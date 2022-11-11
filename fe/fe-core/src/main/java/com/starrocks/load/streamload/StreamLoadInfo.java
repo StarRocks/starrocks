@@ -44,6 +44,7 @@ public class StreamLoadInfo {
     // optional
     private List<ImportColumnDesc> columnExprDescs = Lists.newArrayList();
     private Expr whereExpr;
+    private String mergeConditionStr;
     private ColumnSeparator columnSeparator;
     private RowDelimiter rowDelimiter;
     private PartitionNames partitions;
@@ -100,6 +101,10 @@ public class StreamLoadInfo {
 
     public Expr getWhereExpr() {
         return whereExpr;
+    }
+
+    public String getMergeConditionStr() {
+        return mergeConditionStr;
     }
 
     public ColumnSeparator getColumnSeparator() {
@@ -320,9 +325,17 @@ public class StreamLoadInfo {
         if (request.isSetLoad_dop()) {
             loadParallelRequestNum = request.getLoad_dop();
         }
+        
+        if (request.isSetEnable_replicated_storage()) {
+            enableReplicatedStorage = request.isEnable_replicated_storage();
+        }
+
+        if (request.isSetMerge_condition()) {
+            mergeConditionStr = request.getMerge_condition();
+        }
     }
 
-    public static StreamLoadInfo fromRoutineLoadJob(RoutineLoadJob routineLoadJob) {
+    public static StreamLoadInfo fromRoutineLoadJob(RoutineLoadJob routineLoadJob) throws UserException {
         TUniqueId dummyId = new TUniqueId();
         TFileFormatType fileFormatType = TFileFormatType.FORMAT_CSV_PLAIN;
         if (routineLoadJob.getFormat().equals("json")) {
@@ -334,13 +347,14 @@ public class StreamLoadInfo {
         return streamLoadInfo;
     }
 
-    private void setOptionalFromRoutineLoadJob(RoutineLoadJob routineLoadJob) {
+    private void setOptionalFromRoutineLoadJob(RoutineLoadJob routineLoadJob) throws UserException {
         // copy the columnExprDescs, cause it may be changed when planning.
         // so we keep the columnExprDescs in routine load job as origin.
         if (routineLoadJob.getColumnDescs() != null) {
             columnExprDescs = Lists.newArrayList(routineLoadJob.getColumnDescs());
         }
         whereExpr = routineLoadJob.getWhereExpr();
+        setMergeConditionExpr(routineLoadJob.getMergeCondition());
         columnSeparator = routineLoadJob.getColumnSeparator();
         rowDelimiter = routineLoadJob.getRowDelimiter();
         partitions = routineLoadJob.getPartitions();
@@ -398,6 +412,11 @@ public class StreamLoadInfo {
             throw new UserException("parse columns header failed", e);
         }
         whereExpr = whereStmt.getExpr();
+    }
+
+    private void setMergeConditionExpr(String mergeConditionStr) throws UserException {
+        this.mergeConditionStr = mergeConditionStr;
+        // TODO:(caneGuy) use expr for update condition
     }
 
     private void setColumnSeparator(String oriSeparator) throws AnalysisException {

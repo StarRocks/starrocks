@@ -162,6 +162,7 @@ void NodeChannel::try_open() {
 
 void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResult>* open_closure) {
     PTabletWriterOpenRequest request;
+    request.set_merge_condition(_parent->_merge_condition);
     request.set_allocated_id(&_parent->_load_id);
     request.set_index_id(index_id);
     request.set_txn_id(_parent->_txn_id);
@@ -750,6 +751,7 @@ OlapTableSink::OlapTableSink(ObjectPool* pool, const std::vector<TExpr>& texprs,
 Status OlapTableSink::init(const TDataSink& t_sink) {
     DCHECK(t_sink.__isset.olap_table_sink);
     const auto& table_sink = t_sink.olap_table_sink;
+    _merge_condition = table_sink.merge_condition;
     _load_id.set_hi(table_sink.load_id.hi);
     _load_id.set_lo(table_sink.load_id.lo);
     _txn_id = table_sink.txn_id;
