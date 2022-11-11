@@ -2154,7 +2154,7 @@ RowsetSharedPtr TabletUpdates::get_delta_rowset(int64_t version) const {
     if (version < _edit_version_infos[0]->version.major() || _edit_version_infos.back()->version.major() < version) {
         return nullptr;
     }
-    int idx_hint = version - _edit_version_infos[0]->version.major();
+    int64_t idx_hint = version - _edit_version_infos[0]->version.major();
     for (auto i = idx_hint; i < _edit_version_infos.size(); i++) {
         const auto& vi = _edit_version_infos[i];
         if (vi->version.major() < version) {
