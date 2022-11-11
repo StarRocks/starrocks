@@ -693,7 +693,7 @@ Spark 连接器中，将 DATE 和 DATETIME 数据类型映射为 STRING 数据�
 4. 在 StarRocks 数据库下，开启 Profile 上报:
 
    ```SQL
-   MySQL [test]> SET is_report_success = true;
+   MySQL [test]> SET enable_profile = true;
    Query OK, 0 rows affected (0.00 sec)
    ```
 

@@ -212,7 +212,7 @@ StarRocks 支持单节点部署，所以 BE 最小配置个数是 1 个。BE 需
 
 创建一个新用户，然后通过给该用户授予表查询权限进行数据权限控制。
 
-## 为什么将 `is_report_success` 指定为 `true` 后 profile 无法显示？
+## 为什么将 `enable_profile` 指定为 `true` 后 profile 无法显示？
 
 因为报告信息只汇报给主 FE，只有主 FE 可以查看报告信息。同时，如果通过 StarRocks Manager 查看 profile， 必须确保 FE 配置项 `enable_collect_query_detail_info` 为 `true`。
 
