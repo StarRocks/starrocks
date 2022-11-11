@@ -451,9 +451,8 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
     @Override
     public TTableDescriptor toThrift(List<ReferencedPartitionInfo> partitions) {
-        TTableDescriptor tTableDescriptor = new TTableDescriptor(id, TTableType.MATERIALIZED_VIEW,
+        return new TTableDescriptor(id, TTableType.MATERIALIZED_VIEW,
                 fullSchema.size(), 0, getName(), "");
-        return tTableDescriptor;
     }
 
     @Override
@@ -554,8 +553,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
     public static MaterializedView read(DataInput in) throws IOException {
         String json = Text.readString(in);
-        MaterializedView mv = GsonUtils.GSON.fromJson(json, MaterializedView.class);
-        return mv;
+        return GsonUtils.GSON.fromJson(json, MaterializedView.class);
     }
 
     /**
@@ -655,6 +653,13 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)
                     .append("\" = \"");
             sb.append(properties.get(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)).append("\"");
+        }
+
+        // auto refresh partitions limit
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT)) {
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT)
+                    .append("\" = \"");
+            sb.append(properties.get(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT)).append("\"");
         }
 
         // partition refresh number

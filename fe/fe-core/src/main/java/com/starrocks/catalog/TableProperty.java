@@ -71,6 +71,11 @@ public class TableProperty implements Writable, GsonPostProcessable {
     // It represents the maximum number of partitions that will be refreshed by a TaskRun refresh
     private int partitionRefreshNumber = INVALID;
 
+    // This property only applies to materialized views
+    // When using the system to automatically refresh, the maximum range of the most recent partitions will be refreshed.
+    // By default, all partitions will be refreshed.
+    private int autoRefreshPartitionsLimit = INVALID;
+
     // This property only applies to materialized views,
     // Indicates which tables do not listen to auto refresh events when load
     private List<TableName> excludedTriggerTables = null;
@@ -180,6 +185,13 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
+    public TableProperty buildAutoRefreshPartitionsLimit() {
+        autoRefreshPartitionsLimit =
+                Integer.parseInt(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT,
+                String.valueOf(INVALID)));
+        return this;
+    }
+
     public TableProperty buildPartitionRefreshNumber() {
         partitionRefreshNumber = Integer.parseInt(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER,
                 String.valueOf(INVALID)));
@@ -267,6 +279,14 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return partitionTTLNumber;
     }
 
+    public int getAutoRefreshPartitionsLimit() {
+        return autoRefreshPartitionsLimit;
+    }
+
+    public void setAutoRefreshPartitionsLimit(int autoRefreshPartitionsLimit) {
+        this.autoRefreshPartitionsLimit = autoRefreshPartitionsLimit;
+    }
+
     public int getPartitionRefreshNumber() {
         return partitionRefreshNumber;
     }
@@ -350,6 +370,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildCompressionType();
         buildWriteQuorum();
         buildPartitionTTL();
+        buildAutoRefreshPartitionsLimit();
         buildPartitionRefreshNumber();
         buildExcludedTriggerTables();
         buildReplicatedStorage();
