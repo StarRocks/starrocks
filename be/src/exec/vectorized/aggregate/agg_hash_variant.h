@@ -604,7 +604,6 @@ struct AggHashSetVariant {
 
 private:
     Type type = Type::phase1_slice;
-    AggStatistics* _agg_stat = nullptr;
 };
 
 } // namespace starrocks::vectorized
