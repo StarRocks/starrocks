@@ -5,6 +5,7 @@ package com.starrocks.sql.ast;
 import com.starrocks.alter.AlterOpType;
 
 import java.util.Map;
+import javax.annotation.Nonnull;
 
 // clause which is used to modify table properties
 public class ModifyTablePropertiesClause extends AlterTableClause {
@@ -24,6 +25,7 @@ public class ModifyTablePropertiesClause extends AlterTableClause {
     }
 
     @Override
+    @Nonnull
     public Map<String, String> getProperties() {
         return this.properties;
     }

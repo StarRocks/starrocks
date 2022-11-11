@@ -31,7 +31,7 @@ set -e
 curdir=`dirname "$0"`
 curdir=`cd "$curdir"; pwd`
 
-export STARROCKS_HOME=$curdir/..
+export STARROCKS_HOME=${STARROCKS_HOME:-$curdir/..}
 export TP_DIR=$curdir
 
 # include custom environment variables

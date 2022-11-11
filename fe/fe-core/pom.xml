@@ -249,6 +249,12 @@ under the License.
             <groupId>org.apache.iceberg</groupId>
             <artifactId>iceberg-api</artifactId>
             <version>${iceberg.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.apache.parquet</groupId>
+                    <artifactId>parquet-format-structures</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <dependency>
@@ -703,6 +709,9 @@ under the License.
                     <thriftExecutable>${starrocks.thrift}</thriftExecutable>
                     <thriftSourceRoot>${starrocks.home}/gensrc/thrift</thriftSourceRoot>
                     <generator>java</generator>
+                    <excludes>
+                        <exclude>**/parquet.thrift</exclude>
+                    </excludes>
                 </configuration>
                 <executions>
                     <execution>
