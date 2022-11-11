@@ -1103,6 +1103,19 @@ public class Config extends ConfigBase {
     @ConfField
     public static int tablet_sched_checker_interval_seconds = 20;
 
+<<<<<<< HEAD
+=======
+    @ConfField(mutable = true)
+    public static int tablet_sched_max_migration_task_sent_once = 1000;
+
+    /**
+     * After checked tablet_checker_partition_batch_num partitions, db lock will be released,
+     * so that other threads can get the lock.
+     */
+    @ConfField(mutable = true)
+    public static int tablet_checker_partition_batch_num = 500;
+
+>>>>>>> e6ce66969 ([Enhancement] Split tablets into small batches to decrease db lock occupation (#13070))
     @Deprecated
     @ConfField(mutable = true)
     public static int report_queue_size = 100;
