@@ -1473,4 +1473,22 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int heartbeat_retry_times = 3;
+
+    /**
+     * the keystore file path
+     */
+    @ConfField
+    public static String ssl_keystore_location = "";
+
+    /**
+     * the password of keystore file
+     */
+    @ConfField
+    public static String ssl_keystore_password = "";
+
+    /**
+     * the password of private key
+     */
+    @ConfField
+    public static String ssl_key_password = "";
 }

@@ -25,15 +25,16 @@ import com.starrocks.qe.ConnectProcessor;
 import org.xnio.StreamConnection;
 
 import java.io.IOException;
+import javax.net.ssl.SSLContext;
 
 /**
  * connect context based on nio.
  */
 public class NConnectContext extends ConnectContext {
-    protected NMysqlChannel mysqlChannel;
 
-    public NConnectContext(StreamConnection connection) {
+    public NConnectContext(StreamConnection connection, SSLContext sslContext) {
         super();
+        super.sslContext = sslContext;
         mysqlChannel = new NMysqlChannel(connection);
         remoteIP = mysqlChannel.getRemoteIp();
     }
@@ -48,24 +49,19 @@ public class NConnectContext extends ConnectContext {
         returnRows = 0;
     }
 
-    @Override
-    public NMysqlChannel getMysqlChannel() {
-        return mysqlChannel;
-    }
-
     public void startAcceptQuery(ConnectProcessor connectProcessor) {
-        mysqlChannel.startAcceptQuery(this, connectProcessor);
+        ((NMysqlChannel) mysqlChannel).startAcceptQuery(this, connectProcessor);
     }
 
     public void suspendAcceptQuery() {
-        mysqlChannel.suspendAcceptQuery();
+        ((NMysqlChannel) mysqlChannel).suspendAcceptQuery();
     }
 
     public void resumeAcceptQuery() {
-        mysqlChannel.resumeAcceptQuery();
+        ((NMysqlChannel) mysqlChannel).resumeAcceptQuery();
     }
 
     public void stopAcceptQuery() throws IOException {
-        mysqlChannel.stopAcceptQuery();
+        ((NMysqlChannel) mysqlChannel).stopAcceptQuery();
     }
 }

@@ -52,26 +52,9 @@ public class NMysqlChannel extends MysqlChannel {
         }
     }
 
-    /**
-     * read packet until whole dstBuf is filled, unless block.
-     * Todo: find a better way to avoid block read here.
-     *
-     * @param dstBuf
-     * @return
-     * @throws IOException
-     */
     @Override
-    protected int readAll(ByteBuffer dstBuf) throws IOException {
-        int readLen = 0;
-        while (dstBuf.remaining() != 0) {
-            int ret = Channels.readBlocking(conn.getSourceChannel(), dstBuf);
-            // return -1 when remote peer close the channel
-            if (ret == -1) {
-                return readLen;
-            }
-            readLen += ret;
-        }
-        return readLen;
+    public int realNetRead(ByteBuffer dstBuf) throws IOException {
+        return Channels.readBlocking(conn.getSourceChannel(), dstBuf);
     }
 
     /**
@@ -81,7 +64,7 @@ public class NMysqlChannel extends MysqlChannel {
      * @throws IOException
      */
     @Override
-    protected void realNetSend(ByteBuffer buffer) throws IOException {
+    public void realNetSend(ByteBuffer buffer) throws IOException {
         long bufLen = buffer.remaining();
         long writeLen = Channels.writeBlocking(conn.getSinkChannel(), buffer);
         if (bufLen != writeLen) {
