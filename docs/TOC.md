@@ -222,6 +222,7 @@
       + [current_timestamp](./sql-reference/sql-functions/date-time-functions/current_timestamp.md)
       + [curtime](./sql-reference/sql-functions/date-time-functions/curtime.md)
       + [now](./sql-reference/sql-functions/date-time-functions/now.md)
+      + [date](./sql-reference/sql-functions/date-time-functions/date.md)
       + [date_add](./sql-reference/sql-functions/date-time-functions/date_add.md)
       + [date_sub](./sql-reference/sql-functions/date-time-functions/date_sub.md)
       + [date_format](./sql-reference/sql-functions/date-time-functions/date_format.md)
@@ -392,7 +393,9 @@
       + [sha2](./sql-reference/sql-functions/crytographic-functions/sha2.md)
       + [sm3](./sql-reference/sql-functions/crytographic-functions/sm3.md)
     + Math Functions
-      + [RAND](./sql-reference/sql-functions/math-functions/rand.md)
+      + [greatest](./sql-reference/sql-functions/math-functions/greatest.md)
+      + [least](./sql-reference/sql-functions/math-functions/least.md)
+      + [rand](./sql-reference/sql-functions/math-functions/rand.md)
       + [square](./sql-reference/sql-functions/math-functions/square.md)
     + Utility Functions
       + [current_version](./sql-reference/sql-functions/utility-functions/current_version.md)
