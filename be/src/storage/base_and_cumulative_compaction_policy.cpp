@@ -60,7 +60,6 @@ void BaseAndCumulativeCompactionPolicy::_pick_cumulative_rowsets(bool* has_delet
     if (_compaction_context->rowset_levels[0].size() == 0) {
         return;
     }
-    int index = 0;
     for (auto rowset : _compaction_context->rowset_levels[0]) {
         if (_compaction_context->tablet->version_for_delete_predicate(rowset->version())) {
             *has_delete_version = true;
@@ -74,7 +73,6 @@ void BaseAndCumulativeCompactionPolicy::_pick_cumulative_rowsets(bool* has_delet
                     << ", cumulative rowset size:" << _compaction_context->rowset_levels[0].size();
             break;
         }
-        ++index;
     }
 }
 

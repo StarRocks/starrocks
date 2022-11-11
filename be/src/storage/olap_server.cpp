@@ -448,7 +448,6 @@ void StorageEngine::submit_repair_compaction_tasks(
         const std::vector<std::pair<int64_t, std::vector<uint32_t>>>& tasks) {
     std::lock_guard lg(_repair_compaction_tasks_lock);
     std::unordered_set<int64_t> all_tasks;
-    size_t submitted = 0;
     for (const auto& t : _repair_compaction_tasks) {
         all_tasks.insert(t.first);
     }
@@ -456,7 +455,6 @@ void StorageEngine::submit_repair_compaction_tasks(
         if (all_tasks.find(task.first) == all_tasks.end()) {
             all_tasks.insert(task.first);
             _repair_compaction_tasks.push_back(task);
-            submitted++;
             LOG(INFO) << "submit repair compaction task tablet: " << task.first << " #rowset:" << task.second.size()
                       << " current tasks: " << _repair_compaction_tasks.size();
         }
