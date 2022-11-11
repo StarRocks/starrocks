@@ -669,7 +669,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             sb.append(properties.get(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)).append("\"");
         }
 
-        // disable refresh trigger
+        // excluded trigger tables
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)) {
             sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)
                     .append("\" = \"");
