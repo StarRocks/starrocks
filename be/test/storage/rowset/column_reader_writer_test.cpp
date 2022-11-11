@@ -265,7 +265,6 @@ protected:
 
                 int idx = 0;
                 size_t rows_read = 1024;
-                bool has_null;
                 st = iter.next_batch(&rows_read, column.get());
                 ASSERT_TRUE(st.ok());
                 for (int j = 0; j < rows_read; ++j) {
@@ -292,7 +291,6 @@ protected:
 
                     int idx = rowid;
                     size_t rows_read = 1024;
-                    bool has_null;
                     st = iter.next_batch(&rows_read, column.get());
                     ASSERT_TRUE(st.ok());
                     for (int j = 0; j < rows_read; ++j) {
