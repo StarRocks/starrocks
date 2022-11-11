@@ -184,7 +184,7 @@ public:
         _array_expr.push_back(array_special);
 
         // const([1,4]...)
-        array = ColumnHelper::create_column(type_arr_int, true);
+        array = ColumnHelper::create_column(type_arr_int, false);
         array->append_datum(DatumArray{Datum((int32_t)1), Datum((int32_t)4)}); // [1,4]
         auto const_col = ConstColumn::create(array, 3);
         auto* const_array = new_fake_const_expr(const_col, type_arr_int);
@@ -198,14 +198,14 @@ public:
         _array_expr.push_back(const_array);
 
         // const([null]...)
-        array = ColumnHelper::create_column(type_arr_int, true);
+        array = ColumnHelper::create_column(type_arr_int, false);
         array->append_datum(DatumArray{Datum()}); // [null]...
         const_col = ConstColumn::create(array, 3);
         const_array = new_fake_const_expr(const_col, type_arr_int);
         _array_expr.push_back(const_array);
 
         // const([]...)
-        array = ColumnHelper::create_column(type_arr_int, true);
+        array = ColumnHelper::create_column(type_arr_int, false);
         array->append_datum(DatumArray{}); // []...
         const_col = ConstColumn::create(array, 3);
         const_array = new_fake_const_expr(const_col, type_arr_int);
@@ -266,10 +266,12 @@ private:
     ObjectPool _objpool;
 };
 
-TypeDescriptor new_array_type(const TypeDescriptor& child_type) {
+TypeDescriptor array_type(const PrimitiveType& child_type) {
     TypeDescriptor t;
     t.type = TYPE_ARRAY;
-    t.children.emplace_back(child_type);
+    t.children.resize(1);
+    t.children[0].type = child_type;
+    t.children[0].len = child_type == TYPE_VARCHAR ? 10 : child_type == TYPE_CHAR ? 10 : -1;
     return t;
 }
 
@@ -281,10 +283,7 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_normal_array) {
     cur_chunk->append_column(build_int_column(vec_a), 1);
     for (int i = 0; i < 1; ++i) {
         for (int j = 0; j < _lambda_func.size(); ++j) {
-            expr_node.is_nullable = true;
-            auto array_type = new_array_type(expr_node);
-            array_type.fn.name.function_name = "array_map";
-            ArrayMapExpr array_map_expr(array_type);
+            ArrayMapExpr array_map_expr(array_type(TYPE_INT));
             array_map_expr.clear_children();
             array_map_expr.add_child(_lambda_func[j]);
             array_map_expr.add_child(_array_expr[i]);
@@ -359,8 +358,7 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_special_array) {
     cur_chunk->append_column(build_int_column(vec_a), 1);
     for (int i = 1; i < 5; ++i) {
         for (int j = 0; j < _lambda_func.size(); ++j) {
-            expr_node.fn.name.function_name = "array_map";
-            ArrayMapExpr array_map_expr(expr_node);
+            ArrayMapExpr array_map_expr(array_type(TYPE_INT));
             array_map_expr.clear_children();
             array_map_expr.add_child(_lambda_func[j]);
             array_map_expr.add_child(_array_expr[i]);
@@ -430,8 +428,7 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_const_array) {
     cur_chunk->append_column(build_int_column(vec_a), 1);
     for (int i = 5; i < _array_expr.size(); ++i) {
         for (int j = 0; j < _lambda_func.size(); ++j) {
-            expr_node.fn.name.function_name = "array_map";
-            ArrayMapExpr array_map_expr(expr_node);
+            ArrayMapExpr array_map_expr(array_type(j == 1 ? TYPE_BOOLEAN : TYPE_INT));
             array_map_expr.clear_children();
             array_map_expr.add_child(_lambda_func[j]);
             array_map_expr.add_child(_array_expr[i]);
@@ -454,7 +451,6 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_const_array) {
             }
 
             ColumnPtr result = array_map_expr.evaluate(&exprContext, cur_chunk.get());
-
             if (i == 5 && j == 0) { // array_map( x->x, array<const[1,4]...>)
                 EXPECT_EQ(3, result->size());
                 EXPECT_EQ(1, result->get(0).get_array()[0].get_int32());
@@ -513,13 +509,18 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_const_array) {
                 ASSERT_TRUE(result->get(0).get_array().empty());
                 ASSERT_TRUE(result->get(1).get_array().empty());
                 ASSERT_TRUE(result->get(2).get_array().empty());
-                if (j == 1) { // array<int> -> array<bool>
-                    auto col = std::dynamic_pointer_cast<NullableColumn>(result);
-                    auto array_col = std::dynamic_pointer_cast<ArrayColumn>(col->data_column());
-                    EXPECT_EQ(1, array_col->elements_column()->type_size()); // bool
-                }
             }
 
+            if (j == 1) { // array<int> -> array<bool>
+                if (result->is_nullable()) {
+                    auto col = std::dynamic_pointer_cast<NullableColumn>(result);
+                    auto array_col = std::dynamic_pointer_cast<ArrayColumn>(col->data_column());
+                    EXPECT_EQ(2, array_col->elements_column()->type_size()); // bool
+                } else {
+                    auto array_col = std::dynamic_pointer_cast<ArrayColumn>(result);
+                    EXPECT_EQ(2, array_col->elements_column()->type_size()); // bool
+                }
+            }
             Expr::close(expr_ctxs, &_runtime_state);
         }
     }

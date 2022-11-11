@@ -20,6 +20,8 @@
 namespace starrocks::vectorized {
 ArrayMapExpr::ArrayMapExpr(const TExprNode& node) : Expr(node, false) {}
 
+ArrayMapExpr::ArrayMapExpr(TypeDescriptor type) : Expr(std::move(type), false) {}
+
 inline bool offsets_equal(const UInt32Column::Ptr& array1, const UInt32Column::Ptr& array2) {
     if (array1->size() != array2->size()) {
         return false;
