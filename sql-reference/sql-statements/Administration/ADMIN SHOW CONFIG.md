@@ -15,12 +15,12 @@ ADMIN SHOW FRONTEND CONFIG [LIKE "pattern"];
 结果中的各列含义如下：
 
 ```plain text
-1. Key：        配置项名称
-2. Value：      配置项值
-3. Type：       配置项类型
-4. IsMutable：  是否可以通过 ADMIN SET CONFIG 命令设置
-5. MasterOnly： 是否仅适用于 Leader FE
-6. Comment：    配置项说明
+1. Key         配置项名称
+2. AliasNames  配置项别名
+2. Value       配置项取值
+3. Type        配置项数据类型
+4. IsMutable   是否可以通过 ADMIN SET CONFIG 命令动态设置
+5. Comment     配置项说明
 ```
 
 ## 示例
@@ -35,10 +35,11 @@ ADMIN SHOW FRONTEND CONFIG [LIKE "pattern"];
 
     ```plain text
     mysql> ADMIN SHOW FRONTEND CONFIG LIKE '%check_java_version%';
-    +--------------------+-------+---------+-----------+------------+---------+
-    | Key                | Value | Type    | IsMutable | MasterOnly | Comment |
-    +--------------------+-------+---------+-----------+------------+---------+
-    | check_java_version | true  | boolean | false     | false      |         |
-    +--------------------+-------+---------+-----------+------------+---------+
+    +--------------------+------------+-------+---------+-----------+---------+
+    | Key                | AliasNames | Value | Type    | IsMutable | Comment |
+    +--------------------+------------+-------+---------+-----------+---------+
+    | check_java_version | []         | true  | boolean | false     |         |
+    +--------------------+------------+-------+---------+-----------+---------+
     1 row in set (0.00 sec)
+
     ```
