@@ -308,13 +308,13 @@ curl --location-trusted -u root:  -H "label:label5" \
     http://<fe_host>:<fe_http_port>/api/test_db/table5/_stream_load
 ```
 
-#### **设置严格模式和时区**
+#### **设置匹配模式和时区**
 
 StarRocks 数据库 `test_db` 里的表 `table6` 包含三列，按顺序依次为 `col1`、`col2`、`col3`。
 
 数据文件 `example6.csv` 也包含三列，按顺序一一对应 `table6` 中的三列 `col1`、`col2`、`col3`。
 
-如果要把 `example6.csv` 中所有的数据导入到 `table6` 中，并且要求进行严格模式的过滤、使用时区 `Africa/Abidjan`，可以执行如下命令：
+如果要把 `example6.csv` 中所有的数据导入到 `table6` 中，并且要求进行匹配模式的过滤、使用时区 `Africa/Abidjan`，可以执行如下命令：
 
 ```Bash
 curl --location-trusted -u root: \
@@ -343,7 +343,7 @@ curl --location-trusted -u root: \
 >
 > 上述示例中，通过 `columns` 参数，把 `example7.csv` 中的两列临时命名为 `temp1`、`temp2`，然后使用函数指定数据转换规则，包括：
 >
-> - 使用 `hll_hash` 函数把 `example7.csv` 中的 `temp1` 列转换成 HLL 类型的数据并落入 `table7`中的 `col1` 列。
+> - 使用 `hll_hash` 函数把 `example7.csv` 中的 `temp1` 列转换成 HLL 类型的数据并映射到 `table7`中的 `col1` 列。
 >
 > - 使用 `empty_hll` 函数给导入的数据行在 `table7` 中的第二列补充默认值。
 
@@ -430,7 +430,7 @@ curl --location-trusted -u root: -H "label:label6" \
 ]
 ```
 
-您可以通过指定 `jsonpaths` 参数进行精准导入，例如只导入 `category`、`author`、`price` 三个字段的数据:
+您可以通过指定 `jsonpaths` 参数进行精准导入，例如只导入 `category`、`author`、`price` 三个字段的数据：
 
 ```Bash
 curl --location-trusted -u root: -H "label:label7" \
@@ -444,9 +444,7 @@ curl --location-trusted -u root: -H "label:label7" \
 
 > **说明**
 >
-> - 这里的 JSON 数据是以数组形式表示，并且数组中每个元素（一个 JSON 对象）表示一条记录，则需要设置 `strip_outer_array` 为 `true`，以表示展开数组。
->
-> - 如果 JSON 数据是以数组开始，并且数组中每个对象是一条记录，在设置 `jsonpaths` 时，我们的 ROOT 元素实际上是数组中对象。
+> 上述示例中，JSON 数据的最外层是一个通过中括号 [] 表示的数组结构，并且数组结构中的每个 JSON 对象都表示一条数据记录。因此，需要设置 `strip_outer_array` 为 `true`来裁剪最外层的数组结构。导入过程中，未指定的字段 `title` 会被忽略掉。另外，在这种 JSON 数据结构里，设置 `jsonpaths` 时，我们的 ROOT 元素实际上是数组中对象。
 
 #### **导入数据并指定 JSON 根元素**
 
@@ -464,7 +462,7 @@ curl --location-trusted -u root: -H "label:label7" \
 }
 ```
 
-您可以通过指定 `jsonpath` 进行精准导入，例如只导入 `category`、`author`、`price` 三个字段的数据:
+您可以通过指定 `jsonpaths` 进行精准导入，例如只导入 `category`、`author`、`price` 三个字段的数据：
 
 ```Bash
 curl --location-trusted -u root: \
@@ -479,8 +477,4 @@ curl --location-trusted -u root: \
 
 > **说明**
 >
-> - 通过 `json_root` 参数指定了需要真正导入的数据为 `RECORDS` 字段对应的值，即一个 JSON 数组。
->
-> - 通过指定 `strip_outer_array: true` 来展开这个 JSON 数组，内部每一个 JSON 对象表示一行数据。
->
-> - 其他如 `id`、`comments` 字段的信息都会被忽略掉。
+> 上述示例中，JSON 数据的最外层是一个通过中括号 [] 表示的数组结构，并且数组结构中的每个 JSON 对象都表示一条数据记录。因此，需要设置 `strip_outer_array` 为 `true`来裁剪最外层的数组结构。导入过程中，未指定的字段 `title` 和 `timestamp` 会被忽略掉。另外，示例中还通过 `json_root` 参数指定了需要真正导入的数据为 `RECORDS` 字段对应的值，即一个 JSON 数组。
