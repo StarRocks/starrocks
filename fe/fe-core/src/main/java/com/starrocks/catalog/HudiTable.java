@@ -150,6 +150,11 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         return partColumnNames;
     }
 
+
+    public List<String> getPartitionKeys() {
+        return getPartitionColumnNames();
+    }
+
     public List<String> getDataColumnNames() {
         return dataColumnNames;
     }
