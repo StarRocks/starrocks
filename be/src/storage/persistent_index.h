@@ -47,8 +47,6 @@ struct IndexValue {
 static constexpr size_t kIndexValueSize = 8;
 static_assert(sizeof(IndexValue) == kIndexValueSize);
 
-class ImmutableIndexShard;
-
 uint64_t key_index_hash(const void* data, size_t len);
 
 struct KeysInfo {
@@ -61,10 +59,11 @@ struct KVRef {
     const uint8_t* kv_pos;
     uint64_t hash;
     uint16_t size;
-    KVRef() {}
+    KVRef() = default;
     KVRef(const uint8_t* kv_pos, uint64_t hash, uint16_t size) : kv_pos(kv_pos), hash(hash), size(size) {}
 };
 
+struct ImmutableIndexShard;
 class PersistentIndex;
 class ImmutableIndexWriter;
 
@@ -177,9 +176,9 @@ public:
 
 class ShardByLengthMutableIndex {
 public:
-    ShardByLengthMutableIndex() {}
+    ShardByLengthMutableIndex() = default;
 
-    ShardByLengthMutableIndex(const size_t key_size, const std::string& path)
+    ShardByLengthMutableIndex(const size_t key_size, const std::string& path) // NOLINT
             : _fixed_key_size(key_size), _path(path) {}
 
     ~ShardByLengthMutableIndex() {

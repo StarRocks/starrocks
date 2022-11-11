@@ -36,7 +36,7 @@ namespace starrocks {
 
 class DelVector;
 using DelVectorPtr = std::shared_ptr<DelVector>;
-class EditVersion;
+struct EditVersion;
 class EditVersionMetaPB;
 class RowsetMetaPB;
 class TabletMetaPB;
