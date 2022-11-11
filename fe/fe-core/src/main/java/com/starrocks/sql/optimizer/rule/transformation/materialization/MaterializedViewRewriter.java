@@ -577,7 +577,8 @@ public class MaterializedViewRewriter {
                 }
             } else {
                 ImmutableList.Builder<BiMap<Integer, Integer>> newResult = ImmutableList.builder();
-                PermutationIterator<Integer> permutationIterator = new PermutationIterator<>(mvTableToRelationId.get(queryEntry.getKey()));
+                PermutationIterator<Integer> permutationIterator =
+                        new PermutationIterator<>(mvTableToRelationId.get(queryEntry.getKey()));
                 List<Integer> queryList = queryEntry.getValue().stream().collect(Collectors.toList());
                 while (permutationIterator.hasNext()) {
                     List<Integer> permutation = permutationIterator.next();
