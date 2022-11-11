@@ -76,6 +76,8 @@ TypeDescriptor::TypeDescriptor(const std::vector<TTypeNode>& types, int* idx) {
         DCHECK(!node.__isset.scalar_type);
         DCHECK_LT(*idx, types.size() - 2);
         type = TYPE_MAP;
+        selected_fields = node.selected_fields;
+        DCHECK_EQ(2, selected_fields.size());
         ++(*idx);
         children.push_back(TypeDescriptor(types, idx));
         children.push_back(TypeDescriptor(types, idx));
@@ -93,6 +95,7 @@ void TypeDescriptor::to_thrift(TTypeDesc* thrift_type) const {
         children[0].to_thrift(thrift_type);
     } else if (type == TYPE_MAP) {
         curr_node.__set_type(TTypeNodeType::MAP);
+        curr_node.__set_selected_fields(selected_fields);
         DCHECK_EQ(2, children.size());
         children[0].to_thrift(thrift_type);
         children[1].to_thrift(thrift_type);

@@ -81,6 +81,14 @@ public class ResultSink extends DataSink {
         return sinkType == TResultSinkType.FILE;
     }
 
+    public boolean isQuerySink() {
+        return sinkType == TResultSinkType.MYSQL_PROTOCAL;
+    }
+
+    public boolean isStatisticSink() {
+        return sinkType == TResultSinkType.STATISTIC;
+    }
+
     public boolean needBroker() {
         return fileSinkOptions.isSetUse_broker() && fileSinkOptions.use_broker;
     }

@@ -64,8 +64,10 @@ public enum PrivilegeType {
     public enum DbAction {
         CREATE_TABLE(1),
         DROP(2),
-        SHOW(3),
-        CREATE_VIEW(4);
+        ALTER(3),
+        CREATE_VIEW(4),
+        CREATE_FUNCTION(5),
+        CREATE_MATERIALIZED_VIEW(6);
 
         private final int id;
 

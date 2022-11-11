@@ -9,6 +9,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.CoordinatorMonitor;
+import com.starrocks.qe.GlobalVariable;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -74,6 +75,12 @@ public class ComputeNode implements IComputable, Writable {
     // port of starlet on BE
     @SerializedName("starletPort")
     private volatile int starletPort;
+
+    private volatile int numRunningQueries = 0;
+    private volatile long memLimitBytes = 0;
+    private volatile long memUsedBytes = 0;
+    private volatile int cpuUsedPermille = 0;
+    private volatile long lastUpdateResourceUsageMs = 0;
 
     public ComputeNode() {
         this.host = "";
@@ -266,6 +273,38 @@ public class ComputeNode implements IComputable, Writable {
         return this.isAlive.get() && !this.isDecommissioned.get();
     }
 
+    public int getNumRunningQueries() {
+        return numRunningQueries;
+    }
+
+    public long getMemUsedBytes() {
+        return memUsedBytes;
+    }
+    public long getMemLimitBytes() {
+        return memLimitBytes;
+    }
+
+    public double getMemUsedPct() {
+        if (0 == memLimitBytes) {
+            return 0;
+        }
+        return ((double) memUsedBytes) / memLimitBytes;
+    }
+
+    public int getCpuUsedPermille() {
+        return cpuUsedPermille;
+    }
+
+    public void updateResourceUsage(int numRunningQueries, long memLimitBytes, long memUsedBytes,
+                                       int cpuUsedPermille) {
+
+        this.numRunningQueries = numRunningQueries;
+        this.memLimitBytes = memLimitBytes;
+        this.memUsedBytes = memUsedBytes;
+        this.cpuUsedPermille = cpuUsedPermille;
+        this.lastUpdateResourceUsageMs = System.currentTimeMillis();
+    }
+
     @Override
     public void write(DataOutput out) throws IOException {
         String s = GsonUtils.GSON.toJson(this);
@@ -453,5 +492,30 @@ public class ComputeNode implements IComputable, Writable {
         }
 
         return isChanged;
+    }
+
+    public boolean isResourceOverloaded() {
+        if (!isAvailable()) {
+            return false;
+        }
+
+        long currentMs = System.currentTimeMillis();
+        if (currentMs - lastUpdateResourceUsageMs > GlobalVariable.getQueryQueueResourceUsageIntervalMs()) {
+            // The resource usage is not fresh enough to decide whether it is overloaded.
+            return false;
+        }
+
+        if (GlobalVariable.isQueryQueueConcurrencyLimitEffective() &&
+                numRunningQueries >= GlobalVariable.getQueryQueueConcurrencyLimit()) {
+            return true;
+        }
+
+        if (GlobalVariable.isQueryQueueCpuUsedPermilleLimitEffective() &&
+                cpuUsedPermille >= GlobalVariable.getQueryQueueCpuUsedPermilleLimit()) {
+            return true;
+        }
+
+        return GlobalVariable.isQueryQueueMemUsedPctLimitEffective() &&
+                getMemUsedPct() >= GlobalVariable.getQueryQueueMemUsedPctLimit();
     }
 }
