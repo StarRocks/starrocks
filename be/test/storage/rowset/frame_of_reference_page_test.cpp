@@ -25,6 +25,8 @@
 
 #include <memory>
 
+#include "column/column_helper.h"
+#include "column/column_viewer.h"
 #include "gutil/int128.h"
 #include "runtime/large_int_value.h"
 #include "runtime/mem_pool.h"
@@ -43,16 +45,14 @@ class FrameOfReferencePageTest : public testing::Test {
 public:
     template <FieldType type, class PageDecoderType>
     void copy_one(PageDecoderType* decoder, typename TypeTraits<type>::CppType* ret) {
-        MemPool pool;
-        std::unique_ptr<ColumnVectorBatch> cvb;
-        ColumnVectorBatch::create(1, true, get_type_info(type), nullptr, &cvb);
-        ColumnBlock block(cvb.get(), &pool);
-        ColumnBlockView column_block_view(&block);
-
+        PrimitiveType ptype = scalar_field_type_to_primitive_type(type);
+        TypeDescriptor index_type(ptype);
+        // TODO(alvinz): To reuse this colum
+        auto column = vectorized::ColumnHelper::create_column(index_type, false);
         size_t n = 1;
-        decoder->next_batch(&n, &column_block_view);
+        decoder->next_batch(&n, column.get());
         ASSERT_EQ(1, n);
-        *ret = *reinterpret_cast<const typename TypeTraits<type>::CppType*>(block.cell_ptr(0));
+        *ret = *reinterpret_cast<const typename TypeTraits<type>::CppType*>(column->raw_data());
     }
 
     template <FieldType Type, class PageBuilderType = FrameOfReferencePageBuilder<Type>,
@@ -75,17 +75,13 @@ public:
         ASSERT_EQ(0, for_page_decoder.current_index());
         ASSERT_EQ(size, for_page_decoder.count());
 
-        MemPool pool;
-        std::unique_ptr<ColumnVectorBatch> cvb;
-        ColumnVectorBatch::create(size, true, get_type_info(Type), nullptr, &cvb);
-        ColumnBlock block(cvb.get(), &pool);
-        ColumnBlockView column_block_view(&block);
+        auto column = ChunkHelper::column_from_field_type(Type, false);
         size_t size_to_fetch = size;
-        status = for_page_decoder.next_batch(&size_to_fetch, &column_block_view);
+        status = for_page_decoder.next_batch(&size_to_fetch, column.get());
         ASSERT_TRUE(status.ok());
         ASSERT_EQ(size, size_to_fetch);
 
-        auto* values = reinterpret_cast<CppType*>(column_block_view.data());
+        auto* values = reinterpret_cast<const CppType*>(column->raw_data());
 
         for (uint i = 0; i < size; i++) {
             ASSERT_EQ(src[i], values[i]);

@@ -34,7 +34,6 @@
 #include "gen_cpp/segment.pb.h"
 #include "runtime/mem_pool.h"
 #include "storage/chunk_helper.h"
-#include "storage/column_block.h"
 #include "storage/decimal12.h"
 #include "storage/field.h"
 #include "storage/olap_common.h"
@@ -262,38 +261,29 @@ protected:
                 st = iter.seek_to_first();
                 ASSERT_TRUE(st.ok()) << st.to_string();
 
-                MemPool pool;
-                std::unique_ptr<ColumnVectorBatch> cvb;
-                ColumnVectorBatch::create(0, true, type_info, nullptr, &cvb);
-                cvb->resize(1024);
-                ColumnBlock col(cvb.get(), &pool);
+                auto column = ChunkHelper::column_from_field_type(type, true);
 
                 int idx = 0;
                 size_t rows_read = 1024;
-                ColumnBlockView dst(&col);
                 bool has_null;
-                st = iter.next_batch(&rows_read, &dst, &has_null);
+                st = iter.next_batch(&rows_read, column.get());
                 ASSERT_TRUE(st.ok());
                 for (int j = 0; j < rows_read; ++j) {
                     if (type == OLAP_FIELD_TYPE_CHAR) {
-                        ASSERT_EQ(*(string*)result, reinterpret_cast<const Slice*>(col.cell_ptr(j))->to_string())
+                        ASSERT_EQ(*(string*)result, reinterpret_cast<const Slice*>(column->raw_data())[j].to_string())
                                 << "j:" << j;
                     } else if (type == OLAP_FIELD_TYPE_VARCHAR || type == OLAP_FIELD_TYPE_HLL ||
                                type == OLAP_FIELD_TYPE_OBJECT) {
-                        ASSERT_EQ(value, reinterpret_cast<const Slice*>(col.cell_ptr(j))->to_string()) << "j:" << j;
+                        ASSERT_EQ(value, reinterpret_cast<const Slice*>(column->raw_data())[j].to_string()) << "j:" << j;
                     } else {
-                        ASSERT_EQ(*(Type*)result, *(reinterpret_cast<const Type*>(col.cell_ptr(j))));
+                        ASSERT_EQ(*(Type*)result, reinterpret_cast<const Type*>(column->raw_data())[j]);
                     }
                     idx++;
                 }
             }
 
             {
-                MemPool pool;
-                std::unique_ptr<ColumnVectorBatch> cvb;
-                ColumnVectorBatch::create(0, true, type_info, nullptr, &cvb);
-                cvb->resize(1024);
-                ColumnBlock col(cvb.get(), &pool);
+                auto column = ChunkHelper::column_from_field_type(type, true);
 
                 for (int rowid = 0; rowid < 2048; rowid += 128) {
                     st = iter.seek_to_ordinal(rowid);
@@ -301,19 +291,18 @@ protected:
 
                     int idx = rowid;
                     size_t rows_read = 1024;
-                    ColumnBlockView dst(&col);
                     bool has_null;
-                    st = iter.next_batch(&rows_read, &dst, &has_null);
+                    st = iter.next_batch(&rows_read, column.get());
                     ASSERT_TRUE(st.ok());
                     for (int j = 0; j < rows_read; ++j) {
                         if (type == OLAP_FIELD_TYPE_CHAR) {
-                            ASSERT_EQ(*(string*)result, reinterpret_cast<const Slice*>(col.cell_ptr(j))->to_string())
+                            ASSERT_EQ(*(string*)result, reinterpret_cast<const Slice*>(column->raw_data())[j].to_string())
                                     << "j:" << j;
                         } else if (type == OLAP_FIELD_TYPE_VARCHAR || type == OLAP_FIELD_TYPE_HLL ||
                                    type == OLAP_FIELD_TYPE_OBJECT) {
-                            ASSERT_EQ(value, reinterpret_cast<const Slice*>(col.cell_ptr(j))->to_string());
+                            ASSERT_EQ(value, reinterpret_cast<const Slice*>(column->raw_data())[j].to_string());
                         } else {
-                            ASSERT_EQ(*(Type*)result, *(reinterpret_cast<const Type*>(col.cell_ptr(j))));
+                            ASSERT_EQ(*(Type*)result, reinterpret_cast<const Type*>(column->raw_data())[j]);
                         }
                         idx++;
                     }

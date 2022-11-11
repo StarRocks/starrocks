@@ -28,7 +28,6 @@
 #include "gen_cpp/segment.pb.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
-#include "storage/column_block.h"
 #include "storage/rowset/common.h"
 #include "storage/rowset/indexed_column_reader.h"
 #include "util/once.h"

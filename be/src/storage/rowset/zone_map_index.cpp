@@ -24,13 +24,15 @@
 #include <bthread/sys_futex.h>
 
 #include "runtime/mem_pool.h"
-#include "storage/column_block.h"
+#include "column/column_helper.h"
+#include "column/column_viewer.h"
 #include "storage/olap_define.h"
 #include "storage/olap_type_infra.h"
 #include "storage/rowset/encoding_info.h"
 #include "storage/rowset/indexed_column_reader.h"
 #include "storage/rowset/indexed_column_writer.h"
 #include "storage/types.h"
+#include "storage/chunk_helper.h"
 #include "util/unaligned_access.h"
 
 namespace starrocks {
@@ -218,27 +220,23 @@ Status ZoneMapIndexReader::_do_load(FileSystem* fs, const std::string& filename,
     std::unique_ptr<IndexedColumnIterator> iter;
     RETURN_IF_ERROR(reader.new_iterator(&iter));
 
-    MemPool pool;
     _page_zone_maps.resize(reader.num_values());
 
+    auto column = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_VARCHAR, false);
     // read and cache all page zone maps
     for (int i = 0; i < reader.num_values(); ++i) {
-        size_t num_to_read = 1;
-        std::unique_ptr<ColumnVectorBatch> cvb;
-        RETURN_IF_ERROR(ColumnVectorBatch::create(num_to_read, false, reader.type_info(), nullptr, &cvb));
-        ColumnBlock block(cvb.get(), &pool);
-        ColumnBlockView column_block_view(&block);
-
         RETURN_IF_ERROR(iter->seek_to_ordinal(i));
+        size_t num_to_read = 1;
         size_t num_read = num_to_read;
-        RETURN_IF_ERROR(iter->next_batch(&num_read, &column_block_view));
+        RETURN_IF_ERROR(iter->next_batch(&num_read, column.get()));
         DCHECK(num_to_read == num_read);
 
-        auto* value = reinterpret_cast<Slice*>(cvb->data());
-        if (!_page_zone_maps[i].ParseFromArray(value->data, value->size)) {
+        vectorized::ColumnViewer<TYPE_VARCHAR> viewer(column);
+        auto value = viewer.value(0);
+        if (!_page_zone_maps[i].ParseFromArray(value.data, value.size)) {
             return Status::Corruption("Failed to parse zone map");
         }
-        pool.clear();
+        column->resize(0);
     }
     return Status::OK();
 }

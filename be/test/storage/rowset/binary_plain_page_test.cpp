@@ -71,38 +71,6 @@ public:
 
         //test1
 
-        if (!vectorize) {
-            MemPool pool;
-            size_t size = 3;
-            std::unique_ptr<ColumnVectorBatch> cvb;
-            ColumnVectorBatch::create(size, true, get_type_info(OLAP_FIELD_TYPE_VARCHAR), nullptr, &cvb);
-            ColumnBlock block(cvb.get(), &pool);
-            ColumnBlockView column_block_view(&block);
-
-            status = page_decoder.next_batch(&size, &column_block_view);
-            auto* values = reinterpret_cast<Slice*>(block.data());
-            ASSERT_TRUE(status.ok());
-
-            auto* value = reinterpret_cast<Slice*>(values);
-            ASSERT_EQ(3U, size);
-            ASSERT_EQ("Hello", value[0].to_string());
-            ASSERT_EQ(",", value[1].to_string());
-            ASSERT_EQ("StarRocks", value[2].to_string());
-
-            std::unique_ptr<ColumnVectorBatch> cvb2;
-            ColumnVectorBatch::create(1, true, get_type_info(OLAP_FIELD_TYPE_VARCHAR), nullptr, &cvb2);
-            ColumnBlock block2(cvb2.get(), &pool);
-            ColumnBlockView column_block_view2(&block2);
-
-            size_t fetch_num = 1;
-            page_decoder.seek_to_position_in_page(2);
-            status = page_decoder.next_batch(&fetch_num, &column_block_view2);
-            auto* values2 = reinterpret_cast<Slice*>(block2.data());
-            ASSERT_TRUE(status.ok());
-            auto* value2 = reinterpret_cast<Slice*>(values2);
-            ASSERT_EQ(1, fetch_num);
-            ASSERT_EQ("StarRocks", value2[0].to_string());
-        } else {
             auto column = vectorized::BinaryColumn::create();
             column->reserve(1024);
             size_t size = 1024;
@@ -131,7 +99,6 @@ public:
             ASSERT_EQ(2, column2->size());
             ASSERT_EQ("Hello", column2->get_data()[0]);
             ASSERT_EQ("StarRocks", column2->get_data()[1]);
-        }
     }
 };
 

@@ -25,6 +25,9 @@
 
 #include <memory>
 
+#include "column/column_helper.h"
+#include "column/column_viewer.h"
+#include "storage/chunk_helper.h"
 #include "storage/range.h"
 #include "storage/types.h"
 
@@ -90,18 +93,17 @@ Status BitmapIndexIterator::seek_dictionary(const void* value, bool* exact_match
 Status BitmapIndexIterator::read_bitmap(rowid_t ordinal, Roaring* result) {
     DCHECK(0 <= ordinal && ordinal < _reader->bitmap_nums());
 
-    size_t num_to_read = 1;
-    std::unique_ptr<ColumnVectorBatch> cvb;
-    RETURN_IF_ERROR(ColumnVectorBatch::create(num_to_read, false, _reader->type_info(), nullptr, &cvb));
-    ColumnBlock block(cvb.get(), _pool.get());
-    ColumnBlockView column_block_view(&block);
-
+    auto column = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_VARCHAR, false);
     RETURN_IF_ERROR(_bitmap_column_iter->seek_to_ordinal(ordinal));
+    size_t num_to_read = 1;
     size_t num_read = num_to_read;
-    RETURN_IF_ERROR(_bitmap_column_iter->next_batch(&num_read, &column_block_view));
+    RETURN_IF_ERROR(_bitmap_column_iter->next_batch(&num_read, column.get()));
     DCHECK(num_to_read == num_read);
 
-    *result = Roaring::read(reinterpret_cast<const Slice*>(block.data())->data, false);
+    vectorized::ColumnViewer<TYPE_VARCHAR> viewer(column);
+    auto value = viewer.value(0);
+
+    *result = Roaring::read(value.data, false);
     _pool->clear();
     return Status::OK();
 }

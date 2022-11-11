@@ -339,21 +339,6 @@ public:
         return Status::OK();
     }
 
-    Status next_batch(size_t* n, ColumnBlockView* dst) override {
-        DCHECK(_parsed);
-        if (PREDICT_FALSE(*n == 0 || _cur_index >= _num_elements)) {
-            *n = 0;
-            return Status::OK();
-        }
-
-        size_t max_fetch = std::min(*n, static_cast<size_t>(_num_elements - _cur_index));
-        _copy_next_values(max_fetch, dst->data());
-        *n = max_fetch;
-        _cur_index += max_fetch;
-
-        return Status::OK();
-    }
-
     Status next_batch(size_t* count, vectorized::Column* dst) override;
 
     Status next_batch(const vectorized::SparseRange& range, vectorized::Column* dst) override;

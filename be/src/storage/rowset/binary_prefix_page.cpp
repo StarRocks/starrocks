@@ -252,38 +252,6 @@ Status BinaryPrefixPageDecoder<Type>::_copy_current_to_output(MemPool* mem_pool,
 }
 
 template <FieldType Type>
-Status BinaryPrefixPageDecoder<Type>::next_batch(size_t* n, ColumnBlockView* dst) {
-    DCHECK(_parsed);
-    if (PREDICT_FALSE(*n == 0 || _cur_pos >= _num_values)) {
-        *n = 0;
-        return Status::OK();
-    }
-    size_t i = 0;
-    size_t max_fetch = std::min(*n, static_cast<size_t>(_num_values - _cur_pos));
-    auto out = reinterpret_cast<Slice*>(dst->data());
-    auto prev = out;
-
-    // first copy the current value to output
-    RETURN_IF_ERROR(_copy_current_to_output(dst->pool(), out));
-    i++;
-    out++;
-
-    // read and copy remaining values
-    for (; i < max_fetch; ++i) {
-        _cur_pos++;
-        RETURN_IF_ERROR(_read_next_value_to_output(prev[i - 1], dst->pool(), out));
-        out++;
-    }
-
-    //must update _current_value
-    _current_value.clear();
-    _current_value.assign_copy((uint8_t*)prev[i - 1].data, prev[i - 1].size);
-
-    *n = max_fetch;
-    return Status::OK();
-}
-
-template <FieldType Type>
 Status BinaryPrefixPageDecoder<Type>::_next_value(faststring* value) {
     if (_cur_pos >= _num_values) {
         return Status::NotFound("no more value to read");
