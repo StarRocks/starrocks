@@ -44,8 +44,7 @@ Status FileReader::init(vectorized::HdfsScannerContext* ctx) {
 
 Status FileReader::_parse_footer() {
     // try with buffer on stack
-    constexpr uint64_t footer_buf_size = 16 * 1024;
-    uint8_t local_buf[footer_buf_size];
+    uint8_t local_buf[FOOTER_BUFFER_SIZE];
     uint8_t* footer_buf = local_buf;
     // we may allocate on heap if local_buf is not large enough.
     DeferOp deferop([&] {
@@ -54,7 +53,7 @@ Status FileReader::_parse_footer() {
         }
     });
 
-    uint64_t to_read = std::min(_file_size, footer_buf_size);
+    uint64_t to_read = std::min(_file_size, FOOTER_BUFFER_SIZE);
     {
         SCOPED_RAW_TIMER(&_scanner_ctx->stats->footer_read_ns);
         RETURN_IF_ERROR(_file->read_at_fully(_file_size - to_read, footer_buf, to_read));
@@ -91,8 +90,7 @@ Status FileReader::_parse_footer() {
 }
 
 Status FileReader::_check_magic(const uint8_t* file_magic) {
-    static const char* s_magic = "PAR1";
-    if (!memequal(reinterpret_cast<const char*>(file_magic), 4, s_magic, 4)) {
+    if (!memequal(reinterpret_cast<const char*>(file_magic), 4, PARQUET_MAGIC_NUMBER, 4)) {
         return Status::Corruption("Parquet file magic not match");
     }
     return Status::OK();
