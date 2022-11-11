@@ -72,7 +72,7 @@ public class HudiMetadata implements ConnectorMetadata {
         try {
             database = hmsOps.getDb(dbName);
         } catch (Exception e) {
-            LOG.error("Failed to get hudi database [{}.{}]", catalogName, dbName);
+            LOG.error("Failed to get hudi database [{}.{}]", catalogName, dbName, e);
             return null;
         }
 
@@ -85,7 +85,7 @@ public class HudiMetadata implements ConnectorMetadata {
         try {
             table = hmsOps.getTable(dbName, tblName);
         } catch (Exception e) {
-            LOG.error("Failed to get hudi table [{}.{}.{}]", catalogName, dbName, tblName);
+            LOG.error("Failed to get hudi table [{}.{}.{}]", catalogName, dbName, tblName, e);
             return null;
         }
 
