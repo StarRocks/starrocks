@@ -43,13 +43,13 @@ public class NestLoopJoinTest extends PlanTestBase {
                 " on substr(cast(sub1.v7 as string), 1) = substr(cast(sub2.v10 as string), 1)";
 
         PlanTestBase.connectContext.getSessionVariable().setJoinImplementationMode("auto");
-        assertPlanContains(sql, "  11:Project\n" +
-                "  |  <slot 7> : 7: v7\n" +
+        assertPlanContains(sql, " 11:Project\n" +
+                "  |  <slot 14> : 14: substr\n" +
                 "  |  \n" +
                 "  10:HASH JOIN\n" +
                 "  |  join op: LEFT ANTI JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 14: substr = 15: subst");
+                "  |  equal join conjunct: 14: substr = 15: substr");
     }
 
     @Test
