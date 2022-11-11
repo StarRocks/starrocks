@@ -8,6 +8,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.compaction.CompactionManager;
 import com.starrocks.lake.compaction.PartitionIdentifier;
+import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.server.GlobalStateMgr;
 
 public class LakeTableTxnLogApplier implements TransactionLogApplier {
@@ -32,15 +33,16 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
             Partition partition = table.getPartition(partitionCommitInfo.getPartitionId());
             long version = partitionCommitInfo.getVersion();
             long versionTime = partitionCommitInfo.getVersionTime();
+            Quantiles compactionScore = partitionCommitInfo.getCompactionScore();
             Preconditions.checkState(version == partition.getVisibleVersion() + 1);
             partition.updateVisibleVersion(version, versionTime);
 
             PartitionIdentifier partitionIdentifier =
                     new PartitionIdentifier(txnState.getDbId(), table.getId(), partition.getId());
             if (txnState.getSourceType() == TransactionState.LoadJobSourceType.LAKE_COMPACTION) {
-                compactionManager.handleCompactionFinished(partitionIdentifier, version, versionTime);
+                compactionManager.handleCompactionFinished(partitionIdentifier, version, versionTime, compactionScore);
             } else {
-                compactionManager.handleLoadingFinished(partitionIdentifier, version, versionTime);
+                compactionManager.handleLoadingFinished(partitionIdentifier, version, versionTime, compactionScore);
             }
         }
     }
