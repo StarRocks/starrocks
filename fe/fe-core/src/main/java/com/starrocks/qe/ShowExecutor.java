@@ -167,7 +167,6 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.Table.TableType.JDBC;
-import static com.starrocks.catalog.Table.TableType.MYSQL;
 
 // Execute one show statement.
 public class ShowExecutor {
