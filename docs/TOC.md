@@ -393,6 +393,7 @@
       + [bitmap_to_array](./sql-reference/sql-functions/bitmap-functions/bitmap_to_array.md)
       + [bitmap_from_string](./sql-reference/sql-functions/bitmap-functions/bitmap_from_string.md)
       + [bitmap_to_string](./sql-reference/sql-functions/bitmap-functions/bitmap_to_string.md)
+      + [sub_bitmap](./sql-reference/sql-functions/bitmap-functions/sub_bitmap.md)
       + [to_bitmap](./sql-reference/sql-functions/bitmap-functions/to_bitmap.md)
       + [base64_to_bitmap](./sql-reference/sql-functions/bitmap-functions/base64_to_bitmap.md)
     + Array Functions
