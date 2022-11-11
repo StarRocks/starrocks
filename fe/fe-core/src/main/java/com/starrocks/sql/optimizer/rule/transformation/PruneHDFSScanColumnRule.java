@@ -53,7 +53,11 @@ public class PruneHDFSScanColumnRule extends TransformationRule {
         // if not, we have to choose one materialized column from scan operator output columns
         // with the minimal cost.
         if (!containsMaterializedColumn(scanOperator, scanColumns)) {
-            List<ColumnRefOperator> outputColumns = new ArrayList<>(scanOperator.getColRefToColumnMetaMap().keySet());
+            List<ColumnRefOperator> preOutputColumns =
+                    new ArrayList<>(scanOperator.getColRefToColumnMetaMap().keySet());
+            List<ColumnRefOperator> outputColumns = preOutputColumns.stream()
+                    .filter(column -> !column.getType().getPrimitiveType().equals(PrimitiveType.UNKNOWN_TYPE))
+                    .collect(Collectors.toList());
 
             int smallestIndex = -1;
             int smallestColumnLength = Integer.MAX_VALUE;
@@ -66,7 +70,7 @@ public class PruneHDFSScanColumnRule extends TransformationRule {
                     smallestIndex = index;
                 }
                 Type columnType = outputColumns.get(index).getType();
-                if (columnType.isScalarType()) {
+                if (columnType.isScalarType() && columnType.isSupported()) {
                     int columnLength = columnType.getTypeSize();
                     if (columnLength < smallestColumnLength) {
                         smallestIndex = index;
