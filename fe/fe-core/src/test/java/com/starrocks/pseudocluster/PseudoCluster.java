@@ -431,6 +431,7 @@ public class PseudoCluster {
         private int buckets = 3;
         private int replication = 3;
         private String quorum = "MAJORITY";
+        private String colocateGroup = "";
 
         private boolean ssd = true;
 
@@ -459,13 +460,23 @@ public class PseudoCluster {
             return this;
         }
 
+        public CreateTableSqlBuilder setColocateGroup(String colocateGroup) {
+            this.colocateGroup = colocateGroup;
+            return this;
+        }
+
         public String build() {
             return String.format("create table %s (id bigint not null, name varchar(64) not null, age int null) " +
                             "primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS %d " +
-                            "PROPERTIES(\"write_quorum\" = \"%s\", \"replication_num\" = \"%d\", \"storage_medium\" = \"%s\")",
+                            "PROPERTIES(" +
+                                "\"write_quorum\" = \"%s\", " +
+                                "\"replication_num\" = \"%d\", " +
+                                "\"storage_medium\" = \"%s\", " +
+                                "\"group_with\" = \"%s\")",
                     tableName,
                     buckets, quorum, replication,
-                    ssd ? "SSD" : "HDD");
+                    ssd ? "SSD" : "HDD",
+                    colocateGroup);
         }
     }
 
