@@ -230,7 +230,7 @@ public class StreamLoadPlanner {
 
 
         LOG.info("load job id: {} tx id {} parallel {} compress {} replicated {} quorum {}", DebugUtil.printId(loadId),
-                streamLoadTask.getTxnId(),
+                streamLoadInfo.getTxnId(),
                 queryOptions.getLoad_dop(),
                 queryOptions.getLoad_transmission_compression_type(), destTable.enableReplicatedStorage(),
                 writeQuorum);
