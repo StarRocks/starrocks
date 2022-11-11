@@ -38,7 +38,7 @@ protected:
                                                    const std::vector<TBrokerRangeDesc>& ranges,
                                                    const string& multi_row_delimiter = "\n",
                                                    const string& multi_column_separator = "|",
-                                                   const int64_t skip_header = 0, const bool trim_space = false, const char enclose = '"', const char escape = '\\') {
+                                                   const int64_t skip_header = 0, const bool trim_space = false, const char enclose = 0, const char escape = 0) {
         /// Init DescriptorTable
         TDescriptorTableBuilder desc_tbl_builder;
         TTupleDescriptorBuilder tuple_desc_builder;
@@ -588,12 +588,12 @@ TEST_F(CSVScannerTest, test_ENCLOSE) {
     range.__set_path("./be/test/exec/test_data/csv_scanner/csv_file17");
     ranges.push_back(range);
 
-    auto scanner = create_csv_scanner(types, ranges, "\n", "|", 0, true);
+    auto scanner = create_csv_scanner(types, ranges, "\n", "|", 0, true, '"', '\\');
     Status st = scanner->open();
     ASSERT_TRUE(st.ok()) << st.to_string();
 
     ChunkPtr chunk = scanner->get_next().value();
-    EXPECT_EQ(6, chunk->num_rows());
+    EXPECT_EQ(7, chunk->num_rows());
 
     EXPECT_EQ(1, chunk->get(0)[0].get_int32());
     EXPECT_EQ(3, chunk->get(1)[0].get_int32());
@@ -601,6 +601,7 @@ TEST_F(CSVScannerTest, test_ENCLOSE) {
     EXPECT_EQ(7, chunk->get(3)[0].get_int32());
     EXPECT_EQ(9, chunk->get(4)[0].get_int32());
     EXPECT_EQ(11, chunk->get(5)[0].get_int32());
+    EXPECT_EQ(13, chunk->get(6)[0].get_int32());
 
     EXPECT_EQ("aa", chunk->get(0)[1].get_slice());
     EXPECT_EQ("bb|BB", chunk->get(1)[1].get_slice());
@@ -608,6 +609,7 @@ TEST_F(CSVScannerTest, test_ENCLOSE) {
     EXPECT_EQ("dd", chunk->get(3)[1].get_slice());
     EXPECT_EQ("\"ee", chunk->get(4)[1].get_slice());
     EXPECT_EQ("", chunk->get(5)[1].get_slice());
+    EXPECT_EQ("\"cd\"", chunk->get(6)[1].get_slice());
 
     EXPECT_EQ("abc", chunk->get(0)[2].get_slice());
     EXPECT_EQ("", chunk->get(1)[2].get_slice());
@@ -615,6 +617,7 @@ TEST_F(CSVScannerTest, test_ENCLOSE) {
     EXPECT_EQ("abc|ef\ngh", chunk->get(3)[2].get_slice());
     EXPECT_EQ("", chunk->get(4)[2].get_slice());
     EXPECT_EQ("ab", chunk->get(5)[2].get_slice());
+    EXPECT_EQ("ab\"c", chunk->get(6)[2].get_slice());
 }
 
 TEST_F(CSVScannerTest, test_ESCAPE) {
@@ -626,7 +629,7 @@ TEST_F(CSVScannerTest, test_ESCAPE) {
     range.__set_path("./be/test/exec/test_data/csv_scanner/csv_file18");
     ranges.push_back(range);
 
-    auto scanner = create_csv_scanner(types, ranges, "\n", "|", 0, true);
+    auto scanner = create_csv_scanner(types, ranges, "\n", "|", 0, true, '"', '\\');
     Status st = scanner->open();
     ASSERT_TRUE(st.ok()) << st.to_string();
 

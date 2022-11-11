@@ -95,9 +95,7 @@ enum ParseState {
     NEWLINE = 3,
     ESCAPE = 4,
     ENCLOSE = 5,
-    // 这个状态表示读到了两个连续的ENCLOSE符号，此时并不能确定第一个enclose符号是转义还是这个字段是空字段，
-    // 如果，接下来读到的是delimiter或者newline，那么该字段是空字段，否则是转义符号。
-    DOUBLE_ENCLOSE = 6
+    ENCLOSE_ESCAPE = 6
 };
 
 class CSVReader {

@@ -201,6 +201,7 @@ Status CSVReader::next_record(FieldOffsets* fields) {
                 // TODO: 这里还需要调整
                 status = readMore(_buff);
                 if (!status.ok()) {
+                    // TODO: START状态下仅仅读到了单个的enclose字符，这种是不合法的pattern，可以直接退出。
                     curState = NEWLINE;
                     goto newline_label;
                 }
@@ -250,10 +251,25 @@ Status CSVReader::next_record(FieldOffsets* fields) {
         // 2. 开启了trimspace
         //    去除空格后再判断
         case ENCLOSE:
-            // ENCLOSE状态下再次遇到enclose, enclose状态结束
+            // ENCLOSE状态下再次遇到enclose, 有两种可能：
+            // 1. enclose状态结束
+            // 2. 遇到enclose转义
             if (*(_buff.position()) == _enclose) {
-                curState = ORDINARY;
                 _buff.skip(1);
+
+                status = readMore(_buff);
+                if (!status.ok()) {
+                    is_enclose_field = true;
+                    curState = NEWLINE;
+                    goto newline_label;
+                }
+                if (*(_buff.position()) == _enclose) {
+                    preState = curState;
+                    curState = ENCLOSE_ESCAPE;
+                    escape_pos.insert(_buff.position_offset() - 1);
+                } else {
+                    curState = ORDINARY;
+                }
                 break;
             }
             // escape
@@ -265,6 +281,11 @@ Status CSVReader::next_record(FieldOffsets* fields) {
                 break;
             }
             // other character
+            _buff.skip(1);
+            break;
+        
+        case ENCLOSE_ESCAPE:
+            curState = preState;
             _buff.skip(1);
             break;
 
@@ -315,6 +336,16 @@ Status CSVReader::next_record(FieldOffsets* fields) {
                 _buff.skip(1);
                 break;
             }
+
+            // enclose
+            if (*(_buff.position()) == _enclose) {
+                preState = curState;
+                curState = ENCLOSE_ESCAPE;
+                escape_pos.insert(_buff.position_offset());
+                _buff.skip(1);
+                break;
+            }
+
             _buff.skip(1);
             curState = ORDINARY;
             break;
