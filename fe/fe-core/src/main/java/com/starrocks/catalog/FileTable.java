@@ -104,7 +104,7 @@ public class FileTable extends Table {
                 throw new DdlException("No file exists for FileTable: " + this.getName());
             }
             for (RemoteFileDesc file : remoteFileDescs) {
-                if (!getTableLocation().endsWith("/") && !getTableLocation().endsWith(file.getFileName())) {
+                if (!getTableLocation().endsWith("/") && !checkFileName(file.getFileName())) {
                     throw new DdlException("the path is a directory but didn't end with '/'");
                 }
             }
@@ -112,6 +112,10 @@ public class FileTable extends Table {
         } catch (StarRocksConnectorException e) {
             throw new DdlException("doesn't get file with path: " + getTableLocation());
         }
+    }
+
+    private boolean checkFileName(String fileDescName) {
+        return getTableLocation().endsWith(fileDescName);
     }
 
     @Override
