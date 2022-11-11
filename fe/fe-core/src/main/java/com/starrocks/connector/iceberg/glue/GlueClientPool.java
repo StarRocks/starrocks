@@ -24,7 +24,7 @@ public class GlueClientPool extends ClientPoolImpl<IMetaStoreClient, TException>
     private final HiveConf hiveConf;
 
     public GlueClientPool(int poolSize, Configuration conf) {
-        super(poolSize, TTransportException.class);
+        super(poolSize, TTransportException.class, false);
         this.hiveConf = new HiveConf(conf, HiveClientPool.class);
         this.hiveConf.addResource(conf);
     }

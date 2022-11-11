@@ -1,0 +1,50 @@
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+
+package com.starrocks.connector.iceberg;
+
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.IcebergTable;
+import org.apache.iceberg.Table;
+import org.apache.iceberg.catalog.Namespace;
+import org.apache.iceberg.catalog.TableIdentifier;
+import org.apache.iceberg.rest.RESTCatalog;
+import org.apache.thrift.TException;
+
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+import static com.starrocks.connector.iceberg.IcebergUtil.convertToSRDatabase;
+
+public class IcebergRESTCatalog extends RESTCatalog implements IcebergCatalog {
+
+    @Override
+    public IcebergCatalogType getIcebergCatalogType() {
+        return IcebergCatalogType.CUSTOM_CATALOG;
+    }
+
+    @Override
+    public Table loadTable(IcebergTable table) throws StarRocksIcebergException {
+        return super.loadTable(TableIdentifier.of(table.getDb(), table.getTable()));
+    }
+
+    @Override
+    public Table loadTable(TableIdentifier tableId, String tableLocation,
+            Map<String, String> properties) throws StarRocksIcebergException {
+        return super.loadTable(tableId);
+    }
+
+    @Override
+    public List<String> listAllDatabases() {
+        return super.listNamespaces().stream().map(Namespace::toString)
+            .collect(Collectors.toList());
+    }
+
+    @Override
+    public Database getDB(String dbName) throws TException {
+        if (!super.namespaceExists(Namespace.of(dbName))) {
+            throw new TException("Iceberg db " + dbName + " doesn't exist");
+        }
+        return convertToSRDatabase(dbName);
+    }
+}
