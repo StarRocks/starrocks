@@ -53,7 +53,7 @@ public class PruneHDFSScanColumnRule extends TransformationRule {
         // if not, we have to choose one materialized column from scan operator output columns
         // with the minimal cost.
         if (!containsMaterializedColumn(scanOperator, scanColumns)) {
-            List<ColumnRefOperator> preOutputColumns =
+            List<ColumnRefOperator> outputColumns =
                     new ArrayList<>(scanOperator.getColRefToColumnMetaMap().keySet());
 
             int smallestIndex = -1;
