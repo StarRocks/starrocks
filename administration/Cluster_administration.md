@@ -194,30 +194,41 @@ admin set frontend config ("disable_colocate_balance"="false");
 
 ### 升级 BE 节点
 
-进入 BE 路径，并替换相关文件。以下示例以大版本升级为例。
+1. 进入 BE 路径，停止 BE 节点。
 
-> 注意：BE 节点小版本升级中（例如从 2.0.x 升级到 2.0.y），您只需升级 **/lib/starrocks_be**。而大版本升级中（例如从 2.0.x 升级到 2.x.x），您需要替换 BE 节点路径下的 **bin** 和 **lib** 文件夹。
+    ```shell
+    sh bin/stop_be.sh
+    ```
 
-```shell
-cd StarRocks-x.x.x/be
-mv lib lib.bak 
-mv bin bin.bak
-cp -r /tmp/StarRocks-SE-x.x.x/be/lib  .
-cp -r /tmp/StarRocks-SE-x.x.x/be/bin  .
-```
+2. 替换 BE 节点相关文件。
 
-逐台重启 BE 节点。
+    > 注意
+    >
+    > BE 节点小版本升级中（例如从 2.0.x 升级到 2.0.y），您只需升级 **/lib/starrocks_be**。而大版本升级中（例如从 2.0.x 升级到 2.x.x），您需要替换 BE 节点路径下的 **bin** 和 **lib** 文件夹。
 
-```shell
-sh bin/stop_be.sh
-sh bin/start_be.sh --daemon
-```
+    以下示例以大版本升级为例。
 
-在启动下一台实例之前，您需要确认当前实例启动成功。
+    ```shell
+    cd StarRocks-x.x.x/be
+    mv lib lib.bak 
+    mv bin bin.bak
+    cp -r /tmp/StarRocks-SE-x.x.x/be/lib  .
+    cp -r /tmp/StarRocks-SE-x.x.x/be/bin  .
+    ```
 
-```shell
-ps aux | grep starrocks_be
-```
+3. 启动 BE 节点。
+
+    ```shell
+    sh bin/start_be.sh --daemon
+    ```
+
+4. 确认当前节点启动成功。
+
+    ```shell
+    ps aux | grep starrocks_be
+    ```
+
+5. 重复以上步骤，升级其他 BE 节点。
 
 ### 测试 FE 升级的正确性
 
@@ -236,38 +247,48 @@ ps aux | grep starrocks_be
 9. 如果启动成功，运行 `sh bin/stop_fe.sh` 停止测试环境的 FE 节点进程。
 
 > 说明
+>
 > 以上第 2 至 第 6 步的目的是防止测试环境的 FE 启动后，错误连接到线上环境中。
 
 ### 升级 FE 节点
 
 升级 FE 集群时，您需要先升级各 Follower FE 节点，最后升级 Leader FE 节点，从而在 Follower FE 节点升级失败时可以提前发现问题，防止其影响集群查询功能。
 
-进入 FE 路径，并替换相关文件。以下示例以大版本升级为例。
+1. 进入 FE 路径，停止 FE 节点。
 
-> 注意
->
-> FE 节点小版本升级中（例如从 2.0.x 升级到 2.0.y），您只需升级 **/lib/starrocks-fe.jar**。而大版本升级中（例如从 2.0.x 升级到 2.x.x），您需要替换 FE 节点路径下的 **bin** 和 **lib** 文件夹。
+    ```shell
+    sh bin/stop_fe.sh
+    ```
 
-```shell
-cd StarRocks-x.x.x/fe
-mv lib lib.bak 
-mv bin bin.bak
-cp -r /tmp/StarRocks-SE-x.x.x/fe/lib  .   
-cp -r /tmp/StarRocks-SE-x.x.x/fe/bin  .
-```
+2. 替换 FE 相关文件。
 
-逐台重启 FE 节点。
+    > 注意
+    >
+    > FE 节点小版本升级中（例如从 2.0.x 升级到 2.0.y），您只需升级 **/lib/starrocks-fe.jar**。而大版本升级中（例如从 2.0.x 升级到 2.x.x），您需要替换 FE 节点路径下的 **bin** 和 **lib** 文件夹。
 
-```shell
-sh bin/stop_fe.sh
-sh bin/start_fe.sh --daemon
-```
+    以下示例以大版本升级为例。
 
-在启动下一台实例之前，您需要确认当前实例启动成功。
+    ```shell
+    cd StarRocks-x.x.x/fe
+    mv lib lib.bak 
+    mv bin bin.bak
+    cp -r /tmp/StarRocks-SE-x.x.x/fe/lib  .   
+    cp -r /tmp/StarRocks-SE-x.x.x/fe/bin  .
+    ```
 
-```shell
-ps aux | grep StarRocksFE
-```
+3. 启动 FE 节点。
+
+    ```shell
+    sh bin/start_fe.sh --daemon
+    ```
+
+4. 确认当前节点启动成功。
+
+    ```shell
+    ps aux | grep StarRocksFE
+    ```
+
+5. 重复以上步骤，升级其他 Follower FE 节点，并最后升级 Leader FE 节点。
 
 ### 升级 CN 节点
 
@@ -281,28 +302,28 @@ sh bin/stop_cn.sh --graceful
 
 ### 升级 Broker
 
-进入 Broker 路径，并替换相关文件。
+1. 进入 Broker 路径，停止 Broker 节点。
 
-```shell
-cd StarRocks-x.x.x/apache_hdfs_broker
-mv lib lib.bak 
-mv bin bin.bak
-cp -r /tmp/StarRocks-SE-x.x.x/apache_hdfs_broker/lib  .   
-cp -r /tmp/StarRocks-SE-x.x.x/apache_hdfs_broker/bin  .
-```
+    ```shell
+    sh bin/stop_broker.sh
+    ```
 
-运行命令重启 Broker。
+2. 替换 Broker 相关文件。
 
-```shell
-sh bin/stop_broker.sh
-sh bin/start_broker.sh --daemon
-```
+    ```shell
+    mv lib lib.bak 
+    mv bin bin.bak
+    cp -r /tmp/StarRocks-SE-x.x.x/apache_hdfs_broker/lib  .   
+    cp -r /tmp/StarRocks-SE-x.x.x/apache_hdfs_broker/bin  .
+    ```
 
-在启动下一台实例之前，您需要确认当前实例启动成功。
+3. 启动 Broker 节点。
 
-```shell
-sh bin/start_broker.sh --daemon
-```
+    ```shell
+    sh bin/start_broker.sh --daemon
+    ```
+
+4. 在升级下一台实例之前，您需要确认当前实例启动成功。
 
 ### 关于 StarRocks 1.19 升级至 2.0.x
 
