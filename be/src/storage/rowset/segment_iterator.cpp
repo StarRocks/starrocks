@@ -1611,6 +1611,9 @@ Status SegmentIterator::_get_row_ranges_by_rowid_range() {
 }
 
 void SegmentIterator::close() {
+    if (_del_vec) {
+        _del_vec.reset();
+    }
     _context_list[0].close();
     _context_list[1].close();
     _obj_pool.clear();
