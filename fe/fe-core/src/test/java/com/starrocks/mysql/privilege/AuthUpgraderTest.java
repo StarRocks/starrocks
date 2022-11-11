@@ -2,6 +2,7 @@
 
 package com.starrocks.mysql.privilege;
 
+import com.clearspring.analytics.util.Lists;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.persist.AuthUpgradeInfo;
@@ -67,7 +68,7 @@ public class AuthUpgraderTest {
     }
 
     private void replayUpgrade(UtFrameUtils.PseudoImage image) throws Exception {
-        // pretend it's a old privilege
+        // pretend it's an old privilege
         GlobalStateMgr.getCurrentState().initAuth(false);
         // 1. load image
         ctx = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
@@ -131,14 +132,14 @@ public class AuthUpgraderTest {
             for (int j = 0; j != 2; ++ j) {
                 String createTblStmtStr = "create table db" + i + ".tbl" + j
                         + "(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) "
-                        +
-                        "AGGREGATE KEY(k1, k2,k3,k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
+                        + "AGGREGATE KEY(k1, k2,k3,k4) distributed by hash(k1)"
+                        + " buckets 3 properties('replication_num' = '1');";
                 starRocksAssert.withTable(createTblStmtStr);
             }
         }
         ctx = starRocksAssert.getCtx();
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
-        Config.ignore_invalid_privilege_authentications = true;
+        Config.ignore_invalid_privilege_authentications = false;
     }
 
     @After
@@ -304,6 +305,146 @@ public class AuthUpgraderTest {
             Assert.assertTrue(PrivilegeManager.checkResourceAction(ctx, "hive0", PrivilegeType.ResourceAction.USAGE));
             ctx.setCurrentUserIdentity(createUserByRole("oneUsageResourceRole"));
             Assert.assertTrue(PrivilegeManager.checkResourceAction(ctx, "hive0", PrivilegeType.ResourceAction.USAGE));
+        }
+    }
+
+    @Test
+    public void testCreate() throws Exception {
+        UtFrameUtils.PseudoImage image = executeAndUpgrade(
+                true,
+                "create user userWithGlobalCreate",
+                "grant create_priv on *.* to userWithGlobalCreate",
+                "create role userWithGlobalCreate",
+                "grant create_priv on *.* to role userWithGlobalCreate",
+                "create user userWithResourceAllCreate",
+                "grant create_priv on resource * to userWithResourceAllCreate",
+                "create user userWithDbCreate",
+                "grant create_priv on db1.* to userWithDbCreate",
+                "create role userWithDbCreate",
+                "grant create_priv on db1.* to role userWithDbCreate");
+        // check twice, the second time is as follower
+        for (int i = 0; i != 2; ++ i) {
+            if (i == 1) {
+                replayUpgrade(image);
+            }
+
+            List<String> users = Lists.newArrayList();
+            users.add("userWithGlobalCreate");
+            users.add("userWithResourceAllCreate");
+            // check: grant create_priv on *.* | grant create_priv on resource *
+            for (String user : users) {
+                UserIdentity uid = UserIdentity.createAnalyzedUserIdentWithIp(user, "%");
+                ctx.setCurrentUserIdentity(uid);
+                Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db0", PrivilegeType.DbAction.CREATE_TABLE));
+                Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db0", PrivilegeType.DbAction.CREATE_VIEW));
+                Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db0", PrivilegeType.DbAction.CREATE_FUNCTION));
+                Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.DbAction.CREATE_TABLE));
+                Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db1",
+                        PrivilegeType.DbAction.CREATE_MATERIALIZED_VIEW));
+            }
+            ctx.setCurrentUserIdentity(createUserByRole("userWithGlobalCreate"));
+            Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.DbAction.CREATE_TABLE));
+            Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.DbAction.CREATE_VIEW));
+            Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.DbAction.CREATE_FUNCTION));
+            Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db0", PrivilegeType.DbAction.CREATE_TABLE));
+            Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db0",
+                    PrivilegeType.DbAction.CREATE_MATERIALIZED_VIEW));
+
+            // check: grant create_priv on db1.*
+            ctx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp("userWithDbCreate", "%"));
+            Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.DbAction.CREATE_TABLE));
+            Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db0", PrivilegeType.DbAction.CREATE_TABLE));
+            ctx.setCurrentUserIdentity(createUserByRole("userWithDbCreate"));
+            Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.DbAction.CREATE_TABLE));
+            Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db0", PrivilegeType.DbAction.CREATE_TABLE));
+        }
+    }
+
+    @Test
+    public void testDrop() throws Exception {
+        UtFrameUtils.PseudoImage image = executeAndUpgrade(
+                true,
+                "create user userWithGlobalDrop",
+                "grant drop_priv on *.* to userWithGlobalDrop",
+                "create role userWithGlobalDrop",
+                "grant drop_priv on *.* to role userWithGlobalDrop",
+                "create user userWithResourceAllDrop",
+                "grant drop_priv on resource * to userWithResourceAllDrop",
+                "create user userWithDbDrop",
+                "grant drop_priv on db1.* to userWithDbDrop",
+                "create role userWithDbDrop",
+                "grant drop_priv on db1.* to role userWithDbDrop");
+        // check twice, the second time is as follower
+        for (int i = 0; i != 2; ++ i) {
+            if (i == 1) {
+                replayUpgrade(image);
+            }
+
+            List<String> users = Lists.newArrayList();
+            users.add("userWithGlobalDrop");
+            users.add("userWithResourceAllDrop");
+            // check: grant drop_priv on *.* | grant drop_priv on resource *
+            for (String user : users) {
+                UserIdentity uid = UserIdentity.createAnalyzedUserIdentWithIp(user, "%");
+                ctx.setCurrentUserIdentity(uid);
+                Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.DbAction.DROP));
+                Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.DbAction.CREATE_VIEW));
+            }
+            ctx.setCurrentUserIdentity(createUserByRole("userWithGlobalDrop"));
+            Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.DbAction.DROP));
+            Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.DbAction.CREATE_VIEW));
+
+            // check: grant drop_priv on db1.*
+            ctx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp("userWithDbDrop", "%"));
+            Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.DbAction.DROP));
+            Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db0", PrivilegeType.DbAction.DROP));
+            ctx.setCurrentUserIdentity(createUserByRole("userWithDbDrop"));
+            Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.DbAction.DROP));
+            Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db0", PrivilegeType.DbAction.DROP));
+        }
+    }
+
+    @Test
+    public void testAlter() throws Exception {
+        UtFrameUtils.PseudoImage image = executeAndUpgrade(
+                true,
+                "create user userWithGlobalAlter",
+                "grant alter_priv on *.* to userWithGlobalAlter",
+                "create role userWithGlobalAlter",
+                "grant alter_priv on *.* to role userWithGlobalAlter",
+                "create user userWithResourceAllAlter",
+                "grant alter_priv on resource * to userWithResourceAllAlter",
+                "create user userWithDbAlter",
+                "grant alter_priv on db1.* to userWithDbAlter",
+                "create role userWithDbAlter",
+                "grant alter_priv on db1.* to role userWithDbAlter");
+        // check twice, the second time is as follower
+        for (int i = 0; i != 2; ++ i) {
+            if (i == 1) {
+                replayUpgrade(image);
+            }
+
+            List<String> users = Lists.newArrayList();
+            users.add("userWithGlobalAlter");
+            users.add("userWithResourceAllAlter");
+            // check: grant alter_priv on *.* | grant alter_priv on resource *
+            for (String user : users) {
+                UserIdentity uid = UserIdentity.createAnalyzedUserIdentWithIp(user, "%");
+                ctx.setCurrentUserIdentity(uid);
+                Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.DbAction.ALTER));
+                Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.DbAction.CREATE_VIEW));
+            }
+            ctx.setCurrentUserIdentity(createUserByRole("userWithGlobalAlter"));
+            Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.DbAction.ALTER));
+            Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.DbAction.CREATE_VIEW));
+
+            // check: grant alter_priv on db1.*
+            ctx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp("userWithDbAlter", "%"));
+            Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.DbAction.ALTER));
+            Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db0", PrivilegeType.DbAction.ALTER));
+            ctx.setCurrentUserIdentity(createUserByRole("userWithDbAlter"));
+            Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.DbAction.ALTER));
+            Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db0", PrivilegeType.DbAction.ALTER));
         }
     }
 

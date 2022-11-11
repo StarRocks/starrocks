@@ -20,7 +20,7 @@ import com.starrocks.sql.ast.AdminRepairTableStmt;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
-import com.starrocks.sql.ast.AlterDatabaseRename;
+import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
 import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterResourceGroupStmt;
@@ -504,7 +504,7 @@ public class DDLStmtExecutor {
         }
 
         @Override
-        public ShowResultSet visitAlterDatabaseRename(AlterDatabaseRename stmt, ConnectContext context) {
+        public ShowResultSet visitAlterDatabaseRenameStatement(AlterDatabaseRenameStatement stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().renameDatabase(stmt);
             });
