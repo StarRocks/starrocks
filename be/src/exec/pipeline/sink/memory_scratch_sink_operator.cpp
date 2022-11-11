@@ -37,11 +37,14 @@ Status MemoryScratchSinkOperator::set_finishing(RuntimeState* state) {
 }
 
 bool MemoryScratchSinkOperator::pending_finish() const {
+    // After set_finishing, there may be data that has not been sent.
+    // We need to ensure that all remaining data are put into the queue.
     const_cast<MemoryScratchSinkOperator*>(this)->try_to_put_sentinel();
     return !(_is_finished && _pending_result == nullptr && _has_put_sentinel);
 }
 
 Status MemoryScratchSinkOperator::set_cancelled(RuntimeState* state) {
+    // because we introduced pending_finish, once cancel occurs, some states need to be changed so that the pending_finish can end immediately
     _pending_result.reset();
     _is_finished = true;
     _has_put_sentinel = true;
@@ -74,6 +77,7 @@ void MemoryScratchSinkOperator::try_to_put_sentinel() {
         }
         _pending_result.reset();
     }
+    // the result queue uses nullptr as a sentinel to indicate that no new data is generated.
     if (!_has_put_sentinel && _queue->try_put(nullptr)) {
         _has_put_sentinel = true;
     }
@@ -82,7 +86,7 @@ void MemoryScratchSinkOperator::try_to_put_sentinel() {
 MemoryScratchSinkOperatorFactory::MemoryScratchSinkOperatorFactory(int32_t id, const RowDescriptor& row_desc,
                                                                    std::vector<TExpr> t_output_expr,
                                                                    FragmentContext* const fragment_ctx)
-        : OperatorFactory(id, "memory_scratch_sink", Operator::s_pseudo_plan_node_id_for_result_sink),
+        : OperatorFactory(id, "memory_scratch_sink", Operator::s_pseudo_plan_node_id_for_memory_scratch_sink),
           _row_desc(row_desc),
           _t_output_expr(std::move(t_output_expr)),
           _fragment_ctx(fragment_ctx) {}
