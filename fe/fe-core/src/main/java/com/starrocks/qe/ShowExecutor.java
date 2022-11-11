@@ -681,15 +681,18 @@ public class ShowExecutor {
     private void handleShowCreateTable() throws AnalysisException {
         ShowCreateTableStmt showStmt = (ShowCreateTableStmt) stmt;
         TableName tbl = showStmt.getTbl();
-        if (CatalogMgr.isInternalCatalog(tbl.getCatalog())) {
+        String catalogName = tbl.getCatalog();
+        if (catalogName == null) {
+            catalogName = ConnectContext.get().getCurrentCatalog();
+        }
+        if (CatalogMgr.isInternalCatalog(catalogName)) {
             showCreateInternalTbl(showStmt);
         } else {
-            showCreateExternalTbl(tbl);
+            showCreateExternalTbl(tbl, catalogName);
         }
     }
 
-    private void showCreateExternalTbl(TableName tbl) {
-        String catalogName = tbl.getCatalog();
+    private void showCreateExternalTbl(TableName tbl, String catalogName) {
         String dbName = tbl.getDb();
         String tableName = tbl.getTbl();
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
