@@ -30,23 +30,32 @@
     USE catalog_name.db_name;
     ```
 
-5. 使用 [SELECT](/sql-reference/sql-statements/data-manipulation/SELECT.md) 语句查询外部数据。
+5. 查询外部数据。更多 SELECT 的使用方法，请参见 [SELECT](/sql-reference/sql-statements/data-manipulation/SELECT.md)。
+
+    ```SQL
+    SELECT * FROM table_name;
+    ```
+
+    如在以上步骤中未指定 external catalog 和数据库，则可以在查询语句中直接指定。示例：
+
+    ```SQL
+    SELECT * FROM catalog_name.db_name.table_name;
+    ```
 
 ## 示例
 
 创建一个名为 `hive1` 的 Hive catalog 。如需通过 `hive1` 查询 Apache Hive™ 集群中 `hive_db.hive_table` 的数据，操作如下：
 
-1. 将当前会话切换到 `hive1.hive_db`。
+```SQL
+USE hive1.hive_db;
+SELECT * FROM hive_table limit 1;
+```
 
-    ```SQL
-    USE hive1.hive_db;
-    ```
+或
 
-2. 查询 `hive_tabel` 表中的数据。
-
-    ```SQL
-    SELECT * FROM hive_table limit 1;
-    ```
+```SQL
+SELECT * FROM hive1.hive_db.hive_table limit 1;  
+```
 
 ## 更多操作
 
