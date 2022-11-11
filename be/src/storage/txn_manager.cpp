@@ -41,7 +41,7 @@
 
 namespace starrocks {
 
-TxnManager::TxnManager(int32_t txn_map_shard_size, int32_t txn_shard_size, int32_t store_num)
+TxnManager::TxnManager(int32_t txn_map_shard_size, int32_t txn_shard_size, uint32_t store_num)
         : _txn_map_shard_size(txn_map_shard_size), _txn_shard_size(txn_shard_size) {
     DCHECK_GT(_txn_map_shard_size, 0);
     DCHECK_GT(_txn_shard_size, 0);

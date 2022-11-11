@@ -609,7 +609,7 @@ void StorageEngine::compaction_check() {
         LOG(INFO) << "start to check compaction";
         size_t num = _compaction_check_one_round();
         stop_watch.stop();
-        LOG(INFO) << num << " tablets checked. time elapse:" << stop_watch.elapsed_time() / 1e9 << " seconds."
+        LOG(INFO) << num << " tablets checked. time elapse:" << stop_watch.elapsed_time() / 1000000000 << " seconds."
                   << " compaction checker will be scheduled again in " << checker_one_round_sleep_time_s << " seconds";
         std::unique_lock<std::mutex> lk(_checker_mutex);
         _checker_cv.wait_for(lk, std::chrono::seconds(checker_one_round_sleep_time_s),
@@ -648,7 +648,7 @@ Status StorageEngine::_perform_cumulative_compaction(DataDir* data_dir,
     MonotonicStopWatch watch;
     watch.start();
     SCOPED_CLEANUP({
-        if (watch.elapsed_time() / 1e9 > config::compaction_trace_threshold) {
+        if (watch.elapsed_time() / 1000000000 > config::compaction_trace_threshold) {
             LOG(INFO) << "Trace:" << std::endl << trace->DumpToString(Trace::INCLUDE_ALL);
         }
     });
@@ -691,7 +691,7 @@ Status StorageEngine::_perform_base_compaction(DataDir* data_dir, std::pair<int3
     MonotonicStopWatch watch;
     watch.start();
     SCOPED_CLEANUP({
-        if (watch.elapsed_time() / 1e9 > config::compaction_trace_threshold) {
+        if (watch.elapsed_time() / 1000000000 > config::compaction_trace_threshold) {
             LOG(INFO) << "Trace:" << std::endl << trace->DumpToString(Trace::INCLUDE_ALL);
         }
     });
@@ -730,7 +730,7 @@ Status StorageEngine::_perform_update_compaction(DataDir* data_dir) {
     MonotonicStopWatch watch;
     watch.start();
     SCOPED_CLEANUP({
-        if (watch.elapsed_time() / 1e9 > config::compaction_trace_threshold) {
+        if (watch.elapsed_time() / 1000000000 > config::compaction_trace_threshold) {
             LOG(WARNING) << "Trace:" << std::endl << trace->DumpToString(Trace::INCLUDE_ALL);
         }
     });

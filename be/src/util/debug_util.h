@@ -50,6 +50,6 @@ std::string get_short_version();
 // Returns "<program short name> version <GetBuildVersion(compact)>"
 std::string get_version_string(bool compact);
 
-std::string hexdump(const char* buf, int len);
+std::string hexdump(const char* buf, size_t len);
 
 } // namespace starrocks
