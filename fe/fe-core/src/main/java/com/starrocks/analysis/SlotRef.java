@@ -61,9 +61,9 @@ public class SlotRef extends Expr {
     // Only Struct Type need this field
     // Record access struct subfield path position
     // Example: struct type: col: STRUCT<c1: INT, c2: STRUCT<c1: INT, c2: DOUBLE>>,
-    // We execute sql: `SELECT col.c2.c1 FROM table`, the usedStructFieldPos value is [1, 0].
+    // We execute sql: `SELECT col FROM table`, the usedStructField value is [].
     // We execute sql: `SELECT col.c2 FROM table`, the usedStructFieldPos value is [1].
-    // We execute sql: `SELECT col FROM table`, the usedStructField value is [];
+    // We execute sql: `SELECT col.c2.c1 FROM table`, the usedStructFieldPos value is [1, 0].
     private ImmutableList<Integer> usedStructFieldPos;
 
     // Only used write
@@ -181,6 +181,7 @@ public class SlotRef extends Expr {
         }
         // Set type to subfield's type
         type = tmpType;
+        // col name like a.b.c
         col = colStr.toString();
     }
 
@@ -336,6 +337,7 @@ public class SlotRef extends Expr {
             return desc.getId().hashCode();
         }
         if (usedStructFieldPos != null) {
+            // Means this SlotRef is going to access subfield in StructType
             return Objects.hashCode((tblName == null ? "" : tblName.toSql() + "." + label).toLowerCase(), usedStructFieldPos);
         } else {
             return Objects.hashCode((tblName == null ? "" : tblName.toSql() + "." + label).toLowerCase());

@@ -29,6 +29,8 @@ public class SubfieldOperator extends ScalarOperator {
     public static SubfieldOperator build(ScalarOperator child, Type type, List<Integer> usedSubfieldPos) {
         Type tmpType = type;
         SubfieldOperator res = null;
+        // Like SELECT a.b.c FROM tbl; Will be converted to:
+        // Subfield(Subfield(ColumnRefOperator(a), "b"), "c")
         for (int pos : usedSubfieldPos) {
             StructType tmp = (StructType) tmpType;
             StructField field = tmp.getField(pos);
@@ -45,7 +47,7 @@ public class SubfieldOperator extends ScalarOperator {
     }
 
     private SubfieldOperator(ScalarOperator child, Type type, String fieldName) {
-        super(OperatorType.SUB_FIELD, type);
+        super(OperatorType.SUBFIELD, type);
         this.children.add(child);
         this.fieldName = fieldName;
     }

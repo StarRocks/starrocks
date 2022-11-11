@@ -16,7 +16,7 @@ import static java.util.Objects.requireNonNull;
  * Often used to represent an unresolved Table Name such as db.table
  */
 public class QualifiedName {
-    private final List<String> parts;
+    private final ImmutableList<String> parts;
 
     public static QualifiedName of(Iterable<String> originalParts) {
         requireNonNull(originalParts, "originalParts is null");

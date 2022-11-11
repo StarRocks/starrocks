@@ -51,4 +51,9 @@ public class AnalyzeStructTest {
         analyzeFail("select struct_a.p from struct_a");
         analyzeFail("select p.a from struct_a");
     }
+
+    @Test
+    public void testInvalidSql() {
+        analyzeFail("select b + 1 from struct_a;");
+    }
 }

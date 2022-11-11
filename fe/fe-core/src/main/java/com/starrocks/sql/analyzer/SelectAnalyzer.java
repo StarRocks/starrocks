@@ -228,6 +228,7 @@ public class SelectAnalyzer {
                 analyzeExpression(item.getExpr(), analyzeState, scope);
                 outputExpressionBuilder.add(item.getExpr());
 
+                // We need get column name after analyzerExpression, because StructType's col name maybe a wrong value.
                 // The name here only refer to column name.
                 String name = item.getAlias() == null ? AST2SQL.toString(item.getExpr()) : item.getAlias();
 

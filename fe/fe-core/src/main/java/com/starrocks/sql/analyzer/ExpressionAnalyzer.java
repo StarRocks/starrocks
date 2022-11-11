@@ -224,11 +224,12 @@ public class ExpressionAnalyzer {
             node.setTblName(resolvedField.getField().getRelationAlias());
 
             if (node.getType().isStructType()) {
-                // If SlotRef is a struct type, it needs special treatment.
+                // If SlotRef is a struct type, it needs special treatment, reset SlotRef's col, label name.
                 node.setCol(resolvedField.getField().getName());
                 node.setLabel(resolvedField.getField().getName());
 
                 if (resolvedField.getField().getTmpUsedStructFieldPos().size() > 0) {
+                    // This SlotRef is accessing subfield
                     node.setUsedStructFieldPos(resolvedField.getField().getTmpUsedStructFieldPos());
                     node.resetStructInfo();
                 }
