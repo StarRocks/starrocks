@@ -115,6 +115,7 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_STORAGE_CACHE_TTL = "storage_cache_ttl";
     public static final String PROPERTIES_ALLOW_ASYNC_WRITE_BACK = "allow_async_write_back";
     public static final String PROPERTIES_PARTITION_TTL_NUMBER  = "partition_ttl_number";
+    public static final String PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT  = "auto_refresh_partitions_limit";
     public static final String PROPERTIES_PARTITION_REFRESH_NUMBER  = "partition_refresh_number";
     public static final String PROPERTIES_EXCLUDED_TRIGGER_TABLES = "excluded_trigger_tables";
 
@@ -217,6 +218,22 @@ public class PropertyAnalyzer {
             properties.remove(PROPERTIES_PARTITION_TTL_NUMBER);
         }
         return partitionTimeToLive;
+    }
+
+    public static int analyzeAutoRefreshPartitionsLimit(Map<String, String> properties) throws AnalysisException {
+        int partitionRefreshNumber = -1;
+        if (properties != null && properties.containsKey(PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT)) {
+            try {
+                partitionRefreshNumber = Integer.parseInt(properties.get(PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT));
+            } catch (NumberFormatException e) {
+                throw new AnalysisException("Auto Refresh Partitions Limit: " + e.getMessage());
+            }
+            if (partitionRefreshNumber <= 0) {
+                partitionRefreshNumber = INVALID;
+            }
+            properties.remove(PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT);
+        }
+        return partitionRefreshNumber;
     }
 
     public static int analyzePartitionRefreshNumber(Map<String, String> properties) throws AnalysisException {
