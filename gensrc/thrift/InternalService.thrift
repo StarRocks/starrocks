@@ -54,7 +54,9 @@ enum TLoadJobType {
     BROKER,
     SPARK,
     INSERT_QUERY,
-    INSERT_VALUES
+    INSERT_VALUES,
+    STREAM_LOAD,
+    ROUTINE_LOAD,
 }
 
 enum TErrorHubType {

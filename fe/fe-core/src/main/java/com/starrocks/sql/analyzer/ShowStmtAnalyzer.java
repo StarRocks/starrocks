@@ -57,6 +57,7 @@ import com.starrocks.sql.ast.ShowProcStmt;
 import com.starrocks.sql.ast.ShowRoutineLoadStmt;
 import com.starrocks.sql.ast.ShowRoutineLoadTaskStmt;
 import com.starrocks.sql.ast.ShowStmt;
+import com.starrocks.sql.ast.ShowStreamLoadStmt;
 import com.starrocks.sql.ast.ShowTableStatusStmt;
 import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.ShowTabletStmt;
@@ -195,6 +196,14 @@ public class ShowStmtAnalyzer {
                 LOGGER.error("analysis show routine load task error:", e);
                 throw new SemanticException("analysis show routine load task error: %s", e.getMessage());
             }
+            return null;
+        }
+
+        @Override
+        public Void visitShowStreamLoadStatement(ShowStreamLoadStmt node, ConnectContext context) {
+            String dbName = node.getDbFullName();
+            dbName = getDatabaseName(dbName, context);
+            node.setDb(dbName);
             return null;
         }
 

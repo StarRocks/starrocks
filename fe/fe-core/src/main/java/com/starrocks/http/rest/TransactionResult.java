@@ -19,6 +19,24 @@ public class TransactionResult extends RestBaseResult {
         resultMap.put(key, value);
     }
 
+    public void setErrorMsg(String errMsg) {
+        status = ActionStatus.FAILED;
+        msg = errMsg;
+    }
+
+    public void setOKMsg(String okMsg) {
+        msg = okMsg;
+    }
+
+    public boolean containMsg() {
+        return msg.length() > 0;
+    }
+
+    public boolean stateOK() {
+        return status == ActionStatus.OK;
+    }
+    
+
     public String toJson() {
         Gson gson = new GsonBuilder().setPrettyPrinting().create();
         addResultEntry("Status", status);

@@ -450,6 +450,8 @@ struct TReportExecStatusParams {
   18: optional i64 source_load_rows
 
   19: optional i64 source_load_bytes
+
+  20: optional InternalService.TLoadJobType load_type
 }
 
 struct TFeResult {

@@ -246,6 +246,12 @@ public class Coordinator {
 
     private final Map<PlanFragmentId, List<Integer>> fragmentIdToSeqToInstanceMap = Maps.newHashMap();
 
+    // used only by channel stream load, records the mapping from channel id to target BE's address
+    private final Map<Integer, TNetworkAddress> channelIdToBEHTTP = Maps.newHashMap();
+    private final Map<Integer, TNetworkAddress> channelIdToBEPort = Maps.newHashMap();
+    // used only by channel stream load, records the mapping from be port to be's webserver port
+    private final Map<TNetworkAddress, TNetworkAddress> bePortToBeWebServerPort = Maps.newHashMap();
+
     // Used for new planner
     public Coordinator(ConnectContext context, List<PlanFragment> fragments, List<ScanNode> scanNodes,
                        TDescriptorTable descTable) {
@@ -402,7 +408,6 @@ public class Coordinator {
         this.nextInstanceId = new TUniqueId();
         nextInstanceId.setHi(queryId.hi);
         nextInstanceId.setLo(queryId.lo + 1);
-
         
         this.usePipeline = canUsePipeline(this.connectContext, this.fragments);
     }
@@ -1323,6 +1328,20 @@ public class Coordinator {
         return exportFiles;
     }
 
+    public Map<Integer, TNetworkAddress> getChannelIdToBEHTTPMap() {
+        if (this.queryOptions.getLoad_job_type() == TLoadJobType.STREAM_LOAD) {
+            return channelIdToBEHTTP;
+        }
+        return null;
+    }
+
+    public Map<Integer, TNetworkAddress> getChannelIdToBEPortMap() {
+        if (this.queryOptions.getLoad_job_type() == TLoadJobType.STREAM_LOAD) {
+            return channelIdToBEPort;
+        }
+        return null;
+    }
+
     void updateExportFiles(List<String> files) {
         lock.lock();
         try {
@@ -1989,6 +2008,14 @@ public class Coordinator {
                                     scanRangesPerDriverSeq.put(driverSeq, scanRangeParamsPerDriverSeq.get(driverSeq));
                                 }
                             }
+                            if (this.queryOptions.getLoad_job_type() == TLoadJobType.STREAM_LOAD) {
+                                for (TScanRangeParams scanRange : scanRangeParams) {
+                                    int channelId = scanRange.scan_range.broker_scan_range.channel_id;
+                                    TNetworkAddress beHttpAddress = bePortToBeWebServerPort.get(key);
+                                    channelIdToBEHTTP.put(channelId, beHttpAddress);
+                                    channelIdToBEPort.put(channelId, key);
+                                }
+                            }
                         }
                     }
 
@@ -2387,11 +2414,25 @@ public class Coordinator {
             profileDoneSignal.markedCountDown(params.getFragment_instance_id(), -1L);
         }
 
-        if (params.isSetLoaded_rows() && params.isSetSink_load_bytes() && params.isSetSource_load_rows()
-                && params.isSetSource_load_bytes()) {
-            GlobalStateMgr.getCurrentState().getLoadManager().updateJobPrgress(
-                    jobId, params.backend_id, params.query_id, params.fragment_instance_id, params.loaded_rows,
-                    params.sink_load_bytes, params.source_load_rows, params.source_load_bytes, params.done);
+        if (params.isSetLoad_type()) {
+            TLoadJobType loadJobType = params.getLoad_type();
+            if (loadJobType == TLoadJobType.BROKER ||
+                    loadJobType == TLoadJobType.INSERT_QUERY ||
+                    loadJobType == TLoadJobType.INSERT_VALUES) {
+                if (params.isSetSink_load_bytes() && params.isSetSource_load_rows()
+                        && params.isSetSource_load_bytes()) {
+                    GlobalStateMgr.getCurrentState().getLoadManager().updateJobPrgress(
+                            jobId, params.backend_id, params.query_id, params.fragment_instance_id, params.loaded_rows,
+                            params.sink_load_bytes, params.source_load_rows, params.source_load_bytes, params.done);
+                }
+            }
+        } else {
+            if (params.isSetSink_load_bytes() && params.isSetSource_load_rows()
+                    && params.isSetSource_load_bytes()) {
+                GlobalStateMgr.getCurrentState().getLoadManager().updateJobPrgress(
+                        jobId, params.backend_id, params.query_id, params.fragment_instance_id, params.loaded_rows,
+                        params.sink_load_bytes, params.source_load_rows, params.source_load_bytes, params.done);
+            }
         }
     }
 
@@ -3553,6 +3594,12 @@ public class Coordinator {
     }
 
     private void recordUsedBackend(TNetworkAddress addr, Long backendID) {
+        if (this.queryOptions.getLoad_job_type() == TLoadJobType.STREAM_LOAD) {
+            if (!bePortToBeWebServerPort.containsKey(addr)) {
+                Backend backend = idToBackend.get(backendID);
+                bePortToBeWebServerPort.put(addr, new TNetworkAddress(backend.getHost(), backend.getHttpPort()));
+            }
+        }
         usedBackendIDs.add(backendID);
         addressToBackendID.put(addr, backendID);
     }

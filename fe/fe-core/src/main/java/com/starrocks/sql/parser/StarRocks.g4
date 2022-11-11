@@ -92,6 +92,9 @@ statement
     | showRoutineLoadStatement
     | showRoutineLoadTaskStatement
 
+    //StreamLoad Statement
+    | showStreamLoadStatement
+
     // Admin Statement
     | adminSetConfigStatement
     | adminSetReplicaStatusStatement
@@ -831,6 +834,12 @@ showRoutineLoadTaskStatement
     : SHOW ROUTINE LOAD TASK
         (FROM db=qualifiedName)?
         WHERE expression
+    ;
+
+showStreamLoadStatement
+    : SHOW ALL? STREAM LOAD (FOR (db=qualifiedName '.')? name=identifier)?
+        (FROM db=qualifiedName)?
+        (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 // ------------------------------------------- Analyze Statement -------------------------------------------------------
 
