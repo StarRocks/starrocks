@@ -1063,6 +1063,13 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int max_balancing_tablets = 100;
 
+    /**
+     * After checked tablet_checker_partition_batch_num partitions, db lock will be released,
+     * so that other threads can get the lock.
+     */
+    @ConfField(mutable = true)
+    public static int tablet_checker_partition_batch_num = 500;
+
     @Deprecated
     @ConfField(mutable = true)
     public static int report_queue_size = 100;
