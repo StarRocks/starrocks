@@ -1001,6 +1001,7 @@ public class ExpressionTest extends PlanTestBase {
 
     @Test
     public void testQualifyForWindowFunction() throws Exception {
+        // for '='
         String sql = "select tc from tall qualify row_number() OVER(PARTITION by ta order by tg) = 1;";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "predicates: 11: row_number() = 1");
@@ -1012,6 +1013,32 @@ public class ExpressionTest extends PlanTestBase {
         sql = "select tc from tall qualify dense_rank() OVER(PARTITION by ta order by tg) = 1;";
         plan = getFragmentPlan(sql);
         assertContains(plan, "predicates: 11: dense_rank() = 1");
+
+        // for '<'
+        sql = "select tc from tall qualify row_number() OVER(PARTITION by ta order by tg) < 1;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "predicates: 11: row_number() < 1");
+
+        sql = "select tc from tall qualify rank() OVER(PARTITION by ta order by tg) < 1;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "predicates: 11: rank() < 1");
+
+        sql = "select tc from tall qualify dense_rank() OVER(PARTITION by ta order by tg) < 1;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "predicates: 11: dense_rank() < 1");
+
+        // for '>'
+        sql = "select tc from tall qualify row_number() OVER(PARTITION by ta order by tg) > 1;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "predicates: 11: row_number() > 1");
+
+        sql = "select tc from tall qualify rank() OVER(PARTITION by ta order by tg) > 1;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "predicates: 11: rank() > 1");
+
+        sql = "select tc from tall qualify dense_rank() OVER(PARTITION by ta order by tg) > 1;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "predicates: 11: dense_rank() > 1");
     }
 
     @Test

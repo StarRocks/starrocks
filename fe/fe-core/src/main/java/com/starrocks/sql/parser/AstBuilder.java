@@ -3189,8 +3189,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             IntLiteral rightValue = new IntLiteral(selectValue);
             SlotRef leftSlotRef = new SlotRef(qualifyTableName, "__QUALIFY__VALUE");
 
+            BinaryPredicate.Operator op = getComparisonOperator(((TerminalNode) context.comparisonOperator()
+                            .getChild(0)).getSymbol());
             return new SelectRelation(selectListOuter, subqueryRelation,
-                    new BinaryPredicate(BinaryPredicate.Operator.EQ, leftSlotRef, rightValue), null, null);
+                    new BinaryPredicate(op, leftSlotRef, rightValue), null, null);
         } else {
             return resultSelectRelation;
         }
