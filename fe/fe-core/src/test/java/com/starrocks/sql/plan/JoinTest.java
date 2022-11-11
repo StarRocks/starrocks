@@ -18,6 +18,7 @@ import org.junit.Assert;
 import org.junit.Test;
 
 public class JoinTest extends PlanTestBase {
+
     @Test
     public void testColocateDistributeSatisfyShuffleColumns() throws Exception {
         FeConstants.runningUnitTest = true;
@@ -2611,5 +2612,20 @@ public class JoinTest extends PlanTestBase {
                 ") ) ) ) ) ) ) ) ) ) ) ) ) ) ) ) ) ) ) ) ) ) ) ) ) ) ) ) as k from t1 ) B on A.v1 = B.k ) C group by v4;";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "if(5: v5 = 0, '未知'");
+    }
+
+    @Test
+    public void testJoinKeyHasExpr() throws Exception {
+        String sql = "select subq_1.c0 from " +
+                "(select subq_0.c0 as c0, subq_0.c0 as c4, subq_0.c1 as c5, " +
+                "max(cast(subq_0.c0 as INT)) over (partition by ref_1.n_nationkey, subq_0.c0) as c8, ref_1.n_name as c13 " +
+                "from ( select ref_0.C_CUSTKEY as c0, ref_0.C_CUSTKEY as c1 from customer as ref_0 ) as subq_0 " +
+                "inner join nation as ref_1 on (subq_0.c0 = ref_1.n_name) ) as subq_1 where subq_1.c13 = subq_1.c5;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "4:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 11: N_NAME = 16: cast\n" +
+                "  |  equal join conjunct: 11: N_NAME = CAST(1: C_CUSTKEY AS VARCHAR(1048576))");
     }
 }
