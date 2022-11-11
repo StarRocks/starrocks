@@ -332,7 +332,7 @@ private:
             return NullableColumn::create(std::move(result), nullable->null_column());
         }
 
-        return _array_remove_non_nullable(down_cast<const ArrayColumn&>(*array), *target);
+        return _array_remove_non_nullable(down_cast<ArrayColumn&>(*array), *target);
     }
 };
 
