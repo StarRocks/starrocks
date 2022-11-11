@@ -14,7 +14,7 @@ Status HdfsParquetScanner::do_init(RuntimeState* runtime_state, const HdfsScanne
 }
 
 void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
-    RuntimeProfile::Counter* page_bytes_read = nullptr;
+    RuntimeProfile::Counter* request_bytes_read = nullptr;
     RuntimeProfile::Counter* level_decode_timer = nullptr;
     RuntimeProfile::Counter* value_decode_timer = nullptr;
     RuntimeProfile::Counter* page_read_timer = nullptr;
@@ -30,7 +30,7 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
 
     RuntimeProfile* root = profile->runtime_profile;
     ADD_COUNTER(root, kParquetProfileSectionPrefix, TUnit::UNIT);
-    page_bytes_read = ADD_CHILD_COUNTER(root, "PageBytesRead", TUnit::BYTES, kParquetProfileSectionPrefix);
+    request_bytes_read = ADD_CHILD_COUNTER(root, "RequestBytesRead", TUnit::BYTES, kParquetProfileSectionPrefix);
 
     level_decode_timer = ADD_CHILD_TIMER(root, "LevelDecodeTime", kParquetProfileSectionPrefix);
     value_decode_timer = ADD_CHILD_TIMER(root, "ValueDecodeTime", kParquetProfileSectionPrefix);
@@ -43,7 +43,7 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     group_dict_filter_timer = ADD_CHILD_TIMER(root, "GroupDictFilter", kParquetProfileSectionPrefix);
     group_dict_decode_timer = ADD_CHILD_TIMER(root, "GroupDictDecode", kParquetProfileSectionPrefix);
 
-    COUNTER_UPDATE(page_bytes_read, _stats.page_bytes_read);
+    COUNTER_UPDATE(request_bytes_read, _stats.request_bytes_read);
     COUNTER_UPDATE(value_decode_timer, _stats.value_decode_ns);
     COUNTER_UPDATE(level_decode_timer, _stats.level_decode_ns);
     COUNTER_UPDATE(page_read_timer, _stats.page_read_ns);
