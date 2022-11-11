@@ -44,7 +44,7 @@ This topic guides you through querying data from external data sources by using 
 
 ## Examples
 
-If you already created a Hive catalog named `hive1` and want to use `hive1` to query data from `hive_db.hive_table` of an Apache Hive™ cluster, perform the following operations:
+If you already created a Hive catalog named `hive1` and want to use `hive1` to query data from `hive_db.hive_table` of an Apache Hive™ cluster, you can perform one of the following operations:
 
 ```SQL
 USE hive1.hive_db;

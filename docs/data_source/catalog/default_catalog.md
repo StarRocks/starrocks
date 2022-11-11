@@ -54,7 +54,7 @@ StarRocks 2.3 and later provide an internal catalog to manage the internal data 
 
 ## Examples
 
-To query data in `olap_db.olap_table`, perform the following operations:
+To query data in `olap_db.olap_table`, you can perform one of the following operations:
 
 ```SQL
 USE olap_db;
