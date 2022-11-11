@@ -577,7 +577,7 @@ properties
 
 - > The value of the `analytic` parameter is fixed as `true`, which specifies that the UDWF is a window function (not a aggregate function).
 
-- > The other parameters for a UDWF are similar to those for a scalar UDF. For more information, see [Create a scalar UDF in StarRocks](https://docs.starrocks.com/zh-cn/2.2/using_starrocks/JAVA_UDF/#步骤三在-starrocks-中创建-scalar-udf-函数).
+- > The other parameters for a UDWF are similar to those for a scalar UDF. For more information, see Create a scalar UDF in StarRocks.
 
 #### Step 4: Use the UDWF that you created
 

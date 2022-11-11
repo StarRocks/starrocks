@@ -40,14 +40,10 @@
   + [Approximate De-duplication with HLL](./using_starrocks/Using_HLL.md)
   + [Materialized View](./using_starrocks/Materialized_view.md)
   + [Colocate Join](./using_starrocks/Colocation_join.md)
-  + [External Table](./using_starrocks/External_table.md)
+  + [External Table](./data_source/External_table.md)
   + [Array](./using_starrocks/Array.md)
-  + [Window Function](./using_starrocks/Window_function.md)
-  + [Java UDFs](./using_starrocks/Java-UDFs.md)
   + [Cost Based Optimizer](./using_starrocks/Cost_based_optimizer.md)
   + [Lateral Join](./using_starrocks/Lateral_join.md)
-  + [Configure a time zone](./using_starrocks/timezone.md)
-  + [File manager](./using_starrocks/filemanager.md)
 + Reference
   + SQL Reference
     + User Account Management
@@ -173,6 +169,8 @@
     + Auxiliary Commands
       + [DESCRIBE](./sql-reference/sql-statements/Utility/DESCRIBE.md)
   + Function Reference
+    + [Java UDFs](.//sql-reference/sql-functions/Java-UDFs.md)
+    + [Window Function](./sql-reference/sql-functions/Window_function.md)
     + Date Functions
       + [convert_tz](./sql-reference/sql-functions/date-time-functions/convert_tz.md)
       + [curdate](./sql-reference/sql-functions/date-time-functions/curdate.md)
@@ -366,6 +364,7 @@
   + [Configuration](./administration/Configuration.md)
   + [Scale In and Out](./administration/Scale_up_down.md)
   + [Backup and Restore](./administration/Backup_and_restore.md)
+  + [Configure a time zone](./administration/timezone.md)
   + Data Recovery
     + [Data Recovery](./administration/Data_recovery.md)
     + [Restore FEs](./administration/Metadata_recovery.md)
@@ -381,6 +380,7 @@
     + [Blacklist](./administration/Blacklist.md)
     + [Memory Management](./administration/Memory_management.md)
     + [Load Balance](./administration/Load_balance.md)
+    + [File manager](./administration/filemanager.md)
 + FAQ
   + [Deploy](./faq/Deploy_faq.md)
   + Data Migration
