@@ -104,7 +104,6 @@ Status BitmapIndexIterator::read_bitmap(rowid_t ordinal, Roaring* result) {
     auto value = viewer.value(0);
 
     *result = Roaring::read(value.data, false);
-    _pool->clear();
     return Status::OK();
 }
 

@@ -26,8 +26,6 @@
 
 #include "common/status.h"
 #include "gen_cpp/segment.pb.h"
-#include "runtime/mem_pool.h"
-#include "runtime/mem_tracker.h"
 #include "storage/rowset/common.h"
 #include "storage/rowset/indexed_column_reader.h"
 #include "util/once.h"
@@ -96,11 +94,10 @@ public:
 
 private:
     BloomFilterIndexIterator(BloomFilterIndexReader* reader, std::unique_ptr<IndexedColumnIterator> bf_iter)
-            : _reader(reader), _bloom_filter_iter(std::move(bf_iter)), _pool(new MemPool()) {}
+            : _reader(reader), _bloom_filter_iter(std::move(bf_iter)) {}
 
     BloomFilterIndexReader* _reader;
     std::unique_ptr<IndexedColumnIterator> _bloom_filter_iter;
-    std::unique_ptr<MemPool> _pool;
 };
 
 } // namespace starrocks

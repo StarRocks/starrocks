@@ -26,8 +26,6 @@
 #include "common/status.h"
 #include "fs/fs.h"
 #include "gen_cpp/segment.pb.h"
-#include "runtime/mem_pool.h"
-#include "runtime/mem_tracker.h"
 #include "storage/rowset/common.h"
 #include "storage/rowset/indexed_column_reader.h"
 #include "util/once.h"
@@ -107,8 +105,7 @@ public:
               _bitmap_column_iter(std::move(bitmap_iter)),
               _has_null(has_null),
               _num_bitmap(num_bitmap),
-              _current_rowid(0),
-              _pool(new MemPool()) {}
+              _current_rowid(0) {}
 
     bool has_null_bitmap() const { return _has_null; }
 
@@ -155,7 +152,6 @@ private:
     bool _has_null;
     rowid_t _num_bitmap;
     rowid_t _current_rowid;
-    std::unique_ptr<MemPool> _pool;
 };
 
 } // namespace starrocks
