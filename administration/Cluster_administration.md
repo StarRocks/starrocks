@@ -157,6 +157,7 @@ admin set frontend config ("disable_colocate_balance"="false");
 1. 进入 BE 路径，停止 BE 节点。
 
     ```shell
+    cd StarRocks-x.x.x/be
     sh bin/stop_be.sh
     ```
 
@@ -169,7 +170,6 @@ admin set frontend config ("disable_colocate_balance"="false");
     以下示例以大版本升级为例。
 
     ```shell
-    cd StarRocks-x.x.x/be
     mv lib lib.bak 
     mv bin bin.bak
     cp -r /tmp/StarRocks-SE-x.x.x/be/lib  .
@@ -217,6 +217,7 @@ admin set frontend config ("disable_colocate_balance"="false");
 1. 进入 FE 路径，停止 FE 节点。
 
     ```shell
+    cd StarRocks-x.x.x/fe
     sh bin/stop_fe.sh
     ```
 
@@ -229,7 +230,6 @@ admin set frontend config ("disable_colocate_balance"="false");
     以下示例以大版本升级为例。
 
     ```shell
-    cd StarRocks-x.x.x/fe
     mv lib lib.bak 
     mv bin bin.bak
     cp -r /tmp/StarRocks-SE-x.x.x/fe/lib  .   
@@ -255,6 +255,7 @@ admin set frontend config ("disable_colocate_balance"="false");
 1. 进入 Broker 路径，停止 Broker 节点。
 
     ```shell
+    cd StarRocks-x.x.x/apache_hdfs_broker
     sh bin/stop_broker.sh
     ```
 
