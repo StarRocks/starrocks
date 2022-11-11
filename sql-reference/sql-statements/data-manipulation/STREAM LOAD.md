@@ -420,6 +420,24 @@ curl --location-trusted -u root: -H "label:label6" \
 
 #### **使用匹配模式导入数据**
 
+StarRocks 按照如下顺序对数据进行匹配和处理：
+
+1. （可选）根据 `strip_outer_array` 参数裁剪最外层的数组结构。
+
+    > **说明**
+    >
+    > 仅在 JSON 数据的最外层是一个通过中括号 `[]` 表示的数组结构时涉及，需要设置 `strip_outer_array` 为 `true`。
+
+2. （可选）根据 `json_root` 参数匹配 JSON 数据的根节点。
+
+    > **说明**
+    >
+    > 仅在 JSON 数据存在根节点时涉及，需要通过 `json_root` 参数来指定根节点。
+
+3. 根据 `jsonpaths` 参数提取待导入的 JSON 数据。
+
+##### **不指定 JSON 根节点、使用匹配模式导入数据**
+
 假设数据文件 `example2.json` 包含如下数据：
 
 ```JSON
@@ -444,9 +462,9 @@ curl --location-trusted -u root: -H "label:label7" \
 
 > **说明**
 >
-> 上述示例中，JSON 数据的最外层是一个通过中括号 [] 表示的数组结构，并且数组结构中的每个 JSON 对象都表示一条数据记录。因此，需要设置 `strip_outer_array` 为 `true`来裁剪最外层的数组结构。导入过程中，未指定的字段 `title` 会被忽略掉。另外，在这种 JSON 数据结构里，设置 `jsonpaths` 时，我们的 ROOT 元素实际上是数组中对象。
+> 上述示例中，JSON 数据的最外层是一个通过中括号 [] 表示的数组结构，并且数组结构中的每个 JSON 对象都表示一条数据记录。因此，需要设置 `strip_outer_array` 为 `true`来裁剪最外层的数组结构。导入过程中，未指定的字段 `title` 会被忽略掉。
 
-#### **导入数据并指定 JSON 根元素**
+##### **指定 JSON 根节点、使用匹配模式导入数据**
 
 假设数据文件 `example3.json` 包含如下数据：
 
