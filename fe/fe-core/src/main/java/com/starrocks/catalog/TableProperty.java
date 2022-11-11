@@ -21,8 +21,11 @@
 
 package com.starrocks.catalog;
 
+import com.clearspring.analytics.util.Lists;
+import com.google.common.base.Splitter;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.analysis.TableName;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -32,6 +35,7 @@ import com.starrocks.lake.StorageInfo;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TStorageFormat;
 import com.starrocks.thrift.TWriteQuorumType;
@@ -40,6 +44,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -50,7 +55,7 @@ import java.util.Map;
  */
 public class TableProperty implements Writable, GsonPostProcessable {
     public static final String DYNAMIC_PARTITION_PROPERTY_PREFIX = "dynamic_partition";
-    public static final int NO_TTL = -1;
+    public static final int INVALID = -1;
 
     @SerializedName(value = "properties")
     private Map<String, String> properties;
@@ -60,7 +65,20 @@ public class TableProperty implements Writable, GsonPostProcessable {
     private Short replicationNum = FeConstants.default_replication_num;
 
     // partition time to live number, -1 means no ttl
-    private int partitionTTLNumber = NO_TTL;
+    private int partitionTTLNumber = INVALID;
+
+    // This property only applies to materialized views
+    // It represents the maximum number of partitions that will be refreshed by a TaskRun refresh
+    private int partitionRefreshNumber = INVALID;
+
+    // This property only applies to materialized views
+    // When using the system to automatically refresh, the maximum range of the most recent partitions will be refreshed.
+    // By default, all partitions will be refreshed.
+    private int autoRefreshPartitionsLimit = INVALID;
+
+    // This property only applies to materialized views,
+    // Indicates which tables do not listen to auto refresh events when load
+    private List<TableName> excludedTriggerTables = null;
 
     private boolean isInMemory = false;
 
@@ -126,12 +144,21 @@ public class TableProperty implements Writable, GsonPostProcessable {
             case OperationType.OP_MODIFY_WRITE_QUORUM:
                 buildWriteQuorum();
                 break;
+            case OperationType.OP_ALTER_MATERIALIZED_VIEW_PROPERTIES:
+                buildMvProperties();
+                break;
             case OperationType.OP_MODIFY_REPLICATED_STORAGE:
                 buildReplicatedStorage();
                 break;
             default:
                 break;
         }
+        return this;
+    }
+
+    public TableProperty buildMvProperties() {
+        partitionTTLNumber = Integer.parseInt(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER,
+                String.valueOf(INVALID)));
         return this;
     }
 
@@ -154,7 +181,37 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public TableProperty buildPartitionTTL() {
         partitionTTLNumber = Integer.parseInt(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER,
-                String.valueOf(NO_TTL)));
+                String.valueOf(INVALID)));
+        return this;
+    }
+
+    public TableProperty buildAutoRefreshPartitionsLimit() {
+        autoRefreshPartitionsLimit =
+                Integer.parseInt(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT,
+                String.valueOf(INVALID)));
+        return this;
+    }
+
+    public TableProperty buildPartitionRefreshNumber() {
+        partitionRefreshNumber = Integer.parseInt(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER,
+                String.valueOf(INVALID)));
+        return this;
+    }
+
+    public TableProperty buildExcludedTriggerTables() {
+        String excludedRefreshConf = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES, null);
+        List<TableName> tables = Lists.newArrayList();
+        if (excludedRefreshConf == null) {
+            excludedTriggerTables = tables;
+        } else {
+            List<String> tableList = Splitter.on(",").omitEmptyStrings().trimResults()
+                    .splitToList(excludedRefreshConf);
+            for (String table : tableList) {
+                TableName tableName = AnalyzerUtils.stringToTableName(table);
+                tables.add(tableName);
+            }
+            excludedTriggerTables = tables;
+        }
         return this;
     }
 
@@ -220,6 +277,30 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public int getPartitionTTLNumber() {
         return partitionTTLNumber;
+    }
+
+    public int getAutoRefreshPartitionsLimit() {
+        return autoRefreshPartitionsLimit;
+    }
+
+    public void setAutoRefreshPartitionsLimit(int autoRefreshPartitionsLimit) {
+        this.autoRefreshPartitionsLimit = autoRefreshPartitionsLimit;
+    }
+
+    public int getPartitionRefreshNumber() {
+        return partitionRefreshNumber;
+    }
+
+    public void setPartitionRefreshNumber(int partitionRefreshNumber) {
+        this.partitionRefreshNumber = partitionRefreshNumber;
+    }
+
+    public List<TableName> getExcludedTriggerTables() {
+        return excludedTriggerTables;
+    }
+
+    public void setExcludedTriggerTables(List<TableName> excludedTriggerTables) {
+        this.excludedTriggerTables = excludedTriggerTables;
     }
 
     public boolean isInMemory() {
@@ -289,6 +370,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildCompressionType();
         buildWriteQuorum();
         buildPartitionTTL();
+        buildAutoRefreshPartitionsLimit();
+        buildPartitionRefreshNumber();
+        buildExcludedTriggerTables();
         buildReplicatedStorage();
     }
 }

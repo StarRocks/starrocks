@@ -422,7 +422,7 @@ public class StmtExecutor {
 
                         handleQueryStmt(execPlan);
 
-                        if (context.getSessionVariable().isReportSucc()) {
+                        if (context.getSessionVariable().isEnableProfile()) {
                             writeProfile(beginTimeInNanoSecond);
                         }
                         break;
@@ -460,7 +460,7 @@ public class StmtExecutor {
             } else if (parsedStmt instanceof DmlStmt) {
                 try {
                     handleDMLStmt(execPlan, (DmlStmt) parsedStmt);
-                    if (context.getSessionVariable().isReportSucc()) {
+                    if (context.getSessionVariable().isEnableProfile()) {
                         writeProfile(beginTimeInNanoSecond);
                     }
                 } catch (Throwable t) {
@@ -547,7 +547,7 @@ public class StmtExecutor {
             InsertStmt insertStmt = createTableAsSelectStmt.getInsertStmt();
             ExecPlan execPlan = new StatementPlanner().plan(insertStmt, context);
             handleDMLStmt(execPlan, ((CreateTableAsSelectStmt) parsedStmt).getInsertStmt());
-            if (context.getSessionVariable().isReportSucc()) {
+            if (context.getSessionVariable().isEnableProfile()) {
                 writeProfile(beginTimeInNanoSecond);
             }
             if (context.getState().getStateType() == MysqlStateType.ERR) {
@@ -1273,7 +1273,7 @@ public class StmtExecutor {
         boolean insertError = false;
         try {
             if (execPlan.getFragments().get(0).getSink() instanceof OlapTableSink) {
-                //if sink is OlapTableSink Assigned to Be execute this sql [cn execute OlapTableSink will crash]
+                // if sink is OlapTableSink Assigned to Be execute this sql [cn execute OlapTableSink will crash]
                 context.getSessionVariable().setPreferComputeNode(false);
                 context.getSessionVariable().setUseComputeNodes(0);
                 OlapTableSink dataSink = (OlapTableSink) execPlan.getFragments().get(0).getSink();
@@ -1289,9 +1289,9 @@ public class StmtExecutor {
             List<ScanNode> scanNodes = execPlan.getScanNodes();
 
             boolean containOlapScanNode = false;
-            for (int i = 0; i < scanNodes.size(); i++) {
-                if (scanNodes.get(i) instanceof OlapScanNode) {
-                    estimateScanRows += ((OlapScanNode) scanNodes.get(i)).getActualRows();
+            for (ScanNode scanNode : scanNodes) {
+                if (scanNode instanceof OlapScanNode) {
+                    estimateScanRows += ((OlapScanNode) scanNode).getActualRows();
                     containOlapScanNode = true;
                 }
             }

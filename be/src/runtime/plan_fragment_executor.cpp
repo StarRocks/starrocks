@@ -55,7 +55,7 @@ PlanFragmentExecutor::PlanFragmentExecutor(ExecEnv* exec_env, report_status_call
           _prepared(false),
           _closed(false),
           _has_thread_token(false),
-          _is_report_success(true),
+          enable_profile(true),
           _is_report_on_cancel(true),
           _collect_query_statistics_with_every_batch(false),
           _is_runtime_filter_merge_node(false) {}
@@ -79,8 +79,8 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
         _runtime_state->set_load_job_id(request.load_job_id);
     }
 
-    if (request.query_options.__isset.is_report_success) {
-        _is_report_success = request.query_options.is_report_success;
+    if (request.query_options.__isset.enable_profile) {
+        enable_profile = request.query_options.enable_profile;
     }
 
     // Reserve one main thread from the pool
@@ -297,17 +297,17 @@ void PlanFragmentExecutor::send_report(bool done) {
         status = _status;
     }
 
-    // If plan is done successfully, but _is_report_success is false,
+    // If plan is done successfully, but enable_profile is false,
     // no need to send report.
-    if (!_is_report_success && done && status.ok()) {
+    if (!enable_profile && done && status.ok()) {
         return;
     }
 
-    // If both _is_report_success and _is_report_on_cancel are false,
+    // If both enable_profile and _is_report_on_cancel are false,
     // which means no matter query is success or failed, no report is needed.
     // This may happen when the query limit reached and
     // a internal cancellation being processed
-    if (!_is_report_success && !_is_report_on_cancel) {
+    if (!enable_profile && !_is_report_on_cancel) {
         return;
     }
 

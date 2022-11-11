@@ -527,7 +527,7 @@ public class ShowExecutor {
             }
 
             if (ctx.getGlobalStateMgr().isUsingNewPrivilege()) {
-                if (CatalogMgr.isInternalCatalog(catalogName) && !PrivilegeManager.checkAnyActionInDb(ctx, dbName)) {
+                if (CatalogMgr.isInternalCatalog(catalogName) && !PrivilegeManager.checkAnyActionOnOrUnderDb(ctx, dbName)) {
                     continue;
                 }
             } else {
@@ -570,7 +570,7 @@ public class ShowExecutor {
                         }
                         // check tbl privs
                         if (ctx.getGlobalStateMgr().isUsingNewPrivilege()) {
-                            if (!PrivilegeManager.checkAnyActionInTable(ctx, db.getFullName(), tbl.getName())) {
+                            if (!PrivilegeManager.checkAnyActionOnTable(ctx, db.getFullName(), tbl.getName())) {
                                 continue;
                             }
                         } else {

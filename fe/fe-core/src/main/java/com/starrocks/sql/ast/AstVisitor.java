@@ -92,7 +92,7 @@ public abstract class AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
-    public R visitAlterDatabaseRename(AlterDatabaseRename statement, C context) {
+    public R visitAlterDatabaseRenameStatement(AlterDatabaseRenameStatement statement, C context) {
         return visitStatement(statement, context);
     }
 
@@ -628,6 +628,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitUninstallPluginStatement(UninstallPluginStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitShowPluginsStatement(ShowPluginsStmt statement, C context) {
         return visitStatement(statement, context);
     }
 

@@ -68,11 +68,13 @@ public class RolePrivilegeCollection extends PrivilegeCollection {
         return (this.mask & flag.mask) != 0;
     }
 
-    public void addParentRole(long parentRoleId) {
+    public void addParentRole(long parentRoleId) throws PrivilegeException {
+        assertMutable();
         parentRoleIds.add(parentRoleId);
     }
 
-    public void removeParentRole(long parentRoleId) {
+    public void removeParentRole(long parentRoleId) throws PrivilegeException {
+        assertMutable();
         parentRoleIds.remove(parentRoleId);
     }
 
@@ -80,13 +82,11 @@ public class RolePrivilegeCollection extends PrivilegeCollection {
         return parentRoleIds;
     }
 
-    public void addSubRole(long subRoleId) throws PrivilegeException {
-        assertMutable();
+    public void addSubRole(long subRoleId) {
         subRoleIds.add(subRoleId);
     }
 
-    public void removeSubRole(long subRoleId) throws PrivilegeException {
-        assertMutable();
+    public void removeSubRole(long subRoleId) {
         subRoleIds.remove(subRoleId);
     }
 

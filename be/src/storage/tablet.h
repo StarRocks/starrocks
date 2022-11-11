@@ -95,7 +95,7 @@ public:
 
     size_t tablet_footprint(); // disk space occupied by tablet
     size_t num_rows();
-    int version_count() const;
+    size_t version_count() const;
     Version max_version() const;
 
     // propreties encapsulated in TabletSchema

@@ -146,7 +146,7 @@ Status FragmentExecutor::_prepare_fragment_ctx(const UnifiedExecPlanFragmentPara
     _fragment_ctx->set_fragment_instance_id(fragment_instance_id);
     _fragment_ctx->set_fe_addr(coord);
 
-    if (query_options.__isset.is_report_success && query_options.is_report_success) {
+    if (query_options.__isset.enable_profile && query_options.enable_profile) {
         _fragment_ctx->set_report_profile();
     }
     if (query_options.__isset.pipeline_profile_level) {
@@ -372,11 +372,9 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
         if (scan_ranges_per_driver_seq.empty()) {
             _fragment_ctx->set_enable_cache(false);
         }
-        // TODO (by satanson): intra-tablet parallelism will emit multiple EOS, this situation hard to handled in
-        //  current version. shared_scan mechanism conflicts with per-tablet computation that is required for query
-        //  cache, so it is turned off at present. in the future, these two issues will be handled.
+        // TODO (by satanson): shared_scan mechanism conflicts with per-tablet computation that is required for query
+        //  cache, so it is turned off at present, it would be solved in the future.
         if (_fragment_ctx->enable_cache()) {
-            enable_tablet_internal_parallel = false;
             enable_shared_scan = false;
         }
 
@@ -407,7 +405,7 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
 
     if (_wg && _wg->big_query_scan_rows_limit() > 0) {
         if (logical_scan_limit >= 0 && logical_scan_limit <= _wg->big_query_scan_rows_limit()) {
-            _query_ctx->set_scan_limit(physical_scan_limit);
+            _query_ctx->set_scan_limit(std::max(_wg->big_query_scan_rows_limit(), physical_scan_limit));
         } else {
             _query_ctx->set_scan_limit(_wg->big_query_scan_rows_limit());
         }

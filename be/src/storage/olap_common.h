@@ -405,10 +405,6 @@ struct HashOfVersion {
     }
 };
 
-class Field;
-class WrapperField;
-using KeyRange = std::pair<WrapperField*, WrapperField*>;
-
 // ReaderStatistics used to collect statistics when scan data from storage
 struct OlapReaderStatistics {
     int64_t create_segment_iter_ns = 0;

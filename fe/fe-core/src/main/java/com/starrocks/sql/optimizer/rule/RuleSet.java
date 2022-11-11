@@ -121,6 +121,8 @@ import com.starrocks.sql.optimizer.rule.transformation.ScalarApply2JoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitAggregateRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitLimitRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitTopNRule;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.FilterScanRule;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.OnlyScanRule;
 
 import java.util.List;
 import java.util.Map;
@@ -330,6 +332,11 @@ public class RuleSet {
         REWRITE_RULES.put(RuleSetType.INTERSECT_REWRITE, ImmutableList.of(
                 new IntersectAddDistinctRule(),
                 new ReorderIntersectRule()
+        ));
+
+        REWRITE_RULES.put(RuleSetType.SINGLE_TABLE_MV_REWRITE, ImmutableList.of(
+                OnlyScanRule.getInstance(),
+                FilterScanRule.getInstance()
         ));
     }
 

@@ -105,7 +105,7 @@ public class ExpressionAnalyzer {
             if (((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.ARRAY_MAP) ||
                     ((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.ARRAY_FILTER)) {
                 return true;
-            } else if (((FunctionCallExpr) expr).getFnName().getFunction().equalsIgnoreCase(FunctionSet.TRANSFORM)) {
+            } else if (((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.TRANSFORM)) {
                 // transform just a alias of array_map
                 ((FunctionCallExpr) expr).resetFnName("", FunctionSet.ARRAY_MAP);
                 return true;
@@ -172,7 +172,7 @@ public class ExpressionAnalyzer {
     }
 
     private void bottomUpAnalyze(Visitor visitor, Expr expression, Scope scope) {
-        if (expression.hasLambdaFunction()) {
+        if (expression.hasLambdaFunction(expression)) {
             analyzeHighOrderFunction(visitor, expression, scope);
         } else {
             for (Expr expr : expression.getChildren()) {
@@ -720,6 +720,12 @@ public class ExpressionAnalyzer {
                             fnName + " requires second parameter must be greater than 0");
                 }
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            } else if (fnName.equals(FunctionSet.ARRAY_SLICE)) {
+                // Default type is TINYINT, it would match to a wrong function
+                for (int i = 1; i < argumentTypes.length; i++) {
+                    argumentTypes[i] = Type.BIGINT;
+                }
+                fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_SUPERTYPE_OF);
             } else {
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             }

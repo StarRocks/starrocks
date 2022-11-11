@@ -2282,7 +2282,17 @@ StatusOr<std::unique_ptr<ImmutableIndex>> ImmutableIndex::load(std::unique_ptr<R
         dest.key_size = src.key_size();
         dest.value_size = src.value_size();
         dest.nbucket = src.nbucket();
-        dest.data_size = src.data_size();
+        // This is for compatibility, we don't add data_size in shard_info in the rc version
+        // And data_size is added to reslove some bug(https://github.com/StarRocks/starrocks/issues/11868)
+        // However, if we upgrade from rc version, the data_size will be used as default value(0) which will cause
+        // some error in the subsequent logic
+        // So we will use file size as data_size which will cause some of disk space to be wasted, but it is a acceptable
+        // problem. And the wasted disk space will be reclaimed in the subsequent compaction, so it is acceptable
+        if (src.size() != 0 && src.data_size() == 0) {
+            dest.data_size = src.data().size();
+        } else {
+            dest.data_size = src.data_size();
+        }
     }
     size_t nlength = meta.shard_info_size();
     for (size_t i = 0; i < nlength; i++) {
@@ -2641,7 +2651,28 @@ Status PersistentIndex::abort() {
 // case4 will append wals into l0 file
 Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta) {
     DCHECK_EQ(index_meta->key_size(), _key_size);
-    RETURN_IF_ERROR(_check_and_flush_l0());
+    // check if _l0 need be flush, there are two conditions:
+    //   1. _l1 is not exist, _flush_l0 and build _l1
+    //   2. _l1 is exist, merge _l0 and _l1
+    // rebuild _l0 and _l1
+    // In addition, there may be I/O waste because we append wals firstly and do _flush_l0 or _merge_compaction.
+    const auto l0_mem_size = _l0->memory_usage();
+    uint64_t l1_file_size = _l1 ? _l1->file_size() : 0;
+    // if l1 is not empty,
+    if (l1_file_size != 0) {
+        // and l0 memory usage is large enough,
+        if (l0_mem_size * config::l0_l1_merge_ratio > l1_file_size) {
+            // do l0 l1 merge compaction
+            _flushed = true;
+            RETURN_IF_ERROR(_merge_compaction());
+        }
+        // if l1 is empty, and l0 memory usage is large enough
+    } else if (l0_mem_size > kL0SnapshotSizeMax) {
+        // do flush l0
+        _flushed = true;
+        RETURN_IF_ERROR(_flush_l0());
+    }
+    _dump_snapshot |= !_flushed && _l0->file_size() > config::l0_max_file_size;
     // for case1 and case2
     if (_flushed) {
         // update PersistentIndexMetaPB
@@ -2811,42 +2842,6 @@ Status PersistentIndex::_reload(const PersistentIndexMetaPB& index_meta) {
         LOG(WARNING) << "reload persistent index failed, status: " << st.to_string();
     }
     return st;
-}
-
-// check if _l0 need be flush, if not, return directly
-// if _l0 need be flush, there are two conditions:
-//   1. _l1 is not exist, _flush_l0 and build _l1
-//   2. _l1 is exist, merge _l0 and _l1
-// rebuild _l0 and _l1
-// In addition, there may be I/O waste because we append wals firstly and
-// do _flush_l0 or _merge_compaction.
-Status PersistentIndex::_check_and_flush_l0() {
-    const auto l0_mem_size = _l0->memory_usage();
-    uint64_t l1_file_size = 0;
-    if (_l1 != nullptr) {
-        _l1->file_size(&l1_file_size);
-    }
-
-    // l1 is empty, if l0 memory usage is bigger than kL0SnapshotSizeMax, flush to l1
-    if (l1_file_size == 0) {
-        if (l0_mem_size <= kL0SnapshotSizeMax) {
-            return Status::OK();
-        }
-    } else {
-        // l1 is not empty
-        // perform l0 l1 merge compaction if l0_memory * config::l0_l1_merge_ratio > l1_file_size
-        if (l0_mem_size * config::l0_l1_merge_ratio <= l1_file_size) {
-            return Status::OK();
-        }
-    }
-
-    _flushed = true;
-    if (_l1 == nullptr) {
-        RETURN_IF_ERROR(_flush_l0());
-    } else {
-        RETURN_IF_ERROR(_merge_compaction());
-    }
-    return Status::OK();
 }
 
 size_t PersistentIndex::_dump_bound() {

@@ -27,6 +27,7 @@ import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
@@ -1343,6 +1344,38 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
+    public void testCreateMvFromMv2() {
+        String sql1 = "create materialized view base_mv2 " +
+                "partition by k1 " +
+                "distributed by hash(k2) buckets 10 " +
+                "refresh async " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ") " +
+                "as select k1, k2 from tbl1;";
+        try {
+            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql1, connectContext);
+            currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
+        } catch (Exception e) {
+            Assert.fail(e.getMessage());
+        }
+        String sql2 = "create materialized view mv_from_base_mv2 " +
+                "partition by k1 " +
+                "distributed by hash(k2) buckets 10 " +
+                "refresh async " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ") " +
+                "as select k1, k2 from base_mv2;";
+        try {
+            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql2, connectContext);
+            currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
+        } catch (Exception e) {
+            Assert.fail(e.getMessage());
+        }
+    }
+
+    @Test
     public void testCreateMvFromInactiveMv() {
         String sql1 = "create materialized view base_inactive_mv " +
                 "partition by k1 " +
@@ -2051,6 +2084,17 @@ public class CreateMaterializedViewTest {
             Assert.fail();
         } catch (IllegalArgumentException e) {
             Assert.assertEquals("Realtime materialized view is not supported", e.getMessage());
+        }
+    }
+
+    @Test
+    public void testCreateSyncMvFromSubquery() {
+        String sql = "create materialized view sync_mv_1 as" +
+                " select k1, sum(k2) from (select k1, k2 from tbl1 group by k1, k2) a group by k1";
+        try {
+            starRocksAssert.withMaterializedView(sql);
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("Materialized view query statement only support direct query from table"));
         }
     }
 }

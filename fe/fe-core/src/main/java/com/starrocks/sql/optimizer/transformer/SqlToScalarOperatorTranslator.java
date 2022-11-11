@@ -485,8 +485,14 @@ public final class SqlToScalarOperatorTranslator {
                         "Unsupported correlated in predicate subquery with grouping or aggregation");
             }
 
-            ScalarOperator leftColRef = SqlToScalarOperatorTranslator
-                    .translate(node.getChild(0), builder.getExpressionMapping(), columnRefFactory);
+            List<ColumnRefOperator> leftCorrelationColumns = Lists.newArrayList();
+            ScalarOperator leftColRef = SqlToScalarOperatorTranslator.translate(node.getChild(0),
+                    builder.getExpressionMapping(), leftCorrelationColumns, columnRefFactory);
+
+            if (leftCorrelationColumns.size() > 0) {
+                throw new SemanticException("Unsupported complex nested in-subquery");
+            }
+
             List<ColumnRefOperator> rightColRefs = subqueryPlan.getOutputColumn();
             if (rightColRefs.size() > 1) {
                 throw new SemanticException("subquery must return a single column when used in InPredicate");
@@ -759,6 +765,13 @@ public final class SqlToScalarOperatorTranslator {
 
         @Override
         public ScalarOperator visitSlot(SlotRef node, Context context) {
+            if (!node.isAnalyzed()) {
+                // IgnoreSlotVisitor is for compatibility with some old Analyze logic that has not been migrated.
+                // So if you need to visit SlotRef here, it must be the case where the old version of analyzed is true
+                // (currently mainly used by some Load logic).
+                // TODO: delete old analyze in Load
+                throw unsupportedException("Can't use IgnoreSlotVisitor with not analyzed slot ref");
+            }
             return new ColumnRefOperator(node.getSlotId().asInt(),
                     node.getType(), node.getColumnName(), node.isNullable());
         }

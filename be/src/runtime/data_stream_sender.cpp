@@ -49,6 +49,7 @@
 #include "util/compression/compression_utils.h"
 #include "util/ref_count_closure.h"
 #include "util/thrift_client.h"
+#include "util/uid_util.h"
 
 namespace starrocks {
 
@@ -119,10 +120,7 @@ public:
 
     int64_t num_data_bytes_sent() const { return _num_data_bytes_sent; }
 
-    std::string get_fragment_instance_id_str() {
-        UniqueId uid(_fragment_instance_id);
-        return uid.to_string();
-    }
+    std::string get_fragment_instance_id_str() { return print_id(_fragment_instance_id); }
 
     TUniqueId get_fragment_instance_id() { return _fragment_instance_id; }
 

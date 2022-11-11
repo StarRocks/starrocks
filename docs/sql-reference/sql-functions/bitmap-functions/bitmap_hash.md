@@ -1,6 +1,6 @@
 # bitmap_hash
 
-## description
+## Description
 
 ### Syntax
 

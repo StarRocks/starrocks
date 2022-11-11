@@ -6,7 +6,7 @@ Aggregate the values including `NULL` in a column into an array. This way, you c
 
 ## Syntax
 
-```plain text
+```Haskell
 ARRAY_AGG(col)
 ```
 

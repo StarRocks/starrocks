@@ -59,7 +59,7 @@ enum TabletDropFlag {
 // please uniformly name the method in "xxx_unlocked()" mode
 class TabletManager {
 public:
-    explicit TabletManager(int32_t tablet_map_lock_shard_size);
+    explicit TabletManager(int64_t tablet_map_lock_shard_size);
     ~TabletManager() = default;
 
     // The param stores holds all candidate data_dirs for this tablet.
@@ -179,7 +179,7 @@ private:
     private:
         constexpr static int kNumShard = 128;
 
-        int _shard(int64_t tablet_id) { return tablet_id % kNumShard; }
+        int64_t _shard(int64_t tablet_id) { return tablet_id % kNumShard; }
 
         SpinLock _latches[kNumShard];
         std::unordered_set<int64_t> _locks[kNumShard];
@@ -222,14 +222,14 @@ private:
 
     TabletsShard& _get_tablets_shard(TTabletId tabletId);
 
-    int32_t _get_tablets_shard_idx(TTabletId tabletId) const { return tabletId & _tablets_shards_mask; }
+    int64_t _get_tablets_shard_idx(TTabletId tabletId) const { return tabletId & _tablets_shards_mask; }
 
     static Status _remove_tablet_meta(const TabletSharedPtr& tablet);
     static Status _remove_tablet_directories(const TabletSharedPtr& tablet);
     static Status _move_tablet_directories_to_trash(const TabletSharedPtr& tablet);
 
     std::vector<TabletsShard> _tablets_shards;
-    const int32_t _tablets_shards_mask;
+    const int64_t _tablets_shards_mask;
     LockTable _schema_change_lock_tbl;
 
     // Protect _partition_tablet_map, should not be obtained before _tablet_map_lock to avoid deadlock

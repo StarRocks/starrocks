@@ -89,8 +89,10 @@ import com.starrocks.persist.PartitionPersistInfoV2;
 import com.starrocks.persist.RangePartitionPersistInfo;
 import com.starrocks.privilege.DbPEntryObject;
 import com.starrocks.privilege.PEntryObject;
+import com.starrocks.privilege.ResourcePEntryObject;
 import com.starrocks.privilege.TablePEntryObject;
 import com.starrocks.privilege.UserPEntryObject;
+import com.starrocks.privilege.ViewPEntryObject;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.optimizer.dump.HiveTableDumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpDeserializer;
@@ -216,7 +218,9 @@ public class GsonUtils {
             RuntimeTypeAdapterFactory.of(PEntryObject.class, "clazz")
                     .registerSubtype(DbPEntryObject.class, DbPEntryObject.class.getSimpleName())
                     .registerSubtype(TablePEntryObject.class, TablePEntryObject.class.getSimpleName())
-                    .registerSubtype(UserPEntryObject.class, UserPEntryObject.class.getSimpleName());
+                    .registerSubtype(UserPEntryObject.class, UserPEntryObject.class.getSimpleName())
+                    .registerSubtype(ResourcePEntryObject.class, ResourcePEntryObject.class.getSimpleName())
+                    .registerSubtype(ViewPEntryObject.class, ViewPEntryObject.class.getSimpleName());
 
     private static final JsonSerializer<LocalDateTime> LOCAL_DATE_TIME_TYPE_SERIALIZER =
             (dateTime, type, jsonSerializationContext) -> new JsonPrimitive(dateTime.toEpochSecond(ZoneOffset.UTC));

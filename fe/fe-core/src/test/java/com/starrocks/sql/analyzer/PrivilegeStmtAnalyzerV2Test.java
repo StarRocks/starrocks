@@ -11,6 +11,7 @@ import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DropRoleStmt;
 import com.starrocks.sql.ast.DropUserStmt;
+import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.SetRoleStmt;
 import com.starrocks.utframe.StarRocksAssert;
@@ -410,6 +411,104 @@ public class PrivilegeStmtAnalyzerV2Test {
             Assert.fail();
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage().contains("cannot grant/revoke system privilege"));
+        }
+    }
+
+    @Test
+    public void testResourceException() throws Exception {
+        try {
+            UtFrameUtils.parseStmtWithNewParser(
+                    "grant alter on all resources in all databases to test_user", ctx);
+            Assert.fail();
+        } catch (Exception e) {
+            System.err.println(e.getMessage());
+            Assert.assertTrue(e.getMessage().contains("invalid ALL statement for resource! only support ON ALL RESOURCES"));
+        }
+
+        try {
+            UtFrameUtils.parseStmtWithNewParser(
+                    "grant alter on resource db.resource to test_user", ctx);
+            Assert.fail();
+        } catch (Exception e) {
+            System.err.println(e.getMessage());
+            Assert.assertTrue(e.getMessage().contains("invalid object tokens, should have one"));
+        }
+
+        try {
+            UtFrameUtils.parseStmtWithNewParser(
+                    "grant alter on resource 'not_exists' to test_user", ctx);
+            Assert.fail();
+        } catch (Exception e) {
+            System.err.println(e.getMessage());
+            Assert.assertTrue(e.getMessage().contains("cannot find resource: not_exists"));
+        }
+    }
+
+    @Test
+    public void testViewException() throws Exception {
+        String sql;
+        sql = "grant alter, select on view db1 to test_user";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("invalid object tokens, should have two"));
+        }
+
+        sql = "grant drop, select on view xxx.xx to test_user";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("cannot find db: xxx"));
+        }
+
+        sql = "grant drop on view db1.tbl1 to test_user";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("cannot find view tbl1 in db db1"));
+        }
+
+        sql = "grant select on ALL views to test_user";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("ALL VIEWS must be restricted with database"));
+        }
+
+        sql = "revoke select on ALL views IN ALL views IN all databases from test_user";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("invalid ALL statement for views"));
+        }
+
+        sql = "revoke select on ALL views IN ALL views from test_user";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("ALL VIEWS must be restricted with ALL DATABASES instead of ALL VIEWS"));
+        }
+    }
+
+    @Test
+    public void testExecuteAs() throws Exception {
+        ExecuteAsStmt stmt = (ExecuteAsStmt) UtFrameUtils.parseStmtWithNewParser(
+                "execute as root with no revert", ctx);
+        Assert.assertEquals(UserIdentity.ROOT, stmt.getToUser());
+        Assert.assertFalse(stmt.isAllowRevert());
+
+        try {
+            UtFrameUtils.parseStmtWithNewParser("execute as root", ctx);
+            Assert.fail();
+        } catch (Exception e) {
+            System.err.println(e.getMessage());
+            Assert.assertTrue(e.getMessage().contains("`EXECUTE AS` must use with `WITH NO REVERT` for now"));
         }
     }
 }

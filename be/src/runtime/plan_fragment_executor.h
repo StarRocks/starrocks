@@ -159,9 +159,9 @@ private:
     // true if this fragment has not returned the thread token to the thread resource mgr
     bool _has_thread_token;
 
-    bool _is_report_success;
+    bool enable_profile;
 
-    // If this is set to false, and '_is_report_success' is false as well,
+    // If this is set to false, and 'enable_profile' is false as well,
     // This executor will not report status to FE on being cancelled.
     bool _is_report_on_cancel;
 

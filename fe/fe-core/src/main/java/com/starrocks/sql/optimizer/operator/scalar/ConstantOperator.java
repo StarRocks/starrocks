@@ -57,6 +57,7 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
     private static final LocalDateTime MIN_DATETIME = LocalDateTime.of(0, 1, 1, 0, 0, 0);
 
     public static final ConstantOperator TRUE = ConstantOperator.createBoolean(true);
+    public static final ConstantOperator FALSE = ConstantOperator.createBoolean(false);
 
     // Don't need fixWidth
     private static final DateTimeFormatter DATE_TIME_FORMATTER_MS =

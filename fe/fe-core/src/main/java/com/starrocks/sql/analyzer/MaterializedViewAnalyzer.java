@@ -170,7 +170,8 @@ public class MaterializedViewAnalyzer {
                 Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(tableNameInfo.getCatalog(),
                         tableNameInfo.getDb());
                 if (isInternalCatalog(tableNameInfo.getCatalog())) {
-                    baseTableInfos.add(new MaterializedView.BaseTableInfo(database.getId(), table.getId()));
+                    baseTableInfos.add(new MaterializedView.BaseTableInfo(database.getId(), database.getFullName(),
+                            table.getId()));
                 } else {
                     baseTableInfos.add(new MaterializedView.BaseTableInfo(tableNameInfo.getCatalog(),
                             tableNameInfo.getDb(), table.getTableIdentifier()));
@@ -480,8 +481,15 @@ public class MaterializedViewAnalyzer {
                                        Map<TableName, Table> tableNameTableMap) {
             if (slotRef.getTblNameWithoutAnalyzed().getDb() == null) {
                 TableName tableName = slotRef.getTblNameWithoutAnalyzed();
-                OlapTable table = ((OlapTable) tableNameTableMap.get(tableName));
-                slotRef.setTblName(new TableName(null, statement.getTableName().getDb(), table.getName()));
+                Table table = tableNameTableMap.get(tableName);
+                List<MaterializedView.BaseTableInfo> baseTableInfos = statement.getBaseTableInfos();
+                for (MaterializedView.BaseTableInfo baseTableInfo : baseTableInfos) {
+                    if (baseTableInfo.getTable().equals(table)) {
+                        slotRef.setTblName(new TableName(baseTableInfo.getCatalogName(),
+                                baseTableInfo.getDbName(), table.getName()));
+                        break;
+                    }
+                }
             }
         }
 
@@ -568,6 +576,19 @@ public class MaterializedViewAnalyzer {
                                     Arrays.asList(RefreshTimeUnit.values()));
                         }
                     }
+                }
+            } else if (statement.getModifyTablePropertiesClause() != null) {
+                TableName mvName = statement.getMvName();
+                Database db = context.getGlobalStateMgr().getDb(mvName.getDb());
+                if (db == null) {
+                    throw new SemanticException("Can not find database:" + mvName.getDb());
+                }
+                OlapTable table = (OlapTable) db.getTable(mvName.getTbl());
+                if (table == null) {
+                    throw new SemanticException("Can not find materialized view:" + mvName.getTbl());
+                }
+                if (!(table instanceof MaterializedView)) {
+                    throw new SemanticException(mvName.getTbl() + " is not async materialized view");
                 }
             } else {
                 throw new SemanticException("Unsupported modification for materialized view");

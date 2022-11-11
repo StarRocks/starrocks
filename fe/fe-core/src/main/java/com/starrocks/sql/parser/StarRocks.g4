@@ -23,11 +23,11 @@ statement
     | useDatabaseStatement
     | useCatalogStatement
     | showDatabasesStatement
-    | alterDbQuotaStmtatement
+    | alterDbQuotaStatement
     | createDbStatement
     | dropDbStatement
     | showCreateDbStatement
-    | alterDatabaseRename
+    | alterDatabaseRenameStatement
     | recoverDbStmt
     | showDataStmt
 
@@ -245,7 +245,7 @@ showDatabasesStatement
     | SHOW SCHEMAS ((LIKE pattern=string) | (WHERE expression))?
     ;
 
-alterDbQuotaStmtatement
+alterDbQuotaStatement
     : ALTER DATABASE identifier SET DATA QUOTA identifier
     | ALTER DATABASE identifier SET REPLICA QUOTA INTEGER_VALUE
     ;
@@ -262,7 +262,7 @@ showCreateDbStatement
     : SHOW CREATE (DATABASE | SCHEMA) identifier
     ;
 
-alterDatabaseRename
+alterDatabaseRenameStatement
     : ALTER DATABASE identifier RENAME identifier
     ;
 
@@ -355,7 +355,9 @@ fromRollup
 
 createTableAsSelectStatement
     : CREATE TABLE (IF NOT EXISTS)? qualifiedName
-        ('(' identifier (',' identifier)* ')')? comment?
+        ('(' identifier (',' identifier)* ')')?
+        keyDesc?
+        comment?
         partitionDesc?
         distributionDesc?
         properties?
@@ -495,7 +497,7 @@ dropMaterializedViewStatement
     ;
 
 alterMaterializedViewStatement
-    : ALTER MATERIALIZED VIEW mvName=qualifiedName (refreshSchemeDesc | tableRenameClause)
+    : ALTER MATERIALIZED VIEW mvName=qualifiedName (refreshSchemeDesc | tableRenameClause | modifyTablePropertiesClause)
     ;
 
 refreshMaterializedViewStatement
@@ -1353,7 +1355,7 @@ installPluginStatement
     ;
 
 uninstallPluginStatement
-    : UNINSTALL PLUGIN FROM identifierOrString
+    : UNINSTALL PLUGIN identifierOrString
     ;
 
 // ------------------------------------------- File Statement ----------------------------------------------------------

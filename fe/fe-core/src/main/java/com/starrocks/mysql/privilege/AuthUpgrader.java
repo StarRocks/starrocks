@@ -8,6 +8,7 @@ import com.starrocks.analysis.UserIdentity;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.common.Config;
+import com.starrocks.common.Pair;
 import com.starrocks.privilege.ActionSet;
 import com.starrocks.privilege.PEntryObject;
 import com.starrocks.privilege.PrivilegeCollection;
@@ -22,6 +23,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -30,6 +32,8 @@ import java.util.Set;
 public class AuthUpgrader {
 
     private static final Logger LOG = LogManager.getLogger(AuthUpgrader.class);
+
+    private static final String STAR = "*";
     private Auth auth;
     private AuthenticationManager authenticationManager;
     private PrivilegeManager privilegeManager;
@@ -37,13 +41,19 @@ public class AuthUpgrader {
 
     // constants used when upgrading
     private short tableTypeId;
+    private short dbTypeId;
     private short userTypeId;
+    private short resourceTypeId;
     private String tableTypeStr;
     private String dbTypeStr;
     private String userTypeStr;
+    private String resourceTypeStr;
     private List<PEntryObject> allTablesInAllDbObject;
+    private List<PEntryObject> allDatabasesObject;
     private ActionSet selectActionSet;
-    private ActionSet impersonateActionSet;
+    private ActionSet createActionSet;
+    private ActionSet dropDbActionSet;
+    private ActionSet alterDbActionSet;
 
     public AuthUpgrader(
             Auth auth,
@@ -69,7 +79,7 @@ public class AuthUpgrader {
         }
     }
 
-    public void replayUpgrade(Map<String, Long> roleNameToId) throws AuthUpgradeUnrecoveredException {
+    public void replayUpgrade(Map<String, Long> roleNameToId) throws AuthUpgradeUnrecoverableException {
         LOG.info("start to replay upgrade journal.");
         init();
         upgradeUser();
@@ -79,29 +89,41 @@ public class AuthUpgrader {
         LOG.info("replayed upgrade journal successfully.");
     }
 
-    private void init() throws AuthUpgradeUnrecoveredException {
+    private void init() throws AuthUpgradeUnrecoverableException {
         try {
             tableTypeStr = PrivilegeType.TABLE.name();
             dbTypeStr = PrivilegeType.DATABASE.name();
             userTypeStr = PrivilegeType.USER.name();
+            resourceTypeStr = PrivilegeType.RESOURCE.name();
             tableTypeId = privilegeManager.analyzeType(tableTypeStr);
+            dbTypeId = privilegeManager.analyzeType(dbTypeStr);
             userTypeId = privilegeManager.analyzeType(userTypeStr);
+            resourceTypeId = privilegeManager.analyzeType(resourceTypeStr);
             allTablesInAllDbObject = Arrays.asList(privilegeManager.analyzeObject(
                     tableTypeStr,
                     Arrays.asList(PrivilegeType.TABLE.getPlural(), PrivilegeType.DATABASE.getPlural()),
                     null, null));
+            allDatabasesObject = Arrays.asList(privilegeManager.analyzeObject(dbTypeStr,
+                    Arrays.asList(PrivilegeType.DATABASE.getPlural()), null, null));
             selectActionSet = privilegeManager.analyzeActionSet(
                     tableTypeId,
                     Arrays.asList(PrivilegeType.TableAction.SELECT.toString()));
-            impersonateActionSet = privilegeManager.analyzeActionSet(
-                    userTypeId,
-                    Arrays.asList(PrivilegeType.UserAction.IMPERSONATE.toString()));
+            createActionSet = privilegeManager.analyzeActionSet(dbTypeId,
+                    Arrays.asList(
+                            PrivilegeType.DbAction.CREATE_TABLE.toString(),
+                            PrivilegeType.DbAction.CREATE_VIEW.toString(),
+                            PrivilegeType.DbAction.CREATE_MATERIALIZED_VIEW.toString()
+                    ));
+            dropDbActionSet = privilegeManager.analyzeActionSet(dbTypeId,
+                    Arrays.asList(PrivilegeType.DbAction.DROP.toString()));
+            alterDbActionSet = privilegeManager.analyzeActionSet(dbTypeId,
+                    Arrays.asList(PrivilegeType.DbAction.ALTER.toString()));
         } catch (PrivilegeException e) {
-            throw new AuthUpgradeUnrecoveredException("should not happen", e);
+            throw new AuthUpgradeUnrecoverableException("should not happen", e);
         }
     }
 
-    protected void upgradeUser() throws AuthUpgradeUnrecoveredException {
+    protected void upgradeUser() throws AuthUpgradeUnrecoverableException {
         UserPrivTable globalTable = this.auth.getUserPrivTable();
         DbPrivTable dbTable = this.auth.getDbPrivTable();
         TablePrivTable tableTable = this.auth.getTablePrivTable();
@@ -129,7 +151,7 @@ public class AuthUpgrader {
                 if (Config.ignore_invalid_privilege_authentications) {
                     LOG.warn("discard user priv entry:{}\n{}", entry, entry.toGrantSQL(), e);
                 } else {
-                    throw new AuthUpgradeUnrecoveredException("bad user priv entry " + entry, e);
+                    throw new AuthUpgradeUnrecoverableException("bad user priv entry " + entry, e);
                 }
             }
         }
@@ -153,13 +175,13 @@ public class AuthUpgrader {
                 if (Config.ignore_invalid_privilege_authentications) {
                     LOG.warn("discard user {} whitelist {}", userName, whiteList, e);
                 } else {
-                    throw new AuthUpgradeUnrecoveredException("bad domain user  " + userName, e);
+                    throw new AuthUpgradeUnrecoverableException("bad domain user  " + userName, e);
                 }
             }
         }
 
         // 3. grant privileges on all ip users
-        // must loop twice, otherwise impersonate may fail on non-existence user
+        // must loop again after all the users is created, otherwise impersonate may fail on non-existence user
         iter = globalTable.getFullReadOnlyIterator();
         while (iter.hasNext()) {
             GlobalPrivEntry entry = (GlobalPrivEntry) iter.next();
@@ -175,36 +197,37 @@ public class AuthUpgrader {
                     continue;
                 }
                 UserPrivilegeCollection collection = new UserPrivilegeCollection();
+                // mark all the old grant pattern, will be used in lower level
+                Set<Pair<String, String>> grantPatterns = new HashSet<>();
 
                 // 2. grant global privileges
                 upgradeUserGlobalPrivileges(entry, collection);
 
                 // 3. grant db privileges
-                upgradeUserDbPrivileges(dbTable.getReadOnlyIteratorByUser(userIdentity), collection);
+                upgradeUserDbPrivileges(dbTable, userIdentity, collection, grantPatterns);
 
                 // 4. grant table privilege
-                upgradeUserTablePrivileges(tableTable.getReadOnlyIteratorByUser(userIdentity), collection);
+                upgradeUserTablePrivileges(tableTable, userIdentity, collection, grantPatterns);
 
                 // 5. grant resource privileges
-                upgradeUserResourcePrivileges(resourceTable.getReadOnlyIteratorByUser(userIdentity), collection);
+                upgradeUserResourcePrivileges(resourceTable, userIdentity, collection);
 
                 // 6. grant impersonate privileges
                 upgradeUserImpersonate(impersonateUserPrivTable.getReadOnlyIteratorByUser(userIdentity), collection);
 
                 // 7. set privilege to user
                 privilegeManager.upgradeUserInitPrivilegeUnlock(userIdentity, collection);
-
-            } catch (AuthUpgradeUnrecoveredException | PrivilegeException e) {
+            } catch (AuthUpgradeUnrecoverableException | PrivilegeException e) {
                 if (Config.ignore_invalid_privilege_authentications) {
                     LOG.warn("discard user priv entry:{}\n{}", entry, entry.toGrantSQL(), e);
                 } else {
-                    throw new AuthUpgradeUnrecoveredException("bad user priv entry " + entry, e);
+                    throw new AuthUpgradeUnrecoverableException("bad user priv entry " + entry, e);
                 }
             }
         } // for iter in globalTable
 
         // 4. grant privileges on all domain users
-        // must loop twice, otherwise impersonate may fail on non-existence user
+        // must loop again after all the users is created, otherwise impersonate may fail on non-existence user
         upiter = auth.getPropertyMgr().propertyMap.entrySet().iterator();
         while (upiter.hasNext()) {
             Map.Entry<String, UserProperty> entry = upiter.next();
@@ -214,6 +237,8 @@ public class AuthUpgrader {
                 for (String hostname : whiteList.getAllDomains()) {
                     UserIdentity userIdentity = UserIdentity.createAnalyzedUserIdentWithDomain(userName, hostname);
                     UserPrivilegeCollection collection = new UserPrivilegeCollection();
+                    // mark all the old grant pattern, will be used in lower level
+                    Set<Pair<String, String>> grantPatterns = new HashSet<>();
 
                     // 1. grant global privileges
                     Iterator<PrivEntry> globalIter = globalTable.getReadOnlyIteratorByUser(userIdentity);
@@ -222,13 +247,13 @@ public class AuthUpgrader {
                     }
 
                     // 2. grant db privileges
-                    upgradeUserDbPrivileges(dbTable.getReadOnlyIteratorByUser(userIdentity), collection);
+                    upgradeUserDbPrivileges(dbTable, userIdentity, collection, grantPatterns);
 
                     // 3. grant table privilege
-                    upgradeUserTablePrivileges(tableTable.getReadOnlyIteratorByUser(userIdentity), collection);
+                    upgradeUserTablePrivileges(tableTable, userIdentity, collection, grantPatterns);
 
                     // 4. grant resource privileges
-                    upgradeUserResourcePrivileges(resourceTable.getReadOnlyIteratorByUser(userIdentity), collection);
+                    upgradeUserResourcePrivileges(resourceTable, userIdentity, collection);
 
                     // 5. grant impersonate privileges
                     upgradeUserImpersonate(impersonateUserPrivTable.getReadOnlyIteratorByUser(userIdentity),
@@ -237,55 +262,177 @@ public class AuthUpgrader {
                     // 6. set privilege to user
                     privilegeManager.upgradeUserInitPrivilegeUnlock(userIdentity, collection);
                 }
-            } catch (AuthUpgradeUnrecoveredException | PrivilegeException e) {
+            } catch (AuthUpgradeUnrecoverableException | PrivilegeException e) {
                 if (Config.ignore_invalid_privilege_authentications) {
                     LOG.warn("discard domain user priv for {}", userName);
                 } else {
-                    throw new AuthUpgradeUnrecoveredException("bad user priv for " + userName, e);
+                    throw new AuthUpgradeUnrecoverableException("bad user priv for " + userName, e);
                 }
             }
         } // for upiter in UserPropertyMap
     }
 
-    protected void upgradeUserGlobalPrivileges(GlobalPrivEntry entry, UserPrivilegeCollection collection)
-            throws PrivilegeException, AuthUpgradeUnrecoveredException {
+    protected void upgradeUserGlobalPrivileges(
+            GlobalPrivEntry entry, UserPrivilegeCollection collection)
+            throws PrivilegeException, AuthUpgradeUnrecoverableException {
         PrivBitSet bitSet = entry.getPrivSet();
         for (Privilege privilege : bitSet.toPrivilegeList()) {
-            upgradeTablePrivileges(DbPrivEntry.ANY_DB, DbPrivEntry.ANY_DB, privilege, collection);
+            switch (privilege) {
+                case SELECT_PRIV:
+                case USAGE_PRIV:
+                case CREATE_PRIV:
+                case DROP_PRIV:
+                case ALTER_PRIV:
+                    upgradeTablePrivileges(DbPrivEntry.ANY_DB, TablePrivEntry.ANY_TBL, privilege, collection, null);
+                    break;
+
+                case ADMIN_PRIV:
+                case NODE_PRIV:
+                case GRANT_PRIV:
+                    upgradeBuiltInRoles(privilege, collection, null);
+                    break;
+
+                default:
+                    throw new AuthUpgradeUnrecoverableException(
+                            "unsupported global " + privilege + " for user " + entry.getUserIdent());
+            }
         }
     }
 
-    protected void upgradeUserDbPrivileges(Iterator<PrivEntry> iterator, UserPrivilegeCollection collection)
-            throws PrivilegeException, AuthUpgradeUnrecoveredException {
+    protected void upgradeUserDbPrivileges(
+            DbPrivTable table, UserIdentity user, UserPrivilegeCollection collection,
+            Set<Pair<String, String>> grantPatterns)
+            throws PrivilegeException, AuthUpgradeUnrecoverableException {
+        Iterator<PrivEntry> iterator;
+        // loop twice, the first one is for GRANT_PRIV
+        iterator = table.getReadOnlyIteratorByUser(user);
+        while (iterator.hasNext()) {
+            DbPrivEntry entry = (DbPrivEntry) iterator.next();
+            PrivBitSet bitSet = entry.getPrivSet();
+            if (bitSet.containsPrivs(Privilege.GRANT_PRIV)) {
+                grantPatterns.add(Pair.create(entry.getOrigDb(), TablePattern.ALL.getTbl()));
+            }
+        }
+
+        // loop twice, the second one is for all privilege except GRANT_PRIV
+        iterator = table.getReadOnlyIteratorByUser(user);
         while (iterator.hasNext()) {
             DbPrivEntry entry = (DbPrivEntry) iterator.next();
             PrivBitSet bitSet = entry.getPrivSet();
             for (Privilege privilege : bitSet.toPrivilegeList()) {
-                upgradeTablePrivileges(entry.getOrigDb(), DbPrivEntry.ANY_DB, privilege, collection);
+                switch (privilege) {
+                    case SELECT_PRIV:
+                    case CREATE_PRIV:
+                    case DROP_PRIV:
+                    case ALTER_PRIV:
+                        upgradeTablePrivileges(entry.getOrigDb(), TablePrivEntry.ANY_TBL, privilege, collection,
+                                grantPatterns);
+                        break;
+
+                    case GRANT_PRIV:
+                        break;
+
+                    default:
+                        throw new AuthUpgradeUnrecoverableException("unsupported db " +
+                                privilege + " for user " + user);
+                }
             }
         }
     }
 
-    protected void upgradeUserTablePrivileges(Iterator<PrivEntry> iterator, UserPrivilegeCollection collection)
-            throws PrivilegeException, AuthUpgradeUnrecoveredException {
+    protected void upgradeUserTablePrivileges(
+            TablePrivTable table, UserIdentity user, UserPrivilegeCollection collection,
+            Set<Pair<String, String>> grantPatterns)
+            throws PrivilegeException, AuthUpgradeUnrecoverableException {
+        // loop twice, the first one is for GRANT_PRIV
+        Iterator<PrivEntry> iterator = table.getReadOnlyIteratorByUser(user);
+        while (iterator.hasNext()) {
+            TablePrivEntry entry = (TablePrivEntry) iterator.next();
+            PrivBitSet bitSet = entry.getPrivSet();
+            if (bitSet.containsPrivs(Privilege.GRANT_PRIV)) {
+                grantPatterns.add(Pair.create(entry.getOrigDb(), entry.getOrigTbl()));
+            }
+        }
+
+        // loop twice, the second one is for all privilege except GRANT_PRIV
+        iterator = table.getReadOnlyIteratorByUser(user);
         while (iterator.hasNext()) {
             TablePrivEntry entry = (TablePrivEntry) iterator.next();
             PrivBitSet bitSet = entry.getPrivSet();
             for (Privilege privilege : bitSet.toPrivilegeList()) {
-                upgradeTablePrivileges(entry.getOrigDb(), entry.getOrigTbl(), privilege, collection);
+                switch (privilege) {
+                    case SELECT_PRIV:
+                        upgradeTablePrivileges(entry.getOrigDb(), entry.getOrigTbl(), privilege,
+                                collection, grantPatterns);
+                        break;
+
+                    case GRANT_PRIV:
+                        break;
+
+                    default:
+                        throw new AuthUpgradeUnrecoverableException(
+                                "unsupported table " + privilege + " for user " + user);
+                }
             }
         }
     }
 
-    protected void upgradeUserResourcePrivileges(Iterator<PrivEntry> iterator, UserPrivilegeCollection collection) {
-        // TODO: resource object has not implemented yet
+    protected void upgradeUserResourcePrivileges(ResourcePrivTable table, UserIdentity user,
+                                                 UserPrivilegeCollection collection)
+            throws PrivilegeException, AuthUpgradeUnrecoverableException {
+
+        Set<String> grantPatterns = new HashSet<>();
+        // loop twice, the first one is for GRANT_PRIV
+        Iterator<PrivEntry> iterator = table.getReadOnlyIteratorByUser(user);
+        while (iterator.hasNext()) {
+            ResourcePrivEntry entry = (ResourcePrivEntry) iterator.next();
+            PrivBitSet bitSet = entry.getPrivSet();
+            if (bitSet.containsPrivs(Privilege.GRANT_PRIV)) {
+                if (entry.getOrigResource().equals(STAR)) {
+                    upgradeBuiltInRoles(Privilege.GRANT_PRIV, collection, null);
+                } else {
+                    grantPatterns.add(entry.getOrigResource());
+                }
+            }
+        }
+
+        iterator = table.getReadOnlyIteratorByUser(user);
+        while (iterator.hasNext()) {
+            ResourcePrivEntry entry = (ResourcePrivEntry) iterator.next();
+            String name = entry.getOrigResource();
+            PrivBitSet bitSet = entry.getPrivSet();
+            for (Privilege privilege : bitSet.toPrivilegeList()) {
+                switch (privilege) {
+                    case USAGE_PRIV:
+                        upgradeResourcePrivileges(
+                                name, privilege, collection, grantPatterns.contains(name));
+                        break;
+
+                    case NODE_PRIV:
+                    case ADMIN_PRIV:
+                        if (! name.equals(STAR)) {
+                            throw new AuthUpgradeUnrecoverableException(privilege + " on " +
+                                    name + " is not supported!");
+                        }
+                        upgradeBuiltInRoles(privilege, collection, null);
+                        break;
+
+                    case GRANT_PRIV:
+                        break;
+
+                    default:
+                        throw new AuthUpgradeUnrecoverableException("role resource privilege " +
+                                privilege + " hasn't implemented");
+                }
+            }
+        }
     }
 
     protected void upgradeUserImpersonate(Iterator<PrivEntry> iterator, UserPrivilegeCollection collection)
             throws PrivilegeException {
         while (iterator.hasNext()) {
             ImpersonateUserPrivEntry entry = (ImpersonateUserPrivEntry) iterator.next();
-            upgradeImpersontaePrivileges(entry.getSecuredUserIdentity(), collection);
+            upgradeImpersonatePrivileges(entry.getSecuredUserIdentity(), collection);
         }
     }
 
@@ -293,7 +440,7 @@ public class AuthUpgrader {
      * input param roleNameToId, can be null, meaning that leader is upgrading
      * return roleNameToId if it's leader
      */
-    protected Map<String, Long> upgradeRole(Map<String, Long> roleNameToId) throws AuthUpgradeUnrecoveredException {
+    protected Map<String, Long> upgradeRole(Map<String, Long> roleNameToId) throws AuthUpgradeUnrecoverableException {
         Map<String, Long> ret = new HashMap<>();
         Iterator<Map.Entry<String, Role>> iterator = this.auth.roleManager.roles.entrySet().iterator();
         Long roleId;
@@ -307,7 +454,7 @@ public class AuthUpgrader {
                 roleId = roleNameToId.get(roleName);
                 if (roleId == null) {
                     LOG.warn("cannot find {} in {}", roleName, roleNameToId);
-                    throw new AuthUpgradeUnrecoveredException(
+                    throw new AuthUpgradeUnrecoverableException(
                             "failed to upgrade role " + roleName + " while replaying!");
                 }
             }
@@ -324,10 +471,10 @@ public class AuthUpgrader {
                         RolePrivilegeCollection.RoleFlags.REMOVABLE);
 
                 // 1. table privileges(including global+db)
-                upgradeRoleTablePrivileges(role.getTblPatternToPrivs(), collection);
+                upgradeRoleTablePrivileges(role.getTblPatternToPrivs(), collection, roleId);
 
                 // 2. resource privileges
-                upgradeRoleResourcePrivileges(role.getResourcePatternToPrivs(), collection);
+                upgradeRoleResourcePrivileges(role.getResourcePatternToPrivs(), collection, roleId);
 
                 // 3. impersonate privileges
                 upgradeRoleImpersonatePrivileges(role.getImpersonateUsers(), collection);
@@ -337,11 +484,11 @@ public class AuthUpgrader {
                 for (UserIdentity user : role.getUsers()) {
                     privilegeManager.upgradeUserRoleUnlock(user, roleId);
                 }
-            } catch (AuthUpgradeUnrecoveredException | PrivilegeException e) {
+            } catch (AuthUpgradeUnrecoverableException | PrivilegeException e) {
                 if (Config.ignore_invalid_privilege_authentications) {
                     LOG.warn("discard role[{}] priv:{}", roleName, role, e);
                 } else {
-                    throw new AuthUpgradeUnrecoveredException("bad role priv " + roleName, e);
+                    throw new AuthUpgradeUnrecoverableException("bad role priv " + roleName, e);
                 }
             }
         }
@@ -349,32 +496,127 @@ public class AuthUpgrader {
     }
 
     protected void upgradeRoleTablePrivileges(
-            Map<TablePattern, PrivBitSet> tblPatternToPrivs, RolePrivilegeCollection collection)
-            throws PrivilegeException, AuthUpgradeUnrecoveredException {
-        Iterator<Map.Entry<TablePattern, PrivBitSet>> iterator = tblPatternToPrivs.entrySet().iterator();
+            Map<TablePattern, PrivBitSet> tblPatternToPrivs, RolePrivilegeCollection collection, long roleId)
+            throws PrivilegeException, AuthUpgradeUnrecoverableException {
+        Iterator<Map.Entry<TablePattern, PrivBitSet>> iterator;
+        Set<Pair<String, String>> grantPatterns = new HashSet<>();
 
+        // loop twice, the first one is for GRANT_PRIV
+        iterator = tblPatternToPrivs.entrySet().iterator();
+        while (iterator.hasNext()) {
+            Map.Entry<TablePattern, PrivBitSet> entry = iterator.next();
+            TablePattern pattern = entry.getKey();
+            PrivBitSet bitSet = entry.getValue();
+            if (bitSet.containsPrivs(Privilege.GRANT_PRIV)) {
+                if (pattern.equals(TablePattern.ALL)) {
+                    upgradeBuiltInRoles(Privilege.GRANT_PRIV, collection, roleId);
+                } else {
+                    grantPatterns.add(Pair.create(pattern.getQuolifiedDb(), pattern.getTbl()));
+                }
+            }
+        }
+
+        // loop twice, the second one is for all privilege except GRANT_PRIV
+        iterator = tblPatternToPrivs.entrySet().iterator();
         while (iterator.hasNext()) {
             Map.Entry<TablePattern, PrivBitSet> entry = iterator.next();
             TablePattern pattern = entry.getKey();
             PrivBitSet bitSet = entry.getValue();
 
             for (Privilege privilege : bitSet.toPrivilegeList()) {
-                upgradeTablePrivileges(pattern.getQuolifiedDb(), pattern.getTbl(), privilege, collection);
+                switch (privilege) {
+                    case SELECT_PRIV:
+                    case USAGE_PRIV:
+                    case CREATE_PRIV:
+                    case DROP_PRIV:
+                    case ALTER_PRIV:
+                        upgradeTablePrivileges(pattern.getQuolifiedDb(), pattern.getTbl(), privilege, collection,
+                                grantPatterns);
+                        break;
+
+                    case NODE_PRIV:
+                    case ADMIN_PRIV:
+                        if (! pattern.equals(TablePattern.ALL)) {
+                            throw new AuthUpgradeUnrecoverableException(privilege + " on " +
+                                    pattern + " is not supported!");
+                        }
+                        upgradeBuiltInRoles(privilege, collection, roleId);
+                        break;
+
+                    case GRANT_PRIV:
+                        break;
+
+                    default:
+                        throw new AuthUpgradeUnrecoverableException("role table privilege " +
+                                privilege + " hasn't implemented");
+                }
             }
         }
     }
 
     protected void upgradeRoleResourcePrivileges(
-            Map<ResourcePattern, PrivBitSet> resourcePatternToPrivs, RolePrivilegeCollection collection) {
-        // TODO: resource object has not implemented yet
+            Map<ResourcePattern, PrivBitSet> resourcePatternToPrivs, RolePrivilegeCollection collection, long roleId)
+            throws PrivilegeException, AuthUpgradeUnrecoverableException {
+        Iterator<Map.Entry<ResourcePattern, PrivBitSet>> iterator;
+        Set<String> grantPatterns = new HashSet<>();
+
+        // loop twice, the first one is for GRANT_PRIV
+        iterator = resourcePatternToPrivs.entrySet().iterator();
+        while (iterator.hasNext()) {
+            Map.Entry<ResourcePattern, PrivBitSet> entry = iterator.next();
+            ResourcePattern pattern = entry.getKey();
+            PrivBitSet bitSet = entry.getValue();
+
+            if (bitSet.containsPrivs(Privilege.GRANT_PRIV)) {
+                if (pattern.getResourceName().equals(STAR)) {
+                    upgradeBuiltInRoles(Privilege.GRANT_PRIV, collection, roleId);
+                } else {
+                    grantPatterns.add(pattern.getResourceName());
+                }
+            }
+        }
+
+        // loop twice, the second one is for all privilege except GRANT_PRIV
+        iterator = resourcePatternToPrivs.entrySet().iterator();
+        while (iterator.hasNext()) {
+            Map.Entry<ResourcePattern, PrivBitSet> entry = iterator.next();
+            ResourcePattern pattern = entry.getKey();
+            String name = pattern.getResourceName();
+            PrivBitSet bitSet = entry.getValue();
+
+            for (Privilege privilege : bitSet.toPrivilegeList()) {
+                switch (privilege) {
+                    case USAGE_PRIV:
+                        upgradeResourcePrivileges(name, privilege, collection, grantPatterns.contains(name));
+                        break;
+
+                    case NODE_PRIV:
+                    case ADMIN_PRIV:
+                        if (! name.equals(STAR)) {
+                            throw new AuthUpgradeUnrecoverableException(privilege + " on " +
+                                    pattern + " is not supported!");
+                        }
+                        upgradeBuiltInRoles(privilege, collection, roleId);
+                        break;
+
+                    case GRANT_PRIV:
+                        break;
+
+                    default:
+                        throw new AuthUpgradeUnrecoverableException("role resource privilege " +
+                                privilege + " hasn't implemented");
+                }
+            }
+        }
     }
 
-    protected void upgradeRoleImpersonatePrivileges(Set<UserIdentity> impersonateUsers, RolePrivilegeCollection collection)
+    protected void upgradeRoleImpersonatePrivileges(Set<UserIdentity> impersonateUsers,
+                                                    RolePrivilegeCollection collection)
             throws PrivilegeException {
         Iterator<UserIdentity> iterator = impersonateUsers.iterator();
         while (iterator.hasNext()) {
             UserIdentity securedUser = iterator.next();
-            upgradeImpersontaePrivileges(securedUser, collection);
+            upgradeImpersonatePrivileges(securedUser, collection);
         }
     }
 
@@ -382,14 +624,20 @@ public class AuthUpgrader {
         return roleName.equals(Role.ADMIN_ROLE) || roleName.equals(Role.OPERATOR_ROLE);
     }
 
-    protected void upgradeTablePrivileges(String db, String table, Privilege privilege, PrivilegeCollection collection)
-            throws PrivilegeException, AuthUpgradeUnrecoveredException {
+    protected void upgradeTablePrivileges(
+            String db, String table, Privilege privilege, PrivilegeCollection collection,
+            Set<Pair<String, String>> grantPatterns)
+            throws PrivilegeException, AuthUpgradeUnrecoverableException {
+        boolean isGrant = false;
+        if (grantPatterns != null) {
+            isGrant = matchTableGrant(grantPatterns, db, table);
+        }
         switch (privilege) {
             case SELECT_PRIV: {
                 List<PEntryObject> objects;
-                if (db.equals(TablePattern.ALL.getQuolifiedDb())) {
+                if (db.equals(STAR)) {
                     objects = allTablesInAllDbObject;
-                } else if (table.equals(TablePattern.ALL.getTbl())) {
+                } else if (table.equals(STAR)) {
                     // ALL TABLES in db
                     objects = Arrays.asList(privilegeManager.analyzeObject(
                             tableTypeStr, Arrays.asList(tableTypeStr), dbTypeStr, db));
@@ -398,28 +646,147 @@ public class AuthUpgrader {
                     objects = Arrays.asList(privilegeManager.analyzeObject(
                             tableTypeStr, Arrays.asList(db, table)));
                 }
-                collection.grant(tableTypeId, selectActionSet, objects, false);
+                collection.grant(tableTypeId, selectActionSet, objects, isGrant);
+                break;
+            }
+
+            case CREATE_PRIV: {
+                if (db.equals(STAR)) {
+                    // for *.*
+                    collection.grant(dbTypeId, createActionSet, allDatabasesObject, isGrant);
+                    // TODO(yiming): grant create_database on catalog default_catalog to user_xxx
+                } else {
+                    // for db.*
+                    List<PEntryObject> objects = Arrays.asList(privilegeManager.analyzeObject(
+                            dbTypeStr, Arrays.asList(db)));
+                    collection.grant(dbTypeId, createActionSet, objects, isGrant);
+                }
+                break;
+            }
+
+            case DROP_PRIV: {
+                if (db.equals(STAR)) {
+                    // for *.*
+                    collection.grant(dbTypeId, dropDbActionSet, allDatabasesObject, isGrant);
+                } else if (table.equals(STAR)) {
+                    // for db.*
+                    List<PEntryObject> objects = Arrays.asList(privilegeManager.analyzeObject(
+                            dbTypeStr, Arrays.asList(db)));
+                    collection.grant(dbTypeId, dropDbActionSet, objects, isGrant);
+                } else {
+                    throw new AuthUpgradeUnrecoverableException(
+                            "drop_priv on table/view/mv level hasn't implemented yet");
+                }
+                break;
+            }
+
+            case ALTER_PRIV: {
+                if (db.equals(STAR)) {
+                    // for *.*
+                    collection.grant(dbTypeId, alterDbActionSet, allDatabasesObject, isGrant);
+                } else if (table.equals(STAR)) {
+                    // for db.*
+                    List<PEntryObject> objects = Arrays.asList(privilegeManager.analyzeObject(
+                            dbTypeStr, Arrays.asList(db)));
+                    collection.grant(dbTypeId, alterDbActionSet, objects, isGrant);
+                } else {
+                    throw new AuthUpgradeUnrecoverableException(
+                            "alter_priv on table/view/mv level hasn't implemented yet");
+                }
+                break;
+            }
+
+            case USAGE_PRIV: {
+                if (db.equals(TablePattern.ALL.getQuolifiedDb())) {
+                    upgradeResourcePrivileges("*", privilege, collection, false);
+                }
                 break;
             }
 
             default:
-                throw new AuthUpgradeUnrecoveredException("table privilege " + privilege + " hasn't implemented");
+                throw new AuthUpgradeUnrecoverableException("table privilege " + privilege + " hasn't implemented");
         }
     }
 
-    protected void upgradeImpersontaePrivileges(UserIdentity user, PrivilegeCollection collection)
+    // `grantPattern` only contains dbx.tblx or dbx.*,
+    // grant_priv on *.* will be upgraded to user_admin built-in role
+    private boolean matchTableGrant(Set<Pair<String, String>> grantPattern, String db, String table) {
+        return grantPattern.contains(Pair.create(db, table)) || grantPattern.contains(Pair.create(db, STAR));
+    }
+
+    protected void upgradeImpersonatePrivileges(UserIdentity user, PrivilegeCollection collection)
             throws PrivilegeException {
         List<PEntryObject> objects = Arrays.asList(privilegeManager.analyzeUserObject(
                 userTypeStr, user));
+        ActionSet impersonateActionSet = privilegeManager.analyzeActionSet(
+                userTypeId,
+                Arrays.asList(PrivilegeType.UserAction.IMPERSONATE.toString()));
         collection.grant(userTypeId, impersonateActionSet, objects, false);
     }
 
-    public static class AuthUpgradeUnrecoveredException extends Exception {
-        public AuthUpgradeUnrecoveredException(String s) {
+    protected void upgradeResourcePrivileges(
+            String name, Privilege privilege, PrivilegeCollection collection, boolean isGrant)
+            throws PrivilegeException, AuthUpgradeUnrecoverableException {
+        switch (privilege) {
+            case USAGE_PRIV: {
+                List<PEntryObject> objects;
+                if (name.equals(ResourcePattern.ALL.getResourceName())) {
+                    objects = Arrays.asList(privilegeManager.analyzeObject(
+                            resourceTypeStr, Arrays.asList(name), null, null));
+                } else {
+                    objects = Arrays.asList(privilegeManager.analyzeObject(
+                            resourceTypeStr, Arrays.asList(name)));
+                }
+                ActionSet actionSet = privilegeManager.analyzeActionSet(
+                        resourceTypeId, Arrays.asList(PrivilegeType.ResourceAction.USAGE.toString()));
+                collection.grant(resourceTypeId, actionSet, objects, isGrant);
+                break;
+            }
+
+            default:
+                throw new AuthUpgradeUnrecoverableException("resource privilege " + privilege + " hasn't implemented");
+        }
+    }
+
+    protected void upgradeBuiltInRoles(Privilege privilege, PrivilegeCollection collection, Long roleId)
+            throws PrivilegeException, AuthUpgradeUnrecoverableException {
+        switch (privilege) {
+            case ADMIN_PRIV:   // ADMIN_PRIV -> db_admin + user_admin
+                grantRoleToCollection(collection, roleId,
+                        PrivilegeManager.DB_ADMIN_ROLE_ID, PrivilegeManager.USER_ADMIN_ROLE_ID);
+                break;
+            case NODE_PRIV:    // NODE_PRIV -> cluster_admin
+                grantRoleToCollection(collection, roleId, PrivilegeManager.CLUSTER_ADMIN_ROLE_ID);
+                break;
+            case GRANT_PRIV:   // GRANT_PRIV -> user_admin
+                grantRoleToCollection(collection, roleId, PrivilegeManager.USER_ADMIN_ROLE_ID);
+                break;
+
+            default:
+                throw new AuthUpgradeUnrecoverableException("unsupported " + privilege + " for built-in roles!");
+        }
+    }
+
+    private void grantRoleToCollection(PrivilegeCollection collection, Long roleId, Long... parentRoleIds)
+            throws PrivilegeException {
+        if (roleId == null) {
+            for (long parentRoleId : parentRoleIds) {
+                ((UserPrivilegeCollection) collection).grantRole(parentRoleId);
+            }
+        } else {
+            for (long parentRoleId : parentRoleIds) {
+                privilegeManager.upgradeParentRoleRelationUnlock(parentRoleId, roleId);
+                ((RolePrivilegeCollection) collection).addParentRole(parentRoleId);
+            }
+        }
+    }
+
+    public static class AuthUpgradeUnrecoverableException extends Exception {
+        public AuthUpgradeUnrecoverableException(String s) {
             super(s);
         }
 
-        public AuthUpgradeUnrecoveredException(String s, Exception e) {
+        public AuthUpgradeUnrecoverableException(String s, Exception e) {
             super(s);
             initCause(e);
         }
