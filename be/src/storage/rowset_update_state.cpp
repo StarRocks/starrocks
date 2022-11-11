@@ -422,6 +422,7 @@ Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_
 }
 
 Status RowsetUpdateState::_update_rowset_meta(Tablet* tablet, Rowset* rowset) {
+    std::unique wrlock(tablet->get_header_lock());
     rowset->rowset_meta()->clear_txn_meta();
     auto& rowset_meta_pb = rowset->rowset_meta()->get_meta_pb();
     return TabletMetaManager::write_rowset_meta(tablet->data_dir(), tablet->tablet_id(), rowset_meta_pb, string());
