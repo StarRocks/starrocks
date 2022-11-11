@@ -56,6 +56,7 @@ import com.starrocks.http.UnauthorizedException;
 import com.starrocks.leader.LeaderImpl;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
+import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.metric.TableMetricsRegistry;
@@ -81,7 +82,6 @@ import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
-import com.starrocks.task.StreamLoadTask;
 import com.starrocks.thrift.FrontendService;
 import com.starrocks.thrift.FrontendServiceVersion;
 import com.starrocks.thrift.TAbortRemoteTxnRequest;
@@ -1242,9 +1242,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                                 "and the data of materialized view must be consistent with the base table.",
                         table.getName(), table.getName()));
             }
-            StreamLoadTask streamLoadTask = StreamLoadTask.fromTStreamLoadPutRequest(request, db);
-            StreamLoadPlanner planner = new StreamLoadPlanner(db, (OlapTable) table, streamLoadTask);
-            TExecPlanFragmentParams plan = planner.plan(streamLoadTask.getId());
+            StreamLoadInfo streamLoadInfo = StreamLoadInfo.fromTStreamLoadPutRequest(request, db);
+            StreamLoadPlanner planner = new StreamLoadPlanner(db, (OlapTable) table, streamLoadInfo);
+            TExecPlanFragmentParams plan = planner.plan(streamLoadInfo.getId());
             // add table indexes to transaction state
             TransactionState txnState =
                     GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionState(db.getId(), request.getTxnId());

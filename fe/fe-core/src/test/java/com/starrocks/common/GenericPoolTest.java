@@ -45,6 +45,7 @@ import com.starrocks.thrift.TScanOpenParams;
 import com.starrocks.thrift.TScanOpenResult;
 import com.starrocks.thrift.TSnapshotRequest;
 import com.starrocks.thrift.TStatus;
+import com.starrocks.thrift.TStreamLoadChannel;
 import com.starrocks.thrift.TTabletStatResult;
 import com.starrocks.thrift.TTransmitDataParams;
 import com.starrocks.thrift.TTransmitDataResult;
@@ -199,6 +200,12 @@ public class GenericPoolTest {
 
         @Override
         public TStatus submit_routine_load_task(List<TRoutineLoadTask> tasks) throws TException {
+            // TODO Auto-generated method stub
+            return null;
+        }
+
+        @Override
+        public TStatus finish_stream_load_channel(TStreamLoadChannel streamLoadChannel) throws TException {
             // TODO Auto-generated method stub
             return null;
         }

@@ -141,6 +141,13 @@ public class LoadLoadingTask extends LoadTask {
             curCoordinator = new Coordinator(callback.getCallbackId(), loadId, planner.getDescTable(),
                     planner.getFragments(), planner.getScanNodes(),
                     planner.getTimezone(), planner.getStartTime(), sessionVariables, context);
+            /*
+            * For broker load job, user only need to set mem limit by 'exec_mem_limit' property.
+            * And the variable 'load_mem_limit' does not make any effect.
+            * However, in order to ensure the consistency of semantics when executing on the BE side,
+            * and to prevent subsequent modification from incorrectly setting the load_mem_limit,
+            * here we use exec_mem_limit to directly override the load_mem_limit property.
+            */
             curCoordinator.setQueryType(TQueryType.LOAD);
             curCoordinator.setExecMemoryLimit(execMemLimit);
             curCoordinator.setLoadMemLimit(execMemLimit);
@@ -149,13 +156,6 @@ public class LoadLoadingTask extends LoadTask {
             curCoordinator = new Coordinator(loadPlanner);
         }
         curCoordinator.setLoadJobType(loadJobType);
-        /*
-         * For broker load job, user only need to set mem limit by 'exec_mem_limit' property.
-         * And the variable 'load_mem_limit' does not make any effect.
-         * However, in order to ensure the consistency of semantics when executing on the BE side,
-         * and to prevent subsequent modification from incorrectly setting the load_mem_limit,
-         * here we use exec_mem_limit to directly override the load_mem_limit property.
-         */
 
         try {
             QeProcessorImpl.INSTANCE.registerQuery(loadId, curCoordinator);
