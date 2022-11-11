@@ -278,15 +278,52 @@ public class Alter {
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)) {
             partitionTTL = PropertyAnalyzer.analyzePartitionTimeToLive(properties);
         }
+        int partitionRefreshNumber = INVALID;
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)) {
+            partitionRefreshNumber = PropertyAnalyzer.analyzePartitionRefreshNumber(properties);
+        }
+        int autoRefreshPartitionsLimit = INVALID;
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT)) {
+            autoRefreshPartitionsLimit = PropertyAnalyzer.analyzeAutoRefreshPartitionsLimit(properties, materializedView);
+        }
+        List<TableName> excludedTriggerTables = Lists.newArrayList();
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)) {
+            excludedTriggerTables = PropertyAnalyzer.analyzeExcludedTriggerTables(properties, materializedView);
+        }
+
         if (!properties.isEmpty()) {
             throw new AnalysisException("Modify failed because unknown properties: " + properties);
         }
-        materializedView.getTableProperty().getProperties().put(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER,
-                String.valueOf(partitionTTL));
-        materializedView.getTableProperty().setPartitionTTLNumber(partitionTTL);
-        ModifyTablePropertyOperationLog log = new ModifyTablePropertyOperationLog(materializedView.getDbId(),
-                materializedView.getId(), propClone);
-        GlobalStateMgr.getCurrentState().getEditLog().logAlterMaterializedViewProperties(log);
+
+        boolean isChanged = false;
+        Map<String, String> curProp = materializedView.getTableProperty().getProperties();
+        if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER) &&
+                materializedView.getTableProperty().getPartitionTTLNumber() != partitionTTL) {
+            curProp.put(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER, String.valueOf(partitionTTL));
+            materializedView.getTableProperty().setPartitionTTLNumber(partitionTTL);
+            isChanged = true;
+        } else if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER) &&
+                materializedView.getTableProperty().getPartitionRefreshNumber() != partitionRefreshNumber) {
+            curProp.put(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER, String.valueOf(partitionRefreshNumber));
+            materializedView.getTableProperty().setPartitionRefreshNumber(partitionRefreshNumber);
+            isChanged = true;
+        } else if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT) &&
+                materializedView.getTableProperty().getAutoRefreshPartitionsLimit() != autoRefreshPartitionsLimit) {
+            curProp.put(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT, String.valueOf(autoRefreshPartitionsLimit));
+            materializedView.getTableProperty().setAutoRefreshPartitionsLimit(autoRefreshPartitionsLimit);
+            isChanged = true;
+        }
+        if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)) {
+            curProp.put(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES,
+                    propClone.get(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES));
+            materializedView.getTableProperty().setExcludedTriggerTables(excludedTriggerTables);
+            isChanged = true;
+        }
+        if (isChanged) {
+            ModifyTablePropertyOperationLog log = new ModifyTablePropertyOperationLog(materializedView.getDbId(),
+                    materializedView.getId(), propClone);
+            GlobalStateMgr.getCurrentState().getEditLog().logAlterMaterializedViewProperties(log);
+        }
         LOG.info("alter materialized view properties {}, id: {}", properties, materializedView.getId());
     }
 

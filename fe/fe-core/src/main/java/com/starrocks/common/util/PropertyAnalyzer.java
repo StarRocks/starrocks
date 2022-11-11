@@ -220,20 +220,24 @@ public class PropertyAnalyzer {
         return partitionTimeToLive;
     }
 
-    public static int analyzeAutoRefreshPartitionsLimit(Map<String, String> properties) throws AnalysisException {
-        int partitionRefreshNumber = -1;
+    public static int analyzeAutoRefreshPartitionsLimit(Map<String, String> properties, MaterializedView mv)
+            throws AnalysisException {
+        if (mv.getRefreshScheme().getType() == MaterializedView.RefreshType.MANUAL) {
+            throw new AnalysisException("The auto_refresh_partitions_limit property does not support manual refresh mode.");
+        }
+        int autoRefreshPartitionsLimit = -1;
         if (properties != null && properties.containsKey(PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT)) {
             try {
-                partitionRefreshNumber = Integer.parseInt(properties.get(PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT));
+                autoRefreshPartitionsLimit = Integer.parseInt(properties.get(PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT));
             } catch (NumberFormatException e) {
                 throw new AnalysisException("Auto Refresh Partitions Limit: " + e.getMessage());
             }
-            if (partitionRefreshNumber <= 0) {
-                partitionRefreshNumber = INVALID;
+            if (autoRefreshPartitionsLimit <= 0) {
+                autoRefreshPartitionsLimit = INVALID;
             }
             properties.remove(PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT);
         }
-        return partitionRefreshNumber;
+        return autoRefreshPartitionsLimit;
     }
 
     public static int analyzePartitionRefreshNumber(Map<String, String> properties) throws AnalysisException {
@@ -245,7 +249,7 @@ public class PropertyAnalyzer {
                 throw new AnalysisException("Partition Refresh Number: " + e.getMessage());
             }
             if (partitionRefreshNumber <= 0) {
-                throw new AnalysisException("Partition Refresh Number should larger than 0.");
+                partitionRefreshNumber = INVALID;
             }
             properties.remove(PROPERTIES_PARTITION_REFRESH_NUMBER);
         }
@@ -254,6 +258,9 @@ public class PropertyAnalyzer {
 
     public static List<TableName> analyzeExcludedTriggerTables(Map<String, String> properties, MaterializedView mv)
             throws AnalysisException {
+        if (mv.getRefreshScheme().getType() != MaterializedView.RefreshType.ASYNC) {
+            throw new AnalysisException("The excluded_trigger_tables property only applies to asynchronous refreshes.");
+        }
         List<TableName> tables = Lists.newArrayList();
         if (properties != null && properties.containsKey(PROPERTIES_EXCLUDED_TRIGGER_TABLES)) {
             String tableStr = properties.get(PROPERTIES_EXCLUDED_TRIGGER_TABLES);
