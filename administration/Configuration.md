@@ -2,145 +2,146 @@
 
 本文介绍如何配置 StarRocks FE 节点、BE 节点、Broker 以及系统参数，并介绍相关参数。
 
-## 配置 FE 参数
+## FE 配置项
 
-部分 FE 节点配置项为动态参数，您可以通过命令在线修改。其他配置项为静态参数，需要通过修改 **fe.conf** 文件后**重启 FE 服务**使相关修改生效。
+FE 参数分为动态参数和静态参数。动态参数可通过 SQL 命令进行在线配置和调整，方便快捷。
+
+静态参数必须在 FE 配置文件 **fe.conf** 中进行配置和调整。**调整完成后，需要重启 FE 使变更生效。**
+
+参数是否为动态参数可通过 [ADMIN SHOW CONFIG](../sql-reference/sql-statements/Administration/ADMIN%20SHOW%20CONFIG.md) 返回结果中的 `IsMutable` 列查看。`TRUE` 表示动态参数。
+
+静态和动态参数均可通过 **fe.conf** 文件进行修改。
+
+## 查看 FE 参数
+
+FE 启动后，您可以在 MySQL 客户端执行 ADMIN SHOW FRONTEND CONFIG 命令来查看参数配置。如果您想查看具体参数的配置，执行如下命令：
+
+```SQL
+ ADMIN SHOW FRONTEND CONFIG [LIKE "pattern"];
+ ```
+
+详细的命令返回字段解释，参见 [ADMIN SHOW CONFIG](../sql-reference/sql-statements/Administration/ADMIN%20SHOW%20CONFIG.md)。
+
+> **注意**
+>
+> 执行集群管理相关命令需要有管理员权限。
 
 ### 配置 FE 动态参数
 
-您可以通过以下命令在线修改 FE 节点动态参数。
+您可以通过以下命令在线修改 FE 动态参数。
 
-~~~sql
+```sql
 ADMIN SET FRONTEND CONFIG ("key" = "value");
-~~~
+```
 
-#### LOG 相关动态参数
-
-|配置项|默认值|描述|
-|---|---|---|
-|qe_slow_log_ms|5000|Slow query 的认定时长，单位为 ms。|
-
-#### Server 相关动态参数
+#### Log 相关
 
 |配置项|默认值|描述|
 |---|---|---|
-|shutdown_hook_timeout_sec|60|FE 优雅退出的等待时间。|
+|qe_slow_log_ms|5000|Slow query 的认定时长，单位为 ms。如果查询的响应时间超过此阈值，则会在审计日志 `fe.audit.log` 中记录为 slow query。|
 
-#### 元数据与集群管理相关动态参数
-
-|配置项|默认值|描述|
-|---|---|---|
-|catalog_try_lock_timeout_ms|5000|Catalog Lock 获取的超时时长，单位为 ms。|
-|edit_log_roll_num|50000|Image 日志拆分大小。|
-|ignore_unknown_log_id|FALSE|是否忽略未知的 logID。当 FE 回滚到低版本时，可能存在低版本 BE 无法识别的 logID。如果为 TRUE，则 FE 会忽略这些 logID；否则 FE 会退出。|
-|metadata_checkopoint_memory_threshold|60|如果 JVM 内存使用率超过该阈值，停止生成元数据的 Checkpoint，防止 OOM。|
-|force_do_metadata_checkpoint|FALSE|无论 JVM 内存使用率多少，都会产生元数据的 Checkpoint。|
-|ignore_meta_check|FALSE|忽略元数据落后的情形。|
-|drop_backend_after_decommission|TRUE|BE 被下线后，是否删除该 BE。|
-|enable_collect_query_detail_info|FALSE|是否需要查看查询的 profile。|
-
-#### Query Engine 相关动态参数
+#### 元数据与集群管理
 
 |配置项|默认值|描述|
 |---|---|---|
-|expr_children_limit|10000|查询中 IN 谓词可以涉及的数目。|
-|expr_depth_limit|3000|查询嵌套的层次。|
+|catalog_try_lock_timeout_ms|5000|全局锁（global lock）获取的超时时长，单位为 ms。|
+|edit_log_roll_num|50000|该参数设定每多少条元数据 journal，生成一次 image。您可以适当改小这个数字，让 image 生成更加频繁，从而加速删除旧的 journal。 |
+|ignore_unknown_log_id|FALSE|是否忽略未知的 logID。当 FE 回滚到低版本时，可能存在低版本 BE 无法识别的 logID。<br>如果为 TRUE，则 FE 会忽略这些 logID；否则 FE 会退出。|
+|ignore_meta_check|FALSE|是否忽略元数据落后的情形。如果为 true，非主 FE 将忽略主 FE 与其自身之间的元数据延迟间隙，即使元数据延迟间隙超过 meta_delay_toleration_second，非主 FE 仍将提供读取服务。<br>当您尝试停止 Master FE 较长时间，但仍希望非 Master FE 可以提供读取服务时，该参数会很有帮助。|
+|drop_backend_after_decommission|TRUE|BE 被下线后，是否删除该 BE。true 代表 BE 被下线后会立即删除该 BE。False 代表下线完成后不删除 BE。|
+|enable_collect_query_detail_info|FALSE|是否收集查询的 profile 信息。设置为 true 时，系统会收集查询的 profile。设置为 false 时，系统不会收集查询的 profile。|
+
+#### Query Engine
+
+|配置项|默认值|描述|
+|---|---|---|
 |max_allowed_in_element_num_of_delete|10000|DELETE 语句中 IN 谓词最多允许的元素数量。|
-|max_layout_length_per_row|2147483647|单行最大的长度，Integer.MAX_VALUE。|
-|disable_cluster_feature|TRUE|是否禁用逻辑集群功能。|
 |enable_materialized_view|TRUE|是否允许创建物化视图。|
 |enable_decimal_v3|TRUE|是否开启 Decimal V3。|
 |enable_sql_blacklist|FALSE|是否开启 SQL Query 黑名单校验。如果开启，在黑名单中的 Query 不能被执行。|
-|dynamic_partition_check_interval_seconds|600|动态分区检查的时间周期。|
-|dynamic_partition_enable|TRUE|是否开启动态分区功能。|
+|dynamic_partition_check_interval_seconds|600|动态分区检查的时间周期。如果有新数据生成，会自动生成分区。|
+|dynamic_partition_enable|TRUE|是否开启动态分区功能。打开后，您可以按需为新数据动态创建分区，同时 StarRocks 会⾃动删除过期分区，从而确保数据的实效性。|
 |max_partitions_in_one_batch|4096|批量创建分区时，分区数目的最大值。|
-|max_query_retry_time|2|FE 上查询重试的次数。|
+|max_query_retry_time|2|FE 上查询重试的最大次数。|
 |max_create_table_timeout_second|600|建表最大超时时间，单位为秒。|
 |max_running_rollup_job_num_per_table|1|每个 Table 执行 Rollup 任务的最大并发度。|
 |max_planner_scalar_rewrite_num|100000|优化器重写 ScalarOperator 允许的最大次数。|
 |enable_statistic_collect|TRUE|是否采集统计信息，该开关默认打开。|
 |enable_collect_full_statistic|TRUE|是否开启自动全量统计信息采集，该开关默认打开。|
 |statistic_auto_collect_ratio|0.8|自动统计信息的健康度阈值。如果统计信息的健康度小于该阈值，则触发自动采集。|
-|statistic_max_full_collect_data_size|100|自动统计信息采集的最大分区大小。单位：GB。如果超过该值，则放弃全量采集，转为对该表进行抽样采集。|
+|statistic_max_full_collect_data_size|100|自动统计信息采集的最大分区大小。单位：GB。<br>如果超过该值，则放弃全量采集，转为对该表进行抽样采集。|
 |statistic_collect_interval_sec|300|自动定期采集任务中，检测数据更新的间隔时间，默认为 5 分钟。单位：秒。|
-|statistic_sample_collect_rows|200000|最小采样行数。如果指定了采集类型为抽样采集（SAMPLE），需要设置该参数。如果参数取值超过了实际的表行数，默认进行全量采集。|
+|statistic_sample_collect_rows|200000|最小采样行数。如果指定了采集类型为抽样采集（SAMPLE），需要设置该参数。<br>如果参数取值超过了实际的表行数，默认进行全量采集。|
 |histogram_buckets_size|64|直方图默认分桶数。|
 |histogram_mcv_size|100|直方图默认 most common value 的数量。|
 |histogram_sample_ratio|0.1|直方图默认采样比例。|
 |histogram_max_sample_row_count|10000000|直方图最大采样行数。|
-|statistics_manager_sleep_time_sec|60|统计信息相关元数据调度间隔周期。单位：秒。系统根据这个间隔周期，来执行如下操作：创建统计信息表；删除已经被删除的表的统计信息；删除过期的统计信息历史记录。|
-|statistic_update_interval_sec|24 \* 60 \* 60|统计信息内存Cache失效时间。单位：秒。|
+|statistics_manager_sleep_time_sec|60|统计信息相关元数据调度间隔周期。单位：秒。系统根据这个间隔周期，来执行如下操作：<ul><li>创建统计信息表；</li><li>删除已经被删除的表的统计信息；</li><li>删除过期的统计信息历史记录。</li></ul>|
+|statistic_update_interval_sec|24 \* 60 \* 60|统计信息内存 Cache 失效时间。单位：秒。|
 |statistic_analyze_status_keep_second|259200|统计信息采集任务的记录保留时间，默认为 3 天。单位：秒。|
-|enable_local_replica_selection|FALSE|优化器优先选择与这个 FE 相同 IP 的 BE 节点上的 tablet。|
-|max_distribution_pruner_recursion_depth|100|分区裁剪允许的最大递归深度。|
+|statistic_collect_concurrency|3|手动采集任务的最大并发数，默认为 3，即最多可以有 3 个手动采集任务同时运行。超出的任务处于 PENDING 状态，等待调度。|
+|enable_local_replica_selection|FALSE|是否选择本地副本。本地副本有助于减少数据传输的网络时延。<br>如果设置为 true，优化器优先选择与这个 FE 相同 IP 的 BE 节点上的 tablet。设置为 false 表示选择非本地副本进行查询。默认为 false。|
+|max_distribution_pruner_recursion_depth|100|分区裁剪允许的最大递归深度。增加递归深度可以裁剪更多元素但同时增加 CPU 资源消耗。|
 
-#### 导入和导出相关动态参数
+#### 导入和导出
 
 |配置项|默认值|描述|
 |---|---|---|
 |load_straggler_wait_second|300|控制 BE 副本最大容忍的导入落后时长，超过这个时长就进行克隆，单位为秒。|
-|desired_max_waiting_jobs|100|最多等待的任务数，适用于所有的任务，建表、导入、schema change。如果 FE 中处于 PENDING 状态的作业数目达到该值，FE 会拒绝新的导入请求。该参数配置仅对异步执行的导入有效。|
-|max_load_timeout_second|259200|最大超时，适用于所有导入，单位为秒。|
-|min_load_timeout_second|1|最小超时，适用于所有导入，单位为秒。|
-|max_running_txn_num_per_db|100|StarRocks 集群每个数据库中正在运行的导入作业的最大个数，默认值为 100。当数据库中正在运行的导入作业超过最大个数限制时，后续的导入不会执行。如果是同步的导入作业，作业会被拒绝；如果是异步的导入作业，作业会在队列中等待。|
-|load_parallel_instance_num|1|单个 BE 上并发实例数。|
-|vectorized_load_enable|TRUE|是否开启向量化 Broker 导出和导入。|
-|enable_vectorized_file_load|TRUE|是否开启向量化导入 CSV/JSON/Parquet 和 Spark 导入。|
-|disable_hadoop_load|FALSE|是否禁用从 Hadoop 导入。|
+|desired_max_waiting_jobs|100|最多等待的任务数，适用于所有的任务，建表、导入、schema change。<br>如果 FE 中处于 PENDING 状态的作业数目达到该值，FE 会拒绝新的导入请求。该参数配置仅对异步执行的导入有效。|
+|max_load_timeout_second|259200|导入作业的最大超时时间，适用于所有导入，单位为秒。|
+|min_load_timeout_second|1|导入作业的最小超时时间，适用于所有导入，单位为秒。|
+|max_running_txn_num_per_db|100|StarRocks 集群每个数据库中正在运行的导入作业的最大个数，Default 为 100。<br>当数据库中正在运行的导入作业超过最大个数限制时，后续的导入不会执行。如果是同步的导入作业，作业会被拒绝；如果是异步的导入作业，作业会在队列中等待。不建议调大该值，会增加系统负载。|
+|load_parallel_instance_num|1|单个 BE 上每个作业允许的最大并发实例数。|
 |disable_load_job|FALSE|是否禁用任何导入任务，集群出问题时的止损措施。|
-|using_old_load_usage_pattern|FALSE|如果为 TRUE，插入语句遇到错误时依然会返回 label 给用户。|
-|db_used_data_quota_update_interval_secs|300|更新数据库使用配额的时间周期，单位为秒。|
 |history_job_keep_max_second|604800|历史任务最大的保留时长，例如 schema change 任务，单位为秒。|
-|label_keep_max_num|1000|一定时间内所保留导入任务的最大数量。|
-|label_keep_max_second|259200|已经完成、且处于 FINISHED 或 CANCELLED 状态的导入作业记录在 StarRocks 系统 label 的保留时长，默认值为 3 天。该参数配置适用于所有模式的导入作业。单位为秒。设定过大将会消耗大量内存。|
-|max_routine_load_job_num|100|最大的 routine load 作业数。|
-|max_routine_load_task_concurrent_num|5|每个 routine load 作业最大并发执行的 task 数。|
-|max_routine_load_task_num_per_be|5|每个 BE 最大并发执行的 routine load task 数，需要小于等于 BE 的配置项 routine_load_thread_pool_size 的值。|
-|max_routine_load_batch_size|4294967296|每个 routine load task 导入的最大数据量，单位为 Byte。|
-|routine_load_task_consume_second|15|每个 routine load task 消费数据的最大时间，单位为秒。|
-|routine_load_task_timeout_second|60|每个 routine load task 超时时间，单位为秒。|
-|max_tolerable_backend_down_num|0|如果故障的 BE 节点数超过该阈值，则不能自动恢复 Routine Load 作业。|
+|label_keep_max_num|1000|一定时间内所保留导入任务的最大数量。超过之后历史导入作业的信息会被删除。|
+|label_keep_max_second|259200|已经完成、且处于 FINISHED 或 CANCELLED 状态的导入作业记录在 StarRocks 系统 label 的保留时长，默认值为 3 天。<br>该参数配置适用于所有模式的导入作业。单位为秒。设定过大将会消耗大量内存。|
+|max_routine_load_job_num|100|最大的 Routine Load 作业数。|
+|max_routine_load_task_concurrent_num|5|每个 Routine Load 作业最大并发执行的 task 数。|
+|max_routine_load_task_num_per_be|5|每个 BE 最大并发执行的 Routine Load task 数，需要小于等于 BE 的配置项 `routine_load_thread_pool_size`。|
+|max_routine_load_batch_size|4294967296|每个 Routine Load task 导入的最大数据量，单位为 Byte。|
+|routine_load_task_consume_second|15|每个 Routine Load task 消费数据的最大时间，单位为秒。|
+|routine_load_task_timeout_second|60|每个 Routine Load task 超时时间，单位为秒。|
+|max_tolerable_backend_down_num|0|允许的最大故障 BE 数。如果故障的 BE 节点数超过该阈值，则不能自动恢复 Routine Load 作业。|
 |period_of_auto_resume_min|5|自动恢复 Routine Load 的时间间隔，单位为分钟。|
 |spark_load_default_timeout_second|86400|Spark 导入的超时时间，单位为秒。|
 |spark_home_default_dir|StarRocksFE.STARROCKS_HOME_DIR + "/lib/spark2x"|Spark 客户端根目录。|
-|stream_load_default_timeout_second|600|StreamLoad 超时时间，单位为秒。|
-|max_stream_load_timeout_second|259200|Stream 导入的超时时间允许设置的最大值，单位为秒。|
+|stream_load_default_timeout_second|600|Stream Load 的默认超时时间，单位为秒。|
+|max_stream_load_timeout_second|259200|Stream Load 的最大超时时间，单位为秒。|
 |insert_load_default_timeout_second|3600|Insert Into 语句的超时时间，单位为秒。|
 |broker_load_default_timeout_second|14400|Broker Load 的超时时间，单位为秒。|
-|min_bytes_per_broker_scanner|67108864|单个实例处理的最小数据量，单位为 Byte。|
-|max_broker_concurrency|100|单个任务最大并发实例数。|
-|mini_load_default_timeout_second|3600|小批量导入的超时时间，单位为秒。|
+|min_bytes_per_broker_scanner|67108864|单个 Broker Load 任务最大并发实例数，单位为 Byte。|
+|max_broker_concurrency|100|单个 Broker Load 任务最大并发实例数。|
 |export_max_bytes_per_be_per_task|268435456|单个导出任务在单个 BE 上导出的最大数据量，单位为 Byte。|
 |export_running_job_num_limit|5|导出作业最大的运行数目。|
-|export_task_default_timeout_second|7200|导出作业超时时长，单位为秒。|
+|export_task_default_timeout_second|7200|导出作业的超时时长，单位为秒。|
 |empty_load_as_error|TRUE|导入数据为空时，是否返回报错提示 `all partitions have no load data`。取值：<br> - **TRUE**：当导入数据为空时，则显示导入失败，并返回报错提示 `all partitions have no load data`。<br> - **FALSE**：当导入数据为空时，则显示导入成功，并返回 `OK`，不返回报错提示。|
 
-#### 存储相关动态参数
+#### 存储
 
 |配置项|默认值|描述|
 |---|---|---|
-|enable_strict_storage_medium_check|FALSE|在创建表时，FE 是否检查 BE 的可用的存储介质空间。|
-|capacity_used_percent_high_water|0.75|BE 上磁盘使用容量的度量值，超过 0.75 之后，尽量不再往这个 tablet 上发送建表，克隆的任务，直到恢复正常。|
-|storage_high_watermark_usage_percent|85|BE 存储目录下空间使用率的最大值。|
-|storage_min_left_capacity_bytes|2 \* 1024 \* 1024 \* 1024|BE 存储目录下剩余空间的最小值，单位为 Byte。|
+|enable_strict_storage_medium_check|FALSE|建表时，是否严格校验存储介质类型。<br>为 true 时表示在建表时，会严格校验 BE 上的存储介质。比如建表时指定 `storage_medium = HDD`，而 BE 上只配置了 SSD，那么建表失败。<br>为 FALSE 时则忽略介质匹配，建表成功。|
+|capacity_used_percent_high_water|0.75|BE 上磁盘使用容量的度量值，超过 0.75 之后，尽量不再往这个 tablet 上发送建表、克隆的任务，直到恢复正常。|
+|storage_high_watermark_usage_percent|85|BE 存储目录下空间使用率的最大值。如果超限，则不能继续往该路径写数据。|
+|storage_min_left_capacity_bytes|2 \* 1024 \* 1024 \* 1024|BE 存储目录下剩余空间的最小值，单位为 Byte。如果超限，则不能继续往该路径写数据。|
 |catalog_trash_expire_second|86400|删表/数据库之后，元数据在回收站中保留的时长，超过这个时长，数据就不可以在恢复，单位为秒。|
 |alter_table_timeout_second|86400|Schema change 超时时间，单位为秒。|
-|recover_with_empty_tablet|FALSE|在 tablet 副本丢失/损坏时，使用空的 tablet 代替它。这样可以保证在有 tablet 副本丢失/损坏时，query 依然能被执行（但是由于缺失了数据，结果可能是错误的）。|
-|tablet_create_timeout_second|1|建表超时时长，单位为秒。|
-|tablet_delete_timeout_second|2|删除表的超时时间，单位为秒。|
-|consistency_check_start_time|23|FE 发起副本一致性检测的起始时间。|
-|consistency_check_end_time|4|FE 发起副本一致性检测的终止时间。|
+|recover_with_empty_tablet|FALSE|在 tablet 副本丢失/损坏时，是否使用空的 tablet 代替。<br>这样可以保证在有 tablet 副本丢失/损坏时，query 依然能被执行（但是由于缺失了数据，结果可能是错误的）。默认为 false，不进行替代，查询会失败。|
+|tablet_create_timeout_second|1|创建 tablet 的超时时长，单位为秒。|
+|tablet_delete_timeout_second|2|删除 tablet 的超时时长，单位为秒。|
 |check_consistency_default_timeout_second|600|副本一致性检测的超时时间，单位为秒。|
-|tablet_sched_slot_num_per_path|2|一个 BE 存储目录能够同时执行 tablet 相关任务的数目。|
-|tablet_sched_max_scheduling_tablets|2000|如果正在调度的 tablet 数量超过该值，跳过 tablet 均衡和修复检查。|
-|tablet_sched_disable_balance|FALSE|是否禁用 Tablet 均衡调度。|
-|tablet_sched_disable_colocate_balance|FALSE|禁用 Colocate Table 的副本均衡。|
-|tablet_sched_max_balancing_tablets|100|如果正在均衡的 tablet 数量超过该值，跳过 tablet 重新均衡。|
-|tablet_sched_balance_load_disk_safe_threshold|0.5|disk_and_tablet 策略有效。如果所有 BE 的磁盘使用率低于 50%，认为磁盘使用均衡。|
-|tablet_sched_balance_load_score_threshold|0.1|对于 be_load_score 策略，负载比平均负载低 10% 的 BE 处于低负载状态，比平均负载高 10% 的 BE 处于高负载状态。<br/>对于 disk_and_tablet 策略，如果最大和最小 BE 磁盘使用率之差高于 10%，认为磁盘使用不均衡，会触发 tablet 重新均衡。|
-|tablet_sched_repair_delay_factor_second|60|FE 控制进行副本修复的间隔，单位为秒。|
+|tablet_sched_slot_num_per_path|2|一个 BE 存储目录能够同时执行 tablet 相关任务的数目。参数别名 `schedule_slot_num_per_path`。|
+|tablet_sched_max_scheduling_tablets|2000|可同时调度的 tablet 的数量。如果正在调度的 tablet 数量超过该值，跳过 tablet 均衡和修复检查。|
+|tablet_sched_disable_balance|FALSE|是否禁用 Tablet 均衡调度。参数别名 `disable_balance`。|
+|tablet_sched_disable_colocate_balance|FALSE|是否禁用 Colocate Table 的副本均衡。参数别名 `disable_colocate_balance`。|
+|tablet_sched_max_balancing_tablets|100|正在均衡的 tablet 数量的最大值。如果正在均衡的 tablet 数量超过该值，跳过 tablet 重新均衡。参数别名 `max_balancing_tablets`。|
+|tablet_sched_balance_load_disk_safe_threshold|0.5|判断 BE 磁盘使用率是否均衡的阈值。只有 `tablet_sched_balancer_strategy` 设置为 `disk_and_tablet`时，该参数才生效。<br>如果所有 BE 的磁盘使用率低于 50%，认为磁盘使用均衡。<br>对于 disk_and_tablet 策略，如果最大和最小 BE 磁盘使用率之差高于 10%，认为磁盘使用不均衡，会触发 tablet 重新均衡。参数别名`balance_load_disk_safe_threshold`。|
+|tablet_sched_balance_load_score_threshold|0.1|用于判断 BE 负载是否均衡。只有 `tablet_sched_balancer_strategy` 设置为 `be_load_score`时，该参数才生效。<br>负载比平均负载低 10% 的 BE 处于低负载状态，比平均负载高 10% 的 BE 处于高负载状态。参数别名 `balance_load_score_threshold`。|
+|tablet_sched_repair_delay_factor_second|60|FE 进行副本修复的间隔，单位为秒。参数别名 `tablet_repair_delay_factor_second`。|
 |tablet_sched_min_clone_task_timeout_sec|3 \* 60|克隆 Tablet 的最小超时时间，单位为秒。|
-|tablet_sched_max_clone_task_timeout_sec|2 \* 60 \* 60|克隆 Tablet 的最大超时时间，单位为秒。|
+|tablet_sched_max_clone_task_timeout_sec|2 \* 60 \* 60|克隆 Tablet 的最大超时时间，单位为秒。参数别名 `max_clone_task_timeout_sec`。|
 
 #### 其他动态参数
 
@@ -149,16 +150,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |plugin_enable|TRUE|是否开启了插件功能。只能在 Leader FE 安装/卸载插件|
 |max_small_file_number|100|允许存储小文件数目的最大值。|
 |max_small_file_size_bytes|1024 \* 1024|存储文件的大小上限，单位为 Byte。|
-|agent_task_resend_wait_time_ms|5000|当代理任务的创建时间被设置，并且距离现在超过该值，才能重新发送代理任务，单位为 ms。|
+|agent_task_resend_wait_time_ms|5000|Agent task 重新发送前的等待时间。当代理任务的创建时间已设置，并且距离现在超过该值，才能重新发送代理任务，单位为 ms。<br>该参数防止过于频繁的代理任务发送。|
 |backup_job_default_timeout_ms|86400*1000|Backup 作业的超时时间，单位为 ms。|
-|report_queue_size|100|Disk/Task/Tablet 的 Report 的等待队列长度。|
 |enable_experimental_mv|FALSE|是否开启异步物化视图功能。如果为 `TRUE`，则开启异步物化视图功能。|
 
 ### FE 静态参数
 
 以下 FE 配置项为静态参数，不支持在线修改，您需要在 **fe.conf** 中修改并重启 FE 服务。
 
-#### LOG 相关静态参数
+#### Log 相关
 
 |配置项|默认值|描述|
 |---|---|---|
@@ -180,7 +180,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |dump_log_roll_num|10|每个 `dump_log_roll_interval` 时间内，保留的 Dump 日志文件的数目。|
 |dump_log_delete_age|7d|Dump 日志保留的时间长度。|
 
-#### Server 相关静态参数
+#### Server
 
 |配置项|默认值|描述|
 |---|---|---|
@@ -206,7 +206,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |qe_max_connection|1024|FE 上最多接收的连接数，适用于所有用户。|
 |check_java_version|TRUE|检查执行时的版本与编译的 Java 版本是否兼容。|
 
-#### 元数据与集群管理相关静态参数
+#### 元数据与集群管理
 
 |配置项|默认值|描述|
 |---|---|---|
@@ -227,7 +227,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |meta_delay_toleration_second|300|非 leader 节点容忍的最大元数据落后的时间，单位为秒。|
 |cluster_id|-1|相同 cluster_id 的 FE/BE 节点属于同一个集群。设置为于-1 则在 leader FE 第一次启动时随机生成一个。|
 
-#### Query Engine 相关静态参数
+#### Query Engine
 
 |配置项|默认值|描述|
 |---|---|---|
@@ -235,9 +235,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |enable_udf|FALSE|是否开启 UDF。|
 |publish_version_interval_ms|10|发送版本生效任务的时间间隔，单位为 ms。|
 |statistic_cache_columns|100000|缓存统计信息表的行数。|
-|statistic_collect_concurrency|3|手动采集任务的最大并发数，默认为 3，即最多可以有 3 个手动采集任务同时运行。超出的任务处于 PENDING 状态，等待调度。|
 
-#### 导入和导出相关静态参数
+#### 导入和导出
 
 |配置项|默认值|描述|
 |---|---|---|
@@ -253,7 +252,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |export_checker_interval_second|5|导出作业调度器的调度周期。|
 |export_task_pool_size|5|导出任务线程池大小。|
 
-#### 存储相关相关静态参数
+#### 存储
 
 |配置项|默认值|描述|
 |---|---|---|
@@ -296,11 +295,11 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 您可以通过 `curl` 命令在线修改 BE 节点动态参数。
 
-~~~shell
+```shell
 curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
-~~~
+```
 
-以下是 BE 动态参数列表：
+以下是 BE 动态参数列表。
 
 | 配置项                                                | 默认值      | 单位   | 描述                                                         |
 | ----------------------------------------------------- | ----------- | ------ | ------------------------------------------------------------ |
@@ -476,27 +475,27 @@ Broker 配置项暂不支持在线修改，您需要在 **broker.conf** 中修�
 
 建议使用 Ext4 文件系统，可用相关命令进行查看挂载类型。
 
-~~~shell
+```shell
 df -Th
 FilesystemTypeSize  Used Avail Use% Mounted on
 /dev/vdb1ext41008G  903G   55G  95% /home/disk1
-~~~
+```
 
 ### 高并发配置
 
 如果集群负载的并发度较高，建议添加以下配置。
 
-~~~shell
+```shell
 echo 120000 > /proc/sys/kernel/threads-max
 echo 60000  > /proc/sys/vm/max_map_count
 echo 200000 > /proc/sys/kernel/pid_max
-~~~
+```
 
 ### max user processes
 
-~~~shell
+```shell
 ulimit -u 40960
-~~~
+```
 
 ### 文件句柄
 

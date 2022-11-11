@@ -391,13 +391,13 @@ KILL ANALYZE <ID>;
 | statistic_auto_collect_ratio         | FLOAT    | 0.8        | 自动统计信息的健康度阈值。如果统计信息的健康度小于该阈值，则触发自动采集。 |
 | statistic_max_full_collect_data_size | LONG     | 100        | 自动统计信息采集的最大分区大小。单位：GB。如果超过该值，则放弃全量采集，转为对该表进行抽样采集。 |
 | statistic_collect_interval_sec       | LONG     | 300        | 自动定期任务中，检测数据更新的间隔时间，默认为 5 分钟。单位：秒。 |
-| statistic_sample_collect_rows        | LONG     | 200000     | 最小采样行数。如果指定了采集类型为抽样采集（SAMPLE），需要设置该参数。如果参数取值超过了实际的表行数，默认进行全量采集。 |
-| statistic_collect_concurrency        | INT      | 3          |手动采集任务的最大并发数，默认为 3，即最多可以有 3 个手动采集任务同时运行。超出的任务处于 PENDING 状态，等待调度。注意如果修改了该配置项，需要重启 FE 后配置才能生效。|
+| statistic_sample_collect_rows        | LONG     | 200000     | 最小采样行数。如果指定了采集类型为抽样采集（SAMPLE），需要设置该参数。<br>如果参数取值超过了实际的表行数，默认进行全量采集。 |
+| statistic_collect_concurrency        | INT      | 3          | 手动采集任务的最大并发数，默认为 3，即最多可以有 3 个手动采集任务同时运行。<br>超出的任务处于 PENDING 状态，等待调度。|
 | histogram_buckets_size               | LONG     | 64         | 直方图默认分桶数。                                           |
 | histogram_mcv_size                   | LONG     | 100        | 直方图默认most common value的数量。                          |
 | histogram_sample_ratio               | FLOAT    | 0.1        | 直方图默认采样比例。                                         |
 | histogram_max_sample_row_count       | LONG     | 10000000   | 直方图最大采样行数。                                         |
-| statistic_manager_sleep_time_sec     | LONG     | 60         | 统计信息相关元数据调度间隔周期。单位：秒。系统根据这个间隔周期，来执行如下操作：创建统计信息表删除已经被删除的表的统计信息删除过期的统计信息历史记录 |
+| statistic_manager_sleep_time_sec     | LONG     | 60         | 统计信息相关元数据调度间隔周期。单位：秒。系统根据这个间隔周期，来执行如下操作：<ul><li>创建统计信息表；</li><li>删除已经被删除的表的统计信息；</li><li>删除过期的统计信息历史记录。</li></ul>|
 | statistic_analyze_status_keep_second | LONG     | 259200     | 采集任务记录保留时间，默认为 3 天。单位：秒。                |
 
 ## 更多信息
