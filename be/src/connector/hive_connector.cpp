@@ -71,7 +71,6 @@ Status HiveDataSource::open(RuntimeState* state) {
         _no_data = true;
         return Status::OK();
     }
-    SCOPED_TIMER(_profile.scan_timer);
     RETURN_IF_ERROR(_init_scanner(state));
     return Status::OK();
 }
@@ -211,7 +210,6 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
     _profile.rows_read_counter = ADD_COUNTER(_runtime_profile, "RowsRead", TUnit::UNIT);
     _profile.bytes_read_counter = ADD_COUNTER(_runtime_profile, "BytesRead", TUnit::BYTES);
 
-    _profile.scan_timer = ADD_TIMER(_runtime_profile, "ScanTime");
     _profile.scan_ranges_counter = ADD_COUNTER(_runtime_profile, "ScanRanges", TUnit::UNIT);
 
     _profile.reader_init_timer = ADD_TIMER(_runtime_profile, "ReaderInit");
@@ -390,7 +388,6 @@ Status HiveDataSource::get_next(RuntimeState* state, vectorized::ChunkPtr* chunk
         return Status::EndOfFile("no data");
     }
     _init_chunk(chunk, _runtime_state->chunk_size());
-    SCOPED_TIMER(_profile.scan_timer);
     do {
         RETURN_IF_ERROR(_scanner->get_next(state, chunk));
     } while ((*chunk)->num_rows() == 0);
