@@ -882,7 +882,7 @@ public abstract class Type implements Cloneable {
         // 8-byte pointer and 4-byte length indicator (12 bytes total).
         // Per struct alignment rules, there is an extra 4 bytes of padding to align to 8
         // bytes so 16 bytes total.
-        if (isCollectionType()) {
+        if (isComplexType()) {
             return 16;
         }
         throw new IllegalStateException("getSlotSize() not implemented for type " + toSql());
@@ -1567,8 +1567,9 @@ public abstract class Type implements Cloneable {
         }
     }
 
+    // getInnermostType() is only used for array
     public static Type getInnermostType(Type type) throws AnalysisException {
-        if (type.isScalarType()) {
+        if (type.isScalarType() || type.isStructType()) {
             return type;
         }
         if (type.isArrayType()) {

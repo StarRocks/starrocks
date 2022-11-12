@@ -2,10 +2,13 @@
 
 package com.starrocks.connector;
 
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.StructField;
+import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -184,6 +187,70 @@ public class ColumnTypeConverterTest {
         typeStr = "map<char(10),map<int,array<timestamp>>>";
         resType = fromHiveTypeToMapType(typeStr);
         Assert.assertEquals(mapType, resType);
+    }
+
+    @Test
+    public void testStructString() {
+        {
+            String typeStr = "struct<a:struct<aa:date>,b:int>";
+            StructField aa = new StructField("aa", ScalarType.createType(PrimitiveType.DATE));
+
+            StructType innerStruct = new StructType(Lists.newArrayList(aa));
+            StructField a = new StructField("a", innerStruct);
+            StructField b = new StructField("b", ScalarType.createType(PrimitiveType.INT));
+            StructType outerStruct = new StructType(Lists.newArrayList(a, b));
+
+            Type resType = ColumnTypeConverter.fromHiveType(typeStr);
+            Assert.assertEquals(outerStruct, resType);
+        }
+
+        {
+            String typeStr = "array<struct<a:int,b:map<int,int>>>";
+            MapType map =
+                    new MapType(ScalarType.createType(PrimitiveType.INT), ScalarType.createType(PrimitiveType.INT));
+            StructField a = new StructField("a", ScalarType.createType(PrimitiveType.INT));
+            StructField b = new StructField("b", map);
+            StructType structType = new StructType(Lists.newArrayList(a, b));
+            ArrayType arrayType = new ArrayType(structType);
+
+            Type resType = ColumnTypeConverter.fromHiveType(typeStr);
+            Assert.assertEquals(arrayType, resType);
+        }
+
+        {
+            String typeStr = "struct<struct_test:int,c1:struct<c1:int,cc1:string>>";
+            StructType c1 = new StructType(Lists.newArrayList(
+                    new StructField("c1", ScalarType.createType(PrimitiveType.INT)),
+                    new StructField("cc1", ScalarType.createDefaultExternalTableString())
+            ));
+            StructType root = new StructType(Lists.newArrayList(
+                    new StructField("struct_test", ScalarType.createType(PrimitiveType.INT)),
+                    new StructField("c1", c1)
+            ));
+
+            Type resType = ColumnTypeConverter.fromHiveType(typeStr);
+            Assert.assertEquals(root, resType);
+        }
+    }
+
+    @Test
+    public void testSplitByFirstLevel() {
+        // Test for struct
+        String str = "a: int, b: struct<a: int, b: double>";
+        String[] result = ColumnTypeConverter.splitByFirstLevel(str, ',');
+        String[] expected = new String[] {"a: int", "b: struct<a: int, b: double>"};
+        Assert.assertArrayEquals(result, expected);
+
+        // Test for map
+        str = "int, struct<a:int,b:double>";
+        result = ColumnTypeConverter.splitByFirstLevel(str, ',');
+        expected = new String[] {"int", "struct<a:int,b:double>"};
+        Assert.assertArrayEquals(result, expected);
+
+        str = "b: struct<a: int, b: double>";
+        result = ColumnTypeConverter.splitByFirstLevel(str, ':');
+        expected = new String[] {"b", "struct<a: int, b: double>"};
+        Assert.assertArrayEquals(result, expected);
     }
 
     @Test

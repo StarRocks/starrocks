@@ -56,6 +56,7 @@ import com.starrocks.analysis.RoutineLoadDataSourceProperties;
 import com.starrocks.analysis.RowDelimiter;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
@@ -70,6 +71,8 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.StructField;
+import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -4747,28 +4750,36 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitColumnReference(StarRocksParser.ColumnReferenceContext context) {
-        if (context.identifier() != null) {
-            Identifier identifier = (Identifier) visit(context.identifier());
-            return new SlotRef(null, identifier.getValue(), identifier.getValue());
+    public ParseNode visitDereference(StarRocksParser.DereferenceContext ctx) {
+        Expr base = (Expr) visit(ctx.base);
+        String fieldName = ((Identifier) visit(ctx.fieldName)).getValue();
+
+        // Trick method
+        // If left is SlotRef type, we merge fieldName to SlotRef
+        // The reason do this is to maintain compatibility with the original SlotRef
+        if (base instanceof SlotRef) {
+            // do merge
+            SlotRef tmp = (SlotRef) base;
+            List<String> parts = new ArrayList<>(tmp.getQualifiedName().getParts());
+            parts.add(fieldName);
+            return new SlotRef(QualifiedName.of(parts));
         } else {
-            QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
-            List<String> parts = qualifiedName.getParts();
-            TableName tableName;
-            if (parts.size() == 4) {
-                tableName = new TableName(qualifiedName.getParts().get(0),
-                        qualifiedName.getParts().get(1), qualifiedName.getParts().get(2));
-                return new SlotRef(tableName, parts.get(3), parts.get(3));
-            } else if (parts.size() == 3) {
-                tableName = new TableName(qualifiedName.getParts().get(0), qualifiedName.getParts().get(1));
-                return new SlotRef(tableName, parts.get(2), parts.get(2));
-            } else if (parts.size() == 2) {
-                tableName = new TableName(null, qualifiedName.getParts().get(0));
-                return new SlotRef(tableName, parts.get(1), parts.get(1));
-            } else {
-                throw new ParsingException("Unqualified column reference " + qualifiedName);
-            }
+            // If left is not a SlotRef, we can left must be an StructType,
+            // and fieldName must be StructType's subfield name.
+            return new SubfieldExpr(
+                    (Expr) visit(ctx.base),
+                    ((Identifier) visit(ctx.fieldName)).getValue()
+            );
         }
+    }
+
+    @Override
+    public ParseNode visitColumnReference(StarRocksParser.ColumnReferenceContext context) {
+        Identifier identifier = (Identifier) visit(context.identifier());
+        List<String> parts = new ArrayList<>();
+        parts.add(identifier.getValue());
+        QualifiedName qualifiedName = QualifiedName.of(parts);
+        return new SlotRef(qualifiedName);
     }
 
     @Override
@@ -5189,6 +5200,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return getDecimalType(context.decimalType());
         } else if (context.arrayType() != null) {
             return getArrayType(context.arrayType());
+        } else if (context.structType() != null) {
+            return getStructType(context.structType());
         }
         throw new IllegalArgumentException("Unsupported type specification: " + context.getText());
     }
@@ -5275,6 +5288,19 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     public ArrayType getArrayType(StarRocksParser.ArrayTypeContext context) {
         return new ArrayType(getType(context.type()));
+    }
+
+    public StructType getStructType(StarRocksParser.StructTypeContext context) {
+        ArrayList<StructField> fields = new ArrayList<>();
+        List<StarRocksParser.ColumnNameColonTypeContext> typeLists =
+                context.columnNameColonTypeList().columnNameColonType();
+        for (StarRocksParser.ColumnNameColonTypeContext type : typeLists) {
+            String comment = (type.comment() == null) ? null :
+                    ((StringLiteral) visit(type.comment().string())).getStringValue();
+            fields.add(new StructField(type.identifier().getText(), getType(type.type()), comment));
+        }
+
+        return new StructType(fields);
     }
 
     @Override
