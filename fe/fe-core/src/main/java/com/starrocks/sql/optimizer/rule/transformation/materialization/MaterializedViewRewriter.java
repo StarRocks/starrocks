@@ -290,7 +290,6 @@ public class MaterializedViewRewriter {
                 if (rewrittens == null) {
                     return null;
                 }
-                // TODO: consider normalizing it
                 equalPredicates = Utils.compoundAnd(rewrittens);
             }
 
@@ -319,7 +318,7 @@ public class MaterializedViewRewriter {
                         rewriteContext.getQueryPredicateSplit().toScalarOperator(),
                         CompoundPredicateOperator.not(viewToQueryCompensationPredicate)));
         if (!ConstantOperator.TRUE.equals(queryCompensationPredicate)) {
-            // add filter
+            // add filter to op
             Operator.Builder builder = OperatorBuilderFactory.build(queryExpression.getOp());
             builder.withOperator(queryExpression.getOp());
             builder.setPredicate(queryCompensationPredicate);
@@ -332,34 +331,52 @@ public class MaterializedViewRewriter {
     }
 
     protected OptExpression createUnion(OptExpression queryInput, OptExpression viewInput, RewriteContext rewriteContext) {
-        List<ColumnRefOperator> queryOutputColumns = queryInput.getOutputColumns().getStream()
-                .mapToObj(id -> rewriteContext.getQueryRefFactory().getColumnRef(id)).collect(Collectors.toList());
+        Map<ColumnRefOperator, ScalarOperator> queryColumnRefMap =
+                Utils.getColumnRefMap(queryInput, rewriteContext.getQueryRefFactory());
 
-        List<ColumnRefOperator> viewOutputColumns = viewInput.getOutputColumns().getStream()
-                .mapToObj(id -> rewriteContext.getQueryRefFactory().getColumnRef(id)).collect(Collectors.toList());
+        // keys of queryColumnRefMap and mvColumnRefMap are the same
+        List<ColumnRefOperator> originalOutputColumns = queryColumnRefMap.keySet().stream().collect(Collectors.toList());
 
-        List<ColumnRefOperator> unionOutputColumns = queryOutputColumns.stream()
+        // rewrite query
+        OptExpressionDuplicator duplicator = new OptExpressionDuplicator(rewriteContext.getQueryRefFactory());
+        OptExpression newQueryInput = duplicator.duplicate(queryInput);
+        List<ColumnRefOperator> newQueryOutputColumns = duplicator.getMappedColumns(originalOutputColumns);
+
+        // rewrite viewInput
+        // for viewInput, there must be a projection,
+        // the keyset of the projection is the same as the keyset of queryColumnRefMap
+        Preconditions.checkState(viewInput.getOp().getProjection() != null);
+        Map<ColumnRefOperator, ScalarOperator> newColumnRefMap = Maps.newHashMap();
+        Map<ColumnRefOperator, ScalarOperator> mvProjection = viewInput.getOp().getProjection().getColumnRefMap();
+        List<ColumnRefOperator> newViewOutputColumns = Lists.newArrayList();
+        for (ColumnRefOperator columnRef : originalOutputColumns) {
+            ColumnRefOperator newColumn = rewriteContext.getQueryRefFactory().create(
+                    columnRef, columnRef.getType(), columnRef.isNullable());
+            newViewOutputColumns.add(newColumn);
+            newColumnRefMap.put(newColumn, mvProjection.get(columnRef));
+        }
+        Projection newMvProjection = new Projection(newColumnRefMap);
+        viewInput.getOp().setProjection(newMvProjection);
+        // reset the logical property, should be derived later again because output columns changed
+        viewInput.setLogicalProperty(null);
+
+        List<ColumnRefOperator> unionOutputColumns = originalOutputColumns.stream()
                 .map(c -> rewriteContext.getQueryRefFactory().create(c, c.getType(), c.isNullable()))
                 .collect(Collectors.toList());
-        for (int i = 0; i < viewOutputColumns.size(); ++i) {
-            if (!unionOutputColumns.get(i).isNullable() && viewOutputColumns.get(i).isNullable()) {
-                unionOutputColumns.get(i).setNullable(true);
-            }
-        }
 
-        // generate new prjection
+        // generate new projection
         Map<ColumnRefOperator, ScalarOperator> unionProjection = Maps.newHashMap();
-        for (int i = 0; i < queryOutputColumns.size(); i++) {
-            unionProjection.put(queryOutputColumns.get(i), unionOutputColumns.get(i));
+        for (int i = 0; i < originalOutputColumns.size(); i++) {
+            unionProjection.put(originalOutputColumns.get(i), unionOutputColumns.get(i));
         }
         Projection projection = new Projection(unionProjection);
         LogicalUnionOperator unionOperator = new LogicalUnionOperator.Builder()
                 .setOutputColumnRefOp(unionOutputColumns)
-                .setChildOutputColumns(Lists.newArrayList(queryOutputColumns, viewOutputColumns))
+                .setChildOutputColumns(Lists.newArrayList(newQueryOutputColumns, newViewOutputColumns))
                 .setProjection(projection)
                 .isUnionAll(true)
                 .build();
-        OptExpression unionExpr = OptExpression.create(unionOperator, queryInput, viewInput);
+        OptExpression unionExpr = OptExpression.create(unionOperator, newQueryInput, viewInput);
         return unionExpr;
     }
 
@@ -647,7 +664,7 @@ public class MaterializedViewRewriter {
                 : rewriteContext.getMvPredicateSplit().getRangePredicates();
         ScalarOperator targetPr = isQueryAgainstView ? rewriteContext.getMvPredicateSplit().getRangePredicates()
                 : rewriteContext.getQueryPredicateSplit().getRangePredicates();
-        ScalarOperator compensationPr = getCompensationRangePredicate(srcPr, targetPr, columnRewriter);
+        ScalarOperator compensationPr = getCompensationRangePredicate(srcPr, targetPr, columnRewriter, isQueryAgainstView);
         if (compensationPr == null) {
             return null;
         }
@@ -662,7 +679,7 @@ public class MaterializedViewRewriter {
             // mv: empid < 5 or salary > 100
             srcPu = Utils.compoundAnd(compensationEqualPredicate, compensationPr);
         }
-        ScalarOperator compensationPu = getCompensationResidualPredicate(srcPu, targetPu, columnRewriter);
+        ScalarOperator compensationPu = getCompensationResidualPredicate(srcPu, targetPu, columnRewriter, isQueryAgainstView);
         if (compensationPu == null) {
             return null;
         }
@@ -672,7 +689,8 @@ public class MaterializedViewRewriter {
 
     private ScalarOperator getCompensationResidualPredicate(ScalarOperator srcPu,
                                                             ScalarOperator targetPu,
-                                                            ColumnRewriter columnRewriter) {
+                                                            ColumnRewriter columnRewriter,
+                                                            boolean isQueryAgainstView) {
         ScalarOperator compensationPu;
         if (srcPu == null && targetPu == null) {
             compensationPu = ConstantOperator.createBoolean(true);
@@ -683,8 +701,19 @@ public class MaterializedViewRewriter {
         } else {
             ScalarOperator canonizedSrcPu = Utils.canonizePredicateForRewrite(srcPu.clone());
             ScalarOperator canonizedTargetPu = Utils.canonizePredicateForRewrite(targetPu.clone());
-            ScalarOperator swappedSrcPu = columnRewriter.rewriteByQueryEc(canonizedSrcPu);
-            ScalarOperator swappedTargetPu = columnRewriter.rewriteViewToQueryWithQueryEc(canonizedTargetPu);
+            ScalarOperator swappedSrcPu;
+            ScalarOperator swappedTargetPu;
+            if (isQueryAgainstView) {
+                // src is query
+                swappedSrcPu = columnRewriter.rewriteByQueryEc(canonizedSrcPu);
+                // target is view
+                swappedTargetPu = columnRewriter.rewriteViewToQueryWithQueryEc(canonizedTargetPu);
+            } else {
+                // src is view
+                swappedSrcPu = columnRewriter.rewriteViewToQueryWithViewEc(canonizedSrcPu);
+                // target is query
+                swappedTargetPu = columnRewriter.rewriteByViewEc(canonizedTargetPu);
+            }
 
             compensationPu = Utils.getCompensationPredicateForDisjunctive(swappedSrcPu, swappedTargetPu);
             if (compensationPu == null) {
@@ -714,7 +743,8 @@ public class MaterializedViewRewriter {
 
     private ScalarOperator getCompensationRangePredicate(ScalarOperator srcPr,
                                                          ScalarOperator targetPr,
-                                                         ColumnRewriter columnRewriter) {
+                                                         ColumnRewriter columnRewriter,
+                                                         boolean isQueryAgainstView) {
         ScalarOperator compensationPr;
         if (srcPr == null && targetPr == null) {
             compensationPr = ConstantOperator.createBoolean(true);
@@ -727,13 +757,22 @@ public class MaterializedViewRewriter {
             ScalarOperator canonizedTargetPr = Utils.canonizePredicateForRewrite(targetPr.clone());
 
             // swap column by query EC
-            ScalarOperator swappedSrcPr = columnRewriter.rewriteByQueryEc(canonizedSrcPr);
-            // swap column by relation mapping and query ec
-            ScalarOperator swappedTargetPr = columnRewriter.rewriteViewToQueryWithQueryEc(canonizedTargetPr);
+            ScalarOperator swappedSrcPr;
+            ScalarOperator swappedTargetPr;
+            if (isQueryAgainstView) {
+                // for query
+                swappedSrcPr = columnRewriter.rewriteByQueryEc(canonizedSrcPr);
+                // for view, swap column by relation mapping and query ec
+                swappedTargetPr = columnRewriter.rewriteViewToQueryWithQueryEc(canonizedTargetPr);
+            } else {
+                // for view
+                swappedSrcPr = columnRewriter.rewriteViewToQueryWithViewEc(canonizedSrcPr);
+                // for query
+                swappedTargetPr = columnRewriter.rewriteByViewEc(canonizedTargetPr);
+            }
             compensationPr = getCompensationRangePredicate(swappedSrcPr, swappedTargetPr);
         }
-        compensationPr = Utils.canonizePredicate(compensationPr);
-        return compensationPr;
+        return Utils.canonizePredicate(compensationPr);
     }
 
     private ScalarOperator getCompensationRangePredicate(ScalarOperator srcPr, ScalarOperator targetPr) {

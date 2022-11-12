@@ -65,5 +65,10 @@ public class LogicalFilterOperator extends LogicalOperator {
             super.withOperator(operator);
             return this;
         }
+
+        public LogicalFilterOperator.Builder setPredicate(ScalarOperator predicate) {
+            this.predicate = predicate;
+            return this;
+        }
     }
 }

@@ -707,7 +707,6 @@ public class MvRewriteOptimizationTest {
         String plan7 = getFragmentPlan(query7);
         PlanTestBase.assertNotContains(plan7, "agg_join_mv_3");
 
-
         // distinct rewrite without rollup
         String query8 = "SELECT t0.v1, test_all_type.t1b," +
                 " (sum(test_all_type.t1c) * 2) + 1 as total_sum, (count(distinct test_all_type.t1c) + 1) * 2 as total_num" +
@@ -719,12 +718,39 @@ public class MvRewriteOptimizationTest {
         PlanTestBase.assertContains(plan8, "agg_join_mv_3");
 
         dropMv("test", "agg_join_mv_3");
-
     }
 
     @Test
     public void testUnionRewrite() throws Exception {
+        // single table union
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
+        createAndRefreshMv("test", "union_mv_1", "create materialized view union_mv_1" +
+                " distributed by hash(empid)  as select empid, deptno, name, salary from emps where empid < 3");
+        String query1 = "select empid, deptno, name, salary from emps where empid < 5";
+        String plan1 = getFragmentPlan(query1);
+        PlanTestBase.assertContains(plan1, "6:Project\n" +
+                "  |  <slot 1> : 17: empid\n" +
+                "  |  <slot 2> : 18: deptno\n" +
+                "  |  <slot 3> : 19: name\n" +
+                "  |  <slot 4> : 20: salary\n" +
+                "  |  \n" +
+                "  0:UNION");
+        PlanTestBase.assertContains(plan1, "4:Project\n" +
+                        "  |  <slot 13> : 5: empid\n" +
+                        "  |  <slot 14> : 6: deptno\n" +
+                        "  |  <slot 15> : 7: name\n" +
+                        "  |  <slot 16> : 8: salary\n" +
+                        "  |  \n" +
+                        "  3:OlapScanNode\n" +
+                        "     TABLE: union_mv_1");
+        PlanTestBase.assertContains(plan1, "1:OlapScanNode\n" +
+                "     TABLE: emps\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 9: empid < 5, 9: empid > 2");
 
+        // multi tables query
+
+        // aggregate querys
     }
 
     @Test

@@ -122,21 +122,6 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
             ScalarOperator swapped = columnRewriter.rewriteByQueryEc(rewritten);
             queryAggs.put(entry.getKey(), swapped);
         }
-        /*
-        for (Map.Entry<ColumnRefOperator, CallOperator> aggEntry : mvAgg.getAggregations().entrySet()) {
-            ScalarOperator rewritten = rewriteContext.getMvColumnRefRewriter().rewrite(aggEntry.getValue().clone());
-            ScalarOperator swapped = columnRewriter.rewriteViewToQueryWithQueryEc(rewritten);
-            swappedMvAggs.add(swapped);
-        }
-
-        Map<ColumnRefOperator, ScalarOperator> queryAggs = Maps.newHashMap();
-        for (Map.Entry<ColumnRefOperator, CallOperator> aggEntry : queryAgg.getAggregations().entrySet()) {
-            ScalarOperator rewritten = rewriteContext.getQueryColumnRefRewriter().rewrite(aggEntry.getValue().clone());
-            ScalarOperator swapped = columnRewriter.rewriteByQueryEc(rewritten);
-            queryAggs.put(aggEntry.getKey(), swapped);
-        }
-
-         */
 
         AggregateChecker aggregateChecker = new AggregateChecker(swappedMvAggs);
         boolean aggMatched = aggregateChecker.check(queryAggs.values().stream().collect(Collectors.toList()));
