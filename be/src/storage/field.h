@@ -83,41 +83,12 @@ public:
     // reserve memory from continuous memory.
     virtual char* allocate_value(MemPool* pool) const { return (char*)pool->allocate(_type_info->size()); }
 
-    virtual size_t get_variable_len() const { return 0; }
-
-    virtual Field* clone() const {
-        std::unique_ptr<Field> local = std::make_unique<Field>();
-        this->clone(local.get());
-        return local.release();
-    }
-
-    // Test if these two cell is equal with each other
-    template <typename LhsCellType, typename RhsCellType>
-    bool equal(const LhsCellType& lhs, const RhsCellType& rhs) const {
-        bool l_null = lhs.is_null();
-        bool r_null = rhs.is_null();
-
-        if (l_null != r_null) {
-            return false;
-        } else if (l_null) {
-            return true;
-        } else {
-            return _type_info->equal(lhs.cell_ptr(), rhs.cell_ptr());
-        }
-    }
-
     // Only compare column content, without considering NULL condition.
     // RETURNS:
     //      0 means equal,
     //      -1 means left less than rigth,
     //      1 means left bigger than right
     int compare(const void* left, const void* right) const { return _type_info->cmp(left, right); }
-
-    // used by init scan key stored in string format
-    // value_string should end with '\0'
-    Status from_string(char* buf, const std::string& value_string) const {
-        return _type_info->from_string(buf, value_string);
-    }
 
     // It's a critical function, used by ZoneMapIndexWriter to serialize max and min value
     std::string to_string(const char* src) const { return _type_info->to_string(src); }
@@ -167,18 +138,6 @@ public:
 
     Field* get_sub_field(int i) { return _sub_fields[i].get(); }
 
-    Status convert_to(FieldType type, std::unique_ptr<Field>* output) const {
-        std::unique_ptr<Field> new_field(clone());
-        new_field->_type_info = get_type_info(type);
-        new_field->_key_coder = get_key_coder(type);
-
-        // TODO(zc): we only support fixed length type now.
-        new_field->_index_size = static_cast<uint16_t>(new_field->_type_info->size());
-
-        *output = std::move(new_field);
-        return Status::OK();
-    }
-
     virtual std::string debug_string() const {
         std::stringstream ss;
         ss << "(type=" << _type_info->type() << ",index_size=" << _index_size << ",is_nullable=" << _is_nullable
@@ -197,19 +156,6 @@ protected:
         return type_value;
     }
 
-    void clone(Field* other) const {
-        other->_type_info = this->_type_info;
-        other->_key_coder = this->_key_coder;
-        other->_name = this->_name;
-        other->_index_size = this->_index_size;
-        other->_is_nullable = this->_is_nullable;
-        other->_sub_fields.clear();
-        for (const auto& f : _sub_fields) {
-            Field* item = f->clone();
-            other->add_sub_field(std::unique_ptr<Field>(item));
-        }
-    }
-
     std::string _name;
     TypeInfoPtr _type_info;
     const KeyCoder* _key_coder;
@@ -223,14 +169,6 @@ class CharField : public Field {
 public:
     explicit CharField() {}
     explicit CharField(const TabletColumn& column) : Field(column) {}
-
-    size_t get_variable_len() const override { return _length; }
-
-    CharField* clone() const override {
-        std::unique_ptr<CharField> local = std::make_unique<CharField>();
-        Field::clone(local.get());
-        return local.release();
-    }
 
     char* allocate_value(MemPool* pool) const override { return Field::allocate_string_value(pool); }
 
@@ -246,14 +184,6 @@ public:
     explicit VarcharField() {}
     explicit VarcharField(const TabletColumn& column) : Field(column) {}
 
-    size_t get_variable_len() const override { return _length - OLAP_STRING_MAX_BYTES; }
-
-    VarcharField* clone() const override {
-        std::unique_ptr<VarcharField> local = std::make_unique<VarcharField>();
-        Field::clone(local.get());
-        return local.release();
-    }
-
     char* allocate_value(MemPool* pool) const override { return Field::allocate_string_value(pool); }
 
     void set_to_max(char* ch) const override {
@@ -267,36 +197,18 @@ class BitmapAggField : public Field {
 public:
     explicit BitmapAggField() {}
     explicit BitmapAggField(const TabletColumn& column) : Field(column) {}
-
-    BitmapAggField* clone() const override {
-        std::unique_ptr<BitmapAggField> local = std::make_unique<BitmapAggField>();
-        Field::clone(local.get());
-        return local.release();
-    }
 };
 
 class HllAggField : public Field {
 public:
     explicit HllAggField() {}
     explicit HllAggField(const TabletColumn& column) : Field(column) {}
-
-    HllAggField* clone() const override {
-        std::unique_ptr<HllAggField> local = std::make_unique<HllAggField>();
-        Field::clone(local.get());
-        return local.release();
-    }
 };
 
 class PercentileAggField : public Field {
 public:
     PercentileAggField() {}
     explicit PercentileAggField(const TabletColumn& column) : Field(column) {}
-
-    PercentileAggField* clone() const override {
-        std::unique_ptr<PercentileAggField> local = std::make_unique<PercentileAggField>();
-        Field::clone(local.get());
-        return local.release();
-    }
 };
 
 class FieldFactory {
