@@ -35,6 +35,7 @@ import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.Type;
@@ -60,6 +61,7 @@ import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
+import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
 import com.starrocks.thrift.TExprOpcode;
 import com.starrocks.thrift.TFunctionBinaryType;
@@ -128,6 +130,11 @@ public class ScalarOperatorToExpr {
 
             Preconditions.checkState(context.colRefToExpr.containsKey(node));
             return context.colRefToExpr.get(node);
+        }
+
+        @Override
+        public Expr visitSubfield(SubfieldOperator node, FormatterContext context) {
+            return new SubfieldExpr(buildExpr.build(node.getChild(0), context), node.getType(), node.getFieldName());
         }
 
         @Override
