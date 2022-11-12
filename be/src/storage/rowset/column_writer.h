@@ -28,6 +28,7 @@
 #include "gen_cpp/segment.pb.h" // for EncodingTypePB
 #include "gutil/strings/substitute.h"
 #include "runtime/global_dict/types.h"
+#include "storage/field.h"
 #include "storage/rowset/binary_dict_page.h"
 #include "storage/rowset/common.h"
 #include "storage/rowset/page_pointer.h" // for PagePointer
@@ -277,8 +278,6 @@ public:
     uint64_t total_mem_footprint() const override;
 
 private:
-    Status _append(const vectorized::Column& column);
-
     ColumnWriterOptions _opts;
 
     std::unique_ptr<ScalarColumnWriter> _null_writer;
