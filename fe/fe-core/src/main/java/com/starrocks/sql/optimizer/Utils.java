@@ -622,7 +622,15 @@ public class Utils {
         if (root == null) {
             return false;
         }
-        return isLogicalSPJ(root) || isLogicalSPJG(root);
+        if (isLogicalSPJ(root)) {
+            return true;
+        }
+        if (isLogicalSPJG(root)) {
+            LogicalAggregationOperator agg = (LogicalAggregationOperator) root.getOp();
+            // having is not supported now
+            return agg.getPredicate() == null;
+        }
+        return false;
     }
 
     public static boolean isLogicalSPJG(OptExpression root) {
