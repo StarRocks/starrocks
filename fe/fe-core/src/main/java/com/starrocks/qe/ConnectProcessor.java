@@ -185,7 +185,10 @@ public class ConnectProcessor {
 
         ctx.getAuditEventBuilder().setFeIp(FrontendOptions.getLocalHostAddress());
 
-        if (ctx.getState().isQuery() && containsComment(origStmt)) {
+        if (!ctx.getState().isQuery() && (parsedStmt != null && parsedStmt.needAuditEncryption())) {
+            // Some information like username, password in the stmt should not be printed.
+            ctx.getAuditEventBuilder().setStmt(parsedStmt.toSql());
+        } else if (ctx.getState().isQuery() && containsComment(origStmt)) {
             // avoid audit log can't replay
             ctx.getAuditEventBuilder().setStmt(origStmt);
         } else {
