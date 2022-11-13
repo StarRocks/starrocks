@@ -22,6 +22,7 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.io.IOException;
@@ -76,7 +77,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
     }
 
     @Test
-    //@Ignore("test whether this case affect cases in TableQueryPlanActionTest")
+    @Ignore("test whether this case affect cases in TableQueryPlanActionTest")
     public void beginTransactionTimes() throws IOException {
         String pathUri = "http://localhost:" + HTTP_PORT + "/api/transaction/begin";
 
