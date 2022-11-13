@@ -47,6 +47,9 @@ if [[ ! -f ${STARROCKS_THIRDPARTY}/installed/lib/mariadb/libmariadbclient.a ]]; 
     ${STARROCKS_THIRDPARTY}/build-thirdparty.sh
 fi
 
+wget http://starrocks-public.oss-cn-zhangjiakou.aliyuncs.com/tools%2Fthrift\?Expires\=1676954999\&OSSAccessKeyId\=LTAI4GFYjbX9e7QmFnAAvkt8\&Signature\=TsA4iEdHwhlY8rwhECuxBZaA67o%3D -O ${STARROCKS_THIRDPARTY}/installed/bin/thrift
+chmod 755 ${STARROCKS_THIRDPARTY}/installed/bin/thrift
+
 PARALLEL=$[$(nproc)/4+1]
 
 # Check args
