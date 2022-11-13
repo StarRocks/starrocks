@@ -1498,9 +1498,9 @@ static void _try_implicit_cast(TypeDescriptor* from, const TypeDescriptor& to) {
         if (t2 == LogicalType::TYPE_DECIMALV2) {
             from->type = t2;
         } else if (from->precision > decimal_precision_limit<int64_t>) {
-            from->type = PrimitiveType::TYPE_DECIMAL128;
-        } else if (from->precision > decimal_precision_limit<int32_t> || (to.type == PrimitiveType::TYPE_DECIMAL64)) {
-            from->type = PrimitiveType::TYPE_DECIMAL64;
+            from->type = LogicalType::TYPE_DECIMAL128;
+        } else if (from->precision > decimal_precision_limit<int32_t> || (to.type == LogicalType::TYPE_DECIMAL64)) {
+            from->type = LogicalType::TYPE_DECIMAL64;
         } else {
             from->type = LogicalType::TYPE_DECIMAL32;
         }

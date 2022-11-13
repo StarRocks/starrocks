@@ -1091,11 +1091,11 @@ TEST_F(OrcChunkReaderTest, TestReadArrayBasic) {
 // we use this to test that the data is decimal<9, 9> which type should be decimal32 but we use decimal64
 
 TEST_F(OrcChunkReaderTest, TestReadArrayDecimal) {
-    TypeDescriptor type_array(PrimitiveType::TYPE_ARRAY);
+    TypeDescriptor type_array(LogicalType::TYPE_ARRAY);
     type_array.children.emplace_back(TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, 9, 9));
 
     SlotDesc slot_descs[] = {
-            {"id",  TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
+            {"id",  TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT)},
             {"arr", type_array},
             {""},
     };
