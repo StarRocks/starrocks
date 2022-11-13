@@ -874,6 +874,15 @@ CONF_Int64(block_cache_block_size, "1048576");  // 1MB
 CONF_Int64(block_cache_mem_size, "2147483648"); // 2GB
 CONF_Bool(block_cache_checksum_enable, "true");
 
+CONF_Int64(star_cache_block_size, "1048576"); // 1MB
+CONF_Int64(star_cache_slice_size, "65536"); // 64KB
+CONF_Int64(star_cache_block_file_size, "10737418240"); // 10GB
+CONF_Bool(star_cache_block_file_pre_allocate, "false");
+CONF_Bool(star_cache_checksum_enable, "true");
+CONF_Int64(star_cache_mem_evict_batch, "50");
+CONF_Int64(star_cache_disk_evict_batch, "50");
+CONF_Int64(star_cache_max_retry_when_allocate, "5");
+
 CONF_mInt64(l0_l1_merge_ratio, "10");
 CONF_mInt64(l0_max_file_size, "209715200"); // 200MB
 

@@ -148,6 +148,10 @@ public:
     // REQUIRES: handle must have been returned by a method on *this.
     virtual void release(Handle* handle) = 0;
 
+    // Used to evict elements from lru cache
+    virtual void evict(size_t charge, std::vector<Handle*>* deleted) = 0;
+    virtual void evict_for(const CacheKey& key, size_t charge, std::vector<Handle*>* deleted) = 0;
+
     // Return the value encapsulated in a handle returned by a
     // successful lookup().
     // REQUIRES: handle must not have been released yet.
@@ -273,6 +277,7 @@ public:
     Cache::Handle* lookup(const CacheKey& key, uint32_t hash);
     void release(Cache::Handle* handle);
     void erase(const CacheKey& key, uint32_t hash);
+    void evict(size_t charge, std::vector<Cache::Handle*>* deleted);
     int prune();
 
     uint64_t get_lookup_count();
@@ -305,7 +310,8 @@ private:
     uint64_t _hit_count{0};
 };
 
-static const int kNumShardBits = 5;
+//static const int kNumShardBits = 5;
+static const int kNumShardBits = 1;
 static const int kNumShards = 1 << kNumShardBits;
 
 class ShardedLRUCache : public Cache {
@@ -317,6 +323,8 @@ public:
     Handle* lookup(const CacheKey& key) override;
     void release(Handle* handle) override;
     void erase(const CacheKey& key) override;
+    void evict(size_t charge, std::vector<Handle*>* deleted);
+    void evict_for(const CacheKey& key, size_t charge, std::vector<Handle*>* deleted);
     void* value(Handle* handle) override;
     Slice value_slice(Handle* handle) override;
     uint64_t new_id() override;

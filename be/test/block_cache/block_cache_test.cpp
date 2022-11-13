@@ -24,8 +24,8 @@ TEST_F(BlockCacheTest, hybrid_cache) {
 
     CacheOptions options;
     options.mem_space_size = 20 * 1024 * 1024;
-    size_t quota = 500 * 1024 * 1024;
-    options.disk_spaces.push_back({.path = "./ut_dir/block_disk_cache", .size = quota});
+    size_t quota_bytes = 500 * 1024 * 1024;
+    options.disk_spaces.push_back({.path = "./ut_dir/block_disk_cache", .size = quota_bytes });
     options.block_size = block_size;
     Status status = cache->init(options);
     ASSERT_TRUE(status.ok());

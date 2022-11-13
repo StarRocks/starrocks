@@ -1,0 +1,57 @@
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+
+#pragma once
+
+#include <atomic>
+#include <butil/iobuf.h>
+#include "common/statusor.h"
+#include "star_cache/cache_item.h"
+#include "star_cache/eviction_policy.h"
+
+namespace starrocks {
+
+struct DiskCacheOptions {
+    // Cache Space (Required)
+    std::vector<DirSpace> disk_dir_spaces;
+    
+    // Policy (Optional)
+    /*
+    EvictPolicy evict_policy;
+    */
+};
+
+class DiskSpaceManager;
+
+class DiskCache {
+public:
+    DiskCache() {}
+    ~DiskCache() {
+        delete _eviction_policy;
+    }
+
+	Status init(const DiskCacheOptions& options);
+
+    Status write_block(const CacheId& cache_id, DiskBlockItem* block, off_t offset_in_block,
+                       const IOBuf& buf) const;
+    Status read_block(const CacheId& cache_id, DiskBlockItem* block, off_t offset_in_block, size_t size,
+                      IOBuf* buf) const;
+    Status writev_block(const CacheId& cache_id, DiskBlockItem* block, off_t offset_in_block,
+                        const std::vector<IOBuf*>& bufv) const;
+    Status readv_block(const CacheId& cache_id, DiskBlockItem* block, off_t offset_in_block,
+                       const std::vector<size_t> sizev, std::vector<IOBuf*>* bufv) const;
+
+    DiskBlockItem* new_block_item(const CacheId& cache_id) const;
+    Status free_block_item(DiskBlockItem* block);
+
+    Status evict_for(const CacheId& id, size_t count, std::vector<CacheId>* evicted) const;
+
+private:
+    void _update_block_checksum(DiskBlockItem* block, off_t offset_in_block, const IOBuf& buf) const;
+
+    bool _check_block_checksum(DiskBlockItem* block, off_t offset_in_block, const IOBuf& buf) const;
+
+    DiskSpaceManager* _space_manager = nullptr;
+    EvictionPolicy<CacheId>* _eviction_policy = nullptr;
+};
+
+} // namespace starrocks

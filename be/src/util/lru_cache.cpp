@@ -365,6 +365,17 @@ void LRUCache::erase(const CacheKey& key, uint32_t hash) {
     }
 }
 
+void LRUCache::evict(size_t charge, std::vector<Cache::Handle*>* deleted) {
+    std::vector<LRUHandle*> handles;
+    {
+        std::lock_guard l(_mutex);
+        _evict_from_lru(charge, &handles);
+    }
+    for (auto h : handles) {
+        deleted->push_back(reinterpret_cast<Cache::Handle*>(h));
+    }
+}
+
 int LRUCache::prune() {
     std::vector<LRUHandle*> last_ref_list;
     {
@@ -445,6 +456,17 @@ void ShardedLRUCache::release(Handle* handle) {
 void ShardedLRUCache::erase(const CacheKey& key) {
     const uint32_t hash = _hash_slice(key);
     _shards[_shard(hash)].erase(key, hash);
+}
+
+void ShardedLRUCache::evict( size_t charge, std::vector<Handle*>* deleted) {
+    for (auto& _shard : _shards) {
+        _shard.evict(charge, deleted);
+    }
+}
+
+void ShardedLRUCache::evict_for(const CacheKey& key, size_t charge, std::vector<Handle*>* deleted) {
+    const uint32_t hash = _hash_slice(key);
+    _shards[_shard(hash)].evict(charge, deleted);
 }
 
 void* ShardedLRUCache::value(Handle* handle) {

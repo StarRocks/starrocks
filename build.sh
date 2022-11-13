@@ -121,6 +121,10 @@ if [[ -z ${WITH_BLOCK_CACHE} ]]; then
 	WITH_BLOCK_CACHE=ON
 fi
 
+if [[ -z ${WITH_STAR_CACHE} ]]; then
+	WITH_STAR_CACHE=ON
+fi
+
 if [[ "${WITH_BLOCK_CACHE}" == "ON" && ! -f ${STARROCKS_THIRDPARTY}/installed/cachelib/lib/libcachelib_allocator.a ]]; then
     echo "WITH_BLOCK_CACHE=ON but missing depdency libraries(cachelib)"
     exit 1
@@ -198,6 +202,7 @@ echo "Get params:
     PARALLEL            -- $PARALLEL
     ENABLE_QUERY_DEBUG_TRACE -- $ENABLE_QUERY_DEBUG_TRACE
     WITH_BLOCK_CACHE    -- $WITH_BLOCK_CACHE
+    WITH_STAR_CACHE    -- $WITH_STAR_CACHE
     USE_JEMALLOC        -- $USE_JEMALLOC
 "
 
@@ -250,6 +255,7 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
                     -DUSE_STAROS=${USE_STAROS} \
                     -DWITH_BLOCK_CACHE=${WITH_BLOCK_CACHE} \
+                    -DWITH_STAR_CACHE=${WITH_STAR_CACHE} \
                     -Dprotobuf_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/protobuf \
                     -Dabsl_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/absl \
                     -DgRPC_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/grpc \
@@ -266,6 +272,7 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                     -DENABLE_QUERY_DEBUG_TRACE=$ENABLE_QUERY_DEBUG_TRACE \
                     -DUSE_JEMALLOC=$USE_JEMALLOC \
                     -DWITH_BLOCK_CACHE=${WITH_BLOCK_CACHE} \
+                    -DWITH_STAR_CACHE=${WITH_STAR_CACHE} \
                     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON  ..
     fi
     time ${BUILD_SYSTEM} -j${PARALLEL}
@@ -345,8 +352,6 @@ if [ ${BUILD_BE} -eq 1 ]; then
                ${STARROCKS_OUTPUT}/be/lib/hadoop \
                ${STARROCKS_OUTPUT}/be/lib/jvm \
                ${STARROCKS_OUTPUT}/be/www  \
-               ${STARROCKS_OUTPUT}/udf/lib \
-               ${STARROCKS_OUTPUT}/udf/include
 
     cp -r -p ${STARROCKS_HOME}/be/output/bin/* ${STARROCKS_OUTPUT}/be/bin/
     cp -r -p ${STARROCKS_HOME}/be/output/conf/be.conf ${STARROCKS_OUTPUT}/be/conf/
@@ -358,8 +363,6 @@ if [ ${BUILD_BE} -eq 1 ]; then
     fi
     cp -r -p ${STARROCKS_HOME}/be/output/lib/* ${STARROCKS_OUTPUT}/be/lib/
     cp -r -p ${STARROCKS_HOME}/be/output/www/* ${STARROCKS_OUTPUT}/be/www/
-    cp -r -p ${STARROCKS_HOME}/be/output/udf/*.a ${STARROCKS_OUTPUT}/udf/lib/
-    cp -r -p ${STARROCKS_HOME}/be/output/udf/include/* ${STARROCKS_OUTPUT}/udf/include/
     cp -r -p ${STARROCKS_HOME}/java-extensions/jdbc-bridge/target/starrocks-jdbc-bridge-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
     cp -r -p ${STARROCKS_HOME}/java-extensions/udf-extensions/target/udf-extensions-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
     cp -r -p ${STARROCKS_HOME}/java-extensions/java-utils/target/starrocks-java-utils.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
@@ -370,14 +373,6 @@ if [ ${BUILD_BE} -eq 1 ]; then
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/common ${STARROCKS_OUTPUT}/be/lib/hadoop/
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/hdfs ${STARROCKS_OUTPUT}/be/lib/hadoop/
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/lib/native ${STARROCKS_OUTPUT}/be/lib/hadoop/
-
-    if [ "${WITH_BLOCK_CACHE}" == "ON"  ]; then
-        mkdir -p ${STARROCKS_OUTPUT}/be/lib/cachelib/deps
-        cp -r -p ${CACHELIB_DIR}/lib ${STARROCKS_OUTPUT}/be/lib/cachelib/
-        cp -r -p ${CACHELIB_DIR}/lib64 ${STARROCKS_OUTPUT}/be/lib/cachelib/
-        cp -r -p ${CACHELIB_DIR}/deps/lib ${STARROCKS_OUTPUT}/be/lib/cachelib/deps/
-        cp -r -p ${CACHELIB_DIR}/deps/lib64 ${STARROCKS_OUTPUT}/be/lib/cachelib/deps/
-    fi
 
     # note: do not use oracle jdk to avoid commercial dispute
     if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
