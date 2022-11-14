@@ -78,6 +78,19 @@ public class ShowTabletStmtAnalyzer {
             // order by
             List<OrderByElement> orderByElements = statement.getOrderByElements();
             if (orderByElements != null && !orderByElements.isEmpty()) {
+                Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+                String tableName = statement.getTableName();
+                Table table = null;
+                db.readLock();
+                try {
+                    table = db.getTable(tableName);
+                    if (table == null) {
+                        throw new SemanticException("Table %s is not found", tableName);
+                    }
+                } finally {
+                    db.readUnlock();
+                }
+
                 orderByPairs = new ArrayList<>();
                 for (OrderByElement orderByElement : orderByElements) {
                     if (!(orderByElement.getExpr() instanceof SlotRef)) {
@@ -85,13 +98,6 @@ public class ShowTabletStmtAnalyzer {
                     }
                     SlotRef slotRef = (SlotRef) orderByElement.getExpr();
                     int index = 0;
-                    Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
-                    String tableName = statement.getTableName();
-                    Table table = db.getTable(tableName);
-                    if (table == null) {
-                        throw new SemanticException("Table %s is not found", tableName);
-                    }
-
                     try {
                         if (table.isLakeTable()) {
                             index = LakeTabletsProcNode.analyzeColumn(slotRef.getColumnName());
