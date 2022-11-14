@@ -248,7 +248,7 @@ StarRocks 数据库 `test_db` 里的表 `table2` 包含三列，按顺序依次�
 如果要把 `example2.csv` 中所有的数据都导入到 `table2` 中，并且要求容错率最大不超过 `0.2`，可以执行如下命令：
 
 ```Bash
-curl --location-trusted -u root: -H "label:label3" \
+curl --location-trusted -u root: -H "label:label2" \
     -H "max_filter_ratio:0.2" \
     -T example2.csv -XPUT \
     http://<fe_host>:<fe_http_port>/api/test_db/table2/_stream_load
@@ -263,7 +263,7 @@ StarRocks 数据库 `test_db` 里的表 `table3` 包含三列，按顺序依次�
 如果要把 `example3.csv` 中所有的数据都导入到 `table3` 中，可以执行如下命令：
 
 ```Bash
-curl --location-trusted -u root:  -H "label:label4" \
+curl --location-trusted -u root:  -H "label:label3" \
     -H "columns: col2, col1, col3" \
     -T example3.csv -XPUT \
     http://<fe_host>:<fe_http_port>/api/test_db/table3/_stream_load
@@ -282,7 +282,7 @@ StarRocks 数据库 `test_db` 里的表 `table4` 包含三列，按顺序依次�
 如果只想把 `example4.csv` 中第一列的值等于 `20180601` 的数据行导入到 `table4` 中，可以执行如下命令：
 
 ```Bash
-curl --location-trusted -u root: -H "label:label2" \
+curl --location-trusted -u root: -H "label:label4" \
     -H "columns: col1, col2，col3]"\
     -H "where: col1 = 20180601" \
     -T example4.csv -XPUT \
