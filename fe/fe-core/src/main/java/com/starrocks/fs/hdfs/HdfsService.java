@@ -18,6 +18,7 @@
 package com.starrocks.fs.hdfs;
 
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.PrintableMap;
 import com.starrocks.thrift.TBrokerCheckPathExistRequest;
 import com.starrocks.thrift.TBrokerCloseReaderRequest;
 import com.starrocks.thrift.TBrokerCloseWriterRequest;
@@ -55,7 +56,14 @@ public class HdfsService {
 
     public void listPath(TBrokerListPathRequest request, List<TBrokerFileStatus> fileStatuses, boolean skipDir, 
             boolean fileNameOnly) throws UserException {
-        LOG.info("received a list path request, request detail: " + request);
+        StringBuilder sb = new StringBuilder();
+        sb.append("received a list path request, request path: " + request.path);
+        if (request.properties != null && !request.properties.isEmpty()) {
+            PrintableMap<String, String> printableMap = new PrintableMap<>(request.properties, " = ", true, false, true);
+            sb.append(" (").append(printableMap).append(")");
+        }
+        LOG.info(sb.toString());
+
         List<TBrokerFileStatus> allFileStatuses = fileSystemManager.listPath(request.path, fileNameOnly,
                 request.properties);
 
