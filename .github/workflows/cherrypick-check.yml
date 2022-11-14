@@ -1,5 +1,3 @@
-name: project
-
 on:
   pull_request_target:
     branches:
@@ -10,10 +8,10 @@ on:
       - branch-2.5
     types:
       - opened
-      - edited
+      - reopened
 
 jobs:
-  autolabel:
+  cherrypick-check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions-ecosystem/action-add-labels@v1
@@ -28,3 +26,16 @@ jobs:
             2.4
             2.3
             2.2
+
+      - uses: thollander/actions-comment-pull-request@v1
+        if: >
+          startsWith(github.event.pull_request.title, '[BugFix]') &&
+          !contains(github.event.pull_request.title, 'cherry-pick') &&
+          !contains(github.event.pull_request.title, 'backport')
+        with:
+          message: |
+            ## Please check the version labels which this pr will be auto backported to target branch and click the checkbox:
+
+            - [ ] check done.
+          GITHUB_TOKEN: ${{ secrets.PAT  }}
+          reactions: eyes

@@ -1,5 +1,3 @@
-name: checker
-
 on:
   pull_request_target:
     types:
@@ -10,7 +8,7 @@ on:
       - 'fe/**.java'
 
 jobs:
-  java-codestyle:
+  java-codestyle-check:
     name: "CheckStyle"
     runs-on: ubuntu-latest
     steps:

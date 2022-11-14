@@ -1,6 +1,4 @@
-name: markdownlint
-
-on: 
+on:
   pull_request:
     types:
       - opened
@@ -10,7 +8,7 @@ on:
       - 'docs/**'
 
 jobs:
-  delivery:
+  markdownlint:
     runs-on: ubuntu-latest
     steps:
     - name: Check out code
@@ -22,7 +20,7 @@ jobs:
 #     - name: git diff file list
 #       id: diff
 #       run : echo "files=$(git diff HEAD HEAD^  --name-only -- '*.md')" >> $GITHUB_OUTPUT
-      
+
     - name: markdown lint
       uses: nosborn/github-action-markdown-cli@v3.2.0
       with:
