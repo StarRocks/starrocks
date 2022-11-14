@@ -266,8 +266,7 @@ public class MaterializedViewRewriter {
         if (viewInput == null) {
             return null;
         }
-        OptExpression union = createUnion(queryInput, viewInput, rewriteContext);
-        return union;
+        return createUnion(queryInput, viewInput, rewriteContext);
     }
 
     protected OptExpression queryBasedRewrite(RewriteContext rewriteContext, PredicateSplit compensationPredicates,
@@ -336,8 +335,7 @@ public class MaterializedViewRewriter {
                 .setProjection(projection)
                 .isUnionAll(true)
                 .build();
-        OptExpression unionExpr = OptExpression.create(unionOperator, newQueryInput, viewInput);
-        return unionExpr;
+        return OptExpression.create(unionOperator, newQueryInput, viewInput);
     }
 
     protected Multimap<ScalarOperator, ColumnRefOperator> normalizeAndReverseProjection(

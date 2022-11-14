@@ -573,7 +573,6 @@ public class MvRewriteOptimizationTest {
 
     @Test
     public void testAggregateMvRewrite() throws Exception {
-        connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
         createAndRefreshMv("test", "agg_join_mv_1", "create materialized view agg_join_mv_1" +
                 " distributed by hash(v1) as SELECT t0.v1 as v1," +
                 " test_all_type.t1d, sum(test_all_type.t1c) as total_sum, count(test_all_type.t1c) as total_num" +
@@ -725,7 +724,6 @@ public class MvRewriteOptimizationTest {
     @Test
     public void testUnionRewrite() throws Exception {
         // single table union
-        connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
         createAndRefreshMv("test", "union_mv_1", "create materialized view union_mv_1" +
                 " distributed by hash(empid)  as select empid, deptno, name, salary from emps where empid < 3");
         String query1 = "select empid, deptno, name, salary from emps where empid < 5";
@@ -762,11 +760,6 @@ public class MvRewriteOptimizationTest {
                 " group by v1, test_all_type.t1d";
         getFragmentPlan(query3);
         dropMv("test", "join_agg_union_mv_1");
-    }
-
-    @Test
-    public void testPartitialPartitionRewrite() {
-
     }
 
     public String getFragmentPlan(String sql) throws Exception {

@@ -12,7 +12,7 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.Aggregate
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MaterializedViewRewriter;
 
 public abstract class AggregateRewriteBaseRule extends BaseMaterializedViewRewriteRule {
-    public AggregateRewriteBaseRule(RuleType type, Pattern pattern) {
+    protected AggregateRewriteBaseRule(RuleType type, Pattern pattern) {
         super(type, pattern);
     }
 

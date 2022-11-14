@@ -43,8 +43,7 @@ public class OptExpressionDuplicator {
     }
     public OptExpression duplicate(OptExpression source) {
         OptExpressionDuplicatorVisitor visitor = new OptExpressionDuplicatorVisitor();
-        OptExpression optExpression = source.getOp().accept(visitor, source, null);
-        return optExpression;
+        return source.getOp().accept(visitor, source, null);
     }
 
     public List<ColumnRefOperator> getMappedColumns(List<ColumnRefOperator> originColumns) {
@@ -125,24 +124,23 @@ public class OptExpressionDuplicator {
             LogicalAggregationOperator aggregationOperator = (LogicalAggregationOperator) optExpression.getOp();
             List<ColumnRefOperator> newGroupKeys = Lists.newArrayList();
             for (ColumnRefOperator groupKey : aggregationOperator.getGroupingKeys()) {
-                if (!columnMapping.containsKey(groupKey)) {
-                    ColumnRefOperator newColumnRef = columnRefFactory.create(groupKey, groupKey.getType(), groupKey.isNullable());
-                    columnMapping.put(groupKey, newColumnRef);
-                }
-                newGroupKeys.add((ColumnRefOperator) columnMapping.get(groupKey));
+                ColumnRefOperator mapped = (ColumnRefOperator) columnMapping.computeIfAbsent(groupKey, k -> {
+                    ColumnRefOperator newColumnRef = columnRefFactory.create(k, k.getType(), k.isNullable());
+                    return newColumnRef;
+                });
+                newGroupKeys.add(mapped);
             }
             LogicalAggregationOperator.Builder aggregationBuilder  = (LogicalAggregationOperator.Builder) opBuilder;
             aggregationBuilder.setGroupingKeys(newGroupKeys);
             Map<ColumnRefOperator, CallOperator> newAggregates = Maps.newHashMap();
             for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggregationOperator.getAggregations().entrySet()) {
-                ColumnRefOperator key = entry.getKey();
-                if (!columnMapping.containsKey(key)) {
-                    ColumnRefOperator newColumnRef = columnRefFactory.create(key, key.getType(), key.isNullable());
-                    columnMapping.put(key, newColumnRef);
-                }
+                ColumnRefOperator mapped = (ColumnRefOperator) columnMapping.computeIfAbsent(entry.getKey(), k -> {
+                    ColumnRefOperator newColumnRef = columnRefFactory.create(k, k.getType(), k.isNullable());
+                    return newColumnRef;
+                });
                 ScalarOperator newValue = rewriter.rewrite(entry.getValue());
                 Preconditions.checkState(newValue instanceof CallOperator);
-                newAggregates.put((ColumnRefOperator) columnMapping.get(key), (CallOperator) newValue);
+                newAggregates.put(mapped, (CallOperator) newValue);
             }
             aggregationBuilder.setAggregations(newAggregates);
 
@@ -150,12 +148,11 @@ public class OptExpressionDuplicator {
             List<ColumnRefOperator> partitionColumns = aggregationOperator.getPartitionByColumns();
             if (partitionColumns != null) {
                 for (ColumnRefOperator columnRef : partitionColumns) {
-                    if (!columnMapping.containsKey(columnRef)) {
-                        ColumnRefOperator newColumnRef =
-                                columnRefFactory.create(columnRef, columnRef.getType(), columnRef.isNullable());
-                        columnMapping.put(columnRef, newColumnRef);
-                    }
-                    newPartitionColumns.add((ColumnRefOperator) columnMapping.get(columnRef));
+                    ColumnRefOperator mapped = (ColumnRefOperator) columnMapping.computeIfAbsent(columnRef, k -> {
+                        ColumnRefOperator newColumnRef = columnRefFactory.create(k, k.getType(), k.isNullable());
+                        return newColumnRef;
+                    });
+                    newPartitionColumns.add(mapped);
                 }
             }
             aggregationBuilder.setPartitionByColumns(newPartitionColumns);
@@ -202,6 +199,7 @@ public class OptExpressionDuplicator {
             return OptExpression.create(opBuilder.build(), inputs);
         }
 
+        @Override
         public OptExpression visit(OptExpression optExpression, Void context) {
             return null;
         }

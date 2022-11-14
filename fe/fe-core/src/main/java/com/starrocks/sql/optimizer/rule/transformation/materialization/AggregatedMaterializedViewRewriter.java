@@ -183,8 +183,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
             Operator newInputOp = builder.build();
             OptExpression newInputExpr = OptExpression.create(newInputOp, input.getInputs());
             // create new OptExpression to strip GroupExpression
-            OptExpression newAggExpr = OptExpression.create(queryExpression.getOp(), newInputExpr);
-            return newAggExpr;
+            return OptExpression.create(queryExpression.getOp(), newInputExpr);
         }
         return null;
     }
