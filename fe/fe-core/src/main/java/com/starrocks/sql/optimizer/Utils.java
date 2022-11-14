@@ -839,32 +839,6 @@ public class Utils {
         return predicate.accept(checkVisitor, null);
     }
 
-    public static Map<ColumnRefOperator, ScalarOperator> getLineage(
-            OptExpression expression, ColumnRefFactory refFactory) {
-        Map<ColumnRefOperator, ScalarOperator> columnRefMap = Maps.newHashMap();
-        if (expression.getOp().getProjection() != null) {
-            columnRefMap.putAll(expression.getOp().getProjection().getColumnRefMap());
-            // for LogicalAggregationOperator, should include aggregation
-            if (expression.getOp() instanceof LogicalAggregationOperator) {
-                LogicalAggregationOperator agg = (LogicalAggregationOperator) expression.getOp();
-                columnRefMap.putAll(agg.getColumnRefMap());
-            }
-        } else {
-            if (expression.getOp() instanceof LogicalAggregationOperator) {
-                LogicalAggregationOperator agg = (LogicalAggregationOperator) expression.getOp();
-                columnRefMap.putAll(agg.getColumnRefMap());
-            } else {
-                ColumnRefSet refSet = expression.getOutputColumns();
-                for (int columnId : refSet.getColumnIds()) {
-                    ColumnRefOperator columnRef = refFactory.getColumnRef(columnId);
-                    columnRefMap.put(columnRef, columnRef);
-                }
-            }
-        }
-
-        return columnRefMap;
-    }
-
     public static Map<ColumnRefOperator, ScalarOperator> getColumnRefMap(
             OptExpression expression, ColumnRefFactory refFactory) {
         Map<ColumnRefOperator, ScalarOperator> columnRefMap = Maps.newHashMap();

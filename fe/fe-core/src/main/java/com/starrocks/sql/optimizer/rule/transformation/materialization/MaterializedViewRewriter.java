@@ -257,15 +257,24 @@ public class MaterializedViewRewriter {
                 || !ConstantOperator.TRUE.equals(compensationPredicates.getRangePredicates())
                 || !ConstantOperator.TRUE.equals(compensationPredicates.getResidualPredicates()));
 
+        // for mv: select a, b from t where a < 10;
+        // query: select a, b from t where a < 20;
+        // queryBasedRewrite will return the tree of "select a, b from t where a >= 10 and a < 20"
+        // which is realized by adding the compensation predicate to original query expression
         OptExpression queryInput = queryBasedRewrite(rewriteContext,
                 compensationPredicates, materializationContext.getQueryExpression());
         if (queryInput == null) {
             return null;
         }
+        // viewBasedRewrite will return the tree of "select a, b from t where a < 10" based on mv expression
         OptExpression viewInput = viewBasedRewrite(rewriteContext, targetExpr);
         if (viewInput == null) {
             return null;
         }
+        // createUnion will return the union all result of queryInput and viewInput
+        //           Union
+        //       /          |
+        // partial query   view
         return createUnion(queryInput, viewInput, rewriteContext);
     }
 

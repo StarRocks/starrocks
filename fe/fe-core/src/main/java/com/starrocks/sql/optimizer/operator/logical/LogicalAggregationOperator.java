@@ -8,6 +8,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -132,6 +133,16 @@ public class LogicalAggregationOperator extends LogicalOperator {
         Map<ColumnRefOperator, ScalarOperator> keyMap = groupingKeys.stream().collect(Collectors.toMap(identity(), identity()));
         columnRefMap.putAll(keyMap);
         columnRefMap.putAll(aggregations);
+        return columnRefMap;
+    }
+
+    public Map<ColumnRefOperator, ScalarOperator> getLineage(
+            ColumnRefFactory refFactory, ExpressionContext expressionContext) {
+        Map<ColumnRefOperator, ScalarOperator> columnRefMap = Maps.newHashMap();
+        columnRefMap.putAll(getColumnRefMap());
+        if (projection != null) {
+            columnRefMap.putAll(projection.getColumnRefMap());
+        }
         return columnRefMap;
     }
 

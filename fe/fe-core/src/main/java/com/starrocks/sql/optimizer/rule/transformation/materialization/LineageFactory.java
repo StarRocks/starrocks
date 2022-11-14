@@ -3,9 +3,9 @@
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.google.common.collect.Maps;
+import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
-import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -39,7 +39,9 @@ public class LineageFactory {
             if (!(optExpression.getOp() instanceof LogicalOperator)) {
                 return null;
             }
-            Map<ColumnRefOperator, ScalarOperator> projection = Utils.getLineage(optExpression, refFactory);
+            LogicalOperator logicalOperator = (LogicalOperator) optExpression.getOp();
+            ExpressionContext expressionContext = new ExpressionContext(optExpression);
+            Map<ColumnRefOperator, ScalarOperator> projection = logicalOperator.getLineage(refFactory, expressionContext);
             lineage.putAll(projection);
             for (OptExpression input : optExpression.getInputs()) {
                 input.getOp().accept(this, input, context);
