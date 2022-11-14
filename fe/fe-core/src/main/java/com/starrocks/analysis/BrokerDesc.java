@@ -21,6 +21,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PrintableMap;
+import com.starrocks.sql.ast.LoadStmt;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -72,6 +73,13 @@ public class BrokerDesc implements Writable {
 
     public Map<String, String> getProperties() {
         return properties;
+    }
+
+    public String getMergeConditionStr() {
+        if (properties.containsKey(LoadStmt.MERGE_CONDITION)) {
+            return properties.get(LoadStmt.MERGE_CONDITION);
+        }
+        return "";
     }
 
     @Override
