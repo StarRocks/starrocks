@@ -1689,6 +1689,12 @@ public class Config extends ConfigBase {
     public static String starmgr_s3_sk = "";
 
     /**
+     * default storage cache ttl of lake table
+     */
+    @ConfField(mutable = true)
+    public static long lake_default_cache_ttl_seconds = 2592000L;
+
+    /**
      * default bucket number when create OLAP table without buckets info
      */
     @ConfField(mutable = true)
@@ -1844,10 +1850,4 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean enable_check_db_state = true;
-
-    /**
-     * default storage cache ttl of lake table
-     */
-    @ConfField(mutable = true)
-    public static long default_cache_ttl_seconds = 2592000L;
 }
