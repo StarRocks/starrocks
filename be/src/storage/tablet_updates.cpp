@@ -1004,9 +1004,10 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
         // 4. write meta
         const auto& rowset_meta_pb = rowset->rowset_meta()->get_meta_pb();
         if (rowset_meta_pb.has_txn_meta()) {
+            rowset->rowset_meta()->clear_txn_meta();
             st = TabletMetaManager::apply_rowset_commit(_tablet.data_dir(), tablet_id, _next_log_id, version,
                                                         new_del_vecs, index_meta, enable_persistent_index,
-                                                        rowset.get());
+                                                        &(rowset->rowset_meta()->get_meta_pb()));
         } else {
             st = TabletMetaManager::apply_rowset_commit(_tablet.data_dir(), tablet_id, _next_log_id, version,
                                                         new_del_vecs, index_meta, enable_persistent_index, nullptr);

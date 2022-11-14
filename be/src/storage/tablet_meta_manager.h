@@ -148,7 +148,7 @@ public:
     static Status apply_rowset_commit(DataDir* store, TTabletId tablet_id, int64_t logid, const EditVersion& version,
                                       std::vector<std::pair<uint32_t, DelVectorPtr>>& delvecs,
                                       const PersistentIndexMetaPB& index_meta, bool enable_persistent_index,
-                                      Rowset* rowset);
+                                      const starrocks::RowsetMetaPB* rowset_meta);
 
     // traverse all the op logs for a tablet
     static Status traverse_meta_logs(DataDir* store, TTabletId tablet_id,
