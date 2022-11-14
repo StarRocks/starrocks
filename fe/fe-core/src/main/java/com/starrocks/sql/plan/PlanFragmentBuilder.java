@@ -936,13 +936,8 @@ public class PlanFragmentBuilder {
             icebergScanNode.computeStatistics(optExpression.getStatistics());
             try {
                 // set predicate
-                ScalarOperatorToExpr.FormatterContext formatterContext =
-                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
                 List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
-                for (ScalarOperator predicate : predicates) {
-                    icebergScanNode.getConjuncts()
-                            .add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
-                }
+                icebergScanNode.preProcessConjuncts(predicates);
                 icebergScanNode.getScanRangeLocations();
                 //set slot for equality delete file
                 icebergScanNode.appendEqualityColumns(node, columnRefFactory, context);
