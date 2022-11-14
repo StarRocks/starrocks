@@ -159,48 +159,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
             if (newAggregations == null) {
                 return null;
             }
-            // newGroupKeys may have duplicate because of EquivalenceClasses
-            // remove duplicate here as new grouping keys
-            List<ColumnRefOperator> finalGroupKeys = newGroupKeys.stream().distinct().collect(Collectors.toList());
-
-            LogicalAggregationOperator.Builder aggBuilder = new LogicalAggregationOperator.Builder();
-            aggBuilder.withOperator(queryAgg);
-            aggBuilder.setGroupingKeys(finalGroupKeys);
-            // can not be distinct agg here, so partitionByColumns is the same as groupingKeys
-            aggBuilder.setPartitionByColumns(finalGroupKeys);
-            aggBuilder.setAggregations(newAggregations);
-            aggBuilder.setProjection(queryAgg.getProjection());
-            aggBuilder.setPredicate(queryAgg.getPredicate());
-
-            // add projection for group keys
-            // aggregates are already mapped, so here just process group keys
-            Map<ColumnRefOperator, ScalarOperator> newProjection = Maps.newHashMap();
-            if (queryAgg.getProjection() == null) {
-                for (int i = 0; i < originalGroupKeys.size(); i++) {
-                    newProjection.put(originalGroupKeys.get(i), newGroupKeys.get(i));
-                }
-                newProjection.putAll(newAggregations);
-            } else {
-                Map<ColumnRefOperator, ScalarOperator> originalMap = queryAgg.getProjection().getColumnRefMap();
-                Map<ColumnRefOperator, ScalarOperator> groupKeyMap = Maps.newHashMap();
-                for (int i = 0; i < originalGroupKeys.size(); i++) {
-                    groupKeyMap.put(originalGroupKeys.get(i), newGroupKeys.get(i));
-                }
-                ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(groupKeyMap);
-                for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : originalMap.entrySet()) {
-                    if (groupKeyMap.containsKey(entry.getValue())) {
-                        ScalarOperator rewritten = rewriter.rewrite(entry.getValue());
-                        newProjection.put(entry.getKey(), rewritten);
-                    } else {
-                        newProjection.put(entry.getKey(), entry.getValue());
-                    }
-                }
-            }
-            Projection projection = new Projection(newProjection);
-            aggBuilder.setProjection(projection);
-            LogicalAggregationOperator newAggOp = aggBuilder.build();
-            OptExpression aggExpr = OptExpression.create(newAggOp, targetExpr);
-            return aggExpr;
+            return createNewAggregate(queryAgg, originalGroupKeys, newGroupKeys, newAggregations, targetExpr);
         } else {
             return rewriteProjection(rewriteContext, normalizedViewMap, targetExpr);
         }
@@ -289,11 +248,20 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         if (newAggregations == null) {
             return null;
         }
+        return createNewAggregate(queryAgg, originalGroupKeys, newGroupingKeys, newAggregations, unionExpr);
+    }
+
+    private OptExpression createNewAggregate(LogicalAggregationOperator queryAgg, List<ColumnRefOperator> originalGroupKeys,
+                                             List<ColumnRefOperator> newGroupingKeys,
+                                             Map<ColumnRefOperator, CallOperator> newAggregations, OptExpression inputExpr) {
+        // newGroupKeys may have duplicate because of EquivalenceClasses
+        // remove duplicate here as new grouping keys
+        List<ColumnRefOperator> finalGroupKeys = newGroupingKeys.stream().distinct().collect(Collectors.toList());
         LogicalAggregationOperator.Builder aggBuilder = new LogicalAggregationOperator.Builder();
         aggBuilder.withOperator(queryAgg);
-        aggBuilder.setGroupingKeys(newGroupingKeys);
+        aggBuilder.setGroupingKeys(finalGroupKeys);
         // can not be distinct agg here, so partitionByColumns is the same as groupingKeys
-        aggBuilder.setPartitionByColumns(newGroupingKeys);
+        aggBuilder.setPartitionByColumns(finalGroupKeys);
         aggBuilder.setAggregations(newAggregations);
         aggBuilder.setPredicate(queryAgg.getPredicate());
         // add projection for group keys
@@ -303,7 +271,9 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
             for (int i = 0; i < originalGroupKeys.size(); i++) {
                 newProjection.put(originalGroupKeys.get(i), newGroupingKeys.get(i));
             }
-            newProjection.putAll(newAggregations);
+            for (Map.Entry<ColumnRefOperator, CallOperator> entry : newAggregations.entrySet()) {
+                newProjection.put(entry.getKey(), entry.getKey());
+            }
         } else {
             Map<ColumnRefOperator, ScalarOperator> originalMap = queryAgg.getProjection().getColumnRefMap();
             Map<ColumnRefOperator, ScalarOperator> groupKeyMap = Maps.newHashMap();
@@ -324,8 +294,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         Projection projection = new Projection(newProjection);
         aggBuilder.setProjection(projection);
         LogicalAggregationOperator newAggOp = aggBuilder.build();
-        OptExpression aggExpr = OptExpression.create(newAggOp, unionExpr);
-        return aggExpr;
+        return OptExpression.create(newAggOp, inputExpr);
     }
 
     private List<ColumnRefOperator> rewriteGroupKeys(List<ScalarOperator> groupKeys,
