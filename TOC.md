@@ -134,6 +134,7 @@
       + [SHOW FULL COLUMNS](/sql-reference/sql-statements/Administration/SHOW%20FULL%20COLUMNS.md)
       + [SHOW INDEX](/sql-reference/sql-statements/Administration/SHOW%20INDEX.md)
       + [SHOW PLUGINS](/sql-reference/sql-statements/Administration/SHOW%20PLUGINS.md)
+      + [SHOW PROC](/sql-reference/sql-statements/Administration/SHOW%20PROC.md)
       + [SHOW PROCESSLIST](/sql-reference/sql-statements/Administration/SHOW%20PROCESSLIST.md)
       + [SHOW RESOURCE GROUP](/sql-reference/sql-statements/Administration/SHOW%20RESOURCE%20GROUP.md)
       + [SHOW TABLE STATUS](/sql-reference/sql-statements/Administration/SHOW%20TABLE%20STATUS.md)
