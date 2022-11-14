@@ -111,9 +111,8 @@ TOP-N (order by [[13: O_TOTALPRICE DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FI
                             SCAN (columns[10: O_ORDERKEY, 11: O_CUSTKEY, 13: O_TOTALPRICE, 14: O_ORDERDATE] predicate[null])
                     EXCHANGE BROADCAST
                         SCAN (columns[1: C_CUSTKEY, 2: C_NAME] predicate[null])
-                EXCHANGE SHUFFLE[37]
-                    AGGREGATE ([GLOBAL] aggregate [{54: sum=sum(41: L_QUANTITY)}] group by [[37: L_ORDERKEY]] having [54: sum > 315.0]
-                        SCAN (columns[37: L_ORDERKEY, 41: L_QUANTITY] predicate[null])
+                AGGREGATE ([GLOBAL] aggregate [{54: sum=sum(41: L_QUANTITY)}] group by [[37: L_ORDERKEY]] having [54: sum > 315.0]
+                    SCAN (columns[37: L_ORDERKEY, 41: L_QUANTITY] predicate[null])
 [end]
 [plan-6]
 TOP-N (order by [[13: O_TOTALPRICE DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
@@ -127,9 +126,8 @@ TOP-N (order by [[13: O_TOTALPRICE DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FI
                             SCAN (columns[10: O_ORDERKEY, 11: O_CUSTKEY, 13: O_TOTALPRICE, 14: O_ORDERDATE] predicate[null])
                             EXCHANGE BROADCAST
                                 SCAN (columns[1: C_CUSTKEY, 2: C_NAME] predicate[null])
-                EXCHANGE SHUFFLE[37]
-                    AGGREGATE ([GLOBAL] aggregate [{54: sum=sum(41: L_QUANTITY)}] group by [[37: L_ORDERKEY]] having [54: sum > 315.0]
-                        SCAN (columns[37: L_ORDERKEY, 41: L_QUANTITY] predicate[null])
+                AGGREGATE ([GLOBAL] aggregate [{54: sum=sum(41: L_QUANTITY)}] group by [[37: L_ORDERKEY]] having [54: sum > 315.0]
+                    SCAN (columns[37: L_ORDERKEY, 41: L_QUANTITY] predicate[null])
 [end]
 [plan-7]
 TOP-N (order by [[13: O_TOTALPRICE DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
@@ -143,10 +141,9 @@ TOP-N (order by [[13: O_TOTALPRICE DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FI
                             SCAN (columns[10: O_ORDERKEY, 11: O_CUSTKEY, 13: O_TOTALPRICE, 14: O_ORDERDATE] predicate[null])
                     EXCHANGE BROADCAST
                         SCAN (columns[1: C_CUSTKEY, 2: C_NAME] predicate[null])
-                EXCHANGE SHUFFLE[37]
-                    AGGREGATE ([GLOBAL] aggregate [{54: sum=sum(54: sum)}] group by [[37: L_ORDERKEY]] having [54: sum > 315.0]
-                        AGGREGATE ([LOCAL] aggregate [{54: sum=sum(41: L_QUANTITY)}] group by [[37: L_ORDERKEY]] having [null]
-                            SCAN (columns[37: L_ORDERKEY, 41: L_QUANTITY] predicate[null])
+                AGGREGATE ([GLOBAL] aggregate [{54: sum=sum(54: sum)}] group by [[37: L_ORDERKEY]] having [54: sum > 315.0]
+                    AGGREGATE ([LOCAL] aggregate [{54: sum=sum(41: L_QUANTITY)}] group by [[37: L_ORDERKEY]] having [null]
+                        SCAN (columns[37: L_ORDERKEY, 41: L_QUANTITY] predicate[null])
 [end]
 [plan-8]
 TOP-N (order by [[13: O_TOTALPRICE DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
@@ -160,10 +157,9 @@ TOP-N (order by [[13: O_TOTALPRICE DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FI
                             SCAN (columns[10: O_ORDERKEY, 11: O_CUSTKEY, 13: O_TOTALPRICE, 14: O_ORDERDATE] predicate[null])
                             EXCHANGE BROADCAST
                                 SCAN (columns[1: C_CUSTKEY, 2: C_NAME] predicate[null])
-                EXCHANGE SHUFFLE[37]
-                    AGGREGATE ([GLOBAL] aggregate [{54: sum=sum(54: sum)}] group by [[37: L_ORDERKEY]] having [54: sum > 315.0]
-                        AGGREGATE ([LOCAL] aggregate [{54: sum=sum(41: L_QUANTITY)}] group by [[37: L_ORDERKEY]] having [null]
-                            SCAN (columns[37: L_ORDERKEY, 41: L_QUANTITY] predicate[null])
+                AGGREGATE ([GLOBAL] aggregate [{54: sum=sum(54: sum)}] group by [[37: L_ORDERKEY]] having [54: sum > 315.0]
+                    AGGREGATE ([LOCAL] aggregate [{54: sum=sum(41: L_QUANTITY)}] group by [[37: L_ORDERKEY]] having [null]
+                        SCAN (columns[37: L_ORDERKEY, 41: L_QUANTITY] predicate[null])
 [end]
 [plan-9]
 TOP-N (order by [[13: O_TOTALPRICE DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
@@ -175,9 +171,8 @@ TOP-N (order by [[13: O_TOTALPRICE DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FI
                         SCAN (columns[20: L_ORDERKEY, 24: L_QUANTITY] predicate[null])
                         EXCHANGE SHUFFLE[10]
                             SCAN (columns[10: O_ORDERKEY, 11: O_CUSTKEY, 13: O_TOTALPRICE, 14: O_ORDERDATE] predicate[null])
-                    EXCHANGE SHUFFLE[37]
-                        AGGREGATE ([GLOBAL] aggregate [{54: sum=sum(41: L_QUANTITY)}] group by [[37: L_ORDERKEY]] having [54: sum > 315.0]
-                            SCAN (columns[37: L_ORDERKEY, 41: L_QUANTITY] predicate[null])
+                    AGGREGATE ([GLOBAL] aggregate [{54: sum=sum(41: L_QUANTITY)}] group by [[37: L_ORDERKEY]] having [54: sum > 315.0]
+                        SCAN (columns[37: L_ORDERKEY, 41: L_QUANTITY] predicate[null])
                 EXCHANGE BROADCAST
                     SCAN (columns[1: C_CUSTKEY, 2: C_NAME] predicate[null])
 [end]
@@ -191,10 +186,9 @@ TOP-N (order by [[13: O_TOTALPRICE DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FI
                         SCAN (columns[20: L_ORDERKEY, 24: L_QUANTITY] predicate[null])
                         EXCHANGE SHUFFLE[10]
                             SCAN (columns[10: O_ORDERKEY, 11: O_CUSTKEY, 13: O_TOTALPRICE, 14: O_ORDERDATE] predicate[null])
-                    EXCHANGE SHUFFLE[37]
-                        AGGREGATE ([GLOBAL] aggregate [{54: sum=sum(54: sum)}] group by [[37: L_ORDERKEY]] having [54: sum > 315.0]
-                            AGGREGATE ([LOCAL] aggregate [{54: sum=sum(41: L_QUANTITY)}] group by [[37: L_ORDERKEY]] having [null]
-                                SCAN (columns[37: L_ORDERKEY, 41: L_QUANTITY] predicate[null])
+                    AGGREGATE ([GLOBAL] aggregate [{54: sum=sum(54: sum)}] group by [[37: L_ORDERKEY]] having [54: sum > 315.0]
+                        AGGREGATE ([LOCAL] aggregate [{54: sum=sum(41: L_QUANTITY)}] group by [[37: L_ORDERKEY]] having [null]
+                            SCAN (columns[37: L_ORDERKEY, 41: L_QUANTITY] predicate[null])
                 EXCHANGE BROADCAST
                     SCAN (columns[1: C_CUSTKEY, 2: C_NAME] predicate[null])
 [end]
