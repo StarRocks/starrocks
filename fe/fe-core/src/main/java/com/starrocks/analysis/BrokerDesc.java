@@ -21,6 +21,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PrintableMap;
+import com.starrocks.sql.ast.LoadStmt;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -39,8 +40,6 @@ public class BrokerDesc implements Writable {
     private String name;
     private Map<String, String> properties;
     private boolean hasBroker;
-
-    public static final String MERGE_CONDITION_KEY = "mergeCondition";
 
     // Only used for recovery
     private BrokerDesc() {
@@ -77,8 +76,8 @@ public class BrokerDesc implements Writable {
     }
 
     public String getMergeConditionStr() {
-        if (properties.containsKey(MERGE_CONDITION_KEY)) {
-            return properties.get(MERGE_CONDITION_KEY);
+        if (properties.containsKey(LoadStmt.MERGE_CONDITION)) {
+            return properties.get(LoadStmt.MERGE_CONDITION);
         }
         return "";
     }
