@@ -1457,6 +1457,14 @@ queryNoWith
     : queryPrimary (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 
+temporalClause
+    : AS OF expression
+    | FOR SYSTEM_TIME AS OF TIMESTAMP string
+    | FOR SYSTEM_TIME BETWEEN expression AND expression
+    | FOR SYSTEM_TIME FROM expression TO expression
+    | FOR SYSTEM_TIME ALL
+    ;
+
 queryPrimary
     : querySpecification                                                                    #queryPrimaryDefault
     | subquery                                                                              #queryWithParentheses
@@ -1530,7 +1538,7 @@ relation
     ;
 
 relationPrimary
-    : qualifiedName partitionNames? tabletList? (
+    : qualifiedName temporalClause? partitionNames? tabletList? (
         AS? alias=identifier columnAliases?)? bracketHint?                              #tableAtom
     | '(' VALUES rowConstructor (',' rowConstructor)* ')'
         (AS? alias=identifier columnAliases?)?                                          #inlineTable

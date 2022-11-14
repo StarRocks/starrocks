@@ -27,6 +27,10 @@ public class MysqlScanImplementationRule extends ImplementationRule {
                 logical.getPredicate(),
                 logical.getProjection());
 
+        if (logical.getTemporalClause() != null) {
+            physical.setTemporalClause(logical.getTemporalClause());
+        }
+
         OptExpression result = new OptExpression(physical);
         return Lists.newArrayList(result);
     }
