@@ -67,7 +67,7 @@ git clone https://github.com/StarRocks/starrocks.git
 Create `installed/bin` directory in `thirdparty`.
 
 ```bash
-cd starrocks && mkdir -p starrocks/thirdparty/installed/bin
+cd starrocks && mkdir -p thirdparty/installed/bin
 ```
 
 Then create soft link for Thrift and Protobuf respectively.
