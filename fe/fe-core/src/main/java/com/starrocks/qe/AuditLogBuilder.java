@@ -89,8 +89,34 @@ public class AuditLogBuilder extends Plugin implements AuditPlugin {
             if (queryTime > Config.qe_slow_log_ms) {
                 AuditLog.getSlowAudit().log(auditLog);
             }
+
+            if (isBigQuery(event)) {
+                sb.append("|cpuSecondThreshold=").append(Config.big_query_log_cpu_second_threshold);
+                sb.append("|scanBytesThreshold=").append(Config.big_query_log_scan_bytes_threshold);
+                sb.append("|scanRowsThreshold=").append(Config.big_query_log_scan_rows_threshold);
+                String bigQueryLog = sb.toString();
+                AuditLog.getBigQueryAudit().log(bigQueryLog);
+            }
         } catch (Exception e) {
             LOG.debug("failed to process audit event", e);
         }
+    }
+
+    private boolean isBigQuery(AuditEvent event) {
+        if (Config.enable_big_query_log) {
+            if (Config.big_query_log_cpu_second_threshold >= 0 &&
+                    event.cpuCostNs > Config.big_query_log_cpu_second_threshold * 1000000000L) {
+                return true;
+            }
+            if (Config.big_query_log_scan_rows_threshold >= 0 &&
+                    event.scanRows > Config.big_query_log_scan_rows_threshold) {
+                return true;
+            }
+            if (Config.big_query_log_scan_bytes_threshold >= 0 &&
+                    event.scanBytes > Config.big_query_log_scan_bytes_threshold) {
+                return true;
+            }
+        }
+        return false;
     }
 }

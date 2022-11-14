@@ -157,6 +157,26 @@ public class Config extends ConfigBase {
     @ConfField
     public static String dump_log_delete_age = "7d";
 
+    @ConfField
+    public static String big_query_log_dir = StarRocksFE.STARROCKS_HOME_DIR + "/log";
+    @ConfField
+    public static int big_query_log_roll_num = 10;
+    @ConfField
+    public static boolean enable_big_query_log = false;
+    @ConfField
+    public static long big_query_log_cpu_second_threshold = -1;
+    @ConfField
+    public static long big_query_log_scan_rows_threshold = -1;
+    @ConfField
+    public static long big_query_log_scan_bytes_threshold = -1;
+    @ConfField
+    public static String[] big_query_log_modules = {"query"};
+    @ConfField
+    public static String big_query_log_roll_interval = "DAY";
+    @ConfField
+    public static String big_query_log_delete_age = "7d";
+
+
     /**
      * plugin_dir:
      * plugin install directory
