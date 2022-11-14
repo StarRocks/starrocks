@@ -12,7 +12,7 @@ FE 参数分为动态参数和静态参数。动态参数可通过 SQL 命令进
 
 静态和动态参数均可通过 **fe.conf** 文件进行修改。
 
-## 查看 FE 参数
+### 查看 FE 配置项
 
 FE 启动后，您可以在 MySQL 客户端执行 ADMIN SHOW FRONTEND CONFIG 命令来查看参数配置。如果您想查看具体参数的配置，执行如下命令：
 
@@ -45,7 +45,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |配置项|默认值|描述|
 |---|---|---|
 |catalog_try_lock_timeout_ms|5000|全局锁（global lock）获取的超时时长，单位为 ms。|
-|edit_log_roll_num|50000|该参数设定每多少条元数据 journal，生成一次 image。您可以适当改小这个数字，让 image 生成更加频繁，从而加速删除旧的 journal。 |
+|edit_log_roll_num|50000|该参数用于控制日志文件的大小，指定了每写多少条元数据日志，执行一次日志滚动操作来为这些日志生成新的日志文件。新日志文件会写入到 BDBJE Database。|
 |ignore_unknown_log_id|FALSE|是否忽略未知的 logID。当 FE 回滚到低版本时，可能存在低版本 BE 无法识别的 logID。<br>如果为 TRUE，则 FE 会忽略这些 logID；否则 FE 会退出。|
 |ignore_meta_check|FALSE|是否忽略元数据落后的情形。如果为 true，非主 FE 将忽略主 FE 与其自身之间的元数据延迟间隙，即使元数据延迟间隙超过 meta_delay_toleration_second，非主 FE 仍将提供读取服务。<br>当您尝试停止 Master FE 较长时间，但仍希望非 Master FE 可以提供读取服务时，该参数会很有帮助。|
 |drop_backend_after_decommission|TRUE|BE 被下线后，是否删除该 BE。true 代表 BE 被下线后会立即删除该 BE。False 代表下线完成后不删除 BE。|
@@ -80,7 +80,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |statistic_update_interval_sec|24 \* 60 \* 60|统计信息内存 Cache 失效时间。单位：秒。|
 |statistic_analyze_status_keep_second|259200|统计信息采集任务的记录保留时间，默认为 3 天。单位：秒。|
 |statistic_collect_concurrency|3|手动采集任务的最大并发数，默认为 3，即最多可以有 3 个手动采集任务同时运行。超出的任务处于 PENDING 状态，等待调度。|
-|enable_local_replica_selection|FALSE|是否选择本地副本。本地副本有助于减少数据传输的网络时延。<br>如果设置为 true，优化器优先选择与这个 FE 相同 IP 的 BE 节点上的 tablet。设置为 false 表示选择非本地副本进行查询。默认为 false。|
+|enable_local_replica_selection|FALSE|是否选择本地副本进行查询。本地副本可以减少数据传输的网络时延。<br>如果设置为 true，优化器优先选择与当前 FE 相同 IP 的 BE 节点上的 tablet 副本。设置为 false 表示选择可选择本地或非本地副本进行查询。默认为 false。|
 |max_distribution_pruner_recursion_depth|100|分区裁剪允许的最大递归深度。增加递归深度可以裁剪更多元素但同时增加 CPU 资源消耗。|
 
 #### 导入和导出
@@ -154,7 +154,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |backup_job_default_timeout_ms|86400*1000|Backup 作业的超时时间，单位为 ms。|
 |enable_experimental_mv|FALSE|是否开启异步物化视图功能。如果为 `TRUE`，则开启异步物化视图功能。|
 
-### FE 静态参数
+### 配置 FE 静态参数
 
 以下 FE 配置项为静态参数，不支持在线修改，您需要在 **fe.conf** 中修改并重启 FE 服务。
 
@@ -366,7 +366,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 | max_hdfs_file_handle                                  | 1000        | N/A    | 最多可以打开的 HDFS 文件句柄数量。                             |
 | parquet_buffer_stream_reserve_size                    | 1048576     | Byte   | Parquet reader在读取时为每个列预留的内存空间。               |
 
-### BE 静态参数
+### 配置 BE 静态参数
 
 以下 BE 配置项为静态参数，不支持在线修改，您需要在 **be.conf** 中修改并重启 BE 服务。
 
