@@ -201,9 +201,6 @@ Status DeltaWriter::_init() {
         writer_context.tablet_schema = writer_context.partial_update_tablet_schema.get();
     } else {
         writer_context.tablet_schema = &_tablet->tablet_schema();
-        if (_tablet->tablet_schema().keys_type() == KeysType::PRIMARY_KEYS && !_opt.merge_condition.empty()) {
-            writer_context.merge_condition = _opt.merge_condition;
-        }
     }
 
     writer_context.rowset_id = _storage_engine->next_rowset_id();
@@ -385,13 +382,8 @@ void DeltaWriter::_reset_mem_table() {
         _vectorized_schema = MemTable::convert_schema(_tablet_schema, _opt.slots);
         _schema_initialized = true;
     }
-    if (_tablet->tablet_schema().keys_type() == KeysType::PRIMARY_KEYS && !_opt.merge_condition.empty()) {
-        _mem_table = std::make_unique<MemTable>(_tablet->tablet_id(), &_vectorized_schema, _opt.slots,
-                                                _mem_table_sink.get(), _opt.merge_condition, _mem_tracker);
-    } else {
-        _mem_table = std::make_unique<MemTable>(_tablet->tablet_id(), &_vectorized_schema, _opt.slots,
-                                                _mem_table_sink.get(), "", _mem_tracker);
-    }
+    _mem_table = std::make_unique<MemTable>(_tablet->tablet_id(), &_vectorized_schema, _opt.slots,
+                                            _mem_table_sink.get(), _mem_tracker);
 }
 
 Status DeltaWriter::commit() {

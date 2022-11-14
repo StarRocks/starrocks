@@ -288,9 +288,6 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         jobProperties.put(LoadStmt.PARTIAL_UPDATE, String.valueOf(stmt.isPartialUpdate()));
         jobProperties.put(LoadStmt.TIMEZONE, stmt.getTimezone());
         jobProperties.put(LoadStmt.STRICT_MODE, String.valueOf(stmt.isStrictMode()));
-        if (stmt.getConditionalColumn() != null) {
-            jobProperties.put(LoadStmt.MERGE_CONDITION, stmt.getConditionalColumn());
-        }
         if (Strings.isNullOrEmpty(stmt.getFormat()) || stmt.getFormat().equals("csv")) {
             jobProperties.put(PROPS_FORMAT, "csv");
             jobProperties.put(PROPS_STRIP_OUTER_ARRAY, "false");
@@ -504,10 +501,6 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
             return "csv";
         }
         return value;
-    }
-
-    public String getMergeCondition() {
-        return jobProperties.get(LoadStmt.MERGE_CONDITION);
     }
 
     public boolean isStripOuterArray() {

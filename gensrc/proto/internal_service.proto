@@ -150,7 +150,6 @@ message PTabletWriterOpenRequest {
     optional bool is_replicated_storage = 23;
     optional int64 timeout_ms = 24;
     optional WriteQuorumTypePB write_quorum = 25;
-    optional string merge_condition = 26;
 };
 
 message PTabletWriterOpenResult {

@@ -478,9 +478,6 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
             return Status::InvalidArgument("Invalid partial update flag format. Must be bool type");
         }
     }
-    if (!http_req->header(HTTP_MERGE_CONDITION).empty()) {
-        request.__set_merge_condition(http_req->header(HTTP_MERGE_CONDITION));
-    }
     if (!http_req->header(HTTP_TRANSMISSION_COMPRESSION_TYPE).empty()) {
         request.__set_transmission_compression_type(http_req->header(HTTP_TRANSMISSION_COMPRESSION_TYPE));
     }

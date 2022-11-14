@@ -219,8 +219,6 @@ protected:
         rowset_writer_context->version.second = 0;
     }
 
-    void test_final_merge(bool has_merge_condition);
-
 private:
     std::unique_ptr<MemTracker> _page_cache_mem_tracker = nullptr;
 };
@@ -243,7 +241,7 @@ static vectorized::ChunkIteratorPtr create_tablet_iterator(vectorized::TabletRea
     return vectorized::new_union_iterator(seg_iters);
 }
 
-void RowsetTest::test_final_merge(bool has_merge_condition = false) {
+TEST_F(RowsetTest, FinalMergeTest) {
     auto tablet = create_tablet(12421, 53242);
 
     RowsetSharedPtr rowset;
@@ -251,9 +249,6 @@ void RowsetTest::test_final_merge(bool has_merge_condition = false) {
     RowsetWriterContext writer_context;
     create_rowset_writer_context(12421, &tablet->tablet_schema(), &writer_context);
     writer_context.segments_overlap = OVERLAP_UNKNOWN;
-    if (has_merge_condition) {
-        writer_context.merge_condition = "v1";
-    }
 
     std::unique_ptr<RowsetWriter> rowset_writer;
     ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &rowset_writer).ok());
@@ -395,14 +390,6 @@ void RowsetTest::test_final_merge(bool has_merge_condition = false) {
         }
         EXPECT_EQ(count, rows_per_segment * 2);
     }
-}
-
-TEST_F(RowsetTest, FinalMergeTest) {
-    test_final_merge(false);
-}
-
-TEST_F(RowsetTest, ConditionUpdateWithMultipleSegmentsTest) {
-    test_final_merge(true);
 }
 
 TEST_F(RowsetTest, FinalMergeVerticalTest) {

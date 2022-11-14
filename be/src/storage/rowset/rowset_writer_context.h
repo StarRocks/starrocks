@@ -69,8 +69,6 @@ public:
     vectorized::GlobalDictByNameMaps* global_dicts = nullptr;
 
     RowsetWriterType writer_type = kHorizontal;
-
-    std::string merge_condition;
 };
 
 } // namespace starrocks

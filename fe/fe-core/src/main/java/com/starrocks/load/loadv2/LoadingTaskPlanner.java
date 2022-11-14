@@ -85,7 +85,6 @@ public class LoadingTaskPlanner {
     private final boolean partialUpdate;
     private final int parallelInstanceNum;
     private final long startTime;
-    private String mergeConditionStr;
 
     // Something useful
     // ConnectContext here is just a dummy object to avoid some NPE problem, like ctx.getDatabase()
@@ -107,7 +106,7 @@ public class LoadingTaskPlanner {
     public LoadingTaskPlanner(Long loadJobId, long txnId, long dbId, OlapTable table,
             BrokerDesc brokerDesc, List<BrokerFileGroup> brokerFileGroups,
             boolean strictMode, String timezone, long timeoutS,
-            long startTime, boolean partialUpdate, Map<String, String> sessionVariables, String mergeConditionStr) {
+            long startTime, boolean partialUpdate, Map<String, String> sessionVariables) {
         this.loadJobId = loadJobId;
         this.txnId = txnId;
         this.dbId = dbId;
@@ -118,7 +117,6 @@ public class LoadingTaskPlanner {
         this.analyzer.setTimezone(timezone);
         this.timeoutS = timeoutS;
         this.partialUpdate = partialUpdate;
-        this.mergeConditionStr = mergeConditionStr;
         this.parallelInstanceNum = Config.load_parallel_instance_num;
         this.startTime = startTime;
         this.sessionVariables = sessionVariables;

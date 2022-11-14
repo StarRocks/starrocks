@@ -163,7 +163,7 @@ public class StreamLoadPlanner {
         OlapTableSink olapTableSink = new OlapTableSink(destTable, tupleDesc, partitionIds, writeQuorum,
                 destTable.enableReplicatedStorage());
         olapTableSink.init(loadId, streamLoadInfo.getTxnId(), db.getId(), streamLoadInfo.getTimeout());
-        olapTableSink.complete(streamLoadInfo.getMergeConditionStr());
+        olapTableSink.complete();
 
         // for stream load, we only need one fragment, ScanNode -> DataSink.
         // OlapTableSink can dispatch data to corresponding node.

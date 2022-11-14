@@ -346,7 +346,6 @@ private:
     int _num_repicas = -1;
     bool _need_gen_rollup = false;
     int _tuple_desc_id = -1;
-    std::string _merge_condition;
 
     // this is tuple descriptor of destination OLAP table
     TupleDescriptor* _output_tuple_desc = nullptr;

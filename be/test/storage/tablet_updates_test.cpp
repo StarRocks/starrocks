@@ -47,8 +47,7 @@ enum PartialUpdateCloneCase {
 class TabletUpdatesTest : public testing::Test {
 public:
     RowsetSharedPtr create_rowset(const TabletSharedPtr& tablet, const vector<int64_t>& keys,
-                                  vectorized::Column* one_delete = nullptr, bool empty = false,
-                                  bool has_merge_condition = false) {
+                                  vectorized::Column* one_delete = nullptr, bool empty = false) {
         RowsetWriterContext writer_context;
         RowsetId rowset_id = StorageEngine::instance()->next_rowset_id();
         writer_context.rowset_id = rowset_id;
@@ -61,9 +60,6 @@ public:
         writer_context.version.first = 0;
         writer_context.version.second = 0;
         writer_context.segments_overlap = NONOVERLAPPING;
-        if (has_merge_condition) {
-            writer_context.merge_condition = "v2";
-        }
         std::unique_ptr<RowsetWriter> writer;
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
         if (empty) {
@@ -432,7 +428,7 @@ public:
     void test_noncontinous_meta_save_load(bool enable_persistent_index);
     void test_save_meta(bool enable_persistent_index);
     void test_remove_expired_versions(bool enable_persistent_index);
-    void test_apply(bool enable_persistent_index, bool has_merge_condition);
+    void test_apply(bool enable_persistent_index);
     void test_concurrent_write_read_and_gc(bool enable_persistent_index);
     void test_compaction_score_not_enough(bool enable_persistent_index);
     void test_compaction_score_enough_duplicate(bool enable_persistent_index);
@@ -981,7 +977,7 @@ TEST_F(TabletUpdatesTest, remove_expired_versions_with_persistent_index) {
 }
 
 // NOLINTNEXTLINE
-void TabletUpdatesTest::test_apply(bool enable_persistent_index, bool has_merge_condition = false) {
+void TabletUpdatesTest::test_apply(bool enable_persistent_index) {
     const int N = 10;
     _tablet = create_tablet(rand(), rand());
     _tablet->set_enable_persistent_index(enable_persistent_index);
@@ -994,7 +990,7 @@ void TabletUpdatesTest::test_apply(bool enable_persistent_index, bool has_merge_
     std::vector<RowsetSharedPtr> rowsets;
     rowsets.reserve(64);
     for (int i = 0; i < 64; i++) {
-        rowsets.emplace_back(create_rowset(_tablet, keys, nullptr, false, has_merge_condition));
+        rowsets.emplace_back(create_rowset(_tablet, keys));
     }
     auto pool = StorageEngine::instance()->update_manager()->apply_thread_pool();
     for (int i = 0; i < rowsets.size(); i++) {
@@ -1027,10 +1023,6 @@ TEST_F(TabletUpdatesTest, apply) {
 
 TEST_F(TabletUpdatesTest, apply_with_persistent_index) {
     test_apply(true);
-}
-
-TEST_F(TabletUpdatesTest, apply_with_merge_condition) {
-    test_apply(false, true);
 }
 
 // NOLINTNEXTLINE

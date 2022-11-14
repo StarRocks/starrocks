@@ -168,7 +168,6 @@ struct TOlapTableSink {
     17: optional Types.TKeysType keys_type
     18: optional Types.TWriteQuorumType write_quorum_type
     19: optional bool enable_replicated_storage
-    20: optional string merge_condition
 }
 
 struct TDataSink {

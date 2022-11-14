@@ -14,8 +14,7 @@
 namespace starrocks::vectorized {
 
 // Compare the row of index |m| in |lhs|, with the row of index |n| in |rhs|.
-inline int compare_chunk(size_t key_columns, const Chunk& lhs, size_t m, const Chunk& rhs, size_t n,
-                         const std::string& merge_condition) {
+inline int compare_chunk(size_t key_columns, const Chunk& lhs, size_t m, const Chunk& rhs, size_t n) {
     for (size_t i = 0; i < key_columns; i++) {
         const ColumnPtr& lc = lhs.get_column_by_index(i);
         const ColumnPtr& rc = rhs.get_column_by_index(i);
@@ -23,17 +22,6 @@ inline int compare_chunk(size_t key_columns, const Chunk& lhs, size_t m, const C
             return r;
         }
     }
-
-    // we append merge_condition into schema in rowset writer, so here we use key_columns as
-    // update condition column index
-    if (!merge_condition.empty() && lhs.columns().size() > key_columns) {
-        const ColumnPtr& lc = lhs.get_column_by_index(key_columns);
-        const ColumnPtr& rc = rhs.get_column_by_index(key_columns);
-        if (int r = lc->compare_at(m, n, *rc, -1); r != 0) {
-            return r;
-        }
-    }
-
     return 0;
 }
 
@@ -62,15 +50,12 @@ protected:
 // Compare two chunks by the one specific row of each other.
 class ComparableChunk : public MergingChunk {
 public:
-    explicit ComparableChunk(Chunk* chunk, size_t order, size_t key_columns, string merge_condition)
-            : MergingChunk(chunk),
-              _order(order),
-              _key_columns(key_columns),
-              _merge_condition(std::move(merge_condition)) {}
+    explicit ComparableChunk(Chunk* chunk, size_t order, size_t key_columns)
+            : MergingChunk(chunk), _order(order), _key_columns(key_columns) {}
 
     bool operator>(const ComparableChunk& rhs) const {
         DCHECK_EQ(_key_columns, rhs._key_columns);
-        int r = compare_chunk(_key_columns, *_chunk, _compared_row, *rhs._chunk, rhs._compared_row, _merge_condition);
+        int r = compare_chunk(_key_columns, *_chunk, _compared_row, *rhs._chunk, rhs._compared_row);
         return (r > 0) | ((r == 0) & (_order > rhs._order));
     }
 
@@ -95,7 +80,7 @@ public:
     }
 
     bool less_than(size_t lhs_row, const ComparableChunk& rhs) {
-        int r = compare_chunk(_key_columns, *_chunk, lhs_row, *rhs._chunk, rhs._compared_row, _merge_condition);
+        int r = compare_chunk(_key_columns, *_chunk, lhs_row, *rhs._chunk, rhs._compared_row);
         return (r < 0) | ((r == 0) & (_order < rhs._order));
     }
 
@@ -105,7 +90,6 @@ private:
     // used to determinate the order of two rows when their key columns are all equals.
     uint16_t _order;
     uint16_t _key_columns;
-    std::string _merge_condition;
 };
 
 class MergeIterator : public ChunkIterator {
@@ -198,8 +182,6 @@ inline void MergeIterator::close() {
 class HeapMergeIterator final : public MergeIterator {
 public:
     explicit HeapMergeIterator(std::vector<ChunkIteratorPtr> children) : MergeIterator(std::move(children)) {}
-
-    std::string merge_condition;
 
 protected:
     Status do_get_next(Chunk* chunk) override { return do_get_next(chunk, nullptr); }
@@ -304,7 +286,7 @@ inline Status HeapMergeIterator::fill(size_t child) {
             return Status::InternalError(strings::Substitute(
                     "Merge iterator only supports merging chunks with rows less than $0", max_merge_chunk_size));
         }
-        _heap.push(ComparableChunk{chunk, child, _schema.num_key_fields(), merge_condition});
+        _heap.push(ComparableChunk{chunk, child, _schema.num_key_fields()});
     } else if (st.is_end_of_file()) {
         // ignore Status::EndOfFile.
         close_child(child);
@@ -336,32 +318,6 @@ ChunkIteratorPtr new_heap_merge_iterator(const std::vector<ChunkIteratorPtr>& ch
         sub_merge_iterators.emplace_back(new_heap_merge_iterator(v));
     }
     return new_heap_merge_iterator(sub_merge_iterators);
-}
-
-ChunkIteratorPtr new_heap_merge_iterator(const std::vector<ChunkIteratorPtr>& children,
-                                         const std::string& merge_condition) {
-    DCHECK(!children.empty());
-    if (children.size() == 1) {
-        return children[0];
-    }
-
-    // The `ComparableChunk` is using `uint16_t` to save the chunk order, if the size of
-    // children is greater than UINT16_MAX, the value of order will overflow.
-    const static size_t kMaxChildrenSize = std::numeric_limits<uint16_t>::max();
-
-    if (children.size() <= kMaxChildrenSize) {
-        auto heapMergeIterator = std::make_shared<HeapMergeIterator>(children);
-        heapMergeIterator->merge_condition = merge_condition;
-        return heapMergeIterator;
-    }
-    std::vector<ChunkIteratorPtr> sub_merge_iterators;
-    sub_merge_iterators.reserve((children.size() + kMaxChildrenSize - 1) / kMaxChildrenSize);
-    for (size_t i = 0; i < children.size(); i += kMaxChildrenSize) {
-        size_t j = std::min(i + kMaxChildrenSize, children.size());
-        std::vector<ChunkIteratorPtr> v(children.begin() + i, children.begin() + j);
-        sub_merge_iterators.emplace_back(new_heap_merge_iterator(v, merge_condition));
-    }
-    return new_heap_merge_iterator(sub_merge_iterators, merge_condition);
 }
 
 // Merge iterator based on source masks.

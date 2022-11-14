@@ -42,7 +42,6 @@ struct DeltaWriterOptions {
     std::vector<PNetworkAddress> replicas;
     int64_t timeout_ms;
     WriteQuorumTypePB write_quorum;
-    std::string merge_condition;
 };
 
 enum ReplicaState {
