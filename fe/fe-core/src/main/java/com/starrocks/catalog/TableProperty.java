@@ -157,8 +157,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
     }
 
     public TableProperty buildMvProperties() {
-        partitionTTLNumber = Integer.parseInt(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER,
-                String.valueOf(INVALID)));
+        buildPartitionTTL();
+        buildPartitionRefreshNumber();
+        buildAutoRefreshPartitionsLimit();
+        buildExcludedTriggerTables();
         return this;
     }
 

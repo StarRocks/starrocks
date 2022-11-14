@@ -149,21 +149,6 @@ public:
         return Status::OK();
     }
 
-    Status next_batch(size_t* n, ColumnBlockView* dst) override {
-        DCHECK(_parsed) << "Must call init() firstly";
-        if (PREDICT_FALSE(*n == 0 || _cur_index >= _num_elements)) {
-            *n = 0;
-            return Status::OK();
-        }
-
-        uint32_t to_fetch = std::min(static_cast<uint32_t>(*n), _num_elements - _cur_index);
-        uint8_t* data_ptr = dst->data();
-        _decoder.get_batch(reinterpret_cast<CppType*>(data_ptr), to_fetch);
-        _cur_index += to_fetch;
-        *n = to_fetch;
-        return Status::OK();
-    }
-
     Status next_batch(size_t* n, vectorized::Column* dst) override {
         vectorized::SparseRange read_range;
         uint32_t begin = current_index();

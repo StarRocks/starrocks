@@ -48,6 +48,8 @@ struct CompactionInfo {
 class TabletUpdates {
 public:
     using ColumnUniquePtr = std::unique_ptr<vectorized::Column>;
+    using segment_rowid_t = uint32_t;
+    using DeletesMap = std::unordered_map<uint32_t, vector<segment_rowid_t>>;
 
     explicit TabletUpdates(Tablet& tablet);
     ~TabletUpdates();
@@ -303,6 +305,10 @@ private:
     Status _do_compaction(std::unique_ptr<CompactionInfo>* pinfo);
 
     void _calc_compaction_score(RowsetStats* stats);
+
+    Status _do_update(std::uint32_t rowset_id, std::int32_t upsert_idx, std::int32_t condition_column,
+                      const std::vector<ColumnUniquePtr>& upserts, PrimaryIndex& index, std::int64_t tablet_id,
+                      DeletesMap* new_deletes);
 
     // This method will acquire |_lock|.
     size_t _get_rowset_num_deletes(uint32_t rowsetid);

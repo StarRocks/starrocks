@@ -72,6 +72,7 @@ public class LoadLoadingTask extends LoadTask {
     private final long timeoutS;
     private final Map<String, String> sessionVariables;
     private final TLoadJobType loadJobType;
+    private String mergeConditionStr;
 
     private LoadingTaskPlanner planner;
     private ConnectContext context;
@@ -81,7 +82,8 @@ public class LoadLoadingTask extends LoadTask {
     public LoadLoadingTask(Database db, OlapTable table, BrokerDesc brokerDesc, List<BrokerFileGroup> fileGroups,
             long jobDeadlineMs, long execMemLimit, boolean strictMode,
             long txnId, LoadTaskCallback callback, String timezone,
-            long timeoutS, long createTimestamp, boolean partialUpdate, Map<String, String> sessionVariables, 
+            long timeoutS, long createTimestamp, boolean partialUpdate, String mergeConditionStr,
+            Map<String, String> sessionVariables,
             ConnectContext context, TLoadJobType loadJobType, int priority) {
         super(callback, TaskType.LOADING, priority);
         this.db = db;
@@ -98,6 +100,7 @@ public class LoadLoadingTask extends LoadTask {
         this.timeoutS = timeoutS;
         this.createTimestamp = createTimestamp;
         this.partialUpdate = partialUpdate;
+        this.mergeConditionStr = mergeConditionStr;
         this.sessionVariables = sessionVariables;
         this.context = context;
         this.loadJobType = loadJobType;
@@ -107,7 +110,7 @@ public class LoadLoadingTask extends LoadTask {
         this.loadId = loadId;
         if (!Config.enable_pipeline_load) {
             planner = new LoadingTaskPlanner(callback.getCallbackId(), txnId, db.getId(), table, brokerDesc, fileGroups,
-                    strictMode, timezone, timeoutS, createTimestamp, partialUpdate, sessionVariables);
+                    strictMode, timezone, timeoutS, createTimestamp, partialUpdate, sessionVariables, mergeConditionStr);
             planner.setConnectContext(context);
             planner.plan(loadId, fileStatusList, fileNum);
         } else {
@@ -116,6 +119,7 @@ public class LoadLoadingTask extends LoadTask {
                 brokerDesc, fileGroups, fileStatusList, fileNum);
             loadPlanner.plan();
         }
+        planner.plan(loadId, fileStatusList, fileNum);
     }
 
     public TUniqueId getLoadId() {

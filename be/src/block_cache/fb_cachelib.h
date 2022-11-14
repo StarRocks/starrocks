@@ -16,7 +16,7 @@ public:
     using ReadHandle = facebook::cachelib::LruAllocator::ReadHandle;
 
     FbCacheLib() = default;
-    ~FbCacheLib();
+    ~FbCacheLib() override = default;
 
     Status init(const CacheOptions& options) override;
 
@@ -26,7 +26,7 @@ public:
 
     Status remove_cache(const std::string& key) override;
 
-    Status destroy() override;
+    Status shutdown() override;
 
 private:
     std::unique_ptr<Cache> _cache = nullptr;

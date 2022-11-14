@@ -390,6 +390,7 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
                 options.replicas.emplace_back(replica);
             }
         }
+        options.merge_condition = params.merge_condition();
 
         auto res = AsyncDeltaWriter::open(options, _mem_tracker);
         RETURN_IF_ERROR(res.status());

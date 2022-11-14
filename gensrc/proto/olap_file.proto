@@ -77,6 +77,8 @@ message RowsetTxnMetaPB {
 
     // one for each segment
     repeated FooterPointerPB partial_rowset_footers = 3;
+
+    optional string merge_condition = 4;
 }
 
 message RowsetMetaPB {

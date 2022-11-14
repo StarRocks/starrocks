@@ -28,7 +28,6 @@
 namespace starrocks {
 
 class CondColumn;
-class ColumnBlockView;
 
 namespace vectorized {
 class Column;
@@ -80,16 +79,6 @@ public:
     // If provided seek point is past the end of the file,
     // then returns false.
     virtual Status seek_to_ordinal(ordinal_t ord) = 0;
-
-    Status next_batch(size_t* n, ColumnBlockView* dst) {
-        bool has_null;
-        return next_batch(n, dst, &has_null);
-    }
-
-    // After one seek, we can call this function many times to read data
-    // into ColumnBlockView. when read string type data, memory will allocated
-    // from MemPool
-    virtual Status next_batch(size_t* n, ColumnBlockView* dst, bool* has_null) = 0;
 
     virtual Status next_batch(size_t* n, vectorized::Column* dst) = 0;
 

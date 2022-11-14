@@ -272,14 +272,6 @@ public:
      */
     DEFINE_VECTORIZED_FN(rand_seed);
 
-    static void generate_randoms(ColumnBuilder<TYPE_DOUBLE>* result, int32_t num_rows, uint32_t* seed) {
-        for (int i = 0; i < num_rows; ++i) {
-            *seed = ::rand_r(seed);
-            // Normalize to [0,1].
-            result->append(static_cast<double>(*seed) / RAND_MAX);
-        }
-    }
-
     //
     /**
      * @param: [BigIntColumn]

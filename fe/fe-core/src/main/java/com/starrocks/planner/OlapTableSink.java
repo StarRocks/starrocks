@@ -155,6 +155,12 @@ public class OlapTableSink extends DataSink {
         tDataSink.getOlap_table_sink().setLoad_id(newLoadId);
     }
 
+    public void complete(String mergeCondition) throws UserException {
+        TOlapTableSink tSink = tDataSink.getOlap_table_sink();
+        tSink.setMerge_condition(mergeCondition);
+        complete();
+    }
+
     // must called after tupleDescriptor is computed
     public void complete() throws UserException {
         TOlapTableSink tSink = tDataSink.getOlap_table_sink();

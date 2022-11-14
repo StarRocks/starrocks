@@ -44,8 +44,6 @@ public:
 
     Status seek_to_ordinal_and_calc_element_ordinal(ordinal_t ord) override;
 
-    Status next_batch(size_t* n, ColumnBlockView* dst, bool* has_null) override;
-
     Status next_batch(size_t* n, vectorized::Column* dst) override;
 
     Status next_batch(const vectorized::SparseRange& range, vectorized::Column* dst) override;
