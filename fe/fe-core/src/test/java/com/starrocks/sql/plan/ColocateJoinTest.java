@@ -66,7 +66,7 @@ class ColocateJoinTest extends PlanTestBase {
 
         sqls.add("select * from colocate_t0, colocate_t1, colocate_t2_1 where  v1 = v5 and v5 = v7");
 
-        // now we cannot derive v1 = v7 plan from the below sqls
+        // TODO(packy) now we cannot derive v1 = v7 plan from the below sqls
         unsupportedSqls.add("select * from colocate_t0 join colocate_t1 on v1 = v5 join colocate_t2 on v5 = v7");
         unsupportedSqls.add("select * from colocate_t0 join colocate_t1 on v1 = v5 + v6 join colocate_t2 on v5 + v6 = v7");
         unsupportedSqls.add("select * from colocate_t0, colocate_t1, colocate_t2_1 where  v1 = v5 + v6 and v5 + v6 = v7");
@@ -87,7 +87,7 @@ class ColocateJoinTest extends PlanTestBase {
         sqls.add("select * from colocate_t0, colocate_t1, colocate_t2_1 where v1 = v5 and v1 = v4 and v1 = v7");
 
 
-        // the expr col seems not been equivalent conduction
+        // TODO(packy) the expr col seems not been equivalent conduction
         unsupportedSqls.add("select * from colocate_t0 join colocate_t1 on v1 = v5 and v1 = v4 + v6 and v1 = v4 " +
                 "join colocate_t2_1 on v4 + v6 = v7");
         unsupportedSqls.add("select * from colocate_t0 join colocate_t1 on v1 + v2 = v4 and v1 + v2 = v5 - v4 " +
