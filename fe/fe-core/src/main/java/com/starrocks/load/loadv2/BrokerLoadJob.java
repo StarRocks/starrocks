@@ -230,7 +230,7 @@ public class BrokerLoadJob extends BulkLoadJob {
                 LoadLoadingTask task = new LoadLoadingTask(db, table, brokerDesc,
                         brokerFileGroups, getDeadlineMs(), loadMemLimit,
                         strictMode, transactionId, this, timezone, timeoutSecond,
-                        createTimestamp, partialUpdate, mergeConditionStr, sessionVariables,
+                        createTimestamp, partialUpdate, brokerDesc.getMergeConditionStr(), sessionVariables,
                         context,  TLoadJobType.BROKER, priority);
                 UUID uuid = UUID.randomUUID();
                 TUniqueId loadId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());

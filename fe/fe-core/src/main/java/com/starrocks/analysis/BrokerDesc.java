@@ -40,6 +40,8 @@ public class BrokerDesc implements Writable {
     private Map<String, String> properties;
     private boolean hasBroker;
 
+    public static final String MERGE_CONDITION_KEY = "mergeCondition";
+
     // Only used for recovery
     private BrokerDesc() {
     }
@@ -72,6 +74,13 @@ public class BrokerDesc implements Writable {
 
     public Map<String, String> getProperties() {
         return properties;
+    }
+
+    public String getMergeConditionStr() {
+        if (properties.containsKey(MERGE_CONDITION_KEY)) {
+            return properties.get(MERGE_CONDITION_KEY);
+        }
+        return "";
     }
 
     @Override
