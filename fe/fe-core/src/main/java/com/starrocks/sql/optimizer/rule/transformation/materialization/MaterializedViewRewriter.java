@@ -237,8 +237,14 @@ public class MaterializedViewRewriter {
             ScalarOperator compensationPredicate = Utils.canonizePredicate(Utils.compoundAnd(equalPredicates, otherPredicates));
             if (!ConstantOperator.TRUE.equals(compensationPredicate)) {
                 // add filter operator
-                LogicalFilterOperator filter = new LogicalFilterOperator(compensationPredicate);
-                rewrittenExpression = OptExpression.create(filter, rewrittenExpression);
+                ScalarOperator originalPredicate = rewrittenExpression.getOp().getPredicate();
+                ScalarOperator finalPredicate = Utils.compoundAnd(originalPredicate, compensationPredicate);
+                Operator.Builder newOpBuilder = OperatorBuilderFactory.build(rewrittenExpression.getOp());
+                newOpBuilder.withOperator(rewrittenExpression.getOp());
+                newOpBuilder.setPredicate(finalPredicate);
+                Operator newOp = newOpBuilder.build();
+                rewrittenExpression = OptExpression.create(newOp);
+                rewrittenExpression.setLogicalProperty(null);
                 deriveLogicalProperty(rewrittenExpression);
             }
 

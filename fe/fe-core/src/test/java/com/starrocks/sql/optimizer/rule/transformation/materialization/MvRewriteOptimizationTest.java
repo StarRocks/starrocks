@@ -210,20 +210,16 @@ public class MvRewriteOptimizationTest {
 
         String query2 = "select empid, deptno, name, salary from emps where empid < 4";
         String plan2 = getFragmentPlan(query2);
-        PlanTestBase.assertContains(plan2, "2:Project\n" +
+        PlanTestBase.assertContains(plan2, "1:Project\n" +
                 "  |  <slot 1> : 5: empid\n" +
                 "  |  <slot 2> : 6: deptno\n" +
                 "  |  <slot 3> : 7: name\n" +
                 "  |  <slot 4> : 8: salary\n" +
                 "  |  \n" +
-                "  1:SELECT\n" +
-                "  |  predicates: 5: empid <= 3\n" +
-                "  |  \n" +
                 "  0:OlapScanNode\n" +
                 "     TABLE: mv_1\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     partitions=1/1\n" +
-                "     rollup: mv_1");
+                "     PREDICATES: 5: empid <= 3");
 
         String query3 = "select empid, deptno, name, salary from emps where empid <= 5";
         String plan3 = getFragmentPlan(query3);
@@ -235,51 +231,39 @@ public class MvRewriteOptimizationTest {
 
         String query5 = "select empid, length(name), (salary + 1) * 2 from emps where empid = 4";
         String plan5 = getFragmentPlan(query5);
-        PlanTestBase.assertContains(plan5, "2:Project\n" +
+        PlanTestBase.assertContains(plan5, "1:Project\n" +
                 "  |  <slot 1> : 7: empid\n" +
                 "  |  <slot 5> : length(9: name)\n" +
                 "  |  <slot 6> : 10: salary + 1.0 * 2.0\n" +
                 "  |  \n" +
-                "  1:SELECT\n" +
-                "  |  predicates: 7: empid = 4\n" +
-                "  |  \n" +
                 "  0:OlapScanNode\n" +
                 "     TABLE: mv_1\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     partitions=1/1\n" +
-                "     rollup: mv_1");
+                "     PREDICATES: 7: empid = 4");
 
         String query6 = "select empid, length(name), (salary + 1) * 2 from emps where empid between 3 and 4";
         String plan6 = getFragmentPlan(query6);
-        PlanTestBase.assertContains(plan6, "2:Project\n" +
+        PlanTestBase.assertContains(plan6, "1:Project\n" +
                 "  |  <slot 1> : 7: empid\n" +
                 "  |  <slot 5> : length(9: name)\n" +
                 "  |  <slot 6> : 10: salary + 1.0 * 2.0\n" +
                 "  |  \n" +
-                "  1:SELECT\n" +
-                "  |  predicates: 7: empid <= 4, 7: empid >= 3\n" +
-                "  |  \n" +
                 "  0:OlapScanNode\n" +
                 "     TABLE: mv_1\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     partitions=1/1\n" +
-                "     rollup: mv_1");
+                "     PREDICATES: 7: empid <= 4, 7: empid >= 3");
 
         String query7 = "select empid, length(name), (salary + 1) * 2 from emps where empid < 5 and salary > 100";
         String plan7 = getFragmentPlan(query7);
-        PlanTestBase.assertContains(plan7, "2:Project\n" +
+        PlanTestBase.assertContains(plan7, "1:Project\n" +
                 "  |  <slot 1> : 7: empid\n" +
                 "  |  <slot 5> : length(9: name)\n" +
                 "  |  <slot 6> : 10: salary + 1.0 * 2.0\n" +
                 "  |  \n" +
-                "  1:SELECT\n" +
-                "  |  predicates: 10: salary > 100.0\n" +
-                "  |  \n" +
                 "  0:OlapScanNode\n" +
                 "     TABLE: mv_1\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     partitions=1/1\n" +
-                "     rollup: mv_1");
+                "     PREDICATES: 10: salary > 100.0");
         dropMv("test", "mv_1");
 
         createAndRefreshMv("test", "mv_2",
@@ -386,18 +370,14 @@ public class MvRewriteOptimizationTest {
         String query3 = "SELECT (test_all_type.t1d + 1) * 2, test_all_type.t1c" +
                 " from t0 join test_all_type on t0.v1 = test_all_type.t1d where t0.v1 = 99";
         String plan3 = getFragmentPlan(query3);
-        PlanTestBase.assertContains(plan3, "2:Project\n" +
+        PlanTestBase.assertContains(plan3, "1:Project\n" +
                 "  |  <slot 6> : 17: t1c\n" +
                 "  |  <slot 14> : 15: v1 + 1 * 2\n" +
-                "  |  \n" +
-                "  1:SELECT\n" +
-                "  |  predicates: 15: v1 = 99\n" +
                 "  |  \n" +
                 "  0:OlapScanNode\n" +
                 "     TABLE: join_mv_1\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     partitions=1/1\n" +
-                "     rollup: join_mv_1");
+                "     PREDICATES: 15: v1 = 99");
 
         connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(false);
         String query4 = "SELECT (test_all_type.t1d + 1) * 2, test_all_type.t1c" +
@@ -434,18 +414,14 @@ public class MvRewriteOptimizationTest {
         String query8 = "SELECT (test_all_type.t1d + 1) * 2, test_all_type.t1c" +
                 " from t0 join test_all_type on t0.v1 = test_all_type.t1d where test_all_type.t1d < 10";
         String plan8 = getFragmentPlan(query8);
-        PlanTestBase.assertContains(plan8, "2:Project\n" +
+        PlanTestBase.assertContains(plan8, "1:Project\n" +
                 "  |  <slot 6> : 16: t1c\n" +
                 "  |  <slot 14> : 15: v1 + 1 * 2\n" +
-                "  |  \n" +
-                "  1:SELECT\n" +
-                "  |  predicates: 15: v1 <= 9\n" +
                 "  |  \n" +
                 "  0:OlapScanNode\n" +
                 "     TABLE: join_mv_2\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     partitions=1/1\n" +
-                "     rollup: join_mv_2");
+                "     PREDICATES: 15: v1 <= 9");
         String query9 = "SELECT (test_all_type.t1d + 1) * 2, test_all_type.t1c" +
                 " from t0 join test_all_type on t0.v1 = test_all_type.t1d where test_all_type.t1d = 100";
         String plan9 = getFragmentPlan(query9);
@@ -587,17 +563,16 @@ public class MvRewriteOptimizationTest {
                 " where t0.v1 = 1" +
                 " group by v1, test_all_type.t1d";
         String plan1 = getFragmentPlan(query1);
-        PlanTestBase.assertContains(plan1, "2:Project\n" +
+        PlanTestBase.assertContains(plan1, "1:Project\n" +
                 "  |  <slot 1> : 16: v1\n" +
                 "  |  <slot 7> : 16: v1\n" +
                 "  |  <slot 14> : 18: total_sum\n" +
                 "  |  <slot 15> : 19: total_num\n" +
                 "  |  \n" +
-                "  1:SELECT\n" +
-                "  |  predicates: 16: v1 = 1\n" +
-                "  |  \n" +
                 "  0:OlapScanNode\n" +
-                "     TABLE: agg_join_mv_1");
+                "     TABLE: agg_join_mv_1\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 16: v1 = 1");
 
         String query2 = "SELECT t0.v1 as v1, test_all_type.t1d," +
                 " sum(test_all_type.t1c) as total_sum, count(test_all_type.t1c) as total_num" +
@@ -622,17 +597,16 @@ public class MvRewriteOptimizationTest {
                 " where t0.v1 < 99" +
                 " group by v1, test_all_type.t1d";
         String plan3 = getFragmentPlan(query3);
-        PlanTestBase.assertContains(plan3, "2:Project\n" +
+        PlanTestBase.assertContains(plan3, "1:Project\n" +
                 "  |  <slot 1> : 16: v1\n" +
                 "  |  <slot 7> : 16: v1\n" +
                 "  |  <slot 14> : 18: total_sum\n" +
                 "  |  <slot 15> : 19: total_num\n" +
                 "  |  \n" +
-                "  1:SELECT\n" +
-                "  |  predicates: 16: v1 <= 98\n" +
-                "  |  \n" +
                 "  0:OlapScanNode\n" +
-                "     TABLE: agg_join_mv_1");
+                "     TABLE: agg_join_mv_1\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 16: v1 <= 98");
 
         String query4 = "SELECT t0.v1 as v1, " +
                 " sum(test_all_type.t1c) as total_sum, count(test_all_type.t1c) as total_num" +
@@ -641,16 +615,15 @@ public class MvRewriteOptimizationTest {
                 " where t0.v1 < 99" +
                 " group by v1";
         String plan4 = getFragmentPlan(query4);
-        PlanTestBase.assertContains(plan4, "2:Project\n" +
+        PlanTestBase.assertContains(plan4, "1:Project\n" +
                 "  |  <slot 1> : 16: v1\n" +
                 "  |  <slot 14> : 18: total_sum\n" +
                 "  |  <slot 15> : 19: total_num\n" +
                 "  |  \n" +
-                "  1:SELECT\n" +
-                "  |  predicates: 16: v1 <= 98\n" +
-                "  |  \n" +
                 "  0:OlapScanNode\n" +
-                "     TABLE: agg_join_mv_1");
+                "     TABLE: agg_join_mv_1\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 16: v1 <= 98");
 
         // test group key not equal
         String query5 = "SELECT t0.v1 + 1 as alias, test_all_type.t1d," +
@@ -678,15 +651,14 @@ public class MvRewriteOptimizationTest {
                 " group by v1";
         // rollup test
         String plan6 = getFragmentPlan(query6);
-        PlanTestBase.assertContains(plan6, "2:AGGREGATE (update finalize)\n" +
+        PlanTestBase.assertContains(plan6, "1:AGGREGATE (update finalize)\n" +
                 "  |  output: sum(18: total_sum), sum(19: total_num)\n" +
                 "  |  group by: 16: v1\n" +
                 "  |  \n" +
-                "  1:SELECT\n" +
-                "  |  predicates: 16: v1 <= 98\n" +
-                "  |  \n" +
                 "  0:OlapScanNode\n" +
-                "     TABLE: agg_join_mv_2");
+                "     TABLE: agg_join_mv_2\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 16: v1 <= 98");
         dropMv("test", "agg_join_mv_2");
 
         createAndRefreshMv("test", "agg_join_mv_3", "create materialized view agg_join_mv_3" +
