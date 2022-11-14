@@ -126,7 +126,7 @@ public class IcebergTable extends Table {
         return getPartitionColumns().size() == 0;
     }
 
-    public List<String> getPartitionKeys() {
+    public List<String> getPartitionColumnNames() {
         return getPartitionColumns().stream().map(partitionColumn -> partitionColumn.getName())
                 .collect(Collectors.toList());
     }

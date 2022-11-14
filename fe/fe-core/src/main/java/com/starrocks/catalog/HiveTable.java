@@ -154,10 +154,6 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         return dataColumnNames;
     }
 
-    public List<String> getPartitionKeys() {
-        return getPartitionColumnNames();
-    }
-
     @Override
     public boolean isUnPartitioned() {
         return partColumnNames.size() == 0;

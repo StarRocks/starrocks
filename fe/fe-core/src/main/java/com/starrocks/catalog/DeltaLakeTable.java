@@ -70,7 +70,7 @@ public class DeltaLakeTable extends Table {
                 .collect(Collectors.toList());
     }
 
-    public List<String> getPartitionKeys() {
+    public List<String> getPartitionColumnNames() {
         return getPartitionColumns().stream().map(partitionColumn -> partitionColumn.getName())
                 .collect(Collectors.toList());
     }

@@ -683,7 +683,7 @@ public class ShowExecutor {
         TableName tbl = showStmt.getTbl();
         String catalogName = tbl.getCatalog();
         if (catalogName == null) {
-            catalogName = ConnectContext.get().getCurrentCatalog();
+            catalogName = ctx.getCurrentCatalog();
         }
         if (CatalogMgr.isInternalCatalog(catalogName)) {
             showCreateInternalTbl(showStmt);
@@ -724,7 +724,7 @@ public class ShowExecutor {
         // Partition column names
         if (table.getType() != JDBC && !table.isUnPartitioned()) {
             createTableSql.append("\nWITH (\n partitioned_by = ARRAY [ ");
-            createTableSql.append(String.join(", ", table.getPartitionKeys())).append(" ]\n)");
+            createTableSql.append(String.join(", ", table.getPartitionColumnNames())).append(" ]\n)");
         }
 
         List<List<String>> rows = Lists.newArrayList();

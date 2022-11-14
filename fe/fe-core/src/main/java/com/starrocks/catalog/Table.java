@@ -524,8 +524,7 @@ public class Table extends MetaObject implements Writable {
         return true;
     }
 
-    public List<String> getPartitionKeys() {
+    public List<String> getPartitionColumnNames() {
         return Lists.newArrayList();
     }
-
 }
