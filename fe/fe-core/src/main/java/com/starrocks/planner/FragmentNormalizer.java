@@ -19,12 +19,14 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.thrift.TCacheParam;
 import com.starrocks.thrift.TNormalPlanNode;
 import com.starrocks.thrift.TExpr;
 import org.apache.thrift.TException;
@@ -38,6 +40,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -67,6 +70,9 @@ public class FragmentNormalizer {
     private List<TNormalPlanNode> normalizedPlanNodes = Lists.newArrayList();
     private Map<Long, String> selectedRangeMap = Maps.newHashMap();
     private boolean uncacheable = false;
+    private boolean canUseMultiVersion = true;
+
+    private KeysType keysType;
 
     public FragmentNormalizer(ExecPlan execPlan, PlanFragment fragment) {
         this.execPlan = execPlan;
@@ -92,6 +98,22 @@ public class FragmentNormalizer {
 
     public void setUncacheable(boolean uncacheable) {
         this.uncacheable = uncacheable;
+    }
+
+    public void setCanUseMultiVersion(boolean canUse) {
+        canUseMultiVersion = canUse;
+    }
+
+    public boolean isCanUseMultiVersion() {
+        return canUseMultiVersion;
+    }
+
+    public void setKeysType(KeysType keysType) {
+        this.keysType = keysType;
+    }
+
+    public KeysType getKeysType() {
+        return keysType;
     }
 
     private static String toHexString(byte[] bytes) {
@@ -188,10 +210,17 @@ public class FragmentNormalizer {
             for (int i = 0; i < slotIds.size(); ++i) {
                 outputSlotIdRemapping.put(slotIds.get(i).asInt(), remappedSlotIds.get(i));
             }
-            fragment.setCachePlanNodeId(topmostPlanNode.getId());
-            fragment.setDigest(ByteBuffer.wrap(digest.digest()));
-            fragment.setSlotRemapping(outputSlotIdRemapping);
-            fragment.setRangeMap(selectedRangeMap);
+            PlanNodeId planNodeId = topmostPlanNode.getId();
+            if (planNodeId != null && planNodeId.isValid()) {
+                TCacheParam cacheParam = new TCacheParam();
+                cacheParam.setId(planNodeId.asInt());
+                cacheParam.setDigest(ByteBuffer.wrap(digest.digest()));
+                cacheParam.setSlot_remapping(outputSlotIdRemapping);
+                cacheParam.setRegion_map(selectedRangeMap);
+                cacheParam.setCan_use_multiversion(canUseMultiVersion);
+                cacheParam.setKeys_type(keysType.toThrift());
+                fragment.setCacheParam(cacheParam);
+            }
         } catch (TException | NoSuchAlgorithmException e) {
             throw new RuntimeException("Fatal error happens when normalize PlanFragment", e);
         }
@@ -383,8 +412,8 @@ public class FragmentNormalizer {
         //  cached result is reused poorly. so we mark the fragment uncacheable. As a matter of fact, some complex
         //  exprs can also be decomposed into simple range exprs, later we all extends the scope of simple range exprs.
         if (!boundOtherExprs.isEmpty() && boundSimpleRegionExprs.isEmpty()) {
-             uncacheable = true;
-             return conjuncts;
+            uncacheable = true;
+            return conjuncts;
         }
 
         if (boundSimpleRegionExprs.isEmpty()) {

@@ -4,6 +4,7 @@ package com.starrocks.planner;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PrimitiveType;
@@ -390,7 +391,7 @@ public class QueryCacheTest {
             Assert.fail();
         }
         Optional<PlanFragment> optFragment = plan.getFragments().stream()
-                .filter(f -> f.getCachePlanNodeId() != null && f.getCachePlanNodeId().isValid()).findFirst();
+                .filter(f -> f.getCacheParam() != null).findFirst();
         if (!optFragment.isPresent()) {
             System.out.println("wrong query:" + sql);
             try {
@@ -405,9 +406,11 @@ public class QueryCacheTest {
     private void testHelper(List<String> queryList) {
         List<PlanFragment> frags = queryList.stream()
                 .map(q -> getCachedFragment(q).get()).collect(Collectors.toList());
-        List<ByteBuffer> digests = frags.stream().map(PlanFragment::getDigest).collect(Collectors.toList());
+        List<ByteBuffer> digests =
+                frags.stream().map(f -> ByteBuffer.wrap(f.getCacheParam().getDigest())).collect(Collectors.toList());
         List<Set<Integer>> slotRemappings =
-                frags.stream().map(f -> new HashSet<>(f.getSlotRemapping().values())).collect(Collectors.toList());
+                frags.stream().map(f -> new HashSet<>(f.getCacheParam().getSlot_remapping().values()))
+                        .collect(Collectors.toList());
         ByteBuffer digest = digests.get(0);
         Set<Integer> slotRemapping = slotRemappings.get(0);
         Assert.assertTrue(digest != null && digest.array().length > 0);
@@ -798,15 +801,19 @@ public class QueryCacheTest {
 
     @Test
     public void testDifferentDataModels() {
-        List<String> unCacheableQueryList = Lists.newArrayList(
+        List<String> NonMultiVersionCacheableQueryList = Lists.newArrayList(
                 "select sum(v1) from t4",
                 "select sum(v1) from t5",
                 "select sum(v1) from t6");
-        Assert.assertTrue(unCacheableQueryList.stream().noneMatch(q -> getCachedFragment(q).isPresent()));
+        Assert.assertTrue(NonMultiVersionCacheableQueryList.stream().map(this::getCachedFragment)
+                .allMatch(f -> f.isPresent() && !f.get().getCacheParam().isCan_use_multiversion()));
+
         List<String> cachableQueryList = Lists.newArrayList(
-                "select sum(v1), count(distinct v2) from t7"
+                "select sum(v1), count(distinct v2) from t7",
+                "select sum(v1), count(distinct v2) from t1"
         );
-        Assert.assertTrue(cachableQueryList.stream().allMatch(q -> getCachedFragment(q).isPresent()));
+        Assert.assertTrue(cachableQueryList.stream().map(this::getCachedFragment)
+                .allMatch(f -> f.isPresent() && f.get().getCacheParam().isCan_use_multiversion()));
     }
 
     @Test
@@ -824,7 +831,7 @@ public class QueryCacheTest {
         String q1 = "select sum(v1) from t1 where ts between '2022-01-02 12:55:00' and '2022-01-08 01:30:00'";
         Optional<PlanFragment> optFrag = getCachedFragment(q1);
         Assert.assertTrue(optFrag.isPresent());
-        Map<Long, String> rangeMap = optFrag.get().getRangeMap();
+        Map<Long, String> rangeMap = optFrag.get().getCacheParam().getRegion_map();
         Assert.assertTrue(!rangeMap.isEmpty());
         List<String> expectRanges = Lists.newArrayList();
         PartitionKey startKey;
@@ -856,7 +863,7 @@ public class QueryCacheTest {
         String q1 = "select sum(v1) from t1 where ts >= '2022-01-02 12:55:00' and ts < '2022-01-08 01:30:00'";
         Optional<PlanFragment> optFrag = getCachedFragment(q1);
         Assert.assertTrue(optFrag.isPresent());
-        Map<Long, String> rangeMap = optFrag.get().getRangeMap();
+        Map<Long, String> rangeMap = optFrag.get().getCacheParam().getRegion_map();
         Assert.assertTrue(!rangeMap.isEmpty());
         List<String> expectRanges = Lists.newArrayList();
         PartitionKey startKey;
@@ -888,7 +895,7 @@ public class QueryCacheTest {
         String q1 = "select sum(v1) from t1 where ts >= '2022-01-02 12:55:00' and ts <= '2022-01-08 01:30:00'";
         Optional<PlanFragment> optFrag = getCachedFragment(q1);
         Assert.assertTrue(optFrag.isPresent());
-        Map<Long, String> rangeMap = optFrag.get().getRangeMap();
+        Map<Long, String> rangeMap = optFrag.get().getCacheParam().getRegion_map();
         Assert.assertTrue(!rangeMap.isEmpty());
         List<String> expectRanges = Lists.newArrayList();
         PartitionKey startKey;
@@ -920,7 +927,7 @@ public class QueryCacheTest {
         String q1 = "select sum(v1) from t1 where ts > '2022-01-02 12:55:00' and  ts <= '2022-01-08 01:30:00'";
         Optional<PlanFragment> optFrag = getCachedFragment(q1);
         Assert.assertTrue(optFrag.isPresent());
-        Map<Long, String> rangeMap = optFrag.get().getRangeMap();
+        Map<Long, String> rangeMap = optFrag.get().getCacheParam().getRegion_map();
         Assert.assertTrue(!rangeMap.isEmpty());
         List<String> expectRanges = Lists.newArrayList();
         PartitionKey startKey;
@@ -952,7 +959,7 @@ public class QueryCacheTest {
         String q1 = "select sum(v1) from t1 where ts > '2022-01-02 12:55:00' and ts < '2022-01-08 01:30:00'";
         Optional<PlanFragment> optFrag = getCachedFragment(q1);
         Assert.assertTrue(optFrag.isPresent());
-        Map<Long, String> rangeMap = optFrag.get().getRangeMap();
+        Map<Long, String> rangeMap = optFrag.get().getCacheParam().getRegion_map();
         Assert.assertTrue(!rangeMap.isEmpty());
         List<String> expectRanges = Lists.newArrayList();
         PartitionKey startKey;
@@ -987,7 +994,7 @@ public class QueryCacheTest {
         String q1 = "select sum(v1) from t1 where ts in ('2022-01-03 00:00:00')";
         Optional<PlanFragment> optFrag = getCachedFragment(q1);
         Assert.assertTrue(optFrag.isPresent());
-        Map<Long, String> rangeMap = optFrag.get().getRangeMap();
+        Map<Long, String> rangeMap = optFrag.get().getCacheParam().getRegion_map();
         Assert.assertTrue(!rangeMap.isEmpty());
         PartitionKey startKey = new PartitionKey();
         startKey.pushColumn(new DateLiteral("2022-01-03 00:00:00", Type.DATETIME), PrimitiveType.DATETIME);
@@ -1003,7 +1010,6 @@ public class QueryCacheTest {
         Optional<PlanFragment> optFrag = getCachedFragment(q1);
         Assert.assertFalse(optFrag.isPresent());
     }
-
 
     private static String toHexString(byte[] bytes) {
         StringBuffer s = new StringBuffer(bytes.length * 2);
@@ -1034,16 +1040,52 @@ public class QueryCacheTest {
                 "/*Q14*/ SELECT SearchPhrase, COUNT(DISTINCT UserID) AS u FROM hits WHERE SearchPhrase <> '' GROUP BY SearchPhrase ORDER BY u DESC",
         };
 
-        Map<String,String> digests = new HashMap<String,String>();
-        for (String q: queries) {
+        Map<String, String> digests = new HashMap<String, String>();
+        for (String q : queries) {
             Optional<PlanFragment> optFrag = getCachedFragment(q);
             Assert.assertTrue(optFrag.isPresent());
-            String s = toHexString(optFrag.get().getDigest().array());
+            String s = toHexString(optFrag.get().getCacheParam().getDigest());
             if (digests.containsKey(s)) {
                 System.out.println(String.format("Conflicting digest:'%s',\nq1=%s\nq2=%s", s, q, digests.get(s)));
                 Assert.fail();
             }
-            digests.put(s,q);
+            digests.put(s, q);
+        }
+    }
+
+    @Test
+    public void testHotPartitions() {
+        ctx.getSessionVariable().setQueryCachePrimaryKeysHotPartitionNum(3);
+        ctx.getSessionVariable().setQueryCacheUniqueKeysHotPartitionNum(3);
+        String queriesWithHotPartitions[] = {
+                "/*PRIMARY_KEYS*/ SELECT COUNT(*) FROM t4 where ts between '2022-02-01 00:00:00' and '2022-03-31 00:00:00'",
+                "/*UNIQUE_KEYS*/ SELECT COUNT(*) FROM t5 where ts between '2022-02-01 00:00:00' and '2022-03-31 00:00:00'",
+                "/*AGGREGATE_KEYS with replace*/ SELECT COUNT(*) FROM t6 where ts between '2022-02-01 00:00:00' and '2022-03-31 00:00:00'",
+        };
+
+        String queriesWithoutHotPartitions[] = {
+                "/*DUP_KEYS*/ SELECT COUNT(*) FROM t1 where ts between '2022-02-01 00:00:00' and '2022-03-31 00:00:00'",
+                "/*AGGREGATE_KEYS*/ SELECT COUNT(*) FROM t7 where ts between '2022-02-01 00:00:00' and '2022-03-31 00:00:00'",
+        };
+        Set<String> expectRanges = Sets.newHashSet(
+                "[types: [DATETIME]; keys: [2022-02-26 00:00:00]; ..types: [DATETIME]; keys: [2022-02-27 00:00:00]; )",
+                "[types: [DATETIME]; keys: [2022-02-27 00:00:00]; ..types: [DATETIME]; keys: [2022-02-28 00:00:00]; )",
+                "[types: [DATETIME]; keys: [2022-02-28 00:00:00]; ..types: [DATETIME]; keys: [2022-03-01 00:00:00]; )"
+        );
+
+        for (String q : queriesWithHotPartitions) {
+            Optional<PlanFragment> optFrag = getCachedFragment(q);
+            Assert.assertTrue(optFrag.isPresent());
+            Map<Long, String> rangeMap = optFrag.get().getCacheParam().getRegion_map();
+            Assert.assertFalse(rangeMap.values().stream().anyMatch(expectRanges::contains));
+        }
+        for (String q : queriesWithoutHotPartitions) {
+            Optional<PlanFragment> optFrag = getCachedFragment(q);
+            Assert.assertTrue(optFrag.isPresent());
+            Map<Long, String> rangeMap = optFrag.get().getCacheParam().getRegion_map();
+            List<String> matchedRanges =
+                    rangeMap.values().stream().filter(expectRanges::contains).collect(Collectors.toList());
+            Assert.assertEquals(matchedRanges.size(), expectRanges.size());
         }
     }
 }
