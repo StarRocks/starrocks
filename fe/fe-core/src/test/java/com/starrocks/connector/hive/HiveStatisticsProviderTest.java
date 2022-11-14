@@ -226,5 +226,7 @@ public class HiveStatisticsProviderTest {
         columnStatisticsData.setStringStats(stringColumnStatsData);
         stats.initialize(columnStatisticsData, 90);
         Assert.assertEquals(5, stats.getNumNulls());
+        Assert.assertEquals(Double.NEGATIVE_INFINITY, stats.getMin(), 0.000001);
+        Assert.assertEquals(Double.POSITIVE_INFINITY, stats.getMax(), 0.000001);
     }
 }

@@ -84,6 +84,8 @@ public class HiveColumnStats {
 
     private void initStringColumnStats(StringColumnStatsData stringStats, long rowNums) {
         numNulls = getNumNulls(stringStats.getNumNulls());
+        min = Double.NEGATIVE_INFINITY;
+        max = Double.POSITIVE_INFINITY;
         ndv = stringStats.isSetNumDVs() ? getNdvValue(stringStats.getNumDVs(), rowNums) : -1;
         double avgColLen = stringStats.isSetAvgColLen() ? stringStats.getAvgColLen() : -1;
         totalSizeBytes = getStringColumnTotalSizeBytes(avgColLen, rowNums);
