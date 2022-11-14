@@ -2045,8 +2045,8 @@ public class LocalMetastore implements ConnectorMetadata {
                 if (storageCacheTtlS < -1) {
                     throw new DdlException("Storage cache ttl should not be less than -1");
                 }
-                if (!enableStorageCache && storageCacheTtlS != 0 
-                    && storageCacheTtlS != Config.lake_default_storage_cache_ttl_seconds) {
+                if (!enableStorageCache && storageCacheTtlS != 0 &&
+                        storageCacheTtlS != Config.lake_default_storage_cache_ttl_seconds) {
                     throw new DdlException("Storage cache ttl should be 0 when cache is disabled");
                 }
                 if (enableStorageCache && storageCacheTtlS == 0) {
