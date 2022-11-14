@@ -12,8 +12,8 @@ import static com.google.common.base.Preconditions.checkArgument;
 
 public class AKSKCredentialsProviderFactory implements AWSCredentialsProviderFactory {
 
-    public static final String AWS_ACCESS_KEY_CONF_VAR = "hive.aws_session_access_id";
-    public static final String AWS_SECRET_KEY_CONF_VAR = "hive.aws_session_secret_key";
+    public static final String AWS_ACCESS_KEY_CONF_VAR = "aws.hive.metastore.glue.aws-access-key";
+    public static final String AWS_SECRET_KEY_CONF_VAR = "aws.hive.metastore.glue.aws-secret-key";
 
     @Override
     public AWSCredentialsProvider buildAWSCredentialsProvider(HiveConf hiveConf) {
