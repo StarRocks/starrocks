@@ -8,8 +8,7 @@
 #include "exec/pipeline/scan/meta_scan_operator.h"
 #include "exec/pipeline/scan/lake_meta_scan_prepare_operator.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 LakeMetaScanNode::LakeMetaScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : MetaScanNode(pool, tnode, descs){}
@@ -88,6 +87,4 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> LakeMetaScanNode::decomp
 }
 
 
-} // namespace vectorized
-
-} // namespace starrocks
+} // namespace starrocks::vectorized

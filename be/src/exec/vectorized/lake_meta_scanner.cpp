@@ -4,8 +4,7 @@
 
 #include "exec/vectorized/lake_meta_scan_node.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 LakeMetaScanner::LakeMetaScanner(LakeMetaScanNode* parent)
         : _parent(parent){}
@@ -36,7 +35,6 @@ Status LakeMetaScanner::_init_meta_reader_params() {
 
     return Status::OK();
 }
-
 
 Status LakeMetaScanner::get_chunk(RuntimeState* state, ChunkPtr* chunk) {
     if (state->is_cancelled()) {
@@ -80,7 +78,4 @@ Status LakeMetaScanner::_get_tablet(const TInternalScanRange* scan_range) {
     return Status::OK();
 }
 
-
-} // namespace vectorized
-
-} // namespace starrocks
+} // namespace starrocks::vectorized

@@ -3,8 +3,7 @@
 #include "exec/vectorized/meta_scan_node.h"
 
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 MetaScanNode::MetaScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : ScanNode(pool, tnode, descs),
@@ -67,7 +66,4 @@ Status MetaScanNode::close(RuntimeState* state) {
     return ScanNode::close(state);
 }
 
-
-} // namespace vectorized
-
-} // namespace starrocks
+} // namespace starrocks::vectorized

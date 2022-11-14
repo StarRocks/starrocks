@@ -15,7 +15,7 @@ namespace vectorized {
 class MetaScanNode : public starrocks::ScanNode {
 public:
     MetaScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
-    ~MetaScanNode();
+    ~MetaScanNode() override;
 
     Status init(const TPlanNode& tnode, RuntimeState* state) override;
     Status prepare(RuntimeState* state) override;;

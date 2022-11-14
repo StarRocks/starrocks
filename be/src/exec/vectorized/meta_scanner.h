@@ -10,9 +10,7 @@
 #include "storage/meta_reader.h"
 #include "exec/vectorized/meta_scan_node.h"
 
-
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 struct MetaScannerParams {
     const TInternalScanRange* scan_range = nullptr;
@@ -20,7 +18,7 @@ struct MetaScannerParams {
 
 class MetaScanner {
 public:
-    MetaScanner() : _runtime_state(nullptr), _is_open(false) {};
+    MetaScanner() : _runtime_state(nullptr) {};
     virtual ~MetaScanner() = default;
 
     MetaScanner(const MetaScanner&) = delete;
@@ -51,8 +49,6 @@ protected:
     int64_t _version = 0;
 };
 
-} // namespace vectorized
-
-} // namespace starrocks
+} // namespace starrocks::vectorized
 
 

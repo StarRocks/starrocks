@@ -10,8 +10,7 @@
 #include "gen_cpp/Types_types.h"
 
 
-namespace starrocks {
-namespace pipeline {
+namespace starrocks::pipeline {
 
 class MetaScanOperatorFactory final : public ScanOperatorFactory {
 public:
@@ -35,7 +34,7 @@ public:
     MetaScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, int32_t dop,
                          ScanNode* scan_node, MetaScanContextPtr scan_ctx);
 
-    ~MetaScanOperator() override;
+    ~MetaScanOperator() = default;
 
     bool has_output() const override;
     bool is_finished() const override;
@@ -60,7 +59,4 @@ private:
     MetaScanContextPtr _ctx;
 };
 
-
-
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline

@@ -18,8 +18,6 @@ OlapMetaScanPrepareOperator::OlapMetaScanPrepareOperator(OperatorFactory* factor
         MetaScanPrepareOperator(factory, id, plan_node_id, driver_sequence, std::string("olap_meta_scan_prepare"), scan_ctx),
         _scan_node(scan_node){}
 
-OlapMetaScanPrepareOperator::~OlapMetaScanPrepareOperator() {}
-
 Status OlapMetaScanPrepareOperator::_prepare_scan_context(RuntimeState* state) {
     auto meta_scan_ranges = _morsel_queue->olap_scan_ranges();
     for (auto& scan_range : meta_scan_ranges) {

@@ -6,16 +6,12 @@
 #include "exec/pipeline/source_operator.h"
 #include "exec/vectorized/meta_scan_node.h"
 
-namespace starrocks {
-
-namespace pipeline {
-
-
+namespace starrocks::pipeline {
 class MetaScanPrepareOperator : public SourceOperator {
 public:
     MetaScanPrepareOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence, 
-        std::string operator_name, MetaScanContextPtr scan_ctx);
-    ~MetaScanPrepareOperator() override;
+        const std::string& operator_name, MetaScanContextPtr scan_ctx);
+    ~MetaScanPrepareOperator() override = default;
 
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
@@ -32,7 +28,7 @@ protected:
 
 class MetaScanPrepareOperatorFactory : public SourceOperatorFactory {
 public:
-    MetaScanPrepareOperatorFactory(int32_t id, int32_t plan_node_id, std::string operator_name, 
+    MetaScanPrepareOperatorFactory(int32_t id, int32_t plan_node_id, const std::string& operator_name, 
                                        std::shared_ptr<MetaScanContextFactory> scan_ctx_factory);
 
     ~MetaScanPrepareOperatorFactory() override = default;
@@ -46,5 +42,4 @@ protected:
     std::shared_ptr<MetaScanContextFactory> _scan_ctx_factory;
 };
 
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline

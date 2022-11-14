@@ -7,9 +7,7 @@
 #include "exec/vectorized/meta_scan_node.h"
 #include "exec/vectorized/lake_meta_scanner.h"
 
-namespace starrocks {
-namespace vectorized {
-
+namespace starrocks::vectorized {
 class LakeMetaScanNode final : public MetaScanNode {
 public:
     LakeMetaScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
@@ -30,5 +28,4 @@ private:
     std::vector<LakeMetaScanner*> _scanners;
 };
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

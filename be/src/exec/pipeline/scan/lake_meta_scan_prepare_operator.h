@@ -8,16 +8,13 @@
 #include "exec/pipeline/source_operator.h"
 #include "exec/vectorized/lake_meta_scan_node.h"
 
-namespace starrocks {
-
-namespace pipeline {
-
+namespace starrocks::pipeline {
 
 class LakeMetaScanPrepareOperator final : public MetaScanPrepareOperator {
 public:
     LakeMetaScanPrepareOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                                 vectorized::LakeMetaScanNode* const scan_node, MetaScanContextPtr scan_ctx);
-    ~LakeMetaScanPrepareOperator() override;
+    ~LakeMetaScanPrepareOperator() = default;
 
 private:
     Status _prepare_scan_context(RuntimeState* state) override;
@@ -38,5 +35,4 @@ private:
     vectorized::LakeMetaScanNode* const _scan_node;
 };
 
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline

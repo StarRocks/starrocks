@@ -27,8 +27,6 @@ MetaScanOperator::MetaScanOperator(OperatorFactory* factory, int32_t id, int32_t
                                            ScanNode* meta_scan_node, MetaScanContextPtr ctx)
         : ScanOperator(factory, id, driver_sequence, dop, meta_scan_node), _ctx(ctx) {}
 
-MetaScanOperator::~MetaScanOperator() {}
-
 bool MetaScanOperator::has_output() const {
     if (!_ctx->is_prepare_finished()) {
         return false;

@@ -10,19 +10,16 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 
-namespace starrocks {
-namespace pipeline {
+namespace starrocks::pipeline {
 
 MetaScanPrepareOperator::MetaScanPrepareOperator(OperatorFactory* factory, 
                                                 int32_t id, 
                                                 int32_t plan_node_id,
                                                 int32_t driver_sequence,
-                                                std::string operator_name, 
+                                                const std::string& operator_name, 
                                                 MetaScanContextPtr scan_ctx)
         : SourceOperator(factory, id, operator_name, plan_node_id, driver_sequence),
         _scan_ctx(scan_ctx) {}
-
-MetaScanPrepareOperator::~MetaScanPrepareOperator() {}
 
 Status MetaScanPrepareOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
@@ -49,7 +46,7 @@ StatusOr<vectorized::ChunkPtr> MetaScanPrepareOperator::pull_chunk(RuntimeState*
 }
 
 MetaScanPrepareOperatorFactory::MetaScanPrepareOperatorFactory(
-        int32_t id, int32_t plan_node_id, std::string operator_name, 
+        int32_t id, int32_t plan_node_id, const std::string& operator_name, 
         std::shared_ptr<MetaScanContextFactory> scan_ctx_factory)
         : SourceOperatorFactory(id, operator_name, plan_node_id),
           _scan_ctx_factory(scan_ctx_factory) {}
@@ -60,6 +57,4 @@ Status MetaScanPrepareOperatorFactory::prepare(RuntimeState* state) {
 
 void MetaScanPrepareOperatorFactory::close(RuntimeState* state) {}
 
-
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrock::pipeline

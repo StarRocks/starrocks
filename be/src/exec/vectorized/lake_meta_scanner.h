@@ -9,17 +9,14 @@
 #include "runtime/runtime_state.h"
 #include "storage/lake_meta_reader.h"
 #include "exec/vectorized/meta_scanner.h"
-
-
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 class LakeMetaScanNode;
 
 class LakeMetaScanner final : public MetaScanner{
 public:
     LakeMetaScanner(LakeMetaScanNode* parent);
-    virtual ~LakeMetaScanner() = default;
+    ~LakeMetaScanner() final = default;
 
     LakeMetaScanner(const LakeMetaScanner&) = delete;
     LakeMetaScanner(LakeMetaScanner&) = delete;
@@ -48,6 +45,4 @@ private:
     std::shared_ptr<LakeMetaReader> _reader;
 };
 
-} // namespace vectorized
-
-} // namespace starrocks
+} // namespace starrocks::vectorized

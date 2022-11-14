@@ -19,8 +19,6 @@ LakeMetaScanPrepareOperator::LakeMetaScanPrepareOperator(OperatorFactory* factor
         MetaScanPrepareOperator(factory, id, plan_node_id, driver_sequence, std::string("lake_meta_scan_prepare"), scan_ctx),
         _scan_node(scan_node){}
 
-LakeMetaScanPrepareOperator::~LakeMetaScanPrepareOperator() {}
-
 Status LakeMetaScanPrepareOperator::_prepare_scan_context(RuntimeState* state) {
     auto meta_scan_ranges = _morsel_queue->olap_scan_ranges();
     for (auto& scan_range : meta_scan_ranges) {
