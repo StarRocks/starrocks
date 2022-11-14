@@ -226,11 +226,12 @@ public class BrokerLoadJob extends BulkLoadJob {
                             + tableId + " not found");
                 }
 
+                String mergeCondition = (brokerDesc == null) ? "" : brokerDesc.getMergeConditionStr();
                 // Generate loading task and init the plan of task
                 LoadLoadingTask task = new LoadLoadingTask(db, table, brokerDesc,
                         brokerFileGroups, getDeadlineMs(), loadMemLimit,
                         strictMode, transactionId, this, timezone, timeoutSecond,
-                        createTimestamp, partialUpdate, brokerDesc.getMergeConditionStr(), sessionVariables,
+                        createTimestamp, partialUpdate, mergeCondition, sessionVariables,
                         context,  TLoadJobType.BROKER, priority);
                 UUID uuid = UUID.randomUUID();
                 TUniqueId loadId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
