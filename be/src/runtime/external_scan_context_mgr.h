@@ -38,6 +38,7 @@ namespace starrocks {
 
 struct ScanContext {
 public:
+    TUniqueId query_id;
     TUniqueId fragment_instance_id;
     int64_t offset = 0;
     // use this access_time to clean zombie context
