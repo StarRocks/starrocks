@@ -30,6 +30,7 @@ public:
     Status do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) override;
     Status do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) override;
     Status parse_csv(int chunk_size, ChunkPtr* chunk);
+    Status parse_csv_v2(int chunk_size, ChunkPtr* chunk);
 
 private:
     // create a reader or re init reader
@@ -48,5 +49,7 @@ private:
     std::unordered_map<std::string, int> _columns_index;
     bool _no_data = false;
     bool _trim_space;
+    char _enclose;
+    char _escape;
 };
 } // namespace starrocks::vectorized
