@@ -76,6 +76,7 @@ import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Deque;
@@ -217,6 +218,7 @@ public final class SqlToScalarOperatorTranslator {
         // when push(5) -> [5,1,2,3,4]
         // then pop() -> [1,2,3,4]
         private final Deque<Integer> usedSubFieldPos = new ArrayDeque<>();
+
         public Visitor(ExpressionMapping expressionMapping, ColumnRefFactory columnRefFactory,
                        List<ColumnRefOperator> correlation, ConnectContext session,
                        CTETransformerContext cteContext, OptExprBuilder builder,
