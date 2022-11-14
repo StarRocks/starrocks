@@ -21,15 +21,8 @@
 
 package com.starrocks.utframe;
 
-
 import com.google.common.base.Preconditions;
 import com.starrocks.alter.AlterJobV2;
-import com.starrocks.analysis.CreateMaterializedViewStmt;
-import com.starrocks.analysis.CreateResourceStmt;
-import com.starrocks.analysis.CreateRoleStmt;
-import com.starrocks.analysis.CreateUserStmt;
-import com.starrocks.analysis.DdlStmt;
-import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
@@ -39,19 +32,26 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.execution.DataDefinitionExecutorFactory;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.ast.CreateMaterializedViewStmt;
+import com.starrocks.sql.ast.CreateResourceStmt;
+import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.ast.DropDbStmt;
+import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.ShowResourceGroupStmt;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.system.BackendCoreStat;
 import org.apache.commons.lang.StringUtils;
@@ -104,7 +104,7 @@ public class StarRocksAssert {
 
     public StarRocksAssert withRole(String roleName) throws Exception {
         CreateRoleStmt createRoleStmt =
-                (CreateRoleStmt) UtFrameUtils.parseAndAnalyzeStmt("create role " + roleName + ";", ctx);
+                (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser("create role " + roleName + ";", ctx);
         GlobalStateMgr.getCurrentState().getAuth().createRole(createRoleStmt);
         return this;
     }
@@ -179,6 +179,13 @@ public class StarRocksAssert {
         return this;
     }
 
+    public StarRocksAssert dropMaterializedView(String materializedViewName) throws Exception {
+        DropMaterializedViewStmt dropMaterializedViewStmt = (DropMaterializedViewStmt) UtFrameUtils.
+                parseStmtWithNewParser("drop materialized view " + materializedViewName + ";", ctx);
+        GlobalStateMgr.getCurrentState().dropMaterializedView(dropMaterializedViewStmt);
+        return this;
+    }
+
     // Add materialized view to the schema
     public StarRocksAssert withMaterializedView(String sql) throws Exception {
         CreateMaterializedViewStmt createMaterializedViewStmt =
@@ -220,8 +227,7 @@ public class StarRocksAssert {
         Assert.assertTrue(statement.getClass().getSimpleName().contains("ResourceGroupStmt"));
         ConnectContext connectCtx = new ConnectContext();
         connectCtx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
-        DataDefinitionExecutorFactory.execute((DdlStmt) statement, connectCtx);
-
+        DDLStmtExecutor.execute((DdlStmt) statement, connectCtx);
     }
 
     public List<List<String>> executeResourceGroupShowSql(String sql) throws Exception {

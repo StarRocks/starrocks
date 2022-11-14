@@ -30,6 +30,8 @@ class QueryContext;
 //    - params.per_node_scan_ranges
 //    - fragment.output_sink (only for MultiCastDataStreamSink and ExportSink)
 // For the exec_plan_fragments request, common_request and unique_request are identical.
+
+using PerDriverScanRangesMap = std::map<int32_t, std::vector<TScanRangeParams>>;
 class UnifiedExecPlanFragmentParams {
 public:
     UnifiedExecPlanFragmentParams(const TExecPlanFragmentParams& common_request,
@@ -45,16 +47,21 @@ public:
 
     // Access the common fields by this method.
     const TExecPlanFragmentParams& common() const { return _common_request; }
+    const TExecPlanFragmentParams& unique() const { return _unique_request; }
 
     // Access the unique fields by the following methods.
     int32_t backend_num() const { return _unique_request.backend_num; }
     int32_t pipeline_dop() const { return _unique_request.__isset.pipeline_dop ? _unique_request.pipeline_dop : 0; }
+    int32_t pipeline_sink_dop() const {
+        // NOTE: default dop is 1, compatible with old version(before 2.5)
+        return _unique_request.params.__isset.pipeline_sink_dop ? _unique_request.params.pipeline_sink_dop : 1;
+    }
+
     const TUniqueId& fragment_instance_id() const { return _unique_request.params.fragment_instance_id; }
     int32_t sender_id() const { return _unique_request.params.sender_id; }
 
     const std::vector<TScanRangeParams>& scan_ranges_of_node(TPlanNodeId node_id) const;
-    const std::map<int32_t, std::vector<TScanRangeParams>>& per_driver_seq_scan_ranges_of_node(
-            TPlanNodeId node_id) const;
+    const PerDriverScanRangesMap& per_driver_seq_scan_ranges_of_node(TPlanNodeId node_id) const;
 
     bool isset_output_sink() const {
         return _common_request.fragment.__isset.output_sink || _unique_request.fragment.__isset.output_sink;
@@ -63,8 +70,7 @@ public:
 
 private:
     static const std::vector<TScanRangeParams> _no_scan_ranges;
-    static const std::map<int32_t, std::vector<TScanRangeParams>> _no_scan_ranges_per_driver_seq;
-
+    static const PerDriverScanRangesMap _no_scan_ranges_per_driver_seq;
     const TExecPlanFragmentParams& _common_request;
     const TExecPlanFragmentParams& _unique_request;
 };
@@ -96,10 +102,12 @@ private:
     Status _prepare_exec_plan(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request);
     Status _prepare_global_dict(const UnifiedExecPlanFragmentParams& request);
     Status _prepare_pipeline_driver(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request);
+    Status _prepare_stream_load_pipe(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request);
 
     Status _decompose_data_sink_to_operator(RuntimeState* runtime_state, PipelineBuilderContext* context,
                                             const UnifiedExecPlanFragmentParams& request,
-                                            std::unique_ptr<starrocks::DataSink>& datasink);
+                                            std::unique_ptr<starrocks::DataSink>& datasink,
+                                            const TDataSink& thrift_sink, const std::vector<TExpr>& output_exprs);
 
     int64_t _fragment_start_time = 0;
     QueryContext* _query_ctx = nullptr;

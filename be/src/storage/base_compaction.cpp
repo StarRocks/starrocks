@@ -13,7 +13,7 @@ namespace starrocks::vectorized {
 BaseCompaction::BaseCompaction(MemTracker* mem_tracker, TabletSharedPtr tablet)
         : Compaction(mem_tracker, std::move(tablet)) {}
 
-BaseCompaction::~BaseCompaction() {}
+BaseCompaction::~BaseCompaction() = default;
 
 Status BaseCompaction::compact() {
     if (!_tablet->init_succeeded()) {

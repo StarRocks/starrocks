@@ -7,12 +7,13 @@
 namespace starrocks {
 
 class ExecEnv;
+class ThreadPool;
 
 class LakeServiceImpl : public ::starrocks::lake::LakeService {
 public:
-    explicit LakeServiceImpl(ExecEnv* env) : _env(env) {}
+    explicit LakeServiceImpl(ExecEnv* env);
 
-    ~LakeServiceImpl() override = default;
+    ~LakeServiceImpl() override;
 
     void publish_version(::google::protobuf::RpcController* controller,
                          const ::starrocks::lake::PublishVersionRequest* request,
@@ -59,8 +60,15 @@ public:
                           ::starrocks::lake::UploadSnapshotsResponse* response,
                           ::google::protobuf::Closure* done) override;
 
+    void restore_snapshots(::google::protobuf::RpcController* controller,
+                           const ::starrocks::lake::RestoreSnapshotsRequest* request,
+                           ::starrocks::lake::RestoreSnapshotsResponse* response,
+                           ::google::protobuf::Closure* done) override;
+
 private:
     ExecEnv* _env;
+
+    std::unique_ptr<ThreadPool> _compact_thread_pool;
 };
 
 } // namespace starrocks

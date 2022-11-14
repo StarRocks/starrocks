@@ -28,7 +28,3 @@ Note:
     ```sql
     ADMIN REPAIR TABLE tbl1 PARTITION (p1, p2);
     ```
-
-## keyword
-
-ADMIN,REPAIR

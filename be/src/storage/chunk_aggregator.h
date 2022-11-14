@@ -61,9 +61,9 @@ private:
     // chunk mate
     const Schema* _schema;
 
-    uint16_t _key_fields;
+    size_t _key_fields;
 
-    uint16_t _num_fields;
+    size_t _num_fields;
 
     uint32_t _reserve_rows;
 
@@ -71,7 +71,7 @@ private:
 
     uint32_t _source_row;
 
-    uint32_t _source_size;
+    size_t _source_size;
 
     // aggregate chunk info
     std::vector<uint8_t> _is_eq;

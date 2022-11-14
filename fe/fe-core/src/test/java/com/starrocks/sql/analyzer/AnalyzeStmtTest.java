@@ -4,8 +4,6 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.SetUserPropertyStmt;
-import com.starrocks.analysis.ShowUserPropertyStmt;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
@@ -17,10 +15,12 @@ import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.DropHistogramStmt;
 import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.KillAnalyzeStmt;
+import com.starrocks.sql.ast.SetUserPropertyStmt;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
 import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowHistogramStatsMetaStmt;
+import com.starrocks.sql.ast.ShowUserPropertyStmt;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
@@ -56,14 +56,17 @@ public class AnalyzeStmtTest {
         starRocksAssert = new StarRocksAssert();
         starRocksAssert.withDatabase("db").useDatabase("db");
         starRocksAssert.withTable(createTblStmtStr);
+
+        createTblStmtStr = "create table db.tb2(kk1 int, kk2 json) "
+                + "DUPLICATE KEY(kk1) distributed by hash(kk1) buckets 3 properties('replication_num' = '1');";
+        starRocksAssert.withTable(createTblStmtStr);
     }
 
     @Test
     public void testAllColumns() {
         String sql = "analyze table db.tbl";
         AnalyzeStmt analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
-
-        Assert.assertEquals(4, analyzeStmt.getColumnNames().size());
+        Assert.assertNull(analyzeStmt.getColumnNames());
     }
 
     @Test
@@ -87,12 +90,28 @@ public class AnalyzeStmtTest {
 
         Assert.assertTrue(!analyzeStmt.isSample());
         Assert.assertEquals(2, analyzeStmt.getColumnNames().size());
+
+        sql = "analyze table test.t0";
+        analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
+        Assert.assertNull(analyzeStmt.getColumnNames());
     }
 
     @Test
     public void testProperties() {
         String sql = "analyze full table db.tbl properties('expire_sec' = '30')";
         analyzeFail(sql, "Property 'expire_sec' is not valid");
+
+        sql = "analyze full table db.tbl";
+        AnalyzeStmt analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
+        Assert.assertFalse(analyzeStmt.isAsync());
+
+        sql = "analyze full table db.tbl with sync mode";
+        analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
+        Assert.assertFalse(analyzeStmt.isAsync());
+
+        sql = "analyze full table db.tbl with async mode";
+        analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
+        Assert.assertTrue(analyzeStmt.isAsync());
     }
 
     @Test
@@ -157,6 +176,7 @@ public class AnalyzeStmtTest {
                         "FROM column_statistics WHERE table_id = 10004 and column_name = \"v2\" " +
                         "GROUP BY db_id, table_id, column_name",
                 StatisticSQLBuilder.buildQueryFullStatisticsSQL(10002L, 10004L, Lists.newArrayList(v1, v2)));
+
         Assert.assertEquals("SELECT cast(1 as INT), update_time, db_id, table_id, column_name, row_count, " +
                         "data_size, distinct_count, null_count, max, min " +
                         "FROM table_statistic_v1 WHERE db_id = 10002 and table_id = 10004 and column_name in ('v1', 'v2')",
@@ -166,13 +186,14 @@ public class AnalyzeStmtTest {
                 Lists.newArrayList(10003L),
                 Lists.newArrayList("v1", "v2"), StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
                 Maps.newHashMap());
-        Assert.assertEquals("INSERT INTO column_statistics SELECT 10004, 10003, 'v1', 10002, 'test.t0', 't0', " +
-                        "COUNT(1), COUNT(1) * 8, IFNULL(hll_union(hll_hash(`v1`)), hll_empty()), COUNT(1) - COUNT(`v1`), " +
-                        "IFNULL(MAX(`v1`), ''), IFNULL(MIN(`v1`), ''), NOW() FROM test.t0 partition t0 " +
-                        "UNION ALL SELECT 10004, 10003, 'v2', 10002, 'test.t0', 't0', COUNT(1), COUNT(1) * 8, " +
-                        "IFNULL(hll_union(hll_hash(`v2`)), hll_empty()), COUNT(1) - COUNT(`v2`), IFNULL(MAX(`v2`), ''), " +
-                        "IFNULL(MIN(`v2`), ''), NOW() FROM test.t0 partition t0",
-                collectJob.buildCollectSQLList().get(0));
+        Assert.assertEquals("SELECT 10004, 10003, 'v1', 10002, 'test.t0', 't0', " +
+                        "COUNT(1), COUNT(1) * 8, IFNULL(hll_raw(`v1`), hll_empty()), COUNT(1) - COUNT(`v1`), " +
+                        "IFNULL(MAX(`v1`), ''), IFNULL(MIN(`v1`), ''), NOW() FROM test.t0 partition t0",
+                collectJob.buildCollectSQLList(2).get(0).get(0));
+        Assert.assertEquals("SELECT 10004, 10003, 'v2', 10002, 'test.t0', 't0', " +
+                        "COUNT(1), COUNT(1) * 8, IFNULL(hll_raw(`v2`), hll_empty()), COUNT(1) - COUNT(`v2`), " +
+                        "IFNULL(MAX(`v2`), ''), IFNULL(MIN(`v2`), ''), NOW() FROM test.t0 partition t0",
+                collectJob.buildCollectSQLList(2).get(0).get(1));
     }
 
     @Test
@@ -240,5 +261,48 @@ public class AnalyzeStmtTest {
         Assert.assertThrows(SemanticException.class, () -> GlobalStateMgr.getCurrentAnalyzeMgr().unregisterConnection(2, true));
         GlobalStateMgr.getCurrentAnalyzeMgr().unregisterConnection(1, true);
         Assert.assertThrows(SemanticException.class, () -> GlobalStateMgr.getCurrentAnalyzeMgr().unregisterConnection(1, true));
+    }
+
+    @Test
+    public void testAnalyzeStatus() throws MetaNotFoundException {
+        AnalyzeStatus analyzeStatus = new AnalyzeStatus(-1, 10002, 10004, Lists.newArrayList(), StatsConstants.AnalyzeType.FULL,
+                StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.of(2020, 1, 1, 1, 1));
+        analyzeStatus.setEndTime(LocalDateTime.of(2020, 1, 1, 1, 1));
+        analyzeStatus.setStatus(StatsConstants.ScheduleStatus.RUNNING);
+        Assert.assertEquals("[-1, test, t0, ALL, FULL, ONCE, RUNNING (0%), 2020-01-01 01:01:00, 2020-01-01 01:01:00," +
+                " {}, ]", ShowAnalyzeStatusStmt.showAnalyzeStatus(analyzeStatus).toString());
+
+        analyzeStatus.setProgress(50);
+        Assert.assertEquals("[-1, test, t0, ALL, FULL, ONCE, RUNNING (50%), 2020-01-01 01:01:00, 2020-01-01 01:01:00," +
+                " {}, ]", ShowAnalyzeStatusStmt.showAnalyzeStatus(analyzeStatus).toString());
+
+        analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FINISH);
+        Assert.assertEquals("[-1, test, t0, ALL, FULL, ONCE, SUCCESS, 2020-01-01 01:01:00, 2020-01-01 01:01:00," +
+                " {}, ]", ShowAnalyzeStatusStmt.showAnalyzeStatus(analyzeStatus).toString());
+
+        analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
+        Assert.assertEquals("[-1, test, t0, ALL, FULL, ONCE, FAILED, 2020-01-01 01:01:00, 2020-01-01 01:01:00," +
+                " {}, ]", ShowAnalyzeStatusStmt.showAnalyzeStatus(analyzeStatus).toString());
+    }
+
+    @Test
+    public void testObjectColumns() {
+        Database database = GlobalStateMgr.getCurrentState().getDb("db");
+        OlapTable table = (OlapTable) database.getTable("tb2");
+
+        Column kk1 = table.getColumn("kk1");
+        Column kk2 = table.getColumn("kk2");
+
+        Assert.assertEquals("SELECT cast(1 as INT), now(), db_id, table_id, column_name, sum(row_count), " +
+                        "cast(sum(data_size) as bigint), hll_union_agg(ndv), sum(null_count), " +
+                        " cast(max(cast(max as int(11))) as string), cast(min(cast(min as int(11))) as string) " +
+                        "FROM column_statistics WHERE table_id = 10158 and column_name = \"kk1\" " +
+                        "GROUP BY db_id, table_id, column_name " +
+                        "UNION ALL SELECT cast(1 as INT), now(), db_id, table_id, column_name, sum(row_count), " +
+                        "cast(sum(data_size) as bigint), hll_union_agg(ndv), sum(null_count),  " +
+                        "cast(max(cast(max as string)) as string), cast(min(cast(min as string)) as string) " +
+                        "FROM column_statistics WHERE table_id = 10158 and column_name = \"kk2\" " +
+                        "GROUP BY db_id, table_id, column_name",
+                StatisticSQLBuilder.buildQueryFullStatisticsSQL(database.getId(), table.getId(), Lists.newArrayList(kk1, kk2)));
     }
 }

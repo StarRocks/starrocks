@@ -21,19 +21,12 @@
 
 #include "storage/data_dir.h"
 
-#include <mntent.h>
-#include <sys/file.h>
-#include <sys/stat.h>
-#include <utime.h>
-
 #include <filesystem>
-#include <fstream>
 #include <set>
 #include <sstream>
 #include <utility>
 
 #include "common/config.h"
-#include "common/version.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
@@ -57,7 +50,6 @@ using strings::Substitute;
 
 namespace starrocks {
 
-static const char* const kMtabPath = "/etc/mtab";
 static const char* const kTestFilePath = "/.testfile";
 
 DataDir::DataDir(const std::string& path, TStorageMedium::type storage_medium, TabletManager* tablet_manager,
@@ -163,7 +155,22 @@ Status DataDir::get_shard(uint64_t* shard) {
     }
     shard_path_stream << _path << DATA_PREFIX << "/" << next_shard;
     std::string shard_path = shard_path_stream.str();
+    // First check whether the shard path exists. If it does not exist, sync the data directory.
+    bool sync_data_path = false;
+    if (!fs::path_exist(shard_path)) {
+        sync_data_path = true;
+    }
     RETURN_IF_ERROR(_fs->create_dir_recursive(shard_path));
+    if (sync_data_path) {
+        std::string data_path = _path + DATA_PREFIX;
+        if (config::sync_tablet_meta) {
+            Status st = fs::sync_dir(data_path);
+            if (!st.ok()) {
+                LOG(WARNING) << "Fail to sync " << data_path << ": " << st.to_string();
+                return st;
+            }
+        }
+    }
     *shard = next_shard;
     return Status::OK();
 }
@@ -172,7 +179,7 @@ void DataDir::register_tablet(Tablet* tablet) {
     TabletInfo tablet_info(tablet->tablet_id(), tablet->schema_hash(), tablet->tablet_uid());
 
     std::lock_guard<std::mutex> l(_mutex);
-    _tablet_set.emplace(std::move(tablet_info));
+    _tablet_set.emplace(tablet_info);
 }
 
 void DataDir::deregister_tablet(Tablet* tablet) {
@@ -236,8 +243,8 @@ Status DataDir::load() {
     LOG(INFO) << "begin loading rowset from meta";
     auto load_rowset_func = [&dir_rowset_metas](const TabletUid& tablet_uid, RowsetId rowset_id,
                                                 std::string_view meta_str) -> bool {
-        auto rowset_meta = std::make_shared<RowsetMeta>();
-        bool parsed = rowset_meta->init(meta_str);
+        bool parsed = false;
+        auto rowset_meta = std::make_shared<RowsetMeta>(meta_str, &parsed);
         if (!parsed) {
             LOG(WARNING) << "parse rowset meta string failed for rowset_id:" << rowset_id;
             // return false will break meta iterator, return true to skip this error

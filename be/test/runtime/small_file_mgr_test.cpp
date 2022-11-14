@@ -82,8 +82,8 @@ static int real_port = 0;
 
 class SmallFileMgrTest : public testing::Test {
 public:
-    SmallFileMgrTest() {}
-    virtual ~SmallFileMgrTest() {}
+    SmallFileMgrTest() = default;
+    ~SmallFileMgrTest() override = default;
 
     static void SetUpTestCase() {
         s_server = new EvHttpServer(0);

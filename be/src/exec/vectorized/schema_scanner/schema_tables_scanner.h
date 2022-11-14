@@ -19,10 +19,8 @@ private:
     Status get_new_table();
     Status fill_chunk(ChunkPtr* chunk);
 
-    int _db_index{0};
-    int _table_index{0};
-    TGetDbsResult _db_result;
-    TListTableStatusResult _table_result;
+    int _tables_info_index{0};
+    TGetTablesInfoResponse _tabls_info_response;
     static SchemaScanner::ColumnDesc _s_tbls_columns[];
 };
 

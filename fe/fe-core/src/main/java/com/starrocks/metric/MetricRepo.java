@@ -583,6 +583,9 @@ public final class MetricRepo {
             visitor.visit(metric);
         }
 
+        // database metrics
+        collectDatabaseMetrics(visitor);
+
         // table metrics
         if (collectTableMetrics) {
             collectTableMetrics(visitor, minifyTableMetrics);
@@ -638,6 +641,34 @@ public final class MetricRepo {
                 db.readUnlock();
             }
         }
+    }
+
+    private static void collectDatabaseMetrics(MetricVisitor visitor) {
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        List<String> dbNames = globalStateMgr.getDbNames();
+        GaugeMetricImpl databaseNum = new GaugeMetricImpl<>(
+                "database_num", MetricUnit.OPERATIONS, "count of database");
+        long dbNum = 0;
+        for (String dbName : dbNames) {
+            Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+            if (null == db) {
+                continue;
+            }
+            dbNum++;
+            db.readLock();
+            try {
+                GaugeMetricImpl tableNum = new GaugeMetricImpl<>(
+                        "table_num", MetricUnit.OPERATIONS, "count of table");
+                tableNum.setValue(0L);
+                tableNum.setValue(db.getTables().size());
+                tableNum.addLabel(new MetricLabel("db_name", dbName));
+                visitor.visit(tableNum);
+            } finally {
+                db.readUnlock();
+            }
+        }
+        databaseNum.setValue(dbNum);
+        visitor.visit(databaseNum);
     }
 
     private static void collectRoutineLoadProcessMetrics(MetricVisitor visitor) {

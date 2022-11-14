@@ -376,7 +376,17 @@ struct Version {
 
     bool contains(const Version& other) const { return first <= other.first && second >= other.second; }
 
-    bool operator<(const Version& rhs) const { return second < rhs.second; }
+    bool operator<(const Version& rhs) const {
+        if (second < rhs.second) {
+            return true;
+        } else if (second > rhs.second) {
+            return false;
+        } else {
+            // version with bigger first will be smaller.
+            // design this for fast search in _contains_version() in tablet.cpp.
+            return first > rhs.first;
+        }
+    }
 };
 
 typedef std::vector<Version> Versions;
@@ -394,10 +404,6 @@ struct HashOfVersion {
         return seed;
     }
 };
-
-class Field;
-class WrapperField;
-using KeyRange = std::pair<WrapperField*, WrapperField*>;
 
 // ReaderStatistics used to collect statistics when scan data from storage
 struct OlapReaderStatistics {
@@ -453,6 +459,8 @@ struct OlapReaderStatistics {
     int64_t rowsets_read_count = 0;
     int64_t segments_read_count = 0;
     int64_t total_columns_data_page_count = 0;
+
+    int64_t runtime_stats_filtered = 0;
 };
 
 typedef uint32_t ColumnId;
@@ -476,7 +484,7 @@ struct RowsetId {
     void init(int64_t rowset_id) { init(1, rowset_id, 0, 0); }
 
     void init(int64_t id_version, int64_t high, int64_t middle, int64_t low) {
-        version = id_version;
+        version = static_cast<int8_t>(id_version);
         if (UNLIKELY(high >= MAX_ROWSET_ID)) {
             LOG(FATAL) << "inc rowsetid is too large:" << high;
         }

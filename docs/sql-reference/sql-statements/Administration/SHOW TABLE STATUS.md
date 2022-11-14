@@ -30,7 +30,3 @@ Note:
     ```SQL
     SHOW TABLE STATUS FROM db LIKE "%example%";
     ```
-
-## keyword
-
-SHOW,TABLE,STATUS

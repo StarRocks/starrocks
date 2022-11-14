@@ -1,10 +1,10 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.optimizer;
 
-import com.starrocks.analysis.StatementBase;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
@@ -133,10 +133,9 @@ public class TransformerTest {
             LogicalPlan logicalPlan = new RelationTransformer(new ColumnRefFactory(), connectContext)
                     .transform(((QueryStatement) statementBase).getQueryRelation());
 
-            OperatorStrings operatorPrinter = new OperatorStrings();
             try {
                 Assert.assertEquals(operatorString.substring(0, operatorString.length() - 1),
-                        operatorPrinter.printOperator(logicalPlan.getRoot()));
+                        LogicalPlanPrinter.print(logicalPlan.getRoot()));
             } catch (Error error) {
                 collector.addError(new Throwable("\n" + originStmt, error));
             }

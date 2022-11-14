@@ -27,11 +27,11 @@ import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.load.FailMsg;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.task.LeaderTask;
+import com.starrocks.task.PriorityLeaderTask;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-public abstract class LoadTask extends LeaderTask {
+public abstract class LoadTask extends PriorityLeaderTask {
     public enum TaskType {
         PENDING,
         LOADING
@@ -45,7 +45,8 @@ public abstract class LoadTask extends LeaderTask {
     protected FailMsg failMsg = new FailMsg();
     protected int retryTime = 1;
 
-    public LoadTask(LoadTaskCallback callback, TaskType taskType) {
+    public LoadTask(LoadTaskCallback callback, TaskType taskType, int priority) {
+        super(priority);
         this.taskType = taskType;
         this.signature = GlobalStateMgr.getCurrentState().getNextId();
         this.callback = callback;

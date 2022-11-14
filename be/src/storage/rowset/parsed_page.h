@@ -29,7 +29,6 @@
 #include "storage/rowset/page_pointer.h"
 
 namespace starrocks {
-class ColumnBlockView;
 class Slice;
 class Status;
 
@@ -89,13 +88,6 @@ public:
     virtual Status read(vectorized::Column* column, const vectorized::SparseRange& range) {
         return Status::NotSupported("Read by range Not Support");
     }
-
-    // Attempts to read up to |*count| records from this page into the |block|.
-    // On success, `Status::OK` is returned, and the number of records read will be updated to
-    // |count|, the page offset is advanced by this number too. This number is the minimum value
-    // of |*count| and |remaining()|.
-    // On error, the value of |*count| is undefined.
-    virtual Status read(ColumnBlockView* block, size_t* count) = 0;
 
     // prerequisite: encoding_type() is `DICT_ENCODING`.
     // Attempts to read up to |*count| dictionary codes from this page into the |column|.

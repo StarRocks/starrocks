@@ -9,10 +9,13 @@ import com.google.common.collect.Sets;
 import com.staros.client.StarClient;
 import com.staros.client.StarClientException;
 import com.staros.proto.AllocateStorageInfo;
+import com.staros.proto.CreateShardGroupInfo;
+import com.staros.proto.CreateShardInfo;
 import com.staros.proto.ObjectStorageType;
 import com.staros.proto.ReplicaInfo;
 import com.staros.proto.ReplicaRole;
 import com.staros.proto.ServiceInfo;
+import com.staros.proto.ShardGroupInfo;
 import com.staros.proto.ShardInfo;
 import com.staros.proto.ShardStorageInfo;
 import com.staros.proto.StatusCode;
@@ -25,6 +28,7 @@ import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -253,13 +257,38 @@ public class StarOSAgent {
         }
     }
 
-    public List<Long> createShards(int numShards, ShardStorageInfo shardStorageInfo) throws DdlException {
+    public void createShardGroup(long groupId) throws DdlException {
+        prepare();
+        List<ShardGroupInfo> shardGroupInfos = null;
+        try {
+            List<CreateShardGroupInfo> createShardGroupInfos = new ArrayList<>();
+            createShardGroupInfos.add(CreateShardGroupInfo.newBuilder().setGroupId(groupId).build());
+            shardGroupInfos = client.createShardGroup(serviceId, createShardGroupInfos);
+            LOG.debug("Create shard group success. shard group infos: {}", shardGroupInfos);
+            Preconditions.checkState(shardGroupInfos.size() == 1);
+        } catch (StarClientException e) {
+            throw new DdlException("Failed to create shard group. error: " + e.getMessage());
+        }
+    }
+
+    public List<Long> createShards(int numShards, ShardStorageInfo shardStorageInfo, long groupId) throws DdlException {
         prepare();
         List<ShardInfo> shardInfos = null;
         try {
-            shardInfos = client.createShard(serviceId, numShards, 1, shardStorageInfo, null);
+            List<CreateShardInfo> createShardInfos = new ArrayList<>(numShards);
+            for (int i = 0; i < numShards; ++i) {
+                CreateShardInfo.Builder builder = CreateShardInfo.newBuilder();
+                builder.setReplicaCount(1);
+                builder.setShardId(GlobalStateMgr.getCurrentState().getNextId());
+                builder.setGroupId(groupId);
+                if (shardStorageInfo != null) {
+                    builder.setShardStorageInfo(shardStorageInfo);
+                }
+                createShardInfos.add(builder.build());
+            }
+            shardInfos = client.createShard(serviceId, createShardInfos);
             LOG.debug("Create shards success. shard infos: {}", shardInfos);
-        } catch (StarClientException e) {
+        } catch (Exception e) {
             throw new DdlException("Failed to create shards. error: " + e.getMessage());
         }
 

@@ -8,7 +8,6 @@
 #include "storage/lake/general_tablet_writer.h"
 #include "storage/lake/metadata_iterator.h"
 #include "storage/lake/rowset.h"
-#include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/txn_log.h"
 #include "storage/rowset/segment.h"
@@ -98,8 +97,7 @@ StatusOr<SegmentPtr> Tablet::load_segment(std::string_view segment_name, int seg
     }
     ASSIGN_OR_RETURN(auto tablet_schema, get_schema());
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(location));
-    ASSIGN_OR_RETURN(segment, Segment::open(ExecEnv::GetInstance()->metadata_mem_tracker(), fs, location, seg_id,
-                                            std::move(tablet_schema), footer_size_hint));
+    ASSIGN_OR_RETURN(segment, Segment::open(fs, location, seg_id, std::move(tablet_schema), footer_size_hint));
     if (fill_cache) {
         _mgr->cache_segment(location, segment);
     }

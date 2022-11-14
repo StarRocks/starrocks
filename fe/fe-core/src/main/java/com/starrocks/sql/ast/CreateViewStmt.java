@@ -3,7 +3,6 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.base.Strings;
-import com.starrocks.analysis.ColWithComment;
 import com.starrocks.analysis.TableName;
 
 import java.util.List;
@@ -29,10 +28,5 @@ public class CreateViewStmt extends BaseViewStmt {
 
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitCreateViewStatement(this, context);
-    }
-
-    @Override
-    public boolean isSupportNewPlanner() {
-        return true;
     }
 }

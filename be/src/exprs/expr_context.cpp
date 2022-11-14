@@ -22,7 +22,6 @@
 #include "exprs/expr_context.h"
 
 #include <fmt/format.h>
-#include <gperftools/profiler.h>
 
 #include <memory>
 #include <sstream>
@@ -35,8 +34,6 @@
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
 #include "udf/udf_internal.h"
-#include "util/debug_util.h"
-#include "util/stack_util.h"
 
 namespace starrocks {
 
@@ -45,9 +42,7 @@ ExprContext::ExprContext(Expr* root)
 
 ExprContext::~ExprContext() {
     // DCHECK(!_prepared || _closed) << ". expr context address = " << this;
-    if (_prepared) {
-        close(_runtime_state);
-    }
+    close(_runtime_state);
     for (auto& _fn_context : _fn_contexts) {
         delete _fn_context;
     }
@@ -85,6 +80,9 @@ Status ExprContext::open(std::vector<ExprContext*> evals, RuntimeState* state) {
 }
 
 void ExprContext::close(RuntimeState* state) {
+    if (!_prepared) {
+        return;
+    }
     bool expected = false;
     if (!_closed.compare_exchange_strong(expected, true)) {
         return;
@@ -112,12 +110,12 @@ int ExprContext::register_func(RuntimeState* state, const starrocks_udf::Functio
     return _fn_contexts.size() - 1;
 }
 
-Status ExprContext::clone(RuntimeState* state, ExprContext** new_ctx) {
+Status ExprContext::clone(RuntimeState* state, ObjectPool* pool, ExprContext** new_ctx) {
     DCHECK(_prepared);
     DCHECK(_opened);
     DCHECK(*new_ctx == nullptr);
 
-    *new_ctx = state->obj_pool()->add(new ExprContext(_root));
+    *new_ctx = pool->add(new ExprContext(_root));
     (*new_ctx)->_pool = std::make_unique<MemPool>();
     for (auto& _fn_context : _fn_contexts) {
         (*new_ctx)->_fn_contexts.push_back(_fn_context->impl()->clone((*new_ctx)->_pool.get()));
@@ -131,12 +129,12 @@ Status ExprContext::clone(RuntimeState* state, ExprContext** new_ctx) {
     return _root->open(state, *new_ctx, FunctionContext::THREAD_LOCAL);
 }
 
-Status ExprContext::clone(RuntimeState* state, ExprContext** new_ctx, Expr* root) {
+Status ExprContext::clone(RuntimeState* state, ObjectPool* pool, ExprContext** new_ctx, Expr* root) {
     DCHECK(_prepared);
     DCHECK(_opened);
     DCHECK(*new_ctx == nullptr);
 
-    *new_ctx = state->obj_pool()->add(new ExprContext(root));
+    *new_ctx = pool->add(new ExprContext(root));
     (*new_ctx)->_pool = std::make_unique<MemPool>();
     for (auto& _fn_context : _fn_contexts) {
         (*new_ctx)->_fn_contexts.push_back(_fn_context->impl()->clone((*new_ctx)->_pool.get()));
@@ -184,10 +182,17 @@ std::string ExprContext::get_error_msg() const {
 }
 
 StatusOr<ColumnPtr> ExprContext::evaluate(vectorized::Chunk* chunk) {
-    return evaluate(_root, chunk);
+    return evaluate(_root, chunk, nullptr);
 }
 
-StatusOr<ColumnPtr> ExprContext::evaluate(Expr* e, vectorized::Chunk* chunk) {
+StatusOr<ColumnPtr> ExprContext::evaluate_with_filter(vectorized::Chunk* chunk, uint8_t* filter) {
+    return evaluate(_root, chunk, filter);
+}
+
+StatusOr<ColumnPtr> ExprContext::evaluate(Expr* e, vectorized::Chunk* chunk, uint8_t* filter) {
+    DCHECK(_prepared);
+    DCHECK(_opened);
+    DCHECK(!_closed);
 #ifndef NDEBUG
     if (chunk != nullptr) {
         chunk->check_or_die();
@@ -195,7 +200,12 @@ StatusOr<ColumnPtr> ExprContext::evaluate(Expr* e, vectorized::Chunk* chunk) {
     }
 #endif
     try {
-        auto ptr = e->evaluate(this, chunk);
+        ColumnPtr ptr = nullptr;
+        if (filter == nullptr) {
+            ptr = e->evaluate(this, chunk);
+        } else {
+            ptr = e->evaluate_with_filter(this, chunk, filter);
+        }
         DCHECK(ptr != nullptr);
         if (chunk != nullptr && 0 != chunk->num_columns() && ptr->is_constant()) {
             ptr->resize(chunk->num_rows());

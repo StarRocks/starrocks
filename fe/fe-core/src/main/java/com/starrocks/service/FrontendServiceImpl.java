@@ -21,26 +21,19 @@
 
 package com.starrocks.service;
 
-import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.SetType;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.InternalCatalog;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.PartitionInfo;
-import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.View;
@@ -53,16 +46,17 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.ThriftServerContext;
 import com.starrocks.common.ThriftServerEventProcessor;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
-import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.http.BaseAction;
+import com.starrocks.http.UnauthorizedException;
 import com.starrocks.leader.LeaderImpl;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
+import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.metric.TableMetricsRegistry;
@@ -77,6 +71,7 @@ import com.starrocks.planner.StreamLoadPlanner;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
 import com.starrocks.qe.QeProcessorImpl;
+import com.starrocks.qe.QueryQueueManager;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
@@ -84,13 +79,16 @@ import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.ast.SetType;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
-import com.starrocks.task.StreamLoadTask;
 import com.starrocks.thrift.FrontendService;
 import com.starrocks.thrift.FrontendServiceVersion;
 import com.starrocks.thrift.TAbortRemoteTxnRequest;
 import com.starrocks.thrift.TAbortRemoteTxnResponse;
+import com.starrocks.thrift.TAuthenticateParams;
+import com.starrocks.thrift.TBatchReportExecStatusParams;
+import com.starrocks.thrift.TBatchReportExecStatusResult;
 import com.starrocks.thrift.TBeginRemoteTxnRequest;
 import com.starrocks.thrift.TBeginRemoteTxnResponse;
 import com.starrocks.thrift.TColumnDef;
@@ -114,6 +112,8 @@ import com.starrocks.thrift.TGetTablePrivsParams;
 import com.starrocks.thrift.TGetTablePrivsResult;
 import com.starrocks.thrift.TGetTablesConfigRequest;
 import com.starrocks.thrift.TGetTablesConfigResponse;
+import com.starrocks.thrift.TGetTablesInfoRequest;
+import com.starrocks.thrift.TGetTablesInfoResponse;
 import com.starrocks.thrift.TGetTablesParams;
 import com.starrocks.thrift.TGetTablesResult;
 import com.starrocks.thrift.TGetTaskInfoResult;
@@ -138,6 +138,7 @@ import com.starrocks.thrift.TRefreshTableResponse;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TReportExecStatusResult;
 import com.starrocks.thrift.TReportRequest;
+import com.starrocks.thrift.TResourceUsage;
 import com.starrocks.thrift.TSetConfigRequest;
 import com.starrocks.thrift.TSetConfigResponse;
 import com.starrocks.thrift.TShowVariableRequest;
@@ -147,13 +148,14 @@ import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStreamLoadPutRequest;
 import com.starrocks.thrift.TStreamLoadPutResult;
-import com.starrocks.thrift.TTableConfigInfo;
 import com.starrocks.thrift.TTablePrivDesc;
 import com.starrocks.thrift.TTableStatus;
 import com.starrocks.thrift.TTableType;
 import com.starrocks.thrift.TTaskInfo;
 import com.starrocks.thrift.TTaskRunInfo;
 import com.starrocks.thrift.TUpdateExportTaskStatusRequest;
+import com.starrocks.thrift.TUpdateResourceUsageRequest;
+import com.starrocks.thrift.TUpdateResourceUsageResponse;
 import com.starrocks.thrift.TUserPrivDesc;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TransactionNotFoundException;
@@ -166,7 +168,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -512,6 +513,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             info.setError_code(status.getErrorCode());
             info.setError_message(status.getErrorMessage());
             info.setExpire_time(status.getExpireTime() / 1000);
+            info.setProgress(status.getProgress() + "%");
             tasksResult.add(info);
         }
         return result;
@@ -804,6 +806,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     @Override
+    public TBatchReportExecStatusResult batchReportExecStatus(TBatchReportExecStatusParams params) throws TException {
+        return QeProcessorImpl.INSTANCE.batchReportExecStatus(params, getClientAddr());
+    }
+
+    @Override
     public TMasterResult finishTask(TFinishTaskRequest request) throws TException {
         return leaderImpl.finishTask(request);
     }
@@ -963,11 +970,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         TStatus status = new TStatus(TStatusCode.OK);
         result.setStatus(status);
         try {
-            if (!loadTxnCommitImpl(request)) {
-                // committed success but not visible
-                status.setStatus_code(TStatusCode.PUBLISH_TIMEOUT);
-                status.addToError_msgs("Publish timeout. The data will be visible after a while");
-            }
+            loadTxnCommitImpl(request, status);
         } catch (UserException e) {
             LOG.warn("failed to commit txn_id: {}: {}", request.getTxnId(), e.getMessage());
             status.setStatus_code(TStatusCode.ANALYSIS_ERROR);
@@ -982,7 +985,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     // return true if commit success and publish success, return false if publish timeout
-    private boolean loadTxnCommitImpl(TLoadTxnCommitRequest request) throws UserException {
+    private void loadTxnCommitImpl(TLoadTxnCommitRequest request, TStatus status) throws UserException {
         String cluster = request.getCluster();
         if (Strings.isNullOrEmpty(cluster)) {
             cluster = SystemInfoService.DEFAULT_CLUSTER;
@@ -1013,17 +1016,26 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 TabletCommitInfo.fromThrift(request.getCommitInfos()),
                 timeoutMs, attachment);
         if (!ret) {
-            return ret;
+            // committed success but not visible
+            status.setStatus_code(TStatusCode.PUBLISH_TIMEOUT);
+            String timeoutInfo = GlobalStateMgr.getCurrentGlobalTransactionMgr()
+                    .getTxnPublishTimeoutDebugInfo(db.getId(), request.getTxnId());
+            LOG.warn("txn {} publish timeout {}", request.getTxnId(), timeoutInfo);
+            if (timeoutInfo.length() > 120) {
+                timeoutInfo = timeoutInfo.substring(0, 120) + "...";
+            }
+            status.addToError_msgs("Publish timeout. The data will be visible after a while" + timeoutInfo);
+            return;
         }
         // if commit and publish is success, load can be regarded as success
         MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
         if (null == attachment) {
-            return ret;
+            return;
         }
         // collect table-level metrics
         Table tbl = db.getTable(request.getTbl());
         if (null == tbl) {
-            return ret;
+            return;
         }
         TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(tbl.getId());
         switch (request.txnCommitAttachment.getLoadType()) {
@@ -1035,7 +1047,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 entity.counterRoutineLoadFinishedTotal.increase(1L);
                 entity.counterRoutineLoadBytesTotal.increase(routineAttachment.getReceivedBytes());
                 entity.counterRoutineLoadRowsTotal.increase(routineAttachment.getLoadedRows());
-
+                entity.counterRoutineLoadErrorRowsTotal.increase(routineAttachment.getFilteredRows());
+                entity.counterRoutineLoadUnselectedRowsTotal.increase(routineAttachment.getUnselectedRows());
                 break;
             case MANUAL_LOAD:
                 if (!(attachment instanceof ManualLoadTxnCommitAttachment)) {
@@ -1050,7 +1063,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             default:
                 break;
         }
-        return ret;
     }
 
     @Override
@@ -1230,9 +1242,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                                 "and the data of materialized view must be consistent with the base table.",
                         table.getName(), table.getName()));
             }
-            StreamLoadTask streamLoadTask = StreamLoadTask.fromTStreamLoadPutRequest(request, db);
-            StreamLoadPlanner planner = new StreamLoadPlanner(db, (OlapTable) table, streamLoadTask);
-            TExecPlanFragmentParams plan = planner.plan(streamLoadTask.getId());
+            StreamLoadInfo streamLoadInfo = StreamLoadInfo.fromTStreamLoadPutRequest(request, db);
+            StreamLoadPlanner planner = new StreamLoadPlanner(db, (OlapTable) table, streamLoadInfo);
+            TExecPlanFragmentParams plan = planner.plan(streamLoadInfo.getId());
             // add table indexes to transaction state
             TransactionState txnState =
                     GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionState(db.getId(), request.getTxnId());
@@ -1266,7 +1278,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             GlobalStateMgr.getCurrentState().refreshExternalTable(new TableName(request.getCatalog_name(),
                     request.getDb_name(), request.getTable_name()), request.getPartitions());
             return new TRefreshTableResponse(new TStatus(TStatusCode.OK));
-        } catch (DdlException e) {
+        } catch (Exception e) {
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
             status.setError_msgs(Lists.newArrayList(e.getMessage()));
             return new TRefreshTableResponse(status);
@@ -1292,8 +1304,74 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         return leaderImpl.getTableMeta(request);
     }
 
+    // Authenticate a FrontendServiceImpl#beginRemoteTxn RPC for StarRocks external table.
+    // The beginRemoteTxn is sent by the source cluster, and received by the target cluster.
+    // The target cluster should do authentication using the TAuthenticateParams. This method
+    // will check whether the user has an authorization, and whether the user has a
+    // PrivPredicate.LOAD on the given tables. The implementation is similar with that
+    // of stream load, and you can refer to RestBaseAction#execute and LoadAction#executeWithoutPassword
+    // to know more about the related part.
+    static TStatus checkPasswordAndLoadPrivilege(TAuthenticateParams authParams) {
+        if (authParams == null) {
+            LOG.debug("received null TAuthenticateParams");
+            return new TStatus(TStatusCode.OK);
+        }
+
+        LOG.debug("Receive TAuthenticateParams [user: {}, host: {}, db: {}, tables: {}]",
+                authParams.user, authParams.getHost(), authParams.getDb_name(), authParams.getTable_names());
+        if (!Config.enable_starrocks_external_table_auth_check) {
+            LOG.debug("enable_starrocks_external_table_auth_check is disabled, " +
+                    "and skip to check authorization and privilege for {}", authParams);
+            return new TStatus(TStatusCode.OK);
+        }
+        String configHintMsg = "Set the configuration 'enable_starrocks_external_table_auth_check' to 'false' on the" +
+                " target cluster if you don't want to check the authorization and privilege.";
+
+        // 1. check user and password
+        UserIdentity userIdentity;
+        try {
+            BaseAction.ActionAuthorizationInfo authInfo = BaseAction.parseAuthInfo(
+                    authParams.getUser(), authParams.getPasswd(), authParams.getHost());
+            userIdentity = BaseAction.checkPassword(authInfo);
+        } catch (Exception e) {
+            LOG.warn("Failed to check TAuthenticateParams [user: {}, host: {}, db: {}, tables: {}]",
+                    authParams.user, authParams.getHost(), authParams.getDb_name(), authParams.getTable_names(), e);
+            TStatus status = new TStatus(TStatusCode.NOT_AUTHORIZED);
+            status.setError_msgs(Lists.newArrayList(e.getMessage(), "Please check that your user or password " +
+                    "is correct", configHintMsg));
+            return status;
+        }
+
+        // 2. check privilege
+        try {
+            String dbName = authParams.getDb_name();
+            for (String tableName : authParams.getTable_names()) {
+                if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(
+                        userIdentity, dbName, tableName, PrivPredicate.LOAD)) {
+                    String errMsg = String.format("Access denied; user '%s'@'%s' need (at least one of) the " +
+                                    "privilege(s) in [%s] for table '%s' in database '%s'", userIdentity.getQualifiedUser(),
+                            userIdentity.getHost(), PrivPredicate.LOAD.getPrivs().toString().trim(), tableName, dbName);
+                    throw new UnauthorizedException(errMsg);
+                }
+            }
+            return new TStatus(TStatusCode.OK);
+        } catch (Exception e) {
+            LOG.warn("Failed to check TAuthenticateParams [user: {}, host: {}, db: {}, tables: {}]",
+                    authParams.user, authParams.getHost(), authParams.getDb_name(), authParams.getTable_names(), e);
+            TStatus status = new TStatus(TStatusCode.NOT_AUTHORIZED);
+            status.setError_msgs(Lists.newArrayList(e.getMessage(), configHintMsg));
+            return status;
+        }
+    }
+
     @Override
     public TBeginRemoteTxnResponse beginRemoteTxn(TBeginRemoteTxnRequest request) throws TException {
+        TStatus status = checkPasswordAndLoadPrivilege(request.getAuth_info());
+        if (status.getStatus_code() != TStatusCode.OK) {
+            TBeginRemoteTxnResponse response = new TBeginRemoteTxnResponse();
+            response.setStatus(status);
+            return response;
+        }
         return leaderImpl.beginRemoteTxn(request);
     }
 
@@ -1327,130 +1405,26 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     @Override
     public TGetTablesConfigResponse getTablesConfig(TGetTablesConfigRequest request) throws TException {
-        TGetTablesConfigResponse resp = new TGetTablesConfigResponse();
-        List<TTableConfigInfo> tList = new ArrayList<>();
 
-        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        List<String> dbNames = globalStateMgr.getDbNames();
-
-        dbNames.forEach(dbName -> {
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
-            if (db != null) {
-                db.readLock();
-                try {
-                    List<Table> allTables = db.getTables();
-                    allTables.forEach(table -> {
-                        TTableConfigInfo tableConfigInfo = new TTableConfigInfo();
-                        tableConfigInfo.setTable_schema(dbName);
-                        tableConfigInfo.setTable_name(table.getName());
-                        
-                        if (table.isOlapOrLakeTable() || 
-                                table.getType() == TableType.OLAP_EXTERNAL ||
-                                table.getType() == TableType.MATERIALIZED_VIEW) {
-                            // OLAP (done)
-                            // OLAP_EXTERNAL (done)
-                            // MATERIALIZED_VIEW (done)
-                            // LAKE (done)
-                            tableConfigInfo = genNormalTableConfigInfo(table, tableConfigInfo);
-                        } else {
-                            // SCHEMA (use default)
-                            // INLINE_VIEW (use default)
-                            // VIEW (use default)
-                            // BROKER (use default)                           
-                            tableConfigInfo = genDefaultConfigInfo(tableConfigInfo);
-                        }
-                        // TODO(cjs): other table type (HIVE, MYSQL, ICEBERG, HUDI, JDBC, ELASTICSEARCH)
-                        tList.add(tableConfigInfo);
-                    });
-                } finally {
-                    db.readUnlock();
-                }                
-            }            
-        });
-        resp.tables_config_infos = tList;
-        return resp;
+        return InformationSchemaDataSource.generateTablesConfigResponse(request);
     }
 
-    static final ImmutableList<String> SHOW_PROPERTIES_NAME = new ImmutableList.Builder<String>()
-            .add(PropertyAnalyzer.PROPERTIES_STORAGE_TYPE)
-            .add(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)
-            .add(PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME)
-            .build();
+    @Override
+    public TGetTablesInfoResponse getTablesInfo(TGetTablesInfoRequest request) throws TException {
 
-    private TTableConfigInfo genNormalTableConfigInfo(Table table, TTableConfigInfo tableConfigInfo) {
-        OlapTable olapTable = (OlapTable) table;
-        // Distribution info
-        DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo();
-        String distributeKey = distributionInfo.getDistributionKey();
-        // Partition info
-        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
-        StringBuilder partitionKeySb = new StringBuilder();
-        if (partitionInfo.getType().equals(PartitionType.RANGE)) {
-            int idx = 0;
-            try {
-                for (Column column : partitionInfo.getPartitionColumns()) {
-                    if (idx != 0) {
-                        partitionKeySb.append(", ");
-                    }
-                    partitionKeySb.append("`").append(column.getName()).append("`");
-                    idx++;
-                }
-            } catch (NotImplementedException e) {
-                partitionKeySb.append("NULL");
-                LOG.warn("The partition of type range seems not implement getPartitionColumns");
-            }            
-        } else {
-            partitionKeySb.append("NULL");
-        }
-
-        // keys
-        StringBuilder keysSb = new StringBuilder();
-        List<String> keysColumnNames = Lists.newArrayList();
-        for (Column column : olapTable.getBaseSchema()) {
-            if (column.isKey()) {
-                keysColumnNames.add("`" + column.getName() + "`");
-            }
-        }
-        keysSb.append(Joiner.on(", ").join(keysColumnNames));
-
-        tableConfigInfo.setPrimary_key(isSortKey(olapTable.getKeysType()) ? "NULL" : keysSb.toString());
-        tableConfigInfo.setPartition_key(partitionKeySb.toString());
-        tableConfigInfo.setDistribute_bucket(distributionInfo.getBucketNum());
-        tableConfigInfo.setDistribute_type("HASH");
-        tableConfigInfo.setDistribute_key(distributeKey);
-        tableConfigInfo.setSort_key(isSortKey(olapTable.getKeysType()) ? keysSb.toString() : "NULL");
-
-        Map<String, String> properties = olapTable.getTableProperty().getProperties();
-        Map<String, String> showProperties = new HashMap<>();
-        SHOW_PROPERTIES_NAME.forEach(key -> {
-            if (properties.containsKey(key)) {
-                showProperties.put(key, properties.get(key));
-            }
-        });
-        if (null != olapTable.getColocateGroup()) {
-            showProperties.put(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH, olapTable.getColocateGroup());
-        }
-        Short replicationNum = olapTable.getDefaultReplicationNum();
-        showProperties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, String.valueOf(replicationNum));
-        tableConfigInfo.setProperties(showProperties.toString());
-        return tableConfigInfo;
+        return InformationSchemaDataSource.generateTablesInfoResponse(request);
     }
 
-    private boolean isSortKey(KeysType kType) {
-        if (kType.equals(KeysType.PRIMARY_KEYS) || kType.equals(KeysType.UNIQUE_KEYS)) {
-            return false;
-        }
-        return true;
-    }
+    @Override
+    public TUpdateResourceUsageResponse updateResourceUsage(TUpdateResourceUsageRequest request) throws TException {
+        TResourceUsage usage = request.getResource_usage();
+        QueryQueueManager.getInstance().updateResourceUsage(request.getBackend_id(),
+                usage.getNum_running_queries(), usage.getMem_limit_bytes(), usage.getMem_used_bytes(),
+                usage.getCpu_used_permille());
 
-    private TTableConfigInfo genDefaultConfigInfo(TTableConfigInfo tableConfigInfo) {
-        tableConfigInfo.setPrimary_key("def");
-        tableConfigInfo.setPartition_key("def");
-        tableConfigInfo.setDistribute_bucket(0);
-        tableConfigInfo.setDistribute_type("def");
-        tableConfigInfo.setDistribute_key("def");
-        tableConfigInfo.setSort_key("def");
-        tableConfigInfo.setProperties("def");
-        return tableConfigInfo;
+        TUpdateResourceUsageResponse res = new TUpdateResourceUsageResponse();
+        TStatus status = new TStatus(TStatusCode.OK);
+        res.setStatus(status);
+        return res;
     }
 }

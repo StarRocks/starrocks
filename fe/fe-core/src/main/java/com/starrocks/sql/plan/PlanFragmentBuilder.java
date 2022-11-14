@@ -2,10 +2,10 @@
 package com.starrocks.sql.plan;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.AggregateInfo;
-import com.starrocks.analysis.AssertNumRowsElement;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.JoinOperator;
@@ -16,6 +16,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.SortInfo;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.analysis.TupleId;
+import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Function;
@@ -29,6 +30,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.UserException;
@@ -37,10 +39,12 @@ import com.starrocks.planner.AnalyticEvalNode;
 import com.starrocks.planner.AssertNumRowsNode;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.DecodeNode;
+import com.starrocks.planner.DeltaLakeScanNode;
 import com.starrocks.planner.EmptySetNode;
 import com.starrocks.planner.EsScanNode;
 import com.starrocks.planner.ExceptNode;
 import com.starrocks.planner.ExchangeNode;
+import com.starrocks.planner.FragmentNormalizer;
 import com.starrocks.planner.HashJoinNode;
 import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.planner.HudiScanNode;
@@ -59,6 +63,7 @@ import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.ProjectNode;
 import com.starrocks.planner.RepeatNode;
 import com.starrocks.planner.RuntimeFilterId;
+import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.SchemaScanNode;
 import com.starrocks.planner.SelectNode;
 import com.starrocks.planner.SetOperationNode;
@@ -66,10 +71,12 @@ import com.starrocks.planner.SortNode;
 import com.starrocks.planner.TableFunctionNode;
 import com.starrocks.planner.UnionNode;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
+import com.starrocks.sql.ast.AssertNumRowsElement;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -92,6 +99,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperato
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDecodeOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalDeltaLakeScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalFilterOperator;
@@ -105,7 +113,6 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMergeJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScanOperator;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalNestLoopJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeatOperator;
@@ -121,7 +128,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.rewrite.physical.AddDecodeNodeForDictStringRule.DecodeVisitor;
+import com.starrocks.sql.optimizer.rule.tree.AddDecodeNodeForDictStringRule.DecodeVisitor;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.thrift.TPartitionType;
 import com.starrocks.thrift.TResultSinkType;
@@ -183,7 +190,7 @@ public class PlanFragmentBuilder {
 
         // Single tablet direct output
         // Note: If the fragment has right or full join and the join is local bucket shuffle join,
-        // We shouldn't set result sink directly to top fragment, because we will hash multi reslt sink.
+        // We shouldn't set result sink directly to top fragment, because we will hash multi result sink.
         if (!inputFragment.hashLocalBucketShuffleRightOrFullJoin(inputFragment.getPlanRoot())
                 && execPlan.getScanNodes().stream().allMatch(d -> d instanceof OlapScanNode)
                 && execPlan.getScanNodes().stream().map(d -> ((OlapScanNode) d).getScanTabletIds().size())
@@ -204,6 +211,17 @@ public class PlanFragmentBuilder {
         execPlan.getFragments().add(exchangeFragment);
     }
 
+    boolean useQueryCache(ExecPlan execPlan) {
+        if (ConnectContext.get() == null || !ConnectContext.get().getSessionVariable().isEnableQueryCache()) {
+            return false;
+        }
+        boolean hasJoinNode = execPlan.getFragments().stream().anyMatch(PlanFragment::hasJoinNode);
+        if (hasJoinNode) {
+            return false;
+        }
+        return true;
+    }
+
     private ExecPlan finalizeFragments(ExecPlan execPlan, TResultSinkType resultSinkType) {
         List<PlanFragment> fragments = execPlan.getFragments();
         for (PlanFragment fragment : fragments) {
@@ -220,6 +238,15 @@ public class PlanFragmentBuilder {
             fragment.computeLocalRfWaitingSet(fragment.getPlanRoot(), shouldClearRuntimeFilters);
         }
 
+
+        if (useQueryCache(execPlan)) {
+            List<PlanFragment> fragmentsWithLeftmostOlapScanNode = execPlan.getFragments().stream()
+                    .filter(PlanFragment::hasOlapScanNode).collect(Collectors.toList());
+            for (PlanFragment fragment : fragmentsWithLeftmostOlapScanNode) {
+                FragmentNormalizer normalizer = new FragmentNormalizer(execPlan, fragment);
+                normalizer.normalize();
+            }
+        }
         return execPlan;
     }
 
@@ -244,9 +271,17 @@ public class PlanFragmentBuilder {
 
         private void setUnUsedOutputColumns(PhysicalOlapScanOperator node, OlapScanNode scanNode,
                                             List<ScalarOperator> predicates, OlapTable referenceTable) {
-            if (!ConnectContext.get().getSessionVariable().isAbleFilterUnusedColumnsInScanStage()) {
+            if (!ConnectContext.get().getSessionVariable().isEnableFilterUnusedColumnsInScanStage()) {
                 return;
             }
+
+            // Key columns and value columns cannot be pruned in the non-skip-aggr scan stage.
+            // - All the keys columns must be retained to merge and aggregate rows.
+            // - Value columns can only be used after merging and aggregating.
+            if (referenceTable.getKeysType().isAggregationFamily() && !node.isPreAggregation()) {
+                return;
+            }
+
             List<ColumnRefOperator> outputColumns = node.getOutputColumns();
             // if outputColumns is empty, skip this optimization
             if (outputColumns.isEmpty()) {
@@ -257,20 +292,21 @@ public class PlanFragmentBuilder {
                 outputColumnIds.add(colref.getId());
             }
 
-            // we only support single pred like: a = xx, single pre can push down to scan node
-            // complex pred like: a + b = xx, can not push down to scan node yet
-            // so the columns in complex pred, it useful for the stage after scan
+            // NOTE:
+            // - only support push down single predicate(eg, a = xx) to scan node.
+            // - only keys in agg-key model (aggregation/unique_key model) and primary-key model can be included in the unused columns.
+            // - complex pred(eg, a + b = xx) can not be pushed down to scan node yet.
+            // so the columns in complex predicate are useful for the stage after scan.
             Set<Integer> singlePredColumnIds = new HashSet<Integer>();
             Set<Integer> complexPredColumnIds = new HashSet<Integer>();
-            Set<String> aggAndPrimaryKeyTableValueColumnNames = new HashSet<String>();
+            Set<String> aggOrPrimaryKeyTableValueColumnNames = new HashSet<String>();
             if (referenceTable.getKeysType().isAggregationFamily() ||
                     referenceTable.getKeysType() == KeysType.PRIMARY_KEYS) {
-                List<Column> fullColumn = referenceTable.getFullSchema();
-                for (Column col : fullColumn) {
-                    if (!col.isKey()) {
-                        aggAndPrimaryKeyTableValueColumnNames.add(col.getName());
-                    }
-                }
+                aggOrPrimaryKeyTableValueColumnNames =
+                        referenceTable.getFullSchema().stream()
+                                .filter(col -> !col.isKey())
+                                .map(col -> col.getName())
+                                .collect(Collectors.toSet());
             }
 
             for (ScalarOperator predicate : predicates) {
@@ -298,7 +334,7 @@ public class PlanFragmentBuilder {
                 }
             }
 
-            scanNode.setUnUsedOutputStringColumns(unUsedOutputColumnIds, aggAndPrimaryKeyTableValueColumnNames);
+            scanNode.setUnUsedOutputStringColumns(unUsedOutputColumnIds, aggOrPrimaryKeyTableValueColumnNames);
         }
 
         @Override
@@ -574,6 +610,7 @@ public class PlanFragmentBuilder {
 
             // set unused output columns 
             setUnUsedOutputColumns(node, scanNode, predicates, referenceTable);
+            scanNode.setIsSortedByKeyPerTablet(node.needSortedByKeyPerTablet());
 
             // set isPreAggregation
             scanNode.setIsPreAggregation(node.isPreAggregation(), node.getTurnOffReason());
@@ -627,6 +664,9 @@ public class PlanFragmentBuilder {
                 slotDescriptor.setColumn(entry.getValue());
                 slotDescriptor.setIsNullable(entry.getValue().isAllowNull());
                 slotDescriptor.setIsMaterialized(true);
+                if (slotDescriptor.getType().isComplexType()) {
+                    slotDescriptor.setUsedSubfieldPosGroup(entry.getKey().getUsedSubfieldPosGroup());
+                }
                 context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().toString(), slotDescriptor));
             }
         }
@@ -768,6 +808,56 @@ public class PlanFragmentBuilder {
         }
 
         @Override
+        public PlanFragment visitPhysicalDeltaLakeScan(OptExpression optExpression, ExecPlan context) {
+            PhysicalDeltaLakeScanOperator node = (PhysicalDeltaLakeScanOperator) optExpression.getOp();
+
+            Table referenceTable = node.getTable();
+            context.getDescTbl().addReferencedTable(referenceTable);
+            TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
+            tupleDescriptor.setTable(referenceTable);
+
+            // set slot
+            for (Map.Entry<ColumnRefOperator, Column> entry : node.getColRefToColumnMetaMap().entrySet()) {
+                SlotDescriptor slotDescriptor =
+                        context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getKey().getId()));
+                slotDescriptor.setColumn(entry.getValue());
+                slotDescriptor.setIsNullable(entry.getValue().isAllowNull());
+                slotDescriptor.setIsMaterialized(true);
+                context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().toString(), slotDescriptor));
+            }
+
+            DeltaLakeScanNode deltaLakeScanNode =
+                    new DeltaLakeScanNode(context.getNextNodeId(), tupleDescriptor, "DeltaLakeScanNode");
+            deltaLakeScanNode.computeStatistics(optExpression.getStatistics());
+            try {
+                // set predicate
+                ScalarOperatorToExpr.FormatterContext formatterContext =
+                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
+                List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
+                for (ScalarOperator predicate : predicates) {
+                    deltaLakeScanNode.getConjuncts()
+                            .add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
+                }
+                deltaLakeScanNode.setupScanRangeLocations(context.getDescTbl());
+                HDFSScanNodePredicates scanNodePredicates = deltaLakeScanNode.getScanNodePredicates();
+                prepareMinMaxExpr(scanNodePredicates, node.getScanOperatorPredicates(), context);
+            } catch (AnalysisException e) {
+                LOG.warn("Delta lake scan node get scan range locations failed : " + e);
+                throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);
+            }
+
+            deltaLakeScanNode.setLimit(node.getLimit());
+
+            tupleDescriptor.computeMemLayout();
+            context.getScanNodes().add(deltaLakeScanNode);
+
+            PlanFragment fragment =
+                    new PlanFragment(context.getNextFragmentId(), deltaLakeScanNode, DataPartition.RANDOM);
+            context.getFragments().add(fragment);
+            return fragment;
+        }
+
+        @Override
         public PlanFragment visitPhysicalIcebergScan(OptExpression optExpression, ExecPlan context) {
             PhysicalIcebergScanOperator node = (PhysicalIcebergScanOperator) optExpression.getOp();
 
@@ -799,6 +889,9 @@ public class PlanFragmentBuilder {
                             .add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
                 }
                 icebergScanNode.getScanRangeLocations();
+                //set slot for equality delete file
+                icebergScanNode.appendEqualityColumns(node, columnRefFactory, context);
+
                 HDFSScanNodePredicates scanNodePredicates = icebergScanNode.getScanNodePredicates();
                 prepareMinMaxExpr(scanNodePredicates, node.getScanOperatorPredicates(), context);
             } catch (UserException e) {
@@ -857,7 +950,8 @@ public class PlanFragmentBuilder {
                 if (predicate instanceof BinaryPredicateOperator) {
                     if (((BinaryPredicateOperator) predicate).getBinaryType() ==
                             BinaryPredicateOperator.BinaryType.EQ) {
-                        if (predicate.getChildren().get(0) instanceof ColumnRefOperator) {
+                        if (predicate.getChildren().get(0) instanceof ColumnRefOperator &&
+                                predicate.getChildren().get(1) instanceof ConstantOperator) {
                             ColumnRefOperator columnRefOperator = (ColumnRefOperator) predicate.getChildren().get(0);
                             ConstantOperator constantOperator = (ConstantOperator) predicate.getChildren().get(1);
                             switch (columnRefOperator.getName()) {
@@ -1074,10 +1168,97 @@ public class PlanFragmentBuilder {
             return true;
         }
 
+        /**
+         * Whether all the nodes of the plan tree only contain the specific node types.
+         *
+         * @param root              The plan tree root.
+         * @param requiredNodeTypes The specific node type.
+         * @return true if all the nodes belong to the node types, otherwise false.
+         */
+        private boolean onlyContainNodeTypes(PlanNode root, List<Class<? extends PlanNode>> requiredNodeTypes) {
+            boolean rootMatched = requiredNodeTypes.stream().anyMatch(type -> type.isInstance(root));
+            if (!rootMatched) {
+                return false;
+            }
+
+            for (PlanNode child : root.getChildren()) {
+                if (!onlyContainNodeTypes(child, requiredNodeTypes)) {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        /**
+         * Remove ExchangeNode between AggNode and ScanNode for the single backend.
+         * <p>
+         * This is used to generate "ScanNode->LocalShuffle->OnePhaseLocalAgg" for the single backend,
+         * which contains two steps:
+         * 1. Ignore the network cost for ExchangeNode when estimating cost model.
+         * 2. Remove ExchangeNode between AggNode and ScanNode when building fragments.
+         * <p>
+         * Specifically, transfer
+         * (AggNode->ExchangeNode)->([ProjectNode->]ScanNode)
+         * -      *inputFragment         sourceFragment
+         * to
+         * (AggNode->[ProjectNode->]ScanNode)
+         * -      *sourceFragment
+         * That is, when matching this fragment pattern, remove inputFragment and return sourceFragment.
+         *
+         * @param inputFragment The input fragment to match the above pattern.
+         * @param context       The context of building fragment, which contains all the fragments.
+         * @return SourceFragment if it matches th pattern, otherwise the original inputFragment.
+         */
+        private PlanFragment removeExchangeNodeForLocalShuffleAgg(PlanFragment inputFragment, ExecPlan context) {
+            if (ConnectContext.get() == null) {
+                return inputFragment;
+            }
+            SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
+            boolean enableLocalShuffleAgg = sessionVariable.isEnableLocalShuffleAgg()
+                    && sessionVariable.isEnablePipelineEngine()
+                    && GlobalStateMgr.getCurrentSystemInfo().isSingleBackendAndComputeNode();
+            if (!enableLocalShuffleAgg) {
+                return inputFragment;
+            }
+
+            // InputFragment should match "AggNode->ExchangeNode" pattern, where AggNode is the caller of this method.
+            if (!(inputFragment.getPlanRoot() instanceof ExchangeNode)) {
+                return inputFragment;
+            }
+
+            // SourceFragment should match "[ProjectNode->]ScanNode" pattern.
+            PlanNode sourceFragmentRoot = inputFragment.getPlanRoot().getChild(0);
+            if (!onlyContainNodeTypes(sourceFragmentRoot, ImmutableList.of(ScanNode.class, ProjectNode.class))) {
+                return inputFragment;
+            }
+
+            // If ExchangeSink is CTE MultiCastPlanFragment, we cannot remove this ExchangeNode.
+            PlanFragment sourceFragment = sourceFragmentRoot.getFragment();
+            if (sourceFragment instanceof MultiCastPlanFragment) {
+                return inputFragment;
+            }
+
+            // Traverse fragment in reverse to delete inputFragment,
+            // because the last fragment is inputFragment for the most cases.
+            ArrayList<PlanFragment> fragments = context.getFragments();
+            for (int i = fragments.size() - 1; i >= 0; --i) {
+                if (fragments.get(i).equals(inputFragment)) {
+                    fragments.remove(i);
+                    break;
+                }
+            }
+
+            return sourceFragment;
+        }
+
         @Override
         public PlanFragment visitPhysicalHashAggregate(OptExpression optExpr, ExecPlan context) {
             PhysicalHashAggregateOperator node = (PhysicalHashAggregateOperator) optExpr.getOp();
-            PlanFragment inputFragment = visit(optExpr.inputAt(0), context);
+            PlanFragment originalInputFragment = visit(optExpr.inputAt(0), context);
+
+            PlanFragment inputFragment = removeExchangeNodeForLocalShuffleAgg(originalInputFragment, context);
+            boolean withLocalShuffle = inputFragment != originalInputFragment;
 
             /*
              * Create aggregate TupleDescriptor
@@ -1085,21 +1266,29 @@ public class PlanFragmentBuilder {
             TupleDescriptor outputTupleDesc = context.getDescTbl().createTupleDescriptor();
 
             ArrayList<Expr> groupingExpressions = Lists.newArrayList();
-            for (ColumnRefOperator grouping : node.getGroupBys()) {
-                Expr groupingExpr = ScalarOperatorToExpr.buildExecExpression(grouping,
-                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr()));
+            // EXCHANGE_BYTES/_SPEED aggregate the total bytes/ratio on a node, without grouping, remove group-by here.
+            // the group-by expressions just denote the hash distribution of an exchange operator.
+            boolean forExchangePerf = node.getAggregations().values().stream().anyMatch(aggFunc ->
+                    aggFunc.getFnName().equals(FunctionSet.EXCHANGE_BYTES) ||
+                            aggFunc.getFnName().equals(FunctionSet.EXCHANGE_SPEED)) &&
+                    ConnectContext.get().getSessionVariable().getNewPlannerAggStage() == 1;
+            if (!forExchangePerf) {
+                for (ColumnRefOperator grouping : node.getGroupBys()) {
+                    Expr groupingExpr = ScalarOperatorToExpr.buildExecExpression(grouping,
+                            new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr()));
 
-                groupingExpressions.add(groupingExpr);
+                    groupingExpressions.add(groupingExpr);
 
-                SlotDescriptor slotDesc =
-                        context.getDescTbl().addSlotDescriptor(outputTupleDesc, new SlotId(grouping.getId()));
-                slotDesc.setType(groupingExpr.getType());
-                slotDesc.setIsNullable(groupingExpr.isNullable());
-                slotDesc.setIsMaterialized(true);
-                context.getColRefToExpr().put(grouping, new SlotRef(grouping.toString(), slotDesc));
+                    SlotDescriptor slotDesc =
+                            context.getDescTbl().addSlotDescriptor(outputTupleDesc, new SlotId(grouping.getId()));
+                    slotDesc.setType(groupingExpr.getType());
+                    slotDesc.setIsNullable(groupingExpr.isNullable());
+                    slotDesc.setIsMaterialized(true);
+                }
             }
 
             ArrayList<FunctionCallExpr> aggregateExprList = Lists.newArrayList();
+            List<Expr> intermediateAggrExprs = Lists.newArrayList();
             for (Map.Entry<ColumnRefOperator, CallOperator> aggregation : node.getAggregations().entrySet()) {
                 FunctionCallExpr aggExpr = (FunctionCallExpr) ScalarOperatorToExpr.buildExecExpression(
                         aggregation.getValue(), new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr()));
@@ -1113,6 +1302,16 @@ public class PlanFragmentBuilder {
                 slotDesc.setIsMaterialized(true);
                 context.getColRefToExpr()
                         .put(aggregation.getKey(), new SlotRef(aggregation.getKey().toString(), slotDesc));
+
+                SlotDescriptor intermediateSlotDesc = new SlotDescriptor(slotDesc.getId(), slotDesc.getParent());
+                AggregateFunction aggrFn = (AggregateFunction) aggExpr.getFn();
+                Type intermediateType = aggrFn.getIntermediateType() != null ?
+                        aggrFn.getIntermediateType() : aggrFn.getReturnType();
+                intermediateSlotDesc.setType(intermediateType);
+                intermediateSlotDesc.setIsNullable(aggrFn.isNullable());
+                intermediateSlotDesc.setIsMaterialized(true);
+                SlotRef intermediateSlotRef = new SlotRef(aggregation.getKey().toString(), intermediateSlotDesc);
+                intermediateAggrExprs.add(intermediateSlotRef);
             }
 
             List<Expr> partitionExpressions = Lists.newArrayList();
@@ -1144,9 +1343,13 @@ public class PlanFragmentBuilder {
                 aggregationNode.unsetNeedsFinalize();
                 aggregationNode.setIsPreagg(node.isUseStreamingPreAgg());
                 aggregationNode.setIntermediateTuple();
-
                 if (!partitionExpressions.isEmpty()) {
                     inputFragment.setOutputPartition(DataPartition.hashPartitioned(partitionExpressions));
+                }
+
+                // Check colocate for the first phase in three/four-phase agg whose second phase is pruned.
+                if (!node.isUseStreamingPreAgg() && hasColocateOlapScanChildInFragment(aggregationNode)) {
+                    aggregationNode.setColocate(true);
                 }
             } else if (node.getType().isGlobal()) {
                 if (node.hasSingleDistinct()) {
@@ -1187,10 +1390,6 @@ public class PlanFragmentBuilder {
                             new AggregationNode(context.getNextNodeId(), inputFragment.getPlanRoot(),
                                     aggInfo);
                 }
-                // set aggregate node can use local aggregate
-                if (hasColocateOlapScanChildInFragment(aggregationNode)) {
-                    aggregationNode.setColocate(true);
-                }
 
                 // set predicate
                 List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
@@ -1202,6 +1401,11 @@ public class PlanFragmentBuilder {
                             .add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
                 }
                 aggregationNode.setLimit(node.getLimit());
+
+                // Check colocate for one-phase local agg.
+                if (hasColocateOlapScanChildInFragment(aggregationNode)) {
+                    aggregationNode.setColocate(true);
+                }
             } else if (node.getType().isDistinctGlobal()) {
                 aggregateExprList.forEach(FunctionCallExpr::setMergeAggFn);
                 AggregateInfo aggInfo = AggregateInfo.create(
@@ -1236,16 +1440,20 @@ public class PlanFragmentBuilder {
                 throw unsupportedException("Not support aggregate type : " + node.getType());
             }
 
+            aggregationNode.setUseSortAgg(node.isUseSortAgg());
             aggregationNode.setStreamingPreaggregationMode(context.getConnectContext().
                     getSessionVariable().getStreamingPreaggregationMode());
             aggregationNode.setHasNullableGenerateChild();
             aggregationNode.computeStatistics(optExpr.getStatistics());
 
             if ((node.isOnePhaseAgg() || node.getType().isDistinct())) {
-                inputFragment.setEnableSharedScan(false);
-                inputFragment.setAssignScanRangesPerDriverSeq(true);
+                // For ScanNode->LocalShuffle->AggNode, we needn't assign scan ranges per driver sequence.
+                inputFragment.setAssignScanRangesPerDriverSeq(!withLocalShuffle);
+                inputFragment.setEnableSharedScan(withLocalShuffle);
+                aggregationNode.setWithLocalShuffle(withLocalShuffle);
             }
 
+            aggregationNode.getAggInfo().setIntermediateAggrExprs(intermediateAggrExprs);
             inputFragment.setPlanRoot(aggregationNode);
             return inputFragment;
         }
@@ -1438,7 +1646,7 @@ public class PlanFragmentBuilder {
                 sortExprs.add(new SlotRef(slotDesc));
             }
 
-            ColumnRefSet columnRefSet = optExpr.getLogicalProperty().getOutputColumns();
+            ColumnRefSet columnRefSet = optExpr.inputAt(0).getLogicalProperty().getOutputColumns();
             for (int i = 0; i < columnRefSet.getColumnIds().length; ++i) {
                 /*
                  * Add column not be used in ordering
@@ -1511,11 +1719,69 @@ public class PlanFragmentBuilder {
             return visitPhysicalJoin(leftFragment, rightFragment, optExpr, context);
         }
 
+        private List<Expr> extractConjuncts(ScalarOperator predicate, ExecPlan context) {
+            return Utils.extractConjuncts(predicate).stream()
+                    .map(e -> ScalarOperatorToExpr.buildExecExpression(e,
+                            new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
+                    .collect(Collectors.toList());
+        }
+
         @Override
         public PlanFragment visitPhysicalNestLoopJoin(OptExpression optExpr, ExecPlan context) {
+            PhysicalJoinOperator node = (PhysicalJoinOperator) optExpr.getOp();
             PlanFragment leftFragment = visit(optExpr.inputAt(0), context);
             PlanFragment rightFragment = visit(optExpr.inputAt(1), context);
-            return visitPhysicalJoin(leftFragment, rightFragment, optExpr, context);
+
+            List<Expr> conjuncts = extractConjuncts(node.getPredicate(), context);
+            List<Expr> joinOnConjuncts = extractConjuncts(node.getOnPredicate(), context);
+            List<Expr> probePartitionByExprs = Lists.newArrayList();
+            DistributionSpec leftDistributionSpec =
+                    optExpr.getRequiredProperties().get(0).getDistributionProperty().getSpec();
+            DistributionSpec rightDistributionSpec =
+                    optExpr.getRequiredProperties().get(1).getDistributionProperty().getSpec();
+            if (leftDistributionSpec instanceof HashDistributionSpec &&
+                    rightDistributionSpec instanceof HashDistributionSpec) {
+                probePartitionByExprs =
+                        getHashDistributionSpecPartitionByExprs((HashDistributionSpec) leftDistributionSpec,
+                                context);
+            }
+
+            NestLoopJoinNode joinNode = new NestLoopJoinNode(context.getNextNodeId(),
+                    leftFragment.getPlanRoot(), rightFragment.getPlanRoot(),
+                    null, node.getJoinType(), Lists.newArrayList(), joinOnConjuncts);
+
+            joinNode.setLimit(node.getLimit());
+            joinNode.computeStatistics(optExpr.getStatistics());
+            joinNode.addConjuncts(conjuncts);
+            joinNode.setProbePartitionByExprs(probePartitionByExprs);
+
+            // Connect parent and child fragment
+            rightFragment.getPlanRoot().setFragment(leftFragment);
+
+            // Currently, we always generate new fragment for PhysicalDistribution.
+            // So we need to remove exchange node only fragment for Join.
+            context.getFragments().remove(rightFragment);
+
+            // Move leftFragment to end, it depends on all of its children
+            context.getFragments().remove(leftFragment);
+            context.getFragments().add(leftFragment);
+
+            leftFragment.setPlanRoot(joinNode);
+            if (!rightFragment.getChildren().isEmpty()) {
+                // right table isn't value operator
+                leftFragment.addChild(rightFragment.getChild(0));
+            }
+
+            if (!(joinNode.getChild(1) instanceof ExchangeNode)) {
+                joinNode.setReplicated(true);
+            }
+
+            if (shouldBuildGlobalRuntimeFilter()) {
+                joinNode.buildRuntimeFilters(runtimeFilterIdIdGenerator);
+            }
+
+            leftFragment.mergeQueryGlobalDicts(rightFragment.getQueryGlobalDicts());
+            return leftFragment;
         }
 
         @Override
@@ -1548,6 +1814,19 @@ public class PlanFragmentBuilder {
             return planFragment;
         }
 
+        private List<Expr> getHashDistributionSpecPartitionByExprs(HashDistributionSpec hashDistributionSpec,
+                                                                   ExecPlan context) {
+            List<Integer> columnRefSet = hashDistributionSpec.getHashDistributionDesc().getColumns();
+            Preconditions.checkState(!columnRefSet.isEmpty());
+            List<ColumnRefOperator> partitionColumns = new ArrayList<>();
+            for (int columnId : columnRefSet) {
+                partitionColumns.add(columnRefFactory.getColumnRef(columnId));
+            }
+            return partitionColumns.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
+                            new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
+                    .collect(Collectors.toList());
+        }
+
         private PlanFragment visitPhysicalJoin(PlanFragment leftFragment, PlanFragment rightFragment,
                                                OptExpression optExpr, ExecPlan context) {
             PhysicalJoinOperator node = (PhysicalJoinOperator) optExpr.getOp();
@@ -1555,30 +1834,158 @@ public class PlanFragmentBuilder {
             ColumnRefSet leftChildColumns = optExpr.inputAt(0).getLogicalProperty().getOutputColumns();
             ColumnRefSet rightChildColumns = optExpr.inputAt(1).getLogicalProperty().getOutputColumns();
 
-            // 2. Get eqJoinConjuncts
             List<ScalarOperator> onPredicates = Utils.extractConjuncts(node.getOnPredicate());
             List<BinaryPredicateOperator> eqOnPredicates = JoinHelper.getEqualsPredicate(
                     leftChildColumns, rightChildColumns, onPredicates);
 
-            if (node.getJoinType().isCrossJoin()
-                    || (node.getJoinType().isInnerJoin() && eqOnPredicates.isEmpty())
-                    || node instanceof PhysicalNestLoopJoinOperator) {
-                List<Expr> conjuncts = Utils.extractConjuncts(node.getPredicate()).stream()
-                        .map(e -> ScalarOperatorToExpr.buildExecExpression(e,
-                                new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
-                        .collect(Collectors.toList());
-                List<Expr> joinOnConjuncts =
-                        onPredicates.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
-                                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
-                                .collect(Collectors.toList());
+            Preconditions.checkState(!node.getJoinType().isCrossJoin(), "should not be cross join");
+            Preconditions.checkState(!(node.getJoinType().isInnerJoin() && eqOnPredicates.isEmpty()),
+                    "should has eq conjuncts");
 
-                NestLoopJoinNode joinNode = new NestLoopJoinNode(context.getNextNodeId(),
+            JoinOperator joinOperator = node.getJoinType();
+
+            PlanNode leftFragmentPlanRoot = leftFragment.getPlanRoot();
+            PlanNode rightFragmentPlanRoot = rightFragment.getPlanRoot();
+            // skip decode node
+            if (leftFragmentPlanRoot instanceof DecodeNode) {
+                leftFragmentPlanRoot = leftFragmentPlanRoot.getChild(0);
+            }
+            if (rightFragmentPlanRoot instanceof DecodeNode) {
+                rightFragmentPlanRoot = rightFragmentPlanRoot.getChild(0);
+            }
+
+            // 1. Get distributionMode
+
+            // When left table's distribution is HashPartition, need to record probe's partitionByExprs to
+            // compute hash, and then check whether GRF can push down ExchangeNode.
+            // TODO(by LiShuMing): Multicolumn-grf generated by colocate HJ and bucket_shuffle HJ also need
+            //  be tackled with, because a broadcast HJ can be interpolated between the left-deepmost
+            //  OlapScanNode and its ancestor of HJ.
+            List<Expr> probePartitionByExprs = Lists.newArrayList();
+            DistributionSpec leftDistributionSpec =
+                    optExpr.getRequiredProperties().get(0).getDistributionProperty().getSpec();
+            DistributionSpec rightDistributionSpec =
+                    optExpr.getRequiredProperties().get(1).getDistributionProperty().getSpec();
+            if (leftDistributionSpec instanceof HashDistributionSpec &&
+                    rightDistributionSpec instanceof HashDistributionSpec) {
+                probePartitionByExprs =
+                        getHashDistributionSpecPartitionByExprs((HashDistributionSpec) leftDistributionSpec,
+                                context);
+            }
+
+            JoinNode.DistributionMode distributionMode;
+            if (isExchangeWithDistributionType(leftFragmentPlanRoot, DistributionSpec.DistributionType.SHUFFLE) &&
+                    isExchangeWithDistributionType(rightFragmentPlanRoot,
+                            DistributionSpec.DistributionType.SHUFFLE)) {
+                distributionMode = JoinNode.DistributionMode.PARTITIONED;
+            } else if (isExchangeWithDistributionType(rightFragmentPlanRoot,
+                    DistributionSpec.DistributionType.BROADCAST)) {
+                distributionMode = JoinNode.DistributionMode.BROADCAST;
+            } else if (!(leftFragmentPlanRoot instanceof ExchangeNode) &&
+                    !(rightFragmentPlanRoot instanceof ExchangeNode)) {
+                if (isColocateJoin(optExpr)) {
+                    distributionMode = HashJoinNode.DistributionMode.COLOCATE;
+                } else if (ConnectContext.get().getSessionVariable().isEnableReplicationJoin() &&
+                        rightFragmentPlanRoot.canDoReplicatedJoin()) {
+                    distributionMode = JoinNode.DistributionMode.REPLICATED;
+                } else if (isShuffleJoin(optExpr)) {
+                    distributionMode = JoinNode.DistributionMode.SHUFFLE_HASH_BUCKET;
+                } else {
+                    Preconditions.checkState(false, "Must be replicate join or colocate join");
+                    distributionMode = JoinNode.DistributionMode.COLOCATE;
+                }
+            } else if (isShuffleJoin(optExpr)) {
+                distributionMode = JoinNode.DistributionMode.SHUFFLE_HASH_BUCKET;
+            } else {
+                distributionMode = JoinNode.DistributionMode.LOCAL_HASH_BUCKET;
+            }
+
+            for (BinaryPredicateOperator s : eqOnPredicates) {
+                if (!optExpr.inputAt(0).getLogicalProperty().getOutputColumns()
+                        .containsAll(s.getChild(0).getUsedColumns())) {
+                    s.swap();
+                }
+            }
+
+            List<Expr> eqJoinConjuncts =
+                    eqOnPredicates.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
+                                    new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
+                            .collect(Collectors.toList());
+
+            for (Expr expr : eqJoinConjuncts) {
+                if (expr.isConstant()) {
+                    throw unsupportedException("Support join on constant predicate later");
+                }
+            }
+
+            List<ScalarOperator> otherJoin = Utils.extractConjuncts(node.getOnPredicate());
+            otherJoin.removeAll(eqOnPredicates);
+            List<Expr> otherJoinConjuncts = otherJoin.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
+                            new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
+                    .collect(Collectors.toList());
+
+            // 3. Get conjuncts
+            List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
+            List<Expr> conjuncts = predicates.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
+                            new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
+                    .collect(Collectors.toList());
+
+            List<PlanFragment> nullablePlanFragments = new ArrayList<>();
+            if (joinOperator.isLeftOuterJoin()) {
+                nullablePlanFragments.add(rightFragment);
+            } else if (joinOperator.isRightOuterJoin()) {
+                nullablePlanFragments.add(leftFragment);
+            } else if (joinOperator.isFullOuterJoin()) {
+                nullablePlanFragments.add(leftFragment);
+                nullablePlanFragments.add(rightFragment);
+            }
+            for (PlanFragment planFragment : nullablePlanFragments) {
+                for (TupleId tupleId : planFragment.getPlanRoot().getTupleIds()) {
+                    context.getDescTbl().getTupleDesc(tupleId).getSlots().forEach(slot -> slot.setIsNullable(true));
+                }
+            }
+
+            JoinNode joinNode;
+            if (node instanceof PhysicalHashJoinOperator) {
+                joinNode = new HashJoinNode(
+                        context.getNextNodeId(),
                         leftFragment.getPlanRoot(), rightFragment.getPlanRoot(),
-                        null, node.getJoinType(), Lists.newArrayList(), joinOnConjuncts);
+                        joinOperator, eqJoinConjuncts, otherJoinConjuncts);
+            } else if (node instanceof PhysicalMergeJoinOperator) {
+                joinNode = new MergeJoinNode(
+                        context.getNextNodeId(),
+                        leftFragment.getPlanRoot(), rightFragment.getPlanRoot(),
+                        joinOperator, eqJoinConjuncts, otherJoinConjuncts);
+            } else {
+                throw new StarRocksPlannerException("unknown join operator: " + node, INTERNAL_ERROR);
+            }
 
-                joinNode.setLimit(node.getLimit());
-                joinNode.computeStatistics(optExpr.getStatistics());
-                joinNode.addConjuncts(conjuncts);
+            //Build outputColumns
+            if (node.getProjection() != null) {
+                ColumnRefSet outputColumns = new ColumnRefSet();
+                for (ScalarOperator s : node.getProjection().getColumnRefMap().values()) {
+                    outputColumns.union(s.getUsedColumns());
+                }
+                for (ScalarOperator s : node.getProjection().getCommonSubOperatorMap().values()) {
+                    outputColumns.union(s.getUsedColumns());
+                }
+
+                outputColumns.except(new ArrayList<>(node.getProjection().getCommonSubOperatorMap().keySet()));
+                joinNode.setOutputSlots(outputColumns.getStream().boxed().collect(Collectors.toList()));
+            }
+
+            joinNode.setDistributionMode(distributionMode);
+            joinNode.getConjuncts().addAll(conjuncts);
+            joinNode.setLimit(node.getLimit());
+            joinNode.computeStatistics(optExpr.getStatistics());
+            joinNode.setProbePartitionByExprs(probePartitionByExprs);
+
+            if (shouldBuildGlobalRuntimeFilter()) {
+                joinNode.buildRuntimeFilters(runtimeFilterIdIdGenerator);
+            }
+
+            if (distributionMode.equals(JoinNode.DistributionMode.BROADCAST)) {
+                setJoinPushDown(joinNode);
 
                 // Connect parent and child fragment
                 rightFragment.getPlanRoot().setFragment(leftFragment);
@@ -1590,196 +1997,65 @@ public class PlanFragmentBuilder {
                 // Move leftFragment to end, it depends on all of its children
                 context.getFragments().remove(leftFragment);
                 context.getFragments().add(leftFragment);
-
                 leftFragment.setPlanRoot(joinNode);
-                if (!rightFragment.getChildren().isEmpty()) {
-                    // right table isn't value operator
-                    leftFragment.addChild(rightFragment.getChild(0));
-                }
-
-                if (!(joinNode.getChild(1) instanceof ExchangeNode)) {
-                    joinNode.setReplicated(true);
-                }
-
-                if (shouldBuildGlobalRuntimeFilter()) {
-                    joinNode.buildRuntimeFilters(runtimeFilterIdIdGenerator);
-                }
-
+                leftFragment.addChild(rightFragment.getChild(0));
                 leftFragment.mergeQueryGlobalDicts(rightFragment.getQueryGlobalDicts());
                 return leftFragment;
-            } else {
-                JoinOperator joinOperator = node.getJoinType();
+            } else if (distributionMode.equals(JoinNode.DistributionMode.PARTITIONED)) {
+                DataPartition lhsJoinPartition = new DataPartition(TPartitionType.HASH_PARTITIONED,
+                        leftFragment.getDataPartition().getPartitionExprs());
+                DataPartition rhsJoinPartition = new DataPartition(TPartitionType.HASH_PARTITIONED,
+                        rightFragment.getDataPartition().getPartitionExprs());
 
-                PlanNode leftFragmentPlanRoot = leftFragment.getPlanRoot();
-                PlanNode rightFragmentPlanRoot = rightFragment.getPlanRoot();
-                // skip decode node
-                if (leftFragmentPlanRoot instanceof DecodeNode) {
-                    leftFragmentPlanRoot = leftFragmentPlanRoot.getChild(0);
-                }
-                if (rightFragmentPlanRoot instanceof DecodeNode) {
-                    rightFragmentPlanRoot = rightFragmentPlanRoot.getChild(0);
-                }
-                // 1. Get distributionMode
-                JoinNode.DistributionMode distributionMode;
-                if (isExchangeWithDistributionType(leftFragmentPlanRoot, DistributionSpec.DistributionType.SHUFFLE) &&
-                        isExchangeWithDistributionType(rightFragmentPlanRoot,
-                                DistributionSpec.DistributionType.SHUFFLE)) {
-                    distributionMode = JoinNode.DistributionMode.PARTITIONED;
-                } else if (isExchangeWithDistributionType(rightFragmentPlanRoot,
-                        DistributionSpec.DistributionType.BROADCAST)) {
-                    distributionMode = JoinNode.DistributionMode.BROADCAST;
-                } else if (!(leftFragmentPlanRoot instanceof ExchangeNode) &&
-                        !(rightFragmentPlanRoot instanceof ExchangeNode)) {
-                    if (isColocateJoin(optExpr)) {
-                        distributionMode = HashJoinNode.DistributionMode.COLOCATE;
-                    } else if (ConnectContext.get().getSessionVariable().isEnableReplicationJoin() &&
-                            rightFragmentPlanRoot.canDoReplicatedJoin()) {
-                        distributionMode = JoinNode.DistributionMode.REPLICATED;
-                    } else if (isShuffleJoin(optExpr)) {
-                        distributionMode = JoinNode.DistributionMode.SHUFFLE_HASH_BUCKET;
-                    } else {
-                        Preconditions.checkState(false, "Must be replicate join or colocate join");
-                        distributionMode = JoinNode.DistributionMode.COLOCATE;
-                    }
-                } else if (isShuffleJoin(optExpr)) {
-                    distributionMode = JoinNode.DistributionMode.SHUFFLE_HASH_BUCKET;
+                leftFragment.getChild(0).setOutputPartition(lhsJoinPartition);
+                rightFragment.getChild(0).setOutputPartition(rhsJoinPartition);
+
+                // Currently, we always generate new fragment for PhysicalDistribution.
+                // So we need to remove exchange node only fragment for Join.
+                context.getFragments().remove(leftFragment);
+                context.getFragments().remove(rightFragment);
+
+                PlanFragment joinFragment = new PlanFragment(context.getNextFragmentId(),
+                        joinNode, lhsJoinPartition);
+                joinFragment.addChild(leftFragment.getChild(0));
+                joinFragment.addChild(rightFragment.getChild(0));
+
+                joinFragment.mergeQueryGlobalDicts(leftFragment.getQueryGlobalDicts());
+                joinFragment.mergeQueryGlobalDicts(rightFragment.getQueryGlobalDicts());
+                context.getFragments().add(joinFragment);
+
+                return joinFragment;
+            } else if (distributionMode.equals(JoinNode.DistributionMode.COLOCATE) ||
+                    distributionMode.equals(JoinNode.DistributionMode.REPLICATED)) {
+                if (distributionMode.equals(JoinNode.DistributionMode.COLOCATE)) {
+                    joinNode.setColocate(true, "");
                 } else {
-                    distributionMode = JoinNode.DistributionMode.LOCAL_HASH_BUCKET;
+                    joinNode.setReplicated(true);
+                }
+                setJoinPushDown(joinNode);
+
+                joinNode.setChild(0, leftFragment.getPlanRoot());
+                joinNode.setChild(1, rightFragment.getPlanRoot());
+                leftFragment.setPlanRoot(joinNode);
+                leftFragment.addChildren(rightFragment.getChildren());
+                context.getFragments().remove(rightFragment);
+
+                context.getFragments().remove(leftFragment);
+                context.getFragments().add(leftFragment);
+
+                leftFragment.mergeQueryGlobalDicts(rightFragment.getQueryGlobalDicts());
+
+                if (distributionMode.equals(HashJoinNode.DistributionMode.COLOCATE)) {
+                    leftFragment.setEnableSharedScan(false);
                 }
 
-                for (BinaryPredicateOperator s : eqOnPredicates) {
-                    if (!optExpr.inputAt(0).getLogicalProperty().getOutputColumns()
-                            .containsAll(s.getChild(0).getUsedColumns())) {
-                        s.swap();
-                    }
-                }
+                return leftFragment;
+            } else if (distributionMode.equals(JoinNode.DistributionMode.SHUFFLE_HASH_BUCKET)) {
+                setJoinPushDown(joinNode);
 
-                List<Expr> eqJoinConjuncts =
-                        eqOnPredicates.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
-                                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
-                                .collect(Collectors.toList());
-
-                for (Expr expr : eqJoinConjuncts) {
-                    if (expr.isConstant()) {
-                        throw unsupportedException("Support join on constant predicate later");
-                    }
-                }
-
-                List<ScalarOperator> otherJoin = Utils.extractConjuncts(node.getOnPredicate());
-                otherJoin.removeAll(eqOnPredicates);
-                List<Expr> otherJoinConjuncts = otherJoin.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
-                                new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
-                        .collect(Collectors.toList());
-
-                // 3. Get conjuncts
-                List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
-                List<Expr> conjuncts = predicates.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
-                                new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
-                        .collect(Collectors.toList());
-
-                List<PlanFragment> nullablePlanFragments = new ArrayList<>();
-                if (joinOperator.isLeftOuterJoin()) {
-                    nullablePlanFragments.add(rightFragment);
-                } else if (joinOperator.isRightOuterJoin()) {
-                    nullablePlanFragments.add(leftFragment);
-                } else if (joinOperator.isFullOuterJoin()) {
-                    nullablePlanFragments.add(leftFragment);
-                    nullablePlanFragments.add(rightFragment);
-                }
-                for (PlanFragment planFragment : nullablePlanFragments) {
-                    for (TupleId tupleId : planFragment.getPlanRoot().getTupleIds()) {
-                        context.getDescTbl().getTupleDesc(tupleId).getSlots().forEach(slot -> slot.setIsNullable(true));
-                    }
-                }
-
-                JoinNode joinNode;
-                if (node instanceof PhysicalHashJoinOperator) {
-                    joinNode = new HashJoinNode(
-                            context.getNextNodeId(),
-                            leftFragment.getPlanRoot(), rightFragment.getPlanRoot(),
-                            joinOperator, eqJoinConjuncts, otherJoinConjuncts);
-                } else if (node instanceof PhysicalMergeJoinOperator) {
-                    joinNode = new MergeJoinNode(
-                            context.getNextNodeId(),
-                            leftFragment.getPlanRoot(), rightFragment.getPlanRoot(),
-                            joinOperator, eqJoinConjuncts, otherJoinConjuncts);
-                } else {
-                    throw new StarRocksPlannerException("unknown join operator: " + node, INTERNAL_ERROR);
-                }
-
-                //Build outputColumns
-                if (node.getProjection() != null) {
-                    ColumnRefSet outputColumns = new ColumnRefSet();
-                    for (ScalarOperator s : node.getProjection().getColumnRefMap().values()) {
-                        outputColumns.union(s.getUsedColumns());
-                    }
-                    for (ScalarOperator s : node.getProjection().getCommonSubOperatorMap().values()) {
-                        outputColumns.union(s.getUsedColumns());
-                    }
-
-                    outputColumns.except(new ArrayList<>(node.getProjection().getCommonSubOperatorMap().keySet()));
-                    joinNode.setOutputSlots(outputColumns.getStream().boxed().collect(Collectors.toList()));
-                }
-
-                joinNode.setDistributionMode(distributionMode);
-                joinNode.getConjuncts().addAll(conjuncts);
-                joinNode.setLimit(node.getLimit());
-                joinNode.computeStatistics(optExpr.getStatistics());
-
-                if (shouldBuildGlobalRuntimeFilter()) {
-                    joinNode.buildRuntimeFilters(runtimeFilterIdIdGenerator);
-                }
-
-                if (distributionMode.equals(JoinNode.DistributionMode.BROADCAST)) {
-                    setJoinPushDown(joinNode);
-
-                    // Connect parent and child fragment
-                    rightFragment.getPlanRoot().setFragment(leftFragment);
-
-                    // Currently, we always generate new fragment for PhysicalDistribution.
-                    // So we need to remove exchange node only fragment for Join.
-                    context.getFragments().remove(rightFragment);
-
-                    // Move leftFragment to end, it depends on all of its children
-                    context.getFragments().remove(leftFragment);
-                    context.getFragments().add(leftFragment);
-                    leftFragment.setPlanRoot(joinNode);
-                    leftFragment.addChild(rightFragment.getChild(0));
-                    leftFragment.mergeQueryGlobalDicts(rightFragment.getQueryGlobalDicts());
-                    return leftFragment;
-                } else if (distributionMode.equals(JoinNode.DistributionMode.PARTITIONED)) {
-                    DataPartition lhsJoinPartition = new DataPartition(TPartitionType.HASH_PARTITIONED,
-                            leftFragment.getDataPartition().getPartitionExprs());
-                    DataPartition rhsJoinPartition = new DataPartition(TPartitionType.HASH_PARTITIONED,
-                            rightFragment.getDataPartition().getPartitionExprs());
-
-                    leftFragment.getChild(0).setOutputPartition(lhsJoinPartition);
-                    rightFragment.getChild(0).setOutputPartition(rhsJoinPartition);
-
-                    // Currently, we always generate new fragment for PhysicalDistribution.
-                    // So we need to remove exchange node only fragment for Join.
-                    context.getFragments().remove(leftFragment);
-                    context.getFragments().remove(rightFragment);
-
-                    PlanFragment joinFragment = new PlanFragment(context.getNextFragmentId(),
-                            joinNode, lhsJoinPartition);
-                    joinFragment.addChild(leftFragment.getChild(0));
-                    joinFragment.addChild(rightFragment.getChild(0));
-
-                    joinFragment.mergeQueryGlobalDicts(leftFragment.getQueryGlobalDicts());
-                    joinFragment.mergeQueryGlobalDicts(rightFragment.getQueryGlobalDicts());
-                    context.getFragments().add(joinFragment);
-
-                    return joinFragment;
-                } else if (distributionMode.equals(JoinNode.DistributionMode.COLOCATE) ||
-                        distributionMode.equals(JoinNode.DistributionMode.REPLICATED)) {
-                    if (distributionMode.equals(JoinNode.DistributionMode.COLOCATE)) {
-                        joinNode.setColocate(true, "");
-                    } else {
-                        joinNode.setReplicated(true);
-                    }
-                    setJoinPushDown(joinNode);
-
+                // distributionMode is SHUFFLE_HASH_BUCKET
+                if (!(leftFragment.getPlanRoot() instanceof ExchangeNode) &&
+                        !(rightFragment.getPlanRoot() instanceof ExchangeNode)) {
                     joinNode.setChild(0, leftFragment.getPlanRoot());
                     joinNode.setChild(1, rightFragment.getPlanRoot());
                     leftFragment.setPlanRoot(joinNode);
@@ -1790,54 +2066,31 @@ public class PlanFragmentBuilder {
                     context.getFragments().add(leftFragment);
 
                     leftFragment.mergeQueryGlobalDicts(rightFragment.getQueryGlobalDicts());
-
-                    if (distributionMode.equals(HashJoinNode.DistributionMode.COLOCATE)) {
-                        leftFragment.setEnableSharedScan(false);
-                    }
-
                     return leftFragment;
-                } else if (distributionMode.equals(JoinNode.DistributionMode.SHUFFLE_HASH_BUCKET)) {
-                    setJoinPushDown(joinNode);
-
-                    // distributionMode is SHUFFLE_HASH_BUCKET
-                    if (!(leftFragment.getPlanRoot() instanceof ExchangeNode) &&
-                            !(rightFragment.getPlanRoot() instanceof ExchangeNode)) {
-                        joinNode.setChild(0, leftFragment.getPlanRoot());
-                        joinNode.setChild(1, rightFragment.getPlanRoot());
-                        leftFragment.setPlanRoot(joinNode);
-                        leftFragment.addChildren(rightFragment.getChildren());
-                        context.getFragments().remove(rightFragment);
-
-                        context.getFragments().remove(leftFragment);
-                        context.getFragments().add(leftFragment);
-
-                        leftFragment.mergeQueryGlobalDicts(rightFragment.getQueryGlobalDicts());
-                        return leftFragment;
-                    } else if (leftFragment.getPlanRoot() instanceof ExchangeNode &&
-                            !(rightFragment.getPlanRoot() instanceof ExchangeNode)) {
-                        return computeShuffleHashBucketPlanFragment(context, rightFragment,
-                                leftFragment, joinNode);
-                    } else {
-                        return computeShuffleHashBucketPlanFragment(context, leftFragment,
-                                rightFragment, joinNode);
-                    }
+                } else if (leftFragment.getPlanRoot() instanceof ExchangeNode &&
+                        !(rightFragment.getPlanRoot() instanceof ExchangeNode)) {
+                    return computeShuffleHashBucketPlanFragment(context, rightFragment,
+                            leftFragment, joinNode);
                 } else {
-                    setJoinPushDown(joinNode);
-
-                    // distributionMode is BUCKET_SHUFFLE
-                    if (leftFragment.getPlanRoot() instanceof ExchangeNode &&
-                            !(rightFragment.getPlanRoot() instanceof ExchangeNode)) {
-                        leftFragment = computeBucketShufflePlanFragment(context, rightFragment,
-                                leftFragment, joinNode);
-                    } else {
-                        leftFragment = computeBucketShufflePlanFragment(context, leftFragment,
-                                rightFragment, joinNode);
-                    }
-
-                    leftFragment.setEnableSharedScan(false);
-
-                    return leftFragment;
+                    return computeShuffleHashBucketPlanFragment(context, leftFragment,
+                            rightFragment, joinNode);
                 }
+            } else {
+                setJoinPushDown(joinNode);
+
+                // distributionMode is BUCKET_SHUFFLE
+                if (leftFragment.getPlanRoot() instanceof ExchangeNode &&
+                        !(rightFragment.getPlanRoot() instanceof ExchangeNode)) {
+                    leftFragment = computeBucketShufflePlanFragment(context, rightFragment,
+                            leftFragment, joinNode);
+                } else {
+                    leftFragment = computeBucketShufflePlanFragment(context, leftFragment,
+                            rightFragment, joinNode);
+                }
+
+                leftFragment.setEnableSharedScan(false);
+
+                return leftFragment;
             }
         }
 
@@ -1986,6 +2239,9 @@ public class PlanFragmentBuilder {
             analyticEvalNode.setLimit(node.getLimit());
             analyticEvalNode.setHasNullableGenerateChild();
             analyticEvalNode.computeStatistics(optExpr.getStatistics());
+            if (hasColocateOlapScanChildInFragment(analyticEvalNode)) {
+                analyticEvalNode.setColocate(true);
+            }
 
             // set predicate
             List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());

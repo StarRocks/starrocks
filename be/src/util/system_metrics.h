@@ -29,6 +29,7 @@ class DiskMetrics;
 class NetMetrics;
 class FileDescriptorMetrics;
 class SnmpMetrics;
+class QueryCacheMetrics;
 
 class MemoryMetrics {
 public:
@@ -51,18 +52,22 @@ public:
     METRIC_DEFINE_INT_GAUGE(jemalloc_retained_bytes, MetricUnit::BYTES);
 #endif
     // MemPool metrics
-    // Process memory usage
     METRIC_DEFINE_INT_GAUGE(process_mem_bytes, MetricUnit::BYTES);
-    // Query memory usage
     METRIC_DEFINE_INT_GAUGE(query_mem_bytes, MetricUnit::BYTES);
-    // Load memory usage
     METRIC_DEFINE_INT_GAUGE(load_mem_bytes, MetricUnit::BYTES);
-    // Tablet meta memory usage
     METRIC_DEFINE_INT_GAUGE(metadata_mem_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(tablet_metadata_mem_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(rowset_metadata_mem_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(segment_metadata_mem_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(column_metadata_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(tablet_schema_mem_bytes, MetricUnit::BYTES);
-    // Compaction memory usage
+    METRIC_DEFINE_INT_GAUGE(column_zonemap_index_mem_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(ordinal_index_mem_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(bitmap_index_mem_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(bloom_filter_index_mem_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(segment_zonemap_mem_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(short_key_index_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(compaction_mem_bytes, MetricUnit::BYTES);
-    // SchemaChange memory usage
     METRIC_DEFINE_INT_GAUGE(schema_change_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(column_pool_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(storage_page_cache_mem_bytes, MetricUnit::BYTES);
@@ -130,7 +135,12 @@ private:
     void _update_fd_metrics();
 
     void _install_snmp_metrics(MetricRegistry* registry);
+
     void _update_snmp_metrics();
+
+    void _install_query_cache_metrics(MetricRegistry* registry);
+
+    void _update_query_cache_metrics();
 
 private:
     static const char* const _s_hook_name;
@@ -140,6 +150,7 @@ private:
     std::map<std::string, DiskMetrics*> _disk_metrics;
     std::map<std::string, NetMetrics*> _net_metrics;
     std::unique_ptr<FileDescriptorMetrics> _fd_metrics;
+    std::unique_ptr<QueryCacheMetrics> _query_cache_metrics;
     int _proc_net_dev_version = 0;
     std::unique_ptr<SnmpMetrics> _snmp_metrics;
 

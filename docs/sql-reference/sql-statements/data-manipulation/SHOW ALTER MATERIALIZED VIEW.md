@@ -2,7 +2,7 @@
 
 ## Description
 
-Shows the refresh tasks of the sync refresh materialized views.
+Shows the refresh tasks of the single-table sync refresh materialized views.
 
 ## Syntax
 

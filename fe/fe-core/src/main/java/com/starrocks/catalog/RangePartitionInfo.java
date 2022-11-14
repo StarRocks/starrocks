@@ -26,17 +26,17 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.PartitionDesc;
-import com.starrocks.analysis.PartitionKeyDesc;
-import com.starrocks.analysis.SingleRangePartitionDesc;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.util.RangeUtils;
-import com.starrocks.lake.StorageInfo;
+import com.starrocks.lake.StorageCacheInfo;
 import com.starrocks.persist.RangePartitionPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.PartitionDesc;
+import com.starrocks.sql.ast.PartitionKeyDesc;
+import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -100,8 +100,8 @@ public class RangePartitionInfo extends PartitionInfo {
     }
 
     public void addPartition(long partitionId, boolean isTemp, Range<PartitionKey> range, DataProperty dataProperty,
-                             short replicationNum, boolean isInMemory, StorageInfo storageInfo) {
-        addPartition(partitionId, dataProperty, replicationNum, isInMemory, storageInfo);
+                             short replicationNum, boolean isInMemory, StorageCacheInfo storageCacheInfo) {
+        addPartition(partitionId, dataProperty, replicationNum, isInMemory, storageCacheInfo);
         setRangeInternal(partitionId, isTemp, range);
     }
 
@@ -139,7 +139,7 @@ public class RangePartitionInfo extends PartitionInfo {
             newRangeUpper = PartitionKey.createPartitionKey(partKeyDesc.getUpperValues(), partitionColumns);
         }
         if (newRangeUpper.isMinValue()) {
-            throw new DdlException("Partition's upper value should not be MIN VALUE: " + partKeyDesc.toSql());
+            throw new DdlException("Partition's upper value should not be MIN VALUE: " + partKeyDesc);
         }
 
         Range<PartitionKey> lastRange = null;
@@ -203,7 +203,7 @@ public class RangePartitionInfo extends PartitionInfo {
         idToDataProperty.put(partitionId, desc.getPartitionDataProperty());
         idToReplicationNum.put(partitionId, desc.getReplicationNum());
         idToInMemory.put(partitionId, desc.isInMemory());
-        idToStorageInfo.put(partitionId, desc.getStorageInfo());
+        idToStorageCacheInfo.put(partitionId, desc.getStorageCacheInfo());
         return range;
     }
 
@@ -227,7 +227,7 @@ public class RangePartitionInfo extends PartitionInfo {
                 idToDataProperty.put(partitionId, desc.getPartitionDataProperty());
                 idToReplicationNum.put(partitionId, desc.getReplicationNum());
                 idToInMemory.put(partitionId, desc.isInMemory());
-                idToStorageInfo.put(partitionId, desc.getStorageInfo());
+                idToStorageCacheInfo.put(partitionId, desc.getStorageCacheInfo());
             }
         }
     }
@@ -252,7 +252,7 @@ public class RangePartitionInfo extends PartitionInfo {
         idToDataProperty.put(partitionId, info.getDataProperty());
         idToReplicationNum.put(partitionId, info.getReplicationNum());
         idToInMemory.put(partitionId, info.isInMemory());
-        idToStorageInfo.put(partitionId, info.getStorageInfo());
+        idToStorageCacheInfo.put(partitionId, info.getStorageCacheInfo());
     }
 
     public void setRange(long partitionId, boolean isTemp, Range<PartitionKey> range) {

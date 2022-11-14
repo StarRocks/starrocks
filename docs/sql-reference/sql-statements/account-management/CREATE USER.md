@@ -93,7 +93,3 @@ If a role is specified, it will automatically grant all permissions the role own
     ```sql
     CREATE USER 'jack'@'%' IDENTIFIED BY '12345' DEFAULT ROLE 'my_role';
     ```
-
-## keyword
-
-CREATE, USER

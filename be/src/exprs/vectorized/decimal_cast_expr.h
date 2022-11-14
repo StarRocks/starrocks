@@ -46,13 +46,20 @@ struct DecimalDecimalCast {
         }
 
         if (to_scale == from_scale) {
-            for (auto i = 0; i < num_rows; ++i) {
-                auto overflow = DecimalV3Cast::to_decimal_trivial<FromCppType, ToCppType, check_overflow>(
-                        data[i], &result_data[i]);
-                if constexpr (check_overflow) {
-                    if (overflow) {
-                        has_null = true;
-                        nulls[i] = DATUM_NULL;
+            if constexpr (sizeof(FromCppType) <= sizeof(ToCppType)) {
+                for (auto i = 0; i < num_rows; ++i) {
+                    (void)DecimalV3Cast::to_decimal_trivial<FromCppType, ToCppType, check_overflow>(data[i],
+                                                                                                    &result_data[i]);
+                }
+            } else {
+                for (auto i = 0; i < num_rows; ++i) {
+                    auto overflow = DecimalV3Cast::to_decimal_trivial<FromCppType, ToCppType, check_overflow>(
+                            data[i], &result_data[i]);
+                    if constexpr (check_overflow) {
+                        if (overflow) {
+                            has_null = true;
+                            nulls[i] = DATUM_NULL;
+                        }
                     }
                 }
             }
@@ -281,13 +288,13 @@ struct DecimalNonDecimalCast<check_overflow, DecimalType, NonDecimalType, Decima
 };
 
 // cast: char/varchar <-> decimal
-template <bool check_overflow, PrimitiveType DecimalType, PrimitiveType BinaryType>
-struct DecimalNonDecimalCast<check_overflow, DecimalType, BinaryType, DecimalPTGuard<DecimalType>,
-                             BinaryPTGuard<BinaryType>> {
+template <bool check_overflow, PrimitiveType DecimalType, PrimitiveType StringType>
+struct DecimalNonDecimalCast<check_overflow, DecimalType, StringType, DecimalPTGuard<DecimalType>,
+                             StringPTGuard<StringType>> {
     using DecimalCppType = RunTimeCppType<DecimalType>;
     using DecimalColumnType = RunTimeColumnType<DecimalType>;
-    using BinaryCppType = RunTimeCppType<BinaryType>;
-    using BinaryColumnType = RunTimeColumnType<BinaryType>;
+    using StringCppType = RunTimeCppType<StringType>;
+    using StringColumnType = RunTimeColumnType<StringType>;
 
     static inline ColumnPtr decimal_from(const ColumnPtr& column, int precision, int scale) {
         const auto num_rows = column->size();
@@ -301,7 +308,7 @@ struct DecimalNonDecimalCast<check_overflow, DecimalType, BinaryType, DecimalPTG
             null_column->resize(num_rows);
             nulls = &null_column->get_data().front();
         }
-        const auto binary_data = ColumnHelper::cast_to_raw<BinaryType>(column);
+        const auto binary_data = ColumnHelper::cast_to_raw<StringType>(column);
         for (auto i = 0; i < num_rows; ++i) {
             auto slice = binary_data->get_slice(i);
             auto overflow = DecimalV3Cast::from_string<DecimalCppType>(

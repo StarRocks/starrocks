@@ -26,9 +26,6 @@
 #include "common/status.h"
 #include "fs/fs.h"
 #include "gen_cpp/segment.pb.h"
-#include "runtime/mem_pool.h"
-#include "runtime/mem_tracker.h"
-#include "storage/column_block.h"
 #include "storage/rowset/common.h"
 #include "storage/rowset/indexed_column_reader.h"
 #include "util/once.h"
@@ -48,7 +45,8 @@ class IndexedColumnIterator;
 
 class BitmapIndexReader {
 public:
-    BitmapIndexReader() : _load_once(), _has_null(false) {}
+    BitmapIndexReader();
+    ~BitmapIndexReader();
 
     // Load index data into memory.
     //
@@ -59,7 +57,7 @@ public:
     // Return true if the index data was successfully loaded by the caller, false if
     // the data was loaded by another caller.
     StatusOr<bool> load(FileSystem* fs, const std::string& filename, const BitmapIndexPB& meta, bool use_page_cache,
-                        bool kept_in_memory, MemTracker* mem_tracker);
+                        bool kept_in_memory);
 
     // create a new column iterator. Client should delete returned iterator
     // REQUIRES: the index data has been successfully `load()`ed into memory.
@@ -70,7 +68,12 @@ public:
 
     const TypeInfoPtr& type_info() { return _typeinfo; }
 
-    size_t mem_usage() const {
+    bool loaded() const { return invoked(_load_once); }
+
+private:
+    friend class BitmapIndexIterator;
+
+    size_t _mem_usage() const {
         size_t size = sizeof(BitmapIndexReader);
         if (_dict_column_reader != nullptr) {
             size += _dict_column_reader->mem_usage();
@@ -81,19 +84,16 @@ public:
         return size;
     }
 
-    bool loaded() const { return invoked(_load_once); }
+    void _reset();
 
-private:
-    friend class BitmapIndexIterator;
-
-    Status do_load(FileSystem* fs, const std::string& filename, const BitmapIndexPB& meta, bool use_page_cache,
-                   bool kept_in_memory, MemTracker* mem_tracker);
+    Status _do_load(FileSystem* fs, const std::string& filename, const BitmapIndexPB& meta, bool use_page_cache,
+                    bool kept_in_memory);
 
     OnceFlag _load_once;
     TypeInfoPtr _typeinfo;
     std::unique_ptr<IndexedColumnReader> _dict_column_reader;
     std::unique_ptr<IndexedColumnReader> _bitmap_column_reader;
-    bool _has_null;
+    bool _has_null = false;
 };
 
 class BitmapIndexIterator {
@@ -105,8 +105,7 @@ public:
               _bitmap_column_iter(std::move(bitmap_iter)),
               _has_null(has_null),
               _num_bitmap(num_bitmap),
-              _current_rowid(0),
-              _pool(new MemPool()) {}
+              _current_rowid(0) {}
 
     bool has_null_bitmap() const { return _has_null; }
 
@@ -153,7 +152,6 @@ private:
     bool _has_null;
     rowid_t _num_bitmap;
     rowid_t _current_rowid;
-    std::unique_ptr<MemPool> _pool;
 };
 
 } // namespace starrocks

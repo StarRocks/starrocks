@@ -23,7 +23,6 @@
 
 #include <cmath>
 #include <cstdint>
-#include <string>
 
 static char s_encoding_table[] = {'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P',
                                   'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'a', 'b', 'c', 'd', 'e', 'f',
@@ -49,7 +48,7 @@ static int s_mod_table[] = {0, 2, 1};
 namespace starrocks {
 
 size_t base64_encode2(const unsigned char* data, size_t length, unsigned char* encoded_data) {
-    size_t output_length = (size_t)(4.0 * ceil((double)length / 3.0));
+    auto output_length = (size_t)(4.0 * ceil((double)length / 3.0));
 
     if (encoded_data == nullptr) {
         return 0;

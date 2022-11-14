@@ -46,9 +46,10 @@ set(EXEC_FILES
     es/es_scroll_parser.cpp
     local_file_writer.cpp
     broker_writer.cpp
-    parquet_builder.cpp
     plain_text_builder.cpp
     vectorized/aggregator.cpp
+    vectorized/sorted_streaming_aggregator.cpp
+    vectorized/aggregate/agg_hash_variant.cpp
     vectorized/aggregate/aggregate_base_node.cpp
     vectorized/aggregate/aggregate_blocking_node.cpp
     vectorized/aggregate/distinct_blocking_node.cpp
@@ -150,8 +151,18 @@ set(EXEC_FILES
     pipeline/scan/olap_scan_prepare_operator.cpp
     pipeline/scan/olap_scan_context.cpp
     pipeline/scan/connector_scan_operator.cpp
+    pipeline/scan/olap_meta_chunk_source.cpp
+    pipeline/scan/olap_meta_scan_operator.cpp
+    pipeline/scan/olap_meta_scan_prepare_operator.cpp
+    pipeline/scan/olap_schema_chunk_source.cpp
+    pipeline/scan/olap_schema_scan_operator.cpp
+    pipeline/scan/olap_schema_scan_context.cpp
     pipeline/scan/morsel.cpp
     pipeline/scan/chunk_buffer_limiter.cpp
+    pipeline/sink/file_sink_operator.cpp
+    pipeline/sink/export_sink_operator.cpp
+    pipeline/sink/mysql_table_sink_operator.cpp
+    pipeline/sink/memory_scratch_sink_operator.cpp
     pipeline/select_operator.cpp
     pipeline/nljoin/nljoin_context.cpp
     pipeline/nljoin/nljoin_build_operator.cpp
@@ -178,6 +189,8 @@ set(EXEC_FILES
     pipeline/aggregate/aggregate_distinct_blocking_source_operator.cpp
     pipeline/aggregate/aggregate_distinct_streaming_sink_operator.cpp
     pipeline/aggregate/aggregate_distinct_streaming_source_operator.cpp
+    pipeline/aggregate/sorted_aggregate_streaming_sink_operator.cpp
+    pipeline/aggregate/sorted_aggregate_streaming_source_operator.cpp
     pipeline/aggregate/repeat/repeat_operator.cpp
     pipeline/analysis/analytic_sink_operator.cpp
     pipeline/analysis/analytic_source_operator.cpp
@@ -200,7 +213,12 @@ set(EXEC_FILES
     workgroup/work_group.cpp
     workgroup/scan_executor.cpp
     workgroup/scan_task_queue.cpp
-)
+    query_cache/multilane_operator.cpp
+    query_cache/cache_operator.cpp
+    query_cache/cache_manager.cpp
+    query_cache/lane_arbiter.cpp
+    query_cache/conjugate_operator.cpp
+    query_cache/ticket_checker.cpp)
 
 # simdjson Runtime Implement Dispatch: https://github.com/simdjson/simdjson/blob/master/doc/implementation-selection.md#runtime-cpu-detection
 # Unset architecture-specific flags to avoid breaking implement runtime dispatch.

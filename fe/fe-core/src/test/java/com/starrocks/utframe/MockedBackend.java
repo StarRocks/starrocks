@@ -27,6 +27,8 @@ import com.starrocks.proto.PExecPlanFragmentResult;
 import com.starrocks.proto.PFetchDataResult;
 import com.starrocks.proto.PProxyRequest;
 import com.starrocks.proto.PProxyResult;
+import com.starrocks.proto.PPulsarProxyRequest;
+import com.starrocks.proto.PPulsarProxyResult;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.proto.PTriggerProfileReportResult;
 import com.starrocks.proto.StatusPB;
@@ -381,6 +383,11 @@ public class MockedBackend {
 
         @Override
         public Future<PProxyResult> getInfo(PProxyRequest request) {
+            return null;
+        }
+
+        @Override
+        public Future<PPulsarProxyResult> getPulsarInfo(PPulsarProxyRequest request) {
             return null;
         }
     }

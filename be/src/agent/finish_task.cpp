@@ -6,7 +6,6 @@
 #include "agent/status.h"
 #include "agent/utils.h"
 #include "common/logging.h"
-#include "gen_cpp/MasterService_types.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks {

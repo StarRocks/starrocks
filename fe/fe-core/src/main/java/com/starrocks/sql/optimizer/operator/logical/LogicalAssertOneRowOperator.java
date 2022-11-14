@@ -2,7 +2,7 @@
 
 package com.starrocks.sql.optimizer.operator.logical;
 
-import com.starrocks.analysis.AssertNumRowsElement;
+import com.starrocks.sql.ast.AssertNumRowsElement;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;

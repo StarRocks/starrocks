@@ -23,9 +23,6 @@ package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.SetStmt;
-import com.starrocks.analysis.SetType;
-import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.ResourceGroup;
@@ -36,10 +33,15 @@ import com.starrocks.mysql.MysqlCapability;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.mysql.MysqlSerializer;
+import com.starrocks.mysql.ssl.SSLChannel;
+import com.starrocks.mysql.ssl.SSLChannelImpClassLoader;
 import com.starrocks.plugin.AuditEvent.AuditEventBuilder;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.SetStmt;
+import com.starrocks.sql.ast.SetType;
+import com.starrocks.sql.ast.SetVar;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
@@ -47,6 +49,7 @@ import com.starrocks.thrift.TUniqueId;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.IOException;
 import java.nio.channels.SocketChannel;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -54,6 +57,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import javax.net.ssl.SSLContext;
 
 // When one client connect in, we create a connect context for it.
 // We store session information here. Meanwhile ConnectScheduler all
@@ -100,7 +104,7 @@ public class ConnectContext {
     // the protocol capability after server and client negotiate
     protected MysqlCapability capability;
     // Indicate if this client is killed.
-    protected boolean isKilled;
+    protected volatile boolean isKilled;
     // catalog
     protected volatile String currentCatalog = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
     // Db
@@ -113,6 +117,7 @@ public class ConnectContext {
     // In other word, currentUserIdentity is the entry that matched in StarRocks auth table.
     // This account determines user's access privileges.
     protected UserIdentity currentUserIdentity;
+    protected Set<Long> currentRoleIds = null;
     // Serializer used to pack MySQL packet.
     protected MysqlSerializer serializer;
     // Variables belong to this session.
@@ -141,6 +146,8 @@ public class ConnectContext {
 
     protected String remoteIP;
 
+    protected volatile boolean closed;
+
     // set with the randomstring extracted from the handshake data at connecting stage
     // used for authdata(password) salting
     protected byte[] authDataSalt;
@@ -163,6 +170,14 @@ public class ConnectContext {
 
     protected ResourceGroup resourceGroup;
 
+    protected volatile boolean isPending = false;
+
+    protected SSLContext sslContext;
+
+    public StmtExecutor getExecutor() {
+        return executor;
+    }
+
     public static ConnectContext get() {
         return threadLocalInfo.get();
     }
@@ -176,10 +191,15 @@ public class ConnectContext {
     }
 
     public ConnectContext() {
-        this(null);
+        this(null, null);
     }
 
     public ConnectContext(SocketChannel channel) {
+        this(channel, null);
+    }
+
+    public ConnectContext(SocketChannel channel, SSLContext sslContext) {
+        closed = false;
         state = new QueryState();
         returnRows = 0;
         serverCapability = MysqlCapability.DEFAULT_CAPABILITY;
@@ -197,6 +217,8 @@ public class ConnectContext {
         if (channel != null) {
             remoteIP = mysqlChannel.getRemoteIp();
         }
+
+        this.sslContext = sslContext;
     }
 
     public long getStmtId() {
@@ -266,6 +288,14 @@ public class ConnectContext {
 
     public void setCurrentUserIdentity(UserIdentity currentUserIdentity) {
         this.currentUserIdentity = currentUserIdentity;
+    }
+
+    public Set<Long> getCurrentRoleIds() {
+        return currentRoleIds;
+    }
+
+    public void setCurrentRoleIds(Set<Long> roleIds) {
+        this.currentRoleIds = roleIds;
     }
 
     public void modifySessionVariable(SetVar setVar, boolean onlySetSessionVar) throws DdlException {
@@ -414,7 +444,11 @@ public class ConnectContext {
         this.executor = executor;
     }
 
-    public void cleanup() {
+    public synchronized void cleanup() {
+        if (closed) {
+            return;
+        }
+        closed = true;
         mysqlChannel.close();
         threadLocalInfo.remove();
         returnRows = 0;
@@ -515,18 +549,35 @@ public class ConnectContext {
 
     // kill operation with no protect.
     public void kill(boolean killConnection) {
-        LOG.warn("kill timeout query, {}, kill connection: {}",
+        LOG.warn("kill query, {}, kill connection: {}",
                 getMysqlChannel().getRemoteHostPortString(), killConnection);
-
-        if (killConnection) {
-            isKilled = true;
-            // Close channel to break connection with client
-            getMysqlChannel().close();
-        }
         // Now, cancel running process.
         StmtExecutor executorRef = executor;
+        if (killConnection) {
+            isKilled = true;
+        }
+        QueryQueueManager.getInstance().cancelQuery(this);
         if (executorRef != null) {
             executorRef.cancel();
+        }
+        if (killConnection) {
+            int times = 0;
+            while (!closed) {
+                try {
+                    Thread.sleep(10);
+                    times++;
+                    if (times > 100) {
+                        LOG.warn("wait for close fail, break.");
+                        break;
+                    }
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                    LOG.warn("sleep exception, ignore.");
+                    break;
+                }
+            }
+            // Close channel to break connection with client
+            getMysqlChannel().close();
         }
     }
 
@@ -548,7 +599,11 @@ public class ConnectContext {
                 killConnection = true;
             }
         } else {
-            if (delta > sessionVariable.getQueryTimeoutS() * 1000L) {
+            long timeoutSecond = sessionVariable.getQueryTimeoutS();
+            if (isPending) {
+                timeoutSecond += GlobalVariable.getQueryQueuePendingTimeoutSecond();
+            }
+            if (delta > timeoutSecond * 1000L) {
                 LOG.warn("kill query timeout, remote: {}, query timeout: {}",
                         getMysqlChannel().getRemoteHostPortString(), sessionVariable.getQueryTimeoutS());
 
@@ -579,6 +634,40 @@ public class ConnectContext {
 
     public int getTotalBackendNumber() {
         return globalStateMgr.getClusterInfo().getTotalBackendNumber();
+    }
+
+    public void setPending(boolean pending) {
+        isPending = pending;
+    }
+
+    public boolean isPending() {
+        return isPending;
+    }
+
+    public boolean supportSSL() {
+        return sslContext != null;
+    }
+
+    public boolean enableSSL() throws IOException {
+        Class<? extends SSLChannel> clazz = SSLChannelImpClassLoader.loadSSLChannelImpClazz();
+        if (clazz == null) {
+            LOG.warn("load SSLChannelImp class failed");
+            throw new IOException("load SSLChannelImp class failed");
+        }
+
+        try {
+            SSLChannel sslChannel = (SSLChannel) clazz.getConstructors()[0]
+                    .newInstance(sslContext.createSSLEngine(), mysqlChannel);
+            if (!sslChannel.init()) {
+                return false;
+            } else {
+                mysqlChannel.setSSLChannel(sslChannel);
+                return true;
+            }
+        } catch (Exception e) {
+            LOG.warn("construct SSLChannelImp class failed");
+            throw new IOException("construct SSLChannelImp class failed");
+        }
     }
 
     public class ThreadInfo {
@@ -612,6 +701,7 @@ public class ConnectContext {
                 }
             }
             row.add(stmt);
+            row.add(Boolean.toString(isPending));
             return row;
         }
     }

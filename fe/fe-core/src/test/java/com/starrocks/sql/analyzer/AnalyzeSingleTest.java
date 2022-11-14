@@ -1,12 +1,14 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.StatementBase;
+import com.starrocks.analysis.CompoundPredicate;
+import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.UtFrameUtils;
@@ -294,10 +296,16 @@ public class AnalyzeSingleTest {
         Assert.assertEquals("'\"'", AST2SQL.toString(statement.getQueryRelation().getOutputExpression().get(0)));
         statement = (QueryStatement) analyzeSuccess("select \"7\\\"\\\"\"");
         Assert.assertEquals("'7\"\"'", AST2SQL.toString(statement.getQueryRelation().getOutputExpression().get(0)));
-        statement = (QueryStatement) analyzeWithoutTestView("select '7'''");
-        Assert.assertEquals("'7''", AST2SQL.toString(statement.getQueryRelation().getOutputExpression().get(0)));
+        statement = (QueryStatement) analyzeSuccess("select '7'''");
+        Assert.assertEquals("'7\\''", AST2SQL.toString(statement.getQueryRelation().getOutputExpression().get(0)));
         statement = (QueryStatement) analyzeSuccess("SELECT '7\\'\\''");
-        Assert.assertEquals("'7'''", AST2SQL.toString(statement.getQueryRelation().getOutputExpression().get(0)));
+        Assert.assertEquals("'7\\'\\''", AST2SQL.toString(statement.getQueryRelation().getOutputExpression().get(0)));
+        statement = (QueryStatement) analyzeSuccess("select \"Hello ' World ' !\"");
+        Assert.assertEquals("'Hello \\' World \\' !'",
+                AST2SQL.toString(statement.getQueryRelation().getOutputExpression().get(0)));
+        statement = (QueryStatement) analyzeSuccess("select 'Hello \" World \" !'");
+        Assert.assertEquals("'Hello \" World \" !'",
+                AST2SQL.toString(statement.getQueryRelation().getOutputExpression().get(0)));
 
         analyzeSuccess("select @@`sql_mode`");
     }
@@ -384,6 +392,19 @@ public class AnalyzeSingleTest {
     public void testDual() {
         analyzeSuccess("select 1,2,3 from dual");
         analyzeFail("select * from dual", "No tables used");
+    }
+
+    @Test
+    public void testLogicalBinaryPredicate() {
+        QueryStatement queryStatement = (QueryStatement) analyzeSuccess("select * from test.t0 where v1 = 1 && v2 = 2");
+        SelectRelation selectRelation = (SelectRelation) queryStatement.getQueryRelation();
+        Assert.assertTrue(selectRelation.getPredicate() instanceof CompoundPredicate);
+        Assert.assertEquals(((CompoundPredicate) selectRelation.getPredicate()).getOp(), CompoundPredicate.Operator.AND);
+
+        queryStatement = (QueryStatement) analyzeSuccess("select * from test.t0 where v1 = 1 || v2 = 2");
+        selectRelation = (SelectRelation) queryStatement.getQueryRelation();
+        Assert.assertTrue(selectRelation.getPredicate() instanceof CompoundPredicate);
+        Assert.assertEquals(((CompoundPredicate) selectRelation.getPredicate()).getOp(), CompoundPredicate.Operator.OR);
     }
 
     @Test
@@ -505,5 +526,45 @@ public class AnalyzeSingleTest {
         String sql = "select * from test.t0 [_META_]";
         QueryStatement queryStatement = (QueryStatement) analyzeSuccess(sql);
         Assert.assertTrue(((TableRelation) ((SelectRelation) queryStatement.getQueryRelation()).getRelation()).isMetaQuery());
+    }
+
+    @Test
+    public void testSync() {
+        analyzeSuccess("sync");
+    }
+
+    @Test
+    public void testUnsupportedStatement() {
+        analyzeSuccess("start transaction");
+        analyzeSuccess("start transaction with consistent snapshot");
+        analyzeSuccess("begin");
+        analyzeSuccess("begin work");
+        analyzeSuccess("commit");
+        analyzeSuccess("commit work");
+        analyzeSuccess("commit and no chain release");
+        analyzeSuccess("rollback");
+    }
+
+    @Test
+    public void testASTChildCountLimit() {
+        Config.expr_children_limit = 5;
+        analyzeSuccess("select * from test.t0 where v1 in (1,2,3,4,5)");
+        analyzeSuccess("select * from test.t0 where v1 in (1,2,3,4)");
+
+        analyzeFail("select * from test.t0 where v1 in (1,2,3,4,5,6)",
+                "Expression child number 6 exceeded the maximum 5");
+        analyzeFail("select [1,2,3,4,5,6]",
+                "Expression child number 6 exceeded the maximum 5");
+        analyzeFail("select array<int>[1,2,3,4,5,6]",
+                "Expression child number 6 exceeded the maximum 5");
+        analyzeFail("select * from (values(1,2,3,4,5,6)) t",
+                "Expression child number 6 exceeded the maximum 5");
+        analyzeFail("insert into t0 values(1,2,3),(1,2,3),(1,2,3),(1,2,3),(1,2,3),(1,2,3)",
+                "Expression child number 6 exceeded the maximum 5");
+        analyzeFail("insert into t0 values(1,2,3,4,5,6)",
+                "Expression child number 6 exceeded the maximum 5");
+
+        Config.expr_children_limit = 100000;
+        analyzeSuccess("select * from test.t0 where v1 in (1,2,3,4,5,6)");
     }
 }

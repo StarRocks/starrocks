@@ -1,4 +1,4 @@
-# Spark Load
+# Bulk load using Apache Spark™
 
 This load uses external Apache Spark™ resources to pre-process imported data, which improves import performance and saves compute resources. It is mainly used for **initial migration** and **large data import** into StarRocks (data volume up to TB level).
 
@@ -8,7 +8,7 @@ Spark load is an **asynchronous** import method that requires users to create Sp
 
 * **Spark ETL**: Mainly responsible for ETL of data in the import process, including global dictionary construction (BITMAP type), partitioning, sorting, aggregation, etc.
 * **Broker**: Broker is an independent stateless process. It encapsulates the file system interface and provides StarRocks with the ability to read files from remote storage systems.
-* **Global Dictionary**: Saves the data structure that maps data from the original value to the encoded value. The original value can be any data type, while the encoded value is an integer. The global dictionary is mainly used in scenarios where precise de-duplication is precomputed.
+* **Global Dictionary**: Saves the data structure that maps data from the original value to the encoded value. The original value can be any data type, while the encoded value is an integer. The global dictionary is mainly used in scenarios where exact count distinct is precomputed.
 
 ## Fundamentals
 

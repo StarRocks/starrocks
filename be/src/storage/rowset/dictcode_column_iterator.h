@@ -47,10 +47,6 @@ public:
 
     Status seek_to_ordinal(ordinal_t ord) override { return _col_iter->seek_to_ordinal(ord); }
 
-    Status next_batch(size_t* n, ColumnBlockView* dst, bool* has_null) override {
-        return _col_iter->next_batch(n, dst, has_null);
-    }
-
     ordinal_t get_current_ordinal() const override { return _col_iter->get_current_ordinal(); }
 
     bool all_page_dict_encoded() const override { return _col_iter->all_page_dict_encoded(); }
@@ -84,7 +80,7 @@ public:
     using LowCardDictColumn = starrocks::vectorized::LowCardDictColumn;
 
     GlobalDictCodeColumnIterator(ColumnId cid, ColumnIterator* iter, int16_t* code_convert_data, GlobalDictMap* gdict)
-            : _cid(cid), _col_iter(iter), _local_to_global(code_convert_data), _global_dict(gdict) {}
+            : _cid(cid), _col_iter(iter), _local_to_global(code_convert_data) {}
 
     ~GlobalDictCodeColumnIterator() = default;
 
@@ -112,10 +108,6 @@ public:
     Status seek_to_first() override { return _col_iter->seek_to_first(); }
 
     Status seek_to_ordinal(ordinal_t ord) override { return _col_iter->seek_to_ordinal(ord); }
-
-    Status next_batch(size_t* n, ColumnBlockView* dst, bool* has_null) override {
-        return Status::InternalError("scalar next_batch() should never be called");
-    }
 
     ordinal_t get_current_ordinal() const override { return _col_iter->get_current_ordinal(); }
 
@@ -156,8 +148,6 @@ private:
     // _local_to_global[-1] is accessable
     int16_t* _local_to_global;
 
-    // global dict
-    GlobalDictMap* _global_dict;
     vectorized::ColumnPtr _local_dict_code_col;
 };
 

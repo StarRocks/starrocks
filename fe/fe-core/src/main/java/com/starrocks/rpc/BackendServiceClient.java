@@ -31,6 +31,8 @@ import com.starrocks.proto.PFetchDataResult;
 import com.starrocks.proto.PPlanFragmentCancelReason;
 import com.starrocks.proto.PProxyRequest;
 import com.starrocks.proto.PProxyResult;
+import com.starrocks.proto.PPulsarProxyRequest;
+import com.starrocks.proto.PPulsarProxyResult;
 import com.starrocks.proto.PTriggerProfileReportResult;
 import com.starrocks.proto.PUniqueId;
 import com.starrocks.thrift.TExecBatchPlanFragmentsParams;
@@ -184,6 +186,17 @@ public class BackendServiceClient {
         try {
             final PBackendService service = BrpcProxy.getBackendService(address);
             return service.getInfo(request);
+        } catch (Throwable e) {
+            LOG.warn("failed to get info, address={}:{}", address.getHostname(), address.getPort(), e);
+            throw new RpcException(address.hostname, e.getMessage());
+        }
+    }
+
+    public Future<PPulsarProxyResult> getPulsarInfo(
+            TNetworkAddress address, PPulsarProxyRequest request) throws RpcException {
+        try {
+            final PBackendService service = BrpcProxy.getBackendService(address);
+            return service.getPulsarInfo(request);
         } catch (Throwable e) {
             LOG.warn("failed to get info, address={}:{}", address.getHostname(), address.getPort(), e);
             throw new RpcException(address.hostname, e.getMessage());

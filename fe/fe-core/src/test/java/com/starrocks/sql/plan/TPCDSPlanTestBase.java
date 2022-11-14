@@ -10,6 +10,7 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -886,4 +887,14 @@ public class TPCDSPlanTestBase extends PlanTestBase {
     public static final String Q97 = from("97");
     public static final String Q98 = from("98");
     public static final String Q99 = from("99");
+
+    public String getTPCDS(String name) {
+        Class<TPCDSPlanTestBase> clazz = TPCDSPlanTestBase.class;
+        try {
+            Field f = clazz.getField(name);
+            return (String) f.get(this);
+        } catch (NoSuchFieldException | IllegalAccessException e) {
+            throw new RuntimeException(e);
+        }
+    }
 }

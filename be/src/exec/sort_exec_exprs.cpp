@@ -32,6 +32,7 @@ Status SortExecExprs::init(const TSortInfo& sort_info, ObjectPool* pool) {
 
 Status SortExecExprs::init(const std::vector<TExpr>& ordering_exprs, const std::vector<TExpr>* sort_tuple_slot_exprs,
                            ObjectPool* pool) {
+    _pool = pool;
     RETURN_IF_ERROR(Expr::create_expr_trees(pool, ordering_exprs, &_lhs_ordering_expr_ctxs));
     for (auto& expr : _lhs_ordering_expr_ctxs) {
         auto& type_desc = expr->root()->type();
@@ -71,7 +72,7 @@ Status SortExecExprs::open(RuntimeState* state) {
         RETURN_IF_ERROR(Expr::open(_sort_tuple_slot_expr_ctxs, state));
     }
     RETURN_IF_ERROR(Expr::open(_lhs_ordering_expr_ctxs, state));
-    RETURN_IF_ERROR(Expr::clone_if_not_exists(_lhs_ordering_expr_ctxs, state, &_rhs_ordering_expr_ctxs));
+    RETURN_IF_ERROR(Expr::clone_if_not_exists(state, _pool, _lhs_ordering_expr_ctxs, &_rhs_ordering_expr_ctxs));
     return Status::OK();
 }
 

@@ -21,13 +21,8 @@
 
 #pragma once
 
-#include "common/compiler_util.h"
-
-DIAGNOSTIC_PUSH
-DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 #include <bthread/bthread.h>
 #include <bthread/mutex.h>
-DIAGNOSTIC_POP
 
 #include <ctime>
 #include <memory>
@@ -35,6 +30,7 @@ DIAGNOSTIC_POP
 #include <thread>
 #include <unordered_map>
 
+#include "common/compiler_util.h"
 #include "common/statusor.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/Types_types.h"
@@ -68,6 +64,9 @@ public:
     void add_chunk(const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response);
 
     void add_chunks(const PTabletWriterAddChunksRequest& request, PTabletWriterAddBatchResult* response);
+
+    void add_segment(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
+                     PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done);
 
     void cancel(brpc::Controller* cntl, const PTabletWriterCancelRequest& request, PTabletWriterCancelResult* response,
                 google::protobuf::Closure* done);

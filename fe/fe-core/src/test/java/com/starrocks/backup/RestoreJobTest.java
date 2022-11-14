@@ -252,12 +252,12 @@ public class RestoreJobTest {
         // drop this table, cause we want to try restoring this table
         db.dropTable(expectedRestoreTbl.getName());
 
-        job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
-                jobInfo, false, 3, 100000, -1, -1, globalStateMgr, repo.getId());
-
         List<Table> tbls = Lists.newArrayList();
         tbls.add(expectedRestoreTbl);
         backupMeta = new BackupMeta(tbls);
+        job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
+                jobInfo, false, 3, 100000,
+                globalStateMgr, repo.getId(), backupMeta);
     }
 
     @Ignore

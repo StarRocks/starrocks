@@ -52,6 +52,18 @@ CONF_mInt64(tc_free_memory_rate, "0");
 // tcmalloc gc period, default 60, it should be between [1, 180]
 CONF_mInt64(tc_gc_period, "60");
 
+CONF_mBool(enable_auto_adjust_pagecache, "true");
+// Memory urget water level, if the memory usage exceeds this level, reduce the size of
+// the Pagecache immediately, it should be between (memory_high_level, 100].
+CONF_mInt64(memory_urgent_level, "85");
+// Memory high water level, if the memory usage exceeds this level, reduce the size of
+// the Pagecache slowly, it should be between [1, memory_urgent_level).
+CONF_mInt64(memory_high_level, "75");
+// Pagecache size adjust period, default 20, it should be between [1, 180].
+CONF_mInt64(pagecache_adjust_period, "20");
+// Sleep time in seconds between pagecache adjust iterations.
+CONF_mInt64(auto_adjust_pagecache_interval_seconds, "10");
+
 // Bound on the total amount of bytes allocated to thread caches.
 // This bound is not strict, so it is possible for the cache to go over this bound
 // in certain circumstances. The maximum value of this flag is capped to 1GB.
@@ -123,6 +135,8 @@ CONF_mInt32(report_disk_state_interval_seconds, "60");
 CONF_mInt32(report_tablet_interval_seconds, "60");
 // The interval time(seconds) for agent report workgroup to FE.
 CONF_mInt32(report_workgroup_interval_seconds, "5");
+// The interval time (millisecond) for agent report resource usage to FE.
+CONF_mInt32(report_resource_usage_interval_ms, "1000");
 // The max download speed(KB/s).
 CONF_mInt32(max_download_speed_kbps, "50000");
 // The download low speed limit(KB/s).
@@ -133,6 +147,10 @@ CONF_mInt32(download_low_speed_time, "300");
 CONF_Int32(sleep_one_second, "1");
 // The sleep time for five seconds.
 CONF_Int32(sleep_five_seconds, "5");
+
+// The count of thread to compact
+CONF_Int32(compact_threads, "4");
+CONF_Int32(compact_thread_pool_queue_size, "100");
 
 // The log dir.
 CONF_String(sys_log_dir, "${STARROCKS_HOME}/log");
@@ -220,6 +238,7 @@ CONF_mDouble(memory_ratio_for_sorting_schema_change, "0.8");
 CONF_mInt32(update_cache_expire_sec, "360");
 CONF_mInt32(file_descriptor_cache_clean_interval, "3600");
 CONF_mInt32(disk_stat_monitor_interval, "5");
+CONF_mInt32(profile_report_interval, "30");
 CONF_mInt32(unused_rowset_monitor_interval, "30");
 CONF_String(storage_root_path, "${STARROCKS_HOME}/storage");
 // BE process will exit if the percentage of error disk reach this value.
@@ -248,10 +267,10 @@ CONF_Int32(min_file_descriptor_number, "60000");
 CONF_Int64(index_stream_cache_capacity, "10737418240");
 // CONF_Int64(max_packed_row_block_size, "20971520");
 
-// Cache for stoage page size
-CONF_String(storage_page_cache_limit, "0");
+// Cache for storage page size
+CONF_mString(storage_page_cache_limit, "20%");
 // whether to disable page cache feature in storage
-CONF_Bool(disable_storage_page_cache, "true");
+CONF_Bool(disable_storage_page_cache, "false");
 // whether to disable column pool
 CONF_Bool(disable_column_pool, "false");
 
@@ -272,10 +291,6 @@ CONF_mInt64(max_cumulative_compaction_num_singleton_deltas, "1000");
 // -1 means no limit if enable event_based_compaction_framework, and the max concurrency will be:
 CONF_Int32(cumulative_compaction_num_threads_per_disk, "1");
 // CONF_Int32(cumulative_compaction_write_mbytes_per_sec, "100");
-// cumulative compaction skips recently published deltas in order to prevent
-// compacting a version that might be queried (in case the query planning phase took some time).
-// the following config set the window size
-CONF_mInt32(cumulative_compaction_skip_window_seconds, "30");
 
 CONF_mInt32(update_compaction_check_interval_seconds, "60");
 CONF_Int32(update_compaction_num_threads_per_disk, "1");
@@ -286,6 +301,9 @@ CONF_mInt32(repair_compaction_interval_seconds, "600"); // 10 min
 // if compaction of a tablet failed, this tablet should not be chosen to
 // compaction until this interval passes.
 CONF_mInt64(min_compaction_failure_interval_sec, "120"); // 2 min
+
+CONF_mInt64(min_cmumulative_compaction_failure_interval_sec, "30"); // 30s
+
 // Too many compaction tasks may run out of memory.
 // This config is to limit the max concurrency of running compaction tasks.
 // -1 means no limit, and the max concurrency will be:
@@ -497,12 +515,18 @@ CONF_Bool(enable_metric_calculator, "true");
 // Max consumer num in one data consumer group, for routine load.
 CONF_mInt32(max_consumer_num_per_group, "3");
 
+// Max pulsar consumer num in one data consumer group, for routine load.
+CONF_mInt32(max_pulsar_consumer_num_per_group, "10");
+
 // The size of thread pool for routine load task.
 // this should be larger than FE config 'max_concurrent_task_num_per_be' (default 5).
 CONF_Int32(routine_load_thread_pool_size, "10");
 
 // kafka reqeust timeout
 CONF_Int32(routine_load_kafka_timeout_second, "10");
+
+// pulsar reqeust timeout
+CONF_Int32(routine_load_pulsar_timeout_second, "10");
 
 // Is set to true, index loading failure will not causing BE exit,
 // and the tablet will be marked as bad, so that FE will try to repair it.
@@ -644,7 +668,7 @@ CONF_mInt32(sys_minidump_interval, "600");
 // The maximum number of version per tablet. If the
 // number of version exceeds this value, new write
 // requests will fail.
-CONF_Int16(tablet_max_versions, "1000");
+CONF_mInt16(tablet_max_versions, "1000");
 
 // The maximum number of pending versions allowed for a primary key tablet
 CONF_mInt32(tablet_max_pending_versions, "1000");
@@ -662,6 +686,9 @@ CONF_Int64(pipeline_exec_thread_pool_thread_num, "0");
 // The number of threads for preparing fragment instances in pipeline engine, vCPUs by default.
 CONF_Int64(pipeline_prepare_thread_pool_thread_num, "0");
 CONF_Int64(pipeline_prepare_thread_pool_queue_size, "102400");
+// The number of threads for executing sink io task in pipeline engine, vCPUs by default.
+CONF_Int64(pipeline_sink_io_thread_pool_thread_num, "0");
+CONF_Int64(pipeline_sink_io_thread_pool_queue_size, "102400");
 // The buffer size of SinkBuffer.
 CONF_Int64(pipeline_sink_buffer_size, "64");
 // The degree of parallelism of brpc.
@@ -729,6 +756,10 @@ CONF_Int32(io_coalesce_read_max_buffer_size, "8388608");
 CONF_Int32(io_coalesce_read_max_distance_size, "1048576");
 
 CONF_Int32(connector_io_tasks_per_scan_operator, "16");
+CONF_Int32(io_tasks_per_scan_operator, "4");
+CONF_Bool(connector_chunk_source_accumulate_chunk_enable, "true");
+CONF_Bool(connector_dynamic_chunk_buffer_limiter_enable, "true");
+CONF_Bool(connector_min_max_predicate_from_runtime_filter_enable, "true");
 
 // Enable output trace logs in aws-sdk-cpp for diagnosis purpose.
 // Once logging is enabled in your application, the SDK will generate log files in your current working directory
@@ -783,10 +814,10 @@ CONF_String(starlet_cache_dir, "");
 
 CONF_Int64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
 CONF_Int64(lake_gc_metadata_max_versions, "10");
-CONF_Int64(lake_gc_metadata_check_interval, /*10 minutes=*/"600");
+CONF_Int64(lake_gc_metadata_check_interval, /*30 minutes=*/"1800");
 CONF_Int64(lake_gc_segment_check_interval, /*60 minutes=*/"3600");
 // This value should be much larger than the maximum timeout of loading/compaction/schema change jobs.
-CONF_Int64(lake_gc_segment_expire_seconds, /*1 day=*/"86400");
+CONF_Int64(lake_gc_segment_expire_seconds, /*3 days=*/"259200");
 
 CONF_mBool(dependency_librdkafka_debug_enable, "false");
 
@@ -800,7 +831,16 @@ CONF_String(dependency_librdkafka_debug, "all");
 // max loop count when be waiting its fragments finish
 CONF_Int64(loop_count_wait_fragments_finish, "0");
 
+// the maximum number of connections in the connection pool for a single jdbc url
 CONF_Int16(jdbc_connection_pool_size, "8");
+// the minimum number of idle connections that connection pool tries to maintain.
+// if the idle connections dip below this value and the total connections in the pool are less than jdbc_connection_pool_size,
+// the connection pool will make a best effort to add additional connections quickly.
+CONF_Int16(jdbc_minimum_idle_connections, "1");
+// the maximum amount of time that a connection is allowed to sit idle in the pool.
+// this setting only applies when jdbc_minimum_idle_connections is less than jdbc_connection_pool_size.
+// The minimum allowed value is 10000(10 seconds).
+CONF_Int32(jdbc_connection_idle_timeout_ms, "600000");
 
 // Now, only get_info is processed by _async_thread_pool, and only needs a small number of threads.
 // The default value is set as the THREAD_POOL_SIZE of RoutineLoadTaskScheduler of FE.
@@ -820,4 +860,23 @@ CONF_Int32(cardinality_of_inject, "10");
 CONF_String(directory_of_inject,
             "/src/exec/pipeline/hashjoin,/src/exec/pipeline/scan,/src/exec/pipeline/aggregate,/src/exec/pipeline/"
             "crossjoin,/src/exec/pipeline/sort,/src/exec/pipeline/exchange,/src/exec/pipeline/analysis");
+
+// Used by to_base64
+CONF_Int64(max_length_for_to_base64, "200000");
+// Used by bitmap functions
+CONF_Int64(max_length_for_bitmap_function, "1000000");
+
+CONF_Bool(block_cache_enable, "false");
+CONF_Int64(block_cache_disk_size, "0");
+CONF_String(block_cache_disk_path, "${STARROCKS_HOME}/block_cache/");
+CONF_String(block_cache_meta_path, "${STARROCKS_HOME}/block_cache/");
+CONF_Int64(block_cache_block_size, "1048576");  // 1MB
+CONF_Int64(block_cache_mem_size, "2147483648"); // 2GB
+CONF_Bool(block_cache_checksum_enable, "true");
+
+CONF_mInt64(l0_l1_merge_ratio, "10");
+CONF_mInt64(l0_max_file_size, "209715200"); // 200MB
+
+// Used by query cache, cache entries are evicted when it exceeds its capacity(500MB in default)
+CONF_Int64(query_cache_capacity, "536870912");
 } // namespace starrocks::config

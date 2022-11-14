@@ -3,10 +3,10 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
 import com.starrocks.analysis.LabelName;
-import com.starrocks.analysis.StopRoutineLoadStmt;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.StopRoutineLoadStmt;
 
 public class StopRoutineLoadAnalyzer {
     public static void analyze(StopRoutineLoadStmt statement, ConnectContext context) {
@@ -17,6 +17,6 @@ public class StopRoutineLoadAnalyzer {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
             }
         }
-        statement.setLabelName(new LabelName(db,  statement.getName()));
+        statement.setLabelName(new LabelName(db, statement.getName()));
     }
 }

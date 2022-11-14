@@ -7,7 +7,6 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.BinaryPredicate.Operator;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.RedirectStatus;
-import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Replica.ReplicaStatus;
@@ -101,10 +100,5 @@ public class AdminShowReplicaStatusStmt extends ShowStmt {
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitAdminShowReplicaStatusStatement(this, context);
-    }
-
-    @Override
-    public boolean isSupportNewPlanner() {
-        return true;
     }
 }

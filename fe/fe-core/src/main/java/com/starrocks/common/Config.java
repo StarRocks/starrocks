@@ -123,7 +123,6 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long slow_lock_log_every_ms = 3000L;
 
-
     /**
      * dump_log_dir:
      * This specifies FE dump log dir.
@@ -191,6 +190,7 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static int label_clean_interval_second = 4 * 3600; // 4 hours
+
 
     /**
      * For Task framework do some background operation like cleanup Task/TaskRun.
@@ -691,6 +691,12 @@ public class Config extends ConfigBase {
     public static int max_stream_load_timeout_second = 259200; // 3days
 
     /**
+     * Max stream load load batch size
+     */
+    @ConfField(mutable = true) 
+    public static int max_stream_load_batch_size_mb = 100;
+
+    /**
      * Default prepared transaction timeout
      */
     @ConfField(mutable = true)
@@ -1119,6 +1125,13 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int tablet_sched_max_migration_task_sent_once = 1000;
 
+    /**
+     * After checked tablet_checker_partition_batch_num partitions, db lock will be released,
+     * so that other threads can get the lock.
+     */
+    @ConfField(mutable = true)
+    public static int tablet_checker_partition_batch_num = 500;
+
     @Deprecated
     @ConfField(mutable = true)
     public static int report_queue_size = 100;
@@ -1177,6 +1190,12 @@ public class Config extends ConfigBase {
     public static long routine_load_kafka_timeout_second = 12;
 
     /**
+     * pulsar util request timeout
+     */
+    @ConfField(mutable = true)
+    public static long routine_load_pulsar_timeout_second = 12;
+
+    /**
      * it can't auto-resume routine load job as long as one of the backends is down
      */
     @ConfField(mutable = true)
@@ -1217,6 +1236,13 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static boolean enable_auth_check = true;
+
+    /**
+     * If set to false, auth check for StarRocks external table will be disabled. The check
+     * only happens on the target cluster.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_starrocks_external_table_auth_check = true;
 
     /**
      * ldap server host for authentication_ldap_simple
@@ -1305,8 +1331,20 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean recover_with_empty_tablet = false;
 
+    /**
+     * Limit on the number of expr children of an expr tree.
+     */
+    @ConfField(mutable = true)
+    public static int expr_children_limit = 10000;
+
     @ConfField(mutable = true)
     public static long max_planner_scalar_rewrite_num = 100000;
+
+    /**
+     * statistic collect flag
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_statistic_collect = true;
 
     /**
      * a period of create statistics table automatically by the StatisticsMetaManager
@@ -1320,13 +1358,6 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long statistic_analyze_status_keep_second = 3 * 24 * 3600L; // 3d
 
-    // The statistic
-    @ConfField
-    public static long statistic_cache_columns = 100000;
-
-    @ConfField
-    public static long statistic_dict_columns = 100000;
-
     /**
      * The collect thread work interval
      */
@@ -1334,28 +1365,34 @@ public class Config extends ConfigBase {
     public static long statistic_collect_interval_sec = 5 * 60; // 5m
 
     /**
-     * The column statistic update interval
+     * Num of thread to handle statistic collect
+     */
+    @ConfField(mutable = true)
+    public static int statistic_collect_concurrency = 3;
+
+    /**
+     * statistic collect query timeout
+     */
+    @ConfField(mutable = true)
+    public static long statistic_collect_query_timeout = 3600; // 1h
+
+    @ConfField
+    public static long statistic_cache_columns = 100000;
+
+    @ConfField
+    public static long statistic_dict_columns = 100000;
+
+    /**
+     * The column statistic cache update interval
      */
     @ConfField(mutable = true)
     public static long statistic_update_interval_sec = 24 * 60 * 60;
 
     /**
-     * The row number of sample collect, default 20w rows
-     */
-    @ConfField(mutable = true)
-    public static long statistic_sample_collect_rows = 200000;
-
-    /**
-     * statistic collect flag
-     */
-    @ConfField(mutable = true)
-    public static boolean enable_statistic_collect = true;
-
-    /**
      * Enable full statistics collection
      */
     @ConfField(mutable = true)
-    public static boolean enable_collect_full_statistic = false;
+    public static boolean enable_collect_full_statistic = true;
 
     /**
      * Statistics collection threshold
@@ -1369,14 +1406,17 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long statistic_max_full_collect_data_size = 100L * 1024 * 1024 * 1024; // 100G
 
-    @ConfField(mutable = true)
-    public static long statistic_collect_query_timeout = 3600; // 1h
-
     /**
      * Max row count in statistics collect per query
      */
     @ConfField(mutable = true)
     public static long statistic_collect_max_row_count_per_query = 5000000000L; //5 billion
+
+    /**
+     * The row number of sample collect, default 20w rows
+     */
+    @ConfField(mutable = true)
+    public static long statistic_sample_collect_rows = 200000;
 
     /**
      * default bucket size of histogram statistics
@@ -1448,11 +1488,35 @@ public class Config extends ConfigBase {
     @ConfField
     public static int hive_meta_load_concurrency = 4;
 
+    /**
+     * The interval of lazy refreshing hive metastore cache
+     */
     @ConfField
     public static long hive_meta_cache_refresh_interval_s = 3600L * 2L;
 
+    /**
+     * Hive metastore cache ttl
+     */
     @ConfField
     public static long hive_meta_cache_ttl_s = 3600L * 24L;
+
+    /**
+     * Remote file's metadata from hdfs or s3 cache ttl
+     */
+    @ConfField
+    public static long remote_file_cache_ttl_s = 3600 * 36L;
+
+    /**
+     * The interval of lazy refreshing remote file's metadata cache
+     */
+    @ConfField
+    public static long remote_file_cache_refresh_interval_s = 60;
+
+    /**
+     * Number of threads to load remote file's metadata concurrency.
+     */
+    @ConfField
+    public static int remote_file_metadata_load_concurrency = 32;
 
     /**
      * Hive MetaStore Client socket timeout in seconds.
@@ -1516,6 +1580,18 @@ public class Config extends ConfigBase {
     public static long iceberg_worker_num_threads = 64;
 
     /**
+     * size of iceberg table refresh pool
+     */
+    @ConfField(mutable = true)
+    public static int iceberg_table_refresh_threads = 128;
+
+    /**
+     * interval to remove cached table in iceberg refresh cache
+     */
+    @ConfField(mutable = true)
+    public static int iceberg_table_refresh_expire_sec = 86400;
+
+    /**
      * fe will call es api to get es index shard info every es_state_sync_interval_secs
      */
     @ConfField
@@ -1531,7 +1607,7 @@ public class Config extends ConfigBase {
      * connection and socket timeout for broker client
      */
     @ConfField
-    public static int broker_client_timeout_ms = 10000;
+    public static int broker_client_timeout_ms = 120000;
 
     /**
      * Unused config field, leave it here for backward compatibility
@@ -1602,6 +1678,8 @@ public class Config extends ConfigBase {
     public static boolean integrate_starmgr = false;
     @ConfField
     public static String starmgr_s3_bucket = "";
+    @ConfField
+    public static String starmgr_s3_region = "";
     @ConfField
     public static String starmgr_s3_endpoint = "";
     @ConfField
@@ -1675,26 +1753,32 @@ public class Config extends ConfigBase {
     public static int metadata_journal_max_batch_cnt = 100;
 
     /**
-     * Fqdn function switch,
-     * this switch will be deleted after release the fqdn func
-     */
-    @ConfField(mutable = true)
-    public static boolean enable_fqdn_func = false;
-
-    /**
      * jaeger tracing endpoint, empty thing disables tracing
      */
     @ConfField
     public static String jaeger_grpc_endpoint = "";
 
     @ConfField
-    public static long experimental_lake_compaction_max_version_count = 10;
+    public static String lake_compaction_selector = "SimpleSelector";
 
     @ConfField
-    public static long experimental_lake_compaction_min_version_count = 3;
+    public static String lake_compaction_sorter = "RandomSorter";
 
     @ConfField
-    public static long experimental_lake_compaction_max_interval_seconds = 300;
+    public static long lake_compaction_simple_selector_min_versions = 3;
+
+    @ConfField
+    public static long lake_compaction_simple_selector_threshold_versions = 10;
+
+    @ConfField
+    public static long lake_compaction_simple_selector_threshold_seconds = 300;
+
+    /**
+     * -1 means calculate the value in an adaptive way.
+     * 0 will disable compaction.
+     */
+    @ConfField
+    public static int lake_compaction_max_tasks = -1;
 
     @ConfField(mutable = true)
     public static boolean enable_new_publish_mechanism = false;
@@ -1709,4 +1793,54 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static boolean recursive_dir_search_enabled = false;
+
+    /**
+     * Number of profile infos reserved by `ProfileManager` for recently executed query.
+     * Default value: 500
+     */
+    @ConfField(mutable = true)
+    public static int profile_info_reserved_num = 500;
+
+    /**
+     * Max number of roles that can be granted to user including all direct roles and all parent roles
+     * Used in new RBAC framework after 3.0 released
+     **/
+    @ConfField(mutable = true)
+    public static int privilege_max_total_roles_per_user = 64;
+
+    /**
+     * Max role inheritance depth allowed. To avoid bad performance when merging privileges.
+     **/
+    @ConfField(mutable = true)
+    public static int privilege_max_role_depth = 16;
+
+    /**
+     * ignore invalid privilege & authentication when upgraded to new RBAC privilege framework in 3.0
+     */
+    @ConfField(mutable = true)
+    public static boolean ignore_invalid_privilege_authentications = false;
+
+    /**
+     * the keystore file path
+     */
+    @ConfField
+    public static String ssl_keystore_location = "";
+
+    /**
+     * the password of keystore file
+     */
+    @ConfField
+    public static String ssl_keystore_password = "";
+
+    /**
+     * the password of private key
+     */
+    @ConfField
+    public static String ssl_key_password = "";
+
+    /**
+     * ignore check db status when show proc '/catalog/catalog_name'
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_check_db_state = true;
 }

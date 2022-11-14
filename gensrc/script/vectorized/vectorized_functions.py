@@ -355,7 +355,10 @@ vectorized_functions = [
     [50340, 'date_trunc', 'DATETIME', ['VARCHAR', 'DATETIME'], 'TimeFunctions::datetime_trunc', 'TimeFunctions::datetime_trunc_prepare', 'TimeFunctions::datetime_trunc_close'],
     [50350, 'date_trunc', 'DATE', ['VARCHAR', 'DATE'], 'TimeFunctions::date_trunc', 'TimeFunctions::date_trunc_prepare', 'TimeFunctions::date_trunc_close'],
     [50360, 'timestamp', 'DATETIME', ['DATETIME'], 'TimeFunctions::timestamp'],
-    [50370, 'time_slice', 'DATETIME', ['DATETIME', 'INT', 'VARCHAR'], 'TimeFunctions::time_slice', 'TimeFunctions::time_slice_prepare', 'TimeFunctions::time_slice_close'],
+    [50370, 'date_slice', 'DATE', ['DATE', 'INT', 'VARCHAR'], 'TimeFunctions::time_slice', 'TimeFunctions::time_slice_prepare', 'TimeFunctions::time_slice_close'],
+    [50371, 'date_slice', 'DATE', ['DATE', 'INT', 'VARCHAR', 'VARCHAR'], 'TimeFunctions::time_slice', 'TimeFunctions::time_slice_prepare', 'TimeFunctions::time_slice_close'],
+    [50372, 'time_slice', 'DATETIME', ['DATETIME', 'INT', 'VARCHAR'], 'TimeFunctions::time_slice', 'TimeFunctions::time_slice_prepare', 'TimeFunctions::time_slice_close'],
+    [50373, 'time_slice', 'DATETIME', ['DATETIME', 'INT', 'VARCHAR', 'VARCHAR'], 'TimeFunctions::time_slice', 'TimeFunctions::time_slice_prepare', 'TimeFunctions::time_slice_close'],
 
     # 60xxx: like predicate
     # important ref: LikePredicate.java, must keep name equals LikePredicate.Operator
@@ -478,6 +481,7 @@ vectorized_functions = [
     [90700, 'bitmap_min', 'LARGEINT', ['BITMAP'], 'BitmapFunctions::bitmap_min', False],
     [90800, 'base64_to_bitmap', 'BITMAP', ['VARCHAR'], 'BitmapFunctions::base64_to_bitmap', False],
     [90900, 'array_to_bitmap', 'BITMAP', ['ARRAY_BIGINT'], 'BitmapFunctions::array_to_bitmap', False],
+    [91000, 'sub_bitmap', 'BITMAP', ['BITMAP', 'BIGINT', 'BIGINT'], 'BitmapFunctions::sub_bitmap', False],
 
     # hash function
     [100010, 'murmur_hash3_32', 'INT', ['VARCHAR', '...'], 'HashFunctions::murmur_hash3_32'],
@@ -490,6 +494,7 @@ vectorized_functions = [
     [100015, 'uuid', 'VARCHAR', [], "UtilityFunctions::uuid"],
     [100016, 'uuid_numeric', 'LARGEINT', [], "UtilityFunctions::uuid_numeric"],
     [100017, 'assert_true', 'BOOLEAN', ['BOOLEAN'], 'UtilityFunctions::assert_true'],
+    [100018, 'host_name', 'VARCHAR', [], "UtilityFunctions::host_name"],
 
     # json string function
     [110000, "get_json_int", "INT", ["VARCHAR", "VARCHAR"], "JsonFunctions::get_json_int",
@@ -506,6 +511,8 @@ vectorized_functions = [
      "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close", False],
     [110015, "get_json_object", "VARCHAR", ["JSON", "VARCHAR"], "JsonFunctions::get_native_json_string",
      "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close", False],
+    [110016, "get_json_object", "VARCHAR", ["VARCHAR", "VARCHAR"], "JsonFunctions::get_json_string",
+     "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close", False],
 
     # json type function
     [110003, "parse_json", "JSON", ["VARCHAR"], "JsonFunctions::parse_json", False],
@@ -521,8 +528,10 @@ vectorized_functions = [
     [110011, "json_array", "JSON", [], "JsonFunctions::json_array_empty", False],
     [110016, "json_length", "INT", ["JSON"], "JsonFunctions::json_length", False],
     [110017, "json_length", "INT", ["JSON", "VARCHAR"], "JsonFunctions::json_length", 
-    "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close", False],
+      "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close", False],
     [110018, "json_keys", "JSON", ["JSON"], "JsonFunctions::json_keys", False],
+    [110018, "json_keys", "JSON", ["JSON", "VARCHAR"], "JsonFunctions::json_keys", 
+      "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close", False],
 
     # aes and base64 function
     [120100, "aes_encrypt", "VARCHAR", ["VARCHAR", "VARCHAR"], "EncryptionFunctions::aes_encrypt", False],
@@ -531,6 +540,7 @@ vectorized_functions = [
     [120130, "to_base64", "VARCHAR", ["VARCHAR"], "EncryptionFunctions::to_base64", False],
     [120140, "md5", "VARCHAR", ["VARCHAR"], "EncryptionFunctions::md5", False],
     [120150, "md5sum", "VARCHAR", ["VARCHAR", "..."], "EncryptionFunctions::md5sum", False],
+    [120151, "md5sum_numeric", "LARGEINT", ["VARCHAR", "..."], "EncryptionFunctions::md5sum_numeric", False],
     [120160, "sha2", "VARCHAR", ["VARCHAR", "INT"], "EncryptionFunctions::sha2", "EncryptionFunctions::sha2_prepare", "EncryptionFunctions::sha2_close", False],
 
       # geo function
@@ -654,6 +664,7 @@ vectorized_functions = [
     [150119, 'array_sort', 'ARRAY_DECIMALV2', ['ARRAY_DECIMALV2'], 'ArrayFunctions::array_sort_decimalv2'],
     [150120, 'array_sort', 'ARRAY_DATETIME',  ['ARRAY_DATETIME'],  'ArrayFunctions::array_sort_datetime'],
     [150121, 'array_sort', 'ARRAY_DATE',      ['ARRAY_DATE'],      'ArrayFunctions::array_sort_date'],
+    [150122, 'array_sort', 'ARRAY_JSON',      ['ARRAY_JSON'],      'ArrayFunctions::array_sort_json'],
 
     [150130, 'reverse', 'ARRAY_BOOLEAN',   ['ARRAY_BOOLEAN'],   'ArrayFunctions::array_reverse_boolean'],
     [150131, 'reverse', 'ARRAY_TINYINT',   ['ARRAY_TINYINT'],   'ArrayFunctions::array_reverse_tinyint'],
@@ -667,6 +678,7 @@ vectorized_functions = [
     [150139, 'reverse', 'ARRAY_DECIMALV2', ['ARRAY_DECIMALV2'], 'ArrayFunctions::array_reverse_decimalv2'],
     [150140, 'reverse', 'ARRAY_DATETIME',  ['ARRAY_DATETIME'],  'ArrayFunctions::array_reverse_datetime'],
     [150141, 'reverse', 'ARRAY_DATE',      ['ARRAY_DATE'],      'ArrayFunctions::array_reverse_date'],
+    [150142, 'reverse', 'ARRAY_JSON',      ['ARRAY_JSON'],      'ArrayFunctions::array_reverse_json'],
 
     [150150, 'array_join', 'VARCHAR', ['ARRAY_VARCHAR', 'VARCHAR'],   'ArrayFunctions::array_join_varchar'],
     [150151, 'array_join', 'VARCHAR', ['ARRAY_VARCHAR', 'VARCHAR', 'VARCHAR'],   'ArrayFunctions::array_join_varchar'],
@@ -693,6 +705,7 @@ vectorized_functions = [
     [150179, 'array_slice', 'ARRAY_DOUBLE',    ['ARRAY_DOUBLE', 'BIGINT', 'BIGINT'],    'ArrayFunctions::array_slice_double'],
     [150180, 'array_slice', 'ARRAY_DECIMALV2', ['ARRAY_DECIMALV2', 'BIGINT', 'BIGINT'], 'ArrayFunctions::array_slice_decimalv2'],
     [150181, 'array_slice', 'ARRAY_VARCHAR',   ['ARRAY_VARCHAR', 'BIGINT', 'BIGINT'],   'ArrayFunctions::array_slice_varchar'],
+    [150182, 'array_slice', 'ARRAY_JSON',      ['ARRAY_JSON', 'BIGINT', 'BIGINT'],      'ArrayFunctions::array_slice_json'],
 
     [150190, 'array_concat', 'ARRAY_DATE', ['ARRAY_DATE', "..."], 'ArrayFunctions::array_concat_date'],
     [150191, 'array_concat', 'ARRAY_DATETIME',  ['ARRAY_DATETIME', "..."],  'ArrayFunctions::array_concat_datetime'],
@@ -706,6 +719,7 @@ vectorized_functions = [
     [150199, 'array_concat', 'ARRAY_DOUBLE',    ['ARRAY_DOUBLE', "..."],    'ArrayFunctions::array_concat_double'],
     [150200, 'array_concat', 'ARRAY_DECIMALV2', ['ARRAY_DECIMALV2', "..."], 'ArrayFunctions::array_concat_decimalv2'],
     [150201, 'array_concat', 'ARRAY_VARCHAR',   ['ARRAY_VARCHAR', "..."],   'ArrayFunctions::array_concat_varchar'],
+    [150202, 'array_concat', 'ARRAY_JSON',      ['ARRAY_JSON', "..."],      'ArrayFunctions::array_concat_json'],
 
     [150210, 'arrays_overlap', 'BOOLEAN',      ['ARRAY_DATE', 'ARRAY_DATE'],        'ArrayFunctions::array_overlap_date'],
     [150211, 'arrays_overlap', 'BOOLEAN',  ['ARRAY_DATETIME', 'ARRAY_DATETIME'],    'ArrayFunctions::array_overlap_datetime'],
@@ -745,10 +759,21 @@ vectorized_functions = [
     [150259, 'array_slice', 'ARRAY_DOUBLE',    ['ARRAY_DOUBLE', 'BIGINT'],    'ArrayFunctions::array_slice_double'],
     [150260, 'array_slice', 'ARRAY_DECIMALV2', ['ARRAY_DECIMALV2', 'BIGINT'], 'ArrayFunctions::array_slice_decimalv2'],
     [150261, 'array_slice', 'ARRAY_VARCHAR',   ['ARRAY_VARCHAR', 'BIGINT'],   'ArrayFunctions::array_slice_varchar'],
+    [150262, 'array_slice', 'ARRAY_JSON',      ['ARRAY_JSON', 'BIGINT'],      'ArrayFunctions::array_slice_json'],
 
     [150270, 'array_cum_sum', 'ARRAY_BIGINT', ['ARRAY_BIGINT'], 'ArrayFunctions::array_cum_sum_bigint'],
     [150271, 'array_cum_sum', 'ARRAY_DOUBLE', ['ARRAY_DOUBLE'], 'ArrayFunctions::array_cum_sum_double'],
 
     # reserve 150281
     [150282, 'array_contains_all', 'BOOLEAN', ['ANY_ARRAY', 'ANY_ARRAY'], 'ArrayFunctions::array_contains_all'],
+
+    [150300, 'array_filter', 'ANY_ARRAY',   ['ANY_ARRAY', 'ARRAY_BOOLEAN'],   'ArrayFunctions::array_filter'],
+
+    # high-order functions related to lambda functions.
+    [160100, 'array_map','ANY_ARRAY',['FUNCTION','ANY_ARRAY', "..."],'ArrayFunctions::array_map'],
+
+    # map functions
+    [170000, 'map_size', 'INT', ['ANY_MAP'], 'MapFunctions::map_size'],
+    [170001, 'map_keys', 'ANY_ARRAY', ['ANY_MAP'], 'MapFunctions::map_keys'],
+    [170002, 'map_values', 'ANY_ARRAY', ['ANY_MAP'], 'MapFunctions::map_values'],
 ]

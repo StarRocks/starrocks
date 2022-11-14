@@ -113,7 +113,7 @@ Status AssertNumRowsNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* e
 
         if (!assert_res) {
             auto to_string_lamba = [](TAssertion::type assertion) {
-                std::map<int, const char*>::const_iterator it = _TAssertion_VALUES_TO_NAMES.find(assertion);
+                auto it = _TAssertion_VALUES_TO_NAMES.find(assertion);
 
                 if (it == _TAggregationOp_VALUES_TO_NAMES.end()) {
                     return "NULL";
@@ -156,7 +156,7 @@ pipeline::OpFactories AssertNumRowsNode::decompose_to_pipeline(pipeline::Pipelin
             runtime_state(), operator_before_assert_num_rows_source);
 
     auto source_factory = std::make_shared<AssertNumRowsOperatorFactory>(
-            context->next_operator_id(), id(), _desired_num_rows, _subquery_string, std::move(_assertion));
+            context->next_operator_id(), id(), _desired_num_rows, _subquery_string, _assertion);
     operator_before_assert_num_rows_source.emplace_back(std::move(source_factory));
 
     // Create a shared RefCountedRuntimeFilterCollector

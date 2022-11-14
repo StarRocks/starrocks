@@ -1,6 +1,10 @@
 # weekofyear
 
-## description
+## Description
+
+Returns the week number for a given date within a year.
+
+The `date` parameter must be of the DATE or DATETIME type.
 
 ## Syntax
 
@@ -8,11 +12,7 @@
 INT WEEKOFYEAR(DATETIME date)
 ```
 
-This function returns the week number for a given date (e.g. within a year).
-
-Parameters must be Date or Datetime type.
-
-## example
+## Examples
 
 ```Plain Text
 MySQL > select weekofyear('2008-02-20 00:00:00');

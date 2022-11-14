@@ -14,8 +14,6 @@ import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
-import com.starrocks.analysis.SelectList;
-import com.starrocks.analysis.SelectListItem;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
@@ -25,6 +23,8 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.Relation;
+import com.starrocks.sql.ast.SelectList;
+import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.common.StarRocksPlannerException;
 
 import java.util.ArrayList;
@@ -225,10 +225,12 @@ public class SelectAnalyzer {
                 outputFields.addAll(fields);
 
             } else {
-                String name = item.getAlias() == null ? AST2SQL.toString(item.getExpr()) : item.getAlias();
-
                 analyzeExpression(item.getExpr(), analyzeState, scope);
                 outputExpressionBuilder.add(item.getExpr());
+
+                // We need get column name after analyzerExpression, because StructType's col name maybe a wrong value.
+                // The name here only refer to column name.
+                String name = item.getAlias() == null ? AST2SQL.toString(item.getExpr()) : item.getAlias();
 
                 if (item.getExpr() instanceof SlotRef) {
                     outputFields.add(new Field(name, item.getExpr().getType(),
@@ -523,12 +525,12 @@ public class SelectAnalyzer {
 
         @Override
         public Expr visitSlot(SlotRef slotRef, Void context) {
-            if (sourceScope.tryResolveFeild(slotRef).isPresent() &&
+            if (sourceScope.tryResolveField(slotRef).isPresent() &&
                     !session.getSessionVariable().getEnableGroupbyUseOutputAlias()) {
                 return slotRef;
             }
 
-            Optional<ResolvedField> resolvedField = outputScope.tryResolveFeild(slotRef);
+            Optional<ResolvedField> resolvedField = outputScope.tryResolveField(slotRef);
             if (resolvedField.isPresent()) {
                 return outputExprs.get(resolvedField.get().getRelationFieldIndex());
             }

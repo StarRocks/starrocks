@@ -11,6 +11,7 @@
 #include "column/column_hash.h"
 #include "column/schema.h"
 #include "common/global_types.h"
+#include "exec/query_cache/owner_info.h"
 #include "util/phmap/phmap.h"
 
 namespace starrocks {
@@ -28,8 +29,8 @@ public:
 
     Chunk();
     Chunk(Columns columns, SchemaPtr schema);
-    Chunk(Columns columns, const SlotHashMap& slot_map);
-    Chunk(Columns columns, const SlotHashMap& slot_map, const TupleHashMap& tuple_map);
+    Chunk(Columns columns, SlotHashMap slot_map);
+    Chunk(Columns columns, SlotHashMap slot_map, TupleHashMap tuple_map);
 
     Chunk(Chunk&& other) = default;
     Chunk& operator=(Chunk&& other) = default;
@@ -89,7 +90,7 @@ public:
     // For simplicity and better performance, we are assuming |indexes| all all valid
     // and is sorted in ascending order, if it's not, unexpected columns may be removed (silently).
     // |indexes| can be empty and no column will be removed in this case.
-    void remove_columns_by_index(const std::vector<size_t>& indexes);
+    [[maybe_unused]] void remove_columns_by_index(const std::vector<size_t>& indexes);
 
     // schema must exists.
     const ColumnPtr& get_column_by_name(const std::string& column_name) const;
@@ -241,6 +242,8 @@ public:
         return false;
     }
 
+    query_cache::owner_info& owner_info() { return _owner_info; }
+
 private:
     void rebuild_cid_index();
 
@@ -251,6 +254,7 @@ private:
     SlotHashMap _slot_id_to_index;
     TupleHashMap _tuple_id_to_index;
     DelCondSatisfied _delete_state = DEL_NOT_SATISFIED;
+    query_cache::owner_info _owner_info;
 };
 
 inline const ColumnPtr& Chunk::get_column_by_name(const std::string& column_name) const {

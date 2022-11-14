@@ -90,8 +90,8 @@ static std::string compute_md5(const std::string& file) {
 }
 class UserFunctionCacheTest : public testing::Test {
 public:
-    UserFunctionCacheTest() {}
-    virtual ~UserFunctionCacheTest() {}
+    UserFunctionCacheTest() = default;
+    ~UserFunctionCacheTest() override = default;
     static void SetUpTestCase() {
         s_server = new EvHttpServer(0);
         s_server->register_handler(GET, "/{FILE}", &s_test_handler);

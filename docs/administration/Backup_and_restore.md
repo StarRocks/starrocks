@@ -1,6 +1,6 @@
 # Backup and Recovery
 
-StarRocks supports backing up the current data as a file to a remote storage system via the broker (the broker is an optional process in the StarRocks cluster, mainly used to support StarRocks to read and write files and directories on the remote storage, please refer to the [Broker Load documentation](../loading/BrokerLoad.md). The backup data can be restored from the remote storage system to any StarRocks cluster with the restore command. This feature supports periodic snapshot backup of data. It also allows migrating data between clusters.
+StarRocks supports backing up the current data as a file to a remote storage system via the broker (the broker is an optional process in the StarRocks cluster, mainly used to support StarRocks to read and write files and directories on the remote storage, please refer to the [Broker Load](../loading/BrokerLoad.md). The backup data can be restored from the remote storage system to any StarRocks cluster with the restore command. This feature supports periodic snapshot backup of data. It also allows migrating data between clusters.
 
 To use this feature, you need to deploy a broker that corresponds to the remote storage system, such as HDFS. You can check the broker information by `SHOW BROKER;`.
 
@@ -14,7 +14,7 @@ Backup is to upload data from a specified table or partition to a remote reposit
    * First, it takes a snapshot of the data in the specified table or partition . The backup is performed on the snapshot. After the snapshot, any operation made to the table no longer affects the backup result. The snapshot quickly produces a hard link to the current data file. Once the snapshot is complete, the snapshot files are uploaded one by one. Snapshot upload is done concurrently by each Backend.
   
 2. Metadata Preparation and Upload
-   * After the snapshot upload is completed, Frontend will write the corresponding metadata to a local file, and then upload this file to the remote repository through the broker.
+   * After the snapshot upload is completed, FE will write the corresponding metadata to a local file, and then upload this file to the remote repository through the broker.
 
 ### Restore
 
@@ -24,10 +24,10 @@ The restore operation requires specifying a backup that already exists in the re
    * This step first creates a structure such as a table partition in the local cluster that corresponds to the restore request. Once created, the table will be visible, but not accessible.
 
 2. local snapshot
-   * This step takes a snapshot of the table created in the previous step. The snapshot will be empty because the newly created table has no data. The purpose of this step is to generate the corresponding snapshot directory on Backend, which can be used to receive the snapshot files downloaded from the remote repository later.
+   * This step takes a snapshot of the table created in the previous step. The snapshot will be empty because the newly created table has no data. The purpose of this step is to generate the corresponding snapshot directory on BE, which can be used to receive the snapshot files downloaded from the remote repository later.
 
 3. download the snapshot
-   * The snapshot file from the remote repository is downloaded to the corresponding snapshot directory generated in the previous step. This step is done concurrently by each Backend.
+   * The snapshot file from the remote repository is downloaded to the corresponding snapshot directory generated in the previous step. This step is done concurrently by each BE.
 
 4. ready to use
    * After the snapshots are downloaded, the individual snapshots are mapped to the current local table metadata. These snapshots are then reloaded to be ready to use and complete the final recovery operation.
@@ -49,7 +49,7 @@ To complete data migration, users can back up data to a remote repository and th
 
 ## Notes
 
-1. B Only ADMIN users can perform backup and recovery operations.
+1. Only ADMIN users can perform backup and recovery operations.
 2. Only one active backup or recovery job can run in a Database.
 3. Both backup and recovery can be performed at the partition level. For large volume data, it is recommended to perform the operations separately by partition to reduce retries after failures.
 4. Backup and recovery operations are performed on the actual data files. When a table has too many tablets or minor versions, it takes a long time to back up or restore even if the total data volume is small. Users can estimate the job execution time by viewing the number of tablets and the number of file versions in each partition with `SHOW PARTITIONS FROM table_name;` and `SHOW TABLET FROM table_name;` respectively. The number of files has a great impact on the job execution time, so it is recommended to plan the partitioning and bucketing wisely.
@@ -61,15 +61,17 @@ To complete data migration, users can back up data to a remote repository and th
 
 The following commands are related to the backup and recovery operations.
 
-CREATE REPOSITORY
+### CREATE REPOSITORY
 
-* Create a remote repository path for backup or recovery. This command requires access to the remote storage system via Broker. Different Brokers need different parameters, see [Broker documentation](. /loading/BrokerLoad.md). The backup and recovery clusters need to create the same repository, including the repository path and repository name, which allows the  recovery cluster to read the backup snapshot of the backup cluster.
+Create a remote repository path for backup or recovery.
 
-BACKUP
+This command requires access to the remote storage system via Broker. Different Brokers need different parameters, see [Broker Load](../loading/BrokerLoad.md). The backup and recovery clusters need to create the same repository, including the repository path and repository name, which allows the  recovery cluster to read the backup snapshot of the backup cluster.
 
-* Perform a backup operation.
+### BACKUP
 
-SHOW BACKUP
+Perform a backup operation.
+
+### SHOW BACKUP
 
 View the execution status of the last backup job, including:
 
@@ -95,24 +97,24 @@ View the execution status of the last backup job, including:
 * Status: The status that may occur when the job is running.
 * Timeout: The timeout of the job, in "seconds".
 
-SHOW SNAPSHOT
+### SHOW SNAPSHOT
 
-* View the backups that already exist in the remote repository.
+View the backups that already exist in the remote repository.
 
   * Snapshot: The name (Label) of this backup specified at backup time.
   * Timestamp: The timestamp of the backup.
   * Status: Whether the backup is normal or not.
 
-* If you specify the `where` clause after `SHOW SNAPSHOT`, you will see more detailed backup information.
+If you specify the `where` clause after `SHOW SNAPSHOT`, you will see more detailed backup information.
 
   * Database: The corresponding Database.
   * Details:  A holistic view of the backup data directory.
 
-RESTORE
+### RESTORE
 
 Perform a restore operation.
 
-SHOW RESTORE
+### SHOW RESTORE
 
 View the execution of the most recent recovery job, including:
 
@@ -139,19 +141,19 @@ View the execution of the most recent recovery job, including:
 * SnapshotFinishedTime: Completion time of Local snapshot.
 * DownloadFinishedTime: Completion time of remote snapshot download.
 * FinishedTime: Completion time of this job.
-* UnfinishedTasks: There will be multiple subtasks in progress, such as S SNAPSHOTTING, DOWNLOADING, COMMITTING, etc. Here are the task ids of the incomplete subtasks.
+* UnfinishedTasks: There will be multiple subtasks in progress, such as SNAPSHOTTING, DOWNLOADING, COMMITTING, etc. Here are the task IDs of the incomplete subtasks.
 * TaskErrMsg: If there is a subtask execution error, the error message will be displayed here.
 * Status: The status that may occur when the job is running.
 * Timeout: The timeout of the job, in seconds.
 
-CANCEL BACKUP
+### CANCEL BACKUP
 
 Cancel the running backup job.
 
-CANCEL RESTORE
+### CANCEL RESTORE
 
 Cancel the running recovery job.
 
-DROP REPOSITORY
+### DROP REPOSITORY
 
 Delete a remote repository that has been created. Deleting a repository only removes the mapping of that repository in StarRocks, not the actual repository data.

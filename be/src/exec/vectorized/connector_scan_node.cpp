@@ -132,8 +132,21 @@ Status ConnectorScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
 
 pipeline::OpFactories ConnectorScanNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     size_t dop = context->dop_of_source_operator(id());
-    auto scan_op = std::make_shared<pipeline::ConnectorScanOperatorFactory>(
-            context->next_operator_id(), this, dop, std::make_unique<pipeline::UnlimitedChunkBufferLimiter>());
+    std::shared_ptr<pipeline::ConnectorScanOperatorFactory> scan_op = nullptr;
+
+    if (config::connector_dynamic_chunk_buffer_limiter_enable) {
+        // port from olap scan node.
+        size_t max_buffer_capacity = pipeline::ScanOperator::max_buffer_capacity() * dop;
+        size_t default_buffer_capacity = max_buffer_capacity;
+        int64_t mem_limit = runtime_state()->query_mem_tracker_ptr()->limit() * config::scan_use_query_mem_ratio;
+        pipeline::ChunkBufferLimiterPtr buffer_limiter = std::make_unique<pipeline::DynamicChunkBufferLimiter>(
+                max_buffer_capacity, default_buffer_capacity, mem_limit, runtime_state()->chunk_size());
+        scan_op = std::make_shared<pipeline::ConnectorScanOperatorFactory>(context->next_operator_id(), this, dop,
+                                                                           std::move(buffer_limiter));
+    } else {
+        scan_op = std::make_shared<pipeline::ConnectorScanOperatorFactory>(
+                context->next_operator_id(), this, dop, std::make_unique<pipeline::UnlimitedChunkBufferLimiter>());
+    }
 
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(1, std::move(this->runtime_filter_collector()));
     this->init_runtime_filter_for_operator(scan_op.get(), context, rc_rf_probe_collector);

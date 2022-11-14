@@ -36,8 +36,6 @@ import com.starrocks.thrift.TStructField;
 import com.starrocks.thrift.TTypeDesc;
 import com.starrocks.thrift.TTypeNode;
 import com.starrocks.thrift.TTypeNodeType;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -50,7 +48,9 @@ import java.util.stream.Collectors;
  * as abstract methods that subclasses must implement.
  */
 public abstract class Type implements Cloneable {
-    private static final Logger LOG = LogManager.getLogger(Type.class);
+    // used for nested type such as map and struct
+    protected Boolean[] selectedFields;
+
     public static final int BINARY = 63;
     public static final int CHARSET_UTF8 = 33;
 
@@ -115,6 +115,7 @@ public abstract class Type implements Cloneable {
 
     public static final PseudoType ANY_ELEMENT = PseudoType.ANY_ELEMENT;
     public static final PseudoType ANY_ARRAY = PseudoType.ANY_ARRAY;
+    public static final PseudoType ANY_MAP = PseudoType.ANY_MAP;
 
     public static final Type ARRAY_BOOLEAN = new ArrayType(Type.BOOLEAN);
     public static final Type ARRAY_TINYINT = new ArrayType(Type.TINYINT);
@@ -128,6 +129,7 @@ public abstract class Type implements Cloneable {
     public static final Type ARRAY_DATE = new ArrayType(Type.DATE);
     public static final Type ARRAY_DATETIME = new ArrayType(Type.DATETIME);
     public static final Type ARRAY_VARCHAR = new ArrayType(Type.VARCHAR);
+    public static final Type ARRAY_JSON = new ArrayType(Type.JSON);
 
     private static final ImmutableList<ScalarType> INTEGER_TYPES =
             ImmutableList.of(TINYINT, SMALLINT, INT, BIGINT, LARGEINT);
@@ -156,6 +158,7 @@ public abstract class Type implements Cloneable {
                     .add(DECIMALV2)
                     .add(TIME)
                     .add(ANY_ARRAY)
+                    .add(ANY_MAP)
                     .add(DECIMAL32)
                     .add(DECIMAL64)
                     .add(DECIMAL128)
@@ -172,6 +175,7 @@ public abstract class Type implements Cloneable {
                     .put("DECIMAL", Type.DEFAULT_DECIMALV2) // generic name for decimal
                     .put("STRING", Type.DEFAULT_STRING)
                     .put("INTEGER", Type.INT)
+                    .put("UNSIGNED", Type.INT)
                     .putAll(SUPPORT_SCALAR_TYPE_LIST.stream()
                             .collect(Collectors.toMap(x -> x.getPrimitiveType().toString(), x -> (ScalarType) x)))
                     .build();
@@ -535,6 +539,27 @@ public abstract class Type implements Cloneable {
      */
     protected abstract String prettyPrint(int lpad);
 
+    /**
+     * Used for Nest Type
+     */
+    public void setSelectedField(int pos, boolean needSetChildren) {
+        throw new IllegalStateException("setSelectedField() is not implemented for type " + toSql());
+    }
+
+    /**
+     * Used for Nest Type
+     */
+    public void selectAll() {
+        throw new IllegalStateException("selectAll() is not implemented for type " + toSql());
+    }
+
+    /**
+     * used for test
+     */
+    public Boolean[] getSelectedFields() {
+        return selectedFields;
+    }
+
     public boolean isInvalid() {
         return isScalarType(PrimitiveType.INVALID_TYPE);
     }
@@ -857,7 +882,7 @@ public abstract class Type implements Cloneable {
         // 8-byte pointer and 4-byte length indicator (12 bytes total).
         // Per struct alignment rules, there is an extra 4 bytes of padding to align to 8
         // bytes so 16 bytes total.
-        if (isCollectionType()) {
+        if (isComplexType()) {
             return 16;
         }
         throw new IllegalStateException("getSlotSize() not implemented for type " + toSql());
@@ -950,13 +975,29 @@ public abstract class Type implements Cloneable {
         }
     }
 
-    public static boolean canCastTo(Type from, Type to) {
+    public static boolean canCastToAsFunctionParameter(Type from, Type to) {
         if (from.isNull()) {
             return true;
         } else if (from.isScalarType() && to.isScalarType()) {
             return ScalarType.canCastTo((ScalarType) from, (ScalarType) to);
         } else if (from.isArrayType() && to.isArrayType()) {
             return canCastTo(((ArrayType) from).getItemType(), ((ArrayType) to).getItemType());
+        } else {
+            return false;
+        }
+    }
+
+    public static boolean canCastTo(Type from, Type to) {
+        if (from.isNull()) {
+            return true;
+        } else if (from.isStringType() && to.isBitmapType()) {
+            return true;
+        } else if (from.isScalarType() && to.isScalarType()) {
+            return ScalarType.canCastTo((ScalarType) from, (ScalarType) to);
+        } else if (from.isArrayType() && to.isArrayType()) {
+            return canCastTo(((ArrayType) from).getItemType(), ((ArrayType) to).getItemType());
+        } else if ((from.isStringType() || from.isJsonType()) && to.isArrayType()) {
+            return true;
         } else {
             return false;
         }
@@ -1526,8 +1567,9 @@ public abstract class Type implements Cloneable {
         }
     }
 
+    // getInnermostType() is only used for array
     public static Type getInnermostType(Type type) throws AnalysisException {
-        if (type.isScalarType()) {
+        if (type.isScalarType() || type.isStructType()) {
             return type;
         }
         if (type.isArrayType()) {

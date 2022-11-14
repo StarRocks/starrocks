@@ -2,15 +2,19 @@
 
 package com.starrocks.sql.plan;
 
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.LambdaFunctionExpr;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -220,6 +224,21 @@ public class ExpressionTest extends PlanTestBase {
         Expr castExpression = ScalarOperatorToExpr.buildExecExpression(castColumnRef, context);
 
         Assert.assertTrue(castExpression instanceof CastExpr);
+
+        // lambda functions
+        ScalarOperator lambdaExpr = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
+                new ColumnRefOperator(100000, Type.INT, "x", true),
+                ConstantOperator.createInt(1));
+        ColumnRefOperator colRef = new ColumnRefOperator(100000, Type.INT, "x", true);
+        LambdaFunctionOperator lambda = new LambdaFunctionOperator(Lists.newArrayList(colRef), lambdaExpr, Type.BOOLEAN);
+        variableToSlotRef.clear();
+        projectMap.clear();
+        context = new ScalarOperatorToExpr.FormatterContext(variableToSlotRef, projectMap);
+
+        Expr lambdaFunc = ScalarOperatorToExpr.buildExecExpression(lambda, context);
+
+        Assert.assertTrue(lambdaFunc instanceof LambdaFunctionExpr);
+        Assert.assertEquals("<slot 100000> -> <slot 100000> = 1", lambdaFunc.toSql());
     }
 
     @Test
@@ -960,6 +979,66 @@ public class ExpressionTest extends PlanTestBase {
         sql = "select cast(cast(t1a as int) as bigint) from test_all_type;";
         plan = getFragmentPlan(sql);
         assertContains(plan, "CAST(CAST(1: t1a AS INT) AS BIGINT)");
+    }
+
+    @Test
+    public void testVarcharAsBitmapCast() throws Exception {
+        String sql = "select cast(t1a as BITMAP) from test_all_type;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "CAST(1: t1a AS BITMAP)");
+    }
+
+    @Test
+    public void testTimeSlicePlan() throws Exception {
+        String sql = "select time_slice(th, interval 1 year) from tall;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "time_slice(8: th, 1, 'year', 'floor')");
+
+        sql = "select time_slice(th, interval 1 year, CEIL) from tall;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "time_slice(8: th, 1, 'year', 'ceil')");
+    }
+
+    @Test
+    public void testQualifyForWindowFunction() throws Exception {
+        // for '='
+        String sql = "select tc from tall qualify row_number() OVER(PARTITION by ta order by tg) = 1;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "predicates: 11: row_number() = 1");
+
+        sql = "select tc from tall qualify rank() OVER(PARTITION by ta order by tg) = 1;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "predicates: 11: rank() = 1");
+
+        sql = "select tc from tall qualify dense_rank() OVER(PARTITION by ta order by tg) = 1;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "predicates: 11: dense_rank() = 1");
+
+        // for '<'
+        sql = "select tc from tall qualify row_number() OVER(PARTITION by ta order by tg) < 1;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "predicates: 11: row_number() < 1");
+
+        sql = "select tc from tall qualify rank() OVER(PARTITION by ta order by tg) < 1;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "predicates: 11: rank() < 1");
+
+        sql = "select tc from tall qualify dense_rank() OVER(PARTITION by ta order by tg) < 1;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "predicates: 11: dense_rank() < 1");
+
+        // for '>'
+        sql = "select tc from tall qualify row_number() OVER(PARTITION by ta order by tg) > 1;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "predicates: 11: row_number() > 1");
+
+        sql = "select tc from tall qualify rank() OVER(PARTITION by ta order by tg) > 1;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "predicates: 11: rank() > 1");
+
+        sql = "select tc from tall qualify dense_rank() OVER(PARTITION by ta order by tg) > 1;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "predicates: 11: dense_rank() > 1");
     }
 
     @Test

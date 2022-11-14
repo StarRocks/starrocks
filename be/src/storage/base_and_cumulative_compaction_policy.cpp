@@ -57,27 +57,12 @@ bool BaseAndCumulativeCompactionPolicy::_is_rowset_creation_time_ordered(
 void BaseAndCumulativeCompactionPolicy::_pick_cumulative_rowsets(bool* has_delete_version,
                                                                  size_t* rowsets_compaction_score,
                                                                  std::vector<RowsetSharedPtr>* rowsets) {
-    int64_t now = UnixSeconds();
     if (_compaction_context->rowset_levels[0].size() == 0) {
         return;
     }
-    bool is_creation_time_ordered = _is_rowset_creation_time_ordered(_compaction_context->rowset_levels[0]);
-    int index = 0;
     for (auto rowset : _compaction_context->rowset_levels[0]) {
         if (_compaction_context->tablet->version_for_delete_predicate(rowset->version())) {
             *has_delete_version = true;
-            break;
-        }
-        // For level-0, should consider the rowset creation time.
-        // newly-created rowsets should be skipped.
-        if ((is_creation_time_ordered || (!is_creation_time_ordered && index != 0)) &&
-            rowset->creation_time() + config::cumulative_compaction_skip_window_seconds > now) {
-            // rowset in rowset_levels is ordered
-            VLOG(2) << "rowset:" << rowset->rowset_id() << ", version:" << rowset->version()
-                    << " is newly created. creation time:" << rowset->creation_time()
-                    << ", threshold:" << config::cumulative_compaction_skip_window_seconds
-                    << ", rowset overlapping:" << rowset->rowset_meta()->segments_overlap() << ", index:" << index
-                    << ", is_creation_time_ordered:" << is_creation_time_ordered;
             break;
         }
         rowsets->emplace_back(rowset->shared_from_this());
@@ -88,7 +73,6 @@ void BaseAndCumulativeCompactionPolicy::_pick_cumulative_rowsets(bool* has_delet
                     << ", cumulative rowset size:" << _compaction_context->rowset_levels[0].size();
             break;
         }
-        ++index;
     }
 }
 
@@ -152,8 +136,6 @@ std::shared_ptr<CompactionTask> BaseAndCumulativeCompactionPolicy::_create_cumul
 }
 
 void BaseAndCumulativeCompactionPolicy::_pick_base_rowsets(std::vector<RowsetSharedPtr>* rowsets) {
-    uint32_t input_rows_num = 0;
-    size_t input_size = 0;
     size_t rowsets_compaction_score = 0;
     // add the base rowset to input_rowsets
     Rowset* base_rowset = *_compaction_context->rowset_levels[2].begin();
@@ -162,8 +144,6 @@ void BaseAndCumulativeCompactionPolicy::_pick_base_rowsets(std::vector<RowsetSha
     }
     rowsets->push_back(base_rowset->shared_from_this());
     rowsets_compaction_score += base_rowset->rowset_meta()->get_compaction_score();
-    input_rows_num += base_rowset->num_rows();
-    input_size += base_rowset->data_disk_size();
     // add level-1 rowsets
     for (auto rowset : _compaction_context->rowset_levels[1]) {
         rowsets_compaction_score += rowset->rowset_meta()->get_compaction_score();
@@ -176,8 +156,6 @@ void BaseAndCumulativeCompactionPolicy::_pick_base_rowsets(std::vector<RowsetSha
         }
 
         rowsets->push_back(rowset->shared_from_this());
-        input_rows_num += rowset->num_rows();
-        input_size += rowset->data_disk_size();
     }
 }
 

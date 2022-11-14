@@ -35,7 +35,3 @@ Support the filtering of PartitionId,PartitionName,State,Buckets,ReplicationNum,
     ```sql
     SHOW PARTITIONS FROM example_db.table_name ORDER BY PartitionId DESC LIMIT 1;
     ```
-
-## keyword
-
-SHOW,PARTITIONS

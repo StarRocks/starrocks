@@ -182,11 +182,30 @@ std::string StreamLoadContext::brief(bool detail) const {
         switch (load_src_type) {
         case TLoadSourceType::KAFKA:
             if (kafka_info != nullptr) {
-                ss << ", kafka"
+                ss << ", load type: kafka routine load"
                    << ", brokers: " << kafka_info->brokers << ", topic: " << kafka_info->topic << ", partition: ";
                 for (auto& entry : kafka_info->begin_offset) {
                     ss << "[" << entry.first << ": " << entry.second << "]";
                 }
+            }
+            break;
+        case TLoadSourceType::PULSAR:
+            if (pulsar_info != nullptr) {
+                ss << ", load type: pulsar routine load"
+                   << ", source_url: " << pulsar_info->service_url << ", topic: " << pulsar_info->topic
+                   << ", subscription" << pulsar_info->subscription << ", partitions: [";
+                for (auto& partition : pulsar_info->partitions) {
+                    ss << partition << ",";
+                }
+                ss << "], initial positions: [";
+                for (const auto& [key, value] : pulsar_info->initial_positions) {
+                    ss << key << ":" << value << ",";
+                }
+                ss << "], properties: [";
+                for (auto& propertie : pulsar_info->properties) {
+                    ss << propertie.first << ": " << propertie.second << ",";
+                }
+                ss << "].";
             }
             break;
         default:

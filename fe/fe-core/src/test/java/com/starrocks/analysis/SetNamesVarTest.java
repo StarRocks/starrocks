@@ -19,6 +19,7 @@ package com.starrocks.analysis;
 
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.SetNamesVar;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -29,18 +30,17 @@ public class SetNamesVarTest {
         SetNamesVar var = new SetNamesVar(null, null);
         var.analyze();
         Assert.assertEquals("utf8", var.getCharset().toLowerCase());
-
-        Assert.assertEquals("NAMES 'utf8' COLLATE DEFAULT", var.toString());
+        Assert.assertEquals("DEFAULT", var.getCollate());
 
         var = new SetNamesVar("UTf8", null);
         var.analyze();
         Assert.assertEquals("utf8", var.getCharset().toLowerCase());
-        Assert.assertEquals("NAMES 'utf8' COLLATE DEFAULT", var.toString());
+        Assert.assertEquals("DEFAULT", var.getCollate());
 
         var = new SetNamesVar("UTf8", "aBc");
         var.analyze();
         Assert.assertEquals("utf8", var.getCharset().toLowerCase());
-        Assert.assertEquals("NAMES 'utf8' COLLATE 'abc'", var.toString());
+        Assert.assertEquals("aBc", var.getCollate());
     }
 
     @Test(expected = SemanticException.class)

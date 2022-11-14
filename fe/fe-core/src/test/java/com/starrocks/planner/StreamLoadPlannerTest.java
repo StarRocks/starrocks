@@ -24,10 +24,8 @@ package com.starrocks.planner;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.CompoundPredicate;
-import com.starrocks.analysis.ImportColumnsStmt;
-import com.starrocks.analysis.ImportWhereStmt;
-import com.starrocks.analysis.SqlParser;
-import com.starrocks.analysis.SqlScanner;
+import com.starrocks.analysis.Expr;
+import com.starrocks.sql.ast.ImportColumnsStmt;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
@@ -35,8 +33,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.UserException;
-import com.starrocks.common.util.SqlParserUtils;
-import com.starrocks.task.StreamLoadTask;
+import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TFileType;
 import com.starrocks.thrift.TStreamLoadPutRequest;
@@ -47,7 +44,6 @@ import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Test;
 
-import java.io.StringReader;
 import java.util.Arrays;
 import java.util.List;
 
@@ -101,9 +97,9 @@ public class StreamLoadPlannerTest {
         request.setFileType(TFileType.FILE_STREAM);
         request.setFormatType(TFileFormatType.FORMAT_CSV_PLAIN);
         request.setLoad_dop(2);
-        StreamLoadTask streamLoadTask = StreamLoadTask.fromTStreamLoadPutRequest(request, db);
-        StreamLoadPlanner planner = new StreamLoadPlanner(db, destTable, streamLoadTask);
-        planner.plan(streamLoadTask.getId());
+        StreamLoadInfo streamLoadInfo = StreamLoadInfo.fromTStreamLoadPutRequest(request, db);
+        StreamLoadPlanner planner = new StreamLoadPlanner(db, destTable, streamLoadInfo);
+        planner.plan(streamLoadInfo.getId());
     }
 
     @Test
@@ -144,21 +140,19 @@ public class StreamLoadPlannerTest {
         request.setFormatType(TFileFormatType.FORMAT_CSV_PLAIN);
         request.setPartial_update(true);
         request.setColumns("c1");
-        StreamLoadTask streamLoadTask = StreamLoadTask.fromTStreamLoadPutRequest(request, db);
-        StreamLoadPlanner planner = new StreamLoadPlanner(db, destTable, streamLoadTask);
-        planner.plan(streamLoadTask.getId());
+        StreamLoadInfo streamLoadInfo = StreamLoadInfo.fromTStreamLoadPutRequest(request, db);
+        StreamLoadPlanner planner = new StreamLoadPlanner(db, destTable, streamLoadInfo);
+        planner.plan(streamLoadInfo.getId());
     }
 
     @Test
-    public void testParseStmt() throws Exception {
-        String sql = new String("COLUMNS (k1, k2, k3=abc(), k4=default_value())");
-        SqlParser parser = new SqlParser(new SqlScanner(new StringReader(sql)));
-        ImportColumnsStmt columnsStmt = (ImportColumnsStmt) SqlParserUtils.getFirstStmt(parser);
+    public void testParseStmt() {
+        String sql = "COLUMNS (k1, k2, k3=abc(), k4=default_value())";
+        ImportColumnsStmt columnsStmt = com.starrocks.sql.parser.SqlParser.parseImportColumns(sql, 0);
         Assert.assertEquals(4, columnsStmt.getColumns().size());
 
-        sql = new String("WHERE k1 > 2 and k3 < 4");
-        parser = new SqlParser(new SqlScanner(new StringReader(sql)));
-        ImportWhereStmt whereStmt = (ImportWhereStmt) SqlParserUtils.getFirstStmt(parser);
-        Assert.assertTrue(whereStmt.getExpr() instanceof CompoundPredicate);
+        sql = "k1 > 2 and k3 < 4";
+        Expr where = com.starrocks.sql.parser.SqlParser.parseSqlToExpr(sql, 0);
+        Assert.assertTrue(where instanceof CompoundPredicate);
     }
 }

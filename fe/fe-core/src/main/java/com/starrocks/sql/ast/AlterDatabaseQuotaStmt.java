@@ -2,9 +2,8 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.DdlStmt;
-
 public class AlterDatabaseQuotaStmt extends DdlStmt {
+    private String catalog;
     private String dbName;
     private final QuotaType quotaType;
     private final String quotaValue;
@@ -20,6 +19,14 @@ public class AlterDatabaseQuotaStmt extends DdlStmt {
         this.dbName = dbName;
         this.quotaType = quotaType;
         this.quotaValue = quotaValue;
+    }
+
+    public String getCatalogName() {
+        return this.catalog;
+    }
+
+    public void setCatalogName(String catalogName) {
+        this.catalog = catalogName;
     }
 
     public String getDbName() {
@@ -48,11 +55,6 @@ public class AlterDatabaseQuotaStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitAlterDbQuotaStmt(this, context);
-    }
-
-    @Override
-    public boolean isSupportNewPlanner() {
-        return true;
+        return visitor.visitAlterDatabaseQuotaStatement(this, context);
     }
 }

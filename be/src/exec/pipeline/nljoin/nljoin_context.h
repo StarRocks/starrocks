@@ -35,7 +35,7 @@ public:
               _num_right_sinkers(params.num_right_sinkers),
               _plan_node_id(params.plan_node_id),
               _input_chunks(_num_right_sinkers),
-              _conjuncts_ctx(std::move(params.filters)),
+              _rf_conjuncts_ctx(std::move(params.filters)),
               _rf_hub(params.rf_hub),
               _rf_descs(std::move(params.rf_descs)) {}
 
@@ -50,7 +50,7 @@ public:
 
     int get_build_chunk_size() const { return _build_chunk_desired_size; }
 
-    void append_build_chunk(int32_t sinker_id, vectorized::ChunkPtr build_chunk);
+    void append_build_chunk(int32_t sinker_id, const vectorized::ChunkPtr& build_chunk);
 
     Status finish_one_right_sinker(RuntimeState* state);
 
@@ -81,8 +81,7 @@ private:
     std::vector<uint8_t> _shared_build_match_flag;
 
     // conjuncts in cross join, used for generate runtime_filter
-    std::vector<ExprContext*> _conjuncts_ctx;
-
+    std::vector<ExprContext*> _rf_conjuncts_ctx;
     RuntimeFilterHub* _rf_hub;
     std::vector<vectorized::RuntimeFilterBuildDescriptor*> _rf_descs;
 };

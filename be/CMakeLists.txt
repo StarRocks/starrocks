@@ -73,6 +73,8 @@ option(WITH_GCOV "Build binary with gcov to get code coverage" OFF)
 
 option(WITH_COMPRESS "Build binary with compresss debug section" ON)
 
+option(WITH_BLOCK_CACHE "Build binary with block cache feature" OFF)
+
 option(USE_STAROS "Use StarOS to manager tablet info" OFF)
 
 # Check gcc
@@ -134,9 +136,9 @@ set(BOOST_ROOT ${THIRDPARTY_DIR})
 set(Boost_NO_WARN_NEW_VERSIONS ON)
 
 if (NOT APPLE)
-    find_package(Boost 1.75.0 REQUIRED COMPONENTS thread regex filesystem system date_time program_options)
+    find_package(Boost 1.75.0 REQUIRED COMPONENTS thread regex program_options)
 else()
-    find_package(Boost 1.75.0 COMPONENTS thread regex filesystem system date_time program_options)
+    find_package(Boost 1.75.0 COMPONENTS thread regex program_options)
 endif()
 include_directories(${Boost_INCLUDE_DIRS})
 message(STATUS ${Boost_LIBRARIES})
@@ -144,8 +146,14 @@ message(STATUS ${Boost_LIBRARIES})
 set(GPERFTOOLS_HOME "${THIRDPARTY_DIR}/gperftools")
 
 # Set all libraries
-add_library(gflags STATIC IMPORTED)
-set_target_properties(gflags PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libgflags.a)
+if (${WITH_BLOCK_CACHE} STREQUAL "ON")
+    set(CACHELIB_DIR "$ENV{CACHELIB_DIR}")
+    add_library(gflags STATIC IMPORTED)
+    set_target_properties(gflags PROPERTIES IMPORTED_LOCATION ${CACHELIB_DIR}/lib/libgflags_debug.a)
+else()
+    add_library(gflags STATIC IMPORTED)
+    set_target_properties(gflags PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libgflags.a)
+endif()
 
 add_library(glog STATIC IMPORTED)
 set_target_properties(glog PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libglog.a)
@@ -233,6 +241,9 @@ set_target_properties(brotlienc PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/l
 add_library(zstd STATIC IMPORTED)
 set_target_properties(zstd PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libzstd.a)
 
+add_library(streamvbyte STATIC IMPORTED)
+set_target_properties(streamvbyte PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libstreamvbyte_static.a)
+
 add_library(arrow STATIC IMPORTED)
 set_target_properties(arrow PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libarrow.a)
 
@@ -250,6 +261,9 @@ set_target_properties(librdkafka_cpp PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_D
 
 add_library(librdkafka STATIC IMPORTED)
 set_target_properties(librdkafka PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/librdkafka.a)
+
+add_library(libpulsar STATIC IMPORTED)
+set_target_properties(libpulsar PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libpulsar.a)
 
 add_library(libs2 STATIC IMPORTED)
 set_target_properties(libs2 PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libs2.a)
@@ -317,13 +331,13 @@ if ("${USE_STAROS}" STREQUAL "ON")
      find_package(gRPC CONFIG REQUIRED)
      message(STATUS "Using gRPC ${gRPC_VERSION}")
      get_target_property(gRPC_INCLUDE_DIR gRPC::grpc INTERFACE_INCLUDE_DIRECTORIES)
-     include_directories(${gRPC_INCLUDE_DIR})
+     include_directories(SYSTEM ${gRPC_INCLUDE_DIR})
 
      find_package(starlet CONFIG REQUIRED)
      message(STATUS "Using starlet ${starlet_VERSION}")
      message(STATUS "starlet inc dir: ${STARLET_INCLUDE_DIRS}")
      message(STATUS "starlet lib dir: ${STARLET_LIBS}")
-     include_directories(${STARLET_INCLUDE_DIRS})
+     include_directories(SYSTEM ${STARLET_INCLUDE_DIRS})
      add_library(starlet STATIC IMPORTED)
      set_target_properties(starlet PROPERTIES IMPORTED_LOCATION ${STARLET_LIBS}/libstarlet.a)
 
@@ -331,7 +345,7 @@ if ("${USE_STAROS}" STREQUAL "ON")
      get_target_property(prometheus-cpp_INCLUDE_DIR prometheus-cpp::core INTERFACE_INCLUDE_DIRECTORIES)
      message(STATUS "Using prometheus-cpp")
      message(STATUS "  include: ${prometheus-cpp_INCLUDE_DIR}")
-     include_directories(${prometheus-cpp_INCLUDE_DIR})
+     include_directories(SYSTEM ${prometheus-cpp_INCLUDE_DIR})
 
      add_library(starlet_fslib_all STATIC IMPORTED GLOBAL)
      set_target_properties(starlet_fslib_all PROPERTIES IMPORTED_LOCATION ${STARLET_LIBS}/libstarlet_fslib_all.a)
@@ -355,6 +369,9 @@ check_function_exists(sched_getcpu HAVE_SCHED_GETCPU)
 
 # support to pass cxx flags from environment.
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} $ENV{STARROCKS_CXX_COMMON_FLAGS}")
+
+# -no-pie: Disable Position Independent Executables (PIE) as certain libraries cannot be linked against PIE executables.
+set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -no-pie")
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} $ENV{STARROCKS_CXX_LINKER_FLAGS}")
 
 # compiler flags that are common across debug/release builds
@@ -373,11 +390,25 @@ set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wall -Wno-sign-compare -Wno-unknown-p
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-strict-aliasing -fno-omit-frame-pointer")
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -std=gnu++17 -D__STDC_FORMAT_MACROS")
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-deprecated -Wno-vla -Wno-comment")
+
+if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-unused-parameter -Wno-documentation -Wno-weak-vtables")
+    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-reserved-identifier -Wno-suggest-destructor-override")
+    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-documentation-unknown-command -Wno-old-style-cast")
+    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-c++20-designator -Wno-mismatched-tags")
+    if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "14.0.0")
+        set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-bitwise-instead-of-logical")
+    endif()
+endif()
+
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DBOOST_DATE_TIME_POSIX_TIME_STD_CONFIG")
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DBOOST_SYSTEM_NO_DEPRECATED -DBOOST_UUID_RANDOM_PROVIDER_FORCE_POSIX")
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Werror=return-type -Werror=switch")
 if (${USE_STAROS} STREQUAL "ON")
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DUSE_STAROS")
+endif()
+if (${WITH_BLOCK_CACHE} STREQUAL "ON")
+    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DWITH_BLOCK_CACHE")
 endif()
 
 # When LLVM is used, should give GCC_HOME to get c++11 header to use new string and list
@@ -487,10 +518,10 @@ include_directories(
     ${SRC_DIR}/
     ${TEST_DIR}/
     ${GENSRC_DIR}/
-    ${THIRDPARTY_DIR}/include
-    ${GPERFTOOLS_HOME}/include
-    ${THIRDPARTY_DIR}/include/thrift/
-    ${THIRDPARTY_DIR}/include/event/
+    SYSTEM ${THIRDPARTY_DIR}/include
+    SYSTEM ${GPERFTOOLS_HOME}/include
+    SYSTEM ${THIRDPARTY_DIR}/include/thrift/
+    SYSTEM ${THIRDPARTY_DIR}/include/event/
 )
 
 
@@ -531,6 +562,10 @@ set(STARROCKS_LINK_LIBS
     Geo
     ${WL_END_GROUP}
 )
+
+if (${WITH_BLOCK_CACHE} STREQUAL "ON")
+    set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} BlockCache)
+endif()
 
 set(STARROCKS_DEPENDENCIES ${STARROCKS_DEPENDENCIES}
     mysql
@@ -590,6 +625,7 @@ set(STARROCKS_DEPENDENCIES
     brotlidec
     brotlienc
     zstd
+    streamvbyte
     arrow
     parquet
     orc
@@ -600,6 +636,7 @@ set(STARROCKS_DEPENDENCIES
     simdjson
     librdkafka_cpp
     librdkafka
+    libpulsar
     velocypack
     opentelemetry_trace
     http_client_curl
@@ -635,7 +672,11 @@ if ("${CMAKE_BUILD_TYPE}" STREQUAL "DEBUG" OR "${CMAKE_BUILD_TYPE}" STREQUAL "RE
         set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} tcmalloc)
     endif()
 elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "ASAN")
-    set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libasan)
+    if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+        set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libsan)
+    else()
+        set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libasan)
+    endif()
 elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "LSAN")
     set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-liblsan)
 elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "UBSAN")
@@ -751,6 +792,10 @@ add_subdirectory(${SRC_DIR}/udf)
 add_subdirectory(${SRC_DIR}/tools)
 add_subdirectory(${SRC_DIR}/util)
 
+if (${WITH_BLOCK_CACHE} STREQUAL "ON")
+    add_subdirectory(${SRC_DIR}/block_cache)
+endif()
+
 if (${MAKE_TEST} STREQUAL "ON")
     add_subdirectory(test)
 endif ()
@@ -780,6 +825,12 @@ install(FILES
     ${BASE_DIR}/../conf/hadoop_env.sh
     ${BASE_DIR}/../conf/log4j.properties
     DESTINATION ${OUTPUT_DIR}/conf)
+
+if ("${CMAKE_BUILD_TYPE}" STREQUAL "ASAN" OR "${CMAKE_BUILD_TYPE}" STREQUAL "LSAN")
+install(FILES
+    ${BASE_DIR}/../conf/asan_suppressions.conf
+    DESTINATION ${OUTPUT_DIR}/conf)
+endif()
 
 install(DIRECTORY
     ${BASE_DIR}/../webroot/be/

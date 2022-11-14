@@ -4,8 +4,6 @@
 
 #include "column/column_helper.h"
 #include "runtime/primitive_type_infra.h"
-#include "types/bitmap_value.h"
-#include "types/hll.h"
 #include "util/percentile_value.h"
 #include "util/phmap/phmap.h"
 

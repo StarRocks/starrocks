@@ -36,6 +36,19 @@ public class TransactionChecker {
         return true;
     }
 
+    // return abnormal tablets/replicas which is causing this txn unfinished
+    public String debugInfo() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("errors:");
+        int totalTablet = 0;
+        for (PartitionChecker p : partitions) {
+            p.debugInfo(sb);
+            totalTablet += p.tablets.size();
+        }
+        sb.append(String.format(" #partition:%d #tablet:%d", partitions.size(), totalTablet));
+        return sb.toString();
+    }
+
     static class PartitionChecker {
         long partitionId;
         long version;
@@ -56,6 +69,12 @@ public class TransactionChecker {
             }
             return true;
         }
+
+        void debugInfo(StringBuilder sb) {
+            for (LocalTablet t : tablets) {
+                t.getAbnormalReplicaInfos(version, quorum, sb);
+            }
+        }
     }
 
     // Note: caller should hold db lock
@@ -73,7 +92,7 @@ public class TransactionChecker {
                     continue;
                 }
                 PartitionChecker partitionChecker = new PartitionChecker(partitionId, partitionCommitInfo.getVersion(),
-                        table.getPartitionInfo().getQuorumNum(partitionId));
+                        table.getPartitionInfo().getQuorumNum(partitionId, table.writeQuorum()));
                 List<MaterializedIndex> allIndices = txn.getPartitionLoadedTblIndexes(tableCommitInfo.getTableId(), partition);
                 for (MaterializedIndex index : allIndices) {
                     for (Tablet tablet : index.getTablets()) {

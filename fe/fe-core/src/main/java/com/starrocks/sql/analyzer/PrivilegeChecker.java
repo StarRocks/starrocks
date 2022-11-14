@@ -1,38 +1,12 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.AlterResourceStmt;
-import com.starrocks.analysis.BackupStmt;
 import com.starrocks.analysis.CompoundPredicate;
-import com.starrocks.analysis.CreateFunctionStmt;
-import com.starrocks.analysis.CreateResourceStmt;
-import com.starrocks.analysis.DeleteStmt;
-import com.starrocks.analysis.DropFunctionStmt;
-import com.starrocks.analysis.DropMaterializedViewStmt;
-import com.starrocks.analysis.DropResourceStmt;
-import com.starrocks.analysis.DropUserStmt;
-import com.starrocks.analysis.PauseRoutineLoadStmt;
-import com.starrocks.analysis.ResumeRoutineLoadStmt;
-import com.starrocks.analysis.SetUserPropertyStmt;
-import com.starrocks.analysis.SetUserPropertyVar;
-import com.starrocks.analysis.SetVar;
-import com.starrocks.analysis.ShowAuthenticationStmt;
-import com.starrocks.analysis.ShowBackupStmt;
-import com.starrocks.analysis.ShowBrokerStmt;
-import com.starrocks.analysis.ShowDeleteStmt;
-import com.starrocks.analysis.ShowFunctionsStmt;
-import com.starrocks.analysis.ShowIndexStmt;
-import com.starrocks.analysis.ShowMaterializedViewStmt;
-import com.starrocks.analysis.ShowPartitionsStmt;
-import com.starrocks.analysis.ShowProcStmt;
-import com.starrocks.analysis.ShowRoutineLoadStmt;
-import com.starrocks.analysis.ShowTabletStmt;
-import com.starrocks.analysis.ShowUserPropertyStmt;
-import com.starrocks.analysis.StatementBase;
-import com.starrocks.analysis.StopRoutineLoadStmt;
+import com.starrocks.analysis.ResourcePattern;
 import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.TablePattern;
 import com.starrocks.analysis.TableRef;
-import com.starrocks.analysis.UpdateStmt;
+import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.MaterializedIndex;
@@ -51,6 +25,7 @@ import com.starrocks.mysql.privilege.Privilege;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AddSqlBlackListStmt;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminRepairTableStmt;
@@ -60,51 +35,99 @@ import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
-import com.starrocks.sql.ast.AlterDatabaseRename;
-import com.starrocks.sql.ast.AlterMaterializedViewStatement;
+import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
+import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterResourceGroupStmt;
+import com.starrocks.sql.ast.AlterResourceStmt;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.BackupStmt;
 import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
-import com.starrocks.sql.ast.BaseGrantRevokeImpersonateStmt;
+import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
-import com.starrocks.sql.ast.CancelRefreshMaterializedViewStatement;
+import com.starrocks.sql.ast.CancelBackupStmt;
+import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
+import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.ast.CreateRepositoryStmt;
 import com.starrocks.sql.ast.CreateResourceGroupStmt;
+import com.starrocks.sql.ast.CreateResourceStmt;
+import com.starrocks.sql.ast.CreateRoleStmt;
+import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.DelSqlBlackListStmt;
+import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.DropDbStmt;
+import com.starrocks.sql.ast.DropFunctionStmt;
 import com.starrocks.sql.ast.DropHistogramStmt;
+import com.starrocks.sql.ast.DropMaterializedViewStmt;
+import com.starrocks.sql.ast.DropRepositoryStmt;
 import com.starrocks.sql.ast.DropResourceGroupStmt;
+import com.starrocks.sql.ast.DropResourceStmt;
+import com.starrocks.sql.ast.DropRoleStmt;
 import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
+import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.InstallPluginStmt;
 import com.starrocks.sql.ast.JoinRelation;
+import com.starrocks.sql.ast.PauseRoutineLoadStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RecoverDbStmt;
 import com.starrocks.sql.ast.RecoverTableStmt;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshTableStmt;
+import com.starrocks.sql.ast.RestoreStmt;
+import com.starrocks.sql.ast.ResumeRoutineLoadStmt;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
+import com.starrocks.sql.ast.SetUserPropertyStmt;
+import com.starrocks.sql.ast.SetUserPropertyVar;
+import com.starrocks.sql.ast.SetVar;
 import com.starrocks.sql.ast.ShowAlterStmt;
+import com.starrocks.sql.ast.ShowAuthenticationStmt;
+import com.starrocks.sql.ast.ShowBackendsStmt;
+import com.starrocks.sql.ast.ShowBackupStmt;
+import com.starrocks.sql.ast.ShowBrokerStmt;
 import com.starrocks.sql.ast.ShowComputeNodesStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.sql.ast.ShowDataStmt;
+import com.starrocks.sql.ast.ShowDeleteStmt;
+import com.starrocks.sql.ast.ShowFrontendsStmt;
+import com.starrocks.sql.ast.ShowFunctionsStmt;
+import com.starrocks.sql.ast.ShowGrantsStmt;
+import com.starrocks.sql.ast.ShowIndexStmt;
+import com.starrocks.sql.ast.ShowMaterializedViewStmt;
+import com.starrocks.sql.ast.ShowPartitionsStmt;
+import com.starrocks.sql.ast.ShowProcStmt;
+import com.starrocks.sql.ast.ShowRestoreStmt;
+import com.starrocks.sql.ast.ShowRolesStmt;
+import com.starrocks.sql.ast.ShowRoutineLoadStmt;
+import com.starrocks.sql.ast.ShowSmallFilesStmt;
+import com.starrocks.sql.ast.ShowSqlBlackListStmt;
+import com.starrocks.sql.ast.ShowStreamLoadStmt;
 import com.starrocks.sql.ast.ShowTableStatusStmt;
+import com.starrocks.sql.ast.ShowTabletStmt;
+import com.starrocks.sql.ast.ShowUserPropertyStmt;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.StopRoutineLoadStmt;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.TruncateTableStmt;
+import com.starrocks.sql.ast.UninstallPluginStmt;
+import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.statistic.StatsConstants;
@@ -119,6 +142,10 @@ import java.util.TreeSet;
 
 public class PrivilegeChecker {
     public static void check(StatementBase statement, ConnectContext session) {
+        if (session.getGlobalStateMgr().isUsingNewPrivilege()) {
+            PrivilegeCheckerV2.check(statement, session);
+            return;
+        }
         new PrivilegeCheckerVisitor().check(statement, session);
     }
 
@@ -166,7 +193,8 @@ public class PrivilegeChecker {
         public Void visitCreateTableStatement(CreateTableStmt statement, ConnectContext session) {
             String dbName = statement.getDbTbl().getDb();
             String tableName = statement.getDbTbl().getTbl();
-            if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(session, dbName, tableName, PrivPredicate.CREATE)) {
+            if (!GlobalStateMgr.getCurrentState().getAuth()
+                    .checkTblPriv(session, dbName, tableName, PrivPredicate.CREATE)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "CREATE");
             }
             return null;
@@ -195,7 +223,7 @@ public class PrivilegeChecker {
         }
 
         @Override
-        public Void visitShowIndexStmt(ShowIndexStmt statement, ConnectContext session) {
+        public Void visitShowIndexStatement(ShowIndexStmt statement, ConnectContext session) {
             if (!checkTblPriv(session, statement.getTableName(), PrivPredicate.SHOW)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, session.getQualifiedUser(),
                         statement.getTableName().toString());
@@ -254,7 +282,8 @@ public class PrivilegeChecker {
 
         @Override
         public Void visitAdminShowConfigStatement(AdminShowConfigStmt statement, ConnectContext session) {
-            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
+            if (!GlobalStateMgr.getCurrentState().getAuth()
+                    .checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
             }
             return null;
@@ -263,7 +292,8 @@ public class PrivilegeChecker {
         @Override
         public Void visitAdminShowReplicaDistributionStatement(AdminShowReplicaDistributionStmt statement,
                                                                ConnectContext session) {
-            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
+            if (!GlobalStateMgr.getCurrentState().getAuth()
+                    .checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
             }
             return null;
@@ -302,8 +332,9 @@ public class PrivilegeChecker {
         }
 
         @Override
-        public Void visitShowUserPropertyStmt(ShowUserPropertyStmt statement, ConnectContext session) {
-            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.GRANT)) {
+        public Void visitShowUserPropertyStatement(ShowUserPropertyStmt statement, ConnectContext session) {
+            if (!GlobalStateMgr.getCurrentState().getAuth()
+                    .checkGlobalPriv(ConnectContext.get(), PrivPredicate.GRANT)) {
                 try {
                     ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
                 } catch (AnalysisException e) {
@@ -314,7 +345,7 @@ public class PrivilegeChecker {
         }
 
         @Override
-        public Void visitSetUserPropertyStmt(SetUserPropertyStmt statement, ConnectContext session) {
+        public Void visitSetUserPropertyStatement(SetUserPropertyStmt statement, ConnectContext session) {
             if (statement.getPropertyList() == null || statement.getPropertyList().isEmpty()) {
                 throw new SemanticException("Empty properties");
             }
@@ -352,9 +383,47 @@ public class PrivilegeChecker {
         }
 
         @Override
-        public Void visitDropTableStmt(DropTableStmt statement, ConnectContext session) {
+        public Void visitDropTableStatement(DropTableStmt statement, ConnectContext session) {
             if (!checkTblPriv(session, statement.getTbl(), PrivPredicate.DROP)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "DROP");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitExportStatement(ExportStmt statement, ConnectContext context) {
+            TableName tblName = statement.getTblName();
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
+                    tblName.getDb(), tblName.getTbl(),
+                    PrivPredicate.SELECT)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "EXPORT",
+                        ConnectContext.get().getQualifiedUser(),
+                        ConnectContext.get().getRemoteIP(),
+                        tblName.getTbl());
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitAddSqlBlackListStatement(AddSqlBlackListStmt stmt, ConnectContext context) {
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitDelSqlBlackListStatement(DelSqlBlackListStmt stmt, ConnectContext context) {
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowSqlBlackListStatement(ShowSqlBlackListStmt stmt, ConnectContext context) {
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
             }
             return null;
         }
@@ -436,7 +505,7 @@ public class PrivilegeChecker {
         }
 
         @Override
-        public Void visitShowTableStatusStmt(ShowTableStatusStmt statement, ConnectContext session) {
+        public Void visitShowTableStatusStatement(ShowTableStatusStmt statement, ConnectContext session) {
             String db = statement.getDb();
             if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(session, db, PrivPredicate.SHOW)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, session.getQualifiedUser(), db);
@@ -445,7 +514,7 @@ public class PrivilegeChecker {
         }
 
         @Override
-        public Void visitShowTabletStmt(ShowTabletStmt statement, ConnectContext session) {
+        public Void visitShowTabletStatement(ShowTabletStmt statement, ConnectContext session) {
             if (!GlobalStateMgr.getCurrentState().getAuth()
                     .checkGlobalPriv(session, PrivPredicate.ADMIN)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "SHOW TABLET");
@@ -454,7 +523,7 @@ public class PrivilegeChecker {
         }
 
         @Override
-        public Void visitShowAlterStmt(ShowAlterStmt statement, ConnectContext session) {
+        public Void visitShowAlterStatement(ShowAlterStmt statement, ConnectContext session) {
             String db = statement.getDbName();
             if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(ConnectContext.get(), db, PrivPredicate.SHOW)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, session.getQualifiedUser(), db);
@@ -463,7 +532,7 @@ public class PrivilegeChecker {
         }
 
         @Override
-        public Void visitShowDeleteStmt(ShowDeleteStmt statement, ConnectContext session) {
+        public Void visitShowDeleteStatement(ShowDeleteStmt statement, ConnectContext session) {
             String db = statement.getDbName();
             if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(ConnectContext.get(), db, PrivPredicate.SHOW)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, session.getQualifiedUser(), db);
@@ -472,7 +541,8 @@ public class PrivilegeChecker {
         }
 
         @Override
-        public Void visitCreateMaterializedViewStatement(CreateMaterializedViewStatement statement, ConnectContext session) {
+        public Void visitCreateMaterializedViewStatement(CreateMaterializedViewStatement statement,
+                                                         ConnectContext session) {
             if (!checkTblPriv(session, statement.getTableName(), PrivPredicate.CREATE)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "CREATE");
             }
@@ -489,10 +559,11 @@ public class PrivilegeChecker {
         }
 
         @Override
-        public Void visitAlterMaterializedViewStatement(AlterMaterializedViewStatement statement,
+        public Void visitAlterMaterializedViewStatement(AlterMaterializedViewStmt statement,
                                                         ConnectContext context) {
-            if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(), statement.getMvName().getDb(),
-                    statement.getMvName().getTbl(), PrivPredicate.ALTER)) {
+            if (!GlobalStateMgr.getCurrentState().getAuth()
+                    .checkTblPriv(ConnectContext.get(), statement.getMvName().getDb(),
+                            statement.getMvName().getTbl(), PrivPredicate.ALTER)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ALTER");
             }
             return null;
@@ -509,7 +580,7 @@ public class PrivilegeChecker {
         }
 
         @Override
-        public Void visitCancelRefreshMaterializedViewStatement(CancelRefreshMaterializedViewStatement statement,
+        public Void visitCancelRefreshMaterializedViewStatement(CancelRefreshMaterializedViewStmt statement,
                                                                 ConnectContext context) {
             if (!checkTblPriv(ConnectContext.get(), statement.getMvName(), PrivPredicate.ALTER)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ALTER");
@@ -518,8 +589,9 @@ public class PrivilegeChecker {
         }
 
         @Override
-        public Void visitAlterSystemStmt(AlterSystemStmt statement, ConnectContext session) {
-            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.OPERATOR)) {
+        public Void visitAlterSystemStatement(AlterSystemStmt statement, ConnectContext session) {
+            if (!GlobalStateMgr.getCurrentState().getAuth()
+                    .checkGlobalPriv(ConnectContext.get(), PrivPredicate.OPERATOR)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
                         session.getQualifiedUser());
             }
@@ -528,10 +600,36 @@ public class PrivilegeChecker {
         }
 
         @Override
-        public Void visitCreateAlterUserStmt(BaseCreateAlterUserStmt statement, ConnectContext context) {
+        public Void visitCreateAlterUserStatement(BaseCreateAlterUserStmt statement, ConnectContext context) {
             // check if current user has GRANT priv on GLOBAL or DATABASE level.
             if (!GlobalStateMgr.getCurrentState().getAuth()
                     .checkHasPriv(context, PrivPredicate.GRANT, Auth.PrivLevel.GLOBAL, Auth.PrivLevel.DATABASE)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitDropRoleStatement(DropRoleStmt statement, ConnectContext context) {
+            // check if current user has GRANT priv on GLOBAL level.
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(context, PrivPredicate.GRANT)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "CREATE USER");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitCreateRoleStatement(CreateRoleStmt statement, ConnectContext context) {
+            // check if current user has GRANT priv on GLOBAL level.
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(context, PrivPredicate.GRANT)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "CREATE USER");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowRolesStatement(ShowRolesStmt statement, ConnectContext context) {
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(context, PrivPredicate.GRANT)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
             }
             return null;
@@ -557,11 +655,61 @@ public class PrivilegeChecker {
         }
 
         @Override
-        public Void visitGrantRevokeImpersonateStatement(BaseGrantRevokeImpersonateStmt statement, ConnectContext session) {
-            // check if current user has GRANT priv on GLOBAL level.
-            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(
-                    ConnectContext.get(), PrivPredicate.GRANT)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+        public Void visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt stmt, ConnectContext session) {
+            if (stmt.getRole() != null || stmt.getPrivType().equals("USER")) {
+                if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(
+                        session, PrivPredicate.GRANT)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+                }
+            } else {
+                if (stmt.getPrivType().equals("TABLE") || stmt.getPrivType().equals("DATABASE")) {
+                    TablePattern tblPattern = stmt.getTblPattern();
+                    if (tblPattern.getPrivLevel() == Auth.PrivLevel.GLOBAL) {
+                        if (!GlobalStateMgr.getCurrentState().getAuth()
+                                .checkGlobalPriv(ConnectContext.get(), PrivPredicate.GRANT)) {
+                            ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+                        }
+                    } else if (tblPattern.getPrivLevel() == Auth.PrivLevel.DATABASE) {
+                        if (!GlobalStateMgr.getCurrentState().getAuth()
+                                .checkDbPriv(ConnectContext.get(), tblPattern.getQuolifiedDb(), PrivPredicate.GRANT)) {
+                            ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+                        }
+                    } else {
+                        // table level
+                        if (!GlobalStateMgr.getCurrentState().getAuth()
+                                .checkTblPriv(ConnectContext.get(), tblPattern.getQuolifiedDb(), tblPattern.getTbl(),
+                                        PrivPredicate.GRANT)) {
+                            ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+                        }
+                    }
+                } else {
+                    ResourcePattern resourcePattern = stmt.getResourcePattern();
+                    if (resourcePattern.getPrivLevel() == Auth.PrivLevel.GLOBAL) {
+                        if (!GlobalStateMgr.getCurrentState().getAuth()
+                                .checkGlobalPriv(ConnectContext.get(), PrivPredicate.GRANT)) {
+                            ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+                        }
+                    } else {
+                        if (!GlobalStateMgr.getCurrentState().getAuth()
+                                .checkResourcePriv(ConnectContext.get(), resourcePattern.getResourceName(),
+                                        PrivPredicate.GRANT)) {
+                            ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+                        }
+                    }
+                }
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowGrantsStatement(ShowGrantsStmt statement, ConnectContext session) {
+            // if show all grants, or show other user's grants, need global GRANT priv.
+            UserIdentity self = session.getCurrentUserIdentity();
+            if (statement.isAll() || !self.equals(statement.getUserIdent())) {
+                if (!GlobalStateMgr.getCurrentState().getAuth()
+                        .checkGlobalPriv(ConnectContext.get(), PrivPredicate.GRANT)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+                }
             }
             return null;
         }
@@ -577,7 +725,7 @@ public class PrivilegeChecker {
         }
 
         @Override
-        public Void visitShowMaterializedViewStmt(ShowMaterializedViewStmt statement, ConnectContext session) {
+        public Void visitShowMaterializedViewStatement(ShowMaterializedViewStmt statement, ConnectContext session) {
             String db = statement.getDb();
             if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(session, db, PrivPredicate.SHOW)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, "SHOW MATERIALIZED VIEW",
@@ -630,7 +778,7 @@ public class PrivilegeChecker {
         }
 
         @Override
-        public Void visitShowCreateTableStmt(ShowCreateTableStmt statement, ConnectContext session) {
+        public Void visitShowCreateTableStatement(ShowCreateTableStmt statement, ConnectContext session) {
             if (!GlobalStateMgr.getCurrentState().getAuth()
                     .checkTblPriv(ConnectContext.get(), statement.getDb(), statement.getTable(),
                             PrivPredicate.SHOW)) {
@@ -714,9 +862,10 @@ public class PrivilegeChecker {
         }
 
         @Override
-        public Void visitAlterDbQuotaStmt(AlterDatabaseQuotaStmt statement, ConnectContext session) {
+        public Void visitAlterDatabaseQuotaStatement(AlterDatabaseQuotaStmt statement, ConnectContext session) {
             String dbName = statement.getDbName();
-            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
+            if (!GlobalStateMgr.getCurrentState().getAuth()
+                    .checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, session.getQualifiedUser(), dbName);
             }
             return null;
@@ -734,7 +883,7 @@ public class PrivilegeChecker {
         }
 
         @Override
-        public Void visitDropFunction(DropFunctionStmt statement, ConnectContext context) {
+        public Void visitDropFunctionStatement(DropFunctionStmt statement, ConnectContext context) {
             // check operation privilege
             if (!GlobalStateMgr.getCurrentState().getAuth()
                     .checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
@@ -744,7 +893,7 @@ public class PrivilegeChecker {
         }
 
         @Override
-        public Void visitCreateFunction(CreateFunctionStmt statement, ConnectContext context) {
+        public Void visitCreateFunctionStatement(CreateFunctionStmt statement, ConnectContext context) {
             // check operation privilege
             if (!GlobalStateMgr.getCurrentState().getAuth()
                     .checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
@@ -787,9 +936,8 @@ public class PrivilegeChecker {
             return null;
         }
 
-
         @Override
-        public Void visitAlterDatabaseRename(AlterDatabaseRename statement, ConnectContext session) {
+        public Void visitAlterDatabaseRenameStatement(AlterDatabaseRenameStatement statement, ConnectContext session) {
             String dbName = statement.getDbName();
             if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(ConnectContext.get(), dbName,
                     PrivPredicate.of(PrivBitSet.of(Privilege.ADMIN_PRIV,
@@ -801,7 +949,7 @@ public class PrivilegeChecker {
         }
 
         @Override
-        public Void visitRecoverDbStmt(RecoverDbStmt statement, ConnectContext session) {
+        public Void visitRecoverDbStatement(RecoverDbStmt statement, ConnectContext session) {
             String dbName = statement.getDbName();
             if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(ConnectContext.get(), dbName,
                     PrivPredicate.of(PrivBitSet.of(Privilege.ALTER_PRIV,
@@ -814,7 +962,7 @@ public class PrivilegeChecker {
         }
 
         @Override
-        public Void visitShowFunctions(ShowFunctionsStmt statement, ConnectContext context) {
+        public Void visitShowFunctionsStatement(ShowFunctionsStmt statement, ConnectContext context) {
             String dbName = statement.getDbName();
             if (!GlobalStateMgr.getCurrentState().getAuth()
                     .checkDbPriv(ConnectContext.get(), dbName, PrivPredicate.SHOW)) {
@@ -825,7 +973,7 @@ public class PrivilegeChecker {
         }
 
         @Override
-        public Void visitShowDataStmt(ShowDataStmt statement, ConnectContext session) {
+        public Void visitShowDataStatement(ShowDataStmt statement, ConnectContext session) {
             String dbName = statement.getDbName();
             Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
             if (db == null) {
@@ -916,7 +1064,7 @@ public class PrivilegeChecker {
                         ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
                     }
 
-                    if (table.getType() != Table.TableType.OLAP) {
+                    if (!table.isLocalTable()) {
                         ErrorReport.reportAnalysisException(ErrorCode.ERR_NOT_OLAP_TABLE, tableName);
                     }
 
@@ -993,7 +1141,8 @@ public class PrivilegeChecker {
 
         @Override
         public Void visitShowProcStmt(ShowProcStmt statement, ConnectContext session) {
-            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
+            if (!GlobalStateMgr.getCurrentState().getAuth()
+                    .checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
                         "ADMIN");
             }
@@ -1001,12 +1150,22 @@ public class PrivilegeChecker {
         }
 
         @Override
-        public Void visitShowPartitionsStmt(ShowPartitionsStmt statement, ConnectContext context) {
+        public Void visitShowPartitionsStatement(ShowPartitionsStmt statement, ConnectContext context) {
             if (!GlobalStateMgr.getCurrentState().getAuth()
                     .checkTblPriv(ConnectContext.get(), statement.getDbName(), statement.getTableName(),
                             PrivPredicate.SHOW)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "SHOW PARTITIONS",
                         context.getQualifiedUser(), context.getRemoteIP(), statement.getTableName());
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitCreateRoutineLoadStatement(CreateRoutineLoadStmt statement, ConnectContext session) {
+            String db = statement.getDBName();
+            String table = statement.getTableName();
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(session, db, table, PrivPredicate.LOAD)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, session.getQualifiedUser(), db);
             }
             return null;
         }
@@ -1048,17 +1207,34 @@ public class PrivilegeChecker {
         }
 
         @Override
-        public Void visitBackupStmt(BackupStmt statement, ConnectContext context) {
+        public Void visitShowStreamLoadStatement(ShowStreamLoadStmt statement, ConnectContext session) {
+            String db = statement.getDbFullName();
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(session, db, PrivPredicate.SHOW)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, session.getQualifiedUser(), db);
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitBackupStatement(BackupStmt statement, ConnectContext context) {
             TableRef tableRef = statement.getTableRefs().get(0);
             if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(ConnectContext.get(),
                     tableRef.getName().getDb(), PrivPredicate.LOAD)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "LOAD");
             }
-
             return null;
         }
 
-        public Void visitShowBrokerStmt(ShowBrokerStmt statement, ConnectContext context) {
+        @Override
+        public Void visitCancelBackupStatement(CancelBackupStmt statement, ConnectContext context) {
+            String dbName = statement.getDbName();
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(ConnectContext.get(), dbName, PrivPredicate.LOAD)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "LOAD");
+            }
+            return null;
+        }
+
+        public Void visitShowBrokerStatement(ShowBrokerStmt statement, ConnectContext context) {
             if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)
                     && !GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(),
                     PrivPredicate.OPERATOR)) {
@@ -1068,9 +1244,31 @@ public class PrivilegeChecker {
         }
 
         @Override
-        public Void visitShowBackupStmt(ShowBackupStmt showBackupStmt, ConnectContext context) {
+        public Void visitShowBackupStatement(ShowBackupStmt showBackupStmt, ConnectContext context) {
             String dbName = showBackupStmt.getDbName();
-            if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(ConnectContext.get(), dbName, PrivPredicate.LOAD)) {
+            if (!GlobalStateMgr.getCurrentState().getAuth()
+                    .checkDbPriv(ConnectContext.get(), dbName, PrivPredicate.LOAD)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED,
+                        ConnectContext.get().getQualifiedUser(), dbName);
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitRestoreStatement(RestoreStmt statement, ConnectContext context) {
+            String dbName = statement.getDbName();
+            if (!GlobalStateMgr.getCurrentState().getAuth()
+                    .checkDbPriv(ConnectContext.get(), dbName, PrivPredicate.LOAD)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "LOAD");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowRestoreStatement(ShowRestoreStmt showRestoreStmt, ConnectContext context) {
+            String dbName = showRestoreStmt.getDbName();
+            if (!GlobalStateMgr.getCurrentState().getAuth()
+                    .checkDbPriv(ConnectContext.get(), dbName, PrivPredicate.LOAD)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED,
                         ConnectContext.get().getQualifiedUser(), dbName);
             }
@@ -1080,9 +1278,72 @@ public class PrivilegeChecker {
         @Override
         public Void visitShowAuthenticationStatement(ShowAuthenticationStmt statement, ConnectContext context) {
             if (statement.isAll() || !context.getCurrentUserIdentity().equals(statement.getUserIdent())) {
-                if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.GRANT)) {
+                if (!GlobalStateMgr.getCurrentState().getAuth()
+                        .checkGlobalPriv(ConnectContext.get(), PrivPredicate.GRANT)) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
                 }
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowBackendsStatement(ShowBackendsStmt statement, ConnectContext context) {
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)
+                    && !GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(),
+                    PrivPredicate.OPERATOR)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN/OPERATOR");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowFrontendsStatement(ShowFrontendsStmt statement, ConnectContext context) {
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)
+                    && !GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(),
+                    PrivPredicate.OPERATOR)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN/OPERATOR");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitCreateRepositoryStatement(CreateRepositoryStmt statement, ConnectContext context) {
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitDropRepositoryStatement(DropRepositoryStmt statement, ConnectContext context) {
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitInstallPluginStatement(InstallPluginStmt stmt, ConnectContext context) {
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitUninstallPluginStatement(UninstallPluginStmt stmt, ConnectContext context) {
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowSmallFilesStatement(ShowSmallFilesStmt statement, ConnectContext context) {
+            String dbName = statement.getDbName();
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(ConnectContext.get(), dbName, PrivPredicate.SHOW)) {
+                ErrorReport.reportSemanticException(
+                        ErrorCode.ERR_DB_ACCESS_DENIED, ConnectContext.get().getQualifiedUser(), dbName);
             }
             return null;
         }
@@ -1152,6 +1413,7 @@ public class PrivilegeChecker {
             }
             return null;
         }
+
     }
 
 }

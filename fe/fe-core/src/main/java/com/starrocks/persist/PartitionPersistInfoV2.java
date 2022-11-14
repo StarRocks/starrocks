@@ -7,7 +7,7 @@ import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Partition;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.lake.StorageInfo;
+import com.starrocks.lake.StorageCacheInfo;
 import com.starrocks.persist.gson.GsonUtils;
 
 import java.io.DataInput;
@@ -30,12 +30,19 @@ public class PartitionPersistInfoV2 implements Writable {
     private boolean isInMemory;
     @SerializedName("isTempPartition")
     private boolean isTempPartition;
-    @SerializedName("StorageInfo")
-    private StorageInfo storageInfo;
+    @SerializedName("storageCacheInfo")
+    private StorageCacheInfo storageCacheInfo;
 
     public PartitionPersistInfoV2(Long dbId, Long tableId, Partition partition,
                                   DataProperty dataProperty, short replicationNum,
                                   boolean isInMemory, boolean isTempPartition) {
+        this(dbId, tableId, partition, dataProperty, replicationNum, isInMemory, isTempPartition, null);
+    }
+
+    public PartitionPersistInfoV2(Long dbId, Long tableId, Partition partition,
+                                  DataProperty dataProperty, short replicationNum,
+                                  boolean isInMemory, boolean isTempPartition,
+                                  StorageCacheInfo storageCacheInfo) {
         this.dbId = dbId;
         this.tableId = tableId;
         this.partition = partition;
@@ -43,14 +50,7 @@ public class PartitionPersistInfoV2 implements Writable {
         this.replicationNum = replicationNum;
         this.isInMemory = isInMemory;
         this.isTempPartition = isTempPartition;
-    }
-
-    public PartitionPersistInfoV2(Long dbId, Long tableId, Partition partition,
-                                  DataProperty dataProperty, short replicationNum,
-                                  boolean isInMemory, boolean isTempPartition,
-                                  StorageInfo storageInfo) {
-        this(dbId, tableId, partition, dataProperty, replicationNum, isInMemory, isTempPartition);
-        this.storageInfo = storageInfo;
+        this.storageCacheInfo = storageCacheInfo;
     }
 
     public final boolean isListPartitionPersistInfo() {
@@ -108,8 +108,8 @@ public class PartitionPersistInfoV2 implements Writable {
         return this.isTempPartition;
     }
 
-    public StorageInfo getStorageInfo() {
-        return this.storageInfo;
+    public StorageCacheInfo getStorageCacheInfo() {
+        return this.storageCacheInfo;
     }
 
 }

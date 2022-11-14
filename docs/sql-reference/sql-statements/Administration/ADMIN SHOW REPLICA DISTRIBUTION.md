@@ -27,7 +27,3 @@ The Graph column in the result shows the distribution ratio of replicas graphica
     ```sql
     ADMIN SHOW REPLICA DISTRIBUTION FROM db1.tbl1 PARTITION(p1, p2);
     ```
-
-## keyword
-
-ADMIN,SHOW,REPLICA,DISTRIBUTION

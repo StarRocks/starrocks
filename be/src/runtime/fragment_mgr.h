@@ -29,6 +29,7 @@
 #include <vector>
 
 #include "common/status.h"
+#include "gen_cpp/FrontendService.h"
 #include "gen_cpp/StarrocksExternalService_types.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/internal_service.pb.h"
@@ -83,18 +84,25 @@ public:
 
     Status trigger_profile_report(const PTriggerProfileReportRequest* request);
 
+    void report_fragments(const std::vector<TUniqueId>& non_pipeline_need_report_fragment_ids);
+
+    void report_fragments_with_same_host(const std::vector<std::shared_ptr<FragmentExecState>>& need_report_exec_states,
+                                         std::vector<bool>& reported, const TNetworkAddress& last_coord_addr,
+                                         std::vector<TReportExecStatusParams>& report_exec_status_params_vector,
+                                         std::vector<int32_t>& cur_batch_report_indexes);
+
     // input: TScanOpenParams fragment_instance_id
-    // output: selected_columns
+    // output: selected_columns, query_id parsed from params
     // execute external query, all query info are packed in TScanOpenParams
     Status exec_external_plan_fragment(const TScanOpenParams& params, const TUniqueId& fragment_instance_id,
-                                       std::vector<TScanColumnDesc>* selected_columns);
+                                       std::vector<TScanColumnDesc>* selected_columns, TUniqueId* query_id);
     size_t running_fragment_count() const {
         std::lock_guard<std::mutex> lock(_lock);
         return _fragment_map.size();
     }
 
 private:
-    void exec_actual(std::shared_ptr<FragmentExecState> exec_state, const FinishCallback& cb);
+    void exec_actual(const std::shared_ptr<FragmentExecState>& exec_state, const FinishCallback& cb);
 
     // This is input params
     ExecEnv* _exec_env;

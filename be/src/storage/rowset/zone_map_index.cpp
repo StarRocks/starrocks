@@ -23,8 +23,10 @@
 
 #include <bthread/sys_futex.h>
 
+#include "column/column_helper.h"
+#include "column/column_viewer.h"
 #include "runtime/mem_pool.h"
-#include "storage/column_block.h"
+#include "storage/chunk_helper.h"
 #include "storage/olap_define.h"
 #include "storage/olap_type_infra.h"
 #include "storage/rowset/encoding_info.h"
@@ -112,7 +114,7 @@ template <FieldType type>
 void ZoneMapIndexWriterImpl<type>::add_values(const void* values, size_t count) {
     if (count > 0) {
         _page_zone_map.has_not_null = true;
-        const CppType* vals = reinterpret_cast<const CppType*>(values);
+        const auto* vals = reinterpret_cast<const CppType*>(values);
         auto [pmin, pmax] = std::minmax_element(vals, vals + count);
         if (unaligned_load<CppType>(pmin) < unaligned_load<CppType>(_page_zone_map.min_value)) {
             _field->type_info()->direct_copy(_page_zone_map.min_value, pmin, nullptr);
@@ -189,50 +191,58 @@ Status ZoneMapIndexWriterImpl<type>::finish(WritableFile* wfile, ColumnIndexMeta
     return writer.finish(meta->mutable_page_zone_maps());
 }
 
-StatusOr<bool> ZoneMapIndexReader::load(FileSystem* fs, const std::string& filename, const ZoneMapIndexPB& meta,
-                                        bool use_page_cache, bool kept_in_memory, MemTracker* mem_tracker) {
-    return success_once(_load_once,
-                        [&]() { return do_load(fs, filename, meta, use_page_cache, kept_in_memory, mem_tracker); });
+ZoneMapIndexReader::ZoneMapIndexReader() {
+    MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->column_zonemap_index_mem_tracker(), sizeof(ZoneMapIndexReader));
 }
 
-Status ZoneMapIndexReader::do_load(FileSystem* fs, const std::string& filename, const ZoneMapIndexPB& meta,
-                                   bool use_page_cache, bool kept_in_memory, MemTracker* mem_tracker) {
-    auto old_mem_usage = mem_usage();
+ZoneMapIndexReader::~ZoneMapIndexReader() {
+    MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->column_zonemap_index_mem_tracker(), _mem_usage());
+}
+
+StatusOr<bool> ZoneMapIndexReader::load(FileSystem* fs, const std::string& filename, const ZoneMapIndexPB& meta,
+                                        bool use_page_cache, bool kept_in_memory) {
+    return success_once(_load_once, [&]() {
+        Status st = _do_load(fs, filename, meta, use_page_cache, kept_in_memory);
+        if (st.ok()) {
+            MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->column_zonemap_index_mem_tracker(),
+                                     _mem_usage() - sizeof(ZoneMapIndexReader));
+        } else {
+            _reset();
+        }
+        return st;
+    });
+}
+
+Status ZoneMapIndexReader::_do_load(FileSystem* fs, const std::string& filename, const ZoneMapIndexPB& meta,
+                                    bool use_page_cache, bool kept_in_memory) {
     IndexedColumnReader reader(fs, filename, meta.page_zone_maps());
     RETURN_IF_ERROR(reader.load(use_page_cache, kept_in_memory));
     std::unique_ptr<IndexedColumnIterator> iter;
     RETURN_IF_ERROR(reader.new_iterator(&iter));
 
-    MemPool pool;
     _page_zone_maps.resize(reader.num_values());
 
+    auto column = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_VARCHAR, false);
     // read and cache all page zone maps
     for (int i = 0; i < reader.num_values(); ++i) {
-        size_t num_to_read = 1;
-        std::unique_ptr<ColumnVectorBatch> cvb;
-        RETURN_IF_ERROR(ColumnVectorBatch::create(num_to_read, false, reader.type_info(), nullptr, &cvb));
-        ColumnBlock block(cvb.get(), &pool);
-        ColumnBlockView column_block_view(&block);
-
         RETURN_IF_ERROR(iter->seek_to_ordinal(i));
+        size_t num_to_read = 1;
         size_t num_read = num_to_read;
-        RETURN_IF_ERROR(iter->next_batch(&num_read, &column_block_view));
+        RETURN_IF_ERROR(iter->next_batch(&num_read, column.get()));
         DCHECK(num_to_read == num_read);
 
-        auto* value = reinterpret_cast<Slice*>(cvb->data());
-        if (!_page_zone_maps[i].ParseFromArray(value->data, value->size)) {
+        vectorized::ColumnViewer<TYPE_VARCHAR> viewer(column);
+        auto value = viewer.value(0);
+        if (!_page_zone_maps[i].ParseFromArray(value.data, value.size)) {
             return Status::Corruption("Failed to parse zone map");
         }
-        pool.clear();
+        column->resize(0);
     }
-    auto new_mem_usage = mem_usage();
-    mem_tracker->consume(new_mem_usage - old_mem_usage);
     return Status::OK();
 }
 
-size_t ZoneMapIndexReader::mem_usage() const {
+size_t ZoneMapIndexReader::_mem_usage() const {
     size_t size = sizeof(ZoneMapIndexReader);
-    size += _page_zone_maps.capacity() * sizeof(_page_zone_maps[0]);
     for (const auto& zone_map : _page_zone_maps) {
         size += zone_map.SpaceUsedLong();
     }

@@ -9,11 +9,13 @@
 #include <map>
 #include <vector>
 
+#include "column/struct_column.h"
 #include "common/object_pool.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
+#include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::vectorized {
@@ -43,7 +45,8 @@ struct SlotDesc {
     TypeDescriptor type;
 };
 
-void create_tuple_descriptor(ObjectPool* pool, const SlotDesc* slot_descs, TupleDescriptor** tuple_desc) {
+void create_tuple_descriptor(RuntimeState* state, ObjectPool* pool, const SlotDesc* slot_descs,
+                             TupleDescriptor** tuple_desc) {
     TDescriptorTableBuilder table_desc_builder;
 
     TTupleDescriptorBuilder tuple_desc_builder;
@@ -62,16 +65,17 @@ void create_tuple_descriptor(ObjectPool* pool, const SlotDesc* slot_descs, Tuple
     std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
     std::vector<bool> nullable_tuples = std::vector<bool>{true};
     DescriptorTbl* tbl = nullptr;
-    DescriptorTbl::create(pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size);
+    DescriptorTbl::create(state, pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size);
 
     RowDescriptor* row_desc = pool->add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
     *tuple_desc = row_desc->tuple_descriptors()[0];
     return;
 }
 
-void create_slot_descriptors(ObjectPool* pool, std::vector<SlotDescriptor*>* res, SlotDesc* slot_descs) {
+void create_slot_descriptors(RuntimeState* state, ObjectPool* pool, std::vector<SlotDescriptor*>* res,
+                             SlotDesc* slot_descs) {
     TupleDescriptor* tuple_desc;
-    create_tuple_descriptor(pool, slot_descs, &tuple_desc);
+    create_tuple_descriptor(state, pool, slot_descs, &tuple_desc);
     *res = tuple_desc->slots();
     return;
 }
@@ -194,7 +198,7 @@ static uint64_t get_hit_rows(OrcChunkReader* reader) {
 
 TEST_F(OrcChunkReaderTest, Normal) {
     std::vector<SlotDescriptor*> src_slot_descs;
-    create_slot_descriptors(&_pool, &src_slot_descs, default_slot_descs);
+    create_slot_descriptors(_runtime_state.get(), &_pool, &src_slot_descs, default_slot_descs);
     OrcChunkReader reader(_runtime_state.get(), src_slot_descs);
     auto input_stream = orc::readLocalFile(default_orc_file);
     reader.init(std::move(input_stream));
@@ -217,7 +221,7 @@ public:
 
 TEST_F(OrcChunkReaderTest, SkipStripe) {
     std::vector<SlotDescriptor*> src_slot_descs;
-    create_slot_descriptors(&_pool, &src_slot_descs, default_slot_descs);
+    create_slot_descriptors(_runtime_state.get(), &_pool, &src_slot_descs, default_slot_descs);
     OrcChunkReader reader(_runtime_state.get(), src_slot_descs);
     auto filter = std::make_shared<SkipStripeRowFilter>();
     reader.set_row_reader_filter(filter);
@@ -279,7 +283,7 @@ static TExprNode create_int_literal_node(TPrimitiveType::type value_type, int64_
 
 template <typename ValueType>
 static void push_binary_pred_texpr_node(std::vector<TExprNode>& nodes, TExprOpcode::type opcode,
-                                        SlotDescriptor* slot_desc, ValueType value_type, TExprNode lit_node) {
+                                        SlotDescriptor* slot_desc, ValueType value_type, const TExprNode& lit_node) {
     TExprNode eq_node;
     eq_node.__set_node_type(TExprNodeType::type::BINARY_PRED);
     eq_node.__set_child_type(value_type);
@@ -345,7 +349,7 @@ static ExprContext* create_expr_context(ObjectPool* pool, const std::vector<TExp
 
 TEST_F(OrcChunkReaderTest, SkipFileByConjunctsEQ) {
     std::vector<SlotDescriptor*> src_slot_descs;
-    create_slot_descriptors(&_pool, &src_slot_descs, default_slot_descs);
+    create_slot_descriptors(_runtime_state.get(), &_pool, &src_slot_descs, default_slot_descs);
     OrcChunkReader reader(_runtime_state.get(), src_slot_descs);
 
     // lo_custkey == 0, min/max is 1,7.
@@ -366,7 +370,7 @@ TEST_F(OrcChunkReaderTest, SkipFileByConjunctsEQ) {
 
 TEST_F(OrcChunkReaderTest, SkipStripeByConjunctsEQ) {
     std::vector<SlotDescriptor*> src_slot_descs;
-    create_slot_descriptors(&_pool, &src_slot_descs, default_slot_descs);
+    create_slot_descriptors(_runtime_state.get(), &_pool, &src_slot_descs, default_slot_descs);
     OrcChunkReader reader(_runtime_state.get(), src_slot_descs);
 
     // lo_orderdate == 200000
@@ -394,7 +398,7 @@ TEST_F(OrcChunkReaderTest, SkipStripeByConjunctsEQ) {
 
 TEST_F(OrcChunkReaderTest, SkipStripeByConjunctsInPred) {
     std::vector<SlotDescriptor*> src_slot_descs;
-    create_slot_descriptors(&_pool, &src_slot_descs, default_slot_descs);
+    create_slot_descriptors(_runtime_state.get(), &_pool, &src_slot_descs, default_slot_descs);
     OrcChunkReader reader(_runtime_state.get(), src_slot_descs);
 
     // lo_orderdate min/max = 9/200000
@@ -447,7 +451,7 @@ private:
 
 TEST_F(OrcChunkReaderTest, SkipRowGroups) {
     std::vector<SlotDescriptor*> src_slot_descs;
-    create_slot_descriptors(&_pool, &src_slot_descs, default_slot_descs);
+    create_slot_descriptors(_runtime_state.get(), &_pool, &src_slot_descs, default_slot_descs);
     OrcChunkReader reader(_runtime_state.get(), src_slot_descs);
     auto filter = std::make_shared<SkipRowGroupRowFilter>();
     reader.set_row_reader_filter(filter);
@@ -515,7 +519,7 @@ std::vector<DecimalV2Value> convert_orc_to_starrocks_decimalv2(RuntimeState* sta
     b3.add_slot(b2.build());
     b3.build(&builder);
 
-    Status status = DescriptorTbl::create(pool, builder.desc_tbl(), &tbl, config::vector_chunk_size);
+    Status status = DescriptorTbl::create(state, pool, builder.desc_tbl(), &tbl, config::vector_chunk_size);
     DCHECK(status.ok()) << status.get_error_msg();
     slots.push_back(tbl->get_slot_descriptor(0));
 
@@ -845,7 +849,7 @@ std::vector<TimestampValue> convert_orc_to_starrocks_timestamp(RuntimeState* sta
     b3.add_slot(b2.build());
     b3.build(&builder);
 
-    Status status = DescriptorTbl::create(pool, builder.desc_tbl(), &tbl, config::vector_chunk_size);
+    Status status = DescriptorTbl::create(state, pool, builder.desc_tbl(), &tbl, config::vector_chunk_size);
     DCHECK(status.ok()) << status.get_error_msg();
     slots.push_back(tbl->get_slot_descriptor(0));
 
@@ -938,7 +942,7 @@ TEST_F(OrcChunkReaderTest, TestReadPositionalColumn) {
     static const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/orc_test_positional_column.orc";
     std::vector<SlotDescriptor*> src_slot_descriptors;
     ObjectPool pool;
-    create_slot_descriptors(&pool, &src_slot_descriptors, slot_descs);
+    create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
 
     {
         OrcChunkReader reader(_runtime_state.get(), src_slot_descriptors);
@@ -1040,7 +1044,7 @@ TEST_F(OrcChunkReaderTest, TestReadArrayBasic) {
     static const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/orc_test_array_basic.orc";
     std::vector<SlotDescriptor*> src_slot_descriptors;
     ObjectPool pool;
-    create_slot_descriptors(&pool, &src_slot_descriptors, slot_descs);
+    create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
 
     {
         OrcChunkReader reader(_runtime_state.get(), src_slot_descriptors);
@@ -1108,7 +1112,7 @@ TEST_F(OrcChunkReaderTest, TestReadPaddingChar) {
     static const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/orc_test_padding_char.orc";
     std::vector<SlotDescriptor*> src_slot_descriptors;
     ObjectPool pool;
-    create_slot_descriptors(&pool, &src_slot_descriptors, slot_descs);
+    create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
 
     {
         OrcChunkReader reader(_runtime_state.get(), src_slot_descriptors);
@@ -1185,7 +1189,7 @@ TEST_F(OrcChunkReaderTest, TestColumnWithUpperCase) {
     static const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/orc_test_upper_case.orc";
     std::vector<SlotDescriptor*> src_slot_descriptors;
     ObjectPool pool;
-    create_slot_descriptors(&pool, &src_slot_descriptors, slot_descs);
+    create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
 
     {
         OrcChunkReader reader(_runtime_state.get(), src_slot_descriptors);
@@ -1213,6 +1217,488 @@ TEST_F(OrcChunkReaderTest, TestColumnWithUpperCase) {
         Slice s = char_col->get(0).get_slice();
         std::string res(s.data, s.size);
         EXPECT_EQ(res, "nihao");
+    }
+}
+
+/**
+ * ORC format: struct<c0:int,c1:struct<cc0:int,Cc11:string>>
+ * Data:
+ * {c0: 1, c1: {cc0: 11, Cc1: "Smith"}}
+ * {c0: 2, c1: {cc0: 22, Cc1: "Cruise"}}
+ * {c0: 3, c1: {cc0: 33, Cc1: "hello"}}
+ * {c0: 4, c1: {cc0: 44, Cc1: "world"}}
+ */
+TEST_F(OrcChunkReaderTest, TestReadStructBasic) {
+    static const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/orc_test_struct_basic.orc";
+
+    SlotDesc c0{"c0", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)};
+    SlotDesc c1{"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_STRUCT)};
+    c1.type.children.push_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
+    c1.type.children.push_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR));
+    c1.type.field_names.push_back("cc0");
+    c1.type.field_names.push_back("cc1");
+    c1.type.selected_fields.reserve(2);
+    {
+        /**
+        * Read all orc data
+        */
+
+        c1.type.selected_fields.clear();
+        c1.type.selected_fields.push_back(true);
+        c1.type.selected_fields.push_back(true);
+
+        SlotDesc slot_descs[] = {c0, c1, {""}};
+        std::vector<SlotDescriptor*> src_slot_descriptors;
+        ObjectPool pool;
+        create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
+
+        // Read all fields
+        OrcChunkReader reader(_runtime_state.get(), src_slot_descriptors);
+        auto input_stream = orc::readLocalFile(input_orc_file);
+        Status st = reader.init(std::move(input_stream));
+        DCHECK(st.ok()) << st.get_error_msg();
+
+        st = reader.read_next();
+        DCHECK(st.ok()) << st.get_error_msg();
+        ChunkPtr ckptr = reader.create_chunk();
+        DCHECK(ckptr != nullptr);
+        st = reader.fill_chunk(&ckptr);
+        DCHECK(st.ok()) << st.get_error_msg();
+        ChunkPtr result = reader.cast_chunk(&ckptr);
+        DCHECK(result != nullptr);
+
+        EXPECT_EQ(result->num_rows(), 4);
+        EXPECT_EQ(result->num_columns(), 2);
+
+        EXPECT_EQ("[1, {cc0: 11, cc1: 'Smith'}]", result->debug_row(0));
+        EXPECT_EQ("[2, {cc0: 22, cc1: 'Cruise'}]", result->debug_row(1));
+        EXPECT_EQ("[3, {cc0: 33, cc1: 'hello'}]", result->debug_row(2));
+        EXPECT_EQ("[4, {cc0: 44, cc1: 'World'}]", result->debug_row(3));
+    }
+
+    {
+        /**
+         * Load struct partial subfield.
+         */
+        c1.type.selected_fields.clear();
+        c1.type.selected_fields.push_back(false);
+        c1.type.selected_fields.push_back(true);
+
+        SlotDesc slot_descs[] = {c0, c1, {""}};
+
+        std::vector<SlotDescriptor*> src_slot_descriptors;
+        ObjectPool pool;
+        create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
+
+        OrcChunkReader reader(_runtime_state.get(), src_slot_descriptors);
+        auto input_stream = orc::readLocalFile(input_orc_file);
+        Status st = reader.init(std::move(input_stream));
+        DCHECK(st.ok()) << st.get_error_msg();
+
+        st = reader.read_next();
+        DCHECK(st.ok()) << st.get_error_msg();
+        ChunkPtr ckptr = reader.create_chunk();
+        DCHECK(ckptr != nullptr);
+        st = reader.fill_chunk(&ckptr);
+        DCHECK(st.ok()) << st.get_error_msg();
+        ChunkPtr result = reader.cast_chunk(&ckptr);
+        DCHECK(result != nullptr);
+
+        EXPECT_EQ(result->num_rows(), 4);
+        EXPECT_EQ(result->num_columns(), 2);
+
+        EXPECT_EQ("[1, {cc1: 'Smith'}]", result->debug_row(0));
+        EXPECT_EQ("[2, {cc1: 'Cruise'}]", result->debug_row(1));
+        EXPECT_EQ("[3, {cc1: 'hello'}]", result->debug_row(2));
+        EXPECT_EQ("[4, {cc1: 'World'}]", result->debug_row(3));
+    }
+}
+
+/**
+ * ORC format: struct<c0:int,c1:struct<cc0:int,Cc11:string>>
+ * Data:
+ * {c0: 1, c1: {cc0: 11, Cc1: "Smith"}}
+ * {c0: 2, c1: {cc0: 22, Cc1: "Cruise"}}
+ * {c0: 3, c1: {cc0: 33, Cc1: "hello"}}
+ * {c0: 4, c1: {cc0: 44, Cc1: "world"}}
+ */
+TEST_F(OrcChunkReaderTest, TestReadStructUnorderedField) {
+    static const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/orc_test_struct_basic.orc";
+
+    SlotDesc c0{"c0", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)};
+    SlotDesc c1{"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_STRUCT)};
+    c1.type.children.push_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR));
+    c1.type.children.push_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
+    c1.type.field_names.push_back("cc1");
+    c1.type.field_names.push_back("cc0");
+    c1.type.selected_fields.reserve(2);
+
+    {
+        /**
+        *  Load all fields
+        */
+        c1.type.selected_fields.clear();
+        c1.type.selected_fields.push_back(true);
+        c1.type.selected_fields.push_back(true);
+
+        SlotDesc slot_descs[] = {c0, c1, {""}};
+
+        std::vector<SlotDescriptor*> src_slot_descriptors;
+        ObjectPool pool;
+        create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
+
+        // Read all fields
+        OrcChunkReader reader(_runtime_state.get(), src_slot_descriptors);
+        auto input_stream = orc::readLocalFile(input_orc_file);
+        Status st = reader.init(std::move(input_stream));
+        DCHECK(st.ok()) << st.get_error_msg();
+
+        st = reader.read_next();
+        DCHECK(st.ok()) << st.get_error_msg();
+        ChunkPtr ckptr = reader.create_chunk();
+        DCHECK(ckptr != nullptr);
+        st = reader.fill_chunk(&ckptr);
+        DCHECK(st.ok()) << st.get_error_msg();
+        ChunkPtr result = reader.cast_chunk(&ckptr);
+        DCHECK(result != nullptr);
+
+        EXPECT_EQ(result->num_rows(), 4);
+        EXPECT_EQ(result->num_columns(), 2);
+
+        EXPECT_EQ("[1, {cc1: 'Smith', cc0: 11}]", result->debug_row(0));
+        EXPECT_EQ("[2, {cc1: 'Cruise', cc0: 22}]", result->debug_row(1));
+        EXPECT_EQ("[3, {cc1: 'hello', cc0: 33}]", result->debug_row(2));
+        EXPECT_EQ("[4, {cc1: 'World', cc0: 44}]", result->debug_row(3));
+    }
+
+    {
+        /**
+         * Load partial subfields
+        */
+        c1.type.selected_fields.clear();
+        c1.type.selected_fields.push_back(false);
+        c1.type.selected_fields.push_back(true);
+
+        SlotDesc slot_descs[] = {c0, c1, {""}};
+
+        std::vector<SlotDescriptor*> src_slot_descriptors;
+        ObjectPool pool;
+        create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
+
+        OrcChunkReader reader(_runtime_state.get(), src_slot_descriptors);
+        auto input_stream = orc::readLocalFile(input_orc_file);
+        Status st = reader.init(std::move(input_stream));
+        DCHECK(st.ok()) << st.get_error_msg();
+
+        st = reader.read_next();
+        DCHECK(st.ok()) << st.get_error_msg();
+        ChunkPtr ckptr = reader.create_chunk();
+        DCHECK(ckptr != nullptr);
+        st = reader.fill_chunk(&ckptr);
+        DCHECK(st.ok()) << st.get_error_msg();
+        ChunkPtr result = reader.cast_chunk(&ckptr);
+        DCHECK(result != nullptr);
+
+        EXPECT_EQ(result->num_rows(), 4);
+        EXPECT_EQ(result->num_columns(), 2);
+
+        EXPECT_EQ("[1, {cc0: 11}]", result->debug_row(0));
+        EXPECT_EQ("[2, {cc0: 22}]", result->debug_row(1));
+        EXPECT_EQ("[3, {cc0: 33}]", result->debug_row(2));
+        EXPECT_EQ("[4, {cc0: 44}]", result->debug_row(3));
+    }
+}
+
+/**
+ * ORC format: struct<c0:int,c1:struct<cc0:int,Cc11:string>>
+ * Data:
+ * {c0: 1, c1: {cc0: 11, Cc1: "Smith"}}
+ * {c0: 2, c1: {cc0: 22, Cc1: "Cruise"}}
+ * {c0: 3, c1: {cc0: 33, Cc1: "hello"}}
+ * {c0: 4, c1: {cc0: 44, Cc1: "world"}}
+ */
+TEST_F(OrcChunkReaderTest, TestReadStructCaseSensitiveField) {
+    static const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/orc_test_struct_basic.orc";
+
+    {
+        /**
+        *  Load all fields
+        */
+        SlotDesc c0{"c0", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)};
+        SlotDesc c1{"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_STRUCT)};
+        c1.type.children.push_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR));
+        c1.type.field_names.push_back("Cc1");
+        c1.type.selected_fields.reserve(1);
+        c1.type.selected_fields.clear();
+        c1.type.selected_fields.push_back(true);
+
+        SlotDesc slot_descs[] = {c0, c1, {""}};
+
+        std::vector<SlotDescriptor*> src_slot_descriptors;
+        ObjectPool pool;
+        create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
+
+        OrcChunkReader reader(_runtime_state.get(), src_slot_descriptors);
+        reader.set_case_sensitive(true);
+        auto input_stream = orc::readLocalFile(input_orc_file);
+        Status st = reader.init(std::move(input_stream));
+        DCHECK(st.ok()) << st.get_error_msg();
+
+        st = reader.read_next();
+        DCHECK(st.ok()) << st.get_error_msg();
+        ChunkPtr ckptr = reader.create_chunk();
+        DCHECK(ckptr != nullptr);
+        st = reader.fill_chunk(&ckptr);
+        DCHECK(st.ok()) << st.get_error_msg();
+        ChunkPtr result = reader.cast_chunk(&ckptr);
+        DCHECK(result != nullptr);
+
+        EXPECT_EQ(result->num_rows(), 4);
+        EXPECT_EQ(result->num_columns(), 2);
+
+        EXPECT_EQ("[1, {Cc1: 'Smith'}]", result->debug_row(0));
+        EXPECT_EQ("[2, {Cc1: 'Cruise'}]", result->debug_row(1));
+        EXPECT_EQ("[3, {Cc1: 'hello'}]", result->debug_row(2));
+        EXPECT_EQ("[4, {Cc1: 'World'}]", result->debug_row(3));
+    }
+
+    {
+        /**
+        * Test subfield not found
+        */
+        SlotDesc c0{"c0", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)};
+        SlotDesc c1{"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_STRUCT)};
+        c1.type.children.push_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR));
+        c1.type.field_names.push_back("cc1");
+        c1.type.selected_fields.reserve(1);
+        c1.type.selected_fields.clear();
+        c1.type.selected_fields.push_back(true);
+
+        SlotDesc slot_descs[] = {c0, c1, {""}};
+
+        std::vector<SlotDescriptor*> src_slot_descriptors;
+        ObjectPool pool;
+        create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
+
+        OrcChunkReader reader(_runtime_state.get(), src_slot_descriptors);
+        reader.set_case_sensitive(true);
+        auto input_stream = orc::readLocalFile(input_orc_file);
+        Status st = reader.init(std::move(input_stream));
+        EXPECT_FALSE(st.ok());
+    }
+}
+
+/**
+ * ORC format: struct<c0:int,c1:array<struct<c11:int,c12:array<string>>>,c2:array<map<int,struct<c21:int,c22:string>>>>
+ */
+TEST_F(OrcChunkReaderTest, TestReadStructArrayMap) {
+    static const std::string input_orc_file =
+            "./be/test/exec/test_data/orc_scanner/orc_test_struct_array_map_basic.orc";
+
+    TypeDescriptor c12_array = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_ARRAY);
+    c12_array.children.push_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR));
+
+    TypeDescriptor c1_struct = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_STRUCT);
+    c1_struct.children.push_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
+    c1_struct.children.push_back(c12_array);
+    c1_struct.field_names.push_back("c11");
+    c1_struct.field_names.push_back("c12");
+    c1_struct.selected_fields.reserve(2);
+
+    TypeDescriptor c1_array = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_ARRAY);
+    c1_array.children.push_back(c1_struct);
+
+    TypeDescriptor c2_struct = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_STRUCT);
+    c2_struct.children.push_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
+    c2_struct.children.push_back((TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)));
+    c2_struct.field_names.push_back("c21");
+    c2_struct.field_names.push_back("c22");
+    c2_struct.selected_fields.reserve(2);
+
+    TypeDescriptor c2_map = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_MAP);
+    c2_map.children.push_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
+    c2_map.children.push_back(c2_struct);
+    c2_map.selected_fields.reserve(2);
+
+    TypeDescriptor c2_array = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_ARRAY);
+    c2_array.children.push_back(c2_map);
+
+    SlotDesc c0{"c0", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)};
+    SlotDesc c1{"c1", c1_array};
+    SlotDesc c2{"c2", c2_array};
+
+    {
+        /**
+        * Load all test
+        */
+        c1.type.children.at(0).selected_fields.clear();
+        c1.type.children.at(0).selected_fields.push_back(true);
+        c1.type.children.at(0).selected_fields.push_back(true);
+
+        c2.type.children.at(0).selected_fields.clear();
+        c2.type.children.at(0).selected_fields.push_back(true);
+        c2.type.children.at(0).selected_fields.push_back(true);
+
+        c2.type.children.at(0).children.at(1).selected_fields.clear();
+        c2.type.children.at(0).children.at(1).selected_fields.push_back(true);
+        c2.type.children.at(0).children.at(1).selected_fields.push_back(true);
+
+        SlotDesc slot_descs[] = {c0, c1, c2, {""}};
+
+        std::vector<SlotDescriptor*> src_slot_descriptors;
+        ObjectPool pool;
+        create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
+
+        // Read all fields
+        OrcChunkReader reader(_runtime_state.get(), src_slot_descriptors);
+        auto input_stream = orc::readLocalFile(input_orc_file);
+        Status st = reader.init(std::move(input_stream));
+        DCHECK(st.ok()) << st.get_error_msg();
+
+        st = reader.read_next();
+        DCHECK(st.ok()) << st.get_error_msg();
+        ChunkPtr ckptr = reader.create_chunk();
+        DCHECK(ckptr != nullptr);
+        st = reader.fill_chunk(&ckptr);
+        DCHECK(st.ok()) << st.get_error_msg();
+        ChunkPtr result = reader.cast_chunk(&ckptr);
+        DCHECK(result != nullptr);
+
+        EXPECT_EQ(result->num_rows(), 5);
+        EXPECT_EQ(result->num_columns(), 3);
+
+        //        for (size_t i = 0; i < result->num_rows(); i++) {
+        //            std::cout << result->debug_row(i) << std::endl;
+        //        }
+
+        EXPECT_EQ(
+                "[1, [{c11: 2, c12: ['danny1', 'Smith2', 'Cruise']}, {c11: 4, c12: ['poal', 'alan', 'blossom']}], "
+                "[[1->{c21: 11, c22: 'hi1'}], [5->{c21: 23, c22: 'p4'}], [9->{c21: 25, c22: 'p5'}]]]",
+                result->debug_row(0));
+        EXPECT_EQ(
+                "[2, [{c11: 3, c12: ['danny2', 'Smith3']}, {c11: 5, c12: ['poal', 'alan']}], [[2->{c21: 12, c22: "
+                "'hi2'}], [6->{c21: 24, c22: 'p5'}]]]",
+                result->debug_row(1));
+        EXPECT_EQ(
+                "[3, [{c11: 4, c12: ['danny3']}, {c11: 6, c12: ['poal']}], [[3->{c21: 13, c22: 'hi3'}], [7->{c21: 25, "
+                "c22: 'p6'}]]]",
+                result->debug_row(2));
+        EXPECT_EQ(
+                "[4, [{c11: 5, c12: ['danny4', 'Smith5']}, {c11: 7, c12: ['poal', 'alan']}], [[4->{c21: 14, c22: "
+                "'hi4'}], [8->{c21: 26, c22: 'p7'}]]]",
+                result->debug_row(3));
+        EXPECT_EQ(
+                "[5, [{c11: 6, c12: ['danny4']}, {c11: 7, c12: ['poal', 'alan']}], [[5->{c21: 14, c22: 'hi4'}], "
+                "[9->{c21: 26, c22: 'p7'}]]]",
+                result->debug_row(4));
+    }
+
+    {
+        /**
+        * Load struct subfield c22
+        */
+        c1.type.children.at(0).selected_fields.clear();
+        c1.type.children.at(0).selected_fields.push_back(true);
+        c1.type.children.at(0).selected_fields.push_back(true);
+
+        c2.type.children.at(0).selected_fields.clear();
+        c2.type.children.at(0).selected_fields.push_back(true);
+        c2.type.children.at(0).selected_fields.push_back(true);
+
+        c2.type.children.at(0).children.at(1).selected_fields.clear();
+        c2.type.children.at(0).children.at(1).selected_fields.push_back(false);
+        c2.type.children.at(0).children.at(1).selected_fields.push_back(true);
+
+        SlotDesc slot_descs[] = {c0, c1, c2, {""}};
+
+        std::vector<SlotDescriptor*> src_slot_descriptors;
+        ObjectPool pool;
+        create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
+
+        // Read all fields
+        OrcChunkReader reader(_runtime_state.get(), src_slot_descriptors);
+        auto input_stream = orc::readLocalFile(input_orc_file);
+        Status st = reader.init(std::move(input_stream));
+        DCHECK(st.ok()) << st.get_error_msg();
+
+        st = reader.read_next();
+        DCHECK(st.ok()) << st.get_error_msg();
+        ChunkPtr ckptr = reader.create_chunk();
+        DCHECK(ckptr != nullptr);
+        st = reader.fill_chunk(&ckptr);
+        DCHECK(st.ok()) << st.get_error_msg();
+        ChunkPtr result = reader.cast_chunk(&ckptr);
+        DCHECK(result != nullptr);
+
+        EXPECT_EQ(result->num_rows(), 5);
+        EXPECT_EQ(result->num_columns(), 3);
+
+        //        for (size_t i = 0; i < result->num_rows(); i++) {
+        //            std::cout << result->debug_row(i) << std::endl;
+        //        }
+
+        EXPECT_EQ(
+                "[1, [{c11: 2, c12: ['danny1', 'Smith2', 'Cruise']}, {c11: 4, c12: ['poal', 'alan', 'blossom']}], "
+                "[[1->{c22: 'hi1'}], [5->{c22: 'p4'}], [9->{c22: 'p5'}]]]",
+                result->debug_row(0));
+        EXPECT_EQ(
+                "[2, [{c11: 3, c12: ['danny2', 'Smith3']}, {c11: 5, c12: ['poal', 'alan']}], [[2->{c22: 'hi2'}], "
+                "[6->{c22: 'p5'}]]]",
+                result->debug_row(1));
+        EXPECT_EQ("[3, [{c11: 4, c12: ['danny3']}, {c11: 6, c12: ['poal']}], [[3->{c22: 'hi3'}], [7->{c22: 'p6'}]]]",
+                  result->debug_row(2));
+        EXPECT_EQ(
+                "[4, [{c11: 5, c12: ['danny4', 'Smith5']}, {c11: 7, c12: ['poal', 'alan']}], [[4->{c22: 'hi4'}], "
+                "[8->{c22: 'p7'}]]]",
+                result->debug_row(3));
+        EXPECT_EQ(
+                "[5, [{c11: 6, c12: ['danny4']}, {c11: 7, c12: ['poal', 'alan']}], [[5->{c22: 'hi4'}], [9->{c22: "
+                "'p7'}]]]",
+                result->debug_row(4));
+    }
+
+    {
+        /**
+        * Load c2 col map's key
+        */
+
+        c2.type.children.at(0).selected_fields.clear();
+        c2.type.children.at(0).selected_fields.push_back(true);
+        c2.type.children.at(0).selected_fields.push_back(false);
+
+        SlotDesc slot_descs[] = {c2, {""}};
+
+        std::vector<SlotDescriptor*> src_slot_descriptors;
+        ObjectPool pool;
+        create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
+
+        // Read all fields
+        OrcChunkReader reader(_runtime_state.get(), src_slot_descriptors);
+        auto input_stream = orc::readLocalFile(input_orc_file);
+        Status st = reader.init(std::move(input_stream));
+        DCHECK(st.ok()) << st.get_error_msg();
+
+        st = reader.read_next();
+        DCHECK(st.ok()) << st.get_error_msg();
+        ChunkPtr ckptr = reader.create_chunk();
+        DCHECK(ckptr != nullptr);
+        st = reader.fill_chunk(&ckptr);
+        DCHECK(st.ok()) << st.get_error_msg();
+        ChunkPtr result = reader.cast_chunk(&ckptr);
+        DCHECK(result != nullptr);
+
+        EXPECT_EQ(result->num_rows(), 5);
+        EXPECT_EQ(result->num_columns(), 1);
+
+        //        for (size_t i = 0; i < result->num_rows(); i++) {
+        //            std::cout << result->debug_row(i) << std::endl;
+        //        }
+
+        EXPECT_EQ("[[[1->NULL], [5->NULL], [9->NULL]]]", result->debug_row(0));
+        EXPECT_EQ("[[[2->NULL], [6->NULL]]]", result->debug_row(1));
+        EXPECT_EQ("[[[3->NULL], [7->NULL]]]", result->debug_row(2));
+        EXPECT_EQ("[[[4->NULL], [8->NULL]]]", result->debug_row(3));
+        EXPECT_EQ("[[[5->NULL], [9->NULL]]]", result->debug_row(4));
     }
 }
 

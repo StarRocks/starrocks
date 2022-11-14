@@ -13,6 +13,7 @@ namespace starrocks {
 
 namespace lake {
 class UploadSnapshotsRequest;
+class RestoreSnapshotsRequest;
 } // namespace lake
 
 class ExecEnv;
@@ -27,6 +28,8 @@ public:
     DISALLOW_COPY_AND_MOVE(LakeSnapshotLoader);
 
     Status upload(const ::starrocks::lake::UploadSnapshotsRequest* request);
+
+    Status restore(const ::starrocks::lake::RestoreSnapshotsRequest* request);
 
 private:
     Status _get_existing_files_from_remote(BrokerServiceConnection& client, const std::string& remote_path,

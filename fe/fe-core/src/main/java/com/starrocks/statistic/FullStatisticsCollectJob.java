@@ -2,12 +2,13 @@
 package com.starrocks.statistic;
 
 import com.google.common.base.Joiner;
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.velocity.VelocityContext;
 
 import java.util.ArrayList;
@@ -36,9 +37,31 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
     }
 
     @Override
-    public void collect(ConnectContext context) throws Exception {
-        for (String sql : buildCollectSQLList()) {
+    public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
+        long finishedSQLNum = 0;
+        int parallelism = Math.max(1, context.getSessionVariable().getStatisticCollectParallelism());
+        List<List<String>> collectSQLList = buildCollectSQLList(parallelism);
+        long totalCollectSQL = collectSQLList.size();
+
+        // First, the collection task is divided into several small tasks according to the column name and partition,
+        // and then the multiple small tasks are aggregated into several tasks
+        // that will actually be run according to the configured parallelism, and are connected by union all
+        // Because each union will run independently, if the number of unions is greater than the degree of parallelism,
+        // dop will be set to 1 to meet the requirements of the degree of parallelism.
+        // If the number of unions is less than the degree of parallelism,
+        // dop should be adjusted appropriately to use enough cpu cores
+        for (List<String> sqlUnion : collectSQLList) {
+            if (sqlUnion.size() < parallelism) {
+                context.getSessionVariable().setPipelineDop(parallelism / sqlUnion.size());
+            } else {
+                context.getSessionVariable().setPipelineDop(1);
+            }
+
+            String sql = "INSERT INTO column_statistics " + Joiner.on(" UNION ALL ").join(sqlUnion);
             collectStatisticSync(sql, context);
+            finishedSQLNum++;
+            analyzeStatus.setProgress(finishedSQLNum * 100 / totalCollectSQL);
+            GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
         }
     }
 
@@ -49,28 +72,16 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
      * The number of rows is accumulated in turn until the maximum number of rows is accumulated.
      * Use UNION ALL connection between multiple tasks and collect them in one query
      */
-    public List<String> buildCollectSQLList() {
-        List<String> collectSQLList = new ArrayList<>();
-        List<String> sqlInUnion = new ArrayList<>();
-        long scanRowCount = 0;
+    public List<List<String>> buildCollectSQLList(int parallelism) {
+        List<String> totalQuerySQL = new ArrayList<>();
         for (Long partitionId : partitionIdList) {
             Partition partition = table.getPartition(partitionId);
             for (String columnName : columns) {
-                sqlInUnion.add(buildCollectFullStatisticSQL(db, table, partition, columnName));
-                scanRowCount += partition.getRowCount();
-                if (scanRowCount >= Config.statistic_collect_max_row_count_per_query) {
-                    collectSQLList.add("INSERT INTO column_statistics " + Joiner.on(" UNION ALL ").join(sqlInUnion));
-                    scanRowCount = 0;
-                    sqlInUnion.clear();
-                }
+                totalQuerySQL.add(buildCollectFullStatisticSQL(db, table, partition, columnName));
             }
         }
 
-        if (!sqlInUnion.isEmpty()) {
-            collectSQLList.add("INSERT INTO column_statistics " + Joiner.on(" UNION ALL ").join(sqlInUnion));
-        }
-
-        return collectSQLList;
+        return Lists.partition(totalQuerySQL, parallelism);
     }
 
     private String buildCollectFullStatisticSQL(Database database, Table table, Partition partition, String columnNames) {
@@ -93,7 +104,7 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
             context.put("maxFunction", "''");
             context.put("minFunction", "''");
         } else {
-            context.put("countDistinctFunction", "IFNULL(hll_union(hll_hash(`" + columnNames + "`)), hll_empty())");
+            context.put("countDistinctFunction", "IFNULL(hll_raw(`" + columnNames + "`), hll_empty())");
             context.put("countNullFunction", "COUNT(1) - COUNT(`" + columnNames + "`)");
             context.put("maxFunction", "IFNULL(MAX(`" + columnNames + "`), '')");
             context.put("minFunction", "IFNULL(MIN(`" + columnNames + "`), '')");

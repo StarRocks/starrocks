@@ -18,7 +18,6 @@
 #include "http/http_request.h"
 
 #include <event2/buffer.h>
-#include <event2/bufferevent.h>
 #include <event2/http.h>
 #include <event2/http_struct.h>
 #include <event2/keyvalq_struct.h>
@@ -26,11 +25,9 @@
 #include <boost/algorithm/string.hpp>
 #include <sstream>
 #include <string>
-#include <vector>
 
 #include "common/logging.h"
 #include "http/http_handler.h"
-#include "util/url_coding.h"
 
 namespace starrocks {
 

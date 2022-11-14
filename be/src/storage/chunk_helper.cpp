@@ -98,7 +98,7 @@ vectorized::Schema ChunkHelper::convert_schema(const starrocks::TabletSchema& sc
         auto f = convert_field(cid, schema.column(cid));
         fields.emplace_back(std::make_shared<starrocks::vectorized::Field>(std::move(f)));
     }
-    return starrocks::vectorized::Schema(std::move(fields), schema.keys_type());
+    return starrocks::vectorized::Schema(std::move(fields), schema.keys_type(), schema.sort_key_idxes());
 }
 
 starrocks::vectorized::Field ChunkHelper::convert_field_to_format_v2(ColumnId id, const TabletColumn& c) {
@@ -148,8 +148,10 @@ starrocks::vectorized::Schema ChunkHelper::convert_schema_to_format_v2(const sta
 
 starrocks::vectorized::Schema ChunkHelper::get_short_key_schema_with_format_v2(const starrocks::TabletSchema& schema) {
     std::vector<ColumnId> short_key_cids;
-    for (ColumnId cid = 0; cid < schema.num_short_key_columns(); ++cid) {
-        short_key_cids.push_back(cid);
+    const auto& sort_key_idxes = schema.sort_key_idxes();
+    short_key_cids.reserve(schema.num_short_key_columns());
+    for (auto i = 0; i < schema.num_short_key_columns(); ++i) {
+        short_key_cids.push_back(sort_key_idxes[i]);
     }
     return starrocks::vectorized::Schema(schema.schema(), short_key_cids);
 }
@@ -164,9 +166,9 @@ ColumnId ChunkHelper::max_column_id(const starrocks::vectorized::Schema& schema)
 
 template <typename T>
 struct ColumnDeleter {
-    ColumnDeleter(uint32_t chunk_size) : chunk_size(chunk_size) {}
+    ColumnDeleter(size_t chunk_size) : chunk_size(chunk_size) {}
     void operator()(vectorized::Column* ptr) const { vectorized::return_column<T>(down_cast<T*>(ptr), chunk_size); }
-    uint32_t chunk_size;
+    size_t chunk_size;
 };
 
 template <typename T, bool force>
@@ -265,7 +267,7 @@ void ChunkHelper::padding_char_columns(const std::vector<size_t>& char_column_in
     for (auto field_index : char_column_indexes) {
         vectorized::Column* column = chunk->get_column_by_index(field_index).get();
         vectorized::Column* data_column = vectorized::ColumnHelper::get_data_column(column);
-        vectorized::BinaryColumn* binary = down_cast<vectorized::BinaryColumn*>(data_column);
+        auto* binary = down_cast<vectorized::BinaryColumn*>(data_column);
 
         vectorized::Offsets& offset = binary->get_offset();
         vectorized::Bytes& bytes = binary->get_bytes();
@@ -290,7 +292,7 @@ void ChunkHelper::padding_char_columns(const std::vector<size_t>& char_column_in
         }
 
         for (size_t j = 1; j <= num_rows; ++j) {
-            new_offset[j] = len * j;
+            new_offset[j] = static_cast<uint32_t>(len * j);
         }
 
         const auto& field = schema.field(field_index);
@@ -383,8 +385,8 @@ void ChunkHelper::reorder_chunk(const std::vector<SlotDescriptor*>& slots, vecto
     DCHECK(chunk->columns().size() == slots.size());
     auto reordered_chunk = vectorized::Chunk();
     auto& original_chunk = (*chunk);
-    for (std::size_t idx = 0; idx < slots.size(); idx++) {
-        auto slot_id = slots[idx]->id();
+    for (auto slot : slots) {
+        auto slot_id = slot->id();
         reordered_chunk.append_column(original_chunk.get_column_by_slot_id(slot_id), slot_id);
     }
     original_chunk.swap_chunk(reordered_chunk);
@@ -421,7 +423,7 @@ Status ChunkAccumulator::push(vectorized::ChunkPtr&& chunk) {
     // Cut the input chunk into pieces if larger than desired
     for (size_t start = 0; start < input_rows;) {
         size_t remain_rows = input_rows - start;
-        int need_rows = 0;
+        size_t need_rows = 0;
         if (_tmp_chunk) {
             need_rows = std::min(_desired_size - _tmp_chunk->num_rows(), remain_rows);
             TRY_CATCH_BAD_ALLOC(_tmp_chunk->append(*chunk, start, need_rows));
@@ -456,6 +458,52 @@ void ChunkAccumulator::finalize() {
     if (_tmp_chunk) {
         _output.emplace_back(std::move(_tmp_chunk));
     }
+}
+
+void ChunkPipelineAccumulator::push(const vectorized::ChunkPtr& chunk) {
+    DCHECK(_out_chunk == nullptr);
+    if (_in_chunk == nullptr) {
+        _in_chunk = chunk;
+    } else if (_in_chunk->num_rows() + chunk->num_rows() > _max_size) {
+        _out_chunk = std::move(_in_chunk);
+        _in_chunk = chunk;
+    } else {
+        _in_chunk->append(*chunk);
+    }
+
+    if (_out_chunk == nullptr && (_in_chunk->num_rows() >= _max_size * LOW_WATERMARK_ROWS_RATE ||
+                                  _in_chunk->memory_usage() >= LOW_WATERMARK_BYTES)) {
+        _out_chunk = std::move(_in_chunk);
+    }
+}
+
+void ChunkPipelineAccumulator::reset() {
+    _finalized = false;
+    _in_chunk.reset();
+    _out_chunk.reset();
+}
+
+void ChunkPipelineAccumulator::finalize() {
+    _finalized = true;
+}
+
+vectorized::ChunkPtr& ChunkPipelineAccumulator::pull() {
+    if (_finalized && _out_chunk == nullptr) {
+        return _in_chunk;
+    }
+    return _out_chunk;
+}
+
+bool ChunkPipelineAccumulator::has_output() const {
+    return _out_chunk != nullptr || (_finalized && _in_chunk != nullptr);
+}
+
+bool ChunkPipelineAccumulator::need_input() const {
+    return !_finalized && _out_chunk == nullptr;
+}
+
+bool ChunkPipelineAccumulator::is_finished() const {
+    return _finalized && _out_chunk == nullptr && _in_chunk == nullptr;
 }
 
 } // namespace starrocks

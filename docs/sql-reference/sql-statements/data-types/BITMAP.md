@@ -137,7 +137,3 @@ select intersect_count(user_id, page, 'meituan') as meituan_uv,
 from pv_bitmap
 where page in ('meituan', 'waimai');
 ```
-
-## keyword
-
-BITMAP,BITMAP_COUNT,BITMAP_EMPTY,BITMAP_UNION,BITMAP_UNION_INT,TO_BITMAP,BITMAP_UNION_COUNT,INTERSECT_COUNT,BITMAP_INTERSECT

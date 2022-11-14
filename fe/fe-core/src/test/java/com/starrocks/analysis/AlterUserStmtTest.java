@@ -7,6 +7,7 @@ import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -33,7 +34,7 @@ public class AlterUserStmtTest {
 
         new Expectations() {
             {
-                auth.getUserPrivTable().doesUserExist((UserIdentity) any);
+                auth.doesUserExist((UserIdentity) any);
                 result = true;
             }
         };
@@ -117,7 +118,7 @@ public class AlterUserStmtTest {
     public void testBadPass(@Mocked Auth auth) throws Exception {
         new Expectations() {
             {
-                auth.getUserPrivTable().doesUserExist((UserIdentity) any);
+                auth.doesUserExist((UserIdentity) any);
                 result = true;
             }
         };
@@ -130,7 +131,7 @@ public class AlterUserStmtTest {
     public void testInvalidAuthPlugin(@Mocked Auth auth) throws Exception {
         new Expectations() {
             {
-                auth.getUserPrivTable().doesUserExist((UserIdentity) any);
+                auth.doesUserExist((UserIdentity) any);
                 result = true;
             }
         };

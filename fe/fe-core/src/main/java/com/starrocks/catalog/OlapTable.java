@@ -51,7 +51,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.common.util.Util;
-import com.starrocks.lake.StorageInfo;
+import com.starrocks.lake.StorageCacheInfo;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.qe.OriginStatement;
@@ -69,6 +69,7 @@ import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
+import com.starrocks.thrift.TWriteQuorumType;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
@@ -81,6 +82,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
@@ -110,12 +112,13 @@ public class OlapTable extends Table implements GsonPostProcessable {
          * this state means table is under PENDING alter operation(SCHEMA_CHANGE or ROLLUP), and is not
          * stable. The tablet scheduler will continue fixing the tablets of this table. And the state will
          * change back to SCHEMA_CHANGE or ROLLUP after table is stable, and continue doing alter operation.
-         * This state is a in-memory state and no need to persist.
+         * This state is an in-memory state and no need to persist.
          */
         WAITING_STABLE
     }
 
     @SerializedName(value = "clusterId")
+    @Deprecated
     protected int clusterId;
 
     @SerializedName(value = "state")
@@ -175,10 +178,6 @@ public class OlapTable extends Table implements GsonPostProcessable {
     @SerializedName(value = "tableProperty")
     protected TableProperty tableProperty;
 
-    // not serialized field
-    // record all materialized views based on this OlapTable
-    private Set<Long> relatedMaterializedViews;
-
     public OlapTable() {
         this(TableType.OLAP);
     }
@@ -197,7 +196,6 @@ public class OlapTable extends Table implements GsonPostProcessable {
         this.indexes = null;
 
         this.tableProperty = null;
-        this.relatedMaterializedViews = Sets.newConcurrentHashSet();
     }
 
     public OlapTable(long id, String tableName, List<Column> baseSchema, KeysType keysType,
@@ -239,7 +237,6 @@ public class OlapTable extends Table implements GsonPostProcessable {
         this.indexes = indexes;
 
         this.tableProperty = null;
-        this.relatedMaterializedViews = Sets.newConcurrentHashSet();
     }
 
     public void setTableProperty(TableProperty tableProperty) {
@@ -262,10 +259,6 @@ public class OlapTable extends Table implements GsonPostProcessable {
 
     public long getBaseIndexId() {
         return baseIndexId;
-    }
-
-    public void setClusterId(int clusterId) {
-        this.clusterId = clusterId;
     }
 
     public int getClusterId() {
@@ -336,12 +329,19 @@ public class OlapTable extends Table implements GsonPostProcessable {
     public void setIndexMeta(long indexId, String indexName, List<Column> schema, int schemaVersion,
                              int schemaHash, short shortKeyColumnCount, TStorageType storageType, KeysType keysType) {
         setIndexMeta(indexId, indexName, schema, schemaVersion, schemaHash, shortKeyColumnCount, storageType, keysType,
-                null);
+                null, null);
     }
 
     public void setIndexMeta(long indexId, String indexName, List<Column> schema, int schemaVersion,
                              int schemaHash, short shortKeyColumnCount, TStorageType storageType, KeysType keysType,
                              OriginStatement origStmt) {
+        setIndexMeta(indexId, indexName, schema, schemaVersion, schemaHash, shortKeyColumnCount, storageType, keysType,
+                origStmt, null);
+    }
+
+    public void setIndexMeta(long indexId, String indexName, List<Column> schema, int schemaVersion,
+                             int schemaHash, short shortKeyColumnCount, TStorageType storageType, KeysType keysType,
+                             OriginStatement origStmt, List<Integer> sortColumns) {
         // Nullable when meta comes from schema change log replay.
         // The replay log only save the index id, so we need to get name by id.
         if (indexName == null) {
@@ -364,7 +364,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
         }
 
         MaterializedIndexMeta indexMeta = new MaterializedIndexMeta(indexId, schema, schemaVersion,
-                schemaHash, shortKeyColumnCount, storageType, keysType, origStmt);
+                schemaHash, shortKeyColumnCount, storageType, keysType, origStmt, sortColumns);
         indexIdToMeta.put(indexId, indexMeta);
         indexNameToId.put(indexName, indexId);
     }
@@ -548,26 +548,11 @@ public class OlapTable extends Table implements GsonPostProcessable {
                 // generate new tablets in origin tablet order
                 int tabletNum = idx.getTablets().size();
                 idx.clearTabletsForRestore();
-                for (int i = 0; i < tabletNum; i++) {
-                    long newTabletId = globalStateMgr.getNextId();
-                    LocalTablet newTablet = new LocalTablet(newTabletId);
-                    idx.addTablet(newTablet, null /* tablet meta */, true /* is restore */);
-
-                    // replicas
-                    List<Long> beIds = GlobalStateMgr.getCurrentSystemInfo()
-                            .seqChooseBackendIds(partitionInfo.getReplicationNum(entry.getKey()),
-                                    true, true);
-                    if (CollectionUtils.isEmpty(beIds)) {
-                        return new Status(ErrCode.COMMON_ERROR, "failed to find "
-                                + partitionInfo.getReplicationNum(entry.getKey())
-                                + " different hosts to create table: " + name);
-                    }
-                    for (Long beId : beIds) {
-                        long newReplicaId = globalStateMgr.getNextId();
-                        Replica replica = new Replica(newReplicaId, beId, ReplicaState.NORMAL,
-                                partition.getVisibleVersion(), schemaHash);
-                        newTablet.addReplica(replica, true /* is restore */);
-                    }
+                Status status = createTabletsForRestore(tabletNum, idx, globalStateMgr,
+                        partitionInfo.getReplicationNum(entry.getKey()), partition.getVisibleVersion(),
+                        schemaHash, partition.getId());
+                if (!status.ok()) {
+                    return status;
                 }
             }
 
@@ -575,6 +560,31 @@ public class OlapTable extends Table implements GsonPostProcessable {
             partition.setIdForRestore(entry.getKey());
         }
 
+        return Status.OK;
+    }
+
+    public Status createTabletsForRestore(int tabletNum, MaterializedIndex index, GlobalStateMgr globalStateMgr,
+                                          int replicationNum, long version, int schemaHash, long partitionId) {
+        for (int i = 0; i < tabletNum; i++) {
+            long newTabletId = globalStateMgr.getNextId();
+            LocalTablet newTablet = new LocalTablet(newTabletId);
+            index.addTablet(newTablet, null /* tablet meta */, false/* update inverted index*/);
+
+            // replicas
+            List<Long> beIds = GlobalStateMgr.getCurrentSystemInfo()
+                    .seqChooseBackendIds(replicationNum, true, true);
+            if (CollectionUtils.isEmpty(beIds)) {
+                return new Status(ErrCode.COMMON_ERROR, "failed to find "
+                        + replicationNum
+                        + " different hosts to create table: " + name);
+            }
+            for (Long beId : beIds) {
+                long newReplicaId = globalStateMgr.getNextId();
+                Replica replica = new Replica(newReplicaId, beId, ReplicaState.NORMAL,
+                        version, schemaHash);
+                newTablet.addReplica(replica, false/* update inverted index*/);
+            }
+        }
         return Status.OK;
     }
 
@@ -762,7 +772,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
                         rangePartitionInfo.getDataProperty(partition.getId()),
                         rangePartitionInfo.getReplicationNum(partition.getId()),
                         rangePartitionInfo.getIsInMemory(partition.getId()),
-                        rangePartitionInfo.getStorageInfo(partition.getId()),
+                        rangePartitionInfo.getStorageCacheInfo(partition.getId()),
                         isLakeTable());
             } else if (!reserveTablets) {
                 tabletIds = GlobalStateMgr.getCurrentState().onErasePartition(partition);
@@ -862,6 +872,10 @@ public class OlapTable extends Table implements GsonPostProcessable {
         return idToPartition.values();
     }
 
+    public int getNumberOfPartitions() {
+        return idToPartition.size();
+    }
+
     // get only temp partitions
     public Collection<Partition> getTempPartitions() {
         return tempPartitions.getAllPartitions();
@@ -872,6 +886,17 @@ public class OlapTable extends Table implements GsonPostProcessable {
         List<Partition> partitions = Lists.newArrayList(idToPartition.values());
         partitions.addAll(tempPartitions.getAllPartitions());
         return partitions;
+    }
+
+    public Collection<Partition> getRecentPartitions(int recentPartitionNum) {
+        List<Partition> partitions = Lists.newArrayList(idToPartition.values());
+        Collections.sort(partitions, new Comparator<Partition>() {
+            @Override
+            public int compare(Partition h1, Partition h2) {
+                return (int) (h2.getVisibleVersion() - h1.getVisibleVersion());
+            }
+        });
+        return partitions.subList(0, recentPartitionNum);
     }
 
     // get all partitions' name except the temp partitions
@@ -1338,6 +1363,9 @@ public class OlapTable extends Table implements GsonPostProcessable {
         for (Partition partition : idToPartition.values()) {
             nameToPartition.put(partition.getName(), partition);
         }
+
+        // The table may be restored from another cluster, it should be set to current cluster id.
+        clusterId = GlobalStateMgr.getCurrentState().getClusterId();
     }
 
     public OlapTable selectiveCopy(Collection<String> reservedPartitions, boolean resetState, IndexExtState extState) {
@@ -1414,17 +1442,17 @@ public class OlapTable extends Table implements GsonPostProcessable {
         DataProperty dataProperty = partitionInfo.getDataProperty(oldPartition.getId());
         short replicationNum = partitionInfo.getReplicationNum(oldPartition.getId());
         boolean isInMemory = partitionInfo.getIsInMemory(oldPartition.getId());
-        StorageInfo storageInfo = partitionInfo.getStorageInfo(oldPartition.getId());
+        StorageCacheInfo storageCacheInfo = partitionInfo.getStorageCacheInfo(oldPartition.getId());
 
         if (partitionInfo.getType() == PartitionType.RANGE) {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
             Range<PartitionKey> range = rangePartitionInfo.getRange(oldPartition.getId());
             rangePartitionInfo.dropPartition(oldPartition.getId());
             rangePartitionInfo.addPartition(newPartition.getId(), false, range, dataProperty,
-                    replicationNum, isInMemory, storageInfo);
+                    replicationNum, isInMemory, storageCacheInfo);
         } else {
             partitionInfo.dropPartition(oldPartition.getId());
-            partitionInfo.addPartition(newPartition.getId(), dataProperty, replicationNum, isInMemory, storageInfo);
+            partitionInfo.addPartition(newPartition.getId(), dataProperty, replicationNum, isInMemory, storageCacheInfo);
         }
 
         return oldPartition;
@@ -1452,18 +1480,17 @@ public class OlapTable extends Table implements GsonPostProcessable {
                     + "Do not allow create materialized view");
         }
         // check if all tablets are healthy, and no tablet is in tablet scheduler
-        boolean isStable = isStable(GlobalStateMgr.getCurrentSystemInfo(),
+        long unhealthyTabletId  = checkAndGetUnhealthyTablet(GlobalStateMgr.getCurrentSystemInfo(),
                 GlobalStateMgr.getCurrentState().getTabletScheduler());
-        if (!isStable) {
-            throw new DdlException("table [" + name + "] is not stable."
-                    + " Some tablets of this table may not be healthy or are being "
-                    + "scheduled."
-                    + " You need to repair the table first"
-                    + " or stop cluster balance. See 'help admin;'.");
+        if (unhealthyTabletId != TabletInvertedIndex.NOT_EXIST_VALUE) {
+            throw new DdlException("Table [" + name + "] is not stable. "
+                    + "Unhealthy (or doing balance) tablet id: " + unhealthyTabletId + ". "
+                    + "Some tablets of this table may not be healthy or are being scheduled. "
+                    + "You need to repair the table first or stop cluster balance.");
         }
     }
 
-    public boolean isStable(SystemInfoService infoService, TabletScheduler tabletScheduler) {
+    public long checkAndGetUnhealthyTablet(SystemInfoService infoService, TabletScheduler tabletScheduler) {
         List<Long> aliveBeIdsInCluster = infoService.getBackendIds(true);
         for (Partition partition : idToPartition.values()) {
             long visibleVersion = partition.getVisibleVersion();
@@ -1472,7 +1499,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
                 for (Tablet tablet : mIndex.getTablets()) {
                     LocalTablet localTablet = (LocalTablet) tablet;
                     if (tabletScheduler.containsTablet(tablet.getId())) {
-                        return false;
+                        return localTablet.getId();
                     }
 
                     Pair<TabletStatus, TabletSchedCtx.Priority> statusPair = localTablet.getHealthStatusWithPriority(
@@ -1481,12 +1508,12 @@ public class OlapTable extends Table implements GsonPostProcessable {
                     if (statusPair.first != TabletStatus.HEALTHY) {
                         LOG.info("table {} is not stable because tablet {} status is {}. replicas: {}",
                                 id, tablet.getId(), statusPair.first, localTablet.getImmutableReplicas());
-                        return false;
+                        return localTablet.getId();
                     }
                 }
             }
         }
-        return true;
+        return TabletInvertedIndex.NOT_EXIST_VALUE;
     }
 
     // arbitrarily choose a partition, and get the buckets backends sequence from base index.
@@ -1615,6 +1642,40 @@ public class OlapTable extends Table implements GsonPostProcessable {
                 .modifyTableProperties(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX,
                         Boolean.valueOf(enablePersistentIndex).toString());
         tableProperty.buildEnablePersistentIndex();
+    }
+
+    public Boolean enableReplicatedStorage() {
+        if (tableProperty != null) {
+            return tableProperty.enableReplicatedStorage();
+        }
+        return false;
+    }
+
+    public void setEnableReplicatedStorage(boolean enableReplicatedStorage) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        tableProperty
+                .modifyTableProperties(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE,
+                        Boolean.valueOf(enableReplicatedStorage).toString());
+        tableProperty.buildReplicatedStorage();
+    }
+
+    public TWriteQuorumType writeQuorum() {
+        if (tableProperty != null) {
+            return tableProperty.writeQuorum();
+        }
+        return TWriteQuorumType.MAJORITY;
+    }
+
+    public void setWriteQuorum(String writeQuorum) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        tableProperty
+                .modifyTableProperties(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM,
+                        writeQuorum);
+        tableProperty.buildWriteQuorum();
     }
 
     public void setStorageMedium(TStorageMedium storageMedium) {
@@ -1838,19 +1899,6 @@ public class OlapTable extends Table implements GsonPostProcessable {
         return tableProperty.getCompressionType();
     }
 
-    // should call this when create materialized view
-    public void addRelatedMaterializedView(long mvId) {
-        relatedMaterializedViews.add(mvId);
-    }
-
-    // should call this when drop materialized view
-    public void removeRelatedMaterializedView(long mvId) {
-        relatedMaterializedViews.remove(mvId);
-    }
-
-    public Set<Long> getRelatedMaterializedViews() {
-        return relatedMaterializedViews;
-    }
 
     @Override
     public void onCreate() {
@@ -1861,8 +1909,8 @@ public class OlapTable extends Table implements GsonPostProcessable {
         // drop all temp partitions of this table, so that there is no temp partitions in recycle bin,
         // which make things easier.
         dropAllTempPartitions();
-        for (long mvId : getRelatedMaterializedViews()) {
-            Table tmpTable = db.getTable(mvId);
+        for (MvId mvId : getRelatedMaterializedViews()) {
+            Table tmpTable = db.getTable(mvId.getId());
             if (tmpTable != null) {
                 MaterializedView mv = (MaterializedView) tmpTable;
                 mv.setActive(false);

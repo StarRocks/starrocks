@@ -7,7 +7,6 @@ import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.GroupByClause;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.SelectList;
 import com.starrocks.sql.analyzer.AnalyzeState;
 import com.starrocks.sql.analyzer.FieldId;
 import com.starrocks.sql.analyzer.Scope;

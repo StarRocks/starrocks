@@ -39,6 +39,8 @@ public class FeConstants {
 
     public static int checkpoint_interval_second = 60; // 1 minutes
 
+    public static int sync_task_runs_state_interval = 5000; // 5s
+
     // dpp version
     public static String dpp_version = "3_2_0";
 
@@ -65,4 +67,6 @@ public class FeConstants {
     public static boolean USE_MOCK_DICT_MANAGER = false;
 
     public static final int DEFAULT_TABLET_NUMBER = 128;
+
+    public static final int AGG_FUNC_VERSION = 3;
 }

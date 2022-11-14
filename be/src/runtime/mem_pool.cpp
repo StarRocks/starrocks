@@ -40,7 +40,7 @@ const int MemPool::MAX_CHUNK_SIZE;
 const int MemPool::DEFAULT_ALIGNMENT;
 uint32_t MemPool::k_zero_length_region_ alignas(std::max_align_t) = MEM_POOL_POISON;
 
-MemPool::ChunkInfo::ChunkInfo(const Chunk& chunk_) : chunk(chunk_), allocated_bytes(0) {
+MemPool::ChunkInfo::ChunkInfo(const Chunk& chunk_) : chunk(chunk_) {
     StarRocksMetrics::instance()->memory_pool_bytes_total.increment(chunk.size);
 }
 

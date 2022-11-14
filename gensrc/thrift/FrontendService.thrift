@@ -34,6 +34,7 @@ include "Exprs.thrift"
 include "RuntimeProfile.thrift"
 include "MasterService.thrift"
 include "AgentService.thrift"
+include "ResourceUsage.thrift"
 
 // These are supporting structs for JniFrontend.java, which serves as the glue
 // between our C++ execution environment and the Java frontend.
@@ -45,6 +46,9 @@ struct TSetSessionParams {
 struct TAuthenticateParams {
     1: required string user
     2: required string passwd
+    3: required string host
+    4: required string db_name
+    5: required list<string> table_names;
 }
 
 struct TColumnDesc {
@@ -364,6 +368,7 @@ struct TTaskRunInfo {
     8: optional i64 expire_time
     9: optional i32 error_code
     10: optional string error_message
+    11: optional string progress
 }
 
 struct TGetTaskRunInfoResult {
@@ -375,6 +380,11 @@ struct TGetTablesResult {
   1: list<string> tables
 }
 
+struct TBatchReportExecStatusResult {
+  // required in V1
+  1: optional list<Status.TStatus> status_list
+}
+
 struct TReportExecStatusResult {
   // required in V1
   1: optional Status.TStatus status
@@ -383,6 +393,10 @@ struct TReportExecStatusResult {
 // Service Protocol Details
 enum FrontendServiceVersion {
   V1
+}
+
+struct TBatchReportExecStatusParams {
+  1: required list<TReportExecStatusParams> params_list
 }
 
 // The results of an INSERT query, sent to the coordinator as part of
@@ -430,6 +444,14 @@ struct TReportExecStatusParams {
   15: optional i64 loaded_rows
 
   16: optional i64 backend_id
+
+  17: optional i64 sink_load_bytes
+
+  18: optional i64 source_load_rows
+
+  19: optional i64 source_load_bytes
+
+  20: optional InternalService.TLoadJobType load_type
 }
 
 struct TFeResult {
@@ -488,8 +510,11 @@ struct TShowResultSet {
 struct TMasterOpResult {
     1: required i64 maxJournalId;
     2: required binary packet;
+    // for show statement
     3: optional TShowResultSet resultSet;
     4: optional string state;
+    // for query statement
+    5: optional list<binary> channelBufferList;
 }
 
 struct TIsMethodSupportedRequest {
@@ -570,6 +595,8 @@ struct TStreamLoadPutRequest {
     27: optional bool partial_update
     28: optional string transmission_compression_type
     29: optional i32 load_dop
+    30: optional bool enable_replicated_storage
+    31: optional string merge_condition
     // only valid when file type is CSV
     50: optional string rowDelimiter
 }
@@ -584,6 +611,10 @@ struct TKafkaRLTaskProgress {
     1: required map<i32,i64> partitionCmtOffset
 }
 
+struct TPulsarRLTaskProgress {
+    1: required map<string,i64> partitionBacklogNum
+}
+
 struct TRLTaskTxnCommitAttachment {
     1: required Types.TLoadSourceType loadSourceType
     2: required Types.TUniqueId id
@@ -596,6 +627,7 @@ struct TRLTaskTxnCommitAttachment {
     9: optional i64 loadCostMs
     10: optional TKafkaRLTaskProgress kafkaRLTaskProgress
     11: optional string errorLogUrl
+    12: optional TPulsarRLTaskProgress pulsarRLTaskProgress
 }
 
 struct TMiniLoadTxnCommitAttachment {
@@ -955,8 +987,16 @@ struct TSetConfigResponse {
     1: required Status.TStatus status
 }
 
-struct TGetTablesConfigRequest {
+struct TAuthInfo {
+    // If not set, match every database
+    1: optional string pattern
+    2: optional string user   // deprecated
+    3: optional string user_ip    // deprecated
+    4: optional Types.TUserIdentity current_user_ident // to replace the user and user ip
+}
 
+struct TGetTablesConfigRequest {
+    1: optional TAuthInfo auth_info
 }
 
 struct TGetTablesConfigResponse {
@@ -966,18 +1006,63 @@ struct TGetTablesConfigResponse {
 struct TTableConfigInfo {
     1: optional string table_schema
     2: optional string table_name
-    3: optional string primary_key
-    4: optional string partition_key
-    5: optional string distribute_key
-    6: optional string distribute_type
-    7: optional i32 distribute_bucket
-    8: optional string sort_key
-    9: optional string properties
+    3: optional string table_engine
+    4: optional string table_model
+    5: optional string primary_key
+    6: optional string partition_key
+    7: optional string distribute_key
+    8: optional string distribute_type
+    9: optional i32 distribute_bucket
+    10: optional string sort_key
+    11: optional string properties
+}
+
+struct TGetTablesInfoRequest {
+    1: optional TAuthInfo auth_info
+}
+
+struct TGetTablesInfoResponse {
+    1: optional list<TTableInfo> tables_infos
+}
+
+struct TUpdateResourceUsageRequest {
+    1: optional i64 backend_id 
+    2: optional ResourceUsage.TResourceUsage resource_usage
+}
+
+struct TUpdateResourceUsageResponse {
+    1: optional Status.TStatus status
+}
+
+struct TTableInfo {
+    1: optional string table_catalog
+    2: optional string table_schema
+    3: optional string table_name
+    4: optional string table_type
+    5: optional string engine
+    6: optional i64 version
+    7: optional string row_format
+    8: optional i64 table_rows
+    9: optional i64 avg_row_length
+    10: optional i64 data_length
+    11: optional i64 max_data_length
+    12: optional i64 index_length
+    13: optional i64 data_free
+    14: optional i64 auto_increment
+    15: optional i64 create_time
+    16: optional i64 update_time
+    17: optional i64 check_time
+    18: optional string table_collation
+    19: optional i64 checksum
+    20: optional string create_options
+    21: optional string table_comment
 }
 
 service FrontendService {
     TGetDbsResult getDbNames(1:TGetDbsParams params)
     TGetTablesResult getTableNames(1:TGetTablesParams params)
+  
+    TGetTablesInfoResponse getTablesInfo(1: TGetTablesInfoRequest request)
 
     TGetTablesConfigResponse getTablesConfig(1: TGetTablesConfigRequest request)
 
@@ -988,6 +1073,7 @@ service FrontendService {
     TDescribeTableResult describeTable(1:TDescribeTableParams params)
     TShowVariableResult showVariables(1:TShowVariableRequest params)
     TReportExecStatusResult reportExecStatus(1:TReportExecStatusParams params)
+    TBatchReportExecStatusResult batchReportExecStatus(1:TBatchReportExecStatusParams params)
 
     MasterService.TMasterResult finishTask(1:MasterService.TFinishTaskRequest request)
     MasterService.TMasterResult report(1:MasterService.TReportRequest request)
@@ -1026,5 +1112,7 @@ service FrontendService {
     TAbortRemoteTxnResponse  abortRemoteTxn(1: TAbortRemoteTxnRequest request)
 
     TSetConfigResponse setConfig(1: TSetConfigRequest request)
+
+    TUpdateResourceUsageResponse updateResourceUsage(1: TUpdateResourceUsageRequest request)
 }
 

@@ -8,12 +8,13 @@
 
 #include "runtime/global_dict/types.h"
 #include "storage/olap_common.h"
+#include "storage/olap_runtime_range_pruner.h"
 #include "storage/seek_range.h"
 
 namespace starrocks {
 class Conditions;
 class KVStore;
-class OlapReaderStatistics;
+struct OlapReaderStatistics;
 class RuntimeProfile;
 class RowCursor;
 class RuntimeState;
@@ -63,6 +64,8 @@ public:
 
     RowidRangeOptionPtr rowid_range_option = nullptr;
     std::vector<ShortKeyRangeOptionPtr> short_key_ranges;
+
+    vectorized::OlapRuntimeScanRangePruner runtime_range_pruner;
 };
 
 } // namespace starrocks

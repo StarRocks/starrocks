@@ -72,12 +72,15 @@ public:
     // only for ut
     std::shared_ptr<arrow::Schema> schema() { return _arrow_schema; }
 
+    std::vector<TExpr> get_output_expr() { return _t_output_expr; }
+
+    const RowDescriptor get_row_desc();
+
 private:
     Status prepare_exprs(RuntimeState* state);
 
     void _prepare_id_to_col_name_map();
 
-    ObjectPool* _obj_pool = nullptr;
     // Owned by the RuntimeState.
     const RowDescriptor& _row_desc;
     std::shared_ptr<arrow::Schema> _arrow_schema;

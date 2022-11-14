@@ -13,5 +13,6 @@ class ErrorHandler extends BaseErrorListener {
         String errorMessage = String.format("You have an error in your SQL syntax; " +
                 "check the manual that corresponds to your MySQL server version for the right syntax to use " +
                 "near '%s' at line %d", ((Token) offendingSymbol).getText(), line);
-        throw new ParsingException(errorMessage);    }
+        throw new ParsingException(errorMessage);
+    }
 }

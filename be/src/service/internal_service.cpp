@@ -93,13 +93,14 @@ template <typename T>
 void PInternalServiceImplBase<T>::transmit_chunk(google::protobuf::RpcController* cntl_base,
                                                  const PTransmitChunkParams* request, PTransmitChunkResult* response,
                                                  google::protobuf::Closure* done) {
-    VLOG_ROW << "transmit data: fragment_instance_id=" << print_id(request->finst_id())
-             << " node=" << request->node_id();
+    auto begin_ts = MonotonicNanos();
+    VLOG_ROW << "transmit data: " << (uint64_t)(request) << " fragment_instance_id=" << print_id(request->finst_id())
+             << " node=" << request->node_id() << " begin";
     // NOTE: we should give a default value to response to avoid concurrent risk
     // If we don't give response here, stream manager will call done->Run before
     // transmit_data(), which will cause a dirty memory access.
-    brpc::Controller* cntl = static_cast<brpc::Controller*>(cntl_base);
-    PTransmitChunkParams* req = const_cast<PTransmitChunkParams*>(request);
+    auto* cntl = static_cast<brpc::Controller*>(cntl_base);
+    auto* req = const_cast<PTransmitChunkParams*>(request);
     const auto receive_timestamp = GetCurrentTimeNanos();
     response->set_receive_timestamp(receive_timestamp);
     if (cntl->request_attachment().size() > 0) {
@@ -113,7 +114,7 @@ void PInternalServiceImplBase<T>::transmit_chunk(google::protobuf::RpcController
     }
     Status st;
     st.to_protobuf(response->mutable_status());
-    st = _exec_env->stream_mgr()->transmit_chunk(*request, &done);
+    TRY_CATCH_ALL(st, _exec_env->stream_mgr()->transmit_chunk(*request, &done));
     if (!st.ok()) {
         LOG(WARNING) << "transmit_data failed, message=" << st.get_error_msg()
                      << ", fragment_instance_id=" << print_id(request->finst_id()) << ", node=" << request->node_id();
@@ -123,6 +124,8 @@ void PInternalServiceImplBase<T>::transmit_chunk(google::protobuf::RpcController
         st.to_protobuf(response->mutable_status());
         done->Run();
     }
+    VLOG_ROW << "transmit data: " << (uint64_t)(request) << " fragment_instance_id=" << print_id(request->finst_id())
+             << " node=" << request->node_id() << " cost time = " << MonotonicNanos() - begin_ts;
 }
 
 template <typename T>
@@ -216,6 +219,15 @@ void PInternalServiceImplBase<T>::tablet_writer_add_chunks(google::protobuf::Rpc
 }
 
 template <typename T>
+void PInternalServiceImplBase<T>::tablet_writer_add_segment(google::protobuf::RpcController* controller,
+                                                            const PTabletWriterAddSegmentRequest* request,
+                                                            PTabletWriterAddSegmentResult* response,
+                                                            google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    response->mutable_status()->set_status_code(TStatusCode::NOT_IMPLEMENTED_ERROR);
+}
+
+template <typename T>
 void PInternalServiceImplBase<T>::tablet_writer_cancel(google::protobuf::RpcController* cntl_base,
                                                        const PTabletWriterCancelRequest* request,
                                                        PTabletWriterCancelResult* response,
@@ -226,7 +238,7 @@ Status PInternalServiceImplBase<T>::_exec_plan_fragment(brpc::Controller* cntl) 
     auto ser_request = cntl->request_attachment().to_string();
     TExecPlanFragmentParams t_request;
     {
-        const uint8_t* buf = (const uint8_t*)ser_request.data();
+        const auto* buf = (const uint8_t*)ser_request.data();
         uint32_t len = ser_request.size();
         RETURN_IF_ERROR(deserialize_thrift_msg(buf, &len, TProtocolType::BINARY, &t_request));
     }
@@ -246,7 +258,7 @@ Status PInternalServiceImplBase<T>::_exec_batch_plan_fragments(brpc::Controller*
     auto ser_request = cntl->request_attachment().to_string();
     std::shared_ptr<TExecBatchPlanFragmentsParams> t_batch_requests = std::make_shared<TExecBatchPlanFragmentsParams>();
     {
-        const uint8_t* buf = (const uint8_t*)ser_request.data();
+        const auto* buf = (const uint8_t*)ser_request.data();
         uint32_t len = ser_request.size();
         RETURN_IF_ERROR(deserialize_thrift_msg(buf, &len, TProtocolType::BINARY, t_batch_requests.get()));
     }
@@ -376,8 +388,8 @@ template <typename T>
 void PInternalServiceImplBase<T>::fetch_data(google::protobuf::RpcController* cntl_base,
                                              const PFetchDataRequest* request, PFetchDataResult* result,
                                              google::protobuf::Closure* done) {
-    brpc::Controller* cntl = static_cast<brpc::Controller*>(cntl_base);
-    GetResultBatchCtx* ctx = new GetResultBatchCtx(cntl, result, done);
+    auto* cntl = static_cast<brpc::Controller*>(cntl_base);
+    auto* ctx = new GetResultBatchCtx(cntl, result, done);
     _exec_env->result_mgr()->fetch_data(request->finst_id(), ctx);
 }
 
@@ -462,7 +474,7 @@ void PInternalServiceImplBase<T>::_get_info_impl(
     if (request->has_kafka_offset_batch_request()) {
         MonotonicStopWatch watch;
         watch.start();
-        for (auto offset_req : request->kafka_offset_batch_request().requests()) {
+        for (const auto& offset_req : request->kafka_offset_batch_request().requests()) {
             std::vector<int64_t> beginning_offsets;
             std::vector<int64_t> latest_offsets;
 
@@ -483,6 +495,94 @@ void PInternalServiceImplBase<T>::_get_info_impl(
                 }
             } else {
                 response->clear_kafka_offset_batch_result();
+                st.to_protobuf(response->mutable_status());
+                return;
+            }
+        }
+    }
+    Status::OK().to_protobuf(response->mutable_status());
+}
+
+template <typename T>
+void PInternalServiceImplBase<T>::get_pulsar_info(google::protobuf::RpcController* controller,
+                                                  const PPulsarProxyRequest* request, PPulsarProxyResult* response,
+                                                  google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+
+    GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable> latch(1);
+
+    int timeout_ms =
+            request->has_timeout() ? request->timeout() * 1000 : config::routine_load_pulsar_timeout_second * 1000;
+
+    // watch estimates the interval before the task is actually executed.
+    MonotonicStopWatch watch;
+    watch.start();
+
+    if (!_async_thread_pool.try_offer([&]() {
+            timeout_ms -= watch.elapsed_time() / 1000 / 1000;
+            _get_pulsar_info_impl(request, response, &latch, timeout_ms);
+        })) {
+        Status::ServiceUnavailable(
+                "too busy to get pulsar info, please check the pulsar service status, or set "
+                "internal_service_async_thread_num bigger")
+                .to_protobuf(response->mutable_status());
+        return;
+    }
+
+    latch.wait();
+}
+
+template <typename T>
+void PInternalServiceImplBase<T>::_get_pulsar_info_impl(
+        const PPulsarProxyRequest* request, PPulsarProxyResult* response,
+        GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>* latch, int timeout_ms) {
+    DeferOp defer([latch] { latch->count_down(); });
+
+    if (timeout_ms <= 0) {
+        Status::TimedOut("get pulsar info timeout").to_protobuf(response->mutable_status());
+        return;
+    }
+
+    if (request->has_pulsar_meta_request()) {
+        std::vector<std::string> partitions;
+        Status st = _exec_env->routine_load_task_executor()->get_pulsar_partition_meta(request->pulsar_meta_request(),
+                                                                                       &partitions);
+        if (st.ok()) {
+            PPulsarMetaProxyResult* pulsar_result = response->mutable_pulsar_meta_result();
+            for (const std::string& p : partitions) {
+                pulsar_result->add_partitions(p);
+            }
+        }
+        st.to_protobuf(response->mutable_status());
+        return;
+    }
+    if (request->has_pulsar_backlog_request()) {
+        std::vector<int64_t> backlog_nums;
+        Status st = _exec_env->routine_load_task_executor()->get_pulsar_partition_backlog(
+                request->pulsar_backlog_request(), &backlog_nums);
+        if (st.ok()) {
+            auto result = response->mutable_pulsar_backlog_result();
+            for (int i = 0; i < backlog_nums.size(); i++) {
+                result->add_partitions(request->pulsar_backlog_request().partitions(i));
+                result->add_backlog_nums(backlog_nums[i]);
+            }
+        }
+        st.to_protobuf(response->mutable_status());
+        return;
+    }
+    if (request->has_pulsar_backlog_batch_request()) {
+        for (const auto& backlog_req : request->pulsar_backlog_batch_request().requests()) {
+            std::vector<int64_t> backlog_nums;
+            Status st =
+                    _exec_env->routine_load_task_executor()->get_pulsar_partition_backlog(backlog_req, &backlog_nums);
+            auto backlog_result = response->mutable_pulsar_backlog_batch_result()->add_results();
+            if (st.ok()) {
+                for (int i = 0; i < backlog_nums.size(); i++) {
+                    backlog_result->add_partitions(backlog_req.partitions(i));
+                    backlog_result->add_backlog_nums(backlog_nums[i]);
+                }
+            } else {
+                response->clear_pulsar_backlog_batch_result();
                 st.to_protobuf(response->mutable_status());
                 return;
             }

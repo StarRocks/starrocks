@@ -6,134 +6,12 @@
 
 #include "exec/exec_node.h"
 #include "formats/orc/orc_chunk_reader.h"
-#include "fs/fs.h"
 #include "gen_cpp/orc_proto.pb.h"
 #include "storage/chunk_helper.h"
-#include "util/buffered_stream.h"
 #include "util/runtime_profile.h"
 #include "util/timezone_utils.h"
 
 namespace starrocks::vectorized {
-class ORCHdfsFileStream : public orc::InputStream {
-public:
-    // |file| must outlive ORCHdfsFileStream
-    ORCHdfsFileStream(RandomAccessFile* file, uint64_t length)
-            : _file(std::move(file)), _length(length), _cache_buffer(0), _cache_offset(0), _buffer_stream(_file) {
-        SharedBufferedInputStream::CoalesceOptions options = {
-                .max_dist_size = config::io_coalesce_read_max_distance_size,
-                .max_buffer_size = config::io_coalesce_read_max_buffer_size};
-        _buffer_stream.set_coalesce_options(options);
-    }
-
-    ~ORCHdfsFileStream() override = default;
-
-    uint64_t getLength() const override { return _length; }
-
-    // refers to paper `Delta Lake: High-Performance ACID Table Storage over Cloud Object Stores`
-    uint64_t getNaturalReadSize() const override { return config::orc_natural_read_size; }
-
-    // It's for read size after doing seek.
-    // When doing read after seek, we make assumption that we are doing random read because of seeking row group.
-    // And if we still use NaturalReadSize we probably read many row groups
-    // after the row group we want to read, and that will amplify read IO bytes.
-
-    // So the best way is to reduce read size, hopefully we just read that row group in one shot.
-    // We also have chance that we may not read enough at this shot, then we fallback to NaturalReadSize to read.
-    // The cost is, there is a extra IO, and we read 1/4 of NaturalReadSize more data.
-    // And the potential gain is, we save 3/4 of NaturalReadSize IO bytes.
-
-    // Normally 256K can cover a row group of a column(like integer or double, but maybe not string)
-    // And this value can not be too small because if we can not read a row group in a single shot,
-    // we will fallback to read in normal size, and we pay cost of a extra read.
-
-    uint64_t getNaturalReadSizeAfterSeek() const override { return config::orc_natural_read_size / 4; }
-
-    void prepareCache(orc::InputStream::PrepareCacheScope scope, uint64_t offset, uint64_t length) override {
-        const size_t cache_max_size = config::orc_file_cache_max_size;
-        if (length > cache_max_size) return;
-        if (canUseCacheBuffer(offset, length)) return;
-
-        // If this stripe is small, probably other stripes are also small
-        // we combine those reads into one, and try to read several stripes in one shot.
-        if (scope == orc::InputStream::PrepareCacheScope::READ_FULL_STRIPE) {
-            length = std::min(_length - offset, cache_max_size);
-        }
-
-        _cache_buffer.resize(length);
-        _cache_offset = offset;
-        doRead(_cache_buffer.data(), length, offset, true);
-    }
-
-    bool canUseCacheBuffer(uint64_t offset, uint64_t length) {
-        if ((_cache_buffer.size() != 0) && (offset >= _cache_offset) &&
-            ((offset + length) <= (_cache_offset + _cache_buffer.size()))) {
-            return true;
-        }
-        return false;
-    }
-
-    void read(void* buf, uint64_t length, uint64_t offset) override {
-        if (canUseCacheBuffer(offset, length)) {
-            size_t idx = offset - _cache_offset;
-            memcpy(buf, _cache_buffer.data() + idx, length);
-        } else {
-            doRead(buf, length, offset, false);
-        }
-    }
-
-    void doRead(void* buf, uint64_t length, uint64_t offset, bool direct) {
-        if (buf == nullptr) {
-            throw orc::ParseError("Buffer is null");
-        }
-        Status status;
-        if (direct || !_buffer_stream_enabled) {
-            status = _file->read_at_fully(offset, buf, length);
-        } else {
-            const uint8_t* ptr = nullptr;
-            size_t nbytes = length;
-            status = _buffer_stream.get_bytes(&ptr, offset, &nbytes, false);
-            DCHECK_EQ(nbytes, length);
-            if (status.ok()) {
-                ::memcpy(buf, ptr, length);
-            }
-        }
-        if (!status.ok()) {
-            auto msg = strings::Substitute("Failed to read $0: $1", _file->filename(), status.to_string());
-            throw orc::ParseError(msg);
-        }
-    }
-
-    const std::string& getName() const override { return _file->filename(); }
-
-    bool isIORangesEnabled() const override { return config::orc_coalesce_read_enable; }
-
-    void clearIORanges() override {
-        _buffer_stream_enabled = false;
-        _buffer_stream.release();
-    }
-
-    void setIORanges(std::vector<orc::InputStream::IORange>& io_ranges) override {
-        _buffer_stream_enabled = true;
-        std::vector<SharedBufferedInputStream::IORange> bs_io_ranges;
-        for (const auto& r : io_ranges) {
-            bs_io_ranges.emplace_back(SharedBufferedInputStream::IORange{.offset = static_cast<int64_t>(r.offset),
-                                                                         .size = static_cast<int64_t>(r.size)});
-        }
-        Status st = _buffer_stream.set_io_ranges(bs_io_ranges);
-        if (!st.ok()) {
-            auto msg = strings::Substitute("Failed to setIORanges $0: $1", _file->filename(), st.to_string());
-            throw orc::ParseError(msg);
-        }
-    }
-
-private:
-    RandomAccessFile* _file;
-    uint64_t _length;
-    std::vector<char> _cache_buffer;
-    uint64_t _cache_offset;
-    SharedBufferedInputStream _buffer_stream;
-    bool _buffer_stream_enabled = false;
-};
 
 class OrcRowReaderFilter : public orc::RowReaderFilter {
 public:
@@ -154,12 +32,12 @@ public:
 private:
     const HdfsScannerParams& _scanner_params;
     const HdfsScannerContext& _scanner_ctx;
-    uint64_t _current_stripe_index;
-    bool _init_use_dict_filter_slots;
+    uint64_t _current_stripe_index{0};
+    bool _init_use_dict_filter_slots{false};
     std::vector<pair<SlotDescriptor*, uint64_t>> _use_dict_filter_slots;
     friend class HdfsOrcScanner;
     std::unordered_map<SlotId, FilterPtr> _dict_filter_eval_cache;
-    bool _can_do_filter_on_orc_cvb; // cvb: column vector batch.
+    bool _can_do_filter_on_orc_cvb{true}; // cvb: column vector batch.
     // key: end of range.
     // value: start of range.
     // ranges are not overlapped.
@@ -188,9 +66,7 @@ OrcRowReaderFilter::OrcRowReaderFilter(const HdfsScannerParams& scanner_params, 
                                        OrcChunkReader* reader)
         : _scanner_params(scanner_params),
           _scanner_ctx(scanner_ctx),
-          _current_stripe_index(0),
-          _init_use_dict_filter_slots(false),
-          _can_do_filter_on_orc_cvb(true),
+
           _reader(reader),
           _writer_tzoffset_in_seconds(reader->tzoffset_in_seconds()) {
     if (_scanner_params.min_max_tuple_desc != nullptr) {
@@ -335,8 +211,8 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
         ColumnPtr column_ptr = vectorized::ColumnHelper::create_column(slot_desc->type(), true);
         dict_value_chunk->append_column(column_ptr, slot_id);
 
-        NullableColumn* nullable_column = down_cast<NullableColumn*>(column_ptr.get());
-        BinaryColumn* dict_value_column = down_cast<BinaryColumn*>(nullable_column->data_column().get());
+        auto* nullable_column = down_cast<NullableColumn*>(column_ptr.get());
+        auto* dict_value_column = down_cast<BinaryColumn*>(nullable_column->data_column().get());
 
         // copy dict and offset to column.
         Bytes& bytes = dict_value_column->get_bytes();
@@ -345,8 +221,8 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
         const char* content_data = dict->dictionaryBlob.data();
         size_t content_size = dict->dictionaryBlob.size();
         bytes.reserve(content_size);
-        const uint8_t* start = reinterpret_cast<const uint8_t*>(content_data);
-        const uint8_t* end = reinterpret_cast<const uint8_t*>(content_data + content_size);
+        const auto* start = reinterpret_cast<const uint8_t*>(content_data);
+        const auto* end = reinterpret_cast<const uint8_t*>(content_data + content_size);
 
         size_t offset_size = dict->dictionaryOffset.size();
         size_t dict_size = offset_size - 1;
@@ -438,11 +314,14 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
 
     // create orc reader for further reading.
     int src_slot_index = 0;
-    bool has_conjunct_ctxs_by_slot = (_conjunct_ctxs_by_slot.size() != 0);
+    // we don't need to eval conjunct ctxs at outside any more
+    // we evaluate conjunct ctxs in `do_get_next`.
+    _scanner_params.eval_conjunct_ctxs = false;
     for (const auto& it : _scanner_params.materialize_slots) {
         auto col_name = OrcChunkReader::format_column_name(it->col_name(), _scanner_params.case_sensitive);
         if (known_column_names.find(col_name) == known_column_names.end()) continue;
-        if (has_conjunct_ctxs_by_slot && _conjunct_ctxs_by_slot.find(it->id()) == _conjunct_ctxs_by_slot.end()) {
+        bool is_lazy_slot = _scanner_params.is_lazy_materialization_slot(it->id());
+        if (is_lazy_slot) {
             _lazy_load_ctx.lazy_load_slots.emplace_back(it);
             _lazy_load_ctx.lazy_load_indices.emplace_back(src_slot_index);
             // reserve room for later set in `OrcChunkReader`
@@ -467,7 +346,7 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(_orc_reader->set_timezone(_scanner_ctx.timezone));
     if (_use_orc_sargs) {
         std::vector<Expr*> conjuncts;
-        for (const auto& it : _conjunct_ctxs_by_slot) {
+        for (const auto& it : _scanner_params.conjunct_ctxs_by_slot) {
             for (const auto& it2 : it.second) {
                 conjuncts.push_back(it2->root());
             }
@@ -545,6 +424,10 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
                     if (chunk_size == 0) {
                         break;
                     }
+                }
+                if (chunk_size != 0) {
+                    ASSIGN_OR_RETURN(chunk_size, ExecNode::eval_conjuncts_into_filter(_scanner_params.conjunct_ctxs,
+                                                                                      ck.get(), &_chunk_filter));
                 }
             }
             if (chunk_size != 0 && chunk_size != ck->num_rows()) {

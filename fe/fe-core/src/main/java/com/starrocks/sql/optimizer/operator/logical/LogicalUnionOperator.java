@@ -40,6 +40,10 @@ public class LogicalUnionOperator extends LogicalSetOperator {
         return visitor.visitLogicalUnion(optExpression, context);
     }
 
+    public static Builder builder() {
+        return new Builder();
+    }
+
     public static class Builder extends LogicalSetOperator.Builder<LogicalUnionOperator, LogicalUnionOperator.Builder> {
         private boolean isUnionAll;
 

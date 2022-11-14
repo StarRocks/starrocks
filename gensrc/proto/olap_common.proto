@@ -25,14 +25,6 @@ syntax="proto2";
 package starrocks;
 option java_package = "com.starrocks.proto";
 
-// Please keep the defined value less than 256, because the enum will be casted to uint8_t in some
-// cases.
-enum CompressKind {
-    COMPRESS_NONE = 0;
-    COMPRESS_LZO = 1;
-    COMPRESS_LZ4 = 2;
-}
-
 // An internal version for primary key tablet
 // Each commit will increase this version
 //   FE's publish will increase major by 1
@@ -46,5 +38,11 @@ message EditVersionPB {
 message PagePointerPB {
     required uint64 offset = 1; // offset in segment file
     required uint32 size = 2; // size of page in byte
+}
+
+message PNetworkAddress {
+    optional string host = 1;
+    optional int32 port = 2;
+    optional int64 node_id = 3;
 }
 

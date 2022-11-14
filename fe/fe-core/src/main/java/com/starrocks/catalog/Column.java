@@ -47,12 +47,11 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.time.Instant;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
-import static com.starrocks.common.util.DateUtils.DATE_TIME_FORMAT;
+import static com.starrocks.common.util.DateUtils.DATE_TIME_FORMATTER;
 
 /**
  * This class represents the column-related metadata.
@@ -435,9 +434,13 @@ public class Column implements Writable {
         } else {
             sb.append("NOT NULL ");
         }
-        if (defaultExpr != null && "now()".equalsIgnoreCase(defaultExpr.getExpr())) {
-            // compatible with mysql
-            sb.append("DEFAULT ").append("CURRENT_TIMESTAMP").append(" ");
+        if (defaultExpr != null) {
+            if ("now()".equalsIgnoreCase(defaultExpr.getExpr())) {
+                // compatible with mysql
+                sb.append("DEFAULT ").append("CURRENT_TIMESTAMP").append(" ");
+            } else {
+                sb.append("DEFAULT ").append("(").append(defaultExpr.getExpr()).append(") ");
+            }
         } else if (defaultValue != null && getPrimitiveType() != PrimitiveType.HLL &&
                 getPrimitiveType() != PrimitiveType.BITMAP) {
             sb.append("DEFAULT \"").append(defaultValue).append("\" ");
@@ -480,10 +483,10 @@ public class Column implements Writable {
             if (ConnectContext.get() != null) {
                 LocalDateTime localDateTime = Instant.ofEpochMilli(ConnectContext.get().getStartTime())
                         .atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
-                return localDateTime.format(DateTimeFormatter.ofPattern(DATE_TIME_FORMAT));
+                return localDateTime.format(DATE_TIME_FORMATTER);
             } else {
                 // should not run up here
-                return LocalDateTime.now().format(DateTimeFormatter.ofPattern(DATE_TIME_FORMAT));
+                return LocalDateTime.now().format(DATE_TIME_FORMATTER);
             }
         }
         return null;
@@ -502,7 +505,7 @@ public class Column implements Writable {
         if ("now()".equalsIgnoreCase(defaultExpr.getExpr())) {
             LocalDateTime localDateTime = Instant.ofEpochMilli(currentTimestamp)
                     .atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
-            return localDateTime.format(DateTimeFormatter.ofPattern(DATE_TIME_FORMAT));
+            return localDateTime.format(DATE_TIME_FORMATTER);
         }
         return null;
     }

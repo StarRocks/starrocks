@@ -81,7 +81,7 @@ struct SegmentWriterOptions {
 class SegmentWriter {
 public:
     SegmentWriter(std::unique_ptr<WritableFile> block, uint32_t segment_id, const TabletSchema* tablet_schema,
-                  const SegmentWriterOptions& opts);
+                  SegmentWriterOptions opts);
     ~SegmentWriter();
 
     SegmentWriter(const SegmentWriter&) = delete;
@@ -113,6 +113,8 @@ public:
     uint32_t segment_id() const { return _segment_id; }
 
     const vectorized::DictColumnsValidMap& global_dict_columns_valid_info() { return _global_dict_columns_valid_info; }
+
+    std::string segment_path() const;
 
 private:
     Status _write_short_key_index();

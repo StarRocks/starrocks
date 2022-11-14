@@ -734,8 +734,12 @@ public class GlobalTransactionMgrTest {
         TransactionState transactionState = fakeEditLog.getTransaction(transactionId);
         assertEquals(TransactionStatus.PREPARED, transactionState.getTransactionStatus());
 
-        masterTransMgr.commitPreparedTransaction(masterGlobalStateMgr.getDb(GlobalStateMgrTestUtil.testDbId1), transactionId,
-                (long) 1000);
+        try {
+            masterTransMgr.commitPreparedTransaction(masterGlobalStateMgr.getDb(GlobalStateMgrTestUtil.testDbId1), transactionId,
+                    (long) 1000);
+            Assert.fail("should throw publish timeout exception");
+        } catch (UserException e) {
+        }
         transactionState = fakeEditLog.getTransaction(transactionId);
         assertEquals(TransactionStatus.COMMITTED, transactionState.getTransactionStatus());
 

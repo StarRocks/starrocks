@@ -2,7 +2,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.CancelStmt;
 import com.starrocks.analysis.TableName;
 import com.starrocks.sql.ast.ShowAlterStmt.AlterType;
 
@@ -56,11 +55,6 @@ public class CancelAlterTableStmt extends CancelStmt {
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitCancelAlterTableStatement(this, context);
-    }
-
-    @Override
-    public boolean isSupportNewPlanner() {
-        return true;
     }
 
     @Override

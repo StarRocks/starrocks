@@ -21,11 +21,7 @@
 
 #pragma once
 
-#include "common/compiler_util.h"
-DIAGNOSTIC_PUSH
-DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 #include <bthread/mutex.h>
-DIAGNOSTIC_POP
 
 #include <memory>
 #include <ostream>
@@ -33,6 +29,7 @@ DIAGNOSTIC_POP
 #include <unordered_set>
 
 #include "column/chunk.h"
+#include "common/compiler_util.h"
 #include "common/status.h"
 #include "common/tracer.h"
 #include "gen_cpp/InternalService_types.h"
@@ -75,7 +72,12 @@ public:
 
     void add_chunks(const PTabletWriterAddChunksRequest& request, PTabletWriterAddBatchResult* response);
 
+    void add_segment(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
+                     PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done);
+
     void cancel();
+
+    void cancel(int64_t index_id, int64_t tablet_id);
 
     time_t last_updated_time() const { return _last_updated_time.load(std::memory_order_relaxed); }
 
@@ -116,6 +118,7 @@ private:
 
     Span _span;
     size_t _num_chunk{0};
+    size_t _num_segment = 0;
 };
 
 inline std::ostream& operator<<(std::ostream& os, const LoadChannel& load_channel) {

@@ -102,18 +102,19 @@ public class DiskUsageSimTest {
         Config.tablet_sched_checker_interval_seconds = 100;
         be.setWriteFailureRate(1.0f);
         try {
-            cluster.runSql("test", "insert into test values (1,\"1\", 1), (2,\"2\",2), (3,\"3\",3);");
-            cluster.runSql("test", "insert into test values (1,\"1\", 1), (2,\"2\",2), (3,\"3\",3);");
-            cluster.runSql("test", "insert into test values (1,\"1\", 1), (2,\"2\",2), (3,\"3\",3);");
+            cluster.runSql("test", "insert into test values (1111,\"1\", 1), (2,\"2\",2), (3,\"3\",3);");
+            cluster.runSql("test", "insert into test values (1222,\"1\", 1), (2,\"2\",2), (3,\"3\",3);");
+            cluster.runSql("test", "insert into test values (1333,\"1\", 1), (2,\"2\",2), (3,\"3\",3);");
         } finally {
             be.setWriteFailureRate(0.0f);
         }
 
         // old versions of other replicas will be GCed, backend 10001 will have to full clone from other be
         long oldVersionExpireSec = Tablet.versionExpireSec;
+        PseudoBackend.tabletCheckIntervalMs = 1000;
         Tablet.versionExpireSec = 1;
         try {
-            Thread.sleep(Tablet.versionExpireSec + 2000);
+            Thread.sleep(Tablet.versionExpireSec * 1000 + PseudoBackend.tabletCheckIntervalMs + 2000);
         } finally {
             Tablet.versionExpireSec = oldVersionExpireSec;
         }
@@ -124,10 +125,11 @@ public class DiskUsageSimTest {
         long tabletId = cluster.listTablets("test", "test").get(0);
         Tablet tablet = be.getTablet(tabletId);
         while (true) {
-            if (tablet.getCloneExecuted() == 2) {
+            if (tablet.getCloneExecuted() >= 2) {
                 break;
             }
-            System.out.printf("wait tablet %d to finish full clone\n", tabletId);
+            System.out.printf("wait tablet %d to finish full clone, current clone executed: %d\n",
+                    tabletId, tablet.getCloneExecuted());
             Thread.sleep(1000);
         }
         // check disk usage after clone

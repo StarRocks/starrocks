@@ -39,7 +39,7 @@ public:
 
     void close(RuntimeState* state) override;
 
-    void add_partition_chunks_sorter(std::shared_ptr<ChunksSorter> chunks_sorter);
+    void add_partition_chunks_sorter(const std::shared_ptr<ChunksSorter>& chunks_sorter);
     void finish_partition(uint64_t partition_rows);
     bool is_partition_sort_finished() const;
     bool is_output_finished() const;
@@ -71,7 +71,7 @@ private:
 class SortContextFactory {
 public:
     SortContextFactory(RuntimeState* state, const TTopNType::type topn_type, bool is_merging, int64_t offset,
-                       int64_t limit, int32_t num_right_sinkers, const std::vector<ExprContext*>& sort_exprs,
+                       int64_t limit, int32_t num_right_sinkers, std::vector<ExprContext*> sort_exprs,
                        const std::vector<bool>& _is_asc_order, const std::vector<bool>& is_null_first);
 
     SortContextPtr create(int32_t idx);

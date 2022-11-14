@@ -6,6 +6,7 @@
 #include <hdfs/hdfs.h>
 
 #include <atomic>
+#include <utility>
 
 #include "gutil/strings/substitute.h"
 #include "runtime/file_result_writer.h"
@@ -24,8 +25,8 @@ namespace starrocks {
 // Now this is not thread-safe.
 class HdfsInputStream : public io::SeekableInputStream {
 public:
-    HdfsInputStream(hdfsFS fs, hdfsFile file, const std::string& file_name)
-            : _fs(fs), _file(file), _file_name(file_name), _offset(0), _file_size(0) {}
+    HdfsInputStream(hdfsFS fs, hdfsFile file, std::string file_name)
+            : _fs(fs), _file(file), _file_name(std::move(file_name)) {}
 
     ~HdfsInputStream() override;
 
@@ -34,13 +35,14 @@ public:
     StatusOr<int64_t> position() override { return _offset; }
     StatusOr<std::unique_ptr<io::NumericStatistics>> get_numeric_statistics() override;
     Status seek(int64_t offset) override;
+    void set_size(int64_t size) override;
 
 private:
     hdfsFS _fs;
     hdfsFile _file;
     std::string _file_name;
-    int64_t _offset;
-    int64_t _file_size;
+    int64_t _offset{0};
+    int64_t _file_size{0};
 };
 
 HdfsInputStream::~HdfsInputStream() {
@@ -49,7 +51,7 @@ HdfsInputStream::~HdfsInputStream() {
         if (r == 0) {
             return Status::OK();
         } else {
-            return Status::IOError("");
+            return Status::IOError("close error, file: {}"_format(_file_name));
         }
     });
     Status st = ret->get_future().get();
@@ -91,6 +93,10 @@ StatusOr<int64_t> HdfsInputStream::get_size() {
     return _file_size;
 }
 
+void HdfsInputStream::set_size(int64_t value) {
+    _file_size = value;
+}
+
 StatusOr<std::unique_ptr<io::NumericStatistics>> HdfsInputStream::get_numeric_statistics() {
     auto statistics = std::make_unique<io::NumericStatistics>();
     io::NumericStatistics* stats = statistics.get();
@@ -113,8 +119,8 @@ StatusOr<std::unique_ptr<io::NumericStatistics>> HdfsInputStream::get_numeric_st
 
 class HDFSWritableFile : public WritableFile {
 public:
-    HDFSWritableFile(hdfsFS fs, hdfsFile file, const std::string& path, size_t offset)
-            : _fs(fs), _file(file), _path(path), _offset(offset), _closed(false) {}
+    HDFSWritableFile(hdfsFS fs, hdfsFile file, std::string path, size_t offset)
+            : _fs(fs), _file(file), _path(std::move(path)), _offset(offset) {}
 
     ~HDFSWritableFile() override { (void)HDFSWritableFile::close(); }
 
@@ -147,7 +153,7 @@ private:
     hdfsFile _file;
     std::string _path;
     size_t _offset;
-    bool _closed;
+    bool _closed{false};
 };
 
 Status HDFSWritableFile::append(const Slice& data) {
@@ -174,9 +180,6 @@ Status HDFSWritableFile::close() {
         return Status::OK();
     }
     auto ret = call_hdfs_scan_function_in_pthread([this]() {
-        // If we open a file and close it immediately here (before this file is flushed to the disk),
-        // hdfs cannot find the file and will cause BE crash.
-        // To avoid this, before closing the file, we need to call file sync.
         int r = hdfsHSync(_fs, _file);
         if (r != 0) {
             return Status::IOError("sync error, file: {}"_format(_path));
@@ -191,9 +194,7 @@ Status HDFSWritableFile::close() {
     });
     Status st = ret->get_future().get();
     PLOG_IF(ERROR, !st.ok()) << "close " << _path << " failed";
-    if (st.ok()) {
-        _closed = true;
-    }
+    _closed = true;
     return st;
 }
 
@@ -326,7 +327,7 @@ Status HdfsFileSystem::list_path(const std::string& dir, std::vector<FileStatus>
         std::string_view name(fileinfo[i].mName + dir_size);
         bool is_dir = fileinfo[i].mKind == tObjectKind::kObjectKindDirectory;
         int64_t file_size = fileinfo[i].mSize;
-        result->emplace_back(std::move(name), is_dir, file_size);
+        result->emplace_back(name, is_dir, file_size);
     }
     if (fileinfo) {
         hdfsFreeFileInfo(fileinfo, numEntries);

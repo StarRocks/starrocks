@@ -82,6 +82,10 @@ public abstract class OptExpressionVisitor<R, C> {
         return visit(optExpression, context);
     }
 
+    public R visitLogicalTreeAnchor(OptExpression optExpression, C context) {
+        return visit(optExpression, context);
+    }
+
     public R visitLogicalCTEAnchor(OptExpression optExpression, C context) {
         return visit(optExpression, context);
     }
@@ -110,6 +114,10 @@ public abstract class OptExpressionVisitor<R, C> {
     }
 
     public R visitPhysicalHudiScan(OptExpression optExpression, C context) {
+        return visit(optExpression, context);
+    }
+
+    public R visitPhysicalDeltaLakeScan(OptExpression optExpression, C context) {
         return visit(optExpression, context);
     }
 
@@ -225,4 +233,15 @@ public abstract class OptExpressionVisitor<R, C> {
         return visit(optExpression, context);
     }
 
+    public R visitPhysicalStreamScan(OptExpression optExpression, C context) {
+        return visit(optExpression, context);
+    }
+
+    public R visitPhysicalStreamJoin(OptExpression optExpression, C context) {
+        return visit(optExpression, context);
+    }
+
+    public R visitPhysicalStreamAgg(OptExpression optExpression, C context) {
+        return visit(optExpression, context);
+    }
 }

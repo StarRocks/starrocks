@@ -7,21 +7,33 @@ import com.google.common.collect.HashMultimap;
 import com.google.common.collect.ImmutableCollection;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.Analyzer;
-import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.SlotDescriptor;
+import com.starrocks.analysis.SlotId;
+import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TupleDescriptor;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
-import com.starrocks.external.PredicateUtils;
-import com.starrocks.external.iceberg.ExpressionConverter;
-import com.starrocks.external.iceberg.IcebergUtil;
+import com.starrocks.connector.PredicateUtils;
+import com.starrocks.connector.iceberg.ExpressionConverter;
+import com.starrocks.connector.iceberg.IcebergUtil;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Field;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.THdfsScanNode;
 import com.starrocks.thrift.THdfsScanRange;
+import com.starrocks.thrift.TIcebergDeleteFile;
+import com.starrocks.thrift.TIcebergFileContent;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
@@ -30,6 +42,7 @@ import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import org.apache.iceberg.CombinedScanTask;
 import org.apache.iceberg.DataFile;
+import org.apache.iceberg.FileContent;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.exceptions.ValidationException;
@@ -39,8 +52,12 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 public class IcebergScanNode extends ScanNode {
     private static final Logger LOG = LogManager.getLogger(IcebergScanNode.class);
@@ -53,6 +70,8 @@ public class IcebergScanNode extends ScanNode {
 
     // Exprs in icebergConjuncts converted to Iceberg Expression.
     private List<Expression> icebergPredicates = null;
+
+    private Set<String> equalityDeleteColumns = new HashSet<>();
 
     private final HashMultimap<String, Long> hostToBeId = HashMultimap.create();
     private long totalBytes = 0;
@@ -119,6 +138,42 @@ public class IcebergScanNode extends ScanNode {
         icebergPredicates = expressions;
     }
 
+    /**
+     * Append columns need to read for equality delete files
+     */
+    public void appendEqualityColumns(PhysicalIcebergScanOperator node,
+                                      ColumnRefFactory columnRefFactory,
+                                      ExecPlan context) {
+        Table referenceTable = node.getTable();
+        Set<String> scanNodeColumns = node.getColRefToColumnMetaMap().values().stream()
+                .map(column -> column.getName()).collect(Collectors.toSet());
+        Set<String> appendEqualityColumns = equalityDeleteColumns.stream()
+                .filter(name -> !scanNodeColumns.contains(name)).collect(Collectors.toSet());
+        Map<String, Column> nameToColumns = referenceTable.getFullSchema().stream()
+                .collect(Collectors.toMap(Column::getName, item -> item));
+        for (String eqName : appendEqualityColumns) {
+            if (nameToColumns.containsKey(eqName)) {
+                Column column = nameToColumns.get(eqName);
+                Field field;
+                TableName tableName = desc.getRef().getName();
+                if (referenceTable.getFullSchema().contains(column)) {
+                    field = new Field(column.getName(), column.getType(), tableName,
+                            new SlotRef(tableName, column.getName(), column.getName()), true);
+                } else {
+                    field = new Field(column.getName(), column.getType(), tableName,
+                            new SlotRef(tableName, column.getName(), column.getName()), false);
+                }
+                ColumnRefOperator columnRef = columnRefFactory.create(field.getName(),
+                        field.getType(), column.isAllowNull());
+                SlotDescriptor slotDescriptor = context.getDescTbl().addSlotDescriptor(desc, new SlotId(columnRef.getId()));
+                slotDescriptor.setColumn(column);
+                slotDescriptor.setIsNullable(column.isAllowNull());
+                slotDescriptor.setIsMaterialized(true);
+                context.getColRefToExpr().put(columnRef, new SlotRef(columnRef.toString(), slotDescriptor));
+            }
+        }
+    }
+
     @Override
     public void finalizeStats(Analyzer analyzer) throws UserException {
         if (isFinalized) {
@@ -173,6 +228,22 @@ public class IcebergScanNode extends ScanNode {
                 hdfsScanRange.setPartition_id(-1);
                 hdfsScanRange.setFile_length(file.fileSizeInBytes());
                 hdfsScanRange.setFile_format(IcebergUtil.getHdfsFileFormat(file.format()).toThrift());
+
+                hdfsScanRange.setDelete_files(task.deletes().stream().map(source -> {
+                    TIcebergDeleteFile target = new TIcebergDeleteFile();
+                    target.setFull_path(source.path().toString());
+                    target.setFile_content(
+                            source.content() == FileContent.EQUALITY_DELETES ? TIcebergFileContent.EQUALITY_DELETES : TIcebergFileContent.POSITION_DELETES);
+                    target.setLength(source.fileSizeInBytes());
+
+                    if (source.content() == FileContent.EQUALITY_DELETES) {
+                        source.equalityFieldIds().forEach(fieldId -> {
+                            equalityDeleteColumns.add(srIcebergTable.getIcebergTable().schema().findColumnName(fieldId));
+                        });
+                    }
+
+                    return target;
+                }).collect(Collectors.toList()));
                 TScanRange scanRange = new TScanRange();
                 scanRange.setHdfs_scan_range(hdfsScanRange);
                 scanRangeLocations.setScan_range(scanRange);
@@ -218,33 +289,6 @@ public class IcebergScanNode extends ScanNode {
 
         output.append(prefix).append(String.format("cardinality=%s", cardinality));
         output.append("\n");
-
-        output.append(prefix).append(String.format("avgRowSize=%s", avgRowSize));
-        output.append("\n");
-
-        output.append(prefix).append(String.format("numNodes=%s", numNodes));
-        output.append("\n");
-
-        return output.toString();
-    }
-
-    @Override
-    protected String getNodeVerboseExplain(String prefix) {
-        StringBuilder output = new StringBuilder();
-
-        output.append(prefix).append("TABLE: ").append(srIcebergTable.getTable()).append("\n");
-
-        if (null != sortColumn) {
-            output.append(prefix).append("SORT COLUMN: ").append(sortColumn).append("\n");
-        }
-        if (!conjuncts.isEmpty()) {
-            output.append(prefix).append("PREDICATES: ").append(
-                    getExplainString(conjuncts)).append("\n");
-        }
-        if (!scanNodePredicates.getMinMaxConjuncts().isEmpty()) {
-            output.append(prefix).append("MIN/MAX PREDICATES: ").append(
-                    getExplainString(scanNodePredicates.getMinMaxConjuncts())).append("\n");
-        }
 
         output.append(prefix).append(String.format("avgRowSize=%s", avgRowSize));
         output.append("\n");

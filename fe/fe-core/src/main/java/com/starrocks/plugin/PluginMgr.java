@@ -25,7 +25,6 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.InstallPluginStmt;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeMetaVersion;
@@ -36,6 +35,7 @@ import com.starrocks.plugin.PluginInfo.PluginType;
 import com.starrocks.plugin.PluginLoader.PluginStatus;
 import com.starrocks.qe.AuditLogBuilder;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.InstallPluginStmt;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

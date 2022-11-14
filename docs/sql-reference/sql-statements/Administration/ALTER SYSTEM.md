@@ -1,16 +1,20 @@
 # ALTER SYSTEM
 
-## description
+## Description
 
 This statement is used to operate nodes in a system. (Administrator only!)
 
-Syntax:
+## Syntax
 
 1. Add nodes (Please add in this way if multi-tenant functionality is not used).
 
    ```sql
    ALTER SYSTEM ADD BACKEND "host:heartbeat_port"[,"host:heartbeat_port"...];
+   ALTER SYSTEM ADD COMPUTE NODE "host:heartbeat_service_port"[,"host:heartbeat_service_port"...];
    ```
+
+   After BE nodes are successfully added to your StarRocks cluster, you can execute the [SHOW BACKENDS](./SHOW%20BACKENDS.md) statement to see the newly added nodes.
+   After CN nodes are successfully added to your StarRocks cluster, you can execute the [SHOW COMPUTE NODES](./SHOW%20COMPUTE%20NODES.md) statement to see the newly added nodes.
 
 2. Add idle nodes (Namely, add BACKEND that does not belong to any cluster).
 
@@ -28,6 +32,7 @@ Syntax:
 
    ```sql
    ALTER SYSTEM DROP BACKEND "host:heartbeat_port"[,"host:heartbeat_port"...];
+   ALTER SYSTEM DROP COMPUTE NODES "host:heartbeat_service_port"[,"host:heartbeat_service_port"...];
    ```
 
 5. Take nodes offline.
@@ -164,7 +169,3 @@ Note:
    ALTER SYSTEM SET LOAD ERRORS HUB PROPERTIES
    ("type"= "null");
    ```
-
-## keyword
-
-ALTER,SYSTEM,BACKEND,BROKER,FREE

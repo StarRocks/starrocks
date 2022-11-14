@@ -108,7 +108,7 @@ Status TimeFunctions::convert_tz_prepare(starrocks_udf::FunctionContext* context
         return Status::OK();
     }
 
-    ConvertTzCtx* ctc = new ConvertTzCtx();
+    auto* ctc = new ConvertTzCtx();
     context->set_function_state(scope, ctc);
 
     // find from timezone
@@ -144,8 +144,7 @@ Status TimeFunctions::convert_tz_prepare(starrocks_udf::FunctionContext* context
 Status TimeFunctions::convert_tz_close(starrocks_udf::FunctionContext* context,
                                        starrocks_udf::FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
-        ConvertTzCtx* ctc =
-                reinterpret_cast<ConvertTzCtx*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+        auto* ctc = reinterpret_cast<ConvertTzCtx*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
         if (ctc != nullptr) {
             delete ctc;
         }
@@ -250,7 +249,7 @@ ColumnPtr TimeFunctions::convert_tz_const(FunctionContext* context, const Column
 }
 
 ColumnPtr TimeFunctions::convert_tz(FunctionContext* context, const Columns& columns) {
-    ConvertTzCtx* ctc = reinterpret_cast<ConvertTzCtx*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    auto* ctc = reinterpret_cast<ConvertTzCtx*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
     if (ctc == nullptr) {
         return convert_tz_general(context, columns);
     }
@@ -670,25 +669,97 @@ Status TimeFunctions::time_slice_prepare(starrocks_udf::FunctionContext* context
     Slice format_slice = ColumnHelper::get_const_value<TYPE_VARCHAR>(column_format);
     auto period_unit = format_slice.to_string();
 
+    ColumnPtr column_time_base = context->get_constant_column(3);
+    Slice time_base_slice = ColumnHelper::get_const_value<TYPE_VARCHAR>(column_time_base);
+    auto time_base = time_base_slice.to_string();
+
     ScalarFunction function;
-    if (period_unit == "second") {
-        function = &TimeFunctions::time_slice_second;
-    } else if (period_unit == "minute") {
-        function = &TimeFunctions::time_slice_minute;
-    } else if (period_unit == "hour") {
-        function = &TimeFunctions::time_slice_hour;
-    } else if (period_unit == "day") {
-        function = &TimeFunctions::time_slice_day;
-    } else if (period_unit == "month") {
-        function = &TimeFunctions::time_slice_month;
-    } else if (period_unit == "year") {
-        function = &TimeFunctions::time_slice_year;
-    } else if (period_unit == "week") {
-        function = &TimeFunctions::time_slice_week;
-    } else if (period_unit == "quarter") {
-        function = &TimeFunctions::time_slice_quarter;
+    const FunctionContext::TypeDesc* boundary = context->get_arg_type(0);
+    if (boundary->type == PrimitiveType::TYPE_DATETIME) {
+        // floor specify START as the result time.
+        if (time_base == "floor") {
+            if (period_unit == "second") {
+                function = &TimeFunctions::time_slice_datetime_start_second;
+            } else if (period_unit == "minute") {
+                function = &TimeFunctions::time_slice_datetime_start_minute;
+            } else if (period_unit == "hour") {
+                function = &TimeFunctions::time_slice_datetime_start_hour;
+            } else if (period_unit == "day") {
+                function = &TimeFunctions::time_slice_datetime_start_day;
+            } else if (period_unit == "month") {
+                function = &TimeFunctions::time_slice_datetime_start_month;
+            } else if (period_unit == "year") {
+                function = &TimeFunctions::time_slice_datetime_start_year;
+            } else if (period_unit == "week") {
+                function = &TimeFunctions::time_slice_datetime_start_week;
+            } else if (period_unit == "quarter") {
+                function = &TimeFunctions::time_slice_datetime_start_quarter;
+            } else {
+                return Status::InternalError(
+                        "period unit must in {second, minute, hour, day, month, year, week, quarter}");
+            }
+        } else {
+            // ceil specify END as the result time.
+            DCHECK_EQ(time_base, "ceil");
+            if (period_unit == "second") {
+                function = &TimeFunctions::time_slice_datetime_end_second;
+            } else if (period_unit == "minute") {
+                function = &TimeFunctions::time_slice_datetime_end_minute;
+            } else if (period_unit == "hour") {
+                function = &TimeFunctions::time_slice_datetime_end_hour;
+            } else if (period_unit == "day") {
+                function = &TimeFunctions::time_slice_datetime_end_day;
+            } else if (period_unit == "month") {
+                function = &TimeFunctions::time_slice_datetime_end_month;
+            } else if (period_unit == "year") {
+                function = &TimeFunctions::time_slice_datetime_end_year;
+            } else if (period_unit == "week") {
+                function = &TimeFunctions::time_slice_datetime_end_week;
+            } else if (period_unit == "quarter") {
+                function = &TimeFunctions::time_slice_datetime_end_quarter;
+            } else {
+                return Status::InternalError(
+                        "period unit must in {second, minute, hour, day, month, year, week, quarter}");
+            }
+        }
     } else {
-        return Status::InternalError("period unit must in {second, minute, hour, day, month, year, week, quarter}");
+        DCHECK_EQ(boundary->type, PrimitiveType::TYPE_DATE);
+        if (time_base == "floor") {
+            if (period_unit == "second" || period_unit == "minute" || period_unit == "hour") {
+                return Status::InvalidArgument("can't use time_slice for date with time(hour/minute/second)");
+            } else if (period_unit == "day") {
+                function = &TimeFunctions::time_slice_date_start_day;
+            } else if (period_unit == "month") {
+                function = &TimeFunctions::time_slice_date_start_month;
+            } else if (period_unit == "year") {
+                function = &TimeFunctions::time_slice_date_start_year;
+            } else if (period_unit == "week") {
+                function = &TimeFunctions::time_slice_date_start_week;
+            } else if (period_unit == "quarter") {
+                function = &TimeFunctions::time_slice_date_start_quarter;
+            } else {
+                return Status::InternalError(
+                        "period unit must in {second, minute, hour, day, month, year, week, quarter}");
+            }
+        } else {
+            DCHECK_EQ(time_base, "ceil");
+            if (period_unit == "second" || period_unit == "minute" || period_unit == "hour") {
+                return Status::InvalidArgument("can't use time_slice for date with time(hour/minute/second)");
+            } else if (period_unit == "day") {
+                function = &TimeFunctions::time_slice_date_end_day;
+            } else if (period_unit == "month") {
+                function = &TimeFunctions::time_slice_date_end_month;
+            } else if (period_unit == "year") {
+                function = &TimeFunctions::time_slice_date_end_year;
+            } else if (period_unit == "week") {
+                function = &TimeFunctions::time_slice_date_end_week;
+            } else if (period_unit == "quarter") {
+                function = &TimeFunctions::time_slice_date_end_quarter;
+            } else {
+                return Status::InternalError(
+                        "period unit must in {second, minute, hour, day, month, year, week, quarter}");
+            }
+        }
     }
 
     auto fc = new DateTruncCtx();
@@ -697,14 +768,35 @@ Status TimeFunctions::time_slice_prepare(starrocks_udf::FunctionContext* context
     return Status::OK();
 }
 
-#define DEFINE_TIME_SLICE_FN(UNIT)                                         \
-    DEFINE_BINARY_FUNCTION_WITH_IMPL(time_slice_##UNIT##Impl, v, period) { \
-        TimestampValue result = v;                                         \
-        result.floor_to_##UNIT##_period(period);                           \
-        return result;                                                     \
-    }                                                                      \
-                                                                           \
-    DEFINE_TIME_CALC_FN(time_slice_##UNIT, TYPE_DATETIME, TYPE_INT, TYPE_DATETIME);
+#define DEFINE_TIME_SLICE_FN(UNIT)                                                                 \
+    DEFINE_BINARY_FUNCTION_WITH_IMPL(time_slice_datetime_start_##UNIT##Impl, v, period) {          \
+        TimestampValue result = v;                                                                 \
+        result.template floor_to_##UNIT##_period<false>(period);                                   \
+        return result;                                                                             \
+    }                                                                                              \
+                                                                                                   \
+    DEFINE_TIME_CALC_FN(time_slice_datetime_start_##UNIT, TYPE_DATETIME, TYPE_INT, TYPE_DATETIME); \
+    DEFINE_BINARY_FUNCTION_WITH_IMPL(time_slice_datetime_end_##UNIT##Impl, v, period) {            \
+        TimestampValue result = v;                                                                 \
+        result.template floor_to_##UNIT##_period<true>(period);                                    \
+        return result;                                                                             \
+    }                                                                                              \
+                                                                                                   \
+    DEFINE_TIME_CALC_FN(time_slice_datetime_end_##UNIT, TYPE_DATETIME, TYPE_INT, TYPE_DATETIME);   \
+    DEFINE_BINARY_FUNCTION_WITH_IMPL(time_slice_date_start_##UNIT##Impl, v, period) {              \
+        TimestampValue result = v;                                                                 \
+        result.template floor_to_##UNIT##_period<false>(period);                                   \
+        return result;                                                                             \
+    }                                                                                              \
+                                                                                                   \
+    DEFINE_TIME_CALC_FN(time_slice_date_start_##UNIT, TYPE_DATE, TYPE_INT, TYPE_DATE);             \
+    DEFINE_BINARY_FUNCTION_WITH_IMPL(time_slice_date_end_##UNIT##Impl, v, period) {                \
+        TimestampValue result = v;                                                                 \
+        result.template floor_to_##UNIT##_period<true>(period);                                    \
+        return result;                                                                             \
+    }                                                                                              \
+                                                                                                   \
+    DEFINE_TIME_CALC_FN(time_slice_date_end_##UNIT, TYPE_DATE, TYPE_INT, TYPE_DATE);
 
 // time_slice_to_second
 DEFINE_TIME_SLICE_FN(second);
@@ -1030,7 +1122,7 @@ Status TimeFunctions::from_unix_prepare(starrocks_udf::FunctionContext* context,
         return Status::OK();
     }
 
-    FromUnixState* state = new FromUnixState();
+    auto* state = new FromUnixState();
     context->set_function_state(scope, state);
 
     if (!context->is_notnull_constant_column(1)) {
@@ -1052,7 +1144,7 @@ Status TimeFunctions::from_unix_prepare(starrocks_udf::FunctionContext* context,
 Status TimeFunctions::from_unix_close(starrocks_udf::FunctionContext* context,
                                       starrocks_udf::FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
-        FromUnixState* state = reinterpret_cast<FromUnixState*>(context->get_function_state(scope));
+        auto* state = reinterpret_cast<FromUnixState*>(context->get_function_state(scope));
         delete state;
     }
     return Status::OK();
@@ -1147,8 +1239,7 @@ ColumnPtr TimeFunctions::from_unix_with_format_const(std::string& format_content
 ColumnPtr TimeFunctions::from_unix_to_datetime_with_format(FunctionContext* context,
                                                            const starrocks::vectorized::Columns& columns) {
     DCHECK_EQ(columns.size(), 2);
-    FromUnixState* state =
-            reinterpret_cast<FromUnixState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    auto* state = reinterpret_cast<FromUnixState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
 
     if (state->const_format) {
         std::string format_content = state->format_content;
@@ -1248,12 +1339,12 @@ Status TimeFunctions::str_to_date_prepare(starrocks_udf::FunctionContext* contex
     // start point to the first unspace char in string format.
     char* start;
     if (is_date_format(slice, &start)) {
-        StrToDateCtx* fc = new StrToDateCtx();
+        auto* fc = new StrToDateCtx();
         fc->fmt_type = yyyycMMcdd;
         fc->fmt = start;
         context->set_function_state(scope, fc);
     } else if (is_datetime_format(slice, &start)) {
-        StrToDateCtx* fc = new StrToDateCtx();
+        auto* fc = new StrToDateCtx();
         fc->fmt_type = yyyycMMcddcHHcmmcss;
         fc->fmt = start;
         context->set_function_state(scope, fc);
@@ -1381,7 +1472,7 @@ ColumnPtr TimeFunctions::str_to_date_uncommon(FunctionContext* context, const Co
 
 // str_to_date, for the "str_to_date" in sql.
 ColumnPtr TimeFunctions::str_to_date(FunctionContext* context, const Columns& columns) {
-    StrToDateCtx* ctx = reinterpret_cast<StrToDateCtx*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    auto* ctx = reinterpret_cast<StrToDateCtx*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
     if (ctx == nullptr) {
         return str_to_date_uncommon(context, columns);
     } else if (ctx->fmt_type == yyyycMMcdd) { // for string format like "%Y-%m-%d"
@@ -1398,7 +1489,7 @@ Status TimeFunctions::str_to_date_close(starrocks_udf::FunctionContext* context,
         return Status::OK();
     }
 
-    StrToDateCtx* fc = reinterpret_cast<StrToDateCtx*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    auto* fc = reinterpret_cast<StrToDateCtx*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
     if (fc != nullptr) {
         delete fc;
     }
@@ -1426,7 +1517,7 @@ Status TimeFunctions::format_prepare(starrocks_udf::FunctionContext* context,
     }
 
     ColumnPtr column = context->get_constant_column(1);
-    FormatCtx* fc = new FormatCtx();
+    auto* fc = new FormatCtx();
     context->set_function_state(scope, fc);
 
     if (column->only_null()) {
@@ -1469,7 +1560,7 @@ Status TimeFunctions::format_close(starrocks_udf::FunctionContext* context,
         return Status::OK();
     }
 
-    FormatCtx* fc = reinterpret_cast<FormatCtx*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    auto* fc = reinterpret_cast<FormatCtx*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
     if (fc != nullptr) {
         delete fc;
     }
@@ -1526,7 +1617,7 @@ std::string format_for_yyyy_MM_dd_Impl(const DateValue& date_value) {
 }
 
 DEFINE_STRING_UNARY_FN_WITH_IMPL(yyyy_MM_dd_Impl, v) {
-    DateValue d = (DateValue)v;
+    auto d = (DateValue)v;
     return format_for_yyyy_MM_dd_Impl((DateValue)d);
 }
 
@@ -1623,7 +1714,7 @@ ColumnPtr standard_format(const std::string& fmt, int len, const starrocks::vect
         if (ts_viewer.is_null(i)) {
             result.append_null();
         } else {
-            TimestampValue ts = (TimestampValue)ts_viewer.value(i);
+            auto ts = (TimestampValue)ts_viewer.value(i);
             bool b = standard_format_one_row(ts, buf, fmt);
             result.append(Slice(std::string(buf)), !b);
         }
@@ -1673,7 +1764,7 @@ void common_format_process(ColumnViewer<Type>* viewer_date, ColumnViewer<TYPE_VA
         builder->append(format_for_yyyyImpl(viewer_date->value(i)));
     } else {
         char buf[128];
-        TimestampValue ts = (TimestampValue)viewer_date->value(i);
+        auto ts = (TimestampValue)viewer_date->value(i);
         bool b = standard_format_one_row(ts, buf, viewer_format->value(i).to_string());
         builder->append(Slice(std::string(buf)), !b);
     }
@@ -1682,7 +1773,7 @@ void common_format_process(ColumnViewer<Type>* viewer_date, ColumnViewer<TYPE_VA
 // datetime_format
 ColumnPtr TimeFunctions::datetime_format(FunctionContext* context, const Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
-    FormatCtx* fc = reinterpret_cast<FormatCtx*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    auto* fc = reinterpret_cast<FormatCtx*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
 
     if (fc != nullptr && fc->is_valid) {
         return do_format<TYPE_DATETIME>(fc, columns);
@@ -1709,7 +1800,7 @@ ColumnPtr TimeFunctions::datetime_format(FunctionContext* context, const Columns
 ColumnPtr TimeFunctions::date_format(FunctionContext* context, const Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
-    FormatCtx* fc = reinterpret_cast<FormatCtx*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    auto* fc = reinterpret_cast<FormatCtx*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
 
     if (fc != nullptr && fc->is_valid) {
         return do_format<TYPE_DATE>(fc, columns);

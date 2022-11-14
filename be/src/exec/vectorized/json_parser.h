@@ -33,8 +33,6 @@ public:
     Status advance() noexcept override;
 
 private:
-    uint8_t* _data = nullptr;
-
     // data is parsed as a document stream.
 
     // iterator context for document stream.
@@ -63,8 +61,6 @@ public:
     Status advance() noexcept override;
 
 private:
-    uint8_t* _data = nullptr;
-
     // data is parsed as a document in array type.
     simdjson::ondemand::document _doc;
 

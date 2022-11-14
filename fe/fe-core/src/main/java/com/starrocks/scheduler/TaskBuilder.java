@@ -18,6 +18,7 @@ import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.optimizer.Utils;
 
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 // TaskBuilder is responsible for converting Stmt to Task Class
 // and also responsible for generating taskId and taskName
@@ -66,7 +67,7 @@ public class TaskBuilder {
         return task;
     }
 
-    public static void updateTaskInfo(Task task, RefreshSchemeDesc refreshSchemeDesc)
+    public static void updateTaskInfo(Task task, RefreshSchemeDesc refreshSchemeDesc, MaterializedView materializedView)
             throws DdlException {
         MaterializedView.RefreshType refreshType = refreshSchemeDesc.getType();
         if (refreshType == MaterializedView.RefreshType.MANUAL) {
@@ -78,10 +79,20 @@ public class TaskBuilder {
                 if (intervalLiteral == null) {
                     task.setType(Constants.TaskType.EVENT_TRIGGERED);
                 } else {
-                    final IntLiteral step = (IntLiteral) asyncRefreshSchemeDesc.getIntervalLiteral().getValue();
-                    long startTime = Utils.getLongFromDateTime(asyncRefreshSchemeDesc.getStartTime());
-                    TaskSchedule taskSchedule = new TaskSchedule(startTime, step.getLongValue(),
-                            TimeUtils.convertUnitIdentifierToTimeUnit(intervalLiteral.getUnitIdentifier().getDescription()));
+                    long period = ((IntLiteral) asyncRefreshSchemeDesc.getIntervalLiteral().getValue()).getLongValue();
+                    TimeUnit timeUnit = TimeUtils.convertUnitIdentifierToTimeUnit(
+                            intervalLiteral.getUnitIdentifier().getDescription());
+                    long startTime;
+                    if (asyncRefreshSchemeDesc.isDefineStartTime()) {
+                        startTime = Utils.getLongFromDateTime(asyncRefreshSchemeDesc.getStartTime());
+                    } else {
+                        MaterializedView.AsyncRefreshContext asyncRefreshContext = materializedView.getRefreshScheme()
+                                .getAsyncRefreshContext();
+                        long currentTimeSecond = System.currentTimeMillis() / 1000;
+                        startTime = TimeUtils.getNextValidTimeSecond(asyncRefreshContext.getStartTime(),
+                                currentTimeSecond, period, timeUnit);
+                    }
+                    TaskSchedule taskSchedule = new TaskSchedule(startTime, period, timeUnit);
                     task.setSchedule(taskSchedule);
                     task.setType(Constants.TaskType.PERIODICAL);
                 }

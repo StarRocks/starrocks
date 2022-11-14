@@ -91,7 +91,7 @@ private:
     void _init_read_chunk();
 
     Status _read(const std::vector<int>& read_columns, size_t* row_count, vectorized::ChunkPtr* chunk);
-    Status _lazy_skip_rows(const std::vector<int>& read_columns, vectorized::ChunkPtr chunk, size_t chunk_size);
+    Status _lazy_skip_rows(const std::vector<int>& read_columns, const vectorized::ChunkPtr& chunk, size_t chunk_size);
     void _dict_filter(vectorized::ChunkPtr* chunk, vectorized::Filter* filter_ptr);
     Status _dict_decode(vectorized::ChunkPtr* chunk);
     void _collect_field_io_range(const ParquetField& field, std::vector<SharedBufferedInputStream::IORange>* ranges,

@@ -25,13 +25,11 @@
 
 #include "common/status.h"
 #include "gen_cpp/FrontendService.h"
-#include "gen_cpp/FrontendService_types.h"
 #include "monotime.h"
 #include "runtime/client_cache.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "util/network_util.h"
-#include "util/runtime_profile.h"
 #include "util/thrift_util.h"
 
 namespace starrocks {

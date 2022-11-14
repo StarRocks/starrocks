@@ -36,6 +36,8 @@ add_library(Storage STATIC
     del_vector.cpp
     key_coder.cpp
     memtable_flush_executor.cpp
+    segment_flush_executor.cpp
+    segment_replicate_executor.cpp
     metadata_util.cpp
     kv_store.cpp
     olap_common.cpp
@@ -65,7 +67,6 @@ add_library(Storage STATIC
     types.cpp
     update_manager.cpp
     utils.cpp
-    wrapper_field.cpp
     compaction_utils.cpp
     rowset/array_column_iterator.cpp
     rowset/binary_plain_page.cpp
@@ -103,6 +104,7 @@ add_library(Storage STATIC
     rowset/segment_iterator.cpp
     rowset/segment_options.cpp
     rowset/rowid_range_option.cpp
+    rowset/rowset_meta.cpp
     task/engine_batch_load_task.cpp
     task/engine_checksum_task.cpp
     task/engine_clone_task.cpp

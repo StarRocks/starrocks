@@ -11,7 +11,7 @@
 namespace starrocks::vectorized {
 
 struct StConstructState {
-    StConstructState() {}
+    StConstructState() = default;
     ~StConstructState() = default;
 
     bool is_null{false};
@@ -24,7 +24,7 @@ ColumnPtr GeoFunctions::st_from_wkt_common(FunctionContext* ctx, const Columns& 
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_VARCHAR> result(size);
 
-    StConstructState* state = (StConstructState*)ctx->get_function_state(FunctionContext::FRAGMENT_LOCAL);
+    auto* state = (StConstructState*)ctx->get_function_state(FunctionContext::FRAGMENT_LOCAL);
     if (state == nullptr) {
         for (int row = 0; row < size; ++row) {
             if (wkt_viewer.is_null(row)) {
@@ -69,7 +69,7 @@ ColumnPtr GeoFunctions::st_polygon(FunctionContext* context, const Columns& colu
 
 Status GeoFunctions::st_from_wkt_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
-        StConstructState* state = reinterpret_cast<StConstructState*>(context->get_function_state(scope));
+        auto* state = reinterpret_cast<StConstructState*>(context->get_function_state(scope));
         delete state;
     }
 
@@ -116,7 +116,7 @@ ColumnPtr GeoFunctions::st_circle(FunctionContext* context, const Columns& colum
 
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_VARCHAR> result(size);
-    StConstructState* state = (StConstructState*)context->get_function_state(FunctionContext::FRAGMENT_LOCAL);
+    auto* state = (StConstructState*)context->get_function_state(FunctionContext::FRAGMENT_LOCAL);
     if (state == nullptr) {
         for (int row = 0; row < size; ++row) {
             if (lng_viewer.is_null(row) || lat_viewer.is_null(row) || radius_viewer.is_null(row)) {
@@ -298,7 +298,7 @@ struct StContainsState {
 
 Status GeoFunctions::st_contains_close(FunctionContext* ctx, FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
-        StContainsState* contains_ctx = reinterpret_cast<StContainsState*>(ctx->get_function_state(scope));
+        auto* contains_ctx = reinterpret_cast<StContainsState*>(ctx->get_function_state(scope));
         delete contains_ctx;
     }
 

@@ -24,13 +24,15 @@
 #include <vector>
 
 #include "runtime/descriptors.h"
+#include "runtime/mem_tracker.h"
 #include "util/bit_util.h"
 
 using std::vector;
 
 namespace starrocks {
 
-DescriptorTblBuilder::DescriptorTblBuilder(ObjectPool* obj_pool) : _obj_pool(obj_pool) {}
+DescriptorTblBuilder::DescriptorTblBuilder(RuntimeState* state, ObjectPool* obj_pool)
+        : _state(state), _obj_pool(obj_pool) {}
 
 TupleDescBuilder& DescriptorTblBuilder::declare_tuple() {
     TupleDescBuilder* tuple_builder = _obj_pool->add(new TupleDescBuilder());
@@ -78,7 +80,7 @@ DescriptorTbl* DescriptorTblBuilder::build() {
         build_tuple(_tuples_desc->slot_types(), &thrift_desc_tbl, &tuple_id, &slot_id);
     }
 
-    Status status = DescriptorTbl::create(_obj_pool, thrift_desc_tbl, &desc_tbl, config::vector_chunk_size);
+    Status status = DescriptorTbl::create(_state, _obj_pool, thrift_desc_tbl, &desc_tbl, config::vector_chunk_size);
     DCHECK(status.ok());
     return desc_tbl;
 }

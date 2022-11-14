@@ -2,13 +2,12 @@
 
 #include "exec/pipeline/scan/chunk_source.h"
 
-#include "column/column_helper.h"
+#include <random>
+
 #include "common/statusor.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/runtime_state.h"
-#include "storage/chunk_helper.h"
-
 namespace starrocks::pipeline {
 
 ChunkSource::ChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
@@ -57,6 +56,7 @@ Status ChunkSource::buffer_next_batch_chunks_blocking(RuntimeState* state, size_
     }
 
     int64_t time_spent_ns = 0;
+    auto [tablet_id, version] = _morsel->get_lane_owner_and_version();
     for (size_t i = 0; i < batch_size && !state->is_cancelled(); ++i) {
         {
             SCOPED_RAW_TIMER(&time_spent_ns);
@@ -67,14 +67,25 @@ Status ChunkSource::buffer_next_batch_chunks_blocking(RuntimeState* state, size_
 
             ChunkPtr chunk;
             _status = _read_chunk(state, &chunk);
+            // we always output a empty chunk instead of nullptr, because we need set tablet_id and is_last_chunk flag
+            // in the chunk.
+            if (chunk == nullptr) {
+                chunk = std::make_shared<vectorized::Chunk>();
+            }
             if (!_status.ok()) {
                 // end of file is normal case, need process chunk
                 if (_status.is_end_of_file()) {
+                    chunk->owner_info().set_owner_id(tablet_id, true);
                     _chunk_buffer.put(_scan_operator_seq, std::move(chunk), std::move(_chunk_token));
+                } else if (_status.is_time_out()) {
+                    chunk->owner_info().set_owner_id(tablet_id, false);
+                    _chunk_buffer.put(_scan_operator_seq, std::move(chunk), std::move(_chunk_token));
+                    _status = Status::OK();
                 }
                 break;
             }
 
+            chunk->owner_info().set_owner_id(tablet_id, false);
             _chunk_buffer.put(_scan_operator_seq, std::move(chunk), std::move(_chunk_token));
         }
 
@@ -83,7 +94,7 @@ Status ChunkSource::buffer_next_batch_chunks_blocking(RuntimeState* state, size_
         }
 
         if (running_wg != nullptr && time_spent_ns >= YIELD_PREEMPT_MAX_TIME_SPENT &&
-            running_wg->scan_sched_entity()->in_queue()->should_yield(running_wg, time_spent_ns)) {
+            _scan_sched_entity(running_wg)->in_queue()->should_yield(running_wg, time_spent_ns)) {
             break;
         }
     }

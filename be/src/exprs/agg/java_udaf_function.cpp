@@ -4,14 +4,11 @@
 
 #include <memory>
 
-#include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "fmt/core.h"
-#include "fmt/format.h"
 #include "jni.h"
-#include "runtime/primitive_type.h"
 #include "runtime/user_function_cache.h"
 
 namespace starrocks::vectorized {
@@ -19,7 +16,7 @@ namespace starrocks::vectorized {
 const int DEFAULT_UDAF_BUFFER_SIZE = 1024;
 
 const AggregateFunction* getJavaUDAFFunction(bool input_nullable) {
-    static JavaUDAFAggregateFunction<false> no_nullable_udaf_func;
+    static JavaUDAFAggregateFunction no_nullable_udaf_func;
     return &no_nullable_udaf_func;
 }
 
@@ -67,7 +64,7 @@ Status init_udaf_context(int64_t id, const std::string& url, const std::string& 
                                                                           ClassLoader::BATCH_SINGLE_UPDATE));
     ASSIGN_OR_RETURN(auto method, analyzer->get_method_object(update_stub_clazz.clazz(), stub_method_name));
     udaf_ctx->update_batch_call_stub = std::make_unique<AggBatchCallStub>(
-            context, udaf_ctx->handle.handle(), std::move(update_stub_clazz), JavaGlobalRef(std::move(method)));
+            context, udaf_ctx->handle.handle(), std::move(update_stub_clazz), JavaGlobalRef(method));
 
     RETURN_IF_ERROR(add_method("merge", udaf_ctx->udaf_class.clazz(), &udaf_ctx->merge));
     RETURN_IF_ERROR(add_method("finalize", udaf_ctx->udaf_class.clazz(), &udaf_ctx->finalize));
@@ -77,8 +74,9 @@ Status init_udaf_context(int64_t id, const std::string& url, const std::string& 
     auto& state_clazz = JVMFunctionHelper::getInstance().function_state_clazz();
     ASSIGN_OR_RETURN(auto instance, state_clazz.newInstance());
     ASSIGN_OR_RETURN(auto get_func, analyzer->get_method_object(state_clazz.clazz(), "get"));
+    ASSIGN_OR_RETURN(auto batch_get_func, analyzer->get_method_object(state_clazz.clazz(), "batch_get"));
     ASSIGN_OR_RETURN(auto add_func, analyzer->get_method_object(state_clazz.clazz(), "add"));
-    udaf_ctx->states = std::make_unique<UDAFStateList>(std::move(instance), std::move(get_func), std::move(add_func));
+    udaf_ctx->states = std::make_unique<UDAFStateList>(std::move(instance), get_func, batch_get_func, add_func);
     udaf_ctx->_func = std::make_unique<UDAFFunction>(udaf_ctx->handle.handle(), context, udaf_ctx);
 
     return Status::OK();

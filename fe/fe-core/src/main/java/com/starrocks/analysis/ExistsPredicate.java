@@ -26,6 +26,8 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.thrift.TExprNode;
 
+import java.util.Objects;
+
 public class ExistsPredicate extends Predicate {
     private boolean notExists = false;
 
@@ -73,20 +75,8 @@ public class ExistsPredicate extends Predicate {
     }
 
     @Override
-    public String toDigestImpl() {
-        StringBuilder strBuilder = new StringBuilder();
-        if (notExists) {
-            strBuilder.append("not ");
-
-        }
-        strBuilder.append("exists ");
-        strBuilder.append(getChild(0).toDigest());
-        return strBuilder.toString();
-    }
-
-    @Override
     public int hashCode() {
-        return 31 * super.hashCode() + Boolean.hashCode(notExists);
+        return Objects.hash(super.hashCode(), notExists);
     }
 
     @Override

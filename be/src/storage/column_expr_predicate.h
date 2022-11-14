@@ -60,7 +60,7 @@ public:
                                               std::vector<const ColumnExprPredicate*>* output) const;
 
 private:
-    void _add_expr_ctxs(std::vector<ExprContext*> expr_ctxs);
+    void _add_expr_ctxs(const std::vector<ExprContext*>& expr_ctxs);
 
     // Take ownership of this expression, not necessary to clone
     void _add_expr_ctx(std::unique_ptr<ExprContext> expr_ctx);
@@ -68,6 +68,7 @@ private:
     // Share the ownership, is necessary to clone it
     void _add_expr_ctx(ExprContext* expr_ctx);
 
+    ObjectPool _pool;
     RuntimeState* _state;
     std::vector<ExprContext*> _expr_ctxs;
     const SlotDescriptor* _slot_desc;

@@ -21,6 +21,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeNameFormat;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.common.util.WriteQuorum;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
@@ -134,6 +135,13 @@ public class AlterTableStatementAnalyzer {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                             "Property " + PropertyAnalyzer.PROPERTIES_STORAGE_FORMAT + " should be v2");
                 }
+            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM)) {
+                if (WriteQuorum.findTWriteQuorumByName(properties.get(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM)) == null) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                            "Property " + PropertyAnalyzer.PROPERTIES_WRITE_QUORUM + " not valid");
+                }
+                clause.setNeedTableStable(false);
+                clause.setOpType(AlterOpType.MODIFY_TABLE_PROPERTY_SYNC);
             } else if (DynamicPartitionUtil.checkDynamicPartitionPropertiesExist(properties)) {
                 // do nothing, dynamic properties will be analyzed in SchemaChangeHandler.process
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM)) {
@@ -158,6 +166,15 @@ public class AlterTableStatementAnalyzer {
                         !properties.get(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX).equalsIgnoreCase("false")) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                             "Property " + PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX +
+                                    " must be bool type(false/true)");
+                }
+                clause.setNeedTableStable(false);
+                clause.setOpType(AlterOpType.MODIFY_TABLE_PROPERTY_SYNC);
+            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE)) {
+                if (!properties.get(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE).equalsIgnoreCase("true") &&
+                        !properties.get(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE).equalsIgnoreCase("false")) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                            "Property " + PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE +
                                     " must be bool type(false/true)");
                 }
                 clause.setNeedTableStable(false);

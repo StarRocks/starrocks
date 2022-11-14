@@ -10,7 +10,6 @@
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/table_function/table_function.h"
-#include "gen_cpp/Types_types.h"
 #include "gutil/casts.h"
 #include "jni.h"
 #include "runtime/types.h"
@@ -30,7 +29,7 @@ class JavaUDTFState : public TableFunctionState {
 public:
     JavaUDTFState(std::string libpath, std::string symbol, const TTypeDesc& desc)
             : _libpath(std::move(libpath)), _symbol(std::move(symbol)), _ret_type(TypeDescriptor::from_thrift(desc)) {}
-    ~JavaUDTFState() {}
+    ~JavaUDTFState() override = default;
 
     Status open();
     void close();
@@ -176,6 +175,7 @@ std::pair<Columns, ColumnPtr> JavaUDTFFunction::process(TableFunctionState* stat
         helper.getEnv()->ExceptionClear();
     }
 
+    *eos = true;
     return std::make_pair(std::move(res), std::move(offsets_col));
 }
 

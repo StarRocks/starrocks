@@ -4,9 +4,6 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ExprSubstitutionMap;
-import com.starrocks.analysis.SelectList;
-import com.starrocks.analysis.SelectListItem;
-import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
@@ -15,10 +12,6 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ShowResultSetMetaData;
-import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.QueryStatement;
-import com.starrocks.sql.ast.SelectRelation;
-import com.starrocks.sql.ast.TableRelation;
 
 // SHOW TABLE STATUS
 public class ShowTableStatusStmt extends ShowStmt {
@@ -161,11 +154,6 @@ public class ShowTableStatusStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowTableStatusStmt(this, context);
-    }
-
-    @Override
-    public boolean isSupportNewPlanner() {
-        return true;
+        return visitor.visitShowTableStatusStatement(this, context);
     }
 }

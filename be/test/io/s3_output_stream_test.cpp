@@ -28,7 +28,7 @@ static void destroy_s3client();
 
 class S3OutputStreamTest : public testing::Test {
 public:
-    S3OutputStreamTest() {}
+    S3OutputStreamTest() = default;
 
     ~S3OutputStreamTest() override = default;
 

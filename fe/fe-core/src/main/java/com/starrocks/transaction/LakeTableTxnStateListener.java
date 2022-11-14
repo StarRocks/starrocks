@@ -15,7 +15,7 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.Utils;
-import com.starrocks.lake.proto.AbortTxnRequest;
+import com.starrocks.proto.AbortTxnRequest;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;

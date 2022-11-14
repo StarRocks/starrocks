@@ -2,10 +2,8 @@
 
 #include "storage/lake/async_delta_writer.h"
 
-#include <fmt/format.h>
 #include <gtest/gtest.h>
 
-#include <algorithm>
 #include <random>
 
 #include "column/chunk.h"
@@ -15,7 +13,6 @@
 #include "column/vectorized_fwd.h"
 #include "common/logging.h"
 #include "fs/fs_util.h"
-#include "gutil/strings/util.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/fixed_location_provider.h"
@@ -62,7 +59,6 @@ public:
         schema->set_num_short_key_columns(1);
         schema->set_keys_type(DUP_KEYS);
         schema->set_num_rows_per_row_block(65535);
-        schema->set_compress_kind(COMPRESS_LZ4);
         auto c0 = schema->add_column();
         {
             c0->set_unique_id(next_id());
@@ -140,8 +136,8 @@ TEST_F(AsyncDeltaWriterTest, test_open) {
     {
         auto tablet_id = -1;
         auto delta_writer = AsyncDeltaWriter::create(tablet_id, _txn_id, _partition_id, nullptr, _mem_tracker.get());
-        ASSERT_ERROR(delta_writer->open());
-        ASSERT_ERROR(delta_writer->open());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->open());
         delta_writer->close();
     }
     // Call open() multiple times
@@ -218,13 +214,12 @@ TEST_F(AsyncDeltaWriterTest, test_write) {
     ASSERT_FALSE(txnlog->op_write().rowset().overlapped());
     ASSERT_EQ(2 * kChunkSize, txnlog->op_write().rowset().num_rows());
     ASSERT_GT(txnlog->op_write().rowset().data_size(), 0);
-    ASSERT_EQ(0, txnlog->op_write().rowset().del_vectors_size());
 
     // Check segment file
     ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestGroupPath));
     auto path0 = _location_provider->segment_location(tablet_id, txnlog->op_write().rowset().segments(0));
 
-    ASSIGN_OR_ABORT(auto seg0, Segment::open(_mem_tracker.get(), fs, path0, 0, _tablet_schema.get()));
+    ASSIGN_OR_ABORT(auto seg0, Segment::open(fs, path0, 0, _tablet_schema.get()));
 
     OlapReaderStatistics statistics;
     SegmentReadOptions opts;
@@ -233,7 +228,7 @@ TEST_F(AsyncDeltaWriterTest, test_write) {
     opts.stats = &statistics;
     opts.chunk_size = 1024;
 
-    auto check_segment = [&](SegmentSharedPtr segment) {
+    auto check_segment = [&](const SegmentSharedPtr& segment) {
         ASSIGN_OR_ABORT(auto seg_iter, segment->new_iterator(*_schema, opts));
         auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
         ASSERT_OK(seg_iter->get_next(read_chunk_ptr.get()));
@@ -313,13 +308,12 @@ TEST_F(AsyncDeltaWriterTest, test_write_concurrently) {
     ASSERT_FALSE(txnlog->op_write().rowset().overlapped());
     ASSERT_EQ(kNumThreads * kChunksPerThread * kChunkSize, txnlog->op_write().rowset().num_rows());
     ASSERT_GT(txnlog->op_write().rowset().data_size(), 0);
-    ASSERT_EQ(0, txnlog->op_write().rowset().del_vectors_size());
 
     // Check segment file
     ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestGroupPath));
     auto path0 = _location_provider->segment_location(tablet_id, txnlog->op_write().rowset().segments(0));
 
-    ASSIGN_OR_ABORT(auto seg0, Segment::open(_mem_tracker.get(), fs, path0, 0, _tablet_schema.get()));
+    ASSIGN_OR_ABORT(auto seg0, Segment::open(fs, path0, 0, _tablet_schema.get()));
 
     OlapReaderStatistics statistics;
     SegmentReadOptions opts;
@@ -328,7 +322,7 @@ TEST_F(AsyncDeltaWriterTest, test_write_concurrently) {
     opts.stats = &statistics;
     opts.chunk_size = kNumThreads * kChunksPerThread * kChunkSize;
 
-    auto check_segment = [&](SegmentSharedPtr segment) {
+    auto check_segment = [&](const SegmentSharedPtr& segment) {
         ASSIGN_OR_ABORT(auto seg_iter, segment->new_iterator(*_schema, opts));
         auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, opts.chunk_size);
         ASSERT_OK(seg_iter->get_next(read_chunk_ptr.get()));

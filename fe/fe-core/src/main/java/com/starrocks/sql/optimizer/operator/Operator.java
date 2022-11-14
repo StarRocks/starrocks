@@ -112,6 +112,10 @@ public abstract class Operator {
         return Objects.hash(opType.ordinal(), limit, predicate, projection);
     }
 
+    public boolean canUsePipeLine() {
+        return true;
+    }
+
     public abstract static class Builder<O extends Operator, B extends Builder> {
         protected OperatorType opType;
         protected long limit = DEFAULT_LIMIT;

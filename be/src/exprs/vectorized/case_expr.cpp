@@ -11,7 +11,6 @@
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
-#include "exprs/vectorized/function_helper.h"
 #include "gutil/casts.h"
 #include "runtime/primitive_type_infra.h"
 #include "simd/mulselector.h"

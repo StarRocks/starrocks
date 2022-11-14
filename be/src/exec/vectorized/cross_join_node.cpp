@@ -19,6 +19,7 @@
 #include "exec/pipeline/pipeline_builder.h"
 #include "exprs/expr_context.h"
 #include "exprs/vectorized/literal.h"
+#include "gen_cpp/PlanNodes_types.h"
 #include "glog/logging.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
@@ -36,6 +37,8 @@ static bool _support_join_type(TJoinOp::type join_type) {
     case TJoinOp::LEFT_OUTER_JOIN:
     case TJoinOp::RIGHT_OUTER_JOIN:
     case TJoinOp::FULL_OUTER_JOIN:
+    case TJoinOp::LEFT_SEMI_JOIN:
+    case TJoinOp::LEFT_ANTI_JOIN:
         return true;
     default:
         return false;
@@ -49,6 +52,9 @@ Status CrossJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
     }
     if (tnode.__isset.nestloop_join_node) {
         _join_op = tnode.nestloop_join_node.join_op;
+        if (!state->enable_pipeline_engine() && _join_op != TJoinOp::CROSS_JOIN && _join_op != TJoinOp::INNER_JOIN) {
+            return Status::NotSupported("non-pipeline engine only support CROSS JOIN");
+        }
         if (!_support_join_type(_join_op)) {
             std::string type_string = starrocks::to_string(_join_op);
             return Status::NotSupported("nestloop join not supoort: " + type_string);
@@ -60,6 +66,14 @@ Status CrossJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
         if (tnode.nestloop_join_node.__isset.sql_join_conjuncts) {
             _sql_join_conjuncts = tnode.nestloop_join_node.sql_join_conjuncts;
         }
+        if (tnode.nestloop_join_node.__isset.build_runtime_filters) {
+            for (const auto& desc : tnode.nestloop_join_node.build_runtime_filters) {
+                auto* rf_desc = _pool->add(new RuntimeFilterBuildDescriptor());
+                RETURN_IF_ERROR(rf_desc->init(_pool, desc));
+                _build_runtime_filters.emplace_back(rf_desc);
+            }
+        }
+        return Status::OK();
     }
 
     for (const auto& desc : tnode.cross_join_node.build_runtime_filters) {
@@ -73,6 +87,7 @@ Status CrossJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
 
 Status CrossJoinNode::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::prepare(state));
+    RETURN_IF_ERROR(Expr::prepare(_join_conjuncts, state));
 
     _build_timer = ADD_TIMER(runtime_profile(), "BuildTime");
     _probe_timer = ADD_TIMER(runtime_profile(), "ProbeTime");
@@ -86,6 +101,7 @@ Status CrossJoinNode::prepare(RuntimeState* state) {
 Status CrossJoinNode::open(RuntimeState* state) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     RETURN_IF_ERROR(ExecNode::open(state));
+    RETURN_IF_ERROR(Expr::open(_join_conjuncts, state));
 
     RETURN_IF_ERROR(_build(state));
 
@@ -342,6 +358,7 @@ Status CrossJoinNode::get_next_internal(RuntimeState* state, ChunkPtr* chunk, bo
                 } else {
                     // should output (*chunk) first before EOS
                     RETURN_IF_ERROR(ExecNode::eval_conjuncts(_conjunct_ctxs, (*chunk).get()));
+                    RETURN_IF_ERROR(ExecNode::eval_conjuncts(_join_conjuncts, (*chunk).get()));
                     break;
                 }
             }
@@ -442,6 +459,7 @@ Status CrossJoinNode::get_next_internal(RuntimeState* state, ChunkPtr* chunk, bo
             continue;
         }
 
+        RETURN_IF_ERROR(ExecNode::eval_conjuncts(_join_conjuncts, (*chunk).get()));
         RETURN_IF_ERROR(ExecNode::eval_conjuncts(_conjunct_ctxs, (*chunk).get()));
 
         // we get result chunk.
@@ -485,6 +503,7 @@ Status CrossJoinNode::close(RuntimeState* state) {
         _probe_chunk->reset();
     }
 
+    Expr::close(_join_conjuncts, state);
     return ExecNode::close(state);
 }
 
@@ -559,10 +578,10 @@ StatusOr<std::list<ExprContext*>> CrossJoinNode::rewrite_runtime_filter(
         const std::vector<ExprContext*>& ctxs) {
     std::list<ExprContext*> filters;
 
-    for (int i = 0; i < rf_descs.size(); ++i) {
-        DCHECK_LT(rf_descs[i]->build_expr_order(), ctxs.size());
+    for (auto rf_desc : rf_descs) {
+        DCHECK_LT(rf_desc->build_expr_order(), ctxs.size());
         ASSIGN_OR_RETURN(auto expr, RuntimeFilterHelper::rewrite_runtime_filter_in_cross_join_node(
-                                            pool, ctxs[rf_descs[i]->build_expr_order()], chunk));
+                                            pool, ctxs[rf_desc->build_expr_order()], chunk));
         filters.push_back(expr);
     }
     return filters;
@@ -624,9 +643,11 @@ pipeline::OpFactories CrossJoinNode::decompose_to_pipeline(pipeline::PipelineBui
     context_params.num_left_probers = left_source->degree_of_parallelism();
     context_params.num_right_sinkers = right_source->degree_of_parallelism();
     context_params.plan_node_id = _id;
-    context_params.filters = conjunct_ctxs();
     context_params.rf_hub = context->fragment_context()->runtime_filter_hub();
     context_params.rf_descs = std::move(_build_runtime_filters);
+    // The order or filters should keep same with NestLoopJoinNode::buildRuntimeFilters
+    context_params.filters = _join_conjuncts;
+    std::copy(conjunct_ctxs().begin(), conjunct_ctxs().end(), std::back_inserter(context_params.filters));
 
     auto cross_join_context = std::make_shared<NLJoinContext>(std::move(context_params));
 

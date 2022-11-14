@@ -4,6 +4,8 @@
 
 #include <gtest/gtest.h>
 
+#include <utility>
+
 #include "column/chunk.h"
 #include "column/datum_tuple.h"
 #include "gen_cpp/Descriptors_types.h"
@@ -11,6 +13,7 @@
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 #include "testutil/assert.h"
+#include "testutil/parallel_test.h"
 
 namespace starrocks::vectorized {
 
@@ -30,7 +33,8 @@ protected:
         tuple_desc_builder.build(&desc_tbl_builder);
 
         DescriptorTbl* desc_tbl = nullptr;
-        Status st = DescriptorTbl::create(&_pool, desc_tbl_builder.desc_tbl(), &desc_tbl, config::vector_chunk_size);
+        Status st = DescriptorTbl::create(_state, &_pool, desc_tbl_builder.desc_tbl(), &desc_tbl,
+                                          config::vector_chunk_size);
         CHECK(st.ok()) << st.to_string();
 
         /// Init RuntimeState
@@ -63,8 +67,8 @@ protected:
         return std::make_unique<JsonScanner>(_state, _profile, *broker_scan_range, _counter);
     }
 
-    ChunkPtr test_whole_row_json(int columns, std::string input_data, std::string jsonpath,
-                                 std::vector<std::string> jsonpaths) {
+    ChunkPtr test_whole_row_json(int columns, const std::string& input_data, std::string jsonpath,
+                                 const std::vector<std::string>& jsonpaths) {
         std::vector<TypeDescriptor> types;
         for (int i = 0; i < columns; i++) {
             types.emplace_back(TypeDescriptor::create_varchar_type(1024));
@@ -76,7 +80,7 @@ protected:
         range.strip_outer_array = false;
         range.__isset.strip_outer_array = false;
         range.__isset.jsonpaths = true;
-        range.jsonpaths = jsonpath;
+        range.jsonpaths = std::move(jsonpath);
         range.__isset.json_root = false;
         range.__set_path(input_data);
         ranges.emplace_back(range);
@@ -89,8 +93,8 @@ protected:
         return chunk;
     }
 
-    ChunkPtr test_with_jsonpath(int columns, std::string input_data, std::string jsonpath,
-                                std::vector<std::string> jsonpaths) {
+    ChunkPtr test_with_jsonpath(int columns, const std::string& input_data, std::string jsonpath,
+                                const std::vector<std::string>& jsonpaths) {
         std::vector<TypeDescriptor> types;
         for (int i = 0; i < columns; i++) {
             types.emplace_back(TypeDescriptor::create_json_type());
@@ -102,7 +106,7 @@ protected:
         range.strip_outer_array = false;
         range.__isset.strip_outer_array = false;
         range.__isset.jsonpaths = true;
-        range.jsonpaths = jsonpath;
+        range.jsonpaths = std::move(jsonpath);
         range.__isset.json_root = false;
         range.__set_path(input_data);
         ranges.emplace_back(range);
@@ -208,7 +212,7 @@ TEST_F(JsonScannerTest, test_json_with_path) {
     range.strip_outer_array = true;
     range.__isset.strip_outer_array = true;
     range.__isset.jsonpaths = true;
-    range.jsonpaths = "[\"$.k1\", \"$.kind\", \"$.keyname.ip\", \"$.keyname.value\"]";
+    range.jsonpaths = R"(["$.k1", "$.kind", "$.keyname.ip", "$.keyname.value"])";
     range.__isset.json_root = false;
     range.__set_path("./be/test/exec/test_data/json_scanner/test2.json");
     ranges.emplace_back(range);
@@ -243,7 +247,7 @@ TEST_F(JsonScannerTest, test_one_level_array) {
     range.strip_outer_array = true;
     range.__isset.strip_outer_array = true;
     range.__isset.jsonpaths = true;
-    range.jsonpaths = "[\"$.keyname.ip\", \"$.keyname.value\"]";
+    range.jsonpaths = R"(["$.keyname.ip", "$.keyname.value"])";
     range.__isset.json_root = false;
     range.__set_path("./be/test/exec/test_data/json_scanner/test3.json");
     ranges.emplace_back(range);
@@ -458,7 +462,7 @@ TEST_F(JsonScannerTest, test_ndjson_with_jsonpath) {
     range.strip_outer_array = false;
     range.__isset.strip_outer_array = false;
     range.__isset.jsonpaths = true;
-    range.jsonpaths = "[\"$.k1\", \"$.kind\", \"$.keyname.ip\", \"$.keyname.value\"]";
+    range.jsonpaths = R"(["$.k1", "$.kind", "$.keyname.ip", "$.keyname.value"])";
     range.__isset.json_root = false;
     range.__set_path("./be/test/exec/test_data/json_scanner/test_ndjson.json");
     ranges.emplace_back(range);
@@ -618,7 +622,7 @@ TEST_F(JsonScannerTest, test_native_json_ndjson_with_jsonpath) {
     range.strip_outer_array = false;
     range.__isset.strip_outer_array = false;
     range.__isset.jsonpaths = true;
-    range.jsonpaths = "[\"$.k1\", \"$.kind\", \"$.keyname.ip\", \"$.keyname.value\"]";
+    range.jsonpaths = R"(["$.k1", "$.kind", "$.keyname.ip", "$.keyname.value"])";
     range.__isset.json_root = false;
     range.__set_path("./be/test/exec/test_data/json_scanner/test_ndjson.json");
     ranges.emplace_back(range);
@@ -884,7 +888,7 @@ TEST_F(JsonScannerTest, test_jsonroot_with_jsonpath) {
     range.__isset.jsonpaths = true;
     range.__isset.json_root = true;
 
-    range.jsonpaths = "[\"$.ip\", \"$.value\"]";
+    range.jsonpaths = R"(["$.ip", "$.value"])";
     range.json_root = "$.keyname";
 
     range.__set_path("./be/test/exec/test_data/json_scanner/test_ndjson.json");
@@ -916,7 +920,7 @@ TEST_F(JsonScannerTest, test_expanded_with_jsonroot_and_extracted_by_jsonpath) {
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
     range.strip_outer_array = true;
-    range.jsonpaths = "[\"$.keyname.ip\", \"$.keyname.value\"]";
+    range.jsonpaths = R"(["$.keyname.ip", "$.keyname.value"])";
     range.json_root = "$.data";
 
     range.__isset.strip_outer_array = true;
@@ -952,7 +956,7 @@ TEST_F(JsonScannerTest, test_ndjson_expaned_with_jsonroot_and_extracted_by_jsonp
     TBrokerRangeDesc range;
     range.format_type = TFileFormatType::FORMAT_JSON;
     range.strip_outer_array = true;
-    range.jsonpaths = "[\"$.keyname.ip\", \"$.keyname.value\"]";
+    range.jsonpaths = R"(["$.keyname.ip", "$.keyname.value"])";
     range.json_root = "$.data";
 
     range.__isset.strip_outer_array = true;
@@ -1002,6 +1006,80 @@ TEST_F(JsonScannerTest, test_illegal_input) {
 
     ASSERT_OK(scanner->open());
     ASSERT_TRUE(scanner->get_next().status().is_data_quality_error());
+}
+
+TEST_F(JsonScannerTest, test_illegal_input_with_jsonpath) {
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_DOUBLE);
+    types.emplace_back(TYPE_INT);
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.format_type = TFileFormatType::FORMAT_JSON;
+    range.strip_outer_array = false;
+    range.__isset.strip_outer_array = false;
+    range.__isset.jsonpaths = true;
+    range.jsonpaths = R"(["$.f_float", "$.f_bool", "$.f_int", "$.f_float_in_string", "$.f_int_in_string"])";
+    range.__isset.json_root = false;
+    range.__set_path("./be/test/exec/test_data/json_scanner/illegal.json");
+    ranges.emplace_back(range);
+
+    auto scanner =
+            create_json_scanner(types, ranges, {"f_float", "f_bool", "f_int", "f_float_in_string", "f_int_in_string"});
+
+    ASSERT_OK(scanner->open());
+    ASSERT_TRUE(scanner->get_next().status().is_data_quality_error());
+}
+
+// See more: https://github.com/StarRocks/starrocks/issues/11054
+TEST_F(JsonScannerTest, test_column_2x_than_columns_with_json_root) {
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TypeDescriptor::create_json_type());
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.format_type = TFileFormatType::FORMAT_JSON;
+    range.strip_outer_array = true;
+    range.jsonpaths = "";
+    range.json_root = "$.data";
+
+    range.__isset.strip_outer_array = true;
+    range.__isset.jsonpaths = false;
+    range.__isset.json_root = true;
+
+    range.__set_path("./be/test/exec/test_data/json_scanner/test_ndjson_expanded_array.json");
+    ranges.emplace_back(range);
+
+    auto scanner = create_json_scanner(types, ranges,
+                                       {"k1", "kind", "keyname", "null_col1", "null_col2", "null_col3", "null_col4"});
+
+    Status st;
+    st = scanner->open();
+    ASSERT_TRUE(st.ok());
+
+    ChunkPtr chunk = scanner->get_next().value();
+    EXPECT_EQ(7, chunk->num_columns());
+    EXPECT_EQ(5, chunk->num_rows());
+
+    EXPECT_EQ("['v1', 'server', {\"ip\": \"10.10.0.1\", \"value\": \"10\"}, NULL, NULL, NULL, NULL]",
+              chunk->debug_row(0));
+    EXPECT_EQ("['v2', 'server', {\"ip\": \"10.10.0.2\", \"value\": \"20\"}, NULL, NULL, NULL, NULL]",
+              chunk->debug_row(1));
+    EXPECT_EQ("['v3', 'server', {\"ip\": \"10.10.0.3\", \"value\": \"30\"}, NULL, NULL, NULL, NULL]",
+              chunk->debug_row(2));
+    EXPECT_EQ("['v4', 'server', {\"ip\": \"10.10.0.4\", \"value\": \"40\"}, NULL, NULL, NULL, NULL]",
+              chunk->debug_row(3));
+    EXPECT_EQ("['v5', 'server', {\"ip\": \"10.10.0.5\", \"value\": \"50\"}, NULL, NULL, NULL, NULL]",
+              chunk->debug_row(4));
 }
 
 } // namespace starrocks::vectorized

@@ -61,7 +61,7 @@ class SnapshotLoader {
 public:
     SnapshotLoader(ExecEnv* env, int64_t job_id, int64_t task_id);
 
-    ~SnapshotLoader();
+    ~SnapshotLoader() = default;
 
     Status upload(const std::map<std::string, std::string>& src_to_dest_path, const TUploadReq& upload,
                   std::map<int64_t, std::vector<std::string>>* tablet_files);
@@ -70,6 +70,8 @@ public:
                     std::vector<int64_t>* downloaded_tablet_ids);
 
     Status move(const std::string& snapshot_path, const TabletSharedPtr& tablet, bool overwrite);
+
+    Status primary_key_move(const std::string& snapshot_path, const TabletSharedPtr& tablet, bool overwrite);
 
 private:
     Status _get_tablet_id_and_schema_hash_from_file_path(const std::string& src_path, int64_t* tablet_id,

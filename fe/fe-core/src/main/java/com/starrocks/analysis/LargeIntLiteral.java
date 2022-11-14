@@ -100,6 +100,13 @@ public class LargeIntLiteral extends LiteralExpr {
         return largeIntLiteral;
     }
 
+    public static LargeIntLiteral createMaxValue() {
+        LargeIntLiteral largeIntLiteral = new LargeIntLiteral();
+        largeIntLiteral.type = Type.LARGEINT;
+        largeIntLiteral.value = LARGE_INT_MAX;
+        return largeIntLiteral;
+    }
+
     @Override
     public void analyzeImpl(Analyzer analyzer) throws AnalysisException {
     }
@@ -232,6 +239,6 @@ public class LargeIntLiteral extends LiteralExpr {
 
     @Override
     public int hashCode() {
-        return 31 * super.hashCode() + Objects.hashCode(value);
+        return Objects.hash(super.hashCode(), value);
     }
 }

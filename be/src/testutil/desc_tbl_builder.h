@@ -21,6 +21,7 @@
 
 #pragma once
 
+#include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 #include "runtime/types.h"
 
@@ -42,7 +43,7 @@ class TupleDescBuilder;
 // DescriptorTbl desc_tbl = builder.build();
 class DescriptorTblBuilder {
 public:
-    DescriptorTblBuilder(ObjectPool* object_pool);
+    DescriptorTblBuilder(RuntimeState* state, ObjectPool* object_pool);
     // a null dtor to pass codestyle check
     ~DescriptorTblBuilder() = default;
 
@@ -50,6 +51,7 @@ public:
     DescriptorTbl* build();
 
 private:
+    RuntimeState* _state;
     // Owned by caller.
     ObjectPool* _obj_pool;
 

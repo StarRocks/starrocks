@@ -18,11 +18,11 @@ public abstract class PhysicalJoinOperator extends PhysicalOperator {
     protected final String joinHint;
 
     protected PhysicalJoinOperator(OperatorType operatorType, JoinOperator joinType,
-                                ScalarOperator onPredicate,
-                                String joinHint,
-                                long limit,
-                                ScalarOperator predicate,
-                                Projection projection) {
+                                   ScalarOperator onPredicate,
+                                   String joinHint,
+                                   long limit,
+                                   ScalarOperator predicate,
+                                   Projection projection) {
         super(operatorType);
         this.joinType = joinType;
         this.onPredicate = onPredicate;

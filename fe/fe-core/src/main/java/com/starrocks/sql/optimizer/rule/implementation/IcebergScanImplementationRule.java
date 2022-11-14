@@ -25,7 +25,7 @@ public class IcebergScanImplementationRule extends ImplementationRule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         OptExpression result = null;
         LogicalIcebergScanOperator scan = (LogicalIcebergScanOperator) input.getOp();
-        if (scan.getTableType() == Table.TableType.ICEBERG) {
+        if (scan.getTable().getType() == Table.TableType.ICEBERG) {
             PhysicalIcebergScanOperator physicalIcebergScan = new PhysicalIcebergScanOperator(scan.getTable(),
                     scan.getColRefToColumnMetaMap(),
                     scan.getScanOperatorPredicates(),

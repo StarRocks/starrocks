@@ -28,8 +28,6 @@
 #include "http/http_channel.h"
 #include "http/http_headers.h"
 #include "http/http_request.h"
-#include "http/http_response.h"
-#include "runtime/exec_env.h"
 #include "util/metrics.h"
 
 #ifdef USE_STAROS
@@ -173,7 +171,7 @@ void JsonMetricsVisitor::visit(const std::string& prefix, const std::string& nam
     case MetricType::GAUGE:
         for (auto& it : collector->metrics()) {
             const MetricLabels& labels = it.first;
-            Metric* metric = reinterpret_cast<Metric*>(it.second);
+            auto* metric = reinterpret_cast<Metric*>(it.second);
             rapidjson::Value metric_obj(rapidjson::kObjectType);
             rapidjson::Value tag_obj(rapidjson::kObjectType);
             tag_obj.AddMember("metric", rapidjson::Value(name.c_str(), allocator), allocator);

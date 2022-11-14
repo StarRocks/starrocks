@@ -1,18 +1,18 @@
 # second
 
-## description
+## Description
 
-### Syntax
+Returns the second part for a given date. The return value ranges from 0 to 59.
+
+The `date` parameter must be of the DATE or DATETIME type.
+
+## Syntax
 
 ```Haskell
 INT SECOND(DATETIME date)
 ```
 
-It returns the seconds for a given date. The return values range from 0 to 59.
-
-The parameter is in Date or Datetime type.
-
-## example
+## Examples
 
 ```Plain Text
 MySQL > select second('2018-12-31 23:59:59');

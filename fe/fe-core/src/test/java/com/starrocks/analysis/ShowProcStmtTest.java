@@ -2,6 +2,7 @@
 package com.starrocks.analysis;
 
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.ShowProcStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -22,7 +23,6 @@ public class ShowProcStmtTest {
     public void testShowProc() {
         ShowProcStmt stmt = new ShowProcStmt("/dbs");
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.assertEquals("SHOW PROC '/dbs'", stmt.toSql());
         Assert.assertEquals("/dbs", stmt.getPath());
     }
 
@@ -38,11 +38,11 @@ public class ShowProcStmtTest {
     public void testgetRedirectStatus() {
         ShowProcStmt stmt = new ShowProcStmt("/");
         Assert.assertEquals(RedirectStatus.NO_FORWARD, stmt.getRedirectStatus());
-        stmt = new ShowProcStmt("/backends");
+        stmt = new ShowProcStmt("/routine_loads");
         Assert.assertEquals(RedirectStatus.FORWARD_NO_SYNC, stmt.getRedirectStatus());
-        stmt = new ShowProcStmt("/backends/");
+        stmt = new ShowProcStmt("/routine_loads/");
         Assert.assertEquals(RedirectStatus.FORWARD_NO_SYNC, stmt.getRedirectStatus());
-        stmt = new ShowProcStmt("/backends/1");
+        stmt = new ShowProcStmt("/routine_loads/1");
         Assert.assertEquals(RedirectStatus.FORWARD_NO_SYNC, stmt.getRedirectStatus());
     }
 }

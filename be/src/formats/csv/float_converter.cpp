@@ -24,7 +24,7 @@ Status FloatConverter<T>::write_quoted_string(OutputStream* os, const Column& co
 template <typename T>
 bool FloatConverter<T>::read_string(Column* column, Slice s, const Options& options) const {
     StringParser::ParseResult r;
-    DataType v = StringParser::string_to_float<DataType>(s.data, s.size, &r);
+    auto v = StringParser::string_to_float<DataType>(s.data, s.size, &r);
     if (r == StringParser::PARSE_SUCCESS) {
         down_cast<FixedLengthColumn<DataType>*>(column)->append_numbers(&v, sizeof(v));
     }

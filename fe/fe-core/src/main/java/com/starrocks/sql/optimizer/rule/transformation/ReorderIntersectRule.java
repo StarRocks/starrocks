@@ -23,9 +23,8 @@ public class ReorderIntersectRule extends TransformationRule {
     }
 
     @Override
-    public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
-        LogicalIntersectOperator intersectOperator = (LogicalIntersectOperator) input.getOp();
-        OptExpression intersectOpt = input.getGroupExpression().getGroup().extractLogicalTree();
+    public List<OptExpression> transform(OptExpression intersectOpt, OptimizerContext context) {
+        LogicalIntersectOperator intersectOperator = (LogicalIntersectOperator) intersectOpt.getOp();
         calculateStatistics(intersectOpt, context);
         OptExpression o = intersectOpt.getInputs().stream().min(
                 Comparator.comparingDouble(c -> c.getStatistics().getOutputRowCount())).get();

@@ -47,7 +47,6 @@ public:
         base_schema->set_num_short_key_columns(1);
         base_schema->set_keys_type(DUP_KEYS);
         base_schema->set_num_rows_per_row_block(65535);
-        base_schema->set_compress_kind(COMPRESS_LZ4);
         auto c0_id = next_id();
         auto c1_id = next_id();
         {
@@ -85,7 +84,6 @@ public:
         new_schema->set_num_short_key_columns(1);
         new_schema->set_keys_type(DUP_KEYS);
         new_schema->set_num_rows_per_row_block(65535);
-        new_schema->set_compress_kind(COMPRESS_LZ4);
         // c0 c1 id should be same as base tablet schema
         {
             auto c0 = new_schema->add_column();
@@ -265,7 +263,6 @@ public:
         base_schema->set_num_short_key_columns(1);
         base_schema->set_keys_type(DUP_KEYS);
         base_schema->set_num_rows_per_row_block(65535);
-        base_schema->set_compress_kind(COMPRESS_LZ4);
         auto c0_id = next_id();
         auto c1_id = next_id();
         {
@@ -302,7 +299,6 @@ public:
         new_schema->set_num_short_key_columns(1);
         new_schema->set_keys_type(DUP_KEYS);
         new_schema->set_num_rows_per_row_block(65535);
-        new_schema->set_compress_kind(COMPRESS_LZ4);
         // c0 c1 id should be same as base tablet schema
         {
             auto c0 = new_schema->add_column();
@@ -472,7 +468,6 @@ public:
         base_schema->set_num_short_key_columns(1);
         base_schema->set_keys_type(DUP_KEYS);
         base_schema->set_num_rows_per_row_block(65535);
-        base_schema->set_compress_kind(COMPRESS_LZ4);
         auto c0_id = next_id();
         auto c1_id = next_id();
         auto c2_id = next_id();
@@ -519,7 +514,6 @@ public:
         new_schema->set_num_short_key_columns(1);
         new_schema->set_keys_type(DUP_KEYS);
         new_schema->set_num_rows_per_row_block(65535);
-        new_schema->set_compress_kind(COMPRESS_LZ4);
         // c0 c1 c2 id should be same as base tablet schema
         {
             auto c1 = new_schema->add_column();

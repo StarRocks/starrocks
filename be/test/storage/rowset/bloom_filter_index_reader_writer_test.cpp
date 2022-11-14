@@ -23,7 +23,6 @@
 
 #include "common/logging.h"
 #include "fs/fs_memory.h"
-#include "fs/fs_util.h"
 #include "runtime/mem_tracker.h"
 #include "storage/key_coder.h"
 #include "storage/olap_common.h"
@@ -59,7 +58,7 @@ protected:
             std::unique_ptr<BloomFilterIndexWriter> bloom_filter_index_writer;
             BloomFilterOptions bf_options;
             BloomFilterIndexWriter::create(bf_options, type_info, &bloom_filter_index_writer);
-            const CppType* vals = (const CppType*)values;
+            const auto* vals = (const CppType*)values;
             for (int i = 0; i < value_count;) {
                 size_t num = std::min(1024, (int)value_count - i);
                 bloom_filter_index_writer->add_values(vals + i, num);
@@ -83,8 +82,7 @@ protected:
         std::string fname = kTestDir + "/" + file_name;
 
         *reader = new BloomFilterIndexReader();
-        ASSIGN_OR_ABORT(auto r,
-                        (*reader)->load(_fs.get(), fname, meta.bloom_filter_index(), true, false, _mem_tracker.get()));
+        ASSIGN_OR_ABORT(auto r, (*reader)->load(_fs.get(), fname, meta.bloom_filter_index(), true, false));
         ASSERT_TRUE(r);
         ASSERT_OK((*reader)->new_iterator(iter));
     }
@@ -110,7 +108,7 @@ protected:
             ASSERT_TRUE(st.ok());
             for (int i = 0; i < 1024; ++i) {
                 if (is_slice_type) {
-                    Slice* value = (Slice*)(val + i);
+                    auto* value = (Slice*)(val + i);
                     ASSERT_TRUE(bf->test_bytes(value->data, value->size));
                 } else {
                     ASSERT_TRUE(bf->test_bytes((char*)&val[i], sizeof(CppType)));
@@ -122,7 +120,7 @@ protected:
             ASSERT_TRUE(st.ok());
             for (int i = 1024; i < 2048; ++i) {
                 if (is_slice_type) {
-                    Slice* value = (Slice*)(val + i);
+                    auto* value = (Slice*)(val + i);
                     ASSERT_TRUE(bf->test_bytes(value->data, value->size));
                 } else {
                     ASSERT_TRUE(bf->test_bytes((char*)&val[i], sizeof(CppType)));
@@ -134,7 +132,7 @@ protected:
             ASSERT_TRUE(st.ok());
             for (int i = 2048; i < 3071; ++i) {
                 if (is_slice_type) {
-                    Slice* value = (Slice*)(val + i);
+                    auto* value = (Slice*)(val + i);
                     ASSERT_TRUE(bf->test_bytes(value->data, value->size));
                 } else {
                     ASSERT_TRUE(bf->test_bytes((char*)&val[i], sizeof(CppType)));
@@ -167,7 +165,7 @@ TEST_F(BloomFilterIndexReaderWriterTest, test_int) {
 
 TEST_F(BloomFilterIndexReaderWriterTest, test_bigint) {
     size_t num = 1024 * 3 - 1;
-    int64_t* val = new int64_t[num];
+    auto* val = new int64_t[num];
     for (int i = 0; i < num; ++i) {
         // there will be 3 bloom filter pages
         val[i] = 100000000 + i + 1;
@@ -181,7 +179,7 @@ TEST_F(BloomFilterIndexReaderWriterTest, test_bigint) {
 
 TEST_F(BloomFilterIndexReaderWriterTest, test_largeint) {
     size_t num = 1024 * 3 - 1;
-    int128_t* val = new int128_t[num];
+    auto* val = new int128_t[num];
     for (int i = 0; i < num; ++i) {
         // there will be 3 bloom filter pages
         val[i] = 100000000 + i + 1;
@@ -195,12 +193,12 @@ TEST_F(BloomFilterIndexReaderWriterTest, test_largeint) {
 
 TEST_F(BloomFilterIndexReaderWriterTest, test_varchar_type) {
     size_t num = 1024 * 3 - 1;
-    std::string* val = new std::string[num];
+    auto* val = new std::string[num];
     for (int i = 0; i < num; ++i) {
         // there will be 3 bloom filter pages
         val[i] = "prefix_" + std::to_string(i);
     }
-    Slice* slices = new Slice[num];
+    auto* slices = new Slice[num];
     for (int i = 0; i < num; ++i) {
         // there will be 3 bloom filter pages
         slices[i] = Slice(val[i].c_str(), val[i].size());
@@ -215,12 +213,12 @@ TEST_F(BloomFilterIndexReaderWriterTest, test_varchar_type) {
 
 TEST_F(BloomFilterIndexReaderWriterTest, test_char) {
     size_t num = 1024 * 3 - 1;
-    std::string* val = new std::string[num];
+    auto* val = new std::string[num];
     for (int i = 0; i < num; ++i) {
         // there will be 3 bloom filter pages
         val[i] = "prefix_" + std::to_string(10000 + i);
     }
-    Slice* slices = new Slice[num];
+    auto* slices = new Slice[num];
     for (int i = 0; i < num; ++i) {
         // there will be 3 bloom filter pages
         slices[i] = Slice(val[i].c_str(), val[i].size());
@@ -235,7 +233,7 @@ TEST_F(BloomFilterIndexReaderWriterTest, test_char) {
 
 TEST_F(BloomFilterIndexReaderWriterTest, test_date) {
     size_t num = 1024 * 3 - 1;
-    uint24_t* val = new uint24_t[num];
+    auto* val = new uint24_t[num];
     for (int i = 0; i < num; ++i) {
         // there will be 3 bloom filter pages
         val[i] = 10000 + i + 1;
@@ -249,7 +247,7 @@ TEST_F(BloomFilterIndexReaderWriterTest, test_date) {
 
 TEST_F(BloomFilterIndexReaderWriterTest, test_datetime) {
     size_t num = 1024 * 3 - 1;
-    int64_t* val = new int64_t[num];
+    auto* val = new int64_t[num];
     for (int i = 0; i < num; ++i) {
         // there will be 3 bloom filter pages
         val[i] = 10000 + i + 1;
@@ -263,7 +261,7 @@ TEST_F(BloomFilterIndexReaderWriterTest, test_datetime) {
 
 TEST_F(BloomFilterIndexReaderWriterTest, test_decimal) {
     size_t num = 1024 * 3 - 1;
-    decimal12_t* val = new decimal12_t[num];
+    auto* val = new decimal12_t[num];
     for (int i = 0; i < num; ++i) {
         // there will be 3 bloom filter pages
         val[i] = decimal12_t(i + 1, i + 1);

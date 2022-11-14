@@ -50,6 +50,15 @@ enum TQueryType {
     EXTERNAL
 }
 
+enum TLoadJobType {
+    BROKER,
+    SPARK,
+    INSERT_QUERY,
+    INSERT_VALUES,
+    STREAM_LOAD,
+    ROUTINE_LOAD,
+}
+
 enum TErrorHubType {
     MYSQL,
     BROKER,
@@ -88,6 +97,11 @@ enum TPipelineProfileLevel {
   DETAIL
 }
 
+enum TTabletInternalParallelMode {
+  AUTO,
+  FORCE_SPLIT
+}
+
 // Query options with their respective defaults
 struct TQueryOptions {
   1: optional bool abort_on_error = 0
@@ -104,7 +118,7 @@ struct TQueryOptions {
   12: optional i64 mem_limit = 2147483648
   13: optional bool abort_on_default_limit_exceeded = 0
   14: optional i32 query_timeout = 3600
-  15: optional bool is_report_success = 0
+  15: optional bool enable_profile = 0
   16: optional i32 codegen_level = 0
   // INT64::MAX
   17: optional i64 kudu_latest_observed_ts = 9223372036854775807 // Deprecated
@@ -173,6 +187,18 @@ struct TQueryOptions {
   61: optional bool enable_query_debug_trace;
 
   62: optional Types.TCompressionType load_transmission_compression_type;
+
+  63: optional TTabletInternalParallelMode tablet_internal_parallel_mode;
+
+  64: optional TLoadJobType load_job_type
+
+  66: optional bool use_scan_block_cache;
+
+  67: optional bool enable_pipeline_query_statistic = false;
+
+  68: optional i32 transmission_encode_level;
+  
+  69: optional bool enable_populate_block_cache;
 }
 
 
@@ -223,6 +249,10 @@ struct TPlanFragmentExecParams {
   52: optional bool enable_exchange_pass_through
 
   53: optional map<Types.TPlanNodeId, map<i32, list<TScanRangeParams>>> node_to_per_driver_seq_scan_ranges
+
+  54: optional bool enable_exchange_perf
+
+  70: optional i32 pipeline_sink_dop
 }
 
 // Global query parameters assigned by the coordinator.
@@ -284,7 +314,7 @@ struct TExecPlanFragmentParams {
 
   // Whether reportd when the backend fails
   // required in V1
-  9: optional bool is_report_success
+  9: optional bool enable_profile
 
   // required in V1
   10: optional Types.TResourceInfo resource_info
@@ -366,64 +396,6 @@ struct TTransmitDataResult {
   2: optional i64 packet_seq
   3: optional Types.TUniqueId dest_fragment_instance_id
   4: optional Types.TPlanNodeId dest_node_id
-}
-
-struct TTabletWithPartition {
-    1: required i64 partition_id
-    2: required i64 tablet_id
-}
-
-// open a tablet writer
-struct TTabletWriterOpenParams {
-    1: required Types.TUniqueId id
-    2: required i64 index_id
-    3: required i64 txn_id
-    4: required Descriptors.TOlapTableSchemaParam schema
-    5: required list<TTabletWithPartition> tablets
-
-    6: required i32 num_senders
-}
-
-struct TTabletWriterOpenResult {
-    1: required Status.TStatus status
-}
-
-// add batch to tablet writer
-struct TTabletWriterAddBatchParams {
-    1: required Types.TUniqueId id
-    2: required i64 index_id
-
-    3: required i64 packet_seq
-    4: required list<Types.TTabletId> tablet_ids
-    5: required Data.TRowBatch row_batch
-
-    6: required i32 sender_no
-}
-
-struct TTabletWriterAddBatchResult {
-    1: required Status.TStatus status
-}
-
-struct TTabletWriterCloseParams {
-    1: required Types.TUniqueId id
-    2: required i64 index_id
-
-    3: required i32 sender_no
-}
-
-struct TTabletWriterCloseResult {
-    1: required Status.TStatus status
-}
-
-//
-struct TTabletWriterCancelParams {
-    1: required Types.TUniqueId id
-    2: required i64 index_id
-
-    3: required i32 sender_no
-}
-
-struct TTabletWriterCancelResult {
 }
 
 struct TFetchDataParams {

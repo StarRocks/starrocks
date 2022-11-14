@@ -24,8 +24,6 @@ package com.starrocks.load;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.Gson;
-import com.starrocks.analysis.CancelExportStmt;
-import com.starrocks.analysis.ExportStmt;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
@@ -43,6 +41,8 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.mysql.privilege.Privilege;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.CancelExportStmt;
+import com.starrocks.sql.ast.ExportStmt;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -301,8 +301,8 @@ public class ExportMgr {
 
     private boolean isJobExpired(ExportJob job, long currentTimeMs) {
         return (currentTimeMs - job.getCreateTimeMs()) / 1000 > Config.history_job_keep_max_second
-                        && (job.getState() == ExportJob.JobState.CANCELLED
-                        || job.getState() == ExportJob.JobState.FINISHED);
+                && (job.getState() == ExportJob.JobState.CANCELLED
+                || job.getState() == ExportJob.JobState.FINISHED);
     }
 
     public void removeOldExportJobs() {

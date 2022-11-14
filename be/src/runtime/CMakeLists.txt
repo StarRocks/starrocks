@@ -98,6 +98,7 @@ set(RUNTIME_FILES
     runtime_filter_cache.cpp
     lake_tablets_channel.cpp
     lake_snapshot_loader.cpp
+    profile_report_worker.cpp
 )
 
 set(RUNTIME_FILES ${RUNTIME_FILES}

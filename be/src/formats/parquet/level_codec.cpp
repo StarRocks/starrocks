@@ -17,7 +17,7 @@ Status LevelDecoder::parse(tparquet::Encoding::type encoding, level_t max_level,
             return Status::InternalError("");
         }
 
-        uint8_t* data = (uint8_t*)slice->data;
+        auto* data = (uint8_t*)slice->data;
         uint32_t num_bytes = decode_fixed32_le(data);
         if (num_bytes > slice->size - 4) {
             return Status::InternalError("");

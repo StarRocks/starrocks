@@ -46,11 +46,13 @@ private:
 class LocalPartitionTopnSinkOperatorFactory final : public OperatorFactory {
 public:
     LocalPartitionTopnSinkOperatorFactory(int32_t id, int32_t plan_node_id,
-                                          const LocalPartitionTopnContextFactoryPtr& partition_topn_ctx_factory);
+                                          LocalPartitionTopnContextFactoryPtr partition_topn_ctx_factory);
 
     ~LocalPartitionTopnSinkOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
+
+    Status prepare(RuntimeState* state) override;
 
 private:
     LocalPartitionTopnContextFactoryPtr _partition_topn_ctx_factory;

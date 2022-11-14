@@ -76,7 +76,7 @@ public class CreateLakeTableTest {
             {
                 agent.getServiceShardStorageInfo();
                 result = shardStorageInfo;
-                agent.createShards(anyInt, (ShardStorageInfo) any);
+                agent.createShards(anyInt, (ShardStorageInfo) any, anyLong);
                 returns(Lists.newArrayList(20001L, 20002L, 20003L),
                         Lists.newArrayList(20004L, 20005L), Lists.newArrayList(20006L, 20007L),
                         Lists.newArrayList(20008L), Lists.newArrayList(20009L));
@@ -124,7 +124,7 @@ public class CreateLakeTableTest {
             {
                 agent.getServiceShardStorageInfo();
                 result = shardStorageInfo;
-                agent.createShards(anyInt, (ShardStorageInfo) any);
+                agent.createShards(anyInt, (ShardStorageInfo) any, anyLong);
                 returns(Lists.newArrayList(20001L, 20002L, 20003L),
                         Lists.newArrayList(20004L, 20005L), Lists.newArrayList(20006L, 20007L),
                         Lists.newArrayList(20008L), Lists.newArrayList(20009L));
@@ -148,10 +148,10 @@ public class CreateLakeTableTest {
             Assert.assertEquals(3600, storageInfo.getStorageCacheTtlS());
             // check partition property
             long partitionId = lakeTable.getPartition("single_partition_duplicate_key_cache").getId();
-            StorageInfo partitionStorageInfo = lakeTable.getPartitionInfo().getStorageInfo(partitionId);
-            Assert.assertTrue(partitionStorageInfo.isEnableStorageCache());
-            Assert.assertEquals(3600, partitionStorageInfo.getStorageCacheTtlS());
-            Assert.assertEquals(false, partitionStorageInfo.isAllowAsyncWriteBack());
+            StorageCacheInfo partitionStorageCacheInfo = lakeTable.getPartitionInfo().getStorageCacheInfo(partitionId);
+            Assert.assertTrue(partitionStorageCacheInfo.isEnableStorageCache());
+            Assert.assertEquals(3600, partitionStorageCacheInfo.getStorageCacheTtlS());
+            Assert.assertEquals(false, partitionStorageCacheInfo.isAllowAsyncWriteBack());
         }
 
         ExceptionChecker.expectThrowsNoException(() -> createTable(
@@ -171,14 +171,14 @@ public class CreateLakeTableTest {
             Assert.assertEquals(7200, storageInfo.getStorageCacheTtlS());
             // check partition property
             long partition1Id = lakeTable.getPartition("p1").getId();
-            StorageInfo partition1StorageInfo = lakeTable.getPartitionInfo().getStorageInfo(partition1Id);
-            Assert.assertTrue(partition1StorageInfo.isEnableStorageCache());
-            Assert.assertEquals(7200, partition1StorageInfo.getStorageCacheTtlS());
+            StorageCacheInfo partition1StorageCacheInfo = lakeTable.getPartitionInfo().getStorageCacheInfo(partition1Id);
+            Assert.assertTrue(partition1StorageCacheInfo.isEnableStorageCache());
+            Assert.assertEquals(7200, partition1StorageCacheInfo.getStorageCacheTtlS());
             long partition2Id = lakeTable.getPartition("p2").getId();
-            StorageInfo partition2StorageInfo = lakeTable.getPartitionInfo().getStorageInfo(partition2Id);
-            Assert.assertTrue(partition2StorageInfo.isEnableStorageCache());
-            Assert.assertEquals(7200, partition2StorageInfo.getStorageCacheTtlS());
-            Assert.assertEquals(true, partition2StorageInfo.isAllowAsyncWriteBack());
+            StorageCacheInfo partition2StorageCacheInfo = lakeTable.getPartitionInfo().getStorageCacheInfo(partition2Id);
+            Assert.assertTrue(partition2StorageCacheInfo.isEnableStorageCache());
+            Assert.assertEquals(7200, partition2StorageCacheInfo.getStorageCacheTtlS());
+            Assert.assertEquals(true, partition2StorageCacheInfo.isAllowAsyncWriteBack());
         }
 
         ExceptionChecker.expectThrowsNoException(() -> createTable(
@@ -197,14 +197,14 @@ public class CreateLakeTableTest {
             Assert.assertEquals(0, storageInfo.getStorageCacheTtlS());
             // check partition property
             long partition1Id = lakeTable.getPartition("p1").getId();
-            StorageInfo partition1StorageInfo = lakeTable.getPartitionInfo().getStorageInfo(partition1Id);
-            Assert.assertFalse(partition1StorageInfo.isEnableStorageCache());
-            Assert.assertEquals(0, partition1StorageInfo.getStorageCacheTtlS());
+            StorageCacheInfo partition1StorageCacheInfo = lakeTable.getPartitionInfo().getStorageCacheInfo(partition1Id);
+            Assert.assertFalse(partition1StorageCacheInfo.isEnableStorageCache());
+            Assert.assertEquals(0, partition1StorageCacheInfo.getStorageCacheTtlS());
             long partition2Id = lakeTable.getPartition("p2").getId();
-            StorageInfo partition2StorageInfo = lakeTable.getPartitionInfo().getStorageInfo(partition2Id);
-            Assert.assertTrue(partition2StorageInfo.isEnableStorageCache());
+            StorageCacheInfo partition2StorageCacheInfo = lakeTable.getPartitionInfo().getStorageCacheInfo(partition2Id);
+            Assert.assertTrue(partition2StorageCacheInfo.isEnableStorageCache());
             Assert.assertEquals(Config.tablet_sched_storage_cooldown_second,
-                    partition2StorageInfo.getStorageCacheTtlS());
+                    partition2StorageCacheInfo.getStorageCacheTtlS());
         }
     }
 

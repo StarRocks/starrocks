@@ -3,28 +3,30 @@
 package com.starrocks.rpc;
 
 import com.baidu.jprotobuf.pbrpc.ProtobufRPC;
-import com.starrocks.lake.proto.AbortTxnRequest;
-import com.starrocks.lake.proto.AbortTxnResponse;
-import com.starrocks.lake.proto.CompactRequest;
-import com.starrocks.lake.proto.CompactResponse;
-import com.starrocks.lake.proto.DeleteDataRequest;
-import com.starrocks.lake.proto.DeleteDataResponse;
-import com.starrocks.lake.proto.DeleteTabletRequest;
-import com.starrocks.lake.proto.DeleteTabletResponse;
-import com.starrocks.lake.proto.DropTableRequest;
-import com.starrocks.lake.proto.DropTableResponse;
-import com.starrocks.lake.proto.LockTabletMetadataRequest;
-import com.starrocks.lake.proto.LockTabletMetadataResponse;
-import com.starrocks.lake.proto.PublishLogVersionRequest;
-import com.starrocks.lake.proto.PublishLogVersionResponse;
-import com.starrocks.lake.proto.PublishVersionRequest;
-import com.starrocks.lake.proto.PublishVersionResponse;
-import com.starrocks.lake.proto.TabletStatRequest;
-import com.starrocks.lake.proto.TabletStatResponse;
-import com.starrocks.lake.proto.UnlockTabletMetadataRequest;
-import com.starrocks.lake.proto.UnlockTabletMetadataResponse;
-import com.starrocks.lake.proto.UploadSnapshotsRequest;
-import com.starrocks.lake.proto.UploadSnapshotsResponse;
+import com.starrocks.proto.AbortTxnRequest;
+import com.starrocks.proto.AbortTxnResponse;
+import com.starrocks.proto.CompactRequest;
+import com.starrocks.proto.CompactResponse;
+import com.starrocks.proto.DeleteDataRequest;
+import com.starrocks.proto.DeleteDataResponse;
+import com.starrocks.proto.DeleteTabletRequest;
+import com.starrocks.proto.DeleteTabletResponse;
+import com.starrocks.proto.DropTableRequest;
+import com.starrocks.proto.DropTableResponse;
+import com.starrocks.proto.LockTabletMetadataRequest;
+import com.starrocks.proto.LockTabletMetadataResponse;
+import com.starrocks.proto.PublishLogVersionRequest;
+import com.starrocks.proto.PublishLogVersionResponse;
+import com.starrocks.proto.PublishVersionRequest;
+import com.starrocks.proto.PublishVersionResponse;
+import com.starrocks.proto.RestoreSnapshotsRequest;
+import com.starrocks.proto.RestoreSnapshotsResponse;
+import com.starrocks.proto.TabletStatRequest;
+import com.starrocks.proto.TabletStatResponse;
+import com.starrocks.proto.UnlockTabletMetadataRequest;
+import com.starrocks.proto.UnlockTabletMetadataResponse;
+import com.starrocks.proto.UploadSnapshotsRequest;
+import com.starrocks.proto.UploadSnapshotsResponse;
 
 import java.util.concurrent.Future;
 
@@ -35,7 +37,7 @@ public interface LakeService {
     @ProtobufRPC(serviceName = "LakeService", methodName = "abort_txn", onceTalkTimeout = 5000)
     Future<AbortTxnResponse> abortTxn(AbortTxnRequest request);
 
-    @ProtobufRPC(serviceName = "LakeService", methodName = "compact", onceTalkTimeout = 1800000)
+    @ProtobufRPC(serviceName = "LakeService", methodName = "compact", onceTalkTimeout = 86400000)
     Future<CompactResponse> compact(CompactRequest request);
 
     @ProtobufRPC(serviceName = "LakeService", methodName = "delete_tablet", onceTalkTimeout = 5000)
@@ -61,5 +63,8 @@ public interface LakeService {
 
     @ProtobufRPC(serviceName = "LakeService", methodName = "upload_snapshots", onceTalkTimeout = 5000)
     Future<UploadSnapshotsResponse> uploadSnapshots(UploadSnapshotsRequest request);
+
+    @ProtobufRPC(serviceName = "LakeService", methodName = "restore_snapshots", onceTalkTimeout = 5000)
+    Future<RestoreSnapshotsResponse> restoreSnapshots(RestoreSnapshotsRequest request);
 }
 

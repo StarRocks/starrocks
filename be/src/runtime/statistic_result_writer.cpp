@@ -6,7 +6,6 @@
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "exprs/expr.h"
-#include "gen_cpp/Data_types.h"
 #include "runtime/buffer_control_block.h"
 #include "runtime/primitive_type.h"
 #include "util/thrift_util.h"
@@ -40,8 +39,60 @@ void StatisticResultWriter::_init_profile() {
 
 Status StatisticResultWriter::append_chunk(vectorized::Chunk* chunk) {
     SCOPED_TIMER(_total_timer);
+    auto process_status = _process_chunk(chunk);
+    if (!process_status.ok() || process_status.value() == nullptr) {
+        return process_status.status();
+    }
+    auto result = std::move(process_status.value());
+
+    size_t num_rows = result->result_batch.rows.size();
+    Status status = _sinker->add_batch(result);
+
+    if (status.ok()) {
+        _written_rows += num_rows;
+        return status;
+    }
+
+    LOG(WARNING) << "Append statistic result to sink failed.";
+    return status;
+}
+
+StatusOr<TFetchDataResultPtrs> StatisticResultWriter::process_chunk(vectorized::Chunk* chunk) {
+    SCOPED_TIMER(_total_timer);
+    TFetchDataResultPtrs results;
+    auto process_status = _process_chunk(chunk);
+    if (!process_status.ok()) {
+        return process_status.status();
+    }
+    if (process_status.value() != nullptr) {
+        results.push_back(std::move(process_status.value()));
+    }
+    return results;
+}
+
+StatusOr<bool> StatisticResultWriter::try_add_batch(TFetchDataResultPtrs& results) {
+    size_t num_rows = 0;
+    for (auto& result : results) {
+        num_rows += result->result_batch.rows.size();
+    }
+
+    auto status = _sinker->try_add_batch(results);
+
+    if (status.ok()) {
+        if (status.value()) {
+            _written_rows += num_rows;
+            results.clear();
+        }
+    } else {
+        results.clear();
+        LOG(WARNING) << "Append statistic result to sink failed.";
+    }
+    return status;
+}
+
+StatusOr<TFetchDataResultPtr> StatisticResultWriter::_process_chunk(vectorized::Chunk* chunk) {
     if (nullptr == chunk || 0 == chunk->num_rows()) {
-        return Status::OK();
+        return nullptr;
     }
 
     // Step 1: compute expr
@@ -78,18 +129,7 @@ Status StatisticResultWriter::append_chunk(vectorized::Chunk* chunk) {
         RETURN_IF_ERROR_WITH_WARN(_fill_statistic_histogram(version, result_columns, chunk, result.get()),
                                   "Fill histogram statistic data failed");
     }
-
-    // Step 4: send
-    size_t num_rows = result->result_batch.rows.size();
-    Status status = _sinker->add_batch(result);
-
-    if (status.ok()) {
-        _written_rows += num_rows;
-        return status;
-    }
-
-    LOG(WARNING) << "Append statistic result to sink failed.";
-    return status;
+    return result;
 }
 
 Status StatisticResultWriter::_fill_dict_statistic_data(int version, const vectorized::Columns& columns,
@@ -133,12 +173,12 @@ Status StatisticResultWriter::_fill_statistic_data_v1(int version, const vectori
     auto& dbIds = ColumnHelper::cast_to_raw<TYPE_BIGINT>(columns[2])->get_data();
     auto& tableIds = ColumnHelper::cast_to_raw<TYPE_BIGINT>(columns[3])->get_data();
     BinaryColumn* nameColumn = ColumnHelper::cast_to_raw<TYPE_VARCHAR>(columns[4]);
-    Int64Column* rowCounts = down_cast<Int64Column*>(ColumnHelper::get_data_column(columns[5].get()));
-    Int64Column* dataSizes = down_cast<Int64Column*>(ColumnHelper::get_data_column(columns[6].get()));
-    Int64Column* countDistincts = down_cast<Int64Column*>(ColumnHelper::get_data_column(columns[7].get()));
-    Int64Column* nullCounts = down_cast<Int64Column*>(ColumnHelper::get_data_column(columns[8].get()));
-    BinaryColumn* maxColumn = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(columns[9].get()));
-    BinaryColumn* minColumn = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(columns[10].get()));
+    auto* rowCounts = down_cast<Int64Column*>(ColumnHelper::get_data_column(columns[5].get()));
+    auto* dataSizes = down_cast<Int64Column*>(ColumnHelper::get_data_column(columns[6].get()));
+    auto* countDistincts = down_cast<Int64Column*>(ColumnHelper::get_data_column(columns[7].get()));
+    auto* nullCounts = down_cast<Int64Column*>(ColumnHelper::get_data_column(columns[8].get()));
+    auto* maxColumn = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(columns[9].get()));
+    auto* minColumn = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(columns[10].get()));
 
     std::vector<TStatisticData> data_list;
     int num_rows = chunk->num_rows();
@@ -172,10 +212,10 @@ Status StatisticResultWriter::_fill_statistic_histogram(int version, const vecto
     SCOPED_TIMER(_serialize_timer);
     DCHECK(columns.size() == 5);
 
-    Int64Column* dbIds = down_cast<Int64Column*>(ColumnHelper::get_data_column(columns[1].get()));
-    Int64Column* tableIds = down_cast<Int64Column*>(ColumnHelper::get_data_column(columns[2].get()));
-    BinaryColumn* nameColumn = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(columns[3].get()));
-    BinaryColumn* histogramColumn = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(columns[4].get()));
+    auto* dbIds = down_cast<Int64Column*>(ColumnHelper::get_data_column(columns[1].get()));
+    auto* tableIds = down_cast<Int64Column*>(ColumnHelper::get_data_column(columns[2].get()));
+    auto* nameColumn = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(columns[3].get()));
+    auto* histogramColumn = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(columns[4].get()));
 
     std::vector<TStatisticData> data_list;
     int num_rows = chunk->num_rows();

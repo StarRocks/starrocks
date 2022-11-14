@@ -30,12 +30,17 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.starrocks.analysis.Analyzer;
-import com.starrocks.analysis.PartitionNames;
+import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.analysis.DescriptorTable;
+import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotDescriptor;
+import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.TupleDescriptor;
+import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
+import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -46,6 +51,8 @@ import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.common.Pair;
+import com.starrocks.lake.LakeTablet;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
@@ -55,12 +62,15 @@ import com.starrocks.lake.LakeTablet;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TInternalScanRange;
 import com.starrocks.thrift.TLakeScanNode;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TNormalOlapScanNode;
+import com.starrocks.thrift.TNormalPlanNode;
 import com.starrocks.thrift.TOlapScanNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
@@ -109,13 +119,15 @@ public class OlapScanNode extends ScanNode {
     private long selectedIndexId = -1;
     private int selectedPartitionNum = 0;
     private Collection<Long> selectedPartitionIds = Lists.newArrayList();
-    private Collection<String> selectedPartitionNames = Lists.newArrayList();
-    private Collection<Long> selectedPartitionVersions = Lists.newArrayList();
+    private final Collection<String> selectedPartitionNames = Lists.newArrayList();
+    private final Collection<Long> selectedPartitionVersions = Lists.newArrayList();
     private long actualRows = 0;
 
     // List of tablets will be scanned by current olap_scan_node
     private ArrayList<Long> scanTabletIds = Lists.newArrayList();
     private boolean isFinalized = false;
+
+    private boolean isSortedByKeyPerTablet = false;
 
     private final HashSet<Long> scanBackendIds = new HashSet<>();
 
@@ -145,6 +157,10 @@ public class OlapScanNode extends ScanNode {
     public void setCanTurnOnPreAggr(boolean canChangePreAggr) {
     }
 
+    public void setIsSortedByKeyPerTablet(boolean isSortedByKeyPerTablet) {
+        this.isSortedByKeyPerTablet = isSortedByKeyPerTablet;
+    }
+
     public Collection<Long> getSelectedPartitionIds() {
         return selectedPartitionIds;
     }
@@ -164,6 +180,10 @@ public class OlapScanNode extends ScanNode {
         this.dictStringIdToIntIds = dictStringIdToIntIds;
     }
 
+    public long getActualRows() {
+        return actualRows;
+    }
+
     // The column names applied dict optimization
     // used for explain
     private final List<String> appliedDictStringColumns = new ArrayList<>();
@@ -178,13 +198,13 @@ public class OlapScanNode extends ScanNode {
 
     private final List<String> unUsedOutputStringColumns = new ArrayList<>();
 
-    public void setUnUsedOutputStringColumns(Set<Integer> unUsedOutputColumnIds, Set<String> aggTableValueColumnNames) {
+    public void setUnUsedOutputStringColumns(Set<Integer> unUsedOutputColumnIds, Set<String> aggOrPrimaryKeyTableValueColumnNames) {
         for (SlotDescriptor slot : desc.getSlots()) {
             if (!slot.isMaterialized()) {
                 continue;
             }
             if (unUsedOutputColumnIds.contains(slot.getId().asInt()) &&
-                    !aggTableValueColumnNames.contains(slot.getColumn().getName())) {
+                    !aggOrPrimaryKeyTableValueColumnNames.contains(slot.getColumn().getName())) {
                 unUsedOutputStringColumns.add(slot.getColumn().getName());
             }
         }
@@ -305,6 +325,7 @@ public class OlapScanNode extends ScanNode {
             internalRange.setVersion(visibleVersionStr);
             internalRange.setVersion_hash("0");
             internalRange.setTablet_id(tabletId);
+            internalRange.setPartition_id(partition.getId());
 
             // random shuffle List && only collect one copy
             List<Replica> allQueryableReplicas = Lists.newArrayList();
@@ -471,117 +492,102 @@ public class OlapScanNode extends ScanNode {
     protected String getNodeExplainString(String prefix, TExplainLevel detailLevel) {
         StringBuilder output = new StringBuilder();
 
-        output.append(prefix).append("TABLE: ").append(olapTable.getName()).append("\n");
+        // TODO: unify them
+        if (detailLevel != TExplainLevel.VERBOSE) {
+            output.append(prefix).append("TABLE: ").append(olapTable.getName()).append("\n");
+        } else {
+            output.append(prefix).append("table: ").append(olapTable.getName())
+                    .append(", ").append("rollup: ")
+                    .append(olapTable.getIndexNameById(selectedIndexId)).append("\n");
+        }
 
         if (null != sortColumn) {
             output.append(prefix).append("SORT COLUMN: ").append(sortColumn).append("\n");
         }
-        if (isPreAggregation) {
-            output.append(prefix).append("PREAGGREGATION: ON").append("\n");
-        } else {
-            output.append(prefix).append("PREAGGREGATION: OFF. Reason: ").append(reasonOfPreAggregation).append("\n");
-        }
-        if (!conjuncts.isEmpty()) {
-            output.append(prefix).append("PREDICATES: ").append(
-                    getExplainString(conjuncts)).append("\n");
-        }
 
-        output.append(prefix).append(String.format(
-                "partitions=%s/%s",
-                selectedPartitionNum,
-                olapTable.getPartitions().size()));
-
-        String indexName = olapTable.getIndexNameById(selectedIndexId);
-        output.append("\n").append(prefix).append(String.format("rollup: %s", indexName));
-
-        output.append("\n");
-
-        output.append(prefix).append(String.format(
-                "tabletRatio=%s/%s", selectedTabletsNum, totalTabletsNum));
-        output.append("\n");
-
-        // We print up to 10 tablet, and we print "..." if the number is more than 10
-        if (scanTabletIds.size() > 10) {
-            List<Long> firstTenTabletIds = scanTabletIds.subList(0, 10);
-            output.append(prefix).append(String.format("tabletList=%s ...", Joiner.on(",").join(firstTenTabletIds)));
-        } else {
-            output.append(prefix).append(String.format("tabletList=%s", Joiner.on(",").join(scanTabletIds)));
-        }
-
-        output.append("\n");
-
-        output.append(prefix).append(String.format(
-                "cardinality=%s", cardinality));
-        output.append("\n");
-
-        output.append(prefix).append(String.format(
-                "avgRowSize=%s", avgRowSize));
-        output.append("\n");
-
-        output.append(prefix).append(String.format(
-                "numNodes=%s", numNodes));
-        output.append("\n");
-
-        return output.toString();
-    }
-
-    @Override
-    protected String getNodeVerboseExplain(String prefix) {
-        StringBuilder output = new StringBuilder();
-
-        output.append(prefix).append("table: ").append(olapTable.getName())
-                .append(", ").append("rollup: ")
-                .append(olapTable.getIndexNameById(selectedIndexId)).append("\n");
-
-        if (isPreAggregation) {
-            output.append(prefix).append("preAggregation: on").append("\n");
-        } else {
-            output.append(prefix).append("preAggregation: off. Reason: ").append(reasonOfPreAggregation).append("\n");
-        }
-        if (!conjuncts.isEmpty()) {
-            output.append(prefix).append("Predicates: ").append(getVerboseExplain(conjuncts)).append("\n");
-        }
-
-        if (!dictStringIdToIntIds.isEmpty()) {
-            List<String> flatDictList = dictStringIdToIntIds.entrySet().stream().limit(5)
-                    .map((entry) -> "(" + entry.getKey() + "," + entry.getValue() + ")").collect(Collectors.toList());
-            String format_template = "dictStringIdToIntIds=%s";
-            if (dictStringIdToIntIds.size() > 5) {
-                format_template = format_template + "...";
+        if (detailLevel != TExplainLevel.VERBOSE) {
+            if (isPreAggregation) {
+                output.append(prefix).append("PREAGGREGATION: ON").append("\n");
+            } else {
+                output.append(prefix).append("PREAGGREGATION: OFF. Reason: ").append(reasonOfPreAggregation).append("\n");
             }
-            output.append(prefix).append(String.format(format_template, Joiner.on(",").join(flatDictList)));
-            output.append("\n");
-        }
-
-        if (!appliedDictStringColumns.isEmpty()) {
-            int maxSize = Math.min(appliedDictStringColumns.size(), 5);
-            List<String> printList = appliedDictStringColumns.subList(0, maxSize);
-            String format_template = "dict_col=%s";
-            if (dictStringIdToIntIds.size() > 5) {
-                format_template = format_template + "...";
+            if (!conjuncts.isEmpty()) {
+                output.append(prefix).append("PREDICATES: ").append(
+                        getExplainString(conjuncts)).append("\n");
             }
-            output.append(prefix).append(String.format(format_template, Joiner.on(",").join(printList)));
-            output.append("\n");
-        }
-
-        output.append(prefix).append(String.format(
-                        "partitionsRatio=%s/%s",
-                        selectedPartitionNum,
-                        olapTable.getPartitions().size())).append(", ")
-                .append(String.format("tabletsRatio=%s/%s", selectedTabletsNum, totalTabletsNum)).append("\n");
-
-        if (scanTabletIds.size() > 10) {
-            List<Long> firstTenTabletIds = scanTabletIds.subList(0, 10);
-            output.append(prefix).append(String.format("tabletList=%s ...", Joiner.on(",").join(firstTenTabletIds)));
         } else {
-            output.append(prefix).append(String.format("tabletList=%s", Joiner.on(",").join(scanTabletIds)));
-        }
-        output.append("\n");
+            if (isPreAggregation) {
+                output.append(prefix).append("preAggregation: on").append("\n");
+            } else {
+                output.append(prefix).append("preAggregation: off. Reason: ").append(reasonOfPreAggregation).append("\n");
+            }
+            if (!conjuncts.isEmpty()) {
+                output.append(prefix).append("Predicates: ").append(getVerboseExplain(conjuncts)).append("\n");
+            }
+            if (!dictStringIdToIntIds.isEmpty()) {
+                List<String> flatDictList = dictStringIdToIntIds.entrySet().stream().limit(5)
+                        .map((entry) -> "(" + entry.getKey() + "," + entry.getValue() + ")").collect(Collectors.toList());
+                String format_template = "dictStringIdToIntIds=%s";
+                if (dictStringIdToIntIds.size() > 5) {
+                    format_template = format_template + "...";
+                }
+                output.append(prefix).append(String.format(format_template, Joiner.on(",").join(flatDictList)));
+                output.append("\n");
+            }
 
-        output.append(prefix).append(String.format(
-                        "actualRows=%s", actualRows))
-                .append(", ").append(String.format(
-                        "avgRowSize=%s", avgRowSize)).append("\n");
+            if (!appliedDictStringColumns.isEmpty()) {
+                int maxSize = Math.min(appliedDictStringColumns.size(), 5);
+                List<String> printList = appliedDictStringColumns.subList(0, maxSize);
+                String format_template = "dict_col=%s";
+                if (dictStringIdToIntIds.size() > 5) {
+                    format_template = format_template + "...";
+                }
+                output.append(prefix).append(String.format(format_template, Joiner.on(",").join(printList)));
+                output.append("\n");
+            }
+        }
+
+        if (detailLevel != TExplainLevel.VERBOSE) {
+            output.append(prefix).append(String.format("partitions=%s/%s\n", selectedPartitionNum,
+                    olapTable.getPartitions().size()));
+
+            String indexName = olapTable.getIndexNameById(selectedIndexId);
+            output.append(prefix).append(String.format("rollup: %s\n", indexName));
+
+            output.append(prefix).append(String.format("tabletRatio=%s/%s\n", selectedTabletsNum, totalTabletsNum));
+
+            // We print up to 10 tablet, and we print "..." if the number is more than 10
+            if (scanTabletIds.size() > 10) {
+                List<Long> firstTenTabletIds = scanTabletIds.subList(0, 10);
+                output.append(prefix).append(String.format("tabletList=%s ...", Joiner.on(",").join(firstTenTabletIds)));
+            } else {
+                output.append(prefix).append(String.format("tabletList=%s", Joiner.on(",").join(scanTabletIds)));
+            }
+
+            output.append("\n");
+            output.append(prefix).append(String.format("cardinality=%s\n", cardinality));
+            output.append(prefix).append(String.format("avgRowSize=%s\n", avgRowSize));
+            output.append(prefix).append(String.format("numNodes=%s\n", numNodes));
+        } else {
+            output.append(prefix).append(String.format(
+                            "partitionsRatio=%s/%s",
+                            selectedPartitionNum,
+                            olapTable.getPartitions().size())).append(", ")
+                    .append(String.format("tabletsRatio=%s/%s", selectedTabletsNum, totalTabletsNum)).append("\n");
+
+            if (scanTabletIds.size() > 10) {
+                List<Long> firstTenTabletIds = scanTabletIds.subList(0, 10);
+                output.append(prefix).append(String.format("tabletList=%s ...", Joiner.on(",").join(firstTenTabletIds)));
+            } else {
+                output.append(prefix).append(String.format("tabletList=%s", Joiner.on(",").join(scanTabletIds)));
+            }
+            output.append("\n");
+
+            output.append(prefix).append(String.format("actualRows=%s", actualRows))
+                    .append(", ").append(String.format("avgRowSize=%s\n", avgRowSize));
+            return output.toString();
+        }
+
         return output.toString();
     }
 
@@ -643,6 +649,7 @@ public class OlapScanNode extends ScanNode {
             if (!olapTable.hasDelete()) {
                 msg.olap_scan_node.setUnused_output_column_name(unUsedOutputStringColumns);
             }
+            msg.olap_scan_node.setSorted_by_keys_per_tablet(isSortedByKeyPerTablet);
         }
     }
 
@@ -698,5 +705,110 @@ public class OlapScanNode extends ScanNode {
     @VisibleForTesting
     public long getSelectedIndexId() {
         return selectedIndexId;
+    }
+
+    @Override
+    public void normalizeConjuncts(FragmentNormalizer normalizer, TNormalPlanNode planNode, List<Expr> conjuncts) {
+        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+        if (partitionInfo.getType() != PartitionType.RANGE) {
+            normalizer.setUncacheable(true);
+            return;
+        }
+        // suppress NotImplementationException
+        RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+        List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
+        // Only support one-column partition key, so it is uncacheable for multi-column partition key.
+        if (partitionColumns.size() != 1) {
+            normalizer.setUncacheable(true);
+            return;
+        }
+        Column column = partitionColumns.get(0);
+        List<SlotDescriptor> slots = normalizer.getExecPlan().getDescTbl().getTupleDesc(tupleIds.get(0)).getSlots();
+        List<Pair<SlotId, String>> slotIdToColNames =
+                slots.stream().map(s -> new Pair<>(s.getId(), s.getColumn().getName()))
+                        .collect(Collectors.toList());
+
+        SlotId slotId = slotIdToColNames.stream()
+                .filter(s -> s.second.equalsIgnoreCase(column.getName()))
+                .findFirst().map(s -> s.first).orElse(new SlotId(-1));
+
+        // slotId.isValid means that whereClause contains no predicates involving partition columns. so the query
+        // is equivalent to the query with a superset of all the partitions, so we needs add a fake slotId that
+        // represents the partition column to the slot remapping. for an example:
+        // table t0 is partition by dt and has there partitions:
+        //  p0=[2022-01-01, 2022-01-02),
+        //  p1=[2022-01-02, 2022-01-03),
+        //  p2=[2022-01-03, 2022-01-04).
+        // Q1: select count(*) from t0 will be performed p0,p1,p2. but dt is absent from OlapScanNode.
+        // Q2: select count(*) from t0 where dt between and '2022-01-01' and '2022-01-01' should use the partial result
+        // of Q1 on p0. but Q1 and Q2 has different SlotId re-mappings, so Q2's cache key cannot match the Q1's. so
+        // we should add a fake slotId represents the partition column when we re-map slotIds.
+        if (!slotId.isValid()) {
+            slotIdToColNames.add(new Pair<>(slotId, column.getName()));
+        }
+        slotIdToColNames.sort(Pair.comparingBySecond());
+        List<SlotId> slotIds = slotIdToColNames.stream().map(s -> s.first).collect(Collectors.toList());
+        List<Integer> remappedSlotIds = normalizer.remapSlotIds(slotIds);
+
+        planNode.olap_scan_node.setRemapped_slot_ids(remappedSlotIds);
+        planNode.olap_scan_node.setSelected_column(slotIdToColNames.stream().map(c->c.second).collect(Collectors.toList()));
+
+        List<Map.Entry<Long, Range<PartitionKey>>> rangeMap = Lists.newArrayList();
+        try {
+            rangeMap = rangePartitionInfo.getSortedRangeMap(new HashSet<>(selectedPartitionIds));
+        } catch (AnalysisException ignored) {
+        }
+        conjuncts = normalizer.getPartitionRangePredicates(conjuncts, rangeMap, rangePartitionInfo, slotId);
+        planNode.setConjuncts(normalizer.normalizeExprs(conjuncts));
+    }
+
+    private boolean isUnCacheable() {
+        switch (olapTable.getKeysType()) {
+            case DUP_KEYS:
+            case AGG_KEYS: {
+                List<Column> columns = selectedIndexId == -1 ? olapTable.getBaseSchema() :
+                        olapTable.getSchemaByIndexId(selectedIndexId);
+                return columns.stream().anyMatch(
+                        c -> c.isAggregated() && c.getAggregationType().isReplaceFamily());
+            }
+            default:
+                return true;
+        }
+    }
+
+    protected void toNormalForm(TNormalPlanNode planNode, FragmentNormalizer normalizer) {
+        if (isUnCacheable()) {
+            normalizer.setUncacheable(true);
+            return;
+        }
+        TNormalOlapScanNode scanNode = new TNormalOlapScanNode();
+        scanNode.setTablet_id(olapTable.getId());
+        scanNode.setIndex_id(selectedIndexId);
+        List<String> keyColumnNames = new ArrayList<String>();
+        List<TPrimitiveType> keyColumnTypes = new ArrayList<TPrimitiveType>();
+        if (selectedIndexId != -1) {
+            for (Column col : olapTable.getSchemaByIndexId(selectedIndexId)) {
+                if (!col.isKey()) {
+                    break;
+                }
+                keyColumnNames.add(col.getName());
+                keyColumnTypes.add(col.getPrimitiveType().toThrift());
+            }
+        }
+        scanNode.setKey_column_names(keyColumnNames);
+        scanNode.setKey_column_types(keyColumnTypes);
+        scanNode.setIs_preaggregation(isPreAggregation);
+        scanNode.setSort_column(sortColumn);
+        scanNode.setRollup_name(olapTable.getIndexNameById(selectedIndexId));
+
+        List<Integer> dictStringIds =
+                dictStringIdToIntIds.keySet().stream().sorted(Integer::compareTo).collect(Collectors.toList());
+        List<Integer> dictIntIds = dictStringIds.stream().map(dictStringIdToIntIds::get).collect(Collectors.toList());
+        scanNode.setDict_string_ids(dictStringIds);
+        scanNode.setDict_int_ids(dictIntIds);
+        planNode.setNode_type(TPlanNodeType.OLAP_SCAN_NODE);
+        planNode.setOlap_scan_node(scanNode);
+
+        normalizeConjuncts(normalizer, planNode, conjuncts);
     }
 }

@@ -30,8 +30,8 @@ Status PushBrokerReader::init(const TBrokerScanRange& t_scan_range, const TPushR
                                            query_options, query_globals, ExecEnv::GetInstance());
 
     DescriptorTbl* desc_tbl = nullptr;
-    RETURN_IF_ERROR(
-            DescriptorTbl::create(_runtime_state->obj_pool(), request.desc_tbl, &desc_tbl, config::vector_chunk_size));
+    RETURN_IF_ERROR(DescriptorTbl::create(_runtime_state.get(), _runtime_state->obj_pool(), request.desc_tbl, &desc_tbl,
+                                          config::vector_chunk_size));
     _runtime_state->set_desc_tbl(desc_tbl);
 
     _runtime_profile = _runtime_state->runtime_profile();
@@ -125,7 +125,7 @@ ColumnPtr PushBrokerReader::_build_hll_column(const ColumnPtr& column) {
 ColumnPtr PushBrokerReader::_padding_char_column(const ColumnPtr& column, const SlotDescriptor* slot_desc,
                                                  size_t num_rows) {
     Column* data_column = ColumnHelper::get_data_column(column.get());
-    BinaryColumn* binary = down_cast<BinaryColumn*>(data_column);
+    auto* binary = down_cast<BinaryColumn*>(data_column);
     Offsets& offset = binary->get_offset();
     uint32_t len = slot_desc->type().len;
 

@@ -33,6 +33,7 @@
 #include "exprs/vectorized/arithmetic_expr.h"
 #include "exprs/vectorized/array_element_expr.h"
 #include "exprs/vectorized/array_expr.h"
+#include "exprs/vectorized/array_map_expr.h"
 #include "exprs/vectorized/binary_predicate.h"
 #include "exprs/vectorized/case_expr.h"
 #include "exprs/vectorized/cast_expr.h"
@@ -46,10 +47,11 @@
 #include "exprs/vectorized/info_func.h"
 #include "exprs/vectorized/is_null_predicate.h"
 #include "exprs/vectorized/java_function_call_expr.h"
+#include "exprs/vectorized/lambda_function.h"
 #include "exprs/vectorized/literal.h"
+#include "exprs/vectorized/map_element_expr.h"
 #include "exprs/vectorized/placeholder_ref.h"
-#include "gen_cpp/Exprs_types.h"
-#include "gen_cpp/Types_types.h"
+#include "exprs/vectorized/subfield_expr.h"
 #include "runtime/primitive_type.h"
 #include "runtime/raw_value.h"
 #include "runtime/runtime_state.h"
@@ -80,7 +82,7 @@ Expr::Expr(const Expr& expr)
           _fn(expr._fn),
           _fn_context_index(expr._fn_context_index) {}
 
-Expr::Expr(TypeDescriptor type) : Expr(type, false) {}
+Expr::Expr(TypeDescriptor type) : Expr(std::move(type), false) {}
 
 Expr::Expr(TypeDescriptor type, bool is_slotref)
         : _opcode(TExprOpcode::INVALID_OPCODE),
@@ -231,8 +233,13 @@ Status Expr::create_tree_from_thrift(ObjectPool* pool, const std::vector<TExprNo
     if (parent == nullptr) {
         DCHECK(root_expr != nullptr);
         DCHECK(ctx != nullptr);
-        *root_expr = expr;
-        *ctx = pool->add(new ExprContext(expr));
+        if (root_expr == nullptr || ctx == nullptr) {
+            return Status::InternalError(
+                    "Failed to reconstruct expression tree from thrift. Invalid input root_expr or ctx");
+        } else {
+            *root_expr = expr;
+            *ctx = pool->add(new ExprContext(expr));
+        }
     }
     return Status::OK();
 }
@@ -270,8 +277,19 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
     }
     case TExprNodeType::CAST_EXPR: {
         if (texpr_node.__isset.child_type || texpr_node.__isset.child_type_desc) {
-            *expr = pool->add(vectorized::VectorizedCastExprFactory::from_thrift(texpr_node));
-            break;
+            *expr = pool->add(vectorized::VectorizedCastExprFactory::from_thrift(pool, texpr_node));
+            if (*expr == nullptr) {
+                PrimitiveType to_type = TypeDescriptor::from_thrift(texpr_node.type).type;
+                PrimitiveType from_type = thrift_to_type(texpr_node.child_type);
+                std::string err_msg = fmt::format(
+                        "Vectorized engine does not support the operator, cast from {} to {} failed, maybe use switch "
+                        "function",
+                        type_to_string_v2(from_type), type_to_string_v2(to_type));
+                LOG(WARNING) << err_msg;
+                return Status::InternalError(err_msg);
+            } else {
+                break;
+            }
         } else {
             // @TODO: will call FunctionExpr, implement later
             return Status::InternalError("Vectorized engine not support unknown child type cast");
@@ -292,6 +310,8 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
         } else if (texpr_node.fn.name.function_name == "is_null_pred" ||
                    texpr_node.fn.name.function_name == "is_not_null_pred") {
             *expr = pool->add(vectorized::VectorizedIsNullPredicateFactory::from_thrift(texpr_node));
+        } else if (texpr_node.fn.name.function_name == "array_map") {
+            *expr = pool->add(new vectorized::ArrayMapExpr(texpr_node));
         } else {
             *expr = pool->add(new vectorized::VectorizedFunctionCallExpr(texpr_node));
         }
@@ -322,6 +342,12 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
     case TExprNodeType::ARRAY_ELEMENT_EXPR:
         *expr = pool->add(vectorized::ArrayElementExprFactory::from_thrift(texpr_node));
         break;
+    case TExprNodeType::MAP_ELEMENT_EXPR:
+        *expr = pool->add(vectorized::MapElementExprFactory::from_thrift(texpr_node));
+        break;
+    case TExprNodeType::SUBFIELD_EXPR:
+        *expr = pool->add(vectorized::SubfieldExprFactory::from_thrift(texpr_node));
+        break;
     case TExprNodeType::INFO_FUNC:
         *expr = pool->add(new vectorized::VectorizedInfoFunc(texpr_node));
         break;
@@ -330,6 +356,9 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
         break;
     case TExprNodeType::DICT_EXPR:
         *expr = pool->add(new vectorized::DictMappingExpr(texpr_node));
+        break;
+    case TExprNodeType::LAMBDA_FUNCTION_EXPR:
+        *expr = pool->add(new vectorized::LambdaFunction(texpr_node));
         break;
     case TExprNodeType::CLONE_EXPR:
         *expr = pool->add(new vectorized::CloneExpr(texpr_node));
@@ -341,6 +370,7 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
     case TExprNodeType::LIKE_PRED:
     case TExprNodeType::LITERAL_PRED:
     case TExprNodeType::TUPLE_IS_NULL_PRED:
+    case TExprNodeType::RUNTIME_FILTER_MIN_MAX_EXPR:
         break;
     }
     if (*expr == nullptr) {
@@ -427,7 +457,7 @@ void Expr::close(RuntimeState* state, ExprContext* context, FunctionContext::Fun
 #endif
 }
 
-Status Expr::clone_if_not_exists(const std::vector<ExprContext*>& ctxs, RuntimeState* state,
+Status Expr::clone_if_not_exists(RuntimeState* state, ObjectPool* pool, const std::vector<ExprContext*>& ctxs,
                                  std::vector<ExprContext*>* new_ctxs) {
     DCHECK(new_ctxs != nullptr);
     if (!new_ctxs->empty()) {
@@ -441,7 +471,7 @@ Status Expr::clone_if_not_exists(const std::vector<ExprContext*>& ctxs, RuntimeS
 
     new_ctxs->resize(ctxs.size());
     for (int i = 0; i < ctxs.size(); ++i) {
-        RETURN_IF_ERROR(ctxs[i]->clone(state, &(*new_ctxs)[i]));
+        RETURN_IF_ERROR(ctxs[i]->clone(state, pool, &(*new_ctxs)[i]));
     }
     return Status::OK();
 }
@@ -569,6 +599,10 @@ StatusOr<ColumnPtr> Expr::evaluate_const(ExprContext* context) {
 
 ColumnPtr Expr::evaluate(ExprContext* context, vectorized::Chunk* ptr) {
     return nullptr;
+}
+
+ColumnPtr Expr::evaluate_with_filter(ExprContext* context, vectorized::Chunk* ptr, uint8_t* filter) {
+    return evaluate(context, ptr);
 }
 
 vectorized::ColumnRef* Expr::get_column_ref() {

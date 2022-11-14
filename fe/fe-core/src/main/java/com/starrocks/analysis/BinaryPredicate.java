@@ -235,11 +235,6 @@ public class BinaryPredicate extends Predicate implements Writable {
     }
 
     @Override
-    public String toDigestImpl() {
-        return getChild(0).toDigest() + " " + op.toString() + " " + getChild(1).toDigest();
-    }
-
-    @Override
     public String explainImpl() {
         return getChild(0).explain() + " " + op.toString() + " " + getChild(1).explain();
     }

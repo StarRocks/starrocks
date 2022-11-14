@@ -569,6 +569,9 @@ public class DatabaseTransactionMgr {
             stateListeners.add(listener);
         }
 
+        // before state transform
+        TxnStateChangeCallback callback = transactionState.beforeStateTransform(TransactionStatus.PREPARED);
+        boolean txnOperated = false;
         txnSpan.setAttribute("tables", tableListString.toString());
 
         Span unprotectedCommitSpan = TraceManager.startSpan("unprotectedPreparedTransaction", txnSpan);
@@ -576,6 +579,7 @@ public class DatabaseTransactionMgr {
         writeLock();
         try {
             unprotectedPrepareTransaction(transactionState, stateListeners);
+            txnOperated = true;
         } finally {
             writeUnlock();
             int numPartitions = 0;
@@ -584,6 +588,8 @@ public class DatabaseTransactionMgr {
             }
             txnSpan.setAttribute("num_partition", numPartitions);
             unprotectedCommitSpan.end();
+            // after state transform
+            transactionState.afterStateTransform(TransactionStatus.PREPARED, txnOperated, callback, null);
         }
 
         LOG.info("transaction:[{}] successfully prepare", transactionState);
@@ -784,7 +790,7 @@ public class DatabaseTransactionMgr {
                     }
 
                     List<MaterializedIndex> allIndices = txn.getPartitionLoadedTblIndexes(tableId, partition);
-                    int quorumNum = partitionInfo.getQuorumNum(partitionId);
+                    int quorumNum = partitionInfo.getQuorumNum(partitionId, table.writeQuorum());
                     int replicaNum = partitionInfo.getReplicationNum(partitionId);
                     for (MaterializedIndex index : allIndices) {
                         for (Tablet tablet : index.getTablets()) {
@@ -828,7 +834,13 @@ public class DatabaseTransactionMgr {
                                     && !unfinishedBackends.isEmpty()
                                     && currentTs
                                     - txn.getCommitTime() < Config.quorom_publish_wait_time_ms) {
-                                return false;
+
+                                // if all unfinished backends already down through heartbeat detect, we don't need to wait anymore
+                                for (Long backendID : unfinishedBackends) {
+                                    if (globalStateMgr.getCurrentSystemInfo().checkBackendAlive(backendID)) {
+                                        return false;
+                                    }
+                                }
                             }
                         }
                     }
@@ -918,7 +930,7 @@ public class DatabaseTransactionMgr {
                         continue;
                     }
 
-                    int quorumReplicaNum = partitionInfo.getQuorumNum(partitionId);
+                    int quorumReplicaNum = partitionInfo.getQuorumNum(partitionId, table.writeQuorum());
 
                     List<MaterializedIndex> allIndices =
                             transactionState.getPartitionLoadedTblIndexes(tableId, partition);
@@ -1342,6 +1354,8 @@ public class DatabaseTransactionMgr {
     public void removeExpiredTxns(long currentMillis) {
         writeLock();
         try {
+            StringBuilder expiredTxnMsgs = new StringBuilder(1024);
+            String prefix = "";
             int numJobsToRemove = getTransactionNum() - Config.label_keep_max_num;
             while (!finalStatusTransactionStateDeque.isEmpty()) {
                 TransactionState transactionState = finalStatusTransactionStateDeque.getFirst();
@@ -1349,11 +1363,21 @@ public class DatabaseTransactionMgr {
                     finalStatusTransactionStateDeque.pop();
                     clearTransactionState(transactionState);
                     --numJobsToRemove;
-                    LOG.info("transaction [" + transactionState.getTransactionId() +
-                            "] is expired, remove it from transaction manager");
+                    expiredTxnMsgs.append(prefix);
+                    prefix = ", ";
+                    expiredTxnMsgs.append(transactionState.getTransactionId());
+                    if (expiredTxnMsgs.length() > 4096) {
+                        LOG.info("transaction list [{}] are expired, remove them from transaction manager",
+                                expiredTxnMsgs);
+                        expiredTxnMsgs = new StringBuilder(1024);
+                    }
                 } else {
                     break;
                 }
+            }
+            if (expiredTxnMsgs.length() > 0) {
+                LOG.info("transaction list [{}] are expired, remove them from transaction manager",
+                        expiredTxnMsgs);
             }
         } finally {
             writeUnlock();
@@ -1640,4 +1664,17 @@ public class DatabaseTransactionMgr {
         LOG.info("finish transaction {} successfully", transactionState);
     }
 
+    public String getTxnPublishTimeoutDebugInfo(long txnId) {
+        TransactionState transactionState;
+        readLock();
+        try {
+            transactionState = unprotectedGetTransactionState(txnId);
+        } finally {
+            readUnlock();
+        }
+        if (transactionState == null) {
+            return "";
+        }
+        return transactionState.getPublishTimeoutDebugInfo();
+    }
 }

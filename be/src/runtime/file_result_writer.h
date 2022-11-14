@@ -91,6 +91,8 @@ public:
 private:
     void _init_profile();
 
+    Status _create_fs();
+
     Status _create_file_writer();
     // get next export file name
     std::string _get_next_file_name();

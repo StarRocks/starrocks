@@ -104,6 +104,7 @@ public class FunctionSet {
     public static final String ADDDATE = "adddate";
     public static final String SUBDATE = "subdate";
     public static final String TIME_SLICE = "time_slice";
+    public static final String DATE_SLICE = "date_slice";
     public static final String DATE_FLOOR = "date_floor";
     public static final String STRFTIME = "strftime";
     public static final String TIME_FORMAT = "time_format";
@@ -117,6 +118,7 @@ public class FunctionSet {
     public static final String TO_BASE64 = "to_base64";
     public static final String MD5 = "md5";
     public static final String MD5_SUM = "md5sum";
+    public static final String MD5_SUM_NUMERIC = "md5sum_numeric";
     public static final String SHA2 = "sha2";
     public static final String SM3 = "sm3";
 
@@ -196,16 +198,18 @@ public class FunctionSet {
     public static final String CURRENT_VERSION = "current_version";
     public static final String LAST_QUERY_ID = "last_query_id";
     public static final String UUID = "uuid";
+    public static final String UUID_NUMERIC = "uuid_numeric";
     public static final String SLEEP = "sleep";
     public static final String ISNULL = "isnull";
     public static final String ASSERT_TRUE = "assert_true";
-
+    public static final String HOST_NAME = "host_name";
     // Aggregate functions:
     public static final String APPROX_COUNT_DISTINCT = "approx_count_distinct";
     public static final String AVG = "avg";
     public static final String COUNT = "count";
     public static final String HLL_UNION_AGG = "hll_union_agg";
     public static final String MAX = "max";
+    public static final String MAX_BY = "max_by";
     public static final String MIN = "min";
     public static final String PERCENTILE_APPROX = "percentile_approx";
     public static final String PERCENTILE_CONT = "percentile_cont";
@@ -225,6 +229,8 @@ public class FunctionSet {
     public static final String STDDEV_VAL = "stddev_val";
     public static final String HLL_UNION = "hll_union";
     public static final String HLL_RAW_AGG = "hll_raw_agg";
+    public static final String HLL_RAW = "hll_raw";
+    public static final String HLL_EMPTY = "hll_empty";
     public static final String NDV = "ndv";
     public static final String NDV_NO_FINALIZE = "ndv_no_finalize";
     public static final String MULTI_DISTINCT_COUNT = "multi_distinct_count";
@@ -258,7 +264,8 @@ public class FunctionSet {
     public static final String BITMAP_UNION_INT = "bitmap_union_int";
     public static final String INTERSECT_COUNT = "intersect_count";
     public static final String BITMAP_DICT = "bitmap_dict";
-
+    public static final String EXCHANGE_BYTES = "exchange_bytes";
+    public static final String EXCHANGE_SPEED = "exchange_speed";
     // Array functions:
     public static final String ARRAY_AGG = "array_agg";
     public static final String ARRAY_CONCAT = "array_concat";
@@ -278,6 +285,7 @@ public class FunctionSet {
     public static final String ARRAY_SORT = "array_sort";
     public static final String ARRAY_SUM = "array_sum";
     public static final String ARRAY_REMOVE = "array_remove";
+    public static final String ARRAY_FILTER = "array_filter";
 
     // Bit functions:
     public static final String BITAND = "bitand";
@@ -370,6 +378,10 @@ public class FunctionSet {
     public static final String HLL_CARDINALITY = "hll_cardinality";
     public static final String DEFAULT_VALUE = "default_value";
     public static final String REPLACE_VALUE = "replace_value";
+
+    // high-order functions related lambda functions
+    public static final String ARRAY_MAP = "array_map";
+    public static final String TRANSFORM = "transform";
 
     // JSON functions
     public static final Function JSON_QUERY_FUNC = new Function(
@@ -464,6 +476,11 @@ public class FunctionSet {
                     .add(FunctionSet.NOW)
                     .add(FunctionSet.UTC_TIMESTAMP)
                     .add(FunctionSet.MD5_SUM)
+                    .add(FunctionSet.MD5_SUM_NUMERIC)
+                    .add(FunctionSet.BITMAP_EMPTY)
+                    .add(FunctionSet.HLL_EMPTY)
+                    .add(FunctionSet.EXCHANGE_BYTES)
+                    .add(FunctionSet.EXCHANGE_SPEED)
                     .build();
 
     public static final Set<String> decimalRoundFunctions =
@@ -524,14 +541,13 @@ public class FunctionSet {
                 || functionName.equalsIgnoreCase(LAG)) {
             final ScalarType descArgType = (ScalarType) descArgTypes[0];
             final ScalarType candicateArgType = (ScalarType) candicateArgTypes[0];
-            // Bitmap, HLL, PERCENTILE type don't allow cast
-            if (descArgType.isOnlyMetricType()) {
-                return false;
-            }
             if (functionName.equalsIgnoreCase(LEAD) ||
                     functionName.equalsIgnoreCase(LAG)) {
                 // lead and lag function respect first arg type
                 return descArgType.isNull() || descArgType.matchesType(candicateArgType);
+            } else if (descArgType.isOnlyMetricType()) {
+                // Bitmap, HLL, PERCENTILE type don't allow cast
+                return false;
             } else {
                 // The implementations of hex for string and int are different.
                 return descArgType.isStringType() || !candicateArgType.isStringType();
@@ -579,7 +595,6 @@ public class FunctionSet {
         if (fns == null) {
             return null;
         }
-
         // First check for identical
         for (Function f : fns) {
             if (f.compare(desc, Function.CompareMode.IS_IDENTICAL)) {
@@ -610,7 +625,7 @@ public class FunctionSet {
             return null;
         }
 
-        // Finally check for non-strict supertypes
+        // Finally, check for non-strict supertypes
         for (Function f : fns) {
             if (f.compare(desc, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF) && isCastMatchAllowed(desc, f)) {
                 return checkPolymorphicFunction(f, desc.getArgs());
@@ -686,6 +701,15 @@ public class FunctionSet {
         addBuiltin(AggregateFunction.createBuiltin(FunctionSet.COUNT,
                 new ArrayList<>(), Type.BIGINT, Type.BIGINT, false, true, true));
 
+        // EXCHANGE_BYTES/_SPEED with various arguments
+        addBuiltin(AggregateFunction.createBuiltin(EXCHANGE_BYTES,
+                Lists.newArrayList(Type.ANY_ELEMENT), Type.BIGINT, Type.BIGINT, true,
+                true, false, true));
+
+        addBuiltin(AggregateFunction.createBuiltin(EXCHANGE_SPEED,
+                Lists.newArrayList(Type.ANY_ELEMENT), Type.VARCHAR, Type.BIGINT, true,
+                true, false, true));
+
         for (Type t : Type.getSupportedTypes()) {
             if (t.isFunctionType()) {
                 continue;
@@ -753,6 +777,14 @@ public class FunctionSet {
             addBuiltin(AggregateFunction.createBuiltin(MAX,
                     Lists.newArrayList(t), t, t, true, true, false));
 
+            // max_by        
+            for (Type t1 : Type.getSupportedTypes()) {
+                if (t1.isFunctionType() || t1.isNull() || t1.isChar() || t1.isPseudoType()) {
+                    continue;
+                }
+                addBuiltin(AggregateFunction.createBuiltin(MAX_BY, Lists.newArrayList(t1, t), t1, Type.VARCHAR, true, true, false));
+            }
+
             // NDV
             // ndv return string
             addBuiltin(AggregateFunction.createBuiltin(NDV,
@@ -767,6 +799,10 @@ public class FunctionSet {
             //alias of ndv, compute approx count distinct use HyperLogLog
             addBuiltin(AggregateFunction.createBuiltin(APPROX_COUNT_DISTINCT,
                     Lists.newArrayList(t), Type.BIGINT, Type.VARCHAR,
+                    true, false, true));
+
+            addBuiltin(AggregateFunction.createBuiltin(HLL_RAW,
+                    Lists.newArrayList(t), Type.HLL, Type.VARCHAR,
                     true, false, true));
 
             // BITMAP_UNION_INT
@@ -981,6 +1017,9 @@ public class FunctionSet {
         addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG,
                 Lists.newArrayList(Type.TIME), Type.ARRAY_DATETIME, Type.ARRAY_DATETIME,
                 false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG,
+                Lists.newArrayList(Type.JSON), Type.ARRAY_JSON, Type.ARRAY_JSON,
+                false, false, false));
 
         // Group_concat(string)
         addBuiltin(AggregateFunction.createBuiltin(GROUP_CONCAT,
@@ -1026,7 +1065,7 @@ public class FunctionSet {
         for (Type t : Type.getSupportedTypes()) {
             // null/char/time is handled through type promotion
             // TODO: array/json/pseudo is not supported yet
-            if (t.isNull() || t.isChar() || t.isTime() || t.isArrayType() || t.isJsonType() || t.isPseudoType()) {
+            if (t.isNull() || t.isChar() || t.isTime() || t.isArrayType() || t.isJsonType() || t.isPseudoType() || t.isFunctionType()) {
                 continue;
             }
             addBuiltin(AggregateFunction.createAnalyticBuiltin(
@@ -1120,6 +1159,7 @@ public class FunctionSet {
         Type[] realTypes = Arrays.copyOf(declTypes, declTypes.length);
         ArrayType typeArray = null;
         Type typeElement = null;
+        MapType typeMap = null;
         Type retType = fn.getReturnType();
         for (int i = 0; i < declTypes.length; i++) {
             Type declType = declTypes[i];
@@ -1134,6 +1174,16 @@ public class FunctionSet {
                     LOGGER.warn("could not determine polymorphic type because input has non-match types");
                     return null;
                 }
+            } else if (declType instanceof AnyMapType) {
+                if (realType.isNull()) {
+                    continue;
+                }
+                if (typeMap == null) {
+                    typeMap = (MapType) realType;
+                } else {
+                    LOGGER.warn("could not determine polymorphic type because input has two map types");
+                    return null;
+                }
             } else if (declType instanceof AnyElementType) {
                 if (realType.isNull()) {
                     continue;
@@ -1144,6 +1194,8 @@ public class FunctionSet {
                     LOGGER.warn("could not determine polymorphic type because input has non-match types");
                     return null;
                 }
+            } else if (declType.matchesType(realType) || Type.canCastTo(realType, declType)) { // non-pseudo types
+                continue;
             } else {
                 LOGGER.warn("has unhandled pseudo type '{}'", declType);
                 return null;
@@ -1171,17 +1223,32 @@ public class FunctionSet {
             return null;
         }
 
-        if (retType instanceof AnyArrayType) {
-            retType = typeArray;
-        } else if (retType instanceof AnyElementType) {
-            retType = typeElement;
-        } else if (!(fn instanceof TableFunction)) { //TableFunction don't use retType
-            assert !retType.isPseudoType();
+        if (typeMap != null) {
+            if (retType instanceof AnyArrayType) {
+                if (fn.functionName().equals("map_keys")) {
+                    retType = new ArrayType(typeMap.getKeyType());
+                } else if (fn.functionName().equals("map_values")) {
+                    retType = new ArrayType(typeMap.getValueType());
+                } else {
+                    LOGGER.warn("not supported map function");
+                    return null;
+                }
+            }
+        } else {
+            if (retType instanceof AnyArrayType) {
+                retType = typeArray;
+            } else if (retType instanceof AnyElementType) {
+                retType = typeElement;
+            } else if (!(fn instanceof TableFunction)) { //TableFunction don't use retType
+                assert !retType.isPseudoType();
+            }
         }
 
         for (int i = 0; i < declTypes.length; i++) {
             if (declTypes[i] instanceof AnyArrayType) {
                 realTypes[i] = typeArray;
+            } else if(declTypes[i] instanceof AnyMapType) {
+                realTypes[i] = typeMap;
             } else if (declTypes[i] instanceof AnyElementType) {
                 realTypes[i] = typeElement;
             } else {
@@ -1213,6 +1280,22 @@ public class FunctionSet {
             return newFn;
         }
         if (fn instanceof TableFunction) {
+            // Because unnest is a variadic function, and the types of multiple parameters may be inconsistent,
+            // the current SR variadic function parsing can only support variadic parameters of the same type.
+            // The unnest is treated specially here, and the type of the child is directly used as the unnest function type.
+            if (fn.functionName().equals("unnest")) {
+                List<Type> realTableFnRetTypes = new ArrayList<>();
+                for (Type paramType : paramTypes) {
+                    if (!paramType.isArrayType()) {
+                        return null;
+                    }
+                    Type t = ((ArrayType) paramType).getItemType();
+                    realTableFnRetTypes.add(t);
+                }
+                return new TableFunction(fn.getFunctionName(), ((TableFunction) fn).getDefaultColumnNames(),
+                        Arrays.asList(paramTypes), realTableFnRetTypes);
+            }
+
             TableFunction tableFunction = (TableFunction) fn;
             List<Type> tableFnRetTypes = tableFunction.getTableFnReturnTypes();
             List<Type> realTableFnRetTypes = new ArrayList<>();
@@ -1250,6 +1333,11 @@ public class FunctionSet {
         if (t1.isArrayType() && t2.isArrayType()) {
             Type superElementType = getSuperType(((ArrayType) t1).getItemType(), ((ArrayType) t2).getItemType());
             return superElementType != null ? new ArrayType(superElementType) : null;
+        }
+        if (t1.isMapType() && t2.isMapType()) {
+            Type superKeyType = getSuperType(((MapType) t1).getKeyType(), ((MapType) t2).getKeyType());
+            Type superValueType = getSuperType(((MapType) t1).getValueType(), ((MapType) t2).getValueType());
+            return superKeyType != null && superValueType != null ? new MapType(superKeyType, superValueType) : null;
         }
         return null;
     }

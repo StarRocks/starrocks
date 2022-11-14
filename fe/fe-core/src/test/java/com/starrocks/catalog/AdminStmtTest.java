@@ -21,7 +21,6 @@
 
 package com.starrocks.catalog;
 
-
 import com.google.common.collect.Lists;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;

@@ -17,11 +17,10 @@ import java.util.Map;
 import java.util.Set;
 
 public class LogicalHiveScanOperator extends LogicalScanOperator {
-    private final Table.TableType tableType;
     private ScanOperatorPredicates predicates = new ScanOperatorPredicates();
+    private boolean hasUnknownColumn;
 
     public LogicalHiveScanOperator(Table table,
-                                   Table.TableType tableType,
                                    Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
                                    Map<Column, ColumnRefOperator> columnMetaToColRefMap,
                                    long limit,
@@ -34,7 +33,6 @@ public class LogicalHiveScanOperator extends LogicalScanOperator {
                 predicate, null);
 
         Preconditions.checkState(table instanceof HiveTable);
-        this.tableType = tableType;
         HiveTable hiveTable = (HiveTable) table;
         partitionColumns.addAll(hiveTable.getPartitionColumnNames());
     }
@@ -48,13 +46,8 @@ public class LogicalHiveScanOperator extends LogicalScanOperator {
                 builder.getPredicate(),
                 builder.getProjection());
 
-        this.tableType = builder.tableType;
         this.predicates = builder.predicates;
         this.partitionColumns = builder.partitionColumns;
-    }
-
-    public Table.TableType getTableType() {
-        return tableType;
     }
 
     @Override
@@ -67,6 +60,14 @@ public class LogicalHiveScanOperator extends LogicalScanOperator {
         this.predicates = predicates;
     }
 
+    public boolean hasUnknownColumn() {
+        return hasUnknownColumn;
+    }
+
+    public void setHasUnknownColumn(boolean hasUnknownColumn) {
+        this.hasUnknownColumn = hasUnknownColumn;
+    }
+
     @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
         return visitor.visitLogicalHiveScan(this, context);
@@ -74,7 +75,6 @@ public class LogicalHiveScanOperator extends LogicalScanOperator {
 
     public static class Builder
             extends LogicalScanOperator.Builder<LogicalHiveScanOperator, LogicalHiveScanOperator.Builder> {
-        private Table.TableType tableType;
         private ScanOperatorPredicates predicates = new ScanOperatorPredicates();
         private Set<String> partitionColumns = Sets.newHashSet();
 
@@ -87,7 +87,6 @@ public class LogicalHiveScanOperator extends LogicalScanOperator {
         public LogicalHiveScanOperator.Builder withOperator(LogicalHiveScanOperator scanOperator) {
             super.withOperator(scanOperator);
 
-            this.tableType = scanOperator.tableType;
             this.predicates = scanOperator.predicates;
             this.partitionColumns = scanOperator.partitionColumns;
             return this;

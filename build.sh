@@ -21,11 +21,12 @@
 # Usage: 
 #    sh build.sh --help
 # Eg:
-#    sh build.sh                            build all
-#    sh build.sh  --be                      build Backend without clean
-#    sh build.sh  --fe --clean              clean and build Frontend and Spark Dpp application
-#    sh build.sh  --fe --be --clean         clean and build Frontend, Spark Dpp application and Backend
-#    sh build.sh  --spark-dpp               build Spark DPP application alone
+#    sh build.sh                                      build all
+#    sh build.sh  --be                                build Backend without clean
+#    sh build.sh  --fe --clean                        clean and build Frontend and Spark Dpp application
+#    sh build.sh  --fe --be --clean                   clean and build Frontend, Spark Dpp application and Backend
+#    sh build.sh  --spark-dpp                         build Spark DPP application alone
+#    BUILD_TYPE=build_type ./build.sh --be            build Backend is different mode (build_type could be Release, Debug, or Asan. Default value is Release. To build Backend in Debug mode, you can execute: BUILD_TYPE=Debug ./build.sh --be)
 #
 # You need to make sure all thirdparty libraries have been
 # compiled and installed correctly.
@@ -41,8 +42,7 @@ export STARROCKS_HOME=${ROOT}
 
 . ${STARROCKS_HOME}/env.sh
 
-#build thirdparty libraries if necessary
-if [[ ! -f ${STARROCKS_THIRDPARTY}/installed/lib64/libbenchmark.a ]]; then
+if [[ ! -f ${STARROCKS_THIRDPARTY}/installed/include/fast_float/fast_float.h ]]; then
     echo "Thirdparty libraries need to be build ..."
     ${STARROCKS_THIRDPARTY}/build-thirdparty.sh
 fi
@@ -64,11 +64,12 @@ Usage: $0 <options>
      -j                 build Backend parallel
 
   Eg.
-    $0                                      build all
-    $0 --be                                 build Backend without clean
-    $0 --fe --clean                         clean and build Frontend and Spark Dpp application
-    $0 --fe --be --clean                    clean and build Frontend, Spark Dpp application and Backend
-    $0 --spark-dpp                          build Spark DPP application alone
+    $0                                           build all
+    $0 --be                                      build Backend without clean
+    $0 --fe --clean                              clean and build Frontend and Spark Dpp application
+    $0 --fe --be --clean                         clean and build Frontend, Spark Dpp application and Backend
+    $0 --spark-dpp                               build Spark DPP application alone
+    BUILD_TYPE=build_type ./build.sh --be        build Backend is different mode (build_type could be Release, Debug, or Asan. Default value is Release. To build Backend in Debug mode, you can execute: BUILD_TYPE=Debug ./build.sh --be)
   "
   exit 1
 }
@@ -85,7 +86,6 @@ OPTS=$(getopt \
   -l 'without-gcov' \
   -l 'use-staros' \
   -o 'j:' \
-  -l 'use-jemalloc' \
   -l 'help' \
   -- "$@")
 
@@ -108,11 +108,31 @@ fi
 if [[ -z ${USE_SSE4_2} ]]; then
     USE_SSE4_2=ON
 fi
+# detect cpuinfo
+if [[ -z $(grep -o 'avx[^ ]*' /proc/cpuinfo) ]]; then
+    USE_AVX2=OFF
+fi
+
+if [[ -z $(grep -o 'sse[^ ]*' /proc/cpuinfo) ]]; then
+    USE_SSE4_2=OFF
+fi
+
+if [[ -z ${WITH_BLOCK_CACHE} ]]; then
+	WITH_BLOCK_CACHE=ON
+fi
+
+if [[ "${WITH_BLOCK_CACHE}" == "ON" && ! -f ${STARROCKS_THIRDPARTY}/installed/cachelib/lib/libcachelib_allocator.a ]]; then
+    echo "WITH_BLOCK_CACHE=ON but missing depdency libraries(cachelib)"
+    exit 1
+fi
+
 if [[ -z ${ENABLE_QUERY_DEBUG_TRACE} ]]; then
 	ENABLE_QUERY_DEBUG_TRACE=OFF
 fi
 
-USE_JEMALLOC=OFF
+if [[ -z ${USE_JEMALLOC} ]]; then
+    USE_JEMALLOC=ON
+fi
 
 HELP=0
 if [ $# == 1 ] ; then
@@ -122,6 +142,14 @@ if [ $# == 1 ] ; then
     BUILD_SPARK_DPP=1
     CLEAN=0
     RUN_UT=0
+elif [[ $OPTS =~ "-j" ]] && [ $# == 3 ]; then
+    # default
+    BUILD_BE=1
+    BUILD_FE=1
+    BUILD_SPARK_DPP=1
+    CLEAN=0
+    RUN_UT=0
+    PARALLEL=$2
 else
     BUILD_BE=0
     BUILD_FE=0
@@ -138,7 +166,6 @@ else
             --with-gcov) WITH_GCOV=ON; shift ;;
             --without-gcov) WITH_GCOV=OFF; shift ;;
             --use-staros) USE_STAROS=ON; shift ;;
-            --use-jemalloc) USE_JEMALLOC=ON; shift ;;
             -h) HELP=1; shift ;;
             --help) HELP=1; shift ;;
             -j) PARALLEL=$2; shift 2 ;;
@@ -160,6 +187,7 @@ fi
 
 echo "Get params:
     BUILD_BE            -- $BUILD_BE
+    BE_CMAKE_TYPE       -- $BUILD_TYPE
     BUILD_FE            -- $BUILD_FE
     BUILD_SPARK_DPP     -- $BUILD_SPARK_DPP
     CLEAN               -- $CLEAN
@@ -169,6 +197,7 @@ echo "Get params:
     USE_AVX2            -- $USE_AVX2
     PARALLEL            -- $PARALLEL
     ENABLE_QUERY_DEBUG_TRACE -- $ENABLE_QUERY_DEBUG_TRACE
+    WITH_BLOCK_CACHE    -- $WITH_BLOCK_CACHE
     USE_JEMALLOC        -- $USE_JEMALLOC
 "
 
@@ -220,6 +249,7 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                     -DUSE_JEMALLOC=$USE_JEMALLOC \
                     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
                     -DUSE_STAROS=${USE_STAROS} \
+                    -DWITH_BLOCK_CACHE=${WITH_BLOCK_CACHE} \
                     -Dprotobuf_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/protobuf \
                     -Dabsl_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/absl \
                     -DgRPC_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/grpc \
@@ -235,6 +265,7 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                     -DUSE_AVX2=$USE_AVX2 -DUSE_SSE4_2=$USE_SSE4_2 \
                     -DENABLE_QUERY_DEBUG_TRACE=$ENABLE_QUERY_DEBUG_TRACE \
                     -DUSE_JEMALLOC=$USE_JEMALLOC \
+                    -DWITH_BLOCK_CACHE=${WITH_BLOCK_CACHE} \
                     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON  ..
     fi
     time ${BUILD_SYSTEM} -j${PARALLEL}
@@ -314,18 +345,17 @@ if [ ${BUILD_BE} -eq 1 ]; then
                ${STARROCKS_OUTPUT}/be/lib/hadoop \
                ${STARROCKS_OUTPUT}/be/lib/jvm \
                ${STARROCKS_OUTPUT}/be/www  \
-               ${STARROCKS_OUTPUT}/udf/lib \
-               ${STARROCKS_OUTPUT}/udf/include
 
     cp -r -p ${STARROCKS_HOME}/be/output/bin/* ${STARROCKS_OUTPUT}/be/bin/
     cp -r -p ${STARROCKS_HOME}/be/output/conf/be.conf ${STARROCKS_OUTPUT}/be/conf/
     cp -r -p ${STARROCKS_HOME}/be/output/conf/cn.conf ${STARROCKS_OUTPUT}/be/conf/
     cp -r -p ${STARROCKS_HOME}/be/output/conf/hadoop_env.sh ${STARROCKS_OUTPUT}/be/conf/
     cp -r -p ${STARROCKS_HOME}/be/output/conf/log4j.properties ${STARROCKS_OUTPUT}/be/conf/
+    if [ "${BUILD_TYPE}" == "ASAN" ]; then
+        cp -r -p ${STARROCKS_HOME}/be/output/conf/asan_suppressions.conf ${STARROCKS_OUTPUT}/be/conf/
+    fi
     cp -r -p ${STARROCKS_HOME}/be/output/lib/* ${STARROCKS_OUTPUT}/be/lib/
     cp -r -p ${STARROCKS_HOME}/be/output/www/* ${STARROCKS_OUTPUT}/be/www/
-    cp -r -p ${STARROCKS_HOME}/be/output/udf/*.a ${STARROCKS_OUTPUT}/udf/lib/
-    cp -r -p ${STARROCKS_HOME}/be/output/udf/include/* ${STARROCKS_OUTPUT}/udf/include/
     cp -r -p ${STARROCKS_HOME}/java-extensions/jdbc-bridge/target/starrocks-jdbc-bridge-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
     cp -r -p ${STARROCKS_HOME}/java-extensions/udf-extensions/target/udf-extensions-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
     cp -r -p ${STARROCKS_HOME}/java-extensions/java-utils/target/starrocks-java-utils.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
@@ -336,6 +366,15 @@ if [ ${BUILD_BE} -eq 1 ]; then
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/common ${STARROCKS_OUTPUT}/be/lib/hadoop/
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/hdfs ${STARROCKS_OUTPUT}/be/lib/hadoop/
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/lib/native ${STARROCKS_OUTPUT}/be/lib/hadoop/
+
+    if [ "${WITH_BLOCK_CACHE}" == "ON"  ]; then
+        mkdir -p ${STARROCKS_OUTPUT}/be/lib/cachelib/deps
+        cp -r -p ${CACHELIB_DIR}/lib ${STARROCKS_OUTPUT}/be/lib/cachelib/
+        cp -r -p ${CACHELIB_DIR}/lib64 ${STARROCKS_OUTPUT}/be/lib/cachelib/
+        cp -r -p ${CACHELIB_DIR}/deps/lib ${STARROCKS_OUTPUT}/be/lib/cachelib/deps/
+        cp -r -p ${CACHELIB_DIR}/deps/lib64 ${STARROCKS_OUTPUT}/be/lib/cachelib/deps/
+    fi
+
     # note: do not use oracle jdk to avoid commercial dispute
     if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
         cp -r -p ${STARROCKS_THIRDPARTY}/installed/open_jdk/jre/lib/aarch64 ${STARROCKS_OUTPUT}/be/lib/jvm/

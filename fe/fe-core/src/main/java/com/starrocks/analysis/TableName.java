@@ -21,6 +21,7 @@
 
 package com.starrocks.analysis;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.cluster.ClusterNamespace;
@@ -40,6 +41,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 
 public class TableName implements Writable, GsonPreProcessable, GsonPostProcessable {
+    public static final String LAMBDA_FUNC_TABLE = "__LAMBDA_TABLE";
     private String catalog;
     @SerializedName(value = "tbl")
     private String tbl;
@@ -129,6 +131,10 @@ public class TableName implements Writable, GsonPreProcessable, GsonPostProcessa
 
     public boolean isEmpty() {
         return tbl.isEmpty();
+    }
+
+    public String getCatalogAndDb() {
+        return Joiner.on(".").skipNulls().join(catalog, db);
     }
 
     /**

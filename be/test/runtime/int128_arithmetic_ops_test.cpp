@@ -139,5 +139,50 @@ TEST_F(Int128ArithmeticOpsTest, testMulOverflow) {
         ASSERT_EQ(expect_overflow, actual_overflow);
     }
 }
+
+TEST_F(Int128ArithmeticOpsTest, test_i32xi32_produce_i64) {
+    std::vector<int32_t> values{
+            0,
+            1,
+            (int32_t)0xffff0000,
+            -1,
+            (int32_t)0xdeadbeef,
+            99999'9999,
+            -99999'9999,
+            1 << 31,
+            1 << 30,
+            0x60606060,
+            (int32_t)0xc0c0c0c0c,
+            0x0c0c0c0c,
+    };
+    for (auto a : values) {
+        for (auto b : values) {
+            ASSERT_EQ(i32_x_i32_produce_i64(a, b), (int64_t)a * (int64_t)b);
+        }
+    }
+}
+
+TEST_F(Int128ArithmeticOpsTest, test_i64xi64_produce_i128) {
+    std::vector<int64_t> values{
+            0L,
+            1L,
+            (int64_t)0xffff0000ffff0000L,
+            -1L,
+            (int64_t)0xdeadbeefdeadbeefL,
+            99999'9999'99999'9999L,
+            -99999'9999'99999'9999L,
+            1L << 63,
+            1L << 62,
+            0x6060'6060'6060'6060L,
+            (int64_t)0xc0c0'c0c0'c0c0'c0c0L,
+            0x0c0c'0c0c'0c0c'0c0cL,
+    };
+    for (auto a : values) {
+        for (auto b : values) {
+            ASSERT_EQ(i64_x_i64_produce_i128(a, b), (int128_t)a * (int128_t)b);
+        }
+    }
+}
+
 #endif // defined(__X86_64__) && defined(__GNUC__)
 } // namespace starrocks

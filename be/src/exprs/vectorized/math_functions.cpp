@@ -14,6 +14,8 @@
 
 namespace starrocks::vectorized {
 
+static const double MAX_EXP_PARAMETER = std::log(std::numeric_limits<double>::max());
+
 // ==== basic check rules =========
 DEFINE_UNARY_FN_WITH_IMPL(NegativeCheck, value) {
     return value < 0;
@@ -28,7 +30,7 @@ DEFINE_UNARY_FN_WITH_IMPL(NanCheck, value) {
 }
 
 DEFINE_UNARY_FN_WITH_IMPL(ExpCheck, value) {
-    return std::isnan(value) || value > MathFunctions::MAX_EXP_PARAMETER;
+    return std::isnan(value) || value > MAX_EXP_PARAMETER;
 }
 
 DEFINE_UNARY_FN_WITH_IMPL(ZeroCheck, value) {
@@ -165,8 +167,8 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(logImpl, base, v) {
 }
 
 ColumnPtr MathFunctions::log(FunctionContext* context, const Columns& columns) {
-    auto l = VECTORIZED_FN_ARGS(0);
-    auto r = VECTORIZED_FN_ARGS(1);
+    const auto& l = VECTORIZED_FN_ARGS(0);
+    const auto& r = VECTORIZED_FN_ARGS(1);
     return VectorizedUnstrictBinaryFunction<logProduceNullImpl, logImpl>::evaluate<TYPE_DOUBLE>(l, r);
 }
 
@@ -200,7 +202,7 @@ DEFINE_MATH_UNARY_FN(degrees, TYPE_DOUBLE, TYPE_DOUBLE);
 
 // bin
 DEFINE_STRING_UNARY_FN_WITH_IMPL(binImpl, v) {
-    uint64_t n = static_cast<uint64_t>(v);
+    auto n = static_cast<uint64_t>(v);
     const size_t max_bits = sizeof(uint64_t) * 8;
     char result[max_bits];
     uint32_t index = max_bits;
@@ -631,9 +633,9 @@ ColumnPtr MathFunctions::conv_string(FunctionContext* context, const Columns& co
         bool negative = data_ptr[digit_start_offset] == '-';
         digit_start_offset += negative;
         StringParser::ParseResult parse_res;
-        uint64_t decimal64_num = StringParser::string_to_int<uint64_t>(data_ptr + digit_start_offset,
-                                                                       string_value.size - digit_start_offset,
-                                                                       std::abs(src_base_value), &parse_res);
+        auto decimal64_num = StringParser::string_to_int<uint64_t>(data_ptr + digit_start_offset,
+                                                                   string_value.size - digit_start_offset,
+                                                                   std::abs(src_base_value), &parse_res);
         if (parse_res == StringParser::PARSE_SUCCESS) {
             if (is_signed) {
                 if (negative && decimal64_num > 0ull - std::numeric_limits<int64_t>::min()) {
@@ -666,11 +668,19 @@ ColumnPtr MathFunctions::conv_string(FunctionContext* context, const Columns& co
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
+static uint32_t generate_randoms(ColumnBuilder<TYPE_DOUBLE>* result, int32_t num_rows, uint32_t seed) {
+    for (int i = 0; i < num_rows; ++i) {
+        seed = ::rand_r(&seed);
+        // Normalize to [0,1].
+        result->append(static_cast<double>(seed) / RAND_MAX);
+    }
+    return seed;
+}
+
 Status MathFunctions::rand_prepare(starrocks_udf::FunctionContext* context,
                                    starrocks_udf::FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::THREAD_LOCAL) {
-        auto* seed = reinterpret_cast<uint32_t*>(context->allocate(sizeof(uint32_t)));
-        context->set_function_state(scope, seed);
+        int64_t seed = 0;
         if (context->get_num_args() == 1) {
             // This is a call to RandSeed, initialize the seed
             // TODO: should we support non-constant seed?
@@ -687,30 +697,28 @@ Status MathFunctions::rand_prepare(starrocks_udf::FunctionContext* context,
             }
 
             int64_t seed_value = ColumnHelper::get_const_value<TYPE_BIGINT>(seed_column);
-            *seed = seed_value;
+            seed = seed_value;
         } else {
-            *seed = GetCurrentTimeNanos();
+            seed = GetCurrentTimeNanos();
         }
+        context->set_function_state(scope, reinterpret_cast<void*>(seed));
     }
     return Status::OK();
 }
 
 Status MathFunctions::rand_close(starrocks_udf::FunctionContext* context,
                                  starrocks_udf::FunctionContext::FunctionStateScope scope) {
-    if (scope == FunctionContext::THREAD_LOCAL) {
-        auto* seed = reinterpret_cast<uint8_t*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
-        context->free(seed);
-    }
     return Status::OK();
 }
 
 ColumnPtr MathFunctions::rand(FunctionContext* context, const Columns& columns) {
     int32_t num_rows = ColumnHelper::get_const_value<TYPE_INT>(columns[columns.size() - 1]);
-    auto* seed = reinterpret_cast<uint32_t*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
-    DCHECK(seed != nullptr);
+    void* state = context->get_function_state(FunctionContext::THREAD_LOCAL);
 
     ColumnBuilder<TYPE_DOUBLE> result(num_rows);
-    generate_randoms(&result, num_rows, seed);
+    int64_t res = generate_randoms(&result, num_rows, reinterpret_cast<int64_t>(state));
+    state = reinterpret_cast<void*>(res);
+    context->set_function_state(FunctionContext::THREAD_LOCAL, state);
 
     return result.build(false);
 }

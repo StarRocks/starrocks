@@ -66,6 +66,10 @@ public class MysqlAuthPacket extends MysqlPacket {
         return pluginName;
     }
 
+    public boolean isSSLConnRequest() {
+        return capability.isSSL();
+    }
+
     @Override
     public boolean readFrom(ByteBuffer buffer) {
         // read capability four byte, which CLIENT_PROTOCOL_41 must be set
@@ -79,6 +83,11 @@ public class MysqlAuthPacket extends MysqlPacket {
         characterSet = MysqlProto.readInt1(buffer);
         // reserved 23 bytes
         buffer.position(buffer.position() + 23);
+
+        // if the request is a ssl request, the package is truncated here.
+        if (buffer.remaining() <= 0 && capability.isSSL()) {
+            return true;
+        }
         // user name
         userName = new String(MysqlProto.readNulTerminateString(buffer));
         if (capability.isPluginAuthDataLengthEncoded()) {

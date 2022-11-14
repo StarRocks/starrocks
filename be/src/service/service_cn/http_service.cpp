@@ -55,7 +55,7 @@ Status HttpServiceCN::start() {
     add_default_path_handlers(_web_page_handler.get(), _env->process_mem_tracker());
 
     // Register CN health action
-    HealthAction* health_action = new HealthAction(_env);
+    auto* health_action = new HealthAction(_env);
     _ev_http_server->register_handler(HttpMethod::GET, "/api/health", health_action);
     _http_handlers.emplace_back(health_action);
 
@@ -64,31 +64,31 @@ Status HttpServiceCN::start() {
         fs::create_directories(config::pprof_profile_dir);
     }
 
-    HeapAction* heap_action = new HeapAction();
+    auto* heap_action = new HeapAction();
     _ev_http_server->register_handler(HttpMethod::GET, "/pprof/heap", heap_action);
     _http_handlers.emplace_back(heap_action);
 
-    GrowthAction* growth_action = new GrowthAction();
+    auto* growth_action = new GrowthAction();
     _ev_http_server->register_handler(HttpMethod::GET, "/pprof/growth", growth_action);
     _http_handlers.emplace_back(growth_action);
 
-    ProfileAction* profile_action = new ProfileAction();
+    auto* profile_action = new ProfileAction();
     _ev_http_server->register_handler(HttpMethod::GET, "/pprof/profile", profile_action);
     _http_handlers.emplace_back(profile_action);
 
-    PmuProfileAction* pmu_profile_action = new PmuProfileAction();
+    auto* pmu_profile_action = new PmuProfileAction();
     _ev_http_server->register_handler(HttpMethod::GET, "/pprof/pmuprofile", pmu_profile_action);
     _http_handlers.emplace_back(pmu_profile_action);
 
-    ContentionAction* contention_action = new ContentionAction();
+    auto* contention_action = new ContentionAction();
     _ev_http_server->register_handler(HttpMethod::GET, "/pprof/contention", contention_action);
     _http_handlers.emplace_back(contention_action);
 
-    CmdlineAction* cmdline_action = new CmdlineAction();
+    auto* cmdline_action = new CmdlineAction();
     _ev_http_server->register_handler(HttpMethod::GET, "/pprof/cmdline", cmdline_action);
     _http_handlers.emplace_back(cmdline_action);
 
-    SymbolAction* symbol_action = new SymbolAction(_env->bfd_parser());
+    auto* symbol_action = new SymbolAction(_env->bfd_parser());
     _ev_http_server->register_handler(HttpMethod::GET, "/pprof/symbol", symbol_action);
     _ev_http_server->register_handler(HttpMethod::HEAD, "/pprof/symbol", symbol_action);
     _ev_http_server->register_handler(HttpMethod::POST, "/pprof/symbol", symbol_action);

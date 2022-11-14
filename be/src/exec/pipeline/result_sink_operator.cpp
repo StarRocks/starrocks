@@ -5,11 +5,12 @@
 #include "column/chunk.h"
 #include "exprs/expr.h"
 #include "runtime/buffer_control_block.h"
-#include "runtime/exec_env.h"
 #include "runtime/mysql_result_writer.h"
 #include "runtime/query_statistics.h"
 #include "runtime/result_buffer_mgr.h"
 #include "runtime/runtime_state.h"
+#include "runtime/statistic_result_writer.h"
+#include "runtime/variable_result_writer.h"
 
 namespace starrocks::pipeline {
 Status ResultSinkOperator::prepare(RuntimeState* state) {
@@ -22,6 +23,12 @@ Status ResultSinkOperator::prepare(RuntimeState* state) {
     switch (_sink_type) {
     case TResultSinkType::MYSQL_PROTOCAL:
         _writer = std::make_shared<MysqlResultWriter>(_sender.get(), _output_expr_ctxs, _profile.get());
+        break;
+    case TResultSinkType::STATISTIC:
+        _writer = std::make_shared<vectorized::StatisticResultWriter>(_sender.get(), _output_expr_ctxs, _profile.get());
+        break;
+    case TResultSinkType::VARIABLE:
+        _writer = std::make_shared<vectorized::VariableResultWriter>(_sender.get(), _output_expr_ctxs, _profile.get());
         break;
     default:
         return Status::InternalError("Unknown result sink type");
@@ -46,11 +53,8 @@ void ResultSinkOperator::close(RuntimeState* state) {
             // the visibility of _num_written_rows is guaranteed by _num_result_sinkers.fetch_sub().
             _sender->update_num_written_rows(_num_written_rows.load(std::memory_order_relaxed));
 
-            auto query_statistic = std::make_shared<QueryStatistics>();
             QueryContext* query_ctx = state->query_ctx();
-            query_statistic->add_scan_stats(query_ctx->cur_scan_rows_num(), query_ctx->get_scan_bytes());
-            query_statistic->add_cpu_costs(query_ctx->cpu_cost());
-            query_statistic->add_mem_costs(query_ctx->mem_cost_bytes());
+            auto query_statistic = query_ctx->final_query_statistic();
             query_statistic->set_returned_rows(_num_written_rows);
             _sender->set_query_statistics(query_statistic);
 
@@ -89,8 +93,7 @@ bool ResultSinkOperator::need_input() const {
         return true;
     }
 
-    auto* mysql_writer = down_cast<MysqlResultWriter*>(_writer.get());
-    auto status = mysql_writer->try_add_batch(_fetch_data_result);
+    auto status = _writer->try_add_batch(_fetch_data_result);
     if (status.ok()) {
         return status.value();
     } else {
@@ -114,11 +117,10 @@ Status ResultSinkOperator::push_chunk(RuntimeState* state, const vectorized::Chu
     }
     DCHECK(_fetch_data_result.empty());
 
-    auto* mysql_writer = down_cast<MysqlResultWriter*>(_writer.get());
-    auto status = mysql_writer->process_chunk_for_pipeline(chunk.get());
+    auto status = _writer->process_chunk(chunk.get());
     if (status.ok()) {
         _fetch_data_result = std::move(status.value());
-        return mysql_writer->try_add_batch(_fetch_data_result).status();
+        return _writer->try_add_batch(_fetch_data_result).status();
     } else {
         return status.status();
     }

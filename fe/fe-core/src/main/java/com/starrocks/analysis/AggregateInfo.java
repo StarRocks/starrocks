@@ -119,6 +119,7 @@ public final class AggregateInfo extends AggregateInfoBase {
     private ArrayList<Integer> firstIdx_ = Lists.newArrayList();
     private ArrayList<Integer> lastIdx_ = Lists.newArrayList();
 
+    private List<Expr> intermediateAggrExprs = Lists.newArrayList();
     // C'tor creates copies of groupingExprs and aggExprs.
     private AggregateInfo(ArrayList<Expr> groupingExprs,
                           ArrayList<FunctionCallExpr> aggExprs, AggPhase aggPhase) {
@@ -683,6 +684,12 @@ public final class AggregateInfo extends AggregateInfoBase {
             return new DataPartition(TPartitionType.HASH_PARTITIONED, groupingExprs_);
         }
     }
+
+    public void setIntermediateAggrExprs(List<Expr> intermediateAggrExprs) {
+        this.intermediateAggrExprs = intermediateAggrExprs;
+    }
+
+    public List<Expr> getIntermediateAggrExprs() { return intermediateAggrExprs; }
 
     public String debugString() {
         StringBuilder out = new StringBuilder(super.debugString());

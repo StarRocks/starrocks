@@ -28,11 +28,11 @@ namespace starrocks {
 
 class DecimalValueTest : public testing::Test {
 public:
-    DecimalValueTest() {}
+    DecimalValueTest() = default;
 
 protected:
-    virtual void SetUp() {}
-    virtual void TearDown() {}
+    void SetUp() override {}
+    void TearDown() override {}
 };
 
 TEST_F(DecimalValueTest, string_to_decimal) {
@@ -527,7 +527,7 @@ TEST_F(DecimalValueTest, round_to_int) {
 
 TEST_F(DecimalValueTest, double_to_decimal) {
     double i = 1.2;
-    DecimalValue* value = new DecimalValue(100, 9876);
+    auto* value = new DecimalValue(100, 9876);
     value->assign_from_double(i);
     ASSERT_STREQ("1.2", value->to_string().c_str());
     delete value;
@@ -535,7 +535,7 @@ TEST_F(DecimalValueTest, double_to_decimal) {
 
 TEST_F(DecimalValueTest, float_to_decimal) {
     float i = 1.2;
-    DecimalValue* value = new DecimalValue(100, 9876);
+    auto* value = new DecimalValue(100, 9876);
     value->assign_from_float(i);
     ASSERT_STREQ("1.2", value->to_string().c_str());
     delete value;

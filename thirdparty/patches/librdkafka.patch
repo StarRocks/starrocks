@@ -1,8 +1,8 @@
 --- src/rdkafka_broker.c
 +++ src/rdkafka_broker.c
-@@ -5467,7 +5467,7 @@ static int rd_kafka_broker_thread_main (void *arg) {
+@@ -5388,7 +5388,7 @@ static int rd_kafka_broker_thread_main(void *arg) {
   */
- void rd_kafka_broker_destroy_final (rd_kafka_broker_t *rkb) {
+ void rd_kafka_broker_destroy_final(rd_kafka_broker_t *rkb) {
  
 -        rd_assert(thrd_is_current(rkb->rkb_thread));
 +        //rd_assert(thrd_is_current(rkb->rkb_thread));

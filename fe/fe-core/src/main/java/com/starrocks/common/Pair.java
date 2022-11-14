@@ -31,7 +31,6 @@ import java.util.Comparator;
  * Notice: When using Pair for persistence, users need to guarantee that F and S can be serialized through Gson
  */
 public class Pair<F, S> {
-    public static PairComparator<Pair<?, Comparable>> PAIR_VALUE_COMPARATOR = new PairComparator<>();
 
     @SerializedName(value = "first")
     public F first;
@@ -52,11 +51,28 @@ public class Pair<F, S> {
      * A pair is equal if both parts are equal().
      */
     public boolean equals(Object o) {
-        if (o instanceof Pair) {
-            Pair<F, S> other = (Pair<F, S>) o;
-            return this.first.equals(other.first) && this.second.equals(other.second);
+        if (!(o instanceof Pair)) {
+            return false;
         }
-        return false;
+        Pair<F, S> other = (Pair<F, S>) o;
+
+        // compare first
+        if (this.first == null) {
+            if (other.first != null) {
+                return false;
+            }
+        } else {
+            if (! this.first.equals(other.first)) {
+                return false;
+            }
+        }
+
+        // compare second
+        if (this.second == null) {
+            return other.second == null;
+        } else {
+            return this.second.equals(other.second);
+        }
     }
 
     @Override
@@ -72,10 +88,7 @@ public class Pair<F, S> {
         return first.toString() + ":" + second.toString();
     }
 
-    public static class PairComparator<T extends Pair<?, Comparable>> implements Comparator<T> {
-        @Override
-        public int compare(T o1, T o2) {
-            return o1.second.compareTo(o2.second);
-        }
+    public static <K, V extends Comparable<? super V>> Comparator<Pair<K, V>> comparingBySecond() {
+        return Comparator.comparing(c -> c.second);
     }
 }

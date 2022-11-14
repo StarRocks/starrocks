@@ -22,14 +22,7 @@
 #pragma once
 
 #include <gperftools/malloc_extension.h>
-
-#include <shared_mutex>
-
-#include "common/compiler_util.h"
-DIAGNOSTIC_PUSH
-DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 #include <rapidjson/document.h>
-DIAGNOSTIC_POP
 #include <rapidjson/rapidjson.h>
 
 #include <atomic>
@@ -38,10 +31,12 @@ DIAGNOSTIC_POP
 #include <mutex>
 #include <ostream>
 #include <set>
+#include <shared_mutex>
 #include <sstream>
 #include <string>
 #include <utility>
 
+#include "common/compiler_util.h"
 #include "common/config.h"
 #include "util/core_local.h"
 #include "util/spinlock.h"

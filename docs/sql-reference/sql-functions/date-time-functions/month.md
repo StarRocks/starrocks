@@ -1,18 +1,18 @@
 # month
 
-## description
+## Description
 
-### Syntax
+Returns the month for a given date. The return value ranges from 1 to 12.
+
+The `date` parameter must be of the DATE or DATETIME type.
+
+## Syntax
 
 ```Haskell
 INT MONTH(DATETIME date)
 ```
 
-It returns the month for a given date. The return values range from 1 to 12.
-
-The parameter is in Date or Datetime type.
-
-## example
+## Examples
 
 ```Plain Text
 MySQL > select month('1987-01-01');

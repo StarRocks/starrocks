@@ -1,6 +1,6 @@
-# Parameter Configuration
+# Parameter configuration
 
-After the service is started, you may adjust the configuration parameters to meet the business requirements. You need to reboot the BE and Fe to apply the changes.
+This topic describes how to configure parameters for the FE, BE, broker, and system. After the service is started, you can also adjust the configuration parameters to better suit your business requirements.
 
 ## FE configuration items
 
@@ -95,22 +95,36 @@ After the service is started, you may adjust the configuration parameters to mee
 |disable_load_job|false|No import job is received, which is a stopgap measure when the cluster fails |
 |es_state_sync_interval_second|10| Interval for FE to fetch Elastic Search Index |
 |tablet_repair_delay_factor_second|60| Interval for replica repair controlled by FE |
+|enable_statistic_collect|TRUE|Whether to collect statistics. This parameter is turned on by default.|
+|enable_collect_full_statistic|TRUE|Whether to enable automatic full statistics collection. This parameter is turned on by default.|
+|statistic_auto_collect_ratio|0.8|The threshold for determining whether the statistics for automatic collection are healthy. If statistics health is below this threshold, automatic collection is triggered.|
+|statistic_max_full_collect_data_size|100|The size of the largest partition for automatic collection to collect data. Unit: GB.If a partition exceeds this value, full collection is discarded and sampled collection is performed instead.|
+|statistic_collect_interval_sec|300|The interval for checking data updates during automatic collection. Unit: seconds.|
+|statistic_sample_collect_rows|200000|The minimum number of rows to collect for sampled collection. If the parameter value exceeds the actual number of rows in your table, full collection is performed.|
+|histogram_buckets_size|64|The default bucket number for a histogram.|
+|histogram_mcv_size|100|The number of most common values (MVC) for a histogram.|
+|histogram_sample_ratio|0.1|The sampling ratio for a histogram.|
+|histogram_max_sample_row_count|10000000|The maximum number of rows to collect for a histogram.|
+|statistics_manager_sleep_time_sec|60|The interval at which metadata is scheduled. Unit: seconds. The system performs the following operations based on this interval: create tables for storing statistics, delete statistics that have been deleted, delete expired statistics.|
+|statistic_update_interval_sec|24 \* 60 \* 60|The interval at which the cache of statistical information is updated. Unit: seconds.|
+|statistic_analyze_status_keep_second|259200|The duration to retain the history of collection tasks. The default value is 3 days. Unit: seconds.|
+|statistic_collect_concurrency|3|The maximum number of manual collection tasks that can run in parallel. The value defaults to 3, which means you can run a maximum of three manual collections tasks in parallel. If the value is exceeded, incoming tasks will be in the PENDING state, waiting to be scheduled. You can only modify this parameter in the **fe.conf** file. You must restart the FE for the modification to take effect.|
 |max_routine_load_job_num|100| maximum number of routine load jobs |
 |max_routine_load_task_concurrent_num|5| Maximum number of concurrent execution tasks per routine load job |
 |max_routine_load_task_num_per_be|5| Maximum number of concurrent  routine load tasks per BE, which needs to be less than or equal to the number specified in the configuration |
 |max_routine_load_batch_size|524288000| The maximum amount of data to import per routine load task, default by 500M |
 |routine_load_task_consume_second|3|Maximum time to consume data per routine load task, default by 3s|
 |routine_load_task_timeout_second|15|Timeout for  routine load task, default by 15s|
-|enable_strict_storage_medium_check|TRUE|Swtich value to control if FE checks the available storage space.|
-|storage_cooldown_second|-1|The delay of cooldown from HDD storage to SSD storage. Unit: second. The default value indicates to disable the auto-cooldown.|
+|enable_strict_storage_medium_check|TRUE|Whether the FE checks available storage space.|
+|storage_cooldown_second|-1|The delay of cooldown from HDD storage to SSD storage. Unit: seconds. The default value indicates to disable the auto-cooldown.|
 
-## BE Configuration Items
+## BE configuration items
 
 |Configuration item|Default|Role|
 |---|---|---|
 |be_port|9060|Port of thrift server on BE, used to receive requests from FE|
 |brpc_port|8060|Port of BRPC to view some network statistics of BRPC|
-|brpc_num_threads|-1|The number of bthreads of BRPC, -1 means the same as the number of CPU cores|
+|brpc_num_threads|-1|The number of threads of BRPC, -1 means the same as the number of CPU cores|
 |priority_networks|empty string|Specify BE IP address in the form of CIDR 10.10.10.0/24 for machines with multiple IPs|
 |heartbeat_service_port|9050|The heartbeat service port (thrift) where users receive heartbeats from FE|
 |heartbeat_service_thread_count|1|The number of heartbeat threads|
@@ -182,7 +196,7 @@ After the service is started, you may adjust the configuration parameters to mee
 |cumulative_compaction_write_mbytes_per_sec|100| Speed limit of CumulativeCompaction to write disk |
 |min_compaction_failure_interval_sec|600| Interval for Tablet Compaction to be scheduled again after a failure |
 |max_compaction_concurrency|4| Maximum concurrency for BaseCompaction and CumulativeCompaction. -1 indicates no limit |
-|compaction_trace_threshold|60|Time threshold for each compaction to print the trace. System will print trace log once a compaction exceeds this threshold. Unit: second |
+|compaction_trace_threshold|60|Time threshold for each compaction to print the trace. System will print trace log once a compaction exceeds this threshold. Unit: seconds |
 |webserver_port|8040| Http Server port |
 |webserver_num_workers|5| Number of Http Server threads |
 |periodic_counter_update_period_ms|500| Interval for getting counter statistics |

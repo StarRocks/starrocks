@@ -53,8 +53,8 @@ public class HistogramStatisticsTest {
         check(columnRefOperator, "GT", 48, statistics, 400);
         check(columnRefOperator, "GT", 49, statistics, 391);
         check(columnRefOperator, "GT", 99, statistics, 100);
-        check(columnRefOperator, "GT", 100, statistics, 0);
-        check(columnRefOperator, "GT", 105, statistics, 0);
+        check(columnRefOperator, "GT", 100, statistics, 1);
+        check(columnRefOperator, "GT", 105, statistics, 1);
 
         check(columnRefOperator, "GE", 0, statistics, 1000);
         check(columnRefOperator, "GE", 1, statistics, 1000);
@@ -68,10 +68,10 @@ public class HistogramStatisticsTest {
         check(columnRefOperator, "GE", 49, statistics, 391);
         check(columnRefOperator, "GE", 99, statistics, 120);
         check(columnRefOperator, "GE", 100, statistics, 100);
-        check(columnRefOperator, "GE", 105, statistics, 0);
+        check(columnRefOperator, "GE", 105, statistics, 1);
 
-        check(columnRefOperator, "LT", 0, statistics, 0);
-        check(columnRefOperator, "LT", 1, statistics, 0);
+        check(columnRefOperator, "LT", 0, statistics, 1);
+        check(columnRefOperator, "LT", 1, statistics, 1);
         check(columnRefOperator, "LT", 10, statistics, 80);
         check(columnRefOperator, "LT", 12, statistics, 100);
         check(columnRefOperator, "LT", 15, statistics, 100);
@@ -85,8 +85,8 @@ public class HistogramStatisticsTest {
         check(columnRefOperator, "LT", 100, statistics, 900);
         check(columnRefOperator, "LT", 105, statistics, 1000);
 
-        check(columnRefOperator, "LE", 0, statistics, 0);
-        check(columnRefOperator, "LE", 1, statistics, 0);
+        check(columnRefOperator, "LE", 0, statistics, 1);
+        check(columnRefOperator, "LE", 1, statistics, 1);
         check(columnRefOperator, "LE", 10, statistics, 100);
         check(columnRefOperator, "LE", 12, statistics, 100);
         check(columnRefOperator, "LE", 15, statistics, 100);
@@ -105,7 +105,7 @@ public class HistogramStatisticsTest {
         between(columnRefOperator, "GT", 1, "LT", 43, statistics, 348);
         between(columnRefOperator, "GT", 16, "LT", 47, statistics, 380);
         between(columnRefOperator, "GT", 16, "LT", 53, statistics, 513);
-        between(columnRefOperator, "GT", 46, "LT", 47, statistics, 0);
+        between(columnRefOperator, "GT", 46, "LT", 47, statistics, 1);
         between(columnRefOperator, "GT", 60, "LT", 99, statistics, 180);
         between(columnRefOperator, "GT", 1, "LT", 100, statistics, 900);
 

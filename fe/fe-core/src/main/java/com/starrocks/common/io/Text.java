@@ -26,6 +26,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
+import java.io.EOFException;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
@@ -34,6 +35,8 @@ import java.nio.charset.Charset;
 import java.nio.charset.CharsetDecoder;
 import java.nio.charset.CharsetEncoder;
 import java.nio.charset.CodingErrorAction;
+import java.util.zip.CheckedInputStream;
+import java.util.zip.CheckedOutputStream;
 
 /**
  * This class stores text using standard UTF8 encoding. It provides methods to
@@ -400,6 +403,36 @@ public class Text implements Writable {
         out.writeInt(length);
         out.write(bytes.array(), 0, length);
         return length;
+    }
+
+    /**
+     * Same as writeString(), but to a CheckedOutputStream
+     */
+    public static int writeStringWithChecksum(CheckedOutputStream cos, String s) throws IOException {
+        ByteBuffer byteBuffer = encode(s);
+        int length = byteBuffer.limit();
+        byte[] bytes = ByteBuffer.allocate(4).putInt(length).array();
+        cos.write(bytes);
+        cos.write(byteBuffer.array(), 0, length);
+        return length;
+    }
+
+    private static void readAndCheckEof(CheckedInputStream in, byte[] bytes, int expectLength) throws IOException {
+        int readRet = in.read(bytes, 0, expectLength);
+        if (readRet != expectLength) {
+            throw new EOFException(String.format("reach EOF: read expect %d actual %d!", expectLength, readRet));
+        }
+    }
+    /**
+     * Same as readString(), but to a CheckedInputStream
+     */
+    public static String readStringWithChecksum(CheckedInputStream in) throws IOException {
+        byte[] bytes = new byte[4];
+        readAndCheckEof(in, bytes, 4);
+        int length = ByteBuffer.wrap(bytes).getInt();
+        bytes = new byte[length];
+        readAndCheckEof(in, bytes, length);
+        return decode(bytes);
     }
 
     /**

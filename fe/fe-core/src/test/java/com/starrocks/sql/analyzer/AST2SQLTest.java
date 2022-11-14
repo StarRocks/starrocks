@@ -2,10 +2,10 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.SetStmt;
-import com.starrocks.analysis.SetType;
-import com.starrocks.analysis.StatementBase;
 import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.SetStmt;
+import com.starrocks.sql.ast.SetType;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -34,7 +34,7 @@ public class AST2SQLTest {
             Assert.assertTrue(baseStmt instanceof CreateViewStmt);
             CreateViewStmt viewStmt = (CreateViewStmt) baseStmt;
             Assert.assertEquals(viewStmt.getInlineViewDef(),
-                    "SELECT `test`.`t0`.`v1` AS `v1` FROM `test`.`t0` WHERE (NOT FALSE) IS NULL");
+                    "SELECT `test`.`t0`.`v1`\nFROM `test`.`t0`\nWHERE (NOT FALSE) IS NULL");
         }
         {
             String sql;
@@ -49,7 +49,7 @@ public class AST2SQLTest {
             Assert.assertTrue(baseStmt instanceof CreateViewStmt);
             CreateViewStmt viewStmt = (CreateViewStmt) baseStmt;
             Assert.assertEquals(viewStmt.getInlineViewDef(),
-                    "SELECT `test`.`t0`.`v1` AS `v1` FROM `test`.`t0` WHERE (NOT FALSE) IS NOT NULL");
+                    "SELECT `test`.`t0`.`v1`\nFROM `test`.`t0`\nWHERE (NOT FALSE) IS NOT NULL");
         }
     }
 

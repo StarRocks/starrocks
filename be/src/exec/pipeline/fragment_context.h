@@ -11,20 +11,26 @@
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/runtime_filter_types.h"
 #include "exec/pipeline/scan/morsel.h"
+#include "exec/query_cache/cache_param.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/HeartbeatService.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/QueryPlanExtra_types.h"
 #include "gen_cpp/Types_types.h"
+#include "runtime/profile_report_worker.h"
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_state.h"
 #include "util/hash_util.hpp"
 
 namespace starrocks {
+class StreamLoadContext;
+
 namespace pipeline {
 
 using RuntimeFilterPort = starrocks::RuntimeFilterPort;
+using PerDriverScanRangesMap = std::map<int32_t, std::vector<TScanRangeParams>>;
+
 class FragmentContext {
     friend FragmentContextManager;
 
@@ -75,10 +81,7 @@ public:
         return status == nullptr ? Status::OK() : *status;
     }
 
-    void cancel(const Status& status) {
-        _runtime_state->set_is_cancelled(true);
-        set_final_status(status);
-    }
+    void cancel(const Status& status);
 
     void finish() { cancel(Status::OK()); }
 
@@ -111,6 +114,16 @@ public:
     bool enable_resource_group() const { return _enable_resource_group; }
 
     void set_driver_token(DriverLimiter::TokenPtr driver_token) { _driver_token = std::move(driver_token); }
+
+    query_cache::CacheParam& cache_param() { return _cache_param; }
+
+    void set_enable_cache(bool flag) { _enable_cache = flag; }
+
+    bool enable_cache() const { return _enable_cache; }
+
+    PerDriverScanRangesMap& scan_ranges_per_driver() { return _scan_ranges_per_driver_seq; }
+
+    void set_stream_load_contexts(const std::vector<StreamLoadContext*>& contexts);
 
 private:
     // Id of this query
@@ -146,6 +159,11 @@ private:
     bool _enable_resource_group = false;
 
     DriverLimiter::TokenPtr _driver_token = nullptr;
+    query_cache::CacheParam _cache_param;
+    bool _enable_cache = false;
+    PerDriverScanRangesMap _scan_ranges_per_driver_seq;
+    std::vector<StreamLoadContext*> _stream_load_contexts;
+    bool _channel_stream_load = false;
 };
 
 class FragmentContextManager {
@@ -161,7 +179,7 @@ public:
     FragmentContext* get_or_register(const TUniqueId& fragment_id);
     FragmentContextPtr get(const TUniqueId& fragment_id);
 
-    void register_ctx(const TUniqueId& fragment_id, FragmentContextPtr fragment_ctx);
+    Status register_ctx(const TUniqueId& fragment_id, FragmentContextPtr fragment_ctx);
     void unregister(const TUniqueId& fragment_id);
 
     void cancel(const Status& status);

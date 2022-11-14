@@ -509,7 +509,7 @@ LZ4F_preferences_t Lz4fBlockCompression::_s_preferences = {
 
 class SnappySlicesSource : public snappy::Source {
 public:
-    explicit SnappySlicesSource(const std::vector<Slice>& slices) : _available(0), _cur_slice(0), _slice_off(0) {
+    explicit SnappySlicesSource(const std::vector<Slice>& slices) {
         for (auto& slice : slices) {
             // We filter empty slice here to avoid complicated process
             if (slice.size == 0) {
@@ -546,7 +546,7 @@ public:
         // we should assure that *len is not 0
         *len = _slices[_cur_slice].size - _slice_off;
         DCHECK(*len != 0);
-        return _slices[_cur_slice].data;
+        return _slices[_cur_slice].data + _slice_off;
     }
 
     // Skip the next n bytes.  Invalidates any buffer returned by
@@ -569,9 +569,9 @@ public:
 
 private:
     std::vector<Slice> _slices;
-    size_t _available;
-    size_t _cur_slice;
-    size_t _slice_off;
+    size_t _available{0};
+    size_t _cur_slice{0};
+    size_t _slice_off{0};
 };
 
 class SnappyBlockCompression : public BlockCompressionCodec {
@@ -708,16 +708,8 @@ public:
 
     Status compress(const Slice& input, Slice* output, bool use_compression_buffer, size_t uncompressed_size,
                     faststring* compressed_body1, raw::RawString* compressed_body2) const override {
-        // For ZSTD_compress, default ZSTD_COMPRESS_HEAPMODE is off, and
-        // allocate ZSTD_CCtx on stack. So here we didn't integrate it into the
-        // compression context pool.
-        size_t ret = ZSTD_compress(output->data, output->size, input.data, input.size, ZSTD_CLEVEL_DEFAULT);
-        if (ZSTD_isError(ret)) {
-            return Status::InvalidArgument(
-                    strings::Substitute("ZSTD compress failed: $0", ZSTD_getErrorString(ZSTD_getErrorCode(ret))));
-        }
-        output->size = ret;
-        return Status::OK();
+        return _compress({input}, output, use_compression_buffer, uncompressed_size, compressed_body1,
+                         compressed_body2);
     }
 
     Status compress(const std::vector<Slice>& inputs, Slice* output, bool use_compression_buffer,

@@ -25,6 +25,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.ColocateTableIndex.GroupId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.LocalTablet.TabletStatus;
@@ -204,6 +205,9 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
 
     private Set<Long> colocateBackendsSet = null;
     private int tabletOrderIdx = -1;
+    // ID of colocate group that this tablet belongs to
+    private GroupId colocateGroupId = null;
+    private boolean relocationForRepair = false;
 
     private SystemInfoService infoService;
 
@@ -458,6 +462,22 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
 
     public Set<Long> getColocateBackendsSet() {
         return colocateBackendsSet;
+    }
+
+    public void setColocateGroupId(GroupId gid) {
+        colocateGroupId = gid;
+    }
+
+    public GroupId getColocateGroupId() {
+        return colocateGroupId;
+    }
+
+    public void setRelocationForRepair(boolean isRepair) {
+        relocationForRepair = isRepair;
+    }
+
+    public boolean getRelocationForRepair() {
+        return relocationForRepair;
     }
 
     public void setTabletOrderIdx(int idx) {
@@ -839,7 +859,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                 olapTable.isInMemory(),
                 olapTable.enablePersistentIndex(),
                 olapTable.getPartitionInfo().getTabletType(partitionId),
-                olapTable.getCompressionType());
+                olapTable.getCompressionType(), indexMeta.getSortKeyIdxes());
         createReplicaTask.setIsRecoverTask(true);
         taskTimeoutMs = Config.tablet_sched_min_clone_task_timeout_sec * 1000;
 
@@ -978,6 +998,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         TTabletInfo reportedTablet = request.getFinish_tablet_infos().get(0);
         Preconditions.checkArgument(reportedTablet.isSetPath_hash());
         replica.setPathHash(reportedTablet.getPath_hash());
+        replica.updateVersion(reportedTablet.version);
     }
 
     private void unprotectedFinishClone(TFinishTaskRequest request, Database db, Partition partition,
@@ -1012,7 +1033,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                     "replica does not exist. backend id: " + destBackendId);
         }
 
-        replica.updateRowCount(reportedTablet.getVersion(),
+        replica.updateRowCount(reportedTablet.getVersion(), reportedTablet.getMin_readable_version(),
                 reportedTablet.getData_size(), reportedTablet.getRow_count());
         if (reportedTablet.isSetPath_hash()) {
             replica.setPathHash(reportedTablet.getPath_hash());
@@ -1036,7 +1057,8 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                 reportedTablet.getData_size(),
                 reportedTablet.getRow_count(),
                 replica.getLastFailedVersion(),
-                replica.getLastSuccessVersion());
+                replica.getLastSuccessVersion(),
+                reportedTablet.getMin_readable_version());
 
         if (replica.getState() == ReplicaState.CLONE) {
             replica.setState(ReplicaState.NORMAL);

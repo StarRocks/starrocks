@@ -2,10 +2,12 @@
 
 package com.starrocks.lake;
 
+import com.staros.proto.CacheInfo;
 import com.staros.proto.ObjectStorageInfo;
 import com.staros.proto.ShardStorageInfo;
 import com.starrocks.alter.AlterJobV2Builder;
 import com.starrocks.alter.LakeTableAlterJobV2Builder;
+import com.starrocks.backup.Status;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
@@ -58,15 +60,26 @@ public class LakeTable extends OlapTable {
     }
 
     public String getStorageGroup() {
-        return getShardStorageInfo().getObjectStorageInfo().getObjectUri();
+        return getDefaultShardStorageInfo().getObjectStorageInfo().getObjectUri();
     }
 
-    public ShardStorageInfo getShardStorageInfo() {
+    public ShardStorageInfo getDefaultShardStorageInfo() {
         return tableProperty.getStorageInfo().getShardStorageInfo();
     }
 
+    public ShardStorageInfo getPartitionShardStorageInfo(long partitionId) {
+        CacheInfo cacheInfo = null;
+        StorageCacheInfo storageCacheInfo = partitionInfo.getStorageCacheInfo(partitionId);
+        if (storageCacheInfo == null) {
+            cacheInfo = getDefaultShardStorageInfo().getCacheInfo();
+        } else {
+            cacheInfo = storageCacheInfo.getCacheInfo();
+        }
+        return ShardStorageInfo.newBuilder(getDefaultShardStorageInfo()).setCacheInfo(cacheInfo).build();
+    }
+
     public void setStorageInfo(ShardStorageInfo shardStorageInfo, boolean enableCache, long cacheTtlS,
-            boolean allowAsyncWriteBack) throws DdlException {
+                               boolean allowAsyncWriteBack) throws DdlException {
         String storageGroup;
         // s3://bucket/serviceId/tableId/
         String path = String.format("%s/%d/", shardStorageInfo.getObjectStorageInfo().getObjectUri(), id);
@@ -84,14 +97,16 @@ public class LakeTable extends OlapTable {
         ObjectStorageInfo objectStorageInfo =
                 ObjectStorageInfo.newBuilder(shardStorageInfo.getObjectStorageInfo()).setObjectUri(storageGroup)
                         .build();
+        CacheInfo cacheInfo = CacheInfo.newBuilder().setEnableCache(enableCache).setTtlSeconds(cacheTtlS)
+                .setAllowAsyncWriteBack(allowAsyncWriteBack).build();
         ShardStorageInfo newShardStorageInfo =
-                ShardStorageInfo.newBuilder(shardStorageInfo).setObjectStorageInfo(objectStorageInfo).build();
+                ShardStorageInfo.newBuilder(shardStorageInfo).setObjectStorageInfo(objectStorageInfo)
+                        .setCacheInfo(cacheInfo).build();
 
         if (tableProperty == null) {
             tableProperty = new TableProperty(new HashMap<>());
         }
-        tableProperty.setStorageInfo(new StorageInfo(
-                newShardStorageInfo, new StorageCacheInfo(enableCache, cacheTtlS, allowAsyncWriteBack)));
+        tableProperty.setStorageInfo(new StorageInfo(newShardStorageInfo));
     }
 
     @Override
@@ -154,5 +169,23 @@ public class LakeTable extends OlapTable {
             }
         }
         return properties;
+    }
+
+    @Override
+    public Status createTabletsForRestore(int tabletNum, MaterializedIndex index, GlobalStateMgr globalStateMgr,
+                                          int replicationNum, long version, int schemaHash, long partitionId) {
+        ShardStorageInfo shardStorageInfo = getPartitionShardStorageInfo(partitionId);
+        List<Long> shardIds = null;
+        try {
+            shardIds = globalStateMgr.getStarOSAgent().createShards(tabletNum, shardStorageInfo, partitionId);
+        } catch (DdlException e) {
+            LOG.error(e.getMessage());
+            return new Status(Status.ErrCode.COMMON_ERROR, e.getMessage());
+        }
+        for (long shardId : shardIds) {
+            LakeTablet tablet = new LakeTablet(shardId);
+            index.addTablet(tablet, null /* tablet meta */, false/* update inverted index */);
+        }
+        return Status.OK;
     }
 }

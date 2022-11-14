@@ -4,6 +4,7 @@ package com.starrocks.analysis;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.sql.ast.CancelLoadStmt;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -21,7 +22,6 @@ public class CancelLoadStmtTest {
     public void testNormal() throws Exception {
         AnalyzeTestUtil.getStarRocksAssert().useDatabase("test");
         CancelLoadStmt stmt = (CancelLoadStmt) analyzeSuccess("CANCEL LOAD FROM test WHERE `label` = 'abc'");
-        Assert.assertEquals("CANCEL LOAD FROM `test` WHERE label = 'abc'", stmt.toString());
         Assert.assertEquals("test", stmt.getDbName());
         Assert.assertEquals("abc", stmt.getLabel());
     }

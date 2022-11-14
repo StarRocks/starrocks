@@ -71,7 +71,7 @@ public class LeaderTaskExecutor {
      * @return true if submit success
      * false if task exists
      */
-    public boolean submit(LeaderTask task) {
+    public boolean submit(PriorityLeaderTask task) {
         long signature = task.getSignature();
         synchronized (runningTasks) {
             if (runningTasks.containsKey(signature)) {

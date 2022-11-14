@@ -24,7 +24,6 @@ public:
 
 private:
     SlotId _column_id;
-    bool _is_nullable = false;
 };
 } // namespace vectorized
 } // namespace starrocks

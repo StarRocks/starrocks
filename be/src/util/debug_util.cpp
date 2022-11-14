@@ -24,11 +24,8 @@
 #include <iomanip>
 #include <sstream>
 
-#include "common/logging.h"
 #include "common/version.h"
-#include "gen_cpp/Opcodes_types.h"
 #include "gen_cpp/types.pb.h"
-#include "util/cpu_info.h"
 
 #define PRECISION 2
 #define KILOBYTE (1024)
@@ -99,10 +96,10 @@ std::string get_version_string(bool compact) {
     return ss.str();
 }
 
-std::string hexdump(const char* buf, int len) {
+std::string hexdump(const char* buf, size_t len) {
     std::stringstream ss;
     ss << std::hex << std::uppercase;
-    for (int i = 0; i < len; ++i) {
+    for (size_t i = 0; i < len; ++i) {
         ss << std::setfill('0') << std::setw(2) << ((uint16_t)buf[i] & 0xff);
     }
     return ss.str();

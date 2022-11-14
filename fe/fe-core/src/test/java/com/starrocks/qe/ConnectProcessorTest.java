@@ -253,6 +253,10 @@ public class ConnectProcessorTest extends DDLTestBase {
                 minTimes = 0;
                 result = "testCluster:user";
 
+                context.getCurrentUserIdentity();
+                minTimes = 0;
+                result = UserIdentity.ROOT;
+
                 context.getStartTime();
                 minTimes = 0;
                 result = 0L;

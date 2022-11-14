@@ -3,37 +3,24 @@
 #pragma once
 
 #include "column/array_column.h"
+#include "column/column_helper.h"
 #include "column/type_traits.h"
 #include "exprs/agg/aggregate.h"
 #include "runtime/mem_pool.h"
-#include "udf/udf_internal.h"
+#include "runtime/primitive_type.h"
 
 namespace starrocks::vectorized {
 
-template <PrimitiveType PT, typename = guard::Guard>
-struct ArrayAggAggregateState {};
-
 template <PrimitiveType PT>
-struct ArrayAggAggregateState<PT, FixedLengthPTGuard<PT>> {
-    using CppType = RunTimeCppType<PT>;
+struct ArrayAggAggregateState {
+    using ColumnType = RunTimeColumnType<PT>;
 
-    void update(MemPool* mem_pool, CppType key) { items.emplace_back(key); }
+    void update(const ColumnType& column, size_t offset, size_t count) { data_column.append(column, offset, count); }
 
-    std::vector<CppType> items;
-    size_t null_count = 0;
-};
+    void append_null() { null_count++; }
+    void append_null(size_t count) { null_count += count; }
 
-template <PrimitiveType PT>
-struct ArrayAggAggregateState<PT, BinaryPTGuard<PT>> {
-    using CppType = RunTimeCppType<PT>;
-
-    void update(MemPool* mem_pool, Slice key) {
-        uint8_t* pos = mem_pool->allocate(key.size);
-        memcpy(pos, key.data, key.size);
-        items.emplace_back(Slice(pos, key.size));
-    }
-
-    std::vector<CppType> items;
+    ColumnType data_column; // Aggregated elements for array_agg
     size_t null_count = 0;
 };
 
@@ -41,51 +28,36 @@ template <PrimitiveType PT>
 class ArrayAggAggregateFunction
         : public AggregateFunctionBatchHelper<ArrayAggAggregateState<PT>, ArrayAggAggregateFunction<PT>> {
 public:
-    using InputCppType = RunTimeCppType<PT>;
     using InputColumnType = RunTimeColumnType<PT>;
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
         const auto& column = down_cast<const InputColumnType&>(*columns[0]);
-        if constexpr (IsSlice<InputCppType>) {
-            this->data(state).update(ctx->impl()->mem_pool(), column.get_slice(row_num));
-        } else {
-            this->data(state).update(ctx->impl()->mem_pool(), column.get_data()[row_num]);
-        }
+        // TODO: update is random access, so we could not pre-reserve memory for State, which is the bottleneck
+        this->data(state).update(column, row_num, 1);
     }
 
     void process_null(FunctionContext* ctx, AggDataPtr __restrict state) const override {
-        this->data(state).null_count++;
+        this->data(state).append_null();
     }
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
+        // Array element is nullable, so we need to extract the data from nullable column first
         const auto* input_column = down_cast<const ArrayColumn*>(column);
-        auto datum_array = input_column->get(row_num).get_array();
+        auto offset_size = input_column->get_element_offset_size(row_num);
+        auto& array_element = down_cast<const NullableColumn&>(input_column->elements());
+        auto* element_data_column = down_cast<const InputColumnType*>(ColumnHelper::get_data_column(&array_element));
+        size_t element_null_count = array_element.null_count(offset_size.first, offset_size.second);
+        DCHECK_LE(element_null_count, offset_size.second);
 
-        for (size_t i = 0; i < datum_array.size(); i++) {
-            if (datum_array[i].is_null()) {
-                this->data(state).null_count++;
-            } else {
-                this->data(state).update(ctx->impl()->mem_pool(), datum_array[i].get<InputCppType>());
-            }
-        }
+        this->data(state).update(*element_data_column, offset_size.first, offset_size.second - element_null_count);
+        this->data(state).append_null(element_null_count);
     }
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
-        const auto& data = this->data(state).items;
-        const size_t null_count = this->data(state).null_count;
-
+        auto& state_impl = this->data(state);
         auto* column = down_cast<ArrayColumn*>(to);
-        auto& offsets = column->offsets_column()->get_data();
-        auto& elements_column = column->elements_column();
-
-        if (null_count > 0) {
-            elements_column->append_nulls(null_count);
-        }
-        for (size_t i = 0; i < data.size(); i++) {
-            elements_column->append_datum(data[i]);
-        }
-        offsets.emplace_back(offsets.back() + data.size() + null_count);
+        column->append_array_element(state_impl.data_column, state_impl.null_count);
     }
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {

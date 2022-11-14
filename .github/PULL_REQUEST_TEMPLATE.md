@@ -1,9 +1,11 @@
 ## What type of PR is this：
-- [ ] bugfix
-- [ ] feature
-- [ ] enhancement
-- [ ] refactor
-- [ ] others
+- [ ] BugFix
+- [ ] Feature
+- [ ] Enhancement
+- [ ] Refactor
+- [ ] UT
+- [ ] Doc
+- [ ] Tool
 
 ## Which issues of this PR fixes ：
 <!--
@@ -18,4 +20,6 @@ Fixes #
 ## Checklist:
 
 - [ ] I have added test cases for my bug fix or my new feature
-- [ ] I have added user document for my new feature or new function
+- [ ] This pr will affect users' behaviors
+- [ ] This pr needs user documentation (for new or modified features or behaviors)
+  - [ ] I have added documentation for my new feature or new function

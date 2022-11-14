@@ -3,15 +3,15 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.CreateResourceStmt;
 import com.starrocks.common.UserException;
-import com.starrocks.external.iceberg.IcebergCatalogType;
+import com.starrocks.connector.iceberg.IcebergCatalogType;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.PrivilegeChecker;
+import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Injectable;
@@ -78,7 +78,7 @@ public class IcebergResourceTest {
         String name = "iceberg1";
         String type = "iceberg";
         String catalogType = "CUSTOM";
-        String catalogImpl = "com.starrocks.external.iceberg.IcebergHiveCatalog";
+        String catalogImpl = "com.starrocks.connector.iceberg.IcebergHiveCatalog";
         Map<String, String> properties = Maps.newHashMap();
         properties.put("type", type);
         properties.put("iceberg.catalog.type", catalogType);

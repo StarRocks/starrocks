@@ -1,12 +1,14 @@
 # Change data through loading
 
-The [Primary Key](/docs/table_design/Data_model.md#primary-key-model) model provided by StarRocks allows you to make data changes to StarRocks tables by running [Stream Load](/docs/loading/StreamLoad.md), [Broker Load](/docs/loading/BrokerLoad.md), or [Routine Load](/docs/loading/RoutineLoad.md) jobs. These data changes include inserts, updates, and deletions.
+The [Primary Key](../table_design/Data_model.md#primary-key-model) model provided by StarRocks allows you to make data changes to StarRocks tables by running [Stream Load](../loading/StreamLoad.md), [Broker Load](../loading/BrokerLoad.md), or [Routine Load](../loading/RoutineLoad.md) jobs. These data changes include inserts, updates, and deletions.
 
 StarRocks also supports partial updates. This feature is in preview.
 
 This topic uses CSV data as an example to describe how to make data changes to a StarRocks table through loading. The data file formats that are supported vary depending on the loading method of your choice.
 
-> Note: For CSV data, you can use a UTF-8 string, such as a comma (,), tab, or pipe (|), whose length does not exceed 50 bytes as a text delimiter.
+> **NOTE**
+>
+> For CSV data, you can use a UTF-8 string, such as a comma (,), tab, or pipe (|), whose length does not exceed 50 bytes as a text delimiter.
 
 ## Implementation
 
@@ -14,7 +16,9 @@ The Primary Key model of StarRocks supports UPSERT and DELETE operations and doe
 
 When you create a load job, StarRocks supports adding a field named `__op` to the job creation statement or command. The `__op` field is used to specify the type of operation you want to perform.
 
-> Note: When you create a table, you do not need to add a column named `__op` to that table.
+> **NOTE**
+>
+> When you create a table, you do not need to add a column named `__op` to that table.
 
 The method of defining the `__op` field varies depending on the loading method of your choice:
 
@@ -40,19 +44,19 @@ You can decide whether to add the `__op` field based on the data changes you wan
 
 ## Prerequisites
 
-If you choose Broker Load, make sure that a broker is deployed in your StarRocks cluster. You can use the [SHOW BROKER](/docs/sql-reference/sql-statements/Administration/SHOW%20BROKER.md) statement to check for brokers that are deployed in your StarRocks cluster. If no broker is deployed, you must deploy a broker by following the instructions provided in [Deploy a broker](/docs/quick_start/Deploy.md#deploy-broker). Assume that you have deployed a broker named `broker1`.
+If you choose Broker Load, make sure that a broker is deployed in your StarRocks cluster. You can use the [SHOW BROKER](../sql-reference/sql-statements/Administration/SHOW%20BROKER.md) statement to check for brokers that are deployed in your StarRocks cluster. If no broker is deployed, you must deploy a broker by following the instructions provided in [Deploy a broker](../quick_start/Deploy.md#deploy-broker). Assume that you have deployed a broker named `broker1`.
 
 If you choose Routine Load, make sure that topics are created in your Apache Kafka® cluster. Assume that you have created four topics: `topic1`, `topic2`, `topic3`, and `topic4`.
 
 ## Examples
 
-This section provides examples of how to make data changes to a StarRocks table through loading. For detailed syntax and parameter descriptions, see [STREAM LOAD](/docs/sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md), [BROKER LOAD](/docs/sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md), and [CREATE ROUTINE LOAD](/docs/sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md).
+This section provides examples of how to make data changes to a StarRocks table through loading. For detailed syntax and parameter descriptions, see [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md), [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md), and [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md).
 
 ### UPSERT
 
 If the data file you want to load involves only UPSERT operations, you do not need to add the `__op` field.
 
-> Note:
+> **NOTE**
 >
 > If you add the `__op` field:
 >
@@ -375,7 +379,9 @@ Run a load job to delete the record whose `id` is `101` in `example3.csv` from `
       http://<fe_host>:<fe_http_port>/api/test_db/table3/_stream_load
   ```
 
-  > Note: In the preceding example, the fourth column that represents the operation type in `example3.csv` is temporarily named as `temp` and the `__op` field is mapped onto the `temp` column by using the `columns` parameter. As such, StarRocks can decide whether to perform an UPSERT or DELETE operation depending on the value in the fourth column of `example3.csv` is `0` or `1`.
+  > **NOTE**
+  >
+  > In the preceding example, the fourth column that represents the operation type in `example3.csv` is temporarily named as `temp` and the `__op` field is mapped onto the `temp` column by using the `columns` parameter. As such, StarRocks can decide whether to perform an UPSERT or DELETE operation depending on the value in the fourth column of `example3.csv` is `0` or `1`.
 
 - Run a Broker Load job:
 
@@ -396,7 +402,7 @@ Run a load job to delete the record whose `id` is `101` in `example3.csv` from `
 
   ```SQL
   CREATE ROUTINE LOAD test_db.table3 ON table3
-  COLUMNS(id, name, score, __op)
+  COLUMNS(id, name, score, temp, __op)
   PROPERTIES
   (
       "desired_concurrent_number" = "3",
@@ -485,7 +491,9 @@ Run a load to update the data in the two columns of `example4.csv` to the `id` a
       http://<fe_host>:<fe_http_port>/api/test_db/table4/_stream_load
   ```
 
-  > Note: If you choose Stream Load, you must set the `partial_update` parameter to `true` to enable the partial update feature. Additionally, you must use the `columns` parameter to specify the columns you want to update.
+  > **NOTE**
+  >
+  > If you choose Stream Load, you must set the `partial_update` parameter to `true` to enable the partial update feature. Additionally, you must use the `columns` parameter to specify the columns you want to update.
 
 - Run a Broker Load job:
 
@@ -504,7 +512,9 @@ Run a load to update the data in the two columns of `example4.csv` to the `id` a
   );
   ```
 
-  > Note: If you choose Broker Load, you must set the `partial_update` parameter to `true` to enable the partial update feature. Additionally, you must use the `column_list` parameter to specify the columns you want to update.
+  > **NOTE**
+  >
+  > If you choose Broker Load, you must set the `partial_update` parameter to `true` to enable the partial update feature. Additionally, you must use the `column_list` parameter to specify the columns you want to update.
 
 - Run a Routine Load job:
 
@@ -524,7 +534,9 @@ Run a load to update the data in the two columns of `example4.csv` to the `id` a
   );
   ```
 
-  > Note: If you choose Broker Load, you must set the `partial_update` parameter to `true` to enable the partial update feature. Additionally, you must use the `COLUMNS` parameter to specify the columns you want to update.
+  > **NOTE**
+  >
+  > If you choose Broker Load, you must set the `partial_update` parameter to `true` to enable the partial update feature. Additionally, you must use the `COLUMNS` parameter to specify the columns you want to update.
 
 ### Query data
 

@@ -32,6 +32,8 @@
 
 namespace starrocks {
 
+class Field;
+
 // struct that contains column data(null bitmap), data array in sub class.
 class ColumnVectorBatch {
 public:

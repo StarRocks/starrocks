@@ -27,45 +27,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.HelpStmt;
-import com.starrocks.analysis.PartitionNames;
 import com.starrocks.analysis.Predicate;
-import com.starrocks.analysis.ShowAuthenticationStmt;
-import com.starrocks.analysis.ShowAuthorStmt;
-import com.starrocks.analysis.ShowBackendsStmt;
-import com.starrocks.analysis.ShowBackupStmt;
-import com.starrocks.analysis.ShowBrokerStmt;
-import com.starrocks.analysis.ShowCollationStmt;
-import com.starrocks.analysis.ShowDbStmt;
-import com.starrocks.analysis.ShowDeleteStmt;
-import com.starrocks.analysis.ShowDynamicPartitionStmt;
-import com.starrocks.analysis.ShowEnginesStmt;
-import com.starrocks.analysis.ShowExportStmt;
-import com.starrocks.analysis.ShowFrontendsStmt;
-import com.starrocks.analysis.ShowFunctionsStmt;
-import com.starrocks.analysis.ShowGrantsStmt;
-import com.starrocks.analysis.ShowIndexStmt;
-import com.starrocks.analysis.ShowLoadStmt;
-import com.starrocks.analysis.ShowMaterializedViewStmt;
-import com.starrocks.analysis.ShowPartitionsStmt;
-import com.starrocks.analysis.ShowPluginsStmt;
-import com.starrocks.analysis.ShowProcStmt;
-import com.starrocks.analysis.ShowProcesslistStmt;
-import com.starrocks.analysis.ShowRepositoriesStmt;
-import com.starrocks.analysis.ShowResourcesStmt;
-import com.starrocks.analysis.ShowRestoreStmt;
-import com.starrocks.analysis.ShowRolesStmt;
-import com.starrocks.analysis.ShowRoutineLoadStmt;
-import com.starrocks.analysis.ShowRoutineLoadTaskStmt;
-import com.starrocks.analysis.ShowSmallFilesStmt;
-import com.starrocks.analysis.ShowSnapshotStmt;
-import com.starrocks.analysis.ShowSqlBlackListStmt;
-import com.starrocks.analysis.ShowStmt;
-import com.starrocks.analysis.ShowTabletStmt;
-import com.starrocks.analysis.ShowTransactionStmt;
-import com.starrocks.analysis.ShowUserPropertyStmt;
-import com.starrocks.analysis.ShowUserStmt;
-import com.starrocks.analysis.ShowVariablesStmt;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.backup.AbstractJob;
@@ -118,9 +80,12 @@ import com.starrocks.load.ExportMgr;
 import com.starrocks.load.Load;
 import com.starrocks.load.routineload.RoutineLoadFunctionalExprProvider;
 import com.starrocks.load.routineload.RoutineLoadJob;
+import com.starrocks.load.streamload.StreamLoadFunctionalExprProvider;
+import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.meta.BlackListSql;
 import com.starrocks.meta.SqlBlackList;
 import com.starrocks.mysql.privilege.PrivPredicate;
+import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -129,20 +94,59 @@ import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.DescribeStmt;
+import com.starrocks.sql.ast.HelpStmt;
+import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
+import com.starrocks.sql.ast.ShowAuthenticationStmt;
+import com.starrocks.sql.ast.ShowAuthorStmt;
+import com.starrocks.sql.ast.ShowBackendsStmt;
+import com.starrocks.sql.ast.ShowBackupStmt;
 import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
+import com.starrocks.sql.ast.ShowBrokerStmt;
 import com.starrocks.sql.ast.ShowCatalogsStmt;
+import com.starrocks.sql.ast.ShowCollationStmt;
 import com.starrocks.sql.ast.ShowColumnStmt;
 import com.starrocks.sql.ast.ShowComputeNodesStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.sql.ast.ShowDataStmt;
+import com.starrocks.sql.ast.ShowDbStmt;
+import com.starrocks.sql.ast.ShowDeleteStmt;
+import com.starrocks.sql.ast.ShowDynamicPartitionStmt;
+import com.starrocks.sql.ast.ShowEnginesStmt;
+import com.starrocks.sql.ast.ShowExportStmt;
+import com.starrocks.sql.ast.ShowFrontendsStmt;
+import com.starrocks.sql.ast.ShowFunctionsStmt;
+import com.starrocks.sql.ast.ShowGrantsStmt;
 import com.starrocks.sql.ast.ShowHistogramStatsMetaStmt;
+import com.starrocks.sql.ast.ShowIndexStmt;
+import com.starrocks.sql.ast.ShowLoadStmt;
+import com.starrocks.sql.ast.ShowMaterializedViewStmt;
+import com.starrocks.sql.ast.ShowPartitionsStmt;
+import com.starrocks.sql.ast.ShowPluginsStmt;
+import com.starrocks.sql.ast.ShowProcStmt;
+import com.starrocks.sql.ast.ShowProcesslistStmt;
+import com.starrocks.sql.ast.ShowRepositoriesStmt;
 import com.starrocks.sql.ast.ShowResourceGroupStmt;
+import com.starrocks.sql.ast.ShowResourcesStmt;
+import com.starrocks.sql.ast.ShowRestoreStmt;
+import com.starrocks.sql.ast.ShowRolesStmt;
+import com.starrocks.sql.ast.ShowRoutineLoadStmt;
+import com.starrocks.sql.ast.ShowRoutineLoadTaskStmt;
+import com.starrocks.sql.ast.ShowSmallFilesStmt;
+import com.starrocks.sql.ast.ShowSnapshotStmt;
+import com.starrocks.sql.ast.ShowSqlBlackListStmt;
+import com.starrocks.sql.ast.ShowStmt;
+import com.starrocks.sql.ast.ShowStreamLoadStmt;
 import com.starrocks.sql.ast.ShowTableStatusStmt;
 import com.starrocks.sql.ast.ShowTableStmt;
+import com.starrocks.sql.ast.ShowTabletStmt;
+import com.starrocks.sql.ast.ShowTransactionStmt;
+import com.starrocks.sql.ast.ShowUserPropertyStmt;
+import com.starrocks.sql.ast.ShowUserStmt;
+import com.starrocks.sql.ast.ShowVariablesStmt;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
@@ -215,6 +219,8 @@ public class ShowExecutor {
             handleShowRoutineLoad();
         } else if (stmt instanceof ShowRoutineLoadTaskStmt) {
             handleShowRoutineLoadTask();
+        } else if (stmt instanceof ShowStreamLoadStmt) {
+            handleShowStreamLoad();
         } else if (stmt instanceof ShowDeleteStmt) {
             handleShowDelete();
         } else if (stmt instanceof ShowAlterStmt) {
@@ -329,7 +335,7 @@ public class ShowExecutor {
                     continue;
                 }
                 List<String> resultRow = Lists.newArrayList(String.valueOf(mvTable.getId()), mvTable.getName(), dbName,
-                        GlobalStateMgr.getMaterializedViewDdlStmt(mvTable), String.valueOf(mvTable.getRowCount()));
+                        mvTable.getMaterializedViewDdlStmt(true), String.valueOf(mvTable.getRowCount()));
                 rowSets.add(resultRow);
             }
             for (Table table : db.getTables()) {
@@ -520,9 +526,14 @@ public class ShowExecutor {
                 continue;
             }
 
-            if (!PrivilegeChecker.checkDbPriv(ConnectContext.get(), catalogName,
-                    dbName, PrivPredicate.SHOW)) {
-                continue;
+            if (ctx.getGlobalStateMgr().isUsingNewPrivilege()) {
+                if (CatalogMgr.isInternalCatalog(catalogName) && !PrivilegeManager.checkAnyActionOnOrUnderDb(ctx, dbName)) {
+                    continue;
+                }
+            } else {
+                if (!PrivilegeChecker.checkDbPriv(ctx, catalogName, dbName, PrivPredicate.SHOW)) {
+                    continue;
+                }
             }
             dbNameSet.add(dbName);
         }
@@ -558,9 +569,15 @@ public class ShowExecutor {
                             continue;
                         }
                         // check tbl privs
-                        if (!PrivilegeChecker.checkTblPriv(ConnectContext.get(), catalog,
-                                db.getFullName(), tbl.getName(), PrivPredicate.SHOW)) {
-                            continue;
+                        if (ctx.getGlobalStateMgr().isUsingNewPrivilege()) {
+                            if (!PrivilegeManager.checkAnyActionOnTable(ctx, db.getFullName(), tbl.getName())) {
+                                continue;
+                            }
+                        } else {
+                            if (!PrivilegeChecker.checkTblPriv(ConnectContext.get(), catalog,
+                                    db.getFullName(), tbl.getName(), PrivPredicate.SHOW)) {
+                                continue;
+                            }
                         }
                         tableMap.put(tbl.getName(), tbl.getMysqlType());
                     }
@@ -1000,6 +1017,41 @@ public class ShowExecutor {
         resultSet = new ShowResultSet(showRoutineLoadTaskStmt.getMetaData(), rows);
     }
 
+    private void handleShowStreamLoad() throws AnalysisException {
+        ShowStreamLoadStmt showStreamLoadStmt = (ShowStreamLoadStmt) stmt;
+        List<List<String>> rows = Lists.newArrayList();
+        // if task exists
+        List<StreamLoadTask> streamLoadTaskList;
+        try {
+            streamLoadTaskList = GlobalStateMgr.getCurrentState().getStreamLoadManager()
+                    .getTask(showStreamLoadStmt.getDbFullName(),
+                            showStreamLoadStmt.getName(),
+                            showStreamLoadStmt.isIncludeHistory());
+        } catch (MetaNotFoundException e) {
+            LOG.warn(e.getMessage(), e);
+            throw new AnalysisException(e.getMessage());
+        }
+
+        if (streamLoadTaskList != null) {
+            StreamLoadFunctionalExprProvider fProvider = showStreamLoadStmt.getFunctionalExprProvider(this.ctx);
+            rows = streamLoadTaskList.parallelStream()
+                    .filter(fProvider.getPredicateChain())
+                    .sorted(fProvider.getOrderComparator())
+                    .skip(fProvider.getSkipCount())
+                    .limit(fProvider.getLimitCount())
+                    .map(task -> task.getShowInfo())
+                    .collect(Collectors.toList());
+        }
+
+        if (!Strings.isNullOrEmpty(showStreamLoadStmt.getName()) && rows.isEmpty()) {
+            // if the label has been specified
+            throw new AnalysisException("There is no label named " + showStreamLoadStmt.getName()
+                    + " in db " + showStreamLoadStmt.getDbFullName()
+                    + ". Include history? " + showStreamLoadStmt.isIncludeHistory());
+        }
+        resultSet = new ShowResultSet(showStreamLoadStmt.getMetaData(), rows);
+    }
+
     // Show user property statement
     private void handleShowUserProperty() throws AnalysisException {
         ShowUserPropertyStmt showStmt = (ShowUserPropertyStmt) stmt;
@@ -1195,7 +1247,7 @@ public class ShowExecutor {
                 if (table == null) {
                     ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR, showStmt.getTableName());
                 }
-                if (!(table instanceof OlapTable)) {
+                if (!table.isNativeTable()) {
                     ErrorReport.reportAnalysisException(ErrorCode.ERR_NOT_OLAP_TABLE, showStmt.getTableName());
                 }
 

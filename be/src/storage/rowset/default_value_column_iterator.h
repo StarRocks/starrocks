@@ -57,8 +57,6 @@ public:
         return Status::OK();
     }
 
-    Status next_batch(size_t* n, ColumnBlockView* dst, bool* has_null) override;
-
     Status next_batch(size_t* n, vectorized::Column* dst) override;
 
     Status next_batch(const vectorized::SparseRange& range, vectorized::Column* dst) override;
@@ -97,6 +95,7 @@ private:
     // current rowid
     ordinal_t _current_rowid = 0;
     ordinal_t _num_rows = 0;
+    bool _may_contain_deleted_row = false;
 };
 
 } // namespace starrocks

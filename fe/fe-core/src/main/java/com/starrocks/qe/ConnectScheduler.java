@@ -119,7 +119,13 @@ public class ConnectScheduler {
             connByUser.put(ctx.getQualifiedUser(), new AtomicInteger(0));
         }
         int conns = connByUser.get(ctx.getQualifiedUser()).get();
-        if (conns >= ctx.getGlobalStateMgr().getAuth().getMaxConn(ctx.getQualifiedUser())) {
+        long currentConns;
+        if (ctx.getGlobalStateMgr().isUsingNewPrivilege()) {
+            currentConns = ctx.getGlobalStateMgr().getAuthenticationManager().getMaxConn(ctx.getQualifiedUser());
+        } else {
+            currentConns = ctx.getGlobalStateMgr().getAuth().getMaxConn(ctx.getQualifiedUser());
+        }
+        if (conns >= currentConns) {
             return false;
         }
         numberConnection.incrementAndGet();

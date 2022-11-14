@@ -3,7 +3,6 @@
 #include <utility>
 
 #include "column/column.h"
-#include "column/hash_set.h"
 #include "column/nullable_column.h"
 #include "gutil/casts.h"
 #include "storage/in_predicate_utils.h"

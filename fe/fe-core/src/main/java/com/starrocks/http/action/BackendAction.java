@@ -23,6 +23,7 @@ package com.starrocks.http.action;
 
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.common.util.ListComparator;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
@@ -76,9 +77,15 @@ public class BackendAction extends WebBaseAction {
             }
             backendInfo.add(address.getHostName());
             backendInfo.add(backend.getId());
-            backendInfo.add("heart_port: " + backend.getHeartbeatPort()
+            backendInfo.add("host: " + backend.getHost()
+                    + ", heart_port: " + backend.getHeartbeatPort()
                     + ", be_port: " + backend.getBePort()
-                    + ", http_port: " + backend.getHttpPort());
+                    + ", http_port: " + backend.getHttpPort()
+                    + ", brpc_port: " + backend.getBrpcPort()
+                    + ", state: " + backend.getBackendState()
+                    + ", start_time: " + TimeUtils.longToTimeString(backend.getLastStartTime())
+                    + ", last_report_tablets_time: " + backend.getBackendStatus().lastSuccessReportTabletsTime
+                    + ", version: " + backend.getVersion());
 
             backendInfos.add(backendInfo);
         }

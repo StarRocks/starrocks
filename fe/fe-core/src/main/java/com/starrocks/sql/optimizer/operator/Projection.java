@@ -5,7 +5,7 @@ import com.google.common.base.Preconditions;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.rewrite.physical.AddDecodeNodeForDictStringRule;
+import com.starrocks.sql.optimizer.rule.tree.AddDecodeNodeForDictStringRule;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -96,6 +96,10 @@ public class Projection {
         return AddDecodeNodeForDictStringRule.DecodeVisitor.couldApplyDictOptimize(operator, sids);
     }
 
+    public static boolean cannotApplyDictOptimize(ScalarOperator operator, Set<Integer> sids) {
+        return AddDecodeNodeForDictStringRule.DecodeVisitor.cannotApplyDictOptimize(operator, sids);
+    }
+
     private boolean couldApplyStringDict(ScalarOperator operator, ColumnRefSet dictSet, Set<Integer> sids) {
         ColumnRefSet usedColumns = operator.getUsedColumns();
         if (usedColumns.isIntersect(dictSet)) {
@@ -125,7 +129,7 @@ public class Projection {
     }
 
     private void fillDisableDictOptimizeColumns(ScalarOperator operator, ColumnRefSet columnRefSet, Set<Integer> sids) {
-        if (!couldApplyDictOptimize(operator, sids)) {
+        if (cannotApplyDictOptimize(operator, sids)) {
             columnRefSet.union(operator.getUsedColumns());
         }
     }

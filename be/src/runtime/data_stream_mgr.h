@@ -21,17 +21,14 @@
 
 #pragma once
 
+#include <bthread/mutex.h>
+
 #include <list>
 #include <mutex>
 #include <set>
 
-#include "common/compiler_util.h"
-DIAGNOSTIC_PUSH
-DIAGNOSTIC_IGNORE("-Wclass-memaccess")
-#include <bthread/mutex.h>
-DIAGNOSTIC_POP
-
 #include "column/vectorized_fwd.h"
+#include "common/compiler_util.h"
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "gen_cpp/Types_types.h" // for TUniqueId

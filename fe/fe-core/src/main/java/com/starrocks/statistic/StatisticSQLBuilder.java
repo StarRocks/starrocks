@@ -78,7 +78,11 @@ public class StatisticSQLBuilder {
             VelocityContext context = new VelocityContext();
             context.put("updateTime", "now()");
 
-            context.put("type", column.getType().toSql());
+            if (column.getType().canStatistic()) {
+                context.put("type", column.getType().toSql());
+            } else {
+                context.put("type", "string");
+            }
             context.put("predicate", "table_id = " + tableId + " and column_name = \"" + column.getName() + "\"");
             querySQL.add(build(context, QUERY_FULL_STATISTIC_TEMPLATE));
         }

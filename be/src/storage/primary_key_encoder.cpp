@@ -107,7 +107,7 @@ static bool SSEEncodeChunk(const uint8_t** srcp, uint8_t** dstp) {
     // Compare each byte of the input with '\0'. This results in a vector
     // where each byte is either \x00 or \xFF, depending on whether the
     // input had a '\x00' in the corresponding position.
-    __m128i zeros = reinterpret_cast<__m128i>(_mm_setzero_pd());
+    auto zeros = reinterpret_cast<__m128i>(_mm_setzero_pd());
     __m128i zero_bytes = _mm_cmpeq_epi8(data, zeros);
 
     // Check whether the resulting vector is all-zero.
@@ -159,8 +159,8 @@ inline void encode_slice(const Slice& s, string* dst, bool is_last) {
         size_t old_size = dst->size();
         dst->resize(old_size + s.size * 2 + 2);
 
-        const uint8_t* srcp = (const uint8_t*)s.data;
-        uint8_t* dstp = reinterpret_cast<uint8_t*>(&(*dst)[old_size]);
+        const auto* srcp = (const uint8_t*)s.data;
+        auto* dstp = reinterpret_cast<uint8_t*>(&(*dst)[old_size]);
         size_t len = s.size;
         size_t rem = len;
 
@@ -205,13 +205,13 @@ inline Status decode_slice(Slice* src, string* dest, bool is_last) {
     if (is_last) {
         dest->append(src->data, src->size);
     } else {
-        uint8_t* separator = static_cast<uint8_t*>(memmem(src->data, src->size, "\0\0", 2));
+        auto* separator = static_cast<uint8_t*>(memmem(src->data, src->size, "\0\0", 2));
         DCHECK(separator) << "bad encoded primary key, separator not found";
         if (PREDICT_FALSE(separator == nullptr)) {
             LOG(WARNING) << "bad encoded primary key, separator not found";
             return Status::InvalidArgument("bad encoded primary key, separator not found");
         }
-        uint8_t* data = (uint8_t*)src->data;
+        auto* data = (uint8_t*)src->data;
         int len = separator - data;
         for (int i = 0; i < len; i++) {
             if (i >= 1 && data[i - 1] == '\0' && data[i] == '\1') {
@@ -244,22 +244,22 @@ bool PrimaryKeyEncoder::is_supported(const vectorized::Field& f) {
     }
 }
 
-bool PrimaryKeyEncoder::is_supported(const vectorized::Schema& schema) {
-    size_t n = schema.num_key_fields();
-    for (size_t i = 0; i < n; i++) {
-        if (!is_supported(*schema.field(i))) {
+bool PrimaryKeyEncoder::is_supported(const vectorized::Schema& schema, const std::vector<ColumnId>& key_idxes) {
+    for (const auto key_idx : key_idxes) {
+        if (!is_supported(*schema.field(key_idx))) {
             return false;
         }
     }
     return true;
 }
 
-FieldType PrimaryKeyEncoder::encoded_primary_key_type(const vectorized::Schema& schema) {
-    if (!is_supported(schema)) {
+FieldType PrimaryKeyEncoder::encoded_primary_key_type(const vectorized::Schema& schema,
+                                                      const std::vector<ColumnId>& key_idxes) {
+    if (!is_supported(schema, key_idxes)) {
         return OLAP_FIELD_TYPE_NONE;
     }
-    if (schema.num_key_fields() == 1) {
-        return schema.field(0)->type()->type();
+    if (key_idxes.size() == 1) {
+        return schema.field(key_idxes[0])->type()->type();
     }
     return OLAP_FIELD_TYPE_VARCHAR;
 }
@@ -279,17 +279,26 @@ size_t PrimaryKeyEncoder::get_encoded_fixed_size(const vectorized::Schema& schem
 
 Status PrimaryKeyEncoder::create_column(const vectorized::Schema& schema,
                                         std::unique_ptr<vectorized::Column>* pcolumn) {
-    if (!is_supported(schema)) {
+    std::vector<ColumnId> key_idxes(schema.num_key_fields());
+    for (ColumnId i = 0; i < schema.num_key_fields(); ++i) {
+        key_idxes[i] = i;
+    }
+    return PrimaryKeyEncoder::create_column(schema, pcolumn, key_idxes);
+}
+
+Status PrimaryKeyEncoder::create_column(const vectorized::Schema& schema, std::unique_ptr<vectorized::Column>* pcolumn,
+                                        const std::vector<ColumnId>& key_idxes) {
+    if (!is_supported(schema, key_idxes)) {
         return Status::NotSupported("type not supported for primary key encoding");
     }
     // TODO: let `Chunk::column_from_field_type` and `Chunk::column_from_field` return a
     // `std::unique_ptr<Column>` instead of `std::shared_ptr<Column>`, in order to reuse
     // its code here.
-    if (schema.num_key_fields() == 1) {
+    if (key_idxes.size() == 1) {
         // simple encoding
         // integer's use fixed length original column
         // varchar use binary
-        auto type = schema.field(0)->type()->type();
+        auto type = schema.field(key_idxes[0])->type()->type();
         switch (type) {
         case OLAP_FIELD_TYPE_BOOL:
             *pcolumn = vectorized::BooleanColumn::create_mutable();
@@ -409,7 +418,7 @@ void PrimaryKeyEncoder::encode(const vectorized::Schema& schema, const vectorize
         vector<EncodeOp> ops;
         vector<const void*> datas;
         prepare_ops_datas(schema, chunk, &ops, &datas);
-        vectorized::BinaryColumn& bdest = down_cast<vectorized::BinaryColumn&>(*dest);
+        auto& bdest = down_cast<vectorized::BinaryColumn&>(*dest);
         bdest.reserve(bdest.size() + len);
         string buff;
         for (size_t i = 0; i < len; i++) {
@@ -434,7 +443,7 @@ void PrimaryKeyEncoder::encode_selective(const vectorized::Schema& schema, const
         vector<EncodeOp> ops;
         vector<const void*> datas;
         prepare_ops_datas(schema, chunk, &ops, &datas);
-        vectorized::BinaryColumn& bdest = down_cast<vectorized::BinaryColumn&>(*dest);
+        auto& bdest = down_cast<vectorized::BinaryColumn&>(*dest);
         bdest.reserve(bdest.size() + len);
         string buff;
         for (int i = 0; i < len; i++) {

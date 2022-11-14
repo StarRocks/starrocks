@@ -21,19 +21,11 @@
 
 package com.starrocks.alter;
 
-
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.staros.proto.ObjectStorageInfo;
 import com.staros.proto.ShardStorageInfo;
-import com.starrocks.analysis.CreateUserStmt;
 import com.starrocks.analysis.DateLiteral;
-import com.starrocks.analysis.DropMaterializedViewStmt;
-import com.starrocks.analysis.GrantStmt;
-import com.starrocks.analysis.MultiItemListPartitionDesc;
-import com.starrocks.analysis.PartitionDesc;
-import com.starrocks.analysis.PartitionNames;
-import com.starrocks.analysis.SingleItemListPartitionDesc;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.DataProperty;
@@ -54,12 +46,13 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.lake.StarOSAgent;
-import com.starrocks.lake.StorageInfo;
+import com.starrocks.lake.StorageCacheInfo;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.persist.ListPartitionPersistInfo;
 import com.starrocks.persist.PartitionPersistInfoV2;
 import com.starrocks.persist.RangePartitionPersistInfo;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
@@ -68,19 +61,27 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AddColumnsClause;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AlterClause;
-import com.starrocks.sql.ast.AlterDatabaseRename;
-import com.starrocks.sql.ast.AlterMaterializedViewStatement;
+import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
+import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
+import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
-import com.starrocks.sql.ast.CancelRefreshMaterializedViewStatement;
+import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
 import com.starrocks.sql.ast.ColumnRenameClause;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DropColumnClause;
+import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.ModifyColumnClause;
+import com.starrocks.sql.ast.MultiItemListPartitionDesc;
+import com.starrocks.sql.ast.PartitionDesc;
+import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.ReorderColumnsClause;
+import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.sql.ast.TruncatePartitionClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.thrift.TStorageMedium;
@@ -227,10 +228,10 @@ public class AlterTest {
     }
 
     private static void alterMaterializedView(String sql, boolean expectedException) throws Exception {
-        AlterMaterializedViewStatement alterMaterializedViewStatement =
-                (AlterMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        AlterMaterializedViewStmt alterMaterializedViewStmt =
+                (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         try {
-            GlobalStateMgr.getCurrentState().alterMaterializedView(alterMaterializedViewStatement);
+            GlobalStateMgr.getCurrentState().alterMaterializedView(alterMaterializedViewStmt);
             if (expectedException) {
                 Assert.fail();
             }
@@ -242,7 +243,7 @@ public class AlterTest {
         }
     }
 
-    private static void refreshMaterializedView(String sql, boolean expectedException) throws Exception {
+    private static void refreshMaterializedView(String sql) throws Exception {
         RefreshMaterializedViewStatement refreshMaterializedViewStatement =
                 (RefreshMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         try {
@@ -250,20 +251,15 @@ public class AlterTest {
                     .refreshMaterializedView(refreshMaterializedViewStatement.getMvName().getDb(),
                             refreshMaterializedViewStatement.getMvName().getTbl(),
                             Constants.TaskRunPriority.LOWEST.value());
-            if (expectedException) {
-                Assert.fail();
-            }
         } catch (Exception e) {
             e.printStackTrace();
-            if (!expectedException) {
-                Assert.fail();
-            }
+            Assert.fail();
         }
     }
 
     private static void cancelRefreshMaterializedView(String sql, boolean expectedException) throws Exception {
-        CancelRefreshMaterializedViewStatement cancelRefresh =
-                (CancelRefreshMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        CancelRefreshMaterializedViewStmt cancelRefresh =
+                (CancelRefreshMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         try {
             GlobalStateMgr.getCurrentState().getLocalMetastore()
                     .cancelRefreshMaterializedView(cancelRefresh.getMvName().getDb(),
@@ -334,8 +330,8 @@ public class AlterTest {
                 getDb("test").getTable("mv2");
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
         Task task = taskManager.getTask(TaskBuilder.getMvTaskName(materializedView.getId()));
-        Assert.assertEquals("insert overwrite mv2 SELECT `test`.`testTable1`.`k1` AS `k1`," +
-                " `test`.`testTable1`.`k2` AS `k2` FROM `test`.`testTable1`", task.getDefinition());
+        Assert.assertEquals("insert overwrite mv2 SELECT `test`.`testTable1`.`k1`, `test`.`testTable1`.`k2`\n" +
+                "FROM `test`.`testTable1`", task.getDefinition());
         dropMaterializedView("drop materialized view test.mv2");
     }
 
@@ -417,7 +413,7 @@ public class AlterTest {
                 "as select k1, k2 from test.testTable3;";
         createMaterializedView(sql);
         String alterStmt = "refresh materialized view test.mv1";
-        refreshMaterializedView(alterStmt, false);
+        refreshMaterializedView(alterStmt);
         dropMaterializedView("drop materialized view test.mv1");
     }
 
@@ -447,7 +443,7 @@ public class AlterTest {
                 "as select k1, k2 from test.testTable4;";
         createMaterializedView(sql);
         String alterStmt = "refresh materialized view test.mv1";
-        refreshMaterializedView(alterStmt, false);
+        refreshMaterializedView(alterStmt);
         cancelRefreshMaterializedView("cancel refresh materialized view test.mv1", false);
         dropMaterializedView("drop materialized view test.mv1");
     }
@@ -894,7 +890,9 @@ public class AlterTest {
             {
                 agent.getServiceShardStorageInfo();
                 result = shardStorageInfo;
-                agent.createShards(anyInt, (ShardStorageInfo) any);
+                agent.createShardGroup(anyLong);
+                result = null;
+                agent.createShards(anyInt, (ShardStorageInfo) any, anyLong);
                 returns(Lists.newArrayList(20001L, 20002L, 20003L),
                         Lists.newArrayList(20004L, 20005L, 20006L),
                         Lists.newArrayList(20007L, 20008L, 20009L));
@@ -963,7 +961,9 @@ public class AlterTest {
             {
                 agent.getServiceShardStorageInfo();
                 result = shardStorageInfo;
-                agent.createShards(anyInt, (ShardStorageInfo) any);
+                agent.createShardGroup(anyLong);
+                result = null;
+                agent.createShards(anyInt, (ShardStorageInfo) any, anyLong);
                 returns(Lists.newArrayList(30001L, 30002L, 30003L),
                         Lists.newArrayList(30004L, 30005L, 30006L),
                         Lists.newArrayList(30007L, 30008L, 30009L),
@@ -1382,7 +1382,7 @@ public class AlterTest {
         Assert.assertNull(table.getPartition("p20140103"));
 
         String dropSQL = "drop table test_partition_0day";
-        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseAndAnalyzeStmt(dropSQL, ctx);
+        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
 
     }
@@ -1565,7 +1565,7 @@ public class AlterTest {
         Assert.assertEquals(2, ((OlapTable) table).getPartitions().size());
 
         String dropSQL = "drop table test_partition_exists3";
-        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseAndAnalyzeStmt(dropSQL, ctx);
+        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
     }
 
@@ -1577,9 +1577,8 @@ public class AlterTest {
                 (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, starRocksAssert.getCtx());
         auth.createUser(createUserStmt);
 
-        String grantUser = "grant ALTER_PRIV on test to testuser";
-        GrantStmt grantUserStmt = (GrantStmt) UtFrameUtils.parseAndAnalyzeStmt(grantUser, starRocksAssert.getCtx());
-        auth.grant(grantUserStmt);
+        String sql = "grant ALTER_PRIV on test to testuser";
+        auth.grant((GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx()));
 
         UserIdentity testUser = new UserIdentity("testuser", "%");
         testUser.analyze();
@@ -1589,8 +1588,8 @@ public class AlterTest {
         starRocksAssert.getCtx().setRemoteIP("%");
 
         String renameDb = "alter database test rename test0";
-        AlterDatabaseRename renameDbStmt =
-                (AlterDatabaseRename) UtFrameUtils.parseStmtWithNewParser(renameDb, starRocksAssert.getCtx());
+        AlterDatabaseRenameStatement renameDbStmt =
+                (AlterDatabaseRenameStatement) UtFrameUtils.parseStmtWithNewParser(renameDb, starRocksAssert.getCtx());
     }
 
     @Test
@@ -1853,7 +1852,9 @@ public class AlterTest {
             {
                 agent.getServiceShardStorageInfo();
                 result = shardStorageInfo;
-                agent.createShards(anyInt, (ShardStorageInfo) any);
+                agent.createShardGroup(anyLong);
+                result = null;
+                agent.createShards(anyInt, (ShardStorageInfo) any, anyLong);
                 returns(Lists.newArrayList(30001L, 30002L, 30003L),
                         Lists.newArrayList(30004L, 30005L, 30006L));
                 agent.getPrimaryBackendIdByShard(anyLong);
@@ -1897,9 +1898,9 @@ public class AlterTest {
         boolean isInMemory = partitionInfo.getIsInMemory(partitionId);
         boolean isTempPartition = false;
         Range<PartitionKey> range = partitionInfo.getRange(partitionId);
-        StorageInfo storageInfo = partitionInfo.getStorageInfo(partitionId);
+        StorageCacheInfo storageCacheInfo = partitionInfo.getStorageCacheInfo(partitionId);
         RangePartitionPersistInfo partitionPersistInfoOut = new RangePartitionPersistInfo(dbId, tableId, partition,
-                dataProperty, replicationNum, isInMemory, isTempPartition, range, storageInfo);
+                dataProperty, replicationNum, isInMemory, isTempPartition, range, storageCacheInfo);
 
         // write log
         File file = new File("./test_serial.log");
@@ -1925,7 +1926,7 @@ public class AlterTest {
 
         // replay log
         GlobalStateMgr.getCurrentState().replayAddPartition(partitionPersistInfoIn);
-        Assert.assertNotNull(partitionInfo.getStorageInfo(partitionId));
+        Assert.assertNotNull(partitionInfo.getStorageCacheInfo(partitionId));
 
         String dropSQL = "drop table new_table";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
@@ -2171,6 +2172,17 @@ public class AlterTest {
         Assert.assertEquals("[k1, k2]", clause.getColumnsByPos().toString());
     }
 
+    @Test
+    public void testAlterDatabaseQuota() throws Exception {
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public void alterDatabaseQuota(AlterDatabaseQuotaStmt stmt) throws DdlException {
+            }
+        };
+        String sql = "alter database test set data quota 1KB;";
+        AlterDatabaseQuotaStmt stmt = (AlterDatabaseQuotaStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        DDLStmtExecutor.execute(stmt, starRocksAssert.getCtx());
+    }
 
     @Test(expected = DdlException.class)
     public void testFindTruncatePartitionEntrance() throws Exception {

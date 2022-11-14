@@ -27,12 +27,13 @@
 #include <string>
 #include <vector>
 
+#include "agent/agent_task.h"
 #include "agent/master_info.h"
+#include "agent/task_singatures_manager.h"
 #include "agent/task_worker_pool.h"
+#include "common/config.h"
 #include "common/logging.h"
 #include "common/status.h"
-#include "gen_cpp/AgentService_types.h"
-#include "gen_cpp/Types_types.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
 #include "storage/snapshot_manager.h"
@@ -50,6 +51,7 @@ const uint32_t REPORT_TASK_WORKER_COUNT = 1;
 const uint32_t REPORT_DISK_STATE_WORKER_COUNT = 1;
 const uint32_t REPORT_OLAP_TABLE_WORKER_COUNT = 1;
 const uint32_t REPORT_WORKGROUP_WORKER_COUNT = 1;
+const uint32_t REPORT_RESOURCE_USAGE_WORKER_COUNT = 1;
 
 class AgentServer::Impl {
 public:
@@ -58,6 +60,8 @@ public:
     ~Impl();
 
     void init_or_die();
+
+    void stop();
 
     void submit_tasks(TAgentResult& agent_result, const std::vector<TAgentTaskRequest>& tasks);
 
@@ -76,17 +80,23 @@ private:
 
     std::unique_ptr<ThreadPool> _thread_pool_publish_version;
     std::unique_ptr<ThreadPool> _thread_pool_clone;
+    std::unique_ptr<ThreadPool> _thread_pool_drop;
+    std::unique_ptr<ThreadPool> _thread_pool_create_tablet;
+    std::unique_ptr<ThreadPool> _thread_pool_alter_tablet;
+    std::unique_ptr<ThreadPool> _thread_pool_clear_transaction;
+    std::unique_ptr<ThreadPool> _thread_pool_storage_medium_migrate;
+    std::unique_ptr<ThreadPool> _thread_pool_check_consistency;
 
-    std::unique_ptr<CreateTabletTaskWorkerPool> _create_tablet_workers;
-    std::unique_ptr<DropTabletTaskWorkerPool> _drop_tablet_workers;
+    std::unique_ptr<ThreadPool> _thread_pool_upload;
+    std::unique_ptr<ThreadPool> _thread_pool_download;
+    std::unique_ptr<ThreadPool> _thread_pool_make_snapshot;
+    std::unique_ptr<ThreadPool> _thread_pool_release_snapshot;
+    std::unique_ptr<ThreadPool> _thread_pool_move_dir;
+    std::unique_ptr<ThreadPool> _thread_pool_update_tablet_meta_info;
+
     std::unique_ptr<PushTaskWorkerPool> _push_workers;
     std::unique_ptr<PublishVersionTaskWorkerPool> _publish_version_workers;
-    std::unique_ptr<ClearTransactionTaskWorkerPool> _clear_transaction_task_workers;
     std::unique_ptr<DeleteTaskWorkerPool> _delete_workers;
-    std::unique_ptr<AlterTableTaskWorkerPool> _alter_tablet_workers;
-    std::unique_ptr<CloneTaskWorkerPool> _clone_workers;
-    std::unique_ptr<StorageMediumMigrateTaskWorkerPool> _storage_medium_migrate_workers;
-    std::unique_ptr<CheckConsistencyTaskWorkerPool> _check_consistency_workers;
 
     // These 3 worker-pool do not accept tasks from FE.
     // It is self triggered periodically and reports to Fe master
@@ -94,13 +104,7 @@ private:
     std::unique_ptr<ReportDiskStateTaskWorkerPool> _report_disk_state_workers;
     std::unique_ptr<ReportOlapTableTaskWorkerPool> _report_tablet_workers;
     std::unique_ptr<ReportWorkgroupTaskWorkerPool> _report_workgroup_workers;
-
-    std::unique_ptr<UploadTaskWorkerPool> _upload_workers;
-    std::unique_ptr<DownloadTaskWorkerPool> _download_workers;
-    std::unique_ptr<MakeSnapshotTaskWorkerPool> _make_snapshot_workers;
-    std::unique_ptr<ReleaseSnapshotTaskWorkerPool> _release_snapshot_workers;
-    std::unique_ptr<MoveTaskWorkerPool> _move_dir_workers;
-    std::unique_ptr<UpdateTabletMetaInfoTaskWorkerPool> _update_tablet_meta_info_workers;
+    std::unique_ptr<ReportResourceUsageTaskWorkerPool> _report_resource_usage_workers;
 };
 
 void AgentServer::Impl::init_or_die() {
@@ -132,6 +136,48 @@ void AgentServer::Impl::init_or_die() {
     BUILD_DYNAMIC_TASK_THREAD_POOL("publish_version", config::transaction_publish_version_worker_count,
                                    config::transaction_publish_version_worker_count,
                                    DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE, _thread_pool_publish_version);
+
+    BUILD_DYNAMIC_TASK_THREAD_POOL("drop", config::drop_tablet_worker_count, config::drop_tablet_worker_count,
+                                   std::numeric_limits<int>::max(), _thread_pool_drop);
+
+    BUILD_DYNAMIC_TASK_THREAD_POOL("create_tablet", config::create_tablet_worker_count,
+                                   config::create_tablet_worker_count, std::numeric_limits<int>::max(),
+                                   _thread_pool_create_tablet);
+
+    BUILD_DYNAMIC_TASK_THREAD_POOL("alter_tablet", config::alter_tablet_worker_count, config::alter_tablet_worker_count,
+                                   std::numeric_limits<int>::max(), _thread_pool_alter_tablet);
+
+    BUILD_DYNAMIC_TASK_THREAD_POOL("clear_transaction", config::clear_transaction_task_worker_count,
+                                   config::clear_transaction_task_worker_count, std::numeric_limits<int>::max(),
+                                   _thread_pool_clear_transaction);
+
+    BUILD_DYNAMIC_TASK_THREAD_POOL("storage_medium_migrate", config::storage_medium_migrate_count,
+                                   config::storage_medium_migrate_count, std::numeric_limits<int>::max(),
+                                   _thread_pool_storage_medium_migrate);
+
+    BUILD_DYNAMIC_TASK_THREAD_POOL("check_consistency", config::check_consistency_worker_count,
+                                   config::check_consistency_worker_count, std::numeric_limits<int>::max(),
+                                   _thread_pool_check_consistency);
+
+    BUILD_DYNAMIC_TASK_THREAD_POOL("upload", config::upload_worker_count, config::upload_worker_count,
+                                   std::numeric_limits<int>::max(), _thread_pool_upload);
+
+    BUILD_DYNAMIC_TASK_THREAD_POOL("download", config::download_worker_count, config::download_worker_count,
+                                   std::numeric_limits<int>::max(), _thread_pool_download);
+
+    BUILD_DYNAMIC_TASK_THREAD_POOL("make_snapshot", config::make_snapshot_worker_count,
+                                   config::make_snapshot_worker_count, std::numeric_limits<int>::max(),
+                                   _thread_pool_make_snapshot);
+
+    BUILD_DYNAMIC_TASK_THREAD_POOL("release_snapshot", config::release_snapshot_worker_count,
+                                   config::release_snapshot_worker_count, std::numeric_limits<int>::max(),
+                                   _thread_pool_release_snapshot);
+
+    BUILD_DYNAMIC_TASK_THREAD_POOL("move_dir", 1, 1, std::numeric_limits<int>::max(), _thread_pool_move_dir);
+
+    BUILD_DYNAMIC_TASK_THREAD_POOL("update_tablet_meta_info", 1, 1, std::numeric_limits<int>::max(),
+                                   _thread_pool_update_tablet_meta_info);
+
 #ifndef BE_TEST
     // Currently FE can have at most num_of_storage_path * schedule_slot_num_per_path(default 2) clone tasks
     // scheduled simultaneously, but previously we have only 3 clone worker threads by default,
@@ -157,38 +203,35 @@ void AgentServer::Impl::init_or_die() {
 #define CREATE_AND_START_POOL(pool_name, CLASS_NAME, worker_num)
 #endif // BE_TEST
 
-    CREATE_AND_START_POOL(_create_tablet_workers, CreateTabletTaskWorkerPool, config::create_tablet_worker_count)
-    CREATE_AND_START_POOL(_drop_tablet_workers, DropTabletTaskWorkerPool, config::drop_tablet_worker_count)
+    CREATE_AND_START_POOL(_publish_version_workers, PublishVersionTaskWorkerPool, 1)
     // Both PUSH and REALTIME_PUSH type use _push_workers
     CREATE_AND_START_POOL(_push_workers, PushTaskWorkerPool,
-                          config::push_worker_count_normal_priority + config::push_worker_count_high_priority)
-    CREATE_AND_START_POOL(_publish_version_workers, PublishVersionTaskWorkerPool, 1)
-    CREATE_AND_START_POOL(_clear_transaction_task_workers, ClearTransactionTaskWorkerPool,
-                          config::clear_transaction_task_worker_count)
+                          config::push_worker_count_high_priority + config::push_worker_count_normal_priority)
     CREATE_AND_START_POOL(_delete_workers, DeleteTaskWorkerPool,
                           config::delete_worker_count_normal_priority + config::delete_worker_count_high_priority)
-    CREATE_AND_START_POOL(_alter_tablet_workers, AlterTableTaskWorkerPool, config::alter_tablet_worker_count)
-    CREATE_AND_START_POOL(_clone_workers, CloneTaskWorkerPool, 1)
-    CREATE_AND_START_POOL(_storage_medium_migrate_workers, StorageMediumMigrateTaskWorkerPool,
-                          config::storage_medium_migrate_count)
-    CREATE_AND_START_POOL(_check_consistency_workers, CheckConsistencyTaskWorkerPool,
-                          config::check_consistency_worker_count)
     CREATE_AND_START_POOL(_report_task_workers, ReportTaskWorkerPool, REPORT_TASK_WORKER_COUNT)
     CREATE_AND_START_POOL(_report_disk_state_workers, ReportDiskStateTaskWorkerPool, REPORT_DISK_STATE_WORKER_COUNT)
     CREATE_AND_START_POOL(_report_tablet_workers, ReportOlapTableTaskWorkerPool, REPORT_OLAP_TABLE_WORKER_COUNT)
     CREATE_AND_START_POOL(_report_workgroup_workers, ReportWorkgroupTaskWorkerPool, REPORT_WORKGROUP_WORKER_COUNT)
-    CREATE_AND_START_POOL(_upload_workers, UploadTaskWorkerPool, config::upload_worker_count)
-    CREATE_AND_START_POOL(_download_workers, DownloadTaskWorkerPool, config::download_worker_count)
-    CREATE_AND_START_POOL(_make_snapshot_workers, MakeSnapshotTaskWorkerPool, config::make_snapshot_worker_count)
-    CREATE_AND_START_POOL(_release_snapshot_workers, ReleaseSnapshotTaskWorkerPool,
-                          config::release_snapshot_worker_count)
-    CREATE_AND_START_POOL(_move_dir_workers, MoveTaskWorkerPool, 1);
-    CREATE_AND_START_POOL(_update_tablet_meta_info_workers, UpdateTabletMetaInfoTaskWorkerPool, 1);
+    CREATE_AND_START_POOL(_report_resource_usage_workers, ReportResourceUsageTaskWorkerPool,
+                          REPORT_RESOURCE_USAGE_WORKER_COUNT)
 #undef CREATE_AND_START_POOL
 }
 
-AgentServer::Impl::~Impl() {
+void AgentServer::Impl::stop() {
     _thread_pool_publish_version->shutdown();
+    _thread_pool_drop->shutdown();
+    _thread_pool_create_tablet->shutdown();
+    _thread_pool_alter_tablet->shutdown();
+    _thread_pool_clear_transaction->shutdown();
+    _thread_pool_storage_medium_migrate->shutdown();
+    _thread_pool_check_consistency->shutdown();
+    _thread_pool_upload->shutdown();
+    _thread_pool_download->shutdown();
+    _thread_pool_make_snapshot->shutdown();
+    _thread_pool_release_snapshot->shutdown();
+    _thread_pool_move_dir->shutdown();
+    _thread_pool_update_tablet_meta_info->shutdown();
 
 #ifndef BE_TEST
     _thread_pool_clone->shutdown();
@@ -196,29 +239,19 @@ AgentServer::Impl::~Impl() {
 #else
 #define STOP_POOL(type, pool_name)
 #endif // BE_TEST
-    STOP_POOL(CREATE_TABLE, _create_tablet_workers);
-    STOP_POOL(DROP_TABLE, _drop_tablet_workers);
+    STOP_POOL(PUBLISH_VERSION, _publish_version_workers);
     // Both PUSH and REALTIME_PUSH type use _push_workers
     STOP_POOL(PUSH, _push_workers);
-    STOP_POOL(PUBLISH_VERSION, _publish_version_workers);
-    STOP_POOL(CLEAR_TRANSACTION_TASK, _clear_transaction_task_workers);
     STOP_POOL(DELETE, _delete_workers);
-    STOP_POOL(ALTER_TABLE, _alter_tablet_workers);
-    STOP_POOL(CLONE, _clone_workers);
-    STOP_POOL(STORAGE_MEDIUM_MIGRATE, _storage_medium_migrate_workers);
-    STOP_POOL(CHECK_CONSISTENCY, _check_consistency_workers);
     STOP_POOL(REPORT_TASK, _report_task_workers);
     STOP_POOL(REPORT_DISK_STATE, _report_disk_state_workers);
     STOP_POOL(REPORT_OLAP_TABLE, _report_tablet_workers);
     STOP_POOL(REPORT_WORKGROUP, _report_workgroup_workers);
-    STOP_POOL(UPLOAD, _upload_workers);
-    STOP_POOL(DOWNLOAD, _download_workers);
-    STOP_POOL(MAKE_SNAPSHOT, _make_snapshot_workers);
-    STOP_POOL(RELEASE_SNAPSHOT, _release_snapshot_workers);
-    STOP_POOL(MOVE, _move_dir_workers);
-    STOP_POOL(UPDATE_TABLET_META_INFO, _update_tablet_meta_info_workers);
+    STOP_POOL(REPORT_WORKGROUP, _report_resource_usage_workers);
 #undef STOP_POOL
 }
+
+AgentServer::Impl::~Impl() {}
 
 // TODO(lingbin): each task in the batch may have it own status or FE must check and
 // resend request when something is wrong(BE may need some logic to guarantee idempotence.
@@ -239,7 +272,7 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
         TTaskType::type task_type = task.task_type;
         int64_t signature = task.signature;
 
-#define HANDLE_TYPE(t_task_type, work_pool, req_member)                                             \
+#define HANDLE_TYPE(t_task_type, req_member)                                                        \
     case t_task_type:                                                                               \
         if (task.__isset.req_member) {                                                              \
             task_divider[t_task_type].push_back(&task);                                             \
@@ -251,20 +284,19 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
 
         // TODO(lingbin): It still too long, divided these task types into several categories
         switch (task_type) {
-            HANDLE_TYPE(TTaskType::CREATE, _create_tablet_workers, create_tablet_req);
-            HANDLE_TYPE(TTaskType::DROP, _drop_tablet_workers, drop_tablet_req);
-            HANDLE_TYPE(TTaskType::PUBLISH_VERSION, _publish_version_workers, publish_version_req);
-            HANDLE_TYPE(TTaskType::CLEAR_TRANSACTION_TASK, _clear_transaction_task_workers, clear_transaction_task_req);
-            HANDLE_TYPE(TTaskType::CLONE, _clone_workers, clone_req);
-            HANDLE_TYPE(TTaskType::STORAGE_MEDIUM_MIGRATE, _storage_medium_migrate_workers, storage_medium_migrate_req);
-            HANDLE_TYPE(TTaskType::CHECK_CONSISTENCY, _check_consistency_workers, check_consistency_req);
-            HANDLE_TYPE(TTaskType::UPLOAD, _upload_workers, upload_req);
-            HANDLE_TYPE(TTaskType::DOWNLOAD, _download_workers, download_req);
-            HANDLE_TYPE(TTaskType::MAKE_SNAPSHOT, _make_snapshot_workers, snapshot_req);
-            HANDLE_TYPE(TTaskType::RELEASE_SNAPSHOT, _release_snapshot_workers, release_snapshot_req);
-            HANDLE_TYPE(TTaskType::MOVE, _move_dir_workers, move_dir_req);
-            HANDLE_TYPE(TTaskType::UPDATE_TABLET_META_INFO, _update_tablet_meta_info_workers,
-                        update_tablet_meta_info_req);
+            HANDLE_TYPE(TTaskType::CREATE, create_tablet_req);
+            HANDLE_TYPE(TTaskType::DROP, drop_tablet_req);
+            HANDLE_TYPE(TTaskType::PUBLISH_VERSION, publish_version_req);
+            HANDLE_TYPE(TTaskType::CLEAR_TRANSACTION_TASK, clear_transaction_task_req);
+            HANDLE_TYPE(TTaskType::CLONE, clone_req);
+            HANDLE_TYPE(TTaskType::STORAGE_MEDIUM_MIGRATE, storage_medium_migrate_req);
+            HANDLE_TYPE(TTaskType::CHECK_CONSISTENCY, check_consistency_req);
+            HANDLE_TYPE(TTaskType::UPLOAD, upload_req);
+            HANDLE_TYPE(TTaskType::DOWNLOAD, download_req);
+            HANDLE_TYPE(TTaskType::MAKE_SNAPSHOT, snapshot_req);
+            HANDLE_TYPE(TTaskType::RELEASE_SNAPSHOT, release_snapshot_req);
+            HANDLE_TYPE(TTaskType::MOVE, move_dir_req);
+            HANDLE_TYPE(TTaskType::UPDATE_TABLET_META_INFO, update_tablet_meta_info_req);
 
         case TTaskType::REALTIME_PUSH:
             if (!task.__isset.push_req) {
@@ -311,16 +343,31 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
         }
     }
 
+#define HANDLE_TASK(t_task_type, all_tasks, do_func, AGENT_REQ, request, env)                                      \
+    for (auto* task : all_tasks) {                                                                                 \
+        auto pool = get_thread_pool(t_task_type);                                                                  \
+        auto signature = task->signature;                                                                          \
+        if (register_task_info(task_type, signature)) {                                                            \
+            LOG(INFO) << "Submit task success. type=" << t_task_type << ", signature=" << signature;               \
+            ret_st = pool->submit_func(                                                                            \
+                    std::bind(do_func, std::make_shared<AGENT_REQ>(*task, task->request, time(nullptr)), env));    \
+        } else {                                                                                                   \
+            LOG(INFO) << "Submit task failed, already exists type=" << t_task_type << ", signature=" << signature; \
+        }                                                                                                          \
+    }
+
     // batch submit tasks
     for (const auto& task_item : task_divider) {
         const auto& task_type = task_item.first;
         auto all_tasks = task_item.second;
         switch (task_type) {
         case TTaskType::CREATE:
-            _create_tablet_workers->submit_tasks(all_tasks);
+            HANDLE_TASK(TTaskType::CREATE, all_tasks, run_create_tablet_task, CreateTabletAgentTaskRequest,
+                        create_tablet_req, _exec_env);
             break;
         case TTaskType::DROP:
-            _drop_tablet_workers->submit_tasks(all_tasks);
+            HANDLE_TASK(TTaskType::DROP, all_tasks, run_drop_tablet_task, DropTabletAgentTaskRequest, drop_tablet_req,
+                        _exec_env);
             break;
         case TTaskType::PUBLISH_VERSION: {
             for (const auto& task : all_tasks) {
@@ -329,34 +376,42 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
             break;
         }
         case TTaskType::CLEAR_TRANSACTION_TASK:
-            _clear_transaction_task_workers->submit_tasks(all_tasks);
+            HANDLE_TASK(TTaskType::CLEAR_TRANSACTION_TASK, all_tasks, run_clear_transaction_task,
+                        ClearTransactionAgentTaskRequest, clear_transaction_task_req, _exec_env);
             break;
         case TTaskType::CLONE:
-            _clone_workers->submit_tasks(all_tasks);
+            HANDLE_TASK(TTaskType::CLONE, all_tasks, run_clone_task, CloneAgentTaskRequest, clone_req, _exec_env);
             break;
         case TTaskType::STORAGE_MEDIUM_MIGRATE:
-            _storage_medium_migrate_workers->submit_tasks(all_tasks);
+            HANDLE_TASK(TTaskType::STORAGE_MEDIUM_MIGRATE, all_tasks, run_storage_medium_migrate_task,
+                        StorageMediumMigrateTaskRequest, storage_medium_migrate_req, _exec_env);
             break;
         case TTaskType::CHECK_CONSISTENCY:
-            _check_consistency_workers->submit_tasks(all_tasks);
+            HANDLE_TASK(TTaskType::CHECK_CONSISTENCY, all_tasks, run_check_consistency_task,
+                        CheckConsistencyTaskRequest, check_consistency_req, _exec_env);
             break;
         case TTaskType::UPLOAD:
-            _upload_workers->submit_tasks(all_tasks);
+            HANDLE_TASK(TTaskType::UPLOAD, all_tasks, run_upload_task, UploadAgentTaskRequest, upload_req, _exec_env);
             break;
         case TTaskType::DOWNLOAD:
-            _download_workers->submit_tasks(all_tasks);
+            HANDLE_TASK(TTaskType::DOWNLOAD, all_tasks, run_download_task, DownloadAgentTaskRequest, download_req,
+                        _exec_env);
             break;
         case TTaskType::MAKE_SNAPSHOT:
-            _make_snapshot_workers->submit_tasks(all_tasks);
+            HANDLE_TASK(TTaskType::MAKE_SNAPSHOT, all_tasks, run_make_snapshot_task, SnapshotAgentTaskRequest,
+                        snapshot_req, _exec_env);
             break;
         case TTaskType::RELEASE_SNAPSHOT:
-            _release_snapshot_workers->submit_tasks(all_tasks);
+            HANDLE_TASK(TTaskType::RELEASE_SNAPSHOT, all_tasks, run_release_snapshot_task,
+                        ReleaseSnapshotAgentTaskRequest, release_snapshot_req, _exec_env);
             break;
         case TTaskType::MOVE:
-            _move_dir_workers->submit_tasks(all_tasks);
+            HANDLE_TASK(TTaskType::MOVE, all_tasks, run_move_dir_task, MoveDirAgentTaskRequest, move_dir_req,
+                        _exec_env);
             break;
         case TTaskType::UPDATE_TABLET_META_INFO:
-            _update_tablet_meta_info_workers->submit_tasks(all_tasks);
+            HANDLE_TASK(TTaskType::UPDATE_TABLET_META_INFO, all_tasks, run_update_meta_info_task,
+                        UpdateTabletMetaInfoAgentTaskRequest, update_tablet_meta_info_req, _exec_env);
             break;
         case TTaskType::REALTIME_PUSH:
         case TTaskType::PUSH: {
@@ -364,7 +419,8 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
             break;
         }
         case TTaskType::ALTER:
-            _alter_tablet_workers->submit_tasks(all_tasks);
+            HANDLE_TASK(TTaskType::ALTER, all_tasks, run_alter_tablet_task, AlterTabletAgentTaskRequest,
+                        alter_tablet_req_v2, _exec_env);
             break;
         default:
             ret_st = Status::InvalidArgument(strings::Substitute("tasks(type=$0) has wrong task type", task_type));
@@ -434,27 +490,40 @@ ThreadPool* AgentServer::Impl::get_thread_pool(int type) const {
         return _thread_pool_publish_version.get();
     case TTaskType::CLONE:
         return _thread_pool_clone.get();
-    case TTaskType::CREATE:
     case TTaskType::DROP:
-    case TTaskType::PUSH:
+        return _thread_pool_drop.get();
+    case TTaskType::CREATE:
+        return _thread_pool_create_tablet.get();
     case TTaskType::STORAGE_MEDIUM_MIGRATE:
+        return _thread_pool_storage_medium_migrate.get();
+    case TTaskType::MAKE_SNAPSHOT:
+        return _thread_pool_make_snapshot.get();
+    case TTaskType::RELEASE_SNAPSHOT:
+        return _thread_pool_release_snapshot.get();
+    case TTaskType::CHECK_CONSISTENCY:
+        return _thread_pool_check_consistency.get();
+    case TTaskType::UPLOAD:
+        return _thread_pool_upload.get();
+    case TTaskType::DOWNLOAD:
+        return _thread_pool_download.get();
+    case TTaskType::MOVE:
+        return _thread_pool_move_dir.get();
+    case TTaskType::UPDATE_TABLET_META_INFO:
+        return _thread_pool_update_tablet_meta_info.get();
+    case TTaskType::ALTER:
+        return _thread_pool_alter_tablet.get();
+    case TTaskType::CLEAR_TRANSACTION_TASK:
+        return _thread_pool_clear_transaction.get();
+    case TTaskType::PUSH:
+    case TTaskType::REALTIME_PUSH:
     case TTaskType::ROLLUP:
     case TTaskType::SCHEMA_CHANGE:
     case TTaskType::CANCEL_DELETE:
-    case TTaskType::MAKE_SNAPSHOT:
-    case TTaskType::RELEASE_SNAPSHOT:
-    case TTaskType::CHECK_CONSISTENCY:
-    case TTaskType::UPLOAD:
-    case TTaskType::DOWNLOAD:
     case TTaskType::CLEAR_REMOTE_FILE:
-    case TTaskType::MOVE:
-    case TTaskType::REALTIME_PUSH:
     case TTaskType::CLEAR_ALTER_TASK:
-    case TTaskType::CLEAR_TRANSACTION_TASK:
     case TTaskType::RECOVER_TABLET:
     case TTaskType::STREAM_LOAD:
-    case TTaskType::UPDATE_TABLET_META_INFO:
-    case TTaskType::ALTER:
+
     case TTaskType::INSTALL_PLUGIN:
     case TTaskType::UNINSTALL_PLUGIN:
     case TTaskType::NUM_TASK_TYPE:
@@ -490,6 +559,10 @@ ThreadPool* AgentServer::get_thread_pool(int type) const {
 
 void AgentServer::init_or_die() {
     return _impl->init_or_die();
+}
+
+void AgentServer::stop() {
+    return _impl->stop();
 }
 
 } // namespace starrocks

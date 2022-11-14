@@ -2,18 +2,15 @@
 
 #include "storage/lake/async_delta_writer.h"
 
-#include "common/compiler_util.h"
-DIAGNOSTIC_PUSH
-DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 #include <bthread/execution_queue.h>
 #include <bthread/mutex.h>
-DIAGNOSTIC_POP
 #include <fmt/format.h>
 
 #include <memory>
 #include <string>
 #include <vector>
 
+#include "common/compiler_util.h"
 #include "runtime/current_thread.h"
 #include "storage/lake/delta_writer.h"
 #include "storage/storage_engine.h"
@@ -83,11 +80,12 @@ AsyncDeltaWriterImpl::~AsyncDeltaWriterImpl() {
 }
 
 inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<AsyncDeltaWriterImpl::Task>& iter) {
-    if (iter.is_queue_stopped()) {
-        return 0;
-    }
     auto async_writer = static_cast<AsyncDeltaWriterImpl*>(meta);
     auto delta_writer = async_writer->_writer.get();
+    if (iter.is_queue_stopped()) {
+        delta_writer->close();
+        return 0;
+    }
     auto st = Status{};
     for (; iter; ++iter) {
         // It's safe to run without checking `_closed` but doing so can make the task quit earlier on cancel/error.
@@ -177,10 +175,9 @@ inline void AsyncDeltaWriterImpl::close() {
         r = bthread::execution_queue_join(_queue_id);
         PLOG_IF(WARNING, r != 0) << "Fail to join execution queue";
 
-        // Close and destroy TabletWriter. Since the execution_queue has been stopped and all
+        // Destroy TabletWriter. Since the execution_queue has been stopped and all
         // running tasks have finished, no further execution will call `_writer` anymore, it's
         // safe to destroy it.
-        _writer->close();
         _writer.reset();
     }
 }

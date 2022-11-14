@@ -46,7 +46,3 @@ MISSING:       The replica does not exist
     ADMIN SHOW REPLICA STATUS FROM tbl1
     WHERE STATUS != "OK";
     ```
-
-## keyword
-
-ADMIN,SHOW,REPLICA,STATUS

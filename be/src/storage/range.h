@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <initializer_list>
 #include <sstream>
 #include <string>
@@ -109,6 +110,11 @@ public:
 
     // Return the next discontiguous range contains at most |size| rows
     void next_range(size_t size, SparseRange* range);
+
+    // rhs should be a ordered sparse range
+    SparseRangeIterator intersection(const SparseRange& rhs, SparseRange* result) const;
+
+    void set_range(SparseRange* range) { _range = range; }
 
     size_t covered_ranges(size_t size) const;
 
@@ -321,6 +327,38 @@ inline void SparseRangeIterator::next_range(size_t size, SparseRange* range) {
         range->add(r);
         size -= r.span_size();
     }
+}
+
+inline SparseRangeIterator SparseRangeIterator::intersection(const SparseRange& rhs, SparseRange* result) const {
+    DCHECK(std::is_sorted(rhs._ranges.begin(), rhs._ranges.end(),
+                          [](const auto& l, const auto& r) { return l.begin() < r.begin(); }));
+    for (size_t i = _index; i < _range->_ranges.size(); ++i) {
+        const auto& r1 = _range->_ranges[i];
+        for (const auto& r2 : rhs._ranges) {
+            if (r1.end() < r2.begin()) {
+                break;
+            }
+            if (r1.has_intersection(r2)) {
+                result->_add_uncheck(r1.intersection(r2));
+            }
+        }
+    }
+    SparseRangeIterator res(result);
+    if (res.has_more()) {
+        for (size_t i = 0; i < res._range->size(); ++i) {
+            // set idx and next rowid
+            if (_next_rowid < res._range->_ranges[i].end()) {
+                res._next_rowid = std::max(res._range->_ranges[i].begin(), _next_rowid);
+                res._index = i;
+                break;
+            }
+            // filter all range
+            if (i == res._range->size() - 1) {
+                res._index = res._range->size();
+            }
+        }
+    }
+    return res;
 }
 
 inline size_t SparseRangeIterator::covered_ranges(size_t size) const {

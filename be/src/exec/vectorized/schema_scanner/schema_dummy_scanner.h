@@ -11,7 +11,7 @@ class SchemaDummyScanner : public SchemaScanner {
 public:
     SchemaDummyScanner();
     ~SchemaDummyScanner() override;
-    virtual Status start();
+    Status start(RuntimeState* state) override;
     Status get_next(ChunkPtr* chunk, bool* eos) override;
 
 private:

@@ -5,6 +5,7 @@ package com.starrocks.analysis;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -28,7 +29,7 @@ public class CreateExternalTableLikeTest {
     @Test
     public void testCreateTableLike() {
         String sql_1 = "CREATE EXTERNAL TABLE hive_test_like LIKE hive_test";
-        com.starrocks.analysis.StatementBase statementBase = AnalyzeTestUtil.analyzeSuccess(sql_1);
+        StatementBase statementBase = AnalyzeTestUtil.analyzeSuccess(sql_1);
         Assert.assertTrue(statementBase instanceof CreateTableLikeStmt);
     }
 }

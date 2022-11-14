@@ -1,10 +1,10 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.plan;
 
-import com.starrocks.analysis.StatementBase;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.thrift.TExplainLevel;
 import org.junit.Assert;

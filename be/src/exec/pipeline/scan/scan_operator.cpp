@@ -202,8 +202,21 @@ StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
     if (res == nullptr) {
         return nullptr;
     }
+
+    // for query cache mechanism, we should emit EOS chunk when we receive the last chunk.
+    auto [tablet_id, is_eos] = _should_emit_eos(res);
     eval_runtime_bloom_filters(res.get());
+    res->owner_info().set_owner_id(tablet_id, is_eos);
     return res;
+}
+
+std::tuple<int64_t, bool> ScanOperator::_should_emit_eos(const ChunkPtr& chunk) {
+    auto tablet_id = chunk->owner_info().owner_id();
+    auto is_last_chunk = chunk->owner_info().is_last_chunk();
+    if (is_last_chunk && _ticket_checker != nullptr) {
+        is_last_chunk = _ticket_checker->leave(tablet_id);
+    }
+    return {tablet_id, is_last_chunk};
 }
 
 int64_t ScanOperator::global_rf_wait_timeout_ns() const {
@@ -320,10 +333,10 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             SCOPED_SET_TRACE_INFO(driver_id, state->query_id(), state->fragment_instance_id());
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
 
-            [[maybe_unused]] std::string category = "chunk_source_" + std::to_string(chunk_source_index);
-            QUERY_TRACE_ASYNC_START("io_task", category, query_trace_ctx);
-
             auto& chunk_source = _chunk_sources[chunk_source_index];
+            [[maybe_unused]] std::string category;
+            category = fmt::sprintf("chunk_source_%d_0x%x", get_plan_node_id(), query_trace_ctx.id);
+            QUERY_TRACE_ASYNC_START("io_task", category, query_trace_ctx);
 
             DeferOp timer_defer([chunk_source]() {
                 COUNTER_SET(chunk_source->scan_timer(),
@@ -347,6 +360,8 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
                                       chunk_source->get_scan_bytes() - prev_scan_bytes);
 
             QUERY_TRACE_ASYNC_FINISH("io_task", category, query_trace_ctx);
+            // make clang happy
+            (void)query_trace_ctx;
         }
     };
 
@@ -381,6 +396,36 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
     });
 
     ASSIGN_OR_RETURN(auto morsel, _morsel_queue->try_get());
+
+    if (_lane_arbiter != nullptr) {
+        while (morsel != nullptr) {
+            auto [lane_owner, version] = morsel->get_lane_owner_and_version();
+            auto acquire_result = _lane_arbiter->try_acquire_lane(lane_owner);
+            if (acquire_result == query_cache::AR_BUSY) {
+                _morsel_queue->unget(std::move(morsel));
+                return Status::OK();
+            } else if (acquire_result == query_cache::AR_PROBE) {
+                auto hit = _cache_operator->probe_cache(lane_owner, version);
+                RETURN_IF_ERROR(_cache_operator->reset_lane(state, lane_owner));
+                if (!hit) {
+                    break;
+                }
+                auto cached_version = _cache_operator->cached_version(lane_owner);
+                DCHECK(cached_version <= version);
+                if (cached_version == version) {
+                    ASSIGN_OR_RETURN(morsel, _morsel_queue->try_get());
+                } else {
+                    morsel->set_from_version(cached_version + 1);
+                    break;
+                }
+            } else if (acquire_result == query_cache::AR_SKIP) {
+                ASSIGN_OR_RETURN(morsel, _morsel_queue->try_get());
+            } else if (acquire_result == query_cache::AR_IO) {
+                break;
+            }
+        }
+    }
+
     if (morsel != nullptr) {
         COUNTER_UPDATE(_morsels_counter, 1);
 
@@ -441,7 +486,7 @@ pipeline::OpFactories decompose_scan_node_to_pipeline(std::shared_ptr<ScanOperat
 
     const auto* morsel_queue_factory = context->morsel_queue_factory_of_source_operator(scan_operator.get());
     scan_operator->set_degree_of_parallelism(morsel_queue_factory->size());
-    scan_operator->set_need_local_shuffle(morsel_queue_factory->need_local_shuffle());
+    scan_operator->set_could_local_shuffle(morsel_queue_factory->could_local_shuffle());
 
     ops.emplace_back(std::move(scan_operator));
 

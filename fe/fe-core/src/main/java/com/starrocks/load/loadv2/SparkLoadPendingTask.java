@@ -29,7 +29,6 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.ImportColumnDesc;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
@@ -51,6 +50,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.LoadPriority;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.BrokerFileGroupAggInfo.FileGroupAggKey;
 import com.starrocks.load.FailMsg;
@@ -68,6 +68,7 @@ import com.starrocks.load.loadv2.etl.EtlJobConfig.FilePatternVersion;
 import com.starrocks.load.loadv2.etl.EtlJobConfig.SourceType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.transaction.TransactionState;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -94,7 +95,7 @@ public class SparkLoadPendingTask extends LoadTask {
     public SparkLoadPendingTask(SparkLoadJob loadTaskCallback,
                                 Map<FileGroupAggKey, List<BrokerFileGroup>> aggKeyToBrokerFileGroups,
                                 SparkResource resource, BrokerDesc brokerDesc) {
-        super(loadTaskCallback, TaskType.PENDING);
+        super(loadTaskCallback, TaskType.PENDING, LoadPriority.NORMAL_VALUE);
         this.retryTime = 3;
         this.attachment = new SparkPendingTaskAttachment(signature);
         this.aggKeyToBrokerFileGroups = aggKeyToBrokerFileGroups;

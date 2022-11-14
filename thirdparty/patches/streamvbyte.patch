@@ -1,0 +1,13 @@
+diff --git a/include/streamvbyte.h b/include/streamvbyte.h
+index bc9533c..a6cbb1a 100644
+--- a/include/streamvbyte.h
++++ b/include/streamvbyte.h
+@@ -1,7 +1,7 @@
+
+ #ifndef INCLUDE_STREAMVBYTE_H_
+ #define INCLUDE_STREAMVBYTE_H_
+-#define __STDC_FORMAT_MACROS
++// #define __STDC_FORMAT_MACROS
+ #include <inttypes.h>
+ #include <stdint.h>// please use a C99-compatible compiler
+ #include <stddef.h>

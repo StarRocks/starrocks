@@ -24,7 +24,7 @@ public:
 
     ColumnMapping* get_mutable_column_mapping(size_t column_index);
 
-    SchemaMapping get_schema_mapping() const { return _schema_mapping; }
+    const SchemaMapping& get_schema_mapping() const { return _schema_mapping; }
 
     std::vector<ColumnId>* get_mutable_selected_column_indexs() { return &_selected_column_indexs; }
 
@@ -35,7 +35,8 @@ public:
                          MemPool* mem_pool);
 
 private:
-    const MaterializeTypeConverter* get_materialize_type_converter(std::string materialized_function, FieldType type);
+    const MaterializeTypeConverter* get_materialize_type_converter(const std::string& materialized_function,
+                                                                   FieldType type);
 
     // @brief column-mapping specification of new schema
     SchemaMapping _schema_mapping;

@@ -52,7 +52,7 @@ public:
 private:
     tparquet::Encoding::type _encoding;
     level_t _bit_width = 0;
-    level_t _max_level = 0;
+    [[maybe_unused]] level_t _max_level = 0;
     uint32_t _num_levels = 0;
     RleDecoder<level_t> _rle_decoder;
     BitReader _bit_packed_decoder;

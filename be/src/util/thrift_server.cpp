@@ -47,7 +47,7 @@ namespace starrocks {
 // correctly.
 class ThriftServer::ThriftServerEventProcessor : public apache::thrift::server::TServerEventHandler {
 public:
-    ThriftServerEventProcessor(ThriftServer* thrift_server) : _thrift_server(thrift_server), _signal_fired(false) {}
+    ThriftServerEventProcessor(ThriftServer* thrift_server) : _thrift_server(thrift_server) {}
 
     // friendly to code style
     ~ThriftServerEventProcessor() override = default;
@@ -88,7 +88,7 @@ private:
     ThriftServer* _thrift_server;
 
     // Guards against spurious condition variable wakeups
-    bool _signal_fired;
+    bool _signal_fired{false};
 
     // The time, in milliseconds, to wait for a server to come up
     static constexpr int TIMEOUT_MS = 2500;

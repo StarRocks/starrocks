@@ -26,24 +26,23 @@
 #include "gen_cpp/olap_file.pb.h"
 #include "rowset.h"
 #include "runtime/exec_env.h"
-#include "storage/rowset/beta_rowset_writer.h"
 #include "storage/rowset/rowset_writer.h"
 
 namespace starrocks {
 
 Status RowsetFactory::create_rowset(const TabletSchema* schema, const std::string& rowset_path,
                                     const RowsetMetaSharedPtr& rowset_meta, RowsetSharedPtr* rowset) {
-    *rowset = Rowset::create(ExecEnv::GetInstance()->metadata_mem_tracker(), schema, rowset_path, rowset_meta);
+    *rowset = Rowset::create(schema, rowset_path, rowset_meta);
     RETURN_IF_ERROR((*rowset)->init());
     return Status::OK();
 }
 
 Status RowsetFactory::create_rowset_writer(const RowsetWriterContext& context, std::unique_ptr<RowsetWriter>* output) {
     if (context.writer_type == kHorizontal) {
-        *output = std::make_unique<HorizontalBetaRowsetWriter>(context);
+        *output = std::make_unique<HorizontalRowsetWriter>(context);
     } else {
         DCHECK(context.writer_type == kVertical);
-        *output = std::make_unique<VerticalBetaRowsetWriter>(context);
+        *output = std::make_unique<VerticalRowsetWriter>(context);
     }
     return (*output)->init();
 }

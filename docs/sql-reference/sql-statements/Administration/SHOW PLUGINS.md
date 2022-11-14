@@ -19,7 +19,3 @@ This command will display all built-in plugins and custom plugins.
     ```sql
     SHOW PLUGINS;
     ```
-
-## keyword
-
-SHOW PLUGINS

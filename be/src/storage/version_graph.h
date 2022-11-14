@@ -51,8 +51,6 @@ public:
     /// Use rs_metas to construct the graph including vertex and edges, and return the
     /// max_version in metas.
     void construct_version_graph(const std::vector<RowsetMetaSharedPtr>& rs_metas, int64_t* max_version);
-    /// Reconstruct the graph, begin construction the vertex vec and edges list will be cleared.
-    void reconstruct_version_graph(const std::vector<RowsetMetaSharedPtr>& rs_metas, int64_t* max_version);
     /// Add a version to this graph, graph will add the version and edge in version.
     void add_version_to_graph(const Version& version);
     /// Delete a version from graph. Notice that this del operation only remove this edges and
@@ -66,6 +64,8 @@ public:
 
     // Get max continuous version from 0
     int64_t max_continuous_version() const { return _max_continuous_version; }
+
+    int64_t min_readable_version() const { return _min_readable_version; }
 
 private:
     /// Private method add a version to graph.
@@ -82,6 +82,20 @@ private:
     std::unordered_map<int64_t, std::unique_ptr<Vertex>> _version_graph;
     // max continuous version from -1
     int64_t _max_continuous_version{-1};
+    // minReadableVersion should:
+    // >= compaction output's version.second if compaction's input rowsets are stale and removed from graph
+    // <= _max_continuous_version
+    // for example, suppose graph is:
+    // [0-5] 6 7 8 9 10 11 12
+    //       \-[6-10]-/
+    // minReadableVersion is 5
+    // and when 6, 7, 8, 9, 10 are stale and removed from graph by GC, graph became
+    // [0-5] [6-10] 11 12
+    // minReadableVersion will be updated to 10
+    int64_t _min_readable_version{-1};
+
+    // print log rate limit by tablet id
+    int64_t _tablet_id{0};
 };
 
 /// TimestampedVersion class which is implemented to maintain multi-version path of rowsets.
@@ -183,6 +197,8 @@ public:
 
     // Get max continuous version from 0
     int64_t get_max_continuous_version() const;
+
+    int64_t get_min_readable_version() const;
 
 private:
     /// Construct rowsets version tracker with stale rowsets.

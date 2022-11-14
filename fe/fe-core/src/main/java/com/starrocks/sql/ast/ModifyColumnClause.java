@@ -32,9 +32,4 @@ public class ModifyColumnClause extends AlterTableColumnClause {
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitModifyColumnClause(this, context);
     }
-
-    @Override
-    public boolean isSupportNewPlanner() {
-        return true;
-    }
 }

@@ -16,6 +16,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
 import com.starrocks.sql.optimizer.rewrite.EliminateNegationsRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
 
@@ -71,10 +72,10 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
             Function decimalFn = ScalarFunction.createVectorizedBuiltin(fn.getId(), fn.getFunctionName().getFunction(),
                     Arrays.stream(argTypes).collect(Collectors.toList()), fn.hasVarArgs(), operator.getType());
             decimalFn.setCouldApplyDictOptimize(fn.isCouldApplyDictOptimize());
-            return new CallOperator("if", operator.getType(), args, decimalFn);
+            return new CallOperator(FunctionSet.IF, operator.getType(), args, decimalFn);
         }
 
-        return new CallOperator("if", operator.getType(), args, fn);
+        return new CallOperator(FunctionSet.IF, operator.getType(), args, fn);
     }
 
     ScalarOperator simplifiedCaseWhenConstClause(CaseWhenOperator operator) {
@@ -259,7 +260,14 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
     //
     @Override
     public ScalarOperator visitInPredicate(InPredicateOperator predicate, ScalarOperatorRewriteContext context) {
+        if (predicate.isSubquery()) {
+            return predicate;
+        }
         if (predicate.getChildren().size() != 2) {
+            return predicate;
+        }
+
+        if (predicate.getChild(1) instanceof SubqueryOperator) {
             return predicate;
         }
 

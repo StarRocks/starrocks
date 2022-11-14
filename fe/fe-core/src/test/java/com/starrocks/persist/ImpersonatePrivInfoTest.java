@@ -2,14 +2,14 @@
 
 package com.starrocks.persist;
 
-import com.starrocks.analysis.CreateRoleStmt;
-import com.starrocks.analysis.CreateUserStmt;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.GrantImpersonateStmt;
+import com.starrocks.sql.ast.CreateRoleStmt;
+import com.starrocks.sql.ast.CreateUserStmt;
+import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.utframe.UtFrameUtils;
@@ -27,6 +27,7 @@ import java.io.FileOutputStream;
 
 public class ImpersonatePrivInfoTest {
     private static final Logger LOG = LogManager.getLogger(ImpersonatePrivInfoTest.class);
+
     @Test
     public void testSerialized() throws Exception {
         UserIdentity harry = new UserIdentity("Harry", "%");
@@ -77,7 +78,7 @@ public class ImpersonatePrivInfoTest {
             auth.createUser(createUserStmt);
         }
         String auror = "auror";
-        auth.createRole((CreateRoleStmt) UtFrameUtils.parseAndAnalyzeStmt(
+        auth.createRole((CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser(
                 "CREATE ROLE " + auror, connectContext));
 
         // 1.2 make initialized checkpoint here for later use
@@ -92,7 +93,7 @@ public class ImpersonatePrivInfoTest {
         auth.grantRole((GrantRoleStmt) UtFrameUtils.parseStmtWithNewParser(
                 "GRANT " + auror + " TO Harry", connectContext));
         // 2.2 grant impersonate to role auror
-        auth.grantImpersonate((GrantImpersonateStmt) UtFrameUtils.parseStmtWithNewParser(
+        auth.grant((GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
                 "GRANT Impersonate on Gregory To role " + auror, connectContext));
         // 2.3 verify can impersonate
         Assert.assertTrue(auth.canImpersonate(harry, gregory));
@@ -113,20 +114,21 @@ public class ImpersonatePrivInfoTest {
         Auth newAuth = Auth.read(pseudoImage.getDataInputStream());
         LOG.info("========= load follower's image finished. start to replay");
         // 3.2 follower replay: grant role auror to harry
-        PrivInfo privInfo = (PrivInfo) UtFrameUtils.PseudoJournalReplayer.replayNextJournal();
+        PrivInfo privInfo = (PrivInfo) UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_GRANT_ROLE);
         newAuth.replayGrantRole(privInfo);
         // 3.3 follower replay: grant impersonate to role auror
-        ImpersonatePrivInfo impersonatePrivInfo = (ImpersonatePrivInfo) UtFrameUtils.PseudoJournalReplayer.replayNextJournal();
+        ImpersonatePrivInfo impersonatePrivInfo = (ImpersonatePrivInfo)
+                UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_GRANT_IMPERSONATE);
         newAuth.replayGrantImpersonate(impersonatePrivInfo);
         // 3.4 follower verify can impersonate
         Assert.assertTrue(newAuth.canImpersonate(harry, gregory));
         // 3.5 follower replay: grant role auror to neville
-        privInfo = (PrivInfo) UtFrameUtils.PseudoJournalReplayer.replayNextJournal();
+        privInfo = (PrivInfo) UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_GRANT_ROLE);
         newAuth.replayGrantRole(privInfo);
         // 3.6 follower verify can impersonate
         Assert.assertTrue(newAuth.canImpersonate(neville, gregory));
         // 3.7 follower replay: revoke auror from neville
-        privInfo = (PrivInfo) UtFrameUtils.PseudoJournalReplayer.replayNextJournal();
+        privInfo = (PrivInfo) UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_REVOKE_ROLE);
         newAuth.replayRevokeRole(privInfo);
         // 3.8 follower verify can't impersonate
         Assert.assertFalse(newAuth.canImpersonate(neville, gregory));

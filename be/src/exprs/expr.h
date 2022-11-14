@@ -110,6 +110,7 @@ public:
     bool is_nullable() const { return _is_nullable; }
 
     bool is_monotonic() const { return _is_monotonic; }
+    bool is_cast_expr() const { return _node_type == TExprNodeType::CAST_EXPR; }
 
     // In most time, this field is passed from FE
     // Sometimes we want to construct expr on BE implicitly and we have knowledge about `monotonicity`
@@ -170,8 +171,8 @@ public:
     /// Clones each ExprContext for multiple expr trees. 'new_ctxs' must be non-NULL.
     /// Idempotent: if '*new_ctxs' is empty, a clone of each context in 'ctxs' will be added
     /// to it, and if non-empty, it is assumed CloneIfNotExists() was already called and the
-    /// call is a no-op. The new ExprContexts are created in state->obj_pool().
-    static Status clone_if_not_exists(const std::vector<ExprContext*>& ctxs, RuntimeState* state,
+    /// call is a no-op. The new ExprContexts are created in provided object pool.
+    static Status clone_if_not_exists(RuntimeState* state, ObjectPool* pool, const std::vector<ExprContext*>& ctxs,
                                       std::vector<ExprContext*>* new_ctxs);
 
     /// Convenience function for closing multiple expr trees.
@@ -190,6 +191,7 @@ public:
     virtual StatusOr<ColumnPtr> evaluate_const(ExprContext* context);
 
     virtual ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr);
+    virtual ColumnPtr evaluate_with_filter(ExprContext* context, vectorized::Chunk* ptr, uint8_t* filter);
 
     // get the first column ref in expr
     vectorized::ColumnRef* get_column_ref();
@@ -262,7 +264,7 @@ protected:
 
     // analysis is done, types are fixed at this point
     TypeDescriptor _type;
-    std::vector<Expr*> _children;
+    std::vector<Expr*> _children = std::vector<Expr*>();
     int _output_scale;
 
     /// Function description.
@@ -273,7 +275,7 @@ protected:
     /// doesn't call RegisterFunctionContext().
     int _fn_context_index;
 
-    std::once_flag _constant_column_evaluate_once;
+    std::once_flag _constant_column_evaluate_once{};
     StatusOr<ColumnPtr> _constant_column = Status::OK();
 
     /// Simple debug string that provides no expr subclass-specific information

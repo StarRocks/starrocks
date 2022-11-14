@@ -136,6 +136,8 @@ public:
 
     bool append_continuous_strings(const Buffer<Slice>& strs) override;
 
+    bool append_continuous_fixed_length_strings(const char* data, size_t size, int fixed_length) override;
+
     size_t append_numbers(const void* buff, size_t length) override;
 
     void append_value_multiple_times(const void* value, size_t count) override;
@@ -211,6 +213,7 @@ public:
     const NullColumnPtr& null_column() const { return _null_column; }
 
     size_t null_count() const;
+    size_t null_count(size_t offset, size_t count) const;
 
     Datum get(size_t n) const override {
         if (_has_null && _null_column->get_data()[n]) {
@@ -225,6 +228,7 @@ public:
         _has_null = true;
         return true;
     }
+    ColumnPtr replicate(const std::vector<uint32_t>& offsets) override;
 
     size_t memory_usage() const override {
         return _data_column->memory_usage() + _null_column->memory_usage() + sizeof(bool);

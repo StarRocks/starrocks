@@ -24,12 +24,12 @@ public class ArrowExpr extends Expr {
         super(rhs);
     }
 
-    private Expr getItem() {
+    public Expr getItem() {
         Preconditions.checkState(getChildren().size() == 2);
         return getChild(0);
     }
 
-    private Expr getKey() {
+    public Expr getKey() {
         Preconditions.checkState(getChildren().size() == 2);
         return getChild(1);
     }

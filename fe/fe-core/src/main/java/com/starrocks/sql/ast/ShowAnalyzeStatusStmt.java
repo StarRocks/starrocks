@@ -5,7 +5,6 @@ package com.starrocks.sql.ast;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.RedirectStatus;
-import com.starrocks.analysis.ShowStmt;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ScalarType;
@@ -14,6 +13,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.AnalyzeStatus;
+import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatsConstants;
 
 import java.time.format.DateTimeFormatter;
@@ -57,8 +57,7 @@ public class ShowAnalyzeStatusStmt extends ShowStmt {
         }
         row.set(2, table.getName());
 
-        long totalCollectColumnsSize = table.getBaseSchema().stream().filter(column -> !column.isAggregated()).count();
-
+        long totalCollectColumnsSize = StatisticUtils.getCollectibleColumns(table).size();
         if (null != columns && !columns.isEmpty() && (columns.size() != totalCollectColumnsSize)) {
             String str = String.join(",", columns);
             row.set(3, str);
@@ -69,7 +68,11 @@ public class ShowAnalyzeStatusStmt extends ShowStmt {
         if (analyzeStatus.getStatus().equals(StatsConstants.ScheduleStatus.FINISH)) {
             row.set(6, "SUCCESS");
         } else {
-            row.set(6, analyzeStatus.getStatus().name());
+            String status = analyzeStatus.getStatus().name();
+            if (analyzeStatus.getStatus().equals(StatsConstants.ScheduleStatus.RUNNING)) {
+                status += " (" + analyzeStatus.getProgress() + "%" + ")";
+            }
+            row.set(6, status);
         }
 
         row.set(7, analyzeStatus.getStartTime().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
@@ -94,11 +97,6 @@ public class ShowAnalyzeStatusStmt extends ShowStmt {
     @Override
     public RedirectStatus getRedirectStatus() {
         return RedirectStatus.FORWARD_NO_SYNC;
-    }
-
-    @Override
-    public boolean isSupportNewPlanner() {
-        return true;
     }
 
     @Override

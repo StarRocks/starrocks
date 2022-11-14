@@ -33,15 +33,50 @@ void QueryStatistics::to_pb(PQueryStatistics* statistics) {
     *statistics->mutable_stats_items() = {_stats_items.begin(), _stats_items.end()};
 }
 
-void QueryStatistics::merge(QueryStatisticsRecvr* recvr) {
-    recvr->merge(this);
+void QueryStatistics::clear() {
+    scan_rows = 0;
+    scan_bytes = 0;
+    cpu_ns = 0;
+    returned_rows = 0;
+    _stats_items.clear();
+}
+
+void QueryStatistics::add_stats_item(QueryStatisticsItemPB& stats_item) {
+    this->_stats_items.emplace_back(stats_item);
+    this->scan_rows += stats_item.scan_rows();
+    this->scan_bytes += stats_item.scan_bytes();
+}
+
+void QueryStatistics::add_scan_stats(int64_t scan_rows, int64_t scan_bytes) {
+    this->scan_rows += scan_rows;
+    this->scan_bytes += scan_bytes;
+}
+
+void QueryStatistics::merge(int sender_id, QueryStatistics& other) {
+    // Make the exchange action atomic
+    int64_t rows = other.scan_rows.load();
+    scan_rows += rows;
+    other.scan_rows -= rows;
+
+    int64_t bytes = other.scan_bytes.load();
+    scan_bytes += bytes;
+    other.scan_bytes -= bytes;
+
+    int64_t cpu_ns = other.cpu_ns.load();
+    cpu_ns += cpu_ns;
+    other.cpu_ns -= cpu_ns;
+
+    int64_t mem_bytes = other.mem_cost_bytes.load();
+    mem_cost_bytes = std::max<int64_t>(mem_cost_bytes, mem_bytes);
+
+    _stats_items.insert(_stats_items.end(), other._stats_items.begin(), other._stats_items.end());
 }
 
 void QueryStatistics::merge_pb(const PQueryStatistics& statistics) {
     scan_rows += statistics.scan_rows();
     scan_bytes += statistics.scan_bytes();
     cpu_ns += statistics.cpu_cost_ns();
-    mem_cost_bytes += statistics.mem_cost_bytes();
+    mem_cost_bytes = std::max<int64_t>(mem_cost_bytes, statistics.mem_cost_bytes());
     _stats_items.insert(_stats_items.end(), statistics.stats_items().begin(), statistics.stats_items().end());
 }
 
@@ -56,6 +91,13 @@ void QueryStatisticsRecvr::insert(const PQueryStatistics& statistics, int sender
         query_statistics = iter->second;
     }
     query_statistics->merge_pb(statistics);
+}
+
+void QueryStatisticsRecvr::aggregate(QueryStatistics* statistics) {
+    std::lock_guard<SpinLock> l(_lock);
+    for (auto& pair : _query_statistics) {
+        statistics->merge(pair.first, *pair.second);
+    }
 }
 
 QueryStatisticsRecvr::~QueryStatisticsRecvr() {

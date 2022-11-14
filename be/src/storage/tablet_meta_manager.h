@@ -21,14 +21,11 @@
 
 #pragma once
 
-#include "common/compiler_util.h"
-DIAGNOSTIC_PUSH
-DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 #include <rapidjson/document.h>
-DIAGNOSTIC_POP
 
 #include <string>
 
+#include "common/compiler_util.h"
 #include "gen_cpp/persistent_index.pb.h"
 #include "storage/data_dir.h"
 #include "storage/kv_store.h"
@@ -39,7 +36,7 @@ namespace starrocks {
 
 class DelVector;
 using DelVectorPtr = std::shared_ptr<DelVector>;
-class EditVersion;
+struct EditVersion;
 class EditVersionMetaPB;
 class RowsetMetaPB;
 class TabletMetaPB;
@@ -167,6 +164,13 @@ public:
     using DeleteVectorList = std::vector<std::pair<uint32_t, int64_t>>;
 
     static StatusOr<DeleteVectorList> list_del_vector(KVStore* meta, TTabletId tablet_id, int64_t max_version);
+
+    // delete all delete vectors of a tablet not useful anymore for query version < `version`, for example
+    // suppose we have delete vectors of version 1, 3, 5, 6, 7, 12, 16
+    // min queryable version is 10, which require delvector of version 7
+    // delvector of versin < 7 can be deleted, that is [1,3,5,6]
+    // return num of del vector deleted
+    static StatusOr<size_t> delete_del_vector_before_version(KVStore* meta, TTabletId tablet_id, int64_t version);
 
     static Status delete_del_vector_range(KVStore* meta, TTabletId tablet_id, uint32_t segment_id,
                                           int64_t start_version, int64_t end_version);

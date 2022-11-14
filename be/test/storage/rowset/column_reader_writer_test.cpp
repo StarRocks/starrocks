@@ -34,7 +34,6 @@
 #include "gen_cpp/segment.pb.h"
 #include "runtime/mem_pool.h"
 #include "storage/chunk_helper.h"
-#include "storage/column_block.h"
 #include "storage/decimal12.h"
 #include "storage/field.h"
 #include "storage/olap_common.h"
@@ -60,8 +59,6 @@ static const std::string TEST_DIR = "/column_reader_writer_test";
 class ColumnReaderWriterTest : public testing::Test {
 public:
     ColumnReaderWriterTest() {
-        _metadata_mem_tracker = std::make_unique<MemTracker>();
-
         TabletSchemaPB schema_pb;
         auto* c0 = schema_pb.add_column();
         c0->set_name("pk");
@@ -88,13 +85,12 @@ protected:
     void TearDown() override {}
 
     std::shared_ptr<Segment> create_dummy_segment(const std::shared_ptr<FileSystem>& fs, const std::string& fname) {
-        return std::make_shared<Segment>(Segment::private_type(0), fs, fname, 1, _dummy_segment_schema.get(),
-                                         _metadata_mem_tracker.get());
+        return std::make_shared<Segment>(Segment::private_type(0), fs, fname, 1, _dummy_segment_schema.get());
     }
 
     template <FieldType type, EncodingTypePB encoding, uint32_t version>
-    void test_nullable_data(const vectorized::Column& src, const std::string null_encoding = "0",
-                            const std::string null_ratio = "0") {
+    void test_nullable_data(const vectorized::Column& src, const std::string& null_encoding = "0",
+                            const std::string& null_ratio = "0") {
         config::set_config("null_encoding", null_encoding);
 
         using Type = typename TypeTraits<type>::CppType;
@@ -265,38 +261,29 @@ protected:
                 st = iter.seek_to_first();
                 ASSERT_TRUE(st.ok()) << st.to_string();
 
-                MemPool pool;
-                std::unique_ptr<ColumnVectorBatch> cvb;
-                ColumnVectorBatch::create(0, true, type_info, nullptr, &cvb);
-                cvb->resize(1024);
-                ColumnBlock col(cvb.get(), &pool);
+                auto column = ChunkHelper::column_from_field_type(type, true);
 
                 int idx = 0;
                 size_t rows_read = 1024;
-                ColumnBlockView dst(&col);
-                bool has_null;
-                st = iter.next_batch(&rows_read, &dst, &has_null);
+                st = iter.next_batch(&rows_read, column.get());
                 ASSERT_TRUE(st.ok());
                 for (int j = 0; j < rows_read; ++j) {
                     if (type == OLAP_FIELD_TYPE_CHAR) {
-                        ASSERT_EQ(*(string*)result, reinterpret_cast<const Slice*>(col.cell_ptr(j))->to_string())
+                        ASSERT_EQ(*(string*)result, reinterpret_cast<const Slice*>(column->raw_data())[j].to_string())
                                 << "j:" << j;
                     } else if (type == OLAP_FIELD_TYPE_VARCHAR || type == OLAP_FIELD_TYPE_HLL ||
                                type == OLAP_FIELD_TYPE_OBJECT) {
-                        ASSERT_EQ(value, reinterpret_cast<const Slice*>(col.cell_ptr(j))->to_string()) << "j:" << j;
+                        ASSERT_EQ(value, reinterpret_cast<const Slice*>(column->raw_data())[j].to_string())
+                                << "j:" << j;
                     } else {
-                        ASSERT_EQ(*(Type*)result, *(reinterpret_cast<const Type*>(col.cell_ptr(j))));
+                        ASSERT_EQ(*(Type*)result, reinterpret_cast<const Type*>(column->raw_data())[j]);
                     }
                     idx++;
                 }
             }
 
             {
-                MemPool pool;
-                std::unique_ptr<ColumnVectorBatch> cvb;
-                ColumnVectorBatch::create(0, true, type_info, nullptr, &cvb);
-                cvb->resize(1024);
-                ColumnBlock col(cvb.get(), &pool);
+                auto column = ChunkHelper::column_from_field_type(type, true);
 
                 for (int rowid = 0; rowid < 2048; rowid += 128) {
                     st = iter.seek_to_ordinal(rowid);
@@ -304,19 +291,18 @@ protected:
 
                     int idx = rowid;
                     size_t rows_read = 1024;
-                    ColumnBlockView dst(&col);
-                    bool has_null;
-                    st = iter.next_batch(&rows_read, &dst, &has_null);
+                    st = iter.next_batch(&rows_read, column.get());
                     ASSERT_TRUE(st.ok());
                     for (int j = 0; j < rows_read; ++j) {
                         if (type == OLAP_FIELD_TYPE_CHAR) {
-                            ASSERT_EQ(*(string*)result, reinterpret_cast<const Slice*>(col.cell_ptr(j))->to_string())
+                            ASSERT_EQ(*(string*)result,
+                                      reinterpret_cast<const Slice*>(column->raw_data())[j].to_string())
                                     << "j:" << j;
                         } else if (type == OLAP_FIELD_TYPE_VARCHAR || type == OLAP_FIELD_TYPE_HLL ||
                                    type == OLAP_FIELD_TYPE_OBJECT) {
-                            ASSERT_EQ(value, reinterpret_cast<const Slice*>(col.cell_ptr(j))->to_string());
+                            ASSERT_EQ(value, reinterpret_cast<const Slice*>(column->raw_data())[j].to_string());
                         } else {
-                            ASSERT_EQ(*(Type*)result, *(reinterpret_cast<const Type*>(col.cell_ptr(j))));
+                            ASSERT_EQ(*(Type*)result, reinterpret_cast<const Type*>(column->raw_data())[j]);
                         }
                         idx++;
                     }
@@ -326,7 +312,7 @@ protected:
     }
 
     template <uint32_t version>
-    void test_int_array(std::string null_encoding = "0") {
+    void test_int_array(const std::string& null_encoding = "0") {
         config::set_config("null_encoding", null_encoding);
         auto fs = std::make_shared<MemoryFileSystem>();
         ASSERT_TRUE(fs->create_dir(TEST_DIR).ok());
@@ -429,7 +415,7 @@ protected:
                 ASSERT_EQ("[4, 5, 6]", dst_column->debug_item(1));
             }
 
-            ASSERT_EQ(2, reader->num_rows_from_meta_pb(&meta));
+            ASSERT_EQ(2, meta.num_rows());
             ASSERT_EQ(36, reader->total_mem_footprint());
         }
     }
@@ -556,7 +542,6 @@ protected:
     }
 
     MemPool _pool;
-    std::unique_ptr<MemTracker> _metadata_mem_tracker;
     std::shared_ptr<TabletSchema> _dummy_segment_schema;
 };
 
@@ -726,7 +711,7 @@ TEST_F(ColumnReaderWriterTest, test_scalar_column_total_mem_footprint) {
         auto res = ColumnReader::create(&meta, segment.get());
         ASSERT_TRUE(res.ok());
         auto reader = std::move(res).value();
-        ASSERT_EQ(1024, reader->num_rows_from_meta_pb(&meta));
+        ASSERT_EQ(1024, meta.num_rows());
         ASSERT_EQ(1024 * 4 + 1024, reader->total_mem_footprint());
     }
 }

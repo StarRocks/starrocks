@@ -139,6 +139,11 @@ void FileScanner::fill_columns_from_path(starrocks::vectorized::ChunkPtr& chunk,
 StatusOr<ChunkPtr> FileScanner::materialize(const starrocks::vectorized::ChunkPtr& src,
                                             starrocks::vectorized::ChunkPtr& cast) {
     SCOPED_RAW_TIMER(&_counter->materialize_ns);
+
+    if (cast->num_rows() == 0) {
+        return cast;
+    }
+
     // materialize
     ChunkPtr dest_chunk = std::make_shared<Chunk>();
 
@@ -160,16 +165,23 @@ StatusOr<ChunkPtr> FileScanner::materialize(const starrocks::vectorized::ChunkPt
         int dest_index = ctx_index++;
         ExprContext* ctx = _dest_expr_ctx[dest_index];
         ASSIGN_OR_RETURN(auto col, ctx->evaluate(cast.get()));
-        uintptr_t col_pointer = reinterpret_cast<uintptr_t>(col.get());
+        auto col_pointer = reinterpret_cast<uintptr_t>(col.get());
         if (column_pointers.contains(col_pointer)) {
             col = col->clone();
         } else {
             column_pointers.emplace(col_pointer);
         }
+
+        // The column builder in ctx->evaluate may build column as non-nullable.
+        // See be/src/column/column_builder.h#L79.
+        if (!col->is_nullable() && slot->is_nullable()) {
+            col = ColumnHelper::cast_to_nullable_column(col);
+        }
+
         col = ColumnHelper::unfold_const_column(slot->type(), cast->num_rows(), col);
         dest_chunk->append_column(col, slot->id());
 
-        if (col->is_nullable() && col->has_null()) {
+        if (src != nullptr && col->is_nullable() && col->has_null()) {
             if (_strict_mode && _dest_slot_desc_mappings[dest_index] != nullptr) {
                 ColumnPtr& src_col = src->get_column_by_slot_id(_dest_slot_desc_mappings[dest_index]->id());
 

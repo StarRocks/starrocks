@@ -31,9 +31,6 @@
 #include "common/config.h"
 #include "common/logging.h"
 #include "common/status.h"
-#include "gen_cpp/InternalService_types.h"
-#include "gen_cpp/StarrocksExternalService_types.h"
-#include "gen_cpp/Types_types.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/exec_env.h"
@@ -42,6 +39,7 @@
 #include "runtime/result_buffer_mgr.h"
 #include "runtime/result_queue_mgr.h"
 #include "runtime/routine_load/routine_load_task_executor.h"
+#include "runtime/stream_load/transaction_mgr.h"
 #include "service_be/backend_service.h"
 #include "service_cn/compute_service.h"
 #include "storage/storage_engine.h"
@@ -125,6 +123,17 @@ void BackendServiceBase::submit_routine_load_task(TStatus& t_status, const std::
     return Status::OK().to_thrift(&t_status);
 }
 
+void BackendServiceBase::finish_stream_load_channel(TStatus& t_status, const TStreamLoadChannel& stream_load_channel) {
+    Status st = _exec_env->stream_context_mgr()->finish_body_sink(stream_load_channel.label,
+                                                                  stream_load_channel.channel_id);
+    if (!st.ok()) {
+        LOG(WARNING) << "failed to finish stream load channel. label: " << stream_load_channel.label
+                     << " channel id: " << stream_load_channel.channel_id;
+        return st.to_thrift(&t_status);
+    }
+    return Status::OK().to_thrift(&t_status);
+}
+
 /*
  * 1. validate user privilege (todo)
  * 2. FragmentMgr#exec_plan_fragment
@@ -144,8 +153,8 @@ void BackendServiceBase::open_scanner(TScanOpenResult& result_, const TScanOpenP
     }
     std::vector<TScanColumnDesc> selected_columns;
     // start the scan procedure
-    Status exec_st =
-            _exec_env->fragment_mgr()->exec_external_plan_fragment(params, fragment_instance_id, &selected_columns);
+    Status exec_st = _exec_env->fragment_mgr()->exec_external_plan_fragment(params, fragment_instance_id,
+                                                                            &selected_columns, &(p_context->query_id));
     exec_st.to_thrift(&t_status);
     //return status
     // t_status.status_code = TStatusCode::OK;

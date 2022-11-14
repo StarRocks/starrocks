@@ -179,6 +179,11 @@ public:
         _buffer.clear();
     }
 
+    void reset_cache() {
+        _cache_ok = false;
+        _cache.clear();
+    }
+
     Buffer<T>& get_pool() { return _pool; }
 
     const Buffer<T>& get_pool() const { return _pool; }
@@ -188,7 +193,7 @@ public:
     std::string debug_string() const override {
         std::stringstream ss;
         ss << "[";
-        size_t size = this->size();
+        int size = this->size();
         for (int i = 0; i < size - 1; ++i) {
             ss << debug_item(i) << ", ";
         }
@@ -217,6 +222,9 @@ public:
     bool has_large_column() const override { return false; }
 
 private:
+    // add this to avoid warning clang-diagnostic-overloaded-virtual
+    using Column::append;
+
     void _build_cache() const {
         if (_cache_ok) {
             return;

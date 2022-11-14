@@ -2,7 +2,6 @@
 
 package com.starrocks.sql.analyzer;
 
-
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
@@ -30,7 +29,6 @@ public class AdminRepairStmtTest {
     @Test
     public void testAdminRepairTable() {
         AdminRepairTableStmt stmt = (AdminRepairTableStmt) analyzeSuccess("ADMIN REPAIR TABLE test;");
-        Assert.assertTrue(stmt.isSupportNewPlanner());
         Assert.assertEquals("test", stmt.getDbName());
         Assert.assertEquals("test", stmt.getTblName());
         stmt = (AdminRepairTableStmt) analyzeSuccess("ADMIN REPAIR TABLE test PARTITION(p1, p2, p3);");
@@ -41,6 +39,7 @@ public class AdminRepairStmtTest {
         analyzeFail("ADMIN REPAIR TABLE");
         analyzeFail("ADMIN REPAIR TABLE test TEMPORARY PARTITION(p1, p2, p3);");
     }
+
     @Test
     public void testAdminCancelRepairTable() {
         AdminCancelRepairTableStmt stmt = (AdminCancelRepairTableStmt) analyzeSuccess("ADMIN cancel REPAIR TABLE test;");
@@ -48,10 +47,10 @@ public class AdminRepairStmtTest {
         Assert.assertEquals("test", stmt.getTblName());
         stmt = (AdminCancelRepairTableStmt) analyzeSuccess("ADMIN CANCEL REPAIR TABLE test PARTITION(p1, p2, p3);");
         Assert.assertEquals(Arrays.asList("p1", "p2", "p3"), stmt.getPartitions());
-        Assert.assertTrue(stmt.isSupportNewPlanner());
         analyzeFail("ADMIN CANCEL REPAIR TABLE");
         analyzeFail("ADMIN cancel REPAIR TABLE test TEMPORARY PARTITION(p1, p2, p3);");
     }
+
     @Test
     public void testAdminCheckTablets() {
         AdminCheckTabletsStmt stmt = (AdminCheckTabletsStmt) analyzeSuccess("ADMIN CHECK TABLET (10000, 10001) " +

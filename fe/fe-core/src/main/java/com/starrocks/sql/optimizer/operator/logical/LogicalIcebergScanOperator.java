@@ -15,12 +15,9 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import java.util.Map;
 
 public class LogicalIcebergScanOperator extends LogicalScanOperator {
-    private final Table.TableType tableType;
-
     private ScanOperatorPredicates predicates = new ScanOperatorPredicates();
 
     public LogicalIcebergScanOperator(Table table,
-                                      Table.TableType tableType,
                                       Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
                                       Map<Column, ColumnRefOperator> columnMetaToColRefMap,
                                       long limit,
@@ -33,7 +30,6 @@ public class LogicalIcebergScanOperator extends LogicalScanOperator {
                 predicate, null);
 
         Preconditions.checkState(table instanceof IcebergTable);
-        this.tableType = tableType;
     }
 
     private LogicalIcebergScanOperator(LogicalIcebergScanOperator.Builder builder) {
@@ -45,12 +41,7 @@ public class LogicalIcebergScanOperator extends LogicalScanOperator {
                 builder.getPredicate(),
                 builder.getProjection());
 
-        this.tableType = builder.tableType;
         this.predicates = builder.predicates;
-    }
-
-    public Table.TableType getTableType() {
-        return tableType;
     }
 
     @Override
@@ -70,7 +61,6 @@ public class LogicalIcebergScanOperator extends LogicalScanOperator {
 
     public static class Builder
             extends LogicalScanOperator.Builder<LogicalIcebergScanOperator, LogicalIcebergScanOperator.Builder> {
-        private Table.TableType tableType;
         private ScanOperatorPredicates predicates = new ScanOperatorPredicates();
 
         @Override
@@ -82,7 +72,6 @@ public class LogicalIcebergScanOperator extends LogicalScanOperator {
         public LogicalIcebergScanOperator.Builder withOperator(LogicalIcebergScanOperator scanOperator) {
             super.withOperator(scanOperator);
 
-            this.tableType = scanOperator.tableType;
             this.predicates = scanOperator.predicates;
             return this;
         }

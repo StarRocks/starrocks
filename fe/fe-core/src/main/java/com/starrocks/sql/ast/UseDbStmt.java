@@ -3,7 +3,6 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.RedirectStatus;
-import com.starrocks.analysis.StatementBase;
 
 /**
  * Representation of a USE [catalog.]db statement.
@@ -11,12 +10,24 @@ import com.starrocks.analysis.StatementBase;
  * Queries from JDBC will be handled by COM_QUERY protocol, it will generate UseDbStmt.
  */
 public class UseDbStmt extends StatementBase {
-    private final String catalog;
+    private String catalog;
     private final String database;
 
     public UseDbStmt(String catalog, String database) {
         this.catalog = catalog;
         this.database = database;
+    }
+
+    public String getCatalogName() {
+        return this.catalog;
+    }
+
+    public void setCatalogName(String catalogName) {
+        this.catalog = catalogName;
+    }
+
+    public String getDbName() {
+        return this.database;
     }
 
     public String getIdentifier() {
@@ -35,10 +46,5 @@ public class UseDbStmt extends StatementBase {
     @Override
     public RedirectStatus getRedirectStatus() {
         return RedirectStatus.NO_FORWARD;
-    }
-
-    @Override
-    public boolean isSupportNewPlanner() {
-        return true;
     }
 }

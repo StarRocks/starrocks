@@ -17,7 +17,3 @@ CREATE DATABASE [IF NOT EXISTS] db_name;
     ```sql
     CREATE DATABASE db_test;
     ```
-
-## keyword
-
-CREATE,DATABASE

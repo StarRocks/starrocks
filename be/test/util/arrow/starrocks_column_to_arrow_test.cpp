@@ -48,7 +48,7 @@ void compare_arrow_value(const RunTimeCppType<PT>& datum, const ArrowTypeIdToArr
         ASSERT_EQ(data_array->Value(i), datum);
     } else if constexpr (pt_is_largeint<PT>) {
         ASSERT_EQ(data_array->GetString(i), LargeIntValue::to_string(datum));
-    } else if constexpr (pt_is_binary<PT> || pt_is_date_or_datetime<PT>) {
+    } else if constexpr (pt_is_string<PT> || pt_is_date_or_datetime<PT>) {
         ASSERT_EQ(data_array->GetString(i), datum.to_string());
     } else if constexpr (pt_is_hll<PT>) {
         std::string s;
@@ -118,7 +118,7 @@ struct NullableColumnTester {
     using ColumnType = RunTimeColumnType<PT>;
     using ArrowType = ArrowTypeIdToType<AT>;
     using ArrowArrayType = ArrowTypeIdToArrayType<AT>;
-    static inline void apply(size_t num_rows, std::set<size_t> null_index, const std::vector<CppType>& data,
+    static inline void apply(size_t num_rows, const std::set<size_t>& null_index, const std::vector<CppType>& data,
                              const TypeDescriptor& type_desc) {
         auto chunk = std::make_shared<Chunk>();
         std::vector<PrimitiveType> primitive_types(1, PT);

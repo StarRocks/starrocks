@@ -40,7 +40,6 @@ namespace starrocks {
 ExportSink::ExportSink(ObjectPool* pool, const RowDescriptor& row_desc, const std::vector<TExpr>& t_exprs)
         : _state(nullptr),
           _pool(pool),
-          _row_desc(row_desc),
           _t_output_expr(t_exprs),
           _profile(nullptr),
           _bytes_written_counter(nullptr),
@@ -89,12 +88,17 @@ Status ExportSink::open(RuntimeState* state) {
 }
 
 Status ExportSink::close(RuntimeState* state, Status exec_status) {
+    if (_closed) {
+        return Status::OK();
+    }
     Expr::close(_output_expr_ctxs, state);
     if (_file_builder != nullptr) {
         Status st = _file_builder->finish();
         _file_builder.reset();
+        _closed = true;
         return st;
     }
+    _closed = true;
     return Status::OK();
 }
 
@@ -117,6 +121,10 @@ Status ExportSink::open_file_writer(int timeout_ms) {
             ASSIGN_OR_RETURN(output_file, fs->new_writable_file(options, file_path));
             break;
         } else {
+            if (_t_export_sink.broker_addresses.empty()) {
+                LOG(WARNING) << "ExportSink broker_addresses empty";
+                return Status::InternalError("ExportSink broker_addresses empty");
+            }
             const TNetworkAddress& broker_addr = _t_export_sink.broker_addresses[0];
             BrokerFileSystem fs_broker(broker_addr, _t_export_sink.properties, timeout_ms);
             ASSIGN_OR_RETURN(output_file, fs_broker.new_writable_file(options, file_path));
@@ -150,8 +158,13 @@ Status ExportSink::gen_file_name(std::string* file_name) {
     return Status::OK();
 }
 
-Status ExportSink::send_chunk(RuntimeState*, vectorized::Chunk* chunk) {
-    return _file_builder->add_chunk(chunk);
+Status ExportSink::send_chunk(RuntimeState* state, vectorized::Chunk* chunk) {
+    Status status = _file_builder->add_chunk(chunk);
+    if (!status.ok()) {
+        Status status;
+        close(state, status);
+    }
+    return status;
 }
 
 } // namespace starrocks

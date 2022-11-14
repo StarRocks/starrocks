@@ -74,9 +74,11 @@ public:
     // only used for AGG streaming
     void batch_update_state(FunctionContext* ctx, jobject udaf, jobject update, jobject* input, int cols);
 
-    // batch call evalute
+    // batch call evalute by callstub
     jobject batch_call(BatchEvaluateStub* stub, jobject* input, int cols, int rows);
-    // batch call no-args function
+    // batch call method by reflect
+    jobject batch_call(FunctionContext* ctx, jobject caller, jobject method, jobject* input, int cols, int rows);
+    // batch call no-args function by reflect
     jobject batch_call(FunctionContext* ctx, jobject caller, jobject method, int rows);
     // batch call int()
     // callers should be Object[]
@@ -93,6 +95,9 @@ public:
     // convert int handle to jobject
     // return a local ref
     jobject convert_handle_to_jobject(FunctionContext* ctx, int state);
+
+    // convert handle list to jobject array (Object[])
+    jobject convert_handles_to_jobjects(FunctionContext* ctx, jobject state_ids);
 
     // List methods
     jobject list_get(jobject obj, int idx);
@@ -156,7 +161,6 @@ private:
 
     jclass _udf_helper_class;
     jmethodID _create_boxed_array;
-    jmethodID _batch_update_single;
     jmethodID _batch_update;
     jmethodID _batch_update_if_not_null;
     jmethodID _batch_update_state;
@@ -251,7 +255,7 @@ private:
 // A global ref of the guard, handle can be shared across threads
 class JavaGlobalRef {
 public:
-    JavaGlobalRef(jobject&& handle) : _handle(std::move(handle)) {}
+    JavaGlobalRef(jobject handle) : _handle(handle) {}
     ~JavaGlobalRef();
     JavaGlobalRef(const JavaGlobalRef&) = delete;
 
@@ -279,7 +283,7 @@ private:
 // A Class object created from the ClassLoader that can be accessed by multiple threads
 class JVMClass {
 public:
-    JVMClass(jobject&& clazz) : _clazz(std::move(clazz)) {}
+    JVMClass(jobject clazz) : _clazz(clazz) {}
     JVMClass(const JVMClass&) = delete;
 
     JVMClass& operator=(const JVMClass&&) = delete;
@@ -346,12 +350,15 @@ private:
 class UDAFStateList {
 public:
     static inline const char* clazz_name = "com.starrocks.udf.FunctionStates";
-    UDAFStateList(JavaGlobalRef&& handle, JavaGlobalRef&& get, JavaGlobalRef&& add);
+    UDAFStateList(JavaGlobalRef&& handle, JavaGlobalRef&& get, JavaGlobalRef&& batch_get, JavaGlobalRef&& add);
 
     jobject handle() { return _handle.handle(); }
 
     // get state with index state
     jobject get_state(FunctionContext* ctx, JNIEnv* env, int state);
+
+    // batch get states
+    jobject get_state(FunctionContext* ctx, JNIEnv* env, jobject state_ids);
 
     // add a state to StateList
     int add_state(FunctionContext* ctx, JNIEnv* env, jobject state);
@@ -359,8 +366,10 @@ public:
 private:
     JavaGlobalRef _handle;
     JavaGlobalRef _get_method;
+    JavaGlobalRef _batch_get_method;
     JavaGlobalRef _add_method;
     jmethodID _get_method_id;
+    jmethodID _batch_get_method_id;
     jmethodID _add_method_id;
 };
 

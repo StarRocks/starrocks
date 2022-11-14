@@ -26,7 +26,15 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/exprs")
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/exprs")
 
 set(EXPR_FILES 
-  agg/aggregate_factory.cpp
+  agg/factory/aggregate_factory.cpp
+  agg/factory/aggregate_resolver_approx.cpp
+  agg/factory/aggregate_resolver_avg.cpp
+  agg/factory/aggregate_resolver_minmaxany.cpp
+  agg/factory/aggregate_resolver_others.cpp
+  agg/factory/aggregate_resolver_sumcount.cpp
+  agg/factory/aggregate_resolver_utility.cpp
+  agg/factory/aggregate_resolver_variance.cpp
+  agg/factory/aggregate_resolver_window.cpp
   anyval_util.cpp
   base64.cpp
   expr_context.cpp
@@ -41,6 +49,7 @@ set(EXPR_FILES
   vectorized/bitmap_functions.cpp
   vectorized/case_expr.cpp
   vectorized/cast_expr.cpp
+  vectorized/cast_expr_array.cpp
   vectorized/column_ref.cpp
   vectorized/placeholder_ref.cpp
   vectorized/dictmapping_expr.cpp
@@ -63,6 +72,8 @@ set(EXPR_FILES
   vectorized/like_predicate.cpp
   vectorized/literal.cpp
   vectorized/locate.cpp
+  vectorized/map_element_expr.cpp
+  vectorized/map_functions.cpp
   vectorized/math_functions.cpp
   vectorized/percentile_functions.cpp
   vectorized/runtime_filter_bank.cpp
@@ -76,6 +87,9 @@ set(EXPR_FILES
   agg/java_window_function.cpp
   table_function/java_udtf_function.cpp
   vectorized/java_function_call_expr.cpp
+  vectorized/lambda_function.cpp
+  vectorized/array_map_expr.cpp
+  vectorized/subfield_expr.cpp
 )
 
 add_library(Exprs ${EXPR_FILES})

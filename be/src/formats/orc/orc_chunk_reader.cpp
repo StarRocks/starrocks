@@ -5,7 +5,6 @@
 #include <glog/logging.h>
 
 #include <exception>
-#include <limits>
 #include <set>
 #include <unordered_map>
 #include <utility>
@@ -13,9 +12,12 @@
 #include "cctz/civil_time.h"
 #include "cctz/time_zone.h"
 #include "column/array_column.h"
+#include "column/map_column.h"
+#include "column/struct_column.h"
 #include "exprs/vectorized/cast_expr.h"
 #include "exprs/vectorized/literal.h"
-#include "gen_cpp/Exprs_types.h"
+#include "formats/orc/orc_mapping.h"
+#include "fs/fs.h"
 #include "gen_cpp/orc_proto.pb.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
@@ -70,8 +72,8 @@ static inline size_t remove_trailing_spaces(const char* s, size_t size) {
     return size;
 }
 
-static void fill_boolean_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int from, int size,
-                                const TypeDescriptor& type_desc, void* ctx) {
+static void fill_boolean_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size,
+                                const TypeDescriptor& type_desc, const OrcMappingPtr& mapping, void* ctx) {
     auto* data = down_cast<orc::LongVectorBatch*>(cvb);
 
     int col_start = col->size();
@@ -85,8 +87,8 @@ static void fill_boolean_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int
     }
 }
 
-static void fill_boolean_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int from, int size,
-                                          const TypeDescriptor& type_desc, void* ctx) {
+static void fill_boolean_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size,
+                                          const TypeDescriptor& type_desc, const OrcMappingPtr& mapping, void* ctx) {
     auto* data = down_cast<orc::LongVectorBatch*>(cvb);
     int col_start = col->size();
     col->resize(col->size() + size);
@@ -111,9 +113,9 @@ static void fill_boolean_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr
 }
 
 template <PrimitiveType Type, typename OrcColumnVectorBatch>
-static void fill_int_column_from_cvb(OrcColumnVectorBatch* data, ColumnPtr& col, int from, int size,
-                                     const TypeDescriptor& type_desc, void* ctx) {
-    OrcChunkReader* reader = static_cast<OrcChunkReader*>(ctx);
+static void fill_int_column_from_cvb(OrcColumnVectorBatch* data, ColumnPtr& col, size_t from, size_t size,
+                                     const TypeDescriptor& type_desc, const OrcMappingPtr& mapping, void* ctx) {
+    auto* reader = static_cast<OrcChunkReader*>(ctx);
 
     int col_start = col->size();
     col->resize(col_start + size);
@@ -157,9 +159,10 @@ static void fill_int_column_from_cvb(OrcColumnVectorBatch* data, ColumnPtr& col,
 }
 
 template <PrimitiveType Type, typename OrcColumnVectorBatch>
-static void fill_int_column_with_null_from_cvb(OrcColumnVectorBatch* data, ColumnPtr& col, int from, int size,
-                                               const TypeDescriptor& type_desc, void* ctx) {
-    OrcChunkReader* reader = static_cast<OrcChunkReader*>(ctx);
+static void fill_int_column_with_null_from_cvb(OrcColumnVectorBatch* data, ColumnPtr& col, size_t from, size_t size,
+                                               const TypeDescriptor& type_desc, const OrcMappingPtr& mapping,
+                                               void* ctx) {
+    auto* reader = static_cast<OrcChunkReader*>(ctx);
 
     int col_start = col->size();
     col->resize(col->size() + size);
@@ -221,23 +224,24 @@ static void fill_int_column_with_null_from_cvb(OrcColumnVectorBatch* data, Colum
 }
 
 template <PrimitiveType Type>
-static void fill_int_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int from, int size,
-                            const TypeDescriptor& type_desc, void* ctx) {
+static void fill_int_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size,
+                            const TypeDescriptor& type_desc, const OrcMappingPtr& mapping, void* ctx) {
     // try to dyn_cast to long vector batch first. in most case, the cast will succeed.
     // so there is no performance loss comparing to call `down_cast` directly
     // because in `down_cast` implementation, there is also a dyn_cast.
     {
-        orc::LongVectorBatch* data = dynamic_cast<orc::LongVectorBatch*>(cvb);
+        auto* data = dynamic_cast<orc::LongVectorBatch*>(cvb);
         if (data != nullptr) {
-            return fill_int_column_from_cvb<Type, orc::LongVectorBatch>(data, col, from, size, type_desc, ctx);
+            return fill_int_column_from_cvb<Type, orc::LongVectorBatch>(data, col, from, size, type_desc, nullptr, ctx);
         }
     }
     // if dyn_cast to long vector batch failed, try to dyn_cast to double vector batch for best effort
     // it only happens when slot type and orc type don't match.
     {
-        orc::DoubleVectorBatch* data = dynamic_cast<orc::DoubleVectorBatch*>(cvb);
+        auto* data = dynamic_cast<orc::DoubleVectorBatch*>(cvb);
         if (data != nullptr) {
-            return fill_int_column_from_cvb<Type, orc::DoubleVectorBatch>(data, col, from, size, type_desc, ctx);
+            return fill_int_column_from_cvb<Type, orc::DoubleVectorBatch>(data, col, from, size, type_desc, nullptr,
+                                                                          ctx);
         }
     }
     // we have nothing to fill, but have to resize column to save from crash.
@@ -245,20 +249,20 @@ static void fill_int_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int fro
 }
 
 template <PrimitiveType Type>
-static void fill_int_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int from, int size,
-                                      const TypeDescriptor& type_desc, void* ctx) {
+static void fill_int_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size,
+                                      const TypeDescriptor& type_desc, const OrcMappingPtr& mapping, void* ctx) {
     {
-        orc::LongVectorBatch* data = dynamic_cast<orc::LongVectorBatch*>(cvb);
+        auto* data = dynamic_cast<orc::LongVectorBatch*>(cvb);
         if (data != nullptr) {
             return fill_int_column_with_null_from_cvb<Type, orc::LongVectorBatch>(data, col, from, size, type_desc,
-                                                                                  ctx);
+                                                                                  nullptr, ctx);
         }
     }
     {
-        orc::DoubleVectorBatch* data = dynamic_cast<orc::DoubleVectorBatch*>(cvb);
+        auto* data = dynamic_cast<orc::DoubleVectorBatch*>(cvb);
         if (data != nullptr) {
             return fill_int_column_with_null_from_cvb<Type, orc::DoubleVectorBatch>(data, col, from, size, type_desc,
-                                                                                    ctx);
+                                                                                    nullptr, ctx);
         }
     }
     // we have nothing to fill, but have to resize column to save from crash.
@@ -266,8 +270,8 @@ static void fill_int_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr& co
 }
 
 template <PrimitiveType Type>
-static void fill_float_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int from, int size,
-                              const TypeDescriptor& type_desc, void* ctx) {
+static void fill_float_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size,
+                              const TypeDescriptor& type_desc, const OrcMappingPtr& mapping, void* ctx) {
     auto* data = down_cast<orc::DoubleVectorBatch*>(cvb);
 
     int col_start = col->size();
@@ -282,8 +286,8 @@ static void fill_float_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int f
 }
 
 template <PrimitiveType Type>
-static void fill_float_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int from, int size,
-                                        const TypeDescriptor& type_desc, void* ctx) {
+static void fill_float_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size,
+                                        const TypeDescriptor& type_desc, const OrcMappingPtr& mapping, void* ctx) {
     auto* data = down_cast<orc::DoubleVectorBatch*>(cvb);
     int col_start = col->size();
     col->resize(col->size() + size);
@@ -307,8 +311,9 @@ static void fill_float_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr& 
     c->update_has_null();
 }
 
-static void fill_decimal_column_from_orc_decimal64(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int from, int size,
-                                                   const TypeDescriptor& type_desc, void* ctx) {
+static void fill_decimal_column_from_orc_decimal64(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from,
+                                                   size_t size, const TypeDescriptor& type_desc,
+                                                   const OrcMappingPtr& mapping, void* ctx) {
     auto* data = down_cast<orc::Decimal64VectorBatch*>(cvb);
 
     int col_start = col->size();
@@ -336,14 +341,15 @@ static void fill_decimal_column_from_orc_decimal64(orc::ColumnVectorBatch* cvb, 
     }
 }
 
-static void fill_decimal_column_with_null_from_orc_decimal64(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int from,
-                                                             int size, const TypeDescriptor& type_desc, void* ctx) {
+static void fill_decimal_column_with_null_from_orc_decimal64(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from,
+                                                             size_t size, const TypeDescriptor& type_desc,
+                                                             const OrcMappingPtr& mapping, void* ctx) {
     int col_start = col->size();
     auto c = ColumnHelper::as_raw_column<NullableColumn>(col);
     auto& null_column = c->null_column();
     auto& data_column = c->data_column();
 
-    fill_decimal_column_from_orc_decimal64(cvb, data_column, from, size, type_desc, ctx);
+    fill_decimal_column_from_orc_decimal64(cvb, data_column, from, size, type_desc, nullptr, ctx);
     DCHECK_EQ(col_start + size, data_column->size());
     null_column->resize(data_column->size());
     auto* nulls = null_column->get_data().data();
@@ -358,8 +364,9 @@ static void fill_decimal_column_with_null_from_orc_decimal64(orc::ColumnVectorBa
     }
 }
 
-static void fill_decimal_column_from_orc_decimal128(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int from, int size,
-                                                    const TypeDescriptor& type_desc, void* ctx) {
+static void fill_decimal_column_from_orc_decimal128(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from,
+                                                    size_t size, const TypeDescriptor& type_desc,
+                                                    const OrcMappingPtr& mapping, void* ctx) {
     auto* data = down_cast<orc::Decimal128VectorBatch*>(cvb);
 
     int col_start = col->size();
@@ -385,14 +392,15 @@ static void fill_decimal_column_from_orc_decimal128(orc::ColumnVectorBatch* cvb,
     }
 }
 
-static void fill_decimal_column_with_null_from_orc_decimal128(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int from,
-                                                              int size, const TypeDescriptor& type_desc, void* ctx) {
+static void fill_decimal_column_with_null_from_orc_decimal128(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from,
+                                                              size_t size, const TypeDescriptor& type_desc,
+                                                              const OrcMappingPtr& mapping, void* ctx) {
     int col_start = col->size();
     auto c = ColumnHelper::as_raw_column<NullableColumn>(col);
     auto& null_column = c->null_column();
     auto& data_column = c->data_column();
 
-    fill_decimal_column_from_orc_decimal128(cvb, data_column, from, size, type_desc, ctx);
+    fill_decimal_column_from_orc_decimal128(cvb, data_column, from, size, type_desc, nullptr, ctx);
     DCHECK_EQ(col_start + size, data_column->size());
     null_column->resize(data_column->size());
     auto* nulls = null_column->get_data().data();
@@ -407,21 +415,21 @@ static void fill_decimal_column_with_null_from_orc_decimal128(orc::ColumnVectorB
     }
 }
 
-static void fill_decimal_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int from, int size,
-                                const TypeDescriptor& type_desc, void* ctx) {
+static void fill_decimal_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size,
+                                const TypeDescriptor& type_desc, const OrcMappingPtr& mapping, void* ctx) {
     if (dynamic_cast<orc::Decimal64VectorBatch*>(cvb) != nullptr) {
-        fill_decimal_column_from_orc_decimal64(cvb, col, from, size, type_desc, ctx);
+        fill_decimal_column_from_orc_decimal64(cvb, col, from, size, type_desc, nullptr, ctx);
     } else {
-        fill_decimal_column_from_orc_decimal128(cvb, col, from, size, type_desc, ctx);
+        fill_decimal_column_from_orc_decimal128(cvb, col, from, size, type_desc, nullptr, ctx);
     }
 }
 
-static void fill_decimal_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int from, int size,
-                                          const TypeDescriptor& type_desc, void* ctx) {
+static void fill_decimal_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size,
+                                          const TypeDescriptor& type_desc, const OrcMappingPtr& mapping, void* ctx) {
     if (dynamic_cast<orc::Decimal64VectorBatch*>(cvb) != nullptr) {
-        fill_decimal_column_with_null_from_orc_decimal64(cvb, col, from, size, type_desc, ctx);
+        fill_decimal_column_with_null_from_orc_decimal64(cvb, col, from, size, type_desc, nullptr, ctx);
     } else {
-        fill_decimal_column_with_null_from_orc_decimal128(cvb, col, from, size, type_desc, ctx);
+        fill_decimal_column_with_null_from_orc_decimal128(cvb, col, from, size, type_desc, nullptr, ctx);
     }
 }
 
@@ -432,8 +440,8 @@ struct DecimalVectorBatchSelector {
 };
 
 template <typename T, PrimitiveType DecimalType, bool is_nullable>
-static inline void fill_decimal_column_generic(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int from, int size,
-                                               void* ctx) {
+static inline void fill_decimal_column_generic(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size,
+                                               const OrcMappingPtr& mapping, void* ctx) {
     static_assert(is_decimal_column<RunTimeColumnType<DecimalType>>,
                   "Only support TYPE_DECIMAL32|TYPE_DECIMAL64|TYPE_DECIMAL128");
 
@@ -508,48 +516,55 @@ static inline void fill_decimal_column_generic(orc::ColumnVectorBatch* cvb, Colu
 
 template <PrimitiveType DecimalType, bool is_nullable>
 static inline void fill_decimal_column_from_orc_decimal64_or_decimal128(orc::ColumnVectorBatch* cvb, ColumnPtr& col,
-                                                                        int from, int size,
-                                                                        const TypeDescriptor& type_desc, void* ctx) {
+                                                                        size_t from, size_t size,
+                                                                        const TypeDescriptor& type_desc,
+                                                                        const OrcMappingPtr& mapping, void* ctx) {
     if (dynamic_cast<orc::Decimal64VectorBatch*>(cvb) != nullptr) {
-        fill_decimal_column_generic<int64_t, DecimalType, is_nullable>(cvb, col, from, size, ctx);
+        fill_decimal_column_generic<int64_t, DecimalType, is_nullable>(cvb, col, from, size, nullptr, ctx);
     } else {
-        fill_decimal_column_generic<int128_t, DecimalType, is_nullable>(cvb, col, from, size, ctx);
+        fill_decimal_column_generic<int128_t, DecimalType, is_nullable>(cvb, col, from, size, nullptr, ctx);
     }
 }
 
-static void fill_decimal32_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int from, int size,
-                                  const TypeDescriptor& type_desc, void* ctx) {
-    fill_decimal_column_from_orc_decimal64_or_decimal128<TYPE_DECIMAL32, false>(cvb, col, from, size, type_desc, ctx);
+static void fill_decimal32_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size,
+                                  const TypeDescriptor& type_desc, const OrcMappingPtr& mapping, void* ctx) {
+    fill_decimal_column_from_orc_decimal64_or_decimal128<TYPE_DECIMAL32, false>(cvb, col, from, size, type_desc,
+                                                                                nullptr, ctx);
 }
 
-static void fill_decimal64_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int from, int size,
-                                  const TypeDescriptor& type_desc, void* ctx) {
-    fill_decimal_column_from_orc_decimal64_or_decimal128<TYPE_DECIMAL64, false>(cvb, col, from, size, type_desc, ctx);
+static void fill_decimal64_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size,
+                                  const TypeDescriptor& type_desc, const OrcMappingPtr& mapping, void* ctx) {
+    fill_decimal_column_from_orc_decimal64_or_decimal128<TYPE_DECIMAL64, false>(cvb, col, from, size, type_desc,
+                                                                                nullptr, ctx);
 }
 
-static void fill_decimal128_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int from, int size,
-                                   const TypeDescriptor& type_desc, void* ctx) {
-    fill_decimal_column_from_orc_decimal64_or_decimal128<TYPE_DECIMAL128, false>(cvb, col, from, size, type_desc, ctx);
+static void fill_decimal128_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size,
+                                   const TypeDescriptor& type_desc, const OrcMappingPtr& mapping, void* ctx) {
+    fill_decimal_column_from_orc_decimal64_or_decimal128<TYPE_DECIMAL128, false>(cvb, col, from, size, type_desc,
+                                                                                 nullptr, ctx);
 }
 
-static void fill_decimal32_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int from, int size,
-                                            const TypeDescriptor& type_desc, void* ctx) {
-    fill_decimal_column_from_orc_decimal64_or_decimal128<TYPE_DECIMAL32, true>(cvb, col, from, size, type_desc, ctx);
+static void fill_decimal32_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size,
+                                            const TypeDescriptor& type_desc, const OrcMappingPtr& mapping, void* ctx) {
+    fill_decimal_column_from_orc_decimal64_or_decimal128<TYPE_DECIMAL32, true>(cvb, col, from, size, type_desc, nullptr,
+                                                                               ctx);
 }
 
-static void fill_decimal64_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int from, int size,
-                                            const TypeDescriptor& type_desc, void* ctx) {
-    fill_decimal_column_from_orc_decimal64_or_decimal128<TYPE_DECIMAL64, true>(cvb, col, from, size, type_desc, ctx);
+static void fill_decimal64_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size,
+                                            const TypeDescriptor& type_desc, const OrcMappingPtr& mapping, void* ctx) {
+    fill_decimal_column_from_orc_decimal64_or_decimal128<TYPE_DECIMAL64, true>(cvb, col, from, size, type_desc, nullptr,
+                                                                               ctx);
 }
 
-static void fill_decimal128_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int from, int size,
-                                             const TypeDescriptor& type_desc, void* ctx) {
-    fill_decimal_column_from_orc_decimal64_or_decimal128<TYPE_DECIMAL128, true>(cvb, col, from, size, type_desc, ctx);
+static void fill_decimal128_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size,
+                                             const TypeDescriptor& type_desc, const OrcMappingPtr& mapping, void* ctx) {
+    fill_decimal_column_from_orc_decimal64_or_decimal128<TYPE_DECIMAL128, true>(cvb, col, from, size, type_desc,
+                                                                                nullptr, ctx);
 }
 
-static void fill_string_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int from, int size,
-                               const TypeDescriptor& type_desc, void* ctx) {
-    OrcChunkReader* reader = static_cast<OrcChunkReader*>(ctx);
+static void fill_string_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size,
+                               const TypeDescriptor& type_desc, const OrcMappingPtr& mapping, void* ctx) {
+    auto* reader = static_cast<OrcChunkReader*>(ctx);
 
     auto* data = down_cast<orc::StringVectorBatch*>(cvb);
 
@@ -607,8 +622,8 @@ static void fill_string_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int 
     }
 }
 
-static void fill_string_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int from, int size,
-                                         const TypeDescriptor& type_desc, void* ctx) {
+static void fill_string_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size,
+                                         const TypeDescriptor& type_desc, const OrcMappingPtr& mapping, void* ctx) {
     auto* reader = static_cast<OrcChunkReader*>(ctx);
 
     auto* data = down_cast<orc::StringVectorBatch*>(cvb);
@@ -720,12 +735,9 @@ static inline void orc_date_to_native_date(JulianDate* jd, int64_t value) {
 static inline int64_t native_date_to_orc_date(const DateValue& dv) {
     return dv._julian - date::UNIX_EPOCH_JULIAN;
 }
-static inline int64_t native_date_to_orc_date(const JulianDate& jd) {
-    return jd - date::UNIX_EPOCH_JULIAN;
-}
 
-static void fill_date_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int from, int size,
-                             const TypeDescriptor& type_desc, void* ctx) {
+static void fill_date_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size,
+                             const TypeDescriptor& type_desc, const OrcMappingPtr& mapping, void* ctx) {
     auto* data = down_cast<orc::LongVectorBatch*>(cvb);
 
     int col_start = col->size();
@@ -737,8 +749,8 @@ static void fill_date_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int fr
     }
 }
 
-static void fill_date_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int from, int size,
-                                       const TypeDescriptor& type_desc, void* ctx) {
+static void fill_date_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size,
+                                       const TypeDescriptor& type_desc, const OrcMappingPtr& mapping, void* ctx) {
     auto* data = down_cast<orc::LongVectorBatch*>(cvb);
 
     int col_start = col->size();
@@ -798,9 +810,9 @@ static inline void orc_ts_to_native_ts(TimestampValue* tv, const cctz::time_zone
     }
 }
 
-static void fill_timestamp_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int from, int size,
-                                  const TypeDescriptor& type_desc, void* ctx) {
-    OrcChunkReader* reader = static_cast<OrcChunkReader*>(ctx);
+static void fill_timestamp_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size,
+                                  const TypeDescriptor& type_desc, const OrcMappingPtr& mapping, void* ctx) {
+    auto* reader = static_cast<OrcChunkReader*>(ctx);
     auto* data = down_cast<orc::TimestampVectorBatch*>(cvb);
     int col_start = col->size();
     col->resize(col->size() + size);
@@ -815,9 +827,9 @@ static void fill_timestamp_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, i
     }
 }
 
-static void fill_timestamp_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int from, int size,
-                                            const TypeDescriptor& type_desc, void* ctx) {
-    OrcChunkReader* reader = static_cast<OrcChunkReader*>(ctx);
+static void fill_timestamp_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size,
+                                            const TypeDescriptor& type_desc, const OrcMappingPtr& mapping, void* ctx) {
+    auto* reader = static_cast<OrcChunkReader*>(ctx);
     auto* data = down_cast<orc::TimestampVectorBatch*>(cvb);
     int col_start = col->size();
     col->resize(col->size() + size);
@@ -877,8 +889,8 @@ static void copy_array_offset(orc::DataBuffer<int64_t>& src, int from, int size,
     }
 }
 
-static void fill_array_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int from, int size,
-                              const TypeDescriptor& type_desc, void* ctx) {
+static void fill_array_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size,
+                              const TypeDescriptor& type_desc, const OrcMappingPtr& mapping, void* ctx) {
     auto* orc_list = down_cast<orc::ListVectorBatch*>(cvb);
     auto* col_array = down_cast<ArrayColumn*>(col.get());
 
@@ -891,17 +903,18 @@ static void fill_array_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int f
     const int elements_from = implicit_cast<int>(orc_list->offsets[from]);
     const int elements_size = implicit_cast<int>(orc_list->offsets[from + size] - elements_from);
 
-    fn_fill_elements(orc_list->elements.get(), elements, elements_from, elements_size, child_type, ctx);
+    fn_fill_elements(orc_list->elements.get(), elements, elements_from, elements_size, child_type,
+                     mapping->get_column_id_or_child_mapping(0).orc_mapping, ctx);
 }
 
-static void fill_array_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int from, int size,
-                                        const TypeDescriptor& type_desc, void* ctx) {
+static void fill_array_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size,
+                                        const TypeDescriptor& type_desc, const OrcMappingPtr& mapping, void* ctx) {
     auto* orc_list = down_cast<orc::ListVectorBatch*>(cvb);
     auto* col_nullable = down_cast<NullableColumn*>(col.get());
     auto* col_array = down_cast<ArrayColumn*>(col_nullable->data_column().get());
 
     if (!orc_list->hasNulls) {
-        fill_array_column(orc_list, col_nullable->data_column(), from, size, type_desc, ctx);
+        fill_array_column(orc_list, col_nullable->data_column(), from, size, type_desc, mapping, ctx);
         col_nullable->null_column()->resize(col_array->size());
         return;
     }
@@ -917,7 +930,7 @@ static void fill_array_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr& 
             j++;
         }
         if (j > i) {
-            fill_array_column(orc_list, col_nullable->data_column(), i, j - i, type_desc, ctx);
+            fill_array_column(orc_list, col_nullable->data_column(), i, j - i, type_desc, mapping, ctx);
             col_nullable->null_column()->resize(col_array->size());
         }
 
@@ -932,6 +945,146 @@ static void fill_array_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr& 
         }
         col_nullable->append_nulls(j - i);
         i = j;
+    }
+}
+
+static void fill_map_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size,
+                            const TypeDescriptor& type_desc, const OrcMappingPtr& mapping, void* ctx) {
+    auto* orc_map = down_cast<orc::MapVectorBatch*>(cvb);
+    auto* col_map = down_cast<MapColumn*>(col.get());
+
+    UInt32Column* offsets = col_map->offsets_column().get();
+    copy_array_offset(orc_map->offsets, from, size + 1, offsets);
+
+    ColumnPtr& keys = col_map->keys_column();
+    const int keys_from = implicit_cast<int>(orc_map->offsets[from]);
+    const int keys_size = implicit_cast<int>(orc_map->offsets[from + size] - keys_from);
+
+    if (type_desc.selected_fields[0]) {
+        const TypeDescriptor& key_type = type_desc.children[0];
+        const FillColumnFunction& fn_fill_keys = find_fill_func(key_type.type, true);
+        fn_fill_keys(orc_map->keys.get(), keys, keys_from, keys_size, key_type,
+                     mapping->get_column_id_or_child_mapping(0).orc_mapping, ctx);
+    } else {
+        keys->append_default(keys_size);
+    }
+
+    ColumnPtr& values = col_map->values_column();
+    const int values_from = implicit_cast<int>(orc_map->offsets[from]);
+    const int values_size = implicit_cast<int>(orc_map->offsets[from + size] - values_from);
+    if (type_desc.selected_fields[1]) {
+        const TypeDescriptor& value_type = type_desc.children[1];
+        const FillColumnFunction& fn_fill_values = find_fill_func(value_type.type, true);
+        fn_fill_values(orc_map->elements.get(), values, values_from, values_size, value_type,
+                       mapping->get_column_id_or_child_mapping(1).orc_mapping, ctx);
+    } else {
+        values->append_default(values_size);
+    }
+}
+
+static void fill_map_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size,
+                                      const TypeDescriptor& type_desc, const OrcMappingPtr& mapping, void* ctx) {
+    auto* orc_map = down_cast<orc::MapVectorBatch*>(cvb);
+    auto* col_nullable = down_cast<NullableColumn*>(col.get());
+    auto* col_map = down_cast<MapColumn*>(col_nullable->data_column().get());
+
+    if (!orc_map->hasNulls) {
+        fill_map_column(orc_map, col_nullable->data_column(), from, size, type_desc, mapping, ctx);
+        col_nullable->null_column()->resize(col_map->size());
+        return;
+    }
+    // else
+
+    const int end = from + size;
+
+    int i = from;
+    while (i < end) {
+        int j = i;
+        // Loop until NULL or end of batch.
+        while (j < end && orc_map->notNull[j]) {
+            j++;
+        }
+        if (j > i) {
+            fill_map_column(orc_map, col_nullable->data_column(), i, j - i, type_desc, mapping, ctx);
+            col_nullable->null_column()->resize(col_map->size());
+        }
+
+        if (j == end) {
+            break;
+        }
+        DCHECK(!orc_map->notNull[j]);
+        i = j++;
+        // Loop until not NULL or end of batch.
+        while (j < end && !orc_map->notNull[j]) {
+            j++;
+        }
+        col_nullable->append_nulls(j - i);
+        i = j;
+    }
+}
+
+static void fill_struct_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size,
+                               const TypeDescriptor& type_desc, const OrcMappingPtr& mapping, void* ctx) {
+    auto* orc_struct = down_cast<orc::StructVectorBatch*>(cvb);
+    auto* col_struct = down_cast<StructColumn*>(col.get());
+
+    Columns& field_columns = col_struct->fields_column();
+
+    size_t child_index = 0;
+    for (size_t i = 0; i < type_desc.children.size(); i++) {
+        if (!type_desc.selected_fields[i]) {
+            continue;
+        }
+
+        const TypeDescriptor& field_type = type_desc.children[i];
+        size_t column_id = mapping->get_column_id_or_child_mapping(i).orc_column_id;
+
+        orc::ColumnVectorBatch* field_cvb = orc_struct->fieldsColumnIdMap[column_id];
+        const FillColumnFunction& fn_fill_elements = find_fill_func(field_type.type, true);
+        fn_fill_elements(field_cvb, field_columns[child_index], from, size, field_type,
+                         mapping->get_column_id_or_child_mapping(i).orc_mapping, ctx);
+        child_index++;
+    }
+
+    DCHECK_EQ(field_columns.size(), child_index);
+}
+
+static void fill_struct_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size,
+                                         const TypeDescriptor& type_desc, const OrcMappingPtr& mapping, void* ctx) {
+    auto* orc_struct = down_cast<orc::StructVectorBatch*>(cvb);
+    auto* col_nullable = down_cast<NullableColumn*>(col.get());
+    auto* col_struct = down_cast<StructColumn*>(col_nullable->data_column().get());
+
+    if (!orc_struct->hasNulls) {
+        fill_struct_column(cvb, col_nullable->data_column(), from, size, type_desc, mapping, ctx);
+        col_nullable->null_column()->resize(col_struct->size());
+    } else {
+        const int end = from + size;
+        int i = from;
+
+        while (i < end) {
+            int j = i;
+            // Loop until NULL or end of batch.
+            while (j < end && orc_struct->notNull[j]) {
+                j++;
+            }
+            if (j > i) {
+                fill_struct_column(orc_struct, col_nullable->data_column(), i, j - i, type_desc, mapping, ctx);
+                col_nullable->null_column()->resize(col_struct->size());
+            }
+
+            if (j == end) {
+                break;
+            }
+            DCHECK(!orc_struct->notNull[j]);
+            i = j++;
+            // Loop until not NULL or end of batch.
+            while (j < end && !orc_struct->notNull[j]) {
+                j++;
+            }
+            col_nullable->append_nulls(j - i);
+            i = j;
+        }
     }
 }
 
@@ -966,6 +1119,8 @@ private:
         _funcs[TYPE_DATE] = &fill_date_column;
         _funcs[TYPE_DATETIME] = &fill_timestamp_column;
         _funcs[TYPE_ARRAY] = &fill_array_column;
+        _funcs[TYPE_MAP] = &fill_map_column;
+        _funcs[TYPE_STRUCT] = &fill_struct_column;
 
         _nullable_funcs[TYPE_BOOLEAN] = &fill_boolean_column_with_null;
         _nullable_funcs[TYPE_TINYINT] = &fill_int_column_with_null<TYPE_TINYINT>;
@@ -985,7 +1140,9 @@ private:
         _nullable_funcs[TYPE_DATE] = &fill_date_column_with_null;
         _nullable_funcs[TYPE_DATETIME] = &fill_timestamp_column_with_null;
         _nullable_funcs[TYPE_ARRAY] = &fill_array_column_with_null;
-    }
+        _nullable_funcs[TYPE_MAP] = &fill_map_column_with_null;
+        _nullable_funcs[TYPE_STRUCT] = &fill_struct_column_with_null;
+    };
 
     std::array<FillColumnFunction, 64> _funcs;
     std::array<FillColumnFunction, 64> _nullable_funcs;
@@ -1094,35 +1251,32 @@ Status OrcChunkReader::_slot_to_orc_column_name(const SlotDescriptor* desc,
     return Status::OK();
 }
 
-Status OrcChunkReader::_init_include_columns() {
+Status OrcChunkReader::_init_include_columns(const std::unique_ptr<OrcMapping>& mapping) {
+    // TODO(SmithCruise) delete _name_to_column_id, _hive_column_names when develop subfield lazy load.
     build_column_name_to_id_mapping(&_name_to_column_id, _hive_column_names, _reader->getType(), _case_sensitive);
-    std::unordered_map<int, std::string> column_id_to_orc_name;
-    std::list<std::string> orc_column_names;
 
-    const auto& root_type = _reader->getType();
-    for (size_t i = 0; i < root_type.getSubtypeCount(); i++) {
-        const auto& sub_type = root_type.getSubtype(i);
-        column_id_to_orc_name.emplace(sub_type->getColumnId(), root_type.getFieldName(i));
-    }
+    std::list<uint64_t> include_column_id;
+    // Include root column id.
+    include_column_id.emplace_back(0);
 
-    for (SlotDescriptor* desc : _src_slot_descriptors) {
+    for (size_t i = 0; i < _src_slot_descriptors.size(); i++) {
+        SlotDescriptor* desc = _src_slot_descriptors[i];
         if (desc == nullptr) continue;
-        std::string orc_column_name;
-        RETURN_IF_ERROR(_slot_to_orc_column_name(desc, column_id_to_orc_name, &orc_column_name));
-        orc_column_names.emplace_back(orc_column_name);
+        RETURN_IF_ERROR(mapping->set_include_column_id(i, desc->type(), &include_column_id));
     }
 
-    _row_reader_options.include(orc_column_names);
+    _row_reader_options.includeTypes(include_column_id);
 
     if (_lazy_load_ctx != nullptr) {
-        std::list<std::string> orc_lazy_load_column_names;
-        for (SlotDescriptor* desc : _lazy_load_ctx->lazy_load_slots) {
+        std::list<uint64_t> lazy_load_column_id;
+
+        for (size_t pos : _lazy_load_ctx->lazy_load_indices) {
+            SlotDescriptor* desc = _src_slot_descriptors[pos];
             if (desc == nullptr) continue;
-            std::string orc_column_name;
-            RETURN_IF_ERROR(_slot_to_orc_column_name(desc, column_id_to_orc_name, &orc_column_name));
-            orc_lazy_load_column_names.emplace_back(orc_column_name);
+            RETURN_IF_ERROR(mapping->set_include_column_id(pos, desc->type(), &lazy_load_column_id));
         }
-        _row_reader_options.includeLazyLoadColumnNames(orc_lazy_load_column_names);
+
+        _row_reader_options.includeLazyLoadColumnIndexes(lazy_load_column_id);
     }
 
     return Status::OK();
@@ -1144,7 +1298,13 @@ Status OrcChunkReader::init(std::unique_ptr<orc::Reader> reader) {
         builder->literal(orc::TruthValue::YES_NO_NULL);
         _row_reader_options.searchArgument(builder->build());
     }
-    RETURN_IF_ERROR(_init_include_columns());
+    // Build root_mapping, including all columns in orc.
+    const std::unique_ptr<OrcMapping> root_mapping =
+            OrcMappingFactory::build_mapping(_src_slot_descriptors, _reader->getType(), _case_sensitive);
+    if (root_mapping == nullptr) {
+        return Status::InternalError("Build orc root mapping failed.");
+    }
+    RETURN_IF_ERROR(_init_include_columns(root_mapping));
     try {
         _row_reader = _reader->createRowReader(_row_reader_options);
     } catch (std::exception& e) {
@@ -1153,6 +1313,14 @@ Status OrcChunkReader::init(std::unique_ptr<orc::Reader> reader) {
         LOG(WARNING) << s;
         return Status::InternalError(s);
     }
+    // Build selected column mapping, because after `include column operation`, all included column's column id
+    // will re-assign.
+    _root_selected_mapping =
+            OrcMappingFactory::build_mapping(_src_slot_descriptors, _reader->getType(), _case_sensitive);
+    if (_root_selected_mapping == nullptr) {
+        return Status::InternalError("Build orc root selected mapping failed.");
+    }
+    // TODO(SmithCruise) delete _init_position_in_orc() when develop subfield lazy load.
     RETURN_IF_ERROR(_init_position_in_orc());
     RETURN_IF_ERROR(_init_src_types());
     RETURN_IF_ERROR(_init_cast_exprs());
@@ -1180,7 +1348,12 @@ Status OrcChunkReader::_init_position_in_orc() {
 
         if (slot_desc == nullptr) continue;
         auto it = _name_to_column_id.find(slot_desc->col_name());
-        DCHECK(it != _name_to_column_id.end());
+        if (it == _name_to_column_id.end()) {
+            auto s = strings::Substitute(
+                    "OrcChunkReader::init_position_in_orc. failed to find position. col_name = $0, file = $1",
+                    slot_desc->col_name(), _current_file_name);
+            return Status::NotFound(s);
+        }
         int col_id = it->second;
         auto it2 = column_id_to_pos.find(col_id);
         if (it2 == column_id_to_pos.end()) {
@@ -1210,14 +1383,55 @@ Status OrcChunkReader::_init_position_in_orc() {
     return Status::OK();
 }
 
-static Status _orc_type_to_type_descriptor(const orc::Type* orc_type, TypeDescriptor* result) {
+static Status _create_type_descriptor_by_orc(const TypeDescriptor& origin_type, const orc::Type* orc_type,
+                                             const OrcMappingPtr& mapping, TypeDescriptor* result) {
     orc::TypeKind kind = orc_type->getKind();
     if (kind == orc::LIST) {
+        DCHECK(mapping != nullptr);
         result->type = TYPE_ARRAY;
         DCHECK_EQ(0, result->children.size());
         result->children.emplace_back();
+
         TypeDescriptor& element_type = result->children.back();
-        RETURN_IF_ERROR(_orc_type_to_type_descriptor(orc_type->getSubtype(0), &element_type));
+        RETURN_IF_ERROR(_create_type_descriptor_by_orc(origin_type.children.at(0), orc_type->getSubtype(0),
+                                                       mapping->get_column_id_or_child_mapping(0).orc_mapping,
+                                                       &element_type));
+    } else if (kind == orc::MAP) {
+        DCHECK(mapping != nullptr);
+        result->type = TYPE_MAP;
+        // assign selected_fields information
+        result->selected_fields = origin_type.selected_fields;
+        DCHECK_EQ(0, result->children.size());
+        result->children.emplace_back();
+
+        TypeDescriptor& key_type = result->children.back();
+        RETURN_IF_ERROR(_create_type_descriptor_by_orc(origin_type.children.at(0), orc_type->getSubtype(0),
+                                                       mapping->get_column_id_or_child_mapping(0).orc_mapping,
+                                                       &key_type));
+        result->children.emplace_back();
+        TypeDescriptor& value_type = result->children.back();
+        RETURN_IF_ERROR(_create_type_descriptor_by_orc(origin_type.children.at(1), orc_type->getSubtype(1),
+                                                       mapping->get_column_id_or_child_mapping(1).orc_mapping,
+                                                       &value_type));
+    } else if (kind == orc::STRUCT) {
+        DCHECK(mapping != nullptr);
+        DCHECK_EQ(0, result->children.size());
+
+        result->type = TYPE_STRUCT;
+        // assign selected_fields information
+        result->selected_fields = origin_type.selected_fields;
+
+        size_t field_size = origin_type.children.size();
+
+        // We need copy the all struct subfields
+        for (size_t index = 0; index < field_size; index++) {
+            result->field_names.emplace_back(origin_type.field_names[index]);
+            TypeDescriptor& sub_field_type = result->children.emplace_back();
+            size_t column_id = mapping->get_column_id_or_child_mapping(index).orc_column_id;
+            RETURN_IF_ERROR(_create_type_descriptor_by_orc(
+                    origin_type.children.at(index), orc_type->getSubtypeByColumnId(column_id),
+                    mapping->get_column_id_or_child_mapping(index).orc_mapping, &sub_field_type));
+        }
     } else {
         auto precision = (int)orc_type->getPrecision();
         auto scale = (int)orc_type->getScale();
@@ -1240,8 +1454,17 @@ static void _try_implicit_cast(TypeDescriptor* from, const TypeDescriptor& to) {
 
     PrimitiveType t1 = from->type;
     PrimitiveType t2 = to.type;
-    if (t1 == TYPE_ARRAY && t2 == TYPE_ARRAY) {
+    if (t1 == PrimitiveType::TYPE_ARRAY && t2 == PrimitiveType::TYPE_ARRAY) {
         _try_implicit_cast(&from->children[0], to.children[0]);
+    } else if (t1 == PrimitiveType::TYPE_MAP && t2 == PrimitiveType::TYPE_MAP) {
+        _try_implicit_cast(&from->children.at(0), to.children.at(0));
+        _try_implicit_cast(&from->children.at(1), to.children.at(1));
+    } else if (t1 == PrimitiveType::TYPE_STRUCT && t2 == PrimitiveType::TYPE_STRUCT) {
+        DCHECK_EQ(from->children.size(), to.children.size());
+        size_t field_size = from->children.size();
+        for (size_t i = 0; i < field_size; i++) {
+            _try_implicit_cast(&from->children.at(i), to.children.at(i));
+        }
     } else if (is_integer_type(t1) && is_integer_type(t2)) {
         from->type = t2;
     } else if (is_decimal_type(t1) && is_decimal_type(t2)) {
@@ -1275,7 +1498,9 @@ Status OrcChunkReader::_init_src_types() {
         }
         int pos_of_orc = _position_in_orc[i];
         const orc::Type* orc_type = _row_reader->getSelectedType().getSubtype(pos_of_orc);
-        RETURN_IF_ERROR(_orc_type_to_type_descriptor(orc_type, &_src_types[i]));
+        RETURN_IF_ERROR(_create_type_descriptor_by_orc(
+                slot_desc->type(), orc_type, _root_selected_mapping->get_column_id_or_child_mapping(i).orc_mapping,
+                &_src_types[i]));
         _try_implicit_cast(&_src_types[i], slot_desc->type());
     }
     return Status::OK();
@@ -1410,7 +1635,8 @@ Status OrcChunkReader::_fill_chunk(ChunkPtr* chunk, const std::vector<SlotDescri
             }
         }
         ColumnPtr& col = (*chunk)->get_column_by_slot_id(slot_desc->id());
-        _fill_functions[src_index](cvb, col, 0, _batch->numElements, slot_desc->type(), this);
+        _fill_functions[src_index](cvb, col, 0, _batch->numElements, slot_desc->type(),
+                                   _root_selected_mapping->get_column_id_or_child_mapping(src_index).orc_mapping, this);
     }
 
     if (_broker_load_mode) {
@@ -1613,7 +1839,7 @@ bool OrcChunkReader::_ok_to_add_conjunct(const Expr* conjunct) {
         if (c->node_type() != TExprNodeType::type::SLOT_REF) {
             return false;
         }
-        ColumnRef* ref = down_cast<ColumnRef*>(c);
+        auto* ref = down_cast<ColumnRef*>(c);
         SlotId slot_id = ref->slot_id();
         // slot can not be found.
         auto iter = _slot_id_to_desc.find(slot_id);
@@ -1637,8 +1863,8 @@ bool OrcChunkReader::_ok_to_add_conjunct(const Expr* conjunct) {
             }
         }
         for (int i = 0; i < conjunct->get_num_children(); i++) {
-            Expr* c = conjunct->get_child(i);
-            PrimitiveType pt = c->type().type;
+            Expr* expr = conjunct->get_child(i);
+            PrimitiveType pt = expr->type().type;
             if (_supported_primitive_types.find(pt) == _supported_primitive_types.end()) {
                 return false;
             }
@@ -1650,57 +1876,57 @@ bool OrcChunkReader::_ok_to_add_conjunct(const Expr* conjunct) {
 }
 
 static inline orc::Int128 to_orc128(int128_t value) {
-    return orc::Int128(uint64_t(value >> 64), uint64_t(value));
+    return {int64_t(value >> 64), uint64_t(value)};
 }
 
 static orc::Literal translate_to_orc_literal(Expr* lit, orc::PredicateDataType pred_type) {
     TExprNodeType::type node_type = lit->node_type();
     PrimitiveType ptype = lit->type().type;
     if (node_type == TExprNodeType::type::NULL_LITERAL) {
-        return orc::Literal(pred_type);
+        return {pred_type};
     }
 
-    VectorizedLiteral* vlit = down_cast<VectorizedLiteral*>(lit);
+    auto* vlit = down_cast<VectorizedLiteral*>(lit);
     ColumnPtr ptr = vlit->evaluate(nullptr, nullptr);
     if (ptr->only_null()) {
-        return orc::Literal(pred_type);
+        return {pred_type};
     }
 
     const Datum& datum = ptr->get(0);
     switch (ptype) {
     case PrimitiveType::TYPE_BOOLEAN:
-        return orc::Literal(bool(datum.get_int8()));
+        return {bool(datum.get_int8())};
     case PrimitiveType::TYPE_TINYINT:
-        return orc::Literal(int64_t(datum.get_int8()));
+        return {int64_t(datum.get_int8())};
     case PrimitiveType::TYPE_SMALLINT:
-        return orc::Literal(int64_t(datum.get_int16()));
+        return {int64_t(datum.get_int16())};
     case PrimitiveType::TYPE_INT:
-        return orc::Literal(int64_t(datum.get_int32()));
+        return {int64_t(datum.get_int32())};
     case PrimitiveType::TYPE_BIGINT:
-        return orc::Literal(datum.get_int64());
+        return {datum.get_int64()};
     case PrimitiveType::TYPE_FLOAT:
-        return orc::Literal(double(datum.get_float()));
+        return {double(datum.get_float())};
     case PrimitiveType::TYPE_DOUBLE:
-        return orc::Literal(datum.get_double());
+        return {datum.get_double()};
     case PrimitiveType::TYPE_VARCHAR:
     case PrimitiveType::TYPE_CHAR:
     case PrimitiveType::TYPE_BINARY: {
         const Slice& slice = datum.get_slice();
-        return orc::Literal(slice.data, slice.size);
+        return {slice.data, slice.size};
     }
     case PrimitiveType::TYPE_DATE:
-        return orc::Literal(orc::PredicateDataType::DATE, native_date_to_orc_date(datum.get_date()));
+        return {orc::PredicateDataType::DATE, native_date_to_orc_date(datum.get_date())};
     case PrimitiveType::TYPE_DECIMAL:
     case PrimitiveType::TYPE_DECIMALV2: {
         const DecimalV2Value& value = datum.get_decimal();
-        return orc::Literal(to_orc128(value.value()), value.PRECISION, value.SCALE);
+        return {to_orc128(value.value()), value.PRECISION, value.SCALE};
     }
     case PrimitiveType::TYPE_DECIMAL32:
-        return orc::Literal(orc::Int128(datum.get_int32()), lit->type().precision, lit->type().scale);
+        return {orc::Int128(datum.get_int32()), lit->type().precision, lit->type().scale};
     case PrimitiveType::TYPE_DECIMAL64:
-        return orc::Literal(orc::Int128(datum.get_int64()), lit->type().precision, lit->type().scale);
+        return {orc::Int128(datum.get_int64()), lit->type().precision, lit->type().scale};
     case PrimitiveType::TYPE_DECIMAL128:
-        return orc::Literal(to_orc128(datum.get_int128()), lit->type().precision, lit->type().scale);
+        return {to_orc128(datum.get_int128()), lit->type().precision, lit->type().scale};
     default:
         CHECK(false) << "failed to handle primitive type = " << std::to_string(ptype);
     }
@@ -1746,7 +1972,7 @@ void OrcChunkReader::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc::Se
 
     Expr* slot = conjunct->get_child(0);
     DCHECK(slot->is_slotref());
-    ColumnRef* ref = down_cast<ColumnRef*>(slot);
+    auto* ref = down_cast<ColumnRef*>(slot);
     SlotId slot_id = ref->slot_id();
     std::string name = _slot_id_to_desc[slot_id]->col_name();
     orc::PredicateDataType pred_type = _supported_primitive_types[slot->type().type];
@@ -2150,7 +2376,7 @@ Status OrcChunkReader::apply_dict_filter_eval_cache(const std::unordered_map<Slo
         Filter& data = static_cast<BooleanColumn*>(data_filter.get())->get_data();
         DCHECK(data.size() == size);
 
-        orc::StringVectorBatch* batch = down_cast<orc::StringVectorBatch*>(batch_vec[pos]);
+        auto* batch = down_cast<orc::StringVectorBatch*>(batch_vec[pos]);
         for (uint32_t i = 0; i < size; i++) {
             int64_t code = batch->codes[i];
             DCHECK(code < dict_filter.size());
@@ -2203,6 +2429,94 @@ int OrcChunkReader::get_column_id_by_name(const std::string& name) const {
         return it->second;
     }
     return -1;
+}
+
+// ======================================================================================
+
+ORCHdfsFileStream::ORCHdfsFileStream(RandomAccessFile* file, uint64_t length)
+        : _file(file), _length(length), _cache_buffer(0), _cache_offset(0), _buffer_stream(_file) {
+    SharedBufferedInputStream::CoalesceOptions options = {.max_dist_size = config::io_coalesce_read_max_distance_size,
+                                                          .max_buffer_size = config::io_coalesce_read_max_buffer_size};
+    _buffer_stream.set_coalesce_options(options);
+}
+
+void ORCHdfsFileStream::prepareCache(orc::InputStream::PrepareCacheScope scope, uint64_t offset, uint64_t length) {
+    const size_t cache_max_size = config::orc_file_cache_max_size;
+    if (length > cache_max_size) return;
+    if (canUseCacheBuffer(offset, length)) return;
+
+    // If this stripe is small, probably other stripes are also small
+    // we combine those reads into one, and try to read several stripes in one shot.
+    if (scope == orc::InputStream::PrepareCacheScope::READ_FULL_STRIPE) {
+        length = std::min(_length - offset, cache_max_size);
+    }
+
+    _cache_buffer.resize(length);
+    _cache_offset = offset;
+    doRead(_cache_buffer.data(), length, offset, true);
+}
+
+bool ORCHdfsFileStream::canUseCacheBuffer(uint64_t offset, uint64_t length) {
+    if ((_cache_buffer.size() != 0) && (offset >= _cache_offset) &&
+        ((offset + length) <= (_cache_offset + _cache_buffer.size()))) {
+        return true;
+    }
+    return false;
+}
+
+void ORCHdfsFileStream::read(void* buf, uint64_t length, uint64_t offset) {
+    if (canUseCacheBuffer(offset, length)) {
+        size_t idx = offset - _cache_offset;
+        memcpy(buf, _cache_buffer.data() + idx, length);
+    } else {
+        doRead(buf, length, offset, false);
+    }
+}
+
+const std::string& ORCHdfsFileStream::getName() const {
+    return _file->filename();
+}
+
+void ORCHdfsFileStream::doRead(void* buf, uint64_t length, uint64_t offset, bool direct) {
+    if (buf == nullptr) {
+        throw orc::ParseError("Buffer is null");
+    }
+    Status status;
+    if (direct || !_buffer_stream_enabled) {
+        status = _file->read_at_fully(offset, buf, length);
+    } else {
+        const uint8_t* ptr = nullptr;
+        size_t nbytes = length;
+        status = _buffer_stream.get_bytes(&ptr, offset, &nbytes, false);
+        DCHECK_EQ(nbytes, length);
+        if (status.ok()) {
+            ::memcpy(buf, ptr, length);
+        }
+    }
+    if (!status.ok()) {
+        auto msg = strings::Substitute("Failed to read $0: $1", _file->filename(), status.to_string());
+        throw orc::ParseError(msg);
+    }
+}
+
+void ORCHdfsFileStream::clearIORanges() {
+    _buffer_stream_enabled = false;
+    _buffer_stream.release();
+}
+
+void ORCHdfsFileStream::setIORanges(std::vector<orc::InputStream::IORange>& io_ranges) {
+    _buffer_stream_enabled = true;
+    std::vector<SharedBufferedInputStream::IORange> bs_io_ranges;
+    bs_io_ranges.reserve(io_ranges.size());
+    for (const auto& r : io_ranges) {
+        bs_io_ranges.emplace_back(SharedBufferedInputStream::IORange{.offset = static_cast<int64_t>(r.offset),
+                                                                     .size = static_cast<int64_t>(r.size)});
+    }
+    Status st = _buffer_stream.set_io_ranges(bs_io_ranges);
+    if (!st.ok()) {
+        auto msg = strings::Substitute("Failed to setIORanges $0: $1", _file->filename(), st.to_string());
+        throw orc::ParseError(msg);
+    }
 }
 
 } // namespace starrocks::vectorized

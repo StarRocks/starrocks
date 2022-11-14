@@ -2,12 +2,10 @@
 
 package com.starrocks.sql.optimizer.task;
 
-import com.starrocks.sql.optimizer.Group;
-
 // The scheduler for optimizer task
 // Store tasks in a stack
 public interface TaskScheduler {
-    void executeTasks(TaskContext context, Group group);
+    void executeTasks(TaskContext context);
 
     void pushTask(OptimizerTask task);
 }

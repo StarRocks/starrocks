@@ -3,7 +3,6 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.RedirectStatus;
-import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.TableName;
 
 import java.util.List;
@@ -13,14 +12,17 @@ public class AnalyzeStmt extends StatementBase {
     private final TableName tbl;
     private List<String> columnNames;
     private final boolean isSample;
+    private final boolean isAsync;
     private Map<String, String> properties;
     private final AnalyzeTypeDesc analyzeTypeDesc;
 
-    public AnalyzeStmt(TableName tbl, List<String> columns, Map<String, String> properties, boolean isSample,
+    public AnalyzeStmt(TableName tbl, List<String> columns, Map<String, String> properties,
+                       boolean isSample, boolean isAsync,
                        AnalyzeTypeDesc analyzeTypeDesc) {
         this.tbl = tbl;
         this.columnNames = columns;
         this.isSample = isSample;
+        this.isAsync = isAsync;
         this.properties = properties;
         this.analyzeTypeDesc = analyzeTypeDesc;
     }
@@ -39,6 +41,10 @@ public class AnalyzeStmt extends StatementBase {
 
     public boolean isSample() {
         return isSample;
+    }
+
+    public boolean isAsync() {
+        return isAsync;
     }
 
     public Map<String, String> getProperties() {
@@ -61,10 +67,5 @@ public class AnalyzeStmt extends StatementBase {
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitAnalyzeStatement(this, context);
-    }
-
-    @Override
-    public boolean isSupportNewPlanner() {
-        return true;
     }
 }

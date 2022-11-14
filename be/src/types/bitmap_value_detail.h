@@ -26,6 +26,13 @@
 // So other files should not include this file except bitmap_value.cpp.
 #include <cstdint>
 #include <optional>
+
+#include "roaring/array_util.h"
+#include "roaring/bitset_util.h"
+#include "roaring/containers/containers.h"
+#include "roaring/roaring.h"
+#include "roaring/roaring_array.h"
+
 namespace starrocks {
 
 // serialized bitmap := TypeCode(1), Payload
@@ -612,6 +619,93 @@ public:
             Roaring read = Roaring::read(buf, usev1);
             // forward buffer past the last Roaring Bitmap
             buf += read.getSizeInBytes(usev1);
+            result.emplace(key, std::move(read));
+        }
+        return result;
+    }
+
+    static bool roaring_bitmap_portable_deserialize_check(const char* buf, size_t max_bytes) {
+        return roaring_bitmap_portable_deserialize_size(buf, max_bytes) > 0;
+    }
+
+    static bool roaring_bitmap_deserialize_check(const char* buf, size_t max_bytes) {
+        if (!max_bytes) {
+            return false;
+        }
+
+        const char* bufaschar = (const char*)buf;
+        if (*(const unsigned char*)buf == SERIALIZATION_ARRAY_UINT32) {
+            if (max_bytes < (1 + sizeof(uint32_t))) {
+                return false;
+            }
+            max_bytes -= (1 + sizeof(uint32_t));
+
+            uint32_t card;
+            memcpy(&card, bufaschar + 1, sizeof(uint32_t));
+
+            if (max_bytes < (card * sizeof(uint32_t))) {
+                return false;
+            }
+
+            return true;
+        } else if (bufaschar[0] == SERIALIZATION_CONTAINER) {
+            return roaring_bitmap_portable_deserialize_check(bufaschar + 1, max_bytes - 1);
+        } else {
+            return false;
+        }
+    }
+
+    static bool read_roaring_check(const char* buf, size_t max_bytes, bool portable = true) {
+        return portable ? roaring_bitmap_portable_deserialize_check(buf, max_bytes)
+                        : roaring_bitmap_deserialize_check(buf, max_bytes);
+    }
+
+    static Roaring64Map read_safe(const char* buf, size_t max_bytes, bool* is_valid_ptr) {
+        Roaring64Map result;
+        bool usev1 = BitmapTypeCode::BITMAP32 == *buf || BitmapTypeCode::BITMAP64 == *buf;
+        bool is_bitmap32 = BitmapTypeCode::BITMAP32 == *buf || BitmapTypeCode::BITMAP32_SERIV2 == *buf;
+        if (is_bitmap32) {
+            // check whether there is no valid bitmap.
+            if (!read_roaring_check(buf + 1, max_bytes - 1, usev1)) {
+                *is_valid_ptr = false;
+                return result;
+            }
+
+            Roaring read = Roaring::read(buf + 1, usev1);
+            result.emplace(0, std::move(read));
+            return result;
+        }
+
+        DCHECK(BitmapTypeCode::BITMAP64 == *buf || BitmapTypeCode::BITMAP64_SERIV2 == *buf);
+        buf++;
+        max_bytes--;
+
+        // get map size (varint64 took 1~10 bytes)
+        uint64_t map_size;
+        buf = reinterpret_cast<const char*>(decode_varint64_ptr(reinterpret_cast<const uint8_t*>(buf),
+                                                                reinterpret_cast<const uint8_t*>(buf + 10), &map_size));
+        DCHECK(buf != nullptr);
+        for (uint64_t lcv = 0; lcv < map_size; lcv++) {
+            // get map key
+            if (max_bytes < sizeof(uint32_t)) {
+                *is_valid_ptr = false;
+                return result;
+            }
+            uint32_t key = decode_fixed32_le(reinterpret_cast<const uint8_t*>(buf));
+            buf += sizeof(uint32_t);
+            max_bytes -= sizeof(uint32_t);
+
+            // check whether there is no valid bitmap.
+            if (!read_roaring_check(buf, max_bytes, usev1)) {
+                *is_valid_ptr = false;
+                return result;
+            }
+
+            // read map value Roaring
+            Roaring read = Roaring::read(buf, usev1);
+            // forward buffer past the last Roaring Bitmap
+            buf += read.getSizeInBytes(usev1);
+            max_bytes -= read.getSizeInBytes(usev1);
             result.emplace(key, std::move(read));
         }
         return result;

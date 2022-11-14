@@ -5,29 +5,29 @@
 
 ## Description
 
-Convert a date and time from one time zone to another.
+Converts a datetime value from one time zone to another.
 
 > *What does this function do.*
 
 ## Syntax
 
-```sql
-CONVERT_TZ(dt, from_tz, to_tz)
+```Haskell
+DATETIME CONVERT_TZ(DATETIME dt, VARCHAR from_tz, VARCHAR to_tz)
 ```
 
 > *The syntax of this function. Enclose the syntax in code blocks.*
 
 ## Parameters
 
-- `dt` : the data and time to convert. DATETIME is supported.
+- `dt`: the datetime value to convert. DATETIME is supported.
 
-- `from_tz` : the source time zone. VARCHAR is supported. The time zone can be represented in two  formats: one is Time Zone Database (for example, Asia/Shanghai), the other is UTC offset (for example, +08:00).
+- `from_tz`: the source time zone. VARCHAR is supported. The time zone can be represented in two  formats: one is Time Zone Database (for example, Asia/Shanghai), the other is UTC offset (for example, +08:00).
 
-- `to_tz`:  the destination time zone. VARCHAR is supported. Its format is the same as `from_tz`.
+- `to_tz`: the destination time zone. VARCHAR is supported. Its format is the same as `from_tz`.
 
-> - *The format is* `*parameter*`*:* `*description*` *+* `*data type*` *(please list all the data types supported).*
-> - *The description must include information, such as parameter description, value format, value range, whether this parameter is required, formats and units when different data types are used.*
-> - *The data types must be capitalized, for example, DATETIME.*
+> - The format is `parameter`:`description`+`data type` (list all the data types supported).
+> - The description must include information, such as parameter description, value format, value range, whether this parameter is required, formats and units when different data types are used.
+> - The data types must be capitalized, for example, DATETIME.
 
 ## Return value
 

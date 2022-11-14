@@ -169,8 +169,7 @@ You can create a materialized view based on a specific query statement by using 
 
 ```SQL
 CREATE MATERIALIZED VIEW [IF NOT EXISTS] [database.]mv_name
-AS (query)
-[PROPERTIES ("key"="value", ...)];
+AS (query);
 ```
 
 For detailed instructions and parameter references, see [SQL Reference - CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/CREATE%20MATERIALIZED%20VIEW.md).
@@ -337,7 +336,7 @@ DROP MATERIALIZED VIEW store_amt;
 
 ### Best practices
 
-#### Precise de-duplication
+#### Exact count distinct
 
 The following example is based on an advertisement business analysis table `advertiser_view_record`, which records the date that the ad is viewed `click_time`, the name of the ad `advertiser`, the channel of the ad `channel`, and the ID of the user who viewed the ID `user_id`.
 
@@ -358,7 +357,7 @@ FROM advertiser_view_record
 GROUP BY advertiser, channel;
 ```
 
-To accelerate the precise de-duplication query, you can create a materialized view based on this table and use the bitmap_union function to pre-aggregate the data.
+To accelerate exact count distinct, you can create a materialized view based on this table and use the bitmap_union function to pre-aggregate the data.
 
 ```SQL
 CREATE MATERIALIZED VIEW advertiser_uv AS
@@ -369,9 +368,9 @@ GROUP BY advertiser, channel;
 
 After the materialized view is created, the sub-query `count(distinct user_id)` in the subsequent queries will be automatically rewritten as `bitmap_union_count (to_bitmap(user_id))` so that they can hit the materialized view.
 
-#### Approximate de-duplication
+#### Approximate count distinct
 
-Use the table `advertiser_view_record` above as an example again. To accelerate the approximate de-duplication query, you can create a materialized view based on this table and use the hll_union function to pre-aggregate the data.
+Use the table `advertiser_view_record` above as an example again. To accelerate approximate count distinct, you can create a materialized view based on this table and use the hll_union function to pre-aggregate the data.
 
 ```SQL
 CREATE MATERIALIZED VIEW advertiser_uv2 AS
@@ -405,9 +404,9 @@ When a query is executed with a materialized view, the original query statement 
 
 ### Caution
 
-- Prior to StarRocks 2.4, materialized views only support aggregate functions on a single column. Query statements in the form of `sum(a+b)` are not supported.
+- Sync materialized views only support aggregate functions on a single column. Query statements in the form of `sum(a+b)` are not supported.
 
-- Prior to StarRocks 2.4, clauses such as JOIN, WHERE, and GROUP BY are not supported in the materialized view creation statements.
+- Clauses such as JOIN, and WHERE are not supported in the sync materialized view creation statements.
 
 - The current version of StarRocks does not support creating multiple materialized views at the same time. A new materialized view can only be created when the one before is completed.
 
@@ -423,18 +422,15 @@ When a query is executed with a materialized view, the original query statement 
 >
 > StarRocks prior to 2.4 does not support the functions demonstrated below.
 
-StarRocks 2.4 supports creating asynchronous materialized views for multiple base tables to allow modeling data warehouse.
+StarRocks 2.4 supports creating asynchronous materialized views for multiple base tables to allow modeling data warehouse. Asynchronous materialized views support all [Data Models](../table_design/Data_model.md).
 
-As for the current version, materialized views three refresh strategies:
-
-- **Sync refresh**
-  -  With sync refresh strategy, materialized views will be updated synchronously when data is loaded into the base table. This refresh strategy guarantees strict consistency between the base table and its subordinate materialized views. As for the current version, sync refresh strategy is supported only on materialized view for a single base table.
+As for the current version, multi-table materialized views support two refresh strategies:
 
 - **Async refresh**
-  -  Async refresh strategy allows materialized views refresh through asynchronous tasks, and does not guarantee strict consistency between the base table and its subordinate materialized views. Async refresh strategy is supported on materialized view for multiple base tables.
+  Async refresh strategy allows materialized views refresh through asynchronous tasks, and does not guarantee strict consistency between the base table and its subordinate materialized views. Async refresh strategy is supported on materialized view for multiple base tables.
 
 - **Manual refresh**
-  -  With manual refresh strategy, you can trigger a refresh task for a materialized view by running a SQL command. It does not guarantee strict consistency between the base table and its subordinate materialized views.
+  With manual refresh strategy, you can trigger a refresh task for a materialized view by running a SQL command. It does not guarantee strict consistency between the base table and its subordinate materialized views.
 
 ### Preparation
 
@@ -502,12 +498,12 @@ You can create a materialized view based on a specific query statement by using 
 
 ```SQL
 CREATE MATERIALIZED VIEW [IF NOT EXISTS] [database.]mv_name
-AS (query)
 [distribution_desc]
 [REFRESH refresh_scheme_desc]
 [primary_expression]
 [COMMENT ""]
-[PROPERTIES ("key"="value", ...)];
+[PROPERTIES ("key"="value", ...)]
+AS (query);
 ```
 
 For detailed instructions and parameter references, see [SQL Reference - CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/CREATE%20MATERIALIZED%20VIEW.md).
@@ -593,9 +589,9 @@ You can check the SQL statement used to create a materialized view via SHOW CREA
 SHOW CREATE MATERIALIZED VIEW order_mv;
 ```
 
-### Check the refresh tasks of sync materialized views
+### Check the refresh tasks of single-table sync materialized views
 
-You can check the refresh tasks of all sync materialized views in the database.
+You can check the refresh tasks of all single-table sync materialized views in the database.
 
 ```SQL
 SHOW ALTER MATERIALIZED VIEW;
@@ -611,7 +607,9 @@ REFRESH MATERIALIZED VIEW order_mv;
 
 > **CAUTION**
 >
-> You can refresh a materialized view with async or manual refresh strategy via this command. However, you cannot refresh a sync refresh materialized view via this command.
+> You can refresh a materialized view with async or manual refresh strategy via this command. However, you cannot refresh a single-table sync refresh materialized view via this command.
+
+You can cancel a refresh task by using the [CANCEL REFRESH MATERIALIZED VIEW](../sql-reference/sql-statements/data-manipulation/CANCEL%20REFRESH%20MATERIALIZED%20VIEW.md) statement.
 
 ### Check the execution status of a multi-table materialized view
 
@@ -636,13 +634,6 @@ DROP MATERIALIZED VIEW order_mv;
 
 ### Caution
 
-- Sync refresh materialized views have the following limitations:
-  - You can only create a sync refresh materialized view based on a single table instead of multiple tables.
-  - You cannot change the partitioning and bucketing strategies of sync refresh materialized views. They must be consistent with that of the base table.
-  - You cannot directly query a sync refresh materialized view.
-  - Sync refresh materialized views do not support the clause WHERE.
-  - Sync refresh materialized views only supports limited aggregate functions, including sum, min, max, count, bitmap_union, hll_union, and percentile_union.
-
 - Async refresh materialized views have the following features:
   - You can directly query a async refresh materialized view, but the result may be inconsistent with that from the base tables.
   - You can set different partitioning and bucketing strategies for a async refresh materialized view from that of the base tables.
@@ -652,4 +643,4 @@ DROP MATERIALIZED VIEW order_mv;
 
 - Partition keys and bucket keys of the async or manual refresh materialized view must be in the query statement; if there is an aggregate function in the query statement, the partition keys and bucket keys must be in the GROUP BY clause.
 
-- The query statement does not support random functions, including rand, random, uuid, and sleep.
+- The query statement does not support random functions, including rand((), random(), uuid()), and sleep().

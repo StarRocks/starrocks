@@ -25,6 +25,14 @@ public class CaseWhenOperator extends CallOperator {
         this.whenEnd = other.whenEnd;
     }
 
+    public CaseWhenOperator(Type returnType, CaseWhenOperator other) {
+        super("CaseWhen", returnType, other.arguments);
+        this.hasCase = other.hasCase;
+        this.hasElse = other.hasElse;
+        this.whenStart = other.whenStart;
+        this.whenEnd = other.whenEnd;
+    }
+
     public CaseWhenOperator(Type returnType, ScalarOperator caseClause, ScalarOperator elseClause,
                             List<ScalarOperator> whenThenClauses) {
         super("CaseWhen", returnType, Lists.newArrayList());
@@ -90,6 +98,31 @@ public class CaseWhenOperator extends CallOperator {
 
     public ScalarOperator getThenClause(int i) {
         return arguments.get(2 * i + whenStart + 1);
+    }
+
+    // return all then + else
+    public List<ScalarOperator> getAllValuesClause() {
+        List<ScalarOperator> re = Lists.newArrayList();
+        for (int i = 0; i < getWhenClauseSize(); i++) {
+            re.add(getThenClause(i));
+        }
+        if (hasElse()) {
+            re.add(getElseClause());
+        }
+        return re;
+    }
+
+    // return all case + when
+    public List<ScalarOperator> getAllConditionClause() {
+        List<ScalarOperator> re = Lists.newArrayList();
+        if (hasCase()) {
+            re.add(getCaseClause());
+        }
+        for (int i = 0; i < getWhenClauseSize(); i++) {
+            re.add(getWhenClause(i));
+        }
+
+        return re;
     }
 
     public void setWhenClause(int i, ScalarOperator op) {

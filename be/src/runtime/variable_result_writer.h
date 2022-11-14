@@ -25,10 +25,16 @@ public:
 
     Status append_chunk(vectorized::Chunk* chunk) override;
 
+    StatusOr<TFetchDataResultPtrs> process_chunk(vectorized::Chunk* chunk) override;
+
+    StatusOr<bool> try_add_batch(TFetchDataResultPtrs& results) override;
+
     Status close() override;
 
 private:
     void _init_profile();
+
+    StatusOr<TFetchDataResultPtr> _process_chunk(vectorized::Chunk* chunk);
 
 private:
     BufferControlBlock* _sinker;

@@ -20,7 +20,7 @@ template <FieldType field_type, typename DatumType>
 void test_integral_pk() {
     auto f = std::make_shared<vectorized::Field>(0, "c0", field_type, false);
     f->set_is_key(true);
-    auto schema = std::make_shared<vectorized::Schema>(Fields{f});
+    auto schema = std::make_shared<vectorized::Schema>(Fields{f}, PRIMARY_KEYS, std::vector<ColumnId>{0});
     auto pk_index = TEST_create_primary_index(*schema);
 
     constexpr int kSegmentSize = 20;
@@ -145,7 +145,7 @@ template <FieldType field_type>
 void test_binary_pk() {
     auto f = std::make_shared<vectorized::Field>(0, "c0", field_type, false);
     f->set_is_key(true);
-    auto schema = std::make_shared<vectorized::Schema>(Fields{f});
+    auto schema = std::make_shared<vectorized::Schema>(Fields{f}, PRIMARY_KEYS, std::vector<ColumnId>{0});
     auto pk_index = TEST_create_primary_index(*schema);
 
     constexpr int kSegmentSize = 20;
@@ -260,7 +260,7 @@ PARALLEL_TEST(PrimaryIndexTest, test_composite_key) {
     f1->set_is_key(true);
     auto f2 = std::make_shared<vectorized::Field>(1, "c1", OLAP_FIELD_TYPE_SMALLINT, false);
     f2->set_is_key(true);
-    auto schema = std::make_shared<vectorized::Schema>(Fields{f1, f2});
+    auto schema = std::make_shared<vectorized::Schema>(Fields{f1, f2}, PRIMARY_KEYS, std::vector<ColumnId>{0, 1});
     auto pk_index = TEST_create_primary_index(*schema);
 
     constexpr int kSegmentSize = 100;

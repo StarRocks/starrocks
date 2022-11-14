@@ -39,6 +39,7 @@ set(SRC_FILES
     ${GEN_CPP_DIR}/HeartbeatService_constants.cpp
     ${GEN_CPP_DIR}/HeartbeatService.cpp
     ${GEN_CPP_DIR}/WorkGroup_types.cpp
+    ${GEN_CPP_DIR}/ResourceUsage_types.cpp
     ${GEN_CPP_DIR}/WorkGroup_constants.cpp
     ${GEN_CPP_DIR}/HeartbeatService_types.cpp
     ${GEN_CPP_DIR}/InternalService_constants.cpp
@@ -87,7 +88,6 @@ set(SRC_FILES
     ${GEN_CPP_DIR}/segment.pb.cc
     ${GEN_CPP_DIR}/persistent_index.pb.cc
     ${GEN_CPP_DIR}/tablet_schema.pb.cc
-    ${GEN_CPP_DIR}/lake_delete.pb.cc
     ${GEN_CPP_DIR}/lake_types.pb.cc
     ${GEN_CPP_DIR}/lake_service.pb.cc
     #$${GEN_CPP_DIR}/opcode/functions.cc

@@ -18,6 +18,8 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
+import com.starrocks.sql.ast.PartitionKeyDesc;
+import com.starrocks.sql.ast.PartitionValue;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -38,7 +40,7 @@ public class PartitionKeyDescTest {
         PartitionKeyDesc desc = new PartitionKeyDesc(values);
 
         Assert.assertEquals(values, desc.getUpperValues());
-        Assert.assertEquals("('1', 'abc')", desc.toSql());
+        Assert.assertEquals("('1', 'abc')", desc.toString());
     }
 
     @Test
@@ -46,6 +48,6 @@ public class PartitionKeyDescTest {
         PartitionKeyDesc desc = PartitionKeyDesc.createMaxKeyDesc();
 
         Assert.assertNull(desc.getUpperValues());
-        Assert.assertEquals("MAXVALUE", desc.toSql());
+        Assert.assertEquals("MAXVALUE", desc.toString());
     }
 }

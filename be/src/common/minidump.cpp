@@ -11,12 +11,10 @@
 #include <ctime>
 #include <filesystem>
 #include <fstream>
-#include <iomanip>
 #include <map>
 #include <memory>
 #include <sstream>
 #include <system_error>
-#include <thread>
 
 #include "common/config.h"
 #include "util/logging.h"

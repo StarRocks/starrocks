@@ -38,7 +38,6 @@
 #include "runtime/mem_tracker.h"
 #include "storage/storage_engine.h"
 #include "storage/update_manager.h"
-#include "util/debug_util.h"
 #include "util/pretty_printer.h"
 
 namespace starrocks {
@@ -76,6 +75,7 @@ void logs_handler(const WebPageHandler::ArgumentMap& args, std::stringstream* ou
 void config_handler(const WebPageHandler::ArgumentMap& args, std::stringstream* output) {
     (*output) << "<h2>Configurations</h2>";
     (*output) << "<pre>";
+    std::lock_guard<std::mutex> l(*config::get_mstring_conf_lock());
     for (const auto& it : *(config::full_conf_map)) {
         (*output) << it.first << "=" << it.second << std::endl;
     }
@@ -200,7 +200,7 @@ void mem_tracker_handler(MemTracker* mem_tracker, const WebPageHandler::Argument
 
 #ifdef USE_JEMALLOC
 void malloc_stats_write_cb(void* opaque, const char* data) {
-    std::string* buf = static_cast<std::string*>(opaque);
+    auto* buf = static_cast<std::string*>(opaque);
     buf->append(data);
 }
 #endif

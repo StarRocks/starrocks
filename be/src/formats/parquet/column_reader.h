@@ -7,7 +7,7 @@ namespace starrocks {
 class RandomAccessFile;
 class SharedBufferedInputStream;
 namespace vectorized {
-class HdfsScanStats;
+struct HdfsScanStats;
 }
 } // namespace starrocks
 
@@ -17,11 +17,12 @@ struct ColumnReaderContext {
     size_t next_row = 0;
     size_t rows_to_skip = 0;
 
-    void advance(int num_rows) { next_row += num_rows; }
+    void advance(size_t num_rows) { next_row += num_rows; }
 };
 
 struct ColumnReaderOptions {
     std::string timezone;
+    bool case_sensitive = false;
     int chunk_size = 0;
     vectorized::HdfsScanStats* stats = nullptr;
     RandomAccessFile* file = nullptr;

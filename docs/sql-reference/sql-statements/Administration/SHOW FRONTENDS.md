@@ -19,7 +19,3 @@ Note:
 5. LastHeartbeat is the latest heartbeat.
 6. IsHelper indicates whether the node is a helper node from bdbje.
 7. ErrMsg is used to display error messages when the heartbeat fails.
-
-## keyword
-
-SHOW, FRONTENDS

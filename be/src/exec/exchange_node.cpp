@@ -27,7 +27,6 @@
 #include "exec/pipeline/exchange/exchange_source_operator.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
-#include "gen_cpp/PlanNodes_types.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/data_stream_recvr.h"
 #include "runtime/exec_env.h"
@@ -95,7 +94,7 @@ Status ExchangeNode::open(RuntimeState* state) {
 
 Status ExchangeNode::collect_query_statistics(QueryStatistics* statistics) {
     RETURN_IF_ERROR(ExecNode::collect_query_statistics(statistics));
-    statistics->merge(_sub_plan_query_statistics_recvr.get());
+    _sub_plan_query_statistics_recvr->aggregate(statistics);
     return Status::OK();
 }
 

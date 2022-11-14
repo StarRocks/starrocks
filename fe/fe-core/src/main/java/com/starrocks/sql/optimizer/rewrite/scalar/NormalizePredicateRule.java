@@ -140,6 +140,9 @@ public class NormalizePredicateRule extends BottomUpScalarOperatorRewriteRule {
     @Override
     public ScalarOperator visitInPredicate(InPredicateOperator predicate, ScalarOperatorRewriteContext context) {
         List<ScalarOperator> rhs = predicate.getChildren().subList(1, predicate.getChildren().size());
+        if (predicate.isSubquery()) {
+            return predicate;
+        }
         if (rhs.stream().allMatch(ScalarOperator::isConstant)) {
             return predicate;
         }
@@ -159,5 +162,4 @@ public class NormalizePredicateRule extends BottomUpScalarOperatorRewriteRule {
         }
         return isIn ? Utils.compoundOr(result) : Utils.compoundAnd(result);
     }
-
 }

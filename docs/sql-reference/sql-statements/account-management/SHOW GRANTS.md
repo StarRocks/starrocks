@@ -37,7 +37,3 @@ Note:
     ```sql
     SHOW GRANTS;
     ```
-
-## keyword
-
-SHOW, GRANTS

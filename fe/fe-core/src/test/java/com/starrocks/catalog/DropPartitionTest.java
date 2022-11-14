@@ -24,7 +24,6 @@ package com.starrocks.catalog;
 import com.google.common.collect.Lists;
 import com.staros.proto.ObjectStorageInfo;
 import com.staros.proto.ShardStorageInfo;
-import com.starrocks.analysis.RecoverPartitionStmt;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
@@ -35,6 +34,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.RecoverPartitionStmt;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import org.junit.AfterClass;
@@ -73,7 +73,9 @@ public class DropPartitionTest {
             {
                 agent.getServiceShardStorageInfo();
                 result = shardStorageInfo;
-                agent.createShards(anyInt, (ShardStorageInfo) any);
+                agent.createShardGroup(anyLong);
+                result = null;
+                agent.createShards(anyInt, (ShardStorageInfo) any, anyLong);
                 returns(Lists.newArrayList(10001L, 10002L, 10003L),
                         Lists.newArrayList(10004L, 10005L, 10006L),
                         Lists.newArrayList(10007L, 10008L, 10009L));

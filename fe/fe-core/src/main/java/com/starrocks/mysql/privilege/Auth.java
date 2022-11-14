@@ -28,16 +28,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.StarRocksFE;
-import com.starrocks.analysis.AlterUserStmt;
-import com.starrocks.analysis.CreateRoleStmt;
-import com.starrocks.analysis.CreateUserStmt;
-import com.starrocks.analysis.DropRoleStmt;
-import com.starrocks.analysis.DropUserStmt;
-import com.starrocks.analysis.GrantStmt;
 import com.starrocks.analysis.ResourcePattern;
-import com.starrocks.analysis.RevokeStmt;
-import com.starrocks.analysis.SetPassVar;
-import com.starrocks.analysis.SetUserPropertyStmt;
 import com.starrocks.analysis.TablePattern;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.AuthorizationInfo;
@@ -55,10 +46,17 @@ import com.starrocks.persist.PrivInfo;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.GrantImpersonateStmt;
+import com.starrocks.sql.ast.AlterUserStmt;
+import com.starrocks.sql.ast.CreateRoleStmt;
+import com.starrocks.sql.ast.CreateUserStmt;
+import com.starrocks.sql.ast.DropRoleStmt;
+import com.starrocks.sql.ast.DropUserStmt;
+import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
-import com.starrocks.sql.ast.RevokeImpersonateStmt;
+import com.starrocks.sql.ast.RevokePrivilegeStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
+import com.starrocks.sql.ast.SetPassVar;
+import com.starrocks.sql.ast.SetUserPropertyStmt;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -97,7 +95,7 @@ public class Auth implements Writable {
     private ResourcePrivTable resourcePrivTable = new ResourcePrivTable();
     private ImpersonateUserPrivTable impersonateUserPrivTable = new ImpersonateUserPrivTable();
 
-    private RoleManager roleManager = new RoleManager();
+    protected RoleManager roleManager = new RoleManager();
     private UserPropertyMgr propertyMgr = new UserPropertyMgr();
 
     private ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
@@ -131,14 +129,25 @@ public class Auth implements Writable {
         return userPrivTable;
     }
 
-    public DbPrivTable getDbPrivTable() {
+    protected DbPrivTable getDbPrivTable() {
         return dbPrivTable;
     }
 
-    public TablePrivTable getTablePrivTable() {
+    protected TablePrivTable getTablePrivTable() {
         return tablePrivTable;
     }
 
+    protected ResourcePrivTable getResourcePrivTable() {
+        return resourcePrivTable;
+    }
+
+    protected ImpersonateUserPrivTable getImpersonateUserPrivTable() {
+        return impersonateUserPrivTable;
+    }
+
+    protected UserPropertyMgr getPropertyMgr() {
+        return propertyMgr;
+    }
     /**
      * check if role exist, this function can be used in analyze phrase to validate role
      */
@@ -717,7 +726,7 @@ public class Auth implements Writable {
     public void grantRole(GrantRoleStmt stmt) throws DdlException {
         writeLock();
         try {
-            grantRoleInternal(stmt.getQualifiedRole(), stmt.getUserIdent(), true, false);
+            grantRoleInternal(stmt.getGranteeRole(), stmt.getUserIdent(), true, false);
         } finally {
             writeUnlock();
         }
@@ -773,7 +782,7 @@ public class Auth implements Writable {
     public void revokeRole(RevokeRoleStmt stmt) throws DdlException {
         writeLock();
         try {
-            revokeRoleInternal(stmt.getQualifiedRole(), stmt.getUserIdent(), false);
+            revokeRoleInternal(stmt.getGranteeRole(), stmt.getUserIdent(), false);
         } finally {
             writeUnlock();
         }
@@ -822,14 +831,6 @@ public class Auth implements Writable {
         LOG.info("revoke {} from {}, isReplay = {}", roleName, userIdent, isReplay);
     }
 
-    public void grantImpersonate(GrantImpersonateStmt stmt) throws DdlException {
-        if (stmt.getAuthorizedRoleName() == null) {
-            grantImpersonateToUserInternal(stmt.getAuthorizedUser(), stmt.getSecuredUser(), false);
-        } else {
-            grantImpersonateToRoleInternal(stmt.getAuthorizedRoleName(), stmt.getSecuredUser(), false);
-        }
-    }
-
     public void replayGrantImpersonate(ImpersonatePrivInfo info) {
         try {
             if (info.getAuthorizedRoleName() == null) {
@@ -839,14 +840,6 @@ public class Auth implements Writable {
             }
         } catch (DdlException e) {
             LOG.error("should not happend", e);
-        }
-    }
-
-    public void revokeImpersonate(RevokeImpersonateStmt stmt) throws DdlException {
-        if (stmt.getAuthorizedRoleName() == null) {
-            revokeImpersonateFromUserInternal(stmt.getAuthorizedUser(), stmt.getSecuredUser(), false);
-        } else {
-            revokeImpersonateFromRoleInternal(stmt.getAuthorizedRoleName(), stmt.getSecuredUser(), false);
         }
     }
 
@@ -863,14 +856,18 @@ public class Auth implements Writable {
     }
 
     // grant
-    public void grant(GrantStmt stmt) throws DdlException {
-        PrivBitSet privs = PrivBitSet.of(stmt.getPrivileges());
-        if (stmt.getTblPattern() != null) {
-            grantInternal(stmt.getUserIdent(), stmt.getQualifiedRole(), stmt.getTblPattern(), privs,
-                    true /* err on non exist */, false /* not replay */);
+    public void grant(GrantPrivilegeStmt stmt) throws DdlException {
+        PrivBitSet privs = stmt.getPrivBitSet();
+        if (stmt.getPrivType().equals("TABLE") || stmt.getPrivType().equals("DATABASE")) {
+            grantInternal(stmt.getUserIdentity(), stmt.getRole(), stmt.getTblPattern(), privs, true, false);
+        } else if (stmt.getPrivType().equals("RESOURCE")) {
+            grantInternal(stmt.getUserIdentity(), stmt.getRole(), stmt.getResourcePattern(), privs, true, false);
         } else {
-            grantInternal(stmt.getUserIdent(), stmt.getQualifiedRole(), stmt.getResourcePattern(), privs,
-                    true /* err on non exist */, false /* not replay */);
+            if (stmt.getRole() == null) {
+                grantImpersonateToUserInternal(stmt.getUserIdentity(), stmt.getUserPrivilegeObject(), false);
+            } else {
+                grantImpersonateToRoleInternal(stmt.getRole(), stmt.getUserPrivilegeObject(), false);
+            }
         }
     }
 
@@ -1097,7 +1094,7 @@ public class Auth implements Writable {
     }
 
     // return true if user ident exist
-    private boolean doesUserExist(UserIdentity userIdent) {
+    public boolean doesUserExist(UserIdentity userIdent) {
         if (userIdent.isDomain()) {
             return propertyMgr.doesUserExist(userIdent);
         } else {
@@ -1106,14 +1103,20 @@ public class Auth implements Writable {
     }
 
     // revoke
-    public void revoke(RevokeStmt stmt) throws DdlException {
-        PrivBitSet privs = PrivBitSet.of(stmt.getPrivileges());
-        if (stmt.getTblPattern() != null) {
-            revokeInternal(stmt.getUserIdent(), stmt.getQualifiedRole(), stmt.getTblPattern(), privs,
+    public void revoke(RevokePrivilegeStmt stmt) throws DdlException {
+        PrivBitSet privs = stmt.getPrivBitSet();
+        if (stmt.getPrivType().equals("TABLE")) {
+            revokeInternal(stmt.getUserIdentity(), stmt.getRole(), stmt.getTblPattern(), privs,
+                    true /* err on non exist */, false /* is replay */);
+        } else if (stmt.getPrivType().equals("RESOURCE")) {
+            revokeInternal(stmt.getUserIdentity(), stmt.getRole(), stmt.getResourcePattern(), privs,
                     true /* err on non exist */, false /* is replay */);
         } else {
-            revokeInternal(stmt.getUserIdent(), stmt.getQualifiedRole(), stmt.getResourcePattern(), privs,
-                    true /* err on non exist */, false /* is replay */);
+            if (stmt.getRole() == null) {
+                revokeImpersonateFromUserInternal(stmt.getUserIdentity(), stmt.getUserPrivilegeObject(), false);
+            } else {
+                revokeImpersonateFromRoleInternal(stmt.getRole(), stmt.getUserPrivilegeObject(), false);
+            }
         }
     }
 
@@ -1271,10 +1274,9 @@ public class Auth implements Writable {
     /**
      * check password complexity if `enable_validate_password` is set
      * only check for plain text
-     *
+     * <p>
      * TODO The rules is hard-coded for temporary
      *      We will refactor the whole user privilege framework later to ultimately fix this.
-     *
      **/
     public static void validatePassword(String password) throws DdlException {
         if (!Config.enable_validate_password) {
@@ -1290,7 +1292,7 @@ public class Auth implements Writable {
         boolean hasDigit = false;
         boolean hasUpper = false;
         boolean hasLower = false;
-        for (int i = 0; i != password.length(); ++ i) {
+        for (int i = 0; i != password.length(); ++i) {
             char c = password.charAt(i);
             if (c >= '0' && c <= '9') {
                 hasDigit = true;
@@ -1640,7 +1642,7 @@ public class Auth implements Writable {
                     userAuthInfo.add(password.getUserForAuthPlugin());
                 }
             }
-            if (! onlyAuthenticationInfo) {
+            if (!onlyAuthenticationInfo) {
                 //GlobalPrivs
                 userAuthInfo.add(gEntry.getPrivSet().toString() + " (" + gEntry.isSetByDomainResolver() + ")");
             }
@@ -1663,7 +1665,7 @@ public class Auth implements Writable {
                 userAuthInfo.add(FeConstants.null_string);
                 userAuthInfo.add(FeConstants.null_string);
             }
-            if (! onlyAuthenticationInfo) {
+            if (!onlyAuthenticationInfo) {
                 userAuthInfo.add(FeConstants.null_string);
             }
         }
@@ -1905,6 +1907,7 @@ public class Auth implements Writable {
         sb.append(propertyMgr).append("\n");
         return sb.toString();
     }
+
     private static class SerializeData {
         @SerializedName("entries")
         public List<ImpersonateUserPrivEntry> entries = new ArrayList<>();

@@ -9,7 +9,3 @@ Syntax:
 ```sql
 DROP INDEX index_name ON [db_name.]table_name;
 ```
-
-## keyword
-
-DROP,INDEX

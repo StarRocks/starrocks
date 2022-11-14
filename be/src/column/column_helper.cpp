@@ -5,17 +5,15 @@
 #include <runtime/types.h>
 
 #include "column/array_column.h"
-#include "column/chunk.h"
 #include "column/json_column.h"
+#include "column/map_column.h"
+#include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
 #include "runtime/primitive_type.h"
 #include "runtime/primitive_type_infra.h"
-#include "runtime/types.h"
 #include "simd/simd.h"
-#include "types/hll.h"
 #include "util/date_func.h"
-#include "util/json.h"
 #include "util/percentile_value.h"
 #include "util/phmap/phmap.h"
 
@@ -190,6 +188,25 @@ ColumnPtr ColumnHelper::create_const_null_column(size_t chunk_size) {
     return ConstColumn::create(nullable_column, chunk_size);
 }
 
+// expression trees' return column should align return type when some return columns may be different from
+// the required return type. e.g., concat_ws returns col from create_const_null_column(), it's type is Nullable(int8),
+// but required return type is nullable(string), so col need align return type to nullable(string).
+ColumnPtr ColumnHelper::align_return_type(const ColumnPtr& old_col, const TypeDescriptor& type_desc, size_t num_rows) {
+    ColumnPtr new_column = old_col;
+    if (old_col->only_null()) {
+        new_column = ColumnHelper::create_column(type_desc, true);
+        new_column->append_nulls(num_rows);
+    } else if (old_col->is_constant()) {
+        // Note: we must create a new column every time here,
+        // because result_columns[i] is shared_ptr
+        new_column = ColumnHelper::create_column(type_desc, false);
+        auto* const_column = down_cast<ConstColumn*>(old_col.get());
+        new_column->append(*const_column->data_column(), 0, 1);
+        new_column->assign(num_rows, 0);
+    }
+    return new_column;
+}
+
 ColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool nullable) {
     return create_column(type_desc, nullable, false, 0);
 }
@@ -227,10 +244,30 @@ ColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool null
     }
 
     ColumnPtr p;
-    if (type_desc.type == TYPE_ARRAY) {
+    if (type_desc.type == PrimitiveType::TYPE_ARRAY) {
         auto offsets = UInt32Column::create(size);
         auto data = create_column(type_desc.children[0], true, is_const, size);
         p = ArrayColumn::create(std::move(data), std::move(offsets));
+    } else if (type_desc.type == PrimitiveType::TYPE_MAP) {
+        auto offsets = UInt32Column ::create(size);
+        auto keys = create_column(type_desc.children[0], true, is_const, size);
+        auto values = create_column(type_desc.children[1], true, is_const, size);
+        p = MapColumn::create(std::move(keys), std::move(values), std::move(offsets));
+    } else if (type_desc.type == PrimitiveType::TYPE_STRUCT) {
+        size_t field_size = type_desc.children.size();
+        DCHECK_EQ(field_size, type_desc.selected_fields.size());
+        Columns columns;
+        BinaryColumn::Ptr field_names = BinaryColumn::create();
+        for (size_t i = 0; i < field_size; i++) {
+            if (!type_desc.selected_fields.at(i)) {
+                continue;
+            }
+            // Subfield column must be nullable column.
+            ColumnPtr field_column = create_column(type_desc.children.at(i), true, is_const, size);
+            columns.emplace_back(field_column);
+            field_names->append_string(type_desc.field_names.at(i));
+        }
+        p = StructColumn::create(columns, field_names);
     } else {
         p = type_dispatch_column(type_desc.type, ColumnBuilder(), type_desc, size);
     }

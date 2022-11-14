@@ -1,9 +1,9 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.SetPassVar;
-import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.Subquery;
+import com.starrocks.sql.ast.SetPassVar;
+import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -34,6 +34,12 @@ public class AnalyzeSetVariableTest {
         analyzeSuccess(sql);
         sql = "set LOCAL query_timeout = 10";
         analyzeSuccess(sql);
+        sql = "set tablet_internal_parallel_mode = auto";
+        analyzeSuccess(sql);
+        sql = "set tablet_internal_parallel_mode = force_split";
+        analyzeSuccess(sql);
+        sql = "set tablet_internal_parallel_mode = force";
+        analyzeFail(sql);
     }
 
     @Test
@@ -56,14 +62,12 @@ public class AnalyzeSetVariableTest {
         sql = "set @var = 1 + 2";
         SetStmt setStmt = (SetStmt) analyzeSuccess(sql);
         UserVariable userVariable = (UserVariable) setStmt.getSetVars().get(0);
-        userVariable.analyze();
         Assert.assertNotNull(userVariable.getResolvedExpression());
         Assert.assertEquals("3", userVariable.getResolvedExpression().getStringValue());
 
         sql = "set @var = abs(1.2)";
         setStmt = (SetStmt) analyzeSuccess(sql);
         userVariable = (UserVariable) setStmt.getSetVars().get(0);
-        userVariable.analyze();
         Assert.assertTrue(userVariable.getExpression() instanceof Subquery);
 
         sql = "set @var = (select 1)";
@@ -83,6 +87,12 @@ public class AnalyzeSetVariableTest {
         setStmt = (SetStmt) analyzeSuccess(sql);
         Assert.assertEquals(2, setStmt.getSetVars().size());
 
+        sql = "set @var = cast(\"a\" as json)";
+        analyzeFail(sql, "Can't set variable with type JSON");
+
+        sql = "set @var = [1,2,3]";
+        analyzeFail(sql, "Can't set variable with type ARRAY");
+
         sql = "set @var = bitmap_empty()";
         analyzeFail(sql, "Can't set variable with type BITMAP");
 
@@ -94,6 +104,9 @@ public class AnalyzeSetVariableTest {
 
         sql = "set @var = percentile_empty()";
         analyzeFail(sql, "Can't set variable with type PERCENTILE");
+
+        sql = "set @var=foo";
+        analyzeFail(sql, "Column 'foo' cannot be resolved");
     }
 
     @Test

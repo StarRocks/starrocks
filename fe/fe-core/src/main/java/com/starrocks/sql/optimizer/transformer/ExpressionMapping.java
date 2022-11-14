@@ -92,22 +92,16 @@ public class ExpressionMapping {
         fieldMappings.toArray(this.fieldMappings);
     }
 
-    public void put(Expr expression, ColumnRefOperator variable) {
+    public void put(Expr expression, ColumnRefOperator columnRefOperator) {
         if (expression instanceof FieldReference) {
-            fieldMappings[((FieldReference) expression).getFieldIndex()] = variable;
+            fieldMappings[((FieldReference) expression).getFieldIndex()] = columnRefOperator;
         }
 
         if (expression instanceof SlotRef) {
-            scope.tryResolveFeild((SlotRef) expression)
-                    .ifPresent(field -> fieldMappings[field.getRelationFieldIndex()] = variable);
+            scope.tryResolveField((SlotRef) expression)
+                    .ifPresent(field -> fieldMappings[field.getRelationFieldIndex()] = columnRefOperator);
         }
-        expressionToColumns.put(expression, variable);
-    }
-
-    public void putAll(ExpressionMapping other) {
-        for (Map.Entry<Expr, ColumnRefOperator> entry : other.expressionToColumns.entrySet()) {
-            put(entry.getKey(), entry.getValue());
-        }
+        expressionToColumns.put(expression, columnRefOperator);
     }
 
     public boolean hasExpression(Expr expr) {

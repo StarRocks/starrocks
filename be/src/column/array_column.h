@@ -6,6 +6,7 @@
 
 #include "column/column.h"
 #include "column/fixed_length_column.h"
+#include "column/nullable_column.h"
 
 namespace starrocks::vectorized {
 
@@ -15,7 +16,7 @@ class ArrayColumn final : public ColumnFactory<Column, ArrayColumn> {
 public:
     using ValueType = void;
 
-    ArrayColumn(ColumnPtr elements, UInt32Column::Ptr offests);
+    ArrayColumn(ColumnPtr elements, UInt32Column::Ptr offsets);
 
     ArrayColumn(const ArrayColumn& rhs)
             : _elements(rhs._elements->clone_shared()),
@@ -63,6 +64,9 @@ public:
     void append_datum(const Datum& datum) override;
 
     void append(const Column& src, size_t offset, size_t count) override;
+
+    // Append a single element, which is represented as a column
+    void append_array_element(const Column& elem, size_t null_elem);
 
     void append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) override;
 
@@ -121,6 +125,8 @@ public:
 
     Datum get(size_t idx) const override;
 
+    std::pair<size_t, size_t> get_element_offset_size(size_t idx) const;
+    size_t get_element_null_count(size_t idx) const;
     size_t get_element_size(size_t idx) const;
 
     bool set_null(size_t idx) override;
@@ -160,6 +166,9 @@ public:
     bool has_large_column() const override { return _elements->has_large_column(); }
 
     void check_or_die() const override;
+
+    // null map is null, but the corresponding array may not empty, so need empty the unexpected array.
+    bool empty_null_array(const NullColumnPtr& null_map);
 
 private:
     // _elements must be NullableColumn

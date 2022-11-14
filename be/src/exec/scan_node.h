@@ -56,8 +56,6 @@ class TScanRange;
 //
 class ScanNode : public ExecNode {
 public:
-    static constexpr int MAX_IO_TASKS_PER_OP = 4;
-
     ScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs) : ExecNode(pool, tnode, descs) {}
     ~ScanNode() override = default;
 
@@ -70,10 +68,12 @@ public:
     StatusOr<pipeline::MorselQueueFactoryPtr> convert_scan_range_to_morsel_queue_factory(
             const std::vector<TScanRangeParams>& scan_ranges,
             const std::map<int32_t, std::vector<TScanRangeParams>>& scan_ranges_per_driver_seq, int node_id,
-            int pipeline_dop, bool enable_tablet_internal_parallel);
+            int pipeline_dop, bool enable_tablet_internal_parallel,
+            TTabletInternalParallelMode::type tablet_internal_parallel_mode);
     virtual StatusOr<pipeline::MorselQueuePtr> convert_scan_range_to_morsel_queue(
             const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
-            bool enable_tablet_internal_parallel, size_t num_total_scan_ranges);
+            bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
+            size_t num_total_scan_ranges);
 
     // If this scan node accept empty scan ranges.
     virtual bool accept_empty_scan_ranges() const { return true; }
@@ -101,22 +101,27 @@ public:
 
     const std::string& name() const { return _name; }
 
-    virtual int io_tasks_per_scan_operator() const { return MAX_IO_TASKS_PER_OP; }
+    virtual int io_tasks_per_scan_operator() const { return config::io_tasks_per_scan_operator; }
+
+    // TODO: support more share_scan strategy
+    void enable_shared_scan(bool enable);
+    bool is_shared_scan_enabled() const;
 
 protected:
-    RuntimeProfile::Counter* _bytes_read_counter; // # bytes read from the scanner
+    RuntimeProfile::Counter* _bytes_read_counter = nullptr; // # bytes read from the scanner
     // # rows/tuples read from the scanner (including those discarded by eval_conjucts())
-    RuntimeProfile::Counter* _rows_read_counter;
-    RuntimeProfile::Counter* _read_timer; // total read time
+    RuntimeProfile::Counter* _rows_read_counter = nullptr;
+    RuntimeProfile::Counter* _read_timer = nullptr; // total read time
     // Wall based aggregate read throughput [bytes/sec]
-    RuntimeProfile::Counter* _total_throughput_counter;
+    RuntimeProfile::Counter* _total_throughput_counter = nullptr;
     // Per thread read throughput [bytes/sec]
-    RuntimeProfile::Counter* _num_disks_accessed_counter;
-    RuntimeProfile::Counter* _materialize_tuple_timer; // time writing tuple slots
+    RuntimeProfile::Counter* _num_disks_accessed_counter = nullptr;
+    RuntimeProfile::Counter* _materialize_tuple_timer = nullptr; // time writing tuple slots
     // Aggregated scanner thread counters
-    RuntimeProfile::ThreadCounters* _scanner_thread_counters;
-    RuntimeProfile::Counter* _num_scanner_threads_started_counter;
+    RuntimeProfile::ThreadCounters* _scanner_thread_counters = nullptr;
+    RuntimeProfile::Counter* _num_scanner_threads_started_counter = nullptr;
     std::string _name;
+    bool _enable_shared_scan = false;
 };
 
 } // namespace starrocks

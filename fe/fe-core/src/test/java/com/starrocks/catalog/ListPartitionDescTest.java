@@ -4,13 +4,13 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.ColumnDef;
-import com.starrocks.analysis.ListPartitionDesc;
-import com.starrocks.analysis.MultiItemListPartitionDesc;
-import com.starrocks.analysis.PartitionDesc;
-import com.starrocks.analysis.SingleItemListPartitionDesc;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.sql.ast.ListPartitionDesc;
+import com.starrocks.sql.ast.MultiItemListPartitionDesc;
+import com.starrocks.sql.ast.PartitionDesc;
+import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.utframe.UtFrameUtils;
@@ -34,7 +34,7 @@ public class ListPartitionDescTest {
         UtFrameUtils.addMockBackend(10002);
         UtFrameUtils.addMockBackend(10003);
     }
-    
+
     private List<ColumnDef> findColumnDefList() {
         ColumnDef id = new ColumnDef("id", TypeDef.create(PrimitiveType.BIGINT));
         id.setAggregateType(AggregateType.NONE);
@@ -153,7 +153,7 @@ public class ListPartitionDescTest {
         ListPartitionDesc listPartitionDesc = this.findListSinglePartitionDesc("province",
                 "p1", "p2", null);
         listPartitionDesc.analyze(this.findColumnDefList(), null);
-        String sql = listPartitionDesc.toSql();
+        String sql = listPartitionDesc.toString();
         String target = "PARTITION BY LIST(`province`)(\n" +
                 "  PARTITION p1 VALUES IN (\'guangdong\',\'tianjin\'),\n" +
                 "  PARTITION p2 VALUES IN (\'shanghai\',\'beijing\')\n" +
@@ -166,7 +166,7 @@ public class ListPartitionDescTest {
         ListPartitionDesc listPartitionDesc = this.findListMultiPartitionDesc("dt,province",
                 "p1", "p2", null);
         listPartitionDesc.analyze(this.findColumnDefList(), null);
-        String sql = listPartitionDesc.toSql();
+        String sql = listPartitionDesc.toString();
         String target = "PARTITION BY LIST(`dt`,`province`)(\n" +
                 "  PARTITION p1 VALUES IN ((\'2022-04-15\',\'guangdong\'),(\'2022-04-15\',\'tianjin\')),\n" +
                 "  PARTITION p2 VALUES IN ((\'2022-04-16\',\'shanghai\'),(\'2022-04-16\',\'beijing\'))\n" +

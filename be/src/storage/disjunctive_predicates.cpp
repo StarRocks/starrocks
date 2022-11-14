@@ -7,7 +7,7 @@
 namespace starrocks::vectorized {
 
 Status DisjunctivePredicates::evaluate(const Chunk* chunk, uint8_t* selection) const {
-    return evaluate(chunk, selection, 0, chunk->num_rows());
+    return evaluate(chunk, selection, 0, static_cast<uint16_t>(chunk->num_rows()));
 }
 
 Status DisjunctivePredicates::evaluate(const Chunk* chunk, uint8_t* selection, uint16_t from, uint16_t to) const {

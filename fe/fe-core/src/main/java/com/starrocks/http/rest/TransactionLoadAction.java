@@ -24,6 +24,8 @@ package com.starrocks.http.rest;
 import com.google.common.base.Strings;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.LabelAlreadyUsedException;
+import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
@@ -46,9 +48,13 @@ public class TransactionLoadAction extends RestBaseAction {
     private static final Logger LOG = LogManager.getLogger(TransactionLoadAction.class);
     private static final String TXN_OP_KEY = "txn_op";
     private static final String TXN_BEGIN = "begin";
+    private static final String TXN_PREPARE = "prepare";
     private static final String TXN_COMMIT = "commit";
     private static final String TXN_ROLLBACK = "rollback";
+    private static final String LOAD = "load";
     private static final String TIMEOUT_KEY = "timeout";
+    private static final String CHANNEL_NUM_STR = "channel_num";
+    private static final String CHANNEL_ID_STR = "channel_id";
     private static TransactionLoadAction ac;
 
     private Map<String, Long> txnBackendMap = new LinkedHashMap<String, Long>(512, 0.75f, true) {
@@ -80,6 +86,24 @@ public class TransactionLoadAction extends RestBaseAction {
 
     @Override
     public void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException {
+        try {
+            executeTransaction(request, response);
+        } catch (Exception e) {
+            TransactionResult resp = new TransactionResult();
+            if (e instanceof LabelAlreadyUsedException) {
+                resp.status = ActionStatus.LABEL_ALREADY_EXISTS;
+                resp.msg = e.getMessage();
+                resp.addResultEntry("ExistingJobStatus", ((LabelAlreadyUsedException) e).getJobStatus());
+            } else {
+                resp.status = ActionStatus.FAILED;
+                resp.msg = e.getClass().toString() + ": " + e.getMessage();
+            }
+            LOG.warn(DebugUtil.getStackTrace(e));
+            sendResult(request, response, resp);
+        }
+    }
+
+    public void executeTransaction(BaseRequest request, BaseResponse response) throws UserException {
         if (redirectToLeader(request, response)) {
             return;
         }
@@ -88,75 +112,148 @@ public class TransactionLoadAction extends RestBaseAction {
         String label = request.getRequest().headers().get(LABEL_KEY);
         String op = request.getSingleParameter(TXN_OP_KEY);
         String timeout = request.getRequest().headers().get(TIMEOUT_KEY);
+        String channelNumStr = null;
+        String channelIdStr = null;
+        if (request.getRequest().headers().contains(CHANNEL_NUM_STR)) {
+            channelNumStr = request.getRequest().headers().get(CHANNEL_NUM_STR);
+        }
+        if (request.getRequest().headers().contains(CHANNEL_ID_STR)) {
+            channelIdStr = request.getRequest().headers().get(CHANNEL_ID_STR);
+        }
+
         Long backendID = null;
 
-        // 1. handle commit/rollback PREPARED transaction
-        if (op.equalsIgnoreCase(TXN_COMMIT) || op.equalsIgnoreCase(TXN_ROLLBACK)) {
-            TransactionResult resp = new TransactionResult();
-            resp.addResultEntry("Label", label);
-            try {
-                if (Strings.isNullOrEmpty(dbName)) {
-                    throw new DdlException("No database selected.");
-                }
-                Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
-                if (db == null) {
-                    throw new DdlException("database " + dbName + " not exists");
-                }
-                TransactionStatus txnStatus = GlobalStateMgr.getCurrentGlobalTransactionMgr().getLabelState(db.getId(),
-                        label);
-                if (txnStatus == TransactionStatus.PREPARED) {
-                    Long txnID = GlobalStateMgr.getCurrentGlobalTransactionMgr().getLabelTxnID(db.getId(), label);
-                    if (txnID == -1) {
-                        throw new DdlException("label " + label + " txn not exist");
-                    }
+        if (Strings.isNullOrEmpty(dbName)) {
+            throw new UserException("No database selected.");
+        }
+        if (Strings.isNullOrEmpty(label)) {
+            throw new UserException("empty label.");
+        }
 
-                    if (op.equalsIgnoreCase(TXN_COMMIT)) {
-                        long timeoutMillis = 20000;
-                        if (timeout != null) {
-                            timeoutMillis = Long.parseLong(timeout) * 1000;
-                        }
-                        GlobalStateMgr.getCurrentGlobalTransactionMgr().commitPreparedTransaction(db, txnID, timeoutMillis);
-                    } else if (op.equalsIgnoreCase(TXN_ROLLBACK)) {
-                        GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(db.getId(), txnID,
-                                "User Aborted");
-                    }
-                    sendResult(request, response, resp);
-                    return;
-                }
-            } catch (Exception e) {
-                resp.status = ActionStatus.FAILED;
-                resp.msg = e.getClass().toString() + ": " + e.getMessage();
-                LOG.warn(DebugUtil.getStackTrace(e));
-                sendResult(request, response, resp);
+        // 1. handle commit/rollback PREPARED transaction
+        if ((op.equalsIgnoreCase(TXN_COMMIT) || op.equalsIgnoreCase(TXN_ROLLBACK)) && channelIdStr == null) {
+            TransactionResult resp = new TransactionResult();
+            Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+            if (db == null) {
+                throw new UserException("database " + dbName + " not exists");
             }
-            if (resp.status == ActionStatus.FAILED) {
+            TransactionStatus txnStatus = GlobalStateMgr.getCurrentGlobalTransactionMgr().getLabelState(db.getId(),
+                    label);
+            if (txnStatus == TransactionStatus.PREPARED) {
+                Long txnID = GlobalStateMgr.getCurrentGlobalTransactionMgr().getLabelTxnID(db.getId(), label);
+                if (txnID == -1) {
+                    throw new UserException("label " + label + " txn not exist");
+                }
+
+                if (op.equalsIgnoreCase(TXN_COMMIT)) {
+                    long timeoutMillis = 20000;
+                    if (timeout != null) {
+                        timeoutMillis = Long.parseLong(timeout) * 1000;
+                    }
+                    GlobalStateMgr.getCurrentGlobalTransactionMgr().commitPreparedTransaction(db, txnID, timeoutMillis);
+                } else if (op.equalsIgnoreCase(TXN_ROLLBACK)) {
+                    GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(db.getId(), txnID,
+                            "User Aborted");
+                }
+                resp.addResultEntry("Label", label);
+                sendResult(request, response, resp);
                 return;
             }
         }
 
-        // 2. redirect transaction op to BE
-        synchronized (this) {
-            // 2.1 save label->be map when begin transaction, so that subsequent operator can send to same BE
-            if (op.equalsIgnoreCase(TXN_BEGIN)) {
-                List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendIds(1, true, false);
-                if (CollectionUtils.isEmpty(backendIds)) {
-                    throw new DdlException("No backend alive.");
+        if (channelIdStr == null) {
+            // 2. redirect transaction op to BE
+            synchronized (this) {
+                // 2.1 save label->be map when begin transaction, so that subsequent operator can send to same BE
+                if (op.equalsIgnoreCase(TXN_BEGIN)) {
+                    List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendIds(1, true, false);
+                    if (CollectionUtils.isEmpty(backendIds)) {
+                        throw new UserException("No backend alive.");
+                    }
+                    backendID = backendIds.get(0);
+                    // txnBackendMap is LRU cache, it automic remove unused entry
+                    txnBackendMap.put(label, backendID);
+                } else if (channelIdStr == null) {
+                    backendID = txnBackendMap.get(label);
                 }
-                backendID = backendIds.get(0);
-                // txnBackendMap is LRU cache, it automic remove unused entry
-                txnBackendMap.put(label, backendID);
-            } else {
-                backendID = txnBackendMap.get(label);
             }
         }
 
+        if (op.equalsIgnoreCase(TXN_BEGIN) && channelIdStr != null) {
+            TransactionResult resp = new TransactionResult();
+            long timeoutMillis = 20000;
+            if (timeout != null) {
+                timeoutMillis = Long.parseLong(timeout) * 1000;
+            }
+            if (channelNumStr == null) {
+                throw new DdlException("Must provide channel num when stream load begin.");
+            }
+            int channelNum = Integer.parseInt(channelNumStr);
+            int channelId = Integer.parseInt(channelIdStr);
+            if (channelId >= channelNum) {
+                throw new DdlException("channel id should be less than channel num");
+            }
+
+            // context.parseHttpHeader(request.getRequest().headers());
+            GlobalStateMgr.getCurrentState().getStreamLoadManager().beginLoadTask(
+                    dbName, tableName, label, timeoutMillis, channelNum, channelId, resp);
+            sendResult(request, response, resp);
+            return;
+        }
+
+        if (op.equalsIgnoreCase(LOAD) && channelIdStr != null) {
+            int channelId = Integer.parseInt(channelIdStr);
+            TransactionResult resp = new TransactionResult();
+            TNetworkAddress redirectAddr = GlobalStateMgr.getCurrentState().getStreamLoadManager().executeLoadTask(
+                    label, channelId, request.getRequest().headers(), resp);
+            if (!resp.stateOK() || resp.containMsg()) {
+                sendResult(request, response, resp);
+                return;
+            }
+            LOG.info("redirect transaction action to destination={}, db: {}, table: {}, op: {}, label: {}",
+                    redirectAddr, dbName, tableName, op, label);
+            redirectTo(request, response, redirectAddr);
+            return;
+        } 
+
+        if (op.equalsIgnoreCase(TXN_PREPARE) && channelIdStr != null) {
+            int channelId = Integer.parseInt(channelIdStr);
+            TransactionResult resp = new TransactionResult();
+            GlobalStateMgr.getCurrentState().getStreamLoadManager().prepareLoadTask(
+                    label, channelId, request.getRequest().headers(), resp);
+            if (!resp.stateOK() || resp.containMsg()) {
+                sendResult(request, response, resp);
+                return;
+            }
+            GlobalStateMgr.getCurrentState().getStreamLoadManager().tryPrepareLoadTaskTxn(label, resp);
+            sendResult(request, response, resp);
+            return;
+        }
+
+        if (op.equalsIgnoreCase(TXN_COMMIT) && channelIdStr != null) {
+            int channelId = Integer.parseInt(channelIdStr);
+            TransactionResult resp = new TransactionResult();
+            GlobalStateMgr.getCurrentState().getStreamLoadManager().commitLoadTask(label, resp);
+            sendResult(request, response, resp);
+            return;
+        }
+
+        if (op.equalsIgnoreCase(TXN_ROLLBACK) && channelIdStr != null) {
+            int channelId = Integer.parseInt(channelIdStr);
+            TransactionResult resp = new TransactionResult();
+            GlobalStateMgr.getCurrentState().getStreamLoadManager().rollbackLoadTask(label, resp);
+            sendResult(request, response, resp);
+            return;
+        }
+
+
         if (backendID == null) {
-            throw new DdlException("transaction with op " + op + " label " + label + " has no backend");
+            throw new UserException("transaction with op " + op + " label " + label + " has no backend");
         }
 
         Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendID);
         if (backend == null) {
-            throw new DdlException("Backend " + backendID + " is not alive");
+            throw new UserException("Backend " + backendID + " is not alive");
         }
 
         TNetworkAddress redirectAddr = new TNetworkAddress(backend.getHost(), backend.getHttpPort());

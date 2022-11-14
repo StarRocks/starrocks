@@ -11,6 +11,7 @@ import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.server.MetadataMgr;
@@ -78,6 +79,19 @@ public class ExternalProcDirTest {
         Assert.assertEquals(Lists.newArrayList("DbName"),
                 result.getColumnNames());
         List<List<String>> rows = Lists.newArrayList();
+        rows.add(Arrays.asList("hive_test"));
+        rows.add(Arrays.asList("ods"));
+        rows.add(Arrays.asList("temp_db"));
+        Assert.assertEquals(rows, result.getRows());
+
+        Config.enable_check_db_state = false;
+        result = dir.fetchResult();
+        Assert.assertNotNull(result);
+        Assert.assertTrue(result instanceof BaseProcResult);
+
+        Assert.assertEquals(Lists.newArrayList("DbName"),
+                result.getColumnNames());
+        rows.clear();
         rows.add(Arrays.asList("hive_test"));
         rows.add(Arrays.asList("ods"));
         rows.add(Arrays.asList("temp_db"));

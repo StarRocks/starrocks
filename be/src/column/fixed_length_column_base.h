@@ -49,8 +49,8 @@ public:
 
     // Only used as a underlying type for other column type(i.e. DecimalV3Column), C++
     // is weak to implement delegation for composite type like golang, so we have to use
-    // inheritance to wrap a underlying type. When constructing a wrapper object, we must
-    // constructor the wrapped object first, move constructor is used to prevent the unnecessary
+    // inheritance to wrap an underlying type. When constructing a wrapper object, we must
+    // construct the wrapped object first, move constructor is used to prevent the unnecessary
     // time-consuming copy operation.
     FixedLengthColumnBase(FixedLengthColumnBase&& src) noexcept : _data(std::move(src._data)) {}
 
@@ -130,6 +130,8 @@ public:
     void append_default(size_t count) override {
         _data.resize(_data.size() + count, DefaultValueGenerator<ValueType>::next_value());
     }
+
+    ColumnPtr replicate(const std::vector<uint32_t>& offsets) override;
 
     void fill_default(const Filter& filter) override;
 
@@ -220,6 +222,9 @@ public:
 
 protected:
     Container _data;
+
+private:
+    using Column::append;
 };
 
 } // namespace starrocks::vectorized

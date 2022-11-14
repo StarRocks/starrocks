@@ -1,9 +1,9 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include <gtest/gtest.h>
-#include <math.h>
 
 #include <algorithm>
+#include <cmath>
 
 #include "column/array_column.h"
 #include "column/column_builder.h"
@@ -637,6 +637,62 @@ TEST_F(AggregateTest, test_stddev_samp) {
         const AggregateFunction* func = get_aggregate_function("stddev_samp", TYPE_SMALLINT, TYPE_DOUBLE, false);
         test_agg_variance_function<int16_t, double>(ctx, func, variance_result0, variance_result1, variance_result2);
     }
+}
+
+TEST_F(AggregateTest, test_maxby) {
+    const AggregateFunction* func = get_aggregate_function("max_by", TYPE_VARCHAR, TYPE_INT, true);
+    auto result_column = Int32Column::create();
+    auto aggr_state = ManagedAggrState::create(ctx, func);
+    auto int_column = Int32Column::create();
+    for (int i = 0; i < 10; i++) {
+        int_column->append(i);
+    }
+    auto varchar_column = BinaryColumn::create();
+    std::vector<Slice> strings{{"aaa"}, {"ddd"}, {"zzzz"}, {"ff"}, {"ff"}, {"ddd"}, {"ddd"}, {"ddd"}, {"ddd"}, {""}};
+    varchar_column->append_strings(strings);
+    Columns columns;
+    columns.emplace_back(int_column);
+    columns.emplace_back(varchar_column);
+    std::vector<const Column*> raw_columns;
+    raw_columns.resize(columns.size());
+    for (int i = 0; i < columns.size(); ++i) {
+        raw_columns[i] = columns[i].get();
+    }
+    func->update_batch_single_state(ctx, int_column->size(), raw_columns.data(), aggr_state->state());
+    func->finalize_to_column(ctx, aggr_state->state(), result_column.get());
+    ASSERT_EQ(2, result_column->get_data()[0]);
+
+    //test nullable column
+    func = get_aggregate_function("max_by", TYPE_DECIMALV2, TYPE_DOUBLE, true);
+    aggr_state = ManagedAggrState::create(ctx, func);
+    auto data_column1 = DoubleColumn::create();
+    auto null_column1 = NullColumn::create();
+    for (int i = 0; i < 100; i++) {
+        data_column1->append(i + 0.11);
+        null_column1->append(i % 13 ? false : true);
+    }
+    auto doubleColumn = NullableColumn::create(std::move(data_column1), std::move(null_column1));
+    auto data_column2 = DecimalColumn::create();
+    auto null_column2 = NullColumn::create();
+    for (int i = 0; i < 100; i++) {
+        data_column2->append(DecimalV2Value(i));
+        null_column2->append(i % 11 ? false : true);
+    }
+    auto decimalColumn = NullableColumn::create(std::move(data_column2), std::move(null_column2));
+    auto data_column3 = DoubleColumn::create();
+    auto null_column3 = NullColumn::create();
+    auto nullable_result_column = NullableColumn::create(std::move(data_column3), std::move(null_column3));
+    Columns nullColumns;
+    nullColumns.emplace_back(doubleColumn);
+    nullColumns.emplace_back(decimalColumn);
+    std::vector<const Column*> raw_nullColumns;
+    raw_nullColumns.resize(nullColumns.size());
+    for (int i = 0; i < nullColumns.size(); ++i) {
+        raw_nullColumns[i] = nullColumns[i].get();
+    }
+    func->update_batch_single_state(ctx, doubleColumn->size(), raw_nullColumns.data(), aggr_state->state());
+    func->finalize_to_column(ctx, aggr_state->state(), nullable_result_column.get());
+    ASSERT_EQ(98.11, nullable_result_column->data_column()->get(0).get<double>());
 }
 
 TEST_F(AggregateTest, test_max) {
@@ -1386,6 +1442,44 @@ TEST_F(AggregateTest, test_any_value) {
 
     func = get_aggregate_function("any_value", TYPE_DATE, TYPE_DATE, false);
     test_non_deterministic_agg_function<DateValue, DateValue>(ctx, func);
+}
+
+TEST_F(AggregateTest, test_exchange_bytes) {
+    std::vector<FunctionContext::TypeDesc> arg_types = {
+            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_VARCHAR)),
+            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_BIGINT))};
+
+    auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_BIGINT));
+    std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
+
+    const AggregateFunction* exchange_bytes_function =
+            get_aggregate_function("exchange_bytes", TYPE_BIGINT, TYPE_BIGINT, false);
+    auto state = ManagedAggrState::create(ctx, exchange_bytes_function);
+
+    auto data_column = BinaryColumn::create();
+
+    data_column->append("abc");
+    data_column->append("bcd");
+    data_column->append("cde");
+
+    auto data_column_bigint = Int64Column::create();
+    data_column_bigint->append(21023);
+    data_column_bigint->append(410223);
+    data_column_bigint->append(710233);
+
+    std::vector<const Column*> raw_columns;
+    raw_columns.resize(2);
+    raw_columns[0] = data_column.get();
+    raw_columns[1] = data_column_bigint.get();
+
+    // test update
+    exchange_bytes_function->update_batch_single_state(local_ctx.get(), data_column->size(), raw_columns.data(),
+                                                       state->state());
+
+    auto result_column = Int64Column::create();
+    exchange_bytes_function->finalize_to_column(local_ctx.get(), state->state(), result_column.get());
+
+    ASSERT_EQ(data_column_bigint->byte_size() + data_column->byte_size(), result_column->get_data()[0]);
 }
 
 } // namespace starrocks::vectorized

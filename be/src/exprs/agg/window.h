@@ -438,7 +438,7 @@ class LeadLagWindowFunction final : public ValueWindowFunction<PT, LeadLagState<
 };
 
 template <PrimitiveType PT>
-struct FirstValueState<PT, BinaryPTGuard<PT>> {
+struct FirstValueState<PT, StringPTGuard<PT>> {
     Buffer<uint8_t> buffer;
     bool has_value = false;
     bool is_null = false;
@@ -447,7 +447,7 @@ struct FirstValueState<PT, BinaryPTGuard<PT>> {
 };
 
 template <PrimitiveType PT>
-class FirstValueWindowFunction<PT, Slice, BinaryPTGuard<PT>> final : public WindowFunction<FirstValueState<PT>> {
+class FirstValueWindowFunction<PT, Slice, StringPTGuard<PT>> final : public WindowFunction<FirstValueState<PT>> {
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
         this->data(state).buffer.clear();
         this->data(state).has_value = false;
@@ -484,7 +484,7 @@ class FirstValueWindowFunction<PT, Slice, BinaryPTGuard<PT>> final : public Wind
 };
 
 template <PrimitiveType PT>
-struct LastValueState<PT, BinaryPTGuard<PT>> {
+struct LastValueState<PT, StringPTGuard<PT>> {
     Buffer<uint8_t> buffer;
     bool is_null = false;
 
@@ -492,7 +492,7 @@ struct LastValueState<PT, BinaryPTGuard<PT>> {
 };
 
 template <PrimitiveType PT>
-class LastValueWindowFunction<PT, Slice, BinaryPTGuard<PT>> final : public WindowFunction<LastValueState<PT>> {
+class LastValueWindowFunction<PT, Slice, StringPTGuard<PT>> final : public WindowFunction<LastValueState<PT>> {
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
         this->data(state).buffer.clear();
         this->data(state).is_null = false;
@@ -524,7 +524,7 @@ class LastValueWindowFunction<PT, Slice, BinaryPTGuard<PT>> final : public Windo
 };
 
 template <PrimitiveType PT>
-struct LeadLagState<PT, BinaryPTGuard<PT>> {
+struct LeadLagState<PT, StringPTGuard<PT>> {
     Buffer<uint8_t> value;
     Buffer<uint8_t> default_value;
     bool is_null = false;
@@ -534,7 +534,7 @@ struct LeadLagState<PT, BinaryPTGuard<PT>> {
 };
 
 template <PrimitiveType PT>
-class LeadLagWindowFunction<PT, Slice, BinaryPTGuard<PT>> final : public WindowFunction<LeadLagState<PT>> {
+class LeadLagWindowFunction<PT, Slice, StringPTGuard<PT>> final : public WindowFunction<LeadLagState<PT>> {
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
         this->data(state).value.clear();
         this->data(state).is_null = false;

@@ -18,7 +18,6 @@
 
 #include <string>
 
-#include "Adaptor.hh"
 #include "Compression.hh"
 #include "orc/Exceptions.hh"
 

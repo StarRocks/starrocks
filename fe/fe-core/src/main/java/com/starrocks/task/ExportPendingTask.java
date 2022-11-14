@@ -24,9 +24,9 @@ package com.starrocks.task;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
-import com.starrocks.lake.proto.LockTabletMetadataRequest;
 import com.starrocks.load.ExportFailMsg;
 import com.starrocks.load.ExportJob;
+import com.starrocks.proto.LockTabletMetadataRequest;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
@@ -45,7 +45,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 
-public class ExportPendingTask extends LeaderTask {
+public class ExportPendingTask extends PriorityLeaderTask {
     private static final Logger LOG = LogManager.getLogger(ExportPendingTask.class);
 
     protected final ExportJob job;
@@ -117,6 +117,7 @@ public class ExportPendingTask extends LeaderTask {
                 if (!GlobalStateMgr.getCurrentSystemInfo().checkBackendAvailable(backendId)) {
                     return Status.CANCELLED;
                 }
+                this.job.setBeStartTime(backendId, backend.getLastStartTime());
                 Status status;
                 if (job.exportLakeTable()) {
                     status = lockTabletMetadata(internalScanRange, backend);
@@ -153,7 +154,6 @@ public class ExportPendingTask extends LeaderTask {
         snapshotRequest.setTablet_id(internalScanRange.getTablet_id());
         snapshotRequest.setSchema_hash(Integer.parseInt(internalScanRange.getSchema_hash()));
         snapshotRequest.setVersion(Long.parseLong(internalScanRange.getVersion()));
-        snapshotRequest.setVersion_hash(0);
         snapshotRequest.setTimeout(job.getTimeoutSecond());
         snapshotRequest.setPreferred_snapshot_format(TypesConstants.TPREFER_SNAPSHOT_REQ_VERSION);
 

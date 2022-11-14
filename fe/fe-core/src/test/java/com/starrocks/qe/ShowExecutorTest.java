@@ -24,19 +24,7 @@ package com.starrocks.qe;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.AccessTestUtil;
 import com.starrocks.analysis.Analyzer;
-import com.starrocks.analysis.HelpStmt;
 import com.starrocks.analysis.LabelName;
-import com.starrocks.analysis.SetType;
-import com.starrocks.analysis.ShowAuthorStmt;
-import com.starrocks.analysis.ShowBackendsStmt;
-import com.starrocks.analysis.ShowDbStmt;
-import com.starrocks.analysis.ShowEnginesStmt;
-import com.starrocks.analysis.ShowMaterializedViewStmt;
-import com.starrocks.analysis.ShowPartitionsStmt;
-import com.starrocks.analysis.ShowProcedureStmt;
-import com.starrocks.analysis.ShowRoutineLoadStmt;
-import com.starrocks.analysis.ShowUserStmt;
-import com.starrocks.analysis.ShowVariablesStmt;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
@@ -66,10 +54,22 @@ import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DescribeStmt;
+import com.starrocks.sql.ast.HelpStmt;
+import com.starrocks.sql.ast.SetType;
+import com.starrocks.sql.ast.ShowAuthorStmt;
+import com.starrocks.sql.ast.ShowBackendsStmt;
 import com.starrocks.sql.ast.ShowColumnStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
+import com.starrocks.sql.ast.ShowDbStmt;
+import com.starrocks.sql.ast.ShowEnginesStmt;
+import com.starrocks.sql.ast.ShowMaterializedViewStmt;
+import com.starrocks.sql.ast.ShowPartitionsStmt;
+import com.starrocks.sql.ast.ShowProcedureStmt;
+import com.starrocks.sql.ast.ShowRoutineLoadStmt;
 import com.starrocks.sql.ast.ShowTableStmt;
+import com.starrocks.sql.ast.ShowUserStmt;
+import com.starrocks.sql.ast.ShowVariablesStmt;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageType;
@@ -374,7 +374,7 @@ public class ShowExecutorTest {
         new MockUp<SystemInfoService>() {
             @Mock
             public List<Long> getAvailableBackendIds() {
-                return Arrays.asList(10001L, 10002L, 10003L);       
+                return Arrays.asList(10001L, 10002L, 10003L);
             }
         };
         // Prepare to Test
@@ -682,15 +682,18 @@ public class ShowExecutorTest {
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
 
-        Assert.assertEquals(25, resultSet.getMetaData().getColumnCount());
+        Assert.assertEquals(28, resultSet.getMetaData().getColumnCount());
         Assert.assertEquals("BackendId", resultSet.getMetaData().getColumn(0).getName());
-        Assert.assertEquals("StarletPort", resultSet.getMetaData().getColumn(23).getName());
-        Assert.assertEquals("WorkerId", resultSet.getMetaData().getColumn(24).getName());
+        Assert.assertEquals("NumRunningQueries", resultSet.getMetaData().getColumn(23).getName());
+        Assert.assertEquals("MemUsedPct", resultSet.getMetaData().getColumn(24).getName());
+        Assert.assertEquals("CpuUsedPct", resultSet.getMetaData().getColumn(25).getName());
+        Assert.assertEquals("StarletPort", resultSet.getMetaData().getColumn(26).getName());
+        Assert.assertEquals("WorkerId", resultSet.getMetaData().getColumn(27).getName());
 
         Assert.assertTrue(resultSet.next());
         Assert.assertEquals("1", resultSet.getString(0));
         Assert.assertEquals("0", resultSet.getString(23));
-        Assert.assertEquals("5", resultSet.getString(24));
+        Assert.assertEquals("5", resultSet.getString(27));
 
         Config.integrate_starmgr = false;
     }

@@ -22,7 +22,6 @@
 package com.starrocks.http.rest;
 
 import com.google.common.base.Strings;
-import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
@@ -40,6 +39,7 @@ import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.plan.ExecPlan;
@@ -196,6 +196,7 @@ public class TableQueryPlanAction extends RestBaseAction {
             execPlan = new StatementPlanner().plan(statementBase, context);
             context.getSessionVariable().setSingleNodeExecPlan(false);
         } catch (Exception e) {
+            LOG.error("error occurred when optimizing queryId: {}", context.getQueryId(), e);
             throw new StarRocksHttpException(HttpResponseStatus.INTERNAL_SERVER_ERROR,
                     "The Sql is invalid");
         }
@@ -237,6 +238,7 @@ public class TableQueryPlanAction extends RestBaseAction {
         }
 
         if (execPlan == null) {
+            LOG.error("plan is null for queryId: {}", context.getQueryId());
             throw new StarRocksHttpException(HttpResponseStatus.INTERNAL_SERVER_ERROR,
                     "The Sql is invalid");
         }

@@ -21,7 +21,6 @@
 
 #include "storage/types.h"
 
-#include "exec/vectorized/join_hash_map.h"
 #include "gutil/strings/numbers.h"
 #include "runtime/datetime_value.h"
 #include "runtime/decimalv2_value.h"
@@ -90,6 +89,7 @@ int TypeInfo::cmp(const Datum& left, const Datum& right) const {
 
 class ScalarTypeInfo final : public TypeInfo {
 public:
+    virtual ~ScalarTypeInfo() = default;
     bool equal(const void* left, const void* right) const override { return _equal(left, right); }
 
     int cmp(const void* left, const void* right) const override { return _cmp(left, right); }
@@ -98,19 +98,8 @@ public:
 
     void deep_copy(void* dest, const void* src, MemPool* mem_pool) const override { _deep_copy(dest, src, mem_pool); }
 
-    // See copy_row_in_memtable() in olap/row.h, will be removed in future.
-    // It is same with deep_copy() for all type except for HLL and OBJECT type
-    void copy_object(void* dest, const void* src, MemPool* mem_pool) const override {
-        _copy_object(dest, src, mem_pool);
-    }
-
     void direct_copy(void* dest, const void* src, MemPool* mem_pool) const override {
         _direct_copy(dest, src, mem_pool);
-    }
-
-    //convert and deep copy value from other type's source
-    Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type, MemPool* mem_pool) const override {
-        return _convert_from(dest, src, src_type, mem_pool);
     }
 
     Status from_string(void* buf, const std::string& scan_key) const override { return _from_string(buf, scan_key); }
@@ -134,9 +123,7 @@ private:
 
     void (*_shallow_copy)(void* dest, const void* src);
     void (*_deep_copy)(void* dest, const void* src, MemPool* mem_pool);
-    void (*_copy_object)(void* dest, const void* src, MemPool* mem_pool);
     void (*_direct_copy)(void* dest, const void* src, MemPool* mem_pool);
-    Status (*_convert_from)(void* dest, const void* src, const TypeInfoPtr& src_type, MemPool* mem_pool);
 
     Status (*_from_string)(void* buf, const std::string& scan_key);
     std::string (*_to_string)(const void* src);
@@ -167,14 +154,14 @@ struct ScalarTypeInfoImplBase {
     static const int32_t size = sizeof(CppType);
 
     static bool equal(const void* left, const void* right) {
-        CppType l_value = unaligned_load<CppType>(left);
-        CppType r_value = unaligned_load<CppType>(right);
+        auto l_value = unaligned_load<CppType>(left);
+        auto r_value = unaligned_load<CppType>(right);
         return l_value == r_value;
     }
 
     static int cmp(const void* left, const void* right) {
-        CppType left_int = unaligned_load<CppType>(left);
-        CppType right_int = unaligned_load<CppType>(right);
+        auto left_int = unaligned_load<CppType>(left);
+        auto right_int = unaligned_load<CppType>(right);
         if (left_int < right_int) {
             return -1;
         } else if (left_int > right_int) {
@@ -277,9 +264,7 @@ ScalarTypeInfo::ScalarTypeInfo([[maybe_unused]] TypeInfoImpl t)
           _cmp(TypeInfoImpl::cmp),
           _shallow_copy(TypeInfoImpl::shallow_copy),
           _deep_copy(TypeInfoImpl::deep_copy),
-          _copy_object(TypeInfoImpl::copy_object),
           _direct_copy(TypeInfoImpl::direct_copy),
-          _convert_from(TypeInfoImpl::convert_from),
           _from_string(TypeInfoImpl::from_string),
           _to_string(TypeInfoImpl::to_string),
           _set_to_max(TypeInfoImpl::set_to_max),
@@ -328,7 +313,7 @@ TypeInfoPtr get_type_info(FieldType field_type) {
 }
 
 TypeInfoPtr get_type_info(const ColumnMetaPB& column_meta_pb) {
-    FieldType type = static_cast<FieldType>(column_meta_pb.type());
+    auto type = static_cast<FieldType>(column_meta_pb.type());
     TypeInfoPtr type_info;
     if (type == OLAP_FIELD_TYPE_ARRAY) {
         const ColumnMetaPB& child = column_meta_pb.children_columns(0);
@@ -499,7 +484,7 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_LARGEINT> : public ScalarTypeInfoImplB
     }
     static std::string to_string(const void* src) {
         char buf[1024];
-        int128_t value = unaligned_load<int128_t>(src);
+        auto value = unaligned_load<int128_t>(src);
         if (value >= std::numeric_limits<int64_t>::lowest() && value <= std::numeric_limits<int64_t>::max()) {
             snprintf(buf, sizeof(buf), "%" PRId64, (int64_t)value);
         } else {
@@ -646,7 +631,7 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_DECIMAL> : public ScalarTypeInfoImplBa
         return Status::OK();
     }
     static std::string to_string(const void* src) {
-        CppType t = unaligned_load<CppType>(src);
+        auto t = unaligned_load<CppType>(src);
         return t.to_string();
     }
     static void set_to_max(void* buf) {
@@ -674,7 +659,7 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_DECIMAL_V2> : public ScalarTypeInfoImp
         return Status::OK();
     }
     static std::string to_string(const void* src) {
-        CppType tmp = unaligned_load<CppType>(src);
+        auto tmp = unaligned_load<CppType>(src);
         return tmp.to_string();
     }
     // GCC7.3 will generate movaps instruction, which will lead to SEGV when buf is
@@ -724,7 +709,7 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_DATE> : public ScalarTypeInfoImplBase<
         return Status::OK();
     }
     static std::string to_string(const void* src) {
-        CppType v = unaligned_load<CppType>(src);
+        auto v = unaligned_load<CppType>(src);
         return v.to_string();
     }
 
@@ -752,7 +737,7 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_DATE> : public ScalarTypeInfoImplBase<
 
         if (src_type->type() == FieldType::OLAP_FIELD_TYPE_INT) {
             using SrcType = typename CppTypeTraits<OLAP_FIELD_TYPE_INT>::CppType;
-            SrcType src_value = unaligned_load<SrcType>(src);
+            auto src_value = unaligned_load<SrcType>(src);
             DateTimeValue dt;
             if (!dt.from_date_int64(src_value)) {
                 return Status::InternalError("Fail to cast to date.");
@@ -843,7 +828,7 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_DATETIME> : public ScalarTypeInfoImplB
     }
     static std::string to_string(const void* src) {
         tm time_tm;
-        CppType tmp = unaligned_load<CppType>(src);
+        auto tmp = unaligned_load<CppType>(src);
         CppType part1 = (tmp / 1000000L);
         CppType part2 = (tmp - part1 * 1000000L);
 
@@ -957,8 +942,8 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_CHAR> : public ScalarTypeInfoImplBase<
         return slice.to_string();
     }
     static void deep_copy(void* dest, const void* src, MemPool* mem_pool) {
-        Slice l_slice = unaligned_load<Slice>(dest);
-        Slice r_slice = unaligned_load<Slice>(src);
+        auto l_slice = unaligned_load<Slice>(dest);
+        auto r_slice = unaligned_load<Slice>(src);
         l_slice.data = reinterpret_cast<char*>(mem_pool->allocate(r_slice.size));
         assert(l_slice.data != nullptr);
         memory_copy(l_slice.data, r_slice.data, r_slice.size);
@@ -969,8 +954,8 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_CHAR> : public ScalarTypeInfoImplBase<
     static void copy_object(void* dest, const void* src, MemPool* mem_pool) { deep_copy(dest, src, mem_pool); }
 
     static void direct_copy(void* dest, const void* src, MemPool* mem_pool) {
-        Slice l_slice = unaligned_load<Slice>(dest);
-        Slice r_slice = unaligned_load<Slice>(src);
+        auto l_slice = unaligned_load<Slice>(dest);
+        auto r_slice = unaligned_load<Slice>(src);
         memory_copy(l_slice.data, r_slice.data, r_slice.size);
         l_slice.size = r_slice.size;
         unaligned_store<Slice>(dest, l_slice);
@@ -1009,7 +994,7 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_VARCHAR> : public ScalarTypeInfoImpl<O
                                                      OLAP_STRING_MAX_LENGTH));
         }
 
-        Slice slice = unaligned_load<Slice>(buf);
+        auto slice = unaligned_load<Slice>(buf);
         memory_copy(slice.data, scan_key.c_str(), value_len);
         slice.size = value_len;
         unaligned_store<Slice>(buf, slice);
@@ -1061,7 +1046,7 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_HLL> : public ScalarTypeInfoImpl<OLAP_
     // See copy_row_in_memtable() in olap/row.h, will be removed in future.
     static void copy_object(void* dest, const void* src, MemPool* mem_pool __attribute__((unused))) {
         Slice dst_slice;
-        Slice src_slice = unaligned_load<Slice>(src);
+        auto src_slice = unaligned_load<Slice>(src);
         DCHECK_EQ(src_slice.size, 0);
         dst_slice.data = src_slice.data;
         dst_slice.size = 0;
@@ -1082,7 +1067,7 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_OBJECT> : public ScalarTypeInfoImpl<OL
     // See copy_row_in_memtable() in olap/row.h, will be removed in future.
     static void copy_object(void* dest, const void* src, MemPool* mem_pool __attribute__((unused))) {
         Slice dst_slice;
-        Slice src_slice = unaligned_load<Slice>(src);
+        auto src_slice = unaligned_load<Slice>(src);
         DCHECK_EQ(src_slice.size, 0);
         dst_slice.data = src_slice.data;
         dst_slice.size = 0;

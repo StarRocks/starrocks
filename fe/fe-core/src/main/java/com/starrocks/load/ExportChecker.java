@@ -23,13 +23,15 @@ package com.starrocks.load;
 
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
+import com.starrocks.common.UserException;
 import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.load.ExportJob.JobState;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.system.Backend;
 import com.starrocks.task.ExportExportingTask;
 import com.starrocks.task.ExportPendingTask;
-import com.starrocks.task.LeaderTask;
 import com.starrocks.task.LeaderTaskExecutor;
+import com.starrocks.task.PriorityLeaderTask;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -123,7 +125,7 @@ public final class ExportChecker extends LeaderDaemon {
 
         for (ExportJob job : pendingJobs) {
             try {
-                LeaderTask task = new ExportPendingTask(job);
+                PriorityLeaderTask task = new ExportPendingTask(job);
                 if (executors.get(JobState.PENDING).submit(task)) {
                     LOG.info("run pending export job. job: {}", job);
                 }
@@ -137,8 +139,12 @@ public final class ExportChecker extends LeaderDaemon {
         List<ExportJob> jobs = GlobalStateMgr.getCurrentState().getExportMgr().getExportJobs(JobState.EXPORTING);
         LOG.debug("exporting export job num: {}", jobs.size());
         for (ExportJob job : jobs) {
+            boolean cancelled = checkJobNeedCancel(job);
+            if (cancelled) {
+                continue;
+            }
             try {
-                LeaderTask task = new ExportExportingTask(job);
+                PriorityLeaderTask task = new ExportExportingTask(job);
                 if (executors.get(JobState.EXPORTING).submit(task)) {
                     LOG.info("run exporting export job. job: {}", job);
                 }
@@ -146,5 +152,43 @@ public final class ExportChecker extends LeaderDaemon {
                 LOG.warn("run export exporing job error", e);
             }
         }
+    }
+
+    private boolean checkJobNeedCancel(ExportJob job) {
+
+        boolean beHasErr = false;
+        String errMsg = "";
+        for (Long beId : job.getBeStartTimeMap().keySet()) {
+            Backend be = GlobalStateMgr.getCurrentSystemInfo().getBackend(beId);
+            if (null == be) {
+                // The current implementation, if the be in the job is not found, 
+                // the job will be cancelled
+                beHasErr = true;
+                errMsg = "be not found during exec export job. be:" + beId;
+                LOG.warn(errMsg + " job: {}", job);
+                break;
+            }
+            if (!be.isAlive()) {
+                beHasErr = true;
+                errMsg = "be not alive during exec export job. be:" + beId;
+                LOG.warn(errMsg + " job: {}", job);
+                break;
+            }
+            if (be.getLastStartTime() > job.getBeStartTimeMap().get(beId)) {
+                beHasErr = true;
+                errMsg = "be has rebooted during exec export job. be:" + beId;
+                LOG.warn(errMsg + " job: {}", job);
+                break;
+            }
+        }
+        if (beHasErr) {
+            try {
+                job.cancel(ExportFailMsg.CancelType.BE_STATUS_ERR, errMsg);
+            } catch (UserException e) {
+                LOG.warn("try to cancel a completed job. job: {}", job);
+            }
+            return true;
+        }
+        return false;
     }
 }

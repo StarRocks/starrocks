@@ -27,7 +27,3 @@ Note:
     ADMIN CHECK TABLET (10000, 10001)
     PROPERTIES("type" = "consistency");
     ```
-
-## keyword
-
-ADMIN,CHECK,TABLET

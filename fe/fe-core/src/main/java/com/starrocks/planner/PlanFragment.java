@@ -29,7 +29,10 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.common.Pair;
 import com.starrocks.common.TreeNode;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
+import com.starrocks.system.BackendCoreStat;
+import com.starrocks.thrift.TCacheParam;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TGlobalDict;
 import com.starrocks.thrift.TNetworkAddress;
@@ -44,6 +47,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * PlanFragments form a tree structure via their ExchangeNodes. A tree of fragments
@@ -135,17 +139,28 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
     private final Set<Integer> runtimeFilterBuildNodeIds = Sets.newHashSet();
 
+    private boolean hasJoinNode = false;
+    private boolean hasOlapScanNode = false;
+
+    private PlanNodeId cachePlanNodeId = null;
+    private ByteBuffer digest = null;
+    private Map<Integer, Integer> slotRemapping = Maps.newHashMap();
+    private Map<Long, String> rangeMap = Maps.newHashMap();
+    private boolean hasOlapTableSink = false;
+    private boolean forceSetTableSinkDop = false;
+    private boolean forceAssignScanRangesPerDriverSeq = false;
+
     /**
      * C'tor for fragment with specific partition; the output is by default broadcast.
      */
     public PlanFragment(PlanFragmentId id, PlanNode root, DataPartition partition) {
         this.fragmentId = id;
-        this.planRoot = root;
         this.dataPartition = partition;
         this.outputPartition = DataPartition.UNPARTITIONED;
         this.transferQueryStatisticsWithEveryBatch = false;
         // when dop adaptation is enabled, parallelExecNum and pipelineDop set to degreeOfParallelism and 1 respectively
         // in default. these values just a hint to help determine numInstances and pipelineDop of a PlanFragment.
+        setPlanRoot(root);
         setParallelExecNumIfExists();
         setFragmentInPlanTree(planRoot);
     }
@@ -211,6 +226,22 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         this.pipelineDop = dop;
     }
 
+    public boolean hasOlapTableSink() {
+        return this.hasOlapTableSink;
+    }
+
+    public void setHasOlapTableSink() {
+        this.hasOlapTableSink = true;
+    }
+
+    public boolean forceSetTableSinkDop() {
+        return this.forceSetTableSinkDop;
+    }
+
+    public void setForceSetTableSinkDop() {
+        this.forceSetTableSinkDop = true;
+    }
+
     public void setEnableSharedScan(boolean enable) {
         this.enableSharedScan = enable;
     }
@@ -225,6 +256,14 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
     public void setAssignScanRangesPerDriverSeq(boolean assignScanRangesPerDriverSeq) {
         this.assignScanRangesPerDriverSeq = assignScanRangesPerDriverSeq;
+    }
+
+    public boolean isForceAssignScanRangesPerDriverSeq() {
+        return forceAssignScanRangesPerDriverSeq;
+    }
+
+    public void setForceAssignScanRangesPerDriverSeq() {
+        this.forceAssignScanRangesPerDriverSeq = true;
     }
 
     public void computeLocalRfWaitingSet(PlanNode root, boolean clearGlobalRuntimeFilter) {
@@ -251,6 +290,38 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
     public void setOutputExprs(List<Expr> outputExprs) {
         this.outputExprs = Expr.cloneList(outputExprs, null);
+    }
+
+    public void setCachePlanNodeId(PlanNodeId cachePlanNodeId) {
+        this.cachePlanNodeId = cachePlanNodeId;
+    }
+
+    public PlanNodeId getCachePlanNodeId() {
+        return cachePlanNodeId;
+    }
+
+    public ByteBuffer getDigest() {
+        return digest;
+    }
+
+    public void setDigest(ByteBuffer digest) {
+        this.digest = digest;
+    }
+
+    public Map<Integer, Integer> getSlotRemapping() {
+        return slotRemapping;
+    }
+
+    public void setSlotRemapping(Map<Integer, Integer> slotRemapping) {
+        this.slotRemapping = slotRemapping;
+    }
+
+    public Map<Long, String> getRangeMap() {
+        return rangeMap;
+    }
+
+    public void setRangeMap(Map<Long, String> rangeMap) {
+        this.rangeMap = rangeMap;
     }
 
     /**
@@ -310,12 +381,27 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         if (!loadGlobalDicts.isEmpty()) {
             result.setLoad_global_dicts(dictToThrift(loadGlobalDicts));
         }
+        if (cachePlanNodeId != null && cachePlanNodeId.isValid()) {
+            TCacheParam cacheParam = new TCacheParam();
+            cacheParam.setId(getCachePlanNodeId().asInt());
+            cacheParam.setDigest(getDigest());
+            cacheParam.setRegion_map(getRangeMap());
+            cacheParam.setSlot_remapping(getSlotRemapping());
+            if (ConnectContext.get() != null) {
+                SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
+                cacheParam.setForce_populate(sessionVariable.isQueryCacheForcePopulate());
+                cacheParam.setEntry_max_bytes(sessionVariable.getQueryCacheEntryMaxBytes());
+                cacheParam.setEntry_max_rows(sessionVariable.getQueryCacheEntryMaxRows());
+            }
+            result.setCache_param(cacheParam);
+        }
         return result;
     }
 
     /**
      * Create thrift fragment with the unique fields, including
      * - output_sink (only for MultiCastDataStreamSink and ExportSink).
+     *
      * @return The thrift fragment with the unique fields.
      */
     public TPlanFragment toThriftForUniqueFields() {
@@ -449,6 +535,11 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
     public void setPlanRoot(PlanNode root) {
         planRoot = root;
+        if (root instanceof JoinNode) {
+            hasJoinNode = true;
+        } else if (root instanceof OlapScanNode) {
+            hasOlapScanNode = true;
+        }
         setFragmentInPlanTree(planRoot);
     }
 
@@ -540,7 +631,10 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
     // For plan fragment has join
     public void mergeQueryGlobalDicts(List<Pair<Integer, ColumnDict>> dicts) {
-        this.queryGlobalDicts.addAll(dicts);
+        if (this.queryGlobalDicts != dicts) {
+            this.queryGlobalDicts = Stream.concat(this.queryGlobalDicts.stream(), dicts.stream()).distinct()
+                    .collect(Collectors.toList());
+        }
     }
 
     public void setLoadGlobalDicts(
@@ -564,4 +658,11 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         return false;
     }
 
+    public boolean hasJoinNode() {
+        return hasJoinNode;
+    }
+
+    public boolean hasOlapScanNode() {
+        return hasOlapScanNode;
+    }
 }

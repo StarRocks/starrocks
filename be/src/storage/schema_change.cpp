@@ -21,8 +21,7 @@
 
 #include "storage/schema_change.h"
 
-#include <signal.h>
-
+#include <csignal>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -67,9 +66,8 @@ public:
     bool sort(ChunkPtr& chunk, const TabletSharedPtr& new_tablet);
 
 private:
-    ChunkAllocator* _chunk_allocator = nullptr;
     ChunkPtr _swap_chunk;
-    size_t _max_allocated_rows;
+    size_t _max_allocated_rows{0};
 };
 
 // TODO: optimize it with vertical sort
@@ -100,8 +98,7 @@ private:
     std::unique_ptr<ChunkAggregator> _aggregator;
 };
 
-ChunkSorter::ChunkSorter(ChunkAllocator* chunk_allocator)
-        : _chunk_allocator(chunk_allocator), _swap_chunk(nullptr), _max_allocated_rows(0) {}
+ChunkSorter::ChunkSorter(ChunkAllocator* chunk_allocator) : _swap_chunk(nullptr) {}
 
 ChunkSorter::~ChunkSorter() = default;
 
@@ -119,16 +116,13 @@ bool ChunkSorter::sort(ChunkPtr& chunk, const TabletSharedPtr& new_tablet) {
     _swap_chunk->reset();
 
     Columns key_columns;
-    std::vector<int> sort_orders;
-    std::vector<int> null_firsts;
-    for (int i = 0; i < chunk->schema()->num_key_fields(); i++) {
+    int num_key_columns = chunk->schema()->num_key_fields();
+    for (int i = 0; i < num_key_columns; i++) {
         key_columns.push_back(chunk->get_column_by_index(i));
-        sort_orders.push_back(1);
-        null_firsts.push_back(-1);
     }
 
     SmallPermutation perm = create_small_permutation(chunk->num_rows());
-    Status st = stable_sort_and_tie_columns(false, key_columns, sort_orders, null_firsts, &perm);
+    Status st = stable_sort_and_tie_columns(false, key_columns, SortDescs::asc_null_first(num_key_columns), &perm);
     CHECK(st.ok());
     std::vector<uint32_t> selective;
     permutate_to_selective(perm, &selective);
@@ -140,7 +134,7 @@ bool ChunkSorter::sort(ChunkPtr& chunk, const TabletSharedPtr& new_tablet) {
 }
 
 ChunkAllocator::ChunkAllocator(const TabletSchema& tablet_schema, size_t memory_limitation)
-        : _tablet_schema(tablet_schema), _memory_limitation(memory_limitation) {
+        : _memory_limitation(memory_limitation) {
     // Before the first chunk is readed, for the Varchar type, we can't get the actual size,
     // so we can only conservatively estimate a value for variable length type.
     // Then later, row_len will be adjusted according to the Chunk that has been read.
@@ -913,7 +907,7 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterTable
     return Status::OK();
 }
 
-Status SchemaChangeHandler::_get_versions_to_be_changed(TabletSharedPtr base_tablet,
+Status SchemaChangeHandler::_get_versions_to_be_changed(const TabletSharedPtr& base_tablet,
                                                         std::vector<Version>* versions_to_be_changed) {
     RowsetSharedPtr rowset = base_tablet->rowset_with_max_version();
     if (rowset == nullptr) {
@@ -1046,7 +1040,8 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
     return status;
 }
 
-Status SchemaChangeHandler::_validate_alter_result(TabletSharedPtr new_tablet, const TAlterTabletReqV2& request) {
+Status SchemaChangeHandler::_validate_alter_result(const TabletSharedPtr& new_tablet,
+                                                   const TAlterTabletReqV2& request) {
     int64_t max_continuous_version = new_tablet->max_continuous_version();
     LOG(INFO) << "find max continuous version of tablet=" << new_tablet->full_name()
               << ", version=" << max_continuous_version;

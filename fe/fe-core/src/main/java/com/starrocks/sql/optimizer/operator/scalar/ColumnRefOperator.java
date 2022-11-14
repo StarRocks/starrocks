@@ -5,6 +5,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
@@ -19,11 +20,34 @@ public final class ColumnRefOperator extends ScalarOperator {
     private final String name;
     private boolean nullable;
 
+    private boolean isLambdaArgument;
+
+    // Empty list for default
+    // If it's empty, means select all
+    private final List<List<Integer>> usedSubfieldPosGroup = new ArrayList<>();
+
     public ColumnRefOperator(int id, Type type, String name, boolean nullable) {
         super(OperatorType.VARIABLE, type);
         this.id = id;
         this.name = requireNonNull(name, "name is null");
         this.nullable = nullable;
+        this.isLambdaArgument = false;
+    }
+
+    public void addUsedSubfieldPos(List<Integer> usedNestFieldPos) {
+        this.usedSubfieldPosGroup.add(usedNestFieldPos);
+    }
+
+    public List<List<Integer>> getUsedSubfieldPosGroup() {
+        return this.usedSubfieldPosGroup;
+    }
+
+    public ColumnRefOperator(int id, Type type, String name, boolean nullable, boolean isLambdaArgument) {
+        super(OperatorType.VARIABLE, type);
+        this.id = id;
+        this.name = requireNonNull(name, "name is null");
+        this.nullable = nullable;
+        this.isLambdaArgument = isLambdaArgument;
     }
 
     public int getId() {
@@ -69,6 +93,9 @@ public final class ColumnRefOperator extends ScalarOperator {
     }
 
     public ColumnRefSet getUsedColumns() {
+        if (isLambdaArgument) {
+            return new ColumnRefSet();
+        }
         return new ColumnRefSet(id);
     }
 

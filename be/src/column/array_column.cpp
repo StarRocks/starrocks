@@ -83,6 +83,12 @@ void ArrayColumn::append_datum(const Datum& datum) {
     _offsets->append(_offsets->get_data().back() + array_size);
 }
 
+void ArrayColumn::append_array_element(const Column& elem, size_t null_elem) {
+    _elements->append(elem);
+    _elements->append_nulls(null_elem);
+    _offsets->append(_offsets->get_data().back() + elem.size() + null_elem);
+}
+
 void ArrayColumn::append(const Column& src, size_t offset, size_t count) {
     const auto& array_column = down_cast<const ArrayColumn&>(src);
 
@@ -104,6 +110,7 @@ void ArrayColumn::append_selective(const Column& src, const uint32_t* indexes, u
     }
 }
 
+// TODO(fzh): directly copy elements for un-nested arrays
 void ArrayColumn::append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) {
     for (uint32_t i = 0; i < size; i++) {
         append(src, index, 1);
@@ -111,7 +118,7 @@ void ArrayColumn::append_value_multiple_times(const Column& src, uint32_t index,
 }
 
 void ArrayColumn::append_value_multiple_times(const void* value, size_t count) {
-    const Datum* datum = reinterpret_cast<const Datum*>(value);
+    const auto* datum = reinterpret_cast<const Datum*>(value);
     const auto& array = datum->get<DatumArray>();
     size_t array_size = array.size();
 
@@ -262,7 +269,7 @@ MutableColumnPtr ArrayColumn::clone_empty() const {
 
 size_t ArrayColumn::filter_range(const Column::Filter& filter, size_t from, size_t to) {
     DCHECK_EQ(size(), to);
-    uint32_t* offsets = reinterpret_cast<uint32_t*>(_offsets->mutable_raw_data());
+    auto* offsets = reinterpret_cast<uint32_t*>(_offsets->mutable_raw_data());
     uint32_t elements_start = offsets[from];
     uint32_t elements_end = offsets[to];
     Filter element_filter(elements_end, 0);
@@ -344,7 +351,7 @@ size_t ArrayColumn::filter_range(const Column::Filter& filter, size_t from, size
 }
 
 int ArrayColumn::compare_at(size_t left, size_t right, const Column& right_column, int nan_direction_hint) const {
-    const ArrayColumn& rhs = down_cast<const ArrayColumn&>(right_column);
+    const auto& rhs = down_cast<const ArrayColumn&>(right_column);
 
     size_t lhs_offset = _offsets->get_data()[left];
     size_t lhs_size = _offsets->get_data()[left + 1] - lhs_offset;
@@ -442,7 +449,20 @@ Datum ArrayColumn::get(size_t idx) const {
     for (size_t i = 0; i < array_size; ++i) {
         res[i] = _elements->get(offset + i);
     }
-    return Datum(res);
+    return {res};
+}
+
+std::pair<size_t, size_t> ArrayColumn::get_element_offset_size(size_t idx) const {
+    DCHECK_LT(idx + 1, _offsets->size());
+    size_t offset = _offsets->get_data()[idx];
+    size_t size = _offsets->get_data()[idx + 1] - _offsets->get_data()[idx];
+    return {offset, size};
+}
+
+size_t ArrayColumn::get_element_null_count(size_t idx) const {
+    auto offset_size = get_element_offset_size(idx);
+    auto nullable = down_cast<NullableColumn*>(_elements.get());
+    return nullable->null_count(offset_size.first, offset_size.second);
 }
 
 size_t ArrayColumn::get_element_size(size_t idx) const {
@@ -461,7 +481,7 @@ size_t ArrayColumn::element_memory_usage(size_t from, size_t size) const {
 }
 
 void ArrayColumn::swap_column(Column& rhs) {
-    ArrayColumn& array_column = down_cast<ArrayColumn&>(rhs);
+    auto& array_column = down_cast<ArrayColumn&>(rhs);
     _offsets->swap_column(*array_column.offsets_column());
     _elements->swap_column(*array_column.elements_column());
 }
@@ -510,6 +530,49 @@ StatusOr<ColumnPtr> ArrayColumn::upgrade_if_overflow() {
 
 StatusOr<ColumnPtr> ArrayColumn::downgrade() {
     return downgrade_helper_func(&_elements);
+}
+
+bool ArrayColumn::empty_null_array(const NullColumnPtr& null_map) {
+    DCHECK(null_map->size() == this->size());
+    bool need_empty = false;
+    auto size = this->size();
+    // TODO: optimize it using SIMD
+    for (auto i = 0; i < size && !need_empty; ++i) {
+        if (null_map->get_data()[i] && _offsets->get_data()[i + 1] != _offsets->get_data()[i]) {
+            need_empty = true;
+        }
+    }
+    // TODO: copy too much may result in worse performance.
+    if (need_empty) {
+        auto new_array_column = clone_empty();
+        int count = 0;
+        int null_count = 0;
+        for (size_t i = 0; i < size; ++i) {
+            if (null_map->get_data()[i]) {
+                ++null_count;
+                if (count > 0) {
+                    new_array_column->append(*this, i - count, count);
+                    count = 0;
+                }
+            } else {
+                ++count;
+                if (null_count > 0) {
+                    new_array_column->append_default(null_count);
+                    null_count = 0;
+                }
+            }
+        }
+        if (count > 0) {
+            new_array_column->append(*this, size - count, count);
+            count = 0;
+        }
+        if (null_count > 0) {
+            new_array_column->append_default(null_count);
+            null_count = 0;
+        }
+        swap_column(*new_array_column.get());
+    }
+    return need_empty;
 }
 
 } // namespace starrocks::vectorized

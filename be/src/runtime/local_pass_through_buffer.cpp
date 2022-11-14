@@ -119,7 +119,7 @@ void PassThroughChunkBufferManager::open_fragment_instance(const TUniqueId& quer
         std::unique_lock lock(_mutex);
         auto it = _query_id_to_buffer.find(query_id);
         if (it == _query_id_to_buffer.end()) {
-            PassThroughChunkBuffer* buffer = new PassThroughChunkBuffer(query_id);
+            auto* buffer = new PassThroughChunkBuffer(query_id);
             _query_id_to_buffer.emplace(std::make_pair(query_id, buffer));
         } else {
             it->second->ref();

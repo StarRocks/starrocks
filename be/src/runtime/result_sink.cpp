@@ -41,7 +41,7 @@ namespace starrocks {
 
 ResultSink::ResultSink(const RowDescriptor& row_desc, const std::vector<TExpr>& t_output_expr, const TResultSink& sink,
                        int buffer_size)
-        : _row_desc(row_desc), _t_output_expr(t_output_expr), _buf_size(buffer_size) {
+        : _t_output_expr(t_output_expr), _buf_size(buffer_size) {
     if (!sink.__isset.type || sink.type == TResultSinkType::MYSQL_PROTOCAL) {
         _sink_type = TResultSinkType::MYSQL_PROTOCAL;
     } else {
@@ -50,7 +50,7 @@ ResultSink::ResultSink(const RowDescriptor& row_desc, const std::vector<TExpr>& 
 
     if (_sink_type == TResultSinkType::FILE) {
         CHECK(sink.__isset.file_options);
-        _file_opts = std::make_unique<ResultFileOptions>(sink.file_options);
+        _file_opts = std::make_shared<ResultFileOptions>(sink.file_options);
     }
 }
 

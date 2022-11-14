@@ -41,7 +41,3 @@ Timeout：                Job timeout in seconds
 ```sql
 SHOW BACKUP FROM example_db;
 ```
-
-## keyword
-
-SHOW, BACKUP

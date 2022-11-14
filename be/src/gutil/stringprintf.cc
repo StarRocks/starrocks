@@ -2,7 +2,6 @@
 
 #include "gutil/stringprintf.h"
 
-#include <cerrno>
 #include <cstdarg> // For va_list and related operations
 #include <cstdio>  // MSVC requires this for _vsnprintf
 #include <vector>

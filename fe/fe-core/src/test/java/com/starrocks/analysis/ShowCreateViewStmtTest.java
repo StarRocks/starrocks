@@ -77,8 +77,8 @@ public class ShowCreateViewStmtTest {
         GlobalStateMgr.getDdlStmt(createViewStmt.getDbName(), views.get(0), res,
                 null, null, false, false);
         Assert.assertEquals("CREATE VIEW `test_view` (k1 COMMENT \"dt\", k2, v1) COMMENT \"view comment\" " +
-                "AS SELECT `test`.`tbl1`.`k1` AS `k1`, `test`.`tbl1`.`k2` AS `k2`," +
-                " `test`.`tbl1`.`v1` AS `v1` FROM `test`.`tbl1`;", res.get(0));
+                "AS SELECT `test`.`tbl1`.`k1`, `test`.`tbl1`.`k2`, `test`.`tbl1`.`v1`\n" +
+                "FROM `test`.`tbl1`;", res.get(0));
     }
 
 }

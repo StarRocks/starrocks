@@ -10,6 +10,10 @@
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/scan/olap_scan_operator.h"
 #include "exec/pipeline/source_operator.h"
+#include "exec/query_cache/cache_operator.h"
+#include "exec/query_cache/lane_arbiter.h"
+#include "exec/query_cache/multilane_operator.h"
+#include "exec/query_cache/ticket_checker.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
@@ -27,6 +31,9 @@ PipelineDriver::~PipelineDriver() noexcept {
 Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     _runtime_state = runtime_state;
 
+    auto* prepare_timer = ADD_TIMER(_runtime_profile, "DriverPrepareTime");
+    SCOPED_TIMER(prepare_timer);
+
     // TotalTime is reserved name
     _total_timer = ADD_TIMER(_runtime_profile, "DriverTotalTime");
     _active_timer = ADD_TIMER(_runtime_profile, "ActiveTime");
@@ -35,6 +42,7 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     _schedule_timer = ADD_TIMER(_runtime_profile, "ScheduleTime");
     _schedule_counter = ADD_COUNTER(_runtime_profile, "ScheduleCount", TUnit::UNIT);
     _yield_by_time_limit_counter = ADD_COUNTER(_runtime_profile, "YieldByTimeLimit", TUnit::UNIT);
+    _yield_by_preempt_counter = ADD_COUNTER(_runtime_profile, "YieldByPreempt", TUnit::UNIT);
     _block_by_precondition_counter = ADD_COUNTER(_runtime_profile, "BlockByPrecondition", TUnit::UNIT);
     _block_by_output_full_counter = ADD_COUNTER(_runtime_profile, "BlockByOutputFull", TUnit::UNIT);
     _block_by_input_empty_counter = ADD_COUNTER(_runtime_profile, "BlockByInputEmpty", TUnit::UNIT);
@@ -49,8 +57,20 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
 
     DCHECK(_state == DriverState::NOT_READY);
 
-    source_operator()->add_morsel_queue(_morsel_queue);
+    auto* source_op = source_operator();
+    // attach ticket_checker to both ScanOperator and SplitMorselQueue
+    auto should_attach_ticket_checker = (dynamic_cast<ScanOperator*>(source_op) != nullptr) &&
+                                        (dynamic_cast<SplitMorselQueue*>(_morsel_queue) != nullptr) &&
+                                        _fragment_ctx->enable_cache();
+    if (should_attach_ticket_checker) {
+        auto* scan_op = dynamic_cast<ScanOperator*>(source_op);
+        auto* split_morsel_queue = dynamic_cast<SplitMorselQueue*>(_morsel_queue);
+        auto ticket_checker = std::make_shared<query_cache::TicketChecker>();
+        scan_op->set_ticket_checker(ticket_checker);
+        split_morsel_queue->set_ticket_checker(ticket_checker);
+    }
 
+    source_op->add_morsel_queue(_morsel_queue);
     // fill OperatorWithDependency instances into _dependencies from _operators.
     DCHECK(_dependencies.empty());
     _dependencies.reserve(_operators.size());
@@ -72,10 +92,36 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
             _global_rf_wait_timeout_ns = std::max(_global_rf_wait_timeout_ns, op->global_rf_wait_timeout_ns());
         }
     }
+
     if (!all_local_rf_set.empty()) {
         _runtime_profile->add_info_string("LocalRfWaitingSet", strings::Substitute("$0", all_local_rf_set.size()));
     }
     _local_rf_holders = fragment_ctx()->runtime_filter_hub()->gather_holders(all_local_rf_set);
+
+    ssize_t cache_op_idx = -1;
+    query_cache::CacheOperatorPtr cache_op = nullptr;
+    for (auto i = 0; i < _operators.size(); ++i) {
+        if (cache_op = std::dynamic_pointer_cast<query_cache::CacheOperator>(_operators[i]); cache_op != nullptr) {
+            cache_op_idx = i;
+            break;
+        }
+    }
+
+    if (cache_op != nullptr) {
+        query_cache::LaneArbiterPtr lane_arbiter = cache_op->lane_arbiter();
+        query_cache::MultilaneOperators multilane_operators;
+        for (auto i = 0; i < cache_op_idx; ++i) {
+            auto& op = _operators[i];
+            if (auto* multilane_op = dynamic_cast<query_cache::MultilaneOperator*>(op.get()); multilane_op != nullptr) {
+                multilane_op->set_lane_arbiter(lane_arbiter);
+                multilane_operators.push_back(multilane_op);
+            } else if (auto* olap_scan_op = dynamic_cast<OlapScanOperator*>(op.get()); olap_scan_op != nullptr) {
+                olap_scan_op->set_lane_arbiter(lane_arbiter);
+                olap_scan_op->set_cache_operator(cache_op);
+            }
+        }
+        cache_op->set_multilane_operators(std::move(multilane_operators));
+    }
 
     for (auto& op : _operators) {
         int64_t time_spent = 0;
@@ -112,10 +158,22 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     return Status::OK();
 }
 
+static inline bool is_multilane(pipeline::OperatorPtr& op) {
+    if (dynamic_cast<query_cache::MultilaneOperator*>(op.get()) != nullptr) {
+        return true;
+    }
+    // In essence, CacheOperator is also special MultilaneOperator semantically, it also needs handle EOS chunk.
+    // it shall populate cache on receiving EOS chunk of a tablet.
+    if (dynamic_cast<query_cache::CacheOperator*>(op.get()) != nullptr) {
+        return true;
+    }
+    return false;
+}
+
 StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int worker_id) {
     COUNTER_UPDATE(_schedule_counter, 1);
     SCOPED_TIMER(_active_timer);
-    QUERY_TRACE_SCOPED("process", "");
+    QUERY_TRACE_SCOPED("process", _driver_name);
     set_driver_state(DriverState::RUNNING);
     size_t total_chunks_moved = 0;
     size_t total_rows_moved = 0;
@@ -178,8 +236,9 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                 }
 
                 if (return_status.ok()) {
-                    COUNTER_UPDATE(curr_op->_pull_chunk_num_counter, 1);
-                    if (maybe_chunk.value() && maybe_chunk.value()->num_rows() > 0) {
+                    if (maybe_chunk.value() &&
+                        (maybe_chunk.value()->num_rows() > 0 ||
+                         (maybe_chunk.value()->owner_info().is_last_chunk() && is_multilane(next_op)))) {
                         size_t row_num = maybe_chunk.value()->num_rows();
                         total_rows_moved += row_num;
                         {
@@ -187,15 +246,18 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                             QUERY_TRACE_SCOPED(next_op->get_name(), "push_chunk");
                             return_status = next_op->push_chunk(runtime_state, maybe_chunk.value());
                         }
+                        // ignore empty chunk generated by per-tablet computation when query cache enabled
+                        if (row_num > 0L) {
+                            COUNTER_UPDATE(curr_op->_pull_row_num_counter, row_num);
+                            COUNTER_UPDATE(curr_op->_pull_chunk_num_counter, 1);
+                            COUNTER_UPDATE(next_op->_push_chunk_num_counter, 1);
+                            COUNTER_UPDATE(next_op->_push_row_num_counter, row_num);
+                        }
 
                         if (!return_status.ok() && !return_status.is_end_of_file()) {
                             LOG(WARNING) << "push_chunk returns not ok status " << return_status.to_string();
                             return return_status;
                         }
-
-                        COUNTER_UPDATE(curr_op->_pull_row_num_counter, row_num);
-                        COUNTER_UPDATE(next_op->_push_chunk_num_counter, 1);
-                        COUNTER_UPDATE(next_op->_push_row_num_counter, row_num);
                     }
                     num_chunks_moved += 1;
                     total_chunks_moved += 1;
@@ -217,14 +279,13 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
             // exceed the designated thresholds.
             if (time_spent >= YIELD_MAX_TIME_SPENT) {
                 should_yield = true;
-                COUNTER_UPDATE(_yield_by_time_limit_counter, time_spent >= YIELD_MAX_TIME_SPENT);
+                COUNTER_UPDATE(_yield_by_time_limit_counter, 1);
                 break;
             }
-
             if (_workgroup != nullptr && time_spent >= YIELD_PREEMPT_MAX_TIME_SPENT &&
                 _workgroup->driver_sched_entity()->in_queue()->should_yield(this, time_spent)) {
                 should_yield = true;
-                COUNTER_UPDATE(_yield_by_time_limit_counter, time_spent >= YIELD_MAX_TIME_SPENT);
+                COUNTER_UPDATE(_yield_by_preempt_counter, 1);
                 break;
             }
         }
@@ -326,7 +387,7 @@ void PipelineDriver::_close_operators(RuntimeState* runtime_state) {
 void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
     VLOG_ROW << "[Driver] finalize, driver=" << this;
     DCHECK(state == DriverState::FINISH || state == DriverState::CANCELED || state == DriverState::INTERNAL_ERROR);
-    QUERY_TRACE_BEGIN("finalize", "");
+    QUERY_TRACE_BEGIN("finalize", _driver_name);
     _close_operators(runtime_state);
 
     set_driver_state(state);
@@ -361,16 +422,18 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
             // Acquire the pointer to avoid be released when removing query
             auto query_trace = _query_ctx->shared_query_trace();
             auto wg = _workgroup;
+            auto fragment_ctx_ptr = uintptr_t(_fragment_ctx);
+            auto query_ctx_ptr = uintptr_t(_query_ctx);
             if (ExecEnv::GetInstance()->query_context_mgr()->remove(query_id)) {
                 if (wg) {
-                    VLOG_ROW << "decrease num running queries in workgroup " << wg->id() << "query_id=" << query_id
-                             << ",fragment_ctx address=" << _fragment_ctx << ",fragment_instance_id=" << frag_id
-                             << ",active_drivers=" << active_drivers << ", active_fragments=" << active_fragments
-                             << ", query_ctx address=" << _query_ctx;
+                    LOG(INFO) << "decrease num running queries in workgroup " << wg->id()
+                              << " query_id=" << print_id(query_id) << ", fragment_ctx address=" << fragment_ctx_ptr
+                              << ", fragment_instance_id=" << print_id(frag_id) << ", active_drivers=" << active_drivers
+                              << ", active_fragments=" << active_fragments << ", query_ctx address=" << query_ctx_ptr;
                     wg->decr_num_queries();
                 }
             }
-            QUERY_TRACE_END("finalize", "");
+            QUERY_TRACE_END("finalize", _driver_name);
             // @TODO(silverbullet233): if necessary, remove the dump from the execution thread
             // considering that this feature is generally used for debugging,
             // I think it should not have a big impact now
@@ -378,22 +441,28 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
             return;
         }
     }
-    QUERY_TRACE_END("finalize", "");
+    QUERY_TRACE_END("finalize", _driver_name);
 }
 
 void PipelineDriver::_update_overhead_timer() {
     int64_t overhead_time = _active_timer->value();
     RuntimeProfile* profile = _runtime_profile.get();
-    std::vector<RuntimeProfile*> children;
-    profile->get_children(&children);
-    for (auto* child_profile : children) {
-        auto* total_timer = child_profile->get_counter("OperatorTotalTime");
-        if (total_timer != nullptr) {
-            overhead_time -= total_timer->value();
-        }
+    std::vector<RuntimeProfile*> operator_profiles;
+    profile->get_children(&operator_profiles);
+    for (auto* operator_profile : operator_profiles) {
+        auto* common_metrics = operator_profile->get_child("CommonMetrics");
+        DCHECK(common_metrics != nullptr);
+        auto* total_timer = common_metrics->get_counter("OperatorTotalTime");
+        DCHECK(total_timer != nullptr);
+        overhead_time -= total_timer->value();
     }
 
-    COUNTER_UPDATE(_overhead_timer, overhead_time);
+    if (overhead_time < 0) {
+        // All the time are recorded indenpendently, and there may be errors
+        COUNTER_UPDATE(_overhead_timer, 0);
+    } else {
+        COUNTER_UPDATE(_overhead_timer, overhead_time);
+    }
 }
 
 std::string PipelineDriver::to_readable_string() const {
@@ -446,8 +515,8 @@ Status PipelineDriver::_mark_operator_finishing(OperatorPtr& op, RuntimeState* s
         return Status::OK();
     }
 
-    VLOG_ROW << strings::Substitute("[Driver] finishing operator [driver=$0] [operator=$1]", to_readable_string(),
-                                    op->get_name());
+    VLOG_ROW << strings::Substitute("[Driver] finishing operator [fragment_id=$0] [driver=$1] [operator=$2]",
+                                    print_id(state->fragment_instance_id()), to_readable_string(), op->get_name());
     {
         SCOPED_TIMER(op->_finishing_timer);
         op_state = OperatorStage::FINISHING;
@@ -463,8 +532,8 @@ Status PipelineDriver::_mark_operator_finished(OperatorPtr& op, RuntimeState* st
         return Status::OK();
     }
 
-    VLOG_ROW << strings::Substitute("[Driver] finished operator [driver=$0] [operator=$1]", to_readable_string(),
-                                    op->get_name());
+    VLOG_ROW << strings::Substitute("[Driver] finished operator [fragment_id=$0] [driver=$1] [operator=$2]",
+                                    print_id(state->fragment_instance_id()), to_readable_string(), op->get_name());
     {
         SCOPED_TIMER(op->_finished_timer);
         op_state = OperatorStage::FINISHED;
@@ -474,14 +543,19 @@ Status PipelineDriver::_mark_operator_finished(OperatorPtr& op, RuntimeState* st
 }
 
 Status PipelineDriver::_mark_operator_cancelled(OperatorPtr& op, RuntimeState* state) {
-    RETURN_IF_ERROR(_mark_operator_finished(op, state));
+    Status res = _mark_operator_finished(op, state);
+    if (!res.ok()) {
+        LOG(WARNING) << fmt::format("fragment_id {} driver {} cancels operator {} with finished error {}",
+                                    print_id(state->fragment_instance_id()), to_readable_string(), op->get_name(),
+                                    res.get_error_msg());
+    }
     auto& op_state = _operator_stages[op->get_id()];
     if (op_state >= OperatorStage::CANCELLED) {
         return Status::OK();
     }
 
-    VLOG_ROW << strings::Substitute("[Driver] cancelled operator [driver=$0] [operator=$1]", to_readable_string(),
-                                    op->get_name());
+    VLOG_ROW << strings::Substitute("[Driver] cancelled operator [fragment_id=$0] [driver=$1] [operator=$2]",
+                                    print_id(state->fragment_instance_id()), to_readable_string(), op->get_name());
     op_state = OperatorStage::CANCELLED;
     return op->set_cancelled(state);
 }
@@ -498,8 +572,8 @@ Status PipelineDriver::_mark_operator_closed(OperatorPtr& op, RuntimeState* stat
         return Status::OK();
     }
 
-    VLOG_ROW << strings::Substitute("[Driver] close operator [driver=$0] [operator=$1]", to_readable_string(),
-                                    op->get_name());
+    VLOG_ROW << strings::Substitute("[Driver] close operator [fragment_id=$0] [driver=$1] [operator=$2]",
+                                    print_id(state->fragment_instance_id()), to_readable_string(), op->get_name());
     {
         SCOPED_TIMER(op->_close_timer);
         op_state = OperatorStage::CLOSED;

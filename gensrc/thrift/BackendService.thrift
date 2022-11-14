@@ -51,6 +51,15 @@ struct TKafkaLoadInfo {
     4: optional map<string, string> properties;
 }
 
+struct TPulsarLoadInfo {
+    1: required string service_url;
+    2: required string topic;
+    3: required string subscription;
+    4: required list<string> partitions;
+    5: optional map<string, i64> initial_positions;
+    6: optional map<string, string> properties;
+}
+
 struct TRoutineLoadTask {
     1: required Types.TLoadSourceType type
     2: required i64 job_id
@@ -66,6 +75,7 @@ struct TRoutineLoadTask {
     12: optional TKafkaLoadInfo kafka_load_info
     13: optional InternalService.TExecPlanFragmentParams params
     14: optional PlanNodes.TFileFormatType format
+    15: optional TPulsarLoadInfo pulsar_load_info
 }
 
 struct TKafkaMetaProxyRequest {
@@ -83,6 +93,11 @@ struct TProxyRequest {
 struct TProxyResult {
     1: required Status.TStatus status;
     2: optional TKafkaMetaProxyResult kafka_meta_result;
+}
+
+struct TStreamLoadChannel {
+    1: optional string label
+    2: optional i32 channel_id
 }
 
 service BackendService {
@@ -129,6 +144,8 @@ service BackendService {
     TTabletStatResult get_tablet_stat();
 
     Status.TStatus submit_routine_load_task(1:list<TRoutineLoadTask> tasks);
+
+    Status.TStatus finish_stream_load_channel(1:TStreamLoadChannel stream_load_channel);
 
     // starrocks will build  a scan context for this session, context_id returned if success
     StarrocksExternalService.TScanOpenResult open_scanner(1: StarrocksExternalService.TScanOpenParams params);

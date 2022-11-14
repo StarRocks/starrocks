@@ -21,13 +21,14 @@
 
 package com.starrocks.mysql.privilege;
 
-import com.starrocks.analysis.GrantStmt;
 import com.starrocks.analysis.TablePattern;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AST2SQL;
+import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -37,7 +38,6 @@ import java.io.IOException;
 
 public class GlobalPrivEntry extends PrivEntry {
     private static final Logger LOG = LogManager.getLogger(GlobalPrivEntry.class);
-
     private Password password;
     // set domainUserIdent when this a password entry and is set by domain resolver.
     // so that when user checking password with user@'IP' and match a entry set by the resolver,
@@ -118,7 +118,7 @@ public class GlobalPrivEntry extends PrivEntry {
             return -res;
         }
 
-        return -origUser.compareTo(otherEntry.origUser);
+        return -realOrigUser.compareTo(otherEntry.realOrigUser);
     }
 
     @Override
@@ -128,7 +128,7 @@ public class GlobalPrivEntry extends PrivEntry {
         }
 
         GlobalPrivEntry otherEntry = (GlobalPrivEntry) other;
-        if (origHost.equals(otherEntry.origHost) && origUser.equals(otherEntry.origUser)
+        if (origHost.equals(otherEntry.origHost) && realOrigUser.equals(otherEntry.realOrigUser)
                 && isDomain == otherEntry.isDomain) {
             return true;
         }
@@ -138,7 +138,7 @@ public class GlobalPrivEntry extends PrivEntry {
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
-        sb.append("global priv. host: ").append(origHost).append(", user: ").append(origUser);
+        sb.append("global priv. host: ").append(origHost).append(", user: ").append(realOrigUser);
         sb.append(", priv: ").append(privSet).append(", set by resolver: ").append(isSetByDomainResolver);
         sb.append(", domain user ident: ").append(domainUserIdent);
         return sb.toString();
@@ -176,6 +176,8 @@ public class GlobalPrivEntry extends PrivEntry {
         if (privSet.isEmpty()) {
             return null;
         }
-        return new GrantStmt(getUserIdent(), new TablePattern("*", "*"), privSet).toSql();
+        GrantPrivilegeStmt stmt = new GrantPrivilegeStmt(null, "TABLE", getUserIdent());
+        stmt.setAnalysedTable(privSet, new TablePattern("*", "*"));
+        return AST2SQL.toString(stmt);
     }
 }

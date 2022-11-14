@@ -4,14 +4,14 @@ package com.starrocks.catalog;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.MultiItemListPartitionDesc;
-import com.starrocks.analysis.PartitionDesc;
-import com.starrocks.analysis.SingleItemListPartitionDesc;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.MultiItemListPartitionDesc;
+import com.starrocks.sql.ast.PartitionDesc;
+import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

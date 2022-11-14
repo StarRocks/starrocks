@@ -21,10 +21,7 @@
 
 #include "storage/utils.h"
 
-DIAGNOSTIC_PUSH
-DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 #include <bvar/bvar.h>
-DIAGNOSTIC_POP
 #include <dirent.h>
 #include <fmt/format.h>
 #include <lz4/lz4.h>

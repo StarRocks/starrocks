@@ -81,23 +81,12 @@ public:
     const TypeDescriptor& type() const { return _type; }
     TypeDescriptor& type() { return _type; }
     TupleId parent() const { return _parent; }
-    // Returns the column index of this slot, including partition keys.
-    // (e.g., col_pos - num_partition_keys = the table column this slot corresponds to)
-    int col_pos() const { return _col_pos; }
-    // Returns the field index in the generated llvm struct for this slot's tuple
-    int field_idx() const { return _field_idx; }
-    int tuple_offset() const { return _tuple_offset; }
-    const NullIndicatorOffset& null_indicator_offset() const { return _null_indicator_offset; }
     bool is_materialized() const { return _is_materialized; }
     bool is_nullable() const { return _null_indicator_offset.bit_mask != 0; }
 
     int slot_size() const { return _slot_size; }
 
     const std::string& col_name() const { return _col_name; }
-
-    /// Return true if the physical layout of this descriptor matches the physical layout
-    /// of other_desc, but not necessarily ids.
-    bool layout_equals(const SlotDescriptor& other_desc) const;
 
     void to_protobuf(PSlotDescriptor* pslot) const;
 
@@ -112,8 +101,6 @@ private:
     const SlotId _id;
     TypeDescriptor _type;
     const TupleId _parent;
-    const int _col_pos;
-    const int _tuple_offset;
     const NullIndicatorOffset _null_indicator_offset;
     const std::string _col_name;
 
@@ -123,11 +110,6 @@ private:
 
     // the byte size of this slot.
     const int _slot_size;
-
-    // the idx of the slot in the llvm codegen'd tuple struct
-    // this is set by TupleDescriptor during codegen and takes into account
-    // leading null bytes.
-    int _field_idx;
 
     const bool _is_materialized;
 
@@ -140,16 +122,8 @@ class TableDescriptor {
 public:
     TableDescriptor(const TTableDescriptor& tdesc);
     virtual ~TableDescriptor() = default;
-    int num_cols() const { return _num_cols; }
-    int num_clustering_cols() const { return _num_clustering_cols; }
     TableId table_id() const { return _id; }
     virtual std::string debug_string() const;
-
-    // The first _num_clustering_cols columns by position are clustering
-    // columns.
-    bool is_clustering_col(const SlotDescriptor* slot_desc) const {
-        return slot_desc->col_pos() < _num_clustering_cols;
-    }
 
     const std::string& name() const { return _name; }
     const std::string& database() const { return _database; }
@@ -158,8 +132,6 @@ private:
     std::string _name;
     std::string _database;
     TableId _id;
-    int _num_cols;
-    int _num_clustering_cols;
 };
 
 // ============== HDFS Table Descriptor ============
@@ -168,6 +140,7 @@ class HdfsPartitionDescriptor {
 public:
     HdfsPartitionDescriptor(const THdfsTable& thrift_table, const THdfsPartition& thrift_partition);
     HdfsPartitionDescriptor(const THudiTable& thrift_table, const THdfsPartition& thrift_partition);
+    HdfsPartitionDescriptor(const TDeltaLakeTable& thrift_table, const THdfsPartition& thrift_partition);
 
     int64_t id() const { return _id; }
     THdfsFileFormat::type file_format() { return _file_format; }
@@ -177,7 +150,7 @@ public:
     // partition slots would be [x, y]
     // partition key values wold be [1, 2]
     std::vector<ExprContext*>& partition_key_value_evals() { return _partition_key_value_evals; }
-    Status create_part_key_exprs(ObjectPool* pool, int32_t chunk_size);
+    Status create_part_key_exprs(RuntimeState* state, ObjectPool* pool, int32_t chunk_size);
 
 private:
     int64_t _id = 0;
@@ -196,9 +169,9 @@ public:
     virtual int get_partition_col_index(const SlotDescriptor* slot) const;
     virtual HdfsPartitionDescriptor* get_partition(int64_t partition_id) const;
 
-    Status create_key_exprs(ObjectPool* pool, int32_t chunk_size) {
+    Status create_key_exprs(RuntimeState* state, ObjectPool* pool, int32_t chunk_size) {
         for (auto& part : _partition_id_to_desc_map) {
-            RETURN_IF_ERROR(part.second->create_part_key_exprs(pool, chunk_size));
+            RETURN_IF_ERROR(part.second->create_part_key_exprs(state, pool, chunk_size));
         }
         return Status::OK();
     }
@@ -223,6 +196,13 @@ public:
     IcebergTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool);
     ~IcebergTableDescriptor() override = default;
     bool has_partition() const override { return false; }
+};
+
+class DeltaLakeTableDescriptor : public HiveTableDescriptor {
+public:
+    DeltaLakeTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool);
+    ~DeltaLakeTableDescriptor() override = default;
+    bool has_partition() const override { return true; }
 };
 
 class HudiTableDescriptor : public HiveTableDescriptor {
@@ -332,21 +312,14 @@ private:
 class TupleDescriptor {
 public:
     int byte_size() const { return _byte_size; }
-    int num_null_slots() const { return _num_null_slots; }
-    int num_null_bytes() const { return _num_null_bytes; }
     const std::vector<SlotDescriptor*>& slots() const { return _slots; }
     std::vector<SlotDescriptor*>& slots() { return _slots; }
     const std::vector<SlotDescriptor*>& decoded_slots() const { return _decoded_slots; }
     std::vector<SlotDescriptor*>& decoded_slots() { return _decoded_slots; }
-    bool has_varlen_slots() const { return _has_varlen_slots; }
     const TableDescriptor* table_desc() const { return _table_desc; }
     void set_table_desc(TableDescriptor* table_desc) { _table_desc = table_desc; }
 
     TupleId id() const { return _id; }
-
-    /// Return true if the physical layout of this descriptor matches that of other_desc,
-    /// but not necessarily the id.
-    bool layout_equals(const TupleDescriptor& other_desc) const;
 
     std::string debug_string() const;
 
@@ -359,30 +332,22 @@ private:
     const TupleId _id;
     TableDescriptor* _table_desc;
     int _byte_size;
-    int _num_null_slots;
-    int _num_null_bytes;
     std::vector<SlotDescriptor*> _slots; // contains all slots
     // For a low cardinality string column with global dict,
     // The type in _slots is int, in _decode_slots is varchar
     std::vector<SlotDescriptor*> _decoded_slots;
 
-    // Provide quick way to check if there are variable length slots.
-    // True if _string_slots or _collection_slots have entries.
-    bool _has_varlen_slots;
-
     TupleDescriptor(const TTupleDescriptor& tdesc);
     TupleDescriptor(const PTupleDescriptor& tdesc);
     void add_slot(SlotDescriptor* slot);
-
-    /// Returns slots in their physical order.
-    std::vector<SlotDescriptor*> slots_ordered_by_idx() const;
 };
 
 class DescriptorTbl {
 public:
     // Creates a descriptor tbl within 'pool' from thrift_tbl and returns it via 'tbl'.
     // Returns OK on success, otherwise error (in which case 'tbl' will be unset).
-    static Status create(ObjectPool* pool, const TDescriptorTable& thrift_tbl, DescriptorTbl** tbl, int32_t chunk_size);
+    static Status create(RuntimeState* state, ObjectPool* pool, const TDescriptorTable& thrift_tbl, DescriptorTbl** tbl,
+                         int32_t chunk_size);
 
     TableDescriptor* get_table_descriptor(TableId id) const;
     TupleDescriptor* get_tuple_descriptor(TupleId id) const;
@@ -421,43 +386,17 @@ public:
     RowDescriptor(const RowDescriptor& desc)
             : _tuple_desc_map(desc._tuple_desc_map),
               _tuple_idx_nullable_map(desc._tuple_idx_nullable_map),
-              _tuple_idx_map(desc._tuple_idx_map),
-              _has_varlen_slots(desc._has_varlen_slots) {
-        _num_null_slots = 0;
-        std::vector<TupleDescriptor*>::const_iterator it = desc._tuple_desc_map.begin();
-        for (; it != desc._tuple_desc_map.end(); ++it) {
-            _num_null_slots += (*it)->num_null_slots();
-        }
-        _num_null_bytes = (_num_null_slots + 7) / 8;
-    }
+              _tuple_idx_map(desc._tuple_idx_map) {}
 
     RowDescriptor(TupleDescriptor* tuple_desc, bool is_nullable);
 
     // dummy descriptor, needed for the JNI EvalPredicate() function
     RowDescriptor() = default;
 
-    // Returns total size in bytes.
-    // TODO: also take avg string lengths into account, ie, change this
-    // to GetAvgRowSize()
-    int get_row_size() const;
-
-    int num_null_slots() const { return _num_null_slots; }
-
-    int num_null_bytes() const { return _num_null_bytes; }
-
     static const int INVALID_IDX;
 
     // Returns INVALID_IDX if id not part of this row.
     int get_tuple_idx(TupleId id) const;
-
-    // Return true if the Tuple of the given Tuple index is nullable.
-    bool tuple_is_nullable(int tuple_idx) const;
-
-    // Return true if any Tuple of the row is nullable.
-    bool is_any_tuple_nullable() const;
-
-    // Return true if any Tuple has variable length slots.
-    bool has_varlen_slots() const { return _has_varlen_slots; }
 
     // Return descriptors for all tuples in this row, in order of appearance.
     const std::vector<TupleDescriptor*>& tuple_descriptors() const { return _tuple_desc_map; }
@@ -473,22 +412,11 @@ public:
     // Return true if the tuple ids of this descriptor match tuple ids of other desc.
     bool equals(const RowDescriptor& other_desc) const;
 
-    /// Return true if the physical layout of this descriptor matches the physical layout
-    /// of other_desc, but not necessarily the ids.
-    bool layout_equals(const RowDescriptor& other_desc) const;
-
-    /// Return true if the tuples of this descriptor are a prefix of the tuples of
-    /// other_desc. Tuples are compared by their physical layout and not by ids.
-    bool layout_is_prefix_of(const RowDescriptor& other_desc) const;
-
     std::string debug_string() const;
 
 private:
     // Initializes tupleIdxMap during c'tor using the _tuple_desc_map.
     void init_tuple_idx_map();
-
-    // Initializes _has_varlen_slots during c'tor using the _tuple_desc_map.
-    void init_has_varlen_slots();
 
     // map from position of tuple w/in row to its descriptor
     std::vector<TupleDescriptor*> _tuple_desc_map;
@@ -498,12 +426,6 @@ private:
 
     // map from TupleId to position of tuple w/in row
     std::vector<int> _tuple_idx_map;
-
-    // Provide quick way to check if there are variable length slots.
-    bool _has_varlen_slots;
-
-    int _num_null_slots = 0;
-    int _num_null_bytes = 0;
 };
 
 } // namespace starrocks

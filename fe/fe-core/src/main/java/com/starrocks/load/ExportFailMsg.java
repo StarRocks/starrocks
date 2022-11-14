@@ -26,6 +26,7 @@ import java.io.IOException;
 
 public class ExportFailMsg implements Writable {
     public enum CancelType {
+        BE_STATUS_ERR,
         USER_CANCEL,
         SUBMIT_FAIL,
         RUN_FAIL,

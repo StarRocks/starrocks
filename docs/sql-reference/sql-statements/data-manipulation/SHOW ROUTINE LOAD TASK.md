@@ -7,7 +7,3 @@
     ```sql
     SHOW ROUTINE LOAD TASK WHERE JobName = "test1";
     ```
-
-## keyword
-
-SHOW,ROUTINE,LOAD,TASK

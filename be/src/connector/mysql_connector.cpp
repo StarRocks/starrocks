@@ -7,8 +7,7 @@
 #include "exprs/vectorized/in_const_predicate.hpp"
 #include "storage/chunk_helper.h"
 
-namespace starrocks {
-namespace connector {
+namespace starrocks::connector {
 #define APPLY_FOR_NUMERICAL_TYPE(M, APPEND_TO_SQL) \
     M(TYPE_TINYINT, APPEND_TO_SQL)                 \
     M(TYPE_BOOLEAN, APPEND_TO_SQL)                 \
@@ -94,8 +93,7 @@ Status MySQLDataSource::open(RuntimeState* state) {
 
     // In Filter have been put into _conjunct_ctxs,
     // so we iterate all ExprContext to use it.
-    for (int i = 0; i < _conjunct_ctxs.size(); ++i) {
-        ExprContext* ctx = _conjunct_ctxs[i];
+    for (auto ctx : _conjunct_ctxs) {
         const Expr* root_expr = ctx->root();
         if (root_expr == nullptr) {
             continue;
@@ -470,9 +468,8 @@ template <PrimitiveType PT, typename CppType>
 void MySQLDataSource::append_value_to_column(Column* column, CppType& value) {
     using ColumnType = typename vectorized::RunTimeColumnType<PT>;
 
-    ColumnType* runtime_column = down_cast<ColumnType*>(column);
+    auto* runtime_column = down_cast<ColumnType*>(column);
     runtime_column->append(value);
 }
 
-} // namespace connector
-} // namespace starrocks
+} // namespace starrocks::connector

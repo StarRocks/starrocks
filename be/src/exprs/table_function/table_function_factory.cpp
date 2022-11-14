@@ -7,6 +7,7 @@
 #include "column/column.h"
 #include "column/type_traits.h"
 #include "exprs/table_function/json_each.h"
+#include "exprs/table_function/multi_unnest.h"
 #include "exprs/table_function/table_function.h"
 #include "exprs/table_function/unnest.h"
 #include "udf/java/java_function_fwd.h"
@@ -45,7 +46,7 @@ public:
     }
 
     void add_function_mapping(std::string&& name, const std::vector<PrimitiveType>& arg_type,
-                              const std::vector<PrimitiveType>& return_type, TableFunctionPtr table_func) {
+                              const std::vector<PrimitiveType>& return_type, const TableFunctionPtr& table_func) {
         _infos_mapping.emplace(std::make_tuple(name, arg_type, return_type), table_func);
     }
 
@@ -76,6 +77,12 @@ TableFunctionResolver::TableFunctionResolver() {
     add_function_mapping("unnest", {TYPE_ARRAY}, {TYPE_DATETIME}, func_unnest);
     add_function_mapping("unnest", {TYPE_ARRAY}, {TYPE_BOOLEAN}, func_unnest);
     add_function_mapping("unnest", {TYPE_ARRAY}, {TYPE_ARRAY}, func_unnest);
+
+    // Use special invalid as the parameter of multi_unnest, because multi_unnest is a variable parameter function,
+    // and there is no special treatment for different types of input parameters,
+    // this is just for compatibility and find the corresponding function
+    TableFunctionPtr multi_unnest = std::make_shared<MultiUnnest>();
+    add_function_mapping("unnest", {}, {}, multi_unnest);
 
     TableFunctionPtr func_json_each = std::make_shared<JsonEach>();
     add_function_mapping("json_each", {TYPE_JSON}, {TYPE_VARCHAR, TYPE_JSON}, func_json_each);

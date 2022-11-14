@@ -47,6 +47,10 @@ Status OlapScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
         _unused_output_columns.emplace_back(col_name);
     }
 
+    if (tnode.olap_scan_node.__isset.sorted_by_keys_per_tablet) {
+        _sorted_by_keys_per_tablet = tnode.olap_scan_node.sorted_by_keys_per_tablet;
+    }
+
     _estimate_scan_and_output_row_bytes();
 
     return Status::OK();
@@ -340,13 +344,10 @@ Status OlapScanNode::set_scan_ranges(const std::vector<TScanRangeParams>& scan_r
     return Status::OK();
 }
 
-void OlapScanNode::enable_shared_scan(bool enable) {
-    _enable_shared_scan = enable;
-}
-
 StatusOr<pipeline::MorselQueuePtr> OlapScanNode::convert_scan_range_to_morsel_queue(
         const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
-        bool enable_tablet_internal_parallel, size_t num_total_scan_ranges) {
+        bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
+        size_t num_total_scan_ranges) {
     pipeline::Morsels morsels;
     for (const auto& scan_range : scan_ranges) {
         morsels.emplace_back(std::make_unique<pipeline::ScanMorsel>(node_id, scan_range));
@@ -364,8 +365,9 @@ StatusOr<pipeline::MorselQueuePtr> OlapScanNode::convert_scan_range_to_morsel_qu
 
     int64_t scan_dop;
     int64_t splitted_scan_rows;
-    ASSIGN_OR_RETURN(auto could, _could_tablet_internal_parallel(scan_ranges, pipeline_dop, num_total_scan_ranges,
-                                                                 &scan_dop, &splitted_scan_rows));
+    ASSIGN_OR_RETURN(auto could,
+                     _could_tablet_internal_parallel(scan_ranges, pipeline_dop, num_total_scan_ranges,
+                                                     tablet_internal_parallel_mode, &scan_dop, &splitted_scan_rows));
     if (!could) {
         return std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels));
     }
@@ -379,11 +381,13 @@ StatusOr<pipeline::MorselQueuePtr> OlapScanNode::convert_scan_range_to_morsel_qu
     return std::make_unique<pipeline::LogicalSplitMorselQueue>(std::move(morsels), scan_dop, splitted_scan_rows);
 }
 
-StatusOr<bool> OlapScanNode::_could_tablet_internal_parallel(const std::vector<TScanRangeParams>& scan_ranges,
-                                                             int32_t pipeline_dop, size_t num_total_scan_ranges,
-                                                             int64_t* scan_dop, int64_t* splitted_scan_rows) const {
+StatusOr<bool> OlapScanNode::_could_tablet_internal_parallel(
+        const std::vector<TScanRangeParams>& scan_ranges, int32_t pipeline_dop, size_t num_total_scan_ranges,
+        TTabletInternalParallelMode::type tablet_internal_parallel_mode, int64_t* scan_dop,
+        int64_t* splitted_scan_rows) const {
+    bool force_split = tablet_internal_parallel_mode == TTabletInternalParallelMode::type::FORCE_SPLIT;
     // The enough number of tablets shouldn't use tablet internal parallel.
-    if (num_total_scan_ranges >= pipeline_dop) {
+    if (!force_split && num_total_scan_ranges >= pipeline_dop) {
         return false;
     }
 
@@ -402,6 +406,10 @@ StatusOr<bool> OlapScanNode::_could_tablet_internal_parallel(const std::vector<T
     *scan_dop = num_table_rows / *splitted_scan_rows;
     *scan_dop = std::max<int64_t>(1, std::min<int64_t>(*scan_dop, pipeline_dop));
 
+    if (force_split) {
+        return true;
+    }
+
     bool could = *scan_dop >= pipeline_dop || *scan_dop >= config::tablet_internal_parallel_min_scan_dop;
     return could;
 }
@@ -411,8 +419,8 @@ StatusOr<bool> OlapScanNode::_could_split_tablet_physically(const std::vector<TS
     ASSIGN_OR_RETURN(TabletSharedPtr first_tablet, get_tablet(&(scan_ranges[0].scan_range.internal_scan_range)));
     KeysType keys_type = first_tablet->tablet_schema().keys_type();
     const auto skip_aggr = thrift_olap_scan_node().is_preaggregation;
-    bool is_keys_type_matched =
-            keys_type == PRIMARY_KEYS || keys_type == DUP_KEYS || (keys_type == UNIQUE_KEYS && skip_aggr);
+    bool is_keys_type_matched = keys_type == PRIMARY_KEYS || keys_type == DUP_KEYS ||
+                                ((keys_type == UNIQUE_KEYS || keys_type == AGG_KEYS) && skip_aggr);
     return is_keys_type_matched;
 }
 
@@ -432,7 +440,7 @@ Status OlapScanNode::_start_scan(RuntimeState* state) {
     OlapScanConjunctsManager& cm = _conjuncts_manager;
     cm.conjunct_ctxs_ptr = &_conjunct_ctxs;
     cm.tuple_desc = _tuple_desc;
-    cm.obj_pool = &_obj_pool;
+    cm.obj_pool = _pool;
     cm.key_column_names = &_olap_scan_node.key_column_name;
     cm.runtime_filters = &_runtime_filter_collector;
     cm.runtime_state = state;
@@ -476,6 +484,8 @@ void OlapScanNode::_init_counter(RuntimeState* state) {
     _bi_filtered_counter = ADD_CHILD_COUNTER(_scan_profile, "BitmapIndexFilterRows", TUnit::UNIT, "SegmentInit");
     _bf_filtered_counter = ADD_CHILD_COUNTER(_scan_profile, "BloomFilterFilterRows", TUnit::UNIT, "SegmentInit");
     _seg_zm_filtered_counter = ADD_CHILD_COUNTER(_scan_profile, "SegmentZoneMapFilterRows", TUnit::UNIT, "SegmentInit");
+    _seg_rt_filtered_counter =
+            ADD_CHILD_COUNTER(_scan_profile, "SegmentRuntimeZoneMapFilterRows", TUnit::UNIT, "SegmentInit");
     _zm_filtered_counter = ADD_CHILD_COUNTER(_scan_profile, "ZoneMapIndexFilterRows", TUnit::UNIT, "SegmentInit");
     _sk_filtered_counter = ADD_CHILD_COUNTER(_scan_profile, "ShortKeyFilterRows", TUnit::UNIT, "SegmentInit");
 
@@ -599,7 +609,7 @@ Status OlapScanNode::_start_scan_thread(RuntimeState* state) {
             scanner_params.skip_aggregation = _olap_scan_node.is_preaggregation;
             scanner_params.need_agg_finalize = true;
             scanner_params.unused_output_columns = &_unused_output_columns;
-            auto* scanner = _obj_pool.add(new TabletScanner(this));
+            auto* scanner = _pool->add(new TabletScanner(this));
             RETURN_IF_ERROR(scanner->init(state, scanner_params));
             // Assume all scanners have the same schema.
             _chunk_schema = &scanner->chunk_schema();

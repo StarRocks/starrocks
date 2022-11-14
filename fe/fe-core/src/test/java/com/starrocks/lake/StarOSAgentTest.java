@@ -8,9 +8,12 @@ import com.google.common.collect.Sets;
 import com.staros.client.StarClient;
 import com.staros.client.StarClientException;
 import com.staros.proto.AllocateStorageInfo;
+import com.staros.proto.CreateShardGroupInfo;
+import com.staros.proto.CreateShardInfo;
 import com.staros.proto.ObjectStorageInfo;
 import com.staros.proto.ReplicaInfo;
 import com.staros.proto.ReplicaRole;
+import com.staros.proto.ShardGroupInfo;
 import com.staros.proto.ShardInfo;
 import com.staros.proto.ShardStorageInfo;
 import com.staros.proto.StatusCode;
@@ -30,6 +33,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -235,18 +239,36 @@ public class StarOSAgentTest {
 
     @Test
     public void testCreateShards() throws StarClientException, DdlException {
-        new Expectations() {
-            {
-                client.createShard("1", 2, 1, null, null);
-                minTimes = 0;
-                result = Lists.newArrayList(ShardInfo.newBuilder().setShardId(10L).build(),
-                        ShardInfo.newBuilder().setShardId(11L).build());
+        ShardInfo shard1 = ShardInfo.newBuilder().setShardId(10L).build();
+        ShardInfo shard2 = ShardInfo.newBuilder().setShardId(11L).build();
+        List<ShardInfo> shards = Lists.newArrayList(shard1, shard2);
+
+        long groupId = 333;
+        ShardGroupInfo info = ShardGroupInfo.newBuilder().setGroupId(groupId).build();
+        List<ShardGroupInfo> groups = new ArrayList<>(1);
+        groups.add(info);
+
+        new MockUp<StarClient>() {
+            @Mock
+            public List<ShardInfo> createShard(String serviceId, List<CreateShardInfo> createShardInfos)
+                    throws StarClientException {
+                return shards;
+            }
+
+            @Mock
+            public List<ShardGroupInfo> createShardGroup(String serviceId, List<CreateShardGroupInfo> createShardGroupInfos)
+                    throws StarClientException {
+                return groups;
             }
         };
 
         Deencapsulation.setField(starosAgent, "serviceId", "1");
-        Assert.assertEquals(Lists.newArrayList(10L, 11L), starosAgent.createShards(2, null));
+        // test create shard group
+        ExceptionChecker.expectThrowsNoException(() -> starosAgent.createShardGroup(groupId));
+        // test create shards
+        Assert.assertEquals(Lists.newArrayList(10L, 11L), starosAgent.createShards(2, null, groupId));
     }
+
 
     @Test
     public void testDeleteShards() throws StarClientException, DdlException {
@@ -262,6 +284,7 @@ public class StarOSAgentTest {
         };
 
         Deencapsulation.setField(starosAgent, "serviceId", "1");
+        // test delete shard
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
                 "Failed to delete shards.",
                 () -> starosAgent.deleteShards(shardIds));

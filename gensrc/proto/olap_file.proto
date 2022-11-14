@@ -77,6 +77,8 @@ message RowsetTxnMetaPB {
 
     // one for each segment
     repeated FooterPointerPB partial_rowset_footers = 3;
+
+    optional string merge_condition = 4;
 }
 
 message RowsetMetaPB {
@@ -137,18 +139,6 @@ message RowsetMetaPB {
 enum DataFileType {
     OLAP_DATA_FILE = 0; //Deprecated. Only columnar-wise format is supported.
     COLUMN_ORIENTED_FILE = 1;
-}
-
-message DeletePredicatePB {
-    required int32 version = 1;
-    repeated string sub_predicates = 2;
-    repeated InPredicatePB in_predicates = 3;
-}
-
-message InPredicatePB {
-    optional string column_name = 1;
-    optional bool is_not_in = 2;
-    repeated string values = 3;
 }
 
 enum AlterTabletState {

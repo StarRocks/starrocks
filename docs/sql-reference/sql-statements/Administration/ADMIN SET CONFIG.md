@@ -19,7 +19,3 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
     ```sql
     ADMIN SET FRONTEND CONFIG ("disable_balance" = "true");
     ```
-
-## keyword
-
-ADMIN,SET,CONFIG

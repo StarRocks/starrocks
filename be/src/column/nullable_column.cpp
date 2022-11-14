@@ -38,6 +38,13 @@ size_t NullableColumn::null_count() const {
     return SIMD::count_nonzero(_null_column->get_data());
 }
 
+size_t NullableColumn::null_count(size_t offset, size_t count) const {
+    if (!_has_null) {
+        return 0;
+    }
+    return SIMD::count_nonzero(_null_column->raw_data() + offset, count);
+}
+
 void NullableColumn::append_datum(const Datum& datum) {
     if (datum.is_null()) {
         append_nulls(1);
@@ -107,8 +114,15 @@ void NullableColumn::append_value_multiple_times(const Column& src, uint32_t ind
     DCHECK_EQ(_null_column->size(), _data_column->size());
 }
 
+ColumnPtr NullableColumn::replicate(const std::vector<uint32_t>& offsets) {
+    return NullableColumn::create(this->_data_column->replicate(offsets),
+                                  std::dynamic_pointer_cast<NullColumn>(this->_null_column->replicate(offsets)));
+}
+
 bool NullableColumn::append_nulls(size_t count) {
-    DCHECK_GT(count, 0u);
+    if (count == 0) {
+        return true;
+    }
     _data_column->append_default(count);
     null_column_data().insert(null_column_data().end(), count, 1);
     DCHECK_EQ(_null_column->size(), _data_column->size());
@@ -137,6 +151,15 @@ bool NullableColumn::append_strings_overflow(const Buffer<Slice>& strs, size_t m
 bool NullableColumn::append_continuous_strings(const Buffer<Slice>& strs) {
     if (_data_column->append_continuous_strings(strs)) {
         null_column_data().resize(_null_column->size() + strs.size(), 0);
+        return true;
+    }
+    DCHECK_EQ(_null_column->size(), _data_column->size());
+    return false;
+}
+
+bool NullableColumn::append_continuous_fixed_length_strings(const char* data, size_t size, int fixed_length) {
+    if (_data_column->append_continuous_fixed_length_strings(data, size, fixed_length)) {
+        null_column_data().resize(_null_column->size() + size, 0);
         return true;
     }
     DCHECK_EQ(_null_column->size(), _data_column->size());
@@ -200,7 +223,7 @@ int NullableColumn::compare_at(size_t left, size_t right, const Column& rhs, int
         return rhs.is_null(right) ? 0 : nan_direction_hint;
     }
     if (rhs.is_nullable()) {
-        const NullableColumn& nullable_rhs = down_cast<const NullableColumn&>(rhs);
+        const auto& nullable_rhs = down_cast<const NullableColumn&>(rhs);
         if (nullable_rhs.immutable_null_column_data()[right]) {
             return -nan_direction_hint;
         }

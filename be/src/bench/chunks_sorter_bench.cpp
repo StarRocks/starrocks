@@ -39,12 +39,13 @@ public:
 
     void TearDown() { _runtime_state.reset(); }
 
-    static std::tuple<ColumnPtr, std::unique_ptr<ColumnRef>> build_sorted_column(TypeDescriptor type_desc,
-                                                                                 int slot_index) {
+    static std::tuple<ColumnPtr, std::unique_ptr<ColumnRef>> build_sorted_column(const TypeDescriptor& type_desc,
+                                                                                 int slot_index, bool low_card,
+                                                                                 bool nullable) {
         DCHECK_EQ(TYPE_INT, type_desc.type);
         using UniformInt = std::uniform_int_distribution<std::mt19937::result_type>;
 
-        ColumnPtr column = ColumnHelper::create_column(type_desc, false);
+        ColumnPtr column = ColumnHelper::create_column(type_desc, nullable);
         auto expr = std::make_unique<ColumnRef>(type_desc, slot_index);
 
         std::random_device dev;
@@ -52,19 +53,23 @@ public:
         UniformInt uniform_int;
         uniform_int.param(UniformInt::param_type(1, 100'000 * std::pow(2, slot_index)));
 
-        std::vector<int32_t> elements(config::vector_chunk_size);
+        int null_count = config::vector_chunk_size / 100;
+        std::vector<int32_t> elements(config::vector_chunk_size - null_count);
         std::generate(elements.begin(), elements.end(), [&]() { return uniform_int(rng); });
         std::sort(elements.begin(), elements.end());
 
+        column->append_nulls(null_count);
         for (int32_t x : elements) {
             column->append_datum(Datum((int32_t)x));
         }
+        down_cast<NullableColumn*>(column.get())->update_has_null();
 
         return {column, std::move(expr)};
     }
 
-    static std::tuple<ColumnPtr, std::unique_ptr<ColumnRef>> build_column(TypeDescriptor type_desc, int slot_index,
-                                                                          bool low_card, bool nullable) {
+    static std::tuple<ColumnPtr, std::unique_ptr<ColumnRef>> build_column(const TypeDescriptor& type_desc,
+                                                                          int slot_index, bool low_card,
+                                                                          bool nullable) {
         using UniformInt = std::uniform_int_distribution<std::mt19937::result_type>;
         using PoissonInt = std::poisson_distribution<std::mt19937::result_type>;
         ColumnPtr column = ColumnHelper::create_column(type_desc, nullable);
@@ -137,24 +142,28 @@ struct SortParameters {
     bool nullable = false;
     int max_buffered_chunks = ChunksSorterTopn::kDefaultBufferedChunks;
 
-    SortParameters() {}
+    SortParameters() = default;
 
-    static SortParameters with_limit(int limit, SortParameters params = SortParameters()) {
+    static SortParameters with_limit(int limit) {
+        SortParameters params;
         params.limit = limit;
         return params;
     }
 
-    static SortParameters with_low_card(bool low_card, SortParameters params = SortParameters()) {
+    static SortParameters with_low_card(bool low_card) {
+        SortParameters params;
         params.low_card = low_card;
         return params;
     }
 
-    static SortParameters with_nullable(bool nullable, SortParameters params = SortParameters()) {
+    static SortParameters with_nullable(bool nullable) {
+        SortParameters params;
         params.nullable = nullable;
         return params;
     }
 
-    static SortParameters with_max_buffered_chunks(int max_buffered_chunks, SortParameters params = SortParameters()) {
+    static SortParameters with_max_buffered_chunks(int max_buffered_chunks) {
+        SortParameters params;
         params.max_buffered_chunks = max_buffered_chunks;
         return params;
     }
@@ -186,7 +195,10 @@ static void do_bench(benchmark::State& state, SortAlgorithm sorter_algo, Primiti
         auto [column, expr] = suite.build_column(type_desc, i, params.low_card, params.nullable);
         columns.push_back(column);
         exprs.emplace_back(std::move(expr));
-        sort_exprs.push_back(new ExprContext(exprs.back().get()));
+        auto sort_expr = new ExprContext(exprs.back().get());
+        ASSERT_OK(sort_expr->prepare(suite._runtime_state.get()));
+        ASSERT_OK(sort_expr->open(suite._runtime_state.get()));
+        sort_exprs.push_back(sort_expr);
         asc_arr.push_back(true);
         null_first.push_back(true);
         map[i] = i;
@@ -206,19 +218,21 @@ static void do_bench(benchmark::State& state, SortAlgorithm sorter_algo, Primiti
 
         switch (sorter_algo) {
         case FullSort: {
-            sorter.reset(new ChunksSorterFullSort(suite._runtime_state.get(), &sort_exprs, &asc_arr, &null_first, ""));
+            sorter = std::make_unique<ChunksSorterFullSort>(suite._runtime_state.get(), &sort_exprs, &asc_arr,
+                                                            &null_first, "");
             expected_rows = total_rows;
             break;
         }
         case HeapSort: {
-            sorter.reset(new ChunksSorterHeapSort(suite._runtime_state.get(), &sort_exprs, &asc_arr, &null_first, "", 0,
-                                                  limit_rows));
+            sorter = std::make_unique<ChunksSorterHeapSort>(suite._runtime_state.get(), &sort_exprs, &asc_arr,
+                                                            &null_first, "", 0, limit_rows);
             expected_rows = limit_rows;
             break;
         }
         case MergeSort: {
-            sorter.reset(new ChunksSorterTopn(suite._runtime_state.get(), &sort_exprs, &asc_arr, &null_first, "", 0,
-                                              limit_rows, TTopNType::ROW_NUMBER, params.max_buffered_chunks));
+            sorter = std::make_unique<ChunksSorterTopn>(suite._runtime_state.get(), &sort_exprs, &asc_arr, &null_first,
+                                                        "", 0, limit_rows, TTopNType::ROW_NUMBER,
+                                                        params.max_buffered_chunks);
             expected_rows = limit_rows;
             break;
         }
@@ -285,10 +299,14 @@ static void do_heap_merge(benchmark::State& state, int num_runs, bool use_merger
     TypeDescriptor type_desc = TypeDescriptor(TYPE_INT);
 
     for (int i = 0; i < num_columns; i++) {
-        auto [column, expr] = suite.build_sorted_column(type_desc, i);
+        auto [column, expr] = suite.build_sorted_column(type_desc, i, false, false);
         columns.push_back(column);
         exprs.emplace_back(std::move(expr));
-        sort_exprs.push_back(new ExprContext(exprs.back().get()));
+        auto sort_expr = new ExprContext(exprs.back().get());
+        ASSERT_OK(sort_expr->prepare(suite._runtime_state.get()));
+        ASSERT_OK(sort_expr->open(suite._runtime_state.get()));
+        sort_exprs.push_back(sort_expr);
+
         asc_arr.push_back(true);
         null_first.push_back(true);
         map[i] = i;
@@ -352,7 +370,7 @@ static void do_heap_merge(benchmark::State& state, int num_runs, bool use_merger
     suite.TearDown();
 }
 
-static void do_merge_columnwise(benchmark::State& state, int num_runs) {
+static void do_merge_columnwise(benchmark::State& state, int num_runs, bool nullable) {
     ChunkSorterBase suite;
     suite.SetUp();
 
@@ -366,10 +384,13 @@ static void do_merge_columnwise(benchmark::State& state, int num_runs) {
     TypeDescriptor type_desc = TypeDescriptor(TYPE_INT);
 
     for (int i = 0; i < num_columns; i++) {
-        auto [column, expr] = suite.build_sorted_column(type_desc, i);
+        auto [column, expr] = suite.build_sorted_column(type_desc, i, false, nullable);
         columns.push_back(column);
         exprs.emplace_back(std::move(expr));
-        sort_exprs.push_back(new ExprContext(exprs.back().get()));
+        auto sort_expr = new ExprContext(exprs.back().get());
+        ASSERT_OK(sort_expr->prepare(suite._runtime_state.get()));
+        ASSERT_OK(sort_expr->open(suite._runtime_state.get()));
+        sort_exprs.push_back(sort_expr);
         asc_arr.push_back(true);
         null_first.push_back(true);
         map[i] = i;
@@ -390,7 +411,7 @@ static void do_merge_columnwise(benchmark::State& state, int num_runs) {
             }
         }
         SortedRuns merged;
-        merge_sorted_chunks(sort_desc, &sort_exprs, inputs, &merged, 0);
+        merge_sorted_chunks(sort_desc, &sort_exprs, inputs, &merged);
         ASSERT_EQ(input_rows, merged.num_rows());
 
         num_rows += merged.num_rows();
@@ -451,7 +472,10 @@ static void BM_merge_heap(benchmark::State& state) {
     do_heap_merge(state, state.range(0), true);
 }
 static void BM_merge_columnwise(benchmark::State& state) {
-    do_merge_columnwise(state, state.range(0));
+    do_merge_columnwise(state, state.range(0), false);
+}
+static void BM_merge_columnwise_nullable(benchmark::State& state) {
+    do_merge_columnwise(state, state.range(0), true);
 }
 
 static void CustomArgsFull(benchmark::internal::Benchmark* b) {
@@ -497,6 +521,7 @@ BENCHMARK(BM_topn_buffered_chunks_tunned)->RangeMultiplier(4)->Ranges({{10, 10'0
 // Merge
 BENCHMARK(BM_merge_heap)->DenseRange(2, 64, 4);
 BENCHMARK(BM_merge_columnwise)->DenseRange(2, 64, 4);
+BENCHMARK(BM_merge_columnwise_nullable)->DenseRange(2, 64, 4);
 
 static size_t plain_find_zero(const std::vector<uint8_t>& bytes) {
     for (size_t i = 0; i < bytes.size(); i++) {

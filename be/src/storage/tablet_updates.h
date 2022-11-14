@@ -48,6 +48,8 @@ struct CompactionInfo {
 class TabletUpdates {
 public:
     using ColumnUniquePtr = std::unique_ptr<vectorized::Column>;
+    using segment_rowid_t = uint32_t;
+    using DeletesMap = std::unordered_map<uint32_t, vector<segment_rowid_t>>;
 
     explicit TabletUpdates(Tablet& tablet);
     ~TabletUpdates();
@@ -161,7 +163,7 @@ public:
     Status convert_from(const std::shared_ptr<Tablet>& base_tablet, int64_t request_version,
                         vectorized::ChunkChanger* chunk_changer);
 
-    Status load_snapshot(const SnapshotMeta& snapshot_meta);
+    Status load_snapshot(const SnapshotMeta& snapshot_meta, bool restore_from_backup = false);
 
     Status get_latest_applied_version(EditVersion* latest_applied_version);
 
@@ -293,7 +295,8 @@ private:
     // Find all but the latest already-applied versions whose creation time is less than or
     // equal to |expire_time|, then append them into |expire_list| and erase them from the
     // in-memory version list.
-    void _erase_expired_versions(int64_t expire_time, std::vector<std::unique_ptr<EditVersionInfo>>* expire_list);
+    void _erase_expired_versions(int64_t expire_time, std::vector<std::unique_ptr<EditVersionInfo>>* expire_list,
+                                 int64_t* min_readable_version);
 
     std::set<uint32_t> _active_rowsets();
 
@@ -302,6 +305,10 @@ private:
     Status _do_compaction(std::unique_ptr<CompactionInfo>* pinfo);
 
     void _calc_compaction_score(RowsetStats* stats);
+
+    Status _do_update(std::uint32_t rowset_id, std::int32_t upsert_idx, std::int32_t condition_column,
+                      const std::vector<ColumnUniquePtr>& upserts, PrimaryIndex& index, std::int64_t tablet_id,
+                      DeletesMap* new_deletes);
 
     // This method will acquire |_lock|.
     size_t _get_rowset_num_deletes(uint32_t rowsetid);

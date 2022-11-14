@@ -109,7 +109,8 @@ public class QueryDumpDeserializer implements JsonDeserializer<QueryDumpInfo> {
             dumpInfo.setCachedAvgNumOfHardwareCores(beCoreStat.get("cachedAvgNumOfHardwareCores").getAsInt());
             Map<Long, Integer> numOfHardwareCoresPerBe = GsonUtils.GSON.fromJson(
                     beCoreStat.get("numOfHardwareCoresPerBe").getAsString(),
-                    new TypeToken<Map<Long, Integer>>() {}.getType());
+                    new TypeToken<Map<Long, Integer>>() {
+                    }.getType());
             dumpInfo.addNumOfHardwareCoresPerBe(numOfHardwareCoresPerBe);
         }
 

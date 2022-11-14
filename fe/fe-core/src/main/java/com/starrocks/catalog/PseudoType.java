@@ -15,6 +15,7 @@ import com.starrocks.thrift.TTypeDesc;
 public class PseudoType extends Type {
     public static final PseudoType ANY_ELEMENT = new AnyElementType();
     public static final PseudoType ANY_ARRAY = new AnyArrayType();
+    public static final PseudoType ANY_MAP = new AnyMapType();
 
     @Override
     protected String prettyPrint(int lpad) {

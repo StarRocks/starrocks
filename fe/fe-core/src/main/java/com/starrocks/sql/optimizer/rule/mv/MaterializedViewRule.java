@@ -677,7 +677,7 @@ public class MaterializedViewRule extends Rule {
         if (candidateIndexMeta.getKeysType() == KeysType.AGG_KEYS && !queryExprList.stream()
                 .filter(queryExpr -> {
                     String fnName = queryExpr.getFnName();
-                    return !(fnName.equals(FunctionSet.COUNT) && fnName.equals(FunctionSet.SUM))
+                    return !(fnName.equals(FunctionSet.COUNT) || fnName.equals(FunctionSet.SUM))
                             || !keyColumns.containsAll(queryExpr.getUsedColumns());
                 }).findAny().isPresent()) {
             return false;

@@ -8,7 +8,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.BrokerDesc;
-import com.starrocks.analysis.DataDescription;
+import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;

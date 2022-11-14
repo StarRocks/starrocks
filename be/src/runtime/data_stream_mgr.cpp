@@ -24,8 +24,7 @@
 #include <iostream>
 #include <utility>
 
-#include "gen_cpp/InternalService_types.h"
-#include "gen_cpp/types.pb.h" // PUniqueId
+#include "runtime/current_thread.h"
 #include "runtime/data_stream_recvr.h"
 #include "runtime/raw_value.h"
 #include "runtime/runtime_state.h"
@@ -39,8 +38,8 @@ DataStreamMgr::DataStreamMgr() {
 }
 
 inline uint32_t DataStreamMgr::get_bucket(const TUniqueId& fragment_instance_id) {
-    uint32_t value = RawValue::get_hash_value(&fragment_instance_id.lo, TYPE_BIGINT, 0);
-    value = RawValue::get_hash_value(&fragment_instance_id.hi, TYPE_BIGINT, value);
+    uint32_t value = HashUtil::hash(&fragment_instance_id.lo, 8, 0);
+    value = HashUtil::hash(&fragment_instance_id.hi, 8, value);
     return value % BUCKET_NUM;
 }
 
@@ -85,7 +84,7 @@ std::shared_ptr<DataStreamRecvr> DataStreamMgr::find_recvr(const TUniqueId& frag
             return sub_iter->second;
         }
     }
-    return std::shared_ptr<DataStreamRecvr>();
+    return {};
 }
 
 Status DataStreamMgr::transmit_data(const PTransmitDataParams* request, ::google::protobuf::Closure** done) {
@@ -131,6 +130,7 @@ Status DataStreamMgr::transmit_chunk(const PTransmitChunkParams& request, ::goog
     TUniqueId t_finst_id;
     t_finst_id.hi = finst_id.hi();
     t_finst_id.lo = finst_id.lo();
+    SCOPED_SET_TRACE_INFO({}, {}, t_finst_id);
     std::shared_ptr<DataStreamRecvr> recvr = find_recvr(t_finst_id, request.node_id());
     if (recvr == nullptr) {
         // The receiver may remove itself from the receiver map via deregister_recvr()
@@ -151,12 +151,15 @@ Status DataStreamMgr::transmit_chunk(const PTransmitChunkParams& request, ::goog
     }
 
     bool eos = request.eos();
+    DeferOp op([&eos, &recvr, &request]() {
+        if (eos) {
+            recvr->remove_sender(request.sender_id(), request.be_number());
+        }
+    });
     if (request.chunks_size() > 0 || request.use_pass_through()) {
         RETURN_IF_ERROR(recvr->add_chunks(request, eos ? nullptr : done));
     }
-    if (eos) {
-        recvr->remove_sender(request.sender_id(), request.be_number());
-    }
+
     return Status::OK();
 }
 
@@ -205,8 +208,8 @@ void DataStreamMgr::cancel(const TUniqueId& fragment_instance_id) {
         auto iter = receiver_map.find(fragment_instance_id);
         if (iter != receiver_map.end()) {
             // all of the value should collect
-            for (auto sub_iter = iter->second->begin(); sub_iter != iter->second->end(); sub_iter++) {
-                recvrs.push_back(sub_iter->second);
+            for (auto& sub_iter : *iter->second) {
+                recvrs.push_back(sub_iter.second);
             }
         }
     }

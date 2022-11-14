@@ -47,6 +47,7 @@ public:
      * @return: Int32Column
      */
     DEFINE_VECTORIZED_FN(md5sum);
+    DEFINE_VECTORIZED_FN(md5sum_numeric);
 
     /**
      * @param: [json_string, tagged_value]

@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 #pragma once
 
+#include "gen_cpp/data.pb.h"
 #include "gutil/macros.h"
 #include "storage/memtable_sink.h"
 #include "storage/rowset/rowset_writer.h"
@@ -14,10 +15,13 @@ public:
 
     DISALLOW_COPY(MemTableRowsetWriterSink);
 
-    Status flush_chunk(const Chunk& chunk) override { return _rowset_writer->flush_chunk(chunk); }
+    Status flush_chunk(const Chunk& chunk, SegmentPB* seg_info = nullptr) override {
+        return _rowset_writer->flush_chunk(chunk, seg_info);
+    }
 
-    Status flush_chunk_with_deletes(const Chunk& upserts, const Column& deletes) override {
-        return _rowset_writer->flush_chunk_with_deletes(upserts, deletes);
+    Status flush_chunk_with_deletes(const Chunk& upserts, const Column& deletes,
+                                    SegmentPB* seg_info = nullptr) override {
+        return _rowset_writer->flush_chunk_with_deletes(upserts, deletes, seg_info);
     }
 
 private:

@@ -39,6 +39,7 @@ struct TTabletSchema {
     7: optional list<Descriptors.TOlapTableIndex> indexes
     8: optional bool is_in_memory
     9: optional i64 id;
+    10: optional list<i32> sort_key_idxes
 }
 
 // this enum stands for different storage format in src_backends
@@ -100,7 +101,6 @@ struct TAlterTabletReqV2 {
     4: required Types.TSchemaHash new_schema_hash
     // version of data which this alter task should transform
     5: optional Types.TVersion alter_version
-    6: optional Types.TVersionHash alter_version_hash // Deprecated
     7: optional list<TAlterMaterializedViewParam> materialized_view_params
     8: optional TTabletType tablet_type
     9: optional i64 txn_id
@@ -189,7 +189,7 @@ struct TUploadReq {
     4: optional map<string, string> broker_prop
     // If use_broker is set, we will write hdfs thourgh broker
     // If use_broker is not set, we will write through libhdfs/S3 directly
-    5: optional bool use_broker = false
+    5: optional bool use_broker
     // hdfs_write_buffer_size_kb for writing through lib hdfs directly
     6: optional i32 hdfs_write_buffer_size_kb = 0
     // properties from hdfs-site.xml, core-site.xml and load_properties
@@ -203,7 +203,7 @@ struct TDownloadReq {
     4: optional map<string, string> broker_prop
     // If use_broker is set, we will write hdfs thourgh broker
     // If use_broker is not set, we will write through libhdfs/S3 directly
-    5: optional bool use_broker = false
+    5: optional bool use_broker
     // hdfs_read_buffer_size_kb for writing through lib hdfs directly
     6: optional i32 hdfs_read_buffer_size_kb = 0
     // properties from hdfs-site.xml, core-site.xml and load_properties
@@ -225,6 +225,7 @@ struct TSnapshotRequest {
     // [range1_start, range1_end(inclusive), ... rangeN_start (implicit to INT64_MAX)]
     // size must be 2*N + 1
     10:optional list<Types.TVersion> missing_version_ranges
+    11:optional bool is_restore_task = false;
 }
 
 struct TReleaseSnapshotRequest {
@@ -283,7 +284,9 @@ struct TRecoverTabletReq {
 enum TTabletMetaType {
     PARTITIONID,
     INMEMORY,
-    ENABLE_PERSISTENT_INDEX
+    ENABLE_PERSISTENT_INDEX,
+    WRITE_QUORUM,
+    REPLICATED_STORAGE
 }
 
 struct TTabletMetaInfo {

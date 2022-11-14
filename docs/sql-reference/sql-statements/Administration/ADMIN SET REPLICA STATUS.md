@@ -40,7 +40,3 @@ Replicas set to Bad status may be dropped immediately, please proceed with cauti
     ```sql
     ADMIN SET REPLICA STATUS PROPERTIES("tablet_id" = "10003", "backend_id" = "10001", "status" = "ok");
     ```
-
-## keyword
-
-ADMIN,SET,REPLICA,STATUS

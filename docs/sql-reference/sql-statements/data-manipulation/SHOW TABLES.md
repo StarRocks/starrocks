@@ -9,7 +9,3 @@ Syntax：
 ```sql
 SHOW TABLES;
 ```
-
-## keyword
-
-SHOW,TABLES

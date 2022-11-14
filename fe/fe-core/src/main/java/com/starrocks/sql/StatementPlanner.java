@@ -1,9 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql;
 
-import com.starrocks.analysis.DeleteStmt;
-import com.starrocks.analysis.StatementBase;
-import com.starrocks.analysis.UpdateStmt;
 import com.starrocks.catalog.Database;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ResultSink;
@@ -11,10 +8,13 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.PrivilegeChecker;
+import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
 import com.starrocks.sql.optimizer.OptimizerTraceUtil;
@@ -49,16 +49,21 @@ public class StatementPlanner {
         }
         try {
             lock(dbLocks);
-            Analyzer.analyze(stmt, session);
+            try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Analyzer")) {
+                Analyzer.analyze(stmt, session);
+            }
+
             PrivilegeChecker.check(stmt, session);
             if (stmt instanceof QueryStatement) {
                 OptimizerTraceUtil.logQueryStatement(session, "after analyze:\n%s", (QueryStatement) stmt);
             }
 
             if (stmt instanceof QueryStatement) {
+                QueryStatement queryStmt = (QueryStatement) stmt;
                 session.setCurrentSqlDbIds(dbs.values().stream().map(Database::getId).collect(Collectors.toSet()));
-                ExecPlan plan = createQueryPlan(((QueryStatement) stmt).getQueryRelation(), session, resultSinkType);
-                setOutfileSink((QueryStatement) stmt, plan);
+                resultSinkType = queryStmt.hasOutFileClause() ? TResultSinkType.FILE : resultSinkType;
+                ExecPlan plan = createQueryPlan(queryStmt.getQueryRelation(), session, resultSinkType);
+                setOutfileSink(queryStmt, plan);
 
                 return plan;
             } else if (stmt instanceof InsertStmt) {
@@ -74,7 +79,6 @@ public class StatementPlanner {
         return null;
     }
 
-
     public static ExecPlan createQueryPlan(Relation relation, ConnectContext session, TResultSinkType resultSinkType) {
         QueryRelation query = (QueryRelation) relation;
         List<String> colNames = query.getColumnOutputNames();
@@ -83,25 +87,45 @@ public class StatementPlanner {
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, session).transformWithSelectLimit(query);
 
-        //2. Optimize logical plan and build physical plan
-        Optimizer optimizer = new Optimizer();
-        OptExpression optimizedPlan = optimizer.optimize(
-                session,
-                logicalPlan.getRoot(),
-                new PhysicalPropertySet(),
-                new ColumnRefSet(logicalPlan.getOutputColumn()),
-                columnRefFactory);
+        // TODO: remove forceDisablePipeline when all the operators support pipeline engine.
+        boolean isEnablePipeline = session.getSessionVariable().isEnablePipelineEngine();
+        boolean canUsePipeline =
+                isEnablePipeline && ResultSink.canUsePipeLine(resultSinkType) && logicalPlan.canUsePipeline();
+        boolean forceDisablePipeline = isEnablePipeline && !canUsePipeline;
+        try {
+            if (forceDisablePipeline) {
+                session.getSessionVariable().setEnablePipelineEngine(false);
+            }
 
-        //3. Build fragment exec plan
-        /*
-         * SingleNodeExecPlan is set in TableQueryPlanAction to generate a single-node Plan,
-         * currently only used in Spark/Flink Connector
-         * Because the connector sends only simple queries, it only needs to remove the output fragment
-         */
-        return new PlanFragmentBuilder().createPhysicalPlan(
-                optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory, colNames,
-                resultSinkType,
-                !session.getSessionVariable().isSingleNodeExecPlan());
+            OptExpression optimizedPlan;
+            try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer")) {
+                //2. Optimize logical plan and build physical plan
+                Optimizer optimizer = new Optimizer();
+                optimizedPlan = optimizer.optimize(
+                        session,
+                        logicalPlan.getRoot(),
+                        new PhysicalPropertySet(),
+                        new ColumnRefSet(logicalPlan.getOutputColumn()),
+                        columnRefFactory);
+            }
+            try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("ExecPlanBuild")) {
+
+                //3. Build fragment exec plan
+                /*
+                 * SingleNodeExecPlan is set in TableQueryPlanAction to generate a single-node Plan,
+                 * currently only used in Spark/Flink Connector
+                 * Because the connector sends only simple queries, it only needs to remove the output fragment
+                 */
+                return new PlanFragmentBuilder().createPhysicalPlan(
+                        optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory, colNames,
+                        resultSinkType,
+                        !session.getSessionVariable().isSingleNodeExecPlan());
+            }
+        } finally {
+            if (forceDisablePipeline) {
+                session.getSessionVariable().setEnablePipelineEngine(true);
+            }
+        }
     }
 
     // Lock all database before analyze
@@ -130,16 +154,12 @@ public class StatementPlanner {
         if (!queryStmt.hasOutFileClause()) {
             return;
         }
-        PlanFragment topFragment = plan.getFragments().get(0);
+        PlanFragment topFragment = plan.getTopFragment();
         if (!(topFragment.getSink() instanceof ResultSink)) {
             return;
         }
 
         ResultSink resultSink = (ResultSink) topFragment.getSink();
         resultSink.setOutfileInfo(queryStmt.getOutFileClause());
-    }
-
-    public static boolean supportedByNewPlanner(StatementBase statement) {
-        return statement.isSupportNewPlanner();
     }
 }

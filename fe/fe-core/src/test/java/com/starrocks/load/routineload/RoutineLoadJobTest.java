@@ -26,8 +26,6 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.AlterRoutineLoadStmt;
-import com.starrocks.analysis.CreateRoutineLoadStmt;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.InternalErrorCode;
@@ -40,6 +38,8 @@ import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AlterRoutineLoadStmt;
+import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.thrift.TKafkaRLTaskProgress;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.utframe.UtFrameUtils;
@@ -285,7 +285,7 @@ public class RoutineLoadJobTest {
                 "   \"strip_outer_array\" = \"" + stripOuterArray + "\"," +
                 "   \"json_root\" = \"" + jsonRoot + "\"" +
                 ")";
-        AlterRoutineLoadStmt stmt = (AlterRoutineLoadStmt) UtFrameUtils.parseAndAnalyzeStmt(originStmt, connectContext);
+        AlterRoutineLoadStmt stmt = (AlterRoutineLoadStmt) UtFrameUtils.parseStmtWithNewParser(originStmt, connectContext);
         routineLoadJob.modifyJob(stmt.getRoutineLoadDesc(), stmt.getAnalyzedJobProperties(),
                 stmt.getDataSourceProperties(), new OriginStatement(originStmt, 0), true);
         Assert.assertEquals(Integer.parseInt(desiredConcurrentNumber),
@@ -318,7 +318,7 @@ public class RoutineLoadJobTest {
                 "   \"property.kafka_default_offsets\" = \"" + defaultOffsets + "\"" +
                 ")";
         routineLoadJob.setOrigStmt(new OriginStatement(originStmt, 0));
-        AlterRoutineLoadStmt stmt = (AlterRoutineLoadStmt) UtFrameUtils.parseAndAnalyzeStmt(originStmt, connectContext);
+        AlterRoutineLoadStmt stmt = (AlterRoutineLoadStmt) UtFrameUtils.parseStmtWithNewParser(originStmt, connectContext);
         routineLoadJob.modifyJob(stmt.getRoutineLoadDesc(), stmt.getAnalyzedJobProperties(),
                 stmt.getDataSourceProperties(), new OriginStatement(originStmt, 0), true);
         routineLoadJob.convertCustomProperties(true);
@@ -341,10 +341,10 @@ public class RoutineLoadJobTest {
                 "PARTITION(p1, p2, p3)," +
                 "ROWS TERMINATED BY \"A\"";
         routineLoadJob.setOrigStmt(new OriginStatement(originStmt, 0));
-        AlterRoutineLoadStmt stmt = (AlterRoutineLoadStmt) UtFrameUtils.parseAndAnalyzeStmt(originStmt, connectContext);
+        AlterRoutineLoadStmt stmt = (AlterRoutineLoadStmt) UtFrameUtils.parseStmtWithNewParser(originStmt, connectContext);
         routineLoadJob.modifyJob(stmt.getRoutineLoadDesc(), stmt.getAnalyzedJobProperties(),
                 stmt.getDataSourceProperties(), new OriginStatement(originStmt, 0), true);
-        Assert.assertEquals("a,b,c,d=`a`", Joiner.on(",").join(routineLoadJob.getColumnDescs()));
+        Assert.assertEquals("a,b,c,d=a", Joiner.on(",").join(routineLoadJob.getColumnDescs()));
         Assert.assertEquals("`a` = 1", routineLoadJob.getWhereExpr().toSql());
         Assert.assertEquals("','", routineLoadJob.getColumnSeparator().toString());
         Assert.assertEquals("'A'", routineLoadJob.getRowDelimiter().toString());
@@ -486,6 +486,23 @@ public class RoutineLoadJobTest {
                 "COLUMNS(`a`), " +
                 "PARTITION(`p1`, `p2`), " +
                 "WHERE `a` = 5 " +
+                "PROPERTIES (\"desired_concurrent_number\"=\"1\") " +
+                "FROM KAFKA (\"kafka_topic\" = \"my_topic\")", routineLoadJob.getOrigStmt().originStmt);
+
+        // alter where again
+        loadDesc = CreateRoutineLoadStmt.getLoadDesc(new OriginStatement(
+                "ALTER ROUTINE LOAD FOR job " +
+                        "WHERE a = 5 and b like 'c1%' and c between 1 and 100 and substring(d,1,5) = 'cefd' ", 0), null);
+        routineLoadJob.mergeLoadDescToOriginStatement(loadDesc);
+        Assert.assertEquals("CREATE ROUTINE LOAD job ON unknown " +
+                "COLUMNS TERMINATED BY '\t', " +
+                "ROWS TERMINATED BY 'a', " +
+                "COLUMNS(`a`), " +
+                "PARTITION(`p1`, `p2`), " +
+                "WHERE (((`a` = 5) " +
+                "AND (`b` LIKE 'c1%')) " +
+                "AND (`c` BETWEEN 1 AND 100)) " +
+                "AND (substring(`d`, 1, 5) = 'cefd') " +
                 "PROPERTIES (\"desired_concurrent_number\"=\"1\") " +
                 "FROM KAFKA (\"kafka_topic\" = \"my_topic\")", routineLoadJob.getOrigStmt().originStmt);
     }

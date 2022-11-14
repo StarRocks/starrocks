@@ -47,8 +47,6 @@ struct IndexValue {
 static constexpr size_t kIndexValueSize = 8;
 static_assert(sizeof(IndexValue) == kIndexValueSize);
 
-class ImmutableIndexShard;
-
 uint64_t key_index_hash(const void* data, size_t len);
 
 struct KeysInfo {
@@ -61,10 +59,11 @@ struct KVRef {
     const uint8_t* kv_pos;
     uint64_t hash;
     uint16_t size;
-    KVRef() {}
+    KVRef() = default;
     KVRef(const uint8_t* kv_pos, uint64_t hash, uint16_t size) : kv_pos(kv_pos), hash(hash), size(size) {}
 };
 
+struct ImmutableIndexShard;
 class PersistentIndex;
 class ImmutableIndexWriter;
 
@@ -164,6 +163,10 @@ public:
 
     virtual size_t memory_usage() = 0;
 
+    virtual void update_overlap_info(size_t overlap_size, size_t overlap_usage) = 0;
+
+    virtual size_t overlap_size() = 0;
+
     static StatusOr<std::unique_ptr<MutableIndex>> create(size_t key_size);
 
     static std::tuple<size_t, size_t> estimate_nshard_and_npage(const size_t total_kv_pairs_usage);
@@ -173,9 +176,9 @@ public:
 
 class ShardByLengthMutableIndex {
 public:
-    ShardByLengthMutableIndex() {}
+    ShardByLengthMutableIndex() = default;
 
-    ShardByLengthMutableIndex(const size_t key_size, const std::string& path)
+    ShardByLengthMutableIndex(const size_t key_size, const std::string& path) // NOLINT
             : _fixed_key_size(key_size), _path(path) {}
 
     ~ShardByLengthMutableIndex() {
@@ -185,6 +188,14 @@ public:
     }
 
     Status init();
+
+    uint64_t file_size() {
+        if (_index_file != nullptr) {
+            return _index_file->size();
+        } else {
+            return 0;
+        }
+    }
 
     // batch get
     // |n|: size of key/value array
@@ -273,6 +284,9 @@ public:
 
     size_t memory_usage();
 
+    Status update_overlap_info(size_t key_size, size_t num_overlap, const Slice* keys, const IndexValue* values,
+                               const KeysInfo& keys_info, bool erase);
+
     static StatusOr<std::unique_ptr<ShardByLengthMutableIndex>> create(size_t key_size, const std::string& path);
 
 private:
@@ -311,11 +325,13 @@ public:
     Status check_not_exist(size_t n, const Slice* keys, size_t key_size);
 
     // get Immutable index file size;
-    void file_size(uint64_t* file_size) {
+    uint64_t file_size() {
         if (_file != nullptr) {
             auto res = _file->get_size();
             CHECK(res.ok()) << res.status(); // FIXME: no abort
-            *file_size = *res;
+            return *res;
+        } else {
+            return 0;
         }
     }
 
@@ -365,8 +381,6 @@ private:
     std::unique_ptr<RandomAccessFile> _file;
     EditVersion _version;
     size_t _size = 0;
-    size_t _fixed_key_size = 0;
-    size_t _fixed_value_size = 0;
 
     struct ShardInfo {
         uint64_t offset;
@@ -376,6 +390,7 @@ private:
         uint32_t key_size;
         uint32_t value_size;
         uint32_t nbucket;
+        uint64_t data_size;
     };
 
     std::vector<ShardInfo> _shards;
@@ -428,7 +443,7 @@ private:
 class PersistentIndex {
 public:
     // |path|: directory that contains index files
-    PersistentIndex(const std::string& path);
+    PersistentIndex(std::string path);
     ~PersistentIndex();
 
     bool loaded() const { return (bool)_l0; }
@@ -523,8 +538,6 @@ private:
     bool _can_dump_directly();
 
     Status _delete_expired_index_file(const EditVersion& l0_version, const EditVersion& l1_version);
-
-    Status _check_and_flush_l0();
 
     Status _flush_l0();
 

@@ -120,7 +120,7 @@ std::unique_ptr<SeekableInputStream> StripeStreamsImpl::getStream(uint64_t colum
         }
         offset += stream.length();
     }
-    return std::unique_ptr<SeekableInputStream>();
+    return {};
 }
 
 MemoryPool& StripeStreamsImpl::getMemoryPool() const {

@@ -6,7 +6,7 @@ Checks whether `arr1` contains all the elements of `arr2`, that is, whether `arr
 
 ## Syntax
 
-~~~sql
+~~~Haskell
 BOOLEAN array_contains_all(arr1, arr2)
 ~~~
 
@@ -14,7 +14,7 @@ BOOLEAN array_contains_all(arr1, arr2)
 
 `arr`: the two arrays to compare. This syntax checks whether `arr2` is a subset of `arr1`.
 
-The data types of elements in the two arrays must be the same. For the data types of array elements supported by StarRocks, see [Array](/docs/sql-reference/sql-statements/data-types/Array.md).
+The data types of elements in the two arrays must be the same. For the data types of array elements supported by StarRocks, see [ARRAY](../../../sql-reference/sql-statements/data-types/Array.md).
 
 ## Return value
 

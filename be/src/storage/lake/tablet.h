@@ -7,7 +7,7 @@
 #include <string_view>
 
 #include "common/statusor.h"
-#include "gen_cpp/lake_delete.pb.h"
+#include "gen_cpp/types.pb.h"
 #include "storage/lake/metadata_iterator.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet_metadata.h"

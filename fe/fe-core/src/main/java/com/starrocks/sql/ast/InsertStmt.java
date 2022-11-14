@@ -4,10 +4,7 @@ package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.DmlStmt;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.InsertTarget;
-import com.starrocks.analysis.PartitionNames;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
@@ -64,10 +61,10 @@ public class InsertStmt extends DmlStmt {
     // If this is set to true it means a system refresh operation, which is allowed to write to materialized view.
     private boolean isSystem = false;
 
-    public InsertStmt(InsertTarget target, String label, List<String> cols, QueryStatement queryStatement,
-                      List<String> hints, boolean isOverwrite) {
-        this.tblName = target.getTblName();
-        this.targetPartitionNames = target.getPartitionNames();
+    public InsertStmt(TableName tblName, PartitionNames targetPartitionNames, String label, List<String> cols,
+                      QueryStatement queryStatement, boolean isOverwrite) {
+        this.tblName = tblName;
+        this.targetPartitionNames = targetPartitionNames;
         this.label = label;
         this.queryStatement = queryStatement;
         this.targetColumnNames = cols;
@@ -137,11 +134,6 @@ public class InsertStmt extends DmlStmt {
     }
 
     @Override
-    public ArrayList<Expr> getResultExprs() {
-        return resultExprs;
-    }
-
-    @Override
     public TableName getTableName() {
         return tblName;
     }
@@ -168,15 +160,6 @@ public class InsertStmt extends DmlStmt {
 
     public void setTargetColumns(List<Column> targetColumns) {
         this.targetColumns = targetColumns;
-    }
-
-    @Override
-    public void reset() {
-        super.reset();
-        targetPartitionIds.clear();
-        resultExprs.clear();
-        exprByName.clear();
-        targetColumns.clear();
     }
 
     @Override

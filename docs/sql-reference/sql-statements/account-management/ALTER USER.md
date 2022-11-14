@@ -69,7 +69,3 @@ The command is used to change user information.
     ```SQL
     ALTER USER 'jack' IDENTIFIED WITH authentication_ldap_simple AS 'uid=jack,ou=company,dc=example,dc=com'
     ```
-
-## keyword
-
-ALTER, USER

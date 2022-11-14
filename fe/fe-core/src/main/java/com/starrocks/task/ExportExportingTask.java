@@ -49,7 +49,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
-public class ExportExportingTask extends LeaderTask {
+public class ExportExportingTask extends PriorityLeaderTask {
     private static final Logger LOG = LogManager.getLogger(ExportExportingTask.class);
     private static final int RETRY_NUM = 2;
 
@@ -278,7 +278,7 @@ public class ExportExportingTask extends LeaderTask {
         return Status.OK;
     }
 
-    private class ExportExportingSubTask extends LeaderTask {
+    private class ExportExportingSubTask extends PriorityLeaderTask {
         private final Coordinator coord;
         private final int taskIdx;
         private final int coordSize;

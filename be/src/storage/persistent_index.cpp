@@ -4,6 +4,7 @@
 
 #include <cstring>
 #include <numeric>
+#include <utility>
 
 #include "fs/fs.h"
 #include "gutil/strings/substitute.h"
@@ -38,11 +39,11 @@ constexpr size_t kPackSize = 16;
 constexpr size_t kPagePackLimit = (kPageSize - kPageHeaderSize) / kPackSize;
 constexpr size_t kBucketSizeMax = 256;
 // if l0_mem_size exceeds this value, l0 need snapshot
-constexpr size_t kL0SnapshotSizeMax = 4 * 1024 * 1024;
-// if l0_mem_size exceeds this value and l1 is null, need flush to l1
-constexpr size_t kL0FlushSizeMin = 8 * 1024 * 1024;
-// if l0_mem_size / l1_file_size >= this value and l0_mem_size > kL0SnapshotSizeMax, l0 l1 need merge compaction
-constexpr double kL0L1MergeRatio = 0.1;
+#if BE_TEST
+constexpr size_t kL0SnapshotSizeMax = 1 * 1024 * 1024;
+#else
+constexpr size_t kL0SnapshotSizeMax = 16 * 1024 * 1024;
+#endif
 constexpr size_t kLongKeySize = 64;
 
 const char* const kIndexFileMagic = "IDX1";
@@ -64,7 +65,7 @@ static std::string get_l0_index_file_name(std::string& dir, const EditVersion& v
 }
 
 struct IndexHash {
-    IndexHash() {}
+    IndexHash() = default;
     IndexHash(uint64_t hash) : hash(hash) {}
     uint64_t shard(uint32_t n) const { return (hash >> (63 - n)) >> 1; }
     uint64_t page() const { return (hash >> 16) & 0xffffffff; }
@@ -74,9 +75,9 @@ struct IndexHash {
     uint64_t hash;
 };
 
-MutableIndex::MutableIndex() {}
+MutableIndex::MutableIndex() = default;
 
-MutableIndex::~MutableIndex() {}
+MutableIndex::~MutableIndex() = default;
 
 template <size_t KeySize>
 struct FixedKey {
@@ -205,8 +206,7 @@ static std::vector<int8_t> get_move_buckets(size_t target, size_t nbucket, const
         return ret;
     };
     int32_t max_sum = 0; // current max sum
-    for (int8_t idx = 0; idx < idxes.size(); idx++) {
-        int8_t i = idxes[idx];
+    for (signed char i : idxes) {
         for (int32_t v = 0; v <= max_sum; v++) {
             if (dp[v] < 0 || dp[v] == i) {
                 continue;
@@ -235,9 +235,9 @@ static Status find_buckets_to_move(uint32_t pageid, size_t nbucket, size_t min_p
     auto ret = get_move_buckets(min_pack_to_move, nbucket, bucket_packs_in_page);
 
     size_t move_packs = 0;
-    for (int32_t i = 0; i < ret.size(); ++i) {
-        buckets_to_move->emplace_back(bucket_packs_in_page[ret[i]], pageid, ret[i]);
-        move_packs += bucket_packs_in_page[ret[i]];
+    for (signed char& i : ret) {
+        buckets_to_move->emplace_back(bucket_packs_in_page[i], pageid, i);
+        move_packs += bucket_packs_in_page[i];
     }
     DCHECK(move_packs >= min_pack_to_move);
 
@@ -342,23 +342,20 @@ StatusOr<std::unique_ptr<ImmutableIndexShard>> ImmutableIndexShard::try_create(s
         kv_ptrs.reserve(estimated_entry_per_bucket);
         tags.reserve(estimated_entry_per_bucket);
     }
-    for (size_t i = 0; i < kv_refs.size(); i++) {
-        auto h = IndexHash(kv_refs[i].hash);
+    for (const auto& kv_ref : kv_refs) {
+        auto h = IndexHash(kv_ref.hash);
         auto page = h.page() % npage;
         auto bucket = h.bucket() % nbucket;
         auto bid = page * nbucket + bucket;
         auto& sz = bucket_sizes[bid];
-        if (sz >= kBucketSizeMax) {
-            return Status::InternalError("bucket size exceed kBucketSizeMax");
-        }
         sz++;
         auto& data_size = bucket_data_size[bid].first;
-        data_size += kv_refs[i].size;
+        data_size += kv_ref.size;
         if (pad(sz, kPackSize) + data_size > kPageSize) {
             return Status::InternalError("bucket size limit exceeded");
         }
-        bucket_data_size[bid].second.emplace_back(kv_refs[i].size);
-        bucket_kv_ptrs_tags[bid].first.emplace_back(kv_refs[i].kv_pos);
+        bucket_data_size[bid].second.emplace_back(kv_ref.size);
+        bucket_kv_ptrs_tags[bid].first.emplace_back(kv_ref.kv_pos);
         bucket_kv_ptrs_tags[bid].second.emplace_back(h.tag());
     }
     std::vector<uint8_t> bucket_packs(total_bucket);
@@ -493,12 +490,16 @@ Status ImmutableIndexWriter::write_shard(size_t key_size, size_t npage_hint, siz
     ptr_meta->set_size(pos_after - pos_before);
     _total += kvs.size();
     _total_moved += shard->num_entry_moved;
+    size_t shard_kv_size = 0;
     if (key_size != 0) {
-        _total_kv_size += (key_size + kIndexValueSize) * kvs.size();
+        shard_kv_size = (key_size + kIndexValueSize) * kvs.size();
+        _total_kv_size += shard_kv_size;
     } else {
-        _total_kv_size +=
+        shard_kv_size =
                 std::accumulate(kvs.begin(), kvs.end(), (size_t)0, [](size_t s, const auto& e) { return s + e.size; });
+        _total_kv_size += shard_kv_size;
     }
+    shard_meta->set_data_size(shard_kv_size);
     _total_bytes += pos_after - pos_before;
     auto iter = _shard_info_by_length.find(_cur_key_size);
     if (iter == _shard_info_by_length.end()) {
@@ -538,6 +539,7 @@ Status ImmutableIndexWriter::write_shard_as_rawbuff(const ImmutableIndex::ShardI
     shard_info->set_key_size(old_shard_info.key_size);
     shard_info->set_value_size(old_shard_info.value_size);
     shard_info->set_nbucket(old_shard_info.nbucket);
+    shard_info->set_data_size(old_shard_info.data_size);
     auto page_pointer = shard_info->mutable_data();
     page_pointer->set_offset(pos_before);
     page_pointer->set_size(pos_after - pos_before);
@@ -592,8 +594,8 @@ template <size_t KeySize>
 class FixedMutableIndex : public MutableIndex {
 public:
     using KeyType = FixedKey<KeySize>;
-    FixedMutableIndex() {}
-    ~FixedMutableIndex() override {}
+    FixedMutableIndex() = default;
+    ~FixedMutableIndex() override = default;
 
     Status get(const Slice* keys, IndexValue* values, KeysInfo* not_found, size_t* num_found,
                const std::vector<size_t>& idxes) const override {
@@ -637,7 +639,7 @@ public:
     }
 
     Status upsert(const Slice* keys, const IndexValue* values, KeysInfo* not_found, size_t* num_found,
-                  const std::vector<size_t>& idxes) {
+                  const std::vector<size_t>& idxes) override {
         size_t nfound = 0;
         for (const auto idx : idxes) {
             const auto& key = *reinterpret_cast<const KeyType*>(keys[idx].data);
@@ -691,20 +693,22 @@ public:
         return Status::OK();
     }
 
-    Status replace(const Slice* keys, const IndexValue* values, const std::vector<size_t>& replace_idxes) {
-        for (size_t i = 0; i < replace_idxes.size(); ++i) {
-            const auto& key = *reinterpret_cast<const KeyType*>(keys[replace_idxes[i]].data);
-            const auto value = values[replace_idxes[i]];
+    Status replace(const Slice* keys, const IndexValue* values, const std::vector<size_t>& replace_idxes) override {
+        for (unsigned long replace_idxe : replace_idxes) {
+            const auto& key = *reinterpret_cast<const KeyType*>(keys[replace_idxe].data);
+            const auto value = values[replace_idxe];
             uint64_t hash = FixedKeyHash<KeySize>()(key);
             if (auto [it, inserted] = _map.emplace_with_hash(hash, key, value); !inserted) {
                 it->second = value;
+            } else {
+                _overlap_size += 1;
             }
         }
         return Status::OK();
     }
 
     Status append_wal(const Slice* keys, const IndexValue* values, const std::vector<size_t>& idxes,
-                      std::unique_ptr<WritableFile>& index_file, uint64_t* page_size) {
+                      std::unique_ptr<WritableFile>& index_file, uint64_t* page_size) override {
         faststring fixed_buf;
         fixed_buf.reserve(sizeof(size_t) + sizeof(size_t) + idxes.size() * (KeySize + sizeof(IndexValue)));
         put_fixed32_le(&fixed_buf, KeySize);
@@ -719,7 +723,7 @@ public:
         return Status::OK();
     }
 
-    Status load_wals(size_t n, const Slice* keys, const IndexValue* values) {
+    Status load_wals(size_t n, const Slice* keys, const IndexValue* values) override {
         for (size_t i = 0; i < n; i++) {
             const auto& key = *reinterpret_cast<const KeyType*>(keys[i].data);
             const auto value = values[i];
@@ -731,9 +735,9 @@ public:
         return Status::OK();
     }
 
-    bool load_snapshot(phmap::BinaryInputArchive& ar) { return _map.load(ar); }
+    bool load_snapshot(phmap::BinaryInputArchive& ar) override { return _map.load(ar); }
 
-    Status load(size_t& offset, std::unique_ptr<RandomAccessFile>& file) {
+    Status load(size_t& offset, std::unique_ptr<RandomAccessFile>& file) override {
         size_t kv_header_size = 8;
         std::string buff;
         raw::stl_string_resize_uninitialized(&buff, kv_header_size);
@@ -747,7 +751,8 @@ public:
             const size_t batch_num = (nums > 4096) ? 4096 : nums;
             raw::stl_string_resize_uninitialized(&buff, batch_num * kv_pair_size);
             RETURN_IF_ERROR(file->read_at_fully(offset, buff.data(), buff.size()));
-            std::vector<Slice> keys(batch_num);
+            std::vector<Slice> keys;
+            keys.reserve(batch_num);
             std::vector<IndexValue> values;
             values.reserve(batch_num);
             size_t buf_offset = 0;
@@ -769,9 +774,9 @@ public:
     // than sizeof(uint64_t) in order to improve count distinct streaming aggregate performance.
     // Howevevr, the real snapshot file will only wite a size_(type is size_t) into file. So we
     // will use `sizeof(size_t)` as return value.
-    size_t dump_bound() { return _map.empty() ? sizeof(size_t) : _map.dump_bound(); }
+    size_t dump_bound() override { return _map.empty() ? sizeof(size_t) : _map.dump_bound(); }
 
-    bool dump(phmap::BinaryOutputArchive& ar) { return _map.dump(ar); }
+    bool dump(phmap::BinaryOutputArchive& ar) override { return _map.dump(ar); }
 
     std::vector<std::vector<KVRef>> get_kv_refs_by_shard(size_t nshard, size_t num_entry,
                                                          bool without_null) const override {
@@ -804,13 +809,17 @@ public:
 
     size_t size() const override { return _map.size(); }
 
-    size_t capacity() { return _map.capacity(); }
+    size_t capacity() override { return _map.capacity(); }
 
-    void reserve(size_t size) { _map.reserve(size); }
+    void reserve(size_t size) override { _map.reserve(size); }
 
-    size_t memory_usage() { return _map.capacity() * (1 + (KeySize + 3) / 4 * 4 + kIndexValueSize); }
+    size_t memory_usage() override { return _map.capacity() * (1 + (KeySize + 3) / 4 * 4 + kIndexValueSize); }
+
+    void update_overlap_info(size_t overlap_size, size_t overlap_usage) override { _overlap_size += overlap_size; }
+    size_t overlap_size() override { return _overlap_size; }
 
 private:
+    size_t _overlap_size = 0;
     phmap::flat_hash_map<KeyType, IndexValue, FixedKeyHash<KeySize>> _map;
 };
 
@@ -840,8 +849,8 @@ size_t MutableIndex::estimate_nbucket(size_t key_size, size_t size, size_t nshar
     return std::min(kBucketPerPage, npad(size, pad));
 }
 
-struct StringHash {
-    size_t operator()(const std::string& s) const { return key_index_hash(s.data(), s.length() - kIndexValueSize); }
+struct StringHasher2 {
+    uint64_t operator()(const std::string& s) const { return key_index_hash(s.data(), s.length() - kIndexValueSize); }
 };
 
 class EqualOnStringWithHash {
@@ -860,8 +869,8 @@ public:
     static_assert(sizeof(WALKVSizeType) == kWALKVSize);
     static constexpr size_t kKeySizeMagicNum = 0;
 
-    SliceMutableIndex() {}
-    ~SliceMutableIndex() override {}
+    SliceMutableIndex() = default;
+    ~SliceMutableIndex() override = default;
 
     Status get(const Slice* keys, IndexValue* values, KeysInfo* not_found, size_t* num_found,
                const std::vector<size_t>& idxes) const override {
@@ -873,7 +882,7 @@ public:
             composite_key.reserve(skey.size + kIndexValueSize);
             composite_key.append(skey.data, skey.size);
             put_fixed64_le(&composite_key, value.get_value());
-            uint64_t hash = StringHash()(composite_key);
+            uint64_t hash = StringHasher2()(composite_key);
             auto iter = _set.find(composite_key, hash);
             if (iter == _set.end()) {
                 values[idx] = NullIndexValue;
@@ -900,7 +909,7 @@ public:
             composite_key.reserve(skey.size + kIndexValueSize);
             composite_key.append(skey.data, skey.size);
             put_fixed64_le(&composite_key, value.get_value());
-            uint64_t hash = StringHash()(composite_key);
+            uint64_t hash = StringHasher2()(composite_key);
             if (auto [it, inserted] = _set.emplace_with_hash(hash, composite_key); inserted) {
                 not_found->key_idxes.emplace_back((uint32_t)idx);
                 not_found->hashes.emplace_back(hash);
@@ -911,7 +920,7 @@ public:
                 old_values[idx] = old_value;
                 nfound += old_value != NullIndexValue;
                 _set.erase(it);
-                _set.emplace(composite_key);
+                _set.emplace_with_hash(hash, composite_key);
             }
         }
         *num_found = nfound;
@@ -919,7 +928,7 @@ public:
     }
 
     Status upsert(const Slice* keys, const IndexValue* values, KeysInfo* not_found, size_t* num_found,
-                  const std::vector<size_t>& idxes) {
+                  const std::vector<size_t>& idxes) override {
         size_t nfound = 0;
         for (const auto idx : idxes) {
             std::string composite_key;
@@ -928,7 +937,7 @@ public:
             composite_key.reserve(skey.size + kIndexValueSize);
             composite_key.append(skey.data, skey.size);
             put_fixed64_le(&composite_key, value.get_value());
-            uint64_t hash = StringHash()(composite_key);
+            uint64_t hash = StringHasher2()(composite_key);
             if (auto [it, inserted] = _set.emplace_with_hash(hash, composite_key); inserted) {
                 not_found->key_idxes.emplace_back((uint32_t)idx);
                 not_found->hashes.emplace_back(hash);
@@ -940,7 +949,7 @@ public:
                 nfound += old_value != NullIndexValue;
                 // TODO: find a way to modify iterator directly, currently just erase then re-insert
                 _set.erase(it);
-                _set.emplace(composite_key);
+                _set.emplace_with_hash(hash, composite_key);
             }
         }
         *num_found = nfound;
@@ -955,7 +964,7 @@ public:
             composite_key.reserve(skey.size + kIndexValueSize);
             composite_key.append(skey.data, skey.size);
             put_fixed64_le(&composite_key, value.get_value());
-            uint64_t hash = StringHash()(composite_key);
+            uint64_t hash = StringHasher2()(composite_key);
             if (auto [_, inserted] = _set.emplace_with_hash(hash, composite_key); inserted) {
                 _total_kv_pairs_usage += composite_key.size();
             } else {
@@ -978,7 +987,7 @@ public:
             composite_key.reserve(skey.size + kIndexValueSize);
             composite_key.append(skey.data, skey.size);
             put_fixed64_le(&composite_key, value);
-            uint64_t hash = StringHash()(composite_key);
+            uint64_t hash = StringHasher2()(composite_key);
             if (auto [it, inserted] = _set.emplace_with_hash(hash, composite_key); inserted) {
                 old_values[idx] = NullIndexValue;
                 not_found->key_idxes.emplace_back((uint32_t)idx);
@@ -991,14 +1000,14 @@ public:
                 nfound += old_value != NullIndexValue;
                 // TODO: find a way to modify iterator directly, currently just erase then re-insert
                 _set.erase(it);
-                _set.emplace(composite_key);
+                _set.emplace_with_hash(hash, composite_key);
             }
         }
         *num_found = nfound;
         return Status::OK();
     }
 
-    Status replace(const Slice* keys, const IndexValue* values, const std::vector<size_t>& idxes) {
+    Status replace(const Slice* keys, const IndexValue* values, const std::vector<size_t>& idxes) override {
         for (const auto idx : idxes) {
             std::string composite_key;
             const auto& skey = keys[idx];
@@ -1006,20 +1015,22 @@ public:
             composite_key.reserve(skey.size + kIndexValueSize);
             composite_key.append(skey.data, skey.size);
             put_fixed64_le(&composite_key, value.get_value());
-            uint64_t hash = StringHash()(composite_key);
+            uint64_t hash = StringHasher2()(composite_key);
             if (auto [it, inserted] = _set.emplace_with_hash(hash, composite_key); inserted) {
                 _total_kv_pairs_usage += composite_key.size();
+                _overlap_kv_pairs_usage += composite_key.size();
+                _overlap_size += 1;
             } else {
                 // TODO: find a way to modify iterator directly, currently just erase then re-insert
                 _set.erase(it);
-                _set.emplace(composite_key);
+                _set.emplace_with_hash(hash, composite_key);
             }
         }
         return Status::OK();
     }
 
     Status append_wal(const Slice* keys, const IndexValue* values, const std::vector<size_t>& idxes,
-                      std::unique_ptr<WritableFile>& index_file, uint64_t* page_size) {
+                      std::unique_ptr<WritableFile>& index_file, uint64_t* page_size) override {
         faststring fixed_buf;
         size_t keys_size = 0;
         auto n = idxes.size();
@@ -1042,7 +1053,7 @@ public:
         return Status::OK();
     }
 
-    Status load_wals(size_t n, const Slice* keys, const IndexValue* values) {
+    Status load_wals(size_t n, const Slice* keys, const IndexValue* values) override {
         for (size_t i = 0; i < n; i++) {
             std::string composite_key;
             const auto& skey = keys[i];
@@ -1050,13 +1061,13 @@ public:
             composite_key.reserve(skey.size + kIndexValueSize);
             composite_key.append(skey.data, skey.size);
             put_fixed64_le(&composite_key, value.get_value());
-            uint64_t hash = StringHash()(composite_key);
+            uint64_t hash = StringHasher2()(composite_key);
             if (auto [it, inserted] = _set.emplace_with_hash(hash, composite_key); inserted) {
                 _total_kv_pairs_usage += composite_key.size();
             } else {
                 // TODO: find a way to modify iterator directly, currently just erase then re-insert
                 _set.erase(it);
-                _set.emplace(composite_key);
+                _set.emplace_with_hash(hash, composite_key);
             }
         }
         return Status::OK();
@@ -1066,9 +1077,9 @@ public:
     //  ｜--------    snapshot file      --------｜
     //  |  size_t ||   size_t  ||  char[]  | ... |   size_t  ||  char[]  |
     //  |total num|| data size ||  data    | ... | data size ||  data    |
-    size_t dump_bound() { return sizeof(size_t) * (1 + size()) + _total_kv_pairs_usage; }
+    size_t dump_bound() override { return sizeof(size_t) * (1 + size()) + _total_kv_pairs_usage; }
 
-    bool dump(phmap::BinaryOutputArchive& ar) {
+    bool dump(phmap::BinaryOutputArchive& ar) override {
         if (!ar.dump(size())) {
             LOG(ERROR) << "Failed to dump size";
             return false;
@@ -1077,7 +1088,7 @@ public:
             return true;
         }
         for (const auto& composite_key : _set) {
-            if (!ar.dump(composite_key.size())) {
+            if (!ar.dump(static_cast<size_t>(composite_key.size()))) {
                 LOG(ERROR) << "Failed to dump compose_key_size";
                 return false;
             }
@@ -1096,7 +1107,7 @@ public:
         // return _set.dump(ar);
     }
 
-    bool load_snapshot(phmap::BinaryInputArchive& ar) {
+    bool load_snapshot(phmap::BinaryInputArchive& ar) override {
         size_t size = 0;
         if (!ar.load(&size)) {
             LOG(ERROR) << "Failed to load size";
@@ -1121,7 +1132,13 @@ public:
                 LOG(ERROR) << "Failed to load composite_key";
                 return false;
             }
-            _set.emplace(composite_key);
+            auto [it, inserted] = _set.emplace(composite_key);
+            if (inserted) {
+                _total_kv_pairs_usage += composite_key.size();
+            } else {
+                _set.erase(it);
+                _set.emplace(composite_key);
+            }
         }
         return true;
 
@@ -1131,7 +1148,7 @@ public:
     }
 
     // TODO: read data in less batch, not one by one.
-    Status load(size_t& offset, std::unique_ptr<RandomAccessFile>& file) {
+    Status load(size_t& offset, std::unique_ptr<RandomAccessFile>& file) override {
         const auto kv_header_size = 8;
         std::string buff;
         raw::stl_string_resize_uninitialized(&buff, kv_header_size);
@@ -1139,23 +1156,28 @@ public:
         offset += kv_header_size;
         const auto key_size = UNALIGNED_LOAD32(buff.data());
         DCHECK(key_size == kKeySizeMagicNum);
-        const auto nums = UNALIGNED_LOAD32(buff.data() + kv_header_size - 4);
-        Slice keys[nums];
-        std::vector<IndexValue> values;
-        values.reserve(nums);
-        for (auto i = 0; i < nums; ++i) {
-            raw::stl_string_resize_uninitialized(&buff, sizeof(uint32_t));
-            RETURN_IF_ERROR(file->read_at_fully(offset, buff.data(), buff.size()));
-            offset += sizeof(uint32_t);
-            const auto kv_pair_size = UNALIGNED_LOAD32(buff.data());
-            raw::stl_string_resize_uninitialized(&buff, kv_pair_size);
-            RETURN_IF_ERROR(file->read_at_fully(offset, buff.data(), buff.size()));
-            keys[i] = Slice(buff.data(), kv_pair_size - kIndexValueSize);
-            const auto value = UNALIGNED_LOAD64(buff.data() + kv_pair_size - kIndexValueSize);
-            values.emplace_back(value);
-            offset += kv_pair_size;
+        auto nums = UNALIGNED_LOAD32(buff.data() + kv_header_size - 4);
+        while (nums > 0) {
+            size_t batch_num = (nums > 4096) ? 4096 : nums;
+            Slice keys[batch_num];
+            std::vector<IndexValue> values;
+            values.reserve(batch_num);
+            std::vector<std::string> kv_buffs(batch_num);
+            for (size_t i = 0; i < batch_num; ++i) {
+                raw::stl_string_resize_uninitialized(&buff, sizeof(uint32_t));
+                RETURN_IF_ERROR(file->read_at_fully(offset, buff.data(), buff.size()));
+                offset += sizeof(uint32_t);
+                const auto kv_pair_size = UNALIGNED_LOAD32(buff.data());
+                raw::stl_string_resize_uninitialized(&kv_buffs[i], kv_pair_size);
+                RETURN_IF_ERROR(file->read_at_fully(offset, kv_buffs[i].data(), kv_buffs[i].size()));
+                keys[i] = Slice(kv_buffs[i].data(), kv_pair_size - kIndexValueSize);
+                const auto value = UNALIGNED_LOAD64(kv_buffs[i].data() + kv_pair_size - kIndexValueSize);
+                values.emplace_back(value);
+                offset += kv_pair_size;
+            }
+            RETURN_IF_ERROR(load_wals(batch_num, keys, values.data()));
+            nums -= batch_num;
         }
-        RETURN_IF_ERROR(load_wals(nums, keys, values.data()));
         return Status::OK();
     }
 
@@ -1168,7 +1190,7 @@ public:
         }
         for (const auto& composite_key : _set) {
             const auto value = UNALIGNED_LOAD64(composite_key.data() + composite_key.size() - kIndexValueSize);
-            IndexHash h(StringHash()(composite_key));
+            IndexHash h(StringHasher2()(composite_key));
             if (without_null && value == NullIndexValue) {
                 continue;
             }
@@ -1190,12 +1212,12 @@ public:
 
     size_t size() const override { return _set.size(); }
 
-    size_t capacity() { return _set.capacity(); }
+    size_t capacity() override { return _set.capacity(); }
 
-    void reserve(size_t size) { _set.reserve(size); }
+    void reserve(size_t size) override { _set.reserve(size); }
 
     // TODO: more accurate estimation for phmap::flat_hash_set<std::string, ...
-    size_t memory_usage() {
+    size_t memory_usage() override {
         auto ret = capacity() * (1 + 32);
         if (size() > 0 && _total_kv_pairs_usage / size() > 15) {
             // std::string with size > 15 will alloc new memory for storage
@@ -1206,11 +1228,22 @@ public:
         return ret;
     }
 
+    void update_overlap_info(size_t overlap_size, size_t overlap_usage) override {
+        _overlap_kv_pairs_usage += overlap_usage;
+        _overlap_size += overlap_size;
+    }
+
+    size_t overlap_size() override { return _overlap_size; }
+
 private:
     friend ShardByLengthMutableIndex;
     friend PersistentIndex;
-    phmap::flat_hash_set<KeyType, StringHash, EqualOnStringWithHash> _set;
+    phmap::flat_hash_set<KeyType, StringHasher2, EqualOnStringWithHash> _set;
     size_t _total_kv_pairs_usage = 0;
+    // _overlap_num and _overlap_kv_pairs_usage will lost after be restart,
+    // but it is not very important because it will be fixed in later _merge_compaction.
+    size_t _overlap_size = 0;
+    size_t _overlap_kv_pairs_usage = 0;
 };
 
 StatusOr<std::unique_ptr<MutableIndex>> MutableIndex::create(size_t key_size) {
@@ -1598,6 +1631,36 @@ Status ShardByLengthMutableIndex::erase(size_t n, const Slice* keys, IndexValue*
     return Status::OK();
 }
 
+Status ShardByLengthMutableIndex::update_overlap_info(size_t key_size, size_t num_overlap, const Slice* keys,
+                                                      const IndexValue* values, const KeysInfo& keys_info, bool erase) {
+    DCHECK(_fixed_key_size != -1);
+    const auto [shard_offset, shard_size] = _shard_info_by_key_size[key_size];
+    DCHECK(shard_size == 1);
+    if (key_size > 0) {
+        for (size_t i = 0; i < shard_size; ++i) {
+            _shards[shard_offset + i]->update_overlap_info(num_overlap, 0);
+        }
+    } else {
+        DCHECK(key_size == 0);
+        DCHECK(_fixed_key_size == 0);
+        size_t overlap_size = 0;
+        for (size_t i = 0; i < keys_info.size(); i++) {
+            auto key_idx = keys_info.key_idxes[i];
+            if (values[key_idx].get_value() != NullIndexValue) {
+                overlap_size += keys[key_idx].get_size() + kIndexValueSize;
+            }
+        }
+        if (erase) {
+            overlap_size *= 2;
+        }
+        for (size_t i = 0; i < shard_size; ++i) {
+            _shards[shard_offset + i]->update_overlap_info(num_overlap, overlap_size);
+        }
+    }
+
+    return Status::OK();
+}
+
 Status ShardByLengthMutableIndex::append_wal(size_t n, const Slice* keys, const IndexValue* values) {
     DCHECK(_fixed_key_size != -1);
     if (_fixed_key_size > 0) {
@@ -1675,8 +1738,8 @@ bool ShardByLengthMutableIndex::load_snapshot(phmap::BinaryInputArchive& ar, con
 }
 
 size_t ShardByLengthMutableIndex::dump_bound() {
-    return std::accumulate(_shards.begin(), _shards.end(), 0,
-                           [](size_t s, const auto& e) { return e->size() > 0 ? s + e->size() : s; });
+    return std::accumulate(_shards.begin(), _shards.end(), 0UL,
+                           [](size_t s, const auto& e) { return e->size() > 0 ? s + e->dump_bound() : s; });
 }
 
 bool ShardByLengthMutableIndex::dump(phmap::BinaryOutputArchive& ar_out, std::set<uint32_t>& dumped_shard_idxes) {
@@ -1709,6 +1772,7 @@ Status ShardByLengthMutableIndex::commit(MutableIndexMetaPB* meta, const EditVer
         });
         meta->clear_wals();
         IndexSnapshotMetaPB* snapshot = meta->mutable_snapshot();
+        snapshot->clear_dumped_shard_idxes();
         version.to_pb(snapshot->mutable_version());
         PagePointerPB* data = snapshot->mutable_data();
         // create a new empty _l0 file, set _offset to 0
@@ -1724,7 +1788,6 @@ Status ShardByLengthMutableIndex::commit(MutableIndexMetaPB* meta, const EditVer
         // be maybe crash after create index file during last commit
         // so we delete expired index file first to make sure no garbage left
         FileSystem::Default()->delete_file(file_name);
-        size_t snapshot_size = dump_bound();
         phmap::BinaryOutputArchive ar_out(file_name.data());
         std::set<uint32_t> dumped_shard_idxes;
         if (!dump(ar_out, dumped_shard_idxes)) {
@@ -1736,12 +1799,14 @@ Status ShardByLengthMutableIndex::commit(MutableIndexMetaPB* meta, const EditVer
         WritableFileOptions wblock_opts;
         wblock_opts.mode = FileSystem::MUST_EXIST;
         ASSIGN_OR_RETURN(_index_file, fs->new_writable_file(wblock_opts, file_name));
+        size_t snapshot_size = dump_bound();
         meta->clear_wals();
         IndexSnapshotMetaPB* snapshot = meta->mutable_snapshot();
         version.to_pb(snapshot->mutable_version());
         PagePointerPB* data = snapshot->mutable_data();
         data->set_offset(0);
         data->set_size(snapshot_size);
+        snapshot->clear_dumped_shard_idxes();
         snapshot->mutable_dumped_shard_idxes()->Add(dumped_shard_idxes.begin(), dumped_shard_idxes.end());
         meta->set_format_version(PERSISTENT_INDEX_VERSION_2);
         _offset = snapshot_size;
@@ -1774,7 +1839,11 @@ Status ShardByLengthMutableIndex::load(const MutableIndexMetaPB& meta) {
     const auto snapshot_size = page_pb.size();
     std::set<uint32_t> dumped_shard_idxes;
     for (auto i = 0; i < snapshot_meta.dumped_shard_idxes_size(); ++i) {
-        dumped_shard_idxes.insert(snapshot_meta.dumped_shard_idxes(i));
+        auto [_, insert] = dumped_shard_idxes.insert(snapshot_meta.dumped_shard_idxes(i));
+        if (!insert) {
+            LOG(WARNING) << "duplicate shard idx: " << snapshot_meta.dumped_shard_idxes(i);
+            return Status::InternalError("duplicate shard idx");
+        }
     }
     std::string index_file_name = get_l0_index_file_name(_path, start_version);
     std::shared_ptr<FileSystem> fs;
@@ -1795,18 +1864,20 @@ Status ShardByLengthMutableIndex::load(const MutableIndexMetaPB& meta) {
     for (int i = 0; i < n; i++) {
         const auto& page_pointer_pb = meta.wals(i).data();
         auto offset = page_pointer_pb.offset();
-        for (const auto& shard : _shards) {
-            RETURN_IF_ERROR(shard->load(offset, read_file));
+        const auto end = offset + page_pointer_pb.size();
+        std::string buff;
+        raw::stl_string_resize_uninitialized(&buff, 4);
+        while (offset < end) {
+            RETURN_IF_ERROR(read_file->read_at_fully(offset, buff.data(), buff.size()));
+            const auto key_size = UNALIGNED_LOAD32(buff.data());
+            const auto [shard_offset, shard_size] = _shard_info_by_key_size[key_size];
+            for (auto i = 0; i < shard_size; ++i) {
+                RETURN_IF_ERROR(_shards[shard_offset + i]->load(offset, read_file));
+            }
         }
+        _offset += page_pointer_pb.size();
     }
-    if (n == 0) {
-        RETURN_IF_ERROR(FileSystemUtil::resize_file(index_file_name, 0));
-    } else {
-        const auto& last_page_pb = meta.wals(n - 1).data();
-        // the data in the end maybe invalid
-        // so we need to truncate file first
-        RETURN_IF_ERROR(FileSystemUtil::resize_file(index_file_name, last_page_pb.offset() + last_page_pb.size()));
-    }
+    RETURN_IF_ERROR(FileSystemUtil::resize_file(index_file_name, _offset));
     WritableFileOptions wblock_opts;
     wblock_opts.mode = FileSystem::MUST_EXIST;
     ASSIGN_OR_RETURN(_index_file, fs->new_writable_file(wblock_opts, index_file_name));
@@ -1852,7 +1923,7 @@ size_t ShardByLengthMutableIndex::capacity() {
 }
 
 size_t ShardByLengthMutableIndex::memory_usage() {
-    return std::accumulate(_shards.begin(), _shards.end(), (size_t)0,
+    return std::accumulate(_shards.begin(), _shards.end(), 0UL,
                            [](size_t s, const auto& e) { return s + e->memory_usage(); });
 }
 
@@ -1905,7 +1976,7 @@ Status ImmutableIndex::_get_fixlen_kvs_for_shard(std::vector<std::vector<KVRef>>
             const uint8_t* kvs = bucket_pos + pad(nele, kPackSize);
             for (size_t i = 0; i < nele; i++) {
                 const uint8_t* kv = kvs + (shard_info.key_size + shard_info.value_size) * i;
-                IndexHash hash = IndexHash(key_index_hash(kv, shard_info.key_size));
+                auto hash = IndexHash(key_index_hash(kv, shard_info.key_size));
                 kvs_by_shard[hash.shard(shard_bits)].emplace_back(kv, hash.hash,
                                                                   shard_info.key_size + shard_info.value_size);
             }
@@ -1929,7 +2000,7 @@ Status ImmutableIndex::_get_varlen_kvs_for_shard(std::vector<std::vector<KVRef>>
                 auto kv_offset = UNALIGNED_LOAD16(offsets + sizeof(uint16_t) * i);
                 auto kv_size = UNALIGNED_LOAD16(offsets + sizeof(uint16_t) * (i + 1)) - kv_offset;
                 const uint8_t* kv = bucket_pos + kv_offset;
-                IndexHash hash = IndexHash(key_index_hash(kv, kv_size - shard_info.value_size));
+                auto hash = IndexHash(key_index_hash(kv, kv_size - shard_info.value_size));
                 kvs_by_shard[hash.shard(shard_bits)].emplace_back(kv, hash.hash, kv_size);
             }
         }
@@ -1943,7 +2014,7 @@ Status ImmutableIndex::_get_kvs_for_shard(std::vector<std::vector<KVRef>>& kvs_b
     if (shard_info.size == 0) {
         return Status::OK();
     }
-    *shard = std::move(std::make_unique<ImmutableIndexShard>(shard_info.npage));
+    *shard = std::make_unique<ImmutableIndexShard>(shard_info.npage);
     RETURN_IF_ERROR(_file->read_at_fully(shard_info.offset, (*shard)->pages.data(), shard_info.bytes));
     if (shard_info.key_size != 0) {
         return _get_fixlen_kvs_for_shard(kvs_by_shard, shard_idx, shard_bits, shard);
@@ -1967,7 +2038,7 @@ Status ImmutableIndex::_get_in_fixlen_shard(size_t shard_idx, size_t n, const Sl
         auto nele = bucket_info.size;
         auto ncandidates = get_matched_tag_idxes(bucket_pos, nele, h.tag(), candidate_idxes);
         auto key_idx = keys_info.key_idxes[i];
-        const uint8_t* fixed_key_probe = (const uint8_t*)keys[key_idx].data;
+        const auto* fixed_key_probe = (const uint8_t*)keys[key_idx].data;
         auto kv_pos = bucket_pos + pad(nele, kPackSize);
         values[key_idx] = NullIndexValue;
         for (size_t candidate_idx = 0; candidate_idx < ncandidates; candidate_idx++) {
@@ -1999,7 +2070,7 @@ Status ImmutableIndex::_get_in_varlen_shard(size_t shard_idx, size_t n, const Sl
         auto nele = bucket_info.size;
         auto ncandidates = get_matched_tag_idxes(bucket_pos, nele, h.tag(), candidate_idxes);
         auto key_idx = keys_info.key_idxes[i];
-        const uint8_t* key_probe = reinterpret_cast<const uint8_t*>(keys[key_idx].data);
+        const auto* key_probe = reinterpret_cast<const uint8_t*>(keys[key_idx].data);
         auto offset_pos = bucket_pos + pad(nele, kPackSize);
         values[key_idx] = NullIndexValue;
         for (size_t candidate_idx = 0; candidate_idx < ncandidates; candidate_idx++) {
@@ -2049,7 +2120,7 @@ Status ImmutableIndex::_check_not_exist_in_fixlen_shard(size_t shard_idx, size_t
         auto nele = bucket_info.size;
         auto key_idx = keys_info.key_idxes[i];
         auto ncandidates = get_matched_tag_idxes(bucket_pos, nele, h.tag(), candidate_idxes);
-        const uint8_t* fixed_key_probe = (const uint8_t*)keys[key_idx].data;
+        const auto* fixed_key_probe = (const uint8_t*)keys[key_idx].data;
         auto kv_pos = bucket_pos + pad(nele, kPackSize);
         for (size_t candidate_idx = 0; candidate_idx < ncandidates; candidate_idx++) {
             auto idx = candidate_idxes[candidate_idx];
@@ -2077,7 +2148,7 @@ Status ImmutableIndex::_check_not_exist_in_varlen_shard(size_t shard_idx, size_t
         auto nele = bucket_info.size;
         auto key_idx = keys_info.key_idxes[i];
         auto ncandidates = get_matched_tag_idxes(bucket_pos, nele, h.tag(), candidate_idxes);
-        const uint8_t* key_probe = reinterpret_cast<const uint8_t*>(keys[key_idx].data);
+        const auto* key_probe = reinterpret_cast<const uint8_t*>(keys[key_idx].data);
         auto offset_pos = bucket_pos + pad(nele, kPackSize);
         for (size_t candidate_idx = 0; candidate_idx < ncandidates; candidate_idx++) {
             auto idx = candidate_idxes[candidate_idx];
@@ -2211,6 +2282,17 @@ StatusOr<std::unique_ptr<ImmutableIndex>> ImmutableIndex::load(std::unique_ptr<R
         dest.key_size = src.key_size();
         dest.value_size = src.value_size();
         dest.nbucket = src.nbucket();
+        // This is for compatibility, we don't add data_size in shard_info in the rc version
+        // And data_size is added to reslove some bug(https://github.com/StarRocks/starrocks/issues/11868)
+        // However, if we upgrade from rc version, the data_size will be used as default value(0) which will cause
+        // some error in the subsequent logic
+        // So we will use file size as data_size which will cause some of disk space to be wasted, but it is a acceptable
+        // problem. And the wasted disk space will be reclaimed in the subsequent compaction, so it is acceptable
+        if (src.size() != 0 && src.data_size() == 0) {
+            dest.data_size = src.data().size();
+        } else {
+            dest.data_size = src.data_size();
+        }
     }
     size_t nlength = meta.shard_info_size();
     for (size_t i = 0; i < nlength; i++) {
@@ -2227,7 +2309,7 @@ StatusOr<std::unique_ptr<ImmutableIndex>> ImmutableIndex::load(std::unique_ptr<R
     return std::move(idx);
 }
 
-PersistentIndex::PersistentIndex(const std::string& path) : _path(path) {}
+PersistentIndex::PersistentIndex(std::string path) : _path(std::move(path)) {}
 
 PersistentIndex::~PersistentIndex() {
     if (_l1) {
@@ -2264,8 +2346,8 @@ Status PersistentIndex::load(const PersistentIndexMetaPB& index_meta) {
     ASSIGN_OR_RETURN(_fs, FileSystem::CreateSharedFromString(_path));
     RETURN_IF_ERROR(_load(index_meta));
     // delete expired _l0 file and _l1 file
-    MutableIndexMetaPB l0_meta = index_meta.l0_meta();
-    IndexSnapshotMetaPB snapshot_meta = l0_meta.snapshot();
+    const MutableIndexMetaPB& l0_meta = index_meta.l0_meta();
+    const IndexSnapshotMetaPB& snapshot_meta = l0_meta.snapshot();
     EditVersion l0_version = snapshot_meta.version();
     RETURN_IF_ERROR(_delete_expired_index_file(l0_version, _l1_version));
     return Status::OK();
@@ -2278,7 +2360,7 @@ Status PersistentIndex::_load(const PersistentIndexMetaPB& index_meta) {
     if (!index_meta.has_l0_meta()) {
         return Status::InternalError("invalid PersistentIndexMetaPB");
     }
-    MutableIndexMetaPB l0_meta = index_meta.l0_meta();
+    const MutableIndexMetaPB& l0_meta = index_meta.l0_meta();
     DCHECK(_l0 != nullptr);
     RETURN_IF_ERROR(_l0->load(l0_meta));
     std::unique_ptr<RandomAccessFile> l1_rfile;
@@ -2490,6 +2572,8 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
     //   2. delete WALs because maybe PersistentIndexMetaPB has expired wals
     //   3. reset SnapshotMeta
     //   4. write all data into new tmp _l0 index file (tmp file will be delete in _build_commit())
+    index_meta.clear_l0_meta();
+    index_meta.clear_l1_version();
     index_meta.set_key_size(_key_size);
     index_meta.set_format_version(PERSISTENT_INDEX_VERSION_2);
     lastest_applied_version.to_pb(index_meta.mutable_version());
@@ -2526,7 +2610,6 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
                   << " #rowset:" << rowsets.size() << " #segment:" << total_segments << " #row:" << total_rows << " -"
                   << total_dels << "=" << total_rows - total_dels << " bytes:" << total_data_size;
     }
-    OlapReaderStatistics stats;
     std::unique_ptr<vectorized::Column> pk_column;
     if (pk_columns.size() > 1) {
         if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
@@ -2568,7 +2651,28 @@ Status PersistentIndex::abort() {
 // case4 will append wals into l0 file
 Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta) {
     DCHECK_EQ(index_meta->key_size(), _key_size);
-    RETURN_IF_ERROR(_check_and_flush_l0());
+    // check if _l0 need be flush, there are two conditions:
+    //   1. _l1 is not exist, _flush_l0 and build _l1
+    //   2. _l1 is exist, merge _l0 and _l1
+    // rebuild _l0 and _l1
+    // In addition, there may be I/O waste because we append wals firstly and do _flush_l0 or _merge_compaction.
+    const auto l0_mem_size = _l0->memory_usage();
+    uint64_t l1_file_size = _l1 ? _l1->file_size() : 0;
+    // if l1 is not empty,
+    if (l1_file_size != 0) {
+        // and l0 memory usage is large enough,
+        if (l0_mem_size * config::l0_l1_merge_ratio > l1_file_size) {
+            // do l0 l1 merge compaction
+            _flushed = true;
+            RETURN_IF_ERROR(_merge_compaction());
+        }
+        // if l1 is empty, and l0 memory usage is large enough
+    } else if (l0_mem_size > kL0SnapshotSizeMax) {
+        // do flush l0
+        _flushed = true;
+        RETURN_IF_ERROR(_flush_l0());
+    }
+    _dump_snapshot |= !_flushed && _l0->file_size() > config::l0_max_file_size;
     // for case1 and case2
     if (_flushed) {
         // update PersistentIndexMetaPB
@@ -2623,8 +2727,11 @@ Status PersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue* va
     RETURN_IF_ERROR(_l0->upsert(n, keys, values, old_values, &num_found, not_founds_by_key_size));
     _dump_snapshot |= _can_dump_directly();
     if (_l1) {
+        size_t num_found_before = num_found;
         for (const auto& [key_size, keys_info] : not_founds_by_key_size) {
             RETURN_IF_ERROR(_l1->get(n, keys, keys_info, old_values, &num_found, key_size));
+            _l0->update_overlap_info(key_size, num_found - num_found_before, keys, old_values, keys_info, false);
+            num_found_before = num_found;
         }
     }
     _size += n - num_found;
@@ -2656,8 +2763,11 @@ Status PersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_value
     RETURN_IF_ERROR(_l0->erase(n, keys, old_values, &num_erased, not_founds_by_key_size));
     _dump_snapshot |= _can_dump_directly();
     if (_l1) {
+        size_t num_erased_before = num_erased;
         for (const auto& [key_size, keys_info] : not_founds_by_key_size) {
             RETURN_IF_ERROR(_l1->get(n, keys, keys_info, old_values, &num_erased, key_size));
+            _l0->update_overlap_info(key_size, num_erased - num_erased_before, keys, old_values, keys_info, true);
+            num_erased_before = num_erased;
         }
     }
     CHECK(_size >= num_erased) << strings::Substitute("_size($0) < num_erased($1)", _size, num_erased);
@@ -2672,11 +2782,11 @@ Status PersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_value
                                                      const std::vector<uint32_t>& src_rssid,
                                                      std::vector<uint32_t>* failed) {
     std::vector<IndexValue> found_values;
-    found_values.reserve(n);
+    found_values.resize(n);
     RETURN_IF_ERROR(get(n, keys, found_values.data()));
     std::vector<size_t> replace_idxes;
     for (size_t i = 0; i < n; ++i) {
-        if (values[i].get_value() != NullIndexValue &&
+        if (found_values[i].get_value() != NullIndexValue &&
             ((uint32_t)(found_values[i].get_value() >> 32)) == src_rssid[i]) {
             replace_idxes.emplace_back(i);
         } else {
@@ -2694,11 +2804,11 @@ Status PersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_value
 Status PersistentIndex::try_replace(size_t n, const Slice* keys, const IndexValue* values, const uint32_t max_src_rssid,
                                     std::vector<uint32_t>* failed) {
     std::vector<IndexValue> found_values;
-    found_values.reserve(n);
+    found_values.resize(n);
     RETURN_IF_ERROR(get(n, keys, found_values.data()));
     std::vector<size_t> replace_idxes;
     for (size_t i = 0; i < n; ++i) {
-        if (values[i].get_value() != NullIndexValue &&
+        if (found_values[i].get_value() != NullIndexValue &&
             ((uint32_t)(found_values[i].get_value() >> 32)) <= max_src_rssid) {
             replace_idxes.emplace_back(i);
         } else {
@@ -2728,34 +2838,6 @@ Status PersistentIndex::_reload(const PersistentIndexMetaPB& index_meta) {
         LOG(WARNING) << "reload persistent index failed, status: " << st.to_string();
     }
     return st;
-}
-
-// check if _l0 need be flush, if not, return directly
-// if _l0 need be flush, there are two conditions:
-//   1. _l1 is not exist, _flush_l0 and build _l1
-//   2. _l1 is exist, merge _l0 and _l1
-// rebuild _l0 and _l1
-// In addition, there may be I/O waste because we append wals firstly and
-// do _flush_l0 or _merge_compaction.
-Status PersistentIndex::_check_and_flush_l0() {
-    const auto l0_mem_size = _l0->memory_usage();
-    uint64_t l1_file_size = 0;
-    if (_l1 != nullptr) {
-        _l1->file_size(&l1_file_size);
-    }
-    const bool need_flush_l0 = l0_mem_size > kL0FlushSizeMin;
-    const bool need_flush_l1 = l0_mem_size > kL0SnapshotSizeMax &&
-                               l0_mem_size >= static_cast<size_t>(static_cast<double>(l1_file_size) * kL0L1MergeRatio);
-    if (!(need_flush_l0 || need_flush_l1)) {
-        return Status::OK();
-    }
-    _flushed = true;
-    if (_l1 == nullptr) {
-        RETURN_IF_ERROR(_flush_l0());
-    } else {
-        RETURN_IF_ERROR(_merge_compaction());
-    }
-    return Status::OK();
 }
 
 size_t PersistentIndex::_dump_bound() {
@@ -2801,7 +2883,8 @@ struct KVRefEq {
 template <>
 struct KVRefEq<0> {
     bool operator()(const KVRef& lhs, const KVRef& rhs) const {
-        return lhs.hash == rhs.hash && memcmp(lhs.kv_pos, rhs.kv_pos, lhs.size - kIndexValueSize) == 0;
+        return lhs.hash == rhs.hash && lhs.size == rhs.size &&
+               memcmp(lhs.kv_pos, rhs.kv_pos, lhs.size - kIndexValueSize) == 0;
     }
 };
 
@@ -2926,11 +3009,11 @@ Status PersistentIndex::_merge_compaction() {
     }
     auto writer = std::make_unique<ImmutableIndexWriter>();
     RETURN_IF_ERROR(writer->init(_path, _version));
-    for (const auto [key_size, shard_info] : _l0->_shard_info_by_key_size) {
+    for (const auto& [key_size, shard_info] : _l0->_shard_info_by_key_size) {
         auto [l0_shard_offset, l0_shard_size] = shard_info;
         const auto l0_kv_pairs_size = std::accumulate(std::next(_l0->_shards.begin(), l0_shard_offset),
                                                       std::next(_l0->_shards.begin(), l0_shard_offset + l0_shard_size),
-                                                      (size_t)0, [](size_t s, const auto& e) { return s + e->size(); });
+                                                      0UL, [](size_t s, const auto& e) { return s + e->size(); });
         size_t l0_kv_pairs_usage = 0;
         if (key_size == 0) {
             l0_kv_pairs_usage = dynamic_cast<SliceMutableIndex*>(_l0->_shards[0].get())->_total_kv_pairs_usage;
@@ -2956,15 +3039,28 @@ Status PersistentIndex::_merge_compaction() {
                                                       (size_t)0, [](size_t s, const auto& e) { return s + e.size; });
         const auto l1_kv_pairs_usage = std::accumulate(std::next(_l1->_shards.begin(), l1_shard_offset),
                                                        std::next(_l1->_shards.begin(), l1_shard_offset + l1_shard_size),
-                                                       (size_t)0, [](size_t s, const auto& e) { return s + e.bytes; });
+                                                       0UL, [](size_t s, const auto& e) { return s + e.data_size; });
         if (l0_kv_pairs_size == 0 && l1_kv_pairs_size != 0) {
             for (auto i = 0; i < l1_shard_size; i++) {
                 RETURN_IF_ERROR(writer->write_shard_as_rawbuff(_l1->_shards[l1_shard_offset + i], _l1.get()));
             }
             continue;
         }
-        const auto total_kv_pairs_size = l0_kv_pairs_size + l1_kv_pairs_size;
-        const auto total_kv_pairs_usage = l0_kv_pairs_usage + l1_kv_pairs_usage;
+        auto total_kv_pairs_size = l0_kv_pairs_size + l1_kv_pairs_size;
+        auto total_kv_pairs_usage = l0_kv_pairs_usage + l1_kv_pairs_usage;
+        if (key_size == 0) {
+            size_t overlap_usage = dynamic_cast<SliceMutableIndex*>(_l0->_shards[0].get())->_overlap_kv_pairs_usage;
+            size_t overlap_size = dynamic_cast<SliceMutableIndex*>(_l0->_shards[0].get())->_overlap_size;
+            CHECK(total_kv_pairs_usage >= overlap_usage);
+            CHECK(total_kv_pairs_size >= overlap_size);
+            total_kv_pairs_size -= overlap_size;
+            total_kv_pairs_usage -= overlap_usage;
+        } else {
+            size_t overlap_size = _l0->_shards[l0_shard_offset]->overlap_size();
+            CHECK(total_kv_pairs_size >= overlap_size);
+            total_kv_pairs_size -= overlap_size;
+            total_kv_pairs_usage -= (key_size + kIndexValueSize) * overlap_size;
+        }
         const auto [nshard, npage_hint] = MutableIndex::estimate_nshard_and_npage(total_kv_pairs_usage);
         const auto nbucket = MutableIndex::estimate_nbucket(key_size, total_kv_pairs_size, nshard, npage_hint);
         const auto estimated_size_per_shard = total_kv_pairs_size / nshard;

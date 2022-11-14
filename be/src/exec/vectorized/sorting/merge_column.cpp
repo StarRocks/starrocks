@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include <numeric>
+#include <utility>
 
 #include "column/array_column.h"
 #include "column/chunk.h"
@@ -8,7 +9,6 @@
 #include "column/column_visitor_adapter.h"
 #include "column/const_column.h"
 #include "column/datum.h"
-#include "column/fixed_length_column_base.h"
 #include "column/json_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
@@ -26,7 +26,7 @@ struct EqualRange {
     Range left_range;
     Range right_range;
 
-    EqualRange(Range left, Range right) : left_range(left), right_range(right) {}
+    EqualRange(Range left, Range right) : left_range(std::move(left)), right_range(std::move(right)) {}
 };
 
 // MergeTwoColumn incremental merge two columns
@@ -107,7 +107,7 @@ public:
 
     // General implementation
     template <class ColumnType>
-    Status do_visit(const ColumnType&) {
+    Status do_visit_slow(const ColumnType&) {
         auto cmp = [&](size_t lhs_index, size_t rhs_index) {
             int x = _left_col->compare_at(lhs_index, rhs_index, *_right_col, _null_first);
             if (_sort_order == -1) {
@@ -143,6 +143,11 @@ public:
         return do_merge(cmp, cmp_left, cmp_right);
     }
 
+    template <class ColumnType>
+    Status do_visit(const ColumnType& _) {
+        return do_visit_slow(_);
+    }
+
     // Specific version for FixedlengthColumn
     template <class T>
     Status do_visit(const FixedLengthColumn<T>& _) {
@@ -162,10 +167,19 @@ public:
         return merge_ordinary_column<Container, Slice>(left_data, right_data);
     }
 
-    // TODO: Murphy
-    // Status do_visit(const NullableColumn& _) {
-    // return Status::NotSupported("TODO");
-    // }
+    Status do_visit(const NullableColumn& _) {
+        // Fast path
+        if (!_left_col->has_null() && !_right_col->has_null()) {
+            DCHECK(_left_col->is_nullable() && _right_col->is_nullable());
+            const auto* lhs_data = down_cast<const NullableColumn*>(_left_col)->data_column().get();
+            const auto* rhs_data = down_cast<const NullableColumn*>(_right_col)->data_column().get();
+            MergeTwoColumn merge2({_sort_order, _null_first}, lhs_data, rhs_data, _equal_ranges, _perm);
+            return lhs_data->accept(&merge2);
+        }
+
+        // Slow path
+        return do_visit_slow(_);
+    }
 
 private:
     constexpr static uint32_t kLeftIndex = 0;
@@ -258,7 +272,7 @@ public:
     }
 };
 
-SortedRun::SortedRun(ChunkPtr ichunk, const std::vector<ExprContext*>* exprs)
+SortedRun::SortedRun(const ChunkPtr& ichunk, const std::vector<ExprContext*>* exprs)
         : chunk(ichunk), range(0, ichunk->num_rows()) {
     DCHECK(ichunk);
     if (!ichunk->is_empty()) {
@@ -443,91 +457,39 @@ Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const SortedRun& 
     return MergeTwoChunk::merge_sorted_chunks_two_way(sort_desc, left, right, output);
 }
 
-Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const std::vector<ExprContext*>* sort_exprs,
-                                   const SortedRuns& left, const SortedRuns& right, SortedRuns* output) {
-    int left_index = -1;
-    int right_index = -1;
-    auto left_cursor = std::make_unique<SimpleChunkSortCursor>(
-            [&](ChunkUniquePtr* output, bool* eos) {
-                if (output) {
-                    if (++left_index < left.num_chunks()) {
-                        // TODO: avoid copy
-                        *output = left.get_chunk(left_index)->clone_unique();
+Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext*>* sort_exprs,
+                           const std::vector<ChunkPtr>& chunks, SortedRuns* output) {
+    std::vector<std::unique_ptr<SimpleChunkSortCursor>> cursors;
+    std::vector<size_t> chunk_index(chunks.size(), 0);
+
+    for (size_t i = 0; i < chunks.size(); i++) {
+        if (chunks[i] == nullptr || chunks[i]->is_empty()) {
+            continue;
+        }
+        cursors.emplace_back(std::make_unique<SimpleChunkSortCursor>(
+                [&, i](ChunkUniquePtr* output, bool* eos) -> bool {
+                    if (output == nullptr || eos == nullptr) {
                         return true;
-                    } else {
-                        *eos = true;
+                    }
+                    *eos = true;
+                    if (chunk_index[i] > 0) {
                         return false;
                     }
-                }
-                return true;
-            },
-            sort_exprs);
-    auto right_cursor = std::make_unique<SimpleChunkSortCursor>(
-            [&](ChunkUniquePtr* output, bool* eos) {
-                if (output) {
-                    if (++right_index < right.num_chunks()) {
-                        *output = right.get_chunk(right_index)->clone_unique();
-                        return true;
-                    } else {
-                        *eos = true;
-                        return false;
-                    }
-                }
-                return true;
-            },
-            sort_exprs);
-    MergeTwoCursor merger(sort_desc, std::move(left_cursor), std::move(right_cursor));
+                    chunk_index[i]++;
+                    *output = chunks[i]->clone_unique();
+                    return true;
+                },
+                sort_exprs));
+    }
+    if (cursors.empty()) {
+        return Status::OK();
+    }
+
     ChunkConsumer consumer = [&](ChunkUniquePtr chunk) {
-        output->chunks.push_back(SortedRun(ChunkPtr(chunk.release()), sort_exprs));
+        output->chunks.emplace_back(ChunkPtr(chunk.release()), sort_exprs);
         return Status::OK();
     };
-    return merger.consume_all(consumer);
-}
-
-Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext*>* sort_exprs,
-                           const std::vector<SortedRuns>& runs_batch, SortedRuns* output, size_t limit) {
-    std::deque<SortedRuns> queue;
-    for (auto& runs : runs_batch) {
-        if (runs.num_chunks() > 0) {
-            queue.push_back(runs);
-        }
-    }
-    if (queue.empty()) {
-        return Status::OK();
-    }
-    while (queue.size() > 1) {
-        SortedRuns left = queue.front();
-        queue.pop_front();
-        SortedRuns right = queue.front();
-        queue.pop_front();
-
-        // TODO: push down the limit to merge procedure
-        SortedRuns merged;
-        RETURN_IF_ERROR(merge_sorted_chunks_two_way(descs, sort_exprs, left, right, &merged));
-
-        DCHECK(left.is_sorted(descs)) << left.debug_dump();
-        DCHECK(right.is_sorted(descs)) << right.debug_dump();
-        DCHECK(merged.is_sorted(descs)) << merged.debug_dump();
-
-        if (limit > 0) {
-            merged.resize(limit);
-        }
-        queue.push_back(merged);
-    }
-    *output = queue.front();
-
-    return Status::OK();
-}
-
-Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext*>* sort_exprs,
-                           const std::vector<ChunkPtr>& chunks, SortedRuns* output, size_t limit) {
-    std::vector<SortedRuns> runs;
-    for (auto& chunk : chunks) {
-        if (!chunk->is_empty()) {
-            runs.push_back(SortedRun(chunk, sort_exprs));
-        }
-    }
-    return merge_sorted_chunks(descs, sort_exprs, runs, output, limit);
+    return merge_sorted_cursor_cascade(descs, std::move(cursors), consumer);
 }
 
 Status merge_sorted_chunks_two_way_rowwise(const SortDescs& descs, const Columns& left_columns,

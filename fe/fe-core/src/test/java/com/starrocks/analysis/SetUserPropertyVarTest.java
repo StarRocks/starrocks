@@ -19,6 +19,7 @@ package com.starrocks.analysis;
 
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
+import com.starrocks.sql.ast.SetUserPropertyVar;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -30,7 +31,6 @@ public class SetUserPropertyVarTest {
         var.analyze(true);
         Assert.assertEquals("quota.normal", var.getPropertyKey());
         Assert.assertEquals("1000", var.getPropertyValue());
-        Assert.assertEquals("'quota.normal' = '1000'", var.toString());
     }
 
     @Test(expected = AnalysisException.class)

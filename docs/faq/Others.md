@@ -184,7 +184,7 @@ If you execute the DROP TABLE statement to delete a table, StarRocks takes a whi
 
 ## How to view the current version of StarRocks?
 
-Run the `select current_version();` command or the CLI command `sh bin/show_fe_version.sh` to view the current version.
+Run the `select current_version();` command or the CLI command `./bin/show_fe_version.sh` to view the current version.
 
 ## How to set the memory size of an FE?
 
@@ -214,7 +214,7 @@ StarRocks supports single node deployment, so you need to configure at least one
 
 You can create a new user account and then set the data permission by granting permissions on the table query to the user.
 
-## Why does the profile fail to display after I set `is_report_success` to `true`?
+## Why does the profile fail to display after I set `enable_profile` to `true`?
 
 The report is only submitted to the leader FE for access.
 

@@ -30,7 +30,7 @@ void RowsetId::init(std::string_view rowset_id_str) {
     // if the len < 48, then it is an old format rowset id
     if (rowset_id_str.length() < 48) {
         StringParser::ParseResult result;
-        int64_t high = StringParser::string_to_int<int64_t>(rowset_id_str.data(), rowset_id_str.size(), &result);
+        auto high = StringParser::string_to_int<int64_t>(rowset_id_str.data(), rowset_id_str.size(), &result);
         DCHECK_EQ(StringParser::PARSE_SUCCESS, result);
         init(1, high, 0, 0);
     } else {

@@ -23,12 +23,15 @@
 
 #include <rapidjson/prettywriter.h>
 
+#include <cstdint>
 #include <future>
+#include <vector>
 
 #include "common/status.h"
 #include "common/utils.h"
 #include "gen_cpp/BackendService_types.h"
 #include "gen_cpp/FrontendService_types.h"
+#include "pulsar/Client.h"
 #include "runtime/exec_env.h"
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_executor.h"
@@ -76,6 +79,41 @@ public:
     std::map<std::string, std::string> properties;
 };
 
+// pulsar related info
+class PulsarLoadInfo {
+public:
+    explicit PulsarLoadInfo(const TPulsarLoadInfo& t_info)
+            : service_url(t_info.service_url),
+              topic(t_info.topic),
+              subscription(t_info.subscription),
+              partitions(t_info.partitions),
+              properties(t_info.properties) {
+        if (t_info.__isset.initial_positions) {
+            initial_positions = t_info.initial_positions;
+        }
+    }
+
+    void clear_backlog() {
+        // clear the backlog
+        partition_backlog.clear();
+    }
+
+public:
+    std::string service_url;
+    std::string topic;
+    std::string subscription;
+    std::vector<std::string> partitions;
+    std::map<std::string, int64_t> initial_positions;
+
+    // partition -> acknowledge offset, inclusive.
+    std::map<std::string, pulsar::MessageId> ack_offset;
+    // partition -> backlog num, inclusive.
+    std::map<std::string, int64_t> partition_backlog;
+
+    // custom kafka property key -> value
+    std::map<std::string, std::string> properties;
+};
+
 class MessageBodySink;
 
 const std::string TXN_BEGIN = "begin";
@@ -88,6 +126,10 @@ const std::string TXN_LIST = "list";
 class StreamLoadContext {
 public:
     explicit StreamLoadContext(ExecEnv* exec_env) : id(UniqueId::gen_uid()), _exec_env(exec_env), _refs(0) {
+        start_nanos = MonotonicNanos();
+    }
+
+    explicit StreamLoadContext(ExecEnv* exec_env, UniqueId id) : id(id), _exec_env(exec_env), _refs(0) {
         start_nanos = MonotonicNanos();
     }
 
@@ -124,7 +166,7 @@ public:
     std::shared_ptr<MemTracker> instance_mem_tracker;
     // load type, eg: ROUTINE LOAD/MANUAL LOAD
     TLoadType::type load_type;
-    // load data source: eg: KAFKA/RAW
+    // load data source: eg: KAFKA/PULSAR/RAW
     TLoadSourceType::type load_src_type;
 
     // the job this stream load task belongs to,
@@ -183,6 +225,7 @@ public:
     std::string existing_job_status;
 
     std::unique_ptr<KafkaLoadInfo> kafka_info;
+    std::unique_ptr<PulsarLoadInfo> pulsar_info;
 
     std::vector<TTabletCommitInfo> commit_infos;
 
@@ -198,6 +241,7 @@ public:
     Status status;
 
     int32_t idle_timeout_sec = -1;
+    int channel_id = -1;
 
     // buffer for reading data from ev_buffer
     static constexpr size_t kDefaultBufferSize = 64 * 1024;
@@ -208,6 +252,7 @@ public:
     TStreamLoadPutRequest request;
 
 public:
+    bool is_channel_stream_load_context() { return channel_id != -1; }
     ExecEnv* exec_env() { return _exec_env; }
 
 private:

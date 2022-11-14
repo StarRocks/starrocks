@@ -2,10 +2,10 @@
 
 package com.starrocks.scheduler;
 
-import com.starrocks.analysis.StatementBase;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
 
 // Execute a basic task of SQL\

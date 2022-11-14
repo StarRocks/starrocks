@@ -68,7 +68,7 @@ private:
     void _init_row_desc();
     void _init_chunk(ChunkPtr* chunk);
 
-    TJoinOp::type _join_op;
+    TJoinOp::type _join_op = TJoinOp::type::CROSS_JOIN;
     std::vector<ExprContext*> _join_conjuncts;
     std::string _sql_join_conjuncts;
 

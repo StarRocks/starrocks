@@ -25,14 +25,13 @@
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/select_operator.h"
 #include "exprs/expr.h"
-#include "gen_cpp/PlanNodes_types.h"
 #include "runtime/raw_value.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
 
 SelectNode::SelectNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
-        : ExecNode(pool, tnode, descs), _child_eos(false) {}
+        : ExecNode(pool, tnode, descs) {}
 
 SelectNode::~SelectNode() {
     if (runtime_state() != nullptr) {

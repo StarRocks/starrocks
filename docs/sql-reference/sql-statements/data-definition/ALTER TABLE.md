@@ -581,7 +581,3 @@ bitmap index supports the following modifications:
     ```sql
     ALTER TABLE table1 SWAP WITH table2
     ```
-
-## keyword
-
-ALTER,TABLE,ROLLUP,COLUMN,PARTITION,RENAME,SWAP

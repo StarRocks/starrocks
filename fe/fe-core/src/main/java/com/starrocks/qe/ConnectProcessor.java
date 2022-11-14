@@ -23,8 +23,6 @@ package com.starrocks.qe;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
-import com.starrocks.analysis.KillStmt;
-import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -37,7 +35,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.external.iceberg.StarRocksIcebergException;
+import com.starrocks.connector.iceberg.StarRocksIcebergException;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.ResourceGroupMetricMgr;
 import com.starrocks.mysql.MysqlChannel;
@@ -50,7 +48,9 @@ import com.starrocks.plugin.AuditEvent.EventType;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.ast.KillStmt;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.SqlDigestBuilder;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.thrift.TMasterOpRequest;
@@ -177,10 +177,7 @@ public class ConnectProcessor {
 
         ctx.getAuditEventBuilder().setFeIp(FrontendOptions.getLocalHostAddress());
 
-        // We put origin query stmt at the end of audit log, for parsing the log more convenient.
-        if (!ctx.getState().isQuery() && (parsedStmt != null && parsedStmt.needAuditEncryption())) {
-            ctx.getAuditEventBuilder().setStmt(parsedStmt.toSql());
-        } else if (ctx.getState().isQuery() && containsComment(origStmt)) {
+        if (ctx.getState().isQuery() && containsComment(origStmt)) {
             // avoid audit log can't replay
             ctx.getAuditEventBuilder().setStmt(origStmt);
         } else {
@@ -234,12 +231,7 @@ public class ConnectProcessor {
         if (!Config.enable_collect_query_detail_info) {
             return;
         }
-        String sql;
-        if (parsedStmt.needAuditEncryption()) {
-            sql = parsedStmt.toSql();
-        } else {
-            sql = parsedStmt.getOrigStmt().originStmt;
-        }
+        String sql = parsedStmt.getOrigStmt().originStmt;
         boolean isQuery = parsedStmt instanceof QueryStatement;
         QueryDetail queryDetail = new QueryDetail(
                 DebugUtil.printId(ctx.getQueryId()),
@@ -274,6 +266,7 @@ public class ConnectProcessor {
                 .setTimestamp(System.currentTimeMillis())
                 .setClientIp(ctx.getMysqlChannel().getRemoteHostPortString())
                 .setUser(ctx.getQualifiedUser())
+                .setAuthorizedUser(ctx.getCurrentUserIdentity() == null ? "null" : ctx.getCurrentUserIdentity().toString())
                 .setDb(ctx.getDatabase())
                 .setCatalog(ctx.getCurrentCatalog());
         ctx.getPlannerProfile().reset();
@@ -488,8 +481,12 @@ public class ConnectProcessor {
                 // ShowResultSet is null means this is not ShowStmt, use remote packet(executor.getOutputPacket())
                 // or use local packet (getResultPacket())
                 if (resultSet == null) {
-                    packet = executor.getOutputPacket();
-                } else {
+                    if (executor.sendResultToChannel(ctx.getMysqlChannel())) {  // query statement result
+                        packet = getResultPacket();
+                    } else { // for lower version, in consideration of compatibility
+                        packet = executor.getOutputPacket();
+                    }
+                } else { // show statement result
                     executor.sendShowResult(resultSet);
                     packet = getResultPacket();
                     if (packet == null) {
@@ -634,8 +631,12 @@ public class ConnectProcessor {
         }
         result.setPacket(getResultPacket());
         result.setState(ctx.getState().getStateType().toString());
-        if (executor != null && executor.getProxyResultSet() != null) {
-            result.setResultSet(executor.getProxyResultSet().tothrift());
+        if (executor != null) {
+            if (executor.getProxyResultSet() != null) {  // show statement
+                result.setResultSet(executor.getProxyResultSet().tothrift());
+            } else if (executor.getProxyResultBuffer() != null) {  // query statement
+                result.setChannelBufferList(executor.getProxyResultBuffer());
+            }
         }
         return result;
     }

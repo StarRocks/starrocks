@@ -21,7 +21,3 @@ Only non-builtin plugins can be uninstalled.
     ```SQL
     UNINSTALL PLUGIN auditdemo;
     ```
-
-## keyword
-
-UNINSTALL,PLUGIN

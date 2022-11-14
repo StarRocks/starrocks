@@ -7,7 +7,9 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.IntLiteral;
+import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
@@ -16,7 +18,9 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.optimizer.Memo;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -32,6 +36,8 @@ import mockit.Mocked;
 import org.junit.Test;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -261,4 +267,177 @@ public class PartitionPruneRuleTest {
 
         assertEquals(3, ((LogicalOlapScanOperator) optExpression.getOp()).getSelectedPartitionId().size());
     }
+
+    @Test
+    public void transformForSingleItemListPartition(@Mocked OlapTable olapTable,
+                                                    @Mocked ListPartitionInfo partitionInfo)
+            throws AnalysisException {
+        FeConstants.runningUnitTest = true;
+        ColumnRefFactory columnRefFactory = new ColumnRefFactory();
+        ColumnRefOperator column = columnRefFactory.create("province", ScalarType.STRING, false);
+        Map<ColumnRefOperator, Column> scanColumnMap = Maps.newHashMap();
+        scanColumnMap.put(column, new Column("province", Type.STRING, false));
+        Map<Column, ColumnRefOperator> columnMetaToColRefMap = new HashMap<>();
+        columnMetaToColRefMap.put(new Column(column.getName(), column.getType()),
+                new ColumnRefOperator(1, column.getType(), column.getName(), false));
+
+        BinaryPredicateOperator binaryPredicateOperator =
+                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, column,
+                        ConstantOperator.createVarchar("guangdong"));
+        ScalarOperator predicate = Utils.compoundAnd(binaryPredicateOperator);
+
+        LogicalOlapScanOperator operator =
+                new LogicalOlapScanOperator(olapTable, scanColumnMap, columnMetaToColRefMap, null, -1, predicate);
+
+        Partition part1 = new Partition(10001L, "p1", null, null);
+        Partition part2 = new Partition(10002L, "p2", null, null);
+
+        List<LiteralExpr> p1 = Lists.newArrayList(
+                new PartitionValue("guangdong").getValue(Type.STRING),
+                new PartitionValue("shanghai").getValue(Type.STRING));
+
+        List<LiteralExpr> p2 = Lists.newArrayList(
+                new PartitionValue("beijing").getValue(Type.STRING),
+                new PartitionValue("chongqing").getValue(Type.STRING));
+
+        Map<Long, List<LiteralExpr>> literalExprValues = new HashMap<>();
+        literalExprValues.put(10001L, p1);
+        literalExprValues.put(10002L, p2);
+
+        List<Column> partitionColumns = new ArrayList<>();
+        partitionColumns.add(new Column("province", Type.STRING));
+
+        new Expectations() {
+            {
+                olapTable.getPartitionInfo();
+                result = partitionInfo;
+
+                partitionInfo.getType();
+                result = PartitionType.LIST;
+
+                partitionInfo.getLiteralExprValues();
+                result = literalExprValues;
+
+                olapTable.getPartitions();
+                result = Lists.newArrayList(part1, part2);
+                minTimes = 0;
+
+                partitionInfo.getPartitionColumns();
+                result = partitionColumns;
+                minTimes = 0;
+
+                olapTable.getPartition(10001L);
+                result = part1;
+                minTimes = 0;
+
+                olapTable.getPartition(10002L);
+                result = part2;
+                minTimes = 0;
+            }
+        };
+
+        PartitionPruneRule rule = new PartitionPruneRule();
+        assertNull(operator.getSelectedPartitionId());
+        OptExpression optExpression =
+                rule.transform(new OptExpression(operator), new OptimizerContext(new Memo(), columnRefFactory)).get(0);
+
+        List<Long> selectPartitionIds = ((LogicalOlapScanOperator) optExpression.getOp()).getSelectedPartitionId();
+        assertEquals(1, selectPartitionIds.size());
+        long actual = selectPartitionIds.get(0);
+        assertEquals(10001L, actual);
+    }
+
+    @Test
+    public void transformForMultiItemListPartition(@Mocked OlapTable olapTable,
+                                                   @Mocked ListPartitionInfo partitionInfo)
+            throws AnalysisException {
+        FeConstants.runningUnitTest = true;
+        ColumnRefFactory columnRefFactory = new ColumnRefFactory();
+        ColumnRefOperator column1 = columnRefFactory.create("dt", ScalarType.DATE, false);
+        ColumnRefOperator column2 = columnRefFactory.create("province", ScalarType.STRING, false);
+        Map<ColumnRefOperator, Column> scanColumnMap = Maps.newHashMap();
+        scanColumnMap.put(column1, new Column("dt", Type.DATE, false));
+        scanColumnMap.put(column2, new Column("province", Type.STRING, false));
+
+        Map<Column, ColumnRefOperator> columnMetaToColRefMap = new HashMap<>();
+        columnMetaToColRefMap.put(new Column(column1.getName(), column1.getType()),
+                new ColumnRefOperator(1, column1.getType(), column1.getName(), false));
+        columnMetaToColRefMap.put(new Column(column2.getName(), column2.getType()),
+                new ColumnRefOperator(2, column2.getType(), column2.getName(), false));
+
+        BinaryPredicateOperator binaryPredicateOperator1 =
+                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, column1,
+                        ConstantOperator.createDate(LocalDateTime.of(2022, 4, 2, 0, 0, 0)));
+        BinaryPredicateOperator binaryPredicateOperator2 =
+                new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, column2,
+                        ConstantOperator.createVarchar("shanghai"));
+
+        ScalarOperator predicate = Utils.compoundAnd(binaryPredicateOperator1, binaryPredicateOperator2);
+        LogicalOlapScanOperator operator =
+                new LogicalOlapScanOperator(olapTable, scanColumnMap, columnMetaToColRefMap, null, -1, predicate);
+
+        Partition part1 = new Partition(10001L, "p1", null, null);
+        Partition part2 = new Partition(10002L, "p2", null, null);
+
+        List<List<LiteralExpr>> p1 = new ArrayList<>();
+        List<LiteralExpr> pItem1 = Lists.newArrayList(
+                new PartitionValue("2022-04-01").getValue(Type.DATE),
+                new PartitionValue("beijing").getValue(Type.STRING));
+        p1.add(pItem1);
+
+        List<List<LiteralExpr>> p2 = new ArrayList<>();
+        List<LiteralExpr> pItem2 = Lists.newArrayList(
+                new PartitionValue("2022-04-02").getValue(Type.DATE),
+                new PartitionValue("shanghai").getValue(Type.STRING));
+        p2.add(pItem2);
+
+        Map<Long, List<List<LiteralExpr>>> multiLiteralExprValues = new HashMap<>();
+        multiLiteralExprValues.put(10001L, p1);
+        multiLiteralExprValues.put(10002L, p2);
+
+        List<Column> partitionColumns = new ArrayList<>();
+        partitionColumns.add(new Column("dt", Type.DATE));
+        partitionColumns.add(new Column("province", Type.STRING));
+
+        new Expectations() {
+            {
+                olapTable.getPartitionInfo();
+                result = partitionInfo;
+
+                partitionInfo.getType();
+                result = PartitionType.LIST;
+
+                partitionInfo.getMultiLiteralExprValues();
+                result = multiLiteralExprValues;
+
+                olapTable.getPartitions();
+                result = Lists.newArrayList(part1, part2);
+                minTimes = 0;
+
+                partitionInfo.getPartitionColumns();
+                result = partitionColumns;
+                minTimes = 0;
+
+                olapTable.getPartition(10001L);
+                result = part1;
+                minTimes = 0;
+
+                olapTable.getPartition(10002L);
+                result = part2;
+                minTimes = 0;
+            }
+        };
+
+        PartitionPruneRule rule = new PartitionPruneRule();
+        assertNull(operator.getSelectedPartitionId());
+        OptExpression optExpression =
+                rule.transform(new OptExpression(operator), new OptimizerContext(new Memo(), columnRefFactory)).get(0);
+
+        List<Long> selectPartitionIds = ((LogicalOlapScanOperator) optExpression.getOp()).getSelectedPartitionId();
+        assertEquals(1, selectPartitionIds.size());
+        long actual1 = selectPartitionIds.get(0);
+        assertEquals(10002L, actual1);
+    }
+
+
 }

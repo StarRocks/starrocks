@@ -2,6 +2,8 @@
 
 #include "storage/schema_change.h"
 
+#include <utility>
+
 #include "column/datum_convert.h"
 #include "fs/fs_util.h"
 #include "gtest/gtest.h"
@@ -10,7 +12,6 @@
 #include "storage/rowset/rowset_factory.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
-#include "storage/wrapper_field.h"
 #include "testutil/assert.h"
 #include "util/logging.h"
 
@@ -39,7 +40,7 @@ protected:
     void AddColumn(TCreateTabletReq* request, std::string column_name, TPrimitiveType::type type, bool is_key,
                    TKeysType::type keys_type = TKeysType::DUP_KEYS) {
         TColumn c;
-        c.column_name = column_name;
+        c.column_name = std::move(column_name);
         c.__set_is_key(is_key);
         c.column_type.type = type;
         if (!is_key && keys_type == TKeysType::AGG_KEYS) {
@@ -426,7 +427,7 @@ TEST_F(SchemaChangeTest, convert_from) {
     read_params.skip_aggregation = false;
     read_params.chunk_size = config::vector_chunk_size;
     vectorized::Schema base_schema = ChunkHelper::convert_schema_to_format_v2(base_tablet->tablet_schema());
-    vectorized::TabletReader* tablet_rowset_reader = new TabletReader(base_tablet, rowset->version(), base_schema);
+    auto* tablet_rowset_reader = new TabletReader(base_tablet, rowset->version(), base_schema);
     ASSERT_TRUE(tablet_rowset_reader != nullptr);
     ASSERT_TRUE(tablet_rowset_reader->prepare().ok());
     ASSERT_TRUE(tablet_rowset_reader->open(read_params).ok());
@@ -486,10 +487,7 @@ TEST_F(SchemaChangeTest, schema_change_with_sorting) {
     indexs->emplace_back(3);
     column_mapping = chunk_changer.get_mutable_column_mapping(4);
     column_mapping->ref_column = -1;
-    const TabletColumn& hll_column_schema = new_tablet->tablet_schema().column(4);
-    column_mapping->default_value = WrapperField::create(hll_column_schema);
-    ASSERT_TRUE(column_mapping->default_value != nullptr);
-    column_mapping->default_value->from_string("");
+    SchemaChangeUtils::init_column_mapping(column_mapping, new_tablet->tablet_schema().column(4), "");
 
     _sc_procedure = new (std::nothrow) SchemaChangeWithSorting(
             &chunk_changer, config::memory_limitation_per_thread_for_schema_change * 1024 * 1024 * 1024);
@@ -502,7 +500,7 @@ TEST_F(SchemaChangeTest, schema_change_with_sorting) {
     read_params.skip_aggregation = false;
     read_params.chunk_size = config::vector_chunk_size;
     vectorized::Schema base_schema = ChunkHelper::convert_schema_to_format_v2(base_tablet->tablet_schema());
-    vectorized::TabletReader* tablet_rowset_reader = new TabletReader(base_tablet, rowset->version(), base_schema);
+    auto* tablet_rowset_reader = new TabletReader(base_tablet, rowset->version(), base_schema);
     ASSERT_TRUE(tablet_rowset_reader != nullptr);
     ASSERT_TRUE(tablet_rowset_reader->prepare().ok());
     ASSERT_TRUE(tablet_rowset_reader->open(read_params).ok());
@@ -557,7 +555,7 @@ TEST_F(SchemaChangeTest, schema_change_with_directing_v2) {
     read_params.skip_aggregation = false;
     read_params.chunk_size = config::vector_chunk_size;
     vectorized::Schema base_schema = ChunkHelper::convert_schema_to_format_v2(base_tablet->tablet_schema());
-    vectorized::TabletReader* tablet_rowset_reader = new TabletReader(base_tablet, rowset->version(), base_schema);
+    auto* tablet_rowset_reader = new TabletReader(base_tablet, rowset->version(), base_schema);
     ASSERT_TRUE(tablet_rowset_reader != nullptr);
     ASSERT_TRUE(tablet_rowset_reader->prepare().ok());
     ASSERT_TRUE(tablet_rowset_reader->open(read_params).ok());
@@ -626,7 +624,7 @@ TEST_F(SchemaChangeTest, schema_change_with_sorting_v2) {
     read_params.skip_aggregation = false;
     read_params.chunk_size = config::vector_chunk_size;
     vectorized::Schema base_schema = ChunkHelper::convert_schema_to_format_v2(base_tablet->tablet_schema());
-    vectorized::TabletReader* tablet_rowset_reader = new TabletReader(base_tablet, rowset->version(), base_schema);
+    auto* tablet_rowset_reader = new TabletReader(base_tablet, rowset->version(), base_schema);
     ASSERT_TRUE(tablet_rowset_reader != nullptr);
     ASSERT_TRUE(tablet_rowset_reader->prepare().ok());
     ASSERT_TRUE(tablet_rowset_reader->open(read_params).ok());
@@ -690,7 +688,7 @@ TEST_F(SchemaChangeTest, schema_change_with_agg_key_reorder) {
     read_params.skip_aggregation = false;
     read_params.chunk_size = config::vector_chunk_size;
     vectorized::Schema base_schema = ChunkHelper::convert_schema_to_format_v2(base_tablet->tablet_schema());
-    vectorized::TabletReader* tablet_rowset_reader = new TabletReader(base_tablet, rowset->version(), base_schema);
+    auto* tablet_rowset_reader = new TabletReader(base_tablet, rowset->version(), base_schema);
     ASSERT_TRUE(tablet_rowset_reader != nullptr);
     ASSERT_TRUE(tablet_rowset_reader->prepare().ok());
     ASSERT_TRUE(tablet_rowset_reader->open(read_params).ok());
@@ -717,7 +715,7 @@ TEST_F(SchemaChangeTest, schema_change_with_agg_key_reorder) {
 TEST_F(SchemaChangeTest, convert_varchar_to_json) {
     auto mem_pool = std::make_unique<MemPool>();
     std::vector<std::string> test_cases = {"{\"a\": 1}", "null", "[1,2,3]"};
-    for (auto json_str : test_cases) {
+    for (const auto& json_str : test_cases) {
         JsonValue expected = JsonValue::parse(json_str).value();
 
         BinaryColumn::Ptr src_column = BinaryColumn::create();

@@ -61,7 +61,3 @@ Note:
         "password" = "password"
     );
     ```
-
-## keyword
-
-CREATE REPOSITORY

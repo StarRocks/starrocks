@@ -34,12 +34,12 @@ void BlockSplitBloomFilter::add_hash(uint64_t hash) {
     DCHECK(_num_bytes >= BYTES_PER_BLOCK);
     uint32_t block_size = _num_bytes / BYTES_PER_BLOCK;
     uint32_t block_index = (uint32_t)(hash >> 32) & (block_size - 1);
-    uint32_t key = (uint32_t)hash;
+    auto key = (uint32_t)hash;
 
     // Calculate masks for bucket.
     uint32_t masks[8];
     _set_masks(key, masks);
-    uint32_t* block_offset = (uint32_t*)(_data + BYTES_PER_BLOCK * block_index);
+    auto* block_offset = (uint32_t*)(_data + BYTES_PER_BLOCK * block_index);
     for (int i = 0; i < BITS_SET_PER_BLOCK; ++i) {
         *(block_offset + i) |= masks[i];
     }
@@ -50,11 +50,11 @@ bool BlockSplitBloomFilter::test_hash(uint64_t hash) const {
     // power of 2)
     uint32_t block_size = _num_bytes / BYTES_PER_BLOCK;
     uint32_t block_index = (uint32_t)(hash >> 32) & (block_size - 1);
-    uint32_t key = (uint32_t)hash;
+    auto key = (uint32_t)hash;
     // Calculate masks for bucket.
     uint32_t masks[BITS_SET_PER_BLOCK];
     _set_masks(key, masks);
-    uint32_t* block_offset = (uint32_t*)(_data + BYTES_PER_BLOCK * block_index);
+    auto* block_offset = (uint32_t*)(_data + BYTES_PER_BLOCK * block_index);
     for (int i = 0; i < BITS_SET_PER_BLOCK; ++i) {
         if ((*(block_offset + i) & masks[i]) == 0) {
             return false;

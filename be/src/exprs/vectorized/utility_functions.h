@@ -44,6 +44,10 @@ public:
      * report runtime error if input is false
      */
     DEFINE_VECTORIZED_FN(assert_true);
+    /**
+     * return the host name
+     */
+    DEFINE_VECTORIZED_FN(host_name);
 };
 
 } // namespace vectorized

@@ -32,7 +32,6 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.DecimalLiteral;
-import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.LiteralExpr;
@@ -72,6 +71,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryStateException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.transaction.BeginTransactionException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
@@ -602,8 +602,7 @@ public class DeleteHandler implements Writable {
             }
         }
 
-        LiteralExpr result =
-                LiteralExpr.create(value, Objects.requireNonNull(Type.fromPrimitiveType(column.getPrimitiveType())));
+        LiteralExpr result = LiteralExpr.create(value, Objects.requireNonNull(column.getType()));
         if (result instanceof DecimalLiteral) {
             ((DecimalLiteral) result).checkPrecisionAndScale(column.getPrecision(), column.getScale());
         } else if (result instanceof DateLiteral) {

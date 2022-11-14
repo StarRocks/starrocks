@@ -29,8 +29,7 @@ class Operator {
     friend class PipelineDriver;
 
 public:
-    Operator(OperatorFactory* factory, int32_t id, const std::string& name, int32_t plan_node_id,
-             int32_t driver_sequence);
+    Operator(OperatorFactory* factory, int32_t id, std::string name, int32_t plan_node_id, int32_t driver_sequence);
     virtual ~Operator() = default;
 
     // prepare is used to do the initialization work
@@ -101,6 +100,23 @@ public:
     // Push chunk to this operator
     virtual Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) = 0;
 
+    // reset_state is used by MultilaneOperator in cache mechanism, because lanes in MultilaneOperator are
+    // re-used by tablets, before the lane serves for the current tablet, it must invoke reset_state to re-prepare
+    // the operators (such as: Project, ChunkAccumulate, DictDecode, Aggregate) that is decorated by MultilaneOperator
+    // and clear the garbage that previous tablet has produced.
+    //
+    // In multi-version cache, when cache is hit partially, the partial-hit cache value should be refilled back to the
+    // pre-cache operator(e.g. pre-cache Agg operator) that precedes CacheOperator immediately, the Rowsets of delta
+    // version and the partial-hit cache value will be merged in this pre-cache operator.
+    //
+    // which operators should override this functions?
+    // 1. operators not decorated by MultiOperator: not required
+    // 2. operators decorated by MultilaneOperator and it precedes CacheOperator immediately: required, and must refill back
+    // partial-hit cache value via the `chunks` parameter, e.g.
+    //  MultilaneOperator<ConjugateOperator<AggregateBlockingSinkOperator, AggregateBlockingSourceOperator>>
+    // 3. operators decorated by MultilaneOperator except case 2: e.g. ProjectOperator, Chunk AccumulateOperator and etc.
+    virtual Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) { return Status::OK(); }
+
     int32_t get_id() const { return _id; }
 
     int32_t get_plan_node_id() const { return _plan_node_id; }
@@ -110,6 +126,8 @@ public:
     virtual std::string get_name() const {
         return strings::Substitute("$0_$1_$2($3)", _name, _plan_node_id, this, is_finished() ? "X" : "O");
     }
+
+    std::string get_raw_name() const { return _name; }
 
     const LocalRFWaitingSet& rf_waiting_set() const;
 
@@ -126,7 +144,7 @@ public:
 
     // equal to ExecNode::eval_conjuncts(_conjunct_ctxs, chunk), is used to apply in-filters to Operators.
     Status eval_conjuncts_and_in_filters(const std::vector<ExprContext*>& conjuncts, vectorized::Chunk* chunk,
-                                         vectorized::FilterPtr* filter = nullptr);
+                                         vectorized::FilterPtr* filter = nullptr, bool apply_filter = true);
 
     // Evaluate conjuncts without cache
     Status eval_conjuncts(const std::vector<ExprContext*>& conjuncts, vectorized::Chunk* chunk,
@@ -139,6 +157,8 @@ public:
     // for example, LocalExchangeSinkOperator, LocalExchangeSourceOperator
     // 2. (s_pseudo_plan_node_id_upper_bound, -1] is for operator which is in the query's plan
     // for example, ResultSink
+    static const int32_t s_pseudo_plan_node_id_for_memory_scratch_sink;
+    static const int32_t s_pseudo_plan_node_id_for_export_sink;
     static const int32_t s_pseudo_plan_node_id_for_olap_table_sink;
     static const int32_t s_pseudo_plan_node_id_for_result_sink;
     static const int32_t s_pseudo_plan_node_id_upper_bound;
@@ -214,17 +234,18 @@ private:
 
 class OperatorFactory {
 public:
-    OperatorFactory(int32_t id, const std::string& name, int32_t plan_node_id);
+    OperatorFactory(int32_t id, std::string name, int32_t plan_node_id);
     virtual ~OperatorFactory() = default;
     // Create the operator for the specific sequence driver
     // For some operators, when share some status, need to know the degree_of_parallelism
     virtual OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) = 0;
     virtual bool is_source() const { return false; }
+    int32_t id() const { return _id; }
     int32_t plan_node_id() const { return _plan_node_id; }
     virtual Status prepare(RuntimeState* state);
     virtual void close(RuntimeState* state);
     std::string get_name() const { return _name + "_" + std::to_string(_plan_node_id); }
-
+    std::string get_raw_name() const { return _name; }
     // Local rf that take effects on this operator, and operator must delay to schedule to execution on core
     // util the corresponding local rf generated.
     const LocalRFWaitingSet& rf_waiting_set() const { return _rf_waiting_set; }

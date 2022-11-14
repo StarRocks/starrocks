@@ -6,8 +6,6 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Range;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import com.starrocks.analysis.DistributionDesc;
-import com.starrocks.analysis.HashDistributionDesc;
 import com.starrocks.analysis.IndexDef;
 import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
@@ -15,6 +13,8 @@ import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.DistributionDesc;
+import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.system.Backend;
 import com.starrocks.system.Backend.BackendState;
 import com.starrocks.system.SystemInfoService;
@@ -327,6 +327,8 @@ public class ExternalOlapTable extends OlapTable {
             tableProperty.buildStorageFormat();
             tableProperty.buildInMemory();
             tableProperty.buildDynamicProperty();
+            tableProperty.buildWriteQuorum();
+            tableProperty.buildReplicatedStorage();
 
             indexes = null;
             if (meta.isSetIndex_infos()) {
@@ -482,12 +484,12 @@ public class ExternalOlapTable extends OlapTable {
                             replica.setLastFailedTime(replicaMeta.getLast_failed_time());
                             // forbidden repair for external table
                             replica.setNeedFurtherRepair(false);
-                            tablet.addReplica(replica, true);
+                            tablet.addReplica(replica, false);
                         }
                         TabletMeta tabletMeta = new TabletMeta(tTabletMeta.getDb_id(), tTabletMeta.getTable_id(),
                                 tTabletMeta.getPartition_id(), tTabletMeta.getIndex_id(),
                                 tTabletMeta.getOld_schema_hash(), tTabletMeta.getStorage_medium());
-                        index.addTablet(tablet, tabletMeta);
+                        index.addTablet(tablet, tabletMeta, false);
                     }
                     if (indexMeta.getPartition_id() == partition.getId()) {
                         if (index.getId() != baseIndexId) {

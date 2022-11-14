@@ -14,7 +14,7 @@ When creating a user, specify the authentication method as LDAP authentication b
 Example 1:
 
 ~~~sql
-CREATE USER zhangsan IDENTIFIED WITH authentication_ldap_simple AS 'uid=zhansan,ou=company,dc=example,dc=com'
+CREATE USER tom IDENTIFIED WITH authentication_ldap_simple AS 'uid=tom,ou=company,dc=example,dc=com'
 ~~~
 
 It is possible to create a user without specifying the user's DN in LDAP. When the user logs in, StarRocks will go to the LDAP system to retrieve the user information. if there is one and only one match, the authentication is successful.
@@ -22,7 +22,7 @@ It is possible to create a user without specifying the user's DN in LDAP. When t
 Example 2:
 
 ~~~sql
-CREATE USER zhangsan IDENTIFIED WITH authentication_ldap_simple
+CREATE USER tom IDENTIFIED WITH authentication_ldap_simple
 ~~~
 
 In this case, additional configuration needs to be added to the FE
@@ -39,7 +39,7 @@ LDAP authentication requires the client to pass on a clear-text password to Star
 Add `--default-auth mysql_clear_password --enable-cleartext-plugin` when executing:
 
 ~~~sql
-mysql -uzhangsan -P8030 -h127.0.0.1 -p --default-auth mysql_clear_password --enable-cleartext-plugin
+mysql -utom -P8030 -h127.0.0.1 -p --default-auth mysql_clear_password --enable-cleartext-plugin
 ~~~
 
 * **JDBC**

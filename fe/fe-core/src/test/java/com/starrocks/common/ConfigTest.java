@@ -80,4 +80,37 @@ public class ConfigTest {
         Assert.assertEquals("4", configs.get(0).get(2));
         Assert.assertEquals(4, Config.tablet_sched_slot_num_per_path);
     }
+
+    private static class ConfigForArray extends ConfigBase {
+
+        @ConfField(mutable = true)
+        public static short[] prop_array_short = new short[] {1, 1};
+        @ConfField(mutable = true)
+        public static int[] prop_array_int = new int[] {2, 2};
+        @ConfField(mutable = true)
+        public static long[] prop_array_long = new long[] {3L, 3L};
+        @ConfField(mutable = true)
+        public static double[] prop_array_double = new double[] {1.1, 1.1};
+        @ConfField(mutable = true)
+        public static String[] prop_array_string = new String[] {"1", "2"};
+    }
+
+    @Test
+    public void testConfigArray() throws Exception {
+        ConfigForArray configForArray = new ConfigForArray();
+        URL resource = getClass().getClassLoader().getResource("conf/config_test3.properties");
+        configForArray.init(Paths.get(resource.toURI()).toFile().getAbsolutePath());
+        List<List<String>> configs = ConfigForArray.getConfigInfo(null);
+        Assert.assertEquals("[1, 1]", configs.get(0).get(2));
+        Assert.assertEquals("short[]", configs.get(0).get(3));
+        Assert.assertEquals("[2, 2]", configs.get(1).get(2));
+        Assert.assertEquals("int[]", configs.get(1).get(3));
+        Assert.assertEquals("[3, 3]", configs.get(2).get(2));
+        Assert.assertEquals("long[]", configs.get(2).get(3));
+        Assert.assertEquals("[1.1, 1.1]", configs.get(3).get(2));
+        Assert.assertEquals("double[]", configs.get(3).get(3));
+        Assert.assertEquals("[1, 2]", configs.get(4).get(2));
+        Assert.assertEquals("String[]", configs.get(4).get(3));
+        setUp();
+    }
 }

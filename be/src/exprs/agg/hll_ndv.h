@@ -17,8 +17,9 @@ namespace starrocks::vectorized {
  * ARGS_TYPE: ALL TYPE
  * SERIALIZED_TYPE: TYPE_VARCHAR
  */
-template <PrimitiveType PT, typename T = RunTimeCppType<PT>>
-class HllNdvAggregateFunction final : public AggregateFunctionBatchHelper<HyperLogLog, HllNdvAggregateFunction<PT, T>> {
+template <PrimitiveType PT, bool IsOutputHLL, typename T = RunTimeCppType<PT>>
+class HllNdvAggregateFunction final
+        : public AggregateFunctionBatchHelper<HyperLogLog, HllNdvAggregateFunction<PT, IsOutputHLL, T>> {
 public:
     using ColumnType = RunTimeColumnType<PT>;
 
@@ -31,7 +32,7 @@ public:
         uint64_t value = 0;
         const ColumnType* column = down_cast<const ColumnType*>(columns[0]);
 
-        if constexpr (pt_is_binary<PT>) {
+        if constexpr (pt_is_string<PT>) {
             Slice s = column->get_slice(row_num);
             value = HashUtil::murmur_hash64A(s.data, s.size, HashUtil::MURMUR_SEED);
         } else {
@@ -49,7 +50,7 @@ public:
                                               int64_t frame_end) const override {
         const ColumnType* column = down_cast<const ColumnType*>(columns[0]);
 
-        if constexpr (pt_is_binary<PT>) {
+        if constexpr (pt_is_string<PT>) {
             uint64_t value = 0;
             for (size_t i = frame_start; i < frame_end; ++i) {
                 Slice s = column->get_slice(i);
@@ -116,7 +117,7 @@ public:
         uint64_t value = 0;
         for (size_t i = 0; i < chunk_size; ++i) {
             HyperLogLog hll;
-            if constexpr (pt_is_binary<PT>) {
+            if constexpr (pt_is_string<PT>) {
                 Slice s = column->get_slice(i);
                 value = HashUtil::murmur_hash64A(s.data, s.size, HashUtil::MURMUR_SEED);
             } else {
@@ -138,13 +139,26 @@ public:
 
     void finalize_to_column(FunctionContext* ctx __attribute__((unused)), ConstAggDataPtr __restrict state,
                             Column* to) const override {
-        DCHECK(to->is_numeric());
+        if constexpr (IsOutputHLL) {
+            DCHECK(to->is_object());
+            auto* column = down_cast<HyperLogLogColumn*>(to);
+            auto& hll_value = const_cast<HyperLogLog&>(this->data(state));
+            column->append(std::move(hll_value));
+        } else {
+            DCHECK(to->is_numeric());
 
-        auto* column = down_cast<Int64Column*>(to);
-        column->append(this->data(state).estimate_cardinality());
+            auto* column = down_cast<Int64Column*>(to);
+            column->append(this->data(state).estimate_cardinality());
+        }
     }
 
-    std::string get_name() const override { return "ndv"; }
+    std::string get_name() const override {
+        if constexpr (IsOutputHLL) {
+            return "hll_raw";
+        } else {
+            return "ndv";
+        }
+    }
 };
 
 } // namespace starrocks::vectorized

@@ -4,7 +4,6 @@ package com.starrocks.sql.ast;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.RedirectStatus;
-import com.starrocks.analysis.ShowStmt;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ScalarType;
@@ -13,6 +12,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.BasicStatsMeta;
+import com.starrocks.statistic.StatisticUtils;
 
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -50,7 +50,7 @@ public class ShowBasicStatsMetaStmt extends ShowStmt {
         }
         row.set(1, table.getName());
 
-        long totalCollectColumnsSize = table.getBaseSchema().stream().filter(column -> !column.isAggregated()).count();
+        long totalCollectColumnsSize = StatisticUtils.getCollectibleColumns(table).size();
         if (null != columns && !columns.isEmpty() && (columns.size() != totalCollectColumnsSize)) {
             row.set(2, String.join(",", columns));
         }
@@ -71,11 +71,6 @@ public class ShowBasicStatsMetaStmt extends ShowStmt {
     @Override
     public RedirectStatus getRedirectStatus() {
         return RedirectStatus.FORWARD_NO_SYNC;
-    }
-
-    @Override
-    public boolean isSupportNewPlanner() {
-        return true;
     }
 
     @Override

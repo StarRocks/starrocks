@@ -21,17 +21,14 @@
 
 package com.starrocks.analysis;
 
-import com.google.common.base.Strings;
 import com.starrocks.cluster.ClusterNamespace;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.FeNameFormat;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.SystemInfoService;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import org.apache.commons.lang.builder.HashCodeBuilder;
 
 import java.io.DataInput;
@@ -64,13 +61,8 @@ public class LabelName implements Writable {
         return labelName;
     }
 
-    public void analyze(Analyzer analyzer) throws AnalysisException {
-        if (Strings.isNullOrEmpty(dbName)) {
-            if (Strings.isNullOrEmpty(analyzer.getDefaultDb())) {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_DB_ERROR);
-            }
-            dbName = analyzer.getDefaultDb();
-        }
+    public void analyze(ConnectContext context) {
+        dbName = AnalyzerUtils.getOrDefaultDatabase(dbName, context);
         FeNameFormat.checkLabel(labelName);
     }
 
@@ -89,17 +81,6 @@ public class LabelName implements Writable {
     @Override
     public int hashCode() {
         return new HashCodeBuilder().append(dbName).append(labelName).toHashCode();
-    }
-
-    public String toSql() {
-        StringBuilder stringBuilder = new StringBuilder();
-        stringBuilder.append("`").append(dbName).append("`.`").append(labelName).append("`");
-        return stringBuilder.toString();
-    }
-
-    @Override
-    public String toString() {
-        return toSql();
     }
 
     @Override

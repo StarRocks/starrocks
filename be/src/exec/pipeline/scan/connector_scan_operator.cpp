@@ -15,7 +15,9 @@ namespace starrocks::pipeline {
 
 ConnectorScanOperatorFactory::ConnectorScanOperatorFactory(int32_t id, ScanNode* scan_node, size_t dop,
                                                            ChunkBufferLimiterPtr buffer_limiter)
-        : ScanOperatorFactory(id, scan_node), _chunk_buffer(BalanceStrategy::kDirect, dop, std::move(buffer_limiter)) {}
+        : ScanOperatorFactory(id, scan_node),
+          _chunk_buffer(scan_node->is_shared_scan_enabled() ? BalanceStrategy::kRoundRobin : BalanceStrategy::kDirect,
+                        dop, std::move(buffer_limiter)) {}
 
 Status ConnectorScanOperatorFactory::do_prepare(RuntimeState* state) {
     const auto& conjunct_ctxs = _scan_node->conjunct_ctxs();
@@ -41,14 +43,16 @@ ConnectorScanOperator::ConnectorScanOperator(OperatorFactory* factory, int32_t i
         : ScanOperator(factory, id, driver_sequence, dop, scan_node) {}
 
 Status ConnectorScanOperator::do_prepare(RuntimeState* state) {
+    bool shared_scan = _scan_node->is_shared_scan_enabled();
+    _unique_metrics->add_info_string("SharedScan", shared_scan ? "True" : "False");
     return Status::OK();
 }
 
 void ConnectorScanOperator::do_close(RuntimeState* state) {}
 
 ChunkSourcePtr ConnectorScanOperator::create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) {
-    vectorized::ConnectorScanNode* scan_node = down_cast<vectorized::ConnectorScanNode*>(_scan_node);
-    ConnectorScanOperatorFactory* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
+    auto* scan_node = down_cast<vectorized::ConnectorScanNode*>(_scan_node);
+    auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
     return std::make_shared<ConnectorChunkSource>(_driver_sequence, _chunk_source_profiles[chunk_source_index].get(),
                                                   std::move(morsel), this, scan_node, factory->get_chunk_buffer());
 }
@@ -141,7 +145,7 @@ ConnectorChunkSource::ConnectorChunkSource(int32_t scan_operator_id, RuntimeProf
           _runtime_bloom_filters(op->runtime_bloom_filters()) {
     _conjunct_ctxs = scan_node->conjunct_ctxs();
     _conjunct_ctxs.insert(_conjunct_ctxs.end(), _runtime_in_filters.begin(), _runtime_in_filters.end());
-    ScanMorsel* scan_morsel = (ScanMorsel*)_morsel.get();
+    auto* scan_morsel = (ScanMorsel*)_morsel.get();
     TScanRange* scan_range = scan_morsel->get_scan_range();
 
     if (scan_range->__isset.broker_scan_range) {
@@ -163,6 +167,10 @@ ConnectorChunkSource::~ConnectorChunkSource() {
 Status ConnectorChunkSource::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ChunkSource::prepare(state));
     _runtime_state = state;
+    _ck_acc.set_max_size(state->chunk_size());
+    if (config::connector_min_max_predicate_from_runtime_filter_enable) {
+        _data_source->parse_runtime_filters(state);
+    }
     return Status::OK();
 }
 
@@ -187,15 +195,49 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, vectorized::ChunkP
         return Status::EndOfFile("limit reach");
     }
 
-    do {
-        RETURN_IF_ERROR(_data_source->get_next(state, chunk));
-    } while ((*chunk)->num_rows() == 0);
+    while (_status.ok()) {
+        vectorized::ChunkPtr tmp;
+        _status = _data_source->get_next(state, &tmp);
+        if (_status.ok()) {
+            if (tmp->num_rows() == 0) continue;
+            _ck_acc.push(tmp);
+            if (config::connector_chunk_source_accumulate_chunk_enable) {
+                if (_ck_acc.has_output()) break;
+            } else {
+                _ck_acc.finalize();
+                break;
+            }
+        } else if (!_status.is_end_of_file()) {
+            if (_status.is_time_out()) {
+                Status t = _status;
+                _status = Status::OK();
+                return t;
+            } else {
+                return _status;
+            }
+        } else {
+            _ck_acc.finalize();
+            DCHECK(_status.is_end_of_file());
+        }
+    }
 
-    _rows_read += (*chunk)->num_rows();
+    DCHECK(_status.ok() || _status.is_end_of_file());
     _scan_rows_num = _data_source->raw_rows_read();
     _scan_bytes = _data_source->num_bytes_read();
+    if (_ck_acc.has_output()) {
+        *chunk = std::move(_ck_acc.pull());
+        _rows_read += (*chunk)->num_rows();
+        _chunk_buffer.update_limiter(chunk->get());
+        return Status::OK();
+    }
+    _ck_acc.reset();
+    return Status::EndOfFile("");
+}
 
-    return Status::OK();
+const workgroup::WorkGroupScanSchedEntity* ConnectorChunkSource::_scan_sched_entity(
+        const workgroup::WorkGroup* wg) const {
+    DCHECK(wg != nullptr);
+    return wg->connector_scan_sched_entity();
 }
 
 } // namespace starrocks::pipeline

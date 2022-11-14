@@ -2,12 +2,12 @@
 
 package com.starrocks.sql.plan;
 
-import com.starrocks.analysis.SetStmt;
-import com.starrocks.analysis.StatementBase;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SetExecutor;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.SetStmt;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.Test;
@@ -476,16 +476,16 @@ public class SetTest extends PlanTestBase {
                 "      )\n" +
                 "  ) t;";
         String plan = getVerboseExplain(sql);
-        Assert.assertTrue(plan.contains("8:AGGREGATE (update serialize)\n" +
+        assertContains(plan, "8:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
                 "  |  group by: [9: day, TINYINT, true]\n" +
-                "  |  cardinality: 0\n" +
+                "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  0:UNION\n" +
                 "  |  child exprs:\n" +
                 "  |      [4, TINYINT, true]\n" +
                 "  |      [8, TINYINT, true]\n" +
-                "  |  pass-through-operands: all"));
+                "  |  pass-through-operands: all");
     }
 
     @Test

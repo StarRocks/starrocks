@@ -5,6 +5,8 @@
 #include <atomic>
 #include <boost/algorithm/string/predicate.hpp> // boost::algorithm::ends_with
 #include <chrono>
+#include <memory>
+#include <utility>
 
 #include "fmt/format.h"
 #include "fs/fs.h"
@@ -18,7 +20,8 @@
 namespace starrocks {
 
 struct JDBCDriverEntry {
-    JDBCDriverEntry(const std::string& name_, const std::string& checksum_) : name(name_), checksum(checksum_) {}
+    JDBCDriverEntry(std::string name_, std::string checksum_)
+            : name(std::move(name_)), checksum(std::move(checksum_)) {}
 
     ~JDBCDriverEntry();
 
@@ -47,7 +50,7 @@ JDBCDriverEntry::~JDBCDriverEntry() {
     }
 }
 
-JDBCDriverManager::JDBCDriverManager() {}
+JDBCDriverManager::JDBCDriverManager() = default;
 
 JDBCDriverManager::~JDBCDriverManager() {
     std::unique_lock<std::mutex> l(_lock);
@@ -57,7 +60,7 @@ JDBCDriverManager::~JDBCDriverManager() {
 JDBCDriverManager* JDBCDriverManager::getInstance() {
     static std::unique_ptr<JDBCDriverManager> manager;
     if (manager == nullptr) {
-        manager.reset(new JDBCDriverManager());
+        manager = std::make_unique<JDBCDriverManager>();
     }
     return manager.get();
 }

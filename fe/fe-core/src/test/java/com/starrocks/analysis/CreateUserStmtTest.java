@@ -24,6 +24,7 @@ package com.starrocks.analysis;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.Before;
@@ -33,7 +34,7 @@ public class CreateUserStmtTest {
 
     @Before
     public void setUp() {
-        ConnectContext ctx = new ConnectContext(null);
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
         ctx.setQualifiedUser("root");
         ctx.setRemoteIP("192.168.1.1");
         UserIdentity currentUserIdentity = new UserIdentity("root", "192.168.1.1");

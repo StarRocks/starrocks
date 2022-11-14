@@ -64,8 +64,6 @@ void set_up() {
     k_schema_change_mem_tracker = new MemTracker();
     starrocks::EngineOptions options;
     options.store_paths = paths;
-    options.metadata_mem_tracker = k_metadata_mem_tracker;
-    options.schema_change_mem_tracker = k_schema_change_mem_tracker;
     Status s = starrocks::StorageEngine::open(options, &k_engine);
     ASSERT_TRUE(s.ok()) << s.to_string();
 }
@@ -164,7 +162,6 @@ void set_default_create_tablet_request(TCreateTabletReq* request) {
 void set_create_duplicate_tablet_request(TCreateTabletReq* request) {
     request->tablet_id = random();
     request->__set_version(1);
-    request->__set_version_hash(0);
     request->tablet_schema.schema_hash = 270068376;
     request->tablet_schema.short_key_column_count = 2;
     request->tablet_schema.keys_type = TKeysType::DUP_KEYS;
@@ -243,7 +240,7 @@ void set_create_duplicate_tablet_request(TCreateTabletReq* request) {
 
 class TestDeleteConditionHandler : public testing::Test {
 protected:
-    void SetUp() {
+    void SetUp() override {
         config::storage_root_path = std::filesystem::current_path().string() + "/data_delete_condition";
         fs::remove_all(config::storage_root_path);
         ASSERT_TRUE(fs::create_directories(config::storage_root_path).ok());
@@ -265,7 +262,7 @@ protected:
         _dup_tablet_path = tablet->schema_hash_path();
     }
 
-    void TearDown() {
+    void TearDown() override {
         tablet.reset();
         dup_tablet.reset();
         (void)StorageEngine::instance()->tablet_manager()->drop_tablet(_create_tablet.tablet_id);
@@ -307,26 +304,26 @@ TEST_F(TestDeleteConditionHandler, StoreCondSucceed) {
     condition.column_name = "k4";
     condition.condition_op = "IS";
     condition.condition_values.clear();
-    condition.condition_values.push_back("NULL");
+    condition.condition_values.emplace_back("NULL");
     conditions.push_back(condition);
 
     condition.column_name = "k5";
     condition.condition_op = "*=";
     condition.condition_values.clear();
-    condition.condition_values.push_back("7");
+    condition.condition_values.emplace_back("7");
     conditions.push_back(condition);
 
     condition.column_name = "k12";
     condition.condition_op = "!*=";
     condition.condition_values.clear();
-    condition.condition_values.push_back("9");
+    condition.condition_values.emplace_back("9");
     conditions.push_back(condition);
 
     condition.column_name = "k13";
     condition.condition_op = "*=";
     condition.condition_values.clear();
-    condition.condition_values.push_back("1");
-    condition.condition_values.push_back("3");
+    condition.condition_values.emplace_back("1");
+    condition.condition_values.emplace_back("3");
     conditions.push_back(condition);
 
     DeletePredicatePB del_pred;
@@ -398,7 +395,7 @@ TEST_F(TestDeleteConditionHandler, StoreCondNonexistentColumn) {
 // delete condition does not match
 class TestDeleteConditionHandler2 : public testing::Test {
 protected:
-    void SetUp() {
+    void SetUp() override {
         config::storage_root_path = std::filesystem::current_path().string() + "/data_delete_condition";
         fs::remove_all(config::storage_root_path);
         ASSERT_TRUE(fs::create_directories(config::storage_root_path).ok());
@@ -413,7 +410,7 @@ protected:
         _schema_hash_path = tablet->schema_hash_path();
     }
 
-    void TearDown() {
+    void TearDown() override {
         tablet.reset();
         (void)StorageEngine::instance()->tablet_manager()->drop_tablet(_create_tablet.tablet_id);
         ASSERT_TRUE(fs::remove_all(config::storage_root_path).ok());

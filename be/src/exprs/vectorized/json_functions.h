@@ -2,18 +2,14 @@
 
 #pragma once
 
-#include "common/compiler_util.h"
-DIAGNOSTIC_PUSH
-DIAGNOSTIC_IGNORE("-Wclass-memaccess")
-
-#include <utility>
-DIAGNOSTIC_POP
-
 #include <re2/re2.h>
 #include <simdjson.h>
 #include <velocypack/vpack.h>
 
+#include <utility>
+
 #include "column/column_builder.h"
+#include "common/compiler_util.h"
 #include "exprs/vectorized/function_helper.h"
 #include "exprs/vectorized/jsonpath.h"
 #include "udf/udf.h"

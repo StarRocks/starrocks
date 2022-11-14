@@ -7,8 +7,7 @@
 namespace starrocks {
 
 GCHelper::GCHelper(const size_t period, const size_t interval, const MonoTime& now)
-        : _period(period),
-          _interval(interval * period * 1000 * 1000 * 1000 / SMOOTHSTEP_NSTEPS),
+        : _interval(interval * period * 1000 * 1000 * 1000 / SMOOTHSTEP_NSTEPS),
           _epoch(now),
           _bytes_limit(0),
           _remained_bytes(0) {
@@ -70,7 +69,7 @@ size_t GCHelper::_backlog_bytes_limit() {
     for (unsigned i = 0; i < SMOOTHSTEP_NSTEPS; i++) {
         sum += _backlog[i] * get_smoothstep_at(i);
     }
-    size_t bytes = (size_t)(sum >> SMOOTHSTEP_BFP);
+    auto bytes = (size_t)(sum >> SMOOTHSTEP_BFP);
     return bytes;
 }
 

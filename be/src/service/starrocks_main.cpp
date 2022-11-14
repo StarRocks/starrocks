@@ -24,14 +24,16 @@
 #include <sys/file.h>
 #include <unistd.h>
 
+#include "block_cache/block_cache.h"
+
 #if defined(LEAK_SANITIZER)
 #include <sanitizer/lsan_interface.h>
 #endif
 
 #include <curl/curl.h>
-#include <gperftools/profiler.h>
 #include <thrift/TOutput.h>
 
+#include "agent/agent_server.h"
 #include "agent/heartbeat_server.h"
 #include "agent/status.h"
 #include "common/config.h"
@@ -39,7 +41,6 @@
 #include "common/logging.h"
 #include "common/status.h"
 #include "exec/pipeline/query_context.h"
-#include "fs/fs_util.h"
 #include "runtime/exec_env.h"
 #include "runtime/heartbeat_flags.h"
 #include "runtime/jdbc_driver_manager.h"
@@ -50,11 +51,8 @@
 #include "storage/storage_engine.h"
 #include "util/debug_util.h"
 #include "util/logging.h"
-#include "util/network_util.h"
-#include "util/starrocks_metrics.h"
 #include "util/thrift_rpc_helper.h"
 #include "util/thrift_server.h"
-#include "util/thrift_util.h"
 #include "util/uid_util.h"
 
 DECLARE_bool(s2debug);
@@ -170,6 +168,32 @@ int main(int argc, char** argv) {
     }
 #endif
 
+#ifdef WITH_BLOCK_CACHE
+    if (starrocks::config::block_cache_enable) {
+        starrocks::BlockCache* cache = starrocks::BlockCache::instance();
+        starrocks::CacheOptions cache_options;
+        cache_options.mem_space_size = starrocks::config::block_cache_mem_size;
+        if (starrocks::config::block_cache_disk_size > 0) {
+            std::vector<starrocks::StorePath> paths;
+            auto parse_res = starrocks::parse_conf_store_paths(starrocks::config::block_cache_disk_path, &paths);
+            if (!parse_res.ok()) {
+                LOG(FATAL) << "parse config block cache disk path failed, path="
+                           << starrocks::config::block_cache_disk_path;
+                exit(-1);
+            }
+
+            for (auto& p : paths) {
+                cache_options.disk_spaces.push_back(
+                        {.path = p.path, .size = static_cast<size_t>(starrocks::config::block_cache_disk_size)});
+            }
+        }
+        cache_options.meta_path = starrocks::config::block_cache_meta_path;
+        cache_options.block_size = starrocks::config::block_cache_block_size;
+        cache_options.checksum = starrocks::config::block_cache_checksum_enable;
+        cache->init(cache_options);
+    }
+#endif
+
     Aws::SDKOptions aws_sdk_options;
     if (starrocks::config::aws_sdk_logging_trace_enabled) {
         aws_sdk_options.loggingOptions.logLevel = Aws::Utils::Logging::LogLevel::Trace;
@@ -231,8 +255,6 @@ int main(int argc, char** argv) {
     starrocks::EngineOptions options;
     options.store_paths = paths;
     options.backend_uid = starrocks::UniqueId::gen_uid();
-    options.metadata_mem_tracker = exec_env->metadata_mem_tracker();
-    options.schema_change_mem_tracker = exec_env->schema_change_mem_tracker();
     options.compaction_mem_tracker = exec_env->compaction_mem_tracker();
     options.update_mem_tracker = exec_env->update_mem_tracker();
     options.conf_path = string(getenv("STARROCKS_HOME")) + "/conf/";
@@ -284,6 +306,10 @@ int main(int argc, char** argv) {
         start_be();
     }
 
+#ifdef WITH_BLOCK_CACHE
+    starrocks::BlockCache::instance()->shutdown();
+#endif
+
     daemon->stop();
     daemon.reset();
 
@@ -296,6 +322,7 @@ int main(int argc, char** argv) {
     heartbeat_thrift_server->stop();
     heartbeat_thrift_server->join();
 
+    exec_env->agent_server()->stop();
     engine->stop();
     delete engine;
     starrocks::ExecEnv::destroy(exec_env);

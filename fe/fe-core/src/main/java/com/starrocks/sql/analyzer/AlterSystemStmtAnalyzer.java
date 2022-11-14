@@ -3,14 +3,15 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
-import com.starrocks.analysis.DdlStmt;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BackendClause;
+import com.starrocks.sql.ast.CancelAlterSystemStmt;
 import com.starrocks.sql.ast.ComputeNodeClause;
+import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.ast.FrontendClause;
 import com.starrocks.sql.ast.ModifyBackendAddressClause;
 import com.starrocks.sql.ast.ModifyBrokerClause;
@@ -88,14 +89,18 @@ public class AlterSystemStmtAnalyzer {
 
         private void checkModifyHostClause(String srcHost, String destHost) {
             try {
-                if (!InetAddressValidator.getInstance().isValidInet4Address(srcHost)) {
+                boolean srcHostIsIP = InetAddressValidator.getInstance().isValidInet4Address(srcHost);
+                boolean destHostIsIP = InetAddressValidator.getInstance().isValidInet4Address(destHost);
+                if (srcHostIsIP && destHostIsIP) {
+                    throw new SemanticException("Can't change ip to ip");
+                }
+                // If can't get an ip through the srcHost/destHost, will throw UnknownHostException
+                if (!srcHostIsIP) {
                     InetAddress.getByName(srcHost);
                 }
-                // if destHost is a domain name need to determine whether it is a legitimate domain name
-                if (InetAddressValidator.getInstance().isValidInet4Address(destHost)) {
-                    throw new SemanticException("the host you want to set could't be an ip");
+                if (!destHostIsIP) {
+                    InetAddress.getByName(destHost);
                 }
-                InetAddress.getByName(destHost);
             } catch (UnknownHostException e) {
                 throw new SemanticException("unknown host " + e.getMessage());
             }
@@ -114,6 +119,19 @@ public class AlterSystemStmtAnalyzer {
                 }
             } catch (AnalysisException e) {
                 throw new SemanticException("broker host or port is wrong!");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitCancelAlterSystemStatement(CancelAlterSystemStmt stmt, ConnectContext context) {
+            try {
+                for (String hostPort : stmt.getHostPorts()) {
+                    Pair<String, Integer> pair = SystemInfoService.validateHostAndPort(hostPort);
+                    stmt.getHostPortPairs().add(pair);
+                }
+            } catch (AnalysisException e) {
+                throw new SemanticException("frontend host or port is wrong!");
             }
             return null;
         }

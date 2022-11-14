@@ -28,7 +28,6 @@
 #include <sstream>
 #include <string_view>
 
-#include "common/logging.h"
 #include "util/timezone_utils.h"
 
 namespace starrocks {

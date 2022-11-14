@@ -17,7 +17,3 @@ SHOW ROLES;
     ```sql
     SHOW ROLES;
     ```
-
-## keyword
-
-SHOW,ROLES

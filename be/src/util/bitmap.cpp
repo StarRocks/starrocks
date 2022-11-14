@@ -108,7 +108,7 @@ bool BitmapFindFirst(const uint8_t* bitmap, size_t offset, size_t bitmap_size, b
     }
 
     // check 64bit at the time for a 'value' bit
-    const uint64_t* u64 = (const uint64_t*)p;
+    const auto* u64 = (const uint64_t*)p;
     while (num_bits >= 64 && *u64 == pattern64[value]) {
         num_bits -= 64;
         u64++;

@@ -10,8 +10,9 @@ namespace starrocks {
 
 // ===================================================================================
 
-DefaultBufferedInputStream::DefaultBufferedInputStream(RandomAccessFile* file, uint64_t offset, uint64_t length)
-        : _file(file), _offset(offset), _end_offset(offset + length) {}
+DefaultBufferedInputStream::DefaultBufferedInputStream(RandomAccessFile* file, [[may_unused]] uint64_t offset,
+                                                       uint64_t length)
+        : _file(file), _end_offset(offset + length) {}
 
 Status DefaultBufferedInputStream::get_bytes(const uint8_t** buffer, size_t* nbytes, bool peek) {
     if (*nbytes <= num_remaining()) {
@@ -146,10 +147,12 @@ Status SharedBufferedInputStream::get_bytes(const uint8_t** buffer, size_t offse
     if ((sb.offset > offset) || (sb.offset + sb.size) < (offset + *nbytes)) {
         return Status::RuntimeError("bad construction of shared buffer");
     }
+
     if (sb.buffer.capacity() == 0) {
         sb.buffer.reserve(sb.size);
         RETURN_IF_ERROR(_file->read_at_fully(sb.offset, sb.buffer.data(), sb.size));
     }
+
     *buffer = sb.buffer.data() + offset - sb.offset;
     return Status::OK();
 }

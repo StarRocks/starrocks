@@ -3,7 +3,6 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.RedirectStatus;
-import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.TableName;
 
 public class DropStatsStmt extends StatementBase {
@@ -20,11 +19,6 @@ public class DropStatsStmt extends StatementBase {
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitDropStatsStatement(this, context);
-    }
-
-    @Override
-    public boolean isSupportNewPlanner() {
-        return true;
     }
 
     @Override

@@ -2,8 +2,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.DdlStmt;
-
 // ToDo(zhuodong): to support internal catalog in the future
 public class DropCatalogStmt extends DdlStmt {
 
@@ -28,10 +26,5 @@ public class DropCatalogStmt extends DdlStmt {
         sb.append("DROP CATALOG ");
         sb.append("\'" + name + "\'");
         return sb.toString();
-    }
-
-    @Override
-    public boolean isSupportNewPlanner() {
-        return true;
     }
 }

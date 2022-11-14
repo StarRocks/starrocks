@@ -3,8 +3,6 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.alter.AlterOpType;
-import com.starrocks.analysis.DistributionDesc;
-import com.starrocks.analysis.PartitionDesc;
 
 import java.util.Map;
 
@@ -50,10 +48,5 @@ public class AddPartitionClause extends AlterTableClause {
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitAddPartitionClause(this, context);
-    }
-
-    @Override
-    public boolean isSupportNewPlanner() {
-        return true;
     }
 }

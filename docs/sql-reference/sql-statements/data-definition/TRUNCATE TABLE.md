@@ -31,7 +31,3 @@ Note:
     ```sql
     TRUNCATE TABLE tbl PARTITION(p1, p2);
     ```
-
-## keyword
-
-TRUNCATE,TABLE

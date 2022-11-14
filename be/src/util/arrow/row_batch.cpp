@@ -164,7 +164,7 @@ Status serialize_record_batch(const arrow::RecordBatch& record_batch, std::strin
         msg << "write record batch failure, reason: " << a_st.ToString();
         return Status::InternalError(msg.str());
     }
-    record_batch_writer->Close();
+    [[maybe_unused]] auto wr_close_st = record_batch_writer->Close();
     auto finish_res = sink->Finish();
     if (!finish_res.ok()) {
         std::stringstream msg;
@@ -174,7 +174,7 @@ Status serialize_record_batch(const arrow::RecordBatch& record_batch, std::strin
     std::shared_ptr<arrow::Buffer> buffer = finish_res.ValueOrDie();
     *result = buffer->ToString();
     // close the sink
-    sink->Close();
+    [[maybe_unused]] auto sk_close_st = sink->Close();
     return Status::OK();
 }
 

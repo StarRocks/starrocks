@@ -3,7 +3,6 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.TableName;
 import com.starrocks.statistic.StatsConstants;
 
@@ -75,10 +74,5 @@ public class CreateAnalyzeJobStmt extends DdlStmt {
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitCreateAnalyzeJobStatement(this, context);
-    }
-
-    @Override
-    public boolean isSupportNewPlanner() {
-        return true;
     }
 }

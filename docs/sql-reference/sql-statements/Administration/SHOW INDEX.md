@@ -19,7 +19,3 @@ SHOW KEY[S] FROM [db_name.]table_name [FROM database];
     ```sql
     SHOW INDEX FROM example_db.table_name;
     ```
-
-## keyword
-
-SHOW,INDEX

@@ -2,9 +2,11 @@
 
 StarRocks provides the loading method MySQL-based Broker Load to help you load dozens to hundreds of gigabytes of data from HDFS or cloud storage into StarRocks.
 
-Broker Load runs in asynchronous loading mode. After you submit a load job, StarRocks asynchronously runs the job. You need to use the [SHOW LOAD](/docs/sql-reference/sql-statements/data-manipulation/SHOW%20LOAD.md) statement or the `curl` command to check the result of the job.
+Broker Load runs in asynchronous loading mode. After you submit a load job, StarRocks asynchronously runs the job. You need to use the [SHOW LOAD](../sql-reference/sql-statements/data-manipulation/SHOW%20LOAD.md) statement or the `curl` command to check the result of the job.
 
-Broker Load supports loading one or more data files at a time. Additionally, Broker Load supports data transformation at data loading. For more information, see [Transform data at data loading](/docs/loading/Etl_in_loading.md).
+Broker Load supports loading one or more data files at a time and ensures the transactional atomicity of each load job that is run to load multiple data files. Atomicity means that the loading of multiple data files in one load job must all succeed or fail. It never happens that the loading of some data files succeeds while the loading of the other files fails.
+
+Broker Load also supports data transformation at data loading. For more information, see [Transform data at loading](../loading/Etl_in_loading.md).
 
 ## Background information
 
@@ -20,6 +22,10 @@ Broker Load supports the following data file formats:
 
 - ORC
 
+> **NOTE**
+>
+> For CSV data, you can use a UTF-8 string, such as a comma (,), tab, or pipe (|), whose length does not exceed 50 bytes as a text delimiter.
+
 ## Supported storage systems
 
 Broker Load supports the following storage systems:
@@ -32,11 +38,11 @@ Broker Load supports the following storage systems:
 
 ## Prerequisites
 
-A broker is deployed in your StarRocks cluster.
+Brokers are deployed in your StarRocks cluster.
 
-You can use the [SHOW BROKER](/docs/sql-reference/sql-statements/Administration/SHOW%20BROKER.md) statement to check for brokers that are deployed in your StarRocks cluster. If no broker is deployed, you must deploy a broker by following the instructions provided in [Deploy a broker](/docs/quick_start/Deploy.md#deploy-broker).
+You can use the [SHOW BROKER](../sql-reference/sql-statements/Administration/SHOW%20BROKER.md) statement to check for brokers that are deployed in your StarRocks cluster. If no brokers are deployed, you must deploy brokers by following the instructions provided in [Deploy a broker](../quick_start/Deploy.md#deploy-broker).
 
-In this topic, assume that a broker named mybroker is deployed in your StarRocks cluster.
+In this topic, assume that a group of brokers collectively named 'mybroker' are deployed in your StarRocks cluster.
 
 ## Principles
 
@@ -44,13 +50,13 @@ After you submit a load job to an FE, the FE generates a query plan, splits the 
 
 The following figure shows the workflow of a Broker Load job.
 
-![Workflow of Broker Load](/docs/assets/4.3-1.png)
+![Workflow of Broker Load](../assets/4.3-1.png)
 
 ## Basic operations
 
 ### Create a load job
 
-This topic uses CSV as an example to describe how to load data. For information about how to load data in other file formats and about the syntax and parameter descriptions for Broker Load, see [BROKER LOAD](/docs/sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
+This topic uses CSV as an example to describe how to load data. For information about how to load data in other file formats and about the syntax and parameter descriptions for Broker Load, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
 
 #### Data examples
 
@@ -112,12 +118,12 @@ LOAD LABEL test_db.label1
     DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/file1.csv")
     INTO TABLE table1
     COLUMNS TERMINATED BY ","
-    (id, city)
+    (id, name, score)
 
     DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/file2.csv")
     INTO TABLE table2
     COLUMNS TERMINATED BY ","
-    (id, name, score)
+    (id, city)
 )
 WITH BROKER "mybroker"
 (
@@ -139,11 +145,11 @@ LOAD LABEL test_db.label2
 (
     DATA INFILE("s3a://bucket_s3/input/file1.csv")
     INTO TABLE table1
-    (id, city)
+    (id, name, score)
     
     DATA INFILE("s3a://bucket_s3/input/file2.csv")
     INTO TABLE table2
-    (id, name, score)
+    (id, city)
 )
 WITH BROKER "mybroker"
 (
@@ -153,7 +159,9 @@ WITH BROKER "mybroker"
 )
 ```
 
-> Note: S3A is used for data loads from Amazon S3. Therefore, the file paths that you specify must start with the prefix `s3a://`.
+> **NOTE**
+>
+> S3A is used for data loads from Amazon S3. Therefore, the file paths that you specify must start with the prefix `s3a://`.
 
 #### Load data from Google GCS
 
@@ -164,11 +172,11 @@ LOAD LABEL test_db.label3
 (
     DATA INFILE("s3a://bucket_gcs/input/file1.csv")
     INTO TABLE table1
-    (id, city)
+    (id, name, score)
     
     DATA INFILE("s3a://bucket_gcs/input/file2.csv")
     INTO TABLE table2
-    (id, name, score)
+    (id, city)
 )
 WITH BROKER "mybroker"
 (
@@ -178,7 +186,9 @@ WITH BROKER "mybroker"
 )
 ```
 
-> Note: S3A is used for data loads from Amazon S3. Therefore, the file paths that you specify must start with the prefix `s3a://`.
+> **NOTE**
+>
+> S3A is used for data loads from Amazon S3. Therefore, the file paths that you specify must start with the prefix `s3a://`.
 
 ### Query data
 
@@ -217,7 +227,7 @@ Broker Load allows you to view a lob job by using the SHOW LOAD statement or the
 
 #### Use SHOW LOAD
 
-For more information, see [SHOW LOAD](/docs/sql-reference/sql-statements/data-manipulation/SHOW%20LOAD.md).
+For more information, see [SHOW LOAD](../sql-reference/sql-statements/data-manipulation/SHOW%20LOAD.md).
 
 #### Use curl
 
@@ -248,7 +258,7 @@ The following table describes the parameters in `jobInfo`.
 | dbName        | The name of the database into which data is loaded           |
 | tblNames      | The name of the table into which data is loaded.             |
 | label         | The label of the load job.                                   |
-| state         | The status of the load job. Valid values:<ul><li>`PENDING`: The load job is in queue waiting to be scheduled.</li><li>`LOADING`: The load job is running.</li><li>`FINISHED`: The load job succeeded.</li><li>`CANCELLED`: The load job failed.</li></ul>For more information, see the "Asynchronous loading" section in [Overview of data loading](/docs/loading/Loading_intro.md). |
+| state         | The status of the load job. Valid values:<ul><li>`PENDING`: The load job is in queue waiting to be scheduled.</li><li>`LOADING`: The load job is running.</li><li>`FINISHED`: The load job succeeded.</li><li>`CANCELLED`: The load job failed.</li></ul>For more information, see the "Asynchronous loading" section in [Overview of data loading](../loading/Loading_intro.md). |
 | failMsg       | The reason why the load job failed. If the `state` value for the load job is `PENDING`, `LOADING`, or `FINISHED`, `NULL` is returned for the `failMsg` parameter. If the `state` value for the load job is `CANCELLED`, the value returned for the `failMsg` parameter consists of two parts: `type` and `msg`.<ul><li>The `type` part can be any of the following values:</li><ul><li>`USER_CANCEL`: The load job was manually canceled.</li><li>`ETL_SUBMIT_FAIL`: The load job failed to be submitted.</li><li>`ETL-QUALITY-UNSATISFIED`: The load job failed because the percentage of unqualified data exceeds the value of the `max-filter-ratio` parameter.</li><li>`LOAD-RUN-FAIL`: The load job failed in the `LOADING` stage.</li><li>`TIMEOUT`: The load job failed to finish within the specified timeout period.</li><li>`UNKNOWN`: The load job failed due to an unknown error.</li></ul><li>The `msg` part provides the detailed cause of the load failure.</li></ul> |
 | trackingUrl   | The URL that is used to access the unqualified data detected in the load job. You can use the `curl` or `wget` command to access the URL and obtain the unqualified data. If no unqualified data is detected, `NULL` is returned for the `trackingUrl` parameter. |
 | status        | The status of the HTTP request for the load job. Valid values: `OK` and `Fail`. |
@@ -256,7 +266,7 @@ The following table describes the parameters in `jobInfo`.
 
 ### Cancel a load job
 
-When a load job is not in the **CANCELLED** or **FINISHED** stage, you can use the [CANCEL LOAD](/docs/sql-reference/sql-statements/data-manipulation/CANCEL%20LOAD.md) statement to cancel the job.
+When a load job is not in the **CANCELLED** or **FINISHED** stage, you can use the [CANCEL LOAD](../sql-reference/sql-statements/data-manipulation/CANCEL%20LOAD.md) statement to cancel the job.
 
 For example, you can execute the following statement to cancel a load job, whose label is `label1`, in the database `test_db`:
 
@@ -274,7 +284,7 @@ A Broker Load job can be split into one or more tasks that concurrently run. The
 
 - If you declare multiple `data_desc` parameters, each of which specifies a distinct partition for the same table, a task is generated to load the data of each partition.
 
-Additionally, each task can be further split into one or more instances, which are evenly distributed to and concurrently run on the BEs of your StarRocks cluster. StarRocks splits each task based on the following [FE configurations](/docs/administration/Configuration.md#fe-configuration-items):
+Additionally, each task can be further split into one or more instances, which are evenly distributed to and concurrently run on the BEs of your StarRocks cluster. StarRocks splits each task based on the following [FE configurations](../administration/Configuration.md#fe-configuration-items):
 
 - `min_bytes_per_broker_scanner`: the minimum amount of data processed by each instance. The default amount is 64 MB.
 
@@ -284,6 +294,6 @@ Additionally, each task can be further split into one or more instances, which a
   
   You can use the following formula to calculate the number of instances in an individual task:
 
-  **Number of instances in an individual task = min(Amount of data to be loaded by an individual task/****`min_bytes_per_broker_scanner`****,** **`max_broker_concurrency`****,** **`load_parallel_instance_num`** **x Number of BEs)**
+  **Number of instances in an individual task = min(Amount of data to be loaded by an individual task/`min_bytes_per_broker_scanner`,`max_broker_concurrency`,`load_parallel_instance_num` x Number of BEs)**
 
 In most cases, only one `data_desc` is declared for each load job, each load job is split into only one task, and the task is split into the same number of instances as the number of BEs.

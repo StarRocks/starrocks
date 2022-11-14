@@ -4,20 +4,23 @@
 
 #include <glog/logging.h>
 #include <gtest/gtest.h>
-#include <math.h>
+
+#include <cmath>
 
 #include "butil/time.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "exprs/vectorized/cast_expr.h"
 #include "exprs/vectorized/mock_vectorized_expr.h"
+#include "runtime/mem_tracker.h"
+#include "runtime/runtime_state.h"
+#include "testutil/assert.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 class VectorizedFunctionCallExprTest : public ::testing::Test {
 public:
-    void SetUp() {
+    void SetUp() override {
         expr_node.opcode = TExprOpcode::ADD;
         expr_node.child_type = TPrimitiveType::INT;
         expr_node.node_type = TExprNodeType::BINARY_PRED;
@@ -28,6 +31,7 @@ public:
     }
 
 public:
+    RuntimeState _runtime_state;
     TExprNode expr_node;
 };
 
@@ -50,10 +54,10 @@ TEST_F(VectorizedFunctionCallExprTest, mathPiExprTest) {
     VectorizedFunctionCallExpr expr(expr_node);
 
     ExprContext exprContext(&expr);
-    exprContext._is_clone = true;
+    std::vector<ExprContext*> expr_ctxs = {&exprContext};
 
-    WARN_IF_ERROR(expr.prepare(nullptr, &exprContext), "");
-    WARN_IF_ERROR(expr.open(nullptr, &exprContext, FunctionContext::FunctionStateScope::THREAD_LOCAL), "");
+    ASSERT_OK(Expr::prepare(expr_ctxs, &_runtime_state));
+    ASSERT_OK(Expr::open(expr_ctxs, &_runtime_state));
 
     ColumnPtr result = expr.evaluate(&exprContext, nullptr);
 
@@ -65,7 +69,7 @@ TEST_F(VectorizedFunctionCallExprTest, mathPiExprTest) {
         ASSERT_EQ(M_PI, value);
     }
 
-    exprContext.close(nullptr);
+    Expr::close(expr_ctxs, &_runtime_state);
 }
 
 TEST_F(VectorizedFunctionCallExprTest, mathModExprTest) {
@@ -93,10 +97,10 @@ TEST_F(VectorizedFunctionCallExprTest, mathModExprTest) {
     expr.add_child(&col2);
 
     ExprContext exprContext(&expr);
-    exprContext._is_clone = true;
+    std::vector<ExprContext*> expr_ctxs = {&exprContext};
 
-    WARN_IF_ERROR(expr.prepare(nullptr, &exprContext), "");
-    WARN_IF_ERROR(expr.open(nullptr, &exprContext, FunctionContext::FunctionStateScope::THREAD_LOCAL), "");
+    ASSERT_OK(Expr::prepare(expr_ctxs, &_runtime_state));
+    ASSERT_OK(Expr::open(expr_ctxs, &_runtime_state));
 
     ColumnPtr result = expr.evaluate(&exprContext, nullptr);
 
@@ -107,12 +111,12 @@ TEST_F(VectorizedFunctionCallExprTest, mathModExprTest) {
     {
         auto value = ColumnHelper::cast_to<TYPE_INT>(ColumnHelper::as_column<NullableColumn>(result)->data_column());
 
-        for (int j = 0; j < value->get_data().size(); ++j) {
-            ASSERT_EQ(1, value->get_data()[j]);
+        for (int& j : value->get_data()) {
+            ASSERT_EQ(1, j);
         }
     }
 
-    exprContext.close(nullptr);
+    Expr::close(expr_ctxs, &_runtime_state);
 }
 
 TEST_F(VectorizedFunctionCallExprTest, mathLeastExprTest) {
@@ -150,10 +154,10 @@ TEST_F(VectorizedFunctionCallExprTest, mathLeastExprTest) {
     expr.add_child(&col7);
 
     ExprContext exprContext(&expr);
-    exprContext._is_clone = true;
+    std::vector<ExprContext*> expr_ctxs = {&exprContext};
 
-    WARN_IF_ERROR(expr.prepare(nullptr, &exprContext), "");
-    WARN_IF_ERROR(expr.open(nullptr, &exprContext, FunctionContext::FunctionStateScope::THREAD_LOCAL), "");
+    ASSERT_OK(Expr::prepare(expr_ctxs, &_runtime_state));
+    ASSERT_OK(Expr::open(expr_ctxs, &_runtime_state));
 
     ColumnPtr result = expr.evaluate(&exprContext, nullptr);
 
@@ -164,12 +168,12 @@ TEST_F(VectorizedFunctionCallExprTest, mathLeastExprTest) {
     {
         auto value = ColumnHelper::cast_to<TYPE_INT>(result);
 
-        for (int j = 0; j < value->get_data().size(); ++j) {
-            ASSERT_EQ(1, value->get_data()[j]);
+        for (int& j : value->get_data()) {
+            ASSERT_EQ(1, j);
         }
     }
 
-    exprContext.close(nullptr);
+    Expr::close(expr_ctxs, &_runtime_state);
 }
 
 TEST_F(VectorizedFunctionCallExprTest, mathNullGreatestExprTest) {
@@ -207,11 +211,10 @@ TEST_F(VectorizedFunctionCallExprTest, mathNullGreatestExprTest) {
     expr.add_child(&col7);
 
     ExprContext exprContext(&expr);
-    exprContext._is_clone = true;
+    std::vector<ExprContext*> expr_ctxs = {&exprContext};
 
-    WARN_IF_ERROR(expr.prepare(nullptr, &exprContext), "");
-    WARN_IF_ERROR(expr.open(nullptr, &exprContext, FunctionContext::FunctionStateScope::THREAD_LOCAL), "");
-
+    ASSERT_OK(Expr::prepare(expr_ctxs, &_runtime_state));
+    ASSERT_OK(Expr::open(expr_ctxs, &_runtime_state));
     ColumnPtr result = expr.evaluate(&exprContext, nullptr);
 
     ASSERT_FALSE(result->is_constant());
@@ -229,12 +232,12 @@ TEST_F(VectorizedFunctionCallExprTest, mathNullGreatestExprTest) {
             }
         }
 
-        for (int j = 0; j < value->get_data().size(); ++j) {
-            ASSERT_EQ(20, value->get_data()[j]);
+        for (int& j : value->get_data()) {
+            ASSERT_EQ(20, j);
         }
     }
 
-    exprContext.close(nullptr);
+    Expr::close(expr_ctxs, &_runtime_state);
 }
 
 TEST_F(VectorizedFunctionCallExprTest, prepareFaileCase) {
@@ -265,5 +268,4 @@ TEST_F(VectorizedFunctionCallExprTest, prepareFaileCase) {
     exprContext.close(nullptr);
 }
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

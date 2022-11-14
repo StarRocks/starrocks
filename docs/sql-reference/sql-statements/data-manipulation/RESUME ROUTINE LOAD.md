@@ -7,7 +7,3 @@
 ```sql
     RESUME ROUTINE LOAD FOR test1;
 ```
-
-## keyword
-
-RESUME,ROUTINE,LOAD

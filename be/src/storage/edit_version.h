@@ -13,7 +13,7 @@ struct EditVersion {
     EditVersion() = default;
     EditVersion(const EditVersionPB& pb) : EditVersion(pb.major(), pb.minor()) {}
     EditVersion(int64_t major, int64_t minor) { value = (((unsigned __int128)major) << 64) | minor; }
-    int64_t major() const { return value >> 64; }
+    int64_t major() const { return (int64_t)(value >> 64); }
     int64_t minor() const { return (int64_t)(value & 0xffffffffUL); }
     std::string to_string() const;
     bool operator<(const EditVersion& rhs) const { return value < rhs.value; }

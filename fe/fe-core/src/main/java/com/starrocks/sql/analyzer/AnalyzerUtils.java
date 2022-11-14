@@ -2,45 +2,69 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Predicate;
+import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.AnalyticExpr;
+import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
-import com.starrocks.analysis.StatementBase;
+import com.starrocks.analysis.IntLiteral;
+import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.UpdateStmt;
 import com.starrocks.catalog.AggregateFunction;
+import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CTERelation;
+import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableRelation;
+import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.parser.ParsingException;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.List;
 import java.util.Map;
 
 public class AnalyzerUtils {
+
+    public static String getOrDefaultDatabase(String dbName, ConnectContext context) {
+        if (Strings.isNullOrEmpty(dbName)) {
+            dbName = context.getDatabase();
+            if (Strings.isNullOrEmpty(dbName)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
+            }
+        }
+
+        return dbName;
+    }
+
     public static void verifyNoAggregateFunctions(Expr expression, String clause) {
         List<FunctionCallExpr> functions = Lists.newArrayList();
         expression.collectAll((Predicate<Expr>) arg -> arg instanceof FunctionCallExpr &&
@@ -127,12 +151,22 @@ public class AnalyzerUtils {
         @Override
         public Void visitInsertStatement(InsertStmt node, Void context) {
             getDB(node.getTableName());
-            return null;
+            return visit(node.getQueryStatement());
         }
 
         @Override
         public Void visitUpdateStatement(UpdateStmt node, Void context) {
             getDB(node.getTableName());
+            //If support DML operations through query results in the future,
+            //need to add the corresponding `visit(node.getQueryStatement())`
+            return null;
+        }
+
+        @Override
+        public Void visitDeleteStatement(DeleteStmt node, Void context) {
+            getDB(node.getTableName());
+            //If support DML operations through query results in the future,
+            //need to add the corresponding `visit(node.getQueryStatement())`
             return null;
         }
 
@@ -204,6 +238,9 @@ public class AnalyzerUtils {
             }
 
             Database db = session.getGlobalStateMgr().getDb(dbName);
+            if (db == null) {
+                return;
+            }
             dbs.put(db.getFullName(), db);
         }
     }
@@ -293,6 +330,13 @@ public class AnalyzerUtils {
         return tables;
     }
 
+    public static Map<TableName, Table> collectAllTableAndViewWithAlias(SelectRelation statementBase) {
+        Map<TableName, Table> tables = Maps.newHashMap();
+        new AnalyzerUtils.TableAndViewCollectorWithAlias(tables).visit(statementBase);
+        return tables;
+    }
+
+
     public static Map<String, TableRelation> collectAllTableRelation(StatementBase statementBase) {
         Map<String, TableRelation> tableRelations = Maps.newHashMap();
         new AnalyzerUtils.TableRelationCollector(tableRelations).visit(statementBase);
@@ -303,6 +347,24 @@ public class AnalyzerUtils {
         Map<TableName, SubqueryRelation> subQueryRelations = Maps.newHashMap();
         new AnalyzerUtils.SubQueryRelationCollector(subQueryRelations).visit(queryStatement);
         return subQueryRelations;
+    }
+
+    public static Map<TableName, Table> collectAllTableAndView(StatementBase statementBase) {
+        Map<TableName, Table> tables = Maps.newHashMap();
+        new AnalyzerUtils.TableAndViewCollector(tables).visit(statementBase);
+        return tables;
+    }
+
+    private static class TableAndViewCollector extends TableCollector {
+        public TableAndViewCollector(Map<TableName, Table> dbs) {
+            super(dbs);
+        }
+
+        public Void visitView(ViewRelation node, Void context) {
+            Table table = node.getView();
+            tables.put(node.getResolveTableName(), table);
+            return null;
+        }
     }
 
     private static class TableCollectorWithAlias extends TableCollector {
@@ -365,4 +427,70 @@ public class AnalyzerUtils {
             return null;
         }
     }
+
+    // For char and varchar types, use the inferred length if the length can be inferred,
+    // otherwise (include null type) use the longest varchar value.
+    // For double and float types, since they may be selected as key columns,
+    // the key column must be an exact value, so we unified into a default decimal type.
+    public static Type transformType(Type srcType) {
+        Type newType;
+        if (srcType.isScalarType()) {
+            if (PrimitiveType.VARCHAR == srcType.getPrimitiveType() ||
+                    PrimitiveType.CHAR == srcType.getPrimitiveType() ||
+                    PrimitiveType.NULL_TYPE == srcType.getPrimitiveType()) {
+                int len = ScalarType.MAX_VARCHAR_LENGTH;
+                if (srcType instanceof ScalarType) {
+                    ScalarType scalarType = (ScalarType) srcType;
+                    if (scalarType.getLength() > 0 && scalarType.isAssignedStrLenInColDefinition()) {
+                        len = scalarType.getLength();
+                    }
+                }
+                ScalarType stringType = ScalarType.createVarcharType(len);
+                stringType.setAssignedStrLenInColDefinition();
+                newType = stringType;
+            } else if (PrimitiveType.FLOAT == srcType.getPrimitiveType() ||
+                    PrimitiveType.DOUBLE == srcType.getPrimitiveType()) {
+                newType = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 9);
+            } else if (PrimitiveType.DECIMAL128 == srcType.getPrimitiveType() ||
+                    PrimitiveType.DECIMAL64 == srcType.getPrimitiveType() ||
+                    PrimitiveType.DECIMAL32 == srcType.getPrimitiveType()) {
+                newType = ScalarType.createDecimalV3Type(srcType.getPrimitiveType(),
+                        srcType.getPrecision(), srcType.getDecimalDigits());
+            } else {
+                newType = ScalarType.createType(srcType.getPrimitiveType());
+            }
+        } else if (srcType.isArrayType()) {
+            newType = new ArrayType(transformType(((ArrayType) srcType).getItemType()));
+        } else {
+            throw new SemanticException("Unsupported CTAS transform type: %s", srcType.getPrimitiveType());
+        }
+        return newType;
+    }
+
+    public static TableName stringToTableName(String qualifiedName) {
+        // Hierarchy: catalog.database.table
+        List<String> parts = Splitter.on(".").omitEmptyStrings().trimResults().splitToList(qualifiedName);
+        if (parts.size() == 3) {
+            return new TableName(parts.get(0), parts.get(1), parts.get(2));
+        } else if (parts.size() == 2) {
+            return new TableName(null, parts.get(0), parts.get(1));
+        } else if (parts.size() == 1) {
+            return new TableName(null, null, parts.get(0));
+        } else {
+            throw new ParsingException("error table name ");
+        }
+    }
+
+    public static String parseLiteralExprToDateString(LiteralExpr expr, int offset) {
+        if (expr instanceof DateLiteral) {
+            DateLiteral lowerDate = (DateLiteral) expr;
+            return DateUtils.DATE_FORMATTER.format(lowerDate.toLocalDateTime().plusDays(offset));
+        } else if (expr instanceof IntLiteral) {
+            IntLiteral intLiteral = (IntLiteral) expr;
+            return String.valueOf(intLiteral.getLongValue() + offset);
+        } else {
+            return null;
+        }
+    }
+
 }

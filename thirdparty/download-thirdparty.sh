@@ -358,6 +358,15 @@ fi
 cd -
 echo "Finished patching $LIBRDKAFKA_SOURCE"
 
+# patch pulsar
+cd $TP_SOURCE_DIR/$PULSAR_SOURCE
+if [ ! -f $PATCHED_MARK ] && [ $PULSAR_SOURCE = "pulsar-2.10.1" ]; then
+    patch -p1 < $TP_PATCH_DIR/pulsar.patch
+    touch $PATCHED_MARK
+fi
+cd -
+echo "Finished patching $PULSAR_SOURCE"
+
 # patch mariadb-connector-c-3.2.5
 cd $TP_SOURCE_DIR/$MARIADB_SOURCE
 if [ ! -f $PATCHED_MARK ] && [ $MARIADB_SOURCE = "mariadb-connector-c-3.2.5" ]; then
@@ -391,6 +400,34 @@ if [ ! -f $PATCHED_MARK ] && [ $JEMALLOC_SOURCE = "jemalloc-5.2.1" ]; then
 fi
 cd -
 echo "Finished patching $JEMALLOC_SOURCE"
+
+# patch streamvbyte
+cd $TP_SOURCE_DIR/$STREAMVBYTE_SOURCE
+if [ ! -f $PATCHED_MARK ] && [ $STREAMVBYTE_SOURCE = "streamvbyte-0.5.1" ]; then
+    patch -p1 < $TP_PATCH_DIR/streamvbyte.patch
+    touch $PATCHED_MARK
+fi
+cd -
+echo "Finished patching $STREAMVBYTE_SOURCE"
+
+# patch hyperscan
+cd $TP_SOURCE_DIR/$HYPERSCAN_SOURCE
+if [ ! -f $PATCHED_MARK ] && [ $HYPERSCAN_SOURCE = "hyperscan-5.4.0" ]; then
+    patch -p1 < $TP_PATCH_DIR/hyperscan-5.4.0.patch
+    touch $PATCHED_MARK
+fi
+cd -
+echo "Finished patching $HYPERSCAN_SOURCE"
+
+# patch vpack
+cd $TP_SOURCE_DIR/$VPACK_SOURCE
+if [ ! -f $PATCHED_MARK ] && [ $VPACK_SOURCE = "velocypack-XYZ1.0" ]; then
+    patch -p1 < $TP_PATCH_DIR/velocypack-XYZ1.0.patch
+    touch $PATCHED_MARK
+fi
+cd -
+echo "Finished patching $VPACK_SOURCE"
+
 
 cd -
 

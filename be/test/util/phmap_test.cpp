@@ -17,7 +17,7 @@ class CheckedAlloc {
 public:
     using value_type = T;
 
-    CheckedAlloc() {}
+    CheckedAlloc() = default;
     CheckedAlloc(const CheckedAlloc&) = default;
     CheckedAlloc& operator=(const CheckedAlloc&) = default;
 

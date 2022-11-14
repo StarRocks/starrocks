@@ -6,6 +6,7 @@
 
 #include "column/chunk.h"
 #include "exec/vectorized/sorting/sort_permute.h"
+#include "gen_cpp/data.pb.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "storage/chunk_aggregator.h"
 #include "storage/olap_define.h"
@@ -27,6 +28,9 @@ public:
     MemTable(int64_t tablet_id, const Schema* schema, MemTableSink* sink, int64_t max_buffer_size,
              MemTracker* mem_tracker);
 
+    MemTable(int64_t tablet_id, const Schema* schema, const vector<SlotDescriptor*>* slot_descs, MemTableSink* sink,
+             std::string merge_condition, MemTracker* mem_tracker);
+
     ~MemTable();
 
     int64_t tablet_id() const { return _tablet_id; }
@@ -41,7 +45,7 @@ public:
     // return true suggests caller should flush this memory table
     bool insert(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size);
 
-    Status flush();
+    Status flush(SegmentPB* seg_info = nullptr);
 
     Status finalize();
 
@@ -52,8 +56,8 @@ public:
 private:
     void _merge();
 
-    void _sort(bool is_final);
-    void _sort_column_inc();
+    void _sort(bool is_final, bool by_sort_key = false);
+    void _sort_column_inc(bool by_sort_key = false);
     void _append_to_sorted_chunk(Chunk* src, Chunk* dest, bool is_final);
 
     void _init_aggregator_if_needed();
@@ -84,6 +88,8 @@ private:
 
     bool _has_op_slot = false;
     std::unique_ptr<Column> _deletes;
+
+    std::string _merge_condition;
 
     int64_t _max_buffer_size = config::write_buffer_size;
 

@@ -23,7 +23,7 @@ static const string LOAD_OP_COLUMN = "__op";
 static const size_t kPrimaryKeyLimitSize = 128;
 
 Schema MemTable::convert_schema(const TabletSchema* tablet_schema, const std::vector<SlotDescriptor*>* slot_descs) {
-    Schema schema = std::move(ChunkHelper::convert_schema_to_format_v2(*tablet_schema));
+    Schema schema = ChunkHelper::convert_schema_to_format_v2(*tablet_schema);
     if (tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && slot_descs != nullptr &&
         slot_descs->back()->col_name() == LOAD_OP_COLUMN) {
         // load slots have __op field, so add to _vectorized_schema
@@ -42,6 +42,22 @@ void MemTable::_init_aggregator_if_needed() {
         // otherwise it will take up a lot of memory and may not be released.
         _aggregator = std::make_unique<ChunkAggregator>(_vectorized_schema, 0, INT_MAX, 0);
     }
+}
+
+MemTable::MemTable(int64_t tablet_id, const Schema* schema, const std::vector<SlotDescriptor*>* slot_descs,
+                   MemTableSink* sink, std::string merge_condition, MemTracker* mem_tracker)
+        : _tablet_id(tablet_id),
+          _vectorized_schema(schema),
+          _slot_descs(slot_descs),
+          _keys_type(schema->keys_type()),
+          _sink(sink),
+          _aggregator(nullptr),
+          _merge_condition(std::move(merge_condition)),
+          _mem_tracker(mem_tracker) {
+    if (_keys_type == KeysType::PRIMARY_KEYS && _slot_descs->back()->col_name() == LOAD_OP_COLUMN) {
+        _has_op_slot = true;
+    }
+    _init_aggregator_if_needed();
 }
 
 MemTable::MemTable(int64_t tablet_id, const Schema* schema, const std::vector<SlotDescriptor*>* slot_descs,
@@ -206,6 +222,18 @@ Status MemTable::finalize() {
                     _result_chunk = upserts;
                 }
             }
+            if (_keys_type == KeysType::PRIMARY_KEYS) {
+                std::vector<ColumnId> primary_key_idxes(_vectorized_schema->num_key_fields());
+                for (ColumnId i = 0; i < _vectorized_schema->num_key_fields(); ++i) {
+                    primary_key_idxes[i] = i;
+                }
+                const auto& sort_key_idxes = _vectorized_schema->sort_key_idxes();
+                if (std::mismatch(sort_key_idxes.begin(), sort_key_idxes.end(), primary_key_idxes.begin()).first !=
+                    sort_key_idxes.end()) {
+                    _chunk = _result_chunk;
+                    _sort(true, true);
+                }
+            }
             _aggregator.reset();
             _aggregator_memory_usage = 0;
             _aggregator_bytes_usage = 0;
@@ -218,7 +246,7 @@ Status MemTable::finalize() {
     return Status::OK();
 }
 
-Status MemTable::flush() {
+Status MemTable::flush(SegmentPB* seg_info) {
     if (UNLIKELY(_result_chunk == nullptr)) {
         return Status::OK();
     }
@@ -231,9 +259,9 @@ Status MemTable::flush() {
     {
         SCOPED_RAW_TIMER(&duration_ns);
         if (_deletes) {
-            RETURN_IF_ERROR(_sink->flush_chunk_with_deletes(*_result_chunk, *_deletes));
+            RETURN_IF_ERROR(_sink->flush_chunk_with_deletes(*_result_chunk, *_deletes, seg_info));
         } else {
-            RETURN_IF_ERROR(_sink->flush_chunk(*_result_chunk));
+            RETURN_IF_ERROR(_sink->flush_chunk(*_result_chunk, seg_info));
         }
     }
     StarRocksMetrics::instance()->memtable_flush_total.increment(1);
@@ -283,11 +311,10 @@ void MemTable::_aggregate(bool is_final) {
     }
 }
 
-void MemTable::_sort(bool is_final) {
+void MemTable::_sort(bool is_final, bool by_sort_key) {
     SmallPermutation perm = create_small_permutation(static_cast<uint32_t>(_chunk->num_rows()));
     std::swap(perm, _permutations);
-    _sort_column_inc();
-
+    _sort_column_inc(by_sort_key);
     if (is_final) {
         // No need to reserve, it will be reserve in IColumn::append_selective(),
         // Otherwise it will use more peak memory
@@ -356,18 +383,33 @@ Status MemTable::_split_upserts_deletes(ChunkPtr& src, ChunkPtr* upserts, std::u
     return Status::OK();
 }
 
-void MemTable::_sort_column_inc() {
+void MemTable::_sort_column_inc(bool by_sort_key) {
     Columns columns;
-    std::vector<int> sort_orders;
-    std::vector<int> null_firsts;
-    for (int i = 0; i < _vectorized_schema->num_key_fields(); i++) {
-        columns.push_back(_chunk->get_column_by_index(i));
-        // Ascending, null first
-        sort_orders.push_back(1);
-        null_firsts.push_back(-1);
+    std::vector<ColumnId> sort_key_idxes;
+    if (!by_sort_key) {
+        for (ColumnId i = 0; i < _vectorized_schema->num_key_fields(); ++i) {
+            sort_key_idxes.push_back(i);
+        }
+    } else {
+        sort_key_idxes = _vectorized_schema->sort_key_idxes();
     }
 
-    Status st = stable_sort_and_tie_columns(false, columns, sort_orders, null_firsts, &_permutations);
+    for (auto sort_key_idx : sort_key_idxes) {
+        columns.push_back(_chunk->get_column_by_index(sort_key_idx));
+    }
+
+    auto sort_descs = SortDescs::asc_null_first(sort_key_idxes.size());
+    if (!_merge_condition.empty()) {
+        for (int i = 0; i < _vectorized_schema->num_fields(); ++i) {
+            if (_vectorized_schema->field(i)->name() == _merge_condition) {
+                columns.push_back(_chunk->get_column_by_index(i));
+                sort_descs.descs.emplace_back(1, -1);
+                break;
+            }
+        }
+    }
+
+    Status st = stable_sort_and_tie_columns(false, columns, sort_descs, &_permutations);
     CHECK(st.ok());
 }
 

@@ -3,8 +3,8 @@ package com.starrocks.analysis;
 
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.ast.ShowProcesslistStmt;
 import com.starrocks.utframe.UtFrameUtils;
-import java.util.Locale;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -25,10 +25,9 @@ public class ShowProcesslistStmtTest {
 
     private void testSuccess(String originStmt) throws Exception {
         ShowProcesslistStmt stmt = (ShowProcesslistStmt)UtFrameUtils.parseStmtWithNewParser(originStmt, connectContext);
-        Assert.assertEquals(originStmt.toUpperCase(Locale.ROOT), stmt.toString());
         ShowResultSetMetaData metaData = stmt.getMetaData();
         Assert.assertNotNull(metaData);
-        Assert.assertEquals(9, metaData.getColumnCount());
+        Assert.assertEquals(10, metaData.getColumnCount());
         Assert.assertEquals("Id", metaData.getColumn(0).getName());
         Assert.assertEquals("User", metaData.getColumn(1).getName());
         Assert.assertEquals("Host", metaData.getColumn(2).getName());
@@ -38,5 +37,6 @@ public class ShowProcesslistStmtTest {
         Assert.assertEquals("Time", metaData.getColumn(6).getName());
         Assert.assertEquals("State", metaData.getColumn(7).getName());
         Assert.assertEquals("Info", metaData.getColumn(8).getName());
+        Assert.assertEquals("IsPending", metaData.getColumn(9).getName());
     }
 }

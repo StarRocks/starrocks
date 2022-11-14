@@ -29,7 +29,3 @@ ErrMsg：     StarRocks will regularly check the connectivity of the repository.
     ```sql
     SHOW REPOSITORIES;
     ```
-
-## keyword
-
-SHOW, REPOSITORY, REPOSITORIES

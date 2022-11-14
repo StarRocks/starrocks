@@ -27,16 +27,19 @@ import com.starrocks.thrift.TTypeDesc;
 import com.starrocks.thrift.TTypeNode;
 import com.starrocks.thrift.TTypeNodeType;
 
+import java.util.Arrays;
+
 /**
  * Describes a MAP type. MAP types have a scalar key and an arbitrarily-typed value.
  */
 public class MapType extends Type {
-    private final Type keyType;
-    private final Type valueType;
+    private Type keyType;
+    private Type valueType;
 
     public MapType(Type keyType, Type valueType) {
         Preconditions.checkNotNull(keyType);
         Preconditions.checkNotNull(valueType);
+        selectedFields = new Boolean[] { false, false };
         this.keyType = keyType;
         this.valueType = valueType;
     }
@@ -50,6 +53,26 @@ public class MapType extends Type {
     }
 
     @Override
+    public void setSelectedField(int pos, boolean needSetChildren) {
+        if (pos == -1) {
+            Arrays.fill(selectedFields, true);
+        } else {
+            selectedFields[pos] = true;
+        }
+        if (needSetChildren && (pos == 1 || pos == -1) && valueType.isComplexType()) {
+            valueType.selectAll();
+        }
+    }
+
+    @Override
+    public void selectAll() {
+        Arrays.fill(selectedFields, true);
+        if (valueType.isComplexType()) {
+            valueType.selectAll();
+        }
+    }
+
+    @Override
     public boolean equals(Object other) {
         if (!(other instanceof MapType)) {
             return false;
@@ -57,6 +80,15 @@ public class MapType extends Type {
         MapType otherMapType = (MapType) other;
         return otherMapType.keyType.equals(keyType)
                 && otherMapType.valueType.equals(valueType);
+    }
+
+    @Override
+    public boolean matchesType(Type t) {
+        if (t.isPseudoType()) {
+            return t.matchesType(this);
+        }
+        return t.isMapType()
+                && keyType.matchesType(((MapType) t).keyType) && valueType.matchesType(((MapType) t).getValueType());
     }
 
     @Override
@@ -88,8 +120,18 @@ public class MapType extends Type {
         Preconditions.checkNotNull(keyType);
         Preconditions.checkNotNull(valueType);
         node.setType(TTypeNodeType.MAP);
+        node.setSelected_fields(Arrays.asList(selectedFields));
         keyType.toThrift(container);
         valueType.toThrift(container);
+    }
+
+    @Override
+    public MapType clone() {
+        MapType clone = (MapType) super.clone();
+        clone.keyType = this.keyType.clone();
+        clone.valueType = this.valueType.clone();
+        clone.selectedFields = this.selectedFields.clone();
+        return clone;
     }
 }
 

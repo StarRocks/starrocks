@@ -30,19 +30,20 @@
 #include "exec/exchange_node.h"
 #include "exec/exec_node.h"
 #include "exec/scan_node.h"
-#include "exprs/expr.h"
 #include "gutil/map_util.h"
 #include "runtime/current_thread.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/profile_report_worker.h"
 #include "runtime/result_buffer_mgr.h"
 #include "runtime/result_queue_mgr.h"
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_filter_worker.h"
+#include "runtime/stream_load/stream_load_context.h"
+#include "runtime/stream_load/transaction_mgr.h"
 #include "util/parse_util.h"
-#include "util/pretty_printer.h"
 #include "util/uid_util.h"
 
 namespace starrocks {
@@ -54,7 +55,7 @@ PlanFragmentExecutor::PlanFragmentExecutor(ExecEnv* exec_env, report_status_call
           _prepared(false),
           _closed(false),
           _has_thread_token(false),
-          _is_report_success(true),
+          enable_profile(true),
           _is_report_on_cancel(true),
           _collect_query_statistics_with_every_batch(false),
           _is_runtime_filter_merge_node(false) {}
@@ -78,8 +79,8 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
         _runtime_state->set_load_job_id(request.load_job_id);
     }
 
-    if (request.query_options.__isset.is_report_success) {
-        _is_report_success = request.query_options.is_report_success;
+    if (request.query_options.__isset.enable_profile) {
+        enable_profile = request.query_options.enable_profile;
     }
 
     // Reserve one main thread from the pool
@@ -93,7 +94,8 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
     // set up desc tbl
     DescriptorTbl* desc_tbl = nullptr;
     DCHECK(request.__isset.desc_tbl);
-    RETURN_IF_ERROR(DescriptorTbl::create(obj_pool(), request.desc_tbl, &desc_tbl, _runtime_state->chunk_size()));
+    RETURN_IF_ERROR(DescriptorTbl::create(_runtime_state, obj_pool(), request.desc_tbl, &desc_tbl,
+                                          _runtime_state->chunk_size()));
     _runtime_state->set_desc_tbl(desc_tbl);
 
     // set up plan
@@ -133,7 +135,7 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
     _plan->collect_scan_nodes(&scan_nodes);
 
     for (auto& i : scan_nodes) {
-        ScanNode* scan_node = down_cast<ScanNode*>(i);
+        auto* scan_node = down_cast<ScanNode*>(i);
         const std::vector<TScanRangeParams>& scan_ranges =
                 FindWithDefault(params.per_node_scan_ranges, scan_node->id(), no_scan_ranges);
         scan_node->set_scan_ranges(scan_ranges);
@@ -174,6 +176,7 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
     VLOG(3) << "plan_root=\n" << _plan->debug_string();
     _chunk = std::make_shared<vectorized::Chunk>();
     _prepared = true;
+    RETURN_IF_ERROR(_prepare_stream_load_pipe(request));
 
     return Status::OK();
 }
@@ -181,6 +184,16 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
 Status PlanFragmentExecutor::open() {
     LOG(INFO) << "Open(): fragment_instance_id=" << print_id(_runtime_state->fragment_instance_id());
     tls_thread_status.set_query_id(_runtime_state->query_id());
+
+    // Only register profile report worker for broker load and insert into here,
+    // for stream load and routine load, currently we don't need BE to report their progress regularly.
+    const TQueryOptions& query_options = _runtime_state->query_options();
+    if (query_options.query_type == TQueryType::LOAD && (query_options.load_job_type == TLoadJobType::BROKER ||
+                                                         query_options.load_job_type == TLoadJobType::INSERT_QUERY ||
+                                                         query_options.load_job_type == TLoadJobType::INSERT_VALUES)) {
+        RETURN_IF_ERROR(starrocks::ExecEnv::GetInstance()->profile_report_worker()->register_non_pipeline_load(
+                _runtime_state->fragment_instance_id()));
+    }
 
     Status status = _open_internal_vectorized();
     if (!status.ok() && !status.is_cancelled() && _runtime_state->log_has_space()) {
@@ -284,17 +297,17 @@ void PlanFragmentExecutor::send_report(bool done) {
         status = _status;
     }
 
-    // If plan is done successfully, but _is_report_success is false,
+    // If plan is done successfully, but enable_profile is false,
     // no need to send report.
-    if (!_is_report_success && done && status.ok()) {
+    if (!enable_profile && done && status.ok()) {
         return;
     }
 
-    // If both _is_report_success and _is_report_on_cancel are false,
+    // If both enable_profile and _is_report_on_cancel are false,
     // which means no matter query is success or failed, no report is needed.
     // This may happen when the query limit reached and
     // a internal cancellation being processed
-    if (!_is_report_success && !_is_report_on_cancel) {
+    if (!enable_profile && !_is_report_on_cancel) {
         return;
     }
 
@@ -302,22 +315,6 @@ void PlanFragmentExecutor::send_report(bool done) {
     // but fragments still need to be cancelled (e.g. limit reached), the coordinator will
     // be waiting for a final report and profile.
     _report_status_cb(status, profile(), done || !status.ok());
-}
-
-Status PlanFragmentExecutor::get_next(vectorized::ChunkPtr* chunk) {
-    VLOG_FILE << "GetNext(): instance_id=" << _runtime_state->fragment_instance_id();
-    Status status = _get_next_internal_vectorized(chunk);
-    update_status(status);
-
-    if (_done) {
-        LOG(INFO) << "Finished executing fragment query_id=" << print_id(_query_id)
-                  << " instance_id=" << print_id(_runtime_state->fragment_instance_id());
-        // Query is done, return the thread token
-        release_thread_token();
-        send_report(true);
-    }
-
-    return status;
 }
 
 Status PlanFragmentExecutor::_get_next_internal_vectorized(vectorized::ChunkPtr* chunk) {
@@ -365,7 +362,33 @@ void PlanFragmentExecutor::update_status(const Status& new_status) {
 void PlanFragmentExecutor::cancel() {
     LOG(INFO) << "cancel(): fragment_instance_id=" << print_id(_runtime_state->fragment_instance_id());
     DCHECK(_prepared);
-    _runtime_state->set_is_cancelled(true);
+    {
+        std::lock_guard<std::mutex> l(_status_lock);
+        if (_runtime_state->is_cancelled()) {
+            return;
+        }
+        _runtime_state->set_is_cancelled(true);
+    }
+
+    const TQueryOptions& query_options = _runtime_state->query_options();
+    if (query_options.query_type == TQueryType::LOAD && (query_options.load_job_type == TLoadJobType::BROKER ||
+                                                         query_options.load_job_type == TLoadJobType::INSERT_QUERY ||
+                                                         query_options.load_job_type == TLoadJobType::INSERT_VALUES)) {
+        starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_non_pipeline_load(
+                _runtime_state->fragment_instance_id());
+    }
+    if (_stream_load_contexts.size() > 0) {
+        for (const auto& stream_load_context : _stream_load_contexts) {
+            if (stream_load_context->body_sink) {
+                Status st;
+                stream_load_context->body_sink->cancel(st);
+            }
+            if (_channel_stream_load) {
+                _exec_env->stream_context_mgr()->remove_channel_context(stream_load_context);
+            }
+        }
+        _stream_load_contexts.resize(0);
+    }
     _runtime_state->exec_env()->stream_mgr()->cancel(_runtime_state->fragment_instance_id());
     _runtime_state->exec_env()->result_mgr()->cancel(_runtime_state->fragment_instance_id());
 
@@ -418,6 +441,28 @@ void PlanFragmentExecutor::close() {
 
     // Prepare may not have been called, which sets _runtime_state
     if (_runtime_state != nullptr) {
+        const TQueryOptions& query_options = _runtime_state->query_options();
+        if (query_options.query_type == TQueryType::LOAD &&
+            (query_options.load_job_type == TLoadJobType::BROKER ||
+             query_options.load_job_type == TLoadJobType::INSERT_QUERY ||
+             query_options.load_job_type == TLoadJobType::INSERT_VALUES) &&
+            !_runtime_state->is_cancelled()) {
+            starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_non_pipeline_load(
+                    _runtime_state->fragment_instance_id());
+        }
+
+        if (_stream_load_contexts.size() > 0) {
+            for (const auto& stream_load_context : _stream_load_contexts) {
+                if (stream_load_context->body_sink) {
+                    Status st;
+                    stream_load_context->body_sink->cancel(st);
+                }
+                if (_channel_stream_load) {
+                    _exec_env->stream_context_mgr()->remove_channel_context(stream_load_context);
+                }
+            }
+            _stream_load_contexts.resize(0);
+        }
         // _runtime_state init failed
         if (_plan != nullptr) {
             _plan->close(_runtime_state);
@@ -451,6 +496,47 @@ void PlanFragmentExecutor::close() {
     }
 
     _closed = true;
+}
+
+Status PlanFragmentExecutor::_prepare_stream_load_pipe(const TExecPlanFragmentParams& request) {
+    const auto& scan_range_map = request.params.per_node_scan_ranges;
+    if (scan_range_map.size() == 0) {
+        return Status::OK();
+    }
+    auto iter = scan_range_map.begin();
+    if (iter->second.size() == 0) {
+        return Status::OK();
+    }
+    if (!iter->second[0].scan_range.__isset.broker_scan_range) {
+        return Status::OK();
+    }
+    if (!iter->second[0].scan_range.broker_scan_range.__isset.channel_id) {
+        return Status::OK();
+    }
+    _channel_stream_load = true;
+    for (; iter != scan_range_map.end(); iter++) {
+        for (const auto& scan_range : iter->second) {
+            const TBrokerScanRange& broker_scan_range = scan_range.scan_range.broker_scan_range;
+            int channel_id = broker_scan_range.channel_id;
+            const string& label = broker_scan_range.params.label;
+            const string& db_name = broker_scan_range.params.db_name;
+            const string& table_name = broker_scan_range.params.table_name;
+            TFileFormatType::type format = broker_scan_range.ranges[0].format_type;
+            TUniqueId load_id = broker_scan_range.ranges[0].load_id;
+            long txn_id = broker_scan_range.params.txn_id;
+            StreamLoadContext* ctx = nullptr;
+            RETURN_IF_ERROR(_exec_env->stream_context_mgr()->create_channel_context(
+                    _exec_env, label, channel_id, db_name, table_name, format, ctx, load_id, txn_id));
+            DeferOp op([&] {
+                if (ctx->unref()) {
+                    delete ctx;
+                }
+            });
+            RETURN_IF_ERROR(_exec_env->stream_context_mgr()->put_channel_context(label, channel_id, ctx));
+            _stream_load_contexts.push_back(ctx);
+        }
+    }
+    return Status::OK();
 }
 
 } // namespace starrocks

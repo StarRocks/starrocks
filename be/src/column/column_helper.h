@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <utility>
 #ifdef __x86_64__
 #include <immintrin.h>
 #endif
@@ -134,8 +135,7 @@ public:
     }
 
     // Update column according to whether the dest column and source column are nullable or not.
-    static ColumnPtr update_column_nullable(const TypeDescriptor& dst_type_desc, bool dst_nullable,
-                                            const ColumnPtr& src_column, int num_rows) {
+    static ColumnPtr update_column_nullable(bool dst_nullable, const ColumnPtr& src_column, int num_rows) {
         if (src_column->is_nullable()) {
             if (dst_nullable) {
                 // 1. Src column and dest column are both nullable.
@@ -158,6 +158,14 @@ public:
         }
     }
 
+    // Cast to Nullable
+    static ColumnPtr cast_to_nullable_column(const ColumnPtr& src_column) {
+        if (src_column->is_nullable()) {
+            return src_column;
+        }
+        return NullableColumn::create(src_column, NullColumn::create(src_column->size(), 0));
+    }
+
     // Move the source column according to the specific dest type and nullable.
     static ColumnPtr move_column(const TypeDescriptor& dst_type_desc, bool dst_nullable, const ColumnPtr& src_column,
                                  int num_rows) {
@@ -165,18 +173,23 @@ public:
             return copy_and_unfold_const_column(dst_type_desc, dst_nullable, src_column, num_rows);
         }
 
-        return update_column_nullable(dst_type_desc, dst_nullable, src_column, num_rows);
+        return update_column_nullable(dst_nullable, src_column, num_rows);
     }
 
     // Copy the source column according to the specific dest type and nullable.
     static ColumnPtr clone_column(const TypeDescriptor& dst_type_desc, bool dst_nullable, const ColumnPtr& src_column,
                                   int num_rows) {
-        auto dst_column = update_column_nullable(dst_type_desc, dst_nullable, src_column, num_rows);
+        auto dst_column = update_column_nullable(dst_nullable, src_column, num_rows);
         return dst_column->clone_shared();
     }
 
     // Create an empty column
     static ColumnPtr create_column(const TypeDescriptor& type_desc, bool nullable);
+
+    // expression trees' return column should align return type when some return columns may be different from
+    // the required return type. e.g., concat_ws returns col from create_const_null_column(), it's type is Nullable(int8),
+    // but required return type is nullable(string), so col need align return type to nullable(string).
+    static ColumnPtr align_return_type(const ColumnPtr& old_col, const TypeDescriptor& type_desc, size_t num_rows);
 
     // Create a column with specified size, the column will be resized to size
     static ColumnPtr create_column(const TypeDescriptor& type_desc, bool nullable, bool is_const, size_t size);
@@ -376,6 +389,22 @@ public:
     template <typename T>
     static size_t filter(const Column::Filter& filter, T* data) {
         return filter_range(filter, data, 0, filter.size());
+    }
+
+    template <class FastPath, class SlowPath>
+    static auto call_nullable_func(const Column* column, FastPath&& fast_path, SlowPath&& slow_path) {
+        if (column->is_nullable()) {
+            const auto* nullable_column = down_cast<const NullableColumn*>(column);
+            const auto& null_data = nullable_column->immutable_null_column_data();
+            const Column* data_column = nullable_column->data_column().get();
+            if (column->has_null()) {
+                return std::forward<SlowPath>(slow_path)(null_data, data_column);
+            } else {
+                return std::forward<FastPath>(fast_path)(data_column);
+            }
+        } else {
+            return std::forward<FastPath>(fast_path)(column);
+        }
     }
 
     static ColumnPtr create_const_null_column(size_t chunk_size);

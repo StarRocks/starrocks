@@ -179,7 +179,7 @@ public class Function implements Writable {
     public Type getReturnType() {
         return retType;
     }
-
+    
     public Type[] getArgs() {
         return argTypes;
     }
@@ -215,6 +215,10 @@ public class Function implements Writable {
 
     public void setUserVisible(boolean userVisible) {
         this.userVisible = userVisible;
+    }
+
+    public void setArgsType(Type[] newTypes) {
+        argTypes = newTypes;
     }
 
     public Type getVarArgsType() {

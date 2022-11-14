@@ -46,6 +46,7 @@ namespace starrocks {
 
 class Tablet;
 class DataDir;
+using TabletAndRowsets = std::tuple<TabletSharedPtr, std::vector<RowsetSharedPtr>>;
 
 enum TabletDropFlag {
     kMoveFilesToTrash = 0,
@@ -58,7 +59,7 @@ enum TabletDropFlag {
 // please uniformly name the method in "xxx_unlocked()" mode
 class TabletManager {
 public:
-    explicit TabletManager(MemTracker* mem_tracker, int32_t tablet_map_lock_shard_size);
+    explicit TabletManager(int64_t tablet_map_lock_shard_size);
     ~TabletManager() = default;
 
     // The param stores holds all candidate data_dirs for this tablet.
@@ -74,12 +75,16 @@ public:
 
     Status drop_tablets_on_error_root_path(const std::vector<TabletInfo>& tablet_info_vec);
 
-    TabletSharedPtr find_best_tablet_to_compaction(CompactionType compaction_type, DataDir* data_dir);
+    TabletSharedPtr find_best_tablet_to_compaction(CompactionType compaction_type, DataDir* data_dir,
+                                                   std::pair<int32_t, int32_t> tablet_shards_range);
 
     TabletSharedPtr find_best_tablet_to_do_update_compaction(DataDir* data_dir);
 
     // TODO: pass |include_deleted| as an enum instead of boolean to avoid unexpected implicit cast.
     TabletSharedPtr get_tablet(TTabletId tablet_id, bool include_deleted = false, std::string* err = nullptr);
+
+    StatusOr<TabletAndRowsets> capture_tablet_and_rowsets(TTabletId tablet_id, int64_t from_version,
+                                                          int64_t to_version);
 
     TabletSharedPtr get_tablet(TTabletId tablet_id, const TabletUid& tablet_uid, bool include_deleted = false,
                                std::string* err = nullptr);
@@ -142,7 +147,7 @@ public:
 
     Status delete_shutdown_tablet(int64_t tablet_id);
 
-    MemTracker* metadata_mem_tracker() { return _mem_tracker; }
+    Status delete_shutdown_tablet_before_clone(int64_t tablet_id);
 
     // return true if all tablets visited
     bool get_next_batch_tablets(size_t batch_size, std::vector<TabletSharedPtr>* tablets);
@@ -174,7 +179,7 @@ private:
     private:
         constexpr static int kNumShard = 128;
 
-        int _shard(int64_t tablet_id) { return tablet_id % kNumShard; }
+        int64_t _shard(int64_t tablet_id) { return tablet_id % kNumShard; }
 
         SpinLock _latches[kNumShard];
         std::unordered_set<int64_t> _locks[kNumShard];
@@ -217,16 +222,14 @@ private:
 
     TabletsShard& _get_tablets_shard(TTabletId tabletId);
 
-    int32_t _get_tablets_shard_idx(TTabletId tabletId) const { return tabletId & _tablets_shards_mask; }
+    int64_t _get_tablets_shard_idx(TTabletId tabletId) const { return tabletId & _tablets_shards_mask; }
 
     static Status _remove_tablet_meta(const TabletSharedPtr& tablet);
     static Status _remove_tablet_directories(const TabletSharedPtr& tablet);
     static Status _move_tablet_directories_to_trash(const TabletSharedPtr& tablet);
 
-    MemTracker* _mem_tracker = nullptr;
-
     std::vector<TabletsShard> _tablets_shards;
-    const int32_t _tablets_shards_mask;
+    const int64_t _tablets_shards_mask;
     LockTable _schema_change_lock_tbl;
 
     // Protect _partition_tablet_map, should not be obtained before _tablet_map_lock to avoid deadlock

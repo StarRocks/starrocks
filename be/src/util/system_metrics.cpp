@@ -26,7 +26,6 @@
 #include <gperftools/malloc_extension.h>
 #endif
 #include <runtime/exec_env.h>
-#include <runtime/mem_tracker.h>
 
 #include <cstdio>
 #include <memory>
@@ -99,6 +98,16 @@ public:
     METRIC_DEFINE_INT_GAUGE(fd_num_used, MetricUnit::NOUNIT);
 };
 
+class QueryCacheMetrics {
+public:
+    METRIC_DEFINE_INT_GAUGE(query_cache_capacity, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(query_cache_usage, MetricUnit::BYTES);
+    METRIC_DEFINE_DOUBLE_GAUGE(query_cache_usage_ratio, MetricUnit::PERCENT);
+    METRIC_DEFINE_INT_GAUGE(query_cache_lookup_count, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_GAUGE(query_cache_hit_count, MetricUnit::NOUNIT);
+    METRIC_DEFINE_DOUBLE_GAUGE(query_cache_hit_ratio, MetricUnit::PERCENT);
+};
+
 SystemMetrics::SystemMetrics() = default;
 
 SystemMetrics::~SystemMetrics() {
@@ -130,6 +139,7 @@ void SystemMetrics::install(MetricRegistry* registry, const std::set<std::string
     _install_net_metrics(registry, network_interfaces);
     _install_fd_metrics(registry);
     _install_snmp_metrics(registry);
+    _install_query_cache_metrics(registry);
     _registry = registry;
 }
 
@@ -140,6 +150,7 @@ void SystemMetrics::update() {
     _update_net_metrics();
     _update_fd_metrics();
     _update_snmp_metrics();
+    _update_query_cache_metrics();
 }
 
 void SystemMetrics::_install_cpu_metrics(MetricRegistry* registry) {
@@ -210,14 +221,24 @@ void SystemMetrics::_install_memory_metrics(MetricRegistry* registry) {
     registry->register_metric("jemalloc_metadata_thp", &_memory_metrics->jemalloc_metadata_thp);
     registry->register_metric("jemalloc_resident_bytes", &_memory_metrics->jemalloc_resident_bytes);
     registry->register_metric("jemalloc_mapped_bytes", &_memory_metrics->jemalloc_mapped_bytes);
-    registry->register_metric("jemalloc_retained_bytes", &_memory_metrics->jemalloc_mapped_bytes);
+    registry->register_metric("jemalloc_retained_bytes", &_memory_metrics->jemalloc_retained_bytes);
 #endif
 
     registry->register_metric("process_mem_bytes", &_memory_metrics->process_mem_bytes);
     registry->register_metric("query_mem_bytes", &_memory_metrics->query_mem_bytes);
     registry->register_metric("load_mem_bytes", &_memory_metrics->load_mem_bytes);
     registry->register_metric("metadata_mem_bytes", &_memory_metrics->metadata_mem_bytes);
+    registry->register_metric("tablet_metadata_mem_bytes", &_memory_metrics->tablet_metadata_mem_bytes);
+    registry->register_metric("rowset_metadata_mem_bytes", &_memory_metrics->rowset_metadata_mem_bytes);
+    registry->register_metric("segment_metadata_mem_bytes", &_memory_metrics->segment_metadata_mem_bytes);
+    registry->register_metric("column_metadata_mem_bytes", &_memory_metrics->column_metadata_mem_bytes);
     registry->register_metric("tablet_schema_mem_bytes", &_memory_metrics->tablet_schema_mem_bytes);
+    registry->register_metric("column_zonemap_index_mem_bytes", &_memory_metrics->column_zonemap_index_mem_bytes);
+    registry->register_metric("ordinal_index_mem_bytes", &_memory_metrics->ordinal_index_mem_bytes);
+    registry->register_metric("bitmap_index_mem_bytes", &_memory_metrics->bitmap_index_mem_bytes);
+    registry->register_metric("bloom_filter_index_mem_bytes", &_memory_metrics->bloom_filter_index_mem_bytes);
+    registry->register_metric("segment_zonemap_mem_bytes", &_memory_metrics->segment_zonemap_mem_bytes);
+    registry->register_metric("short_key_index_mem_bytes", &_memory_metrics->short_key_index_mem_bytes);
     registry->register_metric("compaction_mem_bytes", &_memory_metrics->compaction_mem_bytes);
     registry->register_metric("schema_change_mem_bytes", &_memory_metrics->schema_change_mem_bytes);
     registry->register_metric("column_pool_mem_bytes", &_memory_metrics->column_pool_mem_bytes);
@@ -249,7 +270,11 @@ void SystemMetrics::_update_memory_metrics() {
 #if defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER) || defined(THREAD_SANITIZER)
     LOG(INFO) << "Memory tracking is not available with address sanitizer builds.";
 #elif defined(USE_JEMALLOC)
-    size_t sz = sizeof(size_t);
+    // Update the statistics cached by mallctl.
+    uint64_t epoch = 1;
+    size_t sz = sizeof(epoch);
+    je_mallctl("epoch", &epoch, &sz, &epoch, sz);
+    sz = sizeof(size_t);
     if (je_mallctl("stats.allocated", &value, &sz, nullptr, 0) == 0) {
         _memory_metrics->jemalloc_allocated_bytes.set_value(value);
     }
@@ -295,52 +320,35 @@ void SystemMetrics::_update_memory_metrics() {
     _memory_metrics->pageheap_unmapped_bytes.set_value(value);
 #endif
 
-    if (ExecEnv::GetInstance()->process_mem_tracker() != nullptr) {
-        _memory_metrics->process_mem_bytes.set_value(ExecEnv::GetInstance()->process_mem_tracker()->consumption());
+#define SET_MEM_METRIC_VALUE(tracker, key)                                                \
+    if (ExecEnv::GetInstance()->tracker() != nullptr) {                                   \
+        _memory_metrics->key.set_value(ExecEnv::GetInstance()->tracker()->consumption()); \
     }
-    if (ExecEnv::GetInstance()->query_pool_mem_tracker() != nullptr) {
-        _memory_metrics->query_mem_bytes.set_value(ExecEnv::GetInstance()->query_pool_mem_tracker()->consumption());
-    }
-    if (ExecEnv::GetInstance()->load_mem_tracker() != nullptr) {
-        _memory_metrics->load_mem_bytes.set_value(ExecEnv::GetInstance()->load_mem_tracker()->consumption());
-    }
-    if (ExecEnv::GetInstance()->metadata_mem_tracker() != nullptr) {
-        _memory_metrics->metadata_mem_bytes.set_value(ExecEnv::GetInstance()->metadata_mem_tracker()->consumption());
-    }
-    if (ExecEnv::GetInstance()->tablet_schema_mem_tacker() != nullptr) {
-        _memory_metrics->tablet_schema_mem_bytes.set_value(
-                ExecEnv::GetInstance()->tablet_schema_mem_tacker()->consumption());
-    }
-    if (ExecEnv::GetInstance()->compaction_mem_tracker() != nullptr) {
-        _memory_metrics->compaction_mem_bytes.set_value(
-                ExecEnv::GetInstance()->compaction_mem_tracker()->consumption());
-    }
-    if (ExecEnv::GetInstance()->schema_change_mem_tracker() != nullptr) {
-        _memory_metrics->schema_change_mem_bytes.set_value(
-                ExecEnv::GetInstance()->schema_change_mem_tracker()->consumption());
-    }
-    if (ExecEnv::GetInstance()->page_cache_mem_tracker() != nullptr) {
-        _memory_metrics->storage_page_cache_mem_bytes.set_value(
-                ExecEnv::GetInstance()->page_cache_mem_tracker()->consumption());
-    }
-    if (ExecEnv::GetInstance()->update_mem_tracker() != nullptr) {
-        _memory_metrics->update_mem_bytes.set_value(ExecEnv::GetInstance()->update_mem_tracker()->consumption());
-    }
-    if (ExecEnv::GetInstance()->chunk_allocator_mem_tracker() != nullptr) {
-        _memory_metrics->chunk_allocator_mem_bytes.set_value(
-                ExecEnv::GetInstance()->chunk_allocator_mem_tracker()->consumption());
-    }
-    if (ExecEnv::GetInstance()->clone_mem_tracker() != nullptr) {
-        _memory_metrics->clone_mem_bytes.set_value(ExecEnv::GetInstance()->clone_mem_tracker()->consumption());
-    }
-    if (ExecEnv::GetInstance()->column_pool_mem_tracker() != nullptr) {
-        _memory_metrics->column_pool_mem_bytes.set_value(
-                ExecEnv::GetInstance()->column_pool_mem_tracker()->consumption());
-    }
-    if (ExecEnv::GetInstance()->consistency_mem_tracker() != nullptr) {
-        _memory_metrics->consistency_mem_bytes.set_value(
-                ExecEnv::GetInstance()->consistency_mem_tracker()->consumption());
-    }
+
+    SET_MEM_METRIC_VALUE(process_mem_tracker, process_mem_bytes)
+    SET_MEM_METRIC_VALUE(query_pool_mem_tracker, query_mem_bytes)
+    SET_MEM_METRIC_VALUE(load_mem_tracker, load_mem_bytes)
+    SET_MEM_METRIC_VALUE(metadata_mem_tracker, metadata_mem_bytes)
+    SET_MEM_METRIC_VALUE(tablet_metadata_mem_tracker, tablet_metadata_mem_bytes)
+    SET_MEM_METRIC_VALUE(rowset_metadata_mem_tracker, rowset_metadata_mem_bytes)
+    SET_MEM_METRIC_VALUE(segment_metadata_mem_tracker, segment_metadata_mem_bytes)
+    SET_MEM_METRIC_VALUE(column_metadata_mem_tracker, column_metadata_mem_bytes)
+    SET_MEM_METRIC_VALUE(tablet_schema_mem_tracker, tablet_schema_mem_bytes)
+    SET_MEM_METRIC_VALUE(column_zonemap_index_mem_tracker, column_zonemap_index_mem_bytes)
+    SET_MEM_METRIC_VALUE(ordinal_index_mem_tracker, ordinal_index_mem_bytes)
+    SET_MEM_METRIC_VALUE(bitmap_index_mem_tracker, bitmap_index_mem_bytes)
+    SET_MEM_METRIC_VALUE(bloom_filter_index_mem_tracker, bloom_filter_index_mem_bytes)
+    SET_MEM_METRIC_VALUE(segment_zonemap_mem_tracker, segment_zonemap_mem_bytes)
+    SET_MEM_METRIC_VALUE(short_key_index_mem_tracker, short_key_index_mem_bytes)
+    SET_MEM_METRIC_VALUE(compaction_mem_tracker, compaction_mem_bytes)
+    SET_MEM_METRIC_VALUE(schema_change_mem_tracker, schema_change_mem_bytes)
+    SET_MEM_METRIC_VALUE(page_cache_mem_tracker, storage_page_cache_mem_bytes)
+    SET_MEM_METRIC_VALUE(update_mem_tracker, update_mem_bytes)
+    SET_MEM_METRIC_VALUE(chunk_allocator_mem_tracker, chunk_allocator_mem_bytes)
+    SET_MEM_METRIC_VALUE(clone_mem_tracker, clone_mem_bytes)
+    SET_MEM_METRIC_VALUE(column_pool_mem_tracker, column_pool_mem_bytes)
+    SET_MEM_METRIC_VALUE(consistency_mem_tracker, consistency_mem_bytes)
+#undef SET_MEM_METRIC_VALUE
 
 #define UPDATE_COLUMN_POOL_METRIC(var, type)                                         \
     value = vectorized::describe_column_pool<vectorized::type>().central_free_bytes; \
@@ -364,7 +372,7 @@ void SystemMetrics::_update_memory_metrics() {
 
 void SystemMetrics::_install_disk_metrics(MetricRegistry* registry, const std::set<std::string>& devices) {
     for (auto& disk : devices) {
-        DiskMetrics* metrics = new DiskMetrics();
+        auto* metrics = new DiskMetrics();
 #define REGISTER_DISK_METRIC(name) \
     registry->register_metric("disk_" #name, MetricLabels().add("device", disk), &metrics->name)
         REGISTER_DISK_METRIC(reads_completed);
@@ -625,10 +633,39 @@ void SystemMetrics::_update_snmp_metrics() {
     fclose(fp);
 }
 
+void SystemMetrics::_update_query_cache_metrics() {
+    auto* cache_mgr = ExecEnv::GetInstance()->cache_mgr();
+    if (UNLIKELY(cache_mgr == nullptr)) {
+        return;
+    }
+    auto capacity = cache_mgr->capacity();
+    auto usage = cache_mgr->memory_usage();
+    auto lookup_count = cache_mgr->lookup_count();
+    auto hit_count = cache_mgr->hit_count();
+    auto usage_ratio = (capacity == 0L) ? 0.0 : double(usage) / double(capacity);
+    auto hit_ratio = (lookup_count == 0L) ? 0.0 : double(hit_count) / double(lookup_count);
+    _query_cache_metrics->query_cache_capacity.set_value(capacity);
+    _query_cache_metrics->query_cache_usage.set_value(usage);
+    _query_cache_metrics->query_cache_usage_ratio.set_value(usage_ratio);
+    _query_cache_metrics->query_cache_lookup_count.set_value(lookup_count);
+    _query_cache_metrics->query_cache_hit_count.set_value(hit_count);
+    _query_cache_metrics->query_cache_hit_ratio.set_value(hit_ratio);
+}
+
 void SystemMetrics::_install_fd_metrics(MetricRegistry* registry) {
     _fd_metrics = std::make_unique<FileDescriptorMetrics>();
     registry->register_metric("fd_num_limit", &_fd_metrics->fd_num_limit);
     registry->register_metric("fd_num_used", &_fd_metrics->fd_num_used);
+}
+
+void SystemMetrics::_install_query_cache_metrics(starrocks::MetricRegistry* registry) {
+    _query_cache_metrics = std::make_unique<QueryCacheMetrics>();
+    registry->register_metric("query_cache_capacity", &_query_cache_metrics->query_cache_capacity);
+    registry->register_metric("query_cache_usage", &_query_cache_metrics->query_cache_usage);
+    registry->register_metric("query_cache_usage_ratio", &_query_cache_metrics->query_cache_usage_ratio);
+    registry->register_metric("query_cache_lookup_count", &_query_cache_metrics->query_cache_lookup_count);
+    registry->register_metric("query_cache_hit_count", &_query_cache_metrics->query_cache_hit_count);
+    registry->register_metric("query_cache_hit_ratio", &_query_cache_metrics->query_cache_hit_ratio);
 }
 
 void SystemMetrics::_update_fd_metrics() {

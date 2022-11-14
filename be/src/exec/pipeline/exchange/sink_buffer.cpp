@@ -2,12 +2,9 @@
 
 #include "exec/pipeline/exchange/sink_buffer.h"
 
-#include <chrono>
-
-DIAGNOSTIC_PUSH
-DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 #include <bthread/bthread.h>
-DIAGNOSTIC_POP
+
+#include <chrono>
 
 #include "fmt/core.h"
 #include "util/time.h"
@@ -124,7 +121,9 @@ void SinkBuffer::update_profile(RuntimeProfile* profile) {
 
     auto* network_timer = ADD_TIMER(profile, "NetworkTime");
     auto* wait_timer = ADD_TIMER(profile, "WaitTime");
+    auto* overall_timer = ADD_TIMER(profile, "OverallTime");
     COUNTER_SET(network_timer, _network_time());
+    COUNTER_SET(overall_timer, _last_receive_time - _first_send_time);
 
     // WaitTime consists two parts
     // 1. buffer full time
@@ -145,9 +144,15 @@ void SinkBuffer::update_profile(RuntimeProfile* profile) {
     }
 
     profile->add_derived_counter(
-            "OverallThroughput", TUnit::BYTES_PER_SECOND,
+            "NetworkBandwidth", TUnit::BYTES_PER_SECOND,
             [bytes_sent_counter, network_timer] {
                 return RuntimeProfile::units_per_second(bytes_sent_counter, network_timer);
+            },
+            "");
+    profile->add_derived_counter(
+            "OverallThroughput", TUnit::BYTES_PER_SECOND,
+            [bytes_sent_counter, overall_timer] {
+                return RuntimeProfile::units_per_second(bytes_sent_counter, overall_timer);
             },
             "");
 }
@@ -166,14 +171,21 @@ int64_t SinkBuffer::_network_time() {
     return max;
 }
 
-void SinkBuffer::cancel_one_sinker() {
+void SinkBuffer::cancel_one_sinker(RuntimeState* const state) {
     if (--_num_uncancelled_sinkers == 0) {
         _is_finishing = true;
+    }
+    if (state != nullptr) {
+        LOG(INFO) << fmt::format(
+                "fragment_instance_id {} -> {}, _num_uncancelled_sinkers {}, _is_finishing {}, _num_remaining_eos {}",
+                print_id(_fragment_ctx->fragment_instance_id()), print_id(state->fragment_instance_id()),
+                _num_uncancelled_sinkers, _is_finishing, _num_remaining_eos);
     }
 }
 
 void SinkBuffer::_update_network_time(const TUniqueId& instance_id, const int64_t send_timestamp,
                                       const int64_t receive_timestamp) {
+    _last_receive_time = MonotonicNanos();
     int32_t concurrency = _num_in_flight_rpcs[instance_id.lo];
     _network_times[instance_id.lo].update(receive_timestamp - send_timestamp, concurrency);
 }
@@ -194,7 +206,7 @@ void SinkBuffer::_process_send_window(const TUniqueId& instance_id, const int64_
     }
 }
 
-void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, std::function<void()> pre_works) {
+void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::function<void()>& pre_works) {
     std::lock_guard<Mutex> l(*_mutexes[instance_id.lo]);
     pre_works();
 
@@ -284,6 +296,9 @@ void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, std::function<vo
 
         auto* closure = new DisposableClosure<PTransmitChunkResult, ClosureContext>(
                 {instance_id, request.params->sequence(), GetCurrentTimeNanos()});
+        if (_first_send_time == -1) {
+            _first_send_time = MonotonicNanos();
+        }
 
         closure->addFailedHandler([this](const ClosureContext& ctx) noexcept {
             _is_finishing = true;

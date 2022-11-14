@@ -218,13 +218,13 @@ public:
         _client_cache_helper.init_metrics(metrics, key_prefix);
     }
 
-private:
-    friend class ClientConnection<T>;
-
     // Close all clients connected to the supplied address, (e.g., in
     // case of failure) so that on their next use they will have to be
     // Reopen'ed.
     void close_connections(const TNetworkAddress& hostport) { return _client_cache_helper.close_connections(hostport); }
+
+private:
+    friend class ClientConnection<T>;
 
     // Most operations in this class are thin wrappers around the
     // equivalent in ClientCacheHelper, which is a non-templated cache

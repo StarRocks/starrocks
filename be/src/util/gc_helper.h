@@ -22,7 +22,6 @@ private:
 
     size_t _backlog_bytes_limit();
 
-    size_t _period;                     // gc period in second
     size_t _interval;                   // gc interval for period
     MonoTime _epoch;                    // last timestamp `bytes_should_gc` is called
     size_t _bytes_limit;                // how many bytes should limit to

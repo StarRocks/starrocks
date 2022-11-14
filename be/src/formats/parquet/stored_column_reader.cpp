@@ -142,7 +142,6 @@ public:
     }
 
 private:
-    RandomAccessFile* _file = nullptr;
     // TODO(zc): No need copy
     const tparquet::ColumnChunk _chunk_metadata;
     const ParquetField* _field = nullptr;
@@ -330,10 +329,8 @@ Status OptionalStoredColumnReader::_read_records_and_levels(size_t* num_records,
             // TODO(zc): make it better
             _is_nulls.resize(records_to_read);
             // decode def levels
-            bool has_null = false;
             for (size_t i = 0; i < records_to_read; ++i) {
                 _is_nulls[i] = _def_levels[_levels_parsed + i] < _field->max_def_level();
-                has_null |= _is_nulls[i];
             }
             SCOPED_RAW_TIMER(&_opts.stats->value_decode_ns);
             RETURN_IF_ERROR(_reader->decode_values(records_to_read, &_is_nulls[0], content_type, dst));
@@ -515,7 +512,6 @@ Status StoredColumnReader::next_page(size_t records_to_read, ColumnContentType c
     if (_opts.context->filter) {
         dst->append_default(records_to_skip);
         *records_read = records_to_skip;
-        _opts.context->advance(records_to_skip);
     }
     return Status::OK();
 }
@@ -549,6 +545,10 @@ Status StoredColumnReader::_next_selected_page(size_t records_to_read, ColumnCon
             _lazy_load_page_rows(batch_size, content_type, dst);
             _num_values_skip_in_cur_page = 0;
             break;
+        }
+
+        if (_opts.context->filter) {
+            _opts.context->advance(std::min(to_read, remain_values));
         }
         if (to_read < remain_values) {
             _num_values_skip_in_cur_page += to_read;
@@ -592,7 +592,7 @@ bool StoredColumnReader::page_selected(size_t num_values) {
     if (!filter) {
         return true;
     }
-    int start_row = _opts.context->next_row;
+    size_t start_row = _opts.context->next_row;
     int end_row = std::min(start_row + num_values, filter->size()) - 1;
     return SIMD::find_nonzero(*filter, start_row) <= end_row;
 }

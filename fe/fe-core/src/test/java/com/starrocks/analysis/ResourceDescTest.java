@@ -28,6 +28,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.ResourceDesc;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mocked;

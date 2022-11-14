@@ -195,7 +195,7 @@ public class OptimizerTraceUtil {
 
         @Override
         public String visitLogicalHudiScan(LogicalHudiScanOperator node, Void context) {
-            return "LogicalHudiScanOperator" + " {" + "table=" + ((HudiTable) node.getTable()).getTable() +
+            return "LogicalHudiScanOperator" + " {" + "table=" + ((HudiTable) node.getTable()).getTableName() +
                     ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
                     ", predicates=" + node.getScanOperatorPredicates() +
                     ", limit=" + node.getLimit() +
@@ -270,7 +270,13 @@ public class OptimizerTraceUtil {
 
         @Override
         public String visitLogicalAnalytic(LogicalWindowOperator node, Void context) {
-            return super.visitLogicalAnalytic(node, context);
+            StringBuilder sb = new StringBuilder("LogicalWindowOperator");
+            sb.append(" {window=").append(node.getWindowCall());
+            sb.append(", partitions=").append(node.getPartitionExpressions());
+            sb.append(", orderBy=").append(node.getOrderByElements());
+            sb.append(", enforceSort").append(node.getEnforceSortColumns());
+            sb.append("}");
+            return sb.toString();
         }
 
         @Override
@@ -404,7 +410,7 @@ public class OptimizerTraceUtil {
 
         @Override
         public String visitPhysicalHudiScan(PhysicalHudiScanOperator node, Void context) {
-            return "PhysicalHudiScanOperator" + " {" + "table=" + ((HudiTable) node.getTable()).getTable() +
+            return "PhysicalHudiScanOperator" + " {" + "table=" + ((HudiTable) node.getTable()).getTableName() +
                     ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
                     ", predicates=" + node.getScanOperatorPredicates() +
                     ", limit=" + node.getLimit() +

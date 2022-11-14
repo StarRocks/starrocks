@@ -4,7 +4,6 @@ package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.IcebergTable;
-import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.Memo;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -31,7 +30,7 @@ public class PushDownMinMaxConjunctsRuleTest {
                 ConstantOperator.createInt(1));
 
         OptExpression scan =
-                new OptExpression(new LogicalIcebergScanOperator(table, Table.TableType.ICEBERG,
+                new OptExpression(new LogicalIcebergScanOperator(table,
                                 Maps.newHashMap(), Maps.newHashMap(), -1, binaryPredicateOperator));
         scan.getInputs().add(scan);
 

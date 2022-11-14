@@ -14,7 +14,6 @@ import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -44,6 +43,7 @@ import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.SetQualifier;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
@@ -118,37 +118,41 @@ public class QueryAnalyzer {
             for (CTERelation withQuery : stmt.getCteRelations()) {
                 QueryRelation query = withQuery.getCteQueryStatement().getQueryRelation();
                 process(withQuery.getCteQueryStatement(), cteScope);
+                String cteName = withQuery.getName();
+                if (cteScope.containsCTE(cteName)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_NONUNIQ_TABLE, cteName);
+                }
 
-                /*
-                 *  Because the analysis of CTE is sensitive to order
-                 *  the latter CTE can call the previous resolved CTE,
-                 *  and the previous CTE can rewrite the existing table name.
-                 *  So here will save an increasing AnalyzeState to add cte scope
-                 */
+                if (withQuery.getColumnOutputNames() == null) {
+                    withQuery.setColumnOutputNames(new ArrayList<>(query.getColumnOutputNames()));
+                } else {
+                    if (withQuery.getColumnOutputNames().size() != query.getColumnOutputNames().size()) {
+                        ErrorReport.reportSemanticException(ErrorCode.ERR_VIEW_WRONG_LIST);
+                    }
+                }
 
                 /*
                  * use cte column name as output scope of subquery relation fields
                  */
                 ImmutableList.Builder<Field> outputFields = ImmutableList.builder();
-                ImmutableList.Builder<String> columnOutputNames = ImmutableList.builder();
                 for (int fieldIdx = 0; fieldIdx < query.getRelationFields().getAllFields().size(); ++fieldIdx) {
                     Field originField = query.getRelationFields().getFieldByIndex(fieldIdx);
 
                     String database = originField.getRelationAlias() == null ? session.getDatabase() :
                             originField.getRelationAlias().getDb();
-                    TableName tableName = new TableName(database, withQuery.getName());
-                    outputFields.add(new Field(
-                            withQuery.getColumnOutputNames() == null ? originField.getName() :
-                                    withQuery.getColumnOutputNames().get(fieldIdx),
-                            originField.getType(),
-                            tableName,
+                    TableName tableName = new TableName(database, cteName);
+                    outputFields.add(new Field(withQuery.getColumnOutputNames().get(fieldIdx), originField.getType(), tableName,
                             originField.getOriginExpression()));
-                    columnOutputNames.add(withQuery.getColumnOutputNames() == null ? originField.getName() :
-                            withQuery.getColumnOutputNames().get(fieldIdx));
                 }
-                withQuery.setColumnOutputNames(columnOutputNames.build());
+
+                /*
+                 *  Because the analysis of CTE is sensitive to order
+                 *  the later CTE can call the previous resolved CTE,
+                 *  and the previous CTE can rewrite the existing table name.
+                 *  So here will save an increasing AnalyzeState to add cte scope
+                 */
                 withQuery.setScope(new Scope(RelationId.of(withQuery), new RelationFields(outputFields.build())));
-                cteScope.addCteQueries(withQuery.getName(), withQuery);
+                cteScope.addCteQueries(cteName, withQuery);
             }
 
             return cteScope;
@@ -445,7 +449,7 @@ public class QueryAnalyzer {
 
         @Override
         public Scope visitSubquery(SubqueryRelation subquery, Scope context) {
-            if (subquery.getResolveTableName() == null) {
+            if (subquery.getResolveTableName() != null && subquery.getResolveTableName().getTbl() == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_DERIVED_MUST_HAVE_ALIAS);
             }
 
@@ -457,6 +461,31 @@ public class QueryAnalyzer {
                         field.getOriginExpression()));
             }
             Scope scope = new Scope(RelationId.of(subquery), new RelationFields(outputFields.build()));
+
+            if (subquery.hasOrderByClause()) {
+                List<Expr> outputExpressions = subquery.getOutputExpression();
+                for (OrderByElement orderByElement : subquery.getOrderBy()) {
+                    Expr expression = orderByElement.getExpr();
+                    AnalyzerUtils.verifyNoGroupingFunctions(expression, "ORDER BY");
+
+                    if (expression instanceof IntLiteral) {
+                        long ordinal = ((IntLiteral) expression).getLongValue();
+                        if (ordinal < 1 || ordinal > outputExpressions.size()) {
+                            throw new SemanticException("ORDER BY position %s is not in select list", ordinal);
+                        }
+                        expression = new FieldReference((int) ordinal - 1, null);
+                    }
+
+                    analyzeExpression(expression, new AnalyzeState(), scope);
+
+                    if (!expression.getType().canOrderBy()) {
+                        throw new SemanticException(Type.ONLY_METRIC_TYPE_ERROR_MSG);
+                    }
+
+                    orderByElement.setExpr(expression);
+                }
+            }
+
             subquery.setScope(scope);
             return scope;
         }
@@ -616,9 +645,9 @@ public class QueryAnalyzer {
                 analyzeExpression(args.get(i), analyzeState, scope);
                 argTypes[i] = args.get(i).getType();
 
-                AnalyzerUtils.verifyNoAggregateFunctions(args.get(i), "UNNEST");
-                AnalyzerUtils.verifyNoWindowFunctions(args.get(i), "UNNEST");
-                AnalyzerUtils.verifyNoGroupingFunctions(args.get(i), "UNNEST");
+                AnalyzerUtils.verifyNoAggregateFunctions(args.get(i), "Table Function");
+                AnalyzerUtils.verifyNoWindowFunctions(args.get(i), "Table Function");
+                AnalyzerUtils.verifyNoGroupingFunctions(args.get(i), "Table Function");
             }
 
             Function fn = Expr.getBuiltinFunction(node.getFunctionName().getFunction(), argTypes,
@@ -642,13 +671,33 @@ public class QueryAnalyzer {
             node.setTableFunction(tableFunction);
             node.setChildExpressions(node.getFunctionParams().exprs());
 
+            if (node.getColumnNames() == null) {
+                if (tableFunction.getFunctionName().getFunction().equals("unnest")) {
+                    // If the unnest variadic function does not explicitly specify column name,
+                    // all column names are `unnest`. This refers to the return column name of postgresql.
+                    List<String> columnNames = new ArrayList<>();
+                    for (int i = 0; i < tableFunction.getTableFnReturnTypes().size(); ++i) {
+                        columnNames.add("unnest");
+                    }
+                    node.setColumnNames(columnNames);
+                } else {
+                    node.setColumnNames(new ArrayList<>(tableFunction.getDefaultColumnNames()));
+                }
+            } else {
+                if (node.getColumnNames().size() != tableFunction.getTableFnReturnTypes().size()) {
+                    throw new SemanticException("table %s has %s columns available but %s columns specified",
+                            node.getAlias().getTbl(), node.getColumnNames().size(), tableFunction.getTableFnReturnTypes().size());
+                }
+            }
+
             ImmutableList.Builder<Field> fields = ImmutableList.builder();
             for (int i = 0; i < tableFunction.getTableFnReturnTypes().size(); ++i) {
-                Field field = new Field(tableFunction.getDefaultColumnNames().get(i),
-                        tableFunction.getTableFnReturnTypes().get(i), node.getResolveTableName(),
-                        new SlotRef(node.getResolveTableName(),
-                                node.getTableFunction().getDefaultColumnNames().get(i),
-                                node.getTableFunction().getDefaultColumnNames().get(i)));
+                String colName = node.getColumnNames().get(i);
+
+                Field field = new Field(colName,
+                        tableFunction.getTableFnReturnTypes().get(i),
+                        node.getResolveTableName(),
+                        new SlotRef(node.getResolveTableName(), colName, colName));
                 fields.add(field);
             }
 

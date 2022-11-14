@@ -4,7 +4,6 @@
 
 #include "column/datum_convert.h"
 #include "storage/chunk_helper.h"
-#include "storage/wrapper_field.h"
 #include "types/bitmap_value.h"
 #include "types/hll.h"
 #include "util/percentile_value.h"
@@ -16,9 +15,6 @@ ChunkChanger::ChunkChanger(const TabletSchema& tablet_schema) {
 }
 
 ChunkChanger::~ChunkChanger() {
-    for (auto it = _schema_mapping.begin(); it != _schema_mapping.end(); ++it) {
-        SAFE_DELETE(it->default_value);
-    }
     _schema_mapping.clear();
 }
 
@@ -181,7 +177,7 @@ ConvertTypeResolver::ConvertTypeResolver() {
 
 ConvertTypeResolver::~ConvertTypeResolver() = default;
 
-const MaterializeTypeConverter* ChunkChanger::get_materialize_type_converter(std::string materialized_function,
+const MaterializeTypeConverter* ChunkChanger::get_materialize_type_converter(const std::string& materialized_function,
                                                                              FieldType type) {
     if (materialized_function == "to_bitmap") {
         return get_materialized_converter(type, OLAP_MATERIALIZE_TYPE_BITMAP);
@@ -321,48 +317,8 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const
             }
         } else {
             ColumnPtr& new_col = new_chunk->get_column_by_index(i);
-            Datum dst_datum;
-            if (_schema_mapping[i].default_value->is_null()) {
-                dst_datum.set_null();
-                COLUMN_APPEND_DATUM();
-            } else {
-                Field new_field =
-                        ChunkHelper::convert_field_to_format_v2(i, new_tablet_meta->tablet_schema().column(i));
-                const FieldType field_type = new_field.type()->type();
-                std::string tmp = _schema_mapping[i].default_value->to_string();
-                if (field_type == OLAP_FIELD_TYPE_HLL || field_type == OLAP_FIELD_TYPE_OBJECT ||
-                    field_type == OLAP_FIELD_TYPE_PERCENTILE) {
-                    switch (field_type) {
-                    case OLAP_FIELD_TYPE_HLL: {
-                        HyperLogLog hll(tmp);
-                        dst_datum.set_hyperloglog(&hll);
-                        COLUMN_APPEND_DATUM();
-                        break;
-                    }
-                    case OLAP_FIELD_TYPE_OBJECT: {
-                        BitmapValue bitmap(tmp);
-                        dst_datum.set_bitmap(&bitmap);
-                        COLUMN_APPEND_DATUM();
-                        break;
-                    }
-                    case OLAP_FIELD_TYPE_PERCENTILE: {
-                        PercentileValue percentile(tmp);
-                        dst_datum.set_percentile(&percentile);
-                        COLUMN_APPEND_DATUM();
-                        break;
-                    }
-                    default:
-                        LOG(WARNING) << "the column type is wrong. column_type: " << field_type_to_string(field_type);
-                        return false;
-                    }
-                } else {
-                    Status st = datum_from_string(new_field.type().get(), &dst_datum, tmp, nullptr);
-                    if (!st.ok()) {
-                        LOG(WARNING) << "create datum from string failed: status=" << st;
-                        return false;
-                    }
-                    COLUMN_APPEND_DATUM();
-                }
+            for (size_t row_index = 0; row_index < base_chunk->num_rows(); ++row_index) {
+                new_col->append_datum(_schema_mapping[i].default_value_datum);
             }
         }
     }
@@ -463,47 +419,8 @@ bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, co
             }
         } else {
             ColumnPtr& new_col = new_chunk->get_column_by_index(i);
-            Datum dst_datum;
-            if (_schema_mapping[i].default_value->is_null()) {
-                dst_datum.set_null();
-                COLUMN_APPEND_DATUM();
-            } else {
-                TypeInfoPtr new_type_info = new_schema.field(i)->type();
-                const FieldType field_type = new_type_info->type();
-                std::string tmp = _schema_mapping[i].default_value->to_string();
-                if (field_type == OLAP_FIELD_TYPE_HLL || field_type == OLAP_FIELD_TYPE_OBJECT ||
-                    field_type == OLAP_FIELD_TYPE_PERCENTILE) {
-                    switch (field_type) {
-                    case OLAP_FIELD_TYPE_HLL: {
-                        HyperLogLog hll(tmp);
-                        dst_datum.set_hyperloglog(&hll);
-                        COLUMN_APPEND_DATUM();
-                        break;
-                    }
-                    case OLAP_FIELD_TYPE_OBJECT: {
-                        BitmapValue bitmap(tmp);
-                        dst_datum.set_bitmap(&bitmap);
-                        COLUMN_APPEND_DATUM();
-                        break;
-                    }
-                    case OLAP_FIELD_TYPE_PERCENTILE: {
-                        PercentileValue percentile(tmp);
-                        dst_datum.set_percentile(&percentile);
-                        COLUMN_APPEND_DATUM();
-                        break;
-                    }
-                    default:
-                        LOG(WARNING) << "the column type is wrong. column_type: " << field_type_to_string(field_type);
-                        return false;
-                    }
-                } else {
-                    Status st = datum_from_string(new_type_info.get(), &dst_datum, tmp, nullptr);
-                    if (!st.ok()) {
-                        LOG(WARNING) << "create datum from string failed: status=" << st;
-                        return false;
-                    }
-                    COLUMN_APPEND_DATUM();
-                }
+            for (size_t row_index = 0; row_index < base_chunk->num_rows(); ++row_index) {
+                new_col->append_datum(_schema_mapping[i].default_value_datum);
             }
         }
     }
@@ -703,16 +620,36 @@ Status SchemaChangeUtils::parse_request(const TabletSchema& base_schema, const T
 
 Status SchemaChangeUtils::init_column_mapping(ColumnMapping* column_mapping, const TabletColumn& column_schema,
                                               const std::string& value) {
-    column_mapping->default_value = WrapperField::create(column_schema);
-
-    if (column_mapping->default_value == nullptr) {
-        return Status::InternalError("malloc error");
-    }
-
     if (column_schema.is_nullable() && value.length() == 0) {
-        column_mapping->default_value->set_null();
+        column_mapping->default_value_datum.set_null();
     } else {
-        column_mapping->default_value->from_string(value);
+        auto field_type = column_schema.type();
+        auto type_info = get_type_info(column_schema);
+
+        switch (field_type) {
+        case OLAP_FIELD_TYPE_HLL: {
+            column_mapping->default_hll = std::make_unique<HyperLogLog>(value);
+            column_mapping->default_value_datum.set_hyperloglog(column_mapping->default_hll.get());
+            break;
+        }
+        case OLAP_FIELD_TYPE_OBJECT: {
+            column_mapping->default_bitmap = std::make_unique<BitmapValue>(value);
+            column_mapping->default_value_datum.set_bitmap(column_mapping->default_bitmap.get());
+            break;
+        }
+        case OLAP_FIELD_TYPE_PERCENTILE: {
+            column_mapping->default_percentile = std::make_unique<PercentileValue>(value);
+            column_mapping->default_value_datum.set_percentile(column_mapping->default_percentile.get());
+            break;
+        }
+        case OLAP_FIELD_TYPE_JSON: {
+            column_mapping->default_json = std::make_unique<JsonValue>(value);
+            column_mapping->default_value_datum.set_json(column_mapping->default_json.get());
+            break;
+        }
+        default:
+            return datum_from_string(type_info.get(), &column_mapping->default_value_datum, value, nullptr);
+        }
     }
 
     return Status::OK();

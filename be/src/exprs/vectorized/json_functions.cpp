@@ -5,7 +5,6 @@
 #include <re2/re2.h>
 
 #include <algorithm>
-#include <boost/algorithm/string.hpp>
 #include <boost/tokenizer.hpp>
 
 #include "column/column_builder.h"
@@ -15,13 +14,11 @@
 #include "exprs/vectorized/jsonpath.h"
 #include "glog/logging.h"
 #include "gutil/strings/escaping.h"
-#include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
 #include "udf/udf.h"
 #include "util/json.h"
 #include "velocypack/Builder.h"
 #include "velocypack/Iterator.h"
-#include "velocypack/vpack.h"
 
 namespace starrocks::vectorized {
 
@@ -94,7 +91,7 @@ Status JsonFunctions::json_path_prepare(starrocks_udf::FunctionContext* context,
     } catch (const boost::escaped_list_error& e) {
         return Status::InvalidArgument(strings::Substitute("Illegal json path: $0", e.what()));
     }
-    std::vector<SimpleJsonPath>* parsed_paths = new std::vector<SimpleJsonPath>();
+    auto* parsed_paths = new std::vector<SimpleJsonPath>();
     _get_parsed_paths(path_exprs, parsed_paths);
 
     context->set_function_state(scope, parsed_paths);
@@ -105,8 +102,7 @@ Status JsonFunctions::json_path_prepare(starrocks_udf::FunctionContext* context,
 Status JsonFunctions::json_path_close(starrocks_udf::FunctionContext* context,
                                       starrocks_udf::FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
-        std::vector<SimpleJsonPath>* parsed_paths =
-                reinterpret_cast<std::vector<SimpleJsonPath>*>(context->get_function_state(scope));
+        auto* parsed_paths = reinterpret_cast<std::vector<SimpleJsonPath>*>(context->get_function_state(scope));
         if (parsed_paths != nullptr) {
             delete parsed_paths;
             VLOG(10) << "close json path";
@@ -118,6 +114,18 @@ Status JsonFunctions::json_path_close(starrocks_udf::FunctionContext* context,
 
 Status JsonFunctions::extract_from_object(simdjson::ondemand::object& obj, const std::vector<SimpleJsonPath>& jsonpath,
                                           simdjson::ondemand::value* value) noexcept {
+#define HANDLE_SIMDJSON_ERROR(err, msg)                                                                            \
+    do {                                                                                                           \
+        const simdjson::error_code& _err = err;                                                                    \
+        const std::string& _msg = msg;                                                                             \
+        if (UNLIKELY(_err)) {                                                                                      \
+            if (_err == simdjson::NO_SUCH_FIELD || _err == simdjson::INDEX_OUT_OF_BOUNDS) {                        \
+                return Status::NotFound(fmt::format("err: {}, msg: {}", simdjson::error_message(_err), _msg));     \
+            }                                                                                                      \
+            return Status::DataQualityError(fmt::format("err: {}, msg: {}", simdjson::error_message(_err), _msg)); \
+        }                                                                                                          \
+    } while (false);
+
     if (jsonpath.size() <= 1) {
         // The first elem of json path should be '$'.
         // A valid json path's size is >= 2.
@@ -137,47 +145,24 @@ Status JsonFunctions::extract_from_object(simdjson::ondemand::object& obj, const
 
         // Since the simdjson::ondemand::object cannot be converted to simdjson::ondemand::value,
         // we have to do some special treatment for the second elem of json path.
+        // If the key is not found in json object, simdjson::NO_SUCH_FIELD would be returned.
         if (i == 1) {
-            auto err = obj.find_field_unordered(col).get(tvalue);
-            if (err) {
-                return Status::NotFound(
-                        fmt::format("failed to access field: {}, err: {}", col, simdjson::error_message(err)));
-            }
+            HANDLE_SIMDJSON_ERROR(obj.find_field_unordered(col).get(tvalue),
+                                  fmt::format("unable to find field: {}", col));
         } else {
-            auto err = tvalue.find_field_unordered(col).get(tvalue);
-            if (err) {
-                return Status::NotFound(
-                        fmt::format("failed to access field: {}, err: {}", col, simdjson::error_message(err)));
-            }
+            HANDLE_SIMDJSON_ERROR(tvalue.find_field_unordered(col).get(tvalue),
+                                  fmt::format("unable to find field: {}", col));
         }
 
         if (index != -1) {
             // try to access tvalue as array.
+            // If the index is beyond the length of array, simdjson::INDEX_OUT_OF_BOUNDS would be returned.
             simdjson::ondemand::array arr;
-            auto err = tvalue.get_array().get(arr);
-            if (err) {
-                return Status::InvalidArgument(fmt::format("failed to access field as array, field: {}, err: {}", col,
-                                                           simdjson::error_message(err)));
-            }
+            HANDLE_SIMDJSON_ERROR(tvalue.get_array().get(arr),
+                                  fmt::format("failed to access field as array, field: {}", col));
 
-            size_t sz;
-            err = arr.count_elements().get(sz);
-            if (err) {
-                return Status::InvalidArgument(
-                        fmt::format("failed to get array size, field: {}, err: {}", col, simdjson::error_message(err)));
-            }
-
-            if (index >= sz) {
-                return Status::NotFound(
-                        fmt::format("index beyond array size, field: {}, index: {}, array size: {}", col, index, sz));
-            }
-
-            err = arr.at(index).get(tvalue);
-            if (err) {
-                return Status::InvalidArgument(
-                        fmt::format("failed to access array, field: {}, index: {}, array size: {}, err: {}", col, index,
-                                    sz, simdjson::error_message(err)));
-            }
+            HANDLE_SIMDJSON_ERROR(arr.at(index).get(tvalue),
+                                  fmt::format("failed to access array field: {}, index: {}", col, index));
         }
     }
 
@@ -204,7 +189,7 @@ JsonFunctionType JsonTypeTraits<TYPE_VARCHAR>::JsonType = JSON_FUN_STRING;
 
 ColumnPtr JsonFunctions::get_json_int(FunctionContext* context, const Columns& columns) {
     auto jsons = _string_json(context, columns);
-    auto paths = columns[1];
+    const auto& paths = columns[1];
 
     jsons = json_query(context, Columns{jsons, paths});
     return _json_int(context, Columns{jsons});
@@ -212,7 +197,7 @@ ColumnPtr JsonFunctions::get_json_int(FunctionContext* context, const Columns& c
 
 ColumnPtr JsonFunctions::get_json_double(FunctionContext* context, const Columns& columns) {
     auto jsons = _string_json(context, columns);
-    auto paths = columns[1];
+    const auto& paths = columns[1];
 
     jsons = json_query(context, Columns{jsons, paths});
     return _json_double(context, Columns{jsons});
@@ -220,7 +205,7 @@ ColumnPtr JsonFunctions::get_json_double(FunctionContext* context, const Columns
 
 ColumnPtr JsonFunctions::get_json_string(FunctionContext* context, const Columns& columns) {
     auto jsons = _string_json(context, columns);
-    auto paths = columns[1];
+    const auto& paths = columns[1];
 
     jsons = json_query(context, Columns{jsons, paths});
     return _json_string_unescaped(context, Columns{jsons});
@@ -275,7 +260,7 @@ ColumnPtr JsonFunctions::json_string(FunctionContext* context, const Columns& co
             if (!json_str.ok()) {
                 result.append_null();
             } else {
-                result.append(std::move(json_str.value()));
+                result.append(json_str.value());
             }
         }
     }
@@ -295,7 +280,7 @@ ColumnPtr JsonFunctions::_json_int(FunctionContext* context, const Columns& colu
             if (!json_int.ok()) {
                 result.append_null();
             } else {
-                result.append(std::move(json_int.value()));
+                result.append(json_int.value());
             }
         }
     }
@@ -315,7 +300,7 @@ ColumnPtr JsonFunctions::_json_double(FunctionContext* context, const Columns& c
             if (!json_d.ok()) {
                 result.append_null();
             } else {
-                result.append(std::move(json_d.value()));
+                result.append(json_d.value());
             }
         }
     }
@@ -367,7 +352,7 @@ ColumnPtr JsonFunctions::_json_string_unescaped(FunctionContext* context, const 
             }
 
             if (str.length() < 2) {
-                result.append(std::move(str));
+                result.append(str);
                 continue;
             }
 
@@ -375,7 +360,7 @@ ColumnPtr JsonFunctions::_json_string_unescaped(FunctionContext* context, const 
             if (str[0] == '"') str = str.substr(1, str.size() - 1);
             if (str[str.size() - 1] == '"') str = str.substr(0, str.size() - 1);
 
-            result.append(std::move(str));
+            result.append(str);
         }
     }
     return result.build(ColumnHelper::is_all_const(columns));
@@ -384,7 +369,7 @@ ColumnPtr JsonFunctions::_json_string_unescaped(FunctionContext* context, const 
 //////////////////////////// User visiable functions /////////////////////////////////
 
 static StatusOr<JsonPath*> get_prepared_or_parse(FunctionContext* context, Slice slice, JsonPath* out) {
-    JsonPath* prepared = reinterpret_cast<JsonPath*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    auto* prepared = reinterpret_cast<JsonPath*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
     if (prepared != nullptr) {
         return prepared;
     }
@@ -404,7 +389,7 @@ Status JsonFunctions::native_json_path_prepare(starrocks_udf::FunctionContext* c
     Slice path_value = ColumnHelper::get_const_value<TYPE_VARCHAR>(path_column);
     auto json_path = JsonPath::parse(path_value);
     RETURN_IF(!json_path.ok(), json_path.status());
-    JsonPath* state = new JsonPath(std::move(json_path.value()));
+    auto* state = new JsonPath(std::move(json_path.value()));
     context->set_function_state(scope, state);
 
     VLOG(10) << "prepare json path: " << path_value;
@@ -414,7 +399,7 @@ Status JsonFunctions::native_json_path_prepare(starrocks_udf::FunctionContext* c
 Status JsonFunctions::native_json_path_close(starrocks_udf::FunctionContext* context,
                                              starrocks_udf::FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
-        JsonPath* state = reinterpret_cast<JsonPath*>(context->get_function_state(scope));
+        auto* state = reinterpret_cast<JsonPath*>(context->get_function_state(scope));
         delete state;
     }
     return Status::OK();
@@ -427,31 +412,35 @@ ColumnPtr JsonFunctions::json_query(FunctionContext* context, const Columns& col
 // Convert the JSON Slice to a PrimitiveType through ColumnBuilder
 template <PrimitiveType ResultType>
 static Status _convert_json_slice(const vpack::Slice& slice, vectorized::ColumnBuilder<ResultType>& result) {
-    if (slice.isNone()) {
-        result.append_null();
-    } else if constexpr (ResultType == TYPE_JSON) {
-        JsonValue value(slice);
-        result.append(std::move(value));
-    } else if constexpr (ResultType == TYPE_VARCHAR || ResultType == TYPE_CHAR) {
-        if (LIKELY(slice.isType(vpack::ValueType::String))) {
-            vpack::ValueLength len;
-            const char* str = slice.getStringUnchecked(len);
-            result.append(Slice(str, len));
-        } else {
-            vpack::Options options = vpack::Options::Defaults;
-            options.singleLinePrettyPrint = true;
-            std::string str = slice.toJson(&options);
+    try {
+        if (slice.isNone()) {
+            result.append_null();
+        } else if constexpr (ResultType == TYPE_JSON) {
+            JsonValue value(slice);
+            result.append(std::move(value));
+        } else if (slice.isNull()) {
+            result.append_null();
+        } else if constexpr (ResultType == TYPE_VARCHAR || ResultType == TYPE_CHAR) {
+            if (LIKELY(slice.isType(vpack::ValueType::String))) {
+                vpack::ValueLength len;
+                const char* str = slice.getStringUnchecked(len);
+                result.append(Slice(str, len));
+            } else {
+                vpack::Options options = vpack::Options::Defaults;
+                options.singleLinePrettyPrint = true;
+                std::string str = slice.toJson(&options);
 
-            result.append(Slice(str));
+                result.append(Slice(str));
+            }
+        } else if constexpr (ResultType == TYPE_INT) {
+            result.append(slice.getNumber<int64_t>());
+        } else if constexpr (ResultType == TYPE_DOUBLE) {
+            result.append(slice.getNumber<double>());
+        } else {
+            CHECK(false) << "unsupported";
         }
-    } else if constexpr (ResultType == TYPE_INT) {
-        double num = slice.getNumber<int64_t>();
-        result.append(num);
-    } else if constexpr (ResultType == TYPE_DOUBLE) {
-        double num = slice.getNumber<double>();
-        result.append(num);
-    } else {
-        CHECK(false) << "unsupported";
+    } catch (const vpack::Exception& e) {
+        return Status::InvalidArgument("failed to convert json to primitive");
     }
     return Status::OK();
 }
@@ -635,10 +624,8 @@ ColumnPtr JsonFunctions::json_length(FunctionContext* context, const Columns& co
     ColumnBuilder<TYPE_INT> result(rows);
     ColumnViewer<TYPE_JSON> json_column(columns[0]);
 
-    bool with_path = false;
     std::unique_ptr<ColumnViewer<TYPE_VARCHAR>> path_viewer;
     if (columns.size() >= 2) {
-        with_path = true;
         path_viewer = std::make_unique<ColumnViewer<TYPE_VARCHAR>>(columns[1]);
     }
 
@@ -648,26 +635,12 @@ ColumnPtr JsonFunctions::json_length(FunctionContext* context, const Columns& co
             result.append_null();
             continue;
         }
+
         JsonValue* json = json_column.value(row);
-        if (!with_path || path_viewer->value(row).empty()) {
-            switch (json->get_type()) {
-            case JSON_BOOL:
-            case JSON_NUMBER:
-            case JSON_STRING:
-            case JSON_NULL: {
-                result.append(1);
-                break;
-            }
-            case JSON_ARRAY:
-            case JSON_OBJECT: {
-                result.append(json->to_vslice().length());
-                break;
-            }
-            default: {
-                result.append(0);
-                break;
-            }
-            }
+        vpack::Slice target_slice;
+        vpack::Builder builder;
+        if (!path_viewer || path_viewer->value(row).empty()) {
+            target_slice = json->to_vslice();
         } else {
             Slice path_str = path_viewer->value(row);
             auto jsonpath = get_prepared_or_parse(context, path_str, &stored_path);
@@ -676,15 +649,15 @@ ColumnPtr JsonFunctions::json_length(FunctionContext* context, const Columns& co
                 continue;
             }
 
-            vpack::Builder builder;
-            vpack::Slice slice = JsonPath::extract(json, *jsonpath.value(), &builder);
-            if (slice.isObject() || slice.isArray()) {
-                result.append(slice.length());
-            } else if (slice.isNone()) {
-                result.append(0);
-            } else {
-                result.append(1);
-            }
+            target_slice = JsonPath::extract(json, *jsonpath.value(), &builder);
+        }
+
+        if (target_slice.isObject() || target_slice.isArray()) {
+            result.append(target_slice.length());
+        } else if (target_slice.isNone()) {
+            result.append(0);
+        } else {
+            result.append(1);
         }
     }
     return result.build(ColumnHelper::is_all_const(columns));
@@ -695,13 +668,34 @@ ColumnPtr JsonFunctions::json_keys(FunctionContext* context, const Columns& colu
     auto json_viewer = ColumnViewer<TYPE_JSON>(columns[0]);
     ColumnBuilder<TYPE_JSON> result(rows);
 
+    std::unique_ptr<ColumnViewer<TYPE_VARCHAR>> path_viewer;
+    JsonPath stored_path;
+    if (columns.size() >= 2) {
+        path_viewer = std::make_unique<ColumnViewer<TYPE_VARCHAR>>(columns[1]);
+    }
+
     for (size_t row = 0; row < rows; row++) {
         if (json_viewer.is_null(row) || json_viewer.value(row) == nullptr) {
             result.append_null();
             continue;
         }
+
         JsonValue* json_value = json_viewer.value(row);
-        vpack::Slice vslice = json_value->to_vslice();
+        vpack::Slice vslice;
+        vpack::Builder extract_builder;
+        if (!path_viewer || path_viewer->value(row).empty()) {
+            vslice = json_value->to_vslice();
+        } else {
+            Slice path_str = path_viewer->value(row);
+            auto jsonpath = get_prepared_or_parse(context, path_str, &stored_path);
+            if (UNLIKELY(!jsonpath.ok())) {
+                result.append_null();
+                continue;
+            }
+
+            vslice = JsonPath::extract(json_value, *jsonpath.value(), &extract_builder);
+        }
+
         if (!vslice.isObject()) {
             result.append_null();
         } else {

@@ -23,8 +23,6 @@ package com.starrocks.alter;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.CancelAlterSystemStmt;
-import com.starrocks.analysis.CancelStmt;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.TabletInvertedIndex;
@@ -41,6 +39,8 @@ import com.starrocks.sql.ast.AddFollowerClause;
 import com.starrocks.sql.ast.AddObserverClause;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterLoadErrorUrlClause;
+import com.starrocks.sql.ast.CancelAlterSystemStmt;
+import com.starrocks.sql.ast.CancelStmt;
 import com.starrocks.sql.ast.DecommissionBackendClause;
 import com.starrocks.sql.ast.DropBackendClause;
 import com.starrocks.sql.ast.DropComputeNodeClause;

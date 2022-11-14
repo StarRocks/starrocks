@@ -106,7 +106,7 @@ void ExecNode::push_down_predicate(RuntimeState* state, std::list<ExprContext*>*
         }
     }
 
-    std::list<ExprContext*>::iterator iter = expr_ctxs->begin();
+    auto iter = expr_ctxs->begin();
     while (iter != expr_ctxs->end()) {
         if ((*iter)->root()->is_bound(_tuple_ids)) {
             (*iter)->prepare(state);
@@ -129,7 +129,7 @@ void ExecNode::push_down_tuple_slot_mappings(RuntimeState* state,
 
 void ExecNode::push_down_join_runtime_filter(RuntimeState* state, vectorized::RuntimeFilterProbeCollector* collector) {
     if (collector->empty()) return;
-    if (_type != TPlanNodeType::AGGREGATION_NODE) {
+    if (_type != TPlanNodeType::AGGREGATION_NODE && _type != TPlanNodeType::ANALYTIC_EVAL_NODE) {
         push_down_join_runtime_filter_to_children(state, collector);
     }
     _runtime_filter_collector.push_down(collector, _tuple_ids, _local_rf_waiting_set);
@@ -155,6 +155,7 @@ void ExecNode::register_runtime_filter_descriptor(RuntimeState* state,
 }
 
 Status ExecNode::init_join_runtime_filters(const TPlanNode& tnode, RuntimeState* state) {
+    _runtime_filter_collector.set_plan_node_id(_id);
     if (state != nullptr && tnode.__isset.probe_runtime_filters) {
         for (const auto& desc : tnode.probe_runtime_filters) {
             vectorized::RuntimeFilterProbeDescriptor* rf_desc =
@@ -163,7 +164,6 @@ Status ExecNode::init_join_runtime_filters(const TPlanNode& tnode, RuntimeState*
             register_runtime_filter_descriptor(state, rf_desc);
         }
     }
-    _runtime_filter_collector.set_plan_node_id(_id);
     if (state != nullptr && state->query_options().__isset.runtime_filter_wait_timeout_ms) {
         _runtime_filter_collector.set_wait_timeout_ms(state->query_options().runtime_filter_wait_timeout_ms);
     }
@@ -604,7 +604,7 @@ Status eager_prune_eval_conjuncts(const std::vector<ExprContext*>& ctxs, vectori
 }
 
 Status ExecNode::eval_conjuncts(const std::vector<ExprContext*>& ctxs, vectorized::Chunk* chunk,
-                                vectorized::FilterPtr* filter_ptr) {
+                                vectorized::FilterPtr* filter_ptr, bool apply_filter) {
     // No need to do expression if none rows
     DCHECK(chunk != nullptr);
     if (chunk->num_rows() == 0) {
@@ -625,6 +625,9 @@ Status ExecNode::eval_conjuncts(const std::vector<ExprContext*>& ctxs, vectorize
         return eager_prune_eval_conjuncts(ctxs, chunk);
     }
 
+    if (!apply_filter) {
+        DCHECK(filter_ptr) << "Must provide a filter if not apply it directly";
+    }
     vectorized::FilterPtr filter(new vectorized::Column::Filter(chunk->num_rows(), 1));
     if (filter_ptr != nullptr) {
         *filter_ptr = filter;
@@ -640,19 +643,29 @@ Status ExecNode::eval_conjuncts(const std::vector<ExprContext*>& ctxs, vectorize
             continue;
         } else if (0 == true_count) {
             // all not hit, return
-            chunk->set_num_rows(0);
+            if (apply_filter) {
+                chunk->set_num_rows(0);
+            } else {
+                filter->assign(filter->size(), 0);
+            }
             return Status::OK();
         } else {
             bool all_zero = false;
             vectorized::ColumnHelper::merge_two_filters(column, raw_filter, &all_zero);
             if (all_zero) {
-                chunk->set_num_rows(0);
+                if (apply_filter) {
+                    chunk->set_num_rows(0);
+                } else {
+                    filter->assign(filter->size(), 0);
+                }
                 return Status::OK();
             }
         }
     }
 
-    chunk->filter(*raw_filter);
+    if (apply_filter) {
+        chunk->filter(*raw_filter);
+    }
     TRY_CATCH_ALLOC_SCOPE_END()
     return Status::OK();
 }
@@ -665,7 +678,7 @@ StatusOr<size_t> ExecNode::eval_conjuncts_into_filter(const std::vector<ExprCont
         return 0;
     }
     for (auto* ctx : ctxs) {
-        ASSIGN_OR_RETURN(ColumnPtr column, ctx->evaluate(chunk));
+        ASSIGN_OR_RETURN(ColumnPtr column, ctx->evaluate_with_filter(chunk, filter->data()));
         size_t true_count = vectorized::ColumnHelper::count_true_with_notnull(column);
 
         if (true_count == column->size()) {
@@ -708,6 +721,10 @@ void ExecNode::eval_filter_null_values(vectorized::Chunk* chunk, const std::vect
     for (SlotId slot_id : filter_null_value_columns) {
         const ColumnPtr& c = chunk->get_column_by_slot_id(slot_id);
         if (!c->is_nullable()) continue;
+        if (c->only_null()) {
+            chunk->reset();
+            return;
+        }
         const vectorized::NullableColumn* nullable_column =
                 vectorized::ColumnHelper::as_raw_column<vectorized::NullableColumn>(c);
         if (!nullable_column->has_null()) continue;
@@ -759,6 +776,7 @@ void ExecNode::collect_scan_nodes(vector<ExecNode*>* nodes) {
     collect_nodes(TPlanNodeType::JDBC_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::MYSQL_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::LAKE_SCAN_NODE, nodes);
+    collect_nodes(TPlanNodeType::SCHEMA_SCAN_NODE, nodes);
 }
 
 void ExecNode::init_runtime_profile(const std::string& name) {

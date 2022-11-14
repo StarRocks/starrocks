@@ -48,7 +48,7 @@ void TimezoneUtils::init_time_zones() {
     for (const auto& timezone : timezones) {
         cctz::time_zone ctz;
         if (cctz::load_time_zone(timezone, &ctz)) {
-            _s_cached_timezone.emplace(timezone, std::move(ctz));
+            _s_cached_timezone.emplace(timezone, ctz);
         } else {
             LOG(WARNING) << "not found timezone:" << timezone;
         }
@@ -71,7 +71,7 @@ void TimezoneUtils::init_time_zones() {
     for (const auto& timezone : other_timezones) {
         cctz::time_zone ctz;
         if (cctz::load_time_zone(timezone, &ctz)) {
-            _s_cached_timezone.emplace(timezone, std::move(ctz));
+            _s_cached_timezone.emplace(timezone, ctz);
         } else {
             LOG(WARNING) << "not found timezone:" << timezone;
         }

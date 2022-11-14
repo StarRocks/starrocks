@@ -22,6 +22,7 @@ using Pipelines = std::vector<PipelinePtr>;
 class PipelineDriver;
 using DriverPtr = std::shared_ptr<PipelineDriver>;
 using DriverRawPtr = PipelineDriver*;
+using DriverConstRawPtr = const PipelineDriver*;
 using Drivers = std::vector<DriverPtr>;
 class OperatorFactory;
 using OpFactoryPtr = std::shared_ptr<OperatorFactory>;

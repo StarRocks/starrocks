@@ -39,7 +39,3 @@
     ```sql
     SHOW ALL ROUTINE LOAD FOR example_db.test1;
     ```
-
-## keyword
-
-SHOW,ROUTINE,LOAD

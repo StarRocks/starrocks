@@ -31,7 +31,6 @@ import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.ResourceDesc;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleDescriptor;
@@ -75,6 +74,7 @@ import com.starrocks.metric.TableMetricsRegistry;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.ast.ResourceDesc;
 import com.starrocks.system.Backend;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -466,7 +466,7 @@ public class SparkLoadJob extends BulkLoadJob {
                         }
 
                         hasLoadPartitions = true;
-                        int quorumReplicaNum = table.getPartitionInfo().getQuorumNum(partitionId);
+                        int quorumReplicaNum = table.getPartitionInfo().getQuorumNum(partitionId, table.writeQuorum());
 
                         List<MaterializedIndex> indexes = partition.getMaterializedIndices(IndexExtState.ALL);
                         for (MaterializedIndex index : indexes) {

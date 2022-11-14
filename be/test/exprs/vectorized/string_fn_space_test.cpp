@@ -3,8 +3,7 @@
 
 #include "exprs/vectorized/string_functions.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 class StringFunctionSpaceTest : public ::testing::Test {};
 
@@ -122,5 +121,4 @@ TEST_F(StringFunctionSpaceTest, spaceNullableColumnTest) {
     }
 }
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

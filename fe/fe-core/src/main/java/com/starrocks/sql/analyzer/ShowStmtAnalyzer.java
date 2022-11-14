@@ -10,22 +10,6 @@ import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.Predicate;
-import com.starrocks.analysis.SetType;
-import com.starrocks.analysis.ShowAuthenticationStmt;
-import com.starrocks.analysis.ShowDbStmt;
-import com.starrocks.analysis.ShowDeleteStmt;
-import com.starrocks.analysis.ShowDynamicPartitionStmt;
-import com.starrocks.analysis.ShowFunctionsStmt;
-import com.starrocks.analysis.ShowIndexStmt;
-import com.starrocks.analysis.ShowLoadStmt;
-import com.starrocks.analysis.ShowLoadWarningsStmt;
-import com.starrocks.analysis.ShowMaterializedViewStmt;
-import com.starrocks.analysis.ShowPartitionsStmt;
-import com.starrocks.analysis.ShowProcStmt;
-import com.starrocks.analysis.ShowRoutineLoadStmt;
-import com.starrocks.analysis.ShowStmt;
-import com.starrocks.analysis.ShowTabletStmt;
-import com.starrocks.analysis.ShowVariablesStmt;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
@@ -53,13 +37,32 @@ import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.DescribeStmt;
+import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.ShowAlterStmt;
+import com.starrocks.sql.ast.ShowAuthenticationStmt;
 import com.starrocks.sql.ast.ShowColumnStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.sql.ast.ShowDataStmt;
+import com.starrocks.sql.ast.ShowDbStmt;
+import com.starrocks.sql.ast.ShowDeleteStmt;
+import com.starrocks.sql.ast.ShowDynamicPartitionStmt;
+import com.starrocks.sql.ast.ShowFunctionsStmt;
+import com.starrocks.sql.ast.ShowIndexStmt;
+import com.starrocks.sql.ast.ShowLoadStmt;
+import com.starrocks.sql.ast.ShowLoadWarningsStmt;
+import com.starrocks.sql.ast.ShowMaterializedViewStmt;
+import com.starrocks.sql.ast.ShowPartitionsStmt;
+import com.starrocks.sql.ast.ShowProcStmt;
+import com.starrocks.sql.ast.ShowRoutineLoadStmt;
+import com.starrocks.sql.ast.ShowRoutineLoadTaskStmt;
+import com.starrocks.sql.ast.ShowStmt;
+import com.starrocks.sql.ast.ShowStreamLoadStmt;
 import com.starrocks.sql.ast.ShowTableStatusStmt;
 import com.starrocks.sql.ast.ShowTableStmt;
+import com.starrocks.sql.ast.ShowTabletStmt;
+import com.starrocks.sql.ast.ShowTransactionStmt;
+import com.starrocks.sql.ast.ShowVariablesStmt;
 import org.apache.commons.lang.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -88,7 +91,7 @@ public class ShowStmtAnalyzer {
         }
 
         @Override
-        public Void visitShowTableStmt(ShowTableStmt node, ConnectContext context) {
+        public Void visitShowTableStatement(ShowTableStmt node, ConnectContext context) {
             String db = node.getDb();
             db = getDatabaseName(db, context);
             node.setDb(db);
@@ -96,13 +99,13 @@ public class ShowStmtAnalyzer {
         }
 
         @Override
-        public Void visitShowTabletStmt(ShowTabletStmt node, ConnectContext context) {
+        public Void visitShowTabletStatement(ShowTabletStmt node, ConnectContext context) {
             ShowTabletStmtAnalyzer.analyze(node, context);
             return null;
         }
 
         @Override
-        public Void visitShowVariablesStmt(ShowVariablesStmt node, ConnectContext context) {
+        public Void visitShowVariablesStatement(ShowVariablesStmt node, ConnectContext context) {
             if (node.getType() == null) {
                 node.setType(SetType.DEFAULT);
             }
@@ -110,7 +113,7 @@ public class ShowStmtAnalyzer {
         }
 
         @Override
-        public Void visitShowColumnStmt(ShowColumnStmt node, ConnectContext context) {
+        public Void visitShowColumnStatement(ShowColumnStmt node, ConnectContext context) {
             node.init();
             String db = node.getTableName().getDb();
             db = getDatabaseName(db, context);
@@ -119,7 +122,7 @@ public class ShowStmtAnalyzer {
         }
 
         @Override
-        public Void visitShowTableStatusStmt(ShowTableStatusStmt node, ConnectContext context) {
+        public Void visitShowTableStatusStatement(ShowTableStatusStmt node, ConnectContext context) {
             String db = node.getDb();
             db = getDatabaseName(db, context);
             node.setDb(db);
@@ -127,7 +130,7 @@ public class ShowStmtAnalyzer {
         }
 
         @Override
-        public Void visitShowFunctions(ShowFunctionsStmt node, ConnectContext context) {
+        public Void visitShowFunctionsStatement(ShowFunctionsStmt node, ConnectContext context) {
             String dbName = node.getDbName();
             if (Strings.isNullOrEmpty(dbName)) {
                 dbName = context.getDatabase();
@@ -144,7 +147,7 @@ public class ShowStmtAnalyzer {
         }
 
         @Override
-        public Void visitShowMaterializedViewStmt(ShowMaterializedViewStmt node, ConnectContext context) {
+        public Void visitShowMaterializedViewStatement(ShowMaterializedViewStmt node, ConnectContext context) {
             String db = node.getDb();
             db = getDatabaseName(db, context);
             node.setDb(db);
@@ -152,7 +155,7 @@ public class ShowStmtAnalyzer {
         }
 
         @Override
-        public Void visitShowCreateTableStmt(ShowCreateTableStmt node, ConnectContext context) {
+        public Void visitShowCreateTableStatement(ShowCreateTableStmt node, ConnectContext context) {
             if (node.getTbl() == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_NO_TABLES_USED);
             }
@@ -161,7 +164,7 @@ public class ShowStmtAnalyzer {
         }
 
         @Override
-        public Void visitShowDatabasesStmt(ShowDbStmt node, ConnectContext context) {
+        public Void visitShowDatabasesStatement(ShowDbStmt node, ConnectContext context) {
             String catalogName;
             if (node.getCatalogName() != null) {
                 catalogName = node.getCatalogName();
@@ -183,13 +186,35 @@ public class ShowStmtAnalyzer {
         }
 
         @Override
-        public Void visitShowAlterStmt(ShowAlterStmt statement, ConnectContext context) {
+        public Void visitShowRoutineLoadTaskStatement(ShowRoutineLoadTaskStmt node, ConnectContext context) {
+            String dbName = node.getDbFullName();
+            dbName = getDatabaseName(dbName, context);
+            node.setDbFullName(dbName);
+            try {
+                node.checkJobNameExpr();
+            } catch (AnalysisException e) {
+                LOGGER.error("analysis show routine load task error:", e);
+                throw new SemanticException("analysis show routine load task error: %s", e.getMessage());
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowStreamLoadStatement(ShowStreamLoadStmt node, ConnectContext context) {
+            String dbName = node.getDbFullName();
+            dbName = getDatabaseName(dbName, context);
+            node.setDb(dbName);
+            return null;
+        }
+
+        @Override
+        public Void visitShowAlterStatement(ShowAlterStmt statement, ConnectContext context) {
             ShowAlterStmtAnalyzer.analyze(statement, context);
             return null;
         }
 
         @Override
-        public Void visitShowDeleteStmt(ShowDeleteStmt node, ConnectContext context) {
+        public Void visitShowDeleteStatement(ShowDeleteStmt node, ConnectContext context) {
             String dbName = node.getDbName();
             dbName = getDatabaseName(dbName, context);
             node.setDbName(dbName);
@@ -205,7 +230,7 @@ public class ShowStmtAnalyzer {
         }
 
         @Override
-        public Void visitShowIndexStmt(ShowIndexStmt node, ConnectContext context) {
+        public Void visitShowIndexStatement(ShowIndexStmt node, ConnectContext context) {
             node.init();
             String db = node.getTableName().getDb();
             db = getDatabaseName(db, context);
@@ -213,6 +238,12 @@ public class ShowStmtAnalyzer {
             if (Strings.isNullOrEmpty(node.getTableName().getCatalog())) {
                 node.getTableName().setCatalog(context.getCurrentCatalog());
             }
+            return null;
+        }
+
+        @Override
+        public Void visitShowTransactionStatement(ShowTransactionStmt statement, ConnectContext context) {
+            ShowTransactionStmtAnalyzer.analyze(statement, context);
             return null;
         }
 
@@ -235,7 +266,7 @@ public class ShowStmtAnalyzer {
         }
 
         @Override
-        public Void visitShowDataStmt(ShowDataStmt node, ConnectContext context) {
+        public Void visitShowDataStatement(ShowDataStmt node, ConnectContext context) {
             String dbName = node.getDbName();
             dbName = getDatabaseName(dbName, context);
             node.setDbName(dbName);
@@ -448,7 +479,7 @@ public class ShowStmtAnalyzer {
         }
 
         @Override
-        public Void visitShowPartitionsStmt(ShowPartitionsStmt statement, ConnectContext context) {
+        public Void visitShowPartitionsStatement(ShowPartitionsStmt statement, ConnectContext context) {
             String dbName = statement.getDbName();
             dbName = getDatabaseName(dbName, context);
             statement.setDbName(dbName);
@@ -580,13 +611,13 @@ public class ShowStmtAnalyzer {
             return orderByPairs;
         }
 
-        public Void visitShowLoadStmt(ShowLoadStmt statement, ConnectContext context) {
+        public Void visitShowLoadStatement(ShowLoadStmt statement, ConnectContext context) {
             ShowLoadStmtAnalyzer.analyze(statement, context);
             return null;
         }
 
         @Override
-        public Void visitShowLoadWarningsStmt(ShowLoadWarningsStmt statement, ConnectContext context) {
+        public Void visitShowLoadWarningsStatement(ShowLoadWarningsStmt statement, ConnectContext context) {
             ShowLoadWarningsStmtAnalyzer.analyze(statement, context);
             return null;
         }
@@ -602,7 +633,7 @@ public class ShowStmtAnalyzer {
                     exception.initCause(e);
                     throw exception;
                 }
-            } else if (! statement.isAll()) {
+            } else if (!statement.isAll()) {
                 statement.setUserIdent(context.getCurrentUserIdentity());
             }
             return null;

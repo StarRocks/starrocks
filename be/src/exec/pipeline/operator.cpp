@@ -3,6 +3,7 @@
 #include "exec/pipeline/operator.h"
 
 #include <algorithm>
+#include <utility>
 
 #include "exec/exec_node.h"
 #include "gutil/strings/substitute.h"
@@ -14,13 +15,19 @@
 namespace starrocks::pipeline {
 
 /// Operator.
+const int32_t Operator::s_pseudo_plan_node_id_for_memory_scratch_sink = -96;
+const int32_t Operator::s_pseudo_plan_node_id_for_export_sink = -97;
 const int32_t Operator::s_pseudo_plan_node_id_for_olap_table_sink = -98;
 const int32_t Operator::s_pseudo_plan_node_id_for_result_sink = -99;
 const int32_t Operator::s_pseudo_plan_node_id_upper_bound = -100;
 
-Operator::Operator(OperatorFactory* factory, int32_t id, const std::string& name, int32_t plan_node_id,
+Operator::Operator(OperatorFactory* factory, int32_t id, std::string name, int32_t plan_node_id,
                    int32_t driver_sequence)
-        : _factory(factory), _id(id), _name(name), _plan_node_id(plan_node_id), _driver_sequence(driver_sequence) {
+        : _factory(factory),
+          _id(id),
+          _name(std::move(name)),
+          _plan_node_id(plan_node_id),
+          _driver_sequence(driver_sequence) {
     std::string upper_name(_name);
     std::transform(upper_name.begin(), upper_name.end(), upper_name.begin(), ::toupper);
     std::string profile_name;
@@ -113,7 +120,7 @@ const std::vector<SlotId>& Operator::filter_null_value_columns() const {
 }
 
 Status Operator::eval_conjuncts_and_in_filters(const std::vector<ExprContext*>& conjuncts, vectorized::Chunk* chunk,
-                                               vectorized::FilterPtr* filter) {
+                                               vectorized::FilterPtr* filter, bool apply_filter) {
     if (UNLIKELY(!_conjuncts_and_in_filters_is_cached)) {
         _cached_conjuncts_and_in_filters.insert(_cached_conjuncts_and_in_filters.end(), conjuncts.begin(),
                                                 conjuncts.end());
@@ -133,7 +140,8 @@ Status Operator::eval_conjuncts_and_in_filters(const std::vector<ExprContext*>& 
         SCOPED_TIMER(_conjuncts_timer);
         auto before = chunk->num_rows();
         _conjuncts_input_counter->update(before);
-        RETURN_IF_ERROR(starrocks::ExecNode::eval_conjuncts(_cached_conjuncts_and_in_filters, chunk, filter));
+        RETURN_IF_ERROR(
+                starrocks::ExecNode::eval_conjuncts(_cached_conjuncts_and_in_filters, chunk, filter, apply_filter));
         auto after = chunk->num_rows();
         _conjuncts_output_counter->update(after);
     }
@@ -186,6 +194,8 @@ void Operator::_init_rf_counters(bool init_bloom) {
     }
     if (init_bloom && _bloom_filter_eval_context.join_runtime_filter_timer == nullptr) {
         _bloom_filter_eval_context.join_runtime_filter_timer = ADD_TIMER(_common_metrics, "JoinRuntimeFilterTime");
+        _bloom_filter_eval_context.join_runtime_filter_hash_timer =
+                ADD_TIMER(_common_metrics, "JoinRuntimeFilterHashTime");
         _bloom_filter_eval_context.join_runtime_filter_input_counter =
                 ADD_COUNTER(_common_metrics, "JoinRuntimeFilterInputRows", TUnit::UNIT);
         _bloom_filter_eval_context.join_runtime_filter_output_counter =
@@ -202,8 +212,9 @@ void Operator::_init_conjuct_counters() {
         _conjuncts_output_counter = ADD_COUNTER(_common_metrics, "ConjunctsOutputRows", TUnit::UNIT);
     }
 }
-OperatorFactory::OperatorFactory(int32_t id, const std::string& name, int32_t plan_node_id)
-        : _id(id), _name(name), _plan_node_id(plan_node_id) {
+
+OperatorFactory::OperatorFactory(int32_t id, std::string name, int32_t plan_node_id)
+        : _id(id), _name(std::move(name)), _plan_node_id(plan_node_id) {
     std::string upper_name(_name);
     std::transform(upper_name.begin(), upper_name.end(), upper_name.begin(), ::toupper);
     _runtime_profile =
@@ -229,6 +240,7 @@ Status OperatorFactory::prepare(RuntimeState* state) {
             if (grf == nullptr) {
                 continue;
             }
+
             desc->set_shared_runtime_filter(grf);
         }
     }

@@ -106,7 +106,7 @@ public class LakeTableTest {
         Assert.assertTrue(newTable.isLakeTable());
         LakeTable newLakeTable = (LakeTable) newTable;
         Assert.assertEquals(String.format("%s%d/", serviceStorageUri, tableId), newLakeTable.getStorageGroup());
-        ObjectStorageInfo newObjectStorageInfo = newLakeTable.getShardStorageInfo().getObjectStorageInfo();
+        ObjectStorageInfo newObjectStorageInfo = newLakeTable.getDefaultShardStorageInfo().getObjectStorageInfo();
         Assert.assertEquals(endpoint, newObjectStorageInfo.getEndpoint());
 
         Partition p1 = newLakeTable.getPartition(partitionId);

@@ -137,11 +137,15 @@ public:
 
     void remove_first_n_values(size_t count) override;
 
+    // No complain about the overloaded-virtual for this function
+    DIAGNOSTIC_PUSH
+    DIAGNOSTIC_IGNORE("-Woverloaded-virtual")
     void append(const Slice& str) {
         _bytes.insert(_bytes.end(), str.data, str.data + str.size);
         _offsets.emplace_back(_bytes.size());
         _slices_cache = false;
     }
+    DIAGNOSTIC_POP
 
     void append_datum(const Datum& datum) override {
         append(datum.get_slice());
@@ -168,6 +172,8 @@ public:
 
     bool append_continuous_strings(const Buffer<Slice>& strs) override;
 
+    bool append_continuous_fixed_length_strings(const char* data, size_t size, int fixed_length) override;
+
     size_t append_numbers(const void* buff, size_t length) override { return -1; }
 
     void append_value_multiple_times(const void* value, size_t count) override;
@@ -181,6 +187,8 @@ public:
         _offsets.insert(_offsets.end(), count, _bytes.size());
         _slices_cache = false;
     }
+
+    ColumnPtr replicate(const std::vector<uint32_t>& offsets) override;
 
     void fill_default(const Filter& filter) override;
 
@@ -281,9 +289,13 @@ public:
 
     std::string debug_string() const override {
         std::stringstream ss;
-        ss << "[";
         size_t size = this->size();
-        for (int i = 0; i < size - 1; ++i) {
+        if (size == 0) {
+            return "[]";
+        }
+
+        ss << "[";
+        for (size_t i = 0; i < size - 1; i++) {
             ss << debug_item(i) << ", ";
         }
         if (size > 0) {

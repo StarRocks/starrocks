@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <bthread/mutex.h>
+
 #include <algorithm>
 #include <future>
 #include <list>
@@ -9,13 +11,8 @@
 #include <queue>
 #include <unordered_set>
 
-#include "common/compiler_util.h"
-DIAGNOSTIC_PUSH
-DIAGNOSTIC_IGNORE("-Wclass-memaccess")
-#include <bthread/mutex.h>
-DIAGNOSTIC_POP
-
 #include "column/chunk.h"
+#include "common/compiler_util.h"
 #include "exec/pipeline/fragment_context.h"
 #include "gen_cpp/BackendService.h"
 #include "runtime/current_thread.h"
@@ -84,7 +81,7 @@ public:
 
     // When all the ExchangeSinkOperator shared this SinkBuffer are cancelled,
     // the rest chunk request and EOS request needn't be sent anymore.
-    void cancel_one_sinker();
+    void cancel_one_sinker(RuntimeState* const state);
 
 private:
     using Mutex = bthread::Mutex;
@@ -99,7 +96,7 @@ private:
 
     // Try to send rpc if buffer is not empty and channel is not busy
     // And we need to put this function and other extra works(pre_works) together as an atomic operation
-    void _try_to_send_rpc(const TUniqueId& instance_id, std::function<void()> pre_works);
+    void _try_to_send_rpc(const TUniqueId& instance_id, const std::function<void()>& pre_works);
 
     // Roughly estimate network time which is defined as the time between sending a and receiving a packet,
     // and the processing time of both sides are excluded
@@ -165,6 +162,11 @@ private:
     int64_t _pending_timestamp = -1;
     mutable std::atomic<int64_t> _last_full_timestamp = -1;
     mutable std::atomic<int64_t> _full_time = 0;
+
+    // These two fields are used to calculate the overthroughput
+    // Non-atomic type is enough because the concurrency inconsistency is acceptable
+    int64_t _first_send_time = -1;
+    int64_t _last_receive_time = -1;
 }; // namespace starrocks::pipeline
 
 } // namespace starrocks::pipeline

@@ -37,6 +37,7 @@ import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TAbortRemoteTxnRequest;
 import com.starrocks.thrift.TAbortRemoteTxnResponse;
+import com.starrocks.thrift.TAuthenticateParams;
 import com.starrocks.thrift.TBeginRemoteTxnRequest;
 import com.starrocks.thrift.TBeginRemoteTxnResponse;
 import com.starrocks.thrift.TCommitRemoteTxnRequest;
@@ -118,7 +119,8 @@ public class GlobalTransactionMgr implements Writable {
     // begin transaction in remote StarRocks cluster
     public long beginRemoteTransaction(long dbId, List<Long> tableIds, String label,
                                        String host, int port, TxnCoordinator coordinator,
-                                       LoadJobSourceType sourceType, long timeoutSecond)
+                                       LoadJobSourceType sourceType, long timeoutSecond,
+                                       TAuthenticateParams authenticateParams)
             throws AnalysisException, BeginTransactionException {
         if (Config.disable_load_job) {
             throw new AnalysisException("disable_load_job is set to true, all load jobs are prevented");
@@ -142,6 +144,7 @@ public class GlobalTransactionMgr implements Writable {
         request.setLabel(label);
         request.setSource_type(sourceType.ordinal());
         request.setTimeout_second(timeoutSecond);
+        request.setAuth_info(authenticateParams);
         TBeginRemoteTxnResponse response;
         try {
             response = FrontendServiceProxy.call(addr,
@@ -155,7 +158,7 @@ public class GlobalTransactionMgr implements Writable {
         if (response.status.getStatus_code() != TStatusCode.OK) {
             String errStr;
             if (response.status.getError_msgs() != null) {
-                errStr = String.join(",", response.status.getError_msgs());
+                errStr = String.join(". ", response.status.getError_msgs());
             } else {
                 errStr = "";
             }
@@ -317,9 +320,9 @@ public class GlobalTransactionMgr implements Writable {
         }
     }
 
-    public void commitTransaction(long dbId, long transactionId, List<TabletCommitInfo> tabletCommitInfos)
+    public VisibleStateWaiter commitTransaction(long dbId, long transactionId, List<TabletCommitInfo> tabletCommitInfos)
             throws UserException {
-        commitTransaction(dbId, transactionId, tabletCommitInfos, null);
+        return commitTransaction(dbId, transactionId, tabletCommitInfos, null);
     }
 
     /**
@@ -356,6 +359,17 @@ public class GlobalTransactionMgr implements Writable {
         dbTransactionMgr.prepareTransaction(transactionId, tabletCommitInfos, txnCommitAttachment);
     }
 
+    public void commitPreparedTransaction(long dbId, long transactionId, long timeoutMillis)
+            throws UserException  {
+
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        if (db == null) {
+            LOG.warn("Database {} does not exist", dbId);
+            throw new UserException("Database[" + dbId + "] does not exist");
+        }
+        commitPreparedTransaction(db, transactionId, timeoutMillis);
+    }
+
     public void commitPreparedTransaction(Database db, long transactionId, long timeoutMillis)
             throws UserException {
         if (Config.disable_load_job) {
@@ -384,7 +398,9 @@ public class GlobalTransactionMgr implements Writable {
             // so we just return false to indicate publish timeout
             throw new UserException("publish timeout: " + timeoutMillis);
         }
-        waiter.await(publishTimeoutMillis, TimeUnit.MILLISECONDS);
+        if (!waiter.await(publishTimeoutMillis, TimeUnit.MILLISECONDS)) {
+            throw new UserException("publish timeout: " + timeoutMillis);
+        }
     }
 
     public boolean commitAndPublishTransaction(Database db, long transactionId,
@@ -545,7 +561,6 @@ public class GlobalTransactionMgr implements Writable {
     public Long getMinActiveTxnId() {
         long result = Long.MAX_VALUE;
         for (Map.Entry<Long, DatabaseTransactionMgr> entry : dbIdToDatabaseTransactionMgrs.entrySet()) {
-            long dbId = entry.getKey();
             DatabaseTransactionMgr dbTransactionMgr = entry.getValue();
             result = min(result, dbTransactionMgr.getMinActiveTxnId());
         }
@@ -737,5 +752,13 @@ public class GlobalTransactionMgr implements Writable {
         dos.writeInt(size);
         write(dos);
         return checksum;
+    }
+
+    public String getTxnPublishTimeoutDebugInfo(long dbId, long txnId) {
+        DatabaseTransactionMgr dbTransactionMgr = dbIdToDatabaseTransactionMgrs.get(dbId);
+        if (dbTransactionMgr == null) {
+            return "";
+        }
+        return dbTransactionMgr.getTxnPublishTimeoutDebugInfo(txnId);
     }
 }

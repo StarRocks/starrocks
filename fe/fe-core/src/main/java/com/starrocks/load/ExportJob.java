@@ -30,10 +30,7 @@ import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.BaseTableRef;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.DescriptorTable;
-import com.starrocks.analysis.ExportStmt;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.LoadStmt;
-import com.starrocks.analysis.PartitionNames;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
@@ -59,7 +56,6 @@ import com.starrocks.common.util.BrokerUtil;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.fs.HdfsUtil;
-import com.starrocks.lake.proto.UnlockTabletMetadataRequest;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.ExportSink;
 import com.starrocks.planner.MysqlScanNode;
@@ -68,10 +64,14 @@ import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.proto.UnlockTabletMetadataRequest;
 import com.starrocks.qe.Coordinator;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.ExportStmt;
+import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.system.Backend;
 import com.starrocks.task.AgentClient;
 import com.starrocks.thrift.TAgentResult;
@@ -117,6 +117,9 @@ public class ExportJob implements Writable {
     private final AtomicInteger nextId = new AtomicInteger(0);
     // backedn_address => snapshot path
     private final List<Pair<TNetworkAddress, String>> snapshotPaths = Lists.newArrayList();
+    // backend id => backend lastStartTime 
+    private final Map<Long, Long> beLastStartTime = Maps.newHashMap();
+
     private long id;
     private UUID queryId;
     private long dbId;
@@ -404,6 +407,14 @@ public class ExportJob implements Writable {
                     id, i, DebugUtil.printId(queryId));
         }
         LOG.info("create {} coordintors for export job: {}", coordList.size(), id);
+    }
+
+    public void setBeStartTime(long beId, long lastStartTime) {
+        this.beLastStartTime.put(beId, lastStartTime);
+    }
+
+    public Map<Long, Long> getBeStartTimeMap() {
+        return this.beLastStartTime;
     }
 
     public long getId() {

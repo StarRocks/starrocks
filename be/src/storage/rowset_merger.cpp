@@ -34,23 +34,22 @@ struct MergeEntry {
     const T* pk_cur = nullptr;
     const T* pk_last = nullptr;
     const T* pk_start = nullptr;
-    uint32_t cur_segment_idx = 0;
     uint32_t rowset_seg_id = 0;
     ColumnPtr chunk_pk_column;
     ChunkPtr chunk;
-    vector<ChunkIteratorPtr> segment_itrs;
+    ChunkIteratorPtr segment_itr;
     std::unique_ptr<RowsetReleaseGuard> rowset_release_guard;
     // set |encode_schema| if require encode chunk pk columns
     const vectorized::Schema* encode_schema = nullptr;
     uint16_t order;
+    std::vector<vectorized::RowSourceMask>* source_masks = nullptr;
 
     MergeEntry() = default;
     ~MergeEntry() { close(); }
 
     string debug_string() {
         string ret;
-        StringAppendF(&ret, "%u: %ld/%ld %u/%zu : ", rowset_seg_id, offset(pk_cur), offset(pk_last) + 1,
-                      cur_segment_idx, segment_itrs.size());
+        StringAppendF(&ret, "%u: %ld/%ld : ", rowset_seg_id, offset(pk_cur), offset(pk_last) + 1);
         for (const T* cur = pk_cur; cur <= pk_last; cur++) {
             if constexpr (std::is_arithmetic_v<T>) {
                 StringAppendF(&ret, " %ld", (long int)*cur);
@@ -69,32 +68,20 @@ struct MergeEntry {
     void close() {
         chunk_pk_column.reset();
         chunk.reset();
-        for (auto& itr : segment_itrs) {
-            if (itr) {
-                itr->close();
-                itr.reset();
-            }
+        if (segment_itr != nullptr) {
+            segment_itr->close();
+            segment_itr.reset();
         }
-        STLClearObject(&segment_itrs);
         rowset_release_guard.reset();
     }
 
-    Status init() {
-        while (cur_segment_idx < segment_itrs.size() && !segment_itrs[cur_segment_idx]) {
-            cur_segment_idx++;
-        }
-        return next();
-    }
+    Status init() { return next(); }
 
     Status next() {
-        if (cur_segment_idx >= segment_itrs.size()) {
-            return Status::EndOfFile("End of merge entry iterator");
-        }
         DCHECK(pk_cur == nullptr || pk_cur > pk_last);
         chunk->reset();
         while (true) {
-            auto& itr = segment_itrs[cur_segment_idx];
-            auto st = itr->get_next(chunk.get());
+            auto st = segment_itr->get_next(chunk.get(), source_masks);
             if (st.ok()) {
                 // 1. setup chunk_pk_column
                 if (encode_schema != nullptr) {
@@ -113,19 +100,7 @@ struct MergeEntry {
                 pk_last = pk_start + chunk_pk_column->size() - 1;
                 return Status::OK();
             } else if (st.is_end_of_file()) {
-                itr->close();
-                itr.reset();
-                while (true) {
-                    cur_segment_idx++;
-                    rowset_seg_id++;
-                    if (cur_segment_idx == segment_itrs.size()) {
-                        return Status::EndOfFile("End of merge entry iterator");
-                    }
-                    if (segment_itrs[cur_segment_idx]) {
-                        break;
-                    }
-                }
-                continue;
+                return Status::EndOfFile("End of merge entry iterator");
             } else {
                 // error
                 return st;
@@ -243,7 +218,7 @@ public:
         MonotonicStopWatch timer;
         timer.start();
         if (cfg.algorithm == VERTICAL_COMPACTION) {
-            CompactionUtils::split_column_into_groups(tablet.num_columns(), tablet.num_key_columns(),
+            CompactionUtils::split_column_into_groups(tablet.num_columns(), tablet.tablet_schema().sort_key_idxes(),
                                                       config::vertical_compaction_max_columns_per_group,
                                                       &column_groups);
             RETURN_IF_ERROR(_do_merge_vertically(tablet, version, rowsets, writer, cfg, column_groups,
@@ -274,14 +249,21 @@ private:
     Status _do_merge_horizontally(Tablet& tablet, int64_t version, const Schema& schema,
                                   const vector<RowsetSharedPtr>& rowsets, RowsetWriter* writer, const MergeConfig& cfg,
                                   size_t* total_input_size, size_t* total_rows, size_t* total_chunk,
-                                  OlapReaderStatistics* stats, RowSourceMaskBuffer* mask_buffer = nullptr) {
-        std::unique_ptr<vectorized::Column> pk_column;
-        if (schema.num_key_fields() > 1) {
-            if (!PrimaryKeyEncoder::create_column(schema, &pk_column).ok()) {
+                                  OlapReaderStatistics* stats, RowSourceMaskBuffer* mask_buffer = nullptr,
+                                  std::vector<std::unique_ptr<RowSourceMaskBuffer>>* rowsets_mask_buffer = nullptr) {
+        std::unique_ptr<vectorized::Column> sort_column;
+        std::vector<ColumnId> sort_key_idxes;
+        if (schema.sort_key_idxes().size() > 1) {
+            sort_key_idxes = schema.sort_key_idxes();
+            if (!PrimaryKeyEncoder::create_column(schema, &sort_column, sort_key_idxes).ok()) {
+                LOG(FATAL) << "create column for primary key encoder failed";
+            }
+        } else if (schema.num_key_fields() > 1) {
+            if (!PrimaryKeyEncoder::create_column(schema, &sort_column).ok()) {
                 LOG(FATAL) << "create column for primary key encoder failed";
             }
         }
-
+        std::vector<std::unique_ptr<vector<RowSourceMask>>> rowsets_source_masks;
         uint16_t order = 0;
         for (const auto& rowset : rowsets) {
             *total_input_size += rowset->data_disk_size();
@@ -293,12 +275,24 @@ private:
                 return res.status();
             }
             entry.rowset_seg_id = rowset->rowset_meta()->get_rowset_seg_id();
-            entry.segment_itrs.swap(res.value());
             entry.chunk = ChunkHelper::new_chunk(schema, _chunk_size);
-            if (pk_column) {
+            if (res.value().empty()) {
+                entry.segment_itr = new_empty_iterator(schema, _chunk_size);
+            } else {
+                entry.segment_itr = std::move(new_heap_merge_iterator(res.value()));
+            }
+            if (sort_column) {
                 entry.encode_schema = &schema;
-                entry.chunk_pk_column = pk_column->clone_shared();
+                entry.chunk_pk_column = sort_column->clone_shared();
                 entry.chunk_pk_column->reserve(_chunk_size);
+            }
+            if (rowsets_mask_buffer && res.value().size() > 1) {
+                std::unique_ptr<vector<RowSourceMask>> rowset_source_masks = std::make_unique<vector<RowSourceMask>>();
+                rowsets_source_masks.emplace_back(std::move(rowset_source_masks));
+                entry.source_masks = rowsets_source_masks.back().get();
+            } else if (rowsets_mask_buffer) {
+                std::unique_ptr<vector<RowSourceMask>> rowset_source_masks = std::make_unique<vector<RowSourceMask>>();
+                rowsets_source_masks.emplace_back(std::move(rowset_source_masks));
             }
             entry.order = order++;
             auto st = entry.init();
@@ -319,10 +313,7 @@ private:
         std::unique_ptr<vector<RowSourceMask>> source_masks;
         if (mask_buffer) {
             source_masks = std::make_unique<vector<RowSourceMask>>();
-            column_indexes.reserve(schema.num_key_fields());
-            for (uint32_t i = 0; i < schema.num_key_fields(); ++i) {
-                column_indexes.emplace_back(i);
-            }
+            column_indexes = tablet.tablet_schema().sort_key_idxes();
         }
 
         auto chunk = ChunkHelper::new_chunk(schema, _chunk_size);
@@ -360,6 +351,15 @@ private:
                     return st;
                 }
             }
+
+            if (rowsets_mask_buffer) {
+                for (size_t i = 0; i < rowsets_source_masks.size(); ++i) {
+                    if (!rowsets_source_masks[i]->empty()) {
+                        RETURN_IF_ERROR((*rowsets_mask_buffer)[i]->write(*(rowsets_source_masks[i])));
+                        rowsets_source_masks[i]->clear();
+                    }
+                }
+            }
         }
 
         if (mask_buffer) {
@@ -375,6 +375,12 @@ private:
                 LOG(WARNING) << "failed to flush rowset when merging rowsets of tablet " << tablet.tablet_id()
                              << ", err=" << st;
                 return st;
+            }
+        }
+
+        if (rowsets_mask_buffer) {
+            for (auto& i : *rowsets_mask_buffer) {
+                RETURN_IF_ERROR(i->flush());
             }
         }
 
@@ -395,10 +401,17 @@ private:
         DCHECK_GT(column_groups.size(), 1);
         // merge key columns
         auto mask_buffer = std::make_unique<RowSourceMaskBuffer>(tablet.tablet_id(), tablet.data_dir()->path());
+        std::vector<std::unique_ptr<RowSourceMaskBuffer>> rowsets_mask_buffer;
+        for (size_t i = 0; i < rowsets.size(); ++i) {
+            auto rowset_mask_buffer =
+                    std::make_unique<RowSourceMaskBuffer>(tablet.tablet_id(), tablet.data_dir()->path());
+            rowsets_mask_buffer.emplace_back(std::move(rowset_mask_buffer));
+        }
         {
             Schema schema = ChunkHelper::convert_schema_to_format_v2(tablet.tablet_schema(), column_groups[0]);
             RETURN_IF_ERROR(_do_merge_horizontally(tablet, version, schema, rowsets, writer, cfg, total_input_size,
-                                                   total_rows, total_chunk, stats, mask_buffer.get()));
+                                                   total_rows, total_chunk, stats, mask_buffer.get(),
+                                                   &rowsets_mask_buffer));
         }
 
         // merge non key columns
@@ -413,7 +426,9 @@ private:
             iterators.reserve(rowsets.size());
             OlapReaderStatistics non_key_stats;
             Schema schema = ChunkHelper::convert_schema_to_format_v2(tablet.tablet_schema(), column_groups[i]);
-            for (const auto& rowset : rowsets) {
+            for (size_t j = 0; j < rowsets.size(); j++) {
+                const auto& rowset = rowsets[j];
+                rowsets_mask_buffer[j]->flip_to_read();
                 _entries.emplace_back(new MergeEntry<T>());
                 MergeEntry<T>& entry = *_entries.back();
                 entry.rowset_release_guard = std::make_unique<RowsetReleaseGuard>(rowset);
@@ -425,13 +440,13 @@ private:
                 vector<vectorized::ChunkIteratorPtr> segment_iters;
                 for (const auto& segment_iter : res.value()) {
                     if (segment_iter) {
-                        segment_iters.emplace_back(std::move(segment_iter));
+                        segment_iters.emplace_back(segment_iter);
                     }
                 }
                 if (segment_iters.empty()) {
                     iterators.emplace_back(new_empty_iterator(schema, _chunk_size));
                 } else {
-                    iterators.emplace_back(new_union_iterator(std::move(segment_iters)));
+                    iterators.emplace_back(new_mask_merge_iterator(segment_iters, rowsets_mask_buffer[j].get()));
                 }
             }
 
@@ -500,7 +515,7 @@ Status compaction_merge_rowsets(Tablet& tablet, int64_t version, const vector<Ro
                                 RowsetWriter* writer, const MergeConfig& cfg) {
     Schema schema = ChunkHelper::convert_schema_to_format_v2(tablet.tablet_schema());
     std::unique_ptr<RowsetMerger> merger;
-    auto key_type = PrimaryKeyEncoder::encoded_primary_key_type(schema);
+    auto key_type = PrimaryKeyEncoder::encoded_primary_key_type(schema, schema.sort_key_idxes());
     switch (key_type) {
     case OLAP_FIELD_TYPE_BOOL:
         merger = std::make_unique<RowsetMergerImpl<uint8_t>>();

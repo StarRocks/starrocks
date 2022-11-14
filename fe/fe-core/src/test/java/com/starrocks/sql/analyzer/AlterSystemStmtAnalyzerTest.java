@@ -52,7 +52,7 @@ public class AlterSystemStmtAnalyzerTest {
     public void testVisitModifyBackendHostClauseException() {
         AlterSystemStmtAnalyzer.AlterSystemStmtAnalyzerVisitor visitor =
                 new AlterSystemStmtAnalyzer.AlterSystemStmtAnalyzerVisitor();
-        ModifyBackendAddressClause clause = new ModifyBackendAddressClause("test", "127.0.0.1");
+        ModifyBackendAddressClause clause = new ModifyBackendAddressClause("127.0.0.2", "127.0.0.1");
         visitor.visitModifyBackendHostClause(clause, null);
     }
 
@@ -60,7 +60,7 @@ public class AlterSystemStmtAnalyzerTest {
     public void testVisitModifyFrontendHostClauseException() {
         AlterSystemStmtAnalyzer.AlterSystemStmtAnalyzerVisitor visitor =
                 new AlterSystemStmtAnalyzer.AlterSystemStmtAnalyzerVisitor();
-        ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("test", "127.0.0.1");
+        ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("127.0.0.2", "127.0.0.1");
         visitor.visitModifyFrontendHostClause(clause, null);
     }
 }

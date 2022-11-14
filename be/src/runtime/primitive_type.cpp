@@ -94,6 +94,12 @@ std::string type_to_string(PrimitiveType t) {
     return "";
 }
 
+std::string type_to_string_v2(PrimitiveType t) {
+    // change OBJECT to BITMAP for better display
+    std::string raw_str = type_to_string(t);
+    return raw_str == "OBJECT" ? "BITMAP" : raw_str;
+}
+
 std::string type_to_odbc_string(PrimitiveType t) {
     // ODBC driver requires types in lower case
     switch (t) {
@@ -128,6 +134,27 @@ TTypeDesc gen_type_desc(const TPrimitiveType::type val) {
     return type_desc;
 }
 
+TTypeDesc gen_array_type_desc(const TPrimitiveType::type field_type) {
+    std::vector<TTypeNode> types_list;
+    TTypeDesc type_desc;
+
+    TTypeNode type_array;
+    type_array.type = TTypeNodeType::ARRAY;
+    types_list.push_back(type_array);
+
+    TTypeNode type_scalar;
+    TScalarType scalar_type;
+    scalar_type.__set_type(field_type);
+    scalar_type.__set_precision(0);
+    scalar_type.__set_scale(0);
+    scalar_type.__set_len(0);
+    type_scalar.__set_scalar_type(scalar_type);
+    types_list.push_back(type_scalar);
+
+    type_desc.__set_types(types_list);
+    return type_desc;
+}
+
 // for test only
 TTypeDesc gen_type_desc(const TPrimitiveType::type val, const std::string& name) {
     std::vector<TTypeNode> types_list;
@@ -149,8 +176,8 @@ TTypeDesc gen_type_desc(const TPrimitiveType::type val, const std::string& name)
 class ScalarFieldTypeToPrimitiveTypeMapping {
 public:
     ScalarFieldTypeToPrimitiveTypeMapping() {
-        for (int i = 0; i < OLAP_FIELD_TYPE_MAX_VALUE; i++) {
-            _data[i] = INVALID_TYPE;
+        for (auto& i : _data) {
+            i = INVALID_TYPE;
         }
         _data[OLAP_FIELD_TYPE_BOOL] = TYPE_BOOLEAN;
         _data[OLAP_FIELD_TYPE_TINYINT] = TYPE_TINYINT;

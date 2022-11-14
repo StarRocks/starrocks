@@ -5,8 +5,6 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
-#include "column/fixed_length_column.h"
-#include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/port.h"
 #include "gutil/strings/fastmem.h"
@@ -74,8 +72,8 @@ VectorizedLiteral::VectorizedLiteral(const TExprNode& node) : Expr(node) {
         DCHECK_EQ(node.node_type, TExprNodeType::LARGE_INT_LITERAL);
 
         StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
-        int128_t data = StringParser::string_to_int<__int128>(node.large_int_literal.value.c_str(),
-                                                              node.large_int_literal.value.size(), &parse_result);
+        auto data = StringParser::string_to_int<__int128>(node.large_int_literal.value.c_str(),
+                                                          node.large_int_literal.value.size(), &parse_result);
         if (parse_result != StringParser::PARSE_SUCCESS) {
             data = MAX_INT128;
         }

@@ -8,12 +8,11 @@
 #include "exprs/vectorized/mock_vectorized_expr.h"
 #include "geo/geo_types.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 class geographyFunctionsTest : public ::testing::Test {
 public:
-    void SetUp() {}
+    void SetUp() override {}
 };
 
 TEST_F(geographyFunctionsTest, st_pointTest) {
@@ -449,5 +448,4 @@ TEST_F(geographyFunctionsTest, st_containsConstTest) {
     GeoFunctions::st_contains_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
 }
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

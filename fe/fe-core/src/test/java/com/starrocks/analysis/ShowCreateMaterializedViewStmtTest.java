@@ -7,9 +7,12 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -67,7 +70,7 @@ public class ShowCreateMaterializedViewStmtTest {
     @Test
     public void testShowSimpleCreateMvSql() throws Exception {
         String createMvSql = "create materialized view mv1 " +
-                "distributed by hash(k1) " +
+                "distributed by hash(k1) buckets 10 " +
                 "refresh manual " +
                 "as select k1, k2 from tbl1;";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(createMvSql, ctx);
@@ -84,7 +87,7 @@ public class ShowCreateMaterializedViewStmtTest {
                 "\"replication_num\" = \"1\",\n" +
                 "\"storage_medium\" = \"HDD\"\n" +
                 ")\n" +
-                "AS SELECT `test`.`tbl1`.`k1` AS `k1`, `test`.`tbl1`.`k2` AS `k2` FROM `test`.`tbl1`;");
+                "AS SELECT `tbl1`.`k1`, `tbl1`.`k2`\nFROM `test`.`tbl1`;");
         String copySql = createTableStmt.get(0).replaceAll("mv1", "mv1_copy");
         currentState.createMaterializedView(
                 (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(copySql, ctx));
@@ -94,7 +97,7 @@ public class ShowCreateMaterializedViewStmtTest {
     public void testShowPartitionWithAliasCreateMvSql() throws Exception {
         String createMvSql = "create materialized view mv2 " +
                 "partition by k3 " +
-                "distributed by hash(k3) " +
+                "distributed by hash(k3) buckets 10 " +
                 "refresh manual " +
                 "as select k1 as k3, k2 from tbl1;";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(createMvSql, ctx);
@@ -112,7 +115,7 @@ public class ShowCreateMaterializedViewStmtTest {
                 "\"replication_num\" = \"1\",\n" +
                 "\"storage_medium\" = \"HDD\"\n" +
                 ")\n" +
-                "AS SELECT `test`.`tbl1`.`k1` AS `k3`, `test`.`tbl1`.`k2` AS `k2` FROM `test`.`tbl1`;");
+                "AS SELECT `tbl1`.`k1` AS `k3`, `tbl1`.`k2`\nFROM `test`.`tbl1`;");
         String copySql = createTableStmt.get(0).replaceAll("mv2", "mv2_copy");
         currentState.createMaterializedView(
                 (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(copySql, ctx));
@@ -122,7 +125,7 @@ public class ShowCreateMaterializedViewStmtTest {
     public void testShowPartitionWithFunctionCreateMvSql() throws Exception {
         String createMvSql = "create materialized view mv3 " +
                 "partition by date_trunc('month',k1)" +
-                "distributed by hash(k3) " +
+                "distributed by hash(k3) buckets 10 " +
                 "refresh manual " +
                 "as select k1, k2+v1 as k3 from tbl1;";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(createMvSql, ctx);
@@ -140,7 +143,8 @@ public class ShowCreateMaterializedViewStmtTest {
                 "\"replication_num\" = \"1\",\n" +
                 "\"storage_medium\" = \"HDD\"\n" +
                 ")\n" +
-                "AS SELECT `test`.`tbl1`.`k1` AS `k1`, `test`.`tbl1`.`k2` + `test`.`tbl1`.`v1` AS `k3` FROM `test`.`tbl1`;");
+                "AS SELECT `tbl1`.`k1`, `tbl1`.`k2` + `tbl1`.`v1` AS `k3`\n" +
+                "FROM `test`.`tbl1`;");
         String copySql = createTableStmt.get(0).replaceAll("mv3", "mv3_copy");
         currentState.createMaterializedView(
                 (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(copySql, ctx));
@@ -150,7 +154,7 @@ public class ShowCreateMaterializedViewStmtTest {
     public void testShowPartitionWithFunctionAliasCreateMvSql() throws Exception {
         String createMvSql = "create materialized view mv4 " +
                 "partition by (date_trunc('month',k3))" +
-                "distributed by hash(k3) " +
+                "distributed by hash(k3) buckets 10 " +
                 "refresh manual " +
                 "as select k1 as k3, k2 from tbl1;";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(createMvSql, ctx);
@@ -168,7 +172,7 @@ public class ShowCreateMaterializedViewStmtTest {
                 "\"replication_num\" = \"1\",\n" +
                 "\"storage_medium\" = \"HDD\"\n" +
                 ")\n" +
-                "AS SELECT `test`.`tbl1`.`k1` AS `k3`, `test`.`tbl1`.`k2` AS `k2` FROM `test`.`tbl1`;");
+                "AS SELECT `tbl1`.`k1` AS `k3`, `tbl1`.`k2`\nFROM `test`.`tbl1`;");
         String copySql = createTableStmt.get(0).replaceAll("mv4", "mv4_copy");
         currentState.createMaterializedView(
                 (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(copySql, ctx));
@@ -178,7 +182,7 @@ public class ShowCreateMaterializedViewStmtTest {
     public void testShowPartitionWithAllPropertiesCreateMvSql() throws Exception {
         String createMvSql = "create materialized view mv5 " +
                 "partition by (date_trunc('month',k3))" +
-                "distributed by hash(k3) " +
+                "distributed by hash(k3) buckets 10 " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
@@ -202,7 +206,7 @@ public class ShowCreateMaterializedViewStmtTest {
                 "\"storage_medium\" = \"SSD\",\n" +
                 "\"storage_cooldown_time\" = \"2122-12-31 23:59:59\"\n" +
                 ")\n" +
-                "AS SELECT `test`.`tbl1`.`k1` AS `k3`, `test`.`tbl1`.`k2` AS `k2` FROM `test`.`tbl1`;");
+                "AS SELECT `tbl1`.`k1` AS `k3`, `tbl1`.`k2`\nFROM `test`.`tbl1`;");
         String copySql = createTableStmt.get(0).replaceAll("mv5", "mv5_copy");
         currentState.createMaterializedView(
                 (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(copySql, ctx));
@@ -212,7 +216,7 @@ public class ShowCreateMaterializedViewStmtTest {
     public void testShowRefreshWithNoStartTimeCreateMvSql() throws Exception {
         String createMvSql = "create materialized view mv6 " +
                 "partition by (date_trunc('month',k3))" +
-                "distributed by hash(k3) " +
+                "distributed by hash(k3) buckets 10 " +
                 "refresh async " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
@@ -236,7 +240,7 @@ public class ShowCreateMaterializedViewStmtTest {
                 "\"storage_medium\" = \"SSD\",\n" +
                 "\"storage_cooldown_time\" = \"2122-12-31 23:59:59\"\n" +
                 ")\n" +
-                "AS SELECT `test`.`tbl1`.`k1` AS `k3`, `test`.`tbl1`.`k2` AS `k2` FROM `test`.`tbl1`;");
+                "AS SELECT `tbl1`.`k1` AS `k3`, `tbl1`.`k2`\nFROM `test`.`tbl1`;");
         String copySql = createTableStmt.get(0).replaceAll("mv6", "mv6_copy");
         currentState.createMaterializedView(
                 (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(copySql, ctx));
@@ -246,7 +250,7 @@ public class ShowCreateMaterializedViewStmtTest {
     public void testShowRefreshWithIntervalCreateMvSql() throws Exception {
         String createMvSql = "create materialized view mv7 " +
                 "partition by (date_trunc('month',k3))" +
-                "distributed by hash(k3) " +
+                "distributed by hash(k3) buckets 10 " +
                 "refresh async EVERY(INTERVAL 1 HOUR)" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
@@ -270,11 +274,40 @@ public class ShowCreateMaterializedViewStmtTest {
                 "\"storage_medium\" = \"SSD\",\n" +
                 "\"storage_cooldown_time\" = \"2122-12-31 23:59:59\"\n" +
                 ")\n" +
-                "AS SELECT `test`.`tbl1`.`k1` AS `k3`, `test`.`tbl1`.`k2` AS `k2` FROM `test`.`tbl1`;");
+                "AS SELECT `tbl1`.`k1` AS `k3`, `tbl1`.`k2`\nFROM `test`.`tbl1`;");
         String copySql = createTableStmt.get(0).replaceAll("mv7", "mv7_copy");
         currentState.createMaterializedView(
                 (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(copySql, ctx));
     }
+
+    @Test
+    public void testShowExternalTableCreateMvSql() throws Exception {
+        MetadataMgr oldMetadataMgr = ctx.getGlobalStateMgr().getMetadataMgr();
+        ConnectorPlanTestBase.mockHiveCatalog(ctx);
+
+        String createMvSql = "create materialized view mv8 " +
+                "distributed by hash(l_orderkey) buckets 10 " +
+                "refresh manual " +
+                "as select l_orderkey,l_partkey,l_shipdate from hive0.tpch.lineitem;";
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(createMvSql, ctx);
+        GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
+        currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
+        Table table = currentState.getDb("test").getTable("mv8");
+        List<String> createTableStmt = Lists.newArrayList();
+        GlobalStateMgr.getDdlStmt(table, createTableStmt, null, null, false, true);
+        Assert.assertEquals(createTableStmt.get(0), "CREATE MATERIALIZED VIEW `mv8`\n" +
+                "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10 \n" +
+                "REFRESH MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"storage_medium\" = \"HDD\"\n" +
+                ")\n" +
+                "AS SELECT `lineitem`.`l_orderkey`, `lineitem`.`l_partkey`, `lineitem`.`l_shipdate`\n" +
+                "FROM `hive0`.`tpch`.`lineitem`;");
+        ctx.getGlobalStateMgr().setMetadataMgr(oldMetadataMgr);
+    }
+
 
     @Test(expected = SemanticException.class)
     public void testNoTbl(){

@@ -59,7 +59,3 @@ TimeoutMs: 300000
     ```sql
     SHOW TRANSACTION FROM db WHERE ID=4005;
     ```
-
-## keyword
-
-SHOW, TRANSACTION

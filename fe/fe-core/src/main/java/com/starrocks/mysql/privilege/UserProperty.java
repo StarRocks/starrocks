@@ -25,7 +25,6 @@ import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.SetUserPropertyVar;
 import com.starrocks.catalog.AccessPrivilege;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
@@ -35,6 +34,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.load.DppConfig;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.SetUserPropertyVar;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -213,7 +213,7 @@ public class UserProperty implements Writable {
 
     @Override
     public void write(DataOutput out) throws IOException {
-        Text.writeString(out, qualifiedUser);
+        Text.writeString(out, ClusterNamespace.getFullName(qualifiedUser));
         out.writeLong(maxConn);
 
         UserResource.write(out);
@@ -236,7 +236,7 @@ public class UserProperty implements Writable {
         if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_30) {
             qualifiedUser = ClusterNamespace.getFullName(Text.readString(in));
         } else {
-            qualifiedUser = Text.readString(in);
+            qualifiedUser = ClusterNamespace.getNameFromFullName(Text.readString(in));
         }
 
         if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_43) {

@@ -25,11 +25,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.Analyzer;
-import com.starrocks.analysis.SetVar;
-import com.starrocks.analysis.SqlParser;
-import com.starrocks.analysis.SqlScanner;
-import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Database;
@@ -45,7 +40,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Writable;
-import com.starrocks.common.util.SqlParserUtils;
+import com.starrocks.connector.hive.ReplayMetadataMgr;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.meta.MetaContext;
@@ -64,8 +59,10 @@ import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.SetVar;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.SqlDigestBuilder;
-import com.starrocks.sql.optimizer.OperatorStrings;
+import com.starrocks.sql.optimizer.LogicalPlanPrinter;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -79,7 +76,6 @@ import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
-import com.starrocks.sql.plan.ReplayHiveRepository;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.Backend;
 import com.starrocks.system.BackendCoreStat;
@@ -93,7 +89,6 @@ import java.io.DataOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
-import java.io.StringReader;
 import java.net.ServerSocket;
 import java.nio.channels.FileLock;
 import java.nio.file.Files;
@@ -141,7 +136,7 @@ public class UtFrameUtils {
             ");";
 
     // Help to create a mocked ConnectContext.
-    public static ConnectContext createDefaultCtx() throws IOException {
+    public static ConnectContext createDefaultCtx() {
         ConnectContext ctx = new ConnectContext(null);
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         ctx.setQualifiedUser(Auth.ROOT_USER);
@@ -186,52 +181,6 @@ public class UtFrameUtils {
         }
 
         return statementBase;
-    }
-
-    // Parse an origin stmt and analyze it. Return a StatementBase instance.
-    public static StatementBase parseAndAnalyzeStmt(String originStmt, ConnectContext ctx)
-            throws Exception {
-        SqlScanner input = new SqlScanner(new StringReader(originStmt), ctx.getSessionVariable().getSqlMode());
-        SqlParser parser = new SqlParser(input);
-        Analyzer analyzer = new Analyzer(ctx.getGlobalStateMgr(), ctx);
-        StatementBase statementBase = null;
-        try {
-            statementBase = SqlParserUtils.getFirstStmt(parser);
-        } catch (AnalysisException e) {
-            String errorMessage = parser.getErrorMsg(originStmt);
-            System.err.println("parse failed: " + errorMessage);
-            if (errorMessage == null) {
-                throw e;
-            } else {
-                throw new AnalysisException(errorMessage, e);
-            }
-        }
-        statementBase.analyze(analyzer);
-        return statementBase;
-    }
-
-    // for analyzing multi statements
-    public static List<StatementBase> parseAndAnalyzeStmts(String originStmt, ConnectContext ctx) throws Exception {
-        System.out.println("begin to parse stmts: " + originStmt);
-        SqlScanner input = new SqlScanner(new StringReader(originStmt), ctx.getSessionVariable().getSqlMode());
-        SqlParser parser = new SqlParser(input);
-        Analyzer analyzer = new Analyzer(ctx.getGlobalStateMgr(), ctx);
-        List<StatementBase> statementBases = null;
-        try {
-            statementBases = SqlParserUtils.getMultiStmts(parser);
-        } catch (AnalysisException e) {
-            String errorMessage = parser.getErrorMsg(originStmt);
-            System.err.println("parse failed: " + errorMessage);
-            if (errorMessage == null) {
-                throw e;
-            } else {
-                throw new AnalysisException(errorMessage, e);
-            }
-        }
-        for (StatementBase stmt : statementBases) {
-            stmt.analyze(analyzer);
-        }
-        return statementBases;
     }
 
     private static void startFEServer(String runningDir, boolean startBDB) throws Exception {
@@ -386,8 +335,7 @@ public class UtFrameUtils {
                 }
             }
 
-            OperatorStrings operatorPrinter = new OperatorStrings();
-            return new Pair<>(operatorPrinter.printOperator(execPlan.getPhysicalPlan()), execPlan);
+            return new Pair<>(LogicalPlanPrinter.print(execPlan.getPhysicalPlan()), execPlan);
         } finally {
             // before returning we have to restore session variable.
             connectContext.setSessionVariable(oldSessionVariable);
@@ -428,10 +376,15 @@ public class UtFrameUtils {
         for (String createResourceStmt : replayDumpInfo.getCreateResourceStmtList()) {
             starRocksAssert.withResource(createResourceStmt);
         }
+
         // mock replay external table info
         if (!replayDumpInfo.getHmsTableMap().isEmpty()) {
-            ReplayHiveRepository replayHiveRepository = new ReplayHiveRepository(replayDumpInfo.getHmsTableMap());
-            connectContext.getGlobalStateMgr().setHiveRepository(replayHiveRepository);
+            ReplayMetadataMgr replayMetadataMgr = new ReplayMetadataMgr(
+                    connectContext.getGlobalStateMgr().getLocalMetastore(),
+                    connectContext.getGlobalStateMgr().getConnectorMgr(),
+                    replayDumpInfo.getHmsTableMap(),
+                    replayDumpInfo.getTableStatisticsMap());
+            connectContext.getGlobalStateMgr().setMetadataMgr(replayMetadataMgr);
         }
 
         // create table
@@ -535,14 +488,12 @@ public class UtFrameUtils {
                         logicalPlan.getOutputColumn(), columnRefFactory, new ArrayList<>(),
                         TResultSinkType.MYSQL_PROTOCAL, true);
 
-        OperatorStrings operatorPrinter = new OperatorStrings();
-        return new Pair<>(operatorPrinter.printOperator(optimizedPlan), execPlan);
+        return new Pair<>(LogicalPlanPrinter.print(optimizedPlan), execPlan);
     }
 
     private static Pair<String, ExecPlan> getInsertExecPlan(InsertStmt statement, ConnectContext connectContext) {
         ExecPlan execPlan = new InsertPlanner().plan(statement, connectContext);
-        OperatorStrings operatorPrinter = new OperatorStrings();
-        return new Pair<>(operatorPrinter.printOperator(execPlan.getPhysicalPlan()), execPlan);
+        return new Pair<>(LogicalPlanPrinter.print(execPlan.getPhysicalPlan()), execPlan);
     }
 
     public static Pair<String, ExecPlan> getNewPlanAndFragmentFromDump(ConnectContext connectContext,
@@ -681,8 +632,8 @@ public class UtFrameUtils {
                     while (true) {
                         try {
                             JournalTask journalTask = masterJournalQueue.take();
-                            journalTask.markSucceed();
                             followerJournalQueue.put(journalTask);
+                            journalTask.markSucceed();
                         } catch (InterruptedException e) {
                             System.err.println("fakeJournalWriter got an InterruptedException and exit!");
                             break;
@@ -701,15 +652,27 @@ public class UtFrameUtils {
             followerJournalQueue.clear();
         }
 
-        public static synchronized Writable replayNextJournal() throws InterruptedException, IOException {
+        public static synchronized Writable replayNextJournal(short expectCode) throws Exception {
             assert (followerJournalQueue != null);
-            DataOutputBuffer buffer = followerJournalQueue.take().getBuffer();
-            DataInputStream dis = new DataInputStream(new ByteArrayInputStream(buffer.getData(), 0, buffer.getLength()));
-            JournalEntity je = new JournalEntity();
-            je.readFields(dis);
-            Writable ret = je.getData();
-            dis.close();
-            return ret;
+            while (true) {
+                if (followerJournalQueue.isEmpty()) {
+                    throw new Exception("cannot replay next journal because queue is empty!");
+                }
+                DataOutputBuffer buffer = followerJournalQueue.take().getBuffer();
+                DataInputStream dis =
+                        new DataInputStream(new ByteArrayInputStream(buffer.getData(), 0, buffer.getLength()));
+                try {
+                    JournalEntity je = new JournalEntity();
+                    je.readFields(dis);
+                    if (je.getOpCode() == expectCode) {
+                        return je.getData();
+                    } else {
+                        System.err.println("ignore irrelevant journal id " + je.getOpCode());
+                    }
+                } finally {
+                    dis.close();
+                }
+            }
         }
 
         protected static synchronized void tearDown() {
@@ -723,6 +686,18 @@ public class UtFrameUtils {
                 fakeJournalWriter = null;
             }
         }
+    }
+
+    public static ConnectContext initCtxForNewPrivilege(UserIdentity userIdentity) throws Exception {
+        ConnectContext ctx = new ConnectContext(null);
+        ctx.setCurrentUserIdentity(userIdentity);
+        ctx.setQualifiedUser(userIdentity.getQualifiedUser());
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        globalStateMgr.initAuth(true);
+        ctx.setGlobalStateMgr(globalStateMgr);
+        ctx.setThreadLocalInfo();
+        ctx.setDumpInfo(new MockDumpInfo());
+        return ctx;
     }
 
 }

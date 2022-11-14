@@ -6,31 +6,33 @@ You can load data into StarRocks by running load jobs. Each load job has a uniqu
 
 All the loading methods provided by StarRocks can guarantee atomicity. Atomicity means that the qualified data within a load job must be all successfully loaded or none of the qualified data is successfully loaded. It never happens that some of the qualified data is loaded while the other data is not. Note that the qualified data does not include the data that is filtered out due to quality issues such as data type conversion errors.
 
-StarRocks supports two communication protocols that can be used to submit load jobs: MySQL and HTTP. For more information about the protocol supported by each loading method, see the "[Loading methods](/loading/Loading_intro.md#Loading methods)" section of this topic.
+StarRocks supports two communication protocols that can be used to submit load jobs: MySQL and HTTP. For more information about the protocol supported by each loading method, see the "[Loading methods](../loading/Loading_intro.md#loading-methods)" section of this topic.
 
 ## Supported data types
 
-StarRocks supports loading data of all data types. You only need to take note of the limits on the loading of a few specific data types. For more information, see [Data types](/docs/sql-reference/sql-statements/data-types/BIGINT.md).
+StarRocks supports loading data of all data types. You only need to take note of the limits on the loading of a few specific data types. For more information, see [Data types](../sql-reference/sql-statements/data-types/BIGINT.md).
 
 ## Loading modes
 
 StarRocks supports two loading modes: synchronous loading mode and asynchronous loading mode.
 
-> Note: If you load data by using external programs, you must choose a loading mode that best suits your business requirements before you decide the loading method of your choice.
+> **NOTE**
+>
+> If you load data by using external programs, you must choose a loading mode that best suits your business requirements before you decide the loading method of your choice.
 
 ### Synchronous loading
 
 In synchronous loading mode, after you submit a load job, StarRocks synchronously runs the job to load data, and returns the result of the job after the job finishes. You can check whether the job is successful based on the job result.
 
-StarRocks provides two loading methods that support synchronous loading: [Stream Load](/docs/loading/StreamLoad.md) and [INSERT INTO](/docs/loading/InsertInto.md).
+StarRocks provides two loading methods that support synchronous loading: [Stream Load](../loading/StreamLoad.md) and [INSERT](../loading/InsertInto.md).
 
 The process of synchronous loading is as follows:
 
 1. Create a load job.
 
-1. View the job result returned by StarRocks.
+2. View the job result returned by StarRocks.
 
-1. Check whether the job is successful based on the job result. If the job result indicates a load failure, you can retry the job.
+3. Check whether the job is successful based on the job result. If the job result indicates a load failure, you can retry the job.
 
 ### Asynchronous loading
 
@@ -38,23 +40,23 @@ In asynchronous loading mode, after you submit a load job, StarRocks immediately
 
 - If the result indicates a job creation success, StarRocks asynchronously runs the job. However, that does not mean that the data has been successfully loaded. You must use statements or commands to check the status of the job. Then, you can determine whether the data is successfully loaded based on the job status.
 
-- If the result indicates a job creation failure, you can determine whether you need to retry the job based on the failure information. 
+- If the result indicates a job creation failure, you can determine whether you need to retry the job based on the failure information.
 
-StarRocks provides three loading methods that support asynchronous loading: [Broker Load](/docs/loading/BrokerLoad.md), [Routine Load](/docs/loading/RoutineLoad.md), and [Spark Load](/docs/loading/SparkLoad.md).
+StarRocks provides three loading methods that support asynchronous loading: [Broker Load](../loading/BrokerLoad.md), [Routine Load](../loading/RoutineLoad.md), and [Spark Load](../loading/SparkLoad.md).
 
 The process of asynchronous loading is as follows:
 
 1. Create a load job.
 
-1. View the job creation result returned by StarRocks and determine whether the job is successfully created.
-   1. If the job creation succeeds, go to Step 3.
-   2. If the job creation fails, return to Step 1.
+2. View the job creation result returned by StarRocks and determine whether the job is successfully created.
+   a. If the job creation succeeds, go to Step 3.
+   b. If the job creation fails, return to Step 1.
 
-1. Use statements or commands to check the status of the job until the job status shows **FINISHED** or **CANCELLED**.
+3. Use statements or commands to check the status of the job until the job status shows **FINISHED** or **CANCELLED**.
 
 The workflow of a Broker Load, Routine Load, or Spark Load job consists of five stages, as shown in the following figure.
 
-![Asynchronous loading stages](/docs/assets/4.1-1.png)
+![Asynchronous loading stages](../assets/4.1-1.png)
 
 The workflow is described as follows:
 
@@ -65,7 +67,9 @@ The workflow is described as follows:
 2. **ETL**
 
    The FE pre-processes the data, including cleansing, partitioning, sorting, and aggregation.
-   > Note: If the job is a Broker Load job, this stage is directly finished.
+   > **NOTE**
+   >
+   > If the job is a Broker Load job, this stage is directly finished.
 
 3. **LOADING**
 
@@ -81,12 +85,12 @@ The workflow is described as follows:
 
 ## Loading methods
 
-StarRocks provides five loading methods to help you load data in various business scenarios: [Stream Load](/docs/loading/StreamLoad.md), [Broker Load](/docs/loading/BrokerLoad.md), [Routine Load](/docs/loading/RoutineLoad.md), [Spark Load](/docs/loading/SparkLoad.md), and [INSERT INTO](/docs/loading/InsertInto.md).
+StarRocks provides five loading methods to help you load data in various business scenarios: [Stream Load](../loading/StreamLoad.md), [Broker Load](../loading/BrokerLoad.md), [Routine Load](../loading/RoutineLoad.md), [Spark Load](../loading/SparkLoad.md), and [INSERT](../loading/InsertInto.md).
 
 | Loading method     | Protocol | Business scenario                                            | Data volume per load job                                     | Data source                                                  | Data file format      | Loading mode |
 | ------------------ | -------- | ------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------ | --------------------- | ------------ |
 | Stream Load        | HTTP     | Load data files from local file systems or load data streams by using programs. | 10 GB or less                                                | <ul><li>Local files</li><li>Data streams</li></ul>                                |<ul><li>CSV</li><li>JSON</li></ul>          | Synchronous  |
-| Broker Load        | MySQL    | Load data from HDFS or cloud storage.                        | Dozens of GB to hundreds of GB                               |<ul><li>HDFS</li><li>Amazon S3</li><li>Google GCP</li><li>Alibaba Cloud OSS</li><li>Tencent Cloud COS</li></ul>|<ul><li>CSV</li><li>Parquet</li><li>ORC</li></ul>| Asynchronous |
+| Broker Load        | MySQL    | Load data from HDFS or cloud storage.                        | Dozens of GB to hundreds of GB                               |<ul><li>HDFS</li><li>Amazon S3</li><li>Google GCS</li><li>Alibaba Cloud OSS</li><li>Tencent Cloud COS</li></ul>|<ul><li>CSV</li><li>Parquet</li><li>ORC</li></ul>| Asynchronous |
 | Routine Load       | MySQL    | Load data in real time from Apache Kafka®.                   | MBs to GBs of data as mini-batches                           | Kafka                                                        |<ul><li>CSV</li><li>JSON</li></ul>          | Asynchronous |
 | Spark Load         | MySQL    |<ul><li>Migrate large amounts of data from HDFS or Hive by using Apache Spark™ clusters.</li><li>Load data while using a global data dictionary for deduplication.</li></ul>| Dozens of GB to TBs                                          |<ul><li>HDFS</li><li>Hive</li></ul>                                               |<ul><li>CSV</li><li>Parquet</li></ul>       | Asynchronous |
 | INSERT INTO SELECT | MySQL    |<ul><li>Load data from external tables.</li><li>Load data between StarRocks tables.</li></ul>| Not fixed (The data volume varies based on the memory size.) |<ul><li>StarRocks tables</li><li>External tables</li></ul>                         | StarRocks tables      | Synchronous  |
@@ -94,25 +98,25 @@ StarRocks provides five loading methods to help you load data in various busines
 
 You can determine the loading method of your choice based on your business scenario, data volume, data source, data file format, and loading frequency. Additionally, take note of the following points when you select a loading method:
 
-- If you load data from Kafka and the data requires multi-table joins and extract, transform and load (ETL), you can use Apache Flink® to pre-process the data and then use the [flink-connector-starrocks](/docs/loading/Flink-connector-starrocks.md) plug-in to perform a Stream Load job to load the data into StarRocks.
+- If you load data from Kafka and the data requires multi-table joins and extract, transform and load (ETL), you can use Apache Flink® to pre-process the data and then use the [flink-connector-starrocks](../loading/Flink-connector-starrocks.md) plug-in to perform a Stream Load job to load the data into StarRocks.
 
-- If you load data from Hive, you can use [Broker Load](/docs/loading/BrokerLoad.md) or [Spark Load](/docs/loading/SparkLoad.md) to load the data. However, we recommend that you create an [external Hive table](/docs/using_starrocks/External_table.md#hive-external-table) and then use the INSERT INTO SELECT statement to load the data into the external Hive table. 
+- If you load data from Hive, you can use [Broker Load](../loading/BrokerLoad.md) or [Spark Load](../loading/SparkLoad.md) to load the data. However, we recommend that you create an [external Hive table](../data_source/External_table.md#hive-external-table) and then use the INSERT INTO SELECT statement to load the data into the external Hive table. 
 
-- If you load data from MySQL databases, you can use [starrockswriter](/docs/loading/DataX-starrocks-writer.md) to load the data. However, we recommend that you create an [external MySQL table](/docs/using_starrocks/External_table.md#mysql-external-table) and then load the data into the external MySQL table.
+- If you load data from MySQL databases, you can use [starrockswriter](../loading/DataX-starrocks-writer.md) to load the data. However, we recommend that you create an [external MySQL table](../data_source/External_table.md#mysql-external-table) and then load the data into the external MySQL table.
 
-- If you load data from other data sources such as Oracle and PostgreSQL, we recommend that you use [starrockswriter](/docs/loading/DataX-starrocks-writer.md).
+- If you load data from other data sources such as Oracle and PostgreSQL, we recommend that you use [starrockswriter](../loading/DataX-starrocks-writer.md).
 
 The following figure provides an overview of various data sources supported by StarRocks and the loading methods that you can use to load data from these data sources.
 
-![Data loading sources](/docs/assets/4.1-2.png)
+![Data loading sources](../assets/4.1-2.png)
 
 ## Memory limits
 
 StarRocks provides parameters for you to limit the memory usage for each load job, thereby reducing memory consumption, especially in high concurrency scenarios. However, do not specify an excessively low memory usage limit. If the memory usage limit is excessively low, data may be frequently flushed from memory to disk because the memory usage for load jobs reaches the specified limit. We recommend that you specify a proper memory usage limit based on your business scenario.
 
-The parameters that are used to limit memory usage vary for each loading method. For more information, see [Stream Load](/docs/loading/StreamLoad.md), [Broker Load](/docs/loading/BrokerLoad.md), [Routine Load](/docs/loading/RoutineLoad.md), [Spark Load](/docs/loading/SparkLoad.md), and [INSERT INTO](/docs/loading/InsertInto.md). Note that a load job usually runs on multiple BEs. Therefore, the parameters limit the memory usage of each load job on each involved BE rather than the total memory usage of the load job on all involved BEs.
+The parameters that are used to limit memory usage vary for each loading method. For more information, see [Stream Load](../loading/StreamLoad.md), [Broker Load](../loading/BrokerLoad.md), [Routine Load](../loading/RoutineLoad.md), [Spark Load](../loading/SparkLoad.md), and [INSERT](../loading/InsertInto.md). Note that a load job usually runs on multiple BEs. Therefore, the parameters limit the memory usage of each load job on each involved BE rather than the total memory usage of the load job on all involved BEs.
 
-StarRocks also provides parameters for you to limit the total memory usage of all load jobs that run on each individual BE. For more information, see the "[System configurations](/docs/loading/Loading_intro.md#system-configurations)" section of this topic.
+StarRocks also provides parameters for you to limit the total memory usage of all load jobs that run on each individual BE. For more information, see the "[System configurations](../loading/Loading_intro.md#system-configurations)" section of this topic.
 
 ## System configurations
 
@@ -134,7 +138,9 @@ You can configure the following parameters in the configuration file **fe.conf**
   
   This parameter specifies the maximum number of ongoing load jobs that are allowed in each database of your StarRocks cluster. The default value is **100**. When the number of load jobs running in a database reaches the maximum number that you specify, the subsequent load jobs that you submit are not scheduled. In this situation, if you submit a synchronous load job, the job is rejected. If you submit an asynchronous load job, the job is held waiting in queue.
 
-  > Note: StarRocks counts all load jobs together and does not distinguish between synchronous load jobs and asynchronous load jobs.
+  > **NOTE**
+  >
+  > StarRocks counts all load jobs together and does not distinguish between synchronous load jobs and asynchronous load jobs.
 
 - `label_keep_max_second`
   
@@ -170,4 +176,4 @@ You can configure the following parameters in the configuration file **be.conf**
 
 ## Troubleshooting
 
-For more information, see [FAQ about data loading](/docs/faq/loading/Loading_faq.md).
+For more information, see [FAQ about data loading](../faq/loading/Loading_faq.md).

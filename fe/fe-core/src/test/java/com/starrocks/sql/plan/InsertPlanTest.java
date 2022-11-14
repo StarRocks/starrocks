@@ -1,12 +1,12 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.plan;
 
-import com.starrocks.analysis.StatementBase;
 import com.starrocks.common.FeConstants;
 import com.starrocks.sql.InsertPlanner;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.thrift.TExplainLevel;
 import org.junit.Assert;
@@ -29,6 +29,7 @@ public class InsertPlanTest extends PlanTestBase {
                 "  PARTITION: UNPARTITIONED\n" +
                 "\n" +
                 "  OLAP TABLE SINK\n" +
+                "    TABLE: t0\n" +
                 "    TUPLE ID: 1\n" +
                 "    RANDOM\n" +
                 "\n" +
@@ -42,6 +43,7 @@ public class InsertPlanTest extends PlanTestBase {
                 "  PARTITION: UNPARTITIONED\n" +
                 "\n" +
                 "  OLAP TABLE SINK\n" +
+                "    TABLE: t0\n" +
                 "    TUPLE ID: 2\n" +
                 "    RANDOM\n" +
                 "\n" +
@@ -61,6 +63,7 @@ public class InsertPlanTest extends PlanTestBase {
                 "  PARTITION: RANDOM\n" +
                 "\n" +
                 "  OLAP TABLE SINK\n" +
+                "    TABLE: t0\n" +
                 "    TUPLE ID: 2\n" +
                 "    RANDOM\n" +
                 "\n" +
@@ -336,7 +339,7 @@ public class InsertPlanTest extends PlanTestBase {
         }
 
         sql = "insert into duplicate_table_with_default(K1,k2,k3) " +
-                        "values('2020-06-25', '2020-06-25 00:16:23', 'beijing')";
+                "values('2020-06-25', '2020-06-25 00:16:23', 'beijing')";
         explainString = getInsertExecPlan(sql);
         Assert.assertTrue(explainString.contains("<slot 1> : 1: column_0"));
     }
@@ -581,6 +584,7 @@ public class InsertPlanTest extends PlanTestBase {
             String sql = "explain insert into t0 select * from t0";
             String plan = getInsertExecPlan(sql);
             assertContains(plan, "  OLAP TABLE SINK\n" +
+                    "    TABLE: t0\n" +
                     "    TUPLE ID: 1\n" +
                     "    RANDOM\n" +
                     "\n" +
@@ -591,6 +595,7 @@ public class InsertPlanTest extends PlanTestBase {
             sql = "explain insert into t0(v1, v2) select v1, v2 from t0;";
             plan = getInsertExecPlan(sql);
             assertContains(plan, "  OLAP TABLE SINK\n" +
+                    "    TABLE: t0\n" +
                     "    TUPLE ID: 2\n" +
                     "    RANDOM\n" +
                     "\n" +
@@ -607,6 +612,7 @@ public class InsertPlanTest extends PlanTestBase {
             String sql = "explain insert into tprimary select * from tprimary";
             String plan = getInsertExecPlan(sql);
             assertContains(plan, "  OLAP TABLE SINK\n" +
+                    "    TABLE: tprimary\n" +
                     "    TUPLE ID: 1\n" +
                     "    RANDOM\n" +
                     "\n" +
@@ -628,6 +634,7 @@ public class InsertPlanTest extends PlanTestBase {
             sql = "explain insert into tprimary select pk, min(v1), max(v2) from tprimary group by pk";
             plan = getInsertExecPlan(sql);
             assertContains(plan, "  OLAP TABLE SINK\n" +
+                    "    TABLE: tprimary\n" +
                     "    TUPLE ID: 2\n" +
                     "    RANDOM\n" +
                     "\n" +
@@ -640,6 +647,7 @@ public class InsertPlanTest extends PlanTestBase {
             String sql = "explain insert into baseall select * from baseall";
             String plan = getInsertExecPlan(sql);
             assertContains(plan, "  OLAP TABLE SINK\n" +
+                    "    TABLE: baseall\n" +
                     "    TUPLE ID: 1\n" +
                     "    RANDOM\n" +
                     "\n" +
@@ -666,6 +674,7 @@ public class InsertPlanTest extends PlanTestBase {
                             "min(k10), max(k11), min(k7), min(k8), max(k9) from baseall group by k1, k2";
             plan = getInsertExecPlan(sql);
             assertContains(plan, "  OLAP TABLE SINK\n" +
+                    "    TABLE: baseall\n" +
                     "    TUPLE ID: 2\n" +
                     "    RANDOM\n" +
                     "\n" +
@@ -680,6 +689,7 @@ public class InsertPlanTest extends PlanTestBase {
                             "max(k9) from baseall group by k1, k2, k3, k4, k5, k6, k10, k11, k7";
             plan = getInsertExecPlan(sql);
             assertContains(plan, " OLAP TABLE SINK\n" +
+                    "    TABLE: baseall\n" +
                     "    TUPLE ID: 2\n" +
                     "    RANDOM\n" +
                     "\n" +
@@ -700,6 +710,7 @@ public class InsertPlanTest extends PlanTestBase {
                 "  PARTITION: RANDOM\n" +
                 "\n" +
                 "  OLAP TABLE SINK\n" +
+                "    TABLE: tarray\n" +
                 "    TUPLE ID: 2\n" +
                 "    RANDOM\n" +
                 "\n" +

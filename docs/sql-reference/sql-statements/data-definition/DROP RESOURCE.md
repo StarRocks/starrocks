@@ -23,7 +23,3 @@ DROP RESOURCE 'resource_name'
     ```SQL
     DROP RESOURCE 'hive0';
     ```
-
-## keyword
-
-DROP RESOURCE

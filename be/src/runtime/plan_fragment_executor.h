@@ -32,6 +32,7 @@
 #include "runtime/mem_tracker.h"
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_state.h"
+#include "runtime/stream_load/stream_load_executor.h"
 
 namespace starrocks {
 
@@ -75,13 +76,11 @@ public:
     typedef std::function<void(const Status& status, RuntimeProfile* profile, bool done)> report_status_callback;
 
     // if report_status_cb is not empty, is used to report the accumulated profile
-    // information periodically during execution (open() or get_next()).
+    // information periodically during execution open().
     PlanFragmentExecutor(ExecEnv* exec_env, report_status_callback report_status_cb);
 
-    // Closes the underlying plan fragment and frees up all resources allocated
-    // in open()/get_next().
-    // It is an error to delete a PlanFragmentExecutor with a report callback
-    // before open()/get_next() (depending on whether the fragment has a sink)
+    // Closes the underlying plan fragment and frees up all resources allocated in open()
+    // It is an error to delete a PlanFragmentExecutor with a report callback before open()
     // indicated that execution is finished.
     ~PlanFragmentExecutor();
 
@@ -93,21 +92,17 @@ public:
     // The query will be aborted (MEM_LIMIT_EXCEEDED) if it goes over that limit.
     Status prepare(const TExecPlanFragmentParams& request);
 
-    // Start execution. Call this prior to get_next().
+    // Start execution.
     // If this fragment has a sink, open() will send all rows produced
     // by the fragment to that sink. Therefore, open() may block until
-    // all rows are produced (and a subsequent call to get_next() will not return
-    // any rows).
+    // all rows are produced
     // This also starts the status-reporting thread, if the interval flag
     // is > 0 and a callback was specified in the c'tor.
     // If this fragment has a sink, report_status_cb will have been called for the final
     // time when open() returns, and the status-reporting thread will have been stopped.
     Status open();
 
-    Status get_next(vectorized::ChunkPtr* chunk);
-
-    // Closes the underlying plan fragment and frees up all resources allocated
-    // in open()/get_next().
+    // Closes the underlying plan fragment and frees up all resources allocated in open()
     void close();
 
     // Initiate cancellation. Must not be called until after prepare() returned.
@@ -134,7 +129,16 @@ public:
 
     void set_is_report_on_cancel(bool val) { _is_report_on_cancel = val; }
 
+    bool is_done() { return _done; }
+
+    Status status() {
+        std::lock_guard<std::mutex> l(_status_lock);
+        return _status;
+    }
+
 private:
+    Status _prepare_stream_load_pipe(const TExecPlanFragmentParams& request);
+
     ExecEnv* _exec_env;        // not owned
     ExecNode* _plan = nullptr; // lives in _runtime_state->obj_pool()
     TUniqueId _query_id;
@@ -143,7 +147,7 @@ private:
     // profile reporting-related
     report_status_callback _report_status_cb;
 
-    // true if _plan->get_next() indicated that it's done
+    // true if _plan->_get_next_internal_vectorized() indicated that it's done
     bool _done;
 
     // true if prepare() returned OK
@@ -155,9 +159,9 @@ private:
     // true if this fragment has not returned the thread token to the thread resource mgr
     bool _has_thread_token;
 
-    bool _is_report_success;
+    bool enable_profile;
 
-    // If this is set to false, and '_is_report_success' is false as well,
+    // If this is set to false, and 'enable_profile' is false as well,
     // This executor will not report status to FE on being cancelled.
     bool _is_report_on_cancel;
 
@@ -170,6 +174,8 @@ private:
     // 1. _report_thread_lock
     // 2. _status_lock
     std::mutex _status_lock;
+
+    std::mutex _cancel_lock;
 
     // note that RuntimeState should be constructed before and destructed after `_sink' and `_row_batch',
     // therefore we declare it before `_sink' and `_row_batch'
@@ -201,6 +207,9 @@ private:
 
     // If this is a runtime filter merge node for some query.
     bool _is_runtime_filter_merge_node;
+
+    std::vector<StreamLoadContext*> _stream_load_contexts;
+    bool _channel_stream_load = false;
 
     ObjectPool* obj_pool() { return _runtime_state->obj_pool(); }
 

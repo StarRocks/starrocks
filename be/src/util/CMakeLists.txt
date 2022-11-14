@@ -37,6 +37,7 @@ set(UTIL_FILES
   compression/stream_compression.cpp
   coding.cpp
   cpu_info.cpp
+  cpu_usage_info.cpp
   crc32c.cpp
   date_func.cpp
   dynamic_util.cpp
@@ -64,7 +65,6 @@ set(UTIL_FILES
   thrift_client.cpp
   thrift_server.cpp
   stack_util.cpp
-  symbols_util.cpp
   system_metrics.cpp
   url_parser.cpp
   url_coding.cpp

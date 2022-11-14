@@ -22,7 +22,3 @@ user@['domain']
     ```sql
     DROP USER 'jack'@'192.%'
     ```
-
-## keyword
-
-DROP, USER

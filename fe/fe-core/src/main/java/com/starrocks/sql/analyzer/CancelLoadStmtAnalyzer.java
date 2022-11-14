@@ -3,7 +3,6 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
 import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.CancelLoadStmt;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
@@ -11,6 +10,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.CancelLoadStmt;
 
 public class CancelLoadStmtAnalyzer {
 
@@ -31,7 +31,7 @@ public class CancelLoadStmtAnalyzer {
         }
 
         @Override
-        public Void visitCancelLoadStmt(CancelLoadStmt statement, ConnectContext context) {
+        public Void visitCancelLoadStatement(CancelLoadStmt statement, ConnectContext context) {
             analyzeDbName(statement, context);
             analyzeWhereClause(statement, context);
             return null;

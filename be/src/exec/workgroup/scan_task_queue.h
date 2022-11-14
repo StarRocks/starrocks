@@ -80,7 +80,9 @@ private:
 
 class WorkGroupScanTaskQueue final : public ScanTaskQueue {
 public:
-    WorkGroupScanTaskQueue() = default;
+    enum SchedEntityType { OLAP, CONNECTOR };
+
+    WorkGroupScanTaskQueue(SchedEntityType sched_entity_type) : _sched_entity_type(sched_entity_type) {}
     ~WorkGroupScanTaskQueue() override = default;
 
     void close() override;
@@ -110,6 +112,9 @@ private:
     // The ideal runtime of a work group is the weighted average of the schedule period.
     int64_t _ideal_runtime_ns(workgroup::WorkGroupScanSchedEntity* wg_entity) const;
 
+    workgroup::WorkGroupScanSchedEntity* _sched_entity(workgroup::WorkGroup* wg);
+    const workgroup::WorkGroupScanSchedEntity* _sched_entity(const workgroup::WorkGroup* wg) const;
+
 private:
     static constexpr int64_t SCHEDULE_PERIOD_PER_WG_NS = 100'000'000;
     static constexpr int64_t BANDWIDTH_CONTROL_PERIOD_NS = 100'000'000;
@@ -119,6 +124,8 @@ private:
         bool operator()(const WorkGroupScanSchedEntityPtr& lhs, const WorkGroupScanSchedEntityPtr& rhs) const;
     };
     using WorkgroupSet = std::set<workgroup::WorkGroupScanSchedEntity*, WorkGroupScanSchedEntityComparator>;
+
+    const SchedEntityType _sched_entity_type;
 
     mutable std::mutex _global_mutex;
     std::condition_variable _cv;
@@ -131,8 +138,7 @@ private:
 
     size_t _sum_cpu_limit = 0;
 
-    // Cache the minimum vruntime and entity, used to check should_yield() without lock.
-    std::atomic<int64_t> _min_vruntime_ns = std::numeric_limits<int64_t>::max();
+    // Cache the minimum entity, used to check should_yield() without lock.
     std::atomic<workgroup::WorkGroupScanSchedEntity*> _min_wg_entity = nullptr;
 
     // Hard bandwidth control to non-short-query workgroups.

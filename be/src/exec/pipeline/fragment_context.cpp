@@ -5,6 +5,8 @@
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/exec_env.h"
+#include "runtime/stream_load/stream_load_context.h"
+#include "runtime/stream_load/transaction_mgr.h"
 
 namespace starrocks::pipeline {
 
@@ -28,6 +30,37 @@ void FragmentContext::set_final_status(const Status& status) {
     }
 }
 
+void FragmentContext::set_stream_load_contexts(const std::vector<StreamLoadContext*>& contexts) {
+    _stream_load_contexts = std::move(contexts);
+    _channel_stream_load = true;
+}
+
+void FragmentContext::cancel(const Status& status) {
+    _runtime_state->set_is_cancelled(true);
+    set_final_status(status);
+
+    const TQueryOptions& query_options = _runtime_state->query_options();
+    if (query_options.query_type == TQueryType::LOAD && (query_options.load_job_type == TLoadJobType::BROKER ||
+                                                         query_options.load_job_type == TLoadJobType::INSERT_QUERY ||
+                                                         query_options.load_job_type == TLoadJobType::INSERT_VALUES)) {
+        starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_pipeline_load(_query_id,
+                                                                                             _fragment_instance_id);
+    }
+
+    if (_stream_load_contexts.size() > 0) {
+        for (const auto& stream_load_context : _stream_load_contexts) {
+            if (stream_load_context->body_sink) {
+                Status st;
+                stream_load_context->body_sink->cancel(st);
+            }
+            if (_channel_stream_load) {
+                _runtime_state->exec_env()->stream_context_mgr()->remove_channel_context(stream_load_context);
+            }
+        }
+        _stream_load_contexts.resize(0);
+    }
+}
+
 FragmentContext* FragmentContextManager::get_or_register(const TUniqueId& fragment_id) {
     std::lock_guard<std::mutex> lock(_lock);
     auto it = _fragment_contexts.find(fragment_id);
@@ -41,14 +74,27 @@ FragmentContext* FragmentContextManager::get_or_register(const TUniqueId& fragme
     }
 }
 
-void FragmentContextManager::register_ctx(const TUniqueId& fragment_id, FragmentContextPtr fragment_ctx) {
+Status FragmentContextManager::register_ctx(const TUniqueId& fragment_id, FragmentContextPtr fragment_ctx) {
     std::lock_guard<std::mutex> lock(_lock);
 
     if (_fragment_contexts.find(fragment_id) != _fragment_contexts.end()) {
-        return;
+        std::stringstream msg;
+        msg << "Fragment " << fragment_id << " has been registered";
+        LOG(WARNING) << msg.str();
+        return Status::InternalError(msg.str());
     }
 
+    // Only register profile report worker for broker load and insert into here,
+    // for stream load and routine load, currently we don't need BE to report their progress regularly.
+    const TQueryOptions& query_options = fragment_ctx->runtime_state()->query_options();
+    if (query_options.query_type == TQueryType::LOAD && (query_options.load_job_type == TLoadJobType::BROKER ||
+                                                         query_options.load_job_type == TLoadJobType::INSERT_QUERY ||
+                                                         query_options.load_job_type == TLoadJobType::INSERT_VALUES)) {
+        RETURN_IF_ERROR(starrocks::ExecEnv::GetInstance()->profile_report_worker()->register_pipeline_load(
+                fragment_ctx->query_id(), fragment_id));
+    }
     _fragment_contexts.emplace(fragment_id, std::move(fragment_ctx));
+    return Status::OK();
 }
 
 FragmentContextPtr FragmentContextManager::get(const TUniqueId& fragment_id) {
@@ -66,6 +112,31 @@ void FragmentContextManager::unregister(const TUniqueId& fragment_id) {
     auto it = _fragment_contexts.find(fragment_id);
     if (it != _fragment_contexts.end()) {
         it->second->_finish_promise.set_value();
+
+        const TQueryOptions& query_options = it->second->runtime_state()->query_options();
+        if (query_options.query_type == TQueryType::LOAD &&
+            (query_options.load_job_type == TLoadJobType::BROKER ||
+             query_options.load_job_type == TLoadJobType::INSERT_QUERY ||
+             query_options.load_job_type == TLoadJobType::INSERT_VALUES) &&
+            !it->second->runtime_state()->is_cancelled()) {
+            starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_pipeline_load(it->second->query_id(),
+                                                                                                 fragment_id);
+        }
+        const auto& stream_load_contexts = it->second->_stream_load_contexts;
+
+        if (stream_load_contexts.size() > 0) {
+            for (const auto& stream_load_context : stream_load_contexts) {
+                if (stream_load_context->body_sink) {
+                    Status st;
+                    stream_load_context->body_sink->cancel(st);
+                }
+                if (it->second->_channel_stream_load) {
+                    it->second->_runtime_state->exec_env()->stream_context_mgr()->remove_channel_context(
+                            stream_load_context);
+                }
+            }
+            it->second->_stream_load_contexts.resize(0);
+        }
         _fragment_contexts.erase(it);
     }
 }

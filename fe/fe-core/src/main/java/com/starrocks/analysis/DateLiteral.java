@@ -32,8 +32,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TDateLiteral;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -67,13 +65,13 @@ public class DateLiteral extends LiteralExpr {
     private static final DateTimeFormatter DATE_FORMATTER_TWO_DIGIT;
 
     static {
-        DATE_TIME_FORMATTER = DateUtils.unixDatetimeFormatBuilder("%Y-%m-%e %H:%i:%s")
+        DATE_TIME_FORMATTER = DateUtils.unixDatetimeFormatBuilder("%Y-%m-%e %H:%i:%s", false)
                 .toFormatter().withResolverStyle(ResolverStyle.STRICT);
-        DATE_FORMATTER = DateUtils.unixDatetimeFormatBuilder("%Y-%m-%e")
+        DATE_FORMATTER = DateUtils.unixDatetimeFormatBuilder("%Y-%m-%e", false)
                 .toFormatter().withResolverStyle(ResolverStyle.STRICT);
-        DATE_TIME_FORMATTER_TWO_DIGIT = DateUtils.unixDatetimeFormatBuilder("%y-%m-%e %H:%i:%s")
+        DATE_TIME_FORMATTER_TWO_DIGIT = DateUtils.unixDatetimeFormatBuilder("%y-%m-%e %H:%i:%s", false)
                 .toFormatter().withResolverStyle(ResolverStyle.STRICT);
-        DATE_FORMATTER_TWO_DIGIT = DateUtils.unixDatetimeFormatBuilder("%y-%m-%e")
+        DATE_FORMATTER_TWO_DIGIT = DateUtils.unixDatetimeFormatBuilder("%y-%m-%e", false)
                 .toFormatter().withResolverStyle(ResolverStyle.STRICT);
         DATE_NO_SPLIT_FORMATTER = DateUtils.unixDatetimeFormatBuilder("%Y%m%e")
                 .toFormatter().withResolverStyle(ResolverStyle.STRICT);
@@ -174,6 +172,10 @@ public class DateLiteral extends LiteralExpr {
         return new DateLiteral(type, false);
     }
 
+    public static DateLiteral createMaxValue(Type type) throws AnalysisException {
+        return new DateLiteral(type, true);
+    }
+
     private void init(String s, Type type) throws AnalysisException {
         try {
             Preconditions.checkArgument(type.isDateType());
@@ -181,6 +183,8 @@ public class DateLiteral extends LiteralExpr {
             if (type.isDate()) {
                 if (s.split("-")[0].length() == 2) {
                     dateTime = DateUtils.parseStringWithDefaultHSM(s, DATE_FORMATTER_TWO_DIGIT);
+                } else if (s.split("-").length == 3) {
+                    dateTime = DateUtils.parseStringWithDefaultHSM(s, DATE_FORMATTER);
                 } else if (s.length() == 8) {
                     // 20200202
                     dateTime = DateUtils.parseStringWithDefaultHSM(s, DATE_NO_SPLIT_FORMATTER);
@@ -447,7 +451,7 @@ public class DateLiteral extends LiteralExpr {
 
     @Override
     public int hashCode() {
-        return 31 * super.hashCode() + Objects.hashCode(unixTimestamp(TimeZone.getDefault()));
+        return Objects.hash(super.hashCode(), Objects.hashCode(unixTimestamp(TimeZone.getDefault())));
     }
 
     @Override

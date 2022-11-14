@@ -29,7 +29,6 @@ import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StorageCacheInfo;
-import com.starrocks.lake.StorageInfo;
 import com.starrocks.lake.Utils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.rpc.RpcException;
@@ -73,7 +72,7 @@ public class LakeTableSchemaChangeJobTest {
     public void before() throws Exception {
         new MockUp<LakeTableAlterJobV2Builder>() {
             @Mock
-            public List<Long> createShards(int shardCount, ShardStorageInfo storageInfo) throws DdlException {
+            public List<Long> createShards(int shardCount, ShardStorageInfo storageInfo, long groupId) throws DdlException {
                 for (int i = 0; i < shardCount; i++) {
                     shadowTabletIds.add(GlobalStateMgr.getCurrentState().getNextId());
                 }
@@ -116,12 +115,9 @@ public class LakeTableSchemaChangeJobTest {
         ObjectStorageInfo.Builder osib = builder.getObjectStorageInfoBuilder();
         ObjectStorageInfo osi = osib.setObjectUri("s3://test").setAccessKey("zzz").setAccessKeySecret("yyy").build();
         ShardStorageInfo shardStorageInfo = ShardStorageInfo.newBuilder().setObjectStorageInfo(osi).build();
-
-        StorageCacheInfo storageCacheInfo = new StorageCacheInfo(false, 0, false);
-
-        StorageInfo storageInfo = new StorageInfo(shardStorageInfo, storageCacheInfo);
         table.setStorageInfo(shardStorageInfo, false, 0, false);
-        partitionInfo.setStorageInfo(partitionId, storageInfo);
+        StorageCacheInfo storageCacheInfo = new StorageCacheInfo(false, 0, false);
+        partitionInfo.setStorageCacheInfo(partitionId, storageCacheInfo);
 
         db.createTable(table);
 
@@ -753,7 +749,7 @@ public class LakeTableSchemaChangeJobTest {
         // Add table back to database
         db.createTable(table);
 
-        // We've mocked Utils.publishVersion to throw RpcException, should this runFinishedRewritingJob will fail but
+        // We've mocked ColumnTypeConverter.publishVersion to throw RpcException, should this runFinishedRewritingJob will fail but
         // should not throw any exception.
         schemaChangeJob.runFinishedRewritingJob();
         Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob.getJobState());

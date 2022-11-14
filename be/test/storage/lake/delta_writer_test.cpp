@@ -2,10 +2,8 @@
 
 #include "storage/lake/delta_writer.h"
 
-#include <fmt/format.h>
 #include <gtest/gtest.h>
 
-#include <algorithm>
 #include <random>
 
 #include "column/chunk.h"
@@ -15,7 +13,6 @@
 #include "column/vectorized_fwd.h"
 #include "common/logging.h"
 #include "fs/fs_util.h"
-#include "gutil/strings/util.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/fixed_location_provider.h"
@@ -61,7 +58,6 @@ public:
         schema->set_num_short_key_columns(1);
         schema->set_keys_type(DUP_KEYS);
         schema->set_num_rows_per_row_block(65535);
-        schema->set_compress_kind(COMPRESS_LZ4);
         auto c0 = schema->add_column();
         {
             c0->set_unique_id(next_id());
@@ -139,7 +135,7 @@ TEST_F(DeltaWriterTest, test_open) {
     {
         auto tablet_id = -1;
         auto delta_writer = DeltaWriter::create(tablet_id, _txn_id, _partition_id, nullptr, _mem_tracker.get());
-        ASSERT_ERROR(delta_writer->open());
+        ASSERT_OK(delta_writer->open());
         delta_writer->close();
     }
 }
@@ -181,15 +177,14 @@ TEST_F(DeltaWriterTest, test_write) {
     ASSERT_TRUE(txnlog->op_write().rowset().overlapped());
     ASSERT_EQ(2 * kChunkSize, txnlog->op_write().rowset().num_rows());
     ASSERT_GT(txnlog->op_write().rowset().data_size(), 0);
-    ASSERT_EQ(0, txnlog->op_write().rowset().del_vectors_size());
 
     // Check segment file
     ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestGroupPath));
     auto path0 = _location_provider->segment_location(tablet_id, txnlog->op_write().rowset().segments(0));
     auto path1 = _location_provider->segment_location(tablet_id, txnlog->op_write().rowset().segments(1));
 
-    ASSIGN_OR_ABORT(auto seg0, Segment::open(_mem_tracker.get(), fs, path0, 0, _tablet_schema.get()));
-    ASSIGN_OR_ABORT(auto seg1, Segment::open(_mem_tracker.get(), fs, path1, 1, _tablet_schema.get()));
+    ASSIGN_OR_ABORT(auto seg0, Segment::open(fs, path0, 0, _tablet_schema.get()));
+    ASSIGN_OR_ABORT(auto seg1, Segment::open(fs, path1, 1, _tablet_schema.get()));
 
     OlapReaderStatistics statistics;
     SegmentReadOptions opts;
@@ -198,7 +193,7 @@ TEST_F(DeltaWriterTest, test_write) {
     opts.stats = &statistics;
     opts.chunk_size = 1024;
 
-    auto check_segment = [&](SegmentSharedPtr segment) {
+    auto check_segment = [&](const SegmentSharedPtr& segment) {
         ASSIGN_OR_ABORT(auto seg_iter, segment->new_iterator(*_schema, opts));
         auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
         ASSERT_OK(seg_iter->get_next(read_chunk_ptr.get()));
@@ -283,7 +278,6 @@ TEST_F(DeltaWriterTest, test_memory_limit_unreached) {
     ASSERT_FALSE(txnlog->op_write().rowset().overlapped());
     ASSERT_EQ(3 * kChunkSize, txnlog->op_write().rowset().num_rows());
     ASSERT_GT(txnlog->op_write().rowset().data_size(), 0);
-    ASSERT_EQ(0, txnlog->op_write().rowset().del_vectors_size());
 }
 
 TEST_F(DeltaWriterTest, test_reached_memory_limit) {
@@ -327,7 +321,6 @@ TEST_F(DeltaWriterTest, test_reached_memory_limit) {
     ASSERT_TRUE(txnlog->op_write().rowset().overlapped());
     ASSERT_EQ(3 * kChunkSize, txnlog->op_write().rowset().num_rows());
     ASSERT_GT(txnlog->op_write().rowset().data_size(), 0);
-    ASSERT_EQ(0, txnlog->op_write().rowset().del_vectors_size());
 }
 
 TEST_F(DeltaWriterTest, test_reached_parent_memory_limit) {
@@ -371,7 +364,6 @@ TEST_F(DeltaWriterTest, test_reached_parent_memory_limit) {
     ASSERT_TRUE(txnlog->op_write().rowset().overlapped());
     ASSERT_EQ(3 * kChunkSize, txnlog->op_write().rowset().num_rows());
     ASSERT_GT(txnlog->op_write().rowset().data_size(), 0);
-    ASSERT_EQ(0, txnlog->op_write().rowset().del_vectors_size());
 }
 
 TEST_F(DeltaWriterTest, test_memtable_full) {
@@ -415,7 +407,6 @@ TEST_F(DeltaWriterTest, test_memtable_full) {
     ASSERT_TRUE(txnlog->op_write().rowset().overlapped());
     ASSERT_EQ(3 * kChunkSize, txnlog->op_write().rowset().num_rows());
     ASSERT_GT(txnlog->op_write().rowset().data_size(), 0);
-    ASSERT_EQ(0, txnlog->op_write().rowset().del_vectors_size());
 }
 
 } // namespace starrocks::lake

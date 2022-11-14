@@ -45,7 +45,7 @@ Status GroupReader::get_next(vectorized::ChunkPtr* chunk, size_t* row_count) {
 
     vectorized::ChunkPtr active_chunk = _create_read_chunk(_active_column_indices);
     {
-        int rows_to_skip = _column_reader_opts.context->rows_to_skip;
+        size_t rows_to_skip = _column_reader_opts.context->rows_to_skip;
         _column_reader_opts.context->rows_to_skip = 0;
 
         SCOPED_RAW_TIMER(&_param.stats->group_chunk_read_ns);
@@ -138,6 +138,7 @@ void GroupReader::close() {
 Status GroupReader::_init_column_readers() {
     ColumnReaderOptions& opts = _column_reader_opts;
     opts.timezone = _param.timezone;
+    opts.case_sensitive = _param.case_sensitive;
     opts.chunk_size = _param.chunk_size;
     opts.stats = _param.stats;
     opts.sb_stream = _param.shared_buffered_stream;
@@ -214,24 +215,8 @@ vectorized::ChunkPtr GroupReader::_create_read_chunk(const std::vector<int>& col
 void GroupReader::collect_io_ranges(std::vector<SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset) {
     int64_t end = 0;
     for (const auto& column : _param.read_cols) {
-        // 1. We collect column io ranges for each row group to make up the shared buffer, so we get column
-        // metadata (such as page offset and compressed_size) from _row_group_meta directly rather than file_metadata.
-        // 2. For map or struct columns, the physical_column_index indicates the real column index in rows group meta,
-        // and it may not be equal to col_idx_in_chunk.
-        // 3. For array type, the physical_column_index is 0, we need to iterate the children and
-        // collect their io ranges.
         auto schema_node = _param.file_metadata->schema().get_stored_column_by_idx(column.col_idx_in_parquet);
-        if (schema_node->type.type != TYPE_ARRAY) {
-            int64_t range_end = 0;
-            _collect_field_io_range(*schema_node, ranges, &range_end);
-            end = std::max(end, range_end);
-        } else {
-            for (auto& field : schema_node->children) {
-                int64_t range_end = 0;
-                _collect_field_io_range(field, ranges, &range_end);
-                end = std::max(end, range_end);
-            }
-        }
+        _collect_field_io_range(*schema_node, ranges, &end);
     }
     *end_offset = end;
 }
@@ -239,17 +224,35 @@ void GroupReader::collect_io_ranges(std::vector<SharedBufferedInputStream::IORan
 void GroupReader::_collect_field_io_range(const ParquetField& field,
                                           std::vector<SharedBufferedInputStream::IORange>* ranges,
                                           int64_t* end_offset) {
-    auto& column = _row_group_metadata->columns[field.physical_column_index].meta_data;
-    int64_t offset = 0;
-    if (column.__isset.dictionary_page_offset) {
-        offset = column.dictionary_page_offset;
+    // 1. We collect column io ranges for each row group to make up the shared buffer, so we get column
+    // metadata (such as page offset and compressed_size) from _row_group_meta directly rather than file_metadata.
+    // 2. For map or struct columns, the physical_column_index indicates the real column index in rows group meta,
+    // and it may not be equal to col_idx_in_chunk.
+    // 3. For array type, the physical_column_index is 0, we need to iterate the children and
+    // collect their io ranges.
+    if (field.type.type == PrimitiveType::TYPE_ARRAY || field.type.type == PrimitiveType::TYPE_STRUCT) {
+        for (auto& child : field.children) {
+            _collect_field_io_range(child, ranges, end_offset);
+        }
+    } else if (field.type.type == PrimitiveType::TYPE_MAP) {
+        // ParquetFiled Map -> Map<Struct<key,value>>
+        DCHECK(field.children[0].type.type == TYPE_STRUCT);
+        for (auto& child : field.children[0].children) {
+            _collect_field_io_range(child, ranges, end_offset);
+        }
     } else {
-        offset = column.data_page_offset;
+        auto& column = _row_group_metadata->columns[field.physical_column_index].meta_data;
+        int64_t offset = 0;
+        if (column.__isset.dictionary_page_offset) {
+            offset = column.dictionary_page_offset;
+        } else {
+            offset = column.data_page_offset;
+        }
+        int64_t size = column.total_compressed_size;
+        auto r = SharedBufferedInputStream::IORange{.offset = offset, .size = size};
+        ranges->emplace_back(r);
+        *end_offset = std::max(*end_offset, offset + size);
     }
-    int64_t size = column.total_compressed_size;
-    auto r = SharedBufferedInputStream::IORange{.offset = offset, .size = size};
-    ranges->emplace_back(r);
-    *end_offset = offset + size;
 }
 
 bool GroupReader::_can_using_dict_filter(const SlotDescriptor* slot, const SlotIdExprContextsMap& conjunct_ctxs_by_slot,
@@ -433,14 +436,14 @@ Status GroupReader::_read(const std::vector<int>& read_columns, size_t* row_coun
     return Status::OK();
 }
 
-Status GroupReader::_lazy_skip_rows(const std::vector<int>& read_columns, vectorized::ChunkPtr chunk,
+Status GroupReader::_lazy_skip_rows(const std::vector<int>& read_columns, const vectorized::ChunkPtr& chunk,
                                     size_t chunk_size) {
     auto& ctx = _column_reader_opts.context;
     if (ctx->rows_to_skip == 0) {
         return Status::OK();
     }
 
-    int rows_to_skip = ctx->rows_to_skip;
+    size_t rows_to_skip = ctx->rows_to_skip;
     vectorized::Filter empty_filter(1, 0);
     ctx->filter = &empty_filter;
     for (int col_idx : read_columns) {

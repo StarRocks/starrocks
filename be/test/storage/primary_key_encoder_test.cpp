@@ -4,6 +4,8 @@
 
 #include <gtest/gtest.h>
 
+#include <memory>
+
 #include "column/chunk.h"
 #include "column/datum.h"
 #include "column/schema.h"
@@ -15,14 +17,16 @@ namespace starrocks {
 
 static unique_ptr<vectorized::Schema> create_key_schema(const vector<FieldType>& types) {
     vectorized::Fields fields;
+    std::vector<ColumnId> sort_key_idxes(types.size());
     for (int i = 0; i < types.size(); i++) {
         string name = StringPrintf("col%d", i);
         auto fd = new vectorized::Field(i, name, types[i], false);
         fd->set_is_key(true);
         fd->set_aggregate_method(OLAP_FIELD_AGGREGATION_NONE);
         fields.emplace_back(fd);
+        sort_key_idxes[i] = i;
     }
-    return unique_ptr<vectorized::Schema>(new vectorized::Schema(std::move(fields)));
+    return std::make_unique<vectorized::Schema>(std::move(fields), PRIMARY_KEYS, sort_key_idxes);
 }
 
 TEST(PrimaryKeyEncoderTest, testEncodeInt32) {

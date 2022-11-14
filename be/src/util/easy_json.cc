@@ -52,7 +52,7 @@ EasyJson EasyJson::Get(const string& key) {
         Value key_val(key.c_str(), alloc_->allocator());
         value_->AddMember(key_val, Value().SetNull(), alloc_->allocator());
     }
-    return EasyJson(&(*value_)[key.c_str()], alloc_);
+    return {&(*value_)[key.c_str()], alloc_};
 }
 
 EasyJson EasyJson::Get(int index) {
@@ -62,7 +62,7 @@ EasyJson EasyJson::Get(int index) {
     while (SizeType(index) >= value_->Size()) {
         value_->PushBack(Value().SetNull(), alloc_->allocator());
     }
-    return EasyJson(&(*value_)[index], alloc_);
+    return {&(*value_)[index], alloc_};
 }
 
 EasyJson EasyJson::operator[](const string& key) {
@@ -155,7 +155,7 @@ EasyJson EasyJson::PushBack(const string& val) {
     }
     Value push_val(val.c_str(), alloc_->allocator());
     value_->PushBack(push_val, alloc_->allocator());
-    return EasyJson(&(*value_)[value_->Size() - 1], alloc_);
+    return {&(*value_)[value_->Size() - 1], alloc_};
 }
 template <typename T>
 EasyJson EasyJson::PushBack(T val) {
@@ -163,7 +163,7 @@ EasyJson EasyJson::PushBack(T val) {
         value_->SetArray();
     }
     value_->PushBack(val, alloc_->allocator());
-    return EasyJson(&(*value_)[value_->Size() - 1], alloc_);
+    return {&(*value_)[value_->Size() - 1], alloc_};
 }
 template EasyJson EasyJson::PushBack(bool val);
 template EasyJson EasyJson::PushBack(int32_t val);
@@ -178,7 +178,7 @@ EasyJson EasyJson::PushBack(const char* val) {
     }
     Value push_val(val, alloc_->allocator());
     value_->PushBack(push_val, alloc_->allocator());
-    return EasyJson(&(*value_)[value_->Size() - 1], alloc_);
+    return {&(*value_)[value_->Size() - 1], alloc_};
 }
 template <>
 EasyJson EasyJson::PushBack(EasyJson::ComplexTypeInitializer val) {
@@ -194,7 +194,7 @@ EasyJson EasyJson::PushBack(EasyJson::ComplexTypeInitializer val) {
         LOG(FATAL) << "Unknown initializer type";
     }
     value_->PushBack(push_val, alloc_->allocator());
-    return EasyJson(&(*value_)[value_->Size() - 1], alloc_);
+    return {&(*value_)[value_->Size() - 1], alloc_};
 }
 
 string EasyJson::ToString() const {

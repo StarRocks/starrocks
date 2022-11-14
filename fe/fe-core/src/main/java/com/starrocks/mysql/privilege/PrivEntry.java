@@ -23,12 +23,15 @@ package com.starrocks.mysql.privilege;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.UserIdentity;
+import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.commons.lang.NotImplementedException;
 
@@ -38,7 +41,7 @@ import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 
-public abstract class PrivEntry implements Comparable<PrivEntry>, Writable {
+public abstract class PrivEntry implements Comparable<PrivEntry>, Writable, GsonPostProcessable, GsonPreProcessable {
     protected static final String ANY_HOST = "%";
     protected static final String ANY_USER = "%";
 
@@ -50,7 +53,9 @@ public abstract class PrivEntry implements Comparable<PrivEntry>, Writable {
     // user name is case sensitive
     protected transient PatternMatcher userPattern;
     @SerializedName("origUser")
-    protected String origUser;
+    protected String origUserForJsonPersist;
+
+    protected String realOrigUser;
     protected boolean isAnyUser = false;
     @SerializedName("privSet")
     protected PrivBitSet privSet;
@@ -72,7 +77,7 @@ public abstract class PrivEntry implements Comparable<PrivEntry>, Writable {
 
     protected PrivEntry(String origHost, String origUser, boolean isDomain, PrivBitSet privSet) {
         this.origHost = origHost;
-        this.origUser = origUser;
+        this.realOrigUser = origUser;
         this.isDomain = isDomain;
         this.privSet = privSet;
     }
@@ -82,14 +87,14 @@ public abstract class PrivEntry implements Comparable<PrivEntry>, Writable {
             isAnyHost = true;
         }
         this.hostPattern = PatternMatcher.createMysqlPattern(origHost, CaseSensibility.HOST.getCaseSensibility());;
-        if (origUser.equals(ANY_USER)) {
+        if (realOrigUser.equals(ANY_USER)) {
             isAnyUser = true;
         }
-        this.userPattern = PatternMatcher.createMysqlPattern(origUser, CaseSensibility.USER.getCaseSensibility());
+        this.userPattern = PatternMatcher.createMysqlPattern(realOrigUser, CaseSensibility.USER.getCaseSensibility());
         if (isDomain) {
-            userIdentity = UserIdentity.createAnalyzedUserIdentWithDomain(origUser, origHost);
+            userIdentity = UserIdentity.createAnalyzedUserIdentWithDomain(realOrigUser, origHost);
         } else {
-            userIdentity = UserIdentity.createAnalyzedUserIdentWithIp(origUser, origHost);
+            userIdentity = UserIdentity.createAnalyzedUserIdentWithIp(realOrigUser, origHost);
         }
     }
 
@@ -110,7 +115,7 @@ public abstract class PrivEntry implements Comparable<PrivEntry>, Writable {
     }
 
     public String getOrigUser() {
-        return origUser;
+        return realOrigUser;
     }
 
     public boolean isAnyUser() {
@@ -216,7 +221,7 @@ public abstract class PrivEntry implements Comparable<PrivEntry>, Writable {
             isClassNameWrote = true;
         }
         Text.writeString(out, origHost);
-        Text.writeString(out, origUser);
+        Text.writeString(out, ClusterNamespace.getFullName(realOrigUser));
         privSet.write(out);
 
         out.writeBoolean(isSetByDomainResolver);
@@ -227,12 +232,22 @@ public abstract class PrivEntry implements Comparable<PrivEntry>, Writable {
 
     public void readFields(DataInput in) throws IOException {
         origHost = Text.readString(in);
-        origUser = Text.readString(in);
+        realOrigUser = ClusterNamespace.getNameFromFullName(Text.readString(in));
         privSet = PrivBitSet.read(in);
         isSetByDomainResolver = in.readBoolean();
         if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_69) {
             isDomain = in.readBoolean();
         }
+    }
+
+    @Override
+    public void gsonPostProcess() throws IOException {
+        realOrigUser = ClusterNamespace.getNameFromFullName(origUserForJsonPersist);
+    }
+
+    @Override
+    public void gsonPreProcess() throws IOException {
+        origUserForJsonPersist = ClusterNamespace.getFullName(realOrigUser);
     }
 
     @Override

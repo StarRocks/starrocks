@@ -129,7 +129,9 @@ Use the preceding tables as examples. The sorting effect varies in the following
   select sum(pv) from site_access_duplicate where city_code = 2;
   ```
 
-  > Note: In this situation, the sort key columns do not yield the expected sorting effect.
+  > **NOTE**
+  >
+  > In this situation, the sort key columns do not yield the expected sorting effect.
 
 As described above, when your query filters on both `site_id` and `city_code`, StarRocks runs a binary search on the table to narrow the query range down to a specific location. If the table consists of a large number of rows, StarRocks runs binary searches on the `site_id` and `city_code` columns instead. This requires StarRocks to load the data of the two columns into memory and therefore increases memory consumption. In this case, you can use a prefix index to reduce the amount of data cached in memory, thereby accelerating your query.
 
@@ -165,4 +167,4 @@ In summary, take note of the following points when you select sort key columns f
 
 - If your queries frequently filter only on `city_code` and occasionally filter on both `site_id` and `city_code`, we recommend that you select `city_code` as the beginning sort key column.
 
--  If the number of times that your queries filter on both `site_id` and `city_code` is roughly equal to the number of times that your queries filter only on `city_code`, we recommend that you create a materialized view, for which the first column is `city_code`. As such, StarRocks creates a sort index on the `city_code` column of the materialized view.
+- If the number of times that your queries filter on both `site_id` and `city_code` is roughly equal to the number of times that your queries filter only on `city_code`, we recommend that you create a materialized view, for which the first column is `city_code`. As such, StarRocks creates a sort index on the `city_code` column of the materialized view.

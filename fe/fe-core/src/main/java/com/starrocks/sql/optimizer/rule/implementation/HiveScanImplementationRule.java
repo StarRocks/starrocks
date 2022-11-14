@@ -24,7 +24,7 @@ public class HiveScanImplementationRule extends ImplementationRule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         OptExpression result = null;
         LogicalHiveScanOperator scan = (LogicalHiveScanOperator) input.getOp();
-        if (scan.getTableType() == Table.TableType.HIVE) {
+        if (scan.getTable().getType() == Table.TableType.HIVE) {
             PhysicalHiveScanOperator physicalHiveScan = new PhysicalHiveScanOperator(scan.getTable(),
                     scan.getColRefToColumnMetaMap(),
                     scan.getScanOperatorPredicates(),

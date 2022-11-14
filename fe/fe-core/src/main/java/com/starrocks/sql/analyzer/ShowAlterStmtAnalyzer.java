@@ -43,7 +43,7 @@ public class ShowAlterStmtAnalyzer {
         }
 
         @Override
-        public Void visitShowAlterStmt(ShowAlterStmt statement, ConnectContext context) {
+        public Void visitShowAlterStatement(ShowAlterStmt statement, ConnectContext context) {
             //first analyze syntax.
             analyzeSyntax(statement, context);
             // check auth when get job info.

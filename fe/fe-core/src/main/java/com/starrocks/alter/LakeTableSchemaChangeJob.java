@@ -15,6 +15,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Tablet;
@@ -237,7 +238,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
             LakeTable table = getTableOrThrow(db, tableId);
             Preconditions.checkState(table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE);
-
+            MaterializedIndexMeta indexMeta = table.getIndexMetaByIndexId(table.getBaseIndexId());
             numTablets = partitionIndexMap.values().stream().map(MaterializedIndex::getTablets).count();
             countDownLatch = new MarkedCountDownLatch<>((int) numTablets);
 
@@ -281,7 +282,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                                 shadowIdxId, shadowTabletId, shadowShortKeyColumnCount, 0, Partition.PARTITION_INIT_VERSION,
                                 originKeysType, TStorageType.COLUMN, storageMedium, copiedShadowSchema, bfColumns, bfFpp,
                                 countDownLatch, indexes, table.isInMemory(), table.enablePersistentIndex(),
-                                TTabletType.TABLET_TYPE_LAKE, table.getCompressionType());
+                                TTabletType.TABLET_TYPE_LAKE, table.getCompressionType(), indexMeta.getSortKeyIdxes());
 
                         Long baseTabletId = partitionIndexTabletMap.row(partitionId).get(shadowIdxId).get(shadowTabletId);
                         assert baseTabletId != null;

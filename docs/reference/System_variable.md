@@ -44,13 +44,15 @@ Variables that can be set both globally or partially effective include:
 * disable_streaming_preaggregations
 * exec_mem_limit
 * force_streaming_aggregate
-* is_report_success
+* enable_profile
 * hash_join_push_down_right_table
 * parallel_fragment_exec_instance_num
 * parallel_exchange_instance_num
+* prefer_compute_node
 * query_timeout
 * sql_mode
 * time_zone
+* use_compute_nodes
 * vectorized_engine_enable
 * wait_timeout
 
@@ -116,7 +118,7 @@ Used for MySQL client compatibility. No practical usage.
 
 * enable_insert_strict
 
-Used to enable the strict mode when importing data using the INSERT statement. The default value is false, meaning strict mode is not enabled. For more information, see "Data Import" (... /loading/Loading_intro.md)".
+Used to enable the strict mode when importing data using the INSERT statement. The default value is `true`, indicating the strict mode is enabled by default. For more information, see [Load data using INSERT](../loading/InsertInto.md)".
 
 * enable_spilling
 
@@ -186,13 +188,13 @@ Used for MySQL client compatibility. No practical usage.
 
 Used for MySQL client compatibility. No practical usage.
 
-* is_report_success
+* enable_profile
 
 Used to set whether the profile of the query needs to be viewed. The default is false, meaning no profile is required.
 
 By default, a profile will only be sent to the FE when a query error occurs in the BEt. Profile sending causes network overhead and therefore affects high concurrency.
 
-When there is a need to analyze the profile of a query, users can set this variable to true and send a query to deep dive. After the query is completed, the profile can be viewed on the web page of the currently connected FE (address: `fe_host:fe_http_port/query`). This page displays the profiles of the last 100 queries with `is_report_success` turned on.
+When there is a need to analyze the profile of a query, users can set this variable to true and send a query to deep dive. After the query is completed, the profile can be viewed on the web page of the currently connected FE (address: `fe_host:fe_http_port/query`). This page displays the profiles of the last 100 queries with `enable_profile` turned on.
 
 * language
 
@@ -254,6 +256,13 @@ The number of scan instances determines the number of other execution nodes in t
 
 Used for compatibility with MySQL JDBC versions 8.0.16 and above. No practical usage.
 
+* prefer_compute_node
+
+  Whether the FEs distribute query execution plans to CN nodes. Valid values:
+
+  * true: indicates that the FEs distribute query execution plans to CN nodes.
+  * false: indicates that the FEs do not distribute query execution plans to CN nodes.
+
 * query_cache_size
 
 Used for MySQL client compatibility. No practical use.
@@ -303,6 +312,13 @@ Used to set the time zone of the current session. The time zone can affect the r
 * tx_isolation
 
 Used for MySQL client compatibility. No practical usage.
+
+* use_compute_nodes
+
+  The maximum number of CN nodes that can be used. This parameter is valid when `prefer_compute_node=true`. Valid values:
+
+  * `-1`: indicates that all CN nodes are used.
+  * `0`: indicates that no CN nodes are used.
 
 * use_v2_rollup
 

@@ -36,6 +36,26 @@ public:
         }
         return CompressionTypePB::UNKNOWN_COMPRESSION;
     }
+
+    static CompressionTypePB to_compression_pb(const std::string& ext) {
+        if (ext == "gzip" || ext == "gz") {
+            return CompressionTypePB::GZIP;
+        } else if (ext == "bz2") {
+            return CompressionTypePB::BZIP2;
+        } else if (ext == "deflate") {
+            return CompressionTypePB::DEFLATE;
+        } else if (ext == "lz4") {
+            return CompressionTypePB::LZ4;
+        } else if (ext == "snappy") {
+            return CompressionTypePB::SNAPPY;
+        } else if (ext == "lzo") {
+            return CompressionTypePB::LZO;
+        } else if (ext == "zstd" || ext == "zst") {
+            return CompressionTypePB::ZSTD;
+        } else {
+            return CompressionTypePB::UNKNOWN_COMPRESSION;
+        }
+    }
 };
 
 } // namespace starrocks

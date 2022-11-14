@@ -32,14 +32,14 @@ struct test {
 
 class Utf8CheckTest : public testing::Test {
 public:
-    Utf8CheckTest() {}
-    virtual ~Utf8CheckTest() {}
+    Utf8CheckTest() = default;
+    ~Utf8CheckTest() override = default;
 
 private:
     /* positive tests */
     std::vector<test> pos = {{"", 0},
                              {"\x00", 1},
-                             {"\x66", 1},
+                             {R"(f)", 1},
                              {"\x7F", 1},
                              {"\x00\x7F", 2},
                              {"\x7F\x00", 2},

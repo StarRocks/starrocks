@@ -3,6 +3,7 @@ package com.starrocks.analysis;
 
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.ShowDynamicPartitionStmt;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.After;
 import org.junit.Assert;
@@ -28,21 +29,15 @@ public class ShowDynamicPartitionStmtTest {
         String showSQL = "SHOW DYNAMIC PARTITION TABLES FROM testDb";
         ShowDynamicPartitionStmt stmtFromSql =
                 (ShowDynamicPartitionStmt) UtFrameUtils.parseStmtWithNewParser(showSQL, ctx);
-        ShowDynamicPartitionStmt stmt = new ShowDynamicPartitionStmt("testDb");
-        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.assertEquals(stmtFromSql.toSql(), stmt.toSql());
-        Assert.assertEquals("SHOW DYNAMIC PARTITION TABLES FROM testDb", stmt.toString());
-        Assert.assertEquals("testDb", stmt.getDb());
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmtFromSql, ctx);
+        Assert.assertEquals("testDb", stmtFromSql.getDb());
 
         String showWithoutDbSQL = "SHOW DYNAMIC PARTITION TABLES ";
         ShowDynamicPartitionStmt stmtWithoutDbFromSql =
                 (ShowDynamicPartitionStmt) UtFrameUtils.parseStmtWithNewParser(showWithoutDbSQL, ctx);
         ShowDynamicPartitionStmt stmtWithoutIndicateDb = new ShowDynamicPartitionStmt(null);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmtWithoutIndicateDb, ctx);
-        Assert.assertEquals(stmtWithoutDbFromSql.toSql(), stmtWithoutIndicateDb.toSql());
-        Assert.assertEquals("SHOW DYNAMIC PARTITION TABLES FROM testDb",
-                stmtWithoutIndicateDb.toString());
-        Assert.assertEquals("testDb", stmtWithoutIndicateDb.getDb());
+        Assert.assertEquals("testDb", stmtWithoutDbFromSql.getDb());
 
     }
 

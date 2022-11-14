@@ -25,7 +25,7 @@ public:
     void handle(HttpRequest* req) override;
 
 private:
-    void _handle(HttpRequest* req, std::function<void(rapidjson::Document& root)> func);
+    void _handle(HttpRequest* req, const std::function<void(rapidjson::Document& root)>& func);
     void _handle_stat(HttpRequest* req);
     void _handle_trace(HttpRequest* req);
     void _handle_trace_switch(HttpRequest* req, bool on);

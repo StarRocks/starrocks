@@ -54,6 +54,8 @@ public:
     //    return seek(pos + count);
     // ```
     Status skip(int64_t count) override;
+
+    virtual void set_size(int64_t);
 };
 
 class SeekableInputStreamWrapper : public SeekableInputStream {
@@ -101,6 +103,8 @@ public:
     StatusOr<int64_t> get_size() override { return _impl->get_size(); }
 
     Status seek(int64_t offset) override { return _impl->seek(offset); }
+
+    void set_size(int64_t value) override { return _impl->set_size(value); }
 
 private:
     SeekableInputStream* _impl;

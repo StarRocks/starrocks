@@ -5,10 +5,8 @@ package com.starrocks.connector.iceberg;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
-import com.starrocks.external.hive.HiveMetaStoreThriftClient;
-import com.starrocks.external.iceberg.IcebergHiveCatalog;
-import com.starrocks.external.iceberg.IcebergUtil;
-import com.starrocks.external.iceberg.hive.HiveTableOperations;
+import com.starrocks.connector.hive.HiveMetaStoreThriftClient;
+import com.starrocks.connector.iceberg.hive.HiveTableOperations;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.iceberg.BaseTable;
@@ -22,11 +20,13 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import static com.starrocks.catalog.IcebergTable.ICEBERG_CATALOG;
+import static com.starrocks.catalog.IcebergTable.ICEBERG_CATALOG_TYPE;
 import static com.starrocks.catalog.IcebergTable.ICEBERG_METASTORE_URIS;
 import static com.starrocks.catalog.Table.TableType.ICEBERG;
 
 public class IcebergMetadataTest {
+    private static final String CATALOG_NAME = "IcebergCatalog";
+
     @Test
     public void testListDatabaseNames(@Mocked HiveMetaStoreThriftClient metaStoreThriftClient) throws Exception {
         new Expectations() {
@@ -40,8 +40,8 @@ public class IcebergMetadataTest {
         Map<String, String> properties = new HashMap<>();
         String metastoreUris = "thrift://127.0.0.1:9083";
         properties.put(ICEBERG_METASTORE_URIS, metastoreUris);
-        properties.put(ICEBERG_CATALOG, "hive");
-        IcebergMetadata metadata = new IcebergMetadata(properties);
+        properties.put(ICEBERG_CATALOG_TYPE, "hive");
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, properties);
         List<String> expectResult = Lists.newArrayList("db1", "db2");
         Assert.assertEquals(expectResult, metadata.listDbNames());
     }
@@ -61,8 +61,8 @@ public class IcebergMetadataTest {
         Map<String, String> properties = new HashMap<>();
         String metastoreUris = "thrift://127.0.0.1:9083";
         properties.put(ICEBERG_METASTORE_URIS, metastoreUris);
-        properties.put(ICEBERG_CATALOG, "hive");
-        IcebergMetadata metadata = new IcebergMetadata(properties);
+        properties.put(ICEBERG_CATALOG_TYPE, "hive");
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, properties);
         Database expectResult = new Database(0, db);
         Assert.assertEquals(expectResult, metadata.getDb(db));
     }
@@ -85,8 +85,8 @@ public class IcebergMetadataTest {
         Map<String, String> properties = new HashMap<>();
         String metastoreUris = "thrift://127.0.0.1:9083";
         properties.put(ICEBERG_METASTORE_URIS, metastoreUris);
-        properties.put(ICEBERG_CATALOG, "hive");
-        IcebergMetadata metadata = new IcebergMetadata(properties);
+        properties.put(ICEBERG_CATALOG_TYPE, "hive");
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, properties);
         List<String> expectResult = Lists.newArrayList("tbl1", "tbl2");
         Assert.assertEquals(expectResult, metadata.listTableNames(db1));
     }
@@ -106,8 +106,8 @@ public class IcebergMetadataTest {
         Map<String, String> properties = new HashMap<>();
         String metastoreUris = "thrift://127.0.0.1:9083";
         properties.put(ICEBERG_METASTORE_URIS, metastoreUris);
-        properties.put(ICEBERG_CATALOG, "hive");
-        IcebergMetadata metadata = new IcebergMetadata(properties);
+        properties.put(ICEBERG_CATALOG_TYPE, "hive");
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, properties);
         Table expectResult = new Table(0, "tbl", ICEBERG, new ArrayList<>());
         Assert.assertEquals(expectResult, metadata.getTable("db", "tbl"));
     }
@@ -126,8 +126,8 @@ public class IcebergMetadataTest {
         Map<String, String> properties = new HashMap<>();
         String metastoreUris = "thrift://127.0.0.1:9083";
         properties.put(ICEBERG_METASTORE_URIS, metastoreUris);
-        properties.put(ICEBERG_CATALOG, "hive");
-        IcebergMetadata metadata = new IcebergMetadata(properties);
+        properties.put(ICEBERG_CATALOG_TYPE, "hive");
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, properties);
         Assert.assertNull(metadata.getTable("db", "tbl2").getName());
     }
 }

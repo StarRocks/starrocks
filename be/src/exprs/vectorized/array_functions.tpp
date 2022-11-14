@@ -4,7 +4,10 @@
 #include "column/column_builder.h"
 #include "column/column_hash.h"
 #include "column/column_viewer.h"
+#include "column/json_column.h"
+#include "column/type_traits.h"
 #include "exprs/vectorized/function_helper.h"
+#include "runtime/primitive_type.h"
 #include "udf/udf.h"
 #include "util/orlp/pdqsort.h"
 #include "util/phmap/phmap.h"
@@ -16,11 +19,12 @@ public:
     using CppType = RunTimeCppType<PT>;
 
     static ColumnPtr process(FunctionContext* ctx, const Columns& columns) {
+        RETURN_IF_COLUMNS_ONLY_NULL(columns);
         if constexpr (pt_is_largeint<PT>) {
             return _array_distinct<phmap::flat_hash_set<CppType, Hash128WithSeed<PhmapSeed1>>>(columns);
         } else if constexpr (pt_is_fixedlength<PT>) {
             return _array_distinct<phmap::flat_hash_set<CppType, StdHash<CppType>>>(columns);
-        } else if constexpr (pt_is_binary<PT>) {
+        } else if constexpr (pt_is_string<PT>) {
             return _array_distinct<phmap::flat_hash_set<CppType, SliceHash>>(columns);
         } else {
             assert(false);
@@ -113,6 +117,7 @@ public:
     using CppType = RunTimeCppType<PT>;
 
     static ColumnPtr process(FunctionContext* ctx, const Columns& columns) {
+        RETURN_IF_COLUMNS_ONLY_NULL(columns);
         if constexpr (pt_is_arithmetic<PT> || pt_is_decimalv2<PT>) {
             return _array_difference(columns);
         } else {
@@ -360,7 +365,10 @@ class ArrayConcat {
 public:
     using CppType = RunTimeCppType<PT>;
 
-    static ColumnPtr process(FunctionContext* ctx, const Columns& columns) { return _array_concat(columns); }
+    static ColumnPtr process(FunctionContext* ctx, const Columns& columns) {
+        RETURN_IF_COLUMNS_ONLY_NULL(columns);
+        return _array_concat(columns);
+    }
 
 private:
     static void collect_array_columns_and_null_columns(const Columns& columns, std::vector<ArrayColumn*>* src_columns,
@@ -390,8 +398,6 @@ private:
         if (columns.size() == 1) {
             return columns[0];
         }
-
-        RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
         size_t chunk_size = columns[0]->size();
         bool is_nullable = false;
@@ -455,11 +461,12 @@ public:
     using CppType = RunTimeCppType<PT>;
 
     static ColumnPtr process(FunctionContext* ctx, const Columns& columns) {
+        RETURN_IF_COLUMNS_ONLY_NULL(columns);
         if constexpr (pt_is_largeint<PT>) {
             return _array_overlap<phmap::flat_hash_set<CppType, Hash128WithSeed<PhmapSeed1>>>(columns);
         } else if constexpr (pt_is_fixedlength<PT>) {
             return _array_overlap<phmap::flat_hash_set<CppType, StdHash<CppType>>>(columns);
-        } else if constexpr (pt_is_binary<PT>) {
+        } else if constexpr (pt_is_string<PT>) {
             return _array_overlap<phmap::flat_hash_set<CppType, SliceHash>>(columns);
         } else {
             assert(false);
@@ -469,8 +476,6 @@ public:
 private:
     template <typename HashSet>
     static ColumnPtr _array_overlap(const Columns& columns) {
-        RETURN_IF_COLUMNS_ONLY_NULL(columns);
-
         size_t chunk_size = columns[0]->size();
         auto result_column = BooleanColumn::create(chunk_size, 0);
 
@@ -567,7 +572,7 @@ public:
                 return phmap_mix_with_seed<sizeof(size_t), PhmapSeed1>()(hash_128(PhmapSeed1, cpp_type_value.value));
             } else if constexpr (pt_is_fixedlength<PT>) {
                 return phmap_mix<sizeof(size_t)>()(std::hash<CppType>()(cpp_type_value.value));
-            } else if constexpr (pt_is_binary<PT>) {
+            } else if constexpr (pt_is_string<PT>) {
                 return crc_hash_64(cpp_type_value.value.data, static_cast<int32_t>(cpp_type_value.value.size),
                                    CRC_HASH_SEED1);
             } else {
@@ -589,7 +594,7 @@ public:
         } else if constexpr (pt_is_fixedlength<PT>) {
             return _array_intersect<phmap::flat_hash_set<CppTypeWithOverlapTimes, CppTypeWithOverlapTimesHash<PT>,
                                                          CppTypeWithOverlapTimesEqual>>(columns);
-        } else if constexpr (pt_is_binary<PT>) {
+        } else if constexpr (pt_is_string<PT>) {
             return _array_intersect<phmap::flat_hash_set<CppTypeWithOverlapTimes, CppTypeWithOverlapTimesHash<PT>,
                                                          CppTypeWithOverlapTimesEqual>>(columns);
         } else {
@@ -717,12 +722,9 @@ public:
 
     static ColumnPtr process(FunctionContext* ctx, const Columns& columns) {
         DCHECK_EQ(columns.size(), 1);
+        RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
         size_t chunk_size = columns[0]->size();
-
-        if (columns[0]->only_null()) {
-            return ColumnHelper::create_const_null_column(chunk_size);
-        }
 
         // TODO: For fixed-length types, you can operate directly on the original column without using sort index,
         //  which will be optimized later
@@ -761,6 +763,13 @@ private:
         pdqsort(false, sort_index->begin() + offset, sort_index->begin() + offset + count, less_fn);
     }
 
+    // For JSON type
+    static void _sort_column(std::vector<uint32_t>* sort_index, const JsonColumn& src_column, size_t offset,
+                             size_t count) {
+        auto less_fn = [&](uint32_t l, uint32_t r) -> bool { return src_column.compare_at(l, r, src_column, -1) < 0; };
+        pdqsort(false, sort_index->begin() + offset, sort_index->begin() + offset + count, less_fn);
+    }
+
     static void _sort_item(std::vector<uint32_t>* sort_index, const Column& src_column,
                            const UInt32Column& offset_column, size_t index) {
         const auto& offsets = offset_column.get_data();
@@ -771,7 +780,7 @@ private:
             return;
         }
 
-        _sort_column(sort_index, src_column, start, count);
+        _sort_column(sort_index, down_cast<const RunTimeColumnType<PT>&>(src_column), start, count);
     }
 
     static void _sort_nullable_item(std::vector<uint32_t>* sort_index, const Column& src_data_column,
@@ -791,7 +800,8 @@ private:
                 std::partition(sort_index->begin() + start, sort_index->begin() + start + count, null_first_fn);
         size_t data_offset = begin_of_not_null - sort_index->begin();
         size_t null_count = data_offset - start;
-        _sort_column(sort_index, src_data_column, start + null_count, count - null_count);
+        _sort_column(sort_index, down_cast<const RunTimeColumnType<PT>&>(src_data_column), start + null_count,
+                     count - null_count);
     }
 
     static void _sort_array_column(Column* dest_array_column, std::vector<uint32_t>* sort_index,
@@ -901,11 +911,22 @@ private:
         }
     }
 
+    static void _reverse_json_column(Column* column, const Buffer<uint32_t>& array_offsets, size_t chunk_size) {
+        auto json_column = down_cast<JsonColumn*>(column);
+        auto& pool = json_column->get_pool();
+        for (size_t i = 0; i < chunk_size; i++) {
+            std::reverse(pool.begin() + array_offsets[i], pool.begin() + array_offsets[i + 1]);
+        }
+        json_column->reset_cache();
+    }
+
     static void _reverse_data_column(Column* column, const Buffer<uint32_t>& offsets, size_t chunk_size) {
         if constexpr (pt_is_fixedlength<PT>) {
             _reverse_fixed_column(column, offsets, chunk_size);
-        } else if constexpr (pt_is_binary<PT>) {
+        } else if constexpr (pt_is_string<PT>) {
             _reverse_binary_column(column, offsets, chunk_size);
+        } else if constexpr (pt_is_json<PT>) {
+            _reverse_json_column(column, offsets, chunk_size);
         } else {
             assert(false);
         }
@@ -946,9 +967,7 @@ public:
         DCHECK_GE(columns.size(), 2);
         size_t chunk_size = columns[0]->size();
 
-        if (std::any_of(columns.begin(), columns.end(), [](const auto& col) { return col->only_null(); })) {
-            return ColumnHelper::create_const_null_column(chunk_size);
-        }
+        RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
         ColumnPtr src_column = ColumnHelper::unpack_and_duplicate_const_column(chunk_size, columns[0]);
         if (columns.size() <= 2) {
@@ -1033,4 +1052,88 @@ private:
         return res.build_nullable_column();
     }
 };
+
+class ArrayFilter {
+public:
+    static ColumnPtr process([[maybe_unused]] FunctionContext* ctx, const Columns& columns) {
+        return _array_filter(columns);
+    }
+
+private:
+    static ColumnPtr _array_filter(const Columns& columns) {
+        RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+        size_t chunk_size = columns[0]->size();
+        ColumnPtr src_column = ColumnHelper::unpack_and_duplicate_const_column(chunk_size, columns[0]);
+        ColumnPtr dest_column = src_column->clone_empty();
+        ColumnPtr bool_column = ColumnHelper::unpack_and_duplicate_const_column(chunk_size, columns[1]);
+
+        if (src_column->is_nullable()) {
+            const auto* src_nullable_column = down_cast<const NullableColumn*>(src_column.get());
+            const auto& src_data_column = src_nullable_column->data_column();
+            const auto& src_null_column = src_nullable_column->null_column();
+
+            auto* dest_nullable_column = down_cast<NullableColumn*>(dest_column.get());
+            auto* dest_null_column = dest_nullable_column->mutable_null_column();
+            auto* dest_data_column = dest_nullable_column->mutable_data_column();
+
+            if (src_column->has_null()) {
+                dest_null_column->get_data() = src_null_column->get_data();
+            } else {
+                dest_null_column->get_data().resize(chunk_size, 0);
+            }
+            dest_nullable_column->set_has_null(src_nullable_column->has_null());
+
+            _filter_array_items(down_cast<ArrayColumn*>(src_data_column.get()), bool_column,
+                                down_cast<ArrayColumn*>(dest_data_column), dest_null_column);
+        } else {
+            _filter_array_items(down_cast<ArrayColumn*>(src_column.get()), bool_column,
+                                down_cast<ArrayColumn*>(dest_column.get()), nullptr);
+        }
+        return dest_column;
+    }
+
+private:
+    static void _filter_array_items(const ArrayColumn* src_column, const ColumnPtr raw_filter, ArrayColumn* dest_column,
+                                    NullColumn* dest_null_map) {
+        ArrayColumn* filter;
+        NullColumn* filter_null_map = nullptr;
+        auto& dest_offsets = dest_column->offsets_column()->get_data();
+
+        if (raw_filter->is_nullable()) {
+            auto nullable_column = down_cast<NullableColumn*>(raw_filter.get());
+            filter = down_cast<ArrayColumn*>(nullable_column->data_column().get());
+            filter_null_map = nullable_column->null_column().get();
+        } else {
+            filter = down_cast<ArrayColumn*>(raw_filter.get());
+        }
+        std::vector<uint32_t> indexes;
+        // only keep the elements whose filter is not null and not 0.
+        for (size_t i = 0; i < src_column->size(); ++i) {
+            if (dest_null_map == nullptr || !dest_null_map->get_data()[i]) {         // dest_null_map[i] is not null
+                if (filter_null_map == nullptr || !filter_null_map->get_data()[i]) { // filter_null_map[i] is not null
+                    size_t elem_size = 0;
+                    size_t filter_elem_id = filter->offsets().get_data()[i];
+                    size_t filter_elem_limit = filter->offsets().get_data()[i + 1];
+                    for (size_t src_elem_id = src_column->offsets().get_data()[i];
+                         src_elem_id < src_column->offsets().get_data()[i + 1]; ++filter_elem_id, ++src_elem_id) {
+                        // only keep the valid elements
+                        if (filter_elem_id < filter_elem_limit && !filter->elements().is_null(filter_elem_id) &&
+                            filter->elements().get(filter_elem_id).get_int8() != 0) {
+                            indexes.emplace_back(src_elem_id);
+                            ++elem_size;
+                        }
+                    }
+                    dest_offsets.emplace_back(dest_offsets.back() + elem_size);
+                } else { // filter_null_map[i] is null, empty the array by design[, alternatively keep all elements]
+                    dest_offsets.emplace_back(dest_offsets.back());
+                }
+            } else { // dest_null_map[i] is null
+                dest_offsets.emplace_back(dest_offsets.back());
+            }
+        }
+        dest_column->elements_column()->append_selective(src_column->elements(), indexes);
+    }
+};
+
 } // namespace starrocks::vectorized

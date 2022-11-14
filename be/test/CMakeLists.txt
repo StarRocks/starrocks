@@ -13,6 +13,8 @@ set(EXEC_FILES
         ./column/field_test.cpp
         ./column/fixed_length_column_test.cpp
         ./column/json_column_test.cpp
+        ./column/map_column_test.cpp
+        ./column/struct_column_test.cpp
         ./column/nullable_column_test.cpp
         ./column/object_column_test.cpp
         ./column/timestamp_value_test.cpp
@@ -87,7 +89,10 @@ set(EXEC_FILES
         ./exprs/vectorized/in_predicate_test.cpp
         ./exprs/vectorized/is_null_predicate_test.cpp
         ./exprs/vectorized/json_functions_test.cpp
+        ./exprs/vectorized/lambda_function_expr_test.cpp
         ./exprs/vectorized/like_test.cpp
+        ./exprs/vectorized/map_element_expr_test.cpp
+        ./exprs/vectorized/map_functions_test.cpp
         ./exprs/vectorized/math_functions_test.cpp
         ./exprs/vectorized/null_if_expr_test.cpp
         ./exprs/vectorized/percentile_functions_test.cpp
@@ -106,6 +111,7 @@ set(EXEC_FILES
         ./exprs/vectorized/es_functions_test.cpp
         ./exprs/vectorized/utility_functions_test.cpp
         ./exprs/vectorized/runtime_filter_test.cpp
+        ./exprs/vectorized/subfield_expr_test.cpp
         ./formats/csv/array_converter_test.cpp
         ./formats/csv/binary_converter_test.cpp
         ./formats/csv/boolean_converter_test.cpp
@@ -120,6 +126,9 @@ set(EXEC_FILES
         ./formats/json/numeric_column_test.cpp
         ./formats/json/nullable_column_test.cpp
         ./formats/orc/orc_chunk_reader_test.cpp
+        ./formats/orc/orc_lazy_load_test.cpp
+        ./formats/orc/orc_test_util/MemoryOutputStream.cc
+        ./formats/orc/orc_test_util/MemoryInputStream.cc
         ./formats/parquet/parquet_schema_test.cpp
         ./formats/parquet/encoding_test.cpp
         ./formats/parquet/page_reader_test.cpp
@@ -187,6 +196,7 @@ set(EXEC_FILES
         ./storage/rowset/segment_iterator_test.cpp
         ./storage/rowset/zone_map_index_test.cpp
         ./storage/rowset/unique_rowset_id_generator_test.cpp
+        ./storage/rowset/default_value_column_iterator_test.cpp
         ./storage/rowset/index_page_test.cpp
         ./storage/selection_vector_test.cpp
         ./storage/snapshot_meta_test.cpp
@@ -209,6 +219,7 @@ set(EXEC_FILES
         ./storage/conjunctive_predicates_test.cpp
         ./storage/convert_helper_test.cpp
         ./storage/merge_iterator_test.cpp
+	    ./storage/memtable_flush_executor_test.cpp
         ./storage/memtable_test.cpp
         ./storage/projection_iterator_test.cpp
         ./storage/push_handler_test.cpp
@@ -297,12 +308,18 @@ set(EXEC_FILES
         ./util/arrow/starrocks_column_to_arrow_test.cpp
         ./util/starrocks_metrics_test.cpp
         ./util/system_metrics_test.cpp
+        ./util/ratelimit_test.cpp
+        ./util/cpu_usage_info_test.cpp
         ./gutil/sysinfo-test.cc
         ./service/lake_service_test.cpp
         )
 
 if ("${USE_STAROS}" STREQUAL "ON")
     list(APPEND EXEC_FILES ./fs/fs_starlet_test.cpp)
+endif ()
+if ("${WITH_BLOCK_CACHE}" STREQUAL "ON")
+    list(APPEND EXEC_FILES ./block_cache/block_cache_test.cpp)
+    list(APPEND EXEC_FILES ./io/cache_input_stream_test.cpp)
 endif ()
 # simdjson Runtime Implement Dispatch: https://github.com/simdjson/simdjson/blob/master/doc/implementation-selection.md#runtime-cpu-detection
 # Unset architecture-specific flags to avoid breaking implement runtime dispatch.
@@ -326,6 +343,11 @@ add_executable(starrocks_test ${EXEC_FILES})
 TARGET_LINK_LIBRARIES(starrocks_test ${TEST_LINK_LIBS})
 SET_TARGET_PROPERTIES(starrocks_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
 
+
+add_executable(query_cache_test exec/query_cache/transform_operator.cpp exec/query_cache/query_cache_test.cpp)
+
+TARGET_LINK_LIBRARIES(query_cache_test ${TEST_LINK_LIBS})
+SET_TARGET_PROPERTIES(query_cache_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
 # =================================================
 # bytes_test requires tcmalloc which conflicts with sanitizer.
 # Thus we need a standalone binary without sanitizer to test it.

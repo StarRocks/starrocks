@@ -24,7 +24,7 @@ public:
 private:
     void _compact(HttpRequest* req);
 
-    ExecEnv* _exec_env;
+    [[maybe_unused]] ExecEnv* _exec_env;
 };
 
 } // end namespace starrocks

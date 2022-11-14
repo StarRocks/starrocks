@@ -40,6 +40,8 @@ public:
 
     StatusOr<int64_t> get_size() override;
 
+    void set_size(int64_t size) override;
+
 private:
     std::shared_ptr<Aws::S3::S3Client> _s3client;
     std::string _bucket;

@@ -32,10 +32,24 @@
 #include "util/raw_container.h"
 
 namespace starrocks {
+
+static std::string random_string(int len) {
+    static starrocks::Random rand(20200722);
+    std::string s;
+    s.reserve(len * 5);
+    for (int i = 0; i < len; i++) {
+        char c = 'a' + rand.Next() % ('z' - 'a' + 1);
+        std::string tmp_str =
+                std::to_string(c) + std::to_string(c) + std::to_string(c) + std::to_string(c) + std::to_string(c);
+        s.append(tmp_str);
+    }
+    return s;
+}
+
 class BlockCompressionTest : public testing::Test {
 public:
-    BlockCompressionTest() {}
-    virtual ~BlockCompressionTest() {}
+    BlockCompressionTest() = default;
+    ~BlockCompressionTest() override = default;
 };
 
 static std::string generate_str(size_t len) {
@@ -120,6 +134,7 @@ void test_single_slice(starrocks::CompressionTypePB type) {
 }
 
 TEST_F(BlockCompressionTest, single) {
+    test_single_slice(starrocks::CompressionTypePB::ZSTD);
     test_single_slice(starrocks::CompressionTypePB::SNAPPY);
     test_single_slice(starrocks::CompressionTypePB::ZLIB);
     test_single_slice(starrocks::CompressionTypePB::LZ4);
@@ -196,17 +211,19 @@ TEST_F(BlockCompressionTest, multi) {
     test_multi_slices(starrocks::CompressionTypePB::GZIP);
 }
 
-static std::string random_string(int len) {
-    static starrocks::Random rand(20200722);
-    std::string s;
-    s.reserve(len * 5);
-    for (int i = 0; i < len; i++) {
-        char c = 'a' + rand.Next() % ('z' - 'a' + 1);
-        std::string tmp_str =
-                std::to_string(c) + std::to_string(c) + std::to_string(c) + std::to_string(c) + std::to_string(c);
-        s.append(tmp_str);
-    }
-    return s;
+TEST_F(BlockCompressionTest, test_issue_10721) {
+    std::string str = random_string(1024);
+    const BlockCompressionCodec* codec = nullptr;
+    auto st = get_block_compression_codec(starrocks::CompressionTypePB::ZSTD, &codec);
+    ASSERT_TRUE(st.ok());
+
+    Slice orig_slice = str;
+    size_t total_size = str.size();
+    faststring compressed;
+    Slice compressed_slice;
+    st = codec->compress(orig_slice, &compressed_slice, true, total_size, &compressed, nullptr);
+    compressed.shrink_to_fit();
+    ASSERT_TRUE(st.ok());
 }
 
 static const size_t kBenchmarkCompressionTimes = 1000;
@@ -219,7 +236,7 @@ void benchmark_single_slice_compression(starrocks::CompressionTypePB type, std::
     auto st = get_block_compression_codec(type, &codec);
     ASSERT_TRUE(st.ok());
 
-    std::string orig = str;
+    const std::string& orig = str;
     Slice orig_slices(orig);
 
     size_t total_size = orig.size();

@@ -21,7 +21,6 @@ public:
 private:
     Status fill_chunk(ChunkPtr* chunk);
 
-    int _index = 0;
     static SchemaScanner::ColumnDesc _s_vars_columns[];
 
     TShowVariableResult _var_result;

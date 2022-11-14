@@ -9,7 +9,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Optional;
 
 public class MockDictManager implements IDictManager {
-    
+
     private static final ImmutableMap<ByteBuffer, Integer> MOCK_DICT =
             ImmutableMap.of(ByteBuffer.wrap("mock".getBytes(StandardCharsets.UTF_8)), 1);
     private static final ColumnDict COLUMN_DICT = new ColumnDict(MOCK_DICT, 1);

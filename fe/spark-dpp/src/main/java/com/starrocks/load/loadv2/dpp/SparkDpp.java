@@ -553,13 +553,13 @@ public final class SparkDpp implements java.io.Serializable {
         List<String> dstColumnNames = new ArrayList<>();
         List<Column> dstColumns = new ArrayList<>();
         for (StructField dstField : dstTableSchema.fields()) {
+            if (mappingColumns != null && mappingColumns.contains(dstField.name())) {
+                // mapping columns will be processed in next step
+                continue;
+            }
             Column dstColumn = null;
             EtlJobConfig.EtlColumn column = baseIndex.getColumn(dstField.name());
             if (!srcColumnNames.contains(dstField.name())) {
-                if (mappingColumns != null && mappingColumns.contains(dstField.name())) {
-                    // mapping columns will be processed in next step
-                    continue;
-                }
                 if (column.defaultValue != null) {
                     if (column.defaultValue.equals(NULL_FLAG)) {
                         dstColumn = functions.lit(null);

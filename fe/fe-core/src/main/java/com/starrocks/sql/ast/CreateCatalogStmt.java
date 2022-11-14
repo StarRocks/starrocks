@@ -1,16 +1,12 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.ast;
 
-import com.google.common.collect.Lists;
-import com.starrocks.analysis.DdlStmt;
 import com.starrocks.common.util.PrintableMap;
 
-import java.util.List;
 import java.util.Map;
 
 public class CreateCatalogStmt extends DdlStmt {
     public static final String TYPE = "type";
-    public static final List<String> SUPPORTED_CATALOG = Lists.newArrayList("hive", "iceberg", "hudi", "jdbc");
 
     private final String catalogName;
     private final String comment;
@@ -58,10 +54,5 @@ public class CreateCatalogStmt extends DdlStmt {
         }
         sb.append("PROPERTIES(").append(new PrintableMap<>(properties, " = ", true, false)).append(")");
         return sb.toString();
-    }
-
-    @Override
-    public boolean isSupportNewPlanner() {
-        return true;
     }
 }

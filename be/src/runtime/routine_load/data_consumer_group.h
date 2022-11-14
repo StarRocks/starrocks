@@ -85,4 +85,27 @@ private:
     TimedBlockingQueue<RdKafka::Message*> _queue;
 };
 
+// for pulsar
+class PulsarDataConsumerGroup : public DataConsumerGroup {
+public:
+    PulsarDataConsumerGroup(size_t sz) : DataConsumerGroup(sz), _queue(500) {}
+
+    ~PulsarDataConsumerGroup() override;
+
+    Status start_all(StreamLoadContext* ctx) override;
+    // assign topic partitions to all consumers equally
+    Status assign_topic_partitions(StreamLoadContext* ctx);
+
+private:
+    // start a single consumer
+    void actual_consume(const std::shared_ptr<DataConsumer>& consumer, TimedBlockingQueue<pulsar::Message*>* queue,
+                        int64_t max_running_time_ms, const ConsumeFinishCallback& cb);
+
+    void get_backlog_nums(StreamLoadContext* ctx);
+
+private:
+    // blocking queue to receive msgs from all consumers
+    TimedBlockingQueue<pulsar::Message*> _queue;
+};
+
 } // end namespace starrocks

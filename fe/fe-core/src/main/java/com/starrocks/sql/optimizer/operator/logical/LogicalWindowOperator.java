@@ -3,6 +3,7 @@ package com.starrocks.sql.optimizer.operator.logical;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.AnalyticWindow;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -107,10 +108,10 @@ public class LogicalWindowOperator extends LogicalOperator {
 
     public static class Builder extends LogicalOperator.Builder<LogicalWindowOperator, LogicalWindowOperator.Builder> {
         private Map<ColumnRefOperator, CallOperator> windowCall;
-        private List<ScalarOperator> partitionExpressions;
-        private List<Ordering> orderByElements;
+        private List<ScalarOperator> partitionExpressions = Lists.newArrayList();
+        private List<Ordering> orderByElements = Lists.newArrayList();
         private AnalyticWindow analyticWindow;
-        private List<Ordering> enforceSortColumns;
+        private List<Ordering> enforceSortColumns = Lists.newArrayList();
 
         @Override
         public LogicalWindowOperator build() {

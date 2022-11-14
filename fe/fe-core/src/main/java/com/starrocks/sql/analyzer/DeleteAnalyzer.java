@@ -2,10 +2,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.Analyzer;
-import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.SelectList;
-import com.starrocks.analysis.SelectListItem;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
@@ -16,7 +13,10 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.load.Load;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.SelectList;
+import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.common.MetaUtils;

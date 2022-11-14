@@ -21,7 +21,6 @@ public:
 
     bool has_output() const override;
     bool is_finished() const override;
-    Status set_finishing(RuntimeState* state) override;
     Status set_finished(RuntimeState* state) override;
 
     void close(RuntimeState* state) override;
@@ -37,8 +36,6 @@ private:
     // - reffed at constructor() of both sink and source operator,
     // - unreffed at close() of both sink and source operator.
     AggregatorPtr _aggregator = nullptr;
-    // Whether prev operator has no output
-    mutable bool _is_finished = false;
 };
 
 class AggregateStreamingSourceOperatorFactory final : public SourceOperatorFactory {

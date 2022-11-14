@@ -11,16 +11,18 @@
 #include "column/column_helper.h"
 #include "exec/vectorized/sorting/merge.h"
 #include "exec/vectorized/sorting/sort_helper.h"
+#include "exec/vectorized/sorting/sort_permute.h"
 #include "exprs/expr_context.h"
 #include "exprs/vectorized/column_ref.h"
 #include "runtime/chunk_cursor.h"
+#include "runtime/runtime_state.h"
 #include "runtime/types.h"
 #include "testutil/assert.h"
 #include "util/defer_op.h"
 
 namespace starrocks::vectorized {
 
-static ColumnPtr build_sorted_column(TypeDescriptor type_desc, int slot_index, int32_t start, int32_t count,
+static ColumnPtr build_sorted_column(const TypeDescriptor& type_desc, int slot_index, int32_t start, int32_t count,
                                      int32_t step) {
     DCHECK_EQ(TYPE_INT, type_desc.type);
 
@@ -38,10 +40,21 @@ static void clear_exprs(std::vector<ExprContext*>& exprs) {
     exprs.clear();
 }
 
+static std::shared_ptr<RuntimeState> create_runtime_state() {
+    TUniqueId fragment_id;
+    TQueryOptions query_options;
+    query_options.batch_size = config::vector_chunk_size;
+    TQueryGlobals query_globals;
+    auto runtime_state = std::make_shared<RuntimeState>(fragment_id, query_options, query_globals, nullptr);
+    runtime_state->init_instance_mem_tracker();
+    return runtime_state;
+}
+
 using MergeParamType = std::tuple<std::vector<int>, std::vector<std::vector<int32_t>>>;
 class MergeTestFixture : public testing::TestWithParam<MergeParamType> {};
 
 TEST_P(MergeTestFixture, merge_sorter_chunks_two_way) {
+    auto runtime_state = create_runtime_state();
     TypeDescriptor type_desc = TypeDescriptor(TYPE_INT);
     std::vector<int> sort_slots = std::get<0>(GetParam());
     std::vector<std::vector<int32_t>> sorting_data = std::get<1>(GetParam());
@@ -61,8 +74,8 @@ TEST_P(MergeTestFixture, merge_sorter_chunks_two_way) {
     for (int i = 0; i < total_columns; i++) {
         ColumnPtr col = ColumnHelper::create_column(type_desc, false);
         auto& data = sorting_data[i];
-        for (int j = 0; j < data.size(); j++) {
-            col->append_datum(Datum(data[j]));
+        for (int j : data) {
+            col->append_datum(Datum(j));
         }
         if (i < total_columns / 2) {
             left_rows = data.size();
@@ -87,12 +100,13 @@ TEST_P(MergeTestFixture, merge_sorter_chunks_two_way) {
         sort_exprs.push_back(new ExprContext(exprs.back().get()));
     }
 
+    ASSERT_OK(Expr::prepare(sort_exprs, runtime_state.get()));
+    ASSERT_OK(Expr::open(sort_exprs, runtime_state.get()));
+
     size_t expected_size = left_rows + right_rows;
     ChunkPtr output;
     SortedRuns output_run;
-    ASSERT_OK(merge_sorted_chunks(sort_desc, &sort_exprs,
-                                  {SortedRun(left_chunk, &sort_exprs), SortedRun(right_chunk, &sort_exprs)},
-                                  &output_run, 0));
+    ASSERT_OK(merge_sorted_chunks(sort_desc, &sort_exprs, {left_chunk, right_chunk}, &output_run));
     output = output_run.assemble();
     ASSERT_EQ(expected_size, output->num_rows());
     ASSERT_EQ(left_chunk->num_columns(), output->num_columns());
@@ -157,7 +171,7 @@ INSTANTIATE_TEST_SUITE_P(
 
                         ));
 
-TEST(SortingTest, append_by_permutation_binary) {
+TEST(SortingTest, materialize_by_permutation_binary) {
     BinaryColumn::Ptr input1 = BinaryColumn::create();
     BinaryColumn::Ptr input2 = BinaryColumn::create();
     input1->append_string("star");
@@ -165,13 +179,13 @@ TEST(SortingTest, append_by_permutation_binary) {
 
     ColumnPtr merged = BinaryColumn::create();
     Permutation perm{{0, 0}, {1, 0}};
-    append_by_permutation(merged.get(), {input1, input2}, perm);
+    materialize_column_by_permutation(merged.get(), {input1, input2}, perm);
     ASSERT_EQ(2, merged->size());
     ASSERT_EQ("star", merged->get(0).get_slice());
     ASSERT_EQ("rock", merged->get(1).get_slice());
 }
 
-TEST(SortingTest, append_by_permutation_int) {
+TEST(SortingTest, materialize_by_permutation_int) {
     Int32Column::Ptr input1 = Int32Column::create();
     Int32Column::Ptr input2 = Int32Column::create();
     input1->append(1024);
@@ -179,7 +193,7 @@ TEST(SortingTest, append_by_permutation_int) {
 
     ColumnPtr merged = Int32Column::create();
     Permutation perm{{0, 0}, {1, 0}};
-    append_by_permutation(merged.get(), {input1, input2}, perm);
+    materialize_column_by_permutation(merged.get(), {input1, input2}, perm);
     ASSERT_EQ(2, merged->size());
     ASSERT_EQ(1024, merged->get(0).get_int32());
     ASSERT_EQ(2048, merged->get(1).get_int32());
@@ -212,8 +226,8 @@ TEST(SortingTest, sorted_runs) {
     ChunkPtr chunk = std::make_shared<Chunk>(Columns{col1, col2}, slot_map);
 
     SortedRuns runs;
-    runs.chunks.push_back(SortedRun(chunk, chunk->columns()));
-    runs.chunks.push_back(SortedRun(chunk, chunk->columns()));
+    runs.chunks.emplace_back(chunk, chunk->columns());
+    runs.chunks.emplace_back(chunk, chunk->columns());
 
     ASSERT_EQ(2, runs.num_chunks());
     ASSERT_EQ(200, runs.num_rows());
@@ -230,6 +244,7 @@ TEST(SortingTest, sorted_runs) {
 }
 
 TEST(SortingTest, merge_sorted_chunks) {
+    auto runtime_state = create_runtime_state();
     std::vector<ChunkPtr> input_chunks;
     Chunk::SlotHashMap slot_map{{0, 0}};
 
@@ -250,15 +265,19 @@ TEST(SortingTest, merge_sorted_chunks) {
     std::vector<ExprContext*> sort_exprs;
     exprs.push_back(std::make_unique<ColumnRef>(TypeDescriptor(TYPE_INT), 0));
     sort_exprs.push_back(new ExprContext(exprs.back().get()));
+    ASSERT_OK(Expr::prepare(sort_exprs, runtime_state.get()));
+    ASSERT_OK(Expr::open(sort_exprs, runtime_state.get()));
+
     DeferOp defer([&]() { clear_exprs(sort_exprs); });
 
     SortDescs sort_desc(std::vector<int>{1}, std::vector<int>{-1});
     SortedRuns output;
-    merge_sorted_chunks(sort_desc, &sort_exprs, input_chunks, &output, 0);
+    merge_sorted_chunks(sort_desc, &sort_exprs, input_chunks, &output);
     ASSERT_TRUE(output.is_sorted(sort_desc));
 }
 
 TEST(SortingTest, merge_sorted_stream) {
+    auto runtime_state = create_runtime_state();
     constexpr int num_columns = 3;
     constexpr int num_runs = 4;
     constexpr int num_chunks_per_run = 4;
@@ -278,6 +297,8 @@ TEST(SortingTest, merge_sorted_stream) {
         null_first.push_back(true);
         map[i] = i;
     }
+    ASSERT_OK(Expr::prepare(sort_exprs, runtime_state.get()));
+    ASSERT_OK(Expr::open(sort_exprs, runtime_state.get()));
     DeferOp defer([&]() { clear_exprs(sort_exprs); });
 
     std::vector<ChunkProvider> chunk_providers;

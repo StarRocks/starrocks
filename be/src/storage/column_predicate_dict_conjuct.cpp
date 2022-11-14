@@ -55,12 +55,13 @@ public:
 
     bool padding_zeros(size_t len) const { return false; }
 
-    Datum value() const { return Datum(); }
+    Datum value() const { return {}; }
 
     std::vector<Datum> values() const {
         std::vector<Datum> res;
-        for (int i = 0; i < _code_mapping.size(); ++i) {
-            res.emplace_back(int(_code_mapping[i]));
+        res.reserve(_code_mapping.size());
+        for (unsigned char i : _code_mapping) {
+            res.emplace_back(int(i));
         }
         return res;
     }

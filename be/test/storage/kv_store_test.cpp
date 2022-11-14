@@ -40,7 +40,7 @@ namespace starrocks {
 
 class KVStoreTest : public testing::Test {
 public:
-    virtual void SetUp() {
+    void SetUp() override {
         _root_path = "./ut_dir/kv_store_test";
         fs::remove_all(_root_path);
         fs::create_directories(_root_path);
@@ -51,7 +51,7 @@ public:
         ASSERT_TRUE(std::filesystem::exists(_root_path + "/meta"));
     }
 
-    virtual void TearDown() {
+    void TearDown() override {
         delete _kv_store;
         fs::remove_all(_root_path);
     }

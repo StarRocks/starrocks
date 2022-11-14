@@ -33,7 +33,7 @@ ColumnPtr BitmapFunctions::to_bitmap(FunctionContext* context, const starrocks::
         StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
 
         auto slice = viewer.value(row);
-        uint64_t value = StringParser::string_to_unsigned_int<uint64_t>(slice.data, slice.size, &parse_result);
+        auto value = StringParser::string_to_unsigned_int<uint64_t>(slice.data, slice.size, &parse_result);
 
         if (parse_result != StringParser::PARSE_SUCCESS) {
             context->set_error(strings::Substitute("The input: {0} is not valid, to_bitmap only "
@@ -144,6 +144,11 @@ ColumnPtr BitmapFunctions::bitmap_and(FunctionContext* context, const starrocks:
 
 // bitmap_to_string
 DEFINE_STRING_UNARY_FN_WITH_IMPL(bitmapToStingImpl, bitmap_ptr) {
+    if (bitmap_ptr->cardinality() > config::max_length_for_bitmap_function) {
+        std::stringstream ss;
+        ss << "bitmap_to_string not supported size > " << config::max_length_for_bitmap_function;
+        throw std::runtime_error(ss.str());
+    }
     return bitmap_ptr->to_string();
 }
 
@@ -275,6 +280,15 @@ ColumnPtr BitmapFunctions::bitmap_remove(FunctionContext* context, const starroc
     return builder.build(ColumnHelper::is_all_const(columns));
 }
 
+void BitmapFunctions::detect_bitmap_cardinality(size_t* data_size, const int64_t cardinality) {
+    if (cardinality > config::max_length_for_bitmap_function) {
+        std::stringstream ss;
+        ss << "bitmap_to_array not supported size > " << config::max_length_for_bitmap_function;
+        throw std::runtime_error(ss.str());
+    }
+    (*data_size) += cardinality;
+}
+
 ColumnPtr BitmapFunctions::bitmap_to_array(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
     DCHECK_EQ(columns.size(), 1);
     ColumnViewer<TYPE_OBJECT> lhs(columns[0]);
@@ -289,12 +303,14 @@ ColumnPtr BitmapFunctions::bitmap_to_array(FunctionContext* context, const starr
     if (columns[0]->has_null()) {
         for (int row = 0; row < size; ++row) {
             if (!lhs.is_null(row)) {
-                data_size += lhs.value(row)->cardinality();
+                const auto cardinality = lhs.value(row)->cardinality();
+                detect_bitmap_cardinality(&data_size, cardinality);
             }
         }
     } else {
         for (int row = 0; row < size; ++row) {
-            data_size += lhs.value(row)->cardinality();
+            const auto cardinality = lhs.value(row)->cardinality();
+            detect_bitmap_cardinality(&data_size, cardinality);
         }
     }
 
@@ -347,7 +363,7 @@ ColumnPtr BitmapFunctions::array_to_bitmap(FunctionContext* context, const starr
     NullData::pointer null_data = columns[0]->is_nullable()
                                           ? down_cast<NullableColumn*>(columns[0].get())->null_column_data().data()
                                           : nullptr;
-    ArrayColumn* array_column = down_cast<ArrayColumn*>(data_column);
+    auto* array_column = down_cast<ArrayColumn*>(data_column);
 
     RunTimeColumnType<TYPE>::Container& element_container =
             array_column->elements_column()->is_nullable()
@@ -464,6 +480,51 @@ ColumnPtr BitmapFunctions::base64_to_bitmap(FunctionContext* context, const star
         bitmap.deserialize(p.get());
         builder.append(std::move(bitmap));
     }
+    return builder.build(ColumnHelper::is_all_const(columns));
+}
+
+ColumnPtr BitmapFunctions::sub_bitmap(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    ColumnViewer<TYPE_OBJECT> bitmap_viewer(columns[0]);
+    ColumnViewer<TYPE_BIGINT> offset_viewer(columns[1]);
+
+    ColumnPtr len_column = nullptr;
+    if (columns.size() > 2) {
+        len_column = columns[2];
+    } else {
+        len_column = ColumnHelper::create_const_column<TYPE_BIGINT>(INT32_MAX, bitmap_viewer.size());
+    }
+
+    ColumnViewer<TYPE_BIGINT> len_viewer(len_column);
+
+    size_t size = columns[0]->size();
+    ColumnBuilder<TYPE_OBJECT> builder(size);
+
+    for (int row = 0; row < size; row++) {
+        if (bitmap_viewer.is_null(row) || offset_viewer.is_null(row) || len_viewer.is_null(row) ||
+            len_viewer.value(row) <= 0) {
+            builder.append_null();
+            continue;
+        }
+
+        auto bitmap = bitmap_viewer.value(row);
+        auto offset = offset_viewer.value(row);
+        auto len = len_viewer.value(row);
+        if (bitmap->cardinality() == 0 || offset == INT_MIN || len <= 0) {
+            builder.append_null();
+            continue;
+        }
+
+        BitmapValue ret_bitmap;
+        if (bitmap->sub_bitmap_internal(offset, len, &ret_bitmap) == 0) {
+            builder.append_null();
+            continue;
+        }
+
+        builder.append(std::move(ret_bitmap));
+    }
+
     return builder.build(ColumnHelper::is_all_const(columns));
 }
 

@@ -10,8 +10,7 @@
 #include "exprs/expr.h"
 #include "storage/chunk_helper.h"
 
-namespace starrocks {
-namespace connector {
+namespace starrocks::connector {
 using namespace vectorized;
 
 // ================================
@@ -53,7 +52,15 @@ Status HiveDataSource::open(RuntimeState* state) {
     _tuple_desc = state->desc_tbl().get_tuple_descriptor(hdfs_scan_node.tuple_id);
     _hive_table = dynamic_cast<const HiveTableDescriptor*>(_tuple_desc->table_desc());
     if (_hive_table == nullptr) {
-        return Status::RuntimeError("Invalid table type. Only hive/iceberg/hudi table are supported");
+        return Status::RuntimeError("Invalid table type. Only hive/iceberg/hudi/delta lake table are supported");
+    }
+
+    _use_block_cache = config::block_cache_enable;
+    if (state->query_options().__isset.use_scan_block_cache) {
+        _use_block_cache &= state->query_options().use_scan_block_cache;
+    }
+    if (state->query_options().__isset.enable_populate_block_cache) {
+        _enable_populate_block_cache = state->query_options().enable_populate_block_cache;
     }
 
     RETURN_IF_ERROR(_init_conjunct_ctxs(state));
@@ -64,6 +71,7 @@ Status HiveDataSource::open(RuntimeState* state) {
         _no_data = true;
         return Status::OK();
     }
+    SCOPED_TIMER(_profile.scan_timer);
     RETURN_IF_ERROR(_init_scanner(state));
     return Status::OK();
 }
@@ -161,12 +169,26 @@ Status HiveDataSource::_decompose_conjunct_ctxs(RuntimeState* state) {
     }
 
     std::vector<ExprContext*> cloned_conjunct_ctxs;
-    RETURN_IF_ERROR(Expr::clone_if_not_exists(_conjunct_ctxs, state, &cloned_conjunct_ctxs));
+    RETURN_IF_ERROR(Expr::clone_if_not_exists(state, &_pool, _conjunct_ctxs, &cloned_conjunct_ctxs));
 
     for (ExprContext* ctx : cloned_conjunct_ctxs) {
         const Expr* root_expr = ctx->root();
         std::vector<SlotId> slot_ids;
-        if (root_expr->get_slot_ids(&slot_ids) != 1) {
+        root_expr->get_slot_ids(&slot_ids);
+        for (SlotId slot_id : slot_ids) {
+            _conjunct_slots.insert(slot_id);
+        }
+
+        // For some conjunct like (a < 1) or (a > 7)
+        // slot_ids = (a, a), but actually there is only one slot.
+        bool single_slot = true;
+        for (int i = 1; i < slot_ids.size(); i++) {
+            if (slot_ids[i] != slot_ids[0]) {
+                single_slot = false;
+                break;
+            }
+        }
+        if (!single_slot) {
             _scanner_conjunct_ctxs.emplace_back(ctx);
             continue;
         }
@@ -200,6 +222,21 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
     _profile.io_counter = ADD_COUNTER(_runtime_profile, "IOCounter", TUnit::UNIT);
     _profile.column_read_timer = ADD_TIMER(_runtime_profile, "ColumnReadTime");
     _profile.column_convert_timer = ADD_TIMER(_runtime_profile, "ColumnConvertTime");
+
+    if (_use_block_cache) {
+        static const char* prefix = "BlockCache";
+        ADD_COUNTER(_runtime_profile, prefix, TUnit::UNIT);
+        _profile.block_cache_read_counter =
+                ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheReadCounter", TUnit::UNIT, prefix);
+        _profile.block_cache_read_bytes =
+                ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheReadBytes", TUnit::BYTES, prefix);
+        _profile.block_cache_read_timer = ADD_CHILD_TIMER(_runtime_profile, "BlockCacheReadTimer", prefix);
+        _profile.block_cache_write_counter =
+                ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheWriteCounter", TUnit::UNIT, prefix);
+        _profile.block_cache_write_bytes =
+                ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheWriteBytes", TUnit::BYTES, prefix);
+        _profile.block_cache_write_timer = ADD_CHILD_TIMER(_runtime_profile, "BlockCacheWriteTimer", prefix);
+    }
 
     if (hdfs_scan_node.__isset.table_name) {
         _runtime_profile->add_info_string("Table", hdfs_scan_node.table_name);
@@ -241,6 +278,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.scan_ranges = {&scan_range};
     scanner_params.fs = _pool.add(fs.release());
     scanner_params.path = native_file_path;
+    scanner_params.file_size = _scan_range.file_length;
     scanner_params.tuple_desc = _tuple_desc;
     scanner_params.materialize_slots = _materialize_slots;
     scanner_params.materialize_index_in_chunk = _materialize_index_in_chunk;
@@ -250,12 +288,18 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.partition_values = _partition_values;
     scanner_params.conjunct_ctxs = _scanner_conjunct_ctxs;
     scanner_params.conjunct_ctxs_by_slot = _conjunct_ctxs_by_slot;
+    scanner_params.conjunct_slots = _conjunct_slots;
     scanner_params.min_max_conjunct_ctxs = _min_max_conjunct_ctxs;
     scanner_params.min_max_tuple_desc = _min_max_tuple_desc;
     scanner_params.hive_column_names = &_hive_column_names;
     scanner_params.case_sensitive = _case_sensitive;
     scanner_params.profile = &_profile;
     scanner_params.open_limit = nullptr;
+    for (const auto& delete_file : scan_range.delete_files) {
+        scanner_params.deletes.emplace_back(&delete_file);
+    }
+    scanner_params.use_block_cache = _use_block_cache;
+    scanner_params.enable_populate_block_cache = _enable_populate_block_cache;
 
     HdfsScanner* scanner = nullptr;
     auto format = scan_range.file_format;
@@ -280,7 +324,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         std::string delta_file_paths;
         if (!scan_range.hudi_logs.empty()) {
             for (const std::string& log : scan_range.hudi_logs) {
-                delta_file_paths.append(partition_full_path.append("/").append(log));
+                delta_file_paths.append(fmt::format("{}/{}", partition_full_path, log));
                 delta_file_paths.append(",");
             }
             delta_file_paths = delta_file_paths.substr(0, delta_file_paths.size() - 1);
@@ -290,7 +334,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         if (scan_range.relative_path.empty()) {
             data_file_path = "";
         } else {
-            data_file_path = partition_full_path.append("/").append(scan_range.relative_path);
+            data_file_path = fmt::format("{}/{}", partition_full_path, scan_range.relative_path);
         }
 
         std::map<std::string, std::string> jni_scanner_params;
@@ -376,5 +420,4 @@ int64_t HiveDataSource::cpu_time_spent() const {
     return _scanner->cpu_time_spent();
 }
 
-} // namespace connector
-} // namespace starrocks
+} // namespace starrocks::connector

@@ -60,7 +60,6 @@ public:
         schema->set_num_short_key_columns(1);
         schema->set_keys_type(DUP_KEYS);
         schema->set_num_rows_per_row_block(65535);
-        schema->set_compress_kind(COMPRESS_LZ4);
         auto c0 = schema->add_column();
         {
             c0->set_unique_id(next_id());
@@ -181,7 +180,7 @@ TEST_F(DuplicateKeyHorizontalCompactionTest, test1) {
     _txn_id++;
 
     ASSIGN_OR_ABORT(auto task, _tablet_manager->compact(_tablet_metadata->id(), version, _txn_id));
-    ASSERT_OK(task->execute());
+    ASSERT_OK(task->execute(nullptr));
     ASSERT_OK(_tablet_manager->publish_version(_tablet_metadata->id(), version, version + 1, &_txn_id, 1));
     version++;
     ASSERT_EQ(kChunkSize * 3, read(version));
@@ -215,7 +214,6 @@ public:
         schema->set_num_short_key_columns(1);
         schema->set_keys_type(UNIQUE_KEYS);
         schema->set_num_rows_per_row_block(65535);
-        schema->set_compress_kind(COMPRESS_LZ4);
         auto c0 = schema->add_column();
         {
             c0->set_unique_id(next_id());
@@ -337,7 +335,7 @@ TEST_F(UniqueKeyHorizontalCompactionTest, test1) {
     _txn_id++;
 
     ASSIGN_OR_ABORT(auto task, _tablet_manager->compact(_tablet_metadata->id(), version, _txn_id));
-    ASSERT_OK(task->execute());
+    ASSERT_OK(task->execute(nullptr));
     ASSERT_OK(_tablet_manager->publish_version(_tablet_metadata->id(), version, version + 1, &_txn_id, 1));
     version++;
     ASSERT_EQ(kChunkSize, read(version));
@@ -371,7 +369,6 @@ public:
         schema->set_num_short_key_columns(1);
         schema->set_keys_type(UNIQUE_KEYS);
         schema->set_num_rows_per_row_block(65535);
-        schema->set_compress_kind(COMPRESS_LZ4);
         auto c0 = schema->add_column();
         {
             c0->set_unique_id(next_id());
@@ -501,6 +498,7 @@ TEST_F(UniqueKeyHorizontalCompactionWithDeleteTest, test_base_compaction_with_de
         rowset->set_data_size(0);
 
         auto* delete_predicate = rowset->mutable_delete_predicate();
+        delete_predicate->set_version(-1);
         // delete c0 < 4
         auto* binary_predicate = delete_predicate->add_binary_predicates();
         binary_predicate->set_column_name("c0");
@@ -516,7 +514,7 @@ TEST_F(UniqueKeyHorizontalCompactionWithDeleteTest, test_base_compaction_with_de
     }
 
     ASSIGN_OR_ABORT(auto task, _tablet_manager->compact(_tablet_metadata->id(), version, _txn_id));
-    ASSERT_OK(task->execute());
+    ASSERT_OK(task->execute(nullptr));
     ASSERT_OK(_tablet_manager->publish_version(_tablet_metadata->id(), version, version + 1, &_txn_id, 1));
     version++;
     ASSERT_EQ(kChunkSize - 4, read(version));

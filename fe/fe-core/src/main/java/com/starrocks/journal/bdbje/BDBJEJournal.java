@@ -35,6 +35,7 @@ import com.starrocks.journal.JournalCursor;
 import com.starrocks.journal.JournalException;
 import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.staros.StarMgrServer;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -185,7 +186,11 @@ public class BDBJEJournal implements Journal {
                      *  here we should open database with name image max journal id + 1.
                      *  (default GlobalStateMgr.getCurrentState().getReplayedJournalId() is 0)
                      */
-                    dbName = getFullDatabaseName(GlobalStateMgr.getCurrentState().getReplayedJournalId() + 1);
+                    if (prefix.isEmpty()) {
+                        dbName = getFullDatabaseName(GlobalStateMgr.getCurrentState().getReplayedJournalId() + 1);
+                    } else {
+                        dbName = getFullDatabaseName(StarMgrServer.getCurrentState().getReplayId() + 1);
+                    }
                     LOG.info("the very first time to open bdb, dbname is {}", dbName);
                 } else {
                     // get last database as current journal database

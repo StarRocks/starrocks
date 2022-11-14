@@ -2,16 +2,17 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.SetType;
-import com.starrocks.analysis.ShowAuthenticationStmt;
-import com.starrocks.analysis.ShowStmt;
-import com.starrocks.analysis.ShowVariablesStmt;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.SetType;
+import com.starrocks.sql.ast.ShowAuthenticationStmt;
 import com.starrocks.sql.ast.ShowColumnStmt;
+import com.starrocks.sql.ast.ShowPartitionsStmt;
+import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.ShowTableStatusStmt;
 import com.starrocks.sql.ast.ShowTableStmt;
+import com.starrocks.sql.ast.ShowVariablesStmt;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -68,7 +69,8 @@ public class AnalyzeShowTest {
         analyzeSuccess("show tables;");
         ShowTableStmt statement = (ShowTableStmt) analyzeSuccess("show tables where table_name = 't1';");
         Assert.assertEquals(
-                "SELECT TABLE_NAME AS Tables_in_test FROM information_schema.tables WHERE table_name = 't1'",
+                "SELECT TABLE_NAME AS Tables_in_test FROM information_schema.tables"
+                        + " WHERE (TABLE_SCHEMA = 'test') AND (table_name = 't1')",
                 AST2SQL.toString(statement.toSelectStmt()));
 
         statement = (ShowTableStmt) analyzeSuccess("show tables from `test`");
@@ -104,5 +106,35 @@ public class AnalyzeShowTest {
         stmt = (ShowAuthenticationStmt) analyzeSuccess(sql);
         Assert.assertFalse(stmt.isAll());
         Assert.assertEquals("xx", stmt.getUserIdent().getQualifiedUser());
+    }
+
+    @Test
+    public void testShowIndex() {
+        analyzeSuccess("SHOW INDEX FROM `test`.`t0`");
+    }
+
+    @Test
+    public void testShowPartitions() {
+        analyzeSuccess("SHOW PARTITIONS FROM `test`.`t0`");
+        ShowPartitionsStmt showPartitionsStmt = (ShowPartitionsStmt) analyzeSuccess(
+                "SHOW PARTITIONS FROM `test`.`t0` " +
+                        "WHERE `LastConsistencyCheckTime` > '2019-12-22 10:22:11'");
+        Assert.assertEquals("LastConsistencyCheckTime > '2019-12-22 10:22:11'",
+                AST2SQL.toString(showPartitionsStmt.getFilterMap().get("lastconsistencychecktime")));
+
+        showPartitionsStmt = (ShowPartitionsStmt) analyzeSuccess("SHOW PARTITIONS FROM `test`.`t0`" +
+                " WHERE `PartitionName` LIKE '%p2019%'");
+        Assert.assertEquals("PartitionName LIKE '%p2019%'",
+                AST2SQL.toString(showPartitionsStmt.getFilterMap().get("partitionname")));
+
+        showPartitionsStmt = (ShowPartitionsStmt) analyzeSuccess("SHOW PARTITIONS FROM `test`.`t0`" +
+                " WHERE `PartitionName` = 'p1'");
+        Assert.assertEquals("PartitionName = 'p1'",
+                AST2SQL.toString(showPartitionsStmt.getFilterMap().get("partitionname")));
+
+        showPartitionsStmt = (ShowPartitionsStmt) analyzeSuccess("SHOW PARTITIONS FROM " +
+                "`test`.`t0` ORDER BY `PartitionId` ASC LIMIT 10\"");
+        Assert.assertEquals(" LIMIT 10",
+                AST2SQL.toString(showPartitionsStmt.getLimitElement()));
     }
 }

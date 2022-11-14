@@ -50,7 +50,3 @@ Note:
     example_tbl2
     );
     ```
-
-## keyword
-
-BACKUP

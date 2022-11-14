@@ -27,7 +27,6 @@
 #include "common/status.h"
 #include "fs/fs.h"
 #include "gen_cpp/segment.pb.h"
-#include "storage/column_block.h"
 #include "storage/rowset/common.h"
 #include "storage/rowset/index_page.h"
 #include "storage/rowset/page_handle.h"
@@ -70,10 +69,7 @@ public:
         return _current_ordinal;
     }
 
-    // After one seek, we can only call this function once to read data
-    // into ColumnBlock. when read string type data, memory will allocated
-    // from Arena
-    Status next_batch(size_t* n, ColumnBlockView* column_view);
+    Status next_batch(size_t* n, vectorized::Column* column);
 
 private:
     IndexedColumnIterator(const IndexedColumnReader* reader, std::unique_ptr<RandomAccessFile> read_file);

@@ -39,6 +39,11 @@ if [[ -z ${STARROCKS_THIRDPARTY} ]]; then
     export STARROCKS_THIRDPARTY=${STARROCKS_HOME}/thirdparty
 fi
 
+# set cachelib dir
+if [[ -z ${CACHELIB_DIR} ]]; then
+    export CACHELIB_DIR=${STARROCKS_THIRDPARTY}/installed/cachelib
+fi
+
 # check python
 if [[ -z ${PYTHON} ]]; then
     export PYTHON=python
@@ -74,6 +79,11 @@ export CLANG_COMPATIBLE_FLAGS=`echo | ${STARROCKS_GCC_HOME}/bin/gcc -Wp,-v -xc++
 # check java home
 if [[ -z ${JAVA_HOME} ]]; then
     echo "Error: JAVA_HOME is not set"
+    exit 1
+fi
+
+if ! command -v $JAVA_HOME/bin/java &> /dev/null; then
+    echo "Error: JAVA not found, JAVA_HOME may be set wrong"
     exit 1
 fi
 

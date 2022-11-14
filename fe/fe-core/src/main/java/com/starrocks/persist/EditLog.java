@@ -24,6 +24,8 @@ package com.starrocks.persist;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.BatchAlterJobPersistInfo;
 import com.starrocks.analysis.UserIdentity;
+import com.starrocks.authentication.UserAuthenticationInfo;
+import com.starrocks.authentication.UserProperty;
 import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.Repository;
 import com.starrocks.backup.RestoreJob;
@@ -44,6 +46,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.SmallFileMgr.SmallFile;
 import com.starrocks.ha.LeaderInfo;
 import com.starrocks.journal.JournalEntity;
+import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.journal.bdbje.Timestamp;
 import com.starrocks.load.DeleteHandler;
@@ -55,14 +58,18 @@ import com.starrocks.load.MultiDeleteInfo;
 import com.starrocks.load.loadv2.LoadJob.LoadJobStateUpdateInfo;
 import com.starrocks.load.loadv2.LoadJobFinalOperation;
 import com.starrocks.load.routineload.RoutineLoadJob;
+import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.privilege.UserPropertyInfo;
 import com.starrocks.plugin.PluginInfo;
+import com.starrocks.privilege.RolePrivilegeCollection;
+import com.starrocks.privilege.UserPrivilegeCollection;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.persist.DropTaskRunsLog;
 import com.starrocks.scheduler.persist.DropTasksLog;
+import com.starrocks.scheduler.persist.TaskRunPeriodStatusChange;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.server.GlobalStateMgr;
@@ -83,6 +90,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutionException;
@@ -102,7 +110,8 @@ public class EditLog {
         this.journalQueue = journalQueue;
     }
 
-    public static void loadJournal(GlobalStateMgr globalStateMgr, JournalEntity journal) {
+    public static void loadJournal(GlobalStateMgr globalStateMgr, JournalEntity journal)
+            throws JournalInconsistentException {
         short opCode = journal.getOpCode();
         if (opCode != OperationType.OP_SAVE_NEXTID && opCode != OperationType.OP_TIMESTAMP) {
             LOG.debug("replay journal op code: {}", opCode);
@@ -273,6 +282,12 @@ public class EditLog {
                     globalStateMgr.replayChangeMaterializedViewRefreshScheme(log);
                     break;
                 }
+                case OperationType.OP_ALTER_MATERIALIZED_VIEW_PROPERTIES: {
+                    ModifyTablePropertyOperationLog log =
+                            (ModifyTablePropertyOperationLog) journal.getData();
+                    globalStateMgr.replayAlterMaterializedViewProperties(opCode, log);
+                    break;
+                }
                 case OperationType.OP_RENAME_MATERIALIZED_VIEW: {
                     RenameMaterializedViewLog log = (RenameMaterializedViewLog) journal.getData();
                     globalStateMgr.replayRenameMaterializedView(log);
@@ -400,9 +415,7 @@ public class EditLog {
                     Frontend fe = (Frontend) journal.getData();
                     globalStateMgr.replayDropFrontend(fe);
                     if (fe.getNodeName().equals(GlobalStateMgr.getCurrentState().getNodeName())) {
-                        System.out.println("current fe " + fe + " is removed. will exit");
-                        LOG.info("current fe " + fe + " is removed. will exit");
-                        System.exit(-1);
+                        throw new JournalInconsistentException("current fe " + fe + " is removed. will exit");
                     }
                     break;
                 }
@@ -411,54 +424,19 @@ public class EditLog {
                     globalStateMgr.replayUpdateFrontend(fe);
                     break;
                 }
-                case OperationType.OP_CREATE_USER: {
-                    PrivInfo privInfo = (PrivInfo) journal.getData();
-                    globalStateMgr.getAuth().replayCreateUser(privInfo);
-                    break;
-                }
-                case OperationType.OP_NEW_DROP_USER: {
-                    UserIdentity userIdent = (UserIdentity) journal.getData();
-                    globalStateMgr.getAuth().replayDropUser(userIdent);
-                    break;
-                }
-                case OperationType.OP_GRANT_PRIV: {
-                    PrivInfo privInfo = (PrivInfo) journal.getData();
-                    globalStateMgr.getAuth().replayGrant(privInfo);
-                    break;
-                }
-                case OperationType.OP_REVOKE_PRIV: {
-                    PrivInfo privInfo = (PrivInfo) journal.getData();
-                    globalStateMgr.getAuth().replayRevoke(privInfo);
-                    break;
-                }
-                case OperationType.OP_SET_PASSWORD: {
-                    PrivInfo privInfo = (PrivInfo) journal.getData();
-                    globalStateMgr.getAuth().replaySetPassword(privInfo);
-                    break;
-                }
-                case OperationType.OP_CREATE_ROLE: {
-                    PrivInfo privInfo = (PrivInfo) journal.getData();
-                    globalStateMgr.getAuth().replayCreateRole(privInfo);
-                    break;
-                }
-                case OperationType.OP_DROP_ROLE: {
-                    PrivInfo privInfo = (PrivInfo) journal.getData();
-                    globalStateMgr.getAuth().replayDropRole(privInfo);
-                    break;
-                }
-                case OperationType.OP_GRANT_ROLE: {
-                    PrivInfo privInfo = (PrivInfo) journal.getData();
-                    globalStateMgr.getAuth().replayGrantRole(privInfo);
-                    break;
-                }
-                case OperationType.OP_REVOKE_ROLE: {
-                    PrivInfo privInfo = (PrivInfo) journal.getData();
-                    globalStateMgr.getAuth().replayRevokeRole(privInfo);
-                    break;
-                }
-                case OperationType.OP_UPDATE_USER_PROPERTY: {
-                    UserPropertyInfo propertyInfo = (UserPropertyInfo) journal.getData();
-                    globalStateMgr.getAuth().replayUpdateUserProperty(propertyInfo);
+                case OperationType.OP_CREATE_USER:
+                case OperationType.OP_NEW_DROP_USER:
+                case OperationType.OP_GRANT_PRIV:
+                case OperationType.OP_REVOKE_PRIV:
+                case OperationType.OP_SET_PASSWORD:
+                case OperationType.OP_CREATE_ROLE:
+                case OperationType.OP_DROP_ROLE:
+                case OperationType.OP_GRANT_ROLE:
+                case OperationType.OP_REVOKE_ROLE:
+                case OperationType.OP_UPDATE_USER_PROPERTY:
+                case OperationType.OP_GRANT_IMPERSONATE:
+                case OperationType.OP_REVOKE_IMPERSONATE: {
+                    GlobalStateMgr.getCurrentState().replayOldAuthJournal(opCode, journal.getData());
                     break;
                 }
                 case OperationType.OP_TIMESTAMP: {
@@ -476,10 +454,10 @@ public class EditLog {
                     String versionString = ((Text) journal.getData()).toString();
                     int version = Integer.parseInt(versionString);
                     if (version > FeConstants.meta_version) {
-                        LOG.error("invalid meta data version found, cat not bigger than FeConstants.meta_version."
-                                        + "please update FeConstants.meta_version bigger or equal to {} and restart.",
-                                version);
-                        System.exit(-1);
+                        throw new JournalInconsistentException(
+                                "invalid meta data version found, cat not bigger than FeConstants.meta_version."
+                                + "please update FeConstants.meta_version bigger or equal to " + version +
+                                " and restart.");
                     }
                     MetaContext.get().setMetaVersion(version);
                     break;
@@ -487,18 +465,14 @@ public class EditLog {
                 case OperationType.OP_META_VERSION_V2: {
                     MetaVersion metaVersion = (MetaVersion) journal.getData();
                     if (metaVersion.getCommunityVersion() > FeConstants.meta_version) {
-                        LOG.error("invalid meta data version found, cat not bigger than FeConstants.meta_version."
-                                        + "please update FeConstants.meta_version bigger or equal to {} and restart.",
-                                metaVersion.getCommunityVersion());
-                        System.exit(-1);
+                        throw new JournalInconsistentException("invalid meta data version found, cat not bigger than "
+                                + "FeConstants.meta_version. please update FeConstants.meta_version bigger or equal to "
+                                + metaVersion.getCommunityVersion() + "and restart.");
                     }
                     if (metaVersion.getStarRocksVersion() > FeConstants.starrocks_meta_version) {
-                        LOG.error(
-                                "invalid meta data version found, cat not bigger than FeConstants.starrocks_meta_version."
-                                        +
-                                        "please update FeConstants.starrocks_meta_version bigger or equal to {} and restart.",
-                                metaVersion.getStarRocksVersion());
-                        System.exit(-1);
+                        throw new JournalInconsistentException("invalid meta data version found, cat not bigger than "
+                                + "FeConstants.starrocks_meta_version. please update FeConstants.starrocks_meta_version"
+                                + " bigger or equal to " + metaVersion.getStarRocksVersion() + "and restart.");
                     }
                     MetaContext.get().setMetaVersion(metaVersion.getCommunityVersion());
                     MetaContext.get().setStarRocksMetaVersion(metaVersion.getStarRocksVersion());
@@ -632,6 +606,11 @@ public class EditLog {
                     globalStateMgr.getRoutineLoadManager().replayRemoveOldRoutineLoad(operation);
                     break;
                 }
+                case OperationType.OP_CREATE_STREAM_LOAD_TASK: {
+                    StreamLoadTask streamLoadTask = (StreamLoadTask) journal.getData();
+                    globalStateMgr.getStreamLoadManager().replayCreateLoadTask(streamLoadTask);
+                    break;
+                }
                 case OperationType.OP_CREATE_LOAD_JOB: {
                     com.starrocks.load.loadv2.LoadJob loadJob =
                             (com.starrocks.load.loadv2.LoadJob) journal.getData();
@@ -689,6 +668,11 @@ public class EditLog {
                     globalStateMgr.getTaskManager().replayDropTaskRuns(dropTaskRunsLog.getQueryIdList());
                     break;
                 }
+                case OperationType.OP_UPDATE_TASK_RUN_STATE:
+                    TaskRunPeriodStatusChange taskRunPeriodStatusChange = (TaskRunPeriodStatusChange) journal.getData();
+                    globalStateMgr.getTaskManager().replayAlterRunningTaskRunProgress(
+                            taskRunPeriodStatusChange.getTaskRunProgressMap());
+                    break;
                 case OperationType.OP_CREATE_SMALL_FILE: {
                     SmallFile smallFile = (SmallFile) journal.getData();
                     globalStateMgr.getSmallFileMgr().replayCreateFile(smallFile);
@@ -729,6 +713,8 @@ public class EditLog {
                 case OperationType.OP_MODIFY_IN_MEMORY:
                 case OperationType.OP_SET_FORBIT_GLOBAL_DICT:
                 case OperationType.OP_MODIFY_REPLICATION_NUM:
+                case OperationType.OP_MODIFY_WRITE_QUORUM:
+                case OperationType.OP_MODIFY_REPLICATED_STORAGE:
                 case OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX: {
                     ModifyTablePropertyOperationLog modifyTablePropertyOperationLog =
                             (ModifyTablePropertyOperationLog) journal.getData();
@@ -773,6 +759,11 @@ public class EditLog {
                 case OperationType.OP_ALTER_ROUTINE_LOAD_JOB: {
                     AlterRoutineLoadJobOperationLog log = (AlterRoutineLoadJobOperationLog) journal.getData();
                     globalStateMgr.getRoutineLoadManager().replayAlterRoutineLoadJob(log);
+                    break;
+                }
+                case OperationType.OP_ALTER_LOAD_JOB: {
+                    AlterLoadJobOperationLog log = (AlterLoadJobOperationLog) journal.getData();
+                    globalStateMgr.getLoadManager().replayAlterLoadJob(log);
                     break;
                 }
                 case OperationType.OP_GLOBAL_VARIABLE_V2: {
@@ -851,16 +842,7 @@ public class EditLog {
                     globalStateMgr.getCatalogMgr().replayDropCatalog(dropCatalogLog);
                     break;
                 }
-                case OperationType.OP_GRANT_IMPERSONATE: {
-                    ImpersonatePrivInfo info = (ImpersonatePrivInfo) journal.getData();
-                    globalStateMgr.getAuth().replayGrantImpersonate(info);
-                    break;
-                }
-                case OperationType.OP_REVOKE_IMPERSONATE: {
-                    ImpersonatePrivInfo info = (ImpersonatePrivInfo) journal.getData();
-                    globalStateMgr.getAuth().replayRevokeImpersonate(info);
-                    break;
-                }
+
                 case OperationType.OP_CREATE_INSERT_OVERWRITE: {
                     CreateInsertOverwriteJobLog jobInfo = (CreateInsertOverwriteJobLog) journal.getData();
                     globalStateMgr.getInsertOverwriteJobManager().replayCreateInsertOverwrite(jobInfo);
@@ -886,6 +868,52 @@ public class EditLog {
                     StarMgrServer.getCurrentState().getStarMgr().replay(j.getJournal());
                     break;
                 }
+                case OperationType.OP_CREATE_USER_V2: {
+                    CreateUserInfo info = (CreateUserInfo) journal.getData();
+                    globalStateMgr.getAuthenticationManager().replayCreateUser(
+                            info.getUserIdentity(),
+                            info.getAuthenticationInfo(),
+                            info.getUserProperty(),
+                            info.getUserPrivilegeCollection(),
+                            info.getPluginId(),
+                            info.getPluginVersion());
+                    break;
+                }
+                case OperationType.OP_UPDATE_USER_PRIVILEGE_V2: {
+                    UserPrivilegeCollectionInfo info = (UserPrivilegeCollectionInfo) journal.getData();
+                    globalStateMgr.getPrivilegeManager().replayUpdateUserPrivilegeCollection(
+                            info.getUserIdentity(),
+                            info.getPrivilegeCollection(),
+                            info.getPluginId(),
+                            info.getPluginVersion());
+                    break;
+                }
+                case OperationType.OP_ALTER_USER_V2: {
+                    AlterUserInfo info = (AlterUserInfo) journal.getData();
+                    globalStateMgr.getAuthenticationManager().replayAlterUser(
+                            info.getUserIdentity(), info.getAuthenticationInfo());
+                    break;
+                }
+                case OperationType.OP_DROP_USER_V2: {
+                    UserIdentity userIdentity = (UserIdentity) journal.getData();
+                    globalStateMgr.getAuthenticationManager().replayDropUser(userIdentity);
+                    break;
+                }
+                case OperationType.OP_UPDATE_ROLE_PRIVILEGE_V2: {
+                    RolePrivilegeCollectionInfo info = (RolePrivilegeCollectionInfo) journal.getData();
+                    globalStateMgr.getPrivilegeManager().replayUpdateRolePrivilegeCollection(info);
+                    break;
+                }
+                case OperationType.OP_DROP_ROLE_V2: {
+                    RolePrivilegeCollectionInfo info = (RolePrivilegeCollectionInfo) journal.getData();
+                    globalStateMgr.getPrivilegeManager().replayDropRole(info);
+                    break;
+                }
+                case OperationType.OP_AUTH_UPGRDE_V2: {
+                    AuthUpgradeInfo info = (AuthUpgradeInfo) journal.getData();
+                    globalStateMgr.replayAuthUpgrade(info);
+                    break;
+                }
                 default: {
                     if (Config.ignore_unknown_log_id) {
                         LOG.warn("UNKNOWN Operation Type {}", opCode);
@@ -895,8 +923,9 @@ public class EditLog {
                 }
             }
         } catch (Exception e) {
-            LOG.error("Operation Type {}", opCode, e);
-            System.exit(-1);
+            JournalInconsistentException exception = new JournalInconsistentException("failed to load journal type " + opCode);
+            exception.initCause(e);
+            throw exception;
         }
     }
 
@@ -906,12 +935,7 @@ public class EditLog {
     protected void logEdit(short op, Writable writable) {
         long start = System.nanoTime();
         Future<Boolean> task = submitLog(op, writable, -1);
-        boolean result = waitInfinity(task);
-        // for now if journal writer fails, it will exit directly, so this function should always return true.
-        assert (result == true);
-        if (MetricRepo.isInit) {
-            MetricRepo.HISTO_EDIT_LOG_WRITE_LATENCY.update((System.nanoTime() - start) / 1000000);
-        }
+        waitInfinity(start, task);
     }
 
     /**
@@ -957,22 +981,30 @@ public class EditLog {
 
     /**
      * wait for JournalWriter commit all logs
-     * return true if JournalWriter wrote log successfully
-     * return false if JournalWriter wrote log failed, which WON'T HAPPEN for now because on such scenerio JournalWriter
-     * will simplely exit the whole process
      */
-    private boolean waitInfinity(Future<Boolean> task) {
+    public void waitInfinity(long startTime, Future<Boolean> task) {
+        boolean result;
         int cnt = 0;
         while (true) {
             try {
                 if (cnt != 0) {
                     Thread.sleep(1000);
                 }
-                return task.get();
+                // return true if JournalWriter wrote log successfully
+                // return false if JournalWriter wrote log failed, which WON'T HAPPEN for now because on such scenerio JournalWriter
+                // will simplely exit the whole process
+                result = task.get();
+                break;
             } catch (InterruptedException | ExecutionException e) {
                 LOG.warn("failed to wait, wait and retry {} times..: {}", cnt, e);
                 cnt++;
             }
+        }
+
+        // for now if journal writer fails, it will exit directly, so this property should always be true.
+        assert (result);
+        if (MetricRepo.isInit) {
+            MetricRepo.HISTO_EDIT_LOG_WRITE_LATENCY.update((System.nanoTime() - startTime) / 1000000);
         }
     }
 
@@ -1030,6 +1062,10 @@ public class EditLog {
 
     public void logUpdateTaskRun(TaskRunStatusChange statusChange) {
         logEdit(OperationType.OP_UPDATE_TASK_RUN, statusChange);
+    }
+
+    public void logAlterRunningTaskRunProgress(TaskRunPeriodStatusChange info) {
+        logEdit(OperationType.OP_UPDATE_TASK_RUN_STATE, info);
     }
 
     public void logAddPartition(PartitionPersistInfoV2 info) {
@@ -1347,6 +1383,10 @@ public class EditLog {
         logEdit(OperationType.OP_REMOVE_ROUTINE_LOAD_JOB, operation);
     }
 
+    public void logCreateStreamLoadJob(StreamLoadTask streamLoadTask) {
+        logEdit(OperationType.OP_CREATE_STREAM_LOAD_TASK, streamLoadTask);
+    }
+
     public void logCreateLoadJob(com.starrocks.load.loadv2.LoadJob loadJob) {
         logEdit(OperationType.OP_CREATE_LOAD_JOB, loadJob);
     }
@@ -1379,6 +1419,10 @@ public class EditLog {
         logEdit(OperationType.OP_ALTER_JOB_V2, alterJob);
     }
 
+    public Future<Boolean> logAlterJobNoWait(AlterJobV2 alterJob) {
+        return submitLog(OperationType.OP_ALTER_JOB_V2, alterJob, -1);
+    }
+
     public void logBatchAlterJob(BatchAlterJobPersistInfo batchAlterJobV2) {
         logEdit(OperationType.OP_BATCH_ADD_ROLLUP, batchAlterJobV2);
     }
@@ -1403,6 +1447,14 @@ public class EditLog {
         logEdit(OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX, info);
     }
 
+    public void logModifyWriteQuorum(ModifyTablePropertyOperationLog info) {
+        logEdit(OperationType.OP_MODIFY_WRITE_QUORUM, info);
+    }
+
+    public void logModifyReplicatedStorage(ModifyTablePropertyOperationLog info) {
+        logEdit(OperationType.OP_MODIFY_REPLICATED_STORAGE, info);
+    }
+
     public void logReplaceTempPartition(ReplacePartitionOperationLog info) {
         logEdit(OperationType.OP_REPLACE_TEMP_PARTITION, info);
     }
@@ -1425,6 +1477,10 @@ public class EditLog {
 
     public void logAlterRoutineLoadJob(AlterRoutineLoadJobOperationLog log) {
         logEdit(OperationType.OP_ALTER_ROUTINE_LOAD_JOB, log);
+    }
+
+    public void logAlterLoadJob(AlterLoadJobOperationLog log) {
+        logEdit(OperationType.OP_ALTER_LOAD_JOB, log);
     }
 
     public void logGlobalVariableV2(GlobalVarPersistInfo info) {
@@ -1495,6 +1551,10 @@ public class EditLog {
         logEdit(OperationType.OP_CHANGE_MATERIALIZED_VIEW_REFRESH_SCHEME, log);
     }
 
+    public void logAlterMaterializedViewProperties(ModifyTablePropertyOperationLog log) {
+        logEdit(OperationType.OP_ALTER_MATERIALIZED_VIEW_PROPERTIES, log);
+    }
+
     public void logAddUnusedShard(Set<Long> shardIds) {
         logEdit(OperationType.OP_ADD_UNUSED_SHARD, new ShardInfo(shardIds));
     }
@@ -1507,4 +1567,62 @@ public class EditLog {
         logEdit(OperationType.OP_STARMGR, journal);
     }
 
+    public void logCreateUser(
+            UserIdentity userIdentity,
+            UserAuthenticationInfo authenticationInfo,
+            UserProperty userProperty,
+            UserPrivilegeCollection privilegeCollection,
+            short pluginId,
+            short pluginVersion) {
+        CreateUserInfo info = new CreateUserInfo(
+                userIdentity, authenticationInfo, userProperty, privilegeCollection, pluginId, pluginVersion);
+        logEdit(OperationType.OP_CREATE_USER_V2, info);
+    }
+
+    public void logAlterUser(UserIdentity userIdentity, UserAuthenticationInfo authenticationInfo) {
+        AlterUserInfo info = new AlterUserInfo(userIdentity, authenticationInfo);
+        logEdit(OperationType.OP_ALTER_USER_V2, info);
+    }
+
+    public void logDropUser(UserIdentity userIdentity) {
+        logEdit(OperationType.OP_DROP_USER_V2, userIdentity);
+    }
+
+    public void logUpdateUserPrivilege(
+            UserIdentity userIdentity,
+            UserPrivilegeCollection privilegeCollection,
+            short pluginId,
+            short pluginVersion) {
+        UserPrivilegeCollectionInfo info = new UserPrivilegeCollectionInfo(
+                userIdentity, privilegeCollection, pluginId, pluginVersion);
+        logEdit(OperationType.OP_UPDATE_USER_PRIVILEGE_V2, info);
+    }
+
+    public void logUpdateRolePrivilege(
+            long roleId,
+            RolePrivilegeCollection privilegeCollection,
+            short pluginId,
+            short pluginVersion) {
+        RolePrivilegeCollectionInfo info = new RolePrivilegeCollectionInfo(
+                roleId, privilegeCollection, pluginId, pluginVersion);
+        logUpdateRolePrivilege(info);
+    }
+
+    public void logUpdateRolePrivilege(RolePrivilegeCollectionInfo info) {
+        logEdit(OperationType.OP_UPDATE_ROLE_PRIVILEGE_V2, info);
+    }
+
+    public void logDropRole(
+            long roleId,
+            RolePrivilegeCollection privilegeCollection,
+            short pluginId,
+            short pluginVersion) {
+        RolePrivilegeCollectionInfo info = new RolePrivilegeCollectionInfo(
+                roleId, privilegeCollection, pluginId, pluginVersion);
+        logEdit(OperationType.OP_DROP_ROLE_V2, info);
+    }
+
+    public void logAuthUpgrade(Map<String, Long> roleNameToId) {
+        logEdit(OperationType.OP_AUTH_UPGRDE_V2, new AuthUpgradeInfo(roleNameToId));
+    }
 }

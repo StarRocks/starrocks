@@ -27,6 +27,9 @@ import com.starrocks.mysql.privilege.MockedAuth;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.SetPassVar;
+import com.starrocks.sql.ast.SetStmt;
+import com.starrocks.sql.ast.SetVar;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -58,25 +61,25 @@ public class SetPassVarTest {
         stmt.analyze();
         Assert.assertEquals("testUser", stmt.getUserIdent().getQualifiedUser());
         Assert.assertEquals("*88EEBA7D913688E7278E2AD071FDB5E76D76D34B", new String(stmt.getPassword()));
-        Assert.assertEquals("SET PASSWORD FOR 'testUser'@'%' = '*XXX'",
-                stmt.toString());
+
+        Assert.assertEquals("'testUser'@'%'", stmt.getUserIdent().toString());
 
         // empty password
         stmt = new SetPassVar(new UserIdentity("testUser", "%"), null);
         stmt.analyze();
-        Assert.assertEquals("SET PASSWORD FOR 'testUser'@'%' = '*XXX'", stmt.toString());
+        Assert.assertEquals("'testUser'@'%'", stmt.getUserIdent().toString());
 
         // empty user
         // empty password
         stmt = new SetPassVar(null, null);
         stmt.analyze();
-        Assert.assertEquals("SET PASSWORD FOR 'root'@'192.168.1.1' = '*XXX'", stmt.toString());
+        Assert.assertEquals("'root'@'192.168.1.1'", stmt.getUserIdent().toString());
     }
 
     @Test
     public void testCreateTablePartitionNormal() throws Exception {
         String setSql = "set sql_mode = concat(@@sql_mode,',STRICT_TRANS_TABLES');";
-        SetStmt stmt = (SetStmt) UtFrameUtils.parseAndAnalyzeStmt(setSql, ctx);
+        SetStmt stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(setSql, ctx);
         ctx.getSessionVariable().setSqlMode(SqlModeHelper.MODE_STRICT_TRANS_TABLES);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         SetVar setVars = stmt.getSetVars().get(0);

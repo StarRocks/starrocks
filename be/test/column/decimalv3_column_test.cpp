@@ -16,7 +16,7 @@
 namespace starrocks::vectorized {
 
 template <typename T>
-ColumnPtr create_decimal_column(int precision, int scale, size_t num_rows, std::string prefix) {
+ColumnPtr create_decimal_column(int precision, int scale, size_t num_rows, const std::string& prefix) {
     auto col = DecimalV3Column<T>::create(precision, scale, num_rows);
     auto& data = down_cast<DecimalV3Column<T>*>(col.get())->get_data();
     for (auto i = 0; i < num_rows; ++i) {

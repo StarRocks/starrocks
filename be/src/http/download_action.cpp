@@ -21,19 +21,13 @@
 
 #include "http/download_action.h"
 
-#include <sys/types.h>
-#include <unistd.h>
-
 #include <sstream>
 #include <string>
 
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "http/http_channel.h"
-#include "http/http_headers.h"
 #include "http/http_request.h"
-#include "http/http_response.h"
-#include "http/http_status.h"
 #include "http/utils.h"
 #include "runtime/exec_env.h"
 #include "util/filesystem_util.h"

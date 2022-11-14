@@ -2,11 +2,10 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.DdlStmt;
-
 // DROP DB Statement
 public class DropDbStmt extends DdlStmt {
     private final boolean ifExists;
+    private String catalog;
     private String dbName;
     private final boolean forceDrop;
 
@@ -18,6 +17,14 @@ public class DropDbStmt extends DdlStmt {
 
     public boolean isSetIfExists() {
         return ifExists;
+    }
+
+    public String getCatalogName() {
+        return this.catalog;
+    }
+
+    public void setCatalogName(String catalogName) {
+        this.catalog = catalogName;
     }
 
     public String getDbName() {
@@ -35,11 +42,6 @@ public class DropDbStmt extends DdlStmt {
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitDropDbStatement(this, context);
-    }
-
-    @Override
-    public boolean isSupportNewPlanner() {
-        return true;
     }
 
 }

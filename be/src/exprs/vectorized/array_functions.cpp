@@ -80,6 +80,9 @@ static ColumnPtr do_array_append(const Column& elements, const UInt32Column& off
 ColumnPtr ArrayFunctions::array_append([[maybe_unused]] FunctionContext* context, const Columns& columns) {
     const Column* arg0 = columns[0].get();
     const Column* arg1 = columns[1].get();
+    if (arg0->only_null()) {
+        return columns[0];
+    }
 
     arg0 = arg0->has_null() || arg0->is_constant() ? arg0 : ColumnHelper::get_data_column(arg0);
     arg1 = arg1->has_null() || arg1->is_constant() ? arg1 : ColumnHelper::get_data_column(arg1);
@@ -113,7 +116,7 @@ ColumnPtr ArrayFunctions::array_append([[maybe_unused]] FunctionContext* context
 
 class ArrayRemoveImpl {
 public:
-    static ColumnPtr evaluate(const Column& array, const Column& element) {
+    static ColumnPtr evaluate(const ColumnPtr array, const ColumnPtr element) {
         return _array_remove_generic(array, element);
     }
 
@@ -223,13 +226,13 @@ private:
         const NullColumn::Container* null_map_targets = nullptr;
 
         if constexpr (NullableElement) {
-            const NullableColumn& nullable = down_cast<const NullableColumn&>(array_elements);
+            const auto& nullable = down_cast<const NullableColumn&>(array_elements);
             elements_ptr = nullable.data_column().get();
             null_map_elements = &(nullable.null_column()->get_data());
         }
 
         if constexpr (NullableTarget) {
-            const NullableColumn& nullable = down_cast<const NullableColumn&>(argument);
+            const auto& nullable = down_cast<const NullableColumn&>(argument);
             targets_ptr = nullable.data_column().get();
             null_map_targets = &(nullable.null_column()->get_data());
         }
@@ -318,23 +321,18 @@ private:
         }
     }
 
-    static ColumnPtr _array_remove_generic(const Column& array, const Column& target) {
-        if (array.only_null()) {
-            auto result = ArrayColumn::create(array.clone_empty(), UInt32Column::create());
-            result->append_nulls(array.size());
-            return result;
+    static ColumnPtr _array_remove_generic(const ColumnPtr& array, const ColumnPtr& target) {
+        if (array->only_null()) {
+            return array;
         }
-        if (auto nullable = dynamic_cast<const NullableColumn*>(&array); nullable != nullptr) {
+        if (auto nullable = dynamic_cast<const NullableColumn*>(array.get()); nullable != nullptr) {
             auto array_col = down_cast<const ArrayColumn*>(nullable->data_column().get());
-            auto result = _array_remove_non_nullable(*array_col, target);
+            auto result = _array_remove_non_nullable(*array_col, *target);
             DCHECK_EQ(nullable->size(), result->size());
-            if (!nullable->has_null()) {
-                return result;
-            }
             return NullableColumn::create(std::move(result), nullable->null_column());
         }
 
-        return _array_remove_non_nullable(down_cast<const ArrayColumn&>(array), target);
+        return _array_remove_non_nullable(down_cast<ArrayColumn&>(*array), *target);
     }
 };
 
@@ -343,21 +341,21 @@ struct ArrayCumSumImpl {
 public:
     static ColumnPtr evaluate(const ColumnPtr& col) {
         if (col->is_constant()) {
-            ConstColumn* input = down_cast<ConstColumn*>(col.get());
+            auto* input = down_cast<ConstColumn*>(col.get());
             auto arr_col_h = input->data_column()->clone();
-            ArrayColumn* arr_col = down_cast<ArrayColumn*>(arr_col_h.get());
+            auto* arr_col = down_cast<ArrayColumn*>(arr_col_h.get());
             call_cum_sum(arr_col, nullptr);
             return ConstColumn::create(std::move(arr_col_h));
         } else if (col->is_nullable()) {
             auto res = col->clone();
-            NullableColumn* input = down_cast<NullableColumn*>(res.get());
+            auto* input = down_cast<NullableColumn*>(res.get());
             NullColumn* null_column = input->mutable_null_column();
-            ArrayColumn* arr_col = down_cast<ArrayColumn*>(input->data_column().get());
+            auto* arr_col = down_cast<ArrayColumn*>(input->data_column().get());
             call_cum_sum(arr_col, null_column);
             return res;
         } else {
             auto res = col->clone();
-            ArrayColumn* arr_col = down_cast<ArrayColumn*>(res.get());
+            auto* arr_col = down_cast<ArrayColumn*>(res.get());
             call_cum_sum(arr_col, nullptr);
             return res;
         }
@@ -454,7 +452,7 @@ ColumnPtr ArrayFunctions::array_remove([[maybe_unused]] FunctionContext* context
     const ColumnPtr& arg0 = columns[0]; // array
     const ColumnPtr& arg1 = columns[1]; // element
 
-    return ArrayRemoveImpl::evaluate(*arg0, *arg1);
+    return ArrayRemoveImpl::evaluate(arg0, arg1);
 }
 
 // If PositionEnabled=true and ReturnType=Int32, it is function array_position and it will return index of elemt if the array contain it or 0 if not contain.
@@ -545,13 +543,13 @@ private:
         const NullColumn::Container* null_map_targets = nullptr;
 
         if constexpr (NullableElement) {
-            const NullableColumn& nullable = down_cast<const NullableColumn&>(array_elements);
+            const auto& nullable = down_cast<const NullableColumn&>(array_elements);
             elements_ptr = nullable.data_column().get();
             null_map_elements = &(nullable.null_column()->get_data());
         }
 
         if constexpr (NullableTarget) {
-            const NullableColumn& nullable = down_cast<const NullableColumn&>(argument);
+            const auto& nullable = down_cast<const NullableColumn&>(argument);
             targets_ptr = nullable.data_column().get();
             null_map_targets = &(nullable.null_column()->get_data());
         }
@@ -781,13 +779,13 @@ private:
         const NullColumn::Container* null_map_targets = nullptr;
 
         if constexpr (NullableElement) {
-            const NullableColumn& nullable = down_cast<const NullableColumn&>(array_elements);
+            const auto& nullable = down_cast<const NullableColumn&>(array_elements);
             elements_ptr = nullable.data_column().get();
             null_map_elements = &(nullable.null_column()->get_data());
         }
 
         if constexpr (NullableTarget) {
-            const NullableColumn& nullable = down_cast<const NullableColumn&>(array_targets);
+            const auto& nullable = down_cast<const NullableColumn&>(array_targets);
             targets_ptr = nullable.data_column().get();
             null_map_targets = &(nullable.null_column()->get_data());
         }
@@ -959,6 +957,15 @@ ColumnPtr ArrayFunctions::array_contains_all([[maybe_unused]] FunctionContext* c
     return ArrayHasImpl<false>::evaluate(*arg0, *arg1);
 }
 
+// cannot be called anymore
+ColumnPtr ArrayFunctions::array_map([[maybe_unused]] FunctionContext* context, const Columns& columns) {
+    return nullptr;
+}
+
+ColumnPtr ArrayFunctions::array_filter(FunctionContext* context, const Columns& columns) {
+    return ArrayFilter::process(context, columns);
+}
+
 class ArrayArithmeticImpl {
 public:
     using ArithmeticType = typename ArrayFunctions::ArithmeticType;
@@ -1070,7 +1077,7 @@ public:
                 ResultType result;
 
                 size_t index;
-                if constexpr (!pt_is_binary<value_type>) {
+                if constexpr (!pt_is_string<value_type>) {
                     if constexpr (is_min) {
                         result = RunTimeTypeLimits<value_type>::max_value();
                     } else {
@@ -1112,7 +1119,7 @@ public:
                     }
                 }
 
-                if constexpr (!pt_is_binary<value_type>) {
+                if constexpr (!pt_is_string<value_type>) {
                     if (has_data) {
                         result_column->append(result);
                     } else {

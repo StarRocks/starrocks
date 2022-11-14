@@ -2,7 +2,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.catalog.Replica.ReplicaStatus;
 
@@ -66,10 +65,5 @@ public class AdminSetReplicaStatusStmt extends DdlStmt {
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitAdminSetReplicaStatusStatement(this, context);
-    }
-
-    @Override
-    public boolean isSupportNewPlanner() {
-        return true;
     }
 }

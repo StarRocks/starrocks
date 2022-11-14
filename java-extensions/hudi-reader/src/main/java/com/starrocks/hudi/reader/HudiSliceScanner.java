@@ -4,6 +4,7 @@ package com.starrocks.hudi.reader;
 
 import com.starrocks.jni.connector.ConnectorScanner;
 import com.starrocks.jni.connector.TypeMapping;
+import com.starrocks.utils.loader.ThreadContextClassLoader;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.common.JavaUtils;
@@ -52,12 +53,13 @@ public class HudiSliceScanner extends ConnectorScanner {
     private StructField[] structFields;
     private Deserializer deserializer;
     private final int fetchSize;
+    private final ClassLoader classLoader;
 
     public HudiSliceScanner(int fetchSize, Map<String, String> params) {
         this.fetchSize = fetchSize;
         this.basePath = params.get("base_path");
         this.hiveColumnNames = params.get("hive_column_names");
-        this.hiveColumnTypes = params.get("hive_column_types").split(":");
+        this.hiveColumnTypes = params.get("hive_column_types").split("#");
         this.requiredFields = params.get("required_fields").split(",");
         this.instantTime = params.get("instant_time");
         if (params.get("delta_file_paths").length() == 0) {
@@ -71,14 +73,14 @@ public class HudiSliceScanner extends ConnectorScanner {
         this.inputFormat = params.get("input_format");;
         this.fieldInspectors = new ObjectInspector[requiredFields.length];
         this.structFields = new StructField[requiredFields.length];
+        this.classLoader = this.getClass().getClassLoader();
     }
 
     @Override
     public void open() throws IOException {
-        try {
+        try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(classLoader)) {
             Properties properties = new Properties();
             Configuration conf = new Configuration();
-            conf.set("fs.hdfs.impl", "org.apache.hadoop.hdfs.DistributedFileSystem");
             conf.setBoolean("dfs.client.use.legacy.blockreader", false);
             JobConf jobConf = new JobConf(conf);
             jobConf.setBoolean("hive.io.file.read.all.columns", false);
@@ -144,7 +146,7 @@ public class HudiSliceScanner extends ConnectorScanner {
 
     @Override
     public void close() throws IOException {
-        try {
+        try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(classLoader)) {
             if (reader != null) {
                 reader.close();
             }
@@ -156,7 +158,7 @@ public class HudiSliceScanner extends ConnectorScanner {
 
     @Override
     public int getNext() throws IOException {
-        try {
+        try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(classLoader)) {
             NullWritable key = reader.createKey();
             ArrayWritable value = reader.createValue();
             int numRows = 0;
@@ -204,9 +206,6 @@ public class HudiSliceScanner extends ConnectorScanner {
         return (StructObjectInspector) inspector;
     }
 
-    /**
-     * For test only
-     */
     public String toString() {
         StringBuilder sb = new StringBuilder();
         sb.append("basePath: ");
