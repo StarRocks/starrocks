@@ -6,7 +6,7 @@
 
 ![MySQL 同步](../assets/4.9.2.png)
 
-实时同步 MySQL 至 StarRocks 分成同步库表结构、同步数据两个阶段进行。首先 StarRocks Migration Tool (数据迁移工具，以下简称 SMT) 将外部数据库的表结构转化成StarRocks的建表语句。然后 Flink 集群运行 Flink job，同步 MySQL 全量及增量数据至 StarRocks。具体同步流程如下：
+实时同步 MySQL 至 StarRocks 分成同步库表结构、同步数据两个阶段进行。首先 StarRocks Migration Tool (数据迁移工具，以下简称 SMT) 将 MySQL 的库表结构转化成 StarRocks 的建库和建表语句。然后 Flink 集群运行 Flink job，同步 MySQL 全量及增量数据至 StarRocks。具体同步流程如下：
 
 > 说明：
 > MySQL 实时同步至 StarRocks 能够保证端到端的 exactly-once 的语义一致性。
@@ -371,7 +371,7 @@
            >
            > 如果任务出现异常，可以通过 Flink WebUI 或者  **flink-1.14.5/log** 目录的日志文件进行排查。
 
-## 补充说明
+## 常见问题
 
 ### **如何为不同的表设置不同的 flink-connector-starrocks 配置**
 
@@ -477,7 +477,7 @@ flink.starrocks.sink.properties.strip_outer_array=true
 
 1. 打开 **result/flink-create.all.sql** 文件。
 
-2. 修改文件中的 SQL 语句，将所有的  INSERT INTO 语句调整位置到文件末尾。然后在第一条 INSERT语句的前面加上`EXECUTE STATEMENT SET BEGIN;` 在最后一 INSERT 语句后面加上一行`END;`。
+2. 修改文件中的 SQL 语句，将所有的  INSERT INTO 语句调整位置到文件末尾。然后在第一条 INSERT语句的前面加上`EXECUTE STATEMENT SET BEGIN` 在最后一 INSERT 语句后面加上一行`END;`。
 
    > **注意**
    >
@@ -497,6 +497,4 @@ flink.starrocks.sink.properties.strip_outer_array=true
    END;
    ```
 
-## 常见问题
-
-请参见 [MySQL 实时同步至 StarRocks 常见问题](../faq/loading/synchronize_mysql_into_sr.md)。
+更多常见问题，请参见 [MySQL 实时同步至 StarRocks 常见问题](../faq/loading/synchronize_mysql_into_sr.md)。
