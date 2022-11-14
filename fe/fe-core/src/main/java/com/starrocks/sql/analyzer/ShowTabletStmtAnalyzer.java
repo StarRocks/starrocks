@@ -87,12 +87,9 @@ public class ShowTabletStmtAnalyzer {
                     int index = 0;
                     Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
                     String tableName = statement.getTableName();
-                    Table table = null;
-                    db.readLock();
-                    try {
-                        table = db.getTable(tableName);
-                    } finally {
-                        db.readUnlock();
+                    Table table = db.getTable(tableName);
+                    if (table == null) {
+                        throw new SemanticException("Table %s is not found", tableName);
                     }
 
                     try {
