@@ -45,6 +45,7 @@ public:
 
 private:
     Status _on_header(HttpRequest* http_req, StreamLoadContext* ctx);
+    Status _channel_on_header(HttpRequest* http_req, StreamLoadContext* ctx);
     Status _exec_plan_fragment(HttpRequest* http_req, StreamLoadContext* ctx);
     void _send_error_reply(HttpRequest* req, const Status& st);
     Status _parse_request(HttpRequest* http_req, StreamLoadContext* ctx, TStreamLoadPutRequest& request);

@@ -26,12 +26,8 @@
 #include <memory>
 
 #include "column/datum_convert.h"
-#include "gen_cpp/segment.pb.h"
-#include "runtime/mem_pool.h"
-#include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
 #include "storage/rowset/options.h"
-#include "storage/rowset/page_builder.h"
 #include "storage/rowset/page_decoder.h"
 #include "storage/rowset/storage_page_decoder.h"
 #include "util/logging.h"
@@ -48,16 +44,11 @@ public:
 
     template <FieldType type, class PageDecoderType>
     void copy_one(PageDecoderType* decoder, typename TypeTraits<type>::CppType* ret) {
-        MemPool pool;
-        std::unique_ptr<ColumnVectorBatch> cvb;
-        ColumnVectorBatch::create(1, true, get_type_info(type), nullptr, &cvb);
-        ColumnBlock block(cvb.get(), &pool);
-        ColumnBlockView column_block_view(&block);
-
+        auto column = ChunkHelper::column_from_field_type(type, true);
         size_t n = 1;
-        decoder->_copy_next_values(n, column_block_view.data());
+        decoder->next_batch(&n, column.get());
         ASSERT_EQ(1, n);
-        *ret = *reinterpret_cast<const typename TypeTraits<type>::CppType*>(block.cell_ptr(0));
+        *ret = *reinterpret_cast<const typename TypeTraits<type>::CppType*>(column->raw_data());
     }
 
     template <FieldType Type, class PageBuilderType, class PageDecoderType, int ReserveHead = 0>
@@ -97,17 +88,12 @@ public:
         ASSERT_TRUE(status.ok());
         ASSERT_EQ(0, page_decoder.current_index());
 
-        MemPool pool;
+        auto column = ChunkHelper::column_from_field_type(Type, false);
 
-        std::unique_ptr<ColumnVectorBatch> cvb;
-        ColumnVectorBatch::create(size, false, get_type_info(Type), nullptr, &cvb);
-        ColumnBlock block(cvb.get(), &pool);
-        ColumnBlockView column_block_view(&block);
-
-        status = page_decoder.next_batch(&size, &column_block_view);
+        status = page_decoder.next_batch(&size, column.get());
         ASSERT_TRUE(status.ok());
 
-        auto* values = reinterpret_cast<CppType*>(block.data());
+        auto* values = reinterpret_cast<const CppType*>(column->raw_data());
         auto* decoded = (CppType*)values;
         for (uint i = 0; i < size; i++) {
             if (src[i] != decoded[i]) {
@@ -325,7 +311,7 @@ TEST_F(BitShufflePageTest, TestBitShuffleFloatBlockEncoderRandom) {
 
     std::unique_ptr<float[]> floats(new float[size]);
     for (int i = 0; i < size; i++) {
-        floats.get()[i] = random() + static_cast<float>(random()) / INT_MAX;
+        floats.get()[i] = random() + static_cast<float>(random()) / std::numeric_limits<int>::max();
     }
 
     test_encode_decode_page_template<OLAP_FIELD_TYPE_FLOAT, BitshufflePageBuilder<OLAP_FIELD_TYPE_FLOAT>,
@@ -338,7 +324,7 @@ TEST_F(BitShufflePageTest, TestBitShuffleDoubleBlockEncoderRandom) {
 
     std::unique_ptr<double[]> doubles(new double[size]);
     for (int i = 0; i < size; i++) {
-        doubles.get()[i] = random() + static_cast<double>(random()) / INT_MAX;
+        doubles.get()[i] = random() + static_cast<double>(random()) / std::numeric_limits<int>::max();
     }
 
     test_encode_decode_page_template<OLAP_FIELD_TYPE_DOUBLE, BitshufflePageBuilder<OLAP_FIELD_TYPE_DOUBLE>,
@@ -434,7 +420,7 @@ TEST_F(BitShufflePageTest, TestBitShuffleFloatBlockEncoderSeekValue) {
     const uint32_t size = 1000;
     std::unique_ptr<float[]> floats(new float[size]);
     for (int i = 0; i < size; i++) {
-        floats.get()[i] = i + 100 + static_cast<float>(random()) / INT_MAX;
+        floats.get()[i] = i + 100 + static_cast<float>(random()) / std::numeric_limits<int>::max();
     }
 
     float small_than_smallest = 99.9;
@@ -449,7 +435,7 @@ TEST_F(BitShufflePageTest, TestBitShuffleDoubleBlockEncoderSeekValue) {
     const uint32_t size = 1000;
     std::unique_ptr<double[]> doubles(new double[size]);
     for (int i = 0; i < size; i++) {
-        doubles.get()[i] = i + 100 + static_cast<double>(random()) / INT_MAX;
+        doubles.get()[i] = i + 100 + static_cast<double>(random()) / std::numeric_limits<int>::max();
     }
 
     double small_than_smallest = 99.9;

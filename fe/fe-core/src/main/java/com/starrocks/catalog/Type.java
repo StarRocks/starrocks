@@ -48,6 +48,8 @@ import java.util.stream.Collectors;
  * as abstract methods that subclasses must implement.
  */
 public abstract class Type implements Cloneable {
+    // used for nested type such as map and struct
+    protected Boolean[] selectedFields;
 
     public static final int BINARY = 63;
     public static final int CHARSET_UTF8 = 33;
@@ -537,6 +539,27 @@ public abstract class Type implements Cloneable {
      */
     protected abstract String prettyPrint(int lpad);
 
+    /**
+     * Used for Nest Type
+     */
+    public void setSelectedField(int pos, boolean needSetChildren) {
+        throw new IllegalStateException("setSelectedField() is not implemented for type " + toSql());
+    }
+
+    /**
+     * Used for Nest Type
+     */
+    public void selectAll() {
+        throw new IllegalStateException("selectAll() is not implemented for type " + toSql());
+    }
+
+    /**
+     * used for test
+     */
+    public Boolean[] getSelectedFields() {
+        return selectedFields;
+    }
+
     public boolean isInvalid() {
         return isScalarType(PrimitiveType.INVALID_TYPE);
     }
@@ -859,7 +882,7 @@ public abstract class Type implements Cloneable {
         // 8-byte pointer and 4-byte length indicator (12 bytes total).
         // Per struct alignment rules, there is an extra 4 bytes of padding to align to 8
         // bytes so 16 bytes total.
-        if (isCollectionType()) {
+        if (isComplexType()) {
             return 16;
         }
         throw new IllegalStateException("getSlotSize() not implemented for type " + toSql());
@@ -1544,8 +1567,9 @@ public abstract class Type implements Cloneable {
         }
     }
 
+    // getInnermostType() is only used for array
     public static Type getInnermostType(Type type) throws AnalysisException {
-        if (type.isScalarType()) {
+        if (type.isScalarType() || type.isStructType()) {
             return type;
         }
         if (type.isArrayType()) {

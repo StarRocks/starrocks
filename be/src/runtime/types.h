@@ -63,6 +63,7 @@ struct TypeDescriptor {
 
     /// Only set if type == TYPE_STRUCT. The field name of each child.
     std::vector<std::string> field_names;
+
     // Only set if type == TYPE_MAP || type == TYPE_STRUCT.
     std::vector<bool> selected_fields;
 

@@ -47,10 +47,10 @@ void EncodeContext::_adjust(const int col_id) {
         _column_encode_level[col_id] = 0;
     }
     if (old_level != _column_encode_level[col_id] || _session_encode_level < -1) {
-        LOG(WARNING) << "Old encode level " << old_level << " is changed to " << _column_encode_level[col_id]
-                     << " because the first " << EncodeSamplingNum << " of " << _frequency << " in total " << _times
-                     << " chunks' compression ratio is " << _encoded_bytes[col_id] * 1.0 / _raw_bytes[col_id]
-                     << " higher than limit " << EncodeRatioLimit;
+        VLOG_ROW << "Old encode level " << old_level << " is changed to " << _column_encode_level[col_id]
+                 << " because the first " << EncodeSamplingNum << " of " << _frequency << " in total " << _times
+                 << " chunks' compression ratio is " << _encoded_bytes[col_id] * 1.0 / _raw_bytes[col_id]
+                 << " higher than limit " << EncodeRatioLimit;
     }
     _encoded_bytes[col_id] = 0;
     _raw_bytes[col_id] = 0;

@@ -203,30 +203,6 @@ public:
         return Status::OK();
     }
 
-    Status next_batch(size_t* n, ColumnBlockView* dst) override {
-        DCHECK(_parsed);
-        if (PREDICT_FALSE(*n == 0 || _cur_idx >= _num_elems)) {
-            *n = 0;
-            return Status::OK();
-        }
-        size_t max_fetch = std::min(*n, static_cast<size_t>(_num_elems - _cur_idx));
-
-        Slice* out = reinterpret_cast<Slice*>(dst->data());
-
-        for (size_t i = 0; i < max_fetch; i++, out++, _cur_idx++) {
-            Slice elem(string_at_index(_cur_idx));
-            out->size = elem.size;
-            if (elem.size != 0) {
-                out->data = reinterpret_cast<char*>(dst->pool()->allocate(elem.size * sizeof(uint8_t)));
-                RETURN_IF_UNLIKELY_NULL(out->data, Status::MemoryAllocFailed("alloc mem for binary plain page failed"));
-                memcpy(out->data, elem.data, elem.size);
-            }
-        }
-
-        *n = max_fetch;
-        return Status::OK();
-    }
-
     Status next_batch(size_t* count, vectorized::Column* dst) override;
 
     Status next_batch(const vectorized::SparseRange& range, vectorized::Column* dst) override;

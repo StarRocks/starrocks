@@ -114,7 +114,8 @@ Status RowsetWriter::init() {
     _writer_options.global_dicts = _context.global_dicts != nullptr ? _context.global_dicts : nullptr;
     _writer_options.referenced_column_ids = _context.referenced_column_ids;
 
-    if (_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && _context.partial_update_tablet_schema) {
+    if (_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS &&
+        (_context.partial_update_tablet_schema || !_context.merge_condition.empty())) {
         _rowset_txn_meta_pb = std::make_unique<RowsetTxnMetaPB>();
     }
 
@@ -153,6 +154,10 @@ StatusOr<RowsetSharedPtr> RowsetWriter::build() {
                 _rowset_txn_meta_pb->add_partial_update_column_ids(_context.referenced_column_ids[i]);
                 _rowset_txn_meta_pb->add_partial_update_column_unique_ids(tablet_column.unique_id());
             }
+            *_rowset_meta_pb->mutable_txn_meta() = *_rowset_txn_meta_pb;
+        }
+        if (!_context.merge_condition.empty() && !_context.partial_update_tablet_schema) {
+            _rowset_txn_meta_pb->set_merge_condition(_context.merge_condition);
             *_rowset_meta_pb->mutable_txn_meta() = *_rowset_txn_meta_pb;
         }
     } else {
@@ -542,6 +547,14 @@ Status HorizontalRowsetWriter::_final_merge() {
                                                   config::vertical_compaction_max_columns_per_group, &column_groups);
 
         auto schema = ChunkHelper::convert_schema_to_format_v2(*_context.tablet_schema, column_groups[0]);
+        if (!_context.merge_condition.empty()) {
+            for (int i = _context.tablet_schema->num_key_columns(); i < _context.tablet_schema->num_columns(); ++i) {
+                if (_context.tablet_schema->schema()->field(i)->name() == _context.merge_condition) {
+                    schema.append(_context.tablet_schema->schema()->field(i));
+                    break;
+                }
+            }
+        }
 
         for (const auto& segment : segments) {
             auto res = segment->new_iterator(schema, seg_options);
@@ -571,7 +584,7 @@ Status HorizontalRowsetWriter::_final_merge() {
                                     KeysType_Name(_context.tablet_schema->keys_type())));
             }
         } else {
-            itr = new_aggregate_iterator(new_heap_merge_iterator(seg_iterators), true);
+            itr = new_aggregate_iterator(new_heap_merge_iterator(seg_iterators, _context.merge_condition), true);
         }
         itr->init_encoded_schema(vectorized::EMPTY_GLOBAL_DICTMAPS);
 
@@ -739,7 +752,7 @@ Status HorizontalRowsetWriter::_final_merge() {
             }
             _context.schema_change_sorting = false;
         } else {
-            itr = new_aggregate_iterator(new_heap_merge_iterator(seg_iterators), 0);
+            itr = new_aggregate_iterator(new_heap_merge_iterator(seg_iterators, _context.merge_condition), 0);
         }
         itr->init_encoded_schema(vectorized::EMPTY_GLOBAL_DICTMAPS);
 

@@ -356,6 +356,7 @@ void QueryContextManager::report_fragments_with_same_host(
 
                 if (runtime_state->query_options().query_type == TQueryType::LOAD) {
                     runtime_state->update_report_load_status(&params);
+                    params.__set_load_type(runtime_state->query_options().load_job_type);
                 }
 
                 auto backend_id = get_backend_id();
@@ -440,6 +441,7 @@ void QueryContextManager::report_fragments(
 
             if (runtime_state->query_options().query_type == TQueryType::LOAD) {
                 runtime_state->update_report_load_status(&params);
+                params.__set_load_type(runtime_state->query_options().load_job_type);
             }
 
             auto backend_id = get_backend_id();

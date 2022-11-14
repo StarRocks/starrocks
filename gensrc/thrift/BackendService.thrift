@@ -95,6 +95,11 @@ struct TProxyResult {
     2: optional TKafkaMetaProxyResult kafka_meta_result;
 }
 
+struct TStreamLoadChannel {
+    1: optional string label
+    2: optional i32 channel_id
+}
+
 service BackendService {
     // Called by coord to start asynchronous execution of plan fragment in backend.
     // Returns as soon as all incoming data streams have been set up.
@@ -139,6 +144,8 @@ service BackendService {
     TTabletStatResult get_tablet_stat();
 
     Status.TStatus submit_routine_load_task(1:list<TRoutineLoadTask> tasks);
+
+    Status.TStatus finish_stream_load_channel(1:TStreamLoadChannel stream_load_channel);
 
     // starrocks will build  a scan context for this session, context_id returned if success
     StarrocksExternalService.TScanOpenResult open_scanner(1: StarrocksExternalService.TScanOpenParams params);

@@ -53,7 +53,7 @@ public class TaskRunStatus implements Writable {
 
     // the larger the value, the higher the priority, the default value is 0
     @SerializedName("priority")
-    private int priority = 0;
+    private int priority = Constants.TaskRunPriority.LOWEST.value();
 
     @SerializedName("mergeRedundant")
     private boolean mergeRedundant = false;

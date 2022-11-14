@@ -92,6 +92,9 @@ statement
     | showRoutineLoadStatement
     | showRoutineLoadTaskStatement
 
+    //StreamLoad Statement
+    | showStreamLoadStatement
+
     // Admin Statement
     | adminSetConfigStatement
     | adminSetReplicaStatusStatement
@@ -832,6 +835,12 @@ showRoutineLoadTaskStatement
         (FROM db=qualifiedName)?
         WHERE expression
     ;
+
+showStreamLoadStatement
+    : SHOW ALL? STREAM LOAD (FOR (db=qualifiedName '.')? name=identifier)?
+        (FROM db=qualifiedName)?
+        (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
+    ;
 // ------------------------------------------- Analyze Statement -------------------------------------------------------
 
 analyzeStatement
@@ -1476,9 +1485,8 @@ limitElement
 querySpecification
     : SELECT setVarHint* setQuantifier? selectItem (',' selectItem)*
       fromClause
-      (WHERE where=expression)?
-      (GROUP BY groupingElement)?
-      (HAVING having=expression)?
+      ((QUALIFY qualifyFunction=selectItem comparisonOperator limit=INTEGER_VALUE)?
+      | (WHERE where=expression)? (GROUP BY groupingElement)? (HAVING having=expression)?)
     ;
 
 fromClause
@@ -1668,6 +1676,7 @@ primaryExpression
     | primaryExpression COLLATE (identifier | string)                                     #collate
     | literalExpression                                                                   #literal
     | columnReference                                                                     #columnRef
+    | base = primaryExpression '.' fieldName = identifier                                 #dereference
     | left = primaryExpression CONCAT right = primaryExpression                           #concat
     | operator = (MINUS_SYMBOL | PLUS_SYMBOL | BITNOT) primaryExpression                  #arithmeticUnary
     | operator = LOGICAL_NOT primaryExpression                                            #arithmeticUnary
@@ -1725,7 +1734,6 @@ systemVariable
 
 columnReference
     : identifier
-    | qualifiedName
     ;
 
 informationFunctionExpression
@@ -1958,10 +1966,23 @@ type
     : baseType
     | decimalType
     | arrayType
+    | structType
     ;
 
 arrayType
     : ARRAY '<' type '>'
+    ;
+
+columnNameColonType
+    : identifier ':' type comment?
+    ;
+
+columnNameColonTypeList
+    : columnNameColonType (',' columnNameColonType)*
+    ;
+
+structType
+    : STRUCT '<' columnNameColonTypeList '>'
     ;
 
 typeParameter

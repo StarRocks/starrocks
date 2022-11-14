@@ -30,7 +30,6 @@
 #include "column/nullable_column.h"
 #include "common/logging.h"
 #include "fs/fs.h"
-#include "gen_cpp/segment.pb.h"
 #include "gutil/strings/substitute.h"
 #include "simd/simd.h"
 #include "storage/rowset/bitmap_index_writer.h"

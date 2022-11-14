@@ -359,6 +359,17 @@ public class GlobalTransactionMgr implements Writable {
         dbTransactionMgr.prepareTransaction(transactionId, tabletCommitInfos, txnCommitAttachment);
     }
 
+    public void commitPreparedTransaction(long dbId, long transactionId, long timeoutMillis)
+            throws UserException  {
+
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        if (db == null) {
+            LOG.warn("Database {} does not exist", dbId);
+            throw new UserException("Database[" + dbId + "] does not exist");
+        }
+        commitPreparedTransaction(db, transactionId, timeoutMillis);
+    }
+
     public void commitPreparedTransaction(Database db, long transactionId, long timeoutMillis)
             throws UserException {
         if (Config.disable_load_job) {
