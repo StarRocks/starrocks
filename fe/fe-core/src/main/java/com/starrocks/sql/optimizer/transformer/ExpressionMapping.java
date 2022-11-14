@@ -2,6 +2,7 @@
 package com.starrocks.sql.optimizer.transformer;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.sql.analyzer.RelationId;
@@ -16,6 +17,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class ExpressionMapping {
     /**
@@ -35,6 +37,7 @@ public class ExpressionMapping {
      */
     private final Scope scope;
     private ColumnRefOperator[] fieldMappings;
+    private int deDuplicationScope = 0;
     private RelationId outerScopeRelationId;
 
     public ExpressionMapping(Scope scope, List<ColumnRefOperator> fieldMappings) {
@@ -80,7 +83,24 @@ public class ExpressionMapping {
                     String.format("Get columnRef with index %d out fieldMappings length", fieldIndex),
                     ErrorType.INTERNAL_ERROR);
         }
-        return fieldMappings[fieldIndex];
+        if (deDuplicationScope == 0) {
+            return fieldMappings[fieldIndex];
+        } else {
+            Set<ColumnRefOperator> deDep = Sets.newHashSet();
+            for (int i = 0; i < deDuplicationScope; i++) {
+                deDep.add(fieldMappings[i]);
+                if (deDep.size() == fieldIndex + 1) {
+                    return fieldMappings[i];
+                }
+            }
+            int realIndex = (deDuplicationScope - deDep.size()) + fieldIndex;
+            if (realIndex > fieldMappings.length) {
+                throw new StarRocksPlannerException(
+                        String.format("Get columnRef with index %d with deDuplication out fieldMappings length", fieldIndex),
+                        ErrorType.INTERNAL_ERROR);
+            }
+            return fieldMappings[realIndex];
+        }
     }
 
     public RelationId getOuterScopeRelationId() {
@@ -90,6 +110,10 @@ public class ExpressionMapping {
     public void setFieldMappings(List<ColumnRefOperator> fieldMappings) {
         this.fieldMappings = new ColumnRefOperator[fieldMappings.size()];
         fieldMappings.toArray(this.fieldMappings);
+    }
+
+    public void setDeDuplicationScope(int deDuplicationScope) {
+        this.deDuplicationScope = deDuplicationScope;
     }
 
     public void put(Expr expression, ColumnRefOperator columnRefOperator) {

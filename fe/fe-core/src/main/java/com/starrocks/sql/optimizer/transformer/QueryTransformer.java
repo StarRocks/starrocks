@@ -131,6 +131,7 @@ class QueryTransformer {
 
         List<ColumnRefOperator> fieldMappings = new ArrayList<>();
         Map<ColumnRefOperator, ScalarOperator> projections = Maps.newHashMap();
+        int orderByScope = 0;
 
         for (Expr expression : expressions) {
             Map<ScalarOperator, SubqueryOperator> subqueryPlaceholders = Maps.newHashMap();
@@ -145,6 +146,7 @@ class QueryTransformer {
             projections.put(columnRefOperator, scalarOperator);
             fieldMappings.add(columnRefOperator);
             outputTranslations.put(expression, columnRefOperator);
+            orderByScope++;
         }
 
         if (!withAggregation) {
@@ -156,6 +158,7 @@ class QueryTransformer {
 
         LogicalProjectOperator projectOperator = new LogicalProjectOperator(projections);
         outputTranslations.setFieldMappings(fieldMappings);
+        outputTranslations.setDeDuplicationScope(orderByScope);
         return new OptExprBuilder(projectOperator, Lists.newArrayList(subOpt), outputTranslations);
     }
 

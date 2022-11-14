@@ -177,4 +177,11 @@ public class OrderByTest extends PlanTestBase {
                 "  |  \n" +
                 "  14:NESTLOOP JOIN\n");
     }
+
+    @Test
+    public void testOrderDuplicateColumnRef() throws Exception {
+        String sql = "select v1, * from t0 order by v2";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "order by: <slot 2> 2: v2 ASC");
+    }
 }
