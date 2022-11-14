@@ -128,7 +128,7 @@ char* CSVReader::escapeDataPtr() {
 
 // 这个函数我们要从状态START开始，读取下一条记录。
 // 重载。
-Status CSVReader::next_record(FieldOffsets* fields) {
+Status CSVReader::next_record(FieldOffsets* fields, size_t& parsed_start, size_t& parsed_end) {
     fields->clear();
     if (_limit > 0 && _parsed_bytes > _limit) {
         return Status::EndOfFile("Reached limit");
@@ -141,7 +141,7 @@ Status CSVReader::next_record(FieldOffsets* fields) {
     ParseState preState = curState;
     // 将filed_start初始化为最大值，表示未进入START状态
     size_t filed_start = std::string::npos;
-    size_t parsed_start = _buff.position_offset();
+    parsed_start = _buff.position_offset();
     bool is_enclose_field = false;
     bool is_escape_field = false;
     size_t filed_end = 0;
@@ -394,6 +394,7 @@ Status CSVReader::next_record(FieldOffsets* fields) {
     newline_label:
         case NEWLINE:
             _parsed_bytes += _buff.position_offset() - parsed_start;
+            parsed_end = _buff.position_offset();
             // push line
             // 如果未发生异常，那么将行分隔符从字段中去除，发生异常，不做修饰了。
             if (status.ok() || status.is_end_of_file()) {

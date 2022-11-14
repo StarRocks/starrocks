@@ -240,7 +240,6 @@ Status CSVScanner::_parse_csv_v2(Chunk* chunk) {
     const int capacity = _state->chunk_size();
     DCHECK_EQ(0, chunk->num_rows());
     Status status;
-    CSVReader::Record record;
     CSVReader::FieldOffsets fields;
 
     int num_columns = chunk->num_columns();
@@ -250,10 +249,11 @@ Status CSVScanner::_parse_csv_v2(Chunk* chunk) {
     }
 
     csv::Converter::Options options{.invalid_field_as_null = !_strict_mode};
-
     // 这里的循环表示我们获取到capacity条记录，则停止循环
     for (size_t num_rows = chunk->num_rows(); num_rows < capacity; /**/) {
-        status = _curr_reader->next_record(&fields);
+        size_t parsed_start;
+        size_t parsed_end;
+        status = _curr_reader->next_record(&fields, parsed_start, parsed_end);
         if (!status.ok() && !status.is_end_of_file()) {
             return status;
         }
@@ -266,6 +266,8 @@ Status CSVScanner::_parse_csv_v2(Chunk* chunk) {
             continue;
         }
 
+        const char* data = _curr_reader->buffBasePtr() + parsed_start;
+        CSVReader::Record record(data, parsed_end - parsed_start);
         if (fields.size() != _num_fields_in_csv) {
             if (status.is_end_of_file()) {
                 break;
@@ -275,21 +277,16 @@ Status CSVScanner::_parse_csv_v2(Chunk* chunk) {
                 error_msg << "Value count does not match column count. "
                           << "Expect " << _num_fields_in_csv << ", but got " << fields.size();
                 
-                // _report_error(record.to_string(), error_msg.str());
-                _report_error("MMMMM!!!!mark1", error_msg.str());
+                _report_error(record.to_string(), error_msg.str());
             }
             continue;
         }
-        // TODO: what's meaning?
-        // if (!validate_utf8(record.data, record.size)) {
-        //     if (_counter->num_rows_filtered++ < 50) {
-        //         _report_error(record.to_string(), "Invalid UTF-8 row");
-        //     }
-        //     continue;
-        // }
-        // ---------------------------------------------------------
-
-
+        if (!validate_utf8(record.data, record.size)) {
+            if (_counter->num_rows_filtered++ < 50) {
+                _report_error(record.to_string(), "Invalid UTF-8 row");
+            }
+            continue;
+        }
 
         SCOPED_RAW_TIMER(&_counter->fill_ns);
         bool has_error = false;
@@ -316,8 +313,7 @@ Status CSVScanner::_parse_csv_v2(Chunk* chunk) {
                     std::stringstream error_msg;
                     error_msg << "Value '" << field.to_string() << "' is out of range. "
                               << "The type of '" << slot->col_name() << "' is " << slot->type().debug_string();
-                    _report_error("MMMMM!!!!mark2", error_msg.str());
-                    // _report_error(record.to_string(), error_msg.str());
+                    _report_error(record.to_string(), error_msg.str());
                 }
                 has_error = true;
                 break;

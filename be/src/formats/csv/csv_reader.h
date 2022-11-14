@@ -131,7 +131,7 @@ public:
 
     Status next_record(Record* record);
 
-    Status next_record(FieldOffsets* fields);
+    Status next_record(FieldOffsets* fields, size_t& parsed_start, size_t& parsed_end);
 
     void set_limit(size_t limit) { _limit = limit; }
 
