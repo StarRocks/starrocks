@@ -172,6 +172,16 @@ public:
         return false;
     }
 
+    bool try_put(const T& val) {
+        std::unique_lock<Lock> l(_lock);
+        if (_items.size() >= _capacity || _shutdown) {
+            return false;
+        }
+        _items.emplace_back(val);
+        _not_empty.notify_one();
+        return true;
+    }
+
     // Shutdown the queue, this will wake up all waiting threads.
     void shutdown() {
         std::lock_guard<Lock> guard(_lock);
