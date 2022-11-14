@@ -847,20 +847,12 @@ public class Utils {
             // for LogicalAggregationOperator, should include aggregation
             if (expression.getOp() instanceof LogicalAggregationOperator) {
                 LogicalAggregationOperator agg = (LogicalAggregationOperator) expression.getOp();
-                Map<ColumnRefOperator, ScalarOperator> keyMap = agg.getGroupingKeys().stream().collect(Collectors.toMap(
-                        java.util.function.Function.identity(),
-                        java.util.function.Function.identity()));
-                columnRefMap.putAll(keyMap);
-                columnRefMap.putAll(agg.getAggregations());
+                columnRefMap.putAll(agg.getColumnRefMap());
             }
         } else {
             if (expression.getOp() instanceof LogicalAggregationOperator) {
                 LogicalAggregationOperator agg = (LogicalAggregationOperator) expression.getOp();
-                Map<ColumnRefOperator, ScalarOperator> keyMap = agg.getGroupingKeys().stream().collect(Collectors.toMap(
-                        java.util.function.Function.identity(),
-                        java.util.function.Function.identity()));
-                columnRefMap.putAll(keyMap);
-                columnRefMap.putAll(agg.getAggregations());
+                columnRefMap.putAll(agg.getColumnRefMap());
             } else {
                 ColumnRefSet refSet = expression.getOutputColumns();
                 for (int columnId : refSet.getColumnIds()) {

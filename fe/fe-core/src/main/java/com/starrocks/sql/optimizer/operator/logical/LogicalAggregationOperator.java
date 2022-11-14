@@ -4,6 +4,7 @@ package com.starrocks.sql.optimizer.operator.logical;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Maps;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -19,6 +20,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.stream.Collectors;
+
+import static java.util.function.Function.identity;
 
 public class LogicalAggregationOperator extends LogicalOperator {
     private final AggType type;
@@ -121,6 +125,14 @@ public class LogicalAggregationOperator extends LogicalOperator {
             columns.union(new ArrayList<>(aggregations.keySet()));
             return columns;
         }
+    }
+
+    public Map<ColumnRefOperator, ScalarOperator> getColumnRefMap() {
+        Map<ColumnRefOperator, ScalarOperator> columnRefMap = Maps.newHashMap();
+        Map<ColumnRefOperator, ScalarOperator> keyMap = groupingKeys.stream().collect(Collectors.toMap(identity(), identity()));
+        columnRefMap.putAll(keyMap);
+        columnRefMap.putAll(aggregations);
+        return columnRefMap;
     }
 
     @Override

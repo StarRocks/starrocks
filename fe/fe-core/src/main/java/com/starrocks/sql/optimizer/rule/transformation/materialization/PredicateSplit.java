@@ -74,7 +74,7 @@ public class PredicateSplit {
                     } else {
                         residualPredicates.add(scalarOperator);
                     }
-                } else if (binary.getBinaryType().isRangeForMv()) {
+                } else if (binary.getBinaryType().isRangeOrNe()) {
                     if (leftChild.isColumnRef() && rightChild.isConstantRef()) {
                         rangePredicates.add(scalarOperator);
                     } else {

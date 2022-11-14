@@ -109,7 +109,7 @@ public class BinaryPredicateOperator extends PredicateOperator {
                     || type.equals(GE.type);
         }
 
-        public boolean isRangeForMv() {
+        public boolean isRangeOrNe() {
             return isRange() || type.equals(NE.type);
         }
     }
