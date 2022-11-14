@@ -61,7 +61,7 @@ RuntimeState::RuntimeState(const TUniqueId& fragment_instance_id, const TQueryOp
           _num_rows_load_unselected(0),
           _num_print_error_rows(0) {
     _profile = std::make_shared<RuntimeProfile>("Fragment " + print_id(fragment_instance_id));
-    Status status = init(fragment_instance_id, query_options, query_globals, exec_env);
+    auto status = init(fragment_instance_id, query_options, query_globals, exec_env);
     DCHECK(status.ok());
 }
 
@@ -79,8 +79,6 @@ RuntimeState::RuntimeState(const TUniqueId& query_id, const TUniqueId& fragment_
           _num_rows_load_unselected(0),
           _num_print_error_rows(0) {
     _profile = std::make_shared<RuntimeProfile>("Fragment " + print_id(fragment_instance_id));
-    Status status = init(fragment_instance_id, query_options, query_globals, exec_env);
-    DCHECK(status.ok());
 }
 
 RuntimeState::RuntimeState(const TQueryGlobals& query_globals)
@@ -113,7 +111,7 @@ RuntimeState::~RuntimeState() {
         _error_log_file = nullptr;
     }
 
-    if (_exec_env != nullptr && _exec_env->thread_mgr() != nullptr) {
+    if (_exec_env && _exec_env->thread_mgr() && _resource_pool) {
         _exec_env->thread_mgr()->unregister_pool(_resource_pool);
     }
 }
@@ -158,7 +156,7 @@ Status RuntimeState::init(const TUniqueId& fragment_instance_id, const TQueryOpt
     }
 
     // Register with the thread mgr
-    if (exec_env != nullptr) {
+    if (exec_env != nullptr && !enable_pipeline_engine()) {
         _resource_pool = exec_env->thread_mgr()->register_pool();
         DCHECK(_resource_pool != nullptr);
     }
