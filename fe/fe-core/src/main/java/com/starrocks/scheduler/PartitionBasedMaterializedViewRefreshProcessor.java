@@ -8,10 +8,8 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
@@ -32,7 +30,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.DeepCopy;
-import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.PartitionUtil;
@@ -206,7 +203,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
             String startPartitionName = partitionNameIter.next();
             Range<PartitionKey> partitionKeyRange = mappedPartitionsToRefresh.get(startPartitionName);
             LiteralExpr lowerExpr = partitionKeyRange.lowerEndpoint().getKeys().get(0);
-            nextPartitionStart = parseLiteralExprToDateString(lowerExpr, 0);
+            nextPartitionStart = AnalyzerUtils.parseLiteralExprToDateString(lowerExpr, 0);
             endPartitionName = startPartitionName;
             partitionsToRefresh.remove(endPartitionName);
         }
@@ -217,19 +214,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
 
         mvContext.setNextPartitionStart(nextPartitionStart);
         LiteralExpr upperExpr = mappedPartitionsToRefresh.get(endPartitionName).upperEndpoint().getKeys().get(0);
-        mvContext.setNextPartitionEnd(parseLiteralExprToDateString(upperExpr, 1));
-    }
-
-    private String parseLiteralExprToDateString(LiteralExpr expr, int offset) {
-        if (expr instanceof DateLiteral) {
-            DateLiteral lowerDate = (DateLiteral) expr;
-            return DateUtils.DATE_FORMATTER.format(lowerDate.toLocalDateTime().plusDays(offset));
-        } else if (expr instanceof IntLiteral) {
-            IntLiteral intLiteral = (IntLiteral) expr;
-            return String.valueOf(intLiteral.getLongValue() + offset);
-        } else {
-            return null;
-        }
+        mvContext.setNextPartitionEnd(AnalyzerUtils.parseLiteralExprToDateString(upperExpr, 1));
     }
 
     private void generateNextTaskRun() {
@@ -245,8 +230,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         }
         newProperties.put(TaskRun.PARTITION_START, mvContext.getNextPartitionStart());
         newProperties.put(TaskRun.PARTITION_END, mvContext.getNextPartitionEnd());
-        ExecuteOption option = new ExecuteOption(Constants.TaskRunPriority.LOWEST.value(),
-                false, newProperties);
+        ExecuteOption option = new ExecuteOption(mvContext.getPriority(), false, newProperties);
         taskManager.executeTask(taskName, option);
         LOG.info("Submit a generate taskRun for task:{}, partitionStart:{}, partitionEnd:{}", mvId,
                 mvContext.getNextPartitionStart(), mvContext.getNextPartitionEnd());
@@ -499,8 +483,15 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
             Set<String> mvRangePartitionNames = SyncPartitionUtils.getPartitionNamesByRange(materializedView, start, end);
 
             if (needToRefreshNonPartitionTable(partitionTable)) {
-                // if non partition table changed, should refresh all partitions of materialized view
-                return Sets.newHashSet(materializedView.getPartitionNames());
+                if (start == null && end == null) {
+                    // if non partition table changed, should refresh all partitions of materialized view
+                    return Sets.newHashSet(materializedView.getPartitionNames());
+                } else {
+                    // If the user specifies the start and end ranges, and the non-partitioned table still changes,
+                    // it should be refreshed according to the user-specified range, not all partitions.
+                    return getMVPartitionNamesToRefreshByRangePartitionNamesAndForce(partitionTable,
+                            mvRangePartitionNames, true);
+                }
             }
             // check partition table
             if (partitionExpr instanceof SlotRef) {

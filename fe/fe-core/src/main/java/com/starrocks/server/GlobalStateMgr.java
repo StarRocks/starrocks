@@ -145,6 +145,7 @@ import com.starrocks.load.loadv2.LoadTimeoutChecker;
 import com.starrocks.load.routineload.RoutineLoadManager;
 import com.starrocks.load.routineload.RoutineLoadScheduler;
 import com.starrocks.load.routineload.RoutineLoadTaskScheduler;
+import com.starrocks.load.streamload.StreamLoadManager;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.privilege.Auth;
@@ -192,7 +193,7 @@ import com.starrocks.sql.ast.AdminSetConfigStmt;
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt.QuotaType;
-import com.starrocks.sql.ast.AlterDatabaseRename;
+import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
@@ -303,6 +304,7 @@ public class GlobalStateMgr {
     private Load load;
     private LoadManager loadManager;
     private RoutineLoadManager routineLoadManager;
+    private StreamLoadManager streamLoadManager;
     private ExportMgr exportMgr;
     private Alter alter;
     private ConsistencyChecker consistencyChecker;
@@ -514,6 +516,7 @@ public class GlobalStateMgr {
     // if isCheckpointCatalog is true, it means that we should not collect thread pool metric
     private GlobalStateMgr(boolean isCheckpointCatalog) {
         this.load = new Load();
+        this.streamLoadManager = new StreamLoadManager();
         this.routineLoadManager = new RoutineLoadManager();
         this.exportMgr = new ExportMgr();
         this.alter = new Alter();
@@ -1264,6 +1267,8 @@ public class GlobalStateMgr {
             remoteChecksum = dis.readLong();
             checksum = loadCompactionManager(dis, checksum);
             remoteChecksum = dis.readLong();
+            checksum = loadStreamLoadManager(dis, checksum);
+            remoteChecksum = dis.readLong();
             loadRBACPrivilege(dis);
         } catch (EOFException exception) {
             LOG.warn("load image eof.", exception);
@@ -1450,6 +1455,12 @@ public class GlobalStateMgr {
         return checksum;
     }
 
+    public long loadStreamLoadManager(DataInputStream in, long checksum) throws IOException {
+        streamLoadManager = StreamLoadManager.loadStreamLoadManager(in);
+        checksum ^= streamLoadManager.getChecksum();
+        return checksum;
+    }
+
     // Only called by checkpoint thread
     public void saveImage() throws IOException {
         // Write image.ckpt
@@ -1515,6 +1526,8 @@ public class GlobalStateMgr {
             checksum = shardManager.saveShardManager(dos, checksum);
             dos.writeLong(checksum);
             checksum = compactionManager.saveCompactionManager(dos, checksum);
+            dos.writeLong(checksum);
+            checksum = streamLoadManager.saveStreamLoadManager(dos, checksum);
             dos.writeLong(checksum);
             saveRBACPrivilege(dos);
         }
@@ -1763,6 +1776,8 @@ public class GlobalStateMgr {
                     toJournalId, replayedJournalId.get()));
         }
 
+        streamLoadManager.cancelUnDurableTaskAfterRestart();
+
         long replayInterval = System.currentTimeMillis() - replayStartTime;
         LOG.info("finish replay from {} to {} in {} msec", startJournalId, toJournalId, replayInterval);
     }
@@ -1919,7 +1934,7 @@ public class GlobalStateMgr {
         localMetastore.replayAlterDatabaseQuota(dbName, quota, quotaType);
     }
 
-    public void renameDatabase(AlterDatabaseRename stmt) throws DdlException {
+    public void renameDatabase(AlterDatabaseRenameStatement stmt) throws DdlException {
         localMetastore.renameDatabase(stmt);
     }
 
@@ -2586,6 +2601,10 @@ public class GlobalStateMgr {
         return routineLoadManager;
     }
 
+    public StreamLoadManager getStreamLoadManager() {
+        return streamLoadManager;
+    }
+
     public RoutineLoadTaskScheduler getRoutineLoadTaskScheduler() {
         return routineLoadTaskScheduler;
     }
@@ -2973,7 +2992,7 @@ public class GlobalStateMgr {
         // So we didn't check UseDbStmt permission in PrivilegeChecker.
         if (CatalogMgr.isInternalCatalog(ctx.getCurrentCatalog())) {
             if (isUsingNewPrivilege()) {
-                if (!PrivilegeManager.checkAnyActionInDb(ctx, dbName)) {
+                if (!PrivilegeManager.checkAnyActionOnOrUnderDb(ctx, dbName)) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_DB_ACCESS_DENIED,
                             ctx.getQualifiedUser(), dbName);
                 }
@@ -3314,7 +3333,7 @@ public class GlobalStateMgr {
 
     }
 
-    public void replayAuthUpgrade(AuthUpgradeInfo info) throws AuthUpgrader.AuthUpgradeUnrecoveredException {
+    public void replayAuthUpgrade(AuthUpgradeInfo info) throws AuthUpgrader.AuthUpgradeUnrecoverableException {
         AuthUpgrader upgrader = new AuthUpgrader(auth, authenticationManager, privilegeManager, this);
         upgrader.replayUpgrade(info.getRoleNameToId());
         usingNewPrivilege.set(true);
@@ -3384,6 +3403,11 @@ public class GlobalStateMgr {
             backupHandler.removeOldJobs();
         } catch (Throwable t) {
             LOG.warn("backup handler clean old jobs failed", t);
+        }
+        try {
+            streamLoadManager.cleanOldStreamLoadTasks();
+        } catch (Throwable t) {
+            LOG.warn("delete handler remove old delete info failed", t);
         }
     }
 

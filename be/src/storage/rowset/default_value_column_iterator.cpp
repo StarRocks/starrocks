@@ -22,7 +22,6 @@
 #include "storage/rowset/default_value_column_iterator.h"
 
 #include "column/column.h"
-#include "storage/column_block.h"
 #include "storage/range.h"
 #include "storage/types.h"
 #include "util/mem_util.hpp"
@@ -77,28 +76,6 @@ Status DefaultValueColumnIterator::init(const ColumnIteratorOptions& opts) {
         _is_default_value_null = true;
     } else {
         return Status::InternalError("invalid default value column for no default value and not nullable");
-    }
-    return Status::OK();
-}
-
-Status DefaultValueColumnIterator::next_batch(size_t* n, ColumnBlockView* dst, bool* has_null) {
-    if (dst->is_nullable()) {
-        dst->set_null_bits(*n, _is_default_value_null);
-    }
-
-    if (_is_default_value_null) {
-        *has_null = true;
-        dst->advance(*n);
-    } else {
-        *has_null = false;
-        for (int i = 0; i < *n; ++i) {
-            memcpy(dst->data(), _mem_value, _type_size);
-            dst->advance(1);
-        }
-    }
-    _current_rowid += *n;
-    if (_may_contain_deleted_row) {
-        dst->column_block()->set_delete_state(DEL_PARTIAL_SATISFIED);
     }
     return Status::OK();
 }

@@ -191,6 +191,7 @@ public class Config extends ConfigBase {
     @ConfField
     public static int label_clean_interval_second = 4 * 3600; // 4 hours
 
+
     /**
      * For Task framework do some background operation like cleanup Task/TaskRun.
      * It will run every *task_check_interval_second* to do background job.
@@ -690,6 +691,12 @@ public class Config extends ConfigBase {
     public static int max_stream_load_timeout_second = 259200; // 3days
 
     /**
+     * Max stream load load batch size
+     */
+    @ConfField(mutable = true) 
+    public static int max_stream_load_batch_size_mb = 100;
+
+    /**
      * Default prepared transaction timeout
      */
     @ConfField(mutable = true)
@@ -1117,6 +1124,13 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static int tablet_sched_max_migration_task_sent_once = 1000;
+
+    /**
+     * After checked tablet_checker_partition_batch_num partitions, db lock will be released,
+     * so that other threads can get the lock.
+     */
+    @ConfField(mutable = true)
+    public static int tablet_checker_partition_batch_num = 500;
 
     @Deprecated
     @ConfField(mutable = true)
@@ -1805,4 +1819,28 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean ignore_invalid_privilege_authentications = false;
+
+    /**
+     * the keystore file path
+     */
+    @ConfField
+    public static String ssl_keystore_location = "";
+
+    /**
+     * the password of keystore file
+     */
+    @ConfField
+    public static String ssl_keystore_password = "";
+
+    /**
+     * the password of private key
+     */
+    @ConfField
+    public static String ssl_key_password = "";
+
+    /**
+     * ignore check db status when show proc '/catalog/catalog_name'
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_check_db_state = true;
 }

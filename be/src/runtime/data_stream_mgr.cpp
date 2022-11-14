@@ -151,7 +151,7 @@ Status DataStreamMgr::transmit_chunk(const PTransmitChunkParams& request, ::goog
     }
 
     bool eos = request.eos();
-    DeferOp op([this, &eos, &recvr, &request]() {
+    DeferOp op([&eos, &recvr, &request]() {
         if (eos) {
             recvr->remove_sender(request.sender_id(), request.be_number());
         }

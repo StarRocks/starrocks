@@ -2,6 +2,7 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.privilege.PrivilegeManager;
@@ -14,6 +15,8 @@ import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.util.List;
 
 public class PrivilegeCheckerV2Test {
     private static StarRocksAssert starRocksAssert;
@@ -54,7 +57,8 @@ public class PrivilegeCheckerV2Test {
         CreateUserStmt createUserStmt =
                 (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, starRocksAssert.getCtx());
 
-        AuthenticationManager authenticationManager = starRocksAssert.getCtx().getGlobalStateMgr().getAuthenticationManager();
+        AuthenticationManager authenticationManager =
+                starRocksAssert.getCtx().getGlobalStateMgr().getAuthenticationManager();
         authenticationManager.createUser(createUserStmt);
         testUser = createUserStmt.getUserIdent();
 
@@ -66,9 +70,10 @@ public class PrivilegeCheckerV2Test {
                 "create role test_role", starRocksAssert.getCtx()), starRocksAssert.getCtx());
     }
 
-    private static void verifyGrantRevoke(String sql, String grantSql, String revokeSql, String expectError) throws Exception {
+    private static void verifyGrantRevoke(String sql, String grantSql, String revokeSql,
+                                          String expectError) throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
-        StatementBase statement = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        StatementBase statement = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
 
         // 1. before grant: access denied
         ctxToTestUser();
@@ -76,7 +81,7 @@ public class PrivilegeCheckerV2Test {
             PrivilegeCheckerV2.check(statement, ctx);
             Assert.fail();
         } catch (SemanticException e) {
-            System.out.println(e.getMessage());
+            System.out.println(e.getMessage() + ", sql: " + sql);
             Assert.assertTrue(e.getMessage().contains(expectError));
         }
 
@@ -94,7 +99,7 @@ public class PrivilegeCheckerV2Test {
             PrivilegeCheckerV2.check(statement, starRocksAssert.getCtx());
             Assert.fail();
         } catch (SemanticException e) {
-            System.out.println(e.getMessage());
+            System.out.println(e.getMessage() + ", sql: " + sql);
             Assert.assertTrue(e.getMessage().contains(expectError));
         }
     }
@@ -177,6 +182,89 @@ public class PrivilegeCheckerV2Test {
                 "grant drop on all resources to test",
                 "revoke drop on all resources from test",
                 "Access denied; you need (at least one of) the DROP privilege(s) for this operation");
+    }
+
+    @Test
+    public void testViewStmt() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+
+        // grant select on base table to user
+        String grantBaseTableSql = "grant select on db1.tbl1 to test";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                grantBaseTableSql, ctx), ctx);
+
+        // privilege check for create_view on database
+        String createViewStmt = "create view db1.view1 as select * from db1.tbl1";
+        String grantCreateViewStmt = "grant create_view on database db1 to test";
+        String revokeCreateViewStmt = "revoke create_view on database db1 from test";
+        verifyGrantRevoke(
+                createViewStmt,
+                grantCreateViewStmt,
+                revokeCreateViewStmt,
+                "Access denied for user 'test' to database 'db1'");
+
+        // revoke select on base table, grant create_viw on database to user
+        String revokeBaseTableSql = "revoke select on db1.tbl1 from test";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                revokeBaseTableSql, ctx), ctx);
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                grantCreateViewStmt, ctx), ctx);
+        verifyGrantRevoke(
+                createViewStmt,
+                grantBaseTableSql,
+                revokeBaseTableSql,
+                "SELECT command denied to user 'test'");
+
+        // create the view
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(createViewStmt, ctx), ctx);
+
+        // revoke create_view on database, grant select on base table to user
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                revokeCreateViewStmt, ctx), ctx);
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                grantBaseTableSql, ctx), ctx);
+        String grantAlterSql = "grant alter on view db1.view1 to test";
+        String revokeAlterSql = "revoke alter on view db1.view1 from test";
+        String alterViewSql = "alter view db1.view1 as select k2, k3 from db1.tbl1";
+        verifyGrantRevoke(
+                alterViewSql,
+                grantAlterSql,
+                revokeAlterSql,
+                "ALTER command denied to user 'test'");
+
+        // revoke select on base table, grant alter on view to user
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                revokeBaseTableSql, ctx), ctx);
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                grantAlterSql, ctx), ctx);
+        verifyGrantRevoke(
+                alterViewSql,
+                grantBaseTableSql,
+                revokeBaseTableSql,
+                "SELECT command denied to user 'test'");
+
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                revokeAlterSql, ctx), ctx);
+
+        // test select view
+        String selectViewSql = "select * from db1.view1";
+        verifyGrantRevoke(
+                selectViewSql,
+                grantBaseTableSql,
+                revokeBaseTableSql,
+                "SELECT command denied to user 'test'");
+        verifyGrantRevoke(
+                selectViewSql,
+                "grant select on view db1.view1 to test",
+                "revoke select on view db1.view1 from test",
+                "SELECT command denied to user 'test'");
+
+        // drop view
+        verifyGrantRevoke(
+                "drop view db1.view1",
+                "grant drop on view db1.view1 to test",
+                "revoke drop on view db1.view1 from test",
+                "DROP command denied to user 'test'");
     }
 
     @Test
@@ -324,5 +412,83 @@ public class PrivilegeCheckerV2Test {
                 "grant impersonate on user test2 to test",
                 "revoke impersonate on user test2 from test",
                 "Access denied; you need (at least one of) the IMPERSONATE privilege(s) for this operation");
+    }
+
+    @Test
+    public void testDatabaseStmt() throws Exception {
+        final String testDbName = "db_for_db_stmt_test";
+        starRocksAssert.withDatabase(testDbName);
+        String createTblStmtStr = "create table " + testDbName +
+                ".tbl1(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) " +
+                "AGGREGATE KEY(k1, k2,k3,k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
+        starRocksAssert.withTable(createTblStmtStr);
+
+        List<String> statements = Lists.newArrayList();
+        statements.add("use " + testDbName + ";");
+        statements.add("show create database " + testDbName + ";");
+        for (String stmt : statements) {
+            // Test `use database` | `show create database xxx`: check any privilege on db
+            verifyGrantRevoke(
+                    stmt,
+                    "grant DROP on database " + testDbName + " to test",
+                    "revoke DROP on database " + testDbName + " from test",
+                    "Access denied for user 'test' to database '" + testDbName + "'");
+            verifyGrantRevoke(
+                    stmt,
+                    "grant CREATE_FUNCTION on database " + testDbName + " to test",
+                    "revoke CREATE_FUNCTION on database " + testDbName + " from test",
+                    "Access denied for user 'test' to database '" + testDbName + "'");
+            verifyGrantRevoke(
+                    stmt,
+                    "grant ALTER on database " + testDbName + " to test",
+                    "revoke ALTER on database " + testDbName + " from test",
+                    "Access denied for user 'test' to database '" + testDbName + "'");
+        }
+
+        // Test `use database` : check any privilege on tables under db
+        verifyGrantRevoke(
+                "use " + testDbName + ";",
+                "grant select on " + testDbName + ".tbl1 to test",
+                "revoke select on " + testDbName + ".tbl1 from test",
+                "Access denied for user 'test' to database '" + testDbName + "'");
+
+        // Test `recover database xxx`: check DROP on db and CREATE_DATABASE on internal catalog
+        // TODO(yiming): check for CREATE_DATABASE on internal catalog after catalog is added
+        verifyGrantRevoke(
+                "recover database " + testDbName + ";",
+                "grant DROP on database " + testDbName + " to test",
+                "revoke DROP on database " + testDbName + " from test",
+                "Access denied for user 'test' to database '" + testDbName + "'");
+
+        // Test `alter database xxx set...`: check ALTER on db
+        verifyGrantRevoke(
+                "alter database " + testDbName + " set data quota 10T;",
+                "grant ALTER on database " + testDbName + " to test",
+                "revoke ALTER on database " + testDbName + " from test",
+                "Access denied for user 'test' to database '" + testDbName + "'");
+        verifyGrantRevoke(
+                "alter database " + testDbName + " set replica quota 102400;",
+                "grant ALTER on database " + testDbName + " to test",
+                "revoke ALTER on database " + testDbName + " from test",
+                "Access denied for user 'test' to database '" + testDbName + "'");
+
+        // Test `drop database xxx...`: check DROP on db
+        verifyGrantRevoke(
+                "drop database " + testDbName + ";",
+                "grant DROP on database " + testDbName + " to test",
+                "revoke DROP on database " + testDbName + " from test",
+                "Access denied for user 'test' to database '" + testDbName + "'");
+        verifyGrantRevoke(
+                "drop database if exists " + testDbName + " force;",
+                "grant DROP on database " + testDbName + " to test",
+                "revoke DROP on database " + testDbName + " from test",
+                "Access denied for user 'test' to database '" + testDbName + "'");
+
+        // Test `alter database xxx rename xxx_new`: check ALTER on db
+        verifyGrantRevoke(
+                "alter database " + testDbName + " rename new_db_name;",
+                "grant ALTER on database " + testDbName + " to test",
+                "revoke ALTER on database " + testDbName + " from test",
+                "Access denied for user 'test' to database '" + testDbName + "'");
     }
 }

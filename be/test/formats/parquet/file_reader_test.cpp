@@ -57,6 +57,7 @@ private:
     HdfsScannerContext* _create_file6_base_context();
     HdfsScannerContext* _create_file_map_char_key_context();
     HdfsScannerContext* _create_file_map_base_context();
+    HdfsScannerContext* _create_file_map_partial_materialize_context();
 
     void _create_int_conjunct_ctxs(TExprOpcode::type opcode, SlotId slot_id, int value,
                                    std::vector<ExprContext*>* conjunct_ctxs);
@@ -481,10 +482,14 @@ HdfsScannerContext* FileReaderTest::_create_file_map_char_key_context() {
     TypeDescriptor type_map_char(PrimitiveType::TYPE_MAP);
     type_map_char.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_CHAR));
     type_map_char.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
+    type_map_char.selected_fields.emplace_back(true);
+    type_map_char.selected_fields.emplace_back(true);
 
     TypeDescriptor type_map_varchar(PrimitiveType::TYPE_MAP);
     type_map_varchar.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR));
     type_map_varchar.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
+    type_map_varchar.selected_fields.emplace_back(true);
+    type_map_varchar.selected_fields.emplace_back(true);
 
     SlotDesc slot_descs[] = {
             {"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
@@ -505,16 +510,22 @@ HdfsScannerContext* FileReaderTest::_create_file_map_base_context() {
     TypeDescriptor type_map(PrimitiveType::TYPE_MAP);
     type_map.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR));
     type_map.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
+    type_map.selected_fields.emplace_back(true);
+    type_map.selected_fields.emplace_back(true);
 
     TypeDescriptor type_map_map(PrimitiveType::TYPE_MAP);
     type_map_map.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR));
     type_map_map.children.emplace_back(type_map);
+    type_map_map.selected_fields.emplace_back(true);
+    type_map_map.selected_fields.emplace_back(true);
 
     TypeDescriptor type_array(PrimitiveType::TYPE_ARRAY);
     type_array.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
     TypeDescriptor type_map_array(PrimitiveType::TYPE_MAP);
     type_map_array.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR));
     type_map_array.children.emplace_back(type_array);
+    type_map_array.selected_fields.emplace_back(true);
+    type_map_array.selected_fields.emplace_back(true);
 
     // tuple desc
     SlotDesc slot_descs[] = {
@@ -524,6 +535,47 @@ HdfsScannerContext* FileReaderTest::_create_file_map_base_context() {
             {"c4", type_map_array},
             {""},
     };
+    ctx->tuple_desc = create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+    ctx->scan_ranges.emplace_back(_create_scan_range(_file_map_path));
+
+    return ctx;
+}
+
+HdfsScannerContext* FileReaderTest::_create_file_map_partial_materialize_context() {
+    auto ctx = _create_scan_context();
+
+    TypeDescriptor type_map(PrimitiveType::TYPE_MAP);
+    type_map.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR));
+    type_map.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
+    // only key will be materialized
+    type_map.selected_fields.emplace_back(true);
+    type_map.selected_fields.emplace_back(false);
+
+    TypeDescriptor type_map_map(PrimitiveType::TYPE_MAP);
+    type_map_map.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR));
+    type_map_map.children.emplace_back(type_map);
+    // the first level value will be materialized, and the second level key will be materialized
+    type_map_map.selected_fields.emplace_back(false);
+    type_map_map.selected_fields.emplace_back(true);
+
+    TypeDescriptor type_array(PrimitiveType::TYPE_ARRAY);
+    type_array.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
+    TypeDescriptor type_map_array(PrimitiveType::TYPE_MAP);
+    type_map_array.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR));
+    type_map_array.children.emplace_back(type_array);
+    // only value will be materialized
+    type_map_array.selected_fields.emplace_back(false);
+    type_map_array.selected_fields.emplace_back(true);
+
+    // tuple desc
+    SlotDesc slot_descs[] = {
+            {"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
+            {"c2", type_map},
+            {"c3", type_map_map},
+            {"c4", type_map_array},
+            {""},
+        };
     ctx->tuple_desc = create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
     ctx->scan_ranges.emplace_back(_create_scan_range(_file_map_path));
@@ -1049,10 +1101,14 @@ TEST_F(FileReaderTest, TestReadMapCharKeyColumn) {
     TypeDescriptor type_map_char(PrimitiveType::TYPE_MAP);
     type_map_char.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_CHAR));
     type_map_char.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
+    type_map_char.selected_fields.emplace_back(true);
+    type_map_char.selected_fields.emplace_back(true);
 
     TypeDescriptor type_map_varchar(PrimitiveType::TYPE_MAP);
     type_map_varchar.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR));
     type_map_varchar.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
+    type_map_varchar.selected_fields.emplace_back(true);
+    type_map_varchar.selected_fields.emplace_back(true);
 
     vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
     _append_column_for_chunk(PrimitiveType::TYPE_INT, &chunk);
@@ -1092,16 +1148,22 @@ TEST_F(FileReaderTest, TestReadMapColumn) {
     TypeDescriptor type_map(PrimitiveType::TYPE_MAP);
     type_map.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR));
     type_map.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
+    type_map.selected_fields.emplace_back(true);
+    type_map.selected_fields.emplace_back(true);
 
     TypeDescriptor type_map_map(PrimitiveType::TYPE_MAP);
     type_map_map.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR));
     type_map_map.children.emplace_back(type_map);
+    type_map_map.selected_fields.emplace_back(true);
+    type_map_map.selected_fields.emplace_back(true);
 
     TypeDescriptor type_array(PrimitiveType::TYPE_ARRAY);
     type_array.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
     TypeDescriptor type_map_array(PrimitiveType::TYPE_MAP);
     type_map_array.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR));
     type_map_array.children.emplace_back(type_array);
+    type_map_array.selected_fields.emplace_back(true);
+    type_map_array.selected_fields.emplace_back(true);
 
     vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
     _append_column_for_chunk(PrimitiveType::TYPE_INT, &chunk);
@@ -1480,6 +1542,69 @@ TEST_F(FileReaderTest, TestReadStructNull) {
     //    for (int i = 0; i < 4; ++i) {
     //        std::cout << "row" << i << ": " << chunk->debug_row(i) << std::endl;
     //    }
+}
+
+TEST_F(FileReaderTest, TestReadMapColumnWithPartialMaterialize) {
+    auto file = _create_file(_file_map_path);
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
+                                                    std::filesystem::file_size(_file_map_path));
+
+    //init
+    auto* ctx = _create_file_map_partial_materialize_context();
+
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok());
+
+    EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
+
+    std::vector<SharedBufferedInputStream::IORange> ranges;
+    int64_t end_offset = 0;
+    file_reader->_row_group_readers[0]->collect_io_ranges(&ranges, &end_offset);
+
+    // c1, c2.key, c2.value, c3.key, c3.value.key, c3.value.value, c4.key. c4.value
+    EXPECT_EQ(ranges.size(), 8);
+
+    EXPECT_EQ(file_reader->_file_metadata->num_rows(), 8);
+    TypeDescriptor type_map(PrimitiveType::TYPE_MAP);
+    type_map.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR));
+    type_map.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
+
+    TypeDescriptor type_map_map(PrimitiveType::TYPE_MAP);
+    type_map_map.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR));
+    type_map_map.children.emplace_back(type_map);
+
+    TypeDescriptor type_array(PrimitiveType::TYPE_ARRAY);
+    type_array.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
+    TypeDescriptor type_map_array(PrimitiveType::TYPE_MAP);
+    type_map_array.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR));
+    type_map_array.children.emplace_back(type_array);
+
+    vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
+    _append_column_for_chunk(PrimitiveType::TYPE_INT, &chunk);
+    auto c = vectorized::ColumnHelper::create_column(type_map, true);
+    chunk->append_column(c, chunk->num_columns());
+    auto c_map_map = vectorized::ColumnHelper::create_column(type_map_map, true);
+    chunk->append_column(c_map_map, chunk->num_columns());
+    auto c_map_array = vectorized::ColumnHelper::create_column(type_map_array, true);
+    chunk->append_column(c_map_array, chunk->num_columns());
+
+    status = file_reader->get_next(&chunk);
+    ASSERT_TRUE(status.ok());
+    EXPECT_EQ(chunk->num_rows(), 8);
+    for (int i = 0; i < chunk->num_rows(); ++i) {
+        std::cout << "row" << i << ": " << chunk->debug_row(i) << std::endl;
+    }
+    EXPECT_EQ(chunk->debug_row(0),
+              "[1, ['k1'->NULL, 'k2'->NULL], [NULL->['f1'->NULL, 'f2'->NULL]], [NULL->[1, 2]]]");
+    EXPECT_EQ(chunk->debug_row(1),
+              "[2, ['k1'->NULL, 'k3'->NULL, 'k4'->NULL], [NULL->['f1'->NULL, 'f2'->NULL], NULL->['f1'->NULL, 'f2'->NULL]], [NULL->[1], NULL->[2]]]");
+    EXPECT_EQ(chunk->debug_row(2),
+              "[3, ['k2'->NULL, 'k3'->NULL, 'k5'->NULL], [NULL->['f1'->NULL, 'f2'->NULL, 'f3'->NULL]], [NULL->[1, 2, 3]]]");
+    EXPECT_EQ(chunk->debug_row(3), "[4, ['k1'->NULL, 'k2'->NULL, 'k3'->NULL], [NULL->['f2'->NULL]], [NULL->[1]]]");
+    EXPECT_EQ(chunk->debug_row(4), "[5, ['k3'->NULL], [NULL->['f2'->NULL]], [NULL->[NULL]]]");
+    EXPECT_EQ(chunk->debug_row(5), "[6, ['k1'->NULL], [NULL->['f2'->NULL]], [NULL->[1]]]");
+    EXPECT_EQ(chunk->debug_row(6), "[7, ['k1'->NULL, 'k2'->NULL], [NULL->['f2'->NULL]], [NULL->[1, 2, 3]]]");
+    EXPECT_EQ(chunk->debug_row(7), "[8, ['k3'->NULL], [NULL->['f1'->NULL, 'f2'->NULL, 'f3'->NULL]], [NULL->[1], NULL->[2]]]");
 }
 
 } // namespace starrocks::parquet

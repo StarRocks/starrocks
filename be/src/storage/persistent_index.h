@@ -47,8 +47,6 @@ struct IndexValue {
 static constexpr size_t kIndexValueSize = 8;
 static_assert(sizeof(IndexValue) == kIndexValueSize);
 
-class ImmutableIndexShard;
-
 uint64_t key_index_hash(const void* data, size_t len);
 
 struct KeysInfo {
@@ -61,10 +59,11 @@ struct KVRef {
     const uint8_t* kv_pos;
     uint64_t hash;
     uint16_t size;
-    KVRef() {}
+    KVRef() = default;
     KVRef(const uint8_t* kv_pos, uint64_t hash, uint16_t size) : kv_pos(kv_pos), hash(hash), size(size) {}
 };
 
+struct ImmutableIndexShard;
 class PersistentIndex;
 class ImmutableIndexWriter;
 
@@ -177,9 +176,9 @@ public:
 
 class ShardByLengthMutableIndex {
 public:
-    ShardByLengthMutableIndex() {}
+    ShardByLengthMutableIndex() = default;
 
-    ShardByLengthMutableIndex(const size_t key_size, const std::string& path)
+    ShardByLengthMutableIndex(const size_t key_size, const std::string& path) // NOLINT
             : _fixed_key_size(key_size), _path(path) {}
 
     ~ShardByLengthMutableIndex() {
@@ -189,6 +188,14 @@ public:
     }
 
     Status init();
+
+    uint64_t file_size() {
+        if (_index_file != nullptr) {
+            return _index_file->size();
+        } else {
+            return 0;
+        }
+    }
 
     // batch get
     // |n|: size of key/value array
@@ -318,11 +325,13 @@ public:
     Status check_not_exist(size_t n, const Slice* keys, size_t key_size);
 
     // get Immutable index file size;
-    void file_size(uint64_t* file_size) {
+    uint64_t file_size() {
         if (_file != nullptr) {
             auto res = _file->get_size();
             CHECK(res.ok()) << res.status(); // FIXME: no abort
-            *file_size = *res;
+            return *res;
+        } else {
+            return 0;
         }
     }
 
@@ -529,8 +538,6 @@ private:
     bool _can_dump_directly();
 
     Status _delete_expired_index_file(const EditVersion& l0_version, const EditVersion& l1_version);
-
-    Status _check_and_flush_l0();
 
     Status _flush_l0();
 

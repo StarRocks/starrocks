@@ -34,7 +34,7 @@ public class TaskRun implements Comparable<TaskRun> {
 
     private Map<String, String> properties;
 
-    private CompletableFuture<Constants.TaskRunState> future;
+    private final CompletableFuture<Constants.TaskRunState> future;
 
     private Task task;
 
@@ -109,6 +109,7 @@ public class TaskRun implements Comparable<TaskRun> {
         taskRunContext.setCtx(runCtx);
         taskRunContext.setRemoteIp(runCtx.getMysqlChannel().getRemoteHostPortString());
         taskRunContext.setProperties(taskRunContextProperties);
+        taskRunContext.setPriority(status.getPriority());
         processor.processTaskRun(taskRunContext);
         QueryState queryState = runCtx.getState();
         if (runCtx.getState().getStateType() == QueryState.MysqlStateType.ERR) {

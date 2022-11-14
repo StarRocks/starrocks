@@ -123,9 +123,7 @@ private:
 
     void (*_shallow_copy)(void* dest, const void* src);
     void (*_deep_copy)(void* dest, const void* src, MemPool* mem_pool);
-    void (*_copy_object)(void* dest, const void* src, MemPool* mem_pool);
     void (*_direct_copy)(void* dest, const void* src, MemPool* mem_pool);
-    Status (*_convert_from)(void* dest, const void* src, const TypeInfoPtr& src_type, MemPool* mem_pool);
 
     Status (*_from_string)(void* buf, const std::string& scan_key);
     std::string (*_to_string)(const void* src);
@@ -266,9 +264,7 @@ ScalarTypeInfo::ScalarTypeInfo([[maybe_unused]] TypeInfoImpl t)
           _cmp(TypeInfoImpl::cmp),
           _shallow_copy(TypeInfoImpl::shallow_copy),
           _deep_copy(TypeInfoImpl::deep_copy),
-          _copy_object(TypeInfoImpl::copy_object),
           _direct_copy(TypeInfoImpl::direct_copy),
-          _convert_from(TypeInfoImpl::convert_from),
           _from_string(TypeInfoImpl::from_string),
           _to_string(TypeInfoImpl::to_string),
           _set_to_max(TypeInfoImpl::set_to_max),

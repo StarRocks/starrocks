@@ -450,6 +450,8 @@ struct TReportExecStatusParams {
   18: optional i64 source_load_rows
 
   19: optional i64 source_load_bytes
+
+  20: optional InternalService.TLoadJobType load_type
 }
 
 struct TFeResult {
@@ -593,6 +595,8 @@ struct TStreamLoadPutRequest {
     27: optional bool partial_update
     28: optional string transmission_compression_type
     29: optional i32 load_dop
+    30: optional bool enable_replicated_storage
+    31: optional string merge_condition
     // only valid when file type is CSV
     50: optional string rowDelimiter
 }

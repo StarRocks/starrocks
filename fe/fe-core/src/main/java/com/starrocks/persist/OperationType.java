@@ -280,4 +280,6 @@ public class OperationType {
     // alter load
     public static final short OP_ALTER_LOAD_JOB = 11100;
 
+    // stream load
+    public static final short OP_CREATE_STREAM_LOAD_TASK = 11020;
 }

@@ -117,12 +117,18 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
 
         public DecodeContext(Map<Pair<Long, String>, ColumnDict> globalDictCache,
                              Map<Long, List<Integer>> tableIdToStringColumnIds, ColumnRefFactory columnRefFactory) {
+            this(globalDictCache, tableIdToStringColumnIds, columnRefFactory, Lists.newArrayList());
+        }
+
+        public DecodeContext(Map<Pair<Long, String>, ColumnDict> globalDictCache,
+                             Map<Long, List<Integer>> tableIdToStringColumnIds, ColumnRefFactory columnRefFactory,
+                             List<Pair<Integer, ColumnDict>> globalDicts) {
             this.globalDictCache = globalDictCache;
             this.tableIdToStringColumnIds = tableIdToStringColumnIds;
             this.columnRefFactory = columnRefFactory;
             stringColumnIdToDictColumnIds = Maps.newHashMap();
             stringFunctions = Maps.newHashMap();
-            globalDicts = Lists.newArrayList();
+            this.globalDicts = globalDicts;
             disableDictOptimizeColumns = new ColumnRefSet();
             allStringColumnIds = Sets.newHashSet();
             needRewriteMultiCountDistinctColumns = Sets.newHashSet();
@@ -154,11 +160,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
             this.stringColumnIdToDictColumnIds.putAll(other.stringColumnIdToDictColumnIds);
             this.stringFunctions.putAll(other.stringFunctions);
             this.disableDictOptimizeColumns = other.disableDictOptimizeColumns;
-            for (Pair<Integer, ColumnDict> dict : other.globalDicts) {
-                if (!this.globalDicts.contains(dict)) {
-                    this.globalDicts.add(dict);
-                }
-            }
+            Preconditions.checkState(globalDicts == other.globalDicts);
             return this;
         }
     }
@@ -170,6 +172,13 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
             couldApplyCtx.dictEncodedColumnSlotIds = dictEncodedColumnSlotIds;
             operator.accept(new CouldApplyDictOptimizeVisitor(), couldApplyCtx);
             return couldApplyCtx.canDictOptBeApplied;
+        }
+
+        public static boolean cannotApplyDictOptimize(ScalarOperator operator, Set<Integer> dictEncodedColumnSlotIds) {
+            final CouldApplyDictOptimizeContext couldApplyCtx = new CouldApplyDictOptimizeContext();
+            couldApplyCtx.dictEncodedColumnSlotIds = dictEncodedColumnSlotIds;
+            operator.accept(new CouldApplyDictOptimizeVisitor(), couldApplyCtx);
+            return !couldApplyCtx.canDictOptBeApplied && couldApplyCtx.stopOptPropagateUpward;
         }
 
         public static boolean isSimpleStrictPredicate(ScalarOperator operator) {
@@ -337,7 +346,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                         Maps.newHashMap(scanOperator.getColRefToColumnMetaMap());
                 List<ColumnRefOperator> newOutputColumns = Lists.newArrayList(scanOperator.getOutputColumns());
 
-                List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
+                List<Pair<Integer, ColumnDict>> globalDicts = context.globalDicts;
                 ScalarOperator newPredicate;
                 List<ScalarOperator> predicates = Utils.extractConjuncts(scanOperator.getPredicate());
 
@@ -422,7 +431,6 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                     // set output columns because of the projection is not encoded but the colRefToColumnMetaMap has encoded.
                     // There need to set right output columns
                     newOlapScan.setOutputColumns(newOutputColumns);
-                    context.globalDicts = globalDicts;
 
                     OptExpression result = new OptExpression(newOlapScan);
                     result.setLogicalProperty(rewriteLogicProperty(optExpression.getLogicalProperty(),
@@ -722,7 +730,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
             joinOperator.fillDisableDictOptimizeColumns(context.disableDictOptimizeColumns);
 
             DecodeContext mergeContext = new DecodeContext(context.globalDictCache, context.tableIdToStringColumnIds,
-                    context.columnRefFactory);
+                    context.columnRefFactory, context.globalDicts);
             for (int i = 0; i < optExpression.arity(); ++i) {
                 context.clear();
                 OptExpression childExpr = optExpression.inputAt(i);
@@ -1059,7 +1067,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
         @Override
         public Void visitVariableReference(ColumnRefOperator variable, CouldApplyDictOptimizeContext context) {
             context.canDictOptBeApplied = context.dictEncodedColumnSlotIds.contains(variable.getId());
-            context.stopOptPropagateUpward = !context.canDictOptBeApplied;
+            context.stopOptPropagateUpward = false;
             return null;
         }
 

@@ -16,12 +16,6 @@ BlockCache::BlockCache() {
     _kv_cache = std::make_unique<FbCacheLib>();
 }
 
-BlockCache::~BlockCache() {
-    if (_kv_cache) {
-        _kv_cache->destroy();
-    }
-}
-
 BlockCache* BlockCache::instance() {
     static BlockCache cache;
     return &cache;
@@ -90,6 +84,10 @@ Status BlockCache::remove_cache(const CacheKey& cache_key, off_t offset, size_t 
         RETURN_IF_ERROR(_kv_cache->remove_cache(block_key));
     }
     return Status::OK();
+}
+
+Status BlockCache::shutdown() {
+    return _kv_cache->shutdown();
 }
 
 } // namespace starrocks

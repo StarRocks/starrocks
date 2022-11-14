@@ -212,41 +212,6 @@ void BinaryDictPageDecoder<Type>::set_dict_decoder(PageDecoder* dict_decoder) {
 }
 
 template <FieldType Type>
-Status BinaryDictPageDecoder<Type>::next_batch(size_t* n, ColumnBlockView* dst) {
-    if (_encoding_type == PLAIN_ENCODING) {
-        return _data_page_decoder->next_batch(n, dst);
-    }
-    // dictionary encoding
-    DCHECK(_parsed);
-    DCHECK(_dict_decoder != nullptr) << "dict decoder pointer is nullptr";
-    if (PREDICT_FALSE(*n == 0)) {
-        *n = 0;
-        return Status::OK();
-    }
-    auto* out = reinterpret_cast<Slice*>(dst->data());
-    _batch->resize(*n);
-
-    ColumnBlock column_block(_batch.get(), dst->column_block()->pool());
-    ColumnBlockView tmp_block_view(&column_block);
-    RETURN_IF_ERROR(_data_page_decoder->next_batch(n, &tmp_block_view));
-    for (int i = 0; i < *n; ++i) {
-        int32_t codeword = *reinterpret_cast<const int32_t*>(column_block.cell_ptr(i));
-        // get the string from the dict decoder
-        Slice element = _dict_decoder->string_at_index(codeword);
-        if (element.size > 0) {
-            char* destination = (char*)dst->column_block()->pool()->allocate(element.size);
-            if (destination == nullptr) {
-                return Status::MemoryAllocFailed(strings::Substitute("memory allocate failed, size:$0", element.size));
-            }
-            element.relocate(destination);
-        }
-        *out = element;
-        ++out;
-    }
-    return Status::OK();
-}
-
-template <FieldType Type>
 Status BinaryDictPageDecoder<Type>::next_batch(size_t* n, vectorized::Column* dst) {
     vectorized::SparseRange read_range;
     uint32_t begin = current_index();

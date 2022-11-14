@@ -47,8 +47,6 @@
 namespace starrocks {
 
 class BlockCompressionCodec;
-class ColumnBlock;
-class ColumnBlockView;
 class ColumnVectorBatch;
 class MemTracker;
 

@@ -16,6 +16,7 @@ struct CacheOptions {
     // basic
     size_t mem_space_size;
     std::vector<DirSpace> disk_spaces;
+    std::string meta_path;
 
     // advanced
     size_t block_size;

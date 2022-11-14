@@ -47,6 +47,7 @@ public:
 
     // Access the common fields by this method.
     const TExecPlanFragmentParams& common() const { return _common_request; }
+    const TExecPlanFragmentParams& unique() const { return _unique_request; }
 
     // Access the unique fields by the following methods.
     int32_t backend_num() const { return _unique_request.backend_num; }
@@ -101,6 +102,7 @@ private:
     Status _prepare_exec_plan(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request);
     Status _prepare_global_dict(const UnifiedExecPlanFragmentParams& request);
     Status _prepare_pipeline_driver(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request);
+    Status _prepare_stream_load_pipe(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request);
 
     Status _decompose_data_sink_to_operator(RuntimeState* runtime_state, PipelineBuilderContext* context,
                                             const UnifiedExecPlanFragmentParams& request,

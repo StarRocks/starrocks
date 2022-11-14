@@ -35,7 +35,7 @@ import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
-import com.starrocks.sql.ast.AlterDatabaseRename;
+import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterResourceGroupStmt;
 import com.starrocks.sql.ast.AlterResourceStmt;
@@ -117,6 +117,7 @@ import com.starrocks.sql.ast.ShowRolesStmt;
 import com.starrocks.sql.ast.ShowRoutineLoadStmt;
 import com.starrocks.sql.ast.ShowSmallFilesStmt;
 import com.starrocks.sql.ast.ShowSqlBlackListStmt;
+import com.starrocks.sql.ast.ShowStreamLoadStmt;
 import com.starrocks.sql.ast.ShowTableStatusStmt;
 import com.starrocks.sql.ast.ShowTabletStmt;
 import com.starrocks.sql.ast.ShowUserPropertyStmt;
@@ -936,7 +937,7 @@ public class PrivilegeChecker {
         }
 
         @Override
-        public Void visitAlterDatabaseRename(AlterDatabaseRename statement, ConnectContext session) {
+        public Void visitAlterDatabaseRenameStatement(AlterDatabaseRenameStatement statement, ConnectContext session) {
             String dbName = statement.getDbName();
             if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(ConnectContext.get(), dbName,
                     PrivPredicate.of(PrivBitSet.of(Privilege.ADMIN_PRIV,
@@ -1198,6 +1199,15 @@ public class PrivilegeChecker {
 
         @Override
         public Void visitShowRoutineLoadStatement(ShowRoutineLoadStmt statement, ConnectContext session) {
+            String db = statement.getDbFullName();
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(session, db, PrivPredicate.SHOW)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, session.getQualifiedUser(), db);
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowStreamLoadStatement(ShowStreamLoadStmt statement, ConnectContext session) {
             String db = statement.getDbFullName();
             if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(session, db, PrivPredicate.SHOW)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, session.getQualifiedUser(), db);

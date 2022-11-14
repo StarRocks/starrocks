@@ -16,7 +16,7 @@ import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
-import com.starrocks.sql.ast.AlterDatabaseRename;
+import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
 import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterResourceGroupStmt;
@@ -87,6 +87,7 @@ import com.starrocks.sql.ast.ShowAuthenticationStmt;
 import com.starrocks.sql.ast.ShowBackupStmt;
 import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowCatalogsStmt;
+import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowDynamicPartitionStmt;
 import com.starrocks.sql.ast.ShowExportStmt;
 import com.starrocks.sql.ast.ShowGrantsStmt;
@@ -104,6 +105,7 @@ import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.UninstallPluginStmt;
 import com.starrocks.sql.ast.UpdateStmt;
+import com.starrocks.sql.ast.UseDbStmt;
 
 public class Analyzer {
     public static void analyze(StatementBase statement, ConnectContext session) {
@@ -116,6 +118,24 @@ public class Analyzer {
         }
 
         // ---------------------------------------- Database Statement -----------------------------------------------------
+
+        @Override
+        public Void visitUseDbStatement(UseDbStmt statement, ConnectContext context) {
+            BasicDbStmtAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitShowCreateDbStatement(ShowCreateDbStmt statement, ConnectContext context) {
+            BasicDbStmtAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitRecoverDbStatement(RecoverDbStmt statement, ConnectContext context) {
+            BasicDbStmtAnalyzer.analyze(statement, context);
+            return null;
+        }
 
         @Override
         public Void visitCreateTableStatement(CreateTableStmt statement, ConnectContext context) {
@@ -483,13 +503,8 @@ public class Analyzer {
         }
 
         @Override
-        public Void visitAlterDatabaseRename(AlterDatabaseRename statement, ConnectContext context) {
-            AlterDatabaseRenameAnalyzer.analyze(statement, context);
-            return null;
-        }
-
-        @Override
-        public Void visitRecoverDbStatement(RecoverDbStmt statement, ConnectContext context) {
+        public Void visitAlterDatabaseRenameStatement(AlterDatabaseRenameStatement statement, ConnectContext context) {
+            AlterDatabaseRenameStatementAnalyzer.analyze(statement, context);
             return null;
         }
 

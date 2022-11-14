@@ -81,6 +81,8 @@ import com.starrocks.load.ExportMgr;
 import com.starrocks.load.Load;
 import com.starrocks.load.routineload.RoutineLoadFunctionalExprProvider;
 import com.starrocks.load.routineload.RoutineLoadJob;
+import com.starrocks.load.streamload.StreamLoadFunctionalExprProvider;
+import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.meta.BlackListSql;
 import com.starrocks.meta.SqlBlackList;
 import com.starrocks.mysql.privilege.PrivPredicate;
@@ -138,6 +140,7 @@ import com.starrocks.sql.ast.ShowSmallFilesStmt;
 import com.starrocks.sql.ast.ShowSnapshotStmt;
 import com.starrocks.sql.ast.ShowSqlBlackListStmt;
 import com.starrocks.sql.ast.ShowStmt;
+import com.starrocks.sql.ast.ShowStreamLoadStmt;
 import com.starrocks.sql.ast.ShowTableStatusStmt;
 import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.ShowTabletStmt;
@@ -220,6 +223,8 @@ public class ShowExecutor {
             handleShowRoutineLoad();
         } else if (stmt instanceof ShowRoutineLoadTaskStmt) {
             handleShowRoutineLoadTask();
+        } else if (stmt instanceof ShowStreamLoadStmt) {
+            handleShowStreamLoad();
         } else if (stmt instanceof ShowDeleteStmt) {
             handleShowDelete();
         } else if (stmt instanceof ShowAlterStmt) {
@@ -526,7 +531,7 @@ public class ShowExecutor {
             }
 
             if (ctx.getGlobalStateMgr().isUsingNewPrivilege()) {
-                if (CatalogMgr.isInternalCatalog(catalogName) && !PrivilegeManager.checkAnyActionInDb(ctx, dbName)) {
+                if (CatalogMgr.isInternalCatalog(catalogName) && !PrivilegeManager.checkAnyActionOnOrUnderDb(ctx, dbName)) {
                     continue;
                 }
             } else {
@@ -569,7 +574,7 @@ public class ShowExecutor {
                         }
                         // check tbl privs
                         if (ctx.getGlobalStateMgr().isUsingNewPrivilege()) {
-                            if (!PrivilegeManager.checkAnyActionInTable(ctx, db.getFullName(), tbl.getName())) {
+                            if (!PrivilegeManager.checkAnyActionOnTable(ctx, db.getFullName(), tbl.getName())) {
                                 continue;
                             }
                         } else {
@@ -1068,6 +1073,41 @@ public class ShowExecutor {
         // get routine load task info
         rows.addAll(routineLoadJob.getTasksShowInfo());
         resultSet = new ShowResultSet(showRoutineLoadTaskStmt.getMetaData(), rows);
+    }
+
+    private void handleShowStreamLoad() throws AnalysisException {
+        ShowStreamLoadStmt showStreamLoadStmt = (ShowStreamLoadStmt) stmt;
+        List<List<String>> rows = Lists.newArrayList();
+        // if task exists
+        List<StreamLoadTask> streamLoadTaskList;
+        try {
+            streamLoadTaskList = GlobalStateMgr.getCurrentState().getStreamLoadManager()
+                    .getTask(showStreamLoadStmt.getDbFullName(),
+                            showStreamLoadStmt.getName(),
+                            showStreamLoadStmt.isIncludeHistory());
+        } catch (MetaNotFoundException e) {
+            LOG.warn(e.getMessage(), e);
+            throw new AnalysisException(e.getMessage());
+        }
+
+        if (streamLoadTaskList != null) {
+            StreamLoadFunctionalExprProvider fProvider = showStreamLoadStmt.getFunctionalExprProvider(this.ctx);
+            rows = streamLoadTaskList.parallelStream()
+                    .filter(fProvider.getPredicateChain())
+                    .sorted(fProvider.getOrderComparator())
+                    .skip(fProvider.getSkipCount())
+                    .limit(fProvider.getLimitCount())
+                    .map(task -> task.getShowInfo())
+                    .collect(Collectors.toList());
+        }
+
+        if (!Strings.isNullOrEmpty(showStreamLoadStmt.getName()) && rows.isEmpty()) {
+            // if the label has been specified
+            throw new AnalysisException("There is no label named " + showStreamLoadStmt.getName()
+                    + " in db " + showStreamLoadStmt.getDbFullName()
+                    + ". Include history? " + showStreamLoadStmt.isIncludeHistory());
+        }
+        resultSet = new ShowResultSet(showStreamLoadStmt.getMetaData(), rows);
     }
 
     // Show user property statement

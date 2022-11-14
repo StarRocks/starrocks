@@ -1,10 +1,16 @@
-name: FE Code Style Checker
+name: checker
 
 on:
-  pull_request:
-  
+  pull_request_target:
+    types:
+      - opened
+      - reopened
+      - synchronize
+    paths:
+      - 'fe/**.java'
+
 jobs:
-  java-checkstyle:
+  java-codestyle:
     name: "CheckStyle"
     runs-on: ubuntu-latest
     steps:

@@ -69,7 +69,7 @@ public class HiveMetadata implements ConnectorMetadata {
         try {
             database = hmsOps.getDb(dbName);
         } catch (Exception e) {
-            LOG.error("Failed to get hive database [{}.{}]", catalogName, dbName);
+            LOG.error("Failed to get hive database [{}.{}]", catalogName, dbName, e);
             return null;
         }
 
@@ -82,7 +82,7 @@ public class HiveMetadata implements ConnectorMetadata {
         try {
             table = hmsOps.getTable(dbName, tblName);
         } catch (Exception e) {
-            LOG.error("Failed to get hive table [{}.{}.{}]", catalogName, dbName, tblName);
+            LOG.error("Failed to get hive table [{}.{}.{}]", catalogName, dbName, tblName, e);
             return null;
         }
 

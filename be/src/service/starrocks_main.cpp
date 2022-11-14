@@ -187,6 +187,7 @@ int main(int argc, char** argv) {
                         {.path = p.path, .size = static_cast<size_t>(starrocks::config::block_cache_disk_size)});
             }
         }
+        cache_options.meta_path = starrocks::config::block_cache_meta_path;
         cache_options.block_size = starrocks::config::block_cache_block_size;
         cache_options.checksum = starrocks::config::block_cache_checksum_enable;
         cache->init(cache_options);
@@ -304,6 +305,10 @@ int main(int argc, char** argv) {
     } else {
         start_be();
     }
+
+#ifdef WITH_BLOCK_CACHE
+    starrocks::BlockCache::instance()->shutdown();
+#endif
 
     daemon->stop();
     daemon.reset();

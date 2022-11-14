@@ -47,11 +47,6 @@ if [[ ! -f ${STARROCKS_THIRDPARTY}/installed/include/fast_float/fast_float.h ]];
     ${STARROCKS_THIRDPARTY}/build-thirdparty.sh
 fi
 
-if [[ ! -f ${STARROCKS_THIRDPARTY}/installed/include/pulsar/Client.h ]]; then
-    echo "Thirdparty libraries need to be build ..."
-    ${STARROCKS_HOME}/thirdparty/build-thirdparty.sh
-fi
-
 PARALLEL=$[$(nproc)/4+1]
 
 # Check args
@@ -123,7 +118,7 @@ if [[ -z $(grep -o 'sse[^ ]*' /proc/cpuinfo) ]]; then
 fi
 
 if [[ -z ${WITH_BLOCK_CACHE} ]]; then
-	WITH_BLOCK_CACHE=OFF
+	WITH_BLOCK_CACHE=ON
 fi
 
 if [[ "${WITH_BLOCK_CACHE}" == "ON" && ! -f ${STARROCKS_THIRDPARTY}/installed/cachelib/lib/libcachelib_allocator.a ]]; then
@@ -350,8 +345,6 @@ if [ ${BUILD_BE} -eq 1 ]; then
                ${STARROCKS_OUTPUT}/be/lib/hadoop \
                ${STARROCKS_OUTPUT}/be/lib/jvm \
                ${STARROCKS_OUTPUT}/be/www  \
-               ${STARROCKS_OUTPUT}/udf/lib \
-               ${STARROCKS_OUTPUT}/udf/include
 
     cp -r -p ${STARROCKS_HOME}/be/output/bin/* ${STARROCKS_OUTPUT}/be/bin/
     cp -r -p ${STARROCKS_HOME}/be/output/conf/be.conf ${STARROCKS_OUTPUT}/be/conf/
@@ -363,8 +356,6 @@ if [ ${BUILD_BE} -eq 1 ]; then
     fi
     cp -r -p ${STARROCKS_HOME}/be/output/lib/* ${STARROCKS_OUTPUT}/be/lib/
     cp -r -p ${STARROCKS_HOME}/be/output/www/* ${STARROCKS_OUTPUT}/be/www/
-    cp -r -p ${STARROCKS_HOME}/be/output/udf/*.a ${STARROCKS_OUTPUT}/udf/lib/
-    cp -r -p ${STARROCKS_HOME}/be/output/udf/include/* ${STARROCKS_OUTPUT}/udf/include/
     cp -r -p ${STARROCKS_HOME}/java-extensions/jdbc-bridge/target/starrocks-jdbc-bridge-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
     cp -r -p ${STARROCKS_HOME}/java-extensions/udf-extensions/target/udf-extensions-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
     cp -r -p ${STARROCKS_HOME}/java-extensions/java-utils/target/starrocks-java-utils.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages

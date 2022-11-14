@@ -1129,7 +1129,7 @@ size_t Tablet::num_rows() {
     }
 }
 
-int Tablet::version_count() const {
+size_t Tablet::version_count() const {
     if (_updates) {
         return _updates->version_count();
     } else {

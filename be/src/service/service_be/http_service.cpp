@@ -82,6 +82,7 @@ Status HttpServiceBE::start() {
     // ListTransactions:    POST /api/transaction/list
     auto* transaction_manager_action = new TransactionManagerAction(_env);
     _ev_http_server->register_handler(HttpMethod::POST, "/api/transaction/{txn_op}", transaction_manager_action);
+    _ev_http_server->register_handler(HttpMethod::PUT, "/api/transaction/{txn_op}", transaction_manager_action);
     _http_handlers.emplace_back(transaction_manager_action);
 
     // LoadData:            PUT /api/transaction/load

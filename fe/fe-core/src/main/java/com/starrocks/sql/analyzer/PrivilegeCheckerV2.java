@@ -11,7 +11,10 @@ import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.sql.ast.AddSqlBlackListStmt;
+import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
+import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
 import com.starrocks.sql.ast.AlterResourceStmt;
+import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
@@ -21,8 +24,10 @@ import com.starrocks.sql.ast.CreateFileStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DelSqlBlackListStmt;
 import com.starrocks.sql.ast.DeleteStmt;
+import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.sql.ast.DropFileStmt;
 import com.starrocks.sql.ast.DropResourceStmt;
 import com.starrocks.sql.ast.DropRoleStmt;
@@ -33,10 +38,12 @@ import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.InstallPluginStmt;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.RecoverDbStmt;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.SetUserPropertyStmt;
 import com.starrocks.sql.ast.ShowAuthenticationStmt;
+import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowGrantsStmt;
 import com.starrocks.sql.ast.ShowPluginsStmt;
 import com.starrocks.sql.ast.ShowRolesStmt;
@@ -47,6 +54,7 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UninstallPluginStmt;
+import com.starrocks.sql.ast.UseDbStmt;
 import com.starrocks.sql.ast.ViewRelation;
 
 public class PrivilegeCheckerV2 {
@@ -72,25 +80,47 @@ public class PrivilegeCheckerV2 {
         }
     }
 
-    static void checkDbAction(ConnectContext context, TableName tableName, PrivilegeType.DbAction action) {
-        if (!CatalogMgr.isInternalCatalog(tableName.getCatalog())) {
+    static void checkDbAction(ConnectContext context, String catalogName, String dbName,
+                              PrivilegeType.DbAction action) {
+        if (!CatalogMgr.isInternalCatalog(catalogName)) {
             throw new SemanticException(EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG);
         }
-        String db = tableName.getDb();
-        if (!PrivilegeManager.checkDbAction(context, db, action)) {
+        if (!PrivilegeManager.checkDbAction(context, dbName, action)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED,
-                    context.getQualifiedUser(), db);
+                    context.getQualifiedUser(), dbName, action.name());
         }
     }
 
-    static void checkAnyActionInDb(ConnectContext context, String catalogName, String dbName) {
+    static void checkAnyActionOnDb(ConnectContext context, String catalogName, String dbName) {
         if (!CatalogMgr.isInternalCatalog(catalogName)) {
             throw new SemanticException(EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG);
         }
 
-        if (!PrivilegeManager.checkAnyActionInDb(context, dbName)) {
+        if (!PrivilegeManager.checkAnyActionOnDb(context, dbName)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED,
                     context.getQualifiedUser(), dbName);
+        }
+    }
+
+    static void checkAnyActionOnOrUnderDb(ConnectContext context, String catalogName, String dbName) {
+        if (!CatalogMgr.isInternalCatalog(catalogName)) {
+            throw new SemanticException(EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG);
+        }
+
+        if (!PrivilegeManager.checkAnyActionOnOrUnderDb(context, dbName)) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED,
+                    context.getQualifiedUser(), dbName);
+        }
+    }
+
+    static void checkViewAction(ConnectContext context, TableName tableName, PrivilegeType.ViewAction action) {
+        if (!CatalogMgr.isInternalCatalog(tableName.getCatalog())) {
+            throw new SemanticException("external catalog is not supported for now!");
+        }
+        String actionStr = action.toString();
+        if (!PrivilegeManager.checkViewAction(context, tableName.getDb(), tableName.getTbl(), action)) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR,
+                    actionStr, context.getQualifiedUser(), context.getRemoteIP(), tableName);
         }
     }
 
@@ -103,20 +133,8 @@ public class PrivilegeCheckerV2 {
         }
 
         @Override
-        public Void visitCreateTableStatement(CreateTableStmt statement, ConnectContext session) {
-            checkDbAction(session, statement.getDbTbl(), PrivilegeType.DbAction.CREATE_TABLE);
-            return null;
-        }
-
-        @Override
         public Void visitDeleteStatement(DeleteStmt statement, ConnectContext session) {
             checkTableAction(session, statement.getTableName(), PrivilegeType.TableAction.DELETE);
-            return null;
-        }
-
-        @Override
-        public Void visitDropTableStatement(DropTableStmt statement, ConnectContext session) {
-            checkTableAction(session, statement.getTbl(), PrivilegeType.TableAction.DROP);
             return null;
         }
 
@@ -152,7 +170,10 @@ public class PrivilegeCheckerV2 {
             @Override
             public Void visitView(ViewRelation node, Void context) {
                 // if user has select privilege for the view, then there's no need to check base table
-                // TODO check select for view
+                if (PrivilegeManager.checkViewAction(
+                        session, node.getName().getDb(), node.getName().getTbl(), PrivilegeType.ViewAction.SELECT)) {
+                    return null;
+                }
                 return visit(node.getQueryStatement());
             }
 
@@ -193,7 +214,47 @@ public class PrivilegeCheckerV2 {
             }
         }
 
-        // ---------------------------------------- External Resource Statement---------------------------------------------
+        // --------------------------------- Database Statement ---------------------------------
+
+        @Override
+        public Void visitUseDbStatement(UseDbStmt statement, ConnectContext context) {
+            checkAnyActionOnOrUnderDb(context, statement.getCatalogName(), statement.getDbName());
+            return null;
+        }
+
+        @Override
+        public Void visitShowCreateDbStatement(ShowCreateDbStmt statement, ConnectContext context) {
+            checkAnyActionOnDb(context, statement.getCatalogName(), statement.getDb());
+            return null;
+        }
+
+        @Override
+        public Void visitRecoverDbStatement(RecoverDbStmt statement, ConnectContext context) {
+            checkDbAction(context, statement.getCatalogName(), statement.getDbName(), PrivilegeType.DbAction.DROP);
+            // TODO(yiming): check the `CREATE_DATABASE` action on internal catalog after catalog object is added
+            return null;
+        }
+
+        @Override
+        public Void visitAlterDatabaseQuotaStatement(AlterDatabaseQuotaStmt statement, ConnectContext context) {
+            checkDbAction(context, statement.getCatalogName(), statement.getDbName(), PrivilegeType.DbAction.ALTER);
+            return null;
+        }
+
+        @Override
+        public Void visitAlterDatabaseRenameStatement(AlterDatabaseRenameStatement statement, ConnectContext context) {
+            checkDbAction(context, statement.getCatalogName(), statement.getDbName(), PrivilegeType.DbAction.ALTER);
+            return null;
+        }
+
+        @Override
+        public Void visitDropDbStatement(DropDbStmt statement, ConnectContext context) {
+            checkDbAction(context, statement.getCatalogName(), statement.getDbName(), PrivilegeType.DbAction.DROP);
+            return null;
+        }
+
+        // --------------------------------- External Resource Statement ---------------------------------
+
         @Override
         public Void visitCreateResourceStatement(CreateResourceStmt statement, ConnectContext context) {
             if (! PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.CREATE_RESOURCE)) {
@@ -250,7 +311,7 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitCreateFileStatement(CreateFileStmt statement, ConnectContext context) {
-            checkAnyActionInDb(context, context.getCurrentCatalog(), statement.getDbName());
+            checkAnyActionOnOrUnderDb(context, context.getCurrentCatalog(), statement.getDbName());
             if (! PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.FILE)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "FILE");
             }
@@ -259,7 +320,7 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitDropFileStatement(DropFileStmt statement, ConnectContext context) {
-            checkAnyActionInDb(context, context.getCurrentCatalog(), statement.getDbName());
+            checkAnyActionOnOrUnderDb(context, context.getCurrentCatalog(), statement.getDbName());
             if (! PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.FILE)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "FILE");
             }
@@ -268,7 +329,7 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitShowSmallFilesStatement(ShowSmallFilesStmt statement, ConnectContext context) {
-            checkAnyActionInDb(context, context.getCurrentCatalog(), statement.getDbName());
+            checkAnyActionOnOrUnderDb(context, context.getCurrentCatalog(), statement.getDbName());
             return null;
         }
 
@@ -402,6 +463,54 @@ public class PrivilegeCheckerV2 {
             if (user != null && !user.equals(context.getCurrentUserIdentity().getQualifiedUser())
                     && !PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.GRANT)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+            }
+            return null;
+        }
+
+        // ---------------------------------------- View Statement ---------------------------------------------------------
+
+        @Override
+        public Void visitCreateViewStatement(CreateViewStmt statement, ConnectContext context) {
+            // 1. check if user can create view in this db
+            TableName tableName = statement.getTableName();
+            String catalog = tableName.getCatalog();
+            if (catalog == null) {
+                catalog = context.getCurrentCatalog();
+            }
+            checkDbAction(context, catalog, tableName.getDb(), PrivilegeType.DbAction.CREATE_VIEW);
+            // 2. check if user can query
+            check(statement.getQueryStatement(), context);
+            return null;
+        }
+
+        @Override
+        public Void visitAlterViewStatement(AlterViewStmt statement, ConnectContext context) {
+            // 1. check if user can alter view in this db
+            checkViewAction(context, statement.getTableName(), PrivilegeType.ViewAction.ALTER);
+            // 2. check if user can query
+            check(statement.getQueryStatement(), context);
+            return null;
+        }
+
+        // ---------------------------------------- Table Statement --------------------------------------------------------
+
+        @Override
+        public Void visitCreateTableStatement(CreateTableStmt statement, ConnectContext session) {
+            TableName tableName = statement.getDbTbl();
+            String catalog = tableName.getCatalog();
+            if (catalog == null) {
+                catalog = session.getCurrentCatalog();
+            }
+            checkDbAction(session, catalog, tableName.getDb(), PrivilegeType.DbAction.CREATE_TABLE);
+            return null;
+        }
+
+        @Override
+        public Void visitDropTableStatement(DropTableStmt statement, ConnectContext session) {
+            if (statement.isView()) {
+                checkViewAction(session, statement.getTbl(), PrivilegeType.ViewAction.DROP);
+            } else {
+                checkTableAction(session, statement.getTbl(), PrivilegeType.TableAction.DROP);
             }
             return null;
         }

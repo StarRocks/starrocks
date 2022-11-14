@@ -27,9 +27,6 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/udf")
 # where to put generated binaries
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/udf")
 
-# Build this library twice. Once to be linked into the main StarRocks. This version
-# can have dependencies on our other libs. The second version is shipped as part
-# of the UDF sdk, which can't use other libs.
 set(UDF_FILES
   java/java_udf.cpp
   java/java_data_converter.cpp
@@ -37,31 +34,3 @@ set(UDF_FILES
 )
 
 add_library(Udf udf.cpp udf_ir.cpp java/utils.cpp ${UDF_FILES})
-add_library(StarRocksUdf udf.cpp udf_ir.cpp)
-set_target_properties(StarRocksUdf PROPERTIES COMPILE_FLAGS "-DSTARROCKS_UDF_SDK_BUILD")
-
-# We can't use the normal link list since we want to pick up libStarRocksUdf (the external
-# library) rather than the interal libUdf.
-set (UDF_TEST_LINK_LIBS
-  -Wl,--start-group
-  Common
-  GlobalFlags
-  StarRocksUdf
-  Runtime
-  Util
-  -Wl,--end-group
-# Below are all external dependencies.  They should some after the starrocks libs.
-  ${Boost_LIBRARIES}
-  glogstatic
-  gflagsstatic
-  -lboost_date_time
-  gtest)
-  
-set_target_properties(StarRocksUdf PROPERTIES PUBLIC_HEADER "udf.h")
-INSTALL(TARGETS StarRocksUdf
-        ARCHIVE DESTINATION ${OUTPUT_DIR}/udf
-        LIBRARY DESTINATION ${OUTPUT_DIR}/udf/lib
-        PUBLIC_HEADER DESTINATION ${OUTPUT_DIR}/udf/include)
-
-#ADD_BE_TEST(udf_test)
-#ADD_BE_TEST(uda_test)
