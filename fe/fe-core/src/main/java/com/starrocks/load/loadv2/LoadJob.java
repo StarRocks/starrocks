@@ -25,8 +25,6 @@ import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.AuthorizationInfo;
 import com.starrocks.catalog.Database;
@@ -93,8 +91,6 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     public static final String UNSELECTED_ROWS = "unselected.rows";
     public static final String LOADED_BYTES = "loaded.bytes";
 
-    public static final String JSON_MERGE_CONDITION_KEY = "mergeCondition";
-
     private static final int TASK_SUBMIT_RETRY_NUM = 2;
 
     protected long id;
@@ -118,7 +114,6 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     // reuse deleteFlag as partialUpdate
     // @Deprecated
     // protected boolean deleteFlag = false;
-    protected String mergeConditionStr = "";
 
     protected long createTimestamp = -1;
     protected long loadStartTimestamp = -1;
@@ -308,10 +303,6 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             }
             if (properties.containsKey(LoadStmt.PARTIAL_UPDATE)) {
                 partialUpdate = Boolean.valueOf(properties.get(LoadStmt.PARTIAL_UPDATE));
-            }
-
-            if (properties.containsKey(LoadStmt.MERGE_CONDITION)) {
-                mergeConditionStr = properties.get(LoadStmt.MERGE_CONDITION);
             }
 
             if (properties.containsKey(LoadStmt.LOAD_MEM_LIMIT)) {
@@ -1015,9 +1006,6 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             authorizationInfo.write(out);
         }
         Text.writeString(out, timezone);
-        JsonObject jsonObject = new JsonObject();
-        jsonObject.addProperty(JSON_MERGE_CONDITION_KEY, mergeConditionStr);
-        Text.writeString(out, jsonObject.toString());
     }
 
     public void readFields(DataInput in) throws IOException {
@@ -1061,15 +1049,6 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         }
         if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_61) {
             timezone = Text.readString(in);
-        }
-        String mergeConditionJson = Text.readString(in);
-        try {
-            JsonObject jsonObject = JsonParser.parseString(mergeConditionJson).getAsJsonObject();
-            if (jsonObject.has(JSON_MERGE_CONDITION_KEY)) {
-                mergeConditionStr = jsonObject.getAsJsonPrimitive(JSON_MERGE_CONDITION_KEY).getAsString();
-            }
-        } catch (Exception e) {
-            LOG.warn("Load job last string is not json " + mergeConditionJson);
         }
     }
 
