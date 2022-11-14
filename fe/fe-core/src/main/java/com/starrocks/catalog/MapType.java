@@ -101,6 +101,12 @@ public class MapType extends Type {
     }
 
     @Override
+    public String toString() {
+        return String.format("MAP<%s,%s>",
+                keyType.toString(), valueType.toString());
+    }
+
+    @Override
     protected String prettyPrint(int lpad) {
         String leftPadding = Strings.repeat(" ", lpad);
         if (!valueType.isStructType()) {
