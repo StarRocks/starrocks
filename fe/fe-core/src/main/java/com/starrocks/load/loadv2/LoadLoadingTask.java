@@ -119,7 +119,6 @@ public class LoadLoadingTask extends LoadTask {
                 brokerDesc, fileGroups, fileStatusList, fileNum);
             loadPlanner.plan();
         }
-        planner.plan(loadId, fileStatusList, fileNum);
     }
 
     public TUniqueId getLoadId() {
