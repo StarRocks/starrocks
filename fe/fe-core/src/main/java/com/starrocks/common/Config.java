@@ -1692,7 +1692,7 @@ public class Config extends ConfigBase {
      * default storage cache ttl of lake table
      */
     @ConfField(mutable = true)
-    public static long lake_default_cache_ttl_seconds = 2592000L;
+    public static long lake_default_storage_cache_ttl_seconds = 2592000L;
 
     /**
      * default bucket number when create OLAP table without buckets info
