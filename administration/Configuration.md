@@ -17,8 +17,8 @@ FE 参数分为动态参数和静态参数。动态参数可通过 SQL 命令进
 FE 启动后，您可以在 MySQL 客户端执行 ADMIN SHOW FRONTEND CONFIG 命令来查看参数配置。如果您想查看具体参数的配置，执行如下命令：
 
 ```SQL
- ADMIN SHOW FRONTEND CONFIG [LIKE "pattern"];
- ```
+ADMIN SHOW FRONTEND CONFIG [LIKE "pattern"];
+```
 
 详细的命令返回字段解释，参见 [ADMIN SHOW CONFIG](../sql-reference/sql-statements/Administration/ADMIN%20SHOW%20CONFIG.md)。
 
@@ -311,9 +311,9 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 您可以通过 `curl` 命令在线修改 BE 节点动态参数。
 
-~~~shell
+```shell
 curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
-~~~
+```
 
 以下是 BE 动态参数列表：
 
@@ -501,27 +501,27 @@ Broker 配置项暂不支持在线修改，您需要在 **broker.conf** 中修�
 
 建议使用 Ext4 文件系统，可用相关命令进行查看挂载类型。
 
-~~~shell
+```shell
 df -Th
 FilesystemTypeSize  Used Avail Use% Mounted on
 /dev/vdb1ext41008G  903G   55G  95% /home/disk1
-~~~
+```
 
 ### 高并发配置
 
 如果集群负载的并发度较高，建议添加以下配置。
 
-~~~shell
+```shell
 echo 120000 > /proc/sys/kernel/threads-max
 echo 60000  > /proc/sys/vm/max_map_count
 echo 200000 > /proc/sys/kernel/pid_max
-~~~
+```
 
 ### max user processes
 
-~~~shell
+```shell
 ulimit -u 40960
-~~~
+```
 
 ### 文件句柄
 
