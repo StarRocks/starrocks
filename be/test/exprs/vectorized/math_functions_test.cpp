@@ -1309,6 +1309,39 @@ TEST_F(VecMathFunctionsTest, OutputNanTest) {
     }
 
     {
+        std::vector<bool> null_expect = {false, false, true};
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        ColumnPtr result = MathFunctions::sinh(ctx.get(), columns);
+        auto nullable = ColumnHelper::as_raw_column<NullableColumn>(result);
+        ASSERT_EQ(nullable->size(), null_expect.size());
+        for (size_t i = 0; i < nullable->size(); i++) {
+            ASSERT_EQ(nullable->is_null(i), null_expect[i]);
+        }
+    }
+
+    {
+        std::vector<bool> null_expect = {false, false, true};
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        ColumnPtr result = MathFunctions::cosh(ctx.get(), columns);
+        auto nullable = ColumnHelper::as_raw_column<NullableColumn>(result);
+        ASSERT_EQ(nullable->size(), null_expect.size());
+        for (size_t i = 0; i < nullable->size(); i++) {
+            ASSERT_EQ(nullable->is_null(i), null_expect[i]);
+        }
+    }
+
+    {
+        std::vector<bool> null_expect = {false, false, true};
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        ColumnPtr result = MathFunctions::tanh(ctx.get(), columns);
+        auto nullable = ColumnHelper::as_raw_column<NullableColumn>(result);
+        ASSERT_EQ(nullable->size(), null_expect.size());
+        for (size_t i = 0; i < nullable->size(); i++) {
+            ASSERT_EQ(nullable->is_null(i), null_expect[i]);
+        }
+    }
+
+    {
         std::vector<bool> null_expect = {true, false, true};
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr result = MathFunctions::log2(ctx.get(), columns);
