@@ -26,7 +26,7 @@ SHOW BACKENDS;
 | IP                    | BE 的 IP 地址。                                              |
 | HeartbeatPort         | BE 上的心跳端口，用于接收来自 FE 的心跳。                    |
 | BePort                | BE 上的 Thrift server 端口， 用于接收来自 FE 的请求。        |
-| HttpPort              | BE 上的 HTTP server 端口，用于网页访问 FE。                  |
+| HttpPort              | BE 上的 HTTP server 端口，用于网页访问 BE。                  |
 | BrpcPort              | BE 上的 brpc 端口，用于 BE 之间通讯。                        |
 | LastStartTime         | BE 最后一次启动的时间。                                      |
 | LastHeartbeat         | FE 最后一次发心跳给 BE，且 BE 成功回复的时间。               |
