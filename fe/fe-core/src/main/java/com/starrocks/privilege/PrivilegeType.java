@@ -44,7 +44,8 @@ public enum PrivilegeType {
         DROP(2),
         INSERT(3),
         SELECT(4),
-        SHOW(5);
+        ALTER(5),
+        EXPORT(6);
 
         private final int id;
 
