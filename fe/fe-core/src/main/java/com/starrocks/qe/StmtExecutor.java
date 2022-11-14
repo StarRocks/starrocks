@@ -1108,16 +1108,20 @@ public class StmtExecutor {
             }
         } catch (QueryStateException e) {
             if (e.getQueryState().getStateType() != MysqlStateType.OK) {
-                LOG.warn("DDL statement(" + originStmt.originStmt + ") process failed.", e);
+                String str = parsedStmt.toString();
+                if (str.isEmpty()) {
+                    LOG.warn("DDL statement (" + originStmt + ") process failed.", e);
+                }
+                LOG.warn("DDL statement (" + str + ") process failed.", e);
             }
             context.setState(e.getQueryState());
-        } catch (UserException e) {
-            LOG.warn("DDL statement(" + originStmt.originStmt + ") process failed.", e);
-            // Return message to info client what happened.
-            context.getState().setError(e.getMessage());
         } catch (Throwable e) {
             // Maybe our bug
-            LOG.warn("DDL statement(" + originStmt.originStmt + ") process failed.", e);
+            String str = parsedStmt.toString();
+            if (str.isEmpty()) {
+                LOG.warn("DDL statement (" + originStmt + ") process failed.", e);
+            }
+            LOG.warn("DDL statement (" + str + ") process failed.", e);
             context.getState().setError("Unexpected exception: " + e.getMessage());
         }
     }

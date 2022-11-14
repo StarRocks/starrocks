@@ -43,6 +43,7 @@ import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.DataDescription;
+import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.DefaultValueExpr;
 import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.FieldReference;
@@ -99,6 +100,32 @@ public class AST2SQL {
             }
             return sb.toString();
         }
+
+        @Override
+        public String visitCreateRoutineLoadStatement(CreateRoutineLoadStmt stmt, Void context) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("CREATE ROUTINE LOAD ").append(stmt.getDBName()).append(".")
+                    .append(stmt.getName()).append(" ON ").append(stmt.getTableName());
+
+            if (stmt.getRoutineLoadDesc() != null) {
+                sb.append(" ").append(stmt.getRoutineLoadDesc()).append(" ");
+            }
+
+            if (!stmt.getJobProperties().isEmpty()) {
+                PrintableMap<String, String> map = new PrintableMap<>(stmt.getJobProperties(), "=", true, false);
+                sb.append("PROPERTIES ( ").append(map).append(" )");
+            }
+
+            sb.append(" FROM ").append(stmt.getTypeName()).append(" ");
+
+            if (!stmt.getDataSourceProperties().isEmpty()) {
+                PrintableMap<String, String> map = new PrintableMap<>(stmt.getDataSourceProperties(), "=", true, false, true);
+                sb.append("( ").append(map).append(" )");
+            }
+
+            return sb.toString();
+        }
+
 
         @Override
         public String visitLoadStatement(LoadStmt stmt, Void context) {

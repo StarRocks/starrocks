@@ -44,6 +44,7 @@ public class PrintableMap<K, V> {
         SENSITIVE_KEY.add("fs.oss.accessKeySecret");
         SENSITIVE_KEY.add("fs.cosn.userinfo.secretId");
         SENSITIVE_KEY.add("fs.cosn.userinfo.secretKey");
+        SENSITIVE_KEY.add("property.sasl.password");
     }
 
     public PrintableMap(Map<K, V> map, String keyValueSaperator,

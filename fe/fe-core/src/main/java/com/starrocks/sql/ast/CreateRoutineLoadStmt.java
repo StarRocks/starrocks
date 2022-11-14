@@ -22,6 +22,7 @@ import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.analyzer.AST2SQL;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -338,6 +339,14 @@ public class CreateRoutineLoadStmt extends DdlStmt {
 
     public List<ParseNode> getLoadPropertyList() {
         return loadPropertyList;
+    }
+
+    public final Map<String, String> getJobProperties() {
+        return jobProperties;
+    }
+
+    public final Map<String, String> getDataSourceProperties() {
+        return dataSourceProperties;
     }
 
     public static RoutineLoadDesc getLoadDesc(OriginStatement origStmt, Map<String, String> sessionVariables) {
@@ -795,5 +804,15 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) throws RuntimeException {
         return visitor.visitCreateRoutineLoadStatement(this, context);
+    }
+
+    @Override
+    public boolean needAuditEncryption() {
+        return true;
+    }
+
+    @Override
+    public String toString() {
+        return AST2SQL.toString(this);
     }
 }
