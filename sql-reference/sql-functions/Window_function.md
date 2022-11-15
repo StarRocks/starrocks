@@ -419,7 +419,7 @@ where property in ('prime','square');
 +---+----------+---------------+
 ~~~
 
-从2.4版本开始，该函数支持设置`rows between n preceding and n following`，即支持计算当前行前n行及后n行中的最大值。比如要计算当前行前3行和后2行中的最大值，语句可写为：
+从 2.4 版本开始，该函数支持设置 `rows between n preceding and n following`，即支持计算当前行前 n 行及后 n 行中的最大值。比如要计算当前行前 3 行和后 2 行中的最大值，语句可写为：
 
 ~~~SQL
 select x, property,
@@ -470,7 +470,7 @@ where property in ('prime','square');
 +---+----------+---------------+
 ~~~
 
-从2.4版本开始，该函数支持设置`rows between n preceding and n following`，即支持计算当前行前n行以及后`n`行中的最小值。比如要计算当前行前3行和后2行中的最小值，语句可写为：
+从 2.4 版本开始，该函数支持设置 `rows between n preceding and n following`，即支持计算当前行前 n 行以及后 n 行中的最小值。比如要计算当前行前 3 行和后 2 行中的最小值，语句可写为：
 
 ~~~SQL
 select x, property,
