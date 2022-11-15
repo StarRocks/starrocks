@@ -195,7 +195,9 @@ public class Optimizer {
         if (Config.enable_experimental_mv
                 && connectContext.getSessionVariable().isEnableMaterializedViewRewrite()
                 && !optimizerConfig.isRuleBased()) {
-            registerMaterializedViews(logicOperatorTree, connectContext);
+            try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.registerMvs")) {
+                registerMaterializedViews(logicOperatorTree, connectContext);
+            }
         }
     }
 
