@@ -56,6 +56,7 @@ void TabletReader::close() {
 }
 
 Status TabletReader::prepare() {
+    SCOPED_RAW_TIMER(&_stats.get_rowsets_ns);
     std::shared_lock l(_tablet->get_header_lock());
     auto st = _tablet->capture_consistent_rowsets(_version, &_rowsets);
     if (!st.ok()) {
