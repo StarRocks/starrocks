@@ -12,7 +12,6 @@ import org.apache.iceberg.CatalogUtil;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.catalog.Catalog;
 import org.apache.iceberg.catalog.TableIdentifier;
-import org.apache.iceberg.relocated.com.google.common.collect.Maps;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -24,8 +23,7 @@ import java.util.Map;
 public class IcebergRESTCatalogTest {
     @Test
     public void testCatalogType() {
-        Map<String, String> icebergProperties = new HashMap<>();
-        IcebergRESTCatalog icebergRESTCatalog = IcebergRESTCatalog.getInstance(icebergProperties);
+        IcebergRESTCatalog icebergRESTCatalog = new IcebergRESTCatalog();
         Assert.assertEquals(IcebergCatalogType.REST_CATALOG, icebergRESTCatalog.getIcebergCatalogType());
     }
 
@@ -53,16 +51,6 @@ public class IcebergRESTCatalogTest {
         IcebergRESTCatalog icebergRESTCatalog = IcebergRESTCatalog.getInstance(icebergProperties);
         Table table = icebergRESTCatalog.loadTable(identifier);
         Assert.assertEquals("test", table.name());
-    }
-
-    @Test
-    public void testInitialize() {
-        try {
-            IcebergRESTCatalog catalog = new IcebergRESTCatalog();
-            catalog.initialize("rest_iceberg", Maps.newHashMap());
-        } catch (Exception e) {
-            Assert.fail(e.getMessage());
-        }
     }
 
     @Test
