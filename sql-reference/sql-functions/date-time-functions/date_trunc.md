@@ -16,9 +16,9 @@ DATETIME date_trunc(VARCHAR fmt, DATETIME|DATE datetime)
 
 - `datetime`: 需要截断的时间，类型为 DATETIME 或 DATE。日期和时间必须真实存在，否则返回 NULL。比如 '2021-02-29 11:12:13' 为不存在的日期，计算时会返回 NULL。
 
-- `fmt`: 精度级别，即需要将`datetime`截断到哪个时间单位。类型为 VARCHAR 常量。
+- `fmt`: 精度级别，即需要将 `datetime` 截断到哪个时间单位。类型为 VARCHAR 常量。
   
-  `fmt`的取值必须为下表中列举的时间单位。如果取值不正确，则返回报错。
+  `fmt` 的取值必须为下表中列举的时间单位。如果取值不正确，则返回报错。
 
 | fmt 取值 | 含义                                   |
 | -------- | -------------------------------------- |
@@ -35,7 +35,7 @@ DATETIME date_trunc(VARCHAR fmt, DATETIME|DATE datetime)
 
 返回 DATETIME 类型的值。
 
-如果`datetime`为 DATE 类型，`fmt`设定为 `hour`，`minute`， 或`second` 时，返回的时间部分默认为`00:00:00`，参见示例五。
+如果 `datetime` 为 DATE 类型，`fmt` 设定为 `hour`，`minute`， 或 `second` 时，返回的时间部分默认为 `00:00:00`，参见示例五。
 
 ## 示例
 
@@ -83,7 +83,7 @@ select date_trunc("year", "2020-11-04 11:12:13");
 +-------------------------------------------+
 ```
 
-示例五：DATE 类型下，`fmt`设置为`hour`时，时间部分返回`00:00:00`。
+示例五：DATE 类型下，`fmt` 设置为 `hour` 时，时间部分返回 `00:00:00`。
 
 ```undefined
 select date_trunc("hour", "2020-11-04");
