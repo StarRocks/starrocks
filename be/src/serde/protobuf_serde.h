@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <streamvbyte.h>
 #include <string_view>
 #include <vector>
 
@@ -42,7 +43,7 @@ public:
 
     void set_encode_levels_in_pb(ChunkPB* const res);
 
-    static constexpr uint16_t STREAMVBYTE_PADDING = 16;
+    static constexpr uint16_t STREAMVBYTE_PADDING_SIZE = STREAMVBYTE_PADDING;
 
     static bool enable_encode_integer(const int encode_code) { return encode_code & ENCODE_INTEGER; }
 
