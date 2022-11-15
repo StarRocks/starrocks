@@ -5,8 +5,7 @@ on:
     types: [labeled]
 
 jobs:
-  sonarcloud-be-build:
-    name: BE Sonar Build
+  sonarcloud-be:
     runs-on: self-hosted
     if: ${{ github.event.label.name == 'be-build' }}
     env:

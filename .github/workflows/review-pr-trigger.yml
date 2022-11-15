@@ -4,7 +4,6 @@ on: pull_request_review
 
 jobs:
   review-pr-trigger:
-    name: "Label PRs when reviewed"
     runs-on: ubuntu-latest
     steps:
       - uses: taichi/approved-event-action@v1.2.1
