@@ -344,7 +344,7 @@ public class CompactionScheduler extends Daemon {
         VisibleStateWaiter waiter;
         db.writeLock();
         try {
-            waiter = transactionMgr.commitTransaction(db.getId(), context.getTxnId(), commitInfoList);
+            waiter = transactionMgr.commitTransaction(db.getId(), context.getTxnId(), commitInfoList, Lists.newArrayList());
         } finally {
             db.writeUnlock();
         }

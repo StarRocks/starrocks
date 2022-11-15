@@ -35,6 +35,7 @@ import com.starrocks.thrift.TStreamLoadChannel;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.AbstractTxnStateChangeCallback;
 import com.starrocks.transaction.TabletCommitInfo;
+import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionCommitFailedException;
 import com.starrocks.transaction.TransactionException;
 import com.starrocks.transaction.TransactionState;
@@ -835,13 +836,14 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
 
     public void unprotectedPrepareTxn() throws UserException {
         List<TabletCommitInfo> commitInfos = TabletCommitInfo.fromThrift(coord.getCommitInfos());
+        List<TabletFailInfo> failInfos = TabletFailInfo.fromThrift(coord.getFailInfos());
         finishPreparingTimeMs = System.currentTimeMillis();
         StreamLoadTxnCommitAttachment txnCommitAttachment = new StreamLoadTxnCommitAttachment(
                 beforeLoadTimeMs, startLoadingTimeMs, startPreparingTimeMs, finishPreparingTimeMs,
                 endTimeMs, numRowsNormal, numRowsAbnormal, numRowsUnselected, numLoadBytesTotal,
                 trackingUrl);
         GlobalStateMgr.getCurrentGlobalTransactionMgr().prepareTransaction(dbId, 
-                txnId, commitInfos, txnCommitAttachment);
+                txnId, commitInfos, failInfos, txnCommitAttachment);
     }
 
     public boolean checkNeedRemove(long currentMs) {

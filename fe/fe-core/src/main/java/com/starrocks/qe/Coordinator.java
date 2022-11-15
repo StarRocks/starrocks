@@ -110,6 +110,7 @@ import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TScanRangeParams;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTabletCommitInfo;
+import com.starrocks.thrift.TTabletFailInfo;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TUnit;
 import org.apache.commons.lang3.StringUtils;
@@ -213,6 +214,7 @@ public class Coordinator {
     // for export
     private List<String> exportFiles;
     private final List<TTabletCommitInfo> commitInfos = Lists.newArrayList();
+    private final List<TTabletFailInfo> failInfos = Lists.newArrayList();
     // Input parameter
     private long jobId = -1; // job which this task belongs to
     private TUniqueId queryId;
@@ -489,6 +491,10 @@ public class Coordinator {
 
     public List<TTabletCommitInfo> getCommitInfos() {
         return commitInfos;
+    }
+
+    public List<TTabletFailInfo> getFailInfos() {
+        return failInfos;
     }
 
     public boolean isUsingBackend(Long backendID) {
@@ -1421,6 +1427,16 @@ public class Coordinator {
         lock.lock();
         try {
             this.commitInfos.addAll(commitInfos);
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    private void updateFailInfos(List<TTabletFailInfo> failInfos) {
+        lock.lock();
+        try {
+            this.failInfos.addAll(failInfos);
+            LOG.info(failInfos);
         } finally {
             lock.unlock();
         }
@@ -2394,8 +2410,9 @@ public class Coordinator {
             if (ctx != null) {
                 ctx.setErrorCodeOnce(status.getErrorCodeString());
             }
-            LOG.warn("one instance report fail {}, query_id={} instance_id={}",
-                    status, DebugUtil.printId(queryId), DebugUtil.printId(params.getFragment_instance_id()));
+            LOG.warn("one instance report fail {}, params={} query_id={} instance_id={}",
+                    status, params, DebugUtil.printId(queryId),
+                    DebugUtil.printId(params.getFragment_instance_id()));
             updateStatus(status, params.getFragment_instance_id());
         }
         if (execState.done) {
@@ -2413,6 +2430,9 @@ public class Coordinator {
             }
             if (params.isSetCommitInfos()) {
                 updateCommitInfos(params.getCommitInfos());
+            }
+            if (params.isSetFailInfos()) {
+                updateFailInfos(params.getFailInfos());
             }
             profileDoneSignal.markedCountDown(params.getFragment_instance_id(), -1L);
         }
