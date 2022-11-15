@@ -4,7 +4,7 @@
 
 计算指定日期为对应年中的哪一天。
 
-参数为Date或者Datetime类型。
+参数为 DATE 或 DATETIME 类型。
 
 ## 语法
 

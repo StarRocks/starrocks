@@ -12,11 +12,11 @@ INT WEEKOFYEAR(DATETIME date)
 
 ## 参数说明
 
-参数为DATE 或者 DATETIME 类型。
+参数为 DATE 或者 DATETIME 类型。
 
 ## 返回值说明
 
- 返回INT类型的值。
+ 返回 INT 类型的值。
 
 ## 示例
 

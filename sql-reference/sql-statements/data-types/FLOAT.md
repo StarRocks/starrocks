@@ -2,13 +2,11 @@
 
 ## 描述
 
-FLOAT
-
 4 字节浮点数。
 
 ## 示例
 
-创建表时指定字段类型为 FLOAT
+创建表时指定字段类型为 FLOAT。
 
 ```sql
 CREATE TABLE floatDemo (

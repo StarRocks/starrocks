@@ -2,9 +2,7 @@
 
 ## 描述
 
-STRING
-
-变长字符串，最大长度 65533 字节。
+字符串，最大长度 65533 字节。
 
 ## 示例
 
@@ -20,4 +18,4 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(pk) BUCKETS 4;
 ```
 
-表创建成功后通过 `desc tablename;` 查看表可以看到 STRING 类型为 `VARCHAR(65533)`。
+表建成功后通过执行 `desc <table_name>;` 查看表信息，可以看到 STRING 类型为 `VARCHAR(65533)`。

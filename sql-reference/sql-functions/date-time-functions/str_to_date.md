@@ -18,9 +18,9 @@ DATETIME STR_TO_DATE(VARCHAR str, VARCHAR format)
 
 ## 返回值说明
 
-返回 DATETIME 类型的值。如果`format` 指定的格式为日期，则返回 DATE 类型的值。
+返回 DATETIME 类型的值。如果 `format` 指定的格式为日期，则返回 DATE 类型的值。
 
-如果`str`或`format`为 NULL，则返回 NULL。
+如果 `str` 或 `format` 为 NULL，则返回 NULL。
 
 ## 示例
 
