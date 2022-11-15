@@ -277,7 +277,7 @@ public class LoadStmt extends DdlStmt {
     }
 
     @Override
-    public String toSql() {
+    public String toString() {
         return AST2SQL.toString(this);
     }
 }
