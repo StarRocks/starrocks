@@ -50,6 +50,9 @@ public class RemoteScanPartitionPruneRule extends TransformationRule {
     public static final RemoteScanPartitionPruneRule DELTALAKE_SCAN =
             new RemoteScanPartitionPruneRule(OperatorType.LOGICAL_DELTALAKE_SCAN);
 
+    public static final RemoteScanPartitionPruneRule FILE_SCAN =
+            new RemoteScanPartitionPruneRule(OperatorType.LOGICAL_FILE_SCAN);
+
     public RemoteScanPartitionPruneRule(OperatorType logicalOperatorType) {
         super(RuleType.TF_PARTITION_PRUNE, Pattern.create(logicalOperatorType));
     }
