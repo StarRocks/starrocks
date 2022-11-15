@@ -42,7 +42,16 @@ public:
 
     void set_encode_levels_in_pb(ChunkPB* const res);
 
+    static constexpr uint16_t STREAMVBYTE_PADDING = 16;
+
+    static bool enable_encode_integer(const int encode_code) { return encode_code & ENCODE_INTEGER; }
+
+    static bool enable_encode_string(const int encode_code) { return encode_code & ENCODE_STRING; }
+
 private:
+    static constexpr int ENCODE_INTEGER = 2;
+    static constexpr int ENCODE_STRING = 4;
+
     // if encode ratio < EncodeRatioLimit, encode it, otherwise not.
     void _adjust(const int col_id);
     const int _session_encode_level;

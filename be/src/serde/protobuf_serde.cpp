@@ -146,8 +146,8 @@ StatusOr<ChunkPB> ProtobufChunkSerde::serialize_without_meta(const vectorized::C
             buff = ColumnArraySerde::serialize(*chunk.columns()[i], buff, false, context->get_encode_level(i));
             if (UNLIKELY(buff == nullptr)) return Status::InternalError("has unsupported column");
             context->update(i, chunk.columns()[i]->byte_size(), buff - buff_begin);
-            if (context->get_encode_level(i) & 2) { // may be use streamvbyte
-                padding_size = 16;
+            if (EncodeContext::enable_encode_integer(context->get_encode_level(i))) { // may be use streamvbyte
+                padding_size = context->STREAMVBYTE_PADDING;
             }
         }
     }
