@@ -9,7 +9,7 @@ on:
 jobs:
   Trigger-Admit-Test:
     runs-on: ubuntu-latest
-    steps:  
+    steps:
       - name: PR comment
         if: contains(github.event.pull_request.labels.*.name, 'Approved')
         uses: thollander/actions-comment-pull-request@v1
