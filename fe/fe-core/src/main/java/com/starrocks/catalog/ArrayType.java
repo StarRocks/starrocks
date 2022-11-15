@@ -104,9 +104,9 @@ public class ArrayType extends Type {
     }
 
     @Override
-    public void selectAll() {
+    public void selectAllFields() {
         if (itemType.isComplexType()) {
-            itemType.selectAll();
+            itemType.selectAllFields();
         }
     }
 

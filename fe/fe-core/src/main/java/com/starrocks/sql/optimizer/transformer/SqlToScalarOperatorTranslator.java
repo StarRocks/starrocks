@@ -2,6 +2,7 @@
 package com.starrocks.sql.optimizer.transformer;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.ArithmeticExpr;
@@ -217,10 +218,12 @@ public final class SqlToScalarOperatorTranslator {
         private final CTETransformerContext cteContext;
         public final OptExprBuilder builder;
         public final Map<ScalarOperator, SubqueryOperator> subqueryPlaceholders;
+        // TODO(SmithCruise) The code here is ugly, we should move these rules into optimizer
         // ArrayDeque will push into and pop out the head
         // Example: the Deque is [1,2,3,4]
         // when push(5) -> [5,1,2,3,4]
         // then pop() -> [1,2,3,4]
+        // -1 means select all fields in the same level, 0 means select 0th field in this level
         private final Deque<Integer> usedSubFieldPos = new ArrayDeque<>();
         public Visitor(ExpressionMapping expressionMapping, ColumnRefFactory columnRefFactory,
                        List<ColumnRefOperator> correlation, ConnectContext session,
@@ -256,13 +259,13 @@ public final class SqlToScalarOperatorTranslator {
                     expressionMapping.getScope().resolveField(node, expressionMapping.getOuterScopeRelationId());
             ColumnRefOperator columnRefOperator =
                     expressionMapping.getColumnRefWithIndex(resolvedField.getRelationFieldIndex());
-            List<Integer> usedPos = new ArrayList<>(usedSubFieldPos);
-            columnRefOperator.addUsedSubfieldPos(usedPos);
 
             if (!expressionMapping.getScope().isLambdaScope() &&
                     resolvedField.getScope().getRelationId().equals(expressionMapping.getOuterScopeRelationId())) {
                 correlation.add(columnRefOperator);
             }
+
+            ScalarOperator returnValue = columnRefOperator;
 
             // If origin type is struct type, means that node contains subfield access
             if (node.getTrueOriginType().isStructType()) {
@@ -270,17 +273,24 @@ public final class SqlToScalarOperatorTranslator {
                         "an non-empty usedStructFiledPos!");
                 Preconditions.checkArgument(node.getUsedStructFieldPos().size() > 0);
                 List<Integer> usedStructFieldPos = node.getUsedStructFieldPos();
-                return SubfieldOperator.build(columnRefOperator, node.getOriginType(), usedStructFieldPos);
-            } else {
-                return columnRefOperator;
+                returnValue = SubfieldOperator.build(columnRefOperator, node.getOriginType(), usedStructFieldPos);
+
+                for (int i = node.getUsedStructFieldPos().size() - 1; i >= 0; i--) {
+                    usedSubFieldPos.push(node.getUsedStructFieldPos().get(i));
+                }
             }
+
+            columnRefOperator.addUsedSubfieldPos(ImmutableList.copyOf(usedSubFieldPos));
+            return returnValue;
         }
 
         @Override
         public ScalarOperator visitSubfieldExpr(SubfieldExpr node, Context context) {
             Preconditions.checkArgument(node.getChildren().size() == 1);
 
+            usedSubFieldPos.push(node.getFieldPos(node.getFieldName()));
             ScalarOperator child = visit(node.getChild(0), context);
+            usedSubFieldPos.pop();
             return SubfieldOperator.build(child, node);
         }
 
