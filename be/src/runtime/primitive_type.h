@@ -33,38 +33,38 @@ namespace starrocks {
 
 enum PrimitiveType {
     INVALID_TYPE = 0,
-    TYPE_NULL,     /* 1 */
-    TYPE_BOOLEAN,  /* 2 */
-    TYPE_TINYINT,  /* 3 */
-    TYPE_SMALLINT, /* 4 */
-    TYPE_INT,      /* 5 */
-    TYPE_BIGINT,   /* 6 */
-    TYPE_LARGEINT, /* 7 */
-    TYPE_FLOAT,    /* 8 */
-    TYPE_DOUBLE,   /* 9 */
-    TYPE_VARCHAR,  /* 10 */
-    TYPE_DATE,     /* 11 */
-    TYPE_DATETIME, /* 12 */
-    TYPE_BINARY,
-    /* 13 */      // Not implemented
-    TYPE_DECIMAL, /* 14 */
-    TYPE_CHAR,    /* 15 */
+    TYPE_TINYINT = 1,
+    TYPE_SMALLINT = 3,
+    TYPE_INT = 5,
+    TYPE_BIGINT = 7,
+    TYPE_LARGEINT = 9,
+    TYPE_FLOAT = 10,
+    TYPE_DOUBLE = 11,
+    TYPE_CHAR = 13,
+    TYPE_DECIMAL = 16,
+    TYPE_VARCHAR = 17,
 
-    TYPE_STRUCT,    /* 16 */
-    TYPE_ARRAY,     /* 17 */
-    TYPE_MAP,       /* 18 */
-    TYPE_HLL,       /* 19 */
-    TYPE_DECIMALV2, /* 20 */
+    TYPE_STRUCT = 18,
+    TYPE_ARRAY = 19,
+    TYPE_MAP = 20,
+    TYPE_HLL = 23,
+    TYPE_BOOLEAN = 24,
+    TYPE_OBJECT = 25,
 
-    TYPE_TIME,       /* 21 */
-    TYPE_OBJECT,     /* 22 */
-    TYPE_PERCENTILE, /* 23 */
-    TYPE_DECIMAL32,  /* 24 */
-    TYPE_DECIMAL64,  /* 25 */
-    TYPE_DECIMAL128, /* 26 */
+    TYPE_DECIMAL32 = 47,
+    TYPE_DECIMAL64 = 48,
+    TYPE_DECIMAL128 = 49,
+    TYPE_DATE = 50,
+    TYPE_DATETIME = 51,
+    TYPE_DECIMALV2 = 52,
+    TYPE_PERCENTILE = 53,
 
-    TYPE_JSON,     /* 27 */
-    TYPE_FUNCTION, /* 28 */
+    TYPE_JSON = 54,
+
+    TYPE_NULL = 55,
+    TYPE_BINARY = 56,
+    TYPE_TIME = 57,
+    TYPE_FUNCTION = 58,
 };
 
 inline bool is_enumeration_type(PrimitiveType type) {

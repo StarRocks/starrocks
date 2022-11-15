@@ -156,6 +156,14 @@ std::string TabletColumn::get_string_by_field_type(FieldType type) {
         return "UNKNOWN";
     case OLAP_FIELD_TYPE_NONE:
         return "NONE";
+    case OLAP_FIELD_TYPE_NULL:
+        return "NULL";
+    case OLAP_FIELD_TYPE_BINARY:
+        return "BINARY";
+    case OLAP_FIELD_TYPE_TIME:
+        return "TIME";
+    case OLAP_FIELD_TYPE_FUNCTION:
+        return "FUNCTION";
     case OLAP_FIELD_TYPE_MAX_VALUE:
         return "MAX_VALUE";
     }
@@ -203,6 +211,9 @@ uint32_t TabletColumn::get_field_length_by_type(FieldType type, uint32_t string_
     case OLAP_FIELD_TYPE_BOOL:
     case OLAP_FIELD_TYPE_TINYINT:
     case OLAP_FIELD_TYPE_UNSIGNED_TINYINT:
+    case OLAP_FIELD_TYPE_NULL:
+    case OLAP_FIELD_TYPE_BINARY:
+    case OLAP_FIELD_TYPE_FUNCTION:
         return 1;
     case OLAP_FIELD_TYPE_SMALLINT:
     case OLAP_FIELD_TYPE_UNSIGNED_SMALLINT:
@@ -221,6 +232,7 @@ uint32_t TabletColumn::get_field_length_by_type(FieldType type, uint32_t string_
     case OLAP_FIELD_TYPE_DATETIME:
     case OLAP_FIELD_TYPE_TIMESTAMP:
     case OLAP_FIELD_TYPE_DECIMAL64:
+    case OLAP_FIELD_TYPE_TIME:
         return 8;
     case OLAP_FIELD_TYPE_DECIMAL:
         return 12;

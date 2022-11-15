@@ -1828,6 +1828,10 @@ const FieldConverter* get_field_converter(FieldType from_type, FieldType to_type
         case OLAP_FIELD_TYPE_DISCRETE_DOUBLE:
         case OLAP_FIELD_TYPE_NONE:
         case OLAP_FIELD_TYPE_MAX_VALUE:
+        case OLAP_FIELD_TYPE_NULL:
+        case OLAP_FIELD_TYPE_BINARY:
+        case OLAP_FIELD_TYPE_TIME:
+        case OLAP_FIELD_TYPE_FUNCTION:
             return nullptr;
         }
         DCHECK(false) << "unreachable path";

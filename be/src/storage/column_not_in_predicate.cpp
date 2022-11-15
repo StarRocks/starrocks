@@ -332,6 +332,10 @@ ColumnPredicate* new_column_not_in_predicate(const TypeInfoPtr& type_info, Colum
     case OLAP_FIELD_TYPE_PERCENTILE:
     case OLAP_FIELD_TYPE_JSON:
     case OLAP_FIELD_TYPE_MAX_VALUE:
+    case OLAP_FIELD_TYPE_NULL:
+    case OLAP_FIELD_TYPE_BINARY:
+    case OLAP_FIELD_TYPE_TIME:
+    case OLAP_FIELD_TYPE_FUNCTION:
         return nullptr;
         // No default to ensure newly added enumerator will be handled.
     }

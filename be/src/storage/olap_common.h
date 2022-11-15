@@ -166,9 +166,14 @@ enum FieldType {
 
     OLAP_FIELD_TYPE_JSON = 54,
 
+    OLAP_FIELD_TYPE_NULL = 55,
+    OLAP_FIELD_TYPE_BINARY = 56,
+    OLAP_FIELD_TYPE_TIME = 57,
+    OLAP_FIELD_TYPE_FUNCTION = 58,
+
     // max value of FieldType, newly-added type should not exceed this value.
     // used to create a fixed-size hash map.
-    OLAP_FIELD_TYPE_MAX_VALUE = 55
+    OLAP_FIELD_TYPE_MAX_VALUE = 59
 };
 
 inline const char* field_type_to_string(FieldType type) {
@@ -239,6 +244,14 @@ inline const char* field_type_to_string(FieldType type) {
         return "PERCENTILE";
     case OLAP_FIELD_TYPE_JSON:
         return "JSON";
+    case OLAP_FIELD_TYPE_NULL:
+        return "NULL";
+    case OLAP_FIELD_TYPE_BINARY:
+        return "BINARY";
+    case OLAP_FIELD_TYPE_TIME:
+        return "TIME";
+    case OLAP_FIELD_TYPE_FUNCTION:
+        return "FUNCTION";
     case OLAP_FIELD_TYPE_MAX_VALUE:
         return "MAX VALUE";
     }
