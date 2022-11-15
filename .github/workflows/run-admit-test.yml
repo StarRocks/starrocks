@@ -1,3 +1,5 @@
+name: testing
+
 on:
   pull_request_target:
     types: [synchronize, labeled, reopened]

@@ -1,3 +1,5 @@
+name: cron-job
+
 on:
   schedule:
     - cron: "0 11 * * 1"

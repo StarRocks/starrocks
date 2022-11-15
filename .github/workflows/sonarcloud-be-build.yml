@@ -1,3 +1,5 @@
+name: code-check
+
 on:
   pull_request:
     types: [labeled]

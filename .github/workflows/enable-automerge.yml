@@ -1,7 +1,10 @@
+name: pr-state
+
 on:
   pull_request_target:
     types:
       - labeled
+
 jobs:
   enable-automerge:
     runs-on: ubuntu-latest
