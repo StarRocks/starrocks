@@ -1,10 +1,9 @@
-name: BE Build
 on:
   pull_request:
     types: [labeled]
 
 jobs:
-  build:
+  sonarcloud-be-build:
     name: BE Sonar Build
     runs-on: self-hosted
     if: ${{ github.event.label.name == 'be-build' }}
@@ -14,7 +13,7 @@ jobs:
       - name: pre build
         run: |
           sudo rm -rf ../starrocks/*
-           
+
       - uses: dorny/paths-filter@v2
         id: changes
         with:

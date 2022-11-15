@@ -1,10 +1,9 @@
-name: automerge
 on:
   pull_request_target:
     types:
       - labeled
 jobs:
-  automerge:
+  enable-automerge:
     runs-on: ubuntu-latest
     steps:
       - name: enable automerge
