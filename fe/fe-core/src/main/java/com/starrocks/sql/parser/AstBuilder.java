@@ -1729,19 +1729,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitLogicalBinary(StarRocksParser.LogicalBinaryContext context) {
         Expr left = (Expr) visit(context.left);
         Expr right = (Expr) visit(context.right);
-
-        if (context.operator.getType() == StarRocksLexer.LOGICAL_OR) {
-            return new CompoundPredicate(CompoundPredicate.Operator.OR, left, right);
-        } else {
-            return new CompoundPredicate(getLogicalBinaryOperator(context.operator), left, right);
-        }
+        return new CompoundPredicate(getLogicalBinaryOperator(context.operator), left, right);
     }
 
     private static CompoundPredicate.Operator getLogicalBinaryOperator(Token token) {
         switch (token.getType()) {
             case StarRocksLexer.AND:
+            case StarRocksLexer.LOGICAL_AND:
                 return CompoundPredicate.Operator.AND;
             case StarRocksLexer.OR:
+            case StarRocksLexer.LOGICAL_OR:
                 return CompoundPredicate.Operator.OR;
         }
 
