@@ -478,6 +478,9 @@ void OlapScanNode::_init_counter(RuntimeState* state) {
     _cached_pages_num_counter = ADD_COUNTER(_scan_profile, "CachedPagesNum", TUnit::UNIT);
     _pushdown_predicates_counter = ADD_COUNTER(_scan_profile, "PushdownPredicates", TUnit::UNIT);
 
+    _get_rowsets_timer = ADD_TIMER(_scan_profile, "GetRowsets");
+    _get_delvec_timer = ADD_TIMER(_scan_profile, "GetDelVec");
+
     /// SegmentInit
     _seg_init_timer = ADD_TIMER(_scan_profile, "SegmentInit");
     _bi_filter_timer = ADD_CHILD_TIMER(_scan_profile, "BitmapIndexFilter", "SegmentInit");
