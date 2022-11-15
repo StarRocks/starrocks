@@ -30,8 +30,8 @@ public class HiveColumnStats {
     private long totalSizeBytes;
     private long numNulls;
     private long ndv;
-    private double min;
-    private double max;
+    private double min = Double.NEGATIVE_INFINITY;
+    private double max = Double.POSITIVE_INFINITY;
     private StatisticType type;
 
     public HiveColumnStats() {
@@ -47,6 +47,8 @@ public class HiveColumnStats {
         } else {
             ndv = -1;
         }
+        min = boolStats.isSetNumFalses() ? 0 : 1;
+        max = boolStats.isSetNumTrues() ? 1 : 0;
         type = StatisticType.ESTIMATE;
     }
 
@@ -84,8 +86,6 @@ public class HiveColumnStats {
 
     private void initStringColumnStats(StringColumnStatsData stringStats, long rowNums) {
         numNulls = getNumNulls(stringStats.getNumNulls());
-        min = Double.NEGATIVE_INFINITY;
-        max = Double.POSITIVE_INFINITY;
         ndv = stringStats.isSetNumDVs() ? getNdvValue(stringStats.getNumDVs(), rowNums) : -1;
         double avgColLen = stringStats.isSetAvgColLen() ? stringStats.getAvgColLen() : -1;
         totalSizeBytes = getStringColumnTotalSizeBytes(avgColLen, rowNums);
