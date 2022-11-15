@@ -63,9 +63,9 @@ INTO TABLE <table_name>
   >
   > 中间的目录也可以使用通配符匹配。
 
-  以 HDFS 数据源为例，文件路径中的 `<hdfs_host>` 和 `hdfs_port` 参数说明如下：
+  以 HDFS 数据源为例，文件路径中的 `hdfs_host` 和 `hdfs_port` 参数说明如下：
 
-  - `<hdfs_host>`：HDFS 集群中 NameNode 所在主机的 IP 地址。
+  - `hdfs_host`：HDFS 集群中 NameNode 所在主机的 IP 地址。
   - `hdfs_port`：HDFS 集群中 NameNode 所在主机的 FS 端口。默认端口号为 `9000`。
 
 - `INTO TABLE`
