@@ -206,6 +206,17 @@ TEST_F(OrcChunkReaderTest, Normal) {
     EXPECT_EQ(records, total_record_num);
 }
 
+TEST_F(OrcChunkReaderTest, NullSlotDescriptor) {
+    std::vector<SlotDescriptor*> src_slot_descs;
+    create_slot_descriptors(_runtime_state.get(), &_pool, &src_slot_descs, default_slot_descs);
+    src_slot_descs.emplace_back(nullptr);
+    OrcChunkReader reader(_runtime_state.get(), src_slot_descs);
+    auto input_stream = orc::readLocalFile(default_orc_file);
+    reader.init(std::move(input_stream));
+    uint64_t records = get_hit_rows(&reader);
+    EXPECT_EQ(records, total_record_num);
+}
+
 class SkipStripeRowFilter : public orc::RowReaderFilter {
 public:
     bool filterOnOpeningStripe(uint64_t stripIndex, const orc::proto::StripeInformation* stripeInformation) override {

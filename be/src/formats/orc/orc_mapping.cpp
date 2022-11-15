@@ -108,6 +108,7 @@ Status OrcMappingFactory::_init_orc_mapping(std::unique_ptr<OrcMapping>& mapping
 
     for (size_t i = 0; i < slot_descs.size(); i++) {
         SlotDescriptor* slot_desc = slot_descs[i];
+        if (slot_desc == nullptr) continue;
         std::string col_name = format_column_name(slot_desc->col_name(), case_sensitve);
         auto it = orc_fieldname_2_pos.find(col_name);
         if (it == orc_fieldname_2_pos.end()) {
