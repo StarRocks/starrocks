@@ -4,7 +4,7 @@
 
 返回指定日期的工作日索引值，即星期日为 1，星期一为 2，星期六为 7。
 
-参数为 Date 或者 Datetime 类型。或者为可以 cast 为 Date 或者 Datetime 类型的数字。
+参数为 DATE 或 DATETIME 类型，或者为可以 CAST 成 DATE 或 DATETIME 类型的数字。
 
 ## 语法
 

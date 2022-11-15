@@ -476,17 +476,17 @@ StarRocks 支持对目标表进行谓词下推，把过滤条件推给目标表�
 StarRocks 使用 Hive 资源来管理使用到的 Hive 集群相关配置，如 Hive Metastore 地址等，一个 Hive 资源对应一个 Hive 集群。创建 Hive 外表的时候需要指定使用哪个 Hive 资源。
 
 ~~~sql
--- 创建一个名为 hive0 的 Hive 资源
+-- 创建一个名为 hive0 的 Hive 资源。
 CREATE EXTERNAL RESOURCE "hive0"
 PROPERTIES (
   "type" = "hive",
   "hive.metastore.uris" = "thrift://10.10.44.98:9083"
 );
 
--- 查看 StarRocks 中创建的资源
+-- 查看 StarRocks 中创建的资源。
 SHOW RESOURCES;
 
--- 删除名为 hive0 的资源
+-- 删除名为 hive0 的资源。
 DROP RESOURCE "hive0";
 ~~~
 
@@ -512,7 +512,7 @@ PROPERTIES (
   "key" = "value"
 );
 
--- 例子：创建 hive0 资源对应的 Hive 集群中 rawdata 数据库下的 profile_parquet_p7 表的外表
+-- 例子：创建 hive0 资源对应的 Hive 集群中 rawdata 数据库下的 profile_parquet_p7 表的外表。
 CREATE EXTERNAL TABLE `profile_wos_p7` (
   `id` bigint NULL,
   `first_id` varchar(200) NULL,
@@ -573,7 +573,7 @@ PROPERTIES (
 ### 查询 Hive 外表
 
 ~~~sql
--- 查询 profile_wos_p7 的总行数
+-- 查询 profile_wos_p7 的总行数。
 select count(*) from profile_wos_p7;
 ~~~
 

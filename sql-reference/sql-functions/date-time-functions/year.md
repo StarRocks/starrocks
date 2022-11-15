@@ -21,7 +21,7 @@ INT YEAR(DATE|DATETIME date)
 
 ## 示例
 
-示例1：返回 '1987-01-01' 中的年份 `1987`。
+示例一：返回 '1987-01-01' 中的年份 `1987`。
 
 ```Plain Text
 
@@ -34,7 +34,7 @@ select year('1987-01-01');
 1 row in set (0.00 sec)
 ```
 
-示例2：返回当前年份。
+示例二：返回当前年份。
 
 ```Plain Text
 select year(now());

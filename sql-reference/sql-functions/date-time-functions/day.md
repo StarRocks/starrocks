@@ -20,7 +20,7 @@ INT DAY(DATE|DATETIME date)
 
 ## 示例
 
-返回 '1987-01-31'中的日期，`31`。
+返回 '1987-01-31' 中的日期，`31`。
 
 ```Plain Text
 select day('1987-01-31');

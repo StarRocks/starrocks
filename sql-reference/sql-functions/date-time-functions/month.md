@@ -20,7 +20,7 @@ INT MONTH(DATE|DATETIME date)
 
 ## 示例
 
-示例1：返回 '1987-01-01' 中的月份 `1`。
+示例一：返回 '1987-01-01' 中的月份 `1`。
 
 ```Plain Text
 select month('1987-01-01');
@@ -32,7 +32,7 @@ select month('1987-01-01');
 1 row in set (0.01 sec)
 ```
 
-示例2：返回当前月份。
+示例二：返回当前月份。
 
 ```Plain Text
 select month(now());

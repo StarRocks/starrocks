@@ -15,7 +15,8 @@ DATETIME CONVERT_TZ(DATE|DATETIME dt, VARCHAR from_tz, VARCHAR to_tz)
 ## 参数说明
 
 - `dt`：需要转化的时间。支持的数据类型为 DATE 和 DATETIME。
-- `from_tz`：源时区名称。支持的数据类型为 VARCHAR。时区可以使用两种格式：时区信息数据库（Time Zone Database，比如 Asia/Shanghai），或 UTC 偏移量（例如+08: 00）。
+- `from_tz`：源时区名称。支持的数据类型为 VARCHAR。
+   时区可以使用两种格式：时区信息数据库（Time Zone Database，比如 Asia/Shanghai），或 UTC 偏移量（例如+08: 00）。
 - `to_tz`：目标时区名称。支持的数据类型为 VARCHAR。格式同参数 `from_tz`。
 
 ## 返回值说明
@@ -28,7 +29,7 @@ DATETIME CONVERT_TZ(DATE|DATETIME dt, VARCHAR from_tz, VARCHAR to_tz)
 
 ## 示例
 
-示例1：将上海时间转化为洛杉矶时间。
+示例一：将上海时间转化为洛杉矶时间。
 
 ```Plain Text
 
@@ -41,7 +42,7 @@ select convert_tz('2019-08-01 13:21:03', 'Asia/Shanghai', 'America/Los_Angeles')
 1 row in set (0.00 sec)
 ```
 
-示例2：将东八区时间转化为洛杉矶时间。
+示例二：将东八区时间转化为洛杉矶时间。
 
 ```Plain Text
 select convert_tz('2019-08-01 13:21:03', '+08:00', 'America/Los_Angeles');
@@ -53,7 +54,7 @@ select convert_tz('2019-08-01 13:21:03', '+08:00', 'America/Los_Angeles');
 1 row in set (0.00 sec)
 ```
 
-示例3：将DATE类型的日期 `2019-08-01` 进行转化。
+示例三：将 DATE 类型的日期 `2019-08-01` 进行转化。
 
 ```Plain Text
 select convert_tz('2019-08-01', 'Asia/Shanghai', 'America/Los_Angeles');
