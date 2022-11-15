@@ -1,4 +1,3 @@
-name: Checker
 on:
   pull_request_target:
     types:
@@ -9,7 +8,7 @@ on:
       - unlabeled
 
 jobs:
-  Title-Check:
+  pr-title-check:
     runs-on: ubuntu-latest
     steps:
       - uses: thehanimo/pr-title-checker@v1.3.4
