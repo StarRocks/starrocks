@@ -45,7 +45,7 @@ PROPERTIES ("key"="value", ...);
   - Hive metastore: If you use Hive metastore, configure HiveCatalog for your Iceberg cluster.
   - Custom metadata service: If you use the custom metadata service, configure a custom catalog for your Iceberg cluster.
 
-#### HiveCatalog
+#### Hive metastore
 
 If you use Hive metastore for your Iceberg cluster, configure the following properties for the Iceberg catalog.
 
@@ -55,11 +55,9 @@ If you use Hive metastore for your Iceberg cluster, configure the following prop
 | iceberg.catalog.type   | Yes          | The type of the catalog configured your Iceberg cluster. Set the value to `HIVE`. |
 | iceberg.catalog.hive.metastore.uris    | Yes          | The URI of the Hive metastore. The parameter value is in the following format: `thrift://<IP address of Hive metastore>:<port number>`. The port number defaults to 9083. |
 
-#### Custom catalog
+#### Custom metadata service
 
-If you use a custom metadata service for your Iceberg cluster, you need to create a custom catalog class and implement the related interface in StarRocks so that StarRocks can access the custom metadata service. The custom catalog class needs to inherit the abstract class BaseMetastoreCatalog. For information about how to create a custom catalog in StarRocks, see [IcebergHiveCatalog](https://github.com/StarRocks/starrocks/blob/main/fe/fe-core/src/main/java/com/starrocks/external/iceberg/IcebergHiveCatalog.java). After the custom catalog is created, package the catalog and its related files, and then place them under the **fe/lib** path of each FE. Then restart each FE.
-
-> Note: The class name of the custom catalog cannot be duplicated with the name of the class that already exists in StarRocks.
+If you use a custom metadata service for your Iceberg cluster, you need to create a custom catalog class (The class name of the custom catalog cannot be duplicated with the name of the class that already exists in StarRocks) and implement the related interface in StarRocks so that StarRocks can access the custom metadata service. The custom catalog class needs to inherit the abstract class BaseMetastoreCatalog. For information about how to create a custom catalog in StarRocks, see [IcebergHiveCatalog](https://github.com/StarRocks/starrocks/blob/main/fe/fe-core/src/main/java/com/starrocks/external/iceberg/IcebergHiveCatalog.java). After the custom catalog is created, package the catalog and its related files, and then place them under the **fe/lib** path of each FE. Then restart each FE.
 
 After you complete the preceding operations, you can create an Iceberg catalog and configure its properties.
 

@@ -34,7 +34,7 @@ public abstract class ColumnType {
     private static Boolean[][] schemaChangeMatrix;
 
     static {
-        schemaChangeMatrix = new Boolean[PrimitiveType.BINARY.ordinal() + 1][PrimitiveType.BINARY.ordinal() + 1];
+        schemaChangeMatrix = new Boolean[PrimitiveType.UNKNOWN_TYPE.ordinal() + 1][PrimitiveType.UNKNOWN_TYPE.ordinal() + 1];
 
         for (int i = 0; i < schemaChangeMatrix.length; i++) {
             for (int j = 0; j < schemaChangeMatrix[i].length; j++) {
