@@ -409,6 +409,11 @@ struct TTabletCommitInfo {
     4: optional list<string> valid_dict_cache_columns
 }
 
+struct TTabletFailInfo {
+    1: optional i64 tabletId
+    2: optional i64 backendId
+}
+
 enum TLoadType {
     MANUAL_LOAD,
     ROUTINE_LOAD,
