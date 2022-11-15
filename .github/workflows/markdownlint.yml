@@ -1,3 +1,4 @@
+name: document
 on:
   pull_request:
     types:
