@@ -1,5 +1,27 @@
 # StarRocks version 2.2
 
+## 2.2.9
+
+发布日期： 2022 年 11 月 15 日
+
+### 功能优化
+
+- 增加参数 `hive_partition_stats_sample_size`，用于限制获取统计信息的分区数，防止分区数过多导致 FE 获取 Hive 元数据异常。([#12700](https://github.com/StarRocks/starrocks/pull/12700))
+- Elasticsearch 外表支持自定义时区。([#12662](https://github.com/StarRocks/starrocks/pull/12662))
+
+### 问题修复
+
+修复了如下问题：
+
+- 外表元数据同步问题导致下线节点 (Decommission) 卡住。([#12369](https://github.com/StarRocks/starrocks/pull/12368))
+- 在做增加列操作时如果删除该列可能导致 compaction crash。([#12907](https://github.com/StarRocks/starrocks/pull/12907))
+- SHOW CREATE VIEW 没有展示注释字段。([#4163](https://github.com/StarRocks/starrocks/issues/4163))
+- UDF 中可能存在内存泄漏导致 OOM 的问题。([#12418](https://github.com/StarRocks/starrocks/pull/12418))
+
+### 行为变更
+
+Hive 外表字符串支持的长度从 64 KB 扩展为 1 MB。长度超过 1 MB 时，查询设置成 Null。([#12986](https://github.com/StarRocks/starrocks/pull/12986))
+
 ## 2.2.8
 
 发布日期： 2022 年 10 月 17 日
