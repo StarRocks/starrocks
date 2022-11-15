@@ -136,7 +136,7 @@ private:
     std::unique_ptr<orc::RowReader> _row_reader;
     orc::ReaderOptions _reader_options;
     orc::RowReaderOptions _row_reader_options;
-    const std::vector<SlotDescriptor*>& _src_slot_descriptors;
+    std::vector<SlotDescriptor*> _src_slot_descriptors;
     std::unordered_map<SlotId, SlotDescriptor*> _slot_id_to_desc;
     std::unique_ptr<OrcMapping> _root_selected_mapping;
     std::vector<TypeDescriptor> _src_types;

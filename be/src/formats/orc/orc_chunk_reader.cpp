@@ -1168,9 +1168,18 @@ OrcChunkReader::OrcChunkReader(RuntimeState* state, const std::vector<SlotDescri
         _read_chunk_size = 4096;
     }
     _row_reader_options.useWriterTimezone();
-    for (SlotDescriptor* slot_desc : _src_slot_descriptors) {
-        if (slot_desc == nullptr) continue;
-        _slot_id_to_desc[slot_desc->id()] = slot_desc;
+
+    // some caller of `OrcChunkReader` may pass nullptr
+    // This happens when there are extra fields in broker load specification
+    // but those extra fields don't match any fields in native table.
+    // For more details, refer to https://github.com/StarRocks/starrocks/issues/1378
+    for (auto iter_slot = _src_slot_descriptors.begin(); iter_slot != _src_slot_descriptors.end(); /*iter_slot++*/) {
+        if (*iter_slot == nullptr) {
+            iter_slot = _src_slot_descriptors.erase(iter_slot);
+        } else {
+            _slot_id_to_desc[(*iter_slot)->id()] = *iter_slot;
+            ++iter_slot;
+        }
     }
 }
 
