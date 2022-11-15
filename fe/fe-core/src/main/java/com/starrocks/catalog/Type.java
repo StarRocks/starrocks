@@ -549,8 +549,8 @@ public abstract class Type implements Cloneable {
     /**
      * Used for Nest Type
      */
-    public void selectAll() {
-        throw new IllegalStateException("selectAll() is not implemented for type " + toSql());
+    public void selectAllFields() {
+        throw new IllegalStateException("selectAllFields() is not implemented for type " + toSql());
     }
 
     /**
