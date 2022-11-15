@@ -34,6 +34,9 @@ namespace starrocks {
 // This type's enumerate value is used in
 // java-extensions/udf-extensions/src/main/java/com/starrocks/udf/UDFHelper.java
 // If you change it, don't forget to change the value their too.
+// We are going to merge FieldType in storage and PrimitiveType here into one type.
+// FieldType's value is persisted in storage meta, so PrimitiveType must be the same
+// as FieldType.
 enum PrimitiveType {
     INVALID_TYPE = 0,
     TYPE_TINYINT = 1,

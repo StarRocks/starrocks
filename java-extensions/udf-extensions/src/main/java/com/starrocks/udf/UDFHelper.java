@@ -24,7 +24,7 @@ import static com.starrocks.utils.NativeMethodHelper.getAddrs;
 import static com.starrocks.utils.NativeMethodHelper.resizeStringData;
 
 public class UDFHelper {
-    public static final int TYPE_BOOLEAN = 24;
+    // The value for each type must be the same as PrimitiveType value
     public static final int TYPE_TINYINT = 1;
     public static final int TYPE_SMALLINT = 3;
     public static final int TYPE_INT = 5;
@@ -32,8 +32,9 @@ public class UDFHelper {
     public static final int TYPE_FLOAT = 10;
     public static final int TYPE_DOUBLE = 11;
     public static final int TYPE_VARCHAR = 17;
-    public static final int TYPE_DATETIME = 51;
     public static final int TYPE_ARRAY = 19;
+    public static final int TYPE_BOOLEAN = 24;
+    public static final int TYPE_DATETIME = 51;
 
     private static final byte[] emptyBytes = new byte[0];
 
