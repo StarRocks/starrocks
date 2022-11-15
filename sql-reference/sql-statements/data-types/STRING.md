@@ -20,4 +20,4 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(pk) BUCKETS 4;
 ```
 
-表创建成功后通过 `desc tablename;` 查看表可以看到 STRING 类型为 `VARCHAR(65533)`。
+表创建成功后通过 `desc tablename;` 查看表，可以看到 STRING 类型为 `VARCHAR(65533)`。
