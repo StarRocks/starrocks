@@ -8,19 +8,19 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 
 import java.util.List;
 
-public class AggregateChecker {
-    private List<ScalarOperator> mvAggregates;
+public class AggregateRewriteChecker {
+    private List<ScalarOperator> targetAggregates;
     private boolean distinct;
 
-    public AggregateChecker(List<ScalarOperator> mvAggregates) {
-        this.mvAggregates = mvAggregates;
+    public AggregateRewriteChecker(List<ScalarOperator> targetAggregates) {
+        this.targetAggregates = targetAggregates;
         this.distinct = false;
     }
 
     // true if all matched, or false
-    public boolean check(List<ScalarOperator> aggregates) {
+    public boolean check(List<ScalarOperator> srcAggregates) {
         AggregateCheckVisitor visitor = new AggregateCheckVisitor();
-        for (ScalarOperator agg : aggregates) {
+        for (ScalarOperator agg : srcAggregates) {
             boolean matched = agg.accept(visitor, null);
             if (!matched) {
                 return false;
@@ -60,7 +60,7 @@ public class AggregateChecker {
                     }
                 }
             }
-            if (mvAggregates.contains(scalarOperator)) {
+            if (targetAggregates.contains(scalarOperator)) {
                 return true;
             }
             return childMatched;

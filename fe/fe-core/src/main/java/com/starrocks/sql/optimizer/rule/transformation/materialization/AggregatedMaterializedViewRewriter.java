@@ -123,8 +123,8 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
             queryAggs.put(entry.getKey(), swapped);
         }
 
-        AggregateChecker aggregateChecker = new AggregateChecker(swappedMvAggs);
-        boolean aggMatched = aggregateChecker.check(queryAggs.values().stream().collect(Collectors.toList()));
+        AggregateRewriteChecker aggregateRewriteChecker = new AggregateRewriteChecker(swappedMvAggs);
+        boolean aggMatched = aggregateRewriteChecker.check(queryAggs.values().stream().collect(Collectors.toList()));
         if (!aggMatched) {
             return null;
         }
@@ -134,7 +134,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
                 normalizeAndReverseProjection(mvProjection, rewriteContext, false);
         boolean isRollup = groupKeyChecker.isRollup();
         if (isRollup) {
-            if (aggregateChecker.hasDistinct()) {
+            if (aggregateRewriteChecker.hasDistinct()) {
                 // can not support rollup of disctinct agg
                 return null;
             }
