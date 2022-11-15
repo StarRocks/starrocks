@@ -27,6 +27,7 @@ namespace starrocks::vectorized {
 
 class AsyncDeltaWriterRequest;
 class CommittedRowsetInfo;
+class FailedRowsetInfo;
 class AsyncDeltaWriterCallback;
 class AsyncDeltaWriterSegmentRequest;
 
@@ -111,6 +112,12 @@ public:
     const ReplicateToken* replicate_token;
 };
 
+class FailedRowsetInfo {
+public:
+    const int64_t tablet_id;
+    const ReplicateToken* replicate_token;
+};
+
 class AsyncDeltaWriterRequest {
 public:
     // nullptr means no record to write
@@ -135,7 +142,7 @@ public:
     // st != Status::OK means either the writes or the commit failed.
     // st == Status::OK && info != nullptr means commit succeeded.
     // st == Status::OK && info == nullptr means the writes succeeded with no commit.
-    virtual void run(const Status& st, const CommittedRowsetInfo* info) = 0;
+    virtual void run(const Status& st, const CommittedRowsetInfo* info, const FailedRowsetInfo* failed_info) = 0;
 };
 
 } // namespace starrocks::vectorized

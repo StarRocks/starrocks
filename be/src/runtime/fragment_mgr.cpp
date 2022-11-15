@@ -283,6 +283,9 @@ void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfil
                 params.commitInfos.push_back(info);
             }
         }
+        if (!runtime_state->tablet_fail_infos().empty()) {
+            params.__set_failInfos(runtime_state->tablet_fail_infos());
+        }
 
         // Send new errors to coordinator
         runtime_state->get_unreported_errors(&(params.error_log));

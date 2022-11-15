@@ -178,6 +178,7 @@ public class LakeDeleteJob extends DeleteJob {
         }
 
         return GlobalStateMgr.getCurrentGlobalTransactionMgr()
-                .commitAndPublishTransaction(db, getTransactionId(), tabletCommitInfos, timeoutMs);
+                .commitAndPublishTransaction(db, getTransactionId(), tabletCommitInfos, Lists.newArrayList(),
+                        timeoutMs);
     }
 }
