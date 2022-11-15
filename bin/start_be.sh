@@ -76,8 +76,8 @@ else
     fi
 fi
 
-CACHELIB_DIR=$STARROCKS_HOME/lib/cachelib
-export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/hadoop/native:$CACHELIB_DIR/lib:$CACHELIB_DIR/lib64:$CACHELIB_DIR/deps/lib:$CACHELIB_DIR/deps/lib64:$LD_LIBRARY_PATH
+export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/hadoop/native:$LD_LIBRARY_PATH
+export_cachelib_lib_path
 
 # check java version and choose correct JAVA_OPTS
 JAVA_VERSION=$(jdk_version)
