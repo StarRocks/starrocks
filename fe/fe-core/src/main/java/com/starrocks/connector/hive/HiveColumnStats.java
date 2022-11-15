@@ -49,6 +49,11 @@ public class HiveColumnStats {
         }
         min = boolStats.isSetNumFalses() ? 0 : 1;
         max = boolStats.isSetNumTrues() ? 1 : 0;
+        if (min > max) {
+            // when this column is all null values
+            min = 0.0;
+            max = 0.0;
+        }
         type = StatisticType.ESTIMATE;
     }
 
