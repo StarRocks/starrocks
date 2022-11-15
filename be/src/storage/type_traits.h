@@ -26,8 +26,8 @@
 #include "runtime/decimalv2_value.h"
 #include "storage/collection.h"
 #include "storage/olap_common.h"
-#include "util/slice.h"
 #include "types/logical_type.h"
+#include "util/slice.h"
 
 namespace starrocks {
 

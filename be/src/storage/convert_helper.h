@@ -8,8 +8,8 @@
 #include "column/column.h"
 #include "column/datum.h"
 #include "common/status.h"
-#include "types/logical_type.h"
 #include "storage/olap_common.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 class ColumnVectorBatch;

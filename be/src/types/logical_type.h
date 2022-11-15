@@ -132,7 +132,6 @@ inline std::ostream& operator<<(std::ostream& os, FieldType type) {
     return os;
 }
 
-
 template <FieldType TYPE>
 inline constexpr FieldType DelegateType = TYPE;
 template <>
@@ -163,4 +162,4 @@ inline bool is_decimalv3_field_type(FieldType type) {
     return type == OLAP_FIELD_TYPE_DECIMAL32 || type == OLAP_FIELD_TYPE_DECIMAL64 || type == OLAP_FIELD_TYPE_DECIMAL128;
 }
 
-}
+} // namespace starrocks
