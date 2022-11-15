@@ -57,9 +57,7 @@ PROPERTIES ("key"="value", ...);
 
 #### 自定义元数据服务
 
-如使用自定义元数据服务，则您需要在 StarRocks 中开发一个 custom catalog 类，并实现相关接口，以保证 StarRocks 能够访问自定义元数据服务。Custom catalog 类需要继承抽象类 BaseMetastoreCatalog 。有关 custom catalog 开发和相关接口实现的具体信息，参考 [IcebergHiveCatalog](https://github.com/StarRocks/starrocks/blob/main/fe/fe-core/src/main/java/com/starrocks/external/iceberg/IcebergHiveCatalog.java)。开发完成后，您需要将 custom catalog 及其相关文件打包并放到所有 FE 节点的 **fe/lib** 路径下，然后重启所有 FE 节点，以便 FE 识别这个类。
-
-> 注意：custom catalog 类名不能与 StarRocks 中已存在的类名重复。
+如使用自定义元数据服务，则您需要在 StarRocks 中开发一个 custom catalog 类（custom catalog 类名不能与 StarRocks 中已存在的类名重复），并实现相关接口，以保证 StarRocks 能够访问自定义元数据服务。Custom catalog 类需要继承抽象类 BaseMetastoreCatalog 。有关 custom catalog 开发和相关接口实现的具体信息，参考 [IcebergHiveCatalog](https://github.com/StarRocks/starrocks/blob/main/fe/fe-core/src/main/java/com/starrocks/external/iceberg/IcebergHiveCatalog.java)。开发完成后，您需要将 custom catalog 及其相关文件打包并放到所有 FE 节点的 **fe/lib** 路径下，然后重启所有 FE 节点，以便 FE 识别这个类。
 
 以上操作完成后即可创建 Iceberg catalog 并配置其相关属性，具体如下：
 
