@@ -1073,6 +1073,7 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, aliases = {"storage_cooldown_second"})
     public static long tablet_sched_storage_cooldown_second = -1L; // won't cool down by default
 
+
     /**
      * FOR BeLoadBalancer:
      * the threshold of cluster balance score, if a backend's load score is 10% lower than average score,
@@ -1686,6 +1687,12 @@ public class Config extends ConfigBase {
     public static String starmgr_s3_ak = "";
     @ConfField
     public static String starmgr_s3_sk = "";
+
+    /**
+     * default storage cache ttl of lake table
+     */
+    @ConfField(mutable = true)
+    public static long lake_default_storage_cache_ttl_seconds = 2592000L;
 
     /**
      * default bucket number when create OLAP table without buckets info
