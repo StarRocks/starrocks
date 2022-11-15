@@ -460,6 +460,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 |brpc_max_body_size|2147483648|BRPC 最大的包容量，单位为 Byte。|
 |tablet_map_shard_size|32|Tablet 分组数。|
 |enable_bitmap_union_disk_format_with_set|FALSE|Bitmap 新存储格式，可以优化 bitmap_union 性能。|
+|mem_limit|90%|BE 进程内存上限。可设为比例上限（如 "80%"）或物理上限（如 "100GB"）。|
 
 ## Broker 配置项
 
