@@ -2267,12 +2267,15 @@ public class PlanFragmentBuilder {
 
             // reset column is nullable, for handle union select xx join select xxx...
             setOperationNode.setHasNullableGenerateChild();
+            List<Expr> setOutputList = Lists.newArrayList();
             for (ColumnRefOperator columnRefOperator : setOperation.getOutputColumnRefOp()) {
                 SlotDescriptor slotDesc = context.getDescTbl().getSlotDesc(new SlotId(columnRefOperator.getId()));
                 slotDesc.setIsNullable(slotDesc.getIsNullable() | setOperationNode.isHasNullableGenerateChild());
+                setOutputList.add(new SlotRef(String.valueOf(columnRefOperator.getId()), slotDesc));
             }
             setOperationTuple.computeMemLayout();
 
+            setOperationNode.setSetOperationOutputList(setOutputList);
             setOperationNode.setMaterializedResultExprLists_(materializedResultExprLists);
             setOperationNode.setLimit(setOperation.getLimit());
             setOperationNode.computeStatistics(optExpr.getStatistics());
