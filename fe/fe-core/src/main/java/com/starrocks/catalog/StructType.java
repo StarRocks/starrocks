@@ -60,6 +60,8 @@ public class StructType extends Type {
                 fieldMap.put(field.getName(), field);
             }
         }
+        selectedFields = new Boolean[fields.size()];
+        Arrays.fill(selectedFields, false);
     }
 
     @Override
@@ -116,9 +118,25 @@ public class StructType extends Type {
         return fields.get(pos);
     }
 
-    public void clearFields() {
-        fields.clear();
-        fieldMap.clear();
+    @Override
+    public void setSelectedField(int pos, boolean needSetChildren) {
+        selectedFields[pos] = true;
+        if (needSetChildren) {
+            StructField structField = fields.get(pos);
+            if (structField.getType().isComplexType()) {
+                structField.getType().selectAllFields();
+            }
+        }
+    }
+
+    @Override
+    public void selectAllFields() {
+        Arrays.fill(selectedFields, true);
+        for (StructField structField : fields) {
+            if (structField.getType().isComplexType()) {
+                structField.getType().selectAllFields();
+            }
+        }
     }
 
     @Override
@@ -139,9 +157,7 @@ public class StructType extends Type {
         Preconditions.checkNotNull(!fields.isEmpty());
         node.setType(TTypeNodeType.STRUCT);
         node.setStruct_fields(new ArrayList<TStructField>());
-        //TODO(SmithCruise) Select all subfields now, partial subfield select will be implemented in next PR.
-        Boolean[] selectedFields = new Boolean[fields.size()];
-        Arrays.fill(selectedFields, true);
+        Preconditions.checkArgument(selectedFields.length == fields.size());
         node.setSelected_fields(Arrays.asList(selectedFields));
         for (StructField field : fields) {
             field.toThrift(container, node);

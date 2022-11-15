@@ -23,12 +23,14 @@ package com.starrocks.analysis;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnStats;
 import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.thrift.TSlotDescriptor;
@@ -130,17 +132,17 @@ public class SlotDescriptor {
         this.type = type;
     }
 
-    public void setUsedSubfieldPosGroup(List<List<Integer>> usedSubfieldPosGroup) {
+    public void setUsedSubfieldPosGroup(List<ImmutableList<Integer>> usedSubfieldPosGroup) {
         Preconditions.checkArgument(type.isComplexType());
         // type should be cloned from originType!
         if (usedSubfieldPosGroup.isEmpty()) {
-            type.selectAll();
+            type.selectAllFields();
             return;
         }
 
         for (List<Integer> usedSubfieldPos : usedSubfieldPosGroup) {
             if (usedSubfieldPos.isEmpty()) {
-                type.selectAll();
+                type.selectAllFields();
                 return;
             }
             Type tmpType = type;
@@ -151,12 +153,12 @@ public class SlotDescriptor {
                 }
                 int pos = usedSubfieldPos.get(i);
                 if (i == usedSubfieldPos.size() -1) {
-                    // last one, select children
+                    // last one, select children's all subfields
                     tmpType.setSelectedField(pos, true);
                 } else {
                     tmpType.setSelectedField(pos, false);
                     if (tmpType.isStructType()) {
-                        // wait to be done
+                        tmpType = ((StructType)tmpType).getField(pos).getType();
                     } else if (tmpType.isMapType()) {
                         tmpType = pos == 0 ? ((MapType)tmpType).getKeyType() : ((MapType)tmpType).getValueType();
                     }
