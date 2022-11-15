@@ -10,15 +10,15 @@
 // include libunwind to gather the stack trace:
 #define UNW_LOCAL_ONLY
 
-#include <libunwind.h>
-
-#include <dlfcn.h>
 #include <cxxabi.h>
-#include <typeinfo>
+#include <dlfcn.h>
+#include <libunwind.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+
+#include <typeinfo>
 
 #include "runtime/current_thread.h"
 
@@ -26,14 +26,13 @@
 
 static bool mExceptionStackTrace = true;
 
-
 // We would like to print a stacktrace for every throw (even in
 // sub-libraries and independent of the object thrown). This works
 // only for gcc and only with a bit of trickery
 extern "C" {
-void print_exception_info(const std::type_info *aExceptionInfo) {
+void print_exception_info(const std::type_info* aExceptionInfo) {
     int vDemangleStatus;
-    char *vDemangledExceptionName;
+    char* vDemangledExceptionName;
 
     if (aExceptionInfo != NULL) {
         // Demangle the name of the exception using the GNU C++ ABI:
@@ -64,9 +63,9 @@ void libunwind_print_backtrace(const int aFramesToIgnore = 0) {
     unw_proc_info_t pip;
     int vUnwindStatus, vDemangleStatus, i, n = 0;
     char vProcedureName[LIBUNWIND_MAX_PROCNAME_LENGTH];
-    char *vDemangledProcedureName;
+    char* vDemangledProcedureName;
     [[maybe_unused]] const char* vDynObjectFileName;
-    const char *vSourceFileName;
+    const char* vSourceFileName;
     int vSourceFileLineNumber;
 
     // This is from libDL used for identification of the object file names:
@@ -74,14 +73,14 @@ void libunwind_print_backtrace(const int aFramesToIgnore = 0) {
 
     // This is from DWARF for accessing the debugger information:
     Dwarf_Addr addr;
-    char *debuginfo_path = NULL;
+    char* debuginfo_path = NULL;
     Dwfl_Callbacks callbacks = {};
-    Dwfl_Line *vDWARFObjLine;
+    Dwfl_Line* vDWARFObjLine;
     // initialize the DWARF handling:
     callbacks.find_elf = dwfl_linux_proc_find_elf;
     callbacks.find_debuginfo = dwfl_standard_find_debuginfo;
     callbacks.debuginfo_path = &debuginfo_path;
-    Dwfl *dwfl = dwfl_begin(&callbacks);
+    Dwfl* dwfl = dwfl_begin(&callbacks);
     if (dwfl == NULL) {
         fprintf(stderr, "libunwind_print_backtrace(): Error initializing DWARF.\n");
     }
@@ -93,7 +92,6 @@ void libunwind_print_backtrace(const int aFramesToIgnore = 0) {
         fprintf(stderr, "libunwind_print_backtrace(): Error initializing DWARF.\n");
         dwfl = NULL;
     }
-
 
     // Begin stack unwinding with libunwnd:
     vUnwindStatus = unw_getcontext(&vUnwindContext);
@@ -113,7 +111,6 @@ void libunwind_print_backtrace(const int aFramesToIgnore = 0) {
         // We ignore the first aFramesToIgnore stack frames:
         vUnwindStatus = unw_step(&vUnwindCursor);
     }
-
 
     while (vUnwindStatus > 0) {
         pip.unwind_info = NULL;
@@ -159,14 +156,12 @@ void libunwind_print_backtrace(const int aFramesToIgnore = 0) {
             vProcedureName[3] = 0;
         }
 
-
         // Resolve the object file name using dladdr:
-        if (dladdr((void *) (pip.start_ip + off), &dlinfo) && dlinfo.dli_fname && *dlinfo.dli_fname) {
+        if (dladdr((void*)(pip.start_ip + off), &dlinfo) && dlinfo.dli_fname && *dlinfo.dli_fname) {
             vDynObjectFileName = dlinfo.dli_fname;
         } else {
             vDynObjectFileName = "???";
         }
-
 
         // Resolve the source file name using DWARF:
         if (dwfl != NULL) {
@@ -187,15 +182,11 @@ void libunwind_print_backtrace(const int aFramesToIgnore = 0) {
             vSourceFileLineNumber = 0;
         }
 
-
         // Print the stack frame number:
         fprintf(stderr, "#%2d:", ++n);
 
         // Print the stack addresses:
-        fprintf(stderr, " 0x%016"
-                PRIxPTR
-                        " sp=0x%016"
-                PRIxPTR, static_cast<uintptr_t>(ip), static_cast<uintptr_t>(sp));
+        fprintf(stderr, " 0x%016" PRIxPTR " sp=0x%016" PRIxPTR, static_cast<uintptr_t>(ip), static_cast<uintptr_t>(sp));
 
         // Print the source file name:
         fprintf(stderr, " %s:%d", vSourceFileName, vSourceFileLineNumber);
@@ -239,9 +230,8 @@ void __wrap___cxa_throw(void* thrown_exception, void* infov, void (*dest)(void*)
     }
 
     // call the real __cxa_throw():
-    static void (*const rethrow)(void *, void *, void(*)(void *)) __attribute__ ((noreturn)) = (void (*)(void *, void *,
-                                                                                                      void(*)(void *))) dlsym(
-            RTLD_NEXT, "__cxa_throw");
+    static void (*const rethrow)(void*, void*, void (*)(void*)) __attribute__((noreturn)) =
+            (void (*)(void*, void*, void (*)(void*)))dlsym(RTLD_NEXT, "__cxa_throw");
     rethrow(thrown_exception, info, dest);
 }
 }
