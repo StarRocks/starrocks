@@ -79,6 +79,9 @@ public class ShowTabletStmtAnalyzer {
             List<OrderByElement> orderByElements = statement.getOrderByElements();
             if (orderByElements != null && !orderByElements.isEmpty()) {
                 Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+                if (db == null) {
+                    throw new SemanticException("Database %s is not found", dbName);
+                }
                 String tableName = statement.getTableName();
                 Table table = null;
                 db.readLock();
