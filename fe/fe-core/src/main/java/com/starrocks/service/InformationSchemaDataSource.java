@@ -10,6 +10,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
@@ -138,6 +139,11 @@ public class InformationSchemaDataSource {
     }
 
     private static Map<String, String> genProps(Table table) {
+
+        if (table.getType() == TableType.MATERIALIZED_VIEW) {
+            MaterializedView mv = (MaterializedView) table;
+            return mv.getMaterializedViewPropMap();
+        }
 
         OlapTable olapTable = (OlapTable) table;
         Map<String, String> propsMap = new HashMap<>(); 
