@@ -21,6 +21,7 @@ import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.hive.metastore.api.BooleanColumnStatsData;
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsData;
 import org.apache.hadoop.hive.metastore.api.DateColumnStatsData;
 import org.apache.hadoop.hive.metastore.api.DecimalColumnStatsData;
@@ -193,6 +194,22 @@ public class HiveStatisticsProviderTest {
     public void testHiveColumnInit() {
         HiveColumnStats stats = new HiveColumnStats();
         ColumnStatisticsData columnStatisticsData = new ColumnStatisticsData();
+        BooleanColumnStatsData booleanColumnStatsData = new BooleanColumnStatsData();
+        booleanColumnStatsData.setNumTrues(10);
+        columnStatisticsData.setBooleanStats(booleanColumnStatsData);
+        stats.initialize(columnStatisticsData, 10);
+        Assert.assertEquals(1, stats.getMax(), 0.000001);
+        Assert.assertEquals(1, stats.getMin(), 0.000001);
+
+        booleanColumnStatsData = new BooleanColumnStatsData();
+        booleanColumnStatsData.setNumNulls(10);
+        columnStatisticsData.setBooleanStats(booleanColumnStatsData);
+        stats.initialize(columnStatisticsData, 10);
+        Assert.assertEquals(0, stats.getMax(), 0.000001);
+        Assert.assertEquals(0, stats.getMin(), 0.000001);
+
+
+        columnStatisticsData = new ColumnStatisticsData();
         LongColumnStatsData longColumnStatsData = new LongColumnStatsData();
         longColumnStatsData.setNumNulls(1);
         columnStatisticsData.setLongStats(longColumnStatsData);
@@ -220,11 +237,14 @@ public class HiveStatisticsProviderTest {
         stats.initialize(columnStatisticsData, 80);
         Assert.assertEquals(4, stats.getNumNulls());
 
+        stats = new HiveColumnStats();
         columnStatisticsData = new ColumnStatisticsData();
         StringColumnStatsData stringColumnStatsData = new StringColumnStatsData();
         stringColumnStatsData.setNumNulls(5);
         columnStatisticsData.setStringStats(stringColumnStatsData);
         stats.initialize(columnStatisticsData, 90);
         Assert.assertEquals(5, stats.getNumNulls());
+        Assert.assertEquals(Double.NEGATIVE_INFINITY, stats.getMin(), 0.000001);
+        Assert.assertEquals(Double.POSITIVE_INFINITY, stats.getMax(), 0.000001);
     }
 }
