@@ -1,6 +1,8 @@
 # weekofyear
 
-## description
+## 功能
+
+计算指定日期为对应年中的第几周。
 
 ### Syntax
 
@@ -8,9 +10,13 @@
 INT WEEKOFYEAR(DATETIME date)
 ```
 
-获得一年中的第几周
+## 参数说明
 
-参数为Date或者Datetime类型
+参数为 DATE 或者 DATETIME 类型。
+
+## 返回值说明
+
+ 返回 INT 类型的值。
 
 ## example
 

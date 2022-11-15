@@ -1,18 +1,13 @@
 # date_format
 
-## description
+## 功能
 
-### Syntax
+将日期类型按照 `format` 的类型转化为字符串。
 
-```Haskell
-VARCHAR DATE_FORMAT(DATETIME date, VARCHAR format)
-```
+当前支持最大 128 字节的字符串，如果返回值长度超过 128，则返回 NULL。
 
-将日期类型按照format的类型转化为字符串，
-当前支持最大128字节的字符串，如果返回值长度超过128，则返回NULL
-
-* date 参数是合法的日期。
-* format 规定日期/时间的输出格式。
+* `date` 参数是合法的日期。
+* `format` 指定日期/时间的输出格式。
 
 可以使用的格式有：
 
@@ -51,7 +46,7 @@ VARCHAR DATE_FORMAT(DATETIME date, VARCHAR format)
 %% | 用于表示 %
 ```
 
-## example
+## 示例
 
 ```Plain Text
 select date_format('2009-10-04 22:23:00', '%W %M %Y');
