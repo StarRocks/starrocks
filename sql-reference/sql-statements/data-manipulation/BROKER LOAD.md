@@ -112,9 +112,9 @@ INTO TABLE <table_name>
 
 - `COLUMNS FROM PATH AS`
 
-  用于从指定的文件路径中提取一个或多个分区字段的信息。当指定的文件路径中存在分区字段时，允许使用 `COLUMNS FROM PATH AS` 参数指定要提取文件路径中哪些分区字段的信息。
+  用于从指定的文件路径中提取一个或多个分区字段的信息。该参数仅当指定的文件路径中存在分区字段时有效。
 
-  例如，待导入数据文件所在的路径为 `/path/col_name=col_value/file1`，其中 `col_name` 可以对应到 StarRocks 表中的列，因此导入时会将 `col_value` 落入 `col_name` 对应的列中。
+  例如，待导入数据文件所在的路径为 `/path/col_name=col_value/file1`，其中 `col_name` 可以对应到 StarRocks 表中的列。这时候，您可以设置参数为 `col_name`。导入时，StarRocks 会将 `col_value` 落入 `col_name` 对应的列中。
 
   > **说明**
   >
