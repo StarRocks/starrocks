@@ -833,7 +833,7 @@ LEFT SEMI JOIN (join-predicate [19: cast = 20: abs AND add(cast(9: t1c as bigint
 [sql]
 select v1 from t0 where v2 not in (select v5 + v4 from t1 where v1 = 1 and v1 = v4 and v2 + v5 = v6);
 [result]
-NULL AWARE LEFT ANTI JOIN (join-predicate [2: v2 = 9: add AND 1: v1 = 4: v4 AND 1: v1 = 1 AND add(2: v2, 5: v5) = 6: v6] post-join-predicate [null])
+NULL AWARE LEFT ANTI JOIN (join-predicate [2: v2 = 9: add AND 1: v1 = 1 AND 1: v1 = 4: v4 AND add(2: v2, 5: v5) = 6: v6] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2] predicate[null])
     EXCHANGE BROADCAST
         SCAN (columns[4: v4, 5: v5, 6: v6] predicate[null])
