@@ -1152,8 +1152,8 @@ const FillColumnFunction& find_fill_func(PrimitiveType type, bool nullable) {
     return nullable ? FunctionsMap::instance()->get_nullable_func(type) : FunctionsMap::instance()->get_func(type);
 }
 
-OrcChunkReader::OrcChunkReader(RuntimeState* state, const std::vector<SlotDescriptor*>& src_slot_descriptors)
-        : _src_slot_descriptors(src_slot_descriptors),
+OrcChunkReader::OrcChunkReader(RuntimeState* state, std::vector<SlotDescriptor*> src_slot_descriptors)
+        : _src_slot_descriptors(std::move(src_slot_descriptors)),
           _read_chunk_size(state->chunk_size()),
           _tzinfo(cctz::utc_time_zone()),
           _tzoffset_in_seconds(0),
