@@ -16,6 +16,7 @@ import com.starrocks.qe.ShowResultSetMetaData;
 
 import java.util.List;
 
+// ADMIN SHOW REPLICA STATUS FROM example_db.example_table;
 public class AdminShowReplicaStatusStmt extends ShowStmt {
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("TabletId").add("ReplicaId").add("BackendId").add("Version").add("LastFailedVersion")

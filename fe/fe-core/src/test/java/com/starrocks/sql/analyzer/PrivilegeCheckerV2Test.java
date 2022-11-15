@@ -104,6 +104,24 @@ public class PrivilegeCheckerV2Test {
         }
     }
 
+    private static void verifyNODEAndGRANT(String sql, String expectError) throws Exception {
+        ctxToRoot();
+        ConnectContext ctx = starRocksAssert.getCtx();
+        StatementBase statement = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        // user 'root' has GRANT/NODE privilege
+        PrivilegeCheckerV2.check(statement, starRocksAssert.getCtx());
+
+        try {
+            ctxToTestUser();
+            // user 'test' not has GRANT/NODE privilege
+            PrivilegeCheckerV2.check(statement, starRocksAssert.getCtx());
+            Assert.fail();
+        } catch (SemanticException e) {
+            System.out.println(e.getMessage());
+            Assert.assertTrue(e.getMessage().contains(expectError));
+        }
+    }
+
     @Test
     public void testTableSelectDeleteInsert() throws Exception {
         verifyGrantRevoke(
@@ -490,5 +508,173 @@ public class PrivilegeCheckerV2Test {
                 "grant ALTER on database " + testDbName + " to test",
                 "revoke ALTER on database " + testDbName + " from test",
                 "Access denied for user 'test' to database '" + testDbName + "'");
+    }
+    
+    @Test
+    public void testShowNodeStmt() throws Exception {
+
+        verifyGrantRevoke(
+                "show backends",
+                "grant OPERATE on system to test",
+                "revoke OPERATE on system from test",
+                "Access denied; you need (at least one of) the OPERATE/NODE privilege(s) for this operation");
+
+        verifyNODEAndGRANT(
+                "show backends",
+                "Access denied; you need (at least one of) the OPERATE/NODE privilege(s) for this operation");
+
+        verifyGrantRevoke(
+                "show frontends",
+                "grant OPERATE on system to test",
+                "revoke OPERATE on system from test",
+                "Access denied; you need (at least one of) the OPERATE/NODE privilege(s) for this operation");
+
+        verifyNODEAndGRANT(
+                "show frontends",
+                "Access denied; you need (at least one of) the OPERATE/NODE privilege(s) for this operation");
+
+        verifyGrantRevoke(
+                "show broker",
+                "grant OPERATE on system to test",
+                "revoke OPERATE on system from test",
+                "Access denied; you need (at least one of) the OPERATE/NODE privilege(s) for this operation");
+
+        verifyNODEAndGRANT(
+                "show broker",
+                "Access denied; you need (at least one of) the OPERATE/NODE privilege(s) for this operation");
+
+        verifyGrantRevoke(
+                "show compute nodes",
+                "grant OPERATE on system to test",
+                "revoke OPERATE on system from test",
+                "Access denied; you need (at least one of) the OPERATE/NODE privilege(s) for this operation");
+
+        verifyNODEAndGRANT(
+                "show compute nodes",
+                "Access denied; you need (at least one of) the OPERATE/NODE privilege(s) for this operation");
+
+    }
+
+    @Test
+    public void testShowTabletStmt() throws Exception {
+
+        verifyGrantRevoke(
+                "show tablet from example_db.example_table",
+                "grant OPERATE on system to test",
+                "revoke OPERATE on system from test",
+                "Access denied; you need (at least one of) the OPERATE privilege(s) for this operation");
+    }
+
+    @Test
+    public void testShowTransactionStmt() throws Exception {
+
+        ctxToTestUser();
+        ConnectContext ctx = starRocksAssert.getCtx();
+        StatementBase statement = UtFrameUtils.parseStmtWithNewParser("SHOW TRANSACTION FROM db WHERE ID=4005;", ctx);
+        PrivilegeCheckerV2.check(statement, starRocksAssert.getCtx());
+    }
+
+
+    @Test
+    public void testAdminOperateStmt() throws Exception {
+
+        // AdminSetConfigStmt
+        verifyGrantRevoke(
+                "admin set frontend config (\"key\" = \"value\");",
+                "grant OPERATE on system to test",
+                "revoke OPERATE on system from test",
+                "Access denied; you need (at least one of) the OPERATE privilege(s) for this operation");
+
+        // AdminSetReplicaStatusStmt
+        verifyGrantRevoke(
+                "ADMIN SET REPLICA STATUS PROPERTIES(\"tablet_id\" = \"10003\", " +
+                    "\"backend_id\" = \"10001\", \"status\" = \"bad\");",
+                "grant OPERATE on system to test",
+                "revoke OPERATE on system from test",
+                "Access denied; you need (at least one of) the OPERATE privilege(s) for this operation");
+
+        // AdminShowConfigStmt
+        verifyGrantRevoke(
+                "ADMIN SHOW FRONTEND CONFIG;",
+                "grant OPERATE on system to test",
+                "revoke OPERATE on system from test",
+                "Access denied; you need (at least one of) the OPERATE privilege(s) for this operation");
+
+        // AdminShowReplicaDistributionStatement
+        verifyGrantRevoke(
+                "ADMIN SHOW REPLICA DISTRIBUTION FROM example_db.example_table PARTITION(p1, p2);",
+                "grant OPERATE on system to test",
+                "revoke OPERATE on system from test",
+                "Access denied; you need (at least one of) the OPERATE privilege(s) for this operation");
+
+        // AdminShowReplicaStatusStatement
+        verifyGrantRevoke(
+                "ADMIN SHOW REPLICA STATUS FROM example_db.example_table;",
+                "grant OPERATE on system to test",
+                "revoke OPERATE on system from test",
+                "Access denied; you need (at least one of) the OPERATE privilege(s) for this operation");
+
+        // AdminRepairTableStatement
+        verifyGrantRevoke(
+                "ADMIN REPAIR TABLE example_db.example_table PARTITION(p1);",
+                "grant OPERATE on system to test",
+                "revoke OPERATE on system from test",
+                "Access denied; you need (at least one of) the OPERATE privilege(s) for this operation");
+
+        // AdminCancelRepairTableStatement
+        verifyGrantRevoke(
+                "ADMIN CANCEL REPAIR TABLE example_db.example_table PARTITION(p1);",
+                "grant OPERATE on system to test",
+                "revoke OPERATE on system from test",
+                "Access denied; you need (at least one of) the OPERATE privilege(s) for this operation");
+
+        // AdminCheckTabletsStatement
+        verifyGrantRevoke(
+                "ADMIN CHECK TABLET (1, 2) PROPERTIES (\"type\" = \"CONSISTENCY\");",
+                "grant OPERATE on system to test",
+                "revoke OPERATE on system from test",
+                "Access denied; you need (at least one of) the OPERATE privilege(s) for this operation");
+    }
+
+
+    @Test
+    public void testAlterSystemStmt() throws Exception {
+
+        // AlterSystemStmt
+        verifyNODEAndGRANT("ALTER SYSTEM ADD FOLLOWER \"127.0.0.1:9010\";",
+                           "Access denied; you need (at least one of) the NODE privilege(s) for this operation");
+
+        // CancelAlterSystemStmt
+        verifyNODEAndGRANT("CANCEL DECOMMISSION BACKEND \"host1:port\", \"host2:port\";",
+                           "Access denied; you need (at least one of) the NODE privilege(s) for this operation");
+    }
+
+    @Test
+    public void testKillStmt() throws Exception {
+        // KillStmt
+        verifyGrantRevoke(
+                "kill query 1",
+                "grant OPERATE on system to test",
+                "revoke OPERATE on system from test",
+                "Access denied; you need (at least one of) the OPERATE privilege(s) for this operation");
+    }
+
+    @Test
+    public void testShowProcStmt() throws Exception {
+        // ShowProcStmt
+        verifyGrantRevoke(
+                "show proc '/backends'",
+                "grant OPERATE on system to test",
+                "revoke OPERATE on system from test",
+                "Access denied; you need (at least one of) the OPERATE privilege(s) for this operation");
+    }
+
+
+    @Test
+    public void testSetStmt() throws Exception {
+
+        String sql = "SET PASSWORD FOR 'jack'@'192.%' = PASSWORD('123456');";
+        String expectError = "Access denied; you need (at least one of) the GRANT privilege(s) for this operation";
+        verifyNODEAndGRANT(sql, expectError);
     }
 }
