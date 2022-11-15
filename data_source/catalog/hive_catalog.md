@@ -42,9 +42,7 @@ Hive catalog 是一个外部数据目录 (external catalog)。在 StarRocks 中�
 
 如使用 Amazon S3 作为存储系统，则需要在 StarRocks 中做如下配置。
 
-1. 下载[依赖库](https://cdn-thirdparty.starrocks.com/hive_s3_jar.tar.gz)并将其添加到每个 FE 的 **$FE_HOME/lib/** 路径下。
-
-2. 在每个 FE 的 **$FE_HOME/conf/core-site.xml** 文件中添加如下配置。
+1. 在每个 FE 的 **$FE_HOME/conf/core-site.xml** 文件中添加如下配置。
 
       ```XML
       <configuration>
@@ -84,7 +82,7 @@ Hive catalog 是一个外部数据目录 (external catalog)。在 StarRocks 中�
       | fs.s3a.endpoint           | Amazon S3 服务所在地域的 endpoint，例如`s3.us-west-2.amazonaws.com`即为美国西部（俄勒冈）的 endpoint。您可以根据 endpoint 与地域的对应关系进行查找，详情参见 [Amazon Simple Storage Service 终端节点和配额](https://docs.aws.amazon.com/zh_cn/general/latest/gr/s3.html)。 |
       | fs.s3a.connection.maximum | Amazon S3 的最大连接数， 默认值为 500。如查询时有报错 `Timeout waiting for connection from poll`，可适当调高该参数。 |
 
-3. 在每个 BE 的 **$BE_HOME/conf/be.conf** 文件中添加如下配置项。
+2. 在每个 BE 的 **$BE_HOME/conf/be.conf** 文件中添加如下配置项。
 
       | **配置项**                       | **说明**                                                     |
       | -------------------------------- | ------------------------------------------------------------ |
@@ -92,7 +90,7 @@ Hive catalog 是一个外部数据目录 (external catalog)。在 StarRocks 中�
       | object_storage_secret_access_key | AWS 根用户或 IAM 用户的 secret access key，取值和 `fs.s3a.secret.key` 相同。 |
       | object_storage_endpoint          | Amazon S3 服务所在地域的 endpoint，取值和 `fs.s3a.endpoint` 相同。 |
 
-4. 重启所有 FE 和 BE。
+3. 重启所有 FE 和 BE。
 
 ### 腾讯云对象存储 COS
 
