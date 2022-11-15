@@ -668,11 +668,19 @@ ColumnPtr MathFunctions::conv_string(FunctionContext* context, const Columns& co
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
+static uint32_t generate_randoms(ColumnBuilder<TYPE_DOUBLE>* result, int32_t num_rows, uint32_t seed) {
+    for (int i = 0; i < num_rows; ++i) {
+        seed = ::rand_r(&seed);
+        // Normalize to [0,1].
+        result->append(static_cast<double>(seed) / RAND_MAX);
+    }
+    return seed;
+}
+
 Status MathFunctions::rand_prepare(starrocks_udf::FunctionContext* context,
                                    starrocks_udf::FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::THREAD_LOCAL) {
-        auto* seed = reinterpret_cast<uint32_t*>(context->allocate(sizeof(uint32_t)));
-        context->set_function_state(scope, seed);
+        int64_t seed = 0;
         if (context->get_num_args() == 1) {
             // This is a call to RandSeed, initialize the seed
             // TODO: should we support non-constant seed?
@@ -689,30 +697,28 @@ Status MathFunctions::rand_prepare(starrocks_udf::FunctionContext* context,
             }
 
             int64_t seed_value = ColumnHelper::get_const_value<TYPE_BIGINT>(seed_column);
-            *seed = seed_value;
+            seed = seed_value;
         } else {
-            *seed = GetCurrentTimeNanos();
+            seed = GetCurrentTimeNanos();
         }
+        context->set_function_state(scope, reinterpret_cast<void*>(seed));
     }
     return Status::OK();
 }
 
 Status MathFunctions::rand_close(starrocks_udf::FunctionContext* context,
                                  starrocks_udf::FunctionContext::FunctionStateScope scope) {
-    if (scope == FunctionContext::THREAD_LOCAL) {
-        auto* seed = reinterpret_cast<uint8_t*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
-        context->free(seed);
-    }
     return Status::OK();
 }
 
 ColumnPtr MathFunctions::rand(FunctionContext* context, const Columns& columns) {
     int32_t num_rows = ColumnHelper::get_const_value<TYPE_INT>(columns[columns.size() - 1]);
-    auto* seed = reinterpret_cast<uint32_t*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
-    DCHECK(seed != nullptr);
+    void* state = context->get_function_state(FunctionContext::THREAD_LOCAL);
 
     ColumnBuilder<TYPE_DOUBLE> result(num_rows);
-    generate_randoms(&result, num_rows, seed);
+    int64_t res = generate_randoms(&result, num_rows, reinterpret_cast<int64_t>(state));
+    state = reinterpret_cast<void*>(res);
+    context->set_function_state(FunctionContext::THREAD_LOCAL, state);
 
     return result.build(false);
 }

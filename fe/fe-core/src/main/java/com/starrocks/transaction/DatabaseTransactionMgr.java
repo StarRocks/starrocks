@@ -364,7 +364,8 @@ public class DatabaseTransactionMgr {
      * 6. update nextVersion because of the failure of persistent transaction resulting in error version
      */
     public VisibleStateWaiter commitTransaction(long transactionId, List<TabletCommitInfo> tabletCommitInfos,
-                                                TxnCommitAttachment txnCommitAttachment)
+            List<TabletFailInfo> tabletFailInfos,
+            TxnCommitAttachment txnCommitAttachment)
             throws UserException {
         // 1. check status
         // the caller method already own db lock, we do not obtain db lock here
@@ -435,7 +436,7 @@ public class DatabaseTransactionMgr {
             if (listener == null) {
                 throw new TransactionCommitFailedException(table.getName() + " does not support write");
             }
-            listener.preCommit(transactionState, tabletCommitInfos);
+            listener.preCommit(transactionState, tabletCommitInfos, tabletFailInfos);
             if (tableListString.length() != 0) {
                 tableListString.append(',');
             }
@@ -487,7 +488,8 @@ public class DatabaseTransactionMgr {
      * 4. persistent transactionState
      */
     public void prepareTransaction(long transactionId, List<TabletCommitInfo> tabletCommitInfos,
-                                   TxnCommitAttachment txnCommitAttachment)
+            List<TabletFailInfo> tabletFailInfos,
+            TxnCommitAttachment txnCommitAttachment)
             throws UserException {
         // 1. check status
         // the caller method already own db lock, we do not obtain db lock here
@@ -561,7 +563,7 @@ public class DatabaseTransactionMgr {
             if (listener == null) {
                 throw new TransactionCommitFailedException(table.getName() + " does not support write");
             }
-            listener.preCommit(transactionState, tabletCommitInfos);
+            listener.preCommit(transactionState, tabletCommitInfos, tabletFailInfos);
             if (tableListString.length() != 0) {
                 tableListString.append(',');
             }
@@ -1211,11 +1213,16 @@ public class DatabaseTransactionMgr {
 
     public void abortTransaction(long transactionId, String reason, TxnCommitAttachment txnCommitAttachment)
             throws UserException {
-        abortTransaction(transactionId, true, reason, txnCommitAttachment);
+        abortTransaction(transactionId, true, reason, txnCommitAttachment, Lists.newArrayList());
+    }
+
+    public void abortTransaction(long transactionId, String reason,
+            TxnCommitAttachment txnCommitAttachment, List<TabletFailInfo> failedTablets) throws UserException {
+        abortTransaction(transactionId, true, reason, txnCommitAttachment, failedTablets);
     }
 
     public void abortTransaction(long transactionId, boolean abortPrepared, String reason,
-                                 TxnCommitAttachment txnCommitAttachment)
+                                 TxnCommitAttachment txnCommitAttachment, List<TabletFailInfo> failedTablets)
             throws UserException {
         if (transactionId < 0) {
             LOG.info("transaction id is {}, less than 0, maybe this is an old type load job, ignore abort operation",
@@ -1276,7 +1283,7 @@ public class DatabaseTransactionMgr {
         }
 
         for (TransactionStateListener listener : listeners) {
-            listener.postAbort(transactionState);
+            listener.postAbort(transactionState, failedTablets);
         }
     }
 

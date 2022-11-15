@@ -208,6 +208,7 @@ message PTabletWriterAddBatchResult {
     repeated PTabletInfo tablet_vec = 2;
     optional int64 execution_time_us = 3;
     optional int64 wait_lock_time_us = 4;
+    repeated PTabletInfo failed_tablet_vec = 5;
 };
 
 message PTabletWriterAddSegmentRequest {
@@ -224,6 +225,7 @@ message PTabletWriterAddSegmentResult {
     optional StatusPB status = 1;
     optional int64 execution_time_us = 2;
     repeated PTabletInfo tablet_vec = 3;
+    repeated PTabletInfo failed_tablet_vec = 4;
 };
 
 // Tablet writer cancel.

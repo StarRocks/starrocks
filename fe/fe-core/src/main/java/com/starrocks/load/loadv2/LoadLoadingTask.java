@@ -42,6 +42,7 @@ import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TQueryType;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TabletCommitInfo;
+import com.starrocks.transaction.TabletFailInfo;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -119,7 +120,6 @@ public class LoadLoadingTask extends LoadTask {
                 brokerDesc, fileGroups, fileStatusList, fileNum);
             loadPlanner.plan();
         }
-        planner.plan(loadId, fileStatusList, fileNum);
     }
 
     public TUniqueId getLoadId() {
@@ -189,7 +189,8 @@ public class LoadLoadingTask extends LoadTask {
                 attachment = new BrokerLoadingTaskAttachment(signature,
                         curCoordinator.getLoadCounters(),
                         curCoordinator.getTrackingUrl(),
-                        TabletCommitInfo.fromThrift(curCoordinator.getCommitInfos()));
+                        TabletCommitInfo.fromThrift(curCoordinator.getCommitInfos()),
+                        TabletFailInfo.fromThrift(curCoordinator.getFailInfos()));
             } else {
                 throw new LoadException(status.getErrorMsg());
             }

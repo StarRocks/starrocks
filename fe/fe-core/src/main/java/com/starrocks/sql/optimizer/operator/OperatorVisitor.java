@@ -9,6 +9,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalDeltaLakeScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalExceptOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalFileScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHudiScanOperator;
@@ -39,6 +40,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalDeltaLakeScanOperat
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalExceptOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalFileScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
@@ -92,6 +94,10 @@ public abstract class OperatorVisitor<R, C> {
     }
 
     public R visitLogicalHiveScan(LogicalHiveScanOperator node, C context) {
+        return visitLogicalTableScan(node, context);
+    }
+
+    public R visitLogicalFileScan(LogicalFileScanOperator node, C context) {
         return visitLogicalTableScan(node, context);
     }
 
@@ -231,6 +237,10 @@ public abstract class OperatorVisitor<R, C> {
     }
 
     public R visitPhysicalHiveScan(PhysicalHiveScanOperator node, C context) {
+        return visitOperator(node, context);
+    }
+
+    public R visitPhysicalFileScan(PhysicalFileScanOperator node, C context) {
         return visitOperator(node, context);
     }
 

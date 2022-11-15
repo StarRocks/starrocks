@@ -26,6 +26,14 @@ namespace vectorized {
 class MemTable;
 class MemTableSink;
 
+enum ReplicaState {
+    // peer storage engine
+    Peer,
+    // replicated storage engine
+    Primary,
+    Secondary,
+};
+
 struct DeltaWriterOptions {
     int64_t tablet_id;
     int32_t schema_hash;
@@ -38,19 +46,11 @@ struct DeltaWriterOptions {
     Span parent_span;
     int64_t index_id;
     int64_t node_id;
-    bool is_replicated_storage = false;
     std::vector<PNetworkAddress> replicas;
     int64_t timeout_ms;
     WriteQuorumTypePB write_quorum;
     std::string merge_condition;
-};
-
-enum ReplicaState {
-    // peer storage engine
-    Peer,
-    // replicated storage engine
-    Primary,
-    Secondary,
+    ReplicaState replica_state;
 };
 
 enum State {

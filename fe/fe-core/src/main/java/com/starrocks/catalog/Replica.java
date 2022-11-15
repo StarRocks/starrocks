@@ -160,6 +160,9 @@ public class Replica implements Writable {
      */
     private boolean deferReplicaDeleteToNextReport = true;
 
+    // if lastWriteFail is true, we can not use it as replicated storage primary replica
+    private volatile boolean lastWriteFail = false;
+
     public Replica() {
     }
 
@@ -197,6 +200,14 @@ public class Replica implements Writable {
         } else {
             this.lastSuccessVersion = lastSuccessVersion;
         }
+    }
+
+    public void setLastWriteFail(boolean lastWriteFail) {
+        this.lastWriteFail = lastWriteFail;
+    }
+
+    public boolean getLastWriteFail() {
+        return this.lastWriteFail;
     }
 
     public void setLastFailedTime(long lastFailedTime) {

@@ -33,10 +33,12 @@ public:
     ~ReplicateChannel();
 
     Status sync_segment(SegmentPB* segment, butil::IOBuf& data, bool eos,
-                        std::vector<std::unique_ptr<PTabletInfo>>* replicate_tablet_infos);
+                        std::vector<std::unique_ptr<PTabletInfo>>* replicate_tablet_infos,
+                        std::vector<std::unique_ptr<PTabletInfo>>* failed_tablet_infos);
 
     Status async_segment(SegmentPB* segment, butil::IOBuf& data, bool eos,
-                         std::vector<std::unique_ptr<PTabletInfo>>* replicate_tablet_infos);
+                         std::vector<std::unique_ptr<PTabletInfo>>* replicate_tablet_infos,
+                         std::vector<std::unique_ptr<PTabletInfo>>* failed_tablet_infos);
 
     void cancel();
 
@@ -47,7 +49,8 @@ public:
 private:
     Status _init();
     void _send_request(SegmentPB* segment, butil::IOBuf& data, bool eos);
-    Status _wait_response(std::vector<std::unique_ptr<PTabletInfo>>* replicate_tablet_infos);
+    Status _wait_response(std::vector<std::unique_ptr<PTabletInfo>>* replicate_tablet_infos,
+                          std::vector<std::unique_ptr<PTabletInfo>>* failed_tablet_infos);
 
     const DeltaWriterOptions* _opt;
     const std::string _host;
@@ -92,6 +95,8 @@ public:
         return &_replicated_tablet_infos;
     }
 
+    const std::vector<std::unique_ptr<PTabletInfo>>* failed_tablet_infos() const { return &_failed_tablet_infos; }
+
 private:
     friend class SegmentReplicateTask;
 
@@ -108,6 +113,7 @@ private:
     std::vector<std::unique_ptr<ReplicateChannel>> _replicate_channels;
 
     std::vector<std::unique_ptr<PTabletInfo>> _replicated_tablet_infos;
+    std::vector<std::unique_ptr<PTabletInfo>> _failed_tablet_infos;
 
     std::unique_ptr<FileSystem> _fs;
 

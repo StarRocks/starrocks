@@ -782,6 +782,9 @@ public class LocalMetastore implements ConnectorMetadata {
         } else if (engineName.equalsIgnoreCase("hive")) {
             createHiveTable(db, stmt);
             return;
+        } else if (engineName.equalsIgnoreCase("file")) {
+            createFileTable(db, stmt);
+            return;
         } else if (engineName.equalsIgnoreCase("iceberg")) {
             createIcebergTable(db, stmt);
             return;
@@ -2038,18 +2041,19 @@ public class LocalMetastore implements ConnectorMetadata {
                 long storageCacheTtlS = 0;
                 try {
                     storageCacheTtlS = PropertyAnalyzer.analyzeLongProp(properties,
-                            PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL, 0);
+                            PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL, Config.lake_default_storage_cache_ttl_seconds);
                 } catch (AnalysisException e) {
                     throw new DdlException(e.getMessage());
                 }
                 if (storageCacheTtlS < -1) {
                     throw new DdlException("Storage cache ttl should not be less than -1");
                 }
-                if (!enableStorageCache && storageCacheTtlS != 0) {
+                if (!enableStorageCache && storageCacheTtlS != 0 &&
+                        storageCacheTtlS != Config.lake_default_storage_cache_ttl_seconds) {
                     throw new DdlException("Storage cache ttl should be 0 when cache is disabled");
                 }
                 if (enableStorageCache && storageCacheTtlS == 0) {
-                    storageCacheTtlS = Config.tablet_sched_storage_cooldown_second;
+                    throw new DdlException("Storage cache ttl should not be 0 when cache is enabled");
                 }
 
                 // set to false if absent
@@ -2472,6 +2476,12 @@ public class LocalMetastore implements ConnectorMetadata {
         Table hiveTable = TableFactory.createTable(stmt, Table.TableType.HIVE);
         registerTable(db, hiveTable, stmt);
         LOG.info("successfully create table[{}-{}]", stmt.getTableName(), hiveTable.getId());
+    }
+
+    private void createFileTable(Database db, CreateTableStmt stmt) throws DdlException {
+        Table fileTable = TableFactory.createTable(stmt, Table.TableType.FILE);
+        registerTable(db, fileTable, stmt);
+        LOG.info("successfully create table[{}-{}]", stmt.getTableName(), fileTable.getId());
     }
 
     private void createIcebergTable(Database db, CreateTableStmt stmt) throws DdlException {

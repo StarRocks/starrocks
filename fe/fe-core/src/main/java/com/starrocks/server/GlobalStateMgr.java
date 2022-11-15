@@ -50,6 +50,7 @@ import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.DomainResolver;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.ExternalOlapTable;
+import com.starrocks.catalog.FileTable;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HiveMetaStoreTable;
@@ -2025,7 +2026,8 @@ public class GlobalStateMgr {
         if (table.getType() == TableType.MYSQL || table.getType() == TableType.ELASTICSEARCH
                 || table.getType() == TableType.BROKER || table.getType() == TableType.HIVE
                 || table.getType() == TableType.HUDI || table.getType() == TableType.ICEBERG
-                || table.getType() == TableType.OLAP_EXTERNAL || table.getType() == TableType.JDBC) {
+                || table.getType() == TableType.OLAP_EXTERNAL || table.getType() == TableType.JDBC
+                || table.getType() == TableType.FILE) {
             sb.append("EXTERNAL ");
         }
         sb.append("TABLE ");
@@ -2320,6 +2322,14 @@ public class GlobalStateMgr {
                 sb.append(",\n");
             }
             sb.append(new PrintableMap<>(hiveTable.getHiveProperties(), " = ", true, true, false).toString());
+            sb.append("\n)");
+        } else if (table.getType() == TableType.FILE) {
+            FileTable fileTable = (FileTable) table;
+            if (!Strings.isNullOrEmpty(table.getComment())) {
+                sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
+            }
+            sb.append("\nPROPERTIES (\n");
+            sb.append(new PrintableMap<>(fileTable.getFileProperties(), " = ", true, true, false).toString());
             sb.append("\n)");
         } else if (table.getType() == TableType.HUDI) {
             HudiTable hudiTable = (HudiTable) table;

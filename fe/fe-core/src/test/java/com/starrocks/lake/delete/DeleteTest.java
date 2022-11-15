@@ -202,7 +202,7 @@ public class DeleteTest {
                     }
                 };
 
-                globalTransactionMgr.commitAndPublishTransaction(db, anyLong, (List) any, anyLong);
+                globalTransactionMgr.commitAndPublishTransaction(db, anyLong, (List) any, (List) any, anyLong);
                 result = true;
 
                 globalTransactionMgr.getTransactionState(anyLong, anyLong);

@@ -132,6 +132,7 @@ import com.starrocks.thrift.TResultBatch;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.InsertTxnCommitAttachment;
 import com.starrocks.transaction.TabletCommitInfo;
+import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionCommitFailedException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
@@ -1369,7 +1370,8 @@ public class StmtExecutor {
                                 database.getId(),
                                 transactionId,
                                 TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking_url = "
-                                        + coord.getTrackingUrl()
+                                        + coord.getTrackingUrl(),
+                                TabletFailInfo.fromThrift(coord.getFailInfos())
                         );
                     }
                     context.getState().setError("Insert has filtered data in strict mode, txn_id = " +
@@ -1416,6 +1418,7 @@ public class StmtExecutor {
                         database,
                         transactionId,
                         TabletCommitInfo.fromThrift(coord.getCommitInfos()),
+                        TabletFailInfo.fromThrift(coord.getFailInfos()),
                         context.getSessionVariable().getTransactionVisibleWaitTimeout() * 1000,
                         new InsertTxnCommitAttachment(loadedRows))) {
                     txnStatus = TransactionStatus.VISIBLE;
@@ -1447,7 +1450,8 @@ public class StmtExecutor {
                 } else {
                     GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
                             database.getId(), transactionId,
-                            t.getMessage() == null ? "Unknown reason" : t.getMessage());
+                            t.getMessage() == null ? "Unknown reason" : t.getMessage(),
+                            TabletFailInfo.fromThrift(coord.getFailInfos()));
                 }
             } catch (Exception abortTxnException) {
                 // just print a log if abort txn failed. This failure do not need to pass to user.
@@ -1456,7 +1460,7 @@ public class StmtExecutor {
             }
 
             // if not using old load usage pattern, error will be returned directly to user
-            StringBuilder sb = new StringBuilder(t.getMessage());
+            StringBuilder sb = new StringBuilder(t.getMessage() == null ? "Unknown reason" : t.getMessage());
             if (coord != null && !Strings.isNullOrEmpty(coord.getTrackingUrl())) {
                 sb.append(". url: ").append(coord.getTrackingUrl());
             }
