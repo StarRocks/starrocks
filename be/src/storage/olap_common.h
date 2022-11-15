@@ -294,35 +294,6 @@ inline const char* aggregation_method_to_string(FieldAggregationMethod method) {
     return "";
 }
 
-template <FieldType TYPE>
-inline constexpr FieldType DelegateType = TYPE;
-template <>
-inline constexpr FieldType DelegateType<OLAP_FIELD_TYPE_DECIMAL32> = OLAP_FIELD_TYPE_INT;
-template <>
-inline constexpr FieldType DelegateType<OLAP_FIELD_TYPE_DECIMAL64> = OLAP_FIELD_TYPE_BIGINT;
-template <>
-inline constexpr FieldType DelegateType<OLAP_FIELD_TYPE_DECIMAL128> = OLAP_FIELD_TYPE_LARGEINT;
-
-inline FieldType delegate_type(FieldType type) {
-    switch (type) {
-    case OLAP_FIELD_TYPE_DECIMAL32:
-        return OLAP_FIELD_TYPE_INT;
-    case OLAP_FIELD_TYPE_DECIMAL64:
-        return OLAP_FIELD_TYPE_BIGINT;
-    case OLAP_FIELD_TYPE_DECIMAL128:
-        return OLAP_FIELD_TYPE_LARGEINT;
-    default:
-        return type;
-    }
-}
-
-inline bool is_string_type(FieldType type) {
-    return type == FieldType::OLAP_FIELD_TYPE_CHAR || type == FieldType::OLAP_FIELD_TYPE_VARCHAR;
-}
-
-inline bool is_decimalv3_field_type(FieldType type) {
-    return type == OLAP_FIELD_TYPE_DECIMAL32 || type == OLAP_FIELD_TYPE_DECIMAL64 || type == OLAP_FIELD_TYPE_DECIMAL128;
-}
 
 // TODO(lism): support varbinary for zone map.
 inline bool is_zone_map_key_type(FieldType type) {
