@@ -1,4 +1,4 @@
-name: add-approve-label
+name: label
 
 on:
   workflow_run:

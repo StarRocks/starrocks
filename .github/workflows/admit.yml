@@ -1,14 +1,13 @@
-name: admit
+name: Trigger Jobs
+
 on:
   pull_request_target:
     types: [synchronize, labeled, reopened]
-    paths-ignore:
-      - 'docs/**'
 
 jobs:
-  run-admit-test:
+  Trigger-Admit-Test:
     runs-on: ubuntu-latest
-    steps:
+    steps:  
       - name: PR comment
         if: contains(github.event.pull_request.labels.*.name, 'Approved')
         uses: thollander/actions-comment-pull-request@v1

@@ -1,4 +1,5 @@
-name: label
+name: Labels
+
 on:
   pull_request_target:
     types:
@@ -7,9 +8,9 @@ on:
       - 'docs/**'
 
 jobs:
-  add-doc-label:
+  pr-label:
     runs-on: ubuntu-latest
-    steps:
+    steps:  
       - name: add document label
         uses: actions-ecosystem/action-add-labels@v1
         with:
