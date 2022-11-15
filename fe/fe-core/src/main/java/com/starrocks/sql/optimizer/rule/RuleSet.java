@@ -122,12 +122,8 @@ import com.starrocks.sql.optimizer.rule.transformation.ScalarApply2JoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitAggregateRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitLimitRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitTopNRule;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.AggregateFilterJoinRule;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.AggregateFilterScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.AggregateJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.AggregateScanRule;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.FilterJoinRule;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.FilterScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.OnlyJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.OnlyScanRule;
 
@@ -354,16 +350,12 @@ public class RuleSet {
 
         REWRITE_RULES.put(RuleSetType.SINGLE_TABLE_MV_REWRITE, ImmutableList.of(
                 OnlyScanRule.getInstance(),
-                FilterScanRule.getInstance(),
-                AggregateScanRule.getInstance(),
-                AggregateFilterScanRule.getInstance()
+                AggregateScanRule.getInstance()
         ));
 
         REWRITE_RULES.put(RuleSetType.MULTI_TABLE_MV_REWRITE, ImmutableList.of(
                 OnlyJoinRule.getInstance(),
-                FilterJoinRule.getInstance(),
-                AggregateJoinRule.getInstance(),
-                AggregateFilterJoinRule.getInstance()
+                AggregateJoinRule.getInstance()
         ));
     }
 
