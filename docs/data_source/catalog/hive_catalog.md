@@ -42,8 +42,7 @@ If  Kerberos authentication is enabled for your HDFS cluster or Hive metastore, 
 
 If you use Amazon S3 as the data storage system, configure your StarRocks cluster as follows:
 
-1. Download the [dependencies](https://cdn-thirdparty.starrocks.com/hive_s3_jar.tar.gz) and add them to the **$FE_HOME/lib/** path of each FE.
-2. Add the following configuration items to the **$FE_HOME/conf/core-site.xml** file of each FE.
+1. Add the following configuration items to the **$FE_HOME/conf/core-site.xml** file of each FE.
 
       ```XML
       <configuration>
@@ -83,7 +82,7 @@ If you use Amazon S3 as the data storage system, configure your StarRocks cluste
       | fs.s3a.endpoint           | The regional endpoint of your Amazon S3 service. For example, `s3.us-west-2.amazonaws.com` is the endpoint of US East (Ohio). For information about how to obtain your regional endpoint, see [Amazon Simple Storage Service endpoints and quotas](https://docs.aws.amazon.com/general/latest/gr/s3.html). |
       | fs.s3a.connection.maximum | The maximum number of concurrent connections that are allowed by your Amazon S3 service. This parameter defaults to `500`.  If an error (`Timeout waiting for connection from poll`) occurs when you query Hive data, increase the value of this parameter. |
 
-3. Add the following configuration items to the **$BE_HOME/conf/be.conf** file of each BE.
+2. Add the following configuration items to the **$BE_HOME/conf/be.conf** file of each BE.
 
       | **Configuration item**           | **Description**                                              |
       | -------------------------------- | ------------------------------------------------------------ |
@@ -91,7 +90,7 @@ If you use Amazon S3 as the data storage system, configure your StarRocks cluste
       | object_storage_secret_access_key | The secret access key of the root user or an IAM user. The value of the parameter is the same as the value of the `fs.s3a.secret.key` parameter. |
       | object_storage_endpoint          | The regional endpoint of your Amazon S3 service. The value of the parameter is the same as the value of the `fs.s3a.endpoint` parameter. |
 
-4. Restart all BEs and FEs.
+3. Restart all BEs and FEs.
 
 ## Create a Hive catalog
 
