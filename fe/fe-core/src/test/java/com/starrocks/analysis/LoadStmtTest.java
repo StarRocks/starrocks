@@ -88,4 +88,10 @@ public class LoadStmtTest {
         analyzeSuccess("LOAD LABEL test.testLabel (DATA INFILE(\"hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file\") INTO TABLE `t0`) WITH BROKER (\"username\"=\"sr\") PROPERTIES (\"strict_mode\"=\"true\")");
         analyzeSuccess("LOAD LABEL test.testLabel (DATA INFILE(\"hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file\") INTO TABLE `t0`) WITH BROKER (\"username\"=\"sr\")");
     }
+
+    @Test
+    public void testToString() {
+        LoadStmt stmt = (LoadStmt) analyzeSuccess("LOAD        LABEL test.testLabel (DATA INFILE(\"hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file\") INTO TABLE `t0`) WITH BROKER hdfs_broker (\"username\"=\"sr\", \"password\"=\"PASSWORDDDD\") PROPERTIES (\"strict_mode\"=\"true\")");
+        Assert.assertEquals("LOAD LABEL `test`.`testLabel`(DATA INFILE ('hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file') INTO TABLE t0)WITH BROKER hdfs_broker (\"password\"  =  \"*XXX\", \"username\"  =  \"sr\")PROPERTIES (\"strict_mode\" = \"true\")", stmt.toString());
+    }
 }
