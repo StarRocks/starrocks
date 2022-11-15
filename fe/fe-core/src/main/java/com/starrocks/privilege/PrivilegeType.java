@@ -91,7 +91,8 @@ public enum PrivilegeType {
         CREATE_RESOURCE(3),
         PLUGIN(4),
         FILE(5),
-        BLACKLIST(6);  // AND MORE...
+        BLACKLIST(6),
+        OPERATE(7);  // AND MORE...
 
         private final int id;
 

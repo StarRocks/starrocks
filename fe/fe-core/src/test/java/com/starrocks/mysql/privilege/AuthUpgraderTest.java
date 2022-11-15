@@ -621,15 +621,41 @@ public class AuthUpgraderTest {
             UserIdentity user = createUserByRole("adminrole");
             String createResourceStmt = "create external resource 'hive0' PROPERTIES(" +
                     "\"type\"  =  \"hive\", \"hive.metastore.uris\"  =  \"thrift://127.0.0.1:9083\")";
-            checkPrivilegeAsUser(user,
-                    "select * from db1.tbl1",
-                    "select * from db0.tbl0",
-                    createResourceStmt);
+            List<String> sqlList = new ArrayList<>();
+            // show node
+            sqlList.addAll(Arrays.asList("show backends", "show frontends", "show broker", "show compute nodes"));
+            // show txn
+            sqlList.addAll(Arrays.asList("SHOW TRANSACTION FROM db WHERE ID=4005;"));
+            // admin
+            sqlList.addAll(Arrays.asList(
+                    "admin set frontend config (\"key\" = \"value\");",
+                    "ADMIN SET REPLICA STATUS PROPERTIES(\"tablet_id\" = \"10003\", " +
+                    "\"backend_id\" = \"10001\", \"status\" = \"bad\");",
+                    "ADMIN SHOW FRONTEND CONFIG;",
+                    "ADMIN SHOW REPLICA DISTRIBUTION FROM example_db.example_table PARTITION(p1, p2);",
+                    "ADMIN SHOW REPLICA STATUS FROM example_db.example_table;",
+                    "ADMIN REPAIR TABLE example_db.example_table PARTITION(p1);",
+                    "ADMIN CANCEL REPAIR TABLE example_db.example_table PARTITION(p1);",
+                    "ADMIN CHECK TABLET (1, 2) PROPERTIES (\"type\" = \"CONSISTENCY\");"
+            ));
+            // alter system
+            sqlList.addAll(Arrays.asList(
+                    "ALTER SYSTEM ADD FOLLOWER \"127.0.0.1:9010\";",
+                    "CANCEL DECOMMISSION BACKEND \"host1:port\", \"host2:port\";"
+            ));
+            // kill, set, show proc
+            sqlList.addAll(Arrays.asList(
+                    "kill query 1", "show proc '/backends'", "SET PASSWORD FOR 'jack'@'192.%' = PASSWORD('123456');"
+            ));
+            // select, create
+            sqlList.addAll(Arrays.asList(
+                     "select * from db1.tbl1",
+                     "select * from db0.tbl0",
+                     createResourceStmt
+            ));
+            checkPrivilegeAsUser(user, sqlList.toArray(new String[0]));
             user = createUserByRole("adminrole");
-            checkPrivilegeAsUser(user,
-                    "select * from db1.tbl1",
-                    "select * from db0.tbl0",
-                    createResourceStmt);
+            checkPrivilegeAsUser(user, sqlList.toArray(new String[0]));
         }
     }
 

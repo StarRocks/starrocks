@@ -85,6 +85,7 @@ public class VariableMgrTest {
 
     @Test
     public void testNormal() throws IllegalAccessException, NoSuchFieldException, UserException {
+        GlobalStateMgr.getCurrentState().initAuth(false);
         SessionVariable var = VariableMgr.newSessionVariable();
         Assert.assertEquals(2147483648L, var.getMaxExecMemByte());
         Assert.assertEquals(300, var.getQueryTimeoutS());
