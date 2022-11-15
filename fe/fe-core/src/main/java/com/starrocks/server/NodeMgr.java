@@ -792,10 +792,11 @@ public class NodeMgr {
             }
             frontends.put(fe.getNodeName(), fe);
             if (fe.getRole() == FrontendNodeType.FOLLOWER) {
-                // DO NOT add helper sockets here, cause BDBHA is not instantiated yet.
-                // helper sockets will be added after start BDBHA
-                // But add to helperNodes, just for show
                 helperNodes.add(Pair.create(fe.getHost(), fe.getEditLogPort()));
+                if (!GlobalStateMgr.isCheckpointThread()) {
+                    BDBHA ha = (BDBHA) stateMgr.getHaProtocol();
+                    ha.addHelperSocket(fe.getHost(), fe.getEditLogPort());
+                }
             }
         } finally {
             unlock();
@@ -828,6 +829,10 @@ public class NodeMgr {
             }
             if (removedFe.getRole() == FrontendNodeType.FOLLOWER) {
                 helperNodes.remove(Pair.create(removedFe.getHost(), removedFe.getEditLogPort()));
+                if (!GlobalStateMgr.isCheckpointThread()) {
+                    BDBHA ha = (BDBHA) stateMgr.getHaProtocol();
+                    ha.removeHelperSocket(removedFe.getHost(), removedFe.getEditLogPort());
+                }
             }
 
             removedFrontends.add(removedFe.getNodeName());
