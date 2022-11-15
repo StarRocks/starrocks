@@ -238,6 +238,7 @@ private:
     ColumnDecoders _column_decoders;
     std::vector<BitmapIndexIterator*> _bitmap_index_iterators;
 
+    Status _get_del_vec_st;
     DelVectorPtr _del_vec;
     roaring_uint32_iterator_t _roaring_iter;
 
@@ -284,19 +285,30 @@ SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, vectorized::S
         : ChunkIterator(std::move(schema), options.chunk_size),
           _segment(std::move(segment)),
           _opts(std::move(options)),
-          _predicate_columns(_opts.predicates.size()) {}
-
-Status SegmentIterator::_init() {
-    SCOPED_RAW_TIMER(&_opts.stats->segment_init_ns);
+          _predicate_columns(_opts.predicates.size()) {
+    // for very long queries(>30min), delvec may got GCed, to prevent this, load delvec at query start, call stack:
+    //   olap_chunk_source::prepare -> tablet_reader::open -> get_segment_iterators -> create SegmentIterator
+    SCOPED_RAW_TIMER(&_opts.stats->get_delvec_ns);
     if (_opts.is_primary_keys && _opts.version > 0) {
         TabletSegmentId tsid;
         tsid.tablet_id = _opts.tablet_id;
         tsid.segment_id = _opts.rowset_id + segment_id();
-        RETURN_IF_ERROR(
-                StorageEngine::instance()->update_manager()->get_del_vec(_opts.meta, tsid, _opts.version, &_del_vec));
-        if (_del_vec && _del_vec->empty()) {
-            _del_vec.reset();
+        _get_del_vec_st =
+                StorageEngine::instance()->update_manager()->get_del_vec(_opts.meta, tsid, _opts.version, &_del_vec);
+        if (_get_del_vec_st.ok()) {
+            if (_del_vec && _del_vec->empty()) {
+                _del_vec.reset();
+            }
         }
+    }
+}
+
+Status SegmentIterator::_init() {
+    SCOPED_RAW_TIMER(&_opts.stats->segment_init_ns);
+    if (!_get_del_vec_st.ok()) {
+        return _get_del_vec_st;
+    }
+    if (_opts.is_primary_keys && _opts.version > 0) {
         if (_del_vec) {
             if (_segment->num_rows() == _del_vec->cardinality()) {
                 return Status::EndOfFile("all rows deleted");
@@ -1363,6 +1375,9 @@ Status SegmentIterator::_get_row_ranges_by_bloom_filter() {
 }
 
 void SegmentIterator::close() {
+    if (_del_vec) {
+        _del_vec.reset();
+    }
     _context_list[0].close();
     _context_list[1].close();
     _obj_pool.clear();
