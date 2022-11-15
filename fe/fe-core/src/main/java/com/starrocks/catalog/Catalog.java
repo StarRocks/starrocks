@@ -5229,10 +5229,10 @@ public class Catalog {
             }
             frontends.put(fe.getNodeName(), fe);
             if (fe.getRole() == FrontendNodeType.FOLLOWER || fe.getRole() == FrontendNodeType.REPLICA) {
-                // DO NOT add helper sockets here, cause BDBHA is not instantiated yet.
-                // helper sockets will be added after start BDBHA
-                // But add to helperNodes, just for show
                 helperNodes.add(Pair.create(fe.getHost(), fe.getEditLogPort()));
+                if (!Catalog.isCheckpointThread()) {
+                    ((BDBHA) haProtocol).addHelperSocket(fe.getHost(), fe.getEditLogPort());
+                }
             }
         } finally {
             unlock();
@@ -5250,6 +5250,9 @@ public class Catalog {
             if (removedFe.getRole() == FrontendNodeType.FOLLOWER
                     || removedFe.getRole() == FrontendNodeType.REPLICA) {
                 helperNodes.remove(Pair.create(removedFe.getHost(), removedFe.getEditLogPort()));
+                if (!Catalog.isCheckpointThread()) {
+                    ((BDBHA) haProtocol).removeHelperSocket(removedFe.getHost(), removedFe.getEditLogPort());
+                }
             }
 
             removedFrontends.add(removedFe.getNodeName());
