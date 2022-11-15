@@ -21,18 +21,15 @@
 
 package com.starrocks.sql.ast;
 
-import com.google.common.base.Function;
-import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.Lists;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.LabelName;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.LoadPriority;
-import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.Load;
+import com.starrocks.sql.analyzer.AST2SQL;
 
 import java.util.List;
 import java.util.Map;
@@ -281,32 +278,6 @@ public class LoadStmt extends DdlStmt {
 
     @Override
     public String toSql() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("LOAD LABEL ").append(label.toString()).append("\n");
-        sb.append("(");
-        Joiner.on(",\n").appendTo(sb, Lists.transform(dataDescriptions, new Function<DataDescription, Object>() {
-            @Override
-            public Object apply(DataDescription dataDescription) {
-                return dataDescription.toString();
-            }
-        })).append(")");
-        if (brokerDesc != null) {
-            sb.append("\n").append(brokerDesc.toSql());
-        }
-        if (cluster != null) {
-            sb.append("\nBY '");
-            sb.append(cluster);
-            sb.append("'");
-        }
-        if (resourceDesc != null) {
-            sb.append("\n").append(resourceDesc.toSql());
-        }
-
-        if (properties != null && !properties.isEmpty()) {
-            sb.append("\nPROPERTIES (");
-            sb.append(new PrintableMap<String, String>(properties, "=", true, false));
-            sb.append(")");
-        }
-        return sb.toString();
+        return AST2SQL.toString(this);
     }
 }
