@@ -262,7 +262,7 @@ public class ReportHandler extends Daemon {
             if (oldTask == null) {
                 reportQueue.put(reportTask);
             } else {
-                LOG.info("update be {} report task {}", oldTask.beId, oldTask);
+                LOG.info("update be {} report task, type: {}", oldTask.beId, oldTask.type);
             }
             pendingTaskMap.get(reportTask.type).put(reportTask.beId, reportTask);
         }
