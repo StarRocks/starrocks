@@ -157,6 +157,35 @@ public class Config extends ConfigBase {
     @ConfField
     public static String dump_log_delete_age = "7d";
 
+    /**
+     * big_query_log_dir:
+     * This specifies FE big query log dir.
+     * Dump log fe.big_query.log contains all information about big query.
+     * The structure of each log record is very similar to the audit log.
+     * If the cpu cost of a query exceeds big_query_log_cpu_second_threshold,
+     * or scan rows exceeds big_query_log_scan_rows_threshold,
+     * or scan bytes exceeds big_query_log_scan_bytes_threshold,
+     * we will consider it as a big query.
+     * These thresholds are defined by the user.
+     * <p>
+     * big_query_log_roll_num:
+     * Maximal FE log files to be kept within an big_query_log_roll_interval.
+     * <p>
+     * big_query_log_modules:
+     * Informations for all big queries.
+     * <p>
+     * big_query_log_roll_interval:
+     * DAY:  log suffix is yyyyMMdd
+     * HOUR: log suffix is yyyyMMddHH
+     * <p>
+     * big_query_log_delete_age:
+     * default is 7 days, if log's last modify time is 7 days ago, it will be deleted.
+     * support format:
+     * 7d      7 days
+     * 10h     10 hours
+     * 60m     60 mins
+     * 120s    120 seconds
+     */
     @ConfField
     public static String big_query_log_dir = StarRocksFE.STARROCKS_HOME_DIR + "/log";
     @ConfField
