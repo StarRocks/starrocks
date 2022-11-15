@@ -20,7 +20,7 @@ DATETIME CONVERT_TZ(DATE|DATETIME dt, VARCHAR from_tz, VARCHAR to_tz)
 
 ## 返回值说明
 
-返回值的数据类型为 DATETIME。如果输入值为 DATE，默认基于00:00:00进行转换。如果输入值类型不合法，返回`NULL`。
+返回值的数据类型为 DATETIME。如果输入值为 DATE，默认基于 00:00:00 进行转换。如果输入值类型不合法，返回 `NULL`。
 
 ## 注意事项
 
@@ -53,7 +53,7 @@ select convert_tz('2019-08-01 13:21:03', '+08:00', 'America/Los_Angeles');
 1 row in set (0.00 sec)
 ```
 
-示例3：将DATE类型的日期`2019-08-01`进行转化。
+示例3：将DATE类型的日期 `2019-08-01` 进行转化。
 
 ```Plain Text
 select convert_tz('2019-08-01', 'Asia/Shanghai', 'America/Los_Angeles');
