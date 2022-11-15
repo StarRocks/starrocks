@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.optimizer.operator.scalar;
 
+import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -22,9 +23,10 @@ public final class ColumnRefOperator extends ScalarOperator {
 
     private boolean isLambdaArgument;
 
+    // TODO(SmithCruise) Ugly code, remove it in future.
     // Empty list for default
     // If it's empty, means select all
-    private final List<List<Integer>> usedSubfieldPosGroup = new ArrayList<>();
+    private final List<ImmutableList<Integer>> usedSubfieldPosGroup = new ArrayList<>();
 
     public ColumnRefOperator(int id, Type type, String name, boolean nullable) {
         super(OperatorType.VARIABLE, type);
@@ -34,11 +36,11 @@ public final class ColumnRefOperator extends ScalarOperator {
         this.isLambdaArgument = false;
     }
 
-    public void addUsedSubfieldPos(List<Integer> usedNestFieldPos) {
+    public void addUsedSubfieldPos(ImmutableList<Integer> usedNestFieldPos) {
         this.usedSubfieldPosGroup.add(usedNestFieldPos);
     }
 
-    public List<List<Integer>> getUsedSubfieldPosGroup() {
+    public List<ImmutableList<Integer>> getUsedSubfieldPosGroup() {
         return this.usedSubfieldPosGroup;
     }
 

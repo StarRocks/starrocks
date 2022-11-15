@@ -3,6 +3,7 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
@@ -37,6 +38,10 @@ public class SubfieldExpr extends Expr {
 
     public String getFieldName() {
         return fieldName;
+    }
+
+    public int getFieldPos(String fieldName) {
+        return ((StructType) (children.get(0).getType())).getFieldPos(fieldName);
     }
 
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
