@@ -42,7 +42,7 @@ jobs:
         with:
           build_dir: be/build_Release
           config_file: .clang-tidy
-          
+
       - name: post build
         run: |
           sudo rm -rf ../starrocks/*
