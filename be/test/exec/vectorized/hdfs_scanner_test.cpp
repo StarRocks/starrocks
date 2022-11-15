@@ -1472,7 +1472,7 @@ TEST_F(HdfsScannerTest, TestCSVSmall) {
         READ_SCANNER_ROWS(scanner, 2);
         scanner->close(_runtime_state);
     }
-    for (int offset = 10; offset < 20; offset++) {
+    for (int offset = 10; offset < 13; offset++) {
         auto* range0 = _create_scan_range(small_file, 0, offset);
         // at '\n'
         auto* range1 = _create_scan_range(small_file, offset, 0);

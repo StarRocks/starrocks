@@ -92,10 +92,11 @@ Status HdfsScannerCSVReader::next_record(Record* record) {
 }
 
 Status HdfsScannerCSVReader::next_record(FieldOffsets* fields, size_t& parsed_start, size_t& parsed_end) {
+    fields->clear();
     if (_should_stop_next) {
         return Status::EndOfFile("");
     }
-    RETURN_IF_ERROR(CSVReader::next_record(fields, parsed_start, parsed_end));
+    Status status = CSVReader::next_record(fields, parsed_start, parsed_end);
     // std::cout << "fields.size() = " << fields->size() << std::endl;
     // int num = fields->size();
     // for (int i=0; i<num; i++) {
@@ -117,7 +118,7 @@ Status HdfsScannerCSVReader::next_record(FieldOffsets* fields, size_t& parsed_st
     } else {
         _remain_length -= consume;
     }
-    return Status::OK();
+    return status;
 }
 
 Status HdfsScannerCSVReader::_fill_buffer() {
@@ -156,7 +157,8 @@ Status HdfsScannerCSVReader::_fill_buffer() {
             }
         }
         if (n == 0) {
-            _buff.skip(_row_delimiter_length);    
+            _buff.skip(_row_delimiter_length);
+            return Status::EndOfFile(_file->filename());  
         }
     }
 
@@ -293,22 +295,20 @@ Status HdfsTextScanner::parse_csv_v2(int chunk_size, ChunkPtr* chunk) {
         size_t parsed_start;
         size_t parsed_end;
         status = down_cast<HdfsScannerCSVReader*>(_reader.get())->next_record(&fields, parsed_start, parsed_end);
-        if (status.is_end_of_file()) {
-            if (_current_range_index == _scanner_params.scan_ranges.size() - 1) {
-                break;
-            }
-            // End of file status indicate:
-            // 1. read end of file
-            // 2. should stop scan
-            _current_range_index++;
-            RETURN_IF_ERROR(_create_or_reinit_reader());
-            continue;
-        } else if (!status.ok()) {
+        if (!status.ok() && !status.is_end_of_file()) {
             LOG(WARNING) << "Status is not ok " << status.get_error_msg();
             return status;
         }
 
         if (fields.size() == 0) {
+            if (status.is_end_of_file()) {
+                if (_current_range_index == _scanner_params.scan_ranges.size() - 1) {
+                    break;
+                }
+                _current_range_index++;
+                RETURN_IF_ERROR(_create_or_reinit_reader());
+                continue;
+            }
             continue;
         }
 
@@ -316,6 +316,14 @@ Status HdfsTextScanner::parse_csv_v2(int chunk_size, ChunkPtr* chunk) {
         CSVReader::Record record(data, parsed_end - parsed_start);
 
         if (!validate_utf8(record.data, record.size)) {
+            if (status.is_end_of_file()) {
+                if (_current_range_index == _scanner_params.scan_ranges.size() - 1) {
+                    break;
+                }
+                _current_range_index++;
+                RETURN_IF_ERROR(_create_or_reinit_reader());
+                continue;
+            }
             continue;
         }
 
@@ -379,6 +387,16 @@ Status HdfsTextScanner::parse_csv_v2(int chunk_size, ChunkPtr* chunk) {
                 }
             }
         }
+
+        if (status.is_end_of_file()) {
+            if (_current_range_index == _scanner_params.scan_ranges.size() - 1) {
+                break;
+            }
+            _current_range_index++;
+            RETURN_IF_ERROR(_create_or_reinit_reader());
+            continue;
+        }
+        continue;
     }
     return chunk->get()->num_rows() > 0 ? Status::OK() : Status::EndOfFile("");
 }
