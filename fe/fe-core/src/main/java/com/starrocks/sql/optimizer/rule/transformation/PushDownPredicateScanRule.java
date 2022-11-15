@@ -36,6 +36,8 @@ public class PushDownPredicateScanRule extends TransformationRule {
             new PushDownPredicateScanRule(OperatorType.LOGICAL_HUDI_SCAN);
     public static final PushDownPredicateScanRule DELTALAKE_SCAN =
             new PushDownPredicateScanRule(OperatorType.LOGICAL_DELTALAKE_SCAN);
+    public static final PushDownPredicateScanRule FILE_SCAN =
+            new PushDownPredicateScanRule(OperatorType.LOGICAL_FILE_SCAN);
     public static final PushDownPredicateScanRule SCHEMA_SCAN =
             new PushDownPredicateScanRule(OperatorType.LOGICAL_SCHEMA_SCAN);
     public static final PushDownPredicateScanRule MYSQL_SCAN =
