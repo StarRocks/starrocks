@@ -275,8 +275,8 @@ public final class SqlToScalarOperatorTranslator {
                 List<Integer> usedStructFieldPos = node.getUsedStructFieldPos();
                 returnValue = SubfieldOperator.build(columnRefOperator, node.getOriginType(), usedStructFieldPos);
 
-                for (int pos : node.getUsedStructFieldPos()) {
-                    usedSubFieldPos.push(pos);
+                for (int i = node.getUsedStructFieldPos().size() - 1; i >= 0; i--) {
+                    usedSubFieldPos.push(node.getUsedStructFieldPos().get(i));
                 }
             }
 
