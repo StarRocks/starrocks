@@ -91,6 +91,10 @@ public class IcebergTable extends Table {
             setGlueCatalogProperties();
             return;
         }
+        if (catalogType != null && IcebergCatalogType.REST_CATALOG == IcebergCatalogType.valueOf(catalogType)) {
+            setRESTCatalogProperties();
+            return;
+        }
         String metastoreURI = properties.get(ICEBERG_METASTORE_URIS);
         if (null != metastoreURI && !isInternalCatalog(metastoreURI)) {
             setHiveCatalogProperties(metastoreURI);
@@ -190,6 +194,10 @@ public class IcebergTable extends Table {
     private void setHiveCatalogProperties(String metastoreURI) {
         icebergProperties.put(ICEBERG_METASTORE_URIS, metastoreURI);
         icebergProperties.put(ICEBERG_CATALOG_TYPE, "HIVE_CATALOG");
+    }
+
+    private void setRESTCatalogProperties() {
+        icebergProperties.put(ICEBERG_CATALOG_TYPE, "REST_CATALOG");
     }
 
     private void setCustomCatalogProperties(Map<String, String> properties) {
