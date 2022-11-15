@@ -46,6 +46,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
+import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -86,6 +87,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collector;
 import java.util.stream.Collectors;
 
 public class OlapTableSink extends DataSink {
@@ -398,9 +400,11 @@ public class OlapTableSink extends DataSink {
 
     private TOlapTableLocationParam createLocation(OlapTable table) throws UserException {
         TOlapTableLocationParam locationParam = new TOlapTableLocationParam();
-        // BE id -> path hash
+        // replica -> path hash
         Multimap<Long, Long> allBePathsMap = HashMultimap.create();
         Map<Long, Long> bePrimaryMap = new HashMap<>();
+        SystemInfoService infoService = GlobalStateMgr.getCurrentState()
+                .getOrCreateSystemInfo(clusterId);
         for (Long partitionId : partitionIds) {
             Partition partition = table.getPartition(partitionId);
             int quorum = table.getPartitionInfo().getQuorumNum(partition.getId(), table.writeQuorum());
@@ -413,7 +417,7 @@ public class OlapTableSink extends DataSink {
                         // we should ensure the replica backend is alive
                         // otherwise, there will be a 'unknown node id, id=xxx' error for stream load
                         LocalTablet localTablet = (LocalTablet) tablet;
-                        Multimap<Long, Long> bePathsMap =
+                        Multimap<Replica, Long> bePathsMap =
                                 localTablet.getNormalReplicaBackendPathMap(table.getClusterId());
                         if (bePathsMap.keySet().size() < quorum) {
                             throw new UserException(InternalErrorCode.REPLICA_FEW_ERR,
@@ -422,25 +426,43 @@ public class OlapTableSink extends DataSink {
                                             Joiner.on(",").join(localTablet.getBackends()));
                         }
 
-                        List<Long> replicas = Lists.newArrayList(bePathsMap.keySet());
-                        int lowUsageIndex = 0;
-                        for (int i = 0; i < replicas.size(); i++) {
-                            Long backendID = replicas.get(i);
-                            if (!bePrimaryMap.containsKey(backendID)) {
-                                bePrimaryMap.put(backendID, Long.valueOf(0));
+                        List<Replica> replicas = Lists.newArrayList(bePathsMap.keySet());
+
+                        if (enableReplicatedStorage) {
+                            int lowUsageIndex = -1;
+                            for (int i = 0; i < replicas.size(); i++) {
+                                Replica replica = replicas.get(i);
+                                if (lowUsageIndex == -1 && !replica.getLastWriteFail()
+                                        && !infoService.getBackend(replica.getBackendId()).getLastWriteFail()) {
+                                    lowUsageIndex = i;
+                                }
+                                if (lowUsageIndex != -1
+                                        && bePrimaryMap.getOrDefault(replica.getBackendId(), (long) 0) < bePrimaryMap
+                                                .getOrDefault(replicas.get(lowUsageIndex).getBackendId(), (long) 0)
+                                        && !replica.getLastWriteFail()
+                                        && !infoService.getBackend(replica.getBackendId()).getLastWriteFail()) {
+                                    lowUsageIndex = i;
+                                }
                             }
-                            if (bePrimaryMap.get(backendID) < bePrimaryMap.get(replicas.get(lowUsageIndex))) {
-                                lowUsageIndex = i;
+
+                            if (lowUsageIndex != -1) {
+                                bePrimaryMap.put(replicas.get(lowUsageIndex).getBackendId(),
+                                        bePrimaryMap.getOrDefault(replicas.get(lowUsageIndex).getBackendId(), (long) 0)
+                                                + 1);
+                                // replicas[0] will be the primary replica
+                                Collections.swap(replicas, 0, lowUsageIndex);
+                            } else {
+                                LOG.warn("Tablet {} replicas {} all has write fail flag", tablet.getId(), replicas);
                             }
                         }
-                        bePrimaryMap.put(replicas.get(lowUsageIndex), bePrimaryMap.get(replicas.get(lowUsageIndex)) + 1);
-                        // replicas[0] will be the primary replica
-                        Collections.swap(replicas, 0, lowUsageIndex);
 
                         locationParam
                                 .addToTablets(
-                                        new TTabletLocation(tablet.getId(), replicas));
-                        allBePathsMap.putAll(bePathsMap);
+                                        new TTabletLocation(tablet.getId(), replicas.stream().map(Replica::getBackendId)
+                                                .collect(Collectors.toList())));
+                        for (Map.Entry<Replica, Long> entry : bePathsMap.entries()) {
+                            allBePathsMap.put(entry.getKey().getBackendId(), entry.getValue());
+                        }
                     }
                 }
             }

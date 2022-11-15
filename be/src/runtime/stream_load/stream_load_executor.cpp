@@ -63,6 +63,7 @@ Status StreamLoadExecutor::execute_plan_fragment(StreamLoadContext* ctx) {
             },
             [ctx](PlanFragmentExecutor* executor) {
                 ctx->commit_infos = std::move(executor->runtime_state()->tablet_commit_infos());
+                ctx->fail_infos = std::move(executor->runtime_state()->tablet_fail_infos());
                 Status status = executor->status();
                 if (status.ok()) {
                     ctx->number_total_rows = executor->runtime_state()->num_rows_load_from_sink();
@@ -175,6 +176,7 @@ Status StreamLoadExecutor::commit_txn(StreamLoadContext* ctx) {
     request.txnId = ctx->txn_id;
     request.sync = true;
     request.commitInfos = std::move(ctx->commit_infos);
+    request.failInfos = std::move(ctx->fail_infos);
     request.__isset.commitInfos = true;
     request.__set_thrift_rpc_timeout_ms(config::txn_commit_rpc_timeout_ms);
 
@@ -227,6 +229,7 @@ Status StreamLoadExecutor::prepare_txn(StreamLoadContext* ctx) {
     request.txnId = ctx->txn_id;
     request.sync = true;
     request.commitInfos = std::move(ctx->commit_infos);
+    request.failInfos = std::move(ctx->fail_infos);
     request.__isset.commitInfos = true;
     request.__set_thrift_rpc_timeout_ms(config::txn_commit_rpc_timeout_ms);
 
@@ -267,6 +270,7 @@ Status StreamLoadExecutor::rollback_txn(StreamLoadContext* ctx) {
     set_request_auth(&request, ctx->auth);
     request.db = ctx->db;
     request.txnId = ctx->txn_id;
+    request.failInfos = std::move(ctx->fail_infos);
     request.__set_reason(ctx->status.get_error_msg());
 
     // set attachment if has

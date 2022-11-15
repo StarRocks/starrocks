@@ -158,6 +158,7 @@ import com.starrocks.thrift.TUpdateResourceUsageRequest;
 import com.starrocks.thrift.TUpdateResourceUsageResponse;
 import com.starrocks.thrift.TUserPrivDesc;
 import com.starrocks.transaction.TabletCommitInfo;
+import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionNotFoundException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
@@ -1014,6 +1015,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         boolean ret = GlobalStateMgr.getCurrentGlobalTransactionMgr().commitAndPublishTransaction(
                 db, request.getTxnId(),
                 TabletCommitInfo.fromThrift(request.getCommitInfos()),
+                TabletFailInfo.fromThrift(request.getFailInfos()),
                 timeoutMs, attachment);
         if (!ret) {
             // committed success but not visible
@@ -1122,6 +1124,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         GlobalStateMgr.getCurrentGlobalTransactionMgr().prepareTransaction(
                 db.getId(), request.getTxnId(),
                 TabletCommitInfo.fromThrift(request.getCommitInfos()),
+                TabletFailInfo.fromThrift(request.getFailInfos()),
                 attachment);
     }
 

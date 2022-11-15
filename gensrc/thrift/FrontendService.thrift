@@ -452,6 +452,8 @@ struct TReportExecStatusParams {
   19: optional i64 source_load_bytes
 
   20: optional InternalService.TLoadJobType load_type
+
+  21: optional list<Types.TTabletFailInfo> failInfos
 }
 
 struct TFeResult {
@@ -664,6 +666,7 @@ struct TLoadTxnCommitRequest {
     10: optional i64 auth_code
     11: optional TTxnCommitAttachment txnCommitAttachment
     12: optional i64 thrift_rpc_timeout_ms
+    13: optional list<Types.TTabletFailInfo> failInfos
 }
 
 struct TLoadTxnCommitResult {
@@ -681,6 +684,7 @@ struct TLoadTxnRollbackRequest {
     8: optional string reason
     9: optional i64 auth_code
     10: optional TTxnCommitAttachment txnCommitAttachment
+    11: optional list<Types.TTabletFailInfo> failInfos
 }
 
 struct TLoadTxnRollbackResult {
@@ -961,6 +965,7 @@ struct TCommitRemoteTxnRequest {
     4: optional i32 commit_timeout_ms
     5: optional list<Types.TTabletCommitInfo> commit_infos
     6: optional TTxnCommitAttachment commit_attachment
+    7: optional list<Types.TTabletFailInfo> fail_infos
 }
 
 struct TCommitRemoteTxnResponse {

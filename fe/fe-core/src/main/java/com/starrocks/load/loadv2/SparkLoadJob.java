@@ -697,7 +697,7 @@ public class SparkLoadJob extends BulkLoadJob {
         db.writeLock();
         try {
             GlobalStateMgr.getCurrentGlobalTransactionMgr().commitTransaction(
-                    dbId, transactionId, commitInfos,
+                    dbId, transactionId, commitInfos, Lists.newArrayList(),
                     new LoadJobFinalOperation(id, loadingStatus, progress, loadStartTimestamp,
                             finishTimestamp, state, failMsg));
         } catch (TabletQuorumFailedException e) {

@@ -287,9 +287,18 @@ public:
     std::vector<TTabletCommitInfo>& tablet_commit_infos() { return _tablet_commit_infos; }
 
     void append_tablet_commit_infos(std::vector<TTabletCommitInfo>& commit_info) {
-        std::lock_guard<std::mutex> l(_tablet_commit_infos_lock);
+        std::lock_guard<std::mutex> l(_tablet_infos_lock);
         _tablet_commit_infos.insert(_tablet_commit_infos.end(), std::make_move_iterator(commit_info.begin()),
                                     std::make_move_iterator(commit_info.end()));
+    }
+
+    const std::vector<TTabletFailInfo>& tablet_fail_infos() const { return _tablet_fail_infos; }
+
+    std::vector<TTabletFailInfo>& tablet_fail_infos() { return _tablet_fail_infos; }
+
+    void append_tablet_fail_infos(TTabletFailInfo fail_info) {
+        std::lock_guard<std::mutex> l(_tablet_infos_lock);
+        _tablet_fail_infos.emplace_back(std::move(fail_info));
     }
 
     // get mem limit for load channel
@@ -417,8 +426,9 @@ private:
 
     std::string _error_log_file_path;
     std::ofstream* _error_log_file = nullptr; // error file path, absolute path
-    std::mutex _tablet_commit_infos_lock;
+    std::mutex _tablet_infos_lock;
     std::vector<TTabletCommitInfo> _tablet_commit_infos;
+    std::vector<TTabletFailInfo> _tablet_fail_infos;
 
     // prohibit copies
     RuntimeState(const RuntimeState&) = delete;
