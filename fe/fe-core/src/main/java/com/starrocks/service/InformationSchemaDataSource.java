@@ -10,6 +10,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -232,32 +233,35 @@ public class InformationSchemaDataSource {
             partitionKeySb.append(DEF_NULL);
         }
 
-        // keys
-        StringBuilder keysSb = new StringBuilder();
+        // PRIMARY KEYS
         List<String> keysColumnNames = Lists.newArrayList();
         for (Column column : olapTable.getBaseSchema()) {
             if (column.isKey()) {
                 keysColumnNames.add("`" + column.getName() + "`");
             }
         }
-        keysSb.append(Joiner.on(", ").join(keysColumnNames));
-
-        tableConfigInfo.setPrimary_key(isSortKey(olapTable.getKeysType()) ? DEF_NULL : keysSb.toString());
+        String pkSb = Joiner.on(", ").join(keysColumnNames);
+        tableConfigInfo.setPrimary_key(olapTable.getKeysType().equals(KeysType.PRIMARY_KEYS) ? pkSb : DEF_NULL);
         tableConfigInfo.setPartition_key(partitionKeySb.toString());
         tableConfigInfo.setDistribute_bucket(distributionInfo.getBucketNum());
         tableConfigInfo.setDistribute_type("HASH");
         tableConfigInfo.setDistribute_key(distributeKey);
-        tableConfigInfo.setSort_key(isSortKey(olapTable.getKeysType()) ? keysSb.toString() : DEF_NULL);
+        
+        // SORT KEYS
+        MaterializedIndexMeta index = olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexId());
+        if (index.getSortKeyIdxes() != null) {
+            List<String> sortKeysColumnNames = Lists.newArrayList();
+            for (Integer i : index.getSortKeyIdxes()) {
+                sortKeysColumnNames.add("`" + table.getBaseSchema().get(i).getName() + "`");
+            }
+            tableConfigInfo.setSort_key(Joiner.on(", ").join(sortKeysColumnNames));
+        } else {
+            tableConfigInfo.setSort_key(DEF_NULL);
+        }
         tableConfigInfo.setProperties(new Gson().toJson(genProps(table)));
         return tableConfigInfo;
     }
 
-    private static boolean isSortKey(KeysType kType) {
-        if (kType.equals(KeysType.PRIMARY_KEYS) || kType.equals(KeysType.UNIQUE_KEYS)) {
-            return false;
-        }
-        return true;
-    }
 
     private static TTableConfigInfo genDefaultConfigInfo(TTableConfigInfo tableConfigInfo) {
         tableConfigInfo.setTable_engine(DEF);
