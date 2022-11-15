@@ -10,7 +10,7 @@ on:
       - 'fe/**.java'
 
 jobs:
-  java-codestyle-check:
+  java-codestyle:
     name: "CheckStyle"
     runs-on: ubuntu-latest
     steps:
