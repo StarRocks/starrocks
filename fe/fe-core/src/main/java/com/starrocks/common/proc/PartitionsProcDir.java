@@ -94,8 +94,8 @@ public class PartitionsProcDir implements ProcDirInterface {
                     .add("DataSize")
                     .add("RowCount")
                     .add("AvgCS") // Average compaction score
-                    .add("MaxCS") // Maximum compaction score
-                    .add("P50CS"); // 50th percentile compaction score
+                    .add("P50CS") // 50th percentile compaction score
+                    .add("MaxCS"); // Maximum compaction score
             this.titleNames = builder.build();
         } else {
             ImmutableList.Builder<String> builder = new ImmutableList.Builder<String>()
@@ -377,8 +377,8 @@ public class PartitionsProcDir implements ProcDirInterface {
         partitionInfo.add(byteSizeValue); // DataSize
         partitionInfo.add(partition.getRowCount()); // RowCount
         partitionInfo.add(String.format("%.2f", compactionScore != null ? compactionScore.getAvg() : 0.0)); // AvgCS
-        partitionInfo.add(String.format("%.2f", compactionScore != null ? compactionScore.getMax() : 0.0)); // MaxCS
         partitionInfo.add(String.format("%.2f", compactionScore != null ? compactionScore.getP50() : 0.0)); // P50CS
+        partitionInfo.add(String.format("%.2f", compactionScore != null ? compactionScore.getMax() : 0.0)); // MaxCS
         return partitionInfo;
     }
 
