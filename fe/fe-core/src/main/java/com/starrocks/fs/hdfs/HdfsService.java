@@ -18,7 +18,6 @@
 package com.starrocks.fs.hdfs;
 
 import com.starrocks.common.UserException;
-import com.starrocks.common.util.PrintableMap;
 import com.starrocks.thrift.TBrokerCheckPathExistRequest;
 import com.starrocks.thrift.TBrokerCloseReaderRequest;
 import com.starrocks.thrift.TBrokerCloseWriterRequest;
