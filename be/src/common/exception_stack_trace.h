@@ -1,5 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
+// refer to https://stackoverflow.com/a/45057441/3315536
 #pragma once
 // Our stack unwinding is a GNU C extension:
 #if defined(__GNUC__)
@@ -18,6 +19,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+
+#include "runtime/current_thread.h"
 
 #define LIBUNWIND_MAX_PROCNAME_LENGTH 4096
 
@@ -62,7 +65,7 @@ void libunwind_print_backtrace(const int aFramesToIgnore = 0) {
     int vUnwindStatus, vDemangleStatus, i, n = 0;
     char vProcedureName[LIBUNWIND_MAX_PROCNAME_LENGTH];
     char *vDemangledProcedureName;
-    const char *vDynObjectFileName;
+    [[maybe_unused]] const char* vDynObjectFileName;
     const char *vSourceFileName;
     int vSourceFileLineNumber;
 
@@ -133,7 +136,10 @@ void libunwind_print_backtrace(const int aFramesToIgnore = 0) {
             // Demangle the name of the procedure using the GNU C++ ABI:
             vDemangledProcedureName = abi::__cxa_demangle(vProcedureName, NULL, NULL, &vDemangleStatus);
             if (vDemangledProcedureName != NULL) {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstringop-truncation"
                 strncpy(vProcedureName, vDemangledProcedureName, LIBUNWIND_MAX_PROCNAME_LENGTH);
+#pragma GCC diagnostic pop
                 // Free the memory from __cxa_demangle():
                 free(vDemangledProcedureName);
             } else {
@@ -165,7 +171,7 @@ void libunwind_print_backtrace(const int aFramesToIgnore = 0) {
         // Resolve the source file name using DWARF:
         if (dwfl != NULL) {
             addr = (uintptr_t)(ip - 4);
-            Dwfl_Module *module = dwfl_addrmodule(dwfl, addr);
+            [[maybe_unused]] Dwfl_Module* module = dwfl_addrmodule(dwfl, addr);
             // Here we could also ask for the procedure name:
             //const char* vProcedureName = dwfl_module_addrname(module, addr);
             // Here we could also ask for the object file name:
@@ -220,8 +226,12 @@ void libunwind_print_backtrace(const int aFramesToIgnore = 0) {
     }
 }
 
-void __cxa_throw(void *thrown_exception, void *infov, void (*dest)(void *)) {
-    std::type_info *info = (std::type_info *) infov;
+void __wrap___cxa_throw(void* thrown_exception, void* infov, void (*dest)(void*)) {
+    std::type_info* info = (std::type_info*)infov;
+    auto query_id = starrocks::CurrentThread::current().query_id();
+    auto fragment_instance_id = starrocks::CurrentThread::current().fragment_instance_id();
+    fprintf(stderr, "query_id=%s, fragment_instance_id=%s throws exceptions:", starrocks::print_id(query_id).c_str(),
+            starrocks::print_id(fragment_instance_id).c_str());
     // print the stack trace to stderr:
     if (mExceptionStackTrace) {
         print_exception_info(info);
