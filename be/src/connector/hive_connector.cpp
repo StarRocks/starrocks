@@ -111,8 +111,8 @@ Status HiveDataSource::_init_partition_values() {
             ASSIGN_OR_RETURN(auto partition_value_col, partition_values[partition_col_idx]->evaluate(nullptr));
             assert(partition_value_col->is_constant());
             auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(partition_value_col);
-            ColumnPtr data_column = const_column->data_column();
-            ColumnPtr chunk_part_column = partition_chunk->get_column_by_slot_id(slot_id);
+            const ColumnPtr& data_column = const_column->data_column();
+            ColumnPtr& chunk_part_column = partition_chunk->get_column_by_slot_id(slot_id);
             if (data_column->is_nullable()) {
                 chunk_part_column->append_nulls(1);
             } else {
