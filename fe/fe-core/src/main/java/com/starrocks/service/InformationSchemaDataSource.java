@@ -241,7 +241,8 @@ public class InformationSchemaDataSource {
             }
         }
         String pkSb = Joiner.on(", ").join(keysColumnNames);
-        tableConfigInfo.setPrimary_key(olapTable.getKeysType().equals(KeysType.PRIMARY_KEYS) ? pkSb : DEF_NULL);
+        tableConfigInfo.setPrimary_key(olapTable.getKeysType().equals(KeysType.PRIMARY_KEYS)
+                                       || olapTable.getKeysType().equals(KeysType.UNIQUE_KEYS) ? pkSb : DEF_NULL);
         tableConfigInfo.setPartition_key(partitionKeySb.toString());
         tableConfigInfo.setDistribute_bucket(distributionInfo.getBucketNum());
         tableConfigInfo.setDistribute_type("HASH");
@@ -368,6 +369,7 @@ public class InformationSchemaDataSource {
 
     private static TTableInfo genNormalTableInfo(Table table, TTableInfo info) {
         
+        OlapTable olapTable = (OlapTable) table;
         Collection<Partition> partitions = table.getPartitions();
         long lastUpdateTime = 0L;
         long totalRowsOfTable = 0L;
@@ -388,7 +390,7 @@ public class InformationSchemaDataSource {
             info.setAvg_row_length(totalBytesOfTable / totalRowsOfTable);
         }
         // DATA_LENGTH
-        info.setData_length(totalBytesOfTable);
+        info.setData_length(olapTable.getDataSize());
         // UPDATE_TIME
         info.setUpdate_time(lastUpdateTime / 1000);
         return info;
