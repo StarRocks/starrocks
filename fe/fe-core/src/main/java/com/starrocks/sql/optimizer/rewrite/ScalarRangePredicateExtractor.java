@@ -400,7 +400,9 @@ public class ScalarRangePredicateExtractor {
                     // empty range
                     return new MultiValuesDescriptor(this, other);
                 }
-
+                if (result.range.isEmpty()) {
+                    return new MultiValuesDescriptor(this, other);
+                }
                 return result;
             }
 
