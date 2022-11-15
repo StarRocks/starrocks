@@ -60,15 +60,15 @@ public class MapType extends Type {
             selectedFields[pos] = true;
         }
         if (needSetChildren && (pos == 1 || pos == -1) && valueType.isComplexType()) {
-            valueType.selectAll();
+            valueType.selectAllFields();
         }
     }
 
     @Override
-    public void selectAll() {
+    public void selectAllFields() {
         Arrays.fill(selectedFields, true);
         if (valueType.isComplexType()) {
-            valueType.selectAll();
+            valueType.selectAllFields();
         }
     }
 
