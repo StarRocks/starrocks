@@ -956,9 +956,10 @@ void TabletUpdatesTest::test_remove_expired_versions(bool enable_persistent_inde
     EXPECT_EQ(N, read_until_eof(iter_v4));
     EXPECT_EQ(0, read_until_eof(iter_v1)); // iter_v1 is empty iterator
 
+    // read already opened iterator/reader should succeed
+    EXPECT_EQ(N, read_until_eof(iter_v3));
+    EXPECT_EQ(N, read_until_eof(iter_v2));
     // Read expired versions should fail.
-    EXPECT_EQ(-1, read_until_eof(iter_v3));
-    EXPECT_EQ(-1, read_until_eof(iter_v2));
     EXPECT_EQ(-1, read_tablet(_tablet, 3));
     EXPECT_EQ(-1, read_tablet(_tablet, 2));
     EXPECT_EQ(-1, read_tablet(_tablet, 1));
