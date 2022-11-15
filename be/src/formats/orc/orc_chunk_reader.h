@@ -46,7 +46,7 @@ public:
     };
 
     // src slot descriptors should exactly matches columns in row readers.
-    explicit OrcChunkReader(RuntimeState* state, const std::vector<SlotDescriptor*>& src_slot_descriptors);
+    explicit OrcChunkReader(RuntimeState* state, std::vector<SlotDescriptor*> src_slot_descriptors);
     ~OrcChunkReader();
     Status init(std::unique_ptr<orc::InputStream> input_stream);
     Status init(std::unique_ptr<orc::Reader> reader);
@@ -136,7 +136,7 @@ private:
     std::unique_ptr<orc::RowReader> _row_reader;
     orc::ReaderOptions _reader_options;
     orc::RowReaderOptions _row_reader_options;
-    const std::vector<SlotDescriptor*>& _src_slot_descriptors;
+    std::vector<SlotDescriptor*> _src_slot_descriptors;
     std::unordered_map<SlotId, SlotDescriptor*> _slot_id_to_desc;
     std::unique_ptr<OrcMapping> _root_selected_mapping;
     std::vector<TypeDescriptor> _src_types;
