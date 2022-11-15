@@ -10,14 +10,12 @@
 SHOW [FULL] [BUILTIN] FUNCTIONS [IN|FROM db] [LIKE 'function_pattern'];
 ```
 
-说明：
+参数说明：
 
-```plain text
-full:表示显示函数的详细信息
-builtin:表示显示系统提供的函数
-db: 要查询的数据库名字
-function_pattern`: 用来过滤函数名称的参数
-```
+* full: 表示显示函数的详细信息。
+* builtin: 表示显示系统提供的函数。
+* db: 要查询的数据库名称。
+* function_pattern: 用于过滤函数名称的参数。
 
 ## 示例
 

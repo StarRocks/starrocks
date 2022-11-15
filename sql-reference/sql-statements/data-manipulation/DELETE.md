@@ -2,7 +2,7 @@
 
 该语句用于按条件删除表中的数据。注意该操作会同时删除和该表相关的物化视图的数据。
 对于明细模型、聚合模型、更新模型表，支持删除表中指定分区的数据。主键模型目前还不支持删除指定分区中的数据。
-从2.3版本开始，主键模型支持完整的DELETE WHERE语义，即支持按主键、任意列、以及子查询结果删除数据。
+从 2.3 版本开始，主键模型支持完整的 DELETE WHERE 语义，即支持按主键、任意列、以及子查询结果删除数据。
 
 ## DELETE 与明细模型、聚合模型和更新模型
 
@@ -67,7 +67,7 @@ WHERE  k2 in ("abc", "cba");
 
 ## DELETE 与主键模型
 
-从 2.3 版本开始，主键模型支持完整的DELETE WHERE语义。
+从 2.3 版本开始，主键模型支持完整的 DELETE WHERE 语义。
 
 ### 语法
 
@@ -167,7 +167,7 @@ MySQL [test]> select * from score_board;
 
 条件中的列，可以为任意列。
 
-示例 1：删除 `score_board` 表中 `score` 列值等于 `22` 的所有数据行。
+示例一：删除 `score_board` 表中 `score` 列值等于 `22` 的所有数据行。
 
 ```Plain
 MySQL [test]> delete from score_board where score = 22;
@@ -183,7 +183,7 @@ MySQL [test]> select * from score_board;
 3 rows in set (0.01 sec)
 ```
 
-示例 2：删除 `score_board` 表中 `score` 列值小于 `22` 的所有数据行。
+示例二：删除 `score_board` 表中 `score` 列值小于 `22` 的所有数据行。
 
 ```Plain
 MySQL [test]> delete from score_board where score < 22;
@@ -197,7 +197,7 @@ MySQL [test]> select * from score_board;
 1 row in set (0.01 sec)
 ```
 
-示例 3：删除 `score_board` 表中 `score` 列值小于 `22`、且 `name` 列值不为 `Bob` 的所有数据行。
+示例三：删除 `score_board` 表中 `score` 列值小于 `22`、且 `name` 列值不为 `Bob` 的所有数据行。
 
 ```Plain
 MySQL [test]> delete from score_board where score < 22 and name != "Bob";
