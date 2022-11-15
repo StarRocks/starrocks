@@ -190,9 +190,9 @@ public class InformationSchemaDataSource {
         // compression type
         if (olapTable.getCompressionType() == TCompressionType.LZ4_FRAME || 
                 olapTable.getCompressionType() == TCompressionType.LZ4) {
-            propsMap.put(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, "LZ4");
+            propsMap.put(PropertyAnalyzer.PROPERTIES_COMPRESSION, "LZ4");
         } else {
-            propsMap.put(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, olapTable.getCompressionType().name());
+            propsMap.put(PropertyAnalyzer.PROPERTIES_COMPRESSION, olapTable.getCompressionType().name());
         }
 
         // storage media
