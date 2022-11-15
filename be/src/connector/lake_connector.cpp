@@ -95,7 +95,6 @@ private:
     RuntimeProfile::Counter* _rows_read_counter = nullptr;
 
     RuntimeProfile::Counter* _expr_filter_timer = nullptr;
-    RuntimeProfile::Counter* _scan_timer = nullptr;
     RuntimeProfile::Counter* _create_seg_iter_timer = nullptr;
     RuntimeProfile::Counter* _io_timer = nullptr;
     RuntimeProfile::Counter* _read_compressed_counter = nullptr;
@@ -219,7 +218,6 @@ Status LakeDataSource::get_next(RuntimeState* state, vectorized::ChunkPtr* chunk
     chunk->reset(ChunkHelper::new_chunk_pooled(_prj_iter->output_schema(), _runtime_state->chunk_size(), true));
     auto* chunk_ptr = chunk->get();
 
-    SCOPED_TIMER(_scan_timer);
     do {
         RETURN_IF_ERROR(state->check_mem_limit("read chunk from storage"));
         RETURN_IF_ERROR(_prj_iter->get_next(chunk_ptr));
@@ -452,7 +450,6 @@ Status LakeDataSource::build_scan_range(RuntimeState* state) {
 }
 
 void LakeDataSource::init_counter(RuntimeState* state) {
-    _scan_timer = ADD_TIMER(_runtime_profile, "ScanTime");
     _bytes_read_counter = ADD_COUNTER(_runtime_profile, "BytesRead", TUnit::BYTES);
     _rows_read_counter = ADD_COUNTER(_runtime_profile, "RowsRead", TUnit::UNIT);
 
