@@ -78,7 +78,8 @@ public class Table extends MetaObject implements Writable {
         JDBC,
         MATERIALIZED_VIEW,
         LAKE,
-        DELTALAKE
+        DELTALAKE,
+        FILE
     }
 
     @SerializedName(value = "id")
@@ -268,6 +269,8 @@ public class Table extends MetaObject implements Writable {
             table = new EsTable();
         } else if (type == TableType.HIVE) {
             table = new HiveTable();
+        } else if (type == TableType.FILE) {
+            table = new FileTable();
         } else if (type == TableType.HUDI) {
             table = new HudiTable();
         } else if (type == TableType.OLAP_EXTERNAL) {

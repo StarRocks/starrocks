@@ -5,6 +5,7 @@ package com.starrocks.server;
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.FileTable;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.Resource;
@@ -47,6 +48,9 @@ public class TableFactory {
                 break;
             case HUDI :
                 table = createHudiTable(stmt);
+                break;
+            case FILE :
+                table = createFileTable(stmt);
                 break;
             default:
                 throw new DdlException("Unsupported table type " + type);
@@ -93,6 +97,27 @@ public class TableFactory {
             hiveTable.setComment(stmt.getComment());
         }
         return hiveTable;
+    }
+
+    private static FileTable createFileTable(CreateTableStmt stmt) throws DdlException {
+        GlobalStateMgr gsm = GlobalStateMgr.getCurrentState();
+        String tableName = stmt.getTableName();
+        List<Column> columns = stmt.getColumns();
+        Map<String, String> properties = stmt.getProperties();
+        long tableId = gsm.getNextId();
+
+        FileTable.Builder tableBuilder = FileTable.builder()
+                .setId(tableId)
+                .setTableName(tableName)
+                .setFullSchema(columns)
+                .setProperties(properties);
+
+        FileTable fileTable = tableBuilder.build();
+
+        if (!Strings.isNullOrEmpty(stmt.getComment())) {
+            fileTable.setComment(stmt.getComment());
+        }
+        return fileTable;
     }
 
     private static HudiTable createHudiTable(CreateTableStmt stmt) throws DdlException {

@@ -363,7 +363,8 @@ enum TTableType {
     DELTALAKE_TABLE,
     JDBC_TABLE,
     VIEW = 20,
-    MATERIALIZED_VIEW
+    MATERIALIZED_VIEW,
+    FILE_TABLE
 }
 
 enum TKeysType {
