@@ -1508,6 +1508,12 @@ public class Config extends ConfigBase {
     public static long remote_file_cache_ttl_s = 3600 * 36L;
 
     /**
+     * The maximum number of partitions to fetch from the metastore in one RPC.
+     */
+    @ConfField
+    public static int max_hive_partitions_per_rpc = 1000;
+
+    /**
      * The interval of lazy refreshing remote file's metadata cache
      */
     @ConfField

@@ -15,6 +15,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.events.MetastoreNotificationFetchException;
 import org.apache.hadoop.hive.metastore.api.NotificationEventResponse;
@@ -296,8 +297,12 @@ public class CachingHiveMetastore implements IHiveMetastore {
         } else {
             List<HivePartitionName> presentPartitionNames = getPresentPartitionNames(partitionCache, hiveDbName, hiveTblName);
             if (presentPartitionNames.size() > 0) {
-                Map<HivePartitionName, Partition> updatedPartitions = loadPartitionsByNames(presentPartitionNames);
-                partitionCache.putAll(updatedPartitions);
+                for (int i = 0; i < presentPartitionNames.size(); i += Config.max_hive_partitions_per_rpc) {
+                    List<HivePartitionName> partsToFetch = presentPartitionNames.subList(
+                            i, Math.min(i + Config.max_hive_partitions_per_rpc, presentPartitionNames.size()));
+                    Map<HivePartitionName, Partition> updatedPartitions = loadPartitionsByNames(partsToFetch);
+                    partitionCache.putAll(updatedPartitions);
+                }
             }
         }
 
@@ -307,9 +312,13 @@ public class CachingHiveMetastore implements IHiveMetastore {
             List<HivePartitionName> presentPartitionStatistics = getPresentPartitionNames(
                     partitionStatsCache, hiveDbName, hiveTblName);
             if (presentPartitionStatistics.size() > 0) {
-                Map<HivePartitionName, HivePartitionStats> updatePartitionStats =
-                        loadPartitionsStatistics(presentPartitionStatistics);
-                partitionStatsCache.putAll(updatePartitionStats);
+                for (int i = 0; i < presentPartitionStatistics.size(); i += Config.max_hive_partitions_per_rpc) {
+                    List<HivePartitionName> partsToFetch = presentPartitionStatistics.subList(
+                            i, Math.min(i + Config.max_hive_partitions_per_rpc, presentPartitionStatistics.size()));
+                    Map<HivePartitionName, HivePartitionStats> updatePartitionStats =
+                            loadPartitionsStatistics(partsToFetch);
+                    partitionStatsCache.putAll(updatePartitionStats);
+                }
             }
         }
     }
