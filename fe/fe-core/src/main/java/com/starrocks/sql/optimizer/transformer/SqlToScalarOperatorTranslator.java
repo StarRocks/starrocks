@@ -627,6 +627,8 @@ public final class SqlToScalarOperatorTranslator {
                 return ConstantOperator.createVarchar((String) value);
             } else if (type.isChar()) {
                 return ConstantOperator.createChar((String) value);
+            } else if (type.isBinaryType()) {
+                return ConstantOperator.createBinary((byte[]) value, type);
             } else {
                 throw new UnsupportedOperationException("nonsupport constant type");
             }

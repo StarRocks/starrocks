@@ -162,6 +162,7 @@ static ColumnPredicate* new_column_predicate(const TypeInfoPtr& type_info, Colum
     case OLAP_FIELD_TYPE_OBJECT:
     case OLAP_FIELD_TYPE_PERCENTILE:
     case OLAP_FIELD_TYPE_JSON:
+    case OLAP_FIELD_TYPE_VARBINARY:
     case OLAP_FIELD_TYPE_MAX_VALUE:
         return nullptr;
         // No default to ensure newly added enumerator will be handled.

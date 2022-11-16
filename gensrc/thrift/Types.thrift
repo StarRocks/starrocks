@@ -84,7 +84,8 @@ enum TPrimitiveType {
   DECIMAL64,
   DECIMAL128,
   JSON,
-  FUNCTION
+  FUNCTION,
+  VARBINARY
 }
 
 enum TTypeNodeType {

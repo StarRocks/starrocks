@@ -172,6 +172,7 @@ Status MySQLDataSource::open(RuntimeState* state) {
             case TYPE_FLOAT:
             case TYPE_JSON:
             case TYPE_FUNCTION:
+            case TYPE_VARBINARY:
                 break;
             }
         }

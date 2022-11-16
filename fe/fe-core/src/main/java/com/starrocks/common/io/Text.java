@@ -393,6 +393,12 @@ public class Text implements Writable {
         String res = decode(bytes);
         return res;
     }
+    public static byte[] readBinary(DataInput in) throws IOException {
+        int length = in.readInt();
+        byte[] bytes = new byte[length];
+        in.readFully(bytes);
+        return bytes;
+    }
 
     /**
      * Write a UTF8 encoded string to out
@@ -402,6 +408,12 @@ public class Text implements Writable {
         int length = bytes.limit();
         out.writeInt(length);
         out.write(bytes.array(), 0, length);
+        return length;
+    }
+    public static int writeBinary(DataOutput out, byte[] bytes) throws IOException {
+        int length = bytes.length;
+        out.writeInt(length);
+        out.write(bytes, 0, length);
         return length;
     }
 
