@@ -66,6 +66,10 @@ public class ColumnRefSet implements Cloneable {
         return bitSet.equals(rhs.bitSet);
     }
 
+    public int size() {
+        return bitSet.cardinality();
+    }
+
     // The meaning is same with SQL Union Operation
     public void union(int id) {
         bitSet.set(id);

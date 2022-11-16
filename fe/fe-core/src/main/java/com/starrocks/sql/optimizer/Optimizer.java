@@ -406,20 +406,20 @@ public class Optimizer {
             }
         }
 
-        //add join implementRule
-        String joinImplementationMode = ConnectContext.get().getSessionVariable().getJoinImplementationMode();
-        if ("merge".equalsIgnoreCase(joinImplementationMode)) {
-            context.getRuleSet().addMergeJoinImplementationRule();
-        } else if ("hash".equalsIgnoreCase(joinImplementationMode)) {
-            context.getRuleSet().addHashJoinImplementationRule();
-        } else if ("nestloop".equalsIgnoreCase(joinImplementationMode)) {
-            context.getRuleSet().addNestLoopJoinImplementationRule();
+        if (!sessionVariable.isMVPlanner()) {
+            //add join implementRule
+            String joinImplementationMode = ConnectContext.get().getSessionVariable().getJoinImplementationMode();
+            if ("merge".equalsIgnoreCase(joinImplementationMode)) {
+                context.getRuleSet().addMergeJoinImplementationRule();
+            } else if ("hash".equalsIgnoreCase(joinImplementationMode)) {
+                context.getRuleSet().addHashJoinImplementationRule();
+            } else if ("nestloop".equalsIgnoreCase(joinImplementationMode)) {
+                context.getRuleSet().addNestLoopJoinImplementationRule();
+            } else {
+                context.getRuleSet().addAutoJoinImplementationRule();
+            }
         } else {
-            context.getRuleSet().addAutoJoinImplementationRule();
-        }
-
-        // add realtime mv rules
-        if (sessionVariable.isMVPlanner() && sessionVariable.isEnableRealtimeRefreshMV()) {
+            // add realtime mv rules
             context.getRuleSet().addRealtimeMVRules();
         }
 
