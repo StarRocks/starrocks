@@ -153,10 +153,10 @@ enum FieldType {
     OLAP_FIELD_TYPE_OBJECT = 25,
 
     // Added by StarRocks
-    OLAP_FIELD_TYPE_VARBINARY = 26,
 
     // Reserved some field for commutiy version
 
+    OLAP_FIELD_TYPE_VARBINARY = 46,
     // decimal v3 type
     OLAP_FIELD_TYPE_DECIMAL32 = 47,
     OLAP_FIELD_TYPE_DECIMAL64 = 48,
