@@ -58,6 +58,10 @@ public class SplitAggregateRule extends TransformationRule {
     }
 
     public boolean check(final OptExpression input, OptimizerContext context) {
+        // TODO(murphy) support multi-stage StreamAgg
+        if (context.getSessionVariable().isMVPlanner()) {
+            return false;
+        }
         LogicalAggregationOperator agg = (LogicalAggregationOperator) input.getOp();
         // Only apply this rule if the aggregate type is global and not split
         return agg.getType().isGlobal() && !agg.isSplit();

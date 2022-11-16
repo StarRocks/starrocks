@@ -163,6 +163,11 @@ public class RuleSet {
             new CTEProduceImplementationRule()
     );
 
+    private static final ImmutableList<Rule> MV_IMPLEMENT_RULES = ImmutableList.of(
+            StreamJoinImplementationRule.getInstance(),
+            StreamAggregateImplementationRule.getInstance()
+    );
+
     private final List<Rule> implementRules = Lists.newArrayList(ALL_IMPLEMENT_RULES);
 
     private final List<Rule> transformRules = Lists.newArrayList();
