@@ -257,7 +257,7 @@ struct PartitionHashMapWithOneNumberKey : public PartitionHashMapBase {
         const auto& key_column_data = key_column->get_data();
         append_chunk_for_one_key(
                 hash_map, chunk, [&](uint32_t offset) { return key_column_data[offset]; },
-                [](const LogicalType& key) { return key; }, obj_pool);
+                [](const FieldType& key) { return key; }, obj_pool);
         return is_downgrade;
     }
 };
@@ -278,7 +278,7 @@ struct PartitionHashMapWithOneNullableNumberKey : public PartitionHashMapBase {
         const auto& key_column_data = down_cast<ColumnType*>(nullable_key_column->data_column().get())->get_data();
         append_chunk_for_one_nullable_key(
                 hash_map, null_key_value, chunk, nullable_key_column,
-                [&](uint32_t offset) { return key_column_data[offset]; }, [](const LogicalType& key) { return key; },
+                [&](uint32_t offset) { return key_column_data[offset]; }, [](const FieldType& key) { return key; },
                 obj_pool);
         return is_downgrade;
     }

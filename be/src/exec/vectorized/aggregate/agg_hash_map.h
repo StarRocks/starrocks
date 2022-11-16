@@ -111,7 +111,7 @@ struct AggHashMapWithOneNumberKey : public AggHashMapWithKey<HashMap> {
     using ResultVector = typename ColumnType::Container;
     using FieldType = RunTimeCppType<primitive_type>;
 
-    static_assert(sizeof(LogicalType) <= sizeof(KeyType), "hash map key size needs to be larger than the actual element");
+    static_assert(sizeof(FieldType) <= sizeof(KeyType), "hash map key size needs to be larger than the actual element");
 
     template <class... Args>
     AggHashMapWithOneNumberKey(Args&&... args) : Base(std::forward<Args>(args)...) {}
@@ -125,7 +125,7 @@ struct AggHashMapWithOneNumberKey : public AggHashMapWithKey<HashMap> {
         for (size_t i = 0; i < column_size; i++) {
             AGG_HASH_MAP_PREFETCH_HASH_VALUE();
 
-            LogicalType key = column->get_data()[i];
+            FieldType key = column->get_data()[i];
             auto iter = this->hash_map.lazy_emplace_with_hash(key, hash_values[i], [&](const auto& ctor) {
                 AggDataPtr pv = allocate_func(key);
                 ctor(key, pv);
@@ -139,7 +139,7 @@ struct AggHashMapWithOneNumberKey : public AggHashMapWithKey<HashMap> {
     void compute_agg_noprefetch(ColumnType* column, Buffer<AggDataPtr>* agg_states, Func&& allocate_func) {
         size_t num_rows = column->size();
         for (size_t i = 0; i < num_rows; i++) {
-            LogicalType key = column->get_data()[i];
+            FieldType key = column->get_data()[i];
             auto iter = this->hash_map.lazy_emplace(key, [&](const auto& ctor) { ctor(key, allocate_func(key)); });
             (*agg_states)[i] = iter->second;
         }
@@ -171,7 +171,7 @@ struct AggHashMapWithOneNumberKey : public AggHashMapWithKey<HashMap> {
         auto column = down_cast<ColumnType*>(key_columns[0].get());
 
         for (size_t i = 0; i < chunk_size; i++) {
-            LogicalType key = column->get_data()[i];
+            FieldType key = column->get_data()[i];
             if (auto iter = this->hash_map.find(key); iter != this->hash_map.end()) {
                 (*agg_states)[i] = iter->second;
             } else {
@@ -199,7 +199,7 @@ struct AggHashMapWithOneNullableNumberKey : public AggHashMapWithOneNumberKey<pr
     using ResultVector = typename ColumnType::Container;
     using FieldType = RunTimeCppType<primitive_type>;
 
-    static_assert(sizeof(LogicalType) <= sizeof(KeyType), "hash map key size needs to be larger than the actual element");
+    static_assert(sizeof(FieldType) <= sizeof(KeyType), "hash map key size needs to be larger than the actual element");
 
     template <class... Args>
     AggHashMapWithOneNullableNumberKey(Args&&... args) : Base(std::forward<Args>(args)...) {}
