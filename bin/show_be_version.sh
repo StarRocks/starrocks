@@ -18,4 +18,6 @@ else
     fi
 fi
 
+export_cachelib_lib_path
+
 ${STARROCKS_HOME}/lib/starrocks_be --version
