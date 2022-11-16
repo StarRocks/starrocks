@@ -759,13 +759,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // if enable_big_query_log = true and cpu/io cost of a query exceeds the related threshold,
     // the information will be written to the big query log
     @VarAttr(name = ENABLE_BIG_QUERY_LOG)
-    private boolean enableBigQueryLog = false;
+    private boolean enableBigQueryLog = true;
+    // the value is set for testing,
+    // if a query needs to perform 10s for computing tasks at full load on three 16-core machines,
+    // we treat it as a big query, so set this value to 480(10 * 16 * 3).
+    // Users need to set up according to their own scenario.
     @VarAttr(name = BIG_QUERY_LOG_CPU_SECOND_THRESHOLD)
-    private long bigQueryLogCPUSecondThreshold = -1;
+    private long bigQueryLogCPUSecondThreshold = 480;
+    // the value is set for testing, if a query needs to scan more than 10GB of data, we treat it as a big query.
+    // Users need to set up according to their own scenario.
     @VarAttr(name = BIG_QUERY_LOG_SCAN_BYTES_THRESHOLD)
-    private long bigQueryLogScanBytesThreshold = -1;
+    private long bigQueryLogScanBytesThreshold = 1024L * 1024 * 1024 * 10;
+    // the value is set for testing, if a query need to scan more than 1 billion rows of data,
+    // we treat it as a big query.
+    // Users need to set up according to their own scenario.
     @VarAttr(name = BIG_QUERY_LOG_SCAN_ROWS_THRESHOLD)
-    private long bigQueryLogScanRowsThreshold = -1;
+    private long bigQueryLogScanRowsThreshold = 1000000000L;
 
     public boolean getEnablePopulateBlockCache() {
         return enablePopulateBlockCache;
