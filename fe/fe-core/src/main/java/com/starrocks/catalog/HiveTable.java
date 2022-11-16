@@ -385,6 +385,9 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
             GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor().unRegisterTableFromResource(
                     String.join(".", getCatalogName(), hiveDbName, hiveTableName));
         }
+        if (isResourceMappingCatalog(getCatalogName())) {
+            GlobalStateMgr.getCurrentState().getMetadataMgr().dropTable(getCatalogName(), hiveDbName, hiveTableName);
+        }
     }
 
     @Override
