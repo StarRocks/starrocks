@@ -523,4 +523,11 @@ public class Table extends MetaObject implements Writable {
         return relatedMaterializedViews;
     }
 
+    public boolean isUnPartitioned() {
+        return true;
+    }
+
+    public List<String> getPartitionColumnNames() {
+        return Lists.newArrayList();
+    }
 }
