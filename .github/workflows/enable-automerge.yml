@@ -8,9 +8,9 @@ on:
 jobs:
   enable-automerge:
     runs-on: ubuntu-latest
+    if: ${{ github.event.label.name == 'automerge' }}
     steps:
       - name: enable automerge
-        if: ${{ github.event.label.name == 'automerge' }}
         uses: peter-evans/enable-pull-request-automerge@v2
         with:
           token: ${{ secrets.PAT }}
