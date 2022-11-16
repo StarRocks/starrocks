@@ -106,7 +106,7 @@ public:
     }
 
     static void full_encode_ascending_datum(const Datum& value, std::string* buf) {
-        static_assert(field_type != OLAP_FIELD_TYPE_DECIMAL && field_type != OLAP_FIELD_TYPE_DATE);
+        static_assert(field_type != LOGICAL_TYPE_DECIMAL && field_type != LOGICAL_TYPE_DATE);
         CppType raw = value.get<CppType>();
         full_encode_ascending(&raw, buf);
     }
@@ -140,9 +140,9 @@ public:
 };
 
 template <>
-class KeyCoderTraits<OLAP_FIELD_TYPE_BOOL> {
+class KeyCoderTraits<LOGICAL_TYPE_BOOL> {
 public:
-    using CppType = typename CppTypeTraits<OLAP_FIELD_TYPE_BOOL>::CppType;
+    using CppType = typename CppTypeTraits<LOGICAL_TYPE_BOOL>::CppType;
     using Datum = vectorized::Datum;
 
 public:
@@ -181,10 +181,10 @@ public:
 };
 
 template <>
-class KeyCoderTraits<OLAP_FIELD_TYPE_DATE> {
+class KeyCoderTraits<LOGICAL_TYPE_DATE> {
 public:
-    using CppType = typename CppTypeTraits<OLAP_FIELD_TYPE_DATE>::CppType;
-    using UnsignedCppType = typename CppTypeTraits<OLAP_FIELD_TYPE_DATE>::UnsignedCppType;
+    using CppType = typename CppTypeTraits<LOGICAL_TYPE_DATE>::CppType;
+    using UnsignedCppType = typename CppTypeTraits<LOGICAL_TYPE_DATE>::UnsignedCppType;
     using Datum = vectorized::Datum;
 
 public:
@@ -225,15 +225,15 @@ public:
 };
 
 template <>
-class KeyCoderTraits<OLAP_FIELD_TYPE_DECIMAL> {
+class KeyCoderTraits<LOGICAL_TYPE_DECIMAL> {
     using Datum = vectorized::Datum;
 
 public:
     static void full_encode_ascending(const void* value, std::string* buf) {
         decimal12_t decimal_val;
         memcpy((void*)&decimal_val, value, sizeof(decimal12_t));
-        KeyCoderTraits<OLAP_FIELD_TYPE_BIGINT>::full_encode_ascending(&decimal_val.integer, buf);
-        KeyCoderTraits<OLAP_FIELD_TYPE_INT>::full_encode_ascending(&decimal_val.fraction, buf);
+        KeyCoderTraits<LOGICAL_TYPE_BIGINT>::full_encode_ascending(&decimal_val.integer, buf);
+        KeyCoderTraits<LOGICAL_TYPE_INT>::full_encode_ascending(&decimal_val.fraction, buf);
     }
 
     static void full_encode_ascending_datum(const Datum& datum, std::string* buf) {
@@ -253,9 +253,9 @@ public:
     static Status decode_ascending(Slice* encoded_key, size_t index_size __attribute__((unused)), uint8_t* cell_ptr,
                                    MemPool* pool) {
         decimal12_t decimal_val;
-        RETURN_IF_ERROR(KeyCoderTraits<OLAP_FIELD_TYPE_BIGINT>::decode_ascending(
+        RETURN_IF_ERROR(KeyCoderTraits<LOGICAL_TYPE_BIGINT>::decode_ascending(
                 encoded_key, sizeof(decimal_val.integer), (uint8_t*)&decimal_val.integer, pool));
-        RETURN_IF_ERROR(KeyCoderTraits<OLAP_FIELD_TYPE_INT>::decode_ascending(encoded_key, sizeof(decimal_val.fraction),
+        RETURN_IF_ERROR(KeyCoderTraits<LOGICAL_TYPE_INT>::decode_ascending(encoded_key, sizeof(decimal_val.fraction),
                                                                               (uint8_t*)&decimal_val.fraction, pool));
         memcpy(cell_ptr, &decimal_val, sizeof(decimal12_t));
         return Status::OK();
@@ -263,18 +263,18 @@ public:
 };
 
 template <>
-class KeyCoderTraits<OLAP_FIELD_TYPE_DECIMAL_V2> {
+class KeyCoderTraits<LOGICAL_TYPE_DECIMAL_V2> {
     using Datum = vectorized::Datum;
 
 public:
     static void full_encode_ascending(const void* value, std::string* buf) {
-        KeyCoderTraits<OLAP_FIELD_TYPE_LARGEINT>::full_encode_ascending(value, buf);
+        KeyCoderTraits<LOGICAL_TYPE_LARGEINT>::full_encode_ascending(value, buf);
     }
 
     static void full_encode_ascending_datum(const Datum& value, std::string* buf) {
         // NOTE: datum store `DECIMAL` as DecimalV2Value but the CppType is decimal12_t.
         const DecimalV2Value& v2 = value.get_decimal();
-        KeyCoderTraits<OLAP_FIELD_TYPE_LARGEINT>::full_encode_ascending(&v2, buf);
+        KeyCoderTraits<LOGICAL_TYPE_LARGEINT>::full_encode_ascending(&v2, buf);
     }
 
     static void encode_ascending(const void* value, size_t index_size __attribute__((unused)), std::string* buf) {
@@ -289,22 +289,22 @@ public:
     static Status decode_ascending(Slice* encoded_key, size_t index_size __attribute__((unused)), uint8_t* cell_ptr,
                                    MemPool* pool) {
         RETURN_IF_ERROR(
-                KeyCoderTraits<OLAP_FIELD_TYPE_LARGEINT>::decode_ascending(encoded_key, index_size, cell_ptr, pool));
+                KeyCoderTraits<LOGICAL_TYPE_LARGEINT>::decode_ascending(encoded_key, index_size, cell_ptr, pool));
         return Status::OK();
     }
 };
 
 template <>
-class KeyCoderTraits<OLAP_FIELD_TYPE_DECIMAL32> : KeyCoderTraits<OLAP_FIELD_TYPE_INT> {};
+class KeyCoderTraits<LOGICAL_TYPE_DECIMAL32> : KeyCoderTraits<LOGICAL_TYPE_INT> {};
 
 template <>
-class KeyCoderTraits<OLAP_FIELD_TYPE_DECIMAL64> : KeyCoderTraits<OLAP_FIELD_TYPE_BIGINT> {};
+class KeyCoderTraits<LOGICAL_TYPE_DECIMAL64> : KeyCoderTraits<LOGICAL_TYPE_BIGINT> {};
 
 template <>
-class KeyCoderTraits<OLAP_FIELD_TYPE_DECIMAL128> : KeyCoderTraits<OLAP_FIELD_TYPE_LARGEINT> {};
+class KeyCoderTraits<LOGICAL_TYPE_DECIMAL128> : KeyCoderTraits<LOGICAL_TYPE_LARGEINT> {};
 
 template <>
-class KeyCoderTraits<OLAP_FIELD_TYPE_CHAR> {
+class KeyCoderTraits<LOGICAL_TYPE_CHAR> {
     using Datum = vectorized::Datum;
 
 public:
@@ -347,7 +347,7 @@ public:
 };
 
 template <>
-class KeyCoderTraits<OLAP_FIELD_TYPE_VARCHAR> {
+class KeyCoderTraits<LOGICAL_TYPE_VARCHAR> {
     using Datum = vectorized::Datum;
 
 public:

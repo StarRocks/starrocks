@@ -20,7 +20,7 @@ std::string make_string(size_t i) {
 }
 
 vectorized::FieldPtr make_field(size_t i) {
-    return std::make_shared<vectorized::Field>(i, make_string(i), get_type_info(OLAP_FIELD_TYPE_INT), false);
+    return std::make_shared<vectorized::Field>(i, make_string(i), get_type_info(LOGICAL_TYPE_INT), false);
 }
 
 vectorized::Fields make_fields(size_t size) {

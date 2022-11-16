@@ -106,9 +106,9 @@ public:
     bool support_bloom_filter() const override { return true; }
 
     bool bloom_filter(const BloomFilter* bf) const override {
-        static_assert(field_type != OLAP_FIELD_TYPE_HLL, "TODO");
-        static_assert(field_type != OLAP_FIELD_TYPE_OBJECT, "TODO");
-        static_assert(field_type != OLAP_FIELD_TYPE_PERCENTILE, "TODO");
+        static_assert(field_type != LOGICAL_TYPE_HLL, "TODO");
+        static_assert(field_type != LOGICAL_TYPE_OBJECT, "TODO");
+        static_assert(field_type != LOGICAL_TYPE_PERCENTILE, "TODO");
         for (const ValueType& v : _values) {
             RETURN_IF(bf->test_bytes(reinterpret_cast<const char*>(&v), sizeof(v)), true);
         }
@@ -328,111 +328,111 @@ ColumnPredicate* new_column_in_predicate_generic(const TypeInfoPtr& type_info, C
     auto type = type_info->type();
     auto scale = type_info->scale();
     switch (type) {
-    case OLAP_FIELD_TYPE_BOOL: {
-        using SetType = Set<CppTypeTraits<OLAP_FIELD_TYPE_BOOL>::CppType, (Args)...>;
-        SetType values = predicate_internal::strings_to_set<OLAP_FIELD_TYPE_BOOL>(strs);
-        return new ColumnInPredicate<OLAP_FIELD_TYPE_BOOL, SetType>(type_info, id, std::move(values));
+    case LOGICAL_TYPE_BOOL: {
+        using SetType = Set<CppTypeTraits<LOGICAL_TYPE_BOOL>::CppType, (Args)...>;
+        SetType values = predicate_internal::strings_to_set<LOGICAL_TYPE_BOOL>(strs);
+        return new ColumnInPredicate<LOGICAL_TYPE_BOOL, SetType>(type_info, id, std::move(values));
     }
-    case OLAP_FIELD_TYPE_TINYINT: {
-        using SetType = Set<CppTypeTraits<OLAP_FIELD_TYPE_TINYINT>::CppType, (Args)...>;
-        SetType values = predicate_internal::strings_to_set<OLAP_FIELD_TYPE_TINYINT>(strs);
-        return new ColumnInPredicate<OLAP_FIELD_TYPE_TINYINT, SetType>(type_info, id, std::move(values));
+    case LOGICAL_TYPE_TINYINT: {
+        using SetType = Set<CppTypeTraits<LOGICAL_TYPE_TINYINT>::CppType, (Args)...>;
+        SetType values = predicate_internal::strings_to_set<LOGICAL_TYPE_TINYINT>(strs);
+        return new ColumnInPredicate<LOGICAL_TYPE_TINYINT, SetType>(type_info, id, std::move(values));
     }
-    case OLAP_FIELD_TYPE_SMALLINT: {
-        using SetType = Set<CppTypeTraits<OLAP_FIELD_TYPE_SMALLINT>::CppType, (Args)...>;
-        SetType values = predicate_internal::strings_to_set<OLAP_FIELD_TYPE_SMALLINT>(strs);
-        return new ColumnInPredicate<OLAP_FIELD_TYPE_SMALLINT, SetType>(type_info, id, std::move(values));
+    case LOGICAL_TYPE_SMALLINT: {
+        using SetType = Set<CppTypeTraits<LOGICAL_TYPE_SMALLINT>::CppType, (Args)...>;
+        SetType values = predicate_internal::strings_to_set<LOGICAL_TYPE_SMALLINT>(strs);
+        return new ColumnInPredicate<LOGICAL_TYPE_SMALLINT, SetType>(type_info, id, std::move(values));
     }
-    case OLAP_FIELD_TYPE_INT: {
-        using SetType = Set<CppTypeTraits<OLAP_FIELD_TYPE_INT>::CppType, (Args)...>;
-        SetType values = predicate_internal::strings_to_set<OLAP_FIELD_TYPE_INT>(strs);
-        return new ColumnInPredicate<OLAP_FIELD_TYPE_INT, SetType>(type_info, id, std::move(values));
+    case LOGICAL_TYPE_INT: {
+        using SetType = Set<CppTypeTraits<LOGICAL_TYPE_INT>::CppType, (Args)...>;
+        SetType values = predicate_internal::strings_to_set<LOGICAL_TYPE_INT>(strs);
+        return new ColumnInPredicate<LOGICAL_TYPE_INT, SetType>(type_info, id, std::move(values));
     }
-    case OLAP_FIELD_TYPE_BIGINT: {
-        using SetType = Set<CppTypeTraits<OLAP_FIELD_TYPE_BIGINT>::CppType, (Args)...>;
-        SetType values = predicate_internal::strings_to_set<OLAP_FIELD_TYPE_BIGINT>(strs);
-        return new ColumnInPredicate<OLAP_FIELD_TYPE_BIGINT, SetType>(type_info, id, std::move(values));
+    case LOGICAL_TYPE_BIGINT: {
+        using SetType = Set<CppTypeTraits<LOGICAL_TYPE_BIGINT>::CppType, (Args)...>;
+        SetType values = predicate_internal::strings_to_set<LOGICAL_TYPE_BIGINT>(strs);
+        return new ColumnInPredicate<LOGICAL_TYPE_BIGINT, SetType>(type_info, id, std::move(values));
     }
-    case OLAP_FIELD_TYPE_LARGEINT: {
-        using SetType = Set<CppTypeTraits<OLAP_FIELD_TYPE_LARGEINT>::CppType, (Args)...>;
-        SetType values = predicate_internal::strings_to_set<OLAP_FIELD_TYPE_LARGEINT>(strs);
-        return new ColumnInPredicate<OLAP_FIELD_TYPE_LARGEINT, SetType>(type_info, id, std::move(values));
+    case LOGICAL_TYPE_LARGEINT: {
+        using SetType = Set<CppTypeTraits<LOGICAL_TYPE_LARGEINT>::CppType, (Args)...>;
+        SetType values = predicate_internal::strings_to_set<LOGICAL_TYPE_LARGEINT>(strs);
+        return new ColumnInPredicate<LOGICAL_TYPE_LARGEINT, SetType>(type_info, id, std::move(values));
     }
-    case OLAP_FIELD_TYPE_DECIMAL: {
-        using SetType = Set<CppTypeTraits<OLAP_FIELD_TYPE_DECIMAL>::CppType, (Args)...>;
-        SetType values = predicate_internal::strings_to_set<OLAP_FIELD_TYPE_DECIMAL>(strs);
-        return new ColumnInPredicate<OLAP_FIELD_TYPE_DECIMAL, SetType>(type_info, id, std::move(values));
+    case LOGICAL_TYPE_DECIMAL: {
+        using SetType = Set<CppTypeTraits<LOGICAL_TYPE_DECIMAL>::CppType, (Args)...>;
+        SetType values = predicate_internal::strings_to_set<LOGICAL_TYPE_DECIMAL>(strs);
+        return new ColumnInPredicate<LOGICAL_TYPE_DECIMAL, SetType>(type_info, id, std::move(values));
     }
-    case OLAP_FIELD_TYPE_DECIMAL_V2: {
-        using SetType = Set<CppTypeTraits<OLAP_FIELD_TYPE_DECIMAL_V2>::CppType, (Args)...>;
-        SetType values = predicate_internal::strings_to_set<OLAP_FIELD_TYPE_DECIMAL_V2>(strs);
-        return new ColumnInPredicate<OLAP_FIELD_TYPE_DECIMAL_V2, SetType>(type_info, id, std::move(values));
+    case LOGICAL_TYPE_DECIMAL_V2: {
+        using SetType = Set<CppTypeTraits<LOGICAL_TYPE_DECIMAL_V2>::CppType, (Args)...>;
+        SetType values = predicate_internal::strings_to_set<LOGICAL_TYPE_DECIMAL_V2>(strs);
+        return new ColumnInPredicate<LOGICAL_TYPE_DECIMAL_V2, SetType>(type_info, id, std::move(values));
     }
-    case OLAP_FIELD_TYPE_DECIMAL32: {
-        using SetType = Set<CppTypeTraits<OLAP_FIELD_TYPE_DECIMAL32>::CppType, (Args)...>;
-        SetType values = predicate_internal::strings_to_decimal_set<OLAP_FIELD_TYPE_DECIMAL32>(scale, strs);
-        return new ColumnInPredicate<OLAP_FIELD_TYPE_DECIMAL32, SetType>(type_info, id, std::move(values));
+    case LOGICAL_TYPE_DECIMAL32: {
+        using SetType = Set<CppTypeTraits<LOGICAL_TYPE_DECIMAL32>::CppType, (Args)...>;
+        SetType values = predicate_internal::strings_to_decimal_set<LOGICAL_TYPE_DECIMAL32>(scale, strs);
+        return new ColumnInPredicate<LOGICAL_TYPE_DECIMAL32, SetType>(type_info, id, std::move(values));
     }
-    case OLAP_FIELD_TYPE_DECIMAL64: {
-        using SetType = Set<CppTypeTraits<OLAP_FIELD_TYPE_DECIMAL64>::CppType, (Args)...>;
-        SetType values = predicate_internal::strings_to_decimal_set<OLAP_FIELD_TYPE_DECIMAL64>(scale, strs);
-        return new ColumnInPredicate<OLAP_FIELD_TYPE_DECIMAL64, SetType>(type_info, id, std::move(values));
+    case LOGICAL_TYPE_DECIMAL64: {
+        using SetType = Set<CppTypeTraits<LOGICAL_TYPE_DECIMAL64>::CppType, (Args)...>;
+        SetType values = predicate_internal::strings_to_decimal_set<LOGICAL_TYPE_DECIMAL64>(scale, strs);
+        return new ColumnInPredicate<LOGICAL_TYPE_DECIMAL64, SetType>(type_info, id, std::move(values));
     }
-    case OLAP_FIELD_TYPE_DECIMAL128: {
-        using SetType = Set<CppTypeTraits<OLAP_FIELD_TYPE_DECIMAL128>::CppType, (Args)...>;
-        SetType values = predicate_internal::strings_to_decimal_set<OLAP_FIELD_TYPE_DECIMAL128>(scale, strs);
-        return new ColumnInPredicate<OLAP_FIELD_TYPE_DECIMAL128, SetType>(type_info, id, std::move(values));
+    case LOGICAL_TYPE_DECIMAL128: {
+        using SetType = Set<CppTypeTraits<LOGICAL_TYPE_DECIMAL128>::CppType, (Args)...>;
+        SetType values = predicate_internal::strings_to_decimal_set<LOGICAL_TYPE_DECIMAL128>(scale, strs);
+        return new ColumnInPredicate<LOGICAL_TYPE_DECIMAL128, SetType>(type_info, id, std::move(values));
     }
-    case OLAP_FIELD_TYPE_CHAR:
-        return new BinaryColumnInPredicate<OLAP_FIELD_TYPE_CHAR>(type_info, id, strs);
-    case OLAP_FIELD_TYPE_VARCHAR:
-        return new BinaryColumnInPredicate<OLAP_FIELD_TYPE_VARCHAR>(type_info, id, strs);
-    case OLAP_FIELD_TYPE_DATE: {
-        using SetType = Set<CppTypeTraits<OLAP_FIELD_TYPE_DATE>::CppType, (Args)...>;
-        SetType values = predicate_internal::strings_to_set<OLAP_FIELD_TYPE_DATE>(strs);
-        return new ColumnInPredicate<OLAP_FIELD_TYPE_DATE, SetType>(type_info, id, std::move(values));
+    case LOGICAL_TYPE_CHAR:
+        return new BinaryColumnInPredicate<LOGICAL_TYPE_CHAR>(type_info, id, strs);
+    case LOGICAL_TYPE_VARCHAR:
+        return new BinaryColumnInPredicate<LOGICAL_TYPE_VARCHAR>(type_info, id, strs);
+    case LOGICAL_TYPE_DATE: {
+        using SetType = Set<CppTypeTraits<LOGICAL_TYPE_DATE>::CppType, (Args)...>;
+        SetType values = predicate_internal::strings_to_set<LOGICAL_TYPE_DATE>(strs);
+        return new ColumnInPredicate<LOGICAL_TYPE_DATE, SetType>(type_info, id, std::move(values));
     }
-    case OLAP_FIELD_TYPE_DATE_V2: {
-        using SetType = Set<CppTypeTraits<OLAP_FIELD_TYPE_DATE_V2>::CppType, (Args)...>;
-        SetType values = predicate_internal::strings_to_set<OLAP_FIELD_TYPE_DATE_V2>(strs);
-        return new ColumnInPredicate<OLAP_FIELD_TYPE_DATE_V2, SetType>(type_info, id, std::move(values));
+    case LOGICAL_TYPE_DATE_V2: {
+        using SetType = Set<CppTypeTraits<LOGICAL_TYPE_DATE_V2>::CppType, (Args)...>;
+        SetType values = predicate_internal::strings_to_set<LOGICAL_TYPE_DATE_V2>(strs);
+        return new ColumnInPredicate<LOGICAL_TYPE_DATE_V2, SetType>(type_info, id, std::move(values));
     }
-    case OLAP_FIELD_TYPE_DATETIME: {
-        using SetType = Set<CppTypeTraits<OLAP_FIELD_TYPE_DATETIME>::CppType, (Args)...>;
-        SetType values = predicate_internal::strings_to_set<OLAP_FIELD_TYPE_DATETIME>(strs);
-        return new ColumnInPredicate<OLAP_FIELD_TYPE_DATETIME, SetType>(type_info, id, std::move(values));
+    case LOGICAL_TYPE_DATETIME: {
+        using SetType = Set<CppTypeTraits<LOGICAL_TYPE_DATETIME>::CppType, (Args)...>;
+        SetType values = predicate_internal::strings_to_set<LOGICAL_TYPE_DATETIME>(strs);
+        return new ColumnInPredicate<LOGICAL_TYPE_DATETIME, SetType>(type_info, id, std::move(values));
     }
-    case OLAP_FIELD_TYPE_TIMESTAMP: {
-        using SetType = Set<CppTypeTraits<OLAP_FIELD_TYPE_TIMESTAMP>::CppType, (Args)...>;
-        SetType values = predicate_internal::strings_to_set<OLAP_FIELD_TYPE_TIMESTAMP>(strs);
-        return new ColumnInPredicate<OLAP_FIELD_TYPE_TIMESTAMP, SetType>(type_info, id, std::move(values));
+    case LOGICAL_TYPE_TIMESTAMP: {
+        using SetType = Set<CppTypeTraits<LOGICAL_TYPE_TIMESTAMP>::CppType, (Args)...>;
+        SetType values = predicate_internal::strings_to_set<LOGICAL_TYPE_TIMESTAMP>(strs);
+        return new ColumnInPredicate<LOGICAL_TYPE_TIMESTAMP, SetType>(type_info, id, std::move(values));
     }
-    case OLAP_FIELD_TYPE_FLOAT: {
-        using SetType = Set<CppTypeTraits<OLAP_FIELD_TYPE_FLOAT>::CppType, (Args)...>;
-        SetType values = predicate_internal::strings_to_set<OLAP_FIELD_TYPE_FLOAT>(strs);
-        return new ColumnInPredicate<OLAP_FIELD_TYPE_FLOAT, SetType>(type_info, id, std::move(values));
+    case LOGICAL_TYPE_FLOAT: {
+        using SetType = Set<CppTypeTraits<LOGICAL_TYPE_FLOAT>::CppType, (Args)...>;
+        SetType values = predicate_internal::strings_to_set<LOGICAL_TYPE_FLOAT>(strs);
+        return new ColumnInPredicate<LOGICAL_TYPE_FLOAT, SetType>(type_info, id, std::move(values));
     }
-    case OLAP_FIELD_TYPE_DOUBLE: {
-        using SetType = Set<CppTypeTraits<OLAP_FIELD_TYPE_DOUBLE>::CppType, (Args)...>;
-        SetType values = predicate_internal::strings_to_set<OLAP_FIELD_TYPE_DOUBLE>(strs);
-        return new ColumnInPredicate<OLAP_FIELD_TYPE_DOUBLE, SetType>(type_info, id, std::move(values));
+    case LOGICAL_TYPE_DOUBLE: {
+        using SetType = Set<CppTypeTraits<LOGICAL_TYPE_DOUBLE>::CppType, (Args)...>;
+        SetType values = predicate_internal::strings_to_set<LOGICAL_TYPE_DOUBLE>(strs);
+        return new ColumnInPredicate<LOGICAL_TYPE_DOUBLE, SetType>(type_info, id, std::move(values));
     }
-    case OLAP_FIELD_TYPE_UNSIGNED_TINYINT:
-    case OLAP_FIELD_TYPE_UNSIGNED_SMALLINT:
-    case OLAP_FIELD_TYPE_UNSIGNED_INT:
-    case OLAP_FIELD_TYPE_UNSIGNED_BIGINT:
-    case OLAP_FIELD_TYPE_DISCRETE_DOUBLE:
-    case OLAP_FIELD_TYPE_STRUCT:
-    case OLAP_FIELD_TYPE_ARRAY:
-    case OLAP_FIELD_TYPE_MAP:
-    case OLAP_FIELD_TYPE_UNKNOWN:
-    case OLAP_FIELD_TYPE_NONE:
-    case OLAP_FIELD_TYPE_HLL:
-    case OLAP_FIELD_TYPE_OBJECT:
-    case OLAP_FIELD_TYPE_PERCENTILE:
-    case OLAP_FIELD_TYPE_JSON:
-    case OLAP_FIELD_TYPE_VARBINARY:
-    case OLAP_FIELD_TYPE_MAX_VALUE:
+    case LOGICAL_TYPE_UNSIGNED_TINYINT:
+    case LOGICAL_TYPE_UNSIGNED_SMALLINT:
+    case LOGICAL_TYPE_UNSIGNED_INT:
+    case LOGICAL_TYPE_UNSIGNED_BIGINT:
+    case LOGICAL_TYPE_DISCRETE_DOUBLE:
+    case LOGICAL_TYPE_STRUCT:
+    case LOGICAL_TYPE_ARRAY:
+    case LOGICAL_TYPE_MAP:
+    case LOGICAL_TYPE_UNKNOWN:
+    case LOGICAL_TYPE_NONE:
+    case LOGICAL_TYPE_HLL:
+    case LOGICAL_TYPE_OBJECT:
+    case LOGICAL_TYPE_PERCENTILE:
+    case LOGICAL_TYPE_JSON:
+    case LOGICAL_TYPE_VARBINARY:
+    case LOGICAL_TYPE_MAX_VALUE:
         return nullptr;
         // No default to ensure newly added enumerator will be handled.
     }

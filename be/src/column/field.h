@@ -34,10 +34,10 @@ public:
 
     // Non-key field of any type except for DECIMAL32, DECIMAL64, DECIMAL128, and ARRAY
     Field(ColumnId id, std::string_view name, LogicalType type, bool nullable) : Field(id, name, type, -1, -1, nullable) {
-        DCHECK(type != OLAP_FIELD_TYPE_DECIMAL32);
-        DCHECK(type != OLAP_FIELD_TYPE_DECIMAL64);
-        DCHECK(type != OLAP_FIELD_TYPE_DECIMAL128);
-        DCHECK(type != OLAP_FIELD_TYPE_ARRAY);
+        DCHECK(type != LOGICAL_TYPE_DECIMAL32);
+        DCHECK(type != LOGICAL_TYPE_DECIMAL64);
+        DCHECK(type != LOGICAL_TYPE_DECIMAL128);
+        DCHECK(type != LOGICAL_TYPE_ARRAY);
     }
 
     // Non-key field of any type
@@ -143,9 +143,9 @@ public:
     ColumnPtr create_column() const;
 
     static FieldPtr convert_to_dict_field(const Field& field) {
-        DCHECK(field.type()->type() == OLAP_FIELD_TYPE_VARCHAR);
+        DCHECK(field.type()->type() == LOGICAL_TYPE_VARCHAR);
         FieldPtr res = std::make_shared<Field>(field);
-        res->_type = get_type_info(OLAP_FIELD_TYPE_INT);
+        res->_type = get_type_info(LOGICAL_TYPE_INT);
         return res;
     }
 

@@ -271,7 +271,7 @@ public:
         }
 
         // Currently, only the UINT32 block encoder supports expanding size:
-        if (UNLIKELY(Type != OLAP_FIELD_TYPE_UNSIGNED_INT && _size_of_element != SIZE_OF_TYPE)) {
+        if (UNLIKELY(Type != LOGICAL_TYPE_UNSIGNED_INT && _size_of_element != SIZE_OF_TYPE)) {
             std::stringstream ss;
             ss << "invalid size info. size of element:" << _size_of_element << ", SIZE_OF_TYPE:" << SIZE_OF_TYPE
                << ", type:" << Type;

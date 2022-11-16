@@ -31,54 +31,54 @@ struct CppColumnTraits {
 };
 
 template <>
-struct CppColumnTraits<OLAP_FIELD_TYPE_BOOL> {
+struct CppColumnTraits<LOGICAL_TYPE_BOOL> {
     using ColumnType = vectorized::UInt8Column;
 };
 
 // deprecated
 template <>
-struct CppColumnTraits<OLAP_FIELD_TYPE_DATE> {
+struct CppColumnTraits<LOGICAL_TYPE_DATE> {
     using ColumnType = vectorized::FixedLengthColumn<uint24_t>;
 };
 
 template <>
-struct CppColumnTraits<OLAP_FIELD_TYPE_DATE_V2> {
+struct CppColumnTraits<LOGICAL_TYPE_DATE_V2> {
     using ColumnType = vectorized::DateColumn;
 };
 
 template <>
-struct CppColumnTraits<OLAP_FIELD_TYPE_TIMESTAMP> {
+struct CppColumnTraits<LOGICAL_TYPE_TIMESTAMP> {
     using ColumnType = vectorized::TimestampColumn;
 };
 
 // deprecated
 template <>
-struct CppColumnTraits<OLAP_FIELD_TYPE_DECIMAL> {
+struct CppColumnTraits<LOGICAL_TYPE_DECIMAL> {
     using ColumnType = vectorized::FixedLengthColumn<decimal12_t>;
 };
 
 template <>
-struct CppColumnTraits<OLAP_FIELD_TYPE_HLL> {
+struct CppColumnTraits<LOGICAL_TYPE_HLL> {
     using ColumnType = vectorized::HyperLogLogColumn;
 };
 
 template <>
-struct CppColumnTraits<OLAP_FIELD_TYPE_PERCENTILE> {
+struct CppColumnTraits<LOGICAL_TYPE_PERCENTILE> {
     using ColumnType = vectorized::PercentileColumn;
 };
 
 template <>
-struct CppColumnTraits<OLAP_FIELD_TYPE_OBJECT> {
+struct CppColumnTraits<LOGICAL_TYPE_OBJECT> {
     using ColumnType = vectorized::BitmapColumn;
 };
 
 template <>
-struct CppColumnTraits<OLAP_FIELD_TYPE_UNSIGNED_INT> {
+struct CppColumnTraits<LOGICAL_TYPE_UNSIGNED_INT> {
     using ColumnType = vectorized::UInt32Column;
 };
 
 template <>
-struct CppColumnTraits<OLAP_FIELD_TYPE_JSON> {
+struct CppColumnTraits<LOGICAL_TYPE_JSON> {
     using ColumnType = vectorized::JsonColumn;
 };
 
@@ -105,8 +105,8 @@ starrocks::vectorized::Field ChunkHelper::convert_field_to_format_v2(ColumnId id
     LogicalType type = TypeUtils::to_storage_format_v2(c.type());
 
     TypeInfoPtr type_info = nullptr;
-    if (type == OLAP_FIELD_TYPE_ARRAY || type == OLAP_FIELD_TYPE_DECIMAL32 || type == OLAP_FIELD_TYPE_DECIMAL64 ||
-        type == OLAP_FIELD_TYPE_DECIMAL128) {
+    if (type == LOGICAL_TYPE_ARRAY || type == LOGICAL_TYPE_DECIMAL32 || type == LOGICAL_TYPE_DECIMAL64 ||
+        type == LOGICAL_TYPE_DECIMAL128) {
         // ARRAY and DECIMAL should be handled specially
         // Array is nested type, the message is stored in TabletColumn
         // Decimal has precision and scale, the message is stored in TabletColumn
@@ -118,7 +118,7 @@ starrocks::vectorized::Field ChunkHelper::convert_field_to_format_v2(ColumnId id
     f.set_is_key(c.is_key());
     f.set_length(c.length());
 
-    if (type == OLAP_FIELD_TYPE_ARRAY) {
+    if (type == LOGICAL_TYPE_ARRAY) {
         const TabletColumn& sub_column = c.subcolumn(0);
         auto sub_field = convert_field_to_format_v2(id, sub_column);
         f.add_sub_field(sub_field);
@@ -205,20 +205,20 @@ struct ColumnPtrBuilder {
                            : c;
         };
 
-        if constexpr (ftype == OLAP_FIELD_TYPE_ARRAY) {
+        if constexpr (ftype == LOGICAL_TYPE_ARRAY) {
             auto elements = field.sub_field(0).create_column();
             auto offsets = get_column_ptr<vectorized::UInt32Column, force>(chunk_size);
             auto array = vectorized::ArrayColumn::create(std::move(elements), offsets);
             return nullable(array);
         } else {
             switch (ftype) {
-            case OLAP_FIELD_TYPE_DECIMAL32:
+            case LOGICAL_TYPE_DECIMAL32:
                 return nullable(
                         get_decimal_column_ptr<vectorized::Decimal32Column, force>(precision, scale, chunk_size));
-            case OLAP_FIELD_TYPE_DECIMAL64:
+            case LOGICAL_TYPE_DECIMAL64:
                 return nullable(
                         get_decimal_column_ptr<vectorized::Decimal64Column, force>(precision, scale, chunk_size));
-            case OLAP_FIELD_TYPE_DECIMAL128:
+            case LOGICAL_TYPE_DECIMAL128:
                 return nullable(
                         get_decimal_column_ptr<vectorized::Decimal128Column, force>(precision, scale, chunk_size));
             default: {
@@ -254,7 +254,7 @@ std::vector<size_t> ChunkHelper::get_char_field_indexes(const vectorized::Schema
     std::vector<size_t> char_field_indexes;
     for (size_t i = 0; i < schema.num_fields(); ++i) {
         const auto& field = schema.field(i);
-        if (field->type()->type() == OLAP_FIELD_TYPE_CHAR) {
+        if (field->type()->type() == LOGICAL_TYPE_CHAR) {
             char_field_indexes.push_back(i);
         }
     }
@@ -315,7 +315,7 @@ struct ColumnBuilder {
                             : col;
         };
 
-        if constexpr (ftype == OLAP_FIELD_TYPE_ARRAY) {
+        if constexpr (ftype == LOGICAL_TYPE_ARRAY) {
             CHECK(false) << "array not supported";
         } else {
             return NullableIfNeed(CppColumnTraits<ftype>::ColumnType::create());
@@ -336,13 +336,13 @@ vectorized::ColumnPtr ChunkHelper::column_from_field(const vectorized::Field& fi
 
     auto type = field.type()->type();
     switch (type) {
-    case OLAP_FIELD_TYPE_DECIMAL32:
+    case LOGICAL_TYPE_DECIMAL32:
         return NullableIfNeed(vectorized::Decimal32Column::create(field.type()->precision(), field.type()->scale()));
-    case OLAP_FIELD_TYPE_DECIMAL64:
+    case LOGICAL_TYPE_DECIMAL64:
         return NullableIfNeed(vectorized::Decimal64Column::create(field.type()->precision(), field.type()->scale()));
-    case OLAP_FIELD_TYPE_DECIMAL128:
+    case LOGICAL_TYPE_DECIMAL128:
         return NullableIfNeed(vectorized::Decimal128Column::create(field.type()->precision(), field.type()->scale()));
-    case OLAP_FIELD_TYPE_ARRAY: {
+    case LOGICAL_TYPE_ARRAY: {
         return NullableIfNeed(vectorized::ArrayColumn::create(column_from_field(field.sub_field(0)),
                                                               vectorized::UInt32Column::create()));
     }

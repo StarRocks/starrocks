@@ -37,149 +37,149 @@ template <LogicalType field_type>
 struct CppTypeTraits {};
 
 template <>
-struct CppTypeTraits<OLAP_FIELD_TYPE_BOOL> {
+struct CppTypeTraits<LOGICAL_TYPE_BOOL> {
     using CppType = bool;
     using UnsignedCppType = bool;
 };
 
 template <>
-struct CppTypeTraits<OLAP_FIELD_TYPE_NONE> {
+struct CppTypeTraits<LOGICAL_TYPE_NONE> {
     using CppType = bool;
     using UnsignedCppType = bool;
 };
 
 template <>
-struct CppTypeTraits<OLAP_FIELD_TYPE_TINYINT> {
+struct CppTypeTraits<LOGICAL_TYPE_TINYINT> {
     using CppType = int8_t;
     using UnsignedCppType = uint8_t;
 };
 template <>
-struct CppTypeTraits<OLAP_FIELD_TYPE_UNSIGNED_TINYINT> {
+struct CppTypeTraits<LOGICAL_TYPE_UNSIGNED_TINYINT> {
     using CppType = uint8_t;
     using UnsignedCppType = uint8_t;
 };
 template <>
-struct CppTypeTraits<OLAP_FIELD_TYPE_SMALLINT> {
+struct CppTypeTraits<LOGICAL_TYPE_SMALLINT> {
     using CppType = int16_t;
     using UnsignedCppType = uint16_t;
 };
 template <>
-struct CppTypeTraits<OLAP_FIELD_TYPE_UNSIGNED_SMALLINT> {
+struct CppTypeTraits<LOGICAL_TYPE_UNSIGNED_SMALLINT> {
     using CppType = uint16_t;
     using UnsignedCppType = uint16_t;
 };
 template <>
-struct CppTypeTraits<OLAP_FIELD_TYPE_INT> {
+struct CppTypeTraits<LOGICAL_TYPE_INT> {
     using CppType = int32_t;
     using UnsignedCppType = uint32_t;
 };
 template <>
-struct CppTypeTraits<OLAP_FIELD_TYPE_UNSIGNED_INT> {
+struct CppTypeTraits<LOGICAL_TYPE_UNSIGNED_INT> {
     using CppType = uint32_t;
     using UnsignedCppType = uint32_t;
 };
 template <>
-struct CppTypeTraits<OLAP_FIELD_TYPE_BIGINT> {
+struct CppTypeTraits<LOGICAL_TYPE_BIGINT> {
     using CppType = int64_t;
     using UnsignedCppType = uint64_t;
 };
 template <>
-struct CppTypeTraits<OLAP_FIELD_TYPE_UNSIGNED_BIGINT> {
+struct CppTypeTraits<LOGICAL_TYPE_UNSIGNED_BIGINT> {
     using CppType = uint64_t;
     using UnsignedCppType = uint64_t;
 };
 template <>
-struct CppTypeTraits<OLAP_FIELD_TYPE_LARGEINT> {
+struct CppTypeTraits<LOGICAL_TYPE_LARGEINT> {
     using CppType = int128_t;
     using UnsignedCppType = uint128_t;
 };
 template <>
-struct CppTypeTraits<OLAP_FIELD_TYPE_FLOAT> {
+struct CppTypeTraits<LOGICAL_TYPE_FLOAT> {
     using CppType = float;
 };
 template <>
-struct CppTypeTraits<OLAP_FIELD_TYPE_DOUBLE> {
+struct CppTypeTraits<LOGICAL_TYPE_DOUBLE> {
     using CppType = double;
 };
 template <>
-struct CppTypeTraits<OLAP_FIELD_TYPE_DECIMAL> {
+struct CppTypeTraits<LOGICAL_TYPE_DECIMAL> {
     using CppType = decimal12_t;
     using UnsignedCppType = decimal12_t;
 };
 template <>
-struct CppTypeTraits<OLAP_FIELD_TYPE_DECIMAL_V2> {
+struct CppTypeTraits<LOGICAL_TYPE_DECIMAL_V2> {
     using CppType = DecimalV2Value;
     using UnsignedCppType = DecimalV2Value;
 };
 
 template <>
-struct CppTypeTraits<OLAP_FIELD_TYPE_DECIMAL32> {
+struct CppTypeTraits<LOGICAL_TYPE_DECIMAL32> {
     using CppType = int32_t;
     using UnsignedCppType = uint32_t;
 };
 
 template <>
-struct CppTypeTraits<OLAP_FIELD_TYPE_DECIMAL64> {
+struct CppTypeTraits<LOGICAL_TYPE_DECIMAL64> {
     using CppType = int64_t;
     using UnsignedCppType = uint64_t;
 };
 
 template <>
-struct CppTypeTraits<OLAP_FIELD_TYPE_DECIMAL128> {
+struct CppTypeTraits<LOGICAL_TYPE_DECIMAL128> {
     using CppType = int128_t;
     using UnsignedCppType = uint128_t;
 };
 
 template <>
-struct CppTypeTraits<OLAP_FIELD_TYPE_DATE> {
+struct CppTypeTraits<LOGICAL_TYPE_DATE> {
     using CppType = uint24_t;
     using UnsignedCppType = uint24_t;
 };
 template <>
-struct CppTypeTraits<OLAP_FIELD_TYPE_DATE_V2> {
+struct CppTypeTraits<LOGICAL_TYPE_DATE_V2> {
     using CppType = int32_t;
     using UnsignedCppType = uint32_t;
 };
 template <>
-struct CppTypeTraits<OLAP_FIELD_TYPE_DATETIME> {
+struct CppTypeTraits<LOGICAL_TYPE_DATETIME> {
     using CppType = int64_t;
     using UnsignedCppType = uint64_t;
 };
 template <>
-struct CppTypeTraits<OLAP_FIELD_TYPE_TIMESTAMP> {
+struct CppTypeTraits<LOGICAL_TYPE_TIMESTAMP> {
     using CppType = int64_t;
     using UnsignedCppType = uint64_t;
 };
 template <>
-struct CppTypeTraits<OLAP_FIELD_TYPE_CHAR> {
+struct CppTypeTraits<LOGICAL_TYPE_CHAR> {
     using CppType = Slice;
 };
 template <>
-struct CppTypeTraits<OLAP_FIELD_TYPE_VARCHAR> {
+struct CppTypeTraits<LOGICAL_TYPE_VARCHAR> {
     using CppType = Slice;
 };
 template <>
-struct CppTypeTraits<OLAP_FIELD_TYPE_HLL> {
+struct CppTypeTraits<LOGICAL_TYPE_HLL> {
     using CppType = Slice;
 };
 template <>
-struct CppTypeTraits<OLAP_FIELD_TYPE_OBJECT> {
+struct CppTypeTraits<LOGICAL_TYPE_OBJECT> {
     using CppType = Slice;
 };
 template <>
-struct CppTypeTraits<OLAP_FIELD_TYPE_PERCENTILE> {
+struct CppTypeTraits<LOGICAL_TYPE_PERCENTILE> {
     using CppType = Slice;
 };
 template <>
-struct CppTypeTraits<OLAP_FIELD_TYPE_JSON> {
+struct CppTypeTraits<LOGICAL_TYPE_JSON> {
     using CppType = Slice;
 };
 template <>
-struct CppTypeTraits<OLAP_FIELD_TYPE_VARBINARY> {
+struct CppTypeTraits<LOGICAL_TYPE_VARBINARY> {
     using CppType = Slice;
 };
 template <>
-struct CppTypeTraits<OLAP_FIELD_TYPE_ARRAY> {
+struct CppTypeTraits<LOGICAL_TYPE_ARRAY> {
     using CppType = Collection;
 };
 

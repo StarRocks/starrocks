@@ -609,9 +609,9 @@ public:
 // Convert string to json
 // JSON needs dynamic memory allocation, which could not fit in TypeInfo::from_string
 template <>
-class StringToOtherTypeConverter<OLAP_FIELD_TYPE_JSON> : public TypeConverter {
+class StringToOtherTypeConverter<LOGICAL_TYPE_JSON> : public TypeConverter {
 public:
-    using CppType = typename CppTypeTraits<OLAP_FIELD_TYPE_JSON>::CppType;
+    using CppType = typename CppTypeTraits<LOGICAL_TYPE_JSON>::CppType;
 
     StringToOtherTypeConverter() = default;
     virtual ~StringToOtherTypeConverter() = default;
@@ -683,9 +683,9 @@ public:
 };
 
 template <>
-class OtherToStringTypeConverter<OLAP_FIELD_TYPE_JSON> : public TypeConverter {
+class OtherToStringTypeConverter<LOGICAL_TYPE_JSON> : public TypeConverter {
 public:
-    using CppType = typename CppTypeTraits<OLAP_FIELD_TYPE_JSON>::CppType;
+    using CppType = typename CppTypeTraits<LOGICAL_TYPE_JSON>::CppType;
 
     OtherToStringTypeConverter() = default;
     virtual ~OtherToStringTypeConverter() = default;
@@ -721,19 +721,19 @@ public:
 
 const TypeConverter* get_date_converter(LogicalType from_type, LogicalType to_type) {
     switch (from_type) {
-    case OLAP_FIELD_TYPE_DATETIME: {
+    case LOGICAL_TYPE_DATETIME: {
         static DatetimeToDateTypeConverter s_converter;
         return &s_converter;
     }
-    case OLAP_FIELD_TYPE_TIMESTAMP: {
+    case LOGICAL_TYPE_TIMESTAMP: {
         static TimestampToDateTypeConverter s_converter;
         return &s_converter;
     }
-    case OLAP_FIELD_TYPE_INT: {
+    case LOGICAL_TYPE_INT: {
         static IntToDateTypeConverter s_converter;
         return &s_converter;
     }
-    case OLAP_FIELD_TYPE_DATE_V2: {
+    case LOGICAL_TYPE_DATE_V2: {
         static DateV2ToDateTypeConverter s_converter;
         return &s_converter;
     }
@@ -745,19 +745,19 @@ const TypeConverter* get_date_converter(LogicalType from_type, LogicalType to_ty
 
 const TypeConverter* get_datev2_converter(LogicalType from_type, LogicalType to_type) {
     switch (from_type) {
-    case OLAP_FIELD_TYPE_TIMESTAMP: {
+    case LOGICAL_TYPE_TIMESTAMP: {
         static TimestampToDateV2TypeConverter s_converter;
         return &s_converter;
     }
-    case OLAP_FIELD_TYPE_DATETIME: {
+    case LOGICAL_TYPE_DATETIME: {
         static DatetimeToDateV2TypeConverter s_converter;
         return &s_converter;
     }
-    case OLAP_FIELD_TYPE_INT: {
-        static IntegerToDateV2TypeConverter<OLAP_FIELD_TYPE_INT> s_converter;
+    case LOGICAL_TYPE_INT: {
+        static IntegerToDateV2TypeConverter<LOGICAL_TYPE_INT> s_converter;
         return &s_converter;
     }
-    case OLAP_FIELD_TYPE_DATE: {
+    case LOGICAL_TYPE_DATE: {
         static DateToDateV2TypeConverter s_converter;
         return &s_converter;
     }
@@ -768,15 +768,15 @@ const TypeConverter* get_datev2_converter(LogicalType from_type, LogicalType to_
 
 const TypeConverter* get_datetime_converter(LogicalType from_type, LogicalType to_type) {
     switch (from_type) {
-    case OLAP_FIELD_TYPE_DATE: {
+    case LOGICAL_TYPE_DATE: {
         static DateToDatetimeFieldConveter s_converter;
         return &s_converter;
     }
-    case OLAP_FIELD_TYPE_DATE_V2: {
+    case LOGICAL_TYPE_DATE_V2: {
         static DateV2ToDatetimeFieldConveter s_converter;
         return &s_converter;
     }
-    case OLAP_FIELD_TYPE_TIMESTAMP: {
+    case LOGICAL_TYPE_TIMESTAMP: {
         static TimestampToDatetimeTypeConverter s_converter;
         return &s_converter;
     }
@@ -787,15 +787,15 @@ const TypeConverter* get_datetime_converter(LogicalType from_type, LogicalType t
 
 const TypeConverter* get_timestamp_converter(LogicalType from_type, LogicalType to_type) {
     switch (from_type) {
-    case OLAP_FIELD_TYPE_DATE: {
+    case LOGICAL_TYPE_DATE: {
         static DateToTimestampTypeConverter s_converter;
         return &s_converter;
     }
-    case OLAP_FIELD_TYPE_DATE_V2: {
+    case LOGICAL_TYPE_DATE_V2: {
         static DateV2ToTimestampTypeConverter s_converter;
         return &s_converter;
     }
-    case OLAP_FIELD_TYPE_DATETIME: {
+    case LOGICAL_TYPE_DATETIME: {
         static DatetimeToTimestampTypeConverter s_converter;
         return &s_converter;
     }
@@ -806,12 +806,12 @@ const TypeConverter* get_timestamp_converter(LogicalType from_type, LogicalType 
 
 const TypeConverter* get_decimal_converter(LogicalType from_type, LogicalType to_type) {
     switch (from_type) {
-    case OLAP_FIELD_TYPE_DECIMAL_V2: {
+    case LOGICAL_TYPE_DECIMAL_V2: {
         static DecimalToDecimal12TypeConverter s_converter;
         return &s_converter;
     }
-    case OLAP_FIELD_TYPE_DECIMAL128: {
-        static DecimalTypeConverter<OLAP_FIELD_TYPE_DECIMAL128, OLAP_FIELD_TYPE_DECIMAL> s_converter;
+    case LOGICAL_TYPE_DECIMAL128: {
+        static DecimalTypeConverter<LOGICAL_TYPE_DECIMAL128, LOGICAL_TYPE_DECIMAL> s_converter;
         return &s_converter;
     }
     default:
@@ -821,12 +821,12 @@ const TypeConverter* get_decimal_converter(LogicalType from_type, LogicalType to
 
 const TypeConverter* get_decimalv2_converter(LogicalType from_type, LogicalType to_type) {
     switch (from_type) {
-    case OLAP_FIELD_TYPE_DECIMAL: {
+    case LOGICAL_TYPE_DECIMAL: {
         static Decimal12ToDecimalTypeConverter s_converter;
         return &s_converter;
     }
-    case OLAP_FIELD_TYPE_DECIMAL128: {
-        static DecimalTypeConverter<OLAP_FIELD_TYPE_DECIMAL128, OLAP_FIELD_TYPE_DECIMAL_V2> s_converter;
+    case LOGICAL_TYPE_DECIMAL128: {
+        static DecimalTypeConverter<LOGICAL_TYPE_DECIMAL128, LOGICAL_TYPE_DECIMAL_V2> s_converter;
         return &s_converter;
     }
     default:
@@ -842,17 +842,17 @@ const TypeConverter* get_decimalv2_converter(LogicalType from_type, LogicalType 
 
 const TypeConverter* get_decimal128_converter(LogicalType from_type, LogicalType to_type) {
     switch (from_type) {
-    case OLAP_FIELD_TYPE_DECIMAL: {
-        static DecimalTypeConverter<OLAP_FIELD_TYPE_DECIMAL, OLAP_FIELD_TYPE_DECIMAL128> s_converter;
+    case LOGICAL_TYPE_DECIMAL: {
+        static DecimalTypeConverter<LOGICAL_TYPE_DECIMAL, LOGICAL_TYPE_DECIMAL128> s_converter;
         return &s_converter;
     }
-    case OLAP_FIELD_TYPE_DECIMAL_V2: {
-        static DecimalTypeConverter<OLAP_FIELD_TYPE_DECIMAL_V2, OLAP_FIELD_TYPE_DECIMAL128> s_converter;
+    case LOGICAL_TYPE_DECIMAL_V2: {
+        static DecimalTypeConverter<LOGICAL_TYPE_DECIMAL_V2, LOGICAL_TYPE_DECIMAL128> s_converter;
         return &s_converter;
     }
-        DECIMALV3_TYPE_CONVERTER(OLAP_FIELD_TYPE_DECIMAL32, OLAP_FIELD_TYPE_DECIMAL128);
-        DECIMALV3_TYPE_CONVERTER(OLAP_FIELD_TYPE_DECIMAL64, OLAP_FIELD_TYPE_DECIMAL128);
-        DECIMALV3_TYPE_CONVERTER(OLAP_FIELD_TYPE_DECIMAL128, OLAP_FIELD_TYPE_DECIMAL128);
+        DECIMALV3_TYPE_CONVERTER(LOGICAL_TYPE_DECIMAL32, LOGICAL_TYPE_DECIMAL128);
+        DECIMALV3_TYPE_CONVERTER(LOGICAL_TYPE_DECIMAL64, LOGICAL_TYPE_DECIMAL128);
+        DECIMALV3_TYPE_CONVERTER(LOGICAL_TYPE_DECIMAL128, LOGICAL_TYPE_DECIMAL128);
     default:
         return nullptr;
     }
@@ -860,9 +860,9 @@ const TypeConverter* get_decimal128_converter(LogicalType from_type, LogicalType
 
 const TypeConverter* get_decimal64_converter(LogicalType from_type, LogicalType to_type) {
     switch (from_type) {
-        DECIMALV3_TYPE_CONVERTER(OLAP_FIELD_TYPE_DECIMAL32, OLAP_FIELD_TYPE_DECIMAL64);
-        DECIMALV3_TYPE_CONVERTER(OLAP_FIELD_TYPE_DECIMAL64, OLAP_FIELD_TYPE_DECIMAL64);
-        DECIMALV3_TYPE_CONVERTER(OLAP_FIELD_TYPE_DECIMAL128, OLAP_FIELD_TYPE_DECIMAL64);
+        DECIMALV3_TYPE_CONVERTER(LOGICAL_TYPE_DECIMAL32, LOGICAL_TYPE_DECIMAL64);
+        DECIMALV3_TYPE_CONVERTER(LOGICAL_TYPE_DECIMAL64, LOGICAL_TYPE_DECIMAL64);
+        DECIMALV3_TYPE_CONVERTER(LOGICAL_TYPE_DECIMAL128, LOGICAL_TYPE_DECIMAL64);
     default:
         return nullptr;
     }
@@ -871,9 +871,9 @@ const TypeConverter* get_decimal64_converter(LogicalType from_type, LogicalType 
 
 const TypeConverter* get_decimal32_converter(LogicalType from_type, LogicalType to_type) {
     switch (from_type) {
-        DECIMALV3_TYPE_CONVERTER(OLAP_FIELD_TYPE_DECIMAL32, OLAP_FIELD_TYPE_DECIMAL32);
-        DECIMALV3_TYPE_CONVERTER(OLAP_FIELD_TYPE_DECIMAL64, OLAP_FIELD_TYPE_DECIMAL32);
-        DECIMALV3_TYPE_CONVERTER(OLAP_FIELD_TYPE_DECIMAL128, OLAP_FIELD_TYPE_DECIMAL32);
+        DECIMALV3_TYPE_CONVERTER(LOGICAL_TYPE_DECIMAL32, LOGICAL_TYPE_DECIMAL32);
+        DECIMALV3_TYPE_CONVERTER(LOGICAL_TYPE_DECIMAL64, LOGICAL_TYPE_DECIMAL32);
+        DECIMALV3_TYPE_CONVERTER(LOGICAL_TYPE_DECIMAL128, LOGICAL_TYPE_DECIMAL32);
     default:
         return nullptr;
     }
@@ -882,7 +882,7 @@ const TypeConverter* get_decimal32_converter(LogicalType from_type, LogicalType 
 
 const TypeConverter* get_double_converter(LogicalType from_type, LogicalType to_type) {
     switch (from_type) {
-    case OLAP_FIELD_TYPE_FLOAT: {
+    case LOGICAL_TYPE_FLOAT: {
         static FloatToDoubleTypeConverter s_converter;
         return &s_converter;
     }
@@ -907,13 +907,13 @@ const TypeConverter* get_from_varchar_converter(LogicalType from_type, LogicalTy
 
 const TypeConverter* get_to_varchar_converter(LogicalType from_type, LogicalType to_type) {
     switch (from_type) {
-    case OLAP_FIELD_TYPE_BOOL: {
-        static OtherToStringTypeConverter<OLAP_FIELD_TYPE_TINYINT> s_converter;
+    case LOGICAL_TYPE_BOOL: {
+        static OtherToStringTypeConverter<LOGICAL_TYPE_TINYINT> s_converter;
         return &s_converter;
     }
-    case OLAP_FIELD_TYPE_CHAR:
-    case OLAP_FIELD_TYPE_VARCHAR: {
-        static OtherToStringTypeConverter<OLAP_FIELD_TYPE_VARCHAR> s_converter;
+    case LOGICAL_TYPE_CHAR:
+    case LOGICAL_TYPE_VARCHAR: {
+        static OtherToStringTypeConverter<LOGICAL_TYPE_VARCHAR> s_converter;
         return &s_converter;
     }
 #define M(ftype)                                              \
@@ -933,42 +933,42 @@ const TypeConverter* get_to_varchar_converter(LogicalType from_type, LogicalType
 // Use Timestamp, Date V2 and decimal v2 to replace
 // Should be deleted after storage_format_vesion = 1 is forbid
 const TypeConverter* get_type_converter(LogicalType from_type, LogicalType to_type) {
-    if (from_type == OLAP_FIELD_TYPE_VARCHAR) {
+    if (from_type == LOGICAL_TYPE_VARCHAR) {
         return get_from_varchar_converter(from_type, to_type);
     }
 
     switch (to_type) {
-    case OLAP_FIELD_TYPE_DATE: {
+    case LOGICAL_TYPE_DATE: {
         return get_date_converter(from_type, to_type);
     }
-    case OLAP_FIELD_TYPE_DATE_V2: {
+    case LOGICAL_TYPE_DATE_V2: {
         return get_datev2_converter(from_type, to_type);
     }
-    case OLAP_FIELD_TYPE_DATETIME: {
+    case LOGICAL_TYPE_DATETIME: {
         return get_datetime_converter(from_type, to_type);
     }
-    case OLAP_FIELD_TYPE_TIMESTAMP: {
+    case LOGICAL_TYPE_TIMESTAMP: {
         return get_timestamp_converter(from_type, to_type);
     }
-    case OLAP_FIELD_TYPE_DECIMAL: {
+    case LOGICAL_TYPE_DECIMAL: {
         return get_decimal_converter(from_type, to_type);
     }
-    case OLAP_FIELD_TYPE_DECIMAL_V2: {
+    case LOGICAL_TYPE_DECIMAL_V2: {
         return get_decimalv2_converter(from_type, to_type);
     }
-    case OLAP_FIELD_TYPE_DECIMAL128: {
+    case LOGICAL_TYPE_DECIMAL128: {
         return get_decimal128_converter(from_type, to_type);
     }
-    case OLAP_FIELD_TYPE_DECIMAL64: {
+    case LOGICAL_TYPE_DECIMAL64: {
         return get_decimal64_converter(from_type, to_type);
     }
-    case OLAP_FIELD_TYPE_DECIMAL32: {
+    case LOGICAL_TYPE_DECIMAL32: {
         return get_decimal32_converter(from_type, to_type);
     }
-    case OLAP_FIELD_TYPE_DOUBLE: {
+    case LOGICAL_TYPE_DOUBLE: {
         return get_double_converter(from_type, to_type);
     }
-    case OLAP_FIELD_TYPE_VARCHAR: {
+    case LOGICAL_TYPE_VARCHAR: {
         return get_to_varchar_converter(from_type, to_type);
     }
     default:
@@ -1133,36 +1133,36 @@ public:
 
 const MaterializeTypeConverter* get_perentile_converter(LogicalType from_type, MaterializeType to_type) {
     switch (from_type) {
-    case OLAP_FIELD_TYPE_TINYINT:
+    case LOGICAL_TYPE_TINYINT:
         GET_PERENTILE_CONVERTER(int8_t);
-    case OLAP_FIELD_TYPE_UNSIGNED_TINYINT:
+    case LOGICAL_TYPE_UNSIGNED_TINYINT:
         GET_PERENTILE_CONVERTER(uint8_t);
-    case OLAP_FIELD_TYPE_SMALLINT:
+    case LOGICAL_TYPE_SMALLINT:
         GET_PERENTILE_CONVERTER(int16_t);
-    case OLAP_FIELD_TYPE_UNSIGNED_SMALLINT:
+    case LOGICAL_TYPE_UNSIGNED_SMALLINT:
         GET_PERENTILE_CONVERTER(uint16_t);
-    case OLAP_FIELD_TYPE_INT:
+    case LOGICAL_TYPE_INT:
         GET_PERENTILE_CONVERTER(int32_t);
-    case OLAP_FIELD_TYPE_UNSIGNED_INT:
+    case LOGICAL_TYPE_UNSIGNED_INT:
         GET_PERENTILE_CONVERTER(uint32_t);
-    case OLAP_FIELD_TYPE_BIGINT:
+    case LOGICAL_TYPE_BIGINT:
         GET_PERENTILE_CONVERTER(int64_t);
-    case OLAP_FIELD_TYPE_UNSIGNED_BIGINT:
+    case LOGICAL_TYPE_UNSIGNED_BIGINT:
         GET_PERENTILE_CONVERTER(uint64_t);
-    case OLAP_FIELD_TYPE_LARGEINT:
+    case LOGICAL_TYPE_LARGEINT:
         GET_PERENTILE_CONVERTER(int128_t);
-    case OLAP_FIELD_TYPE_FLOAT:
+    case LOGICAL_TYPE_FLOAT:
         GET_PERENTILE_CONVERTER(float);
-    case OLAP_FIELD_TYPE_DOUBLE:
+    case LOGICAL_TYPE_DOUBLE:
         GET_PERENTILE_CONVERTER(double);
-    case OLAP_FIELD_TYPE_DECIMAL_V2:
+    case LOGICAL_TYPE_DECIMAL_V2:
         GET_PERENTILE_CONVERTER(DecimalV2Value);
-    case OLAP_FIELD_TYPE_DECIMAL32:
-        GET_DECIMAL_PERENTILE_CONVERTER(OLAP_FIELD_TYPE_DECIMAL32);
-    case OLAP_FIELD_TYPE_DECIMAL64:
-        GET_DECIMAL_PERENTILE_CONVERTER(OLAP_FIELD_TYPE_DECIMAL64);
-    case OLAP_FIELD_TYPE_DECIMAL128:
-        GET_DECIMAL_PERENTILE_CONVERTER(OLAP_FIELD_TYPE_DECIMAL128);
+    case LOGICAL_TYPE_DECIMAL32:
+        GET_DECIMAL_PERENTILE_CONVERTER(LOGICAL_TYPE_DECIMAL32);
+    case LOGICAL_TYPE_DECIMAL64:
+        GET_DECIMAL_PERENTILE_CONVERTER(LOGICAL_TYPE_DECIMAL64);
+    case LOGICAL_TYPE_DECIMAL128:
+        GET_DECIMAL_PERENTILE_CONVERTER(LOGICAL_TYPE_DECIMAL128);
     default:
         LOG(WARNING) << "the column type which was altered from was unsupported."
                      << " from_type=" << from_type;
@@ -1172,36 +1172,36 @@ const MaterializeTypeConverter* get_perentile_converter(LogicalType from_type, M
 
 const MaterializeTypeConverter* get_hll_converter(LogicalType from_type, MaterializeType to_type) {
     switch (from_type) {
-    case OLAP_FIELD_TYPE_CHAR:
-    case OLAP_FIELD_TYPE_VARCHAR:
+    case LOGICAL_TYPE_CHAR:
+    case LOGICAL_TYPE_VARCHAR:
         GET_HLL_CONVERTER(Slice);
-    case OLAP_FIELD_TYPE_BOOL:
-    case OLAP_FIELD_TYPE_TINYINT:
+    case LOGICAL_TYPE_BOOL:
+    case LOGICAL_TYPE_TINYINT:
         GET_HLL_CONVERTER(int8_t);
-    case OLAP_FIELD_TYPE_UNSIGNED_TINYINT:
+    case LOGICAL_TYPE_UNSIGNED_TINYINT:
         GET_HLL_CONVERTER(uint8_t);
-    case OLAP_FIELD_TYPE_SMALLINT:
+    case LOGICAL_TYPE_SMALLINT:
         GET_HLL_CONVERTER(int16_t);
-    case OLAP_FIELD_TYPE_UNSIGNED_SMALLINT:
+    case LOGICAL_TYPE_UNSIGNED_SMALLINT:
         GET_HLL_CONVERTER(uint16_t);
-    case OLAP_FIELD_TYPE_DATE_V2:
-    case OLAP_FIELD_TYPE_INT:
+    case LOGICAL_TYPE_DATE_V2:
+    case LOGICAL_TYPE_INT:
         GET_HLL_CONVERTER(int32_t);
-    case OLAP_FIELD_TYPE_UNSIGNED_INT:
+    case LOGICAL_TYPE_UNSIGNED_INT:
         GET_HLL_CONVERTER(uint32_t);
-    case OLAP_FIELD_TYPE_TIMESTAMP:
-    case OLAP_FIELD_TYPE_DATETIME:
-    case OLAP_FIELD_TYPE_BIGINT:
+    case LOGICAL_TYPE_TIMESTAMP:
+    case LOGICAL_TYPE_DATETIME:
+    case LOGICAL_TYPE_BIGINT:
         GET_HLL_CONVERTER(int64_t);
-    case OLAP_FIELD_TYPE_UNSIGNED_BIGINT:
+    case LOGICAL_TYPE_UNSIGNED_BIGINT:
         GET_HLL_CONVERTER(uint64_t);
-    case OLAP_FIELD_TYPE_LARGEINT:
+    case LOGICAL_TYPE_LARGEINT:
         GET_HLL_CONVERTER(int128_t);
-    case OLAP_FIELD_TYPE_FLOAT:
+    case LOGICAL_TYPE_FLOAT:
         GET_HLL_CONVERTER(float);
-    case OLAP_FIELD_TYPE_DOUBLE:
+    case LOGICAL_TYPE_DOUBLE:
         GET_HLL_CONVERTER(double);
-    case OLAP_FIELD_TYPE_DATE:
+    case LOGICAL_TYPE_DATE:
         GET_HLL_CONVERTER(uint24_t);
     default:
         LOG(WARNING) << "fail to hll hash type : " << from_type;
@@ -1211,21 +1211,21 @@ const MaterializeTypeConverter* get_hll_converter(LogicalType from_type, Materia
 
 const MaterializeTypeConverter* get_bitmap_converter(LogicalType from_type, MaterializeType to_type) {
     switch (from_type) {
-    case OLAP_FIELD_TYPE_TINYINT:
+    case LOGICAL_TYPE_TINYINT:
         GET_BTIMAP_CONVERTER(int8_t);
-    case OLAP_FIELD_TYPE_UNSIGNED_TINYINT:
+    case LOGICAL_TYPE_UNSIGNED_TINYINT:
         GET_BTIMAP_CONVERTER(uint8_t);
-    case OLAP_FIELD_TYPE_SMALLINT:
+    case LOGICAL_TYPE_SMALLINT:
         GET_BTIMAP_CONVERTER(int16_t);
-    case OLAP_FIELD_TYPE_UNSIGNED_SMALLINT:
+    case LOGICAL_TYPE_UNSIGNED_SMALLINT:
         GET_BTIMAP_CONVERTER(uint16_t);
-    case OLAP_FIELD_TYPE_INT:
+    case LOGICAL_TYPE_INT:
         GET_BTIMAP_CONVERTER(int32_t);
-    case OLAP_FIELD_TYPE_UNSIGNED_INT:
+    case LOGICAL_TYPE_UNSIGNED_INT:
         GET_BTIMAP_CONVERTER(uint32_t);
-    case OLAP_FIELD_TYPE_BIGINT:
+    case LOGICAL_TYPE_BIGINT:
         GET_BTIMAP_CONVERTER(int64_t);
-    case OLAP_FIELD_TYPE_UNSIGNED_BIGINT:
+    case LOGICAL_TYPE_UNSIGNED_BIGINT:
         GET_BTIMAP_CONVERTER(uint64_t);
     default:
         LOG(WARNING) << "the column type which was altered from was unsupported."
@@ -1310,7 +1310,7 @@ public:
 
     ColumnPtr copy_convert(const Column& src) const override {
         auto nullable = src.is_nullable();
-        auto dst = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_DATE_V2, nullable);
+        auto dst = ChunkHelper::column_from_field_type(LOGICAL_TYPE_DATE_V2, nullable);
         int num_items = static_cast<int>(src.size());
         dst->reserve(num_items);
         for (int i = 0; i < num_items; ++i) {
@@ -1370,7 +1370,7 @@ public:
 
     ColumnPtr copy_convert(const Column& src) const override {
         auto nullable = src.is_nullable();
-        auto dst = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_DATE, nullable);
+        auto dst = ChunkHelper::column_from_field_type(LOGICAL_TYPE_DATE, nullable);
         int num_items = static_cast<int>(src.size());
         dst->reserve(num_items);
         for (int i = 0; i < num_items; ++i) {
@@ -1434,7 +1434,7 @@ public:
 
     ColumnPtr copy_convert(const Column& src) const override {
         auto nullable = src.is_nullable();
-        auto dst = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_TIMESTAMP, nullable);
+        auto dst = ChunkHelper::column_from_field_type(LOGICAL_TYPE_TIMESTAMP, nullable);
         int num_items = static_cast<int>(src.size());
         dst->reserve(num_items);
         for (int i = 0; i < num_items; ++i) {
@@ -1494,7 +1494,7 @@ public:
 
     ColumnPtr copy_convert(const Column& src) const override {
         auto nullable = src.is_nullable();
-        auto dst = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_DATETIME, nullable);
+        auto dst = ChunkHelper::column_from_field_type(LOGICAL_TYPE_DATETIME, nullable);
         int num_items = static_cast<int>(src.size());
         dst->reserve(num_items);
         for (int i = 0; i < num_items; ++i) {
@@ -1559,7 +1559,7 @@ public:
 
     ColumnPtr copy_convert(const Column& src) const override {
         auto nullable = src.is_nullable();
-        auto dst = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_DECIMAL_V2, nullable);
+        auto dst = ChunkHelper::column_from_field_type(LOGICAL_TYPE_DECIMAL_V2, nullable);
         int num_items = static_cast<int>(src.size());
         dst->reserve(num_items);
         for (int i = 0; i < num_items; ++i) {
@@ -1625,7 +1625,7 @@ public:
 
     ColumnPtr copy_convert(const Column& src) const override {
         auto nullable = src.is_nullable();
-        auto dst = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_DECIMAL, nullable);
+        auto dst = ChunkHelper::column_from_field_type(LOGICAL_TYPE_DECIMAL, nullable);
         int num_items = static_cast<int>(src.size());
         dst->reserve(num_items);
         for (int i = 0; i < num_items; ++i) {
@@ -1794,41 +1794,41 @@ const FieldConverter* get_field_converter(LogicalType from_type, LogicalType to_
 
     if (from_type == to_type) {
         switch (from_type) {
-            TYPE_CASE_CLAUSE(OLAP_FIELD_TYPE_BOOL)
-            TYPE_CASE_CLAUSE(OLAP_FIELD_TYPE_TINYINT)
-            TYPE_CASE_CLAUSE(OLAP_FIELD_TYPE_SMALLINT)
-            TYPE_CASE_CLAUSE(OLAP_FIELD_TYPE_INT)
-            TYPE_CASE_CLAUSE(OLAP_FIELD_TYPE_BIGINT)
-            TYPE_CASE_CLAUSE(OLAP_FIELD_TYPE_LARGEINT)
-            TYPE_CASE_CLAUSE(OLAP_FIELD_TYPE_FLOAT)
-            TYPE_CASE_CLAUSE(OLAP_FIELD_TYPE_DOUBLE)
-            TYPE_CASE_CLAUSE(OLAP_FIELD_TYPE_DECIMAL)
-            TYPE_CASE_CLAUSE(OLAP_FIELD_TYPE_DECIMAL_V2)
-            TYPE_CASE_CLAUSE(OLAP_FIELD_TYPE_CHAR)
-            TYPE_CASE_CLAUSE(OLAP_FIELD_TYPE_VARCHAR)
-            TYPE_CASE_CLAUSE(OLAP_FIELD_TYPE_DATE)
-            TYPE_CASE_CLAUSE(OLAP_FIELD_TYPE_DATE_V2)
-            TYPE_CASE_CLAUSE(OLAP_FIELD_TYPE_DATETIME)
-            TYPE_CASE_CLAUSE(OLAP_FIELD_TYPE_TIMESTAMP)
-            TYPE_CASE_CLAUSE(OLAP_FIELD_TYPE_HLL)
-            TYPE_CASE_CLAUSE(OLAP_FIELD_TYPE_OBJECT)
-            TYPE_CASE_CLAUSE(OLAP_FIELD_TYPE_PERCENTILE)
-            TYPE_CASE_CLAUSE(OLAP_FIELD_TYPE_JSON)
-            TYPE_CASE_CLAUSE(OLAP_FIELD_TYPE_VARBINARY)
-        case OLAP_FIELD_TYPE_DECIMAL32:
-        case OLAP_FIELD_TYPE_DECIMAL64:
-        case OLAP_FIELD_TYPE_DECIMAL128:
-        case OLAP_FIELD_TYPE_ARRAY:
-        case OLAP_FIELD_TYPE_UNSIGNED_TINYINT:
-        case OLAP_FIELD_TYPE_UNSIGNED_SMALLINT:
-        case OLAP_FIELD_TYPE_UNSIGNED_INT:
-        case OLAP_FIELD_TYPE_UNSIGNED_BIGINT:
-        case OLAP_FIELD_TYPE_UNKNOWN:
-        case OLAP_FIELD_TYPE_MAP:
-        case OLAP_FIELD_TYPE_STRUCT:
-        case OLAP_FIELD_TYPE_DISCRETE_DOUBLE:
-        case OLAP_FIELD_TYPE_NONE:
-        case OLAP_FIELD_TYPE_MAX_VALUE:
+            TYPE_CASE_CLAUSE(LOGICAL_TYPE_BOOL)
+            TYPE_CASE_CLAUSE(LOGICAL_TYPE_TINYINT)
+            TYPE_CASE_CLAUSE(LOGICAL_TYPE_SMALLINT)
+            TYPE_CASE_CLAUSE(LOGICAL_TYPE_INT)
+            TYPE_CASE_CLAUSE(LOGICAL_TYPE_BIGINT)
+            TYPE_CASE_CLAUSE(LOGICAL_TYPE_LARGEINT)
+            TYPE_CASE_CLAUSE(LOGICAL_TYPE_FLOAT)
+            TYPE_CASE_CLAUSE(LOGICAL_TYPE_DOUBLE)
+            TYPE_CASE_CLAUSE(LOGICAL_TYPE_DECIMAL)
+            TYPE_CASE_CLAUSE(LOGICAL_TYPE_DECIMAL_V2)
+            TYPE_CASE_CLAUSE(LOGICAL_TYPE_CHAR)
+            TYPE_CASE_CLAUSE(LOGICAL_TYPE_VARCHAR)
+            TYPE_CASE_CLAUSE(LOGICAL_TYPE_DATE)
+            TYPE_CASE_CLAUSE(LOGICAL_TYPE_DATE_V2)
+            TYPE_CASE_CLAUSE(LOGICAL_TYPE_DATETIME)
+            TYPE_CASE_CLAUSE(LOGICAL_TYPE_TIMESTAMP)
+            TYPE_CASE_CLAUSE(LOGICAL_TYPE_HLL)
+            TYPE_CASE_CLAUSE(LOGICAL_TYPE_OBJECT)
+            TYPE_CASE_CLAUSE(LOGICAL_TYPE_PERCENTILE)
+            TYPE_CASE_CLAUSE(LOGICAL_TYPE_JSON)
+            TYPE_CASE_CLAUSE(LOGICAL_TYPE_VARBINARY)
+        case LOGICAL_TYPE_DECIMAL32:
+        case LOGICAL_TYPE_DECIMAL64:
+        case LOGICAL_TYPE_DECIMAL128:
+        case LOGICAL_TYPE_ARRAY:
+        case LOGICAL_TYPE_UNSIGNED_TINYINT:
+        case LOGICAL_TYPE_UNSIGNED_SMALLINT:
+        case LOGICAL_TYPE_UNSIGNED_INT:
+        case LOGICAL_TYPE_UNSIGNED_BIGINT:
+        case LOGICAL_TYPE_UNKNOWN:
+        case LOGICAL_TYPE_MAP:
+        case LOGICAL_TYPE_STRUCT:
+        case LOGICAL_TYPE_DISCRETE_DOUBLE:
+        case LOGICAL_TYPE_NONE:
+        case LOGICAL_TYPE_MAX_VALUE:
             return nullptr;
         }
         DCHECK(false) << "unreachable path";
@@ -1836,34 +1836,34 @@ const FieldConverter* get_field_converter(LogicalType from_type, LogicalType to_
     }
 #undef TYPE_CASE_CLAUSE
 
-    if (to_type == OLAP_FIELD_TYPE_DATE_V2 && from_type == OLAP_FIELD_TYPE_DATE) {
+    if (to_type == LOGICAL_TYPE_DATE_V2 && from_type == LOGICAL_TYPE_DATE) {
         static DateToDateV2FieldConverter s_converter;
         return &s_converter;
-    } else if (to_type == OLAP_FIELD_TYPE_DATE && from_type == OLAP_FIELD_TYPE_DATE_V2) {
+    } else if (to_type == LOGICAL_TYPE_DATE && from_type == LOGICAL_TYPE_DATE_V2) {
         static DateV2ToDateFieldConverter s_converter;
         return &s_converter;
-    } else if (to_type == OLAP_FIELD_TYPE_TIMESTAMP && from_type == OLAP_FIELD_TYPE_DATETIME) {
+    } else if (to_type == LOGICAL_TYPE_TIMESTAMP && from_type == LOGICAL_TYPE_DATETIME) {
         static DatetimeToTimestampFieldConverter s_converter;
         return &s_converter;
-    } else if (to_type == OLAP_FIELD_TYPE_DATETIME && from_type == OLAP_FIELD_TYPE_TIMESTAMP) {
+    } else if (to_type == LOGICAL_TYPE_DATETIME && from_type == LOGICAL_TYPE_TIMESTAMP) {
         static TimestampToDatetimeFieldConverter s_converter;
         return &s_converter;
-    } else if (to_type == OLAP_FIELD_TYPE_DECIMAL_V2 && from_type == OLAP_FIELD_TYPE_DECIMAL) {
+    } else if (to_type == LOGICAL_TYPE_DECIMAL_V2 && from_type == LOGICAL_TYPE_DECIMAL) {
         static Decimal12ToDecimalFieldConverter s_converter;
         return &s_converter;
-    } else if (to_type == OLAP_FIELD_TYPE_DECIMAL && from_type == OLAP_FIELD_TYPE_DECIMAL_V2) {
+    } else if (to_type == LOGICAL_TYPE_DECIMAL && from_type == LOGICAL_TYPE_DECIMAL_V2) {
         static DecimalToDecimal12FieldConverter s_converter;
         return &s_converter;
-    } else if (to_type == OLAP_FIELD_TYPE_DECIMAL128 && from_type == OLAP_FIELD_TYPE_DECIMAL) {
+    } else if (to_type == LOGICAL_TYPE_DECIMAL128 && from_type == LOGICAL_TYPE_DECIMAL) {
         static DecimalFieldConverter<decimal12_t, int128_t> s_converter;
         return &s_converter;
-    } else if (to_type == OLAP_FIELD_TYPE_DECIMAL && from_type == OLAP_FIELD_TYPE_DECIMAL128) {
+    } else if (to_type == LOGICAL_TYPE_DECIMAL && from_type == LOGICAL_TYPE_DECIMAL128) {
         static DecimalFieldConverter<int128_t, decimal12_t> s_converter;
         return &s_converter;
-    } else if (to_type == OLAP_FIELD_TYPE_DECIMAL128 && from_type == OLAP_FIELD_TYPE_DECIMAL_V2) {
+    } else if (to_type == LOGICAL_TYPE_DECIMAL128 && from_type == LOGICAL_TYPE_DECIMAL_V2) {
         static DecimalFieldConverter<DecimalV2Value, int128_t> s_converter;
         return &s_converter;
-    } else if (to_type == OLAP_FIELD_TYPE_DECIMAL_V2 && from_type == OLAP_FIELD_TYPE_DECIMAL128) {
+    } else if (to_type == LOGICAL_TYPE_DECIMAL_V2 && from_type == LOGICAL_TYPE_DECIMAL128) {
         static DecimalFieldConverter<int128_t, DecimalV2Value> s_converter;
         return &s_converter;
     }

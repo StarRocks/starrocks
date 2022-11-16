@@ -50,15 +50,15 @@ struct BloomFilterTraits<Slice> {
     using ValueDict = std::set<Slice, Slice::Comparator>;
 };
 
-// supported slice types are: OLAP_FIELD_TYPE_CHAR|OLAP_FIELD_TYPE_VARCHAR
+// supported slice types are: LOGICAL_TYPE_CHAR|LOGICAL_TYPE_VARCHAR
 template <LogicalType type>
 constexpr bool is_slice_type() {
-    return type == OLAP_FIELD_TYPE_VARCHAR || type == OLAP_FIELD_TYPE_CHAR;
+    return type == LOGICAL_TYPE_VARCHAR || type == LOGICAL_TYPE_CHAR;
 }
 
 template <LogicalType type>
 constexpr bool is_int128() {
-    return type == OLAP_FIELD_TYPE_LARGEINT || type == OLAP_FIELD_TYPE_DECIMAL_V2;
+    return type == LOGICAL_TYPE_LARGEINT || type == LOGICAL_TYPE_DECIMAL_V2;
 }
 
 template <LogicalType type>
@@ -138,7 +138,7 @@ public:
         meta->set_algorithm(BLOCK_BLOOM_FILTER);
 
         // write bloom filters
-        TypeInfoPtr bf_typeinfo = get_type_info(OLAP_FIELD_TYPE_VARCHAR);
+        TypeInfoPtr bf_typeinfo = get_type_info(LOGICAL_TYPE_VARCHAR);
         IndexedColumnWriterOptions options;
         options.write_ordinal_index = true;
         options.write_value_index = false;

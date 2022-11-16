@@ -46,7 +46,7 @@
 
 namespace starrocks::vectorized {
 
-constexpr static const LogicalType kDictCodeType = OLAP_FIELD_TYPE_INT;
+constexpr static const LogicalType kDictCodeType = LOGICAL_TYPE_INT;
 
 // compare |tuple| with the first row of |chunk|.
 // NULL will be treated as a minimal value.
@@ -1239,8 +1239,8 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
     if (late_materialization && predicate_count < _schema.num_fields()) {
         // ordinal column
         ColumnId cid = _schema.field(predicate_count)->id();
-        static_assert(std::is_same_v<rowid_t, TypeTraits<OLAP_FIELD_TYPE_UNSIGNED_INT>::CppType>);
-        auto f = std::make_shared<Field>(cid, "ordinal", OLAP_FIELD_TYPE_UNSIGNED_INT, -1, -1, false);
+        static_assert(std::is_same_v<rowid_t, TypeTraits<LOGICAL_TYPE_UNSIGNED_INT>::CppType>);
+        auto f = std::make_shared<Field>(cid, "ordinal", LOGICAL_TYPE_UNSIGNED_INT, -1, -1, false);
         auto* iter = new RowIdColumnIterator();
         _obj_pool.add(iter);
         ctx->_read_schema.append(f);
@@ -1398,7 +1398,7 @@ Status SegmentIterator::_check_low_cardinality_optimization() {
     for (size_t i = 0; i < n; i++) {
         const FieldPtr& field = _schema.field(i);
         const LogicalType type = field->type()->type();
-        if (type != OLAP_FIELD_TYPE_CHAR && type != OLAP_FIELD_TYPE_VARCHAR) {
+        if (type != LOGICAL_TYPE_CHAR && type != LOGICAL_TYPE_VARCHAR) {
             continue;
         }
         ColumnId cid = field->id();

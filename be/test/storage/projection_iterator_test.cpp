@@ -36,9 +36,9 @@ public:
     }
 
     static Schema schema() {
-        FieldPtr f1 = std::make_shared<Field>(0, "c1", get_type_info(OLAP_FIELD_TYPE_INT), false);
-        FieldPtr f2 = std::make_shared<Field>(1, "c2", get_type_info(OLAP_FIELD_TYPE_VARCHAR), false);
-        FieldPtr f3 = std::make_shared<Field>(2, "c3", get_type_info(OLAP_FIELD_TYPE_INT), false);
+        FieldPtr f1 = std::make_shared<Field>(0, "c1", get_type_info(LOGICAL_TYPE_INT), false);
+        FieldPtr f2 = std::make_shared<Field>(1, "c2", get_type_info(LOGICAL_TYPE_VARCHAR), false);
+        FieldPtr f3 = std::make_shared<Field>(2, "c3", get_type_info(LOGICAL_TYPE_INT), false);
         f1->set_is_key(true);
         return Schema(std::vector<FieldPtr>{f1, f2, f3});
     }

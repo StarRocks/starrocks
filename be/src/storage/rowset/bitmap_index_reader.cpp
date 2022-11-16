@@ -64,7 +64,7 @@ void BitmapIndexReader::_reset() {
 
 Status BitmapIndexReader::_do_load(FileSystem* fs, const std::string& filename, const BitmapIndexPB& meta,
                                    bool use_page_cache, bool kept_in_memory) {
-    _typeinfo = get_type_info(OLAP_FIELD_TYPE_VARCHAR);
+    _typeinfo = get_type_info(LOGICAL_TYPE_VARCHAR);
     const IndexedColumnMetaPB& dict_meta = meta.dict_column();
     const IndexedColumnMetaPB& bitmap_meta = meta.bitmap_column();
     _has_null = meta.has_null();
@@ -93,7 +93,7 @@ Status BitmapIndexIterator::seek_dictionary(const void* value, bool* exact_match
 Status BitmapIndexIterator::read_bitmap(rowid_t ordinal, Roaring* result) {
     DCHECK(0 <= ordinal && ordinal < _reader->bitmap_nums());
 
-    auto column = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_VARCHAR, false);
+    auto column = ChunkHelper::column_from_field_type(LOGICAL_TYPE_VARCHAR, false);
     RETURN_IF_ERROR(_bitmap_column_iter->seek_to_ordinal(ordinal));
     size_t num_to_read = 1;
     size_t num_read = num_to_read;

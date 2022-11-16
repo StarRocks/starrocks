@@ -30,7 +30,7 @@ static unique_ptr<vectorized::Schema> create_key_schema(const vector<LogicalType
 }
 
 TEST(PrimaryKeyEncoderTest, testEncodeInt32) {
-    auto sc = create_key_schema({OLAP_FIELD_TYPE_INT});
+    auto sc = create_key_schema({LOGICAL_TYPE_INT});
     unique_ptr<vectorized::Column> dest;
     PrimaryKeyEncoder::create_column(*sc, &dest);
     const int n = 1000;
@@ -51,7 +51,7 @@ TEST(PrimaryKeyEncoderTest, testEncodeInt32) {
 }
 
 TEST(PrimaryKeyEncoderTest, testEncodeInt128) {
-    auto sc = create_key_schema({OLAP_FIELD_TYPE_LARGEINT});
+    auto sc = create_key_schema({LOGICAL_TYPE_LARGEINT});
     unique_ptr<vectorized::Column> dest;
     PrimaryKeyEncoder::create_column(*sc, &dest);
     const int n = 1000;
@@ -77,7 +77,7 @@ TEST(PrimaryKeyEncoderTest, testEncodeInt128) {
 
 TEST(PrimaryKeyEncoderTest, testEncodeComposite) {
     auto sc = create_key_schema(
-            {OLAP_FIELD_TYPE_INT, OLAP_FIELD_TYPE_VARCHAR, OLAP_FIELD_TYPE_SMALLINT, OLAP_FIELD_TYPE_BOOL});
+            {LOGICAL_TYPE_INT, LOGICAL_TYPE_VARCHAR, LOGICAL_TYPE_SMALLINT, LOGICAL_TYPE_BOOL});
     unique_ptr<vectorized::Column> dest;
     PrimaryKeyEncoder::create_column(*sc, &dest);
     const int n = 1;
@@ -121,7 +121,7 @@ TEST(PrimaryKeyEncoderTest, testEncodeComposite) {
 TEST(PrimaryKeyEncoderTest, testEncodeCompositeLimit) {
     {
         auto sc = create_key_schema(
-                {OLAP_FIELD_TYPE_INT, OLAP_FIELD_TYPE_VARCHAR, OLAP_FIELD_TYPE_SMALLINT, OLAP_FIELD_TYPE_BOOL});
+                {LOGICAL_TYPE_INT, LOGICAL_TYPE_VARCHAR, LOGICAL_TYPE_SMALLINT, LOGICAL_TYPE_BOOL});
         const int n = 1;
         auto pchunk = ChunkHelper::new_chunk(*sc, n);
         vectorized::Datum tmp;
@@ -141,7 +141,7 @@ TEST(PrimaryKeyEncoderTest, testEncodeCompositeLimit) {
 
     {
         auto sc = create_key_schema(
-                {OLAP_FIELD_TYPE_INT, OLAP_FIELD_TYPE_VARCHAR, OLAP_FIELD_TYPE_SMALLINT, OLAP_FIELD_TYPE_BOOL});
+                {LOGICAL_TYPE_INT, LOGICAL_TYPE_VARCHAR, LOGICAL_TYPE_SMALLINT, LOGICAL_TYPE_BOOL});
         const int n = 1;
         auto pchunk = ChunkHelper::new_chunk(*sc, n);
         vectorized::Datum tmp;

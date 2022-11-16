@@ -56,7 +56,7 @@ public:
         OwnedSlice dict_slice = page_builder.finish()->build();
 
         PageDecoderOptions dict_decoder_options;
-        auto page_decoder = std::make_unique<BinaryPrefixPageDecoder<OLAP_FIELD_TYPE_VARCHAR>>(dict_slice.slice(),
+        auto page_decoder = std::make_unique<BinaryPrefixPageDecoder<LOGICAL_TYPE_VARCHAR>>(dict_slice.slice(),
                                                                                                dict_decoder_options);
         Status ret = page_decoder->init();
         ASSERT_TRUE(ret.ok());
@@ -99,7 +99,7 @@ public:
         ASSERT_EQ(slices[count - 1], last_value);
 
         PageDecoderOptions dict_decoder_options;
-        auto page_decoder = std::make_unique<BinaryPrefixPageDecoder<OLAP_FIELD_TYPE_VARCHAR>>(dict_slice.slice(),
+        auto page_decoder = std::make_unique<BinaryPrefixPageDecoder<LOGICAL_TYPE_VARCHAR>>(dict_slice.slice(),
                                                                                                dict_decoder_options);
         Status ret = page_decoder->init();
         ASSERT_TRUE(ret.ok());
