@@ -1141,7 +1141,7 @@ public class LowCardinalityTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("  5:Decode\n" +
                 "  |  <dict id 14> : <string id 10>\n" +
                 "  |  string functions:\n" +
-                "  |  <function id 14> : DictExpr(11: S_ADDRESS,[upper(<place-holder>)])\n" +
+                "  |  <function id 12> : DictExpr(11: S_ADDRESS,[upper(<place-holder>)])\n" +
                 "  |  "));
         sql = "select max(if(S_ADDRESS='kks', upper(S_COMMENT), S_COMMENT)), " +
                 "min(upper(S_COMMENT)) from supplier_nullable " +
@@ -1151,7 +1151,6 @@ public class LowCardinalityTest extends PlanTestBase {
                 "  |  <dict id 17> : <string id 12>\n" +
                 "  |  <dict id 15> : <string id 9>\n" +
                 "  |  string functions:\n" +
-                "  |  <function id 17> : DictExpr(14: S_COMMENT,[upper(<place-holder>)])\n" +
                 "  |  <function id 15> : DictExpr(14: S_COMMENT,[upper(<place-holder>)])"));
 
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
