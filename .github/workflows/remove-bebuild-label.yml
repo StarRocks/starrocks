@@ -1,0 +1,20 @@
+name: label
+
+on:
+  pull_request_target:
+    types:
+      - synchronize
+      - closed
+    paths:
+      - 'be/**'
+
+jobs:
+  remove-bebuild-label:
+    runs-on: self-hosted
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+    steps:  
+      - uses: actions-ecosystem/action-remove-labels@v1
+        if: contains(github.event.pull_request.labels.*.name, 'be-build')
+        with:
+          labels: be-build
