@@ -20,7 +20,7 @@ public class GroupKeyChecker {
     }
 
     public boolean isRollup() {
-        return matchingBits.cardinality() != mvGroupKeys.size();
+        return matchingBits.cardinality() < mvGroupKeys.size();
     }
 
     // true if matched, or false

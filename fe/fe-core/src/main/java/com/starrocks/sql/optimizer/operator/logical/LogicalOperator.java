@@ -31,6 +31,8 @@ public abstract class LogicalOperator extends Operator {
 
     public abstract ColumnRefSet getOutputColumns(ExpressionContext expressionContext);
 
+    // lineage means the merge of operator's column ref map, which is used to track
+    // what does the ColumnRefOperator come from.
     public Map<ColumnRefOperator, ScalarOperator> getLineage(
             ColumnRefFactory refFactory, ExpressionContext expressionContext) {
         Map<ColumnRefOperator, ScalarOperator> columnRefMap = Maps.newHashMap();

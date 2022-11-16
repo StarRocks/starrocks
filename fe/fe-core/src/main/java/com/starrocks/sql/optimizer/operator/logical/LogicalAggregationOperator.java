@@ -136,6 +136,7 @@ public class LogicalAggregationOperator extends LogicalOperator {
         return columnRefMap;
     }
 
+    @Override
     public Map<ColumnRefOperator, ScalarOperator> getLineage(
             ColumnRefFactory refFactory, ExpressionContext expressionContext) {
         Map<ColumnRefOperator, ScalarOperator> columnRefMap = Maps.newHashMap();
