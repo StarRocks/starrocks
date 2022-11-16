@@ -1,5 +1,31 @@
 # StarRocks version 2.2
 
+## 2.2.9
+
+Release date: November 15, 2022
+
+### Improvements
+
+- Added the session variable `hive_partition_stats_sample_size` to control the number of Hive partitions from which to collect statistics. An excessive number of partitions will cause errors in obtaining Hive metadata. [#12700](https://github.com/StarRocks/starrocks/pull/12700)
+
+- Elasticsearch external tables support custom time zones. [#12662](https://github.com/StarRocks/starrocks/pull/12662)
+
+### Bug Fixes
+
+The following bugs are fixed:
+
+- The DECOMMISION operation is stuck if an error occurs during metadata synchronization for external tables. [#12369](https://github.com/StarRocks/starrocks/pull/12368)
+
+- Compaction crashes if a column that is newly added is deleted. [#12907](https://github.com/StarRocks/starrocks/pull/12907)
+
+- SHOW CREATE VIEW does not display the comments that were added when creating the view. [#4163](https://github.com/StarRocks/starrocks/issues/4163)
+
+- Memory leak in Java UDF may cause OOM. [#12418](https://github.com/StarRocks/starrocks/pull/12418)
+
+### Behavior Changes
+
+Extended the length of Hive STRING columns that can be queried by StarRocks from 64 KB to 1 MB. If a STRING column exceeds 1 MB, it will be processed as a null column during queries. [#12986](https://github.com/StarRocks/starrocks/pull/12986)
+
 ## 2.2.8
 
 Release date: October 17, 2022
