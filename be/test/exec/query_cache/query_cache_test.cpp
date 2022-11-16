@@ -472,7 +472,7 @@ static ValidateFuncGenerator eq_validator_gen = [](double expect) {
 
 static ValidateFuncGenerator approx_validator_gen = [](double expect) {
     return [expect](double actual) {
-        auto abs_value = std::max(std::abs(expect), abs(actual));
+        auto abs_value = std::max(std::abs(expect), std::abs(actual));
         LOG(INFO) << strings::Substitute("approx_validate: expect=$0, actual=$1", expect, actual);
         ASSERT_TRUE(abs_value == 0.0 || std::abs(expect - actual) / abs_value < 0.001);
     };
