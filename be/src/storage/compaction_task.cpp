@@ -1,6 +1,8 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 #include "storage/compaction_task.h"
 
+#include <sstream>
+
 #include "runtime/current_thread.h"
 #include "runtime/mem_tracker.h"
 #include "storage/compaction_manager.h"
@@ -22,7 +24,7 @@ CompactionTask::~CompactionTask() {
 void CompactionTask::run() {
     LOG(INFO) << "start compaction. task_id:" << _task_info.task_id << ", tablet:" << _task_info.tablet_id
               << ", algorithm:" << CompactionUtils::compaction_algorithm_to_string(_task_info.algorithm)
-              << ", compaction_type:" << _task_info.compaction_type
+              << ", compaction_type:" << starrocks::to_string(_task_info.compaction_type)
               << ", compaction_score:" << _task_info.compaction_score
               << ", output_version:" << _task_info.output_version << ", input rowsets size:" << _input_rowsets.size();
     _task_info.start_time = UnixMillis();
@@ -65,14 +67,16 @@ void CompactionTask::run() {
         // reset compaction before judge need_compaction again
         // because if there is a compaction task for one compaction type in a tablet,
         // it will not be able to run another one for that type
-        _tablet->reset_compaction(compaction_type());
+        _tablet->reset_compaction();
         _task_info.end_time = UnixMillis();
         StorageEngine::instance()->compaction_manager()->unregister_task(this);
         // compaction context has been updated when commit
         // so do not update context here
-        StorageEngine::instance()->compaction_manager()->update_tablet_async(_tablet, false, true);
+        StorageEngine::instance()->compaction_manager()->update_tablet_async(_tablet);
         // must be put after unregister_task
-        _scheduler->notify();
+        if (_scheduler) {
+            _scheduler->notify();
+        }
         TRACE("[Compaction] $0", _task_info.to_string());
     });
     if (should_stop()) {
@@ -89,6 +93,17 @@ void CompactionTask::run() {
     }
     TRACE("[Compaction] compaction registered");
 
+    DataDir* data_dir = _tablet->data_dir();
+    if (data_dir->capacity_limit_reached(input_rowsets_size())) {
+        std::ostringstream sstream;
+        sstream << "skip tablet:" << _tablet->tablet_id()
+                << " because data dir reaches capacity limit. input rowsets size:" << input_rowsets_size();
+        Status st = Status::InternalError(sstream.str());
+        _failure_callback(st);
+        LOG(WARNING) << sstream.str();
+        return;
+    }
+
     _try_lock();
     if (!_compaction_lock.owns_lock()) {
         return;
@@ -99,7 +114,7 @@ void CompactionTask::run() {
     if (status.ok()) {
         _success_callback();
     } else {
-        _failure_callback();
+        _failure_callback(status);
     }
     _watch.stop();
     _task_info.end_time = UnixMillis();
@@ -119,7 +134,10 @@ void CompactionTask::_success_callback() {
     // for compatible, update compaction time
     if (_task_info.compaction_type == CUMULATIVE_COMPACTION) {
         _tablet->set_last_cumu_compaction_success_time(UnixMillis());
-        _tablet->set_cumulative_layer_point(_input_rowsets.back()->end_version() + 1);
+        _tablet->set_last_cumu_compaction_failure_status(TStatusCode::OK);
+        if (_tablet->cumulative_layer_point() == _input_rowsets.front()->start_version()) {
+            _tablet->set_cumulative_layer_point(_input_rowsets.back()->end_version() + 1);
+        }
     } else {
         _tablet->set_last_base_compaction_success_time(UnixMillis());
     }
@@ -143,10 +161,11 @@ void CompactionTask::_success_callback() {
     }
 }
 
-void CompactionTask::_failure_callback() {
+void CompactionTask::_failure_callback(const Status& st) {
     set_compaction_task_state(COMPACTION_FAILED);
     if (_task_info.compaction_type == CUMULATIVE_COMPACTION) {
         _tablet->set_last_cumu_compaction_failure_time(UnixMillis());
+        _tablet->set_last_cumu_compaction_failure_status(st.code());
     } else {
         _tablet->set_last_base_compaction_failure_time(UnixMillis());
     }

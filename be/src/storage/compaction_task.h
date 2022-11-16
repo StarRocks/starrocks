@@ -102,7 +102,7 @@ struct CompactionTaskInfo {
         ss << ", compaction score:" << compaction_score;
         ss << ", algorithm:" << CompactionUtils::compaction_algorithm_to_string(algorithm);
         ss << ", state:" << compaction_state_to_string(state);
-        ss << ", compaction_type:" << compaction_type;
+        ss << ", compaction_type:" << starrocks::to_string(compaction_type);
         ss << ", output_version:" << output_version;
         ss << ", start_time:" << ToStringFromUnixMillis(start_time);
         ss << ", end_time:" << ToStringFromUnixMillis(end_time);
@@ -143,6 +143,8 @@ public:
     }
 
     void set_compaction_task_state(CompactionTaskState state) { _task_info.state = state; }
+
+    CompactionTaskState compaction_task_state() { return _task_info.state; }
 
     bool is_compaction_finished() const {
         return _task_info.state == COMPACTION_FAILED || _task_info.state == COMPACTION_SUCCESS;
@@ -259,7 +261,7 @@ protected:
 
     void _success_callback();
 
-    void _failure_callback();
+    void _failure_callback(const Status& st);
 
 protected:
     CompactionTaskInfo _task_info;
@@ -270,7 +272,7 @@ protected:
     std::unique_lock<std::mutex> _compaction_lock;
     MonotonicStopWatch _watch;
     MemTracker* _mem_tracker;
-    CompactionScheduler* _scheduler;
+    CompactionScheduler* _scheduler = nullptr;
 };
 
 } // namespace starrocks
