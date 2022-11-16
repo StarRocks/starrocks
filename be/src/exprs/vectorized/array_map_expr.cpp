@@ -81,7 +81,7 @@ ColumnPtr ArrayMapExpr::evaluate(ExprContext* context, Chunk* chunk) {
     }
 
     ColumnPtr column = nullptr;
-    if (input_array->elements_column()->size() == 0) { // arrays may be null or empty
+    if (input_array->size() == 0) { // arrays may be null or empty
         column = ColumnHelper::create_column(type().children[0],
                                              true); // array->elements must be of return array->elements' type
     } else {
