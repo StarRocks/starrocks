@@ -690,8 +690,8 @@ public class OlapTable extends Table implements GsonPostProcessable {
         return rangePartitionMap;
     }
 
-    public Set<String> getPartitionColumnNames() {
-        Set<String> partitionColumnNames = Sets.newHashSet();
+    public List<String> getPartitionColumnNames() {
+        List<String> partitionColumnNames = Lists.newArrayList();
         if (partitionInfo instanceof SinglePartitionInfo) {
             return partitionColumnNames;
         }
