@@ -193,6 +193,5 @@ public class View extends Table {
         originalViewDef = Text.readString(in);
         originalViewDef = "";
         inlineViewDef = Text.readString(in);
-        inlineViewDef = inlineViewDef.replaceAll("default_cluster:", "");
     }
 }
