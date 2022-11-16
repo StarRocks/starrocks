@@ -109,7 +109,7 @@ struct AggHashMapWithOneNumberKey : public AggHashMapWithKey<HashMap> {
     using Iterator = typename HashMap::iterator;
     using ColumnType = RunTimeColumnType<primitive_type>;
     using ResultVector = typename ColumnType::Container;
-    using LogicalType = RunTimeCppType<primitive_type>;
+    using FieldType = RunTimeCppType<primitive_type>;
 
     static_assert(sizeof(LogicalType) <= sizeof(KeyType), "hash map key size needs to be larger than the actual element");
 
@@ -197,7 +197,7 @@ struct AggHashMapWithOneNullableNumberKey : public AggHashMapWithOneNumberKey<pr
     using Iterator = typename HashMap::iterator;
     using ColumnType = RunTimeColumnType<primitive_type>;
     using ResultVector = typename ColumnType::Container;
-    using LogicalType = RunTimeCppType<primitive_type>;
+    using FieldType = RunTimeCppType<primitive_type>;
 
     static_assert(sizeof(LogicalType) <= sizeof(KeyType), "hash map key size needs to be larger than the actual element");
 

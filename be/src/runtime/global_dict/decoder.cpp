@@ -15,7 +15,7 @@ namespace starrocks::vectorized {
 template <PrimitiveType type, typename Dict, PrimitiveType result_type>
 class GlobalDictDecoderBase : public GlobalDictDecoder {
 public:
-    using LogicalType = RunTimeCppType<type>;
+    using FieldType = RunTimeCppType<type>;
     using ResultColumnType = RunTimeColumnType<result_type>;
     using ColumnType = RunTimeColumnType<type>;
 

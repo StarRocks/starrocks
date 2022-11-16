@@ -246,7 +246,7 @@ template <PrimitiveType primitive_type, typename HashMap>
 struct PartitionHashMapWithOneNumberKey : public PartitionHashMapBase {
     using Iterator = typename HashMap::iterator;
     using ColumnType = RunTimeColumnType<primitive_type>;
-    using LogicalType = RunTimeCppType<primitive_type>;
+    using FieldType = RunTimeCppType<primitive_type>;
     HashMap hash_map;
 
     PartitionHashMapWithOneNumberKey(int32_t chunk_size) : PartitionHashMapBase(chunk_size) {}
@@ -266,7 +266,7 @@ template <PrimitiveType primitive_type, typename HashMap>
 struct PartitionHashMapWithOneNullableNumberKey : public PartitionHashMapBase {
     using Iterator = typename HashMap::iterator;
     using ColumnType = RunTimeColumnType<primitive_type>;
-    using LogicalType = RunTimeCppType<primitive_type>;
+    using FieldType = RunTimeCppType<primitive_type>;
     HashMap hash_map;
     PartitionChunks null_key_value;
 
