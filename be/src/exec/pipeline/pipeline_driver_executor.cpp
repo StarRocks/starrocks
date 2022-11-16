@@ -4,12 +4,12 @@
 
 #include <memory>
 
-#include "common/exception_stack_trace.h"
 #include "exec/workgroup/work_group.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "util/debug/query_trace.h"
 #include "util/defer_op.h"
+#include "util/stack_util.h"
 
 namespace starrocks::pipeline {
 
