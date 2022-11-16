@@ -26,7 +26,7 @@
 #include "common/logging.h"
 #include "gen_cpp/Opcodes_types.h"
 #include "gen_cpp/Types_types.h"
-#include "storage/olap_common.h"
+#include "types/logical_type.h"
 #include "util/guard.h"
 
 namespace starrocks {
