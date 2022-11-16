@@ -32,6 +32,7 @@
 #include "storage/tablet_schema.h"
 #include "storage/types.h"
 #include "storage/utils.h"
+#include "types/logical_type.h"
 #include "util/hash_util.hpp"
 #include "util/slice.h"
 

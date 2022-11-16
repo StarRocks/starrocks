@@ -32,6 +32,7 @@
 #include "gen_cpp/segment.pb.h" // for ColumnMetaPB
 #include "storage/collection.h"
 #include "storage/olap_common.h"
+#include "types/logical_type.h"
 #include "util/unaligned_access.h"
 
 namespace starrocks {
