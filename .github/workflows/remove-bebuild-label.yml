@@ -1,4 +1,4 @@
-name: env-cleanup
+name: label
 
 on:
   pull_request_target:
@@ -9,7 +9,7 @@ on:
       - 'be/**'
 
 jobs:
-  env-cleanup:
+  remove-bebuild-label:
     runs-on: self-hosted
     env:
       PR_NUMBER: ${{ github.event.number }}
