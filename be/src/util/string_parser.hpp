@@ -714,7 +714,7 @@ inline T StringParser::string_to_decimal(const char* s, int len, int type_precis
                 if (LIKELY(divisor >= 0)) {
                     T remainder = value % divisor;
                     value /= divisor;
-                    if (abs(remainder) >= (divisor >> 1)) {
+                    if (std::abs(remainder) >= (divisor >> 1)) {
                         value += 1;
                     }
                 } else {
