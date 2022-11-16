@@ -5,18 +5,15 @@ on:
     types:
       - synchronize
       - closed
+    paths:
+      - 'be/**'
 
 jobs:
   env-cleanup:
     runs-on: self-hosted
     env:
       PR_NUMBER: ${{ github.event.number }}
-    steps:
-      - name: romove tar.gz
-        run: |
-          ssh jenkins@ci01 '[ -f userContent/be-build-$PR_NUMBER.tar.gz ] && rm userContent/be-build-$PR_NUMBER.tar.gz'
-          ssh jenkins@ci01 '[ -f userContent/fe-ut-target-$PR_NUMBER.tar.gz ] && rm userContent/fe-ut-target-$PR_NUMBER.tar.gz'
-          
+    steps:        
       - uses: actions-ecosystem/action-remove-labels@v1
         if: contains(github.event.pull_request.labels.*.name, 'be-build')
         with:
