@@ -5,15 +5,18 @@ on:
     types:
       - synchronize
       - closed
-    paths:
-      - 'be/**'
 
 jobs:
-  remove-bebuild-label:
-    runs-on: self-hosted
+  synchronize-label:
+    runs-on: ubuntu-latest
     env:
       PR_NUMBER: ${{ github.event.number }}
-    steps:  
+    steps:
+      - uses: actions-ecosystem/action-remove-labels@v1
+        if: contains(github.event.pull_request.labels.*.name, 'Approved')
+        with:
+          labels: Approved
+            
       - uses: actions-ecosystem/action-remove-labels@v1
         if: contains(github.event.pull_request.labels.*.name, 'be-build')
         with:
