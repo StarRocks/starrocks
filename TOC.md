@@ -153,9 +153,11 @@
       + [HLL](/sql-reference/sql-statements/data-definition/HLL.md)
       + [RECOVER](/sql-reference/sql-statements/data-definition/RECOVER.md)
       + [RESTORE](/sql-reference/sql-statements/data-definition/RESTORE.md)
+      + [SHOW AUTHENTICATION](/sql-reference/sql-statements/data-definition/SHOW%20AUTHENTICATION.md)
       + [SHOW RESOURCES](/sql-reference/sql-statements/data-definition/SHOW%20RESOURCES.md)
       + [SHOW FUNCTION](/sql-reference/sql-statements/data-definition/show-functions.md)
       + [TRUNCATE TABLE](/sql-reference/sql-statements/data-definition/TRUNCATE%20TABLE.md)
+      + [USE](/sql-reference/sql-statements/data-definition/USE.md)
     + DML
       + [ALTER ROUTINE LOAD](/sql-reference/sql-statements/data-manipulation/alter-routine-load.md)
       + [BROKER LOAD](/sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md)
