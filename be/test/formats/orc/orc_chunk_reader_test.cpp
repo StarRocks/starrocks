@@ -1246,8 +1246,8 @@ TEST_F(OrcChunkReaderTest, TestReadStructBasic) {
     SlotDesc c1{"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_STRUCT)};
     c1.type.children.push_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
     c1.type.children.push_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR));
-    c1.type.field_names.push_back("cc0");
-    c1.type.field_names.push_back("cc1");
+    c1.type.field_names.emplace_back("cc0");
+    c1.type.field_names.emplace_back("cc1");
     c1.type.selected_fields.reserve(2);
     {
         /**
@@ -1340,8 +1340,8 @@ TEST_F(OrcChunkReaderTest, TestReadStructUnorderedField) {
     SlotDesc c1{"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_STRUCT)};
     c1.type.children.push_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR));
     c1.type.children.push_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
-    c1.type.field_names.push_back("cc1");
-    c1.type.field_names.push_back("cc0");
+    c1.type.field_names.emplace_back("cc1");
+    c1.type.field_names.emplace_back("cc0");
     c1.type.selected_fields.reserve(2);
 
     {
@@ -1438,7 +1438,7 @@ TEST_F(OrcChunkReaderTest, TestReadStructCaseSensitiveField) {
         SlotDesc c0{"c0", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)};
         SlotDesc c1{"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_STRUCT)};
         c1.type.children.push_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR));
-        c1.type.field_names.push_back("Cc1");
+        c1.type.field_names.emplace_back("Cc1");
         c1.type.selected_fields.reserve(1);
         c1.type.selected_fields.clear();
         c1.type.selected_fields.push_back(true);
@@ -1480,7 +1480,7 @@ TEST_F(OrcChunkReaderTest, TestReadStructCaseSensitiveField) {
         SlotDesc c0{"c0", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)};
         SlotDesc c1{"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_STRUCT)};
         c1.type.children.push_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR));
-        c1.type.field_names.push_back("cc1");
+        c1.type.field_names.emplace_back("cc1");
         c1.type.selected_fields.reserve(1);
         c1.type.selected_fields.clear();
         c1.type.selected_fields.push_back(true);
@@ -1512,8 +1512,8 @@ TEST_F(OrcChunkReaderTest, TestReadStructArrayMap) {
     TypeDescriptor c1_struct = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_STRUCT);
     c1_struct.children.push_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
     c1_struct.children.push_back(c12_array);
-    c1_struct.field_names.push_back("c11");
-    c1_struct.field_names.push_back("c12");
+    c1_struct.field_names.emplace_back("c11");
+    c1_struct.field_names.emplace_back("c12");
     c1_struct.selected_fields.reserve(2);
 
     TypeDescriptor c1_array = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_ARRAY);
@@ -1522,8 +1522,8 @@ TEST_F(OrcChunkReaderTest, TestReadStructArrayMap) {
     TypeDescriptor c2_struct = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_STRUCT);
     c2_struct.children.push_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
     c2_struct.children.push_back((TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)));
-    c2_struct.field_names.push_back("c21");
-    c2_struct.field_names.push_back("c22");
+    c2_struct.field_names.emplace_back("c21");
+    c2_struct.field_names.emplace_back("c22");
     c2_struct.selected_fields.reserve(2);
 
     TypeDescriptor c2_map = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_MAP);

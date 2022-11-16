@@ -477,11 +477,11 @@ static ValidateFuncGenerator approx_validator_gen = [](double expect) {
     };
 };
 
-void test_framework_with_with_options(query_cache::CacheManagerPtr cache_mgr, bool force_populate,
+void test_framework_with_with_options(const query_cache::CacheManagerPtr& cache_mgr, bool force_populate,
                                       bool force_passthrough, int num_lanes, int dop, RuntimeState& state_object,
-                                      MapFunc map1, MapFunc map2, double init_value, ReduceFunc reduce,
-                                      const Actions& pre_passthrough_actions, const Actions& post_passthrough_actions,
-                                      const ValidateFunc& validate_func) {
+                                      const MapFunc& map1, const MapFunc& map2, double init_value,
+                                      const ReduceFunc& reduce, const Actions& pre_passthrough_actions,
+                                      const Actions& post_passthrough_actions, const ValidateFunc& validate_func) {
     auto* state = &state_object;
     auto cache_param = create_test_cache_param(force_populate, force_passthrough, num_lanes);
     auto tasks = create_test_pipelines(cache_param, dop, std::move(cache_mgr), state, std::move(map1), std::move(map2),
@@ -512,7 +512,7 @@ void test_framework_with_with_options(query_cache::CacheManagerPtr cache_mgr, bo
 void test_framework(query_cache::CacheManagerPtr cache_mgr, int num_lanes, int dop, RuntimeState& state_object,
                     MapFunc map1, MapFunc map2, double init_value, ReduceFunc reduce,
                     const Actions& pre_passthrough_actions, const Actions& post_passthrough_actions,
-                    ValidateFunc validate_func) {
+                    const ValidateFunc& validate_func) {
     test_framework_with_with_options(std::move(cache_mgr), false, false, num_lanes, dop, state_object, std::move(map1),
                                      std::move(map2), init_value, std::move(reduce), pre_passthrough_actions,
                                      post_passthrough_actions, std::move(validate_func));
@@ -521,7 +521,7 @@ void test_framework(query_cache::CacheManagerPtr cache_mgr, int num_lanes, int d
 void test_framework_force_populate(query_cache::CacheManagerPtr cache_mgr, int num_lanes, int dop,
                                    RuntimeState& state_object, MapFunc map1, MapFunc map2, double init_value,
                                    ReduceFunc reduce, const Actions& pre_passthrough_actions,
-                                   const Actions& post_passthrough_actions, ValidateFunc validate_func) {
+                                   const Actions& post_passthrough_actions, const ValidateFunc& validate_func) {
     test_framework_with_with_options(std::move(cache_mgr), true, false, num_lanes, dop, state_object, std::move(map1),
                                      std::move(map2), init_value, std::move(reduce), pre_passthrough_actions,
                                      post_passthrough_actions, std::move(validate_func));
@@ -532,7 +532,7 @@ void test_framework_force_populate_and_passthrough(query_cache::CacheManagerPtr 
                                                    double init_value, ReduceFunc reduce,
                                                    const Actions& pre_passthrough_actions,
                                                    const Actions& post_passthrough_actions,
-                                                   ValidateFunc validate_func) {
+                                                   const ValidateFunc& validate_func) {
     test_framework_with_with_options(std::move(cache_mgr), true, true, num_lanes, dop, state_object, std::move(map1),
                                      std::move(map2), init_value, std::move(reduce), pre_passthrough_actions,
                                      post_passthrough_actions, std::move(validate_func));

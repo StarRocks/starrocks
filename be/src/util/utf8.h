@@ -118,10 +118,10 @@ static int utf8_len(const char* begin, const char* end) {
     // _mm256_loadu_si256 need not to load bytes from addresses aligning at bytes_avx2
     // boundary.
     const auto src_end_avx2 = p + (str_size & ~(bytes_avx2 - 1));
-    const auto threshold = _mm_set1_epi8(0xBF);
+    const auto threshold = _mm256_set1_epi8(0xBF);
     for (; p < src_end_avx2; p += bytes_avx2)
-        len += __builtin_popcount(
-                _mm_movemask_epi8(_mm_cmpgt_epi8(_mm_loadu_si16(reinterpret_cast<const __m256i*>(p)), threshold)));
+        len += __builtin_popcount(_mm256_movemask_epi8(
+                _mm256_cmpgt_epi8(_mm256_loadu_si256(reinterpret_cast<const __m256i*>(p)), threshold)));
 #elif defined(__SSE2__)
     size_t str_size = end - begin;
     constexpr auto bytes_sse2 = sizeof(__m128i);
@@ -140,4 +140,4 @@ static int utf8_len(const char* begin, const char* end) {
     return len;
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks
