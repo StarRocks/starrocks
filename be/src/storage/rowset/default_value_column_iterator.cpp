@@ -55,8 +55,7 @@ Status DefaultValueColumnIterator::init(const ColumnIteratorOptions& opts) {
                 (static_cast<Slice*>(_mem_value))->size = length;
                 (static_cast<Slice*>(_mem_value))->data = string_buffer;
             } else if (_type_info->type() == LOGICAL_TYPE_VARCHAR || _type_info->type() == LOGICAL_TYPE_HLL ||
-                       _type_info->type() == LOGICAL_TYPE_OBJECT ||
-                       _type_info->type() == LOGICAL_TYPE_PERCENTILE) {
+                       _type_info->type() == LOGICAL_TYPE_OBJECT || _type_info->type() == LOGICAL_TYPE_PERCENTILE) {
                 auto length = static_cast<int32_t>(_default_value.length());
                 char* string_buffer = reinterpret_cast<char*>(_pool.allocate(length));
                 if (UNLIKELY(string_buffer == nullptr)) {

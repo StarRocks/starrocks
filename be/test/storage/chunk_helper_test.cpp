@@ -30,8 +30,8 @@ public:
 
 private:
     LogicalType _type[9] = {LOGICAL_TYPE_TINYINT, LOGICAL_TYPE_SMALLINT, LOGICAL_TYPE_INT,
-                          LOGICAL_TYPE_BIGINT,  LOGICAL_TYPE_LARGEINT, LOGICAL_TYPE_FLOAT,
-                          LOGICAL_TYPE_DOUBLE,  LOGICAL_TYPE_VARCHAR,  LOGICAL_TYPE_CHAR};
+                            LOGICAL_TYPE_BIGINT,  LOGICAL_TYPE_LARGEINT, LOGICAL_TYPE_FLOAT,
+                            LOGICAL_TYPE_DOUBLE,  LOGICAL_TYPE_VARCHAR,  LOGICAL_TYPE_CHAR};
 
     PrimitiveType _primitive_type[9] = {
             PrimitiveType::TYPE_TINYINT, PrimitiveType::TYPE_SMALLINT, PrimitiveType::TYPE_INT,

@@ -65,7 +65,7 @@ public:
                                     int src_precision, int src_scale, int dst_precision, int dst_scale) {
 #define TO_DECIMAL_MACRO(n, m)                                                                               \
                                                                                                              \
-    if (src_type == LOGICAL_TYPE_DECIMAL##n && dst_type == LOGICAL_TYPE_DECIMAL##m) {                  \
+    if (src_type == LOGICAL_TYPE_DECIMAL##n && dst_type == LOGICAL_TYPE_DECIMAL##m) {                        \
         int##n##_t src_datum = 0;                                                                            \
         int##m##_t dst_datum = 0;                                                                            \
         src_datum = unaligned_load<typeof(src_datum)>(src);                                                  \
@@ -94,11 +94,12 @@ public:
         return Status::InvalidArgument("Fail to cast to decimal.");
     }
 
-    static inline Status to_decimal(LogicalType src_type, LogicalType dst_type, const Datum& src_datum, Datum& dst_datum,
-                                    int src_precision, int src_scale, int dst_precision, int dst_scale) {
+    static inline Status to_decimal(LogicalType src_type, LogicalType dst_type, const Datum& src_datum,
+                                    Datum& dst_datum, int src_precision, int src_scale, int dst_precision,
+                                    int dst_scale) {
 #define TO_DECIMAL_MACRO(n, m)                                                                           \
                                                                                                          \
-    if (src_type == LOGICAL_TYPE_DECIMAL##n && dst_type == LOGICAL_TYPE_DECIMAL##m) {              \
+    if (src_type == LOGICAL_TYPE_DECIMAL##n && dst_type == LOGICAL_TYPE_DECIMAL##m) {                    \
         int##m##_t dst_val = 0;                                                                          \
         int##n##_t src_val = src_datum.get_int##n();                                                     \
         auto overflow = to_decimal<int##n##_t, int##m##_t>(&src_val, &dst_val, src_precision, src_scale, \

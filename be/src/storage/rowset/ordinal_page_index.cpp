@@ -123,7 +123,7 @@ Status OrdinalIndexReader::_do_load(FileSystem* fs, const std::string& filename,
         Slice key = reader.get_key(i);
         ordinal_t ordinal = 0;
         RETURN_IF_ERROR(KeyCoderTraits<LOGICAL_TYPE_UNSIGNED_BIGINT>::decode_ascending(&key, sizeof(ordinal_t),
-                                                                                          (uint8_t*)&ordinal, nullptr));
+                                                                                       (uint8_t*)&ordinal, nullptr));
 
         _ordinals[i] = ordinal;
         _pages[i] = reader.get_value(i);

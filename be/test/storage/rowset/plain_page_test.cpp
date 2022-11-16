@@ -241,7 +241,7 @@ TEST_F(PlainPageTest, TestInt32PlainPageSeekValue) {
 
     test_seek_at_or_after_value_template<LOGICAL_TYPE_INT, PlainPageBuilder<LOGICAL_TYPE_INT>,
                                          PlainPageDecoder<LOGICAL_TYPE_INT>>(ints.get(), size, &small_than_smallest,
-                                                                                &bigger_than_biggest);
+                                                                             &bigger_than_biggest);
 }
 
 TEST_F(PlainPageTest, TestInt64PlainPageRandom) {
@@ -265,8 +265,8 @@ TEST_F(PlainPageTest, TestInt64PlainPageSeekValue) {
     int64_t bigger_than_biggest = 1111;
 
     test_seek_at_or_after_value_template<LOGICAL_TYPE_BIGINT, PlainPageBuilder<LOGICAL_TYPE_BIGINT>,
-                                         PlainPageDecoder<LOGICAL_TYPE_BIGINT>>(
-            ints.get(), size, &small_than_smallest, &bigger_than_biggest);
+                                         PlainPageDecoder<LOGICAL_TYPE_BIGINT>>(ints.get(), size, &small_than_smallest,
+                                                                                &bigger_than_biggest);
 }
 
 TEST_F(PlainPageTest, TestPlainFloatBlockEncoderRandom) {

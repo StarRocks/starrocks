@@ -147,8 +147,7 @@ TEST(ConjunctivePredicatesTest, test_evaluate) {
     {
         PredicatePtr p0(new_column_null_predicate(get_type_info(LOGICAL_TYPE_INT), 0, false));
         PredicatePtr p1(new_column_ge_predicate(get_type_info(LOGICAL_TYPE_CHAR), 1, "aaa"));
-        PredicatePtr p2(
-                new_column_in_predicate(get_type_info(LOGICAL_TYPE_DECIMAL_V2), 4, {"0.000001", "0.000003"}));
+        PredicatePtr p2(new_column_in_predicate(get_type_info(LOGICAL_TYPE_DECIMAL_V2), 4, {"0.000001", "0.000003"}));
 
         ConjunctivePredicates conjuncts({p0.get(), p1.get(), p2.get()});
 

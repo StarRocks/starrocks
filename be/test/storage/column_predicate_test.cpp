@@ -500,8 +500,7 @@ TEST(ColumnPredicateTest, test_eq) {
     }
     // decimal_v2
     {
-        std::unique_ptr<ColumnPredicate> p(
-                new_column_eq_predicate(get_type_info(LOGICAL_TYPE_DECIMAL_V2), 0, "1.23"));
+        std::unique_ptr<ColumnPredicate> p(new_column_eq_predicate(get_type_info(LOGICAL_TYPE_DECIMAL_V2), 0, "1.23"));
         auto field = std::make_shared<Field>(1, "test", LOGICAL_TYPE_DECIMAL_V2, 27, 9, false);
         auto c = ChunkHelper::column_from_field(*field);
         c->append_datum(Datum(DecimalV2Value("1.23")));
@@ -1633,8 +1632,7 @@ TEST(ColumnPredicateTest, test_in) {
 // NOLINTNEXTLINE
 TEST(ColumnPredicateTest, test_no_in) {
     {
-        std::unique_ptr<ColumnPredicate> p(
-                new_column_not_in_predicate(get_type_info(LOGICAL_TYPE_INT), 0, {"3", "4"}));
+        std::unique_ptr<ColumnPredicate> p(new_column_not_in_predicate(get_type_info(LOGICAL_TYPE_INT), 0, {"3", "4"}));
         auto c = ChunkHelper::column_from_field_type(LOGICAL_TYPE_INT, true);
         c->append_datum(Datum(1));
         c->append_datum(Datum(2));
@@ -2095,10 +2093,8 @@ TEST(ColumnPredicateTest, zone_map_filter_varchar) {
     std::unique_ptr<ColumnPredicate> ge_xx(new_column_ge_predicate(get_type_info(LOGICAL_TYPE_VARCHAR), 0, "xx"));
     std::unique_ptr<ColumnPredicate> lt_xx(new_column_lt_predicate(get_type_info(LOGICAL_TYPE_VARCHAR), 0, "xx"));
     std::unique_ptr<ColumnPredicate> le_xx(new_column_le_predicate(get_type_info(LOGICAL_TYPE_VARCHAR), 0, "xx"));
-    std::unique_ptr<ColumnPredicate> is_null(
-            new_column_null_predicate(get_type_info(LOGICAL_TYPE_VARCHAR), 0, true));
-    std::unique_ptr<ColumnPredicate> not_null(
-            new_column_null_predicate(get_type_info(LOGICAL_TYPE_VARCHAR), 0, false));
+    std::unique_ptr<ColumnPredicate> is_null(new_column_null_predicate(get_type_info(LOGICAL_TYPE_VARCHAR), 0, true));
+    std::unique_ptr<ColumnPredicate> not_null(new_column_null_predicate(get_type_info(LOGICAL_TYPE_VARCHAR), 0, false));
     std::unique_ptr<ColumnPredicate> in_xx_yy(
             new_column_in_predicate(get_type_info(LOGICAL_TYPE_VARCHAR), 0, {"xx", "yy"}));
     std::unique_ptr<ColumnPredicate> not_in_xx_yy(

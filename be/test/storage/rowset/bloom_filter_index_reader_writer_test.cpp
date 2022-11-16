@@ -206,7 +206,7 @@ TEST_F(BloomFilterIndexReaderWriterTest, test_varchar_type) {
     std::string file_name = "bloom_filter_varchar";
     Slice not_exist_value("value_not_exist");
     test_bloom_filter_index_reader_writer_template<LOGICAL_TYPE_VARCHAR>(file_name, slices, num, 1, &not_exist_value,
-                                                                            true);
+                                                                         true);
     delete[] val;
     delete[] slices;
 }
@@ -226,7 +226,7 @@ TEST_F(BloomFilterIndexReaderWriterTest, test_char) {
     std::string file_name = "bloom_filter_char";
     Slice not_exist_value("char_value_not_exist");
     test_bloom_filter_index_reader_writer_template<LOGICAL_TYPE_CHAR>(file_name, slices, num, 1, &not_exist_value,
-                                                                         true);
+                                                                      true);
     delete[] val;
     delete[] slices;
 }

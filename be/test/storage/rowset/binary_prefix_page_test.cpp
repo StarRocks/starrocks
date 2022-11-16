@@ -57,7 +57,7 @@ public:
 
         PageDecoderOptions dict_decoder_options;
         auto page_decoder = std::make_unique<BinaryPrefixPageDecoder<LOGICAL_TYPE_VARCHAR>>(dict_slice.slice(),
-                                                                                               dict_decoder_options);
+                                                                                            dict_decoder_options);
         Status ret = page_decoder->init();
         ASSERT_TRUE(ret.ok());
 
@@ -100,7 +100,7 @@ public:
 
         PageDecoderOptions dict_decoder_options;
         auto page_decoder = std::make_unique<BinaryPrefixPageDecoder<LOGICAL_TYPE_VARCHAR>>(dict_slice.slice(),
-                                                                                               dict_decoder_options);
+                                                                                            dict_decoder_options);
         Status ret = page_decoder->init();
         ASSERT_TRUE(ret.ok());
         // because every slice is unique

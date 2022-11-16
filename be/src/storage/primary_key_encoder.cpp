@@ -254,7 +254,7 @@ bool PrimaryKeyEncoder::is_supported(const vectorized::Schema& schema, const std
 }
 
 LogicalType PrimaryKeyEncoder::encoded_primary_key_type(const vectorized::Schema& schema,
-                                                      const std::vector<ColumnId>& key_idxes) {
+                                                        const std::vector<ColumnId>& key_idxes) {
     if (!is_supported(schema, key_idxes)) {
         return LOGICAL_TYPE_NONE;
     }

@@ -76,8 +76,7 @@ TEST(PrimaryKeyEncoderTest, testEncodeInt128) {
 }
 
 TEST(PrimaryKeyEncoderTest, testEncodeComposite) {
-    auto sc = create_key_schema(
-            {LOGICAL_TYPE_INT, LOGICAL_TYPE_VARCHAR, LOGICAL_TYPE_SMALLINT, LOGICAL_TYPE_BOOL});
+    auto sc = create_key_schema({LOGICAL_TYPE_INT, LOGICAL_TYPE_VARCHAR, LOGICAL_TYPE_SMALLINT, LOGICAL_TYPE_BOOL});
     unique_ptr<vectorized::Column> dest;
     PrimaryKeyEncoder::create_column(*sc, &dest);
     const int n = 1;
@@ -120,8 +119,7 @@ TEST(PrimaryKeyEncoderTest, testEncodeComposite) {
 
 TEST(PrimaryKeyEncoderTest, testEncodeCompositeLimit) {
     {
-        auto sc = create_key_schema(
-                {LOGICAL_TYPE_INT, LOGICAL_TYPE_VARCHAR, LOGICAL_TYPE_SMALLINT, LOGICAL_TYPE_BOOL});
+        auto sc = create_key_schema({LOGICAL_TYPE_INT, LOGICAL_TYPE_VARCHAR, LOGICAL_TYPE_SMALLINT, LOGICAL_TYPE_BOOL});
         const int n = 1;
         auto pchunk = ChunkHelper::new_chunk(*sc, n);
         vectorized::Datum tmp;
@@ -140,8 +138,7 @@ TEST(PrimaryKeyEncoderTest, testEncodeCompositeLimit) {
     }
 
     {
-        auto sc = create_key_schema(
-                {LOGICAL_TYPE_INT, LOGICAL_TYPE_VARCHAR, LOGICAL_TYPE_SMALLINT, LOGICAL_TYPE_BOOL});
+        auto sc = create_key_schema({LOGICAL_TYPE_INT, LOGICAL_TYPE_VARCHAR, LOGICAL_TYPE_SMALLINT, LOGICAL_TYPE_BOOL});
         const int n = 1;
         auto pchunk = ChunkHelper::new_chunk(*sc, n);
         vectorized::Datum tmp;

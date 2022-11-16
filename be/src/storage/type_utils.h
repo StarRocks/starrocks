@@ -19,8 +19,7 @@ public:
     }
 
     static inline bool specific_type_of_format_v2(LogicalType type) {
-        return type == LOGICAL_TYPE_DATE_V2 || type == LOGICAL_TYPE_TIMESTAMP ||
-               type == LOGICAL_TYPE_DECIMAL_V2;
+        return type == LOGICAL_TYPE_DATE_V2 || type == LOGICAL_TYPE_TIMESTAMP || type == LOGICAL_TYPE_DECIMAL_V2;
     }
 
     static inline size_t estimate_field_size(LogicalType type, size_t variable_length) {

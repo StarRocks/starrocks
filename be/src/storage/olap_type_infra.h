@@ -11,36 +11,36 @@
 namespace starrocks {
 
 #define APPLY_FOR_TYPE_INTEGER(M) \
-    M(LOGICAL_TYPE_TINYINT)    \
-    M(LOGICAL_TYPE_SMALLINT)   \
-    M(LOGICAL_TYPE_BIGINT)     \
-    M(LOGICAL_TYPE_LARGEINT)   \
+    M(LOGICAL_TYPE_TINYINT)       \
+    M(LOGICAL_TYPE_SMALLINT)      \
+    M(LOGICAL_TYPE_BIGINT)        \
+    M(LOGICAL_TYPE_LARGEINT)      \
     M(LOGICAL_TYPE_INT)
 
 #define APPLY_FOR_TYPE_DECIMAL(M) \
-    M(LOGICAL_TYPE_DECIMAL)    \
-    M(LOGICAL_TYPE_DECIMAL_V2) \
-    M(LOGICAL_TYPE_DECIMAL32)  \
-    M(LOGICAL_TYPE_DECIMAL64)  \
+    M(LOGICAL_TYPE_DECIMAL)       \
+    M(LOGICAL_TYPE_DECIMAL_V2)    \
+    M(LOGICAL_TYPE_DECIMAL32)     \
+    M(LOGICAL_TYPE_DECIMAL64)     \
     M(LOGICAL_TYPE_DECIMAL128)
 
-#define APPLY_FOR_TYPE_TIME(M)  \
-    M(LOGICAL_TYPE_DATE)     \
-    M(LOGICAL_TYPE_DATE_V2)  \
-    M(LOGICAL_TYPE_DATETIME) \
+#define APPLY_FOR_TYPE_TIME(M) \
+    M(LOGICAL_TYPE_DATE)       \
+    M(LOGICAL_TYPE_DATE_V2)    \
+    M(LOGICAL_TYPE_DATETIME)   \
     M(LOGICAL_TYPE_TIMESTAMP)
 
 // Types that support bitmap index
 #define APPLY_FOR_BITMAP_INDEX_TYPE(M) \
     APPLY_FOR_TYPE_INTEGER(M)          \
     APPLY_FOR_TYPE_TIME(M)             \
-    M(LOGICAL_TYPE_UNSIGNED_INT)    \
-    M(LOGICAL_TYPE_FLOAT)           \
-    M(LOGICAL_TYPE_DOUBLE)          \
-    M(LOGICAL_TYPE_CHAR)            \
-    M(LOGICAL_TYPE_VARCHAR)         \
-    M(LOGICAL_TYPE_BOOL)            \
-    M(LOGICAL_TYPE_DECIMAL)         \
+    M(LOGICAL_TYPE_UNSIGNED_INT)       \
+    M(LOGICAL_TYPE_FLOAT)              \
+    M(LOGICAL_TYPE_DOUBLE)             \
+    M(LOGICAL_TYPE_CHAR)               \
+    M(LOGICAL_TYPE_VARCHAR)            \
+    M(LOGICAL_TYPE_BOOL)               \
+    M(LOGICAL_TYPE_DECIMAL)            \
     M(LOGICAL_TYPE_DECIMAL_V2)
 
 // Types that support bloomfilter(exclude tinyint/float/double)
@@ -48,13 +48,13 @@ namespace starrocks {
     APPLY_FOR_TYPE_INTEGER(M)         \
     APPLY_FOR_TYPE_DECIMAL(M)         \
     APPLY_FOR_TYPE_TIME(M)            \
-    M(LOGICAL_TYPE_UNSIGNED_INT)   \
-    M(LOGICAL_TYPE_CHAR)           \
+    M(LOGICAL_TYPE_UNSIGNED_INT)      \
+    M(LOGICAL_TYPE_CHAR)              \
     M(LOGICAL_TYPE_VARCHAR)
 
 // These types should be synced with LogicalType in olap_common.h
 #define APPLY_FOR_BASIC_LOGICAL_TYPE(M) \
-    APPLY_FOR_BITMAP_INDEX_TYPE(M)         \
+    APPLY_FOR_BITMAP_INDEX_TYPE(M)      \
     M(LOGICAL_TYPE_JSON)                \
     M(LOGICAL_TYPE_DECIMAL32)           \
     M(LOGICAL_TYPE_DECIMAL64)           \
@@ -74,17 +74,17 @@ namespace starrocks {
     M(LOGICAL_TYPE_PERCENTILE)
 
 #define APPLY_FOR_METRIC_FIELD_TYPE(M) \
-    M(LOGICAL_TYPE_HLL)             \
-    M(LOGICAL_TYPE_OBJECT)          \
+    M(LOGICAL_TYPE_HLL)                \
+    M(LOGICAL_TYPE_OBJECT)             \
     M(LOGICAL_TYPE_PERCENTILE)
 
 #define APPLY_FOR_SUPPORTED_FIELD_TYPE(M) \
-    APPLY_FOR_BASIC_LOGICAL_TYPE(M)    \
-    M(LOGICAL_TYPE_UNSIGNED_TINYINT)   \
-    M(LOGICAL_TYPE_UNSIGNED_SMALLINT)  \
-    M(LOGICAL_TYPE_UNSIGNED_BIGINT)    \
-    M(LOGICAL_TYPE_HLL)                \
-    M(LOGICAL_TYPE_OBJECT)             \
+    APPLY_FOR_BASIC_LOGICAL_TYPE(M)       \
+    M(LOGICAL_TYPE_UNSIGNED_TINYINT)      \
+    M(LOGICAL_TYPE_UNSIGNED_SMALLINT)     \
+    M(LOGICAL_TYPE_UNSIGNED_BIGINT)       \
+    M(LOGICAL_TYPE_HLL)                   \
+    M(LOGICAL_TYPE_OBJECT)                \
     M(LOGICAL_TYPE_PERCENTILE)
 
 #define APPLY_FOR_EXTRA_LOGICAL_TYPE(M) \
@@ -97,17 +97,17 @@ namespace starrocks {
     APPLY_FOR_TYPE_INTEGER(M)                  \
     APPLY_FOR_TYPE_TIME(M)                     \
     APPLY_FOR_TYPE_DECIMAL(M)                  \
-    M(LOGICAL_TYPE_FLOAT)                   \
-    M(LOGICAL_TYPE_DOUBLE)                  \
-    M(LOGICAL_TYPE_JSON)                    \
+    M(LOGICAL_TYPE_FLOAT)                      \
+    M(LOGICAL_TYPE_DOUBLE)                     \
+    M(LOGICAL_TYPE_JSON)                       \
     M(LOGICAL_TYPE_BOOL)
 
 #define APPLY_FOR_TYPE_CONVERT_TO_VARCHAR(M) \
     APPLY_FOR_TYPE_INTEGER(M)                \
     APPLY_FOR_TYPE_TIME(M)                   \
     APPLY_FOR_TYPE_DECIMAL(M)                \
-    M(LOGICAL_TYPE_FLOAT)                 \
-    M(LOGICAL_TYPE_JSON)                  \
+    M(LOGICAL_TYPE_FLOAT)                    \
+    M(LOGICAL_TYPE_JSON)                     \
     M(LOGICAL_TYPE_DOUBLE)
 
 #define _TYPE_DISPATCH_CASE(type) \

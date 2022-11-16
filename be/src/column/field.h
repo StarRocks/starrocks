@@ -33,7 +33,8 @@ public:
             : Field(id, name, get_type_info(type, precision, scale), OLAP_FIELD_AGGREGATION_NONE, 0, false, nullable) {}
 
     // Non-key field of any type except for DECIMAL32, DECIMAL64, DECIMAL128, and ARRAY
-    Field(ColumnId id, std::string_view name, LogicalType type, bool nullable) : Field(id, name, type, -1, -1, nullable) {
+    Field(ColumnId id, std::string_view name, LogicalType type, bool nullable)
+            : Field(id, name, type, -1, -1, nullable) {
         DCHECK(type != LOGICAL_TYPE_DECIMAL32);
         DCHECK(type != LOGICAL_TYPE_DECIMAL64);
         DCHECK(type != LOGICAL_TYPE_DECIMAL128);
