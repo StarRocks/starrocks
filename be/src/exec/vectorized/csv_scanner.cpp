@@ -88,12 +88,12 @@ CSVScanner::CSVScanner(RuntimeState* state, RuntimeProfile* profile, const TBrok
     if (scan_range.params.__isset.enclose) {
         _enclose = scan_range.params.enclose;
     } else {
-        _enclose = '"';
+        _enclose = 0;
     }
     if (scan_range.params.__isset.escape) {
         _escape = scan_range.params.escape;
     } else {
-        _escape = '\\';
+        _escape = 0;
     }
 }
 
