@@ -15,12 +15,12 @@ on:
 jobs:
   cherrypick-check:
     runs-on: ubuntu-latest
+    if: >
+      startsWith(github.event.pull_request.title, '[BugFix]') &&
+      !contains(github.event.pull_request.title, 'cherry-pick') &&
+      !contains(github.event.pull_request.title, 'backport')
     steps:
       - uses: actions-ecosystem/action-add-labels@v1
-        if: >
-          startsWith(github.event.pull_request.title, '[BugFix]') &&
-          !contains(github.event.pull_request.title, 'cherry-pick') &&
-          !contains(github.event.pull_request.title, 'backport')
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           labels: |
@@ -30,10 +30,6 @@ jobs:
             2.2
 
       - uses: thollander/actions-comment-pull-request@v1
-        if: >
-          startsWith(github.event.pull_request.title, '[BugFix]') &&
-          !contains(github.event.pull_request.title, 'cherry-pick') &&
-          !contains(github.event.pull_request.title, 'backport')
         with:
           message: |
             ## Please check the version labels which this pr will be auto backported to target branch and click the checkbox:
