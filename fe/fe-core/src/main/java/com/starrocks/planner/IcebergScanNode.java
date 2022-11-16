@@ -117,7 +117,7 @@ public class IcebergScanNode extends ScanNode {
      * predicates in the scan to keep consistency. More details about Iceberg scanning,
      * please refer: https://iceberg.apache.org/spec/#scan-planning
      */
-    public void preProcessConjuncts(List<ScalarOperator> operators) {
+    public void preProcessIcebergPredicate(List<ScalarOperator> operators) {
         Types.StructType schema = srIcebergTable.getIcebergTable().schema().asStruct();
         ScalarOperatorToIcebergExpr.IcebergContext icebergContext = new ScalarOperatorToIcebergExpr.IcebergContext(schema);
         icebergPredicate = new ScalarOperatorToIcebergExpr().convert(operators, icebergContext);
