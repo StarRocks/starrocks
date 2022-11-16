@@ -1265,8 +1265,9 @@ Status OrcChunkReader::_init_include_columns(const std::unique_ptr<OrcMapping>& 
     build_column_name_to_id_mapping(&_name_to_column_id, _hive_column_names, _reader->getType(), _case_sensitive);
 
     std::list<uint64_t> include_column_id;
-    // Include root column id.
-    include_column_id.emplace_back(0);
+    // NOTE(yan): No need to explicit include root column id, otherwise it will read out all fields.
+    // // Include root column id.
+    // include_column_id.emplace_back(0);
 
     for (size_t i = 0; i < _src_slot_descriptors.size(); i++) {
         SlotDescriptor* desc = _src_slot_descriptors[i];
