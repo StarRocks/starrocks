@@ -105,6 +105,7 @@ public:
             case OLAP_FIELD_TYPE_PERCENTILE:
             case OLAP_FIELD_TYPE_JSON:
             case OLAP_FIELD_TYPE_MAX_VALUE:
+            case OLAP_FIELD_TYPE_VARBINARY:
                 return type;
                 // no default by intention.
             }
@@ -124,6 +125,7 @@ public:
             case OLAP_FIELD_TYPE_DECIMAL32:
             case OLAP_FIELD_TYPE_DECIMAL64:
             case OLAP_FIELD_TYPE_DECIMAL128:
+            case OLAP_FIELD_TYPE_VARBINARY:
                 return OLAP_FIELD_TYPE_UNKNOWN;
             case OLAP_FIELD_TYPE_TINYINT:
             case OLAP_FIELD_TYPE_UNSIGNED_TINYINT:

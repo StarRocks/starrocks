@@ -221,6 +221,8 @@ std::string TypeDescriptor::debug_string() const {
         return strings::Substitute("CHAR($0)", len);
     case TYPE_VARCHAR:
         return strings::Substitute("VARCHAR($0)", len);
+    case TYPE_VARBINARY:
+        return strings::Substitute("VARBINARY($0)", len);
     case TYPE_DECIMAL:
         return strings::Substitute("DECIMAL($0, $1)", precision, scale);
     case TYPE_DECIMALV2:
@@ -310,6 +312,7 @@ int TypeDescriptor::get_slot_size() const {
     case TYPE_OBJECT:
     case TYPE_PERCENTILE:
     case TYPE_JSON:
+    case TYPE_VARBINARY:
         return sizeof(StringValue);
 
     case TYPE_NULL:

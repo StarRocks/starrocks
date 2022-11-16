@@ -336,6 +336,7 @@ USER: 'USER';
 USING: 'USING';
 VALUE: 'VALUE';
 VALUES: 'VALUES';
+VARBINARY: 'VARBINARY';
 VARCHAR: 'VARCHAR';
 VARIABLES: 'VARIABLES';
 VERBOSE: 'VERBOSE';
@@ -397,6 +398,14 @@ SINGLE_QUOTED_TEXT
 
 DOUBLE_QUOTED_TEXT
     : '"' ('\\'. | '""' | ~('"'| '\\'))* '"'
+    ;
+
+BINARY_SINGLE_QUOTED_TEXT
+    : 'X\'' (~('\'' | '\\'))* '\''
+    ;
+
+BINARY_DOUBLE_QUOTED_TEXT
+    : 'X"' (~('"'| '\\'))* '"'
     ;
 
 LETTER_IDENTIFIER

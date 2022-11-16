@@ -156,6 +156,10 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
         return new ConstantOperator(value, charType);
     }
 
+    public static ConstantOperator createBinary(byte[] value, Type binaryType) {
+        return new ConstantOperator(value, binaryType);
+    }
+
     public boolean isNull() {
         return isNull;
     }
@@ -247,6 +251,10 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
 
     public String getChar() {
         return (String) Optional.ofNullable(value).orElse("");
+    }
+
+    public byte[] getBinary() {
+        return (byte[]) (value);
     }
 
     @Override

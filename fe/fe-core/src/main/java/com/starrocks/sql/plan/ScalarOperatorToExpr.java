@@ -37,6 +37,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.Subquery;
+import com.starrocks.analysis.VarBinaryLiteral;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
@@ -200,6 +201,8 @@ public class ScalarOperatorToExpr {
                     return d;
                 } else if (type.isVarchar() || type.isChar()) {
                     return new StringLiteral(literal.getVarchar());
+                } else if (type.isBinaryType()) {
+                    return new VarBinaryLiteral(literal.getBinary());
                 } else {
                     throw new UnsupportedOperationException("nonsupport constant type: " + type.toSql());
                 }

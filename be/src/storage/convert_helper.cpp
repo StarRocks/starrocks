@@ -1814,6 +1814,7 @@ const FieldConverter* get_field_converter(FieldType from_type, FieldType to_type
             TYPE_CASE_CLAUSE(OLAP_FIELD_TYPE_OBJECT)
             TYPE_CASE_CLAUSE(OLAP_FIELD_TYPE_PERCENTILE)
             TYPE_CASE_CLAUSE(OLAP_FIELD_TYPE_JSON)
+            TYPE_CASE_CLAUSE(OLAP_FIELD_TYPE_VARBINARY)
         case OLAP_FIELD_TYPE_DECIMAL32:
         case OLAP_FIELD_TYPE_DECIMAL64:
         case OLAP_FIELD_TYPE_DECIMAL128:

@@ -121,6 +121,17 @@ public class TypeDef implements ParseNode {
                 }
                 break;
             }
+            case VARBINARY: {
+                String name = "VARBINARY";
+                int maxLen = ScalarType.MAX_VARCHAR_LENGTH;
+                int len = scalarType.getLength();
+                // len is decided by child, when it is -1.
+                if (scalarType.getLength() > maxLen) {
+                    throw new AnalysisException(
+                            name + " size must be <= " + maxLen + ": " + len);
+                }
+                break;
+            }
             case DECIMALV2:
             case DECIMAL32:
             case DECIMAL64:
