@@ -1,0 +1,32 @@
+name: label
+
+on:
+  pull_request_target:
+    types:
+      - synchronize
+      - closed
+
+jobs:
+  synchronize-label:
+    runs-on: ubuntu-latest
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+    steps:
+      - uses: actions-ecosystem/action-remove-labels@v1
+        if: contains(github.event.pull_request.labels.*.name, 'Approved')
+        with:
+          labels: Approved
+          
+      - uses: dorny/paths-filter@v2
+        id: changes
+        with:
+          filters: |
+            be:
+            - 'be/**'
+            
+      - uses: actions-ecosystem/action-remove-labels@v1
+        if: >
+          contains(github.event.pull_request.labels.*.name, 'be-build') &&
+          steps.changes.outputs.be == 'true'
+        with:
+          labels: be-build
