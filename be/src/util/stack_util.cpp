@@ -20,7 +20,10 @@
 #include <cxxabi.h>
 #include <dlfcn.h>
 
+#include <string>
+
 #include "runtime/current_thread.h"
+#include "util/time.h"
 
 namespace google::glog_internal_namespace_ {
 void DumpStackTraceToString(std::string* stacktrace);
@@ -34,12 +37,35 @@ std::string get_stack_trace() {
     return s;
 }
 
-void __wrap___cxa_throw(void* thrown_exception, void* infov, void (*dest)(void*)) {
-    std::type_info* info = (std::type_info*)infov;
+// as exception' name is not large, so we can think there are no exceptions.
+std::string get_exception_name(const void* info) {
+    auto* exception_info = (std::type_info*)info;
+    int demangle_status;
+    char* demangled_exception_name;
+    std::string exception_name = "unknown";
+    if (exception_info != NULL) {
+        // Demangle the name of the exception using the GNU C++ ABI:
+        demangled_exception_name = abi::__cxa_demangle(exception_info->name(), NULL, NULL, &demangle_status);
+        if (demangled_exception_name != NULL) {
+            exception_name = std::string(demangled_exception_name);
+            // Free the memory from __cxa_demangle():
+            free(demangled_exception_name);
+        } else {
+            // NOTE: if the demangle fails, we do nothing, so the
+            // non-demangled name will be printed. That's ok.
+            exception_name = std::string(exception_info->name());
+        }
+    }
+    return exception_name;
+}
+
+// wrap libc's _cxa_throw
+void __wrap___cxa_throw(void* thrown_exception, void* info, void (*dest)(void*)) {
     auto query_id = CurrentThread::current().query_id();
     auto fragment_instance_id = CurrentThread::current().fragment_instance_id();
-    fprintf(stderr, "query_id=%s, fragment_instance_id=%s throws exceptions, trace:\n %s \n",
-            print_id(query_id).c_str(), print_id(fragment_instance_id).c_str(), get_stack_trace().c_str());
+    fprintf(stderr, "@ %s, query_id=%s, fragment_instance_id=%s throws exception: %s, trace:\n %s \n",
+            ToStringFromUnixMicros(GetCurrentTimeMicros()).c_str(), print_id(query_id).c_str(),
+            print_id(fragment_instance_id).c_str(), get_exception_name(info).c_str(), get_stack_trace().c_str());
 
     // call the real __cxa_throw():
     static void (*const rethrow)(void*, void*, void (*)(void*)) __attribute__((noreturn)) =
