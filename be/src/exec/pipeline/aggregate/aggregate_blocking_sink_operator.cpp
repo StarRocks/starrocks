@@ -93,6 +93,7 @@ Status AggregateBlockingSinkOperator::push_chunk(RuntimeState* state, const vect
     }
     _aggregator->update_num_input_rows(chunk_size);
     RETURN_IF_ERROR(_aggregator->check_has_error());
+
     return Status::OK();
 }
 } // namespace starrocks::pipeline
