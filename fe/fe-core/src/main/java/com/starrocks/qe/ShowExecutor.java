@@ -30,6 +30,7 @@ import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.analysis.TableName;
 import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.Repository;
@@ -164,6 +165,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+
+import static com.starrocks.catalog.Table.TableType.JDBC;
 
 // Execute one show statement.
 public class ShowExecutor {
@@ -677,6 +680,63 @@ public class ShowExecutor {
     // Show create table
     private void handleShowCreateTable() throws AnalysisException {
         ShowCreateTableStmt showStmt = (ShowCreateTableStmt) stmt;
+        TableName tbl = showStmt.getTbl();
+        String catalogName = tbl.getCatalog();
+        if (catalogName == null) {
+            catalogName = ctx.getCurrentCatalog();
+        }
+        if (CatalogMgr.isInternalCatalog(catalogName)) {
+            showCreateInternalTbl(showStmt);
+        } else {
+            showCreateExternalTbl(tbl, catalogName);
+        }
+    }
+
+    private void showCreateExternalTbl(TableName tbl, String catalogName) {
+        String dbName = tbl.getDb();
+        String tableName = tbl.getTbl();
+        MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
+        Database db = metadataMgr.getDb(catalogName, dbName);
+        if (db == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+        }
+        Table table = metadataMgr.getTable(catalogName, dbName, tableName);
+        if (table == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
+        }
+
+        // create table catalogName.dbName.tableName (
+        StringBuilder createTableSql = new StringBuilder();
+        createTableSql.append("CREATE TABLE ")
+                .append(catalogName)
+                .append(".")
+                .append(dbName)
+                .append(".")
+                .append(tableName)
+                .append(" (\n");
+
+        // Columns
+        List<String> columns = table.getFullSchema().stream().map(
+                column -> toDDL(column)).collect(Collectors.toList());
+        createTableSql.append(String.join(",\n", columns))
+                .append("\n)");
+
+        // Partition column names
+        if (table.getType() != JDBC && !table.isUnPartitioned()) {
+            createTableSql.append("\nWITH (\n partitioned_by = ARRAY [ ");
+            createTableSql.append(String.join(", ", table.getPartitionColumnNames())).append(" ]\n)");
+        }
+
+        List<List<String>> rows = Lists.newArrayList();
+        rows.add(Lists.newArrayList(tableName, createTableSql.toString()));
+        resultSet = new ShowResultSet(stmt.getMetaData(), rows);
+    }
+
+    private String toDDL(Column column) {
+        return "`" + column.getName() + "` " + column.getType();
+    }
+
+    private void showCreateInternalTbl(ShowCreateTableStmt showStmt) throws AnalysisException {
         Database db = ctx.getGlobalStateMgr().getDb(showStmt.getDb());
         if (db == null) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_DB_ERROR, showStmt.getDb());

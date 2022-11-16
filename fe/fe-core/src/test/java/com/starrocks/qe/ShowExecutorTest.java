@@ -31,6 +31,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
+import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.ListPartitionInfoTest;
 import com.starrocks.catalog.MaterializedIndex;
@@ -53,6 +54,7 @@ import com.starrocks.lake.StarOSAgent;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.HelpStmt;
 import com.starrocks.sql.ast.SetType;
@@ -88,11 +90,13 @@ import org.junit.rules.ExpectedException;
 
 import java.io.IOException;
 import java.net.URL;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
 import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME;
+import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.toResourceName;
 import static com.starrocks.thrift.TStorageMedium.SSD;
 
 public class ShowExecutorTest {
@@ -861,5 +865,58 @@ public class ShowExecutorTest {
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         // AnalysisException("There is no job named...") is expected.
         Assert.assertThrows(AnalysisException.class, () -> executor.execute());
+    }
+
+    @Test
+    public void testShowCreateExternalCatalogTable() throws DdlException, AnalysisException {
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Database getDb(String catalogName, String dbName) {
+                return new Database();
+            }
+            @Mock
+            public Table getTable(String catalogName, String dbName, String tblName) {
+                List<Column> fullSchema = new ArrayList<>();
+                Column columnId = new Column("id", Type.INT);
+                Column columnName = new Column("name", Type.VARCHAR);
+                Column columnYear = new Column("year", Type.INT);
+                Column columnDt = new Column("dt", Type.INT);
+                fullSchema.add(columnId);
+                fullSchema.add(columnName);
+                fullSchema.add(columnYear);
+                fullSchema.add(columnDt);
+                List<String> partitions = Lists.newArrayList();
+                partitions.add("year");
+                partitions.add("dt");
+                HiveTable.Builder tableBuilder = HiveTable.builder()
+                        .setId(1)
+                        .setTableName("test_table")
+                        .setCatalogName("hive_catalog")
+                        .setResourceName(toResourceName("hive_catalog", "hive"))
+                        .setHiveDbName("hive_db")
+                        .setHiveTableName("test_table")
+                        .setPartitionColumnNames(partitions)
+                        .setFullSchema(fullSchema)
+                        .setTableLocation("")
+                        .setCreateTime(10000);
+                return tableBuilder.build();
+            }
+        };
+
+
+        ShowCreateTableStmt stmt = new ShowCreateTableStmt(new TableName("hive_catalog", "hive_db", "test_table"),
+                ShowCreateTableStmt.CreateTableType.TABLE);
+        ShowExecutor executor = new ShowExecutor(ctx, stmt);
+        ShowResultSet resultSet = executor.execute();
+        Assert.assertEquals("test_table", resultSet.getResultRows().get(0).get(0));
+        Assert.assertEquals("CREATE TABLE hive_catalog.hive_db.test_table (\n" +
+                "`id` INT,\n" +
+                "`name` VARCHAR,\n" +
+                "`year` INT,\n" +
+                "`dt` INT\n" +
+                ")\n" +
+                "WITH (\n" +
+                " partitioned_by = ARRAY [ year, dt ]\n" +
+                ")", resultSet.getResultRows().get(0).get(1));
     }
 }
