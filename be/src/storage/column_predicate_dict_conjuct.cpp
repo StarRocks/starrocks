@@ -20,7 +20,7 @@ namespace starrocks::vectorized {
 // [2] "RK" -> false
 //
 
-template <FieldType field_type>
+template <LogicalType field_type>
 class DictConjuctPredicateOperator {
 public:
     static constexpr bool skip_null = false;

@@ -105,7 +105,7 @@ public:
         return ss.str();
     }
 
-    FieldType type() const { return _type_info->type(); }
+    LogicalType type() const { return _type_info->type(); }
     const TypeInfoPtr& type_info() const { return _type_info; }
     bool is_nullable() const { return _is_nullable; }
 
@@ -277,7 +277,7 @@ public:
         return nullptr;
     }
 
-    static Field* create_by_type(const FieldType& type) {
+    static Field* create_by_type(const LogicalType& type) {
         TabletColumn column(OLAP_FIELD_AGGREGATION_NONE, type);
         return create(column);
     }

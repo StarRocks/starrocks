@@ -41,7 +41,7 @@ Status ColumnVectorBatch::resize(size_t new_cap) {
     return Status::OK();
 }
 
-template <FieldType ftype>
+template <LogicalType ftype>
 struct BatchT {
     using value = ScalarColumnVectorBatch<typename CppTypeTraits<ftype>::CppType>;
 };
@@ -51,7 +51,7 @@ struct BatchT<OLAP_FIELD_TYPE_BOOL> {
 };
 
 struct BatchBuilder {
-    template <FieldType ftype>
+    template <LogicalType ftype>
     StatusOr<std::unique_ptr<ColumnVectorBatch>> operator()(const TypeInfoPtr& type_info, bool nullable, Field* field,
                                                             size_t capacity) {
         switch (ftype) {

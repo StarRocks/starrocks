@@ -328,7 +328,7 @@ PARALLEL_TEST(ConvertHelperTest, testTimestampToDatetimeColumn) {
     }
 }
 
-template <FieldType field_type>
+template <LogicalType field_type>
 static void test_convert_same_numeric_types() {
     using CppType = typename CppTypeTraits<field_type>::CppType;
 

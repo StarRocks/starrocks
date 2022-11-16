@@ -6,7 +6,7 @@
 
 namespace starrocks {
 
-enum FieldType {
+enum LogicalType {
     OLAP_FIELD_TYPE_UNKNOWN = 0, // UNKNOW Type
     OLAP_FIELD_TYPE_TINYINT = 1, // MYSQL_TYPE_TINY
     OLAP_FIELD_TYPE_UNSIGNED_TINYINT = 2,
@@ -50,12 +50,12 @@ enum FieldType {
 
     OLAP_FIELD_TYPE_JSON = 54,
 
-    // max value of FieldType, newly-added type should not exceed this value.
+    // max value of LogicalType, newly-added type should not exceed this value.
     // used to create a fixed-size hash map.
     OLAP_FIELD_TYPE_MAX_VALUE = 55
 };
 
-inline const char* field_type_to_string(FieldType type) {
+inline const char* field_type_to_string(LogicalType type) {
     switch (type) {
     case OLAP_FIELD_TYPE_TINYINT:
         return "TINYINT";
@@ -131,27 +131,27 @@ inline const char* field_type_to_string(FieldType type) {
     return "";
 }
 
-inline std::ostream& operator<<(std::ostream& os, FieldType type) {
+inline std::ostream& operator<<(std::ostream& os, LogicalType type) {
     os << field_type_to_string(type);
     return os;
 }
 
 // TODO(lism): support varbinary for zone map.
-inline bool is_zone_map_key_type(FieldType type) {
+inline bool is_zone_map_key_type(LogicalType type) {
     return type != OLAP_FIELD_TYPE_CHAR && type != OLAP_FIELD_TYPE_VARCHAR && type != OLAP_FIELD_TYPE_JSON &&
            type != OLAP_FIELD_TYPE_VARBINARY;
 }
 
-template <FieldType TYPE>
-inline constexpr FieldType DelegateType = TYPE;
+template <LogicalType TYPE>
+inline constexpr LogicalType DelegateType = TYPE;
 template <>
-inline constexpr FieldType DelegateType<OLAP_FIELD_TYPE_DECIMAL32> = OLAP_FIELD_TYPE_INT;
+inline constexpr LogicalType DelegateType<OLAP_FIELD_TYPE_DECIMAL32> = OLAP_FIELD_TYPE_INT;
 template <>
-inline constexpr FieldType DelegateType<OLAP_FIELD_TYPE_DECIMAL64> = OLAP_FIELD_TYPE_BIGINT;
+inline constexpr LogicalType DelegateType<OLAP_FIELD_TYPE_DECIMAL64> = OLAP_FIELD_TYPE_BIGINT;
 template <>
-inline constexpr FieldType DelegateType<OLAP_FIELD_TYPE_DECIMAL128> = OLAP_FIELD_TYPE_LARGEINT;
+inline constexpr LogicalType DelegateType<OLAP_FIELD_TYPE_DECIMAL128> = OLAP_FIELD_TYPE_LARGEINT;
 
-inline FieldType delegate_type(FieldType type) {
+inline LogicalType delegate_type(LogicalType type) {
     switch (type) {
     case OLAP_FIELD_TYPE_DECIMAL32:
         return OLAP_FIELD_TYPE_INT;
@@ -164,11 +164,11 @@ inline FieldType delegate_type(FieldType type) {
     }
 }
 
-inline bool is_string_type(FieldType type) {
-    return type == FieldType::OLAP_FIELD_TYPE_CHAR || type == FieldType::OLAP_FIELD_TYPE_VARCHAR;
+inline bool is_string_type(LogicalType type) {
+    return type == LogicalType::OLAP_FIELD_TYPE_CHAR || type == LogicalType::OLAP_FIELD_TYPE_VARCHAR;
 }
 
-inline bool is_decimalv3_field_type(FieldType type) {
+inline bool is_decimalv3_field_type(LogicalType type) {
     return type == OLAP_FIELD_TYPE_DECIMAL32 || type == OLAP_FIELD_TYPE_DECIMAL64 || type == OLAP_FIELD_TYPE_DECIMAL128;
 }
 

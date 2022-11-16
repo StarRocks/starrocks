@@ -488,7 +488,7 @@ public:
     }
 };
 
-template <FieldType int_type>
+template <LogicalType int_type>
 class IntegerToDateV2TypeConverter : public TypeConverter {
 public:
     using CppType = typename CppTypeTraits<int_type>::CppType;
@@ -523,7 +523,7 @@ public:
     }
 };
 
-template <FieldType SrcType, FieldType DstType>
+template <LogicalType SrcType, LogicalType DstType>
 class DecimalTypeConverter : public TypeConverter {
 public:
     using SrcCppType = typename CppTypeTraits<SrcType>::CppType;
@@ -550,7 +550,7 @@ public:
     }
 };
 
-template <FieldType SrcType, FieldType DstType>
+template <LogicalType SrcType, LogicalType DstType>
 class DecimalV3TypeConverter : public TypeConverter {
 public:
     using SrcCppType = typename CppTypeTraits<SrcType>::CppType;
@@ -579,7 +579,7 @@ public:
     }
 };
 
-template <FieldType Type>
+template <LogicalType Type>
 class StringToOtherTypeConverter : public TypeConverter {
 public:
     using CppType = typename CppTypeTraits<Type>::CppType;
@@ -644,7 +644,7 @@ public:
     }
 };
 
-template <FieldType Type>
+template <LogicalType Type>
 class OtherToStringTypeConverter : public TypeConverter {
 public:
     using CppType = typename CppTypeTraits<Type>::CppType;
@@ -719,7 +719,7 @@ public:
     }
 };
 
-const TypeConverter* get_date_converter(FieldType from_type, FieldType to_type) {
+const TypeConverter* get_date_converter(LogicalType from_type, LogicalType to_type) {
     switch (from_type) {
     case OLAP_FIELD_TYPE_DATETIME: {
         static DatetimeToDateTypeConverter s_converter;
@@ -743,7 +743,7 @@ const TypeConverter* get_date_converter(FieldType from_type, FieldType to_type) 
     return nullptr;
 }
 
-const TypeConverter* get_datev2_converter(FieldType from_type, FieldType to_type) {
+const TypeConverter* get_datev2_converter(LogicalType from_type, LogicalType to_type) {
     switch (from_type) {
     case OLAP_FIELD_TYPE_TIMESTAMP: {
         static TimestampToDateV2TypeConverter s_converter;
@@ -766,7 +766,7 @@ const TypeConverter* get_datev2_converter(FieldType from_type, FieldType to_type
     }
 }
 
-const TypeConverter* get_datetime_converter(FieldType from_type, FieldType to_type) {
+const TypeConverter* get_datetime_converter(LogicalType from_type, LogicalType to_type) {
     switch (from_type) {
     case OLAP_FIELD_TYPE_DATE: {
         static DateToDatetimeFieldConveter s_converter;
@@ -785,7 +785,7 @@ const TypeConverter* get_datetime_converter(FieldType from_type, FieldType to_ty
     }
 }
 
-const TypeConverter* get_timestamp_converter(FieldType from_type, FieldType to_type) {
+const TypeConverter* get_timestamp_converter(LogicalType from_type, LogicalType to_type) {
     switch (from_type) {
     case OLAP_FIELD_TYPE_DATE: {
         static DateToTimestampTypeConverter s_converter;
@@ -804,7 +804,7 @@ const TypeConverter* get_timestamp_converter(FieldType from_type, FieldType to_t
     }
 }
 
-const TypeConverter* get_decimal_converter(FieldType from_type, FieldType to_type) {
+const TypeConverter* get_decimal_converter(LogicalType from_type, LogicalType to_type) {
     switch (from_type) {
     case OLAP_FIELD_TYPE_DECIMAL_V2: {
         static DecimalToDecimal12TypeConverter s_converter;
@@ -819,7 +819,7 @@ const TypeConverter* get_decimal_converter(FieldType from_type, FieldType to_typ
     }
 }
 
-const TypeConverter* get_decimalv2_converter(FieldType from_type, FieldType to_type) {
+const TypeConverter* get_decimalv2_converter(LogicalType from_type, LogicalType to_type) {
     switch (from_type) {
     case OLAP_FIELD_TYPE_DECIMAL: {
         static Decimal12ToDecimalTypeConverter s_converter;
@@ -840,7 +840,7 @@ const TypeConverter* get_decimalv2_converter(FieldType from_type, FieldType to_t
         return &s_converter;                                         \
     }
 
-const TypeConverter* get_decimal128_converter(FieldType from_type, FieldType to_type) {
+const TypeConverter* get_decimal128_converter(LogicalType from_type, LogicalType to_type) {
     switch (from_type) {
     case OLAP_FIELD_TYPE_DECIMAL: {
         static DecimalTypeConverter<OLAP_FIELD_TYPE_DECIMAL, OLAP_FIELD_TYPE_DECIMAL128> s_converter;
@@ -858,7 +858,7 @@ const TypeConverter* get_decimal128_converter(FieldType from_type, FieldType to_
     }
 }
 
-const TypeConverter* get_decimal64_converter(FieldType from_type, FieldType to_type) {
+const TypeConverter* get_decimal64_converter(LogicalType from_type, LogicalType to_type) {
     switch (from_type) {
         DECIMALV3_TYPE_CONVERTER(OLAP_FIELD_TYPE_DECIMAL32, OLAP_FIELD_TYPE_DECIMAL64);
         DECIMALV3_TYPE_CONVERTER(OLAP_FIELD_TYPE_DECIMAL64, OLAP_FIELD_TYPE_DECIMAL64);
@@ -869,7 +869,7 @@ const TypeConverter* get_decimal64_converter(FieldType from_type, FieldType to_t
     return nullptr;
 }
 
-const TypeConverter* get_decimal32_converter(FieldType from_type, FieldType to_type) {
+const TypeConverter* get_decimal32_converter(LogicalType from_type, LogicalType to_type) {
     switch (from_type) {
         DECIMALV3_TYPE_CONVERTER(OLAP_FIELD_TYPE_DECIMAL32, OLAP_FIELD_TYPE_DECIMAL32);
         DECIMALV3_TYPE_CONVERTER(OLAP_FIELD_TYPE_DECIMAL64, OLAP_FIELD_TYPE_DECIMAL32);
@@ -880,7 +880,7 @@ const TypeConverter* get_decimal32_converter(FieldType from_type, FieldType to_t
 }
 #undef DECIMALV3_TYPE_CONVERTER
 
-const TypeConverter* get_double_converter(FieldType from_type, FieldType to_type) {
+const TypeConverter* get_double_converter(LogicalType from_type, LogicalType to_type) {
     switch (from_type) {
     case OLAP_FIELD_TYPE_FLOAT: {
         static FloatToDoubleTypeConverter s_converter;
@@ -891,7 +891,7 @@ const TypeConverter* get_double_converter(FieldType from_type, FieldType to_type
     }
 }
 
-const TypeConverter* get_from_varchar_converter(FieldType from_type, FieldType to_type) {
+const TypeConverter* get_from_varchar_converter(LogicalType from_type, LogicalType to_type) {
     switch (to_type) {
 #define M(ftype)                                              \
     case ftype: {                                             \
@@ -905,7 +905,7 @@ const TypeConverter* get_from_varchar_converter(FieldType from_type, FieldType t
     }
 }
 
-const TypeConverter* get_to_varchar_converter(FieldType from_type, FieldType to_type) {
+const TypeConverter* get_to_varchar_converter(LogicalType from_type, LogicalType to_type) {
     switch (from_type) {
     case OLAP_FIELD_TYPE_BOOL: {
         static OtherToStringTypeConverter<OLAP_FIELD_TYPE_TINYINT> s_converter;
@@ -932,7 +932,7 @@ const TypeConverter* get_to_varchar_converter(FieldType from_type, FieldType to_
 // Datetime, Date and decimal should not be used
 // Use Timestamp, Date V2 and decimal v2 to replace
 // Should be deleted after storage_format_vesion = 1 is forbid
-const TypeConverter* get_type_converter(FieldType from_type, FieldType to_type) {
+const TypeConverter* get_type_converter(LogicalType from_type, LogicalType to_type) {
     if (from_type == OLAP_FIELD_TYPE_VARCHAR) {
         return get_from_varchar_converter(from_type, to_type);
     }
@@ -1061,7 +1061,7 @@ public:
     }
 };
 
-template <FieldType SrcType>
+template <LogicalType SrcType>
 class DecimalToPercentileTypeConverter : public MaterializeTypeConverter {
 public:
     using CppType = typename CppTypeTraits<SrcType>::CppType;
@@ -1131,7 +1131,7 @@ public:
         return &s_converter;                               \
     }
 
-const MaterializeTypeConverter* get_perentile_converter(FieldType from_type, MaterializeType to_type) {
+const MaterializeTypeConverter* get_perentile_converter(LogicalType from_type, MaterializeType to_type) {
     switch (from_type) {
     case OLAP_FIELD_TYPE_TINYINT:
         GET_PERENTILE_CONVERTER(int8_t);
@@ -1170,7 +1170,7 @@ const MaterializeTypeConverter* get_perentile_converter(FieldType from_type, Mat
     }
 }
 
-const MaterializeTypeConverter* get_hll_converter(FieldType from_type, MaterializeType to_type) {
+const MaterializeTypeConverter* get_hll_converter(LogicalType from_type, MaterializeType to_type) {
     switch (from_type) {
     case OLAP_FIELD_TYPE_CHAR:
     case OLAP_FIELD_TYPE_VARCHAR:
@@ -1209,7 +1209,7 @@ const MaterializeTypeConverter* get_hll_converter(FieldType from_type, Materiali
     }
 }
 
-const MaterializeTypeConverter* get_bitmap_converter(FieldType from_type, MaterializeType to_type) {
+const MaterializeTypeConverter* get_bitmap_converter(LogicalType from_type, MaterializeType to_type) {
     switch (from_type) {
     case OLAP_FIELD_TYPE_TINYINT:
         GET_BTIMAP_CONVERTER(int8_t);
@@ -1239,7 +1239,7 @@ const MaterializeTypeConverter* get_bitmap_converter(FieldType from_type, Materi
 #undef GET_HLL_CONVERTER
 #undef GET_BITMAP_CONVERTER
 
-const MaterializeTypeConverter* get_materialized_converter(FieldType from_type, MaterializeType to_type) {
+const MaterializeTypeConverter* get_materialized_converter(LogicalType from_type, MaterializeType to_type) {
     switch (to_type) {
     case OLAP_MATERIALIZE_TYPE_PERCENTILE: {
         return get_perentile_converter(from_type, to_type);
@@ -1785,7 +1785,7 @@ public:
 private:
 };
 
-const FieldConverter* get_field_converter(FieldType from_type, FieldType to_type) {
+const FieldConverter* get_field_converter(LogicalType from_type, LogicalType to_type) {
 #define TYPE_CASE_CLAUSE(type)                                      \
     case type: {                                                    \
         static SameFieldConverter s_converter(get_type_info(type)); \

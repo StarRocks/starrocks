@@ -32,8 +32,8 @@
 namespace starrocks {
 
 // CppTypeTraits:
-// Infer on-disk type(CppType) from FieldType
-template <FieldType field_type>
+// Infer on-disk type(CppType) from LogicalType
+template <LogicalType field_type>
 struct CppTypeTraits {};
 
 template <>
@@ -184,11 +184,11 @@ struct CppTypeTraits<OLAP_FIELD_TYPE_ARRAY> {
 };
 
 // Instantiate this template to get static access to the type traits.
-template <FieldType field_type>
+template <LogicalType field_type>
 struct TypeTraits {
     using CppType = typename CppTypeTraits<field_type>::CppType;
 
-    static const FieldType type = field_type;
+    static const LogicalType type = field_type;
     static const int32_t size = sizeof(CppType);
 };
 

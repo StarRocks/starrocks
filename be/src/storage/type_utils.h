@@ -14,16 +14,16 @@ const DataFormatVersion kDataFormatV2 = 2;
 
 class TypeUtils {
 public:
-    static inline bool specific_type_of_format_v1(FieldType type) {
+    static inline bool specific_type_of_format_v1(LogicalType type) {
         return type == OLAP_FIELD_TYPE_DATE || type == OLAP_FIELD_TYPE_DATETIME || type == OLAP_FIELD_TYPE_DECIMAL;
     }
 
-    static inline bool specific_type_of_format_v2(FieldType type) {
+    static inline bool specific_type_of_format_v2(LogicalType type) {
         return type == OLAP_FIELD_TYPE_DATE_V2 || type == OLAP_FIELD_TYPE_TIMESTAMP ||
                type == OLAP_FIELD_TYPE_DECIMAL_V2;
     }
 
-    static inline size_t estimate_field_size(FieldType type, size_t variable_length) {
+    static inline size_t estimate_field_size(LogicalType type, size_t variable_length) {
         switch (type) {
         case OLAP_FIELD_TYPE_UNKNOWN:
         case OLAP_FIELD_TYPE_DISCRETE_DOUBLE:
@@ -65,7 +65,7 @@ public:
         }
     }
 
-    static inline FieldType convert_to_format(FieldType type, DataFormatVersion format_version) {
+    static inline LogicalType convert_to_format(LogicalType type, DataFormatVersion format_version) {
         if (format_version == kDataFormatV2) {
             switch (type) {
             case OLAP_FIELD_TYPE_DATE:
@@ -158,9 +158,9 @@ public:
         return OLAP_FIELD_TYPE_UNKNOWN;
     }
 
-    static inline FieldType to_storage_format_v2(FieldType type) { return convert_to_format(type, kDataFormatV2); }
+    static inline LogicalType to_storage_format_v2(LogicalType type) { return convert_to_format(type, kDataFormatV2); }
 
-    static inline FieldType to_storage_format_v1(FieldType type) { return convert_to_format(type, kDataFormatV1); }
+    static inline LogicalType to_storage_format_v1(LogicalType type) { return convert_to_format(type, kDataFormatV1); }
 };
 
 } // namespace starrocks

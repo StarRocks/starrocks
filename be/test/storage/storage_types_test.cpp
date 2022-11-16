@@ -34,7 +34,7 @@ public:
     ~StorageLayerTypesTest() override = default;
 };
 
-template <FieldType field_type>
+template <LogicalType field_type>
 void common_test(typename TypeTraits<field_type>::CppType src_val) {
     TypeInfoPtr type = get_type_info(field_type);
 
@@ -70,7 +70,7 @@ void common_test(typename TypeTraits<field_type>::CppType src_val) {
     }
 }
 
-template <FieldType fieldType>
+template <LogicalType fieldType>
 void test_char(Slice src_val) {
     Field* field = FieldFactory::create_by_type(fieldType);
     field->_length = src_val.size;

@@ -40,7 +40,7 @@ private:
     MemPool _pool;
 };
 
-template <FieldType type>
+template <LogicalType type>
 void test_integer_encode() {
     using CppType = typename CppTypeTraits<type>::CppType;
 

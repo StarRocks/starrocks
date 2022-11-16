@@ -31,7 +31,7 @@
 namespace starrocks {
 
 // Encode page use frame-of-reference coding
-template <FieldType Type>
+template <LogicalType Type>
 class FrameOfReferencePageBuilder final : public PageBuilder {
 public:
     explicit FrameOfReferencePageBuilder(const PageBuilderOptions& options)
@@ -100,7 +100,7 @@ private:
     ForEncoder<CppType> _encoder;
 };
 
-template <FieldType Type>
+template <LogicalType Type>
 class FrameOfReferencePageDecoder final : public PageDecoder {
 public:
     FrameOfReferencePageDecoder(Slice data, const PageDecoderOptions& options)

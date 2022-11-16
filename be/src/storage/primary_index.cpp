@@ -854,7 +854,7 @@ public:
     }
 };
 
-static std::unique_ptr<HashIndex> create_hash_index(FieldType key_type, size_t fix_size) {
+static std::unique_ptr<HashIndex> create_hash_index(LogicalType key_type, size_t fix_size) {
     if (key_type == OLAP_FIELD_TYPE_VARCHAR && fix_size > 0) {
         if (fix_size <= 8) {
             return std::make_unique<FixSliceHashIndex<2>>();

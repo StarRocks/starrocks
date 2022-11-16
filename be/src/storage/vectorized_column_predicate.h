@@ -38,7 +38,7 @@ class BloomFilter;
 
 namespace starrocks::vectorized {
 
-template <FieldType ftype>
+template <LogicalType ftype>
 struct PredicateCmpTypeForField {
     using ValueType = typename CppTypeTraits<ftype>::CppType;
 };

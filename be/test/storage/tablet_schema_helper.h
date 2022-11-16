@@ -153,7 +153,7 @@ inline ColumnPB create_with_default_value_pb(const std::string& col_type, std::s
     return column;
 }
 
-template <FieldType type>
+template <LogicalType type>
 inline TabletColumn create_with_default_value(std::string default_value) {
     TabletColumn column;
     column.set_type(type);

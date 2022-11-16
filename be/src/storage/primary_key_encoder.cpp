@@ -253,7 +253,7 @@ bool PrimaryKeyEncoder::is_supported(const vectorized::Schema& schema, const std
     return true;
 }
 
-FieldType PrimaryKeyEncoder::encoded_primary_key_type(const vectorized::Schema& schema,
+LogicalType PrimaryKeyEncoder::encoded_primary_key_type(const vectorized::Schema& schema,
                                                       const std::vector<ColumnId>& key_idxes) {
     if (!is_supported(schema, key_idxes)) {
         return OLAP_FIELD_TYPE_NONE;

@@ -112,7 +112,7 @@ public:
     uint32_t hash_code(const void* data, uint32_t seed) const override { return _hash_code(data, seed); }
     size_t size() const override { return _size; }
 
-    FieldType type() const override { return _field_type; }
+    LogicalType type() const override { return _field_type; }
 
 protected:
     int _datum_cmp_impl(const Datum& left, const Datum& right) const override { return _datum_cmp(left, right); }
@@ -137,7 +137,7 @@ private:
     int (*_datum_cmp)(const Datum& left, const Datum& right);
 
     const size_t _size;
-    const FieldType _field_type;
+    const LogicalType _field_type;
 
     friend class ScalarTypeInfoResolver;
     template <typename TypeTraitsClass>
@@ -146,11 +146,11 @@ private:
 
 // ScalarTypeInfoImplBase
 // Base implementation for ScalarTypeInfo, use as default
-template <FieldType field_type>
+template <LogicalType field_type>
 struct ScalarTypeInfoImplBase {
     using CppType = typename CppTypeTraits<field_type>::CppType;
 
-    static const FieldType type = field_type;
+    static const LogicalType type = field_type;
     static const int32_t size = sizeof(CppType);
 
     static bool equal(const void* left, const void* right) {
@@ -218,7 +218,7 @@ struct ScalarTypeInfoImplBase {
 };
 
 // Default template does nothing but inherit from ScalarTypeInfoImplBase
-template <FieldType field_type>
+template <LogicalType field_type>
 struct ScalarTypeInfoImpl : public ScalarTypeInfoImplBase<field_type> {};
 
 // ScalarTypeInfoResolver
@@ -227,20 +227,20 @@ class ScalarTypeInfoResolver {
     DECLARE_SINGLETON(ScalarTypeInfoResolver);
 
 public:
-    const TypeInfoPtr get_type_info(const FieldType t) {
+    const TypeInfoPtr get_type_info(const LogicalType t) {
         if (this->_mapping.find(t) == this->_mapping.end()) {
             return std::make_shared<ScalarTypeInfo>(*this->_mapping[OLAP_FIELD_TYPE_NONE].get());
         }
         return std::make_shared<ScalarTypeInfo>(*this->_mapping[t].get());
     }
 
-    const ScalarTypeInfo* get_scalar_type_info(const FieldType t) {
+    const ScalarTypeInfo* get_scalar_type_info(const LogicalType t) {
         DCHECK(is_scalar_field_type(t));
         return this->_mapping[t].get();
     }
 
 private:
-    template <FieldType field_type>
+    template <LogicalType field_type>
     void add_mapping() {
         ScalarTypeInfoImpl<field_type> traits;
         std::unique_ptr<ScalarTypeInfo> scalar_type_info(new ScalarTypeInfo(traits));
@@ -248,7 +248,7 @@ private:
     }
 
     // item_type_info -> list_type_info
-    std::unordered_map<FieldType, std::unique_ptr<ScalarTypeInfo>, std::hash<size_t>> _mapping;
+    std::unordered_map<LogicalType, std::unique_ptr<ScalarTypeInfo>, std::hash<size_t>> _mapping;
 
     ScalarTypeInfoResolver(const ScalarTypeInfoResolver&) = delete;
     const ScalarTypeInfoResolver& operator=(const ScalarTypeInfoResolver&) = delete;
@@ -279,7 +279,7 @@ ScalarTypeInfoResolver::ScalarTypeInfoResolver() {
 
 ScalarTypeInfoResolver::~ScalarTypeInfoResolver() = default;
 
-bool is_scalar_field_type(FieldType field_type) {
+bool is_scalar_field_type(LogicalType field_type) {
     switch (field_type) {
     case OLAP_FIELD_TYPE_STRUCT:
     case OLAP_FIELD_TYPE_ARRAY:
@@ -293,7 +293,7 @@ bool is_scalar_field_type(FieldType field_type) {
     }
 }
 
-bool is_complex_metric_type(FieldType field_type) {
+bool is_complex_metric_type(LogicalType field_type) {
     switch (field_type) {
     case OLAP_FIELD_TYPE_OBJECT:
     case OLAP_FIELD_TYPE_PERCENTILE:
@@ -304,12 +304,12 @@ bool is_complex_metric_type(FieldType field_type) {
     }
 }
 
-TypeInfoPtr get_type_info(FieldType field_type) {
+TypeInfoPtr get_type_info(LogicalType field_type) {
     return ScalarTypeInfoResolver::instance()->get_type_info(field_type);
 }
 
 TypeInfoPtr get_type_info(const ColumnMetaPB& column_meta_pb) {
-    auto type = static_cast<FieldType>(column_meta_pb.type());
+    auto type = static_cast<LogicalType>(column_meta_pb.type());
     TypeInfoPtr type_info;
     if (type == OLAP_FIELD_TYPE_ARRAY) {
         const ColumnMetaPB& child = column_meta_pb.children_columns(0);
@@ -333,7 +333,7 @@ TypeInfoPtr get_type_info(const TabletColumn& col) {
     }
 }
 
-TypeInfoPtr get_type_info(FieldType field_type, [[maybe_unused]] int precision, [[maybe_unused]] int scale) {
+TypeInfoPtr get_type_info(LogicalType field_type, [[maybe_unused]] int precision, [[maybe_unused]] int scale) {
     if (is_scalar_field_type(field_type)) {
         return get_type_info(field_type);
     } else if (field_type == OLAP_FIELD_TYPE_DECIMAL32 || field_type == OLAP_FIELD_TYPE_DECIMAL64 ||
@@ -348,7 +348,7 @@ TypeInfoPtr get_type_info(const TypeInfo* type_info) {
     return get_type_info(type_info->type(), type_info->precision(), type_info->scale());
 }
 
-const TypeInfo* get_scalar_type_info(FieldType type) {
+const TypeInfo* get_scalar_type_info(LogicalType type) {
     DCHECK(is_scalar_field_type(type));
     return ScalarTypeInfoResolver::instance()->get_scalar_type_info(type);
 }
@@ -705,7 +705,7 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_DATE> : public ScalarTypeInfoImplBase<
 
     static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
                                MemPool* mem_pool __attribute__((unused))) {
-        if (src_type->type() == FieldType::OLAP_FIELD_TYPE_DATETIME) {
+        if (src_type->type() == LogicalType::OLAP_FIELD_TYPE_DATETIME) {
             using SrcType = typename CppTypeTraits<OLAP_FIELD_TYPE_DATETIME>::CppType;
             auto src_value = unaligned_load<SrcType>(src);
             //only need part one
@@ -717,7 +717,7 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_DATE> : public ScalarTypeInfoImplBase<
             return Status::OK();
         }
 
-        if (src_type->type() == FieldType::OLAP_FIELD_TYPE_TIMESTAMP) {
+        if (src_type->type() == LogicalType::OLAP_FIELD_TYPE_TIMESTAMP) {
             int year, month, day, hour, minute, second, usec;
             auto src_value = unaligned_load<vectorized::TimestampValue>(src);
             src_value.to_timestamp(&year, &month, &day, &hour, &minute, &second, &usec);
@@ -725,7 +725,7 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_DATE> : public ScalarTypeInfoImplBase<
             return Status::OK();
         }
 
-        if (src_type->type() == FieldType::OLAP_FIELD_TYPE_INT) {
+        if (src_type->type() == LogicalType::OLAP_FIELD_TYPE_INT) {
             using SrcType = typename CppTypeTraits<OLAP_FIELD_TYPE_INT>::CppType;
             auto src_value = unaligned_load<SrcType>(src);
             DateTimeValue dt;
@@ -739,7 +739,7 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_DATE> : public ScalarTypeInfoImplBase<
             return Status::OK();
         }
 
-        if (src_type->type() == FieldType::OLAP_FIELD_TYPE_VARCHAR) {
+        if (src_type->type() == LogicalType::OLAP_FIELD_TYPE_VARCHAR) {
             using SrcType = typename CppTypeTraits<OLAP_FIELD_TYPE_VARCHAR>::CppType;
             auto src_value = unaligned_load<SrcType>(src);
             DateTimeValue dt;
@@ -838,7 +838,7 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_DATETIME> : public ScalarTypeInfoImplB
     static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
                                MemPool* memPool __attribute__((unused))) {
         // when convert date to datetime, automatic padding zero
-        if (src_type->type() == FieldType::OLAP_FIELD_TYPE_DATE) {
+        if (src_type->type() == LogicalType::OLAP_FIELD_TYPE_DATE) {
             using SrcType = typename CppTypeTraits<OLAP_FIELD_TYPE_DATE>::CppType;
             auto value = unaligned_load<SrcType>(src);
             int day = static_cast<int>(value & 31);
@@ -849,7 +849,7 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_DATETIME> : public ScalarTypeInfoImplB
         }
 
         // when convert date to datetime, automatic padding zero
-        if (src_type->type() == FieldType::OLAP_FIELD_TYPE_DATE_V2) {
+        if (src_type->type() == LogicalType::OLAP_FIELD_TYPE_DATE_V2) {
             auto src_value = unaligned_load<vectorized::DateValue>(src);
             int year, month, day;
             src_value.to_date(&year, &month, &day);
@@ -970,7 +970,7 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_CHAR> : public ScalarTypeInfoImplBase<
 
 template <>
 struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_VARCHAR> : public ScalarTypeInfoImpl<OLAP_FIELD_TYPE_CHAR> {
-    static const FieldType type = OLAP_FIELD_TYPE_VARCHAR;
+    static const LogicalType type = OLAP_FIELD_TYPE_VARCHAR;
     static const int32_t size = TypeTraits<OLAP_FIELD_TYPE_VARCHAR>::size;
 
     static Status from_string(void* buf, const std::string& scan_key) {
@@ -1023,25 +1023,25 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_VARCHAR> : public ScalarTypeInfoImpl<O
 
 template <>
 struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_HLL> : public ScalarTypeInfoImpl<OLAP_FIELD_TYPE_VARCHAR> {
-    static const FieldType type = OLAP_FIELD_TYPE_HLL;
+    static const LogicalType type = OLAP_FIELD_TYPE_HLL;
     static const int32_t size = TypeTraits<OLAP_FIELD_TYPE_HLL>::size;
 };
 
 template <>
 struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_OBJECT> : public ScalarTypeInfoImpl<OLAP_FIELD_TYPE_VARCHAR> {
-    static const FieldType type = OLAP_FIELD_TYPE_OBJECT;
+    static const LogicalType type = OLAP_FIELD_TYPE_OBJECT;
     static const int32_t size = TypeTraits<OLAP_FIELD_TYPE_OBJECT>::size;
 };
 
 template <>
 struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_PERCENTILE> : public ScalarTypeInfoImpl<OLAP_FIELD_TYPE_VARCHAR> {
-    static const FieldType type = OLAP_FIELD_TYPE_PERCENTILE;
+    static const LogicalType type = OLAP_FIELD_TYPE_PERCENTILE;
     static const int32_t size = TypeTraits<OLAP_FIELD_TYPE_PERCENTILE>::size;
 };
 
 template <>
 struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_JSON> : public ScalarTypeInfoImpl<OLAP_FIELD_TYPE_OBJECT> {
-    static const FieldType type = OLAP_FIELD_TYPE_JSON;
+    static const LogicalType type = OLAP_FIELD_TYPE_JSON;
     static const int32_t size = TypeTraits<OLAP_FIELD_TYPE_JSON>::size;
 
     static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type, MemPool* mem_pool) {
@@ -1052,7 +1052,7 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_JSON> : public ScalarTypeInfoImpl<OLAP
 
 template <>
 struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_VARBINARY> : public ScalarTypeInfoImpl<OLAP_FIELD_TYPE_VARCHAR> {
-    static const FieldType type = OLAP_FIELD_TYPE_VARBINARY;
+    static const LogicalType type = OLAP_FIELD_TYPE_VARBINARY;
     static const int32_t size = TypeTraits<OLAP_FIELD_TYPE_VARBINARY>::size;
 };
 
@@ -1061,7 +1061,7 @@ void (*ScalarTypeInfoImpl<OLAP_FIELD_TYPE_CHAR>::set_to_max)(void*) = nullptr;
 // NOTE
 // These code could not be moved proceeding ScalarTypeInfoImpl specialization, otherwise
 // will encounter `specialization after instantiation` error
-template <FieldType ftype>
+template <LogicalType ftype>
 int TypeComparator<ftype>::cmp(const void* lhs, const void* rhs) {
     return ScalarTypeInfoImpl<ftype>::cmp(lhs, rhs);
 }

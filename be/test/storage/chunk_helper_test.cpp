@@ -26,10 +26,10 @@ public:
     vectorized::SchemaPtr gen_v_schema(bool is_nullable);
     void check_chunk(Chunk* chunk, size_t column_size, size_t row_size);
     void check_chunk_nullable(Chunk* chunk, size_t column_size, size_t row_size);
-    void check_column(Column* column, FieldType type, size_t row_size);
+    void check_column(Column* column, LogicalType type, size_t row_size);
 
 private:
-    FieldType _type[9] = {OLAP_FIELD_TYPE_TINYINT, OLAP_FIELD_TYPE_SMALLINT, OLAP_FIELD_TYPE_INT,
+    LogicalType _type[9] = {OLAP_FIELD_TYPE_TINYINT, OLAP_FIELD_TYPE_SMALLINT, OLAP_FIELD_TYPE_INT,
                           OLAP_FIELD_TYPE_BIGINT,  OLAP_FIELD_TYPE_LARGEINT, OLAP_FIELD_TYPE_FLOAT,
                           OLAP_FIELD_TYPE_DOUBLE,  OLAP_FIELD_TYPE_VARCHAR,  OLAP_FIELD_TYPE_CHAR};
 
@@ -137,7 +137,7 @@ void ChunkHelperTest::check_chunk_nullable(Chunk* chunk, size_t column_size, siz
     }
 }
 
-void ChunkHelperTest::check_column(Column* column, FieldType type, size_t row_size) {
+void ChunkHelperTest::check_column(Column* column, LogicalType type, size_t row_size) {
     ASSERT_EQ(column->size(), row_size);
 
     switch (type) {

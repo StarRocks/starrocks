@@ -58,7 +58,7 @@ protected:
         ASSERT_OK((*reader)->new_iterator(iter));
     }
 
-    template <FieldType type>
+    template <LogicalType type>
     void write_index_file(std::string& filename, const void* values, size_t value_count, size_t null_count,
                           ColumnIndexMetaPB* meta) {
         TypeInfoPtr type_info = get_type_info(type);

@@ -46,7 +46,7 @@ protected:
     }
     void TearDown() override { StoragePageCache::release_global_cache(); }
 
-    template <FieldType type>
+    template <LogicalType type>
     void write_bloom_filter_index_file(const std::string& file_name, const void* values, size_t value_count,
                                        size_t null_count, ColumnIndexMetaPB* index_meta) {
         TypeInfoPtr type_info = get_type_info(type);
@@ -87,7 +87,7 @@ protected:
         ASSERT_OK((*reader)->new_iterator(iter));
     }
 
-    template <FieldType Type>
+    template <LogicalType Type>
     void test_bloom_filter_index_reader_writer_template(const std::string file_name,
                                                         typename TypeTraits<Type>::CppType* val, size_t num,
                                                         size_t null_num,

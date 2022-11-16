@@ -56,7 +56,7 @@ enum { RLE_PAGE_HEADER_SIZE = 4 };
 // for these case.
 //
 // TODO(hkp): optimize rle algorithm
-template <FieldType Type>
+template <LogicalType Type>
 class RlePageBuilder final : public PageBuilder {
 public:
     explicit RlePageBuilder(const PageBuilderOptions& options)
@@ -147,7 +147,7 @@ private:
     CppType _last_value;
 };
 
-template <FieldType Type>
+template <LogicalType Type>
 class RlePageDecoder final : public PageDecoder {
 public:
     RlePageDecoder(Slice slice, const PageDecoderOptions& options)

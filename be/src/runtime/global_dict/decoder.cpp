@@ -15,7 +15,7 @@ namespace starrocks::vectorized {
 template <PrimitiveType type, typename Dict, PrimitiveType result_type>
 class GlobalDictDecoderBase : public GlobalDictDecoder {
 public:
-    using FieldType = RunTimeCppType<type>;
+    using LogicalType = RunTimeCppType<type>;
     using ResultColumnType = RunTimeColumnType<result_type>;
     using ColumnType = RunTimeColumnType<type>;
 
@@ -49,7 +49,7 @@ Status GlobalDictDecoderBase<type, Dict, result_type>::decode(vectorized::Column
         auto res_column = down_cast<ResultColumnType*>(out);
         auto column = down_cast<ColumnType*>(in);
         for (size_t i = 0; i < in->size(); i++) {
-            FieldType key = column->get_data()[i];
+            LogicalType key = column->get_data()[i];
             auto iter = _dict.find(key);
             if (iter == _dict.end()) {
                 return Status::InternalError(fmt::format("Dict Decode failed, Dict can't take cover all key :{}", key));
@@ -69,7 +69,7 @@ Status GlobalDictDecoderBase<type, Dict, result_type>::decode(vectorized::Column
     for (size_t i = 0; i < in->size(); i++) {
         if (column->null_column_data()[i] == 0) {
             res_column->null_column_data()[i] = 0;
-            FieldType key = data_column->get_data()[i];
+            LogicalType key = data_column->get_data()[i];
             auto iter = _dict.find(key);
             if (iter == _dict.end()) {
                 return Status::InternalError(fmt::format("Dict Decode failed, Dict can't take cover all key :{}", key));

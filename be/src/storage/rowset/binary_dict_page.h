@@ -110,7 +110,7 @@ private:
     faststring _first_value;
 };
 
-template <FieldType Type>
+template <LogicalType Type>
 class BinaryDictPageDecoder final : public PageDecoder {
 public:
     BinaryDictPageDecoder(Slice data, const PageDecoderOptions& options);

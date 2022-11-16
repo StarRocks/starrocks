@@ -12,7 +12,7 @@
 
 namespace starrocks::vectorized {
 
-template <FieldType field_type>
+template <LogicalType field_type>
 class ColumnNotInPredicate : public ColumnPredicate {
     using ValueType = typename CppTypeTraits<field_type>::CppType;
 
@@ -135,7 +135,7 @@ private:
 };
 
 // Template specialization for binary column
-template <FieldType field_type>
+template <LogicalType field_type>
 class BinaryColumnNotInPredicate : public ColumnPredicate {
 public:
     BinaryColumnNotInPredicate(const TypeInfoPtr& type_info, ColumnId id, std::vector<std::string> strings)

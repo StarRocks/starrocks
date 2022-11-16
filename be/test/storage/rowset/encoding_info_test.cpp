@@ -53,7 +53,7 @@ TEST_F(EncodingInfoTest, no_encoding) {
 }
 
 TEST_F(EncodingInfoTest, default_encoding) {
-    std::map<FieldType, EncodingTypePB> default_expected = {
+    std::map<LogicalType, EncodingTypePB> default_expected = {
             {OLAP_FIELD_TYPE_TINYINT, BIT_SHUFFLE},
             {OLAP_FIELD_TYPE_SMALLINT, BIT_SHUFFLE},
             {OLAP_FIELD_TYPE_INT, BIT_SHUFFLE},
@@ -81,7 +81,7 @@ TEST_F(EncodingInfoTest, default_encoding) {
             {OLAP_FIELD_TYPE_PERCENTILE, PLAIN_ENCODING},
             {OLAP_FIELD_TYPE_JSON, PLAIN_ENCODING},
     };
-    std::map<FieldType, EncodingTypePB> value_seek_expected = {
+    std::map<LogicalType, EncodingTypePB> value_seek_expected = {
             {OLAP_FIELD_TYPE_TINYINT, FOR_ENCODING},    {OLAP_FIELD_TYPE_SMALLINT, FOR_ENCODING},
             {OLAP_FIELD_TYPE_INT, FOR_ENCODING},        {OLAP_FIELD_TYPE_BIGINT, FOR_ENCODING},
             {OLAP_FIELD_TYPE_LARGEINT, FOR_ENCODING},   {OLAP_FIELD_TYPE_CHAR, PREFIX_ENCODING},

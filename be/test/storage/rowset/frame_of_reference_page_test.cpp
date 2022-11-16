@@ -43,7 +43,7 @@ using starrocks::operator<<;
 namespace starrocks {
 class FrameOfReferencePageTest : public testing::Test {
 public:
-    template <FieldType type, class PageDecoderType>
+    template <LogicalType type, class PageDecoderType>
     void copy_one(PageDecoderType* decoder, typename TypeTraits<type>::CppType* ret) {
         PrimitiveType ptype = scalar_field_type_to_primitive_type(type);
         TypeDescriptor index_type(ptype);
@@ -55,7 +55,7 @@ public:
         *ret = *reinterpret_cast<const typename TypeTraits<type>::CppType*>(column->raw_data());
     }
 
-    template <FieldType Type, class PageBuilderType = FrameOfReferencePageBuilder<Type>,
+    template <LogicalType Type, class PageBuilderType = FrameOfReferencePageBuilder<Type>,
               class PageDecoderType = FrameOfReferencePageDecoder<Type>>
     void test_encode_decode_page_template(typename TypeTraits<Type>::CppType* src, size_t size) {
         typedef typename TypeTraits<Type>::CppType CppType;
@@ -98,7 +98,7 @@ public:
         }
     }
 
-    template <FieldType Type, class PageBuilderType = FrameOfReferencePageBuilder<Type>,
+    template <LogicalType Type, class PageBuilderType = FrameOfReferencePageBuilder<Type>,
               class PageDecoderType = FrameOfReferencePageDecoder<Type>>
     void test_encode_decode_page_vectorize(typename TypeTraits<Type>::CppType* src, size_t size) {
         typedef typename TypeTraits<Type>::CppType CppType;

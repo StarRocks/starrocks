@@ -544,7 +544,7 @@ public:
 #define CASE_REPLACE(CASE_TYPE, COLUMN_TYPE, STATE_TYPE) \
     CASE_NEW_VALUE_AGGREGATOR(CASE_TYPE, COLUMN_TYPE, STATE_TYPE, ReplaceAggregator)
 
-ValueColumnAggregatorPtr create_value_aggregator(FieldType type, FieldAggregationMethod method) {
+ValueColumnAggregatorPtr create_value_aggregator(LogicalType type, FieldAggregationMethod method) {
     switch (method) {
     case OLAP_FIELD_AGGREGATION_SUM: {
         switch (type) {
@@ -676,7 +676,7 @@ ValueColumnAggregatorPtr create_value_aggregator(FieldType type, FieldAggregatio
 
 ColumnAggregatorPtr ColumnAggregatorFactory::create_key_column_aggregator(
         const starrocks::vectorized::FieldPtr& field) {
-    FieldType type = field->type()->type();
+    LogicalType type = field->type()->type();
     starrocks::FieldAggregationMethod method = field->aggregate_method();
     if (method != OLAP_FIELD_AGGREGATION_NONE) {
         CHECK(false) << "key column's aggregation method should be NONE";
@@ -702,7 +702,7 @@ ColumnAggregatorPtr ColumnAggregatorFactory::create_key_column_aggregator(
 
 ColumnAggregatorPtr ColumnAggregatorFactory::create_value_column_aggregator(
         const starrocks::vectorized::FieldPtr& field) {
-    FieldType type = field->type()->type();
+    LogicalType type = field->type()->type();
     starrocks::FieldAggregationMethod method = field->aggregate_method();
     if (method == OLAP_FIELD_AGGREGATION_NONE) {
         CHECK(false) << "bad agg method NONE for column: " << field->name();

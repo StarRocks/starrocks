@@ -201,7 +201,7 @@ TTypeDesc gen_type_desc(const TPrimitiveType::type val);
 TTypeDesc gen_type_desc(const TPrimitiveType::type val, const std::string& name);
 TTypeDesc gen_array_type_desc(const TPrimitiveType::type field_type);
 
-PrimitiveType scalar_field_type_to_primitive_type(FieldType field_type);
+PrimitiveType scalar_field_type_to_primitive_type(LogicalType field_type);
 
 // Return length of fixed-length type, return 0 for dynamic length type
 size_t get_size_of_fixed_length_type(PrimitiveType ptype);

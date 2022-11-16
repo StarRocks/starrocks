@@ -278,7 +278,7 @@ bool TypeDescriptor::support_groupby() const {
 }
 
 TypeDescriptor TypeDescriptor::from_storage_type_info(TypeInfo* type_info) {
-    FieldType ftype = type_info->type();
+    LogicalType ftype = type_info->type();
 
     bool is_array = false;
     if (ftype == OLAP_FIELD_TYPE_ARRAY) {

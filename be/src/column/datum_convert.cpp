@@ -10,7 +10,7 @@ namespace starrocks::vectorized {
 
 using strings::Substitute;
 
-template <FieldType TYPE>
+template <LogicalType TYPE>
 Status datum_from_string(TypeInfo* type_info, Datum* dst, const std::string& str) {
     typename CppTypeTraits<TYPE>::CppType value;
     RETURN_IF_ERROR(type_info->from_string(&value, str));
@@ -64,7 +64,7 @@ Status datum_from_string(TypeInfo* type_info, Datum* dst, const std::string& str
     return Status::OK();
 }
 
-template <FieldType TYPE>
+template <LogicalType TYPE>
 std::string datum_to_string(TypeInfo* type_info, const Datum& datum) {
     using CppType = typename CppTypeTraits<TYPE>::CppType;
     auto value = datum.template get<CppType>();

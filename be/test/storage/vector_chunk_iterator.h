@@ -17,7 +17,7 @@ namespace starrocks::vectorized {
 using Datums = std::vector<Datum>;
 
 /// DatumBuilder
-template <FieldType Type>
+template <LogicalType Type>
 struct DatumBuilder {
     template <typename T>
     Datums operator()(const std::vector<T>& data) const {

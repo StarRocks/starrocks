@@ -252,7 +252,7 @@ Status ScalarColumnIterator::_load_dict_page() {
     return _dict_decoder->init();
 }
 
-template <FieldType Type>
+template <LogicalType Type>
 Status ScalarColumnIterator::_do_init_dict_decoder() {
     static_assert(Type == OLAP_FIELD_TYPE_CHAR || Type == OLAP_FIELD_TYPE_VARCHAR);
     auto dict_page_decoder = down_cast<BinaryDictPageDecoder<Type>*>(_page->data_decoder());
@@ -334,7 +334,7 @@ Status ScalarColumnIterator::fetch_all_dict_words(std::vector<Slice>* words) con
     return (this->*_fetch_all_dict_words_func)(words);
 }
 
-template <FieldType Type>
+template <LogicalType Type>
 Status ScalarColumnIterator::_fetch_all_dict_words(std::vector<Slice>* words) const {
     auto dict = down_cast<BinaryPlainPageDecoder<Type>*>(_dict_decoder.get());
     uint32_t words_count = dict->count();
@@ -351,13 +351,13 @@ Status ScalarColumnIterator::_fetch_all_dict_words(std::vector<Slice>* words) co
     return Status::OK();
 }
 
-template <FieldType Type>
+template <LogicalType Type>
 int ScalarColumnIterator::_do_dict_lookup(const Slice& word) {
     auto dict = down_cast<BinaryPlainPageDecoder<Type>*>(_dict_decoder.get());
     return dict->find(word);
 }
 
-template <FieldType Type>
+template <LogicalType Type>
 Status ScalarColumnIterator::_do_next_dict_codes(size_t* n, vectorized::Column* dst) {
     size_t remaining = *n;
     bool contain_delted_row = false;
@@ -384,7 +384,7 @@ Status ScalarColumnIterator::_do_next_dict_codes(size_t* n, vectorized::Column* 
     return Status::OK();
 }
 
-template <FieldType Type>
+template <LogicalType Type>
 Status ScalarColumnIterator::_do_next_batch_dict_codes(const vectorized::SparseRange& range, vectorized::Column* dst) {
     bool contain_deleted_row = false;
     vectorized::SparseRangeIterator iter = range.new_iterator();
@@ -432,7 +432,7 @@ Status ScalarColumnIterator::_do_next_batch_dict_codes(const vectorized::SparseR
     return Status::OK();
 }
 
-template <FieldType Type>
+template <LogicalType Type>
 Status ScalarColumnIterator::_do_decode_dict_codes(const int32_t* codes, size_t size, vectorized::Column* words) {
     auto dict = down_cast<BinaryPlainPageDecoder<Type>*>(_dict_decoder.get());
     std::vector<Slice> slices;

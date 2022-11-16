@@ -29,11 +29,11 @@ public:
               _flags((is_key << kIsKeyShift) | (nullable << kNullableShift)) {}
 
     // Non-key field of any type except for ARRAY
-    Field(ColumnId id, std::string_view name, FieldType type, int precision, int scale, bool nullable)
+    Field(ColumnId id, std::string_view name, LogicalType type, int precision, int scale, bool nullable)
             : Field(id, name, get_type_info(type, precision, scale), OLAP_FIELD_AGGREGATION_NONE, 0, false, nullable) {}
 
     // Non-key field of any type except for DECIMAL32, DECIMAL64, DECIMAL128, and ARRAY
-    Field(ColumnId id, std::string_view name, FieldType type, bool nullable) : Field(id, name, type, -1, -1, nullable) {
+    Field(ColumnId id, std::string_view name, LogicalType type, bool nullable) : Field(id, name, type, -1, -1, nullable) {
         DCHECK(type != OLAP_FIELD_TYPE_DECIMAL32);
         DCHECK(type != OLAP_FIELD_TYPE_DECIMAL64);
         DCHECK(type != OLAP_FIELD_TYPE_DECIMAL128);
@@ -134,7 +134,7 @@ public:
 
     starrocks::FieldAggregationMethod aggregate_method() const { return _agg_method; }
 
-    FieldPtr convert_to(FieldType to_type) const;
+    FieldPtr convert_to(LogicalType to_type) const;
 
     void add_sub_field(const Field& sub_field);
 

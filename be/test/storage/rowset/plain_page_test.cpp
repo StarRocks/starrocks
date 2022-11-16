@@ -50,7 +50,7 @@ public:
         return ret;
     }
 
-    template <FieldType type, class PageDecoderType>
+    template <LogicalType type, class PageDecoderType>
     void copy_one(PageDecoderType* decoder, typename TypeTraits<type>::CppType* ret) {
         auto column = ChunkHelper::column_from_field_type(type, false);
         size_t n = 1;
@@ -59,7 +59,7 @@ public:
         *ret = *reinterpret_cast<const typename TypeTraits<type>::CppType*>(column->raw_data());
     }
 
-    template <FieldType Type, class PageBuilderType, class PageDecoderType>
+    template <LogicalType Type, class PageBuilderType, class PageDecoderType>
     void test_encode_decode_page_template(typename TypeTraits<Type>::CppType* src, size_t size) {
         typedef typename TypeTraits<Type>::CppType CppType;
 
@@ -132,7 +132,7 @@ public:
         }
     }
 
-    template <FieldType Type, class PageBuilderType, class PageDecoderType>
+    template <LogicalType Type, class PageBuilderType, class PageDecoderType>
     void test_seek_at_or_after_value_template(typename TypeTraits<Type>::CppType* src, size_t size,
                                               typename TypeTraits<Type>::CppType* small_than_smallest,
                                               typename TypeTraits<Type>::CppType* bigger_than_biggest) {
@@ -185,7 +185,7 @@ public:
         }
     }
 
-    template <FieldType Type, class PageBuilderType>
+    template <LogicalType Type, class PageBuilderType>
     void test_multi_pages(typename TypeTraits<Type>::CppType* src, size_t size) {
         typedef typename TypeTraits<Type>::CppType CppType;
 

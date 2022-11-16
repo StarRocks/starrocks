@@ -4,7 +4,7 @@
 
 namespace starrocks {
 
-template <FieldType Type>
+template <LogicalType Type>
 Status BinaryPlainPageDecoder<Type>::next_batch(size_t* count, vectorized::Column* dst) {
     vectorized::SparseRange read_range;
     uint32_t begin = current_index();
@@ -14,7 +14,7 @@ Status BinaryPlainPageDecoder<Type>::next_batch(size_t* count, vectorized::Colum
     return Status::OK();
 }
 
-template <FieldType Type>
+template <LogicalType Type>
 Status BinaryPlainPageDecoder<Type>::next_batch(const vectorized::SparseRange& range, vectorized::Column* dst) {
     DCHECK(_parsed);
     if (PREDICT_FALSE(_cur_idx >= _num_elems)) {

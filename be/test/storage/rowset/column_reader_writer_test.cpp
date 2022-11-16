@@ -88,7 +88,7 @@ protected:
         return std::make_shared<Segment>(Segment::private_type(0), fs, fname, 1, _dummy_segment_schema.get());
     }
 
-    template <FieldType type, EncodingTypePB encoding, uint32_t version>
+    template <LogicalType type, EncodingTypePB encoding, uint32_t version>
     void test_nullable_data(const vectorized::Column& src, const std::string& null_encoding = "0",
                             const std::string& null_ratio = "0") {
         config::set_config("null_encoding", null_encoding);
@@ -244,7 +244,7 @@ protected:
         }
     }
 
-    template <FieldType type>
+    template <LogicalType type>
     void test_read_default_value(string value, void* result) {
         using Type = typename TypeTraits<type>::CppType;
         TypeInfoPtr type_info = get_type_info(type);
@@ -420,7 +420,7 @@ protected:
         }
     }
 
-    template <FieldType type>
+    template <LogicalType type>
     vectorized::ColumnPtr numeric_data(int null_ratio) {
         using CppType = typename CppTypeTraits<type>::CppType;
         auto col = ChunkHelper::column_from_field_type(type, true);
@@ -523,7 +523,7 @@ protected:
         return col;
     }
 
-    template <FieldType type>
+    template <LogicalType type>
     void test_numeric_types() {
         auto col = numeric_data<type>(1);
         test_nullable_data<type, BIT_SHUFFLE, 1>(*col, "0", "1");

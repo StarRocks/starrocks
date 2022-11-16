@@ -60,7 +60,7 @@ struct ZoneMap {
     }
 };
 
-template <FieldType type>
+template <LogicalType type>
 class ZoneMapIndexWriterImpl final : public ZoneMapIndexWriter {
     using CppType = typename TypeTraits<type>::CppType;
 
@@ -100,7 +100,7 @@ private:
     uint64_t _estimated_size = 0;
 };
 
-template <FieldType type>
+template <LogicalType type>
 ZoneMapIndexWriterImpl<type>::ZoneMapIndexWriterImpl(Field* field) : _field(field) {
     _page_zone_map.min_value = _field->allocate_value(&_pool);
     _page_zone_map.max_value = _field->allocate_value(&_pool);
@@ -110,7 +110,7 @@ ZoneMapIndexWriterImpl<type>::ZoneMapIndexWriterImpl(Field* field) : _field(fiel
     _reset_zone_map(&_segment_zone_map);
 }
 
-template <FieldType type>
+template <LogicalType type>
 void ZoneMapIndexWriterImpl<type>::add_values(const void* values, size_t count) {
     if (count > 0) {
         _page_zone_map.has_not_null = true;
@@ -125,7 +125,7 @@ void ZoneMapIndexWriterImpl<type>::add_values(const void* values, size_t count) 
     }
 }
 
-template <FieldType type>
+template <LogicalType type>
 Status ZoneMapIndexWriterImpl<type>::flush() {
     // Update segment zone map.
     if (_field->compare(_segment_zone_map.min_value, _page_zone_map.min_value) > 0) {
@@ -156,7 +156,7 @@ Status ZoneMapIndexWriterImpl<type>::flush() {
 }
 
 struct ZoneMapIndexWriterBuilder {
-    template <FieldType ftype>
+    template <LogicalType ftype>
     std::unique_ptr<ZoneMapIndexWriter> operator()(Field* field) {
         return std::make_unique<ZoneMapIndexWriterImpl<ftype>>(field);
     }
@@ -166,7 +166,7 @@ std::unique_ptr<ZoneMapIndexWriter> ZoneMapIndexWriter::create(starrocks::Field*
     return field_type_dispatch_zonemap_index(field->type(), ZoneMapIndexWriterBuilder(), field);
 }
 
-template <FieldType type>
+template <LogicalType type>
 Status ZoneMapIndexWriterImpl<type>::finish(WritableFile* wfile, ColumnIndexMetaPB* index_meta) {
     index_meta->set_type(ZONE_MAP_INDEX);
     ZoneMapIndexPB* meta = index_meta->mutable_zone_map_index();

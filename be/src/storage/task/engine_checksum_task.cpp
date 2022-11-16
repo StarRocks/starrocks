@@ -70,7 +70,7 @@ Status EngineChecksumTask::_compute_checksum() {
 
     size_t num_columns = tablet_schema.num_columns();
     for (size_t i = 0; i < num_columns; ++i) {
-        FieldType type = tablet_schema.column(i).type();
+        LogicalType type = tablet_schema.column(i).type();
         // The approximation of FLOAT/DOUBLE in a certain precision range, the binary of byte is not
         // a fixed value, so these two types are ignored in calculating checksum.
         // And also HLL/OBJCET/PERCENTILE is too large to calculate the checksum.

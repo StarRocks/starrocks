@@ -78,7 +78,7 @@ static FieldAggregationMethod t_aggregation_type_to_field_aggregation_method(TAg
     return OLAP_FIELD_AGGREGATION_NONE;
 }
 
-static FieldType t_primitive_type_to_field_type(TPrimitiveType::type primitive_type, FieldTypeVersion v) {
+static LogicalType t_primitive_type_to_field_type(TPrimitiveType::type primitive_type, FieldTypeVersion v) {
     switch (primitive_type) {
     case TPrimitiveType::INVALID_TYPE:
     case TPrimitiveType::NULL_TYPE:
@@ -170,7 +170,7 @@ static Status t_column_to_pb_column(int32_t unique_id, const TColumn& t_column, 
         }
         TScalarType scalar = curr_type_node.scalar_type;
 
-        FieldType field_type = t_primitive_type_to_field_type(scalar.type, v);
+        LogicalType field_type = t_primitive_type_to_field_type(scalar.type, v);
         column_pb->set_type(TabletColumn::get_string_by_field_type(field_type));
         column_pb->set_length(TabletColumn::get_field_length_by_type(field_type, scalar.len));
         column_pb->set_index_length(column_pb->length());

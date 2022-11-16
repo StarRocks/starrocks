@@ -162,7 +162,7 @@ bool BinaryDictPageBuilder::is_valid_global_dict(const vectorized::GlobalDictMap
     return true;
 }
 
-template <FieldType Type>
+template <LogicalType Type>
 BinaryDictPageDecoder<Type>::BinaryDictPageDecoder(Slice data, const PageDecoderOptions& options)
         : _data(data),
           _options(options),
@@ -170,7 +170,7 @@ BinaryDictPageDecoder<Type>::BinaryDictPageDecoder(Slice data, const PageDecoder
           _parsed(false),
           _encoding_type(UNKNOWN_ENCODING) {}
 
-template <FieldType Type>
+template <LogicalType Type>
 Status BinaryDictPageDecoder<Type>::init() {
     CHECK(!_parsed);
     if (_data.size < BINARY_DICT_PAGE_HEADER_SIZE) {
@@ -200,18 +200,18 @@ Status BinaryDictPageDecoder<Type>::init() {
     return Status::OK();
 }
 
-template <FieldType Type>
+template <LogicalType Type>
 Status BinaryDictPageDecoder<Type>::seek_to_position_in_page(uint32_t pos) {
     return _data_page_decoder->seek_to_position_in_page(pos);
 }
 
-template <FieldType Type>
+template <LogicalType Type>
 void BinaryDictPageDecoder<Type>::set_dict_decoder(PageDecoder* dict_decoder) {
     _dict_decoder = down_cast<BinaryPlainPageDecoder<Type>*>(dict_decoder);
     _max_value_legth = _dict_decoder->max_value_length();
 }
 
-template <FieldType Type>
+template <LogicalType Type>
 Status BinaryDictPageDecoder<Type>::next_batch(size_t* n, vectorized::Column* dst) {
     vectorized::SparseRange read_range;
     uint32_t begin = current_index();
@@ -221,7 +221,7 @@ Status BinaryDictPageDecoder<Type>::next_batch(size_t* n, vectorized::Column* ds
     return Status::OK();
 }
 
-template <FieldType Type>
+template <LogicalType Type>
 Status BinaryDictPageDecoder<Type>::next_batch(const vectorized::SparseRange& range, vectorized::Column* dst) {
     if (_encoding_type == PLAIN_ENCODING) {
         return _data_page_decoder->next_batch(range, dst);
@@ -258,14 +258,14 @@ Status BinaryDictPageDecoder<Type>::next_batch(const vectorized::SparseRange& ra
     return Status::OK();
 }
 
-template <FieldType Type>
+template <LogicalType Type>
 Status BinaryDictPageDecoder<Type>::next_dict_codes(size_t* n, vectorized::Column* dst) {
     DCHECK(_encoding_type == DICT_ENCODING);
     DCHECK(_parsed);
     return _data_page_decoder->next_batch(n, dst);
 }
 
-template <FieldType Type>
+template <LogicalType Type>
 Status BinaryDictPageDecoder<Type>::next_dict_codes(const vectorized::SparseRange& range, vectorized::Column* dst) {
     DCHECK(_encoding_type == DICT_ENCODING);
     DCHECK(_parsed);

@@ -45,7 +45,7 @@ using EncodeAscendingFuncDatum = void (*)(const vectorized::Datum& value, size_t
 // Order-preserving binary encoding for values of a particular type so that
 // those values can be compared by memcpy their encoded bytes.
 //
-// To obtain instance of this class, use the `get_key_coder(FieldType)` method.
+// To obtain instance of this class, use the `get_key_coder(LogicalType)` method.
 class KeyCoder {
     using Datum = vectorized::Datum;
 
@@ -80,12 +80,12 @@ private:
     EncodeAscendingFuncDatum _encode_ascending_datum;
 };
 
-extern const KeyCoder* get_key_coder(FieldType type);
+extern const KeyCoder* get_key_coder(LogicalType type);
 
-template <FieldType field_type, typename Enable = void>
+template <LogicalType field_type, typename Enable = void>
 class KeyCoderTraits {};
 
-template <FieldType field_type>
+template <LogicalType field_type>
 class KeyCoderTraits<field_type,
                      typename std::enable_if_t<std::is_integral_v<typename CppTypeTraits<field_type>::CppType>>> {
 public:

@@ -41,7 +41,7 @@ public:
         return &s_instance;
     }
 
-    KeyCoder* get_coder(FieldType field_type) const { return _coder_map[field_type]; }
+    KeyCoder* get_coder(LogicalType field_type) const { return _coder_map[field_type]; }
 
 private:
     KeyCoderResolver() {
@@ -64,7 +64,7 @@ private:
         add_mapping<OLAP_FIELD_TYPE_BOOL>();
     }
 
-    template <FieldType field_type>
+    template <LogicalType field_type>
     void add_mapping() {
         static_assert(field_type < OLAP_FIELD_TYPE_MAX_VALUE);
         _coder_map[field_type] = new KeyCoder(KeyCoderTraits<field_type>());
@@ -73,7 +73,7 @@ private:
     KeyCoder* _coder_map[OLAP_FIELD_TYPE_MAX_VALUE] = {nullptr};
 };
 
-const KeyCoder* get_key_coder(FieldType type) {
+const KeyCoder* get_key_coder(LogicalType type) {
     return KeyCoderResolver::instance()->get_coder(delegate_type(type));
 }
 

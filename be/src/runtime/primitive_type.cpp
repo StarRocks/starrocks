@@ -201,7 +201,7 @@ public:
         _data[OLAP_FIELD_TYPE_JSON] = TYPE_JSON;
         _data[OLAP_FIELD_TYPE_VARBINARY] = TYPE_VARBINARY;
     }
-    PrimitiveType get_primitive_type(FieldType field_type) { return _data[field_type]; }
+    PrimitiveType get_primitive_type(LogicalType field_type) { return _data[field_type]; }
 
 private:
     PrimitiveType _data[OLAP_FIELD_TYPE_MAX_VALUE];
@@ -209,7 +209,7 @@ private:
 
 static ScalarFieldTypeToPrimitiveTypeMapping g_scalar_ftype_to_ptype;
 
-PrimitiveType scalar_field_type_to_primitive_type(FieldType field_type) {
+PrimitiveType scalar_field_type_to_primitive_type(LogicalType field_type) {
     PrimitiveType ptype = g_scalar_ftype_to_ptype.get_primitive_type(field_type);
     DCHECK(ptype != INVALID_TYPE);
     return ptype;

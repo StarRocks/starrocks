@@ -15,7 +15,7 @@
 namespace starrocks::parquet {
 
 constexpr static const PrimitiveType kDictCodePrimitiveType = TYPE_INT;
-constexpr static const FieldType kDictCodeFieldType = OLAP_FIELD_TYPE_INT;
+constexpr static const LogicalType kDictCodeFieldType = OLAP_FIELD_TYPE_INT;
 
 GroupReader::GroupReader(GroupReaderParam& param, int row_group_number) : _param(param) {
     _row_group_metadata =

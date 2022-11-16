@@ -23,8 +23,8 @@ namespace starrocks {
 // NOTE(zc): now CppColumnTraits is only used for this class, so I move it here.
 // Someday if it is used by others, please move it into a single file.
 // CppColumnTraits
-// Infer ColumnType from FieldType
-template <FieldType ftype>
+// Infer ColumnType from LogicalType
+template <LogicalType ftype>
 struct CppColumnTraits {
     using CppType = typename CppTypeTraits<ftype>::CppType;
     using ColumnType = typename vectorized::ColumnTraits<CppType>::ColumnType;
@@ -102,7 +102,7 @@ vectorized::Schema ChunkHelper::convert_schema(const starrocks::TabletSchema& sc
 }
 
 starrocks::vectorized::Field ChunkHelper::convert_field_to_format_v2(ColumnId id, const TabletColumn& c) {
-    FieldType type = TypeUtils::to_storage_format_v2(c.type());
+    LogicalType type = TypeUtils::to_storage_format_v2(c.type());
 
     TypeInfoPtr type_info = nullptr;
     if (type == OLAP_FIELD_TYPE_ARRAY || type == OLAP_FIELD_TYPE_DECIMAL32 || type == OLAP_FIELD_TYPE_DECIMAL64 ||
@@ -196,7 +196,7 @@ inline std::shared_ptr<vectorized::DecimalColumnType<T>> get_decimal_column_ptr(
 
 template <bool force>
 struct ColumnPtrBuilder {
-    template <FieldType ftype>
+    template <LogicalType ftype>
     vectorized::ColumnPtr operator()(size_t chunk_size, const vectorized::Field& field, int precision, int scale) {
         auto nullable = [&](vectorized::ColumnPtr c) -> vectorized::ColumnPtr {
             return field.is_nullable()
@@ -308,7 +308,7 @@ void ChunkHelper::padding_char_columns(const std::vector<size_t>& char_column_in
 }
 
 struct ColumnBuilder {
-    template <FieldType ftype>
+    template <LogicalType ftype>
     vectorized::ColumnPtr operator()(bool nullable) {
         [[maybe_unused]] auto NullableIfNeed = [&](vectorized::ColumnPtr col) -> vectorized::ColumnPtr {
             return nullable ? vectorized::NullableColumn::create(std::move(col), vectorized::NullColumn::create())
@@ -323,7 +323,7 @@ struct ColumnBuilder {
     }
 };
 
-vectorized::ColumnPtr ChunkHelper::column_from_field_type(FieldType type, bool nullable) {
+vectorized::ColumnPtr ChunkHelper::column_from_field_type(LogicalType type, bool nullable) {
     return field_type_dispatch_column(type, ColumnBuilder(), nullable);
 }
 

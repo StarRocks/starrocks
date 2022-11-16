@@ -36,15 +36,15 @@
 namespace starrocks {
 
 struct EncodingMapHash {
-    size_t operator()(const std::pair<FieldType, EncodingTypePB>& pair) const {
+    size_t operator()(const std::pair<LogicalType, EncodingTypePB>& pair) const {
         return (pair.first << 5) ^ pair.second;
     }
 };
 
-template <FieldType type, EncodingTypePB encoding, typename CppType, typename Enabled = void>
+template <LogicalType type, EncodingTypePB encoding, typename CppType, typename Enabled = void>
 struct TypeEncodingTraits {};
 
-template <FieldType type, typename CppType>
+template <LogicalType type, typename CppType>
 struct TypeEncodingTraits<type, PLAIN_ENCODING, CppType> {
     static Status create_page_builder(const PageBuilderOptions& opts, PageBuilder** builder) {
         *builder = new PlainPageBuilder<type>(opts);
@@ -56,7 +56,7 @@ struct TypeEncodingTraits<type, PLAIN_ENCODING, CppType> {
     }
 };
 
-template <FieldType type>
+template <LogicalType type>
 struct TypeEncodingTraits<type, PLAIN_ENCODING, Slice> {
     static Status create_page_builder(const PageBuilderOptions& opts, PageBuilder** builder) {
         *builder = new BinaryPlainPageBuilder(opts);
@@ -68,7 +68,7 @@ struct TypeEncodingTraits<type, PLAIN_ENCODING, Slice> {
     }
 };
 
-template <FieldType type, typename CppType>
+template <LogicalType type, typename CppType>
 struct TypeEncodingTraits<type, BIT_SHUFFLE, CppType,
                           typename std::enable_if<!std::is_same<CppType, Slice>::value>::type> {
     static Status create_page_builder(const PageBuilderOptions& opts, PageBuilder** builder) {
@@ -93,7 +93,7 @@ struct TypeEncodingTraits<OLAP_FIELD_TYPE_BOOL, RLE, bool> {
     }
 };
 
-template <FieldType type>
+template <LogicalType type>
 struct TypeEncodingTraits<type, DICT_ENCODING, Slice> {
     static Status create_page_builder(const PageBuilderOptions& opts, PageBuilder** builder) {
         *builder = new BinaryDictPageBuilder(opts);
@@ -117,7 +117,7 @@ struct TypeEncodingTraits<OLAP_FIELD_TYPE_DATE, FOR_ENCODING, typename CppTypeTr
     }
 };
 
-template <FieldType type, typename CppType>
+template <LogicalType type, typename CppType>
 struct TypeEncodingTraits<type, FOR_ENCODING, CppType,
                           typename std::enable_if<std::is_integral<CppType>::value>::type> {
     static Status create_page_builder(const PageBuilderOptions& opts, PageBuilder** builder) {
@@ -130,7 +130,7 @@ struct TypeEncodingTraits<type, FOR_ENCODING, CppType,
     }
 };
 
-template <FieldType type>
+template <LogicalType type>
 struct TypeEncodingTraits<type, PREFIX_ENCODING, Slice> {
     static Status create_page_builder(const PageBuilderOptions& opts, PageBuilder** builder) {
         *builder = new BinaryPrefixPageBuilder(opts);
@@ -142,9 +142,9 @@ struct TypeEncodingTraits<type, PREFIX_ENCODING, Slice> {
     }
 };
 
-template <FieldType field_type, EncodingTypePB encoding_type>
+template <LogicalType field_type, EncodingTypePB encoding_type>
 struct EncodingTraits : TypeEncodingTraits<field_type, encoding_type, typename CppTypeTraits<field_type>::CppType> {
-    static const FieldType type = field_type;
+    static const LogicalType type = field_type;
     static const EncodingTypePB encoding = encoding_type;
 };
 
@@ -153,7 +153,7 @@ public:
     EncodingInfoResolver();
     ~EncodingInfoResolver();
 
-    EncodingTypePB get_default_encoding(FieldType type, bool optimize_value_seek) const {
+    EncodingTypePB get_default_encoding(LogicalType type, bool optimize_value_seek) const {
         auto& encoding_map = optimize_value_seek ? _value_seek_encoding_map : _default_encoding_type_map;
         auto it = encoding_map.find(delegate_type(type));
         if (it != encoding_map.end()) {
@@ -162,11 +162,11 @@ public:
         return UNKNOWN_ENCODING;
     }
 
-    Status get(FieldType data_type, EncodingTypePB encoding_type, const EncodingInfo** out);
+    Status get(LogicalType data_type, EncodingTypePB encoding_type, const EncodingInfo** out);
 
 private:
     // Not thread-safe
-    template <FieldType type, EncodingTypePB encoding_type, bool optimize_value_seek = false>
+    template <LogicalType type, EncodingTypePB encoding_type, bool optimize_value_seek = false>
     void _add_map() {
         auto key = std::make_pair(type, encoding_type);
         DCHECK(_encoding_map.count(key) == 0);
@@ -180,12 +180,12 @@ private:
         _encoding_map.emplace(key, new EncodingInfo(EncodingTraits<type, encoding_type>()));
     }
 
-    std::unordered_map<FieldType, EncodingTypePB, std::hash<int>> _default_encoding_type_map;
+    std::unordered_map<LogicalType, EncodingTypePB, std::hash<int>> _default_encoding_type_map;
 
     // default encoding for each type which optimizes value seek
-    std::unordered_map<FieldType, EncodingTypePB, std::hash<int>> _value_seek_encoding_map;
+    std::unordered_map<LogicalType, EncodingTypePB, std::hash<int>> _value_seek_encoding_map;
 
-    std::unordered_map<std::pair<FieldType, EncodingTypePB>, EncodingInfo*, EncodingMapHash> _encoding_map;
+    std::unordered_map<std::pair<LogicalType, EncodingTypePB>, EncodingInfo*, EncodingMapHash> _encoding_map;
 };
 
 EncodingInfoResolver::EncodingInfoResolver() {
@@ -264,7 +264,7 @@ EncodingInfoResolver::~EncodingInfoResolver() {
     _encoding_map.clear();
 }
 
-Status EncodingInfoResolver::get(FieldType data_type, EncodingTypePB encoding_type, const EncodingInfo** out) {
+Status EncodingInfoResolver::get(LogicalType data_type, EncodingTypePB encoding_type, const EncodingInfo** out) {
     if (encoding_type == DEFAULT_ENCODING) {
         encoding_type = get_default_encoding(data_type, false);
     }
@@ -287,11 +287,11 @@ EncodingInfo::EncodingInfo(TraitsClass traits)
           _type(TraitsClass::type),
           _encoding(TraitsClass::encoding) {}
 
-Status EncodingInfo::get(const FieldType& data_type, EncodingTypePB encoding_type, const EncodingInfo** out) {
+Status EncodingInfo::get(const LogicalType& data_type, EncodingTypePB encoding_type, const EncodingInfo** out) {
     return s_encoding_info_resolver.get(data_type, encoding_type, out);
 }
 
-EncodingTypePB EncodingInfo::get_default_encoding(const FieldType& data_type, bool optimize_value_seek) {
+EncodingTypePB EncodingInfo::get_default_encoding(const LogicalType& data_type, bool optimize_value_seek) {
     return s_encoding_info_resolver.get_default_encoding(data_type, optimize_value_seek);
 }
 

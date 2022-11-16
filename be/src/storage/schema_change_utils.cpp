@@ -83,24 +83,24 @@ ColumnMapping* ChunkChanger::get_mutable_column_mapping(size_t column_index) {
     }
 
 struct ConvertTypeMapHash {
-    size_t operator()(const std::pair<FieldType, FieldType>& pair) const { return (pair.first + 31) ^ pair.second; }
+    size_t operator()(const std::pair<LogicalType, LogicalType>& pair) const { return (pair.first + 31) ^ pair.second; }
 };
 
 class ConvertTypeResolver {
     DECLARE_SINGLETON(ConvertTypeResolver);
 
 public:
-    bool convert_type_exist(const FieldType from_type, const FieldType to_type) const {
+    bool convert_type_exist(const LogicalType from_type, const LogicalType to_type) const {
         return _convert_type_set.find(std::make_pair(from_type, to_type)) != _convert_type_set.end();
     }
 
-    template <FieldType from_type, FieldType to_type>
+    template <LogicalType from_type, LogicalType to_type>
     void add_convert_type_mapping() {
         _convert_type_set.emplace(std::make_pair(from_type, to_type));
     }
 
 private:
-    typedef std::pair<FieldType, FieldType> convert_type_pair;
+    typedef std::pair<LogicalType, LogicalType> convert_type_pair;
     std::unordered_set<convert_type_pair, ConvertTypeMapHash> _convert_type_set;
 
     DISALLOW_COPY(ConvertTypeResolver);
@@ -178,7 +178,7 @@ ConvertTypeResolver::ConvertTypeResolver() {
 ConvertTypeResolver::~ConvertTypeResolver() = default;
 
 const MaterializeTypeConverter* ChunkChanger::get_materialize_type_converter(const std::string& materialized_function,
-                                                                             FieldType type) {
+                                                                             LogicalType type) {
     if (materialized_function == "to_bitmap") {
         return get_materialized_converter(type, OLAP_MATERIALIZE_TYPE_BITMAP);
     } else if (materialized_function == "hll_hash") {
@@ -204,9 +204,9 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const
     for (size_t i = 0; i < new_chunk->num_columns(); ++i) {
         int ref_column = _schema_mapping[i].ref_column;
         if (ref_column >= 0) {
-            FieldType ref_type =
+            LogicalType ref_type =
                     TypeUtils::to_storage_format_v2(base_tablet_meta->tablet_schema().column(ref_column).type());
-            FieldType new_type = TypeUtils::to_storage_format_v2(new_tablet_meta->tablet_schema().column(i).type());
+            LogicalType new_type = TypeUtils::to_storage_format_v2(new_tablet_meta->tablet_schema().column(i).type());
             if (!_schema_mapping[i].materialized_function.empty()) {
                 const auto& materialized_function = _schema_mapping[i].materialized_function;
                 const MaterializeTypeConverter* converter =

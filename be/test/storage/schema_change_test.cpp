@@ -108,7 +108,7 @@ protected:
     }
 
     template <typename T>
-    void test_convert_to_varchar(FieldType type, int type_size, T val, const std::string& expect_val) {
+    void test_convert_to_varchar(LogicalType type, int type_size, T val, const std::string& expect_val) {
         auto src_tablet_schema =
                 SetTabletSchema("SrcColumn", field_type_to_string(type), "REPLACE", type_size, false, false);
         auto dst_tablet_schema = SetTabletSchema("VarcharColumn", "VARCHAR", "REPLACE", 255, false, false);
@@ -128,7 +128,7 @@ protected:
     }
 
     template <typename T>
-    void test_convert_from_varchar(FieldType type, int type_size, std::string val, T expect_val) {
+    void test_convert_from_varchar(LogicalType type, int type_size, std::string val, T expect_val) {
         auto src_tablet_schema = SetTabletSchema("VarcharColumn", "VARCHAR", "REPLACE", 255, false, false);
         auto dst_tablet_schema =
                 SetTabletSchema("DstColumn", field_type_to_string(type), "REPLACE", type_size, false, false);

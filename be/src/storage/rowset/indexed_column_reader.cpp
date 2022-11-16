@@ -35,7 +35,7 @@ Status IndexedColumnReader::load(bool use_page_cache, bool kept_in_memory) {
     _use_page_cache = use_page_cache;
     _kept_in_memory = kept_in_memory;
 
-    _type_info = get_type_info((FieldType)_meta.data_type());
+    _type_info = get_type_info((LogicalType)_meta.data_type());
     if (_type_info == nullptr) {
         return Status::NotSupported(strings::Substitute("unsupported type=$0", _meta.data_type()));
     }

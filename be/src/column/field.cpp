@@ -21,7 +21,7 @@ void Field::full_encode_ascending(const Datum& value, std::string* buf) const {
     coder->full_encode_ascending(value, buf);
 }
 
-FieldPtr Field::convert_to(FieldType to_type) const {
+FieldPtr Field::convert_to(LogicalType to_type) const {
     FieldPtr new_field = std::make_shared<Field>(*this);
     new_field->_type = get_type_info(to_type);
     new_field->_short_key_length = new_field->_type->size();

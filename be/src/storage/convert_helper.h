@@ -41,7 +41,7 @@ private:
                                  MemPool* mem_pool) const = 0;
 };
 
-const TypeConverter* get_type_converter(FieldType from_type, FieldType to_type);
+const TypeConverter* get_type_converter(LogicalType from_type, LogicalType to_type);
 
 class MaterializeTypeConverter {
 public:
@@ -51,7 +51,7 @@ public:
     virtual Status convert_materialized(ColumnPtr src_col, ColumnPtr dst_col, TypeInfo* src_type) const = 0;
 };
 
-const MaterializeTypeConverter* get_materialized_converter(FieldType from_type, MaterializeType to_type);
+const MaterializeTypeConverter* get_materialized_converter(LogicalType from_type, MaterializeType to_type);
 
 class FieldConverter {
 public:
@@ -73,7 +73,7 @@ public:
                          uint16_t selected_size) const = 0;
 };
 
-const FieldConverter* get_field_converter(FieldType from_type, FieldType to_type);
+const FieldConverter* get_field_converter(LogicalType from_type, LogicalType to_type);
 
 class RowConverter {
 public:

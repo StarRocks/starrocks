@@ -503,7 +503,7 @@ void check_meta_consistency(DataDir* data_dir) {
                 }
                 for (const auto& column : columns) {
                     uint32_t unique_id = column.unique_id();
-                    starrocks::FieldType type = column.type();
+                    starrocks::LogicalType type = column.type();
                     auto iter = columns_in_footer.find(unique_id);
                     if (iter == columns_in_footer.end()) {
                         continue;
@@ -516,7 +516,7 @@ void check_meta_consistency(DataDir* data_dir) {
                     }
 
                     // if type is varchar, check length
-                    if (type == starrocks::FieldType::OLAP_FIELD_TYPE_VARCHAR) {
+                    if (type == starrocks::LogicalType::OLAP_FIELD_TYPE_VARCHAR) {
                         const auto& column_pb = footer.columns(iter->second.first);
                         if (column.length() != column_pb.length()) {
                             tablet_ids.emplace_back(tablet_id);

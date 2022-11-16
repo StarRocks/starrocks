@@ -72,7 +72,7 @@ static unique_ptr<Schema> create_schema(const string& desc, int nkey) {
         }
         ColumnId cid = i;
         string name = fs[0];
-        FieldType type = OLAP_FIELD_TYPE_UNKNOWN;
+        LogicalType type = OLAP_FIELD_TYPE_UNKNOWN;
         if (fs[1] == "boolean") {
             type = OLAP_FIELD_TYPE_BOOL;
         } else if (fs[1] == "tinyint") {

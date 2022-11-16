@@ -44,7 +44,7 @@ class RlePageTest : public testing::Test {
 public:
     ~RlePageTest() override = default;
 
-    template <FieldType type, class PageDecoderType>
+    template <LogicalType type, class PageDecoderType>
     void copy_one(PageDecoderType* decoder, typename TypeTraits<type>::CppType* ret) {
         auto column = ChunkHelper::column_from_field_type(type, false);
 
@@ -54,7 +54,7 @@ public:
         *ret = *reinterpret_cast<const typename TypeTraits<type>::CppType*>(column->raw_data());
     }
 
-    template <FieldType Type, class PageBuilderType = RlePageBuilder<Type>>
+    template <LogicalType Type, class PageBuilderType = RlePageBuilder<Type>>
     OwnedSlice rle_encode(typename TypeTraits<Type>::CppType* src, size_t size) {
         typedef typename TypeTraits<Type>::CppType CppType;
         PageBuilderOptions builder_options;
@@ -74,7 +74,7 @@ public:
         return s;
     }
 
-    template <FieldType Type>
+    template <LogicalType Type>
     void test_encode_decode_page_template(typename TypeTraits<Type>::CppType* src, size_t size) {
         typedef typename TypeTraits<Type>::CppType CppType;
         OwnedSlice s = rle_encode<Type>(src, size);
@@ -110,7 +110,7 @@ public:
         }
     }
 
-    template <FieldType Type>
+    template <LogicalType Type>
     void test_encode_decode_page_vectorized(typename TypeTraits<Type>::CppType* src, size_t size) {
         typedef typename TypeTraits<Type>::CppType CppType;
         OwnedSlice s = rle_encode<Type>(src, size);

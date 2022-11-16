@@ -15,7 +15,7 @@ using namespace std;
 
 namespace starrocks {
 
-static unique_ptr<vectorized::Schema> create_key_schema(const vector<FieldType>& types) {
+static unique_ptr<vectorized::Schema> create_key_schema(const vector<LogicalType>& types) {
     vectorized::Fields fields;
     std::vector<ColumnId> sort_key_idxes(types.size());
     for (int i = 0; i < types.size(); i++) {

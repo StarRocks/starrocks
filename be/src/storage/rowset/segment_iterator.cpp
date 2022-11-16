@@ -46,7 +46,7 @@
 
 namespace starrocks::vectorized {
 
-constexpr static const FieldType kDictCodeType = OLAP_FIELD_TYPE_INT;
+constexpr static const LogicalType kDictCodeType = OLAP_FIELD_TYPE_INT;
 
 // compare |tuple| with the first row of |chunk|.
 // NULL will be treated as a minimal value.
@@ -1397,7 +1397,7 @@ Status SegmentIterator::_check_low_cardinality_optimization() {
     const size_t n = _opts.predicates.size();
     for (size_t i = 0; i < n; i++) {
         const FieldPtr& field = _schema.field(i);
-        const FieldType type = field->type()->type();
+        const LogicalType type = field->type()->type();
         if (type != OLAP_FIELD_TYPE_CHAR && type != OLAP_FIELD_TYPE_VARCHAR) {
             continue;
         }

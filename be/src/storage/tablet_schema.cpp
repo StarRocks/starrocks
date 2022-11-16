@@ -33,7 +33,7 @@
 
 namespace starrocks {
 
-FieldType TabletColumn::get_field_type_by_string(const std::string& type_str) {
+LogicalType TabletColumn::get_field_type_by_string(const std::string& type_str) {
     std::string upper_type_str = type_str;
     std::transform(type_str.begin(), type_str.end(), upper_type_str.begin(), ::toupper);
     if (upper_type_str == "TINYINT") return OLAP_FIELD_TYPE_TINYINT;
@@ -89,7 +89,7 @@ FieldAggregationMethod TabletColumn::get_aggregation_type_by_string(const std::s
     return OLAP_FIELD_AGGREGATION_UNKNOWN;
 }
 
-std::string TabletColumn::get_string_by_field_type(FieldType type) {
+std::string TabletColumn::get_string_by_field_type(LogicalType type) {
     switch (type) {
     case OLAP_FIELD_TYPE_TINYINT:
         return "TINYINT";
@@ -195,7 +195,7 @@ size_t TabletColumn::estimate_field_size(size_t variable_length) const {
     return TypeUtils::estimate_field_size(_type, variable_length);
 }
 
-uint32_t TabletColumn::get_field_length_by_type(FieldType type, uint32_t string_length) {
+uint32_t TabletColumn::get_field_length_by_type(LogicalType type, uint32_t string_length) {
     switch (type) {
     case OLAP_FIELD_TYPE_UNKNOWN:
     case OLAP_FIELD_TYPE_DISCRETE_DOUBLE:
@@ -248,15 +248,15 @@ uint32_t TabletColumn::get_field_length_by_type(FieldType type, uint32_t string_
 
 TabletColumn::TabletColumn() = default;
 
-TabletColumn::TabletColumn(FieldAggregationMethod agg, FieldType type) : _aggregation(agg), _type(type) {}
+TabletColumn::TabletColumn(FieldAggregationMethod agg, LogicalType type) : _aggregation(agg), _type(type) {}
 
-TabletColumn::TabletColumn(FieldAggregationMethod agg, FieldType type, bool is_nullable)
+TabletColumn::TabletColumn(FieldAggregationMethod agg, LogicalType type, bool is_nullable)
         : _aggregation(agg), _type(type) {
     _length = get_type_info(type)->size();
     _set_flag(kIsNullableShift, is_nullable);
 }
 
-TabletColumn::TabletColumn(FieldAggregationMethod agg, FieldType type, bool is_nullable, int32_t unique_id,
+TabletColumn::TabletColumn(FieldAggregationMethod agg, LogicalType type, bool is_nullable, int32_t unique_id,
                            size_t length)
         : _unique_id(unique_id), _length(length), _aggregation(agg), _type(type) {
     _set_flag(kIsNullableShift, is_nullable);
