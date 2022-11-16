@@ -2,7 +2,9 @@ name: env-cleanup
 
 on:
   pull_request_target:
-    types: [closed]
+    types:
+      - synchronize
+      - closed
 
 jobs:
   env-cleanup:
