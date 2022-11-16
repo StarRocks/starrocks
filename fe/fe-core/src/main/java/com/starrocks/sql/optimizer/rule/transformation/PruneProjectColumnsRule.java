@@ -5,8 +5,10 @@ package com.starrocks.sql.optimizer.rule.transformation;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
@@ -15,9 +17,11 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import org.apache.commons.collections.CollectionUtils;
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class PruneProjectColumnsRule extends TransformationRule {
 
@@ -47,6 +51,20 @@ public class PruneProjectColumnsRule extends TransformationRule {
                 }
             }
         }));
+
+        if (newMap.isEmpty()) {
+            List<ColumnRefOperator> outputColumns =
+                    projectOperator.getOutputColumns(new ExpressionContext(input.inputAt(0))).getStream().
+                            mapToObj(context.getColumnRefFactory()::getColumnRef).collect(Collectors.toList());
+            if (CollectionUtils.isNotEmpty(outputColumns)) {
+                ColumnRefOperator smallestColumn = Utils.findSmallestColumnRef(outputColumns);
+                ScalarOperator expr = projectOperator.getColumnRefMap().get(smallestColumn);
+                if (!smallestColumn.equals(expr) && !expr.isVariable()) {
+                    newMap.put(smallestColumn, expr);
+                    requiredInputColumns.union(smallestColumn);
+                }
+            }
+        }
 
         // Change the requiredOutputColumns in context
         requiredOutputColumns.union(requiredInputColumns);
