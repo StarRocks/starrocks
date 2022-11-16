@@ -34,6 +34,22 @@ public class NestLoopJoinTest extends PlanTestBase {
                 "  |  other join predicates: 3: v3 < 6: v3\n" +
                 "  |  \n" +
                 "  |----2:EXCHANGE\n"));
+
+        // Prune should make the HASH JOIN(LEFT ANTI) could output the left table, but not join slot
+        sql = "select distinct('const') from t0, t1, " +
+                " (select * from t2 where cast(v7 as string) like 'ss%' ) sub1 " +
+                "left anti join " +
+                " (select * from t3 where cast(v10 as string) like 'ss%' ) sub2" +
+                " on substr(cast(sub1.v7 as string), 1) = substr(cast(sub2.v10 as string), 1)";
+
+        PlanTestBase.connectContext.getSessionVariable().setJoinImplementationMode("auto");
+        assertPlanContains(sql, " 11:Project\n" +
+                "  |  <slot 14> : 14: substr\n" +
+                "  |  \n" +
+                "  10:HASH JOIN\n" +
+                "  |  join op: LEFT ANTI JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 14: substr = 15: substr");
     }
 
     @Test
