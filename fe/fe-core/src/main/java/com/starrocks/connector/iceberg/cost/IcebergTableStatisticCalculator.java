@@ -8,6 +8,7 @@ import com.starrocks.connector.iceberg.IcebergUtil;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import org.apache.iceberg.CombinedScanTask;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.PartitionField;
@@ -15,15 +16,12 @@ import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableScan;
 import org.apache.iceberg.expressions.Expression;
-import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.types.Comparators;
 import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -218,8 +216,8 @@ public class IcebergTableStatisticCalculator {
                 snapshot.get(), icebergPredicates);
 
         IcebergFileStats icebergFileStats = null;
-        try (CloseableIterable<FileScanTask> fileScanTasks = tableScan.planFiles()) {
-            for (FileScanTask fileScanTask : fileScanTasks) {
+        for (CombinedScanTask combinedScanTask : tableScan.planTasks()) {
+            for (FileScanTask fileScanTask : combinedScanTask.files()) {
                 DataFile dataFile = fileScanTask.file();
                 // ignore this data file.
                 if (dataFile.recordCount() == 0) {
@@ -248,9 +246,8 @@ public class IcebergTableStatisticCalculator {
                     updateColumnSizes(icebergFileStats, dataFile.columnSizes());
                 }
             }
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
         }
+
         return icebergFileStats;
     }
 
