@@ -745,7 +745,7 @@ Hive Table 的 Partition 统计信息以及 Partition 下面的文件信息可�
    | 参数值                             | 说明                                      | 默认值 |
    | --- | --- | ---|
    | enable_hms_events_incremental_sync | 是否开启元数据自动增量同步功能            | false |
-   | hms_events_polling_interval_ms     | StarRocks 拉取 Hive Metastore Event 事件间隔 | 5 秒 |
+   | hms_events_polling_interval_ms     | StarRocks 拉取 Hive Metastore Event 事件间隔 | 5000 毫秒 |
    | hms_events_batch_size_per_rpc      | StarRocks 每次拉取 Event 事件的最大数量      | 500 |
    | enable_hms_parallel_process_evens  | 对接收的 Events 是否并行处理                | true |
    | hms_process_events_parallel_num    | 处理 Events 事件的并发数                    | 4 |
