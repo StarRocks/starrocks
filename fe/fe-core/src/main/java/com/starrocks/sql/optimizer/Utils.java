@@ -862,4 +862,26 @@ public class Utils {
         }
         return columnRefMap;
     }
+
+    public static List<ColumnRefOperator> collectScanColumn(OptExpression optExpression) {
+        List<ColumnRefOperator> columnRefOperators = Lists.newArrayList();
+        OptExpressionVisitor visitor = new OptExpressionVisitor<Void, Void>() {
+            @Override
+            public Void visit(OptExpression optExpression, Void context) {
+                for (OptExpression input : optExpression.getInputs()) {
+                    input.getOp().accept(this, input, null);
+                }
+                return null;
+            }
+
+            @Override
+            public Void visitLogicalTableScan(OptExpression optExpression, Void context) {
+                LogicalScanOperator scan = (LogicalScanOperator) optExpression.getOp();
+                columnRefOperators.addAll(scan.getColRefToColumnMetaMap().keySet());
+                return null;
+            }
+        };
+        optExpression.getOp().accept(visitor, optExpression, null);
+        return columnRefOperators;
+    }
 }

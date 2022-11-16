@@ -142,7 +142,7 @@ public class MaterializedViewRewriter {
         //    1. A1 -> A1, A2 -> A2, B -> B
         //    2. A1 -> A2, A2 -> A1, B -> B
         List<BiMap<Integer, Integer>> relationIdMappings = generateRelationIdMap(materializationContext.getQueryRefFactory(),
-                queryTables, materializationContext.getMvColumnRefFactory(), mvTables);
+                queryTables, queryExpression, materializationContext.getMvColumnRefFactory(), mvTables, mvExpression);
 
         // used to judge whether query scalar ops can be rewritten
         Set<ColumnRefOperator> queryColumnSet = queryRelationIdToColumns.values()
@@ -568,9 +568,10 @@ public class MaterializedViewRewriter {
     }
 
     private List<BiMap<Integer, Integer>> generateRelationIdMap(
-            ColumnRefFactory queryRefFactory, List<Table> queryTables, ColumnRefFactory mvRefFactory, List<Table> mvTables) {
-        Map<Table, Set<Integer>> queryTableToRelationId = getTableToRelationid(queryRefFactory, queryTables);
-        Map<Table, Set<Integer>> mvTableToRelationId = getTableToRelationid(mvRefFactory, mvTables);
+            ColumnRefFactory queryRefFactory, List<Table> queryTables, OptExpression queryExpression,
+            ColumnRefFactory mvRefFactory, List<Table> mvTables, OptExpression mvExpression) {
+        Map<Table, Set<Integer>> queryTableToRelationId = getTableToRelationid(queryExpression, queryRefFactory, queryTables);
+        Map<Table, Set<Integer>> mvTableToRelationId = getTableToRelationid(mvExpression, mvRefFactory, mvTables);
         Preconditions.checkState(queryTableToRelationId.keySet().equals(mvTableToRelationId.keySet()));
         List<BiMap<Integer, Integer>> result = ImmutableList.of(HashBiMap.create());
         for (Map.Entry<Table, Set<Integer>> queryEntry : queryTableToRelationId.entrySet()) {
@@ -602,21 +603,20 @@ public class MaterializedViewRewriter {
         return result;
     }
 
-    private Map<Table, Set<Integer>> getTableToRelationid(ColumnRefFactory refFactory, List<Table> tableList) {
+    private Map<Table, Set<Integer>> getTableToRelationid(
+            OptExpression optExpression, ColumnRefFactory refFactory, List<Table> tableList) {
         Map<Table, Set<Integer>> tableToRelationId = Maps.newHashMap();
-
+        List<ColumnRefOperator> validColumnRefs = Utils.collectScanColumn(optExpression);
         for (Map.Entry<ColumnRefOperator, Table> entry : refFactory.getColumnRefToTable().entrySet()) {
             if (!tableList.contains(entry.getValue())) {
                 continue;
             }
-            if (tableToRelationId.containsKey(entry.getValue())) {
-                Integer relationId = refFactory.getRelationId(entry.getKey().getId());
-                tableToRelationId.get(entry.getValue()).add(relationId);
-            } else {
-                Set<Integer> relationids = Sets.newHashSet();
-                relationids.add(refFactory.getRelationId(entry.getKey().getId()));
-                tableToRelationId.put(entry.getValue(), relationids);
+            if (!validColumnRefs.contains(entry.getKey())) {
+                continue;
             }
+            Set<Integer> relationIds = tableToRelationId.computeIfAbsent(entry.getValue(), k -> Sets.newHashSet());
+            Integer relationId = refFactory.getRelationId(entry.getKey().getId());
+            relationIds.add(relationId);
         }
         return tableToRelationId;
     }

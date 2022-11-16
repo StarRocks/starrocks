@@ -93,6 +93,7 @@ public class ColumnRefFactory {
         columnRefToTable.put(columnRef, table);
     }
 
+    /*
     public void updateColumnRef(ColumnRefOperator oldColumnRef, ColumnRefOperator columnRef) {
         Column column = columnRefToColumns.remove(oldColumnRef);
         Table table = columnRefToTable.remove(oldColumnRef);
@@ -100,6 +101,8 @@ public class ColumnRefFactory {
         Integer relationid = columnToRelationIds.remove(oldColumnRef.getId());
         columnToRelationIds.put(columnRef.getId(), relationid);
     }
+
+     */
 
     public Column getColumn(ColumnRefOperator columnRef) {
         return columnRefToColumns.get(columnRef);

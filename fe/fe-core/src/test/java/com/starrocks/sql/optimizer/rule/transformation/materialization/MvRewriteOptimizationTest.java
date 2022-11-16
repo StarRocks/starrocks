@@ -696,13 +696,12 @@ public class MvRewriteOptimizationTest {
 
     @Test
     public void testUnionRewrite() throws Exception {
-        starRocksAssert.getCtx().getSessionVariable().setOptimizerExecuteTimeout(300000000);
+        connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
         Table emps = getTable("test", "emps");
         PlanTestBase.setTableStatistics((OlapTable) emps, 1000000);
         Table depts = getTable("test", "depts");
         PlanTestBase.setTableStatistics((OlapTable) depts, 1000000);
         // single table union
-        /*
         createAndRefreshMv("test", "union_mv_1", "create materialized view union_mv_1" +
                 " distributed by hash(empid)  as select empid, deptno, name, salary from emps where empid < 3");
         MaterializedView mv1 = getMv("test", "union_mv_1");
@@ -726,8 +725,6 @@ public class MvRewriteOptimizationTest {
                 "     PREDICATES: 9: empid < 5, 9: empid > 2");
         dropMv("test", "union_mv_1");
 
-         */
-
         // multi tables query
         createAndRefreshMv("test", "join_union_mv_1", "create materialized view join_union_mv_1" +
                 " distributed by hash(empid)" +
@@ -738,11 +735,9 @@ public class MvRewriteOptimizationTest {
         PlanTestBase.setTableStatistics(mv2, 1);
         String query2 = "select emps.empid, emps.salary, depts.deptno, depts.name" +
                 " from emps join depts using (deptno) where depts.deptno < 120";
-        String plan2 = getFragmentPlan(query2);
-        // PlanTestBase.assertContains(plan2, "join_union_mv_1");
+        getFragmentPlan(query2);
         dropMv("test", "join_union_mv_1");
 
-        /*
         // aggregate querys
         createAndRefreshMv("test", "join_agg_union_mv_1", "create materialized view join_agg_union_mv_1" +
                         " distributed by hash(v1)" +
@@ -762,8 +757,6 @@ public class MvRewriteOptimizationTest {
                 " group by v1, test_all_type.t1d";
         getFragmentPlan(query3);
         dropMv("test", "join_agg_union_mv_1");
-
-         */
     }
 
     public String getFragmentPlan(String sql) throws Exception {

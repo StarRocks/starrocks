@@ -62,12 +62,17 @@ public class OptExpressionDuplicator {
             Map<ColumnRefOperator, Column> columnRefOperatorColumnMap =
                     ((LogicalScanOperator) optExpression.getOp()).getColRefToColumnMetaMap();
             ImmutableMap.Builder<ColumnRefOperator, Column> columnRefColumnMapBuilder = new ImmutableMap.Builder<>();
+            Map<Integer, Integer> relationIdMapping = Maps.newHashMap();
             for (Map.Entry<ColumnRefOperator, Column> entry : columnRefOperatorColumnMap.entrySet()) {
                 ColumnRefOperator key = entry.getKey();
                 ColumnRefOperator newColumnRef = columnRefFactory.create(key, key.getType(), key.isNullable());
                 columnRefColumnMapBuilder.put(newColumnRef, entry.getValue());
                 columnMapping.put(entry.getKey(), newColumnRef);
-                columnRefFactory.updateColumnRef(key, newColumnRef);
+                columnRefFactory.updateColumnRefToColumns(newColumnRef, columnRefFactory.getColumn(key),
+                        columnRefFactory.getColumnRefToTable().get(key));
+                Integer newRelationId = relationIdMapping.computeIfAbsent(columnRefFactory.getRelationId(key.getId()),
+                        k -> columnRefFactory.getNextRelationId());
+                columnRefFactory.updateColumnToRelationIds(newColumnRef.getId(), newRelationId);
             }
             ImmutableMap<ColumnRefOperator, Column> newColumnRefColumnMap = columnRefColumnMapBuilder.build();
             LogicalScanOperator.Builder scanBuilder = (LogicalScanOperator.Builder) opBuilder;
@@ -78,14 +83,17 @@ public class OptExpressionDuplicator {
             ImmutableMap.Builder<Column, ColumnRefOperator> columnMetaToColRefMapBuilder = new ImmutableMap.Builder<>();
             for (Map.Entry<Column, ColumnRefOperator> entry : columnMetaToColRefMap.entrySet()) {
                 ColumnRefOperator key = entry.getValue();
-                if (columnMapping.containsKey(key)) {
-                    columnMetaToColRefMapBuilder.put(entry.getKey(), (ColumnRefOperator) columnMapping.get(key));
-                } else {
-                    ColumnRefOperator newColumnRef = columnRefFactory.create(key, key.getType(), key.isNullable());
-                    columnMetaToColRefMapBuilder.put(entry.getKey(), newColumnRef);
-                    columnMapping.put(key, newColumnRef);
-                    columnRefFactory.updateColumnRef(key, newColumnRef);
-                }
+                ColumnRefOperator mapped = (ColumnRefOperator) columnMapping.computeIfAbsent(key, k -> {
+                    ColumnRefOperator newColumnRef = columnRefFactory.create(k, k.getType(), k.isNullable());
+                    columnMapping.put(k, newColumnRef);
+                    return newColumnRef;
+                });
+                columnRefFactory.updateColumnRefToColumns(mapped, columnRefFactory.getColumn(key),
+                        columnRefFactory.getColumnRefToTable().get(key));
+                Integer newRelationId = relationIdMapping.computeIfAbsent(columnRefFactory.getRelationId(key.getId()),
+                        k -> columnRefFactory.getNextRelationId());
+                columnRefFactory.updateColumnToRelationIds(mapped.getId(), newRelationId);
+                columnMetaToColRefMapBuilder.put(entry.getKey(), mapped);
             }
             ImmutableMap<Column, ColumnRefOperator> newColumnMetaToColRefMap = columnMetaToColRefMapBuilder.build();
             scanBuilder.setColumnMetaToColRefMap(newColumnMetaToColRefMap);
