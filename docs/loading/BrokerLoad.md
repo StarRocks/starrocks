@@ -4,7 +4,9 @@ StarRocks provides the loading method MySQL-based Broker Load to help you load d
 
 Broker Load runs in asynchronous loading mode. After you submit a load job, StarRocks asynchronously runs the job. You need to use the [SHOW LOAD](../sql-reference/sql-statements/data-manipulation/SHOW%20LOAD.md) statement or the `curl` command to check the result of the job.
 
-Broker Load supports loading one or more data files at a time. Additionally, Broker Load supports data transformation at data loading. For more information, see [Transform data at loading](../loading/Etl_in_loading.md).
+Broker Load supports loading one or more data files at a time and ensures the transactional atomicity of each load job that is run to load multiple data files. Atomicity means that the loading of multiple data files in one load job must all succeed or fail. It never happens that the loading of some data files succeeds while the loading of the other files fails.
+
+Broker Load also supports data transformation at data loading. For more information, see [Transform data at loading](../loading/Etl_in_loading.md).
 
 ## Background information
 
@@ -19,6 +21,10 @@ Broker Load supports the following data file formats:
 - Parquet
 
 - ORC
+
+> **NOTE**
+>
+> For CSV data, you can use a UTF-8 string, such as a comma (,), tab, or pipe (|), whose length does not exceed 50 bytes as a text delimiter.
 
 ## Supported storage systems
 
@@ -153,7 +159,9 @@ WITH BROKER "mybroker"
 )
 ```
 
-> Note: S3A is used for data loads from Amazon S3. Therefore, the file paths that you specify must start with the prefix `s3a://`.
+> **NOTE**
+>
+> S3A is used for data loads from Amazon S3. Therefore, the file paths that you specify must start with the prefix `s3a://`.
 
 #### Load data from Google GCS
 
@@ -178,7 +186,9 @@ WITH BROKER "mybroker"
 )
 ```
 
-> Note: S3A is used for data loads from Amazon S3. Therefore, the file paths that you specify must start with the prefix `s3a://`.
+> **NOTE**
+>
+> S3A is used for data loads from Amazon S3. Therefore, the file paths that you specify must start with the prefix `s3a://`.
 
 ### Query data
 
