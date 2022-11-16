@@ -62,6 +62,7 @@ import static org.apache.iceberg.expressions.Expressions.startsWith;
  * not -> CompoundPredicateOperator(not, ...)
  * <p>
  */
+
 public class ScalarOperatorToIcebergExpr {
     private static final Logger LOG = LogManager.getLogger(ScalarOperatorToIcebergExpr.class);
 
@@ -206,42 +207,53 @@ public class ScalarOperatorToIcebergExpr {
     }
 
     private static Object getLiteralValue(ScalarOperator operator) {
-        if (!(operator instanceof ConstantOperator)) {
+        if (operator == null) {
             return null;
         }
 
-        ConstantOperator constantOperator = (ConstantOperator) operator;
-        switch (operator.getType().getPrimitiveType()) {
-            case BOOLEAN:
-                return constantOperator.getBoolean();
-            case TINYINT:
-                return constantOperator.getTinyInt();
-            case SMALLINT:
-                return constantOperator.getSmallint();
-            case INT:
-                return constantOperator.getInt();
-            case BIGINT:
-                return constantOperator.getBigint();
-            case FLOAT:
-                return constantOperator.getFloat();
-            case DOUBLE:
-                return constantOperator.getDouble();
-            case DECIMALV2:
-            case DECIMAL32:
-            case DECIMAL64:
-            case DECIMAL128:
-                return constantOperator.getDecimal();
-            case HLL:
-            case VARCHAR:
-            case CHAR:
-                return constantOperator.getVarchar();
-            case DATE:
-                return constantOperator.getDate().toLocalDate().toEpochDay();
-            case DATETIME:
-                long value = constantOperator.getDatetime().toEpochSecond(OffsetDateTime.now().getOffset());
-                return TimeUnit.MICROSECONDS.convert(value, TimeUnit.SECONDS);
-            default:
-                return null;
+        return new ExtractLiteralValue().visit(operator, null);
+    }
+
+    private static class ExtractLiteralValue extends ScalarOperatorVisitor<Object, Void> {
+        @Override
+        public Object visit(ScalarOperator scalarOperator, Void context) {
+            return scalarOperator.accept(this, context);
+        }
+
+        @Override
+        public Object visitConstant(ConstantOperator operator, Void context) {
+            switch (operator.getType().getPrimitiveType()) {
+                case BOOLEAN:
+                    return operator.getBoolean();
+                case TINYINT:
+                    return operator.getTinyInt();
+                case SMALLINT:
+                    return operator.getSmallint();
+                case INT:
+                    return operator.getInt();
+                case BIGINT:
+                    return operator.getBigint();
+                case FLOAT:
+                    return operator.getFloat();
+                case DOUBLE:
+                    return operator.getDouble();
+                case DECIMALV2:
+                case DECIMAL32:
+                case DECIMAL64:
+                case DECIMAL128:
+                    return operator.getDecimal();
+                case HLL:
+                case VARCHAR:
+                case CHAR:
+                    return operator.getVarchar();
+                case DATE:
+                    return operator.getDate().toLocalDate().toEpochDay();
+                case DATETIME:
+                    long value = operator.getDatetime().toEpochSecond(OffsetDateTime.now().getOffset());
+                    return TimeUnit.MICROSECONDS.convert(value, TimeUnit.SECONDS);
+                default:
+                    return null;
+            }
         }
     }
 
@@ -249,11 +261,30 @@ public class ScalarOperatorToIcebergExpr {
         if (operator == null) {
             return null;
         }
-        ColumnRefOperator column = (ColumnRefOperator) operator;
-        String columnName = column.getName();
+
+        String columnName = new ExtractColumnName().visit(operator, null);
         if (columnName == null || columnName.isEmpty()) {
             return null;
         }
         return columnName;
+    }
+
+    private static class ExtractColumnName extends ScalarOperatorVisitor<String, Void> {
+
+        @Override
+        public String visit(ScalarOperator scalarOperator, Void context) {
+            return scalarOperator.accept(this, context);
+        }
+
+        public String visitVariableReference(ColumnRefOperator operator, Void context) {
+            return operator.getName();
+        }
+
+        public String visitConstant(ConstantOperator operator, Void context) {
+            if (operator.getChild(0) == null) {
+                return null;
+            }
+            return operator.getChild(0).accept(this, null);
+        }
     }
 }
