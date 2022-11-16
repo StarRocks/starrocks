@@ -601,17 +601,34 @@ public class ReportHandler extends Daemon {
         AgentBatchTask createReplicaBatchTask = new AgentBatchTask();
         TabletInvertedIndex invertedIndex = Catalog.getCurrentInvertedIndex();
         Catalog catalog = Catalog.getCurrentCatalog();
+        final long MAX_DB_WLOCK_HOLDING_TIME_MS = 1000L;
+        DB_TRAVERSE:
         for (Long dbId : tabletDeleteFromMeta.keySet()) {
             Database db = catalog.getDbIncludeRecycleBin(dbId);
             if (db == null) {
                 continue;
             }
             db.writeLock();
+            long lockStartTime = System.currentTimeMillis();
             try {
                 int deleteCounter = 0;
                 List<Long> tabletIds = tabletDeleteFromMeta.get(dbId);
                 List<TabletMeta> tabletMetaList = invertedIndex.getTabletMetaList(tabletIds);
                 for (int i = 0; i < tabletMetaList.size(); i++) {
+                    // Because we need to write bdb with db write lock hold,
+                    // to avoid block other threads too long, we periodically release and
+                    // acquire the db write lock (every MAX_DB_WLOCK_HOLDING_TIME_MS milliseconds).
+                    long currentTime = System.currentTimeMillis();
+                    if (currentTime - lockStartTime > MAX_DB_WLOCK_HOLDING_TIME_MS) {
+                        db.writeUnlock();
+                        db = catalog.getDbIncludeRecycleBin(dbId);
+                        if (db == null) {
+                            continue DB_TRAVERSE;
+                        }
+                        db.writeLock();
+                        lockStartTime = currentTime;
+                    }
+
                     TabletMeta tabletMeta = tabletMetaList.get(i);
                     if (tabletMeta == TabletInvertedIndex.NOT_EXIST_TABLET_META) {
                         continue;
