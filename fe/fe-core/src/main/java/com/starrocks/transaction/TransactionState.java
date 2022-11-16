@@ -39,11 +39,13 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.service.FrontendOptions;
 import com.starrocks.task.PublishVersionTask;
 import com.starrocks.thrift.TPartitionVersionInfo;
 import com.starrocks.thrift.TUniqueId;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.StatusCode;
+import javax.validation.constraints.NotNull;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -58,7 +60,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
-import javax.validation.constraints.NotNull;
 
 public class TransactionState implements Writable {
     private static final Logger LOG = LogManager.getLogger(TransactionState.class);
@@ -186,6 +187,11 @@ public class TransactionState implements Writable {
         public TxnCoordinator(TxnSourceType sourceType, String ip) {
             this.sourceType = sourceType;
             this.ip = ip;
+        }
+
+        public static TxnCoordinator fromThisFE() {
+            return new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE,
+                    FrontendOptions.getLocalHostAddress());
         }
 
         @Override

@@ -397,6 +397,10 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         this.simpleDefineSql = simple;
     }
 
+    public Set<Long> getBaseTableIds() {
+        return baseTableIds;
+    }
+
     public List<BaseTableInfo> getBaseTableInfos() {
         return baseTableInfos;
     }
