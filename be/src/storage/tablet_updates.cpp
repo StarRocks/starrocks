@@ -2,6 +2,7 @@
 
 #include "storage/tablet_updates.h"
 
+#include <cmath>
 #include <ctime>
 #include <memory>
 
@@ -2195,7 +2196,7 @@ void TabletUpdates::_print_rowsets(std::vector<uint32_t>& rowsets, std::string* 
                 auto& stats = *itr->second;
                 string bytes = PrettyPrinter::print(stats.byte_size, TUnit::BYTES);
                 // PrettyPrinter doesn't support negative value
-                string compaction = PrettyPrinter::print(abs(stats.compaction_score), TUnit::BYTES);
+                string compaction = PrettyPrinter::print(std::abs(stats.compaction_score), TUnit::BYTES);
                 const char* cprefix = "";
                 if (stats.compaction_score < 0) {
                     cprefix = "-";
