@@ -49,8 +49,6 @@ struct CompactionCandidate {
         return *this;
     }
 
-    bool is_valid() { return tablet && (type == BASE_COMPACTION || type == CUMULATIVE_COMPACTION); }
-
     std::string to_string() const {
         std::stringstream ss;
         if (tablet) {
@@ -58,7 +56,7 @@ struct CompactionCandidate {
         } else {
             ss << "nullptr tablet";
         }
-        ss << ", type:" << type;
+        ss << ", type:" << starrocks::to_string(type);
         ss << ", score:" << score;
         return ss.str();
     }

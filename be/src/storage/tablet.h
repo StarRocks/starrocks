@@ -52,8 +52,8 @@ class Tablet;
 class TabletMeta;
 class TabletUpdates;
 class CompactionTask;
-class CompactionContext;
 class CompactionCandidate;
+class CompactionContext;
 
 using TabletSharedPtr = std::shared_ptr<Tablet>;
 
@@ -205,6 +205,7 @@ public:
 
     void pick_candicate_rowsets_to_cumulative_compaction(std::vector<RowsetSharedPtr>* candidate_rowsets);
     void pick_candicate_rowsets_to_base_compaction(std::vector<RowsetSharedPtr>* candidate_rowsets);
+    void pick_all_candicate_rowsets(vector<RowsetSharedPtr>* candidate_rowsets);
 
     void calculate_cumulative_point();
 
@@ -227,23 +228,20 @@ public:
 
     // if there is _compaction_task running
     // do not do compaction
-    bool need_compaction(CompactionType type) const {
-        std::unique_lock wrlock(_meta_lock);
-        return _need_compaction_unlock(type);
-    }
+    bool need_compaction();
 
-    // for ut
-    void set_compaction_context(std::unique_ptr<CompactionContext>& compaction_context);
+    int64_t compaction_score();
+    CompactionType compaction_type();
 
-    std::vector<CompactionCandidate> get_compaction_candidates(bool need_update_context);
+    void set_compaction_context(std::unique_ptr<CompactionContext>& context);
 
-    double compaction_score(CompactionType type) const;
+    std::shared_ptr<CompactionTask> create_compaction_task();
 
-    std::shared_ptr<CompactionTask> get_compaction(CompactionType type, bool create_if_not_exist);
+    bool has_compaction_task();
 
     void stop_compaction();
 
-    void reset_compaction(CompactionType type);
+    void reset_compaction();
 
     bool get_enable_persistent_index() { return _tablet_meta->get_enable_persistent_index(); }
 
@@ -272,14 +270,6 @@ private:
                                                 vector<RowsetSharedPtr>* rowsets) const;
 
     bool _check_versions_completeness();
-
-    std::unique_ptr<CompactionContext> _get_compaction_context();
-
-    // protected by _meta_lock
-    void _update_tablet_compaction_context();
-    std::vector<CompactionCandidate> _get_compaction_candidates();
-    bool _need_compaction_unlock() const;
-    bool _need_compaction_unlock(CompactionType type) const;
 
     friend class TabletUpdates;
     static const int64_t kInvalidCumulativePoint = -1;
@@ -322,8 +312,9 @@ private:
 
     // compaction related
     std::unique_ptr<CompactionContext> _compaction_context;
-    std::shared_ptr<CompactionTask> _base_compaction_task;
-    std::shared_ptr<CompactionTask> _cumulative_compaction_task;
+    std::shared_ptr<CompactionTask> _compaction_task;
+
+    std::mutex _compaction_task_lock;
 
     // if this tablet is broken, set to true. default is false
     // timestamp of last cumu compaction failure

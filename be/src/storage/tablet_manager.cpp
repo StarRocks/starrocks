@@ -724,7 +724,7 @@ Status TabletManager::load_tablet_from_meta(DataDir* data_dir, TTabletId tablet_
     LOG_IF(WARNING, !st.ok()) << "Fail to add tablet " << tablet->full_name();
     // no concurrent access here
     if (config::enable_event_based_compaction_framework) {
-        StorageEngine::instance()->compaction_manager()->update_tablet_async(tablet, true, false);
+        StorageEngine::instance()->compaction_manager()->update_tablet_async(tablet);
     }
 
     return st;
