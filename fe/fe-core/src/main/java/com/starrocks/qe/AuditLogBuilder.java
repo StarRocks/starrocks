@@ -77,6 +77,14 @@ public class AuditLogBuilder extends Plugin implements AuditPlugin {
                     continue;
                 }
 
+                // fields related to big queries are not written into audit log by default,
+                // they will be written into big query log.
+                if (af.value().equals("BigQueryLogCPUSecondThreshold") ||
+                        af.value().equals("BigQueryLogScanBytesThreshold") ||
+                        af.value().equals("BigQueryLogScanRowsThreshold")) {
+                    continue;
+                }
+
                 if (af.value().equals("Time")) {
                     queryTime = (long) f.get(event);
                 }
@@ -91,9 +99,9 @@ public class AuditLogBuilder extends Plugin implements AuditPlugin {
             }
 
             if (isBigQuery(event)) {
-                sb.append("|cpuSecondThreshold=").append(Config.big_query_log_cpu_second_threshold);
-                sb.append("|scanBytesThreshold=").append(Config.big_query_log_scan_bytes_threshold);
-                sb.append("|scanRowsThreshold=").append(Config.big_query_log_scan_rows_threshold);
+                sb.append("|bigQueryLogCPUSecondThreshold=").append(event.bigQueryLogCPUSecondThreshold);
+                sb.append("|bigQueryLogScanBytesThreshold=").append(event.bigQueryLogScanBytesThreshold);
+                sb.append("|bigQueryLogScanRowsThreshold=").append(event.bigQueryLogScanRowsThreshold);
                 String bigQueryLog = sb.toString();
                 AuditLog.getBigQueryAudit().log(bigQueryLog);
             }
@@ -103,19 +111,15 @@ public class AuditLogBuilder extends Plugin implements AuditPlugin {
     }
 
     private boolean isBigQuery(AuditEvent event) {
-        if (Config.enable_big_query_log) {
-            if (Config.big_query_log_cpu_second_threshold >= 0 &&
-                    event.cpuCostNs > Config.big_query_log_cpu_second_threshold * 1000000000L) {
-                return true;
-            }
-            if (Config.big_query_log_scan_rows_threshold >= 0 &&
-                    event.scanRows > Config.big_query_log_scan_rows_threshold) {
-                return true;
-            }
-            if (Config.big_query_log_scan_bytes_threshold >= 0 &&
-                    event.scanBytes > Config.big_query_log_scan_bytes_threshold) {
-                return true;
-            }
+        if (event.bigQueryLogCPUSecondThreshold >= 0 &&
+                event.cpuCostNs > event.bigQueryLogCPUSecondThreshold * 1000000000L) {
+            return true;
+        }
+        if (event.bigQueryLogScanBytesThreshold >= 0 && event.scanBytes > event.bigQueryLogScanBytesThreshold) {
+            return true;
+        }
+        if (event.bigQueryLogScanRowsThreshold >= 0 && event.scanRows > event.bigQueryLogScanRowsThreshold) {
+            return true;
         }
         return false;
     }

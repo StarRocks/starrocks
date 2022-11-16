@@ -304,6 +304,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_MATERIALIZED_VIEW_UNION_REWRITE = "enable_materialized_view_union_rewrite";
     public static final String ENABLE_RULE_BASED_MATERIALIZED_VIEW_REWRITE = "enable_rule_based_materialized_view_rewrite";
 
+    public static final String ENABLE_BIG_QUERY_LOG = "enable_big_query_log";
+    public static final String BIG_QUERY_LOG_CPU_SECOND_THRESHOLD = "big_query_log_cpu_second_threshold";
+    public static final String BIG_QUERY_LOG_SCAN_BYTES_THRESHOLD = "big_query_log_scan_bytes_threshold";
+    public static final String BIG_QUERY_LOG_SCAN_ROWS_THRESHOLD = "big_query_log_scan_rows_threshold";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(ENABLE_SPILLING)
@@ -750,6 +755,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_RULE_BASED_MATERIALIZED_VIEW_REWRITE)
     private boolean enableRuleBasedMaterializedViewRewrite = true;
+
+    // if enable_big_query_log = true and cpu/io cost of a query exceeds the related threshold,
+    // the information will be written to the big query log
+    @VarAttr(name = ENABLE_BIG_QUERY_LOG)
+    private boolean enableBigQueryLog = false;
+    @VarAttr(name = BIG_QUERY_LOG_CPU_SECOND_THRESHOLD)
+    private long bigQueryLogCPUSecondThreshold = -1;
+    @VarAttr(name = BIG_QUERY_LOG_SCAN_BYTES_THRESHOLD)
+    private long bigQueryLogScanBytesThreshold = -1;
+    @VarAttr(name = BIG_QUERY_LOG_SCAN_ROWS_THRESHOLD)
+    private long bigQueryLogScanRowsThreshold = -1;
 
     public boolean getEnablePopulateBlockCache() {
         return enablePopulateBlockCache;
@@ -1417,6 +1433,38 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableRuleBasedMaterializedViewRewrite(boolean enableRuleBasedMaterializedViewRewrite) {
         this.enableRuleBasedMaterializedViewRewrite = enableRuleBasedMaterializedViewRewrite;
+    }
+
+    public boolean isEnableBigQueryLog() {
+        return enableBigQueryLog;
+    }
+
+    public void setEnableBigQueryLog(boolean enableBigQueryLog) {
+        this.enableBigQueryLog = enableBigQueryLog;
+    }
+
+    public long getBigQueryLogCPUSecondThreshold() {
+        return this.bigQueryLogCPUSecondThreshold;
+    }
+
+    public void setBigQueryLogCpuSecondThreshold(long bigQueryLogCPUSecondThreshold) {
+        this.bigQueryLogCPUSecondThreshold = bigQueryLogCPUSecondThreshold;
+    }
+
+    public long getBigQueryLogScanBytesThreshold() {
+        return bigQueryLogScanBytesThreshold;
+    }
+
+    public void setBigQueryLogScanBytesThreshold(long bigQueryLogScanBytesThreshold) {
+        this.bigQueryLogScanBytesThreshold = bigQueryLogScanBytesThreshold;
+    }
+
+    public long getBigQueryLogScanRowsThreshold() {
+        return bigQueryLogScanRowsThreshold;
+    }
+
+    public void setBigQueryLogScanRowsThreshold(long bigQueryLogScanRowsThreshold) {
+        this.bigQueryLogScanRowsThreshold = bigQueryLogScanRowsThreshold;
     }
 
     // Serialize to thrift object
