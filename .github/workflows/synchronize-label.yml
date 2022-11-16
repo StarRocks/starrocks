@@ -16,17 +16,8 @@ jobs:
         if: contains(github.event.pull_request.labels.*.name, 'Approved')
         with:
           labels: Approved
-          
-      - uses: dorny/paths-filter@v2
-        id: changes
-        with:
-          filters: |
-            be:
-            - 'be/**'
             
       - uses: actions-ecosystem/action-remove-labels@v1
-        if: >
-          contains(github.event.pull_request.labels.*.name, 'be-build') &&
-          steps.changes.outputs.be == 'true'
+        if: contains(github.event.pull_request.labels.*.name, 'be-build')
         with:
           labels: be-build
