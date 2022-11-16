@@ -6,8 +6,7 @@
 #include "exprs/expr.h"
 #include "exprs/vectorized/builtin_functions.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 class VectorizedFunctionCallExpr final : public Expr {
 public:
@@ -34,5 +33,4 @@ private:
     bool _is_returning_random_value = false;
 };
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

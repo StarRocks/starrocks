@@ -43,7 +43,7 @@ struct StringValue {
     size_t len{0};
 
     StringValue(char* ptr, size_t len) : ptr(ptr), len(len) {}
-    StringValue() {}
+    StringValue() = default;
 
     /// Construct a StringValue from 's'.  's' must be valid for as long as
     /// this object is valid.
@@ -100,7 +100,7 @@ struct StringValue {
     // Trims leading and trailing spaces.
     StringValue trim() const;
 
-    static StringValue from_slice(const starrocks::Slice& slice) { return StringValue(slice.data, slice.size); }
+    static StringValue from_slice(const starrocks::Slice& slice) { return {slice.data, slice.size}; }
 };
 
 // This function must be called 'hash_value' to be picked up by boost.

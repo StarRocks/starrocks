@@ -3,18 +3,18 @@
 #pragma once
 
 #include <memory>
+#include <utility>
 #include <vector>
 
 #include "exec/pipeline/scan/morsel.h"
 
-namespace starrocks {
-namespace pipeline {
+namespace starrocks::pipeline {
 class DriverSource;
 using DriverSourcePtr = std::unique_ptr<DriverSource>;
 using DriverSources = std::vector<DriverSourcePtr>;
 class DriverSource {
 public:
-    DriverSource(const Morsels& morsels, int32_t source_id) : _morsels(morsels), _source_id(source_id) {}
+    DriverSource(Morsels morsels, int32_t source_id) : _morsels(std::move(morsels)), _source_id(source_id) {}
 
     const Morsels& get_morsels() const { return _morsels; }
 
@@ -24,5 +24,4 @@ private:
     Morsels _morsels;
     int32_t _source_id;
 };
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline

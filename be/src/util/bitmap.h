@@ -127,7 +127,7 @@ std::string BitmapToString(const uint8_t* bitmap, size_t num_bits);
 //   }
 class BitmapIterator {
 public:
-    BitmapIterator(const uint8_t* map, size_t num_bits) : offset_(0), num_bits_(num_bits), map_(map) {}
+    BitmapIterator(const uint8_t* map, size_t num_bits) : num_bits_(num_bits), map_(map) {}
 
     void Reset(const uint8_t* map, size_t num_bits) {
         offset_ = 0;
@@ -171,7 +171,7 @@ private:
     }
 
 private:
-    size_t offset_;
+    size_t offset_{0};
     size_t num_bits_;
     const uint8_t* map_;
 };

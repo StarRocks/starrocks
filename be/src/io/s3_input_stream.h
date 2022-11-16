@@ -16,11 +16,7 @@ namespace starrocks::io {
 class S3InputStream final : public SeekableInputStream {
 public:
     explicit S3InputStream(std::shared_ptr<Aws::S3::S3Client> client, std::string bucket, std::string object)
-            : _s3client(std::move(client)),
-              _bucket(std::move(bucket)),
-              _object(std::move(object)),
-              _offset(0),
-              _size(-1) {}
+            : _s3client(std::move(client)), _bucket(std::move(bucket)), _object(std::move(object)) {}
 
     ~S3InputStream() override = default;
 
@@ -46,8 +42,8 @@ private:
     std::shared_ptr<Aws::S3::S3Client> _s3client;
     std::string _bucket;
     std::string _object;
-    int64_t _offset;
-    int64_t _size;
+    int64_t _offset{0};
+    int64_t _size{-1};
 };
 
 } // namespace starrocks::io

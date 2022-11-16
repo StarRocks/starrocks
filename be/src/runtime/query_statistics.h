@@ -35,7 +35,7 @@ class QueryStatisticsRecvr;
 // or plan's statistics and QueryStatisticsRecvr is responsible for collecting it.
 class QueryStatistics {
 public:
-    QueryStatistics() {}
+    QueryStatistics() = default;
 
     void set_returned_rows(int64_t num_rows) { this->returned_rows = num_rows; }
 

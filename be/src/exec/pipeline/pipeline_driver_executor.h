@@ -16,8 +16,7 @@
 #include "util/limit_setter.h"
 #include "util/threadpool.h"
 
-namespace starrocks {
-namespace pipeline {
+namespace starrocks::pipeline {
 
 class DriverExecutor;
 using DriverExecutorPtr = std::shared_ptr<DriverExecutor>;
@@ -79,5 +78,4 @@ private:
     std::unique_ptr<UIntGauge> _driver_poller_block_queue_len;
 };
 
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline

@@ -89,7 +89,7 @@ public:
 
     void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) override;
 
-    virtual ColumnPtr replicate(const std::vector<uint32_t>& offsets) override;
+    ColumnPtr replicate(const std::vector<uint32_t>& offsets) override;
 
     bool append_nulls(size_t count) override {
         if (_data->is_nullable()) {

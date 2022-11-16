@@ -46,10 +46,10 @@ class AggregateDistinctBlockingSinkOperatorFactory final : public OperatorFactor
 public:
     AggregateDistinctBlockingSinkOperatorFactory(int32_t id, int32_t plan_node_id,
                                                  AggregatorFactoryPtr aggregator_factory,
-                                                 const std::vector<ExprContext*>& partition_by_exprs)
+                                                 std::vector<ExprContext*> partition_by_exprs)
             : OperatorFactory(id, "aggregate_distinct_blocking_sink", plan_node_id),
               _aggregator_factory(std::move(aggregator_factory)),
-              _partition_by_exprs(partition_by_exprs) {}
+              _partition_by_exprs(std::move(partition_by_exprs)) {}
 
     ~AggregateDistinctBlockingSinkOperatorFactory() override = default;
 

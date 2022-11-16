@@ -319,7 +319,7 @@ public:
     }
 
     static void encode_ascending(const void* value, size_t index_size, std::string* buf) {
-        const Slice* slice = (const Slice*)value;
+        const auto* slice = (const Slice*)value;
         DCHECK_LE(index_size, slice->size);
         buf->append(slice->data, index_size);
     }
@@ -362,7 +362,7 @@ public:
     }
 
     static void encode_ascending(const void* value, size_t index_size, std::string* buf) {
-        const Slice* slice = (const Slice*)value;
+        const auto* slice = (const Slice*)value;
         size_t copy_size = std::min(index_size, slice->size);
         buf->append(slice->data, copy_size);
     }

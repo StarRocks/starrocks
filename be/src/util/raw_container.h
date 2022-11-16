@@ -8,8 +8,7 @@
 #include <utility>
 #include <vector>
 
-namespace starrocks {
-namespace raw {
+namespace starrocks::raw {
 
 // RawAllocator allocates `trailing` more object(not bytes) than caller required,
 // to avoid overflow when the memory is operated with 128-bit aligned instructions,
@@ -80,12 +79,12 @@ public:
     typedef const T& const_reference;
 
 public:
-    AlignmentAllocator() throw() {}
+    AlignmentAllocator() throw() = default;
 
     template <typename T2>
     AlignmentAllocator(const AlignmentAllocator<T2, N>&) throw() {}
 
-    ~AlignmentAllocator() throw() {}
+    ~AlignmentAllocator() throw() = default;
 
     pointer adress(reference r) { return &r; }
 
@@ -176,5 +175,4 @@ inline void stl_string_resize_uninitialized(std::string* str, size_t new_size) {
     ((RawString*)str)->resize(new_size);
 }
 
-} // namespace raw
-} //namespace starrocks
+} // namespace starrocks::raw

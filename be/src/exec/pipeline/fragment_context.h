@@ -35,7 +35,7 @@ class FragmentContext {
     friend FragmentContextManager;
 
 public:
-    FragmentContext() {}
+    FragmentContext() = default;
     ~FragmentContext() {
         _runtime_filter_hub.close_all_in_filters(_runtime_state.get());
         _drivers.clear();

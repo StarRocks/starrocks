@@ -18,12 +18,12 @@ namespace pipeline {
 class ResultSinkOperator final : public Operator {
 public:
     ResultSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
-                       TResultSinkType::type sink_type, const std::vector<ExprContext*>& output_expr_ctxs,
+                       TResultSinkType::type sink_type, std::vector<ExprContext*> output_expr_ctxs,
                        const std::shared_ptr<BufferControlBlock>& sender, std::atomic<int32_t>& num_result_sinks,
                        std::atomic<int64_t>& num_written_rows, FragmentContext* const fragment_ctx)
             : Operator(factory, id, "result_sink", plan_node_id, driver_sequence),
               _sink_type(sink_type),
-              _output_expr_ctxs(output_expr_ctxs),
+              _output_expr_ctxs(std::move(output_expr_ctxs)),
               _sender(sender),
               _num_result_sinkers(num_result_sinks),
               _num_written_rows(num_written_rows),

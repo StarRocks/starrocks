@@ -58,7 +58,7 @@ public:
     static const int128_t MAX_DECIMAL_VALUE = static_cast<int128_t>(MAX_INT64) * ONE_BILLION + MAX_FRAC_VALUE;
     static const int128_t MIN_DECIMAL_VALUE = -MAX_DECIMAL_VALUE;
 
-    DecimalV2Value() {}
+    DecimalV2Value() = default;
     inline const int128_t& value() const { return _value; }
     inline int128_t& value() { return _value; }
 
@@ -189,9 +189,9 @@ public:
 
     std::string get_debug_info() const { return to_string(); }
 
-    static DecimalV2Value get_min_decimal() { return DecimalV2Value(-MAX_INT_VALUE, MAX_FRAC_VALUE); }
+    static DecimalV2Value get_min_decimal() { return {-MAX_INT_VALUE, MAX_FRAC_VALUE}; }
 
-    static DecimalV2Value get_max_decimal() { return DecimalV2Value(MAX_INT_VALUE, MAX_FRAC_VALUE); }
+    static DecimalV2Value get_max_decimal() { return {MAX_INT_VALUE, MAX_FRAC_VALUE}; }
 
     // set DecimalV2Value to zero
     void set_to_zero() { _value = 0; }

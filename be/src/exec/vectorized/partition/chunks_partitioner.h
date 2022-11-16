@@ -124,7 +124,7 @@ private:
             }
 
             chunk_it = std::any_cast<ChunkIterator>(_chunk_it);
-            ChunkIterator chunk_end = chunks.end();
+            auto chunk_end = chunks.end();
 
             while (chunk_it != chunk_end) {
                 if (!consumer(_partition_idx, *chunk_it++)) {
@@ -155,8 +155,8 @@ private:
         }
 
         using ChunkIterator = typename std::vector<ChunkPtr>::iterator;
-        ChunkIterator chunk_it = std::any_cast<ChunkIterator>(_chunk_it);
-        const ChunkIterator chunk_end = chunks.end();
+        auto chunk_it = std::any_cast<ChunkIterator>(_chunk_it);
+        const auto chunk_end = chunks.end();
 
         DeferOp defer([&]() {
             if (chunk_it == chunk_end) {

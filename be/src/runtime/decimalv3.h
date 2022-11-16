@@ -119,7 +119,7 @@ public:
             return true;
         }
         if (UNLIKELY(StringParser::PARSE_OVERFLOW == result)) {
-            double double_value = StringParser::string_to_float<double>(s, n, &result);
+            auto double_value = StringParser::string_to_float<double>(s, n, &result);
             if (result != StringParser::PARSE_SUCCESS) {
                 return true;
             }

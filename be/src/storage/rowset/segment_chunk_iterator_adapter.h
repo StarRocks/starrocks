@@ -33,12 +33,12 @@ public:
 
     void set_iterator(std::shared_ptr<ChunkIterator> iterator) { _inner_iter = std::move(iterator); }
 
-    virtual Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) override {
+    Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) override {
         _inner_iter->init_encoded_schema(dict_maps);
         ChunkIterator::init_encoded_schema(dict_maps);
         return Status::OK();
     }
-    virtual Status init_output_schema(const std::unordered_set<uint32_t>& unused_output_column_ids) override {
+    Status init_output_schema(const std::unordered_set<uint32_t>& unused_output_column_ids) override {
         _inner_iter->init_output_schema(unused_output_column_ids);
         ChunkIterator::init_output_schema(unused_output_column_ids);
         return Status::OK();

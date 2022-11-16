@@ -70,7 +70,7 @@ class QueryContext;
 class RuntimeState {
 public:
     // for ut only
-    RuntimeState() {}
+    RuntimeState() = default;
     // for ut only
     RuntimeState(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
                  const TQueryGlobals& query_globals, ExecEnv* exec_env);
@@ -296,7 +296,7 @@ public:
 
     std::vector<TTabletFailInfo>& tablet_fail_infos() { return _tablet_fail_infos; }
 
-    void append_tablet_fail_infos(TTabletFailInfo fail_info) {
+    void append_tablet_fail_infos(const TTabletFailInfo& fail_info) {
         std::lock_guard<std::mutex> l(_tablet_infos_lock);
         _tablet_fail_infos.emplace_back(std::move(fail_info));
     }

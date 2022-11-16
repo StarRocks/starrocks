@@ -72,7 +72,7 @@ inline std::string to_string(CompactionType type) {
 }
 
 struct DataDirInfo {
-    DataDirInfo() {}
+    DataDirInfo() = default;
 
     std::string path;
     size_t path_hash{0};
@@ -370,13 +370,9 @@ struct Version {
     int64_t second{0};
 
     Version(int64_t first_, int64_t second_) : first(first_), second(second_) {}
-    Version() {}
+    Version() = default;
 
-    Version& operator=(const Version& version) {
-        first = version.first;
-        second = version.second;
-        return *this;
-    }
+    Version& operator=(const Version& version) = default;
 
     friend std::ostream& operator<<(std::ostream& os, const Version& version);
 

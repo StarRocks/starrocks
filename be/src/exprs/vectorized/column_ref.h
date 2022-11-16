@@ -5,8 +5,7 @@
 #include "common/object_pool.h"
 #include "exprs/expr.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 class ColumnRef final : public Expr {
 public:
@@ -50,5 +49,4 @@ private:
     TupleId _tuple_id = 0; // used for desc this slot from
 };
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

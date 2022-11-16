@@ -14,11 +14,9 @@
 #include "formats/parquet/utils.h"
 #include "gen_cpp/parquet_types.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 class Column;
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized
 
 namespace starrocks::parquet {
 

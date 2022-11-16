@@ -88,7 +88,7 @@ struct SortDescs {
         DCHECK_EQ(orders.size(), nulls.size());
         descs.reserve(orders.size());
         for (int i = 0; i < orders.size(); i++) {
-            descs.push_back(SortDesc(orders[i], nulls[i]));
+            descs.emplace_back(orders[i], nulls[i]);
         }
     }
 

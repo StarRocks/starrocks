@@ -40,11 +40,9 @@
 #include "util/phmap/phmap.h"
 #include "util/runtime_profile.h"
 
-namespace google {
-namespace protobuf {
+namespace google::protobuf {
 class Closure;
-}
-} // namespace google
+} // namespace google::protobuf
 
 namespace starrocks {
 

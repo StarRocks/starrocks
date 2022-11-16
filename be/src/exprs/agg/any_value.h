@@ -229,7 +229,7 @@ public:
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         DCHECK(to->is_binary());
-        BinaryColumn* column = down_cast<BinaryColumn*>(to);
+        auto* column = down_cast<BinaryColumn*>(to);
         column->append(this->data(state).slice());
     }
 
@@ -240,14 +240,14 @@ public:
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         DCHECK(to->is_binary());
-        BinaryColumn* column = down_cast<BinaryColumn*>(to);
+        auto* column = down_cast<BinaryColumn*>(to);
         column->append(this->data(state).slice());
     }
 
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
                     size_t end) const override {
         DCHECK_GT(end, start);
-        BinaryColumn* column = down_cast<BinaryColumn*>(dst);
+        auto* column = down_cast<BinaryColumn*>(dst);
         for (size_t i = start; i < end; ++i) {
             column->append(this->data(state).slice());
         }
@@ -282,7 +282,7 @@ public:
     }
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
-        JsonColumn* column = down_cast<JsonColumn*>(to);
+        auto* column = down_cast<JsonColumn*>(to);
         column->append(this->data(state).json());
     }
 
@@ -292,14 +292,14 @@ public:
     }
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
-        JsonColumn* column = down_cast<JsonColumn*>(to);
+        auto* column = down_cast<JsonColumn*>(to);
         column->append(this->data(state).json());
     }
 
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
                     size_t end) const override {
         DCHECK_GT(end, start);
-        JsonColumn* column = down_cast<JsonColumn*>(dst);
+        auto* column = down_cast<JsonColumn*>(dst);
         for (size_t i = start; i < end; ++i) {
             column->append(this->data(state).json());
         }

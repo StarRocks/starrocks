@@ -167,7 +167,7 @@ protected:
 
 class CharField : public Field {
 public:
-    explicit CharField() {}
+    explicit CharField() = default;
     explicit CharField(const TabletColumn& column) : Field(column) {}
 
     char* allocate_value(MemPool* pool) const override { return Field::allocate_string_value(pool); }
@@ -181,7 +181,7 @@ public:
 
 class VarcharField : public Field {
 public:
-    explicit VarcharField() {}
+    explicit VarcharField() = default;
     explicit VarcharField(const TabletColumn& column) : Field(column) {}
 
     char* allocate_value(MemPool* pool) const override { return Field::allocate_string_value(pool); }
@@ -195,19 +195,19 @@ public:
 
 class BitmapAggField : public Field {
 public:
-    explicit BitmapAggField() {}
+    explicit BitmapAggField() = default;
     explicit BitmapAggField(const TabletColumn& column) : Field(column) {}
 };
 
 class HllAggField : public Field {
 public:
-    explicit HllAggField() {}
+    explicit HllAggField() = default;
     explicit HllAggField(const TabletColumn& column) : Field(column) {}
 };
 
 class PercentileAggField : public Field {
 public:
-    PercentileAggField() {}
+    PercentileAggField() = default;
     explicit PercentileAggField(const TabletColumn& column) : Field(column) {}
 };
 

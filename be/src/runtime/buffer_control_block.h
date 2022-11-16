@@ -32,11 +32,9 @@
 #include "gen_cpp/Types_types.h"
 #include "runtime/query_statistics.h"
 
-namespace google {
-namespace protobuf {
+namespace google::protobuf {
 class Closure;
-}
-} // namespace google
+} // namespace google::protobuf
 
 namespace brpc {
 class Controller;

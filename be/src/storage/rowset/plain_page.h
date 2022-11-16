@@ -111,8 +111,7 @@ private:
 template <FieldType Type>
 class PlainPageDecoder : public PageDecoder {
 public:
-    PlainPageDecoder(Slice data, const PageDecoderOptions& options)
-            : _data(data), _options(options), _parsed(false), _num_elems(0), _cur_idx(0) {}
+    PlainPageDecoder(Slice data, const PageDecoderOptions& options) : _data(data), _options(options) {}
 
     Status init() override {
         CHECK(!_parsed);
@@ -236,9 +235,9 @@ public:
 private:
     Slice _data;
     PageDecoderOptions _options;
-    bool _parsed;
-    uint32_t _num_elems;
-    uint32_t _cur_idx;
+    bool _parsed{false};
+    uint32_t _num_elems{0};
+    uint32_t _cur_idx{0};
     typedef typename TypeTraits<Type>::CppType CppType;
     enum { SIZE_OF_TYPE = TypeTraits<Type>::size };
 };

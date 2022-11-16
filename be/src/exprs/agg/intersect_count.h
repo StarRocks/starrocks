@@ -72,7 +72,7 @@ public:
             this->data(state).initial = true;
         }
 
-        const BitmapColumn* bitmap_column = down_cast<const BitmapColumn*>(columns[0]);
+        const auto* bitmap_column = down_cast<const BitmapColumn*>(columns[0]);
 
         // based on NullableAggregateFunctionVariadic.
         const InputColumnType* key_column = down_cast<const InputColumnType*>(columns[1]);
@@ -126,7 +126,7 @@ public:
             }
         }
 
-        const BitmapColumn* bitmap_column = down_cast<const BitmapColumn*>(src[0].get());
+        const auto* bitmap_column = down_cast<const BitmapColumn*>(src[0].get());
         const InputColumnType* key_column = down_cast<const InputColumnType*>(src[1].get());
 
         // compute bytes for serialization for this chunk.
