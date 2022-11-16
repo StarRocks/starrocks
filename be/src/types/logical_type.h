@@ -35,8 +35,10 @@ enum FieldType {
     OLAP_FIELD_TYPE_OBJECT = 25,
 
     // Added by StarRocks
+
     // Reserved some field for commutiy version
 
+    OLAP_FIELD_TYPE_VARBINARY = 46,
     // decimal v3 type
     OLAP_FIELD_TYPE_DECIMAL32 = 47,
     OLAP_FIELD_TYPE_DECIMAL64 = 48,
@@ -121,6 +123,8 @@ inline const char* field_type_to_string(FieldType type) {
         return "PERCENTILE";
     case OLAP_FIELD_TYPE_JSON:
         return "JSON";
+    case OLAP_FIELD_TYPE_VARBINARY:
+        return "VARBINARY";
     case OLAP_FIELD_TYPE_MAX_VALUE:
         return "MAX VALUE";
     }
@@ -130,6 +134,12 @@ inline const char* field_type_to_string(FieldType type) {
 inline std::ostream& operator<<(std::ostream& os, FieldType type) {
     os << field_type_to_string(type);
     return os;
+}
+
+// TODO(lism): support varbinary for zone map.
+inline bool is_zone_map_key_type(FieldType type) {
+    return type != OLAP_FIELD_TYPE_CHAR && type != OLAP_FIELD_TYPE_VARCHAR && type != OLAP_FIELD_TYPE_JSON &&
+           type != OLAP_FIELD_TYPE_VARBINARY;
 }
 
 template <FieldType TYPE>
