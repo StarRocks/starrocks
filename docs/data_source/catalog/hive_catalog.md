@@ -2,34 +2,31 @@
 
 This topic describes how to create a Hive catalog, and how to configure your StarRocks cluster for querying data from Apache Hive™.
 
-A Hive catalog is an external catalog, which enables you to query data from Hive without loading data into StarRocks or creating external tables. StarRocks interacts with the following two components of Hive when you query Hive data:
-
-- **Metadata service:** used by the FEs to access Hive metadata stored in a relational database, such as MySQL. The FEs generate a query execution plan based on Hive metadata.
-- **Data storage system:** used to store Hive data. You can use a distributed file system or object storage system as the data storage system to store Hive data files in various formats. After the FEs distribute the query execution plan to all BEs, all BEs scan the target Hive data in parallel, perform calculations, and then return the query result.
+A Hive catalog is an external catalog supported in StarRocks 2.3 and later versions. It enables you to query data from Hive without loading data into StarRocks or creating external tables.
 
 ## Usage notes
 
 - StarRocks supports querying data files of Hive in the following formats: Parquet, ORC, and CSV.
-- StarRocks support querying Hive data in the following types: TINYINT, SMALLINT, DATE, BOOLEAN, INT, BIGINT, TIMESTAMP, STRING, VARCHAR, CHAR, DOUBLE, FLOAT, DECIMAL, and ARRAY. Note that an error occurs if you query Hive data in unsupported data types. The following data types are not supported: INTERVAL, BINARY, MAP, STRUCT, and UNION.
+- StarRocks support querying Hive data in the following types: TINYINT, SMALLINT, DATE, BOOLEAN, INTEGER, BIGINT, TIMESTAMP, STRING, VARCHAR, CHAR, DOUBLE, FLOAT, DECIMAL, and ARRAY. Note that an error occurs if you query Hive data in unsupported data types. The following data types are not supported: INTERVAL, BINARY, MAP, STRUCT, and UNION.
 - You can use the [DESC](../../sql-reference/sql-statements/Utility/DESCRIBE.md) statement to view the schema of a Hive table in StarRocks 2.4 and later versions.
 
 ## Before you begin
 
-Before you create a Hive catalog, configure your StarRocks cluster so that you can access the data storage system and metadata service of your Hive cluster. StarRocks supports two data storage systems for Hive: HDFS and Amazon S3. StarRocks supports one metadata service for Hive: Hive metastore.
+Before you create a Hive catalog, configure your StarRocks cluster so that StarRocks can access the data storage system and metadata service of your Hive cluster. StarRocks supports two data storage systems for Hive: HDFS and Amazon S3. StarRocks supports one metadata service for Hive: Hive metastore.
 
 ### HDFS
 
 If you use HDFS as the data storage system, configure your StarRocks cluster as follows:
 
-- (Optional) Set the username that is used to access your HDFS and Hive metastore. By default, StarRocks uses the username of the FE and BE processes to access your HDFS and Hive metastore. You can also set the username via the `HADOOP_USERNAME` parameter in the **fe/conf/hadoop_env.sh** file of each FE and the **be/conf/hadoop_env.sh** file of each BE. Then restart each FE and BE to make the parameter settings take effect.
-
-    > Note: You can set only one username for a StarRocks cluster.
+- (Optional) Set the username that is used to access your HDFS and Hive metastore. By default, StarRocks uses the username of the FE and BE processes to access your HDFS and Hive metastore. You can also set the username via the `HADOOP_USERNAME` parameter in the **fe/conf/hadoop_env.sh** file of each FE and the **be/conf/hadoop_env.sh** file of each BE. Then restart each FE and BE to make the parameter settings take effect. You can set only one username for a StarRocks cluster.
 
 - When you query Hive data, the FEs and BEs use the HDFS client to access HDFS. In general, StarRocks starts the HDFS client using the default configurations. However, in the following cases, you need to configure your StarRocks cluster:
   - If your HDFS cluster runs in HA mode, add the **hdfs-site.xml** file of your HA cluster to the **$FE_HOME/conf path** of each FE and the **$BE_HOME/conf** path of each BE.
   - If you configure View File System (ViewFs) to your HDFS cluster, add the **core-site.xml** file of your HDFS cluster to the **$FE_HOME/conf** path of each FE and the **$BE_HOME/conf** path of each BE.
 
-> Note: If an error (unknown host) occurs when you send a query, configure the mapping between the host names and IP addresses of HDFS nodes under the **/etc/hosts** path.
+> **Note**
+>
+> If an error (unknown host) occurs when you send a query, configure the mapping between the host names and IP addresses of HDFS nodes under the **/etc/hosts** path.
 
 ### Kerberos authentication
 
@@ -115,10 +112,9 @@ The parameter description is as follows:
     | type                | Yes          | The type of the data source. Set the value to `hive`.        |
     | hive.metastore.uris | Yes          | The URI of the Hive metastore. The parameter value is in the following format: `thrift://<IP address of Hive metastore>:<port number>`. The port number defaults to 9083. |
 
-> Note
+> **Note**
 >
-> - The CREATE EXTERNAL CATALOG statement does not require any privileges for execution.
-> - Before querying Hive data, you must add the mapping between the domain name and IP address of the Hive metastore node to the **/etc/hosts** path. Otherwise, StarRocks may fail to access Hive metastore when you start a query.
+> Before querying Hive data, you must add the mapping between the domain name and IP address of the Hive metastore node to the **/etc/hosts** path. Otherwise, StarRocks may fail to access Hive metastore when you start a query.
 
 ## Caching strategy of Hive metadata
 
@@ -161,13 +157,15 @@ To query the latest Hive data, make sure that the metadata cached in StarRocks i
     [PARTITION ('partition_name', ...)];
     ```
 
-For more information about the parameter descriptions and examples of using the REFRESH EXTERNAL TABEL statement, see [REFRESH EXTERNAL TABEL](../../sql-reference/sql-statements/data-definition/REFRESH%20EXTERNAL%20TABLE.md). Note that only users with the `ALTER_PRIV` permission can manually update the metadata cached in StarRocks.
+For more information about the parameter descriptions and examples of using the REFRESH EXTERNAL TABEL statement, see [REFRESH EXTERNAL TABEL](../../sql-reference/sql-statements/data-definition/REFRESH%20EXTERNAL%20TABLE.md).
 
 ### Automatic incremental update
 
 This strategy enables FEs to read the events from Hive metastore, such as adding columns, removing partitions, or updating data. Then StarRocks automatically updates the metadata cached in StarRocks based on these events. Follow the steps below to enable this strategy.
 
-> Note: After you enable this strategy, the asynchronous update strategy is disabled.
+> **Note**
+>
+> After you enable this strategy, the asynchronous update strategy is disabled.
 
 #### Step 1: Configure the event listener for your Hive metastore
 
@@ -220,7 +218,7 @@ Configure the following parameters in the **$FE_HOME/conf/fe.conf** file of each
 
 ## What to do next
 
-After you complete the preceding configurations, you can use the Hive catalog to query Hive data. For more information, see [Query external data](../catalog/query_external_data.md).
+After you complete all the preceding operations, you can use the Hive catalog to query Hive data. For more information, see [Query external data](../catalog/query_external_data.md).
 
 ## References
 
