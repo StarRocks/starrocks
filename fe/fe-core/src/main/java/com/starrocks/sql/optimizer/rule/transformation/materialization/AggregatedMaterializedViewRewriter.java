@@ -151,15 +151,26 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
                 return null;
             }
             Preconditions.checkState(originalGroupKeys.size() == newGroupKeys.size());
+            Map<ColumnRefOperator, ScalarOperator> aggregateMapping = Maps.newHashMap();
+            for (int i = 0; i < originalGroupKeys.size(); i++) {
+                aggregateMapping.put(originalGroupKeys.get(i), newGroupKeys.get(i));
+            }
+
+            for (Map.Entry<ColumnRefOperator, CallOperator> entry : queryAgg.getAggregations().entrySet()) {
+                // create new column ref for aggregations
+                ColumnRefOperator mapped = rewriteContext.getQueryRefFactory().create(
+                        entry.getKey(), entry.getKey().getType(), entry.getKey().isNullable());
+                aggregateMapping.put(entry.getKey(), mapped);
+            }
 
             // generate new agg exprs(rollup functions)
             Map<ColumnRefOperator, CallOperator> newAggregations = rewriteAggregates(
                     queryAggs, normalizedViewMap, rewriteContext.getOutputMapping(),
-                    rewriteContext.getQueryColumnSet());
+                    rewriteContext.getQueryColumnSet(), aggregateMapping);
             if (newAggregations == null) {
                 return null;
             }
-            return createNewAggregate(queryAgg, originalGroupKeys, newGroupKeys, newAggregations, targetExpr);
+            return createNewAggregate(queryAgg, newAggregations, aggregateMapping, targetExpr);
         } else {
             return rewriteProjection(rewriteContext, normalizedViewMap, targetExpr);
         }
@@ -236,25 +247,36 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
             return null;
         }
         List<ColumnRefOperator> originalGroupKeys = queryAgg.getGroupingKeys();
-        List<ColumnRefOperator> newGroupingKeys = Lists.newArrayList();
+        Map<ColumnRefOperator, ScalarOperator> aggregateMapping = Maps.newHashMap();
         for (ColumnRefOperator groupKey : originalGroupKeys) {
-            newGroupingKeys.add(columnMapping.get(groupKey));
+            aggregateMapping.put(groupKey, columnMapping.get(groupKey));
         }
 
-        Map<ColumnRefOperator, CallOperator> queryAggs = queryAgg.getAggregations();
+        for (Map.Entry<ColumnRefOperator, CallOperator> entry : queryAgg.getAggregations().entrySet()) {
+            // create new column ref for aggregation's keys
+            ColumnRefOperator mapped = rewriteContext.getQueryRefFactory().create(
+                    entry.getKey(), entry.getKey().getType(), entry.getKey().isNullable());
+            aggregateMapping.put(entry.getKey(), mapped);
+            // aggregateMapping.put(entry.getKey(), columnMapping.get(entry.getKey()));
+        }
+
         Map<ColumnRefOperator, CallOperator> newAggregations = rewriteAggregatesForUnion(
-                queryAggs, columnMapping);
+                queryAgg.getAggregations(), columnMapping, aggregateMapping);
         if (newAggregations == null) {
             return null;
         }
-        return createNewAggregate(queryAgg, originalGroupKeys, newGroupingKeys, newAggregations, unionExpr);
+        return createNewAggregate(queryAgg, newAggregations, aggregateMapping, unionExpr);
     }
 
-    private OptExpression createNewAggregate(LogicalAggregationOperator queryAgg, List<ColumnRefOperator> originalGroupKeys,
-                                             List<ColumnRefOperator> newGroupingKeys,
-                                             Map<ColumnRefOperator, CallOperator> newAggregations, OptExpression inputExpr) {
+    private OptExpression createNewAggregate(LogicalAggregationOperator queryAgg,
+                                             Map<ColumnRefOperator, CallOperator> newAggregations,
+                                             Map<ColumnRefOperator, ScalarOperator> aggregateMapping,
+                                             OptExpression inputExpr) {
         // newGroupKeys may have duplicate because of EquivalenceClasses
         // remove duplicate here as new grouping keys
+        List<ColumnRefOperator> originalGroupKeys = queryAgg.getGroupingKeys();
+        List<ColumnRefOperator> newGroupingKeys = originalGroupKeys.stream()
+                .map(key -> (ColumnRefOperator) aggregateMapping.get(key)).collect(Collectors.toList());
         List<ColumnRefOperator> finalGroupKeys = newGroupingKeys.stream().distinct().collect(Collectors.toList());
         LogicalAggregationOperator.Builder aggBuilder = new LogicalAggregationOperator.Builder();
         aggBuilder.withOperator(queryAgg);
@@ -263,30 +285,26 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         aggBuilder.setPartitionByColumns(finalGroupKeys);
         aggBuilder.setAggregations(newAggregations);
         aggBuilder.setPredicate(queryAgg.getPredicate());
-        // add projection for group keys
-        // aggregates are already mapped, so here just process group keys
+        // add projection to make sure that the output columns keep the same with the origin query
         Map<ColumnRefOperator, ScalarOperator> newProjection = Maps.newHashMap();
         if (queryAgg.getProjection() == null) {
             for (int i = 0; i < originalGroupKeys.size(); i++) {
                 newProjection.put(originalGroupKeys.get(i), newGroupingKeys.get(i));
             }
-            for (Map.Entry<ColumnRefOperator, CallOperator> entry : newAggregations.entrySet()) {
-                newProjection.put(entry.getKey(), entry.getKey());
+            for (Map.Entry<ColumnRefOperator, CallOperator> entry : queryAgg.getAggregations().entrySet()) {
+                newProjection.put(entry.getKey(), aggregateMapping.get(entry.getKey()));
             }
         } else {
             Map<ColumnRefOperator, ScalarOperator> originalMap = queryAgg.getProjection().getColumnRefMap();
-            Map<ColumnRefOperator, ScalarOperator> groupKeyMap = Maps.newHashMap();
-            for (int i = 0; i < originalGroupKeys.size(); i++) {
-                groupKeyMap.put(originalGroupKeys.get(i), newGroupingKeys.get(i));
-            }
-            ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(groupKeyMap);
+            ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(aggregateMapping);
             for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : originalMap.entrySet()) {
-                if (groupKeyMap.containsKey(entry.getValue())) {
+                if (queryAgg.getGroupingKeys().contains(entry.getValue())) {
                     ScalarOperator rewritten = rewriter.rewrite(entry.getValue());
                     newProjection.put(entry.getKey(), rewritten);
                 } else {
-                    // Aggregates map's keys are kept, so projection for aggregates remains the same
-                    newProjection.put(entry.getKey(), entry.getValue());
+                    // Aggregates map's keys are changed, so here entry values should be rewritten by aggregateMapping
+                    ScalarOperator newValue = rewriter.rewrite(entry.getValue());
+                    newProjection.put(entry.getKey(), newValue);
                 }
             }
         }
@@ -313,9 +331,10 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
     }
 
     private Map<ColumnRefOperator, CallOperator> rewriteAggregates(Map<ColumnRefOperator, ScalarOperator> aggregates,
-                                                           Multimap<ScalarOperator, ColumnRefOperator> normalizedViewMap,
-                                                           Map<ColumnRefOperator, ColumnRefOperator> mapping,
-                                                           Set<ColumnRefOperator> queryColumnSet) {
+                                                                   Multimap<ScalarOperator, ColumnRefOperator> normalizedViewMap,
+                                                                   Map<ColumnRefOperator, ColumnRefOperator> mapping,
+                                                                   Set<ColumnRefOperator> queryColumnSet,
+                                                                   Map<ColumnRefOperator, ScalarOperator> aggregateMapping) {
         Map<ColumnRefOperator, CallOperator> rewrittens = Maps.newHashMap();
         for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : aggregates.entrySet()) {
             Preconditions.checkState(entry.getValue() instanceof CallOperator);
@@ -331,14 +350,16 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
             if (newAggregate == null) {
                 return null;
             }
-            rewrittens.put(entry.getKey(), newAggregate);
+            rewrittens.put((ColumnRefOperator) aggregateMapping.get(entry.getKey()), newAggregate);
         }
 
         return rewrittens;
     }
 
-    private Map<ColumnRefOperator, CallOperator> rewriteAggregatesForUnion(Map<ColumnRefOperator, CallOperator> aggregates,
-                                                                           Map<ColumnRefOperator, ColumnRefOperator> mapping) {
+    private Map<ColumnRefOperator, CallOperator> rewriteAggregatesForUnion(
+            Map<ColumnRefOperator, CallOperator> aggregates,
+            Map<ColumnRefOperator, ColumnRefOperator> mapping,
+            Map<ColumnRefOperator, ScalarOperator> aggregateMapping) {
         Map<ColumnRefOperator, CallOperator> rewrittens = Maps.newHashMap();
         for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggregates.entrySet()) {
             Preconditions.checkState(entry.getValue() instanceof CallOperator);
@@ -350,7 +371,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
             if (newAggregate == null) {
                 return null;
             }
-            rewrittens.put(entry.getKey(), newAggregate);
+            rewrittens.put((ColumnRefOperator) aggregateMapping.get(entry.getKey()), newAggregate);
         }
 
         return rewrittens;
