@@ -116,6 +116,12 @@ public:
      * @param columns: [DoubleColumn]
      * @return DoubleColumn
      */
+    DEFINE_VECTORIZED_FN(sinh);
+
+    /**
+     * @param columns: [DoubleColumn]
+     * @return DoubleColumn
+     */
     DEFINE_VECTORIZED_FN(cos);
 
     /**
@@ -128,6 +134,12 @@ public:
      * @param columns: [DoubleColumn]
      * @return DoubleColumn
      */
+    DEFINE_VECTORIZED_FN(cosh);
+
+    /**
+     * @param columns: [DoubleColumn]
+     * @return DoubleColumn
+     */
     DEFINE_VECTORIZED_FN(tan);
 
     /**
@@ -135,6 +147,12 @@ public:
      * @return DoubleColumn
      */
     DEFINE_VECTORIZED_FN(atan);
+
+    /**
+     * @param columns: [DoubleColumn]
+     * @return DoubleColumn
+     */
+    DEFINE_VECTORIZED_FN(tanh);
 
     /**
     * @param columns: [DoubleColumn]
