@@ -2,15 +2,12 @@
 
 本文介绍如何创建 Hive catalog，以及需要做哪些相应的配置。
 
-Hive catalog 是一个外部数据目录 (external catalog)。在 StarRocks 中，您可以通过该目录直接查询 Apache Hive™ 集群中的数据，无需数据导入或创建外部表。在查询数据时，StarRocks 会用到以下两个 Hive 组件：
-
-- **元数据服务**：Hive 元数据会存储在关系型数据库中（如 MySQL），并通过元数据服务将元数据暴露出来供 StarRocks 的 FE 进行查询规划。
-- **存储系统**：用于存储 Hive 数据。数据文件以不同的格式存储在分布式文件系统或对象存储系统中。当 FE 将生成的查询计划分发给各个 BE 后，各个 BE 会并行扫描 Hive 存储系统中的目标数据，并执行计算返回查询结果。
+Hive catalog 是一个外部数据目录 (external catalog)。StarRocks 2.3 及以上版本支持通过该目录直接查询 Apache Hive™ 集群中的数据，无需数据导入或创建外部表。
 
 ## 使用限制
 
 - StarRocks 支持查询如下格式的 Hive 数据：Parquet、ORC 和 CSV。
-- StarRocks 支持查询如下类型的 Hive 数据：TINYINT、SMALLINT、DATE、BOOLEAN、INT、BIGINT、TIMESTAMP、STRING、VARCHAR、CHAR、DOUBLE、FLOAT、DECIMAL、ARRAY、MAP 和 STRUCT。不支持的数据类型包括：INTERVAL、BINARY  和 UNION。
+- StarRocks 支持查询如下类型的 Hive 数据：TINYINT、SMALLINT、DATE、BOOLEAN、INTEGER、BIGINT、TIMESTAMP、STRING、VARCHAR、CHAR、DOUBLE、FLOAT、DECIMAL、ARRAY、MAP 和 STRUCT。不支持的数据类型包括：INTERVAL、BINARY  和 UNION。
 
     > **说明**
     >
@@ -27,15 +24,15 @@ Hive catalog 是一个外部数据目录 (external catalog)。在 StarRocks 中�
 
 如使用 HDFS 作为存储系统，则需要在 StarRocks 中做如下配置。
 
-- （可选）设置 StarRocks 访问 HDFS 和 Hive metastore 的用户名。 您可以在每个 FE 的 **fe/conf/hadoop_env.sh** 和每个 BE 的 **be/conf/hadoop_env.sh** 文件中通过配置 `HADOOP_USERNAME` 来设置该用户名，设置后重启各个 FE 和 BE 生效。如不设置，则默认使用 FE 和 BE 进程的用户名进行访问。
-
-  > 注意：一个 StarRocks 集群仅支持配置一个用户名。
+- （可选）设置 StarRocks 访问 HDFS 和 Hive metastore 的用户名。 您可以在每个 FE 的 **fe/conf/hadoop_env.sh** 和每个 BE 的 **be/conf/hadoop_env.sh** 文件中通过配置 `HADOOP_USERNAME` 来设置该用户名，设置后重启各个 FE 和 BE 生效。如不设置，则默认使用 FE 和 BE 进程的用户名进行访问。一个 StarRocks 集群仅支持配置一个用户名。
 
 - 查询时，StarRocks 的 FE 和 BE 都会通过 HDFS 客户端访问 HDFS。一般情况下，StarRocks 会按照默认配置来启动 HDFS 客户端，无需手动配置。但在以下场景中，需要进行手动配置：
   - 如 HDFS 开启了 HA（高可用）模式，则需要将 HDFS 集群中的 **hdfs-site.xml** 文件放到每一个 FE 的 **$FE_HOME/conf** 下以及每个 BE 的 **$BE_HOME/conf** 下。  
   - 如 HDFS 配置了 ViewFs，则需要将 HDFS 集群中的 **core-site.xml** 文件放到每一个 FE 的 **$FE_HOME/conf** 下以及每个 BE 的 **$BE_HOME/conf** 下。
 
-> 注意：如果查询时因为域名无法识别而访问失败 (unknown host)，则需要将 HDFS 节点域名和其 IP 的映射关系配置到 **/etc/hosts** 路径中。
+> **注意**
+>
+> 如果查询时因为域名无法识别而访问失败 (unknown host)，则需要将 HDFS 节点域名和其 IP 的映射关系配置到 **/etc/hosts** 路径中。
 
 ### Kerberos 认证
 
@@ -221,15 +218,14 @@ PROPERTIES ("key"="value", ...);
 
 - `PROPERTIES`：Hive catalog 的属性，必选参数。<br>支持配置如下：
 
-    | **参数**            | **必选** | **说明**                                                     |
+    | **属性**            | **必选** | **说明**                                                     |
     | ------------------- | -------- | ------------------------------------------------------------ |
     | type                | 是       | 数据源类型，取值为 `hive`。                                   |
     | hive.metastore.uris | 是       | Hive metastore 的 URI。格式为 `thrift://<Hive metastore的IP地址>:<端口号>`，端口号默认为 9083。 |
 
-> 注意
+> **注意**
 >
-> - 使用该创建语句无权限限制。
-> - 查询前，需要将 Hive metastore 节点域名和其 IP 的映射关系配置到 **/etc/hosts** 路径中，否则查询时可能会因为域名无法识别而访问失败。
+> 查询前，需要将 Hive metastore 节点域名和其 IP 的映射关系配置到 **/etc/hosts** 路径中，否则查询时可能会因为域名无法识别而访问失败。
 
 ## 元数据同步
 
@@ -270,7 +266,7 @@ StarRocks 需要利用 Hive 表的元数据来进行查询规划，因此请求�
     [PARTITION ('partition_name', ...)];
     ```
 
-有关 REFRESH EXTERNAL TABEL 语句的参数说明和示例，请参见 [REFRESH EXTERNAL TABEL](/sql-reference/sql-statements/data-definition/REFRESH%20EXTERNAL%20TABLE.md)。注意只有拥有 `ALTER_PRIV` 权限的用户才可以手动更新元数据。
+有关 REFRESH EXTERNAL TABEL 语句的参数说明和示例，请参见 [REFRESH EXTERNAL TABEL](/sql-reference/sql-statements/data-definition/REFRESH%20EXTERNAL%20TABLE.md)。
 
 ### 元数据自动增量更新
 

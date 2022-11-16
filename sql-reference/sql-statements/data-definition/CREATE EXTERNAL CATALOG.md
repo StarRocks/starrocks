@@ -4,11 +4,11 @@
 
 该语句用于创建 external catalog。创建后，无需数据导入或创建外部表即可查询外部数据。当前支持创建如下 external catalog：
 
-- Hive catalog：用于查询 Apache Hive™ 集群中的数据。
-- Iceberg catalog：用于查询 Apache Iceberg 集群中的数据。
-- Hudi catalog：用于查询 Apache Hudi 集群中的数据。
+- [Hive catalog](/data_source/catalog/hive_catalog.md)：用于查询 Apache Hive™ 集群中的数据。
+- [Iceberg catalog](/data_source/catalog/iceberg_catalog.md)：用于查询 Apache Iceberg 集群中的数据。
+- [Hudi catalog](/data_source/catalog/hudi_catalog.md)：用于查询 Apache Hudi 集群中的数据。
 
-在创建 external catalog 前，需要根据数据源的存储系统（如 Amazon S3）、元数据服务（如 Hive metastore）和认证方式（如 Kerberos）在 StarRocks 中做相应的配置。详细信息，请参见 [Hive catalog](/data_source/catalog/hive_catalog.md#前提条件)、[Iceberg catalog](/data_source/catalog/iceberg_catalog.md#前提条件) 和 [Hudi catalog](/data_source/catalog/hudi_catalog.md#前提条件)。
+使用该创建语句无权限限制。在创建 external catalog 前，需要根据数据源的存储系统（如 Amazon S3）、元数据服务（如 Hive metastore）和认证方式（如 Kerberos）在 StarRocks 中做相应的配置。详细信息，请参见以上各个 external catalog 文档中的「前提条件」小节 。
 
 ## 语法
 

@@ -14,10 +14,15 @@ StarRocks 2.3 及以上版本支持 catalog（数据目录）功能，方便您�
 ![figure1](/assets/3.12-1.png)
 
 - **Internal catalog**: 内部数据目录，用于管理 StarRocks 所有内部数据。例如，执行 CREATE DATABASE 和 CREATE TABLE 语句创建的数据库和数据表都由 internal catalog 管理。 每个 StarRocks 集群都有且只有一个 internal catalog 名为 [default catalog](../catalog/default_catalog.md)。
-- **External catalog**: 外部数据目录，用于管理外部数据源的访问信息，如数据源类型和 Hive metastore 的 URI。在 StarRocks 中，您可以通过该目录直接查询外部数据，无需数据导入或创建外部表。当前支持创建以下三种 external catalog：
+- **External catalog**: 外部数据目录，用于管理外部数据源的访问信息，如数据源类型和 Hive metastore 的 URI 等。在 StarRocks 中，您可以通过 external catalog 直接查询外部数据。当前支持创建以下三种 external catalog：
   - [Hive catalog](../catalog/hive_catalog.md)：用于查询 Hive 数据。
   - [Iceberg catalog](../catalog/iceberg_catalog.md)：用于查询 Iceberg 数据。
   - [Hudi catalog](../catalog/hudi_catalog.md)：用于查询 Hudi 数据。
+
+使用 external catalog 查询数据时，StarRocks 会用到外部数据源的两个组件：
+
+- **元数据服务**：用于将元数据暴露出来供 StarRocks 的 FE 进行查询规划。
+- **存储系统**：用于存储数据。数据文件以不同的格式存储在分布式文件系统或对象存储系统中。当 FE 将生成的查询计划分发给各个 BE 后，各个 BE 会并行扫描 Hive 存储系统中的目标数据，并执行计算返回查询结果。
 
 ## 查询数据
 
