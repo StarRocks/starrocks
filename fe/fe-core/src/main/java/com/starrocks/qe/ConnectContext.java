@@ -677,6 +677,7 @@ public class ConnectContext {
 
         public List<String> toRow(long nowMs, boolean full) {
             List<String> row = Lists.newArrayList();
+            row.add(GlobalStateMgr.getCurrentState().getSelfNode().first);
             row.add("" + connectionId);
             row.add(ClusterNamespace.getNameFromFullName(qualifiedUser));
             row.add(getMysqlChannel().getRemoteHostPortString());

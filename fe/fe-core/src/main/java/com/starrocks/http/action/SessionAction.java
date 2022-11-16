@@ -22,12 +22,17 @@
 package com.starrocks.http.action;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.FrontendOpExecutor;
+import com.starrocks.qe.OriginStatement;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.ExecuteEnv;
+import com.starrocks.system.Frontend;
 import io.netty.handler.codec.http.HttpMethod;
 
 import java.util.ArrayList;
@@ -38,20 +43,24 @@ public class SessionAction extends WebBaseAction {
     private static final ArrayList<String> SESSION_TABLE_HEADER = Lists.newArrayList();
 
     static {
+        SESSION_TABLE_HEADER.add("FeHost");
         SESSION_TABLE_HEADER.add("Id");
         SESSION_TABLE_HEADER.add("User");
-        SESSION_TABLE_HEADER.add("Host");
-        SESSION_TABLE_HEADER.add("Cluster");
+        SESSION_TABLE_HEADER.add("ClientHost");
         SESSION_TABLE_HEADER.add("Db");
         SESSION_TABLE_HEADER.add("Command");
         SESSION_TABLE_HEADER.add("ConnectionStartTime");
         SESSION_TABLE_HEADER.add("Time");
         SESSION_TABLE_HEADER.add("State");
         SESSION_TABLE_HEADER.add("Info");
+        SESSION_TABLE_HEADER.add("IsPending");
     }
+
+    private boolean isShowAll;
 
     public SessionAction(ActionController controller) {
         super(controller);
+        isShowAll = false;
     }
 
     public static void registerAction(ActionController controller) throws IllegalArgException {
@@ -60,6 +69,7 @@ public class SessionAction extends WebBaseAction {
 
     @Override
     public void executeGet(BaseRequest request, BaseResponse response) {
+        isShowAll = Boolean.parseBoolean(request.getSingleParameter("all"));
         getPageHeader(request, response.getContent());
         appendSessionInfo(response.getContent());
         getPageFooter(response.getContent());
@@ -69,11 +79,30 @@ public class SessionAction extends WebBaseAction {
     private void appendSessionInfo(StringBuilder buffer) {
         buffer.append("<h2>Session Info</h2>");
 
-        List<ConnectContext.ThreadInfo> threadInfos = ExecuteEnv.getInstance().getScheduler().listConnection("root");
         List<List<String>> rowSet = Lists.newArrayList();
+        List<ConnectContext.ThreadInfo> threadInfos = ExecuteEnv.getInstance().getScheduler().listConnection(
+                ConnectContext.get().getQualifiedUser());
         long nowMs = System.currentTimeMillis();
         for (ConnectContext.ThreadInfo info : threadInfos) {
             rowSet.add(info.toRow(nowMs, false));
+        }
+        if (isShowAll) {
+            List<Frontend> frontends = GlobalStateMgr.getCurrentState().getFrontends(null);
+            for (Frontend frontend : frontends) {
+                if (frontend.getHost().equals(GlobalStateMgr.getCurrentState().getSelfNode().first)) {
+                    continue;
+                }
+                String showProcStmt = "SHOW PROCESSLIST";
+                // ConnectContext build in RestBaseAction
+                ConnectContext context = ConnectContext.get();
+                FrontendOpExecutor frontendOpExecutor = new FrontendOpExecutor(frontend.getHost(), frontend.getRpcPort(),
+                        new OriginStatement(showProcStmt, 0), context, RedirectStatus.FORWARD_NO_SYNC);
+                try {
+                    frontendOpExecutor.execute();
+                    rowSet.addAll(frontendOpExecutor.getProxyResultSet().getResultRows());
+                } catch (Exception ignored) {
+                }
+            }
         }
 
         buffer.append("<p>This page lists the session info, there are "
