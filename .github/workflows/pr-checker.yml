@@ -4,9 +4,10 @@ on:
     types:
       - opened
       - edited
-      - synchronize
       - labeled
       - unlabeled
+      - reopened
+      - auto_merge_enabled
 
 jobs:
   Title-Check:
