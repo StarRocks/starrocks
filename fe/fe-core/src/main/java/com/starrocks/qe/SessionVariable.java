@@ -305,6 +305,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_MATERIALIZED_VIEW_UNION_REWRITE = "enable_materialized_view_union_rewrite";
     public static final String ENABLE_RULE_BASED_MATERIALIZED_VIEW_REWRITE = "enable_rule_based_materialized_view_rewrite";
 
+    public static final String ENABLE_BIG_QUERY_LOG = "enable_big_query_log";
+    public static final String BIG_QUERY_LOG_CPU_SECOND_THRESHOLD = "big_query_log_cpu_second_threshold";
+    public static final String BIG_QUERY_LOG_SCAN_BYTES_THRESHOLD = "big_query_log_scan_bytes_threshold";
+    public static final String BIG_QUERY_LOG_SCAN_ROWS_THRESHOLD = "big_query_log_scan_rows_threshold";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(ENABLE_SPILLING)
@@ -752,6 +757,26 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_RULE_BASED_MATERIALIZED_VIEW_REWRITE)
     private boolean enableRuleBasedMaterializedViewRewrite = true;
+
+    // if enable_big_query_log = true and cpu/io cost of a query exceeds the related threshold,
+    // the information will be written to the big query log
+    @VarAttr(name = ENABLE_BIG_QUERY_LOG)
+    private boolean enableBigQueryLog = true;
+    // the value is set for testing,
+    // if a query needs to perform 10s for computing tasks at full load on three 16-core machines,
+    // we treat it as a big query, so set this value to 480(10 * 16 * 3).
+    // Users need to set up according to their own scenario.
+    @VarAttr(name = BIG_QUERY_LOG_CPU_SECOND_THRESHOLD)
+    private long bigQueryLogCPUSecondThreshold = 480;
+    // the value is set for testing, if a query needs to scan more than 10GB of data, we treat it as a big query.
+    // Users need to set up according to their own scenario.
+    @VarAttr(name = BIG_QUERY_LOG_SCAN_BYTES_THRESHOLD)
+    private long bigQueryLogScanBytesThreshold = 1024L * 1024 * 1024 * 10;
+    // the value is set for testing, if a query need to scan more than 1 billion rows of data,
+    // we treat it as a big query.
+    // Users need to set up according to their own scenario.
+    @VarAttr(name = BIG_QUERY_LOG_SCAN_ROWS_THRESHOLD)
+    private long bigQueryLogScanRowsThreshold = 1000000000L;
 
     public boolean getEnablePopulateBlockCache() {
         return enablePopulateBlockCache;
@@ -1419,6 +1444,38 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableRuleBasedMaterializedViewRewrite(boolean enableRuleBasedMaterializedViewRewrite) {
         this.enableRuleBasedMaterializedViewRewrite = enableRuleBasedMaterializedViewRewrite;
+    }
+
+    public boolean isEnableBigQueryLog() {
+        return enableBigQueryLog;
+    }
+
+    public void setEnableBigQueryLog(boolean enableBigQueryLog) {
+        this.enableBigQueryLog = enableBigQueryLog;
+    }
+
+    public long getBigQueryLogCPUSecondThreshold() {
+        return this.bigQueryLogCPUSecondThreshold;
+    }
+
+    public void setBigQueryLogCpuSecondThreshold(long bigQueryLogCPUSecondThreshold) {
+        this.bigQueryLogCPUSecondThreshold = bigQueryLogCPUSecondThreshold;
+    }
+
+    public long getBigQueryLogScanBytesThreshold() {
+        return bigQueryLogScanBytesThreshold;
+    }
+
+    public void setBigQueryLogScanBytesThreshold(long bigQueryLogScanBytesThreshold) {
+        this.bigQueryLogScanBytesThreshold = bigQueryLogScanBytesThreshold;
+    }
+
+    public long getBigQueryLogScanRowsThreshold() {
+        return bigQueryLogScanRowsThreshold;
+    }
+
+    public void setBigQueryLogScanRowsThreshold(long bigQueryLogScanRowsThreshold) {
+        this.bigQueryLogScanRowsThreshold = bigQueryLogScanRowsThreshold;
     }
 
     // Serialize to thrift object
