@@ -149,13 +149,7 @@
       + [HLL](./sql-reference/sql-statements/data-definition/HLL.md)
       + [RECOVER](./sql-reference/sql-statements/data-definition/RECOVER.md)
       + [RESTORE](./sql-reference/sql-statements/data-definition/RESTORE.md)
-<<<<<<< HEAD
-=======
-      + [SHOW ANALYZE JOB](./sql-reference/sql-statements/data-definition/SHOW%20ANALYZE%20JOB.md)
-      + [SHOW ANALYZE STATUS](./sql-reference/sql-statements/data-definition/SHOW%20ANALYZE%20STATUS.md)
       + [SHOW AUTHENTICATION](./sql-reference/sql-statements/data-definition/SHOW%20AUTHENTICATION.md)
-      + [SHOW META](./sql-reference/sql-statements/data-definition/SHOW%20META.md)
->>>>>>> 13be87a06 ([Doc] update TOC (#13540))
       + [SHOW RESOURCES](./sql-reference/sql-statements/data-definition/SHOW%20RESOURCES.md)
       + [SHOW FUNCTION](./sql-reference/sql-statements/data-definition/show-functions.md)
       + [TRUNCATE TABLE](./sql-reference/sql-statements/data-definition/TRUNCATE%20TABLE.md)
