@@ -65,7 +65,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
             return false;
         }
         // TODO: to support grouping set/rollup/cube
-        return Utils.isLogicalSPJ(expression.inputAt(0));
+        return MvUtils.isLogicalSPJ(expression.inputAt(0));
     }
 
     @Override
@@ -98,7 +98,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         // check aggregates of query
         // normalize mv's aggs by using query's table ref and query ec
         Map<ColumnRefOperator, ScalarOperator> mvProjection =
-                Utils.getColumnRefMap(rewriteContext.getMvExpression(), rewriteContext.getMvRefFactory());
+                MvUtils.getColumnRefMap(rewriteContext.getMvExpression(), rewriteContext.getMvRefFactory());
 
         List<ScalarOperator> swappedMvAggs = Lists.newArrayList();
         for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : mvProjection.entrySet()) {
@@ -112,7 +112,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         }
 
         Map<ColumnRefOperator, ScalarOperator> queryProjection =
-                Utils.getColumnRefMap(rewriteContext.getQueryExpression(), rewriteContext.getQueryRefFactory());
+                MvUtils.getColumnRefMap(rewriteContext.getQueryExpression(), rewriteContext.getQueryRefFactory());
         Map<ColumnRefOperator, ScalarOperator> queryAggregations = Maps.newHashMap();
         for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : queryProjection.entrySet()) {
             if (queryAgg.getGroupingKeys().contains(entry.getKey())) {
@@ -198,7 +198,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
     protected OptExpression queryBasedRewrite(RewriteContext rewriteContext, PredicateSplit compensationPredicates,
                                               OptExpression queryExpression) {
         // query predicate and (not viewToQueryCompensationPredicate) is the final query compensation predicate
-        ScalarOperator queryCompensationPredicate = Utils.canonizePredicate(
+        ScalarOperator queryCompensationPredicate = MvUtils.canonizePredicate(
                 Utils.compoundAnd(
                         rewriteContext.getQueryPredicateSplit().toScalarOperator(),
                         CompoundPredicateOperator.not(compensationPredicates.toScalarOperator())));
@@ -220,7 +220,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
     @Override
     protected OptExpression createUnion(OptExpression queryInput, OptExpression viewInput, RewriteContext rewriteContext) {
         Map<ColumnRefOperator, ScalarOperator> queryColumnRefMap =
-                Utils.getColumnRefMap(queryInput, rewriteContext.getQueryRefFactory());
+                MvUtils.getColumnRefMap(queryInput, rewriteContext.getQueryRefFactory());
         // keys of queryColumnRefMap and mvColumnRefMap are the same
         List<ColumnRefOperator> originalOutputColumns = queryColumnRefMap.keySet().stream().collect(Collectors.toList());
         // rewrite query

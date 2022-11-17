@@ -28,6 +28,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.plan.ExecPlan;
@@ -220,7 +221,7 @@ public class OptimizerTest {
         Pair<Table, Column> partitionTableAndColumn = mv.getPartitionTableAndColumn();
         Assert.assertEquals("tbl_with_mv", partitionTableAndColumn.first.getName());
 
-        List<OptExpression> scanExpr = Utils.collectScanExprs(materializationContext.getMvExpression());
+        List<OptExpression> scanExpr = MvUtils.collectScanExprs(materializationContext.getMvExpression());
         Assert.assertEquals(1, scanExpr.size());
         Assert.assertNotNull(scanExpr.get(0).getOp().getPredicate());
         ScalarOperator scalarOperator  = scanExpr.get(0).getOp().getPredicate();
@@ -235,7 +236,7 @@ public class OptimizerTest {
         Assert.assertNotNull(expr2);
         MaterializationContext materializationContext2 = optimizer2.getContext().getCandidateMvs().iterator().next();
         Assert.assertEquals("mv_4", materializationContext2.getMv().getName());
-        List<OptExpression> scanExpr2 = Utils.collectScanExprs(materializationContext2.getMvExpression());
+        List<OptExpression> scanExpr2 = MvUtils.collectScanExprs(materializationContext2.getMvExpression());
         Assert.assertEquals(1, scanExpr2.size());
         Assert.assertNotNull(scanExpr2.get(0).getOp().getPredicate());
         ScalarOperator scalarOperator2  = scanExpr2.get(0).getOp().getPredicate();
@@ -258,7 +259,7 @@ public class OptimizerTest {
         Assert.assertNotNull(expr3);
         MaterializationContext materializationContext3 = optimizer3.getContext().getCandidateMvs().iterator().next();
         Assert.assertEquals("mv_5", materializationContext3.getMv().getName());
-        List<OptExpression> scanExpr3 = Utils.collectScanExprs(materializationContext3.getMvExpression());
+        List<OptExpression> scanExpr3 = MvUtils.collectScanExprs(materializationContext3.getMvExpression());
         Assert.assertEquals(1, scanExpr3.size());
         Assert.assertNotNull(scanExpr3.get(0).getOp().getPredicate());
         ScalarOperator scalarOperator3  = scanExpr3.get(0).getOp().getPredicate();

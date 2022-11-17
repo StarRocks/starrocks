@@ -43,6 +43,7 @@ import com.starrocks.sql.optimizer.rule.transformation.PushLimitAndFilterToCTEPr
 import com.starrocks.sql.optimizer.rule.transformation.RemoveAggregationFromAggTable;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteGroupingSetsByCTERule;
 import com.starrocks.sql.optimizer.rule.transformation.SemiReorderRule;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.rule.tree.AddDecodeNodeForDictStringRule;
 import com.starrocks.sql.optimizer.rule.tree.ExchangeSortToMergeRule;
 import com.starrocks.sql.optimizer.rule.tree.PreAggregateTurnOnRule;
@@ -202,11 +203,11 @@ public class Optimizer {
     }
 
     private void registerMaterializedViews(OptExpression logicOperatorTree, ConnectContext connectContext) {
-        List<Table> tables = Utils.getAllTables(logicOperatorTree);
+        List<Table> tables = MvUtils.getAllTables(logicOperatorTree);
 
         // get all related materialized views, include nested mvs
         Set<MaterializedView> relatedMvs =
-                Utils.getRelatedMvs(connectContext.getSessionVariable().getNestedMvRewriteMaxLevel(), tables);
+                MvUtils.getRelatedMvs(connectContext.getSessionVariable().getNestedMvRewriteMaxLevel(), tables);
 
         for (MaterializedView mv : relatedMvs) {
             if (!mv.isActive()) {
@@ -228,7 +229,7 @@ public class Optimizer {
             ColumnRefFactory columnRefFactory = new ColumnRefFactory();
             MaterializedViewOptimizer mvOptimizer = new MaterializedViewOptimizer();
             OptExpression mvPlan = mvOptimizer.optimize(mv, columnRefFactory, connectContext);
-            if (!Utils.isValidMVPlan(mvPlan)) {
+            if (!MvUtils.isValidMVPlan(mvPlan)) {
                 continue;
             }
 
@@ -241,9 +242,9 @@ public class Optimizer {
             TableName tableName = new TableName(db.getFullName(), mv.getName());
             String selectMvSql = "select * from " + tableName.toSql();
             Pair<OptExpression, LogicalPlan> scanMvPlans =
-                    Utils.getRuleOptimizedLogicalPlan(selectMvSql, context.getColumnRefFactory(), connectContext);
+                    MvUtils.getRuleOptimizedLogicalPlan(selectMvSql, context.getColumnRefFactory(), connectContext);
             OptExpression scanMvPlan = scanMvPlans.first;
-            if (!Utils.isLogicalSPJ(scanMvPlan)) {
+            if (!MvUtils.isLogicalSPJ(scanMvPlan)) {
                 continue;
             }
             if (!(scanMvPlan.getOp() instanceof LogicalOlapScanOperator)) {
