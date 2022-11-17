@@ -140,4 +140,4 @@ static int utf8_len(const char* begin, const char* end) {
     return len;
 }
 
-} // namespace starrocks
+} // namespace starrocks::vectorized
