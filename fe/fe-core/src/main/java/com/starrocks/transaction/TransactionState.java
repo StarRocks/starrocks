@@ -45,7 +45,6 @@ import com.starrocks.thrift.TPartitionVersionInfo;
 import com.starrocks.thrift.TUniqueId;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.StatusCode;
-import javax.validation.constraints.NotNull;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -57,9 +56,11 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import javax.validation.constraints.NotNull;
 
 public class TransactionState implements Writable {
     private static final Logger LOG = LogManager.getLogger(TransactionState.class);
@@ -86,7 +87,7 @@ public class TransactionState implements Writable {
 
         private final int flag;
 
-        private LoadJobSourceType(int flag) {
+        LoadJobSourceType(int flag) {
             this.flag = flag;
         }
 
@@ -159,7 +160,7 @@ public class TransactionState implements Writable {
             return flag;
         }
 
-        private int flag;
+        private final int flag;
 
         TxnSourceType(int flag) {
             this.flag = flag;
@@ -207,7 +208,7 @@ public class TransactionState implements Writable {
     // requestId is used to judge whether a begin request is an internal retry request.
     // no need to persist it.
     private TUniqueId requestId;
-    private Map<Long, TableCommitInfo> idToTableCommitInfos;
+    private final Map<Long, TableCommitInfo> idToTableCommitInfos;
     // coordinator is show who begin this txn (FE, or one of BE, etc...)
     private TxnCoordinator txnCoordinator;
     private TransactionStatus transactionStatus;
@@ -225,10 +226,10 @@ public class TransactionState implements Writable {
 
     // error replica ids
     private Set<Long> errorReplicas;
-    private CountDownLatch latch;
+    private final CountDownLatch latch;
 
     // these states need not be serialized
-    private Map<Long, PublishVersionTask> publishVersionTasks; // Only for OlapTable
+    private final Map<Long, PublishVersionTask> publishVersionTasks; // Only for OlapTable
     private boolean hasSendTask;
     private long publishVersionTime = -1;
     private long publishVersionFinishTime = -1;
@@ -242,7 +243,7 @@ public class TransactionState implements Writable {
     // this map should be set when load execution begin, so that when the txn commit, it will know
     // which tables and rollups it loaded.
     // tbl id -> (index ids)
-    private Map<Long, Set<Long>> loadedTblIndexes = Maps.newHashMap();
+    private final Map<Long, Set<Long>> loadedTblIndexes = Maps.newHashMap();
 
     private String errorLogUrl = null;
 
@@ -454,13 +455,10 @@ public class TransactionState implements Writable {
                     break;
             }
         } else if (callbackId > 0) {
-            switch (transactionStatus) {
-                case COMMITTED:
-                    // Maybe listener has been deleted. The txn need to be aborted later.
-                    throw new TransactionException(
-                            "Failed to commit txn when callback " + callbackId + "could not be found");
-                default:
-                    break;
+            if (Objects.requireNonNull(transactionStatus) == TransactionStatus.COMMITTED) {
+                // Maybe listener has been deleted. The txn need to be aborted later.
+                throw new TransactionException(
+                        "Failed to commit txn when callback " + callbackId + "could not be found");
             }
         }
 
@@ -472,12 +470,8 @@ public class TransactionState implements Writable {
         TxnStateChangeCallback callback = GlobalStateMgr.getCurrentGlobalTransactionMgr()
                 .getCallbackFactory().getCallback(callbackId);
         if (callback != null) {
-            switch (transactionStatus) {
-                case VISIBLE:
-                    callback.afterVisible(this, txnOperated);
-                    break;
-                default:
-                    break;
+            if (Objects.requireNonNull(transactionStatus) == TransactionStatus.VISIBLE) {
+                callback.afterVisible(this, txnOperated);
             }
         }
     }
