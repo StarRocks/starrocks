@@ -115,10 +115,3 @@ IsMaster: false
 ```
 
 节点的 `Alive` 项为 `true` 时，添加节点成功。
-
-## 下一步
-
-成功部署 StarRocks 集群后，您可以：
-
-* [创建表](Create_table.md)
-* [导入和查询数据](Import_and_query.md)
