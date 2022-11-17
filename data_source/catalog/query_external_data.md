@@ -24,7 +24,7 @@
     SHOW DATABASES FROM catalog_name;
     ```
 
-4. （可选）执行以下语句将当前会话切换到指定 external catalog 的指定数据库。
+4. （可选）执行以下语句将当前会话切换到指定 external catalog 的指定数据库。有关参数说明和示例，请参见 [USE](/sql-reference/sql-statements/data-definition/USE.md)。
 
     ```SQL
     USE catalog_name.db_name;
