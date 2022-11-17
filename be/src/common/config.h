@@ -322,6 +322,11 @@ CONF_Int64(vertical_compaction_max_columns_per_group, "5");
 
 CONF_Bool(enable_event_based_compaction_framework, "true");
 
+CONF_Bool(enable_size_tiered_compaction_strategy, "true");
+CONF_mInt64(size_tiered_min_level_size, "131072");
+CONF_mInt64(size_tiered_level_multiple, "5");
+CONF_mInt64(size_tiered_level_num, "7");
+
 CONF_Bool(enable_check_string_lengths, "true");
 // 5GB
 CONF_mInt64(min_cumulative_compaction_size, "5368709120");

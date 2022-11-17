@@ -14,7 +14,7 @@ namespace starrocks {
 struct CompactionCandidate {
     TabletSharedPtr tablet;
     CompactionType type;
-    int64_t score = 0;
+    double score = 0;
 
     CompactionCandidate() : tablet(nullptr), type(INVALID_COMPACTION) {}
 
