@@ -14,7 +14,7 @@ SHOW [ALL] AUTHENTICATION;
 
 | **Parameter** | **Required** | **Description**                                              |
 | ------------- | ------------ | ------------------------------------------------------------ |
-| ALL           | No           | If this keyword is specified, the authentication information of all users in the current cluster is returned.If this keyword is not specified, only the authentication information of the current user is returned. |
+| ALL           | No           | If this keyword is specified, the authentication information of all users in the current cluster is returned. If this keyword is not specified, only the authentication information of the current user is returned. |
 
 ## Output
 
