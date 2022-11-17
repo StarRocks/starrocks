@@ -370,8 +370,12 @@ Status CSVReader::next_record(FieldOffsets* fields, size_t& parsed_start, size_t
             // push field
             if (is_enclose_field) {
                 if (_trim_space) {
-                    std::pair<const char*, size_t> newPos = trim(_buff.base_ptr()+filed_start, filed_end - _column_separator_length - filed_start - 1);
-                    fields->emplace_back(newPos.first - _buff.base_ptr(), newPos.second, is_escape_field);
+                    const char* basePtr = _buff.base_ptr();
+                    if (is_escape_field) {
+                        basePtr = _escape_data.data();
+                    }
+                    std::pair<const char*, size_t> newPos = trim(basePtr+filed_start, filed_end - _column_separator_length - filed_start - 1);
+                    fields->emplace_back(newPos.first - basePtr, newPos.second, is_escape_field);
                 } else {
                     // enclose字段要去除字段最后的enclose character
                     fields->emplace_back(filed_start, filed_end - _column_separator_length - filed_start - 1, is_escape_field);
@@ -379,8 +383,12 @@ Status CSVReader::next_record(FieldOffsets* fields, size_t& parsed_start, size_t
                 
             } else {
                 if (_trim_space) {
-                    std::pair<const char*, size_t> newPos = trim(_buff.base_ptr()+filed_start, filed_end - _column_separator_length - filed_start);
-                    fields->emplace_back(newPos.first - _buff.base_ptr(), newPos.second, is_escape_field);
+                    const char* basePtr = _buff.base_ptr();
+                    if (is_escape_field) {
+                        basePtr = _escape_data.data();
+                    }
+                    std::pair<const char*, size_t> newPos = trim(basePtr+filed_start, filed_end - _column_separator_length - filed_start);
+                    fields->emplace_back(newPos.first - basePtr, newPos.second, is_escape_field);
                 } else {
                     fields->emplace_back(filed_start, filed_end - _column_separator_length - filed_start, is_escape_field);
                 }
@@ -423,15 +431,23 @@ Status CSVReader::next_record(FieldOffsets* fields, size_t& parsed_start, size_t
 
                     if (is_enclose_field) {
                         if (_trim_space) {
-                            std::pair<const char*, size_t> newPos = trim(_buff.base_ptr()+filed_start, filed_end - _row_delimiter_length - filed_start - 1);
-                            fields->emplace_back(newPos.first - _buff.base_ptr(), newPos.second, is_escape_field);
+                            const char* basePtr = _buff.base_ptr();
+                            if (is_escape_field) {
+                                basePtr = _escape_data.data();
+                            }
+                            std::pair<const char*, size_t> newPos = trim(basePtr+filed_start, filed_end - _row_delimiter_length - filed_start - 1);
+                            fields->emplace_back(newPos.first - basePtr, newPos.second, is_escape_field);
                         } else {
                             fields->emplace_back(filed_start, filed_end - _row_delimiter_length - filed_start - 1, is_escape_field);
                         }
                     } else {
                         if (_trim_space) {
-                            std::pair<const char*, size_t> newPos = trim(_buff.base_ptr()+filed_start, filed_end - _row_delimiter_length - filed_start);
-                            fields->emplace_back(newPos.first - _buff.base_ptr(), newPos.second, is_escape_field);                
+                            const char* basePtr = _buff.base_ptr();
+                            if (is_escape_field) {
+                                basePtr = _escape_data.data();
+                            }
+                            std::pair<const char*, size_t> newPos = trim(basePtr+filed_start, filed_end - _row_delimiter_length - filed_start);
+                            fields->emplace_back(newPos.first - basePtr, newPos.second, is_escape_field);                
                         } else {
                             fields->emplace_back(filed_start, filed_end - _row_delimiter_length - filed_start, is_escape_field);
                         }

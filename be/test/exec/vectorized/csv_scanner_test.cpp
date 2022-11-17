@@ -579,6 +579,38 @@ TEST_F(CSVScannerTest, test_trim_space) {
     EXPECT_EQ("ee", chunk->get(4)[1].get_slice());
 }
 
+TEST_F(CSVScannerTest, test_trim_space_with_ENCLOSE) {
+    std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_INT)};
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.__set_num_of_columns_from_file(3);
+    range.__set_path("./be/test/exec/test_data/csv_scanner/csv_file19");
+    ranges.push_back(range);
+
+    auto scanner = create_csv_scanner(types, ranges, "\n", ",", 0, true, '\'', '\\');
+    Status st = scanner->open();
+    ASSERT_TRUE(st.ok()) << st.to_string();
+
+    ChunkPtr chunk = scanner->get_next().value();
+    EXPECT_EQ(4, chunk->num_rows());
+
+    EXPECT_EQ(1, chunk->get(0)[0].get_int32());
+    EXPECT_EQ(2, chunk->get(1)[0].get_int32());
+    EXPECT_EQ(3, chunk->get(2)[0].get_int32());
+    EXPECT_EQ(4, chunk->get(3)[0].get_int32());
+
+    EXPECT_EQ("Lily,  asdf\n\n\nsafsdfaasfsdfa23'1111111", chunk->get(0)[1].get_slice());
+    EXPECT_EQ("Ro se", chunk->get(1)[1].get_slice());
+    EXPECT_EQ("Al  i   ce", chunk->get(2)[1].get_slice());
+    EXPECT_EQ("Julia", chunk->get(3)[1].get_slice());
+
+    EXPECT_EQ(24, chunk->get(0)[2].get_int32());
+    EXPECT_EQ(23, chunk->get(1)[2].get_int32());
+    EXPECT_EQ(24, chunk->get(2)[2].get_int32());
+    EXPECT_EQ(25, chunk->get(3)[2].get_int32());
+}
+
 TEST_F(CSVScannerTest, test_ENCLOSE) {
     std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_VARCHAR)};
 
