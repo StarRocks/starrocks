@@ -5230,7 +5230,8 @@ public class Catalog {
             frontends.put(fe.getNodeName(), fe);
             if (fe.getRole() == FrontendNodeType.FOLLOWER || fe.getRole() == FrontendNodeType.REPLICA) {
                 helperNodes.add(Pair.create(fe.getHost(), fe.getEditLogPort()));
-                if (!Catalog.isCheckpointThread()) {
+                // haPrococal is null when loading image
+                if (!Catalog.isCheckpointThread() && haProtocol != null) {
                     ((BDBHA) haProtocol).addHelperSocket(fe.getHost(), fe.getEditLogPort());
                 }
             }
