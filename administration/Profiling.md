@@ -80,7 +80,7 @@ StarRocks 支持四种数据模型：主键模型 (PRIMARY KEY)，聚合模型 (
         state tinyint NOT NULL
     )
     PRIMARY KEY (dt, order_id)
-    DISTRIBUTED BY HASH(order_id) BUCKETS 4
+    DISTRIBUTED BY HASH(order_id) BUCKETS 4;
     ```
 
 ### 使用内存表
