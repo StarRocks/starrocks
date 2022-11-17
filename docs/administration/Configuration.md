@@ -371,7 +371,7 @@ BE static parameters are as follows:
 | num_cores | 0 | N/A | |
 | num_disks | 0 | N/A | |
 | num_threads_per_disk | 0 | N/A | |
-| object_storage_access_key_id | LTAI4GFYjbX9e7QmFnAAvkt8 | N/A | |
+| object_storage_access_key_id | N/A | N/A | |
 | object_storage_endpoint | http://oss-cn-zhangjiakou-internal.aliyuncs.com | N/A | |
 | object_storage_endpoint_path_style_access | 0 | N/A | |
 | object_storage_endpoint_use_https | 0 | N/A | |
