@@ -439,7 +439,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 ## Broker 配置项
 
-Broker 配置项暂不支持在线修改，您需要在 **broker.conf** 中修改并重启 BE 服务。具体配置项参考 [Broker load 导入](../loading/BrokerLoad.md)
+Broker 配置项暂不支持在线修改，您需要在 **broker.conf** 中修改并重启 BE 服务。具体配置项参考 [Broker load 导入](../loading/BrokerLoad.md)。
 
 ## 系统参数
 
