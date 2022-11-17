@@ -31,7 +31,7 @@ RECOVER DATABASE example_db;
 RECOVER TABLE [db_name.]table_name;
 ```
 
-以下示例恢复名为 `example_tbl` 的表。
+以下示例恢复 `example_db` 数据库中名为 `example_tbl` 的表。
 
 ```sql
 RECOVER TABLE example_db.example_tbl;
@@ -45,8 +45,8 @@ RECOVER TABLE example_db.example_tbl;
 RECOVER PARTITION partition_name FROM [db_name.]table_name;
 ```
 
-以下示例恢复 `example_tbl` 中名为 `p1` 的分区。
+以下示例恢复 `example_db` 数据库的 `example_tbl` 表中名为 `p1` 的分区。
 
 ```sql
-RECOVER PARTITION p1 FROM example_tbl;
+RECOVER PARTITION p1 FROM example_db.example_tbl;
 ```
