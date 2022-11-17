@@ -461,6 +461,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 |tablet_map_shard_size|32|Tablet 分组数。|
 |enable_bitmap_union_disk_format_with_set|FALSE|Bitmap 新存储格式，可以优化 bitmap_union 性能。|
 |mem_limit|90%|BE 进程内存上限。可设为比例上限（如 "80%"）或物理上限（如 "100GB"）。|
+|flush_thread_num_per_store|2|每个 Store 用以 Flush MemTable 的线程数。|
 
 ## Broker 配置项
 
