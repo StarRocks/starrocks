@@ -138,10 +138,9 @@ inline void memcpy_inlined(void* __restrict _dst, const void* __restrict _src, s
             _mm256_storeu_si256(reinterpret_cast<__m256i*>(dst + size - 32),
                                 _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src + size - 32)));
         } else {
-            // erms version.
             static constexpr size_t KB = 1024;
-            static constexpr size_t MB = 1024 * 1024;
-            if ((size >= 4 * KB && size <= 16 * KB) || (size >= 512 * KB && size <= 2 * MB)) {
+            if (size >= 512 * KB && size <= 2048 * KB) {
+                // erms(enhanced repeat movsv/stosb) version works well in this region.
                 asm volatile("rep movsb" : "=D"(dst), "=S"(src), "=c"(size) : "0"(dst), "1"(src), "2"(size) : "memory");
             } else {
                 size_t padding = (32 - (reinterpret_cast<size_t>(dst) & 31)) & 31;
