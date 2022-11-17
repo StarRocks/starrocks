@@ -16,7 +16,7 @@ SQL 语句在 StarRocks 中的生命周期可以分为查询解析（Query Parsi
 
 Query Plan 可以为数据库管理者提供一个宏观的视角，从而获取查询执行的相关信息。优秀的 Query Plan 很大程度上决定了查询的性能，所以数据库管理者需要频繁查看 Query Plan，以确保其是否生成得当。本章以TPC-DS的query96为例，展示如何查看StarRocks的Query Plan。
 
-以下示例以 TPCDS 的 query96 为例，展示如何查看分析 StarRocks 的 Query Plan。
+以下示例以 TPC-DS 的 query96 为例，展示如何查看分析 StarRocks 的 Query Plan。
 
 ```SQL
 -- query96.sql
