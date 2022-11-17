@@ -100,6 +100,27 @@ public class EsNodeInfo {
         }
     }
 
+<<<<<<< HEAD
+=======
+    public EsNodeInfo(String id, String seed) {
+        this.id = id;
+        String[] scratch = seed.split(":");
+        int port = seed.startsWith("https") ? 443 : 80;
+        if (scratch.length == 3) {
+            port = Integer.parseInt(scratch[2]);
+        }
+        String remoteHost = scratch[0] + ":" + scratch[1];
+        this.name = remoteHost;
+        this.host = remoteHost;
+        this.ip = remoteHost;
+        this.isClient = true;
+        this.isData = true;
+        this.isIngest = true;
+        this.publishAddress = new TNetworkAddress(remoteHost, port);
+        this.hasHttp = true;
+    }
+
+>>>>>>> 2da64bf43 ([BugFix] Fix couldn't connect to ES external table when access default URL (#13625))
     public boolean hasHttp() {
         return hasHttp;
     }
