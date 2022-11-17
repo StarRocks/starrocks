@@ -120,9 +120,11 @@ session  required  pam_limits.so
 最后，请确认 **/etc/ssh/sshd_config** 中存在 **UsePAM yes**。如果没有，请添加该参数，并运行 `restart sshd`。
 
 **Q**：安装 Python 时遇到问题 `__init__() takes 2 arguments (4 given)`，如何处理？
+
 **A**：如果在安装 Python 时遇到问题 `__init__() takes 2 arguments (4 given)`，请执行如下步骤：
 
 首先，请运行 `which python` 命令确认 Python 安装路径为 **/usr/bin/python**。
+
 然后，请删除 python-setuptools 安装包：
 
 ```shell
