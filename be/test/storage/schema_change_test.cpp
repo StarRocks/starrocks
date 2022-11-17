@@ -108,7 +108,7 @@ protected:
     }
 
     template <typename T>
-    void test_convert_to_varchar(FieldType type, int type_size, T val, const std::string& expect_val) {
+    void test_convert_to_varchar(LogicalType type, int type_size, T val, const std::string& expect_val) {
         auto src_tablet_schema =
                 SetTabletSchema("SrcColumn", field_type_to_string(type), "REPLACE", type_size, false, false);
         auto dst_tablet_schema = SetTabletSchema("VarcharColumn", "VARCHAR", "REPLACE", 255, false, false);
@@ -119,7 +119,7 @@ protected:
         Datum src_datum;
         src_datum.set<T>(val);
         Datum dst_datum;
-        auto converter = vectorized::get_type_converter(type, OLAP_FIELD_TYPE_VARCHAR);
+        auto converter = vectorized::get_type_converter(type, LOGICAL_TYPE_VARCHAR);
         std::unique_ptr<MemPool> mem_pool(new MemPool());
         Status st = converter->convert_datum(f.type().get(), src_datum, f2.type().get(), &dst_datum, mem_pool.get());
         ASSERT_TRUE(st.ok());
@@ -128,7 +128,7 @@ protected:
     }
 
     template <typename T>
-    void test_convert_from_varchar(FieldType type, int type_size, std::string val, T expect_val) {
+    void test_convert_from_varchar(LogicalType type, int type_size, std::string val, T expect_val) {
         auto src_tablet_schema = SetTabletSchema("VarcharColumn", "VARCHAR", "REPLACE", 255, false, false);
         auto dst_tablet_schema =
                 SetTabletSchema("DstColumn", field_type_to_string(type), "REPLACE", type_size, false, false);
@@ -142,7 +142,7 @@ protected:
         slice.size = val.size();
         src_datum.set_slice(slice);
         Datum dst_datum;
-        auto converter = vectorized::get_type_converter(OLAP_FIELD_TYPE_VARCHAR, type);
+        auto converter = vectorized::get_type_converter(LOGICAL_TYPE_VARCHAR, type);
         std::unique_ptr<MemPool> mem_pool(new MemPool());
         Status st = converter->convert_datum(f.type().get(), src_datum, f2.type().get(), &dst_datum, mem_pool.get());
         ASSERT_TRUE(st.ok());
@@ -154,59 +154,59 @@ protected:
 };
 
 TEST_F(SchemaChangeTest, convert_tinyint_to_varchar) {
-    test_convert_to_varchar<int8_t>(OLAP_FIELD_TYPE_TINYINT, 1, 127, "127");
+    test_convert_to_varchar<int8_t>(LOGICAL_TYPE_TINYINT, 1, 127, "127");
 }
 
 TEST_F(SchemaChangeTest, convert_smallint_to_varchar) {
-    test_convert_to_varchar<int16_t>(OLAP_FIELD_TYPE_SMALLINT, 2, 32767, "32767");
+    test_convert_to_varchar<int16_t>(LOGICAL_TYPE_SMALLINT, 2, 32767, "32767");
 }
 
 TEST_F(SchemaChangeTest, convert_int_to_varchar) {
-    test_convert_to_varchar<int32_t>(OLAP_FIELD_TYPE_INT, 4, 2147483647, "2147483647");
+    test_convert_to_varchar<int32_t>(LOGICAL_TYPE_INT, 4, 2147483647, "2147483647");
 }
 
 TEST_F(SchemaChangeTest, convert_bigint_to_varchar) {
-    test_convert_to_varchar<int64_t>(OLAP_FIELD_TYPE_BIGINT, 8, 9223372036854775807, "9223372036854775807");
+    test_convert_to_varchar<int64_t>(LOGICAL_TYPE_BIGINT, 8, 9223372036854775807, "9223372036854775807");
 }
 
 TEST_F(SchemaChangeTest, convert_largeint_to_varchar) {
-    test_convert_to_varchar<int128_t>(OLAP_FIELD_TYPE_LARGEINT, 16, 1701411834604690, "1701411834604690");
+    test_convert_to_varchar<int128_t>(LOGICAL_TYPE_LARGEINT, 16, 1701411834604690, "1701411834604690");
 }
 
 TEST_F(SchemaChangeTest, convert_float_to_varchar) {
-    test_convert_to_varchar<float>(OLAP_FIELD_TYPE_FLOAT, 4, 3.40282e+38, "3.40282e+38");
+    test_convert_to_varchar<float>(LOGICAL_TYPE_FLOAT, 4, 3.40282e+38, "3.40282e+38");
 }
 
 TEST_F(SchemaChangeTest, convert_double_to_varchar) {
-    test_convert_to_varchar<double>(OLAP_FIELD_TYPE_DOUBLE, 8, 123.456, "123.456");
+    test_convert_to_varchar<double>(LOGICAL_TYPE_DOUBLE, 8, 123.456, "123.456");
 }
 
 TEST_F(SchemaChangeTest, convert_varchar_to_tinyint) {
-    test_convert_from_varchar<int8_t>(OLAP_FIELD_TYPE_TINYINT, 1, "127", 127);
+    test_convert_from_varchar<int8_t>(LOGICAL_TYPE_TINYINT, 1, "127", 127);
 }
 
 TEST_F(SchemaChangeTest, convert_varchar_to_smallint) {
-    test_convert_from_varchar<int16_t>(OLAP_FIELD_TYPE_SMALLINT, 2, "32767", 32767);
+    test_convert_from_varchar<int16_t>(LOGICAL_TYPE_SMALLINT, 2, "32767", 32767);
 }
 
 TEST_F(SchemaChangeTest, convert_varchar_to_int) {
-    test_convert_from_varchar<int32_t>(OLAP_FIELD_TYPE_INT, 4, "2147483647", 2147483647);
+    test_convert_from_varchar<int32_t>(LOGICAL_TYPE_INT, 4, "2147483647", 2147483647);
 }
 
 TEST_F(SchemaChangeTest, convert_varchar_to_bigint) {
-    test_convert_from_varchar<int64_t>(OLAP_FIELD_TYPE_BIGINT, 8, "9223372036854775807", 9223372036854775807);
+    test_convert_from_varchar<int64_t>(LOGICAL_TYPE_BIGINT, 8, "9223372036854775807", 9223372036854775807);
 }
 
 TEST_F(SchemaChangeTest, convert_varchar_to_largeint) {
-    test_convert_from_varchar<int128_t>(OLAP_FIELD_TYPE_LARGEINT, 16, "1701411834604690", 1701411834604690);
+    test_convert_from_varchar<int128_t>(LOGICAL_TYPE_LARGEINT, 16, "1701411834604690", 1701411834604690);
 }
 
 TEST_F(SchemaChangeTest, convert_varchar_to_float) {
-    test_convert_from_varchar<float>(OLAP_FIELD_TYPE_FLOAT, 4, "3.40282e+38", 3.40282e+38);
+    test_convert_from_varchar<float>(LOGICAL_TYPE_FLOAT, 4, "3.40282e+38", 3.40282e+38);
 }
 
 TEST_F(SchemaChangeTest, convert_varchar_to_double) {
-    test_convert_from_varchar<double>(OLAP_FIELD_TYPE_DOUBLE, 8, "123.456", 123.456);
+    test_convert_from_varchar<double>(LOGICAL_TYPE_DOUBLE, 8, "123.456", 123.456);
 }
 
 TEST_F(SchemaChangeTest, convert_float_to_double) {
@@ -219,7 +219,7 @@ TEST_F(SchemaChangeTest, convert_float_to_double) {
     Datum src_datum;
     src_datum.set_float(1.2345);
     Datum dst_datum;
-    auto converter = vectorized::get_type_converter(OLAP_FIELD_TYPE_FLOAT, OLAP_FIELD_TYPE_DOUBLE);
+    auto converter = vectorized::get_type_converter(LOGICAL_TYPE_FLOAT, LOGICAL_TYPE_DOUBLE);
     std::unique_ptr<MemPool> mem_pool(new MemPool());
     Status st = converter->convert_datum(f.type().get(), src_datum, f2.type().get(), &dst_datum, mem_pool.get());
     ASSERT_TRUE(st.ok());
@@ -244,7 +244,7 @@ TEST_F(SchemaChangeTest, convert_datetime_to_date) {
                     time_tm.tm_hour * 10000L + time_tm.tm_min * 100L + time_tm.tm_sec;
     src_datum.set_int64(value);
     Datum dst_datum;
-    auto converter = vectorized::get_type_converter(OLAP_FIELD_TYPE_DATETIME, OLAP_FIELD_TYPE_DATE);
+    auto converter = vectorized::get_type_converter(LOGICAL_TYPE_DATETIME, LOGICAL_TYPE_DATE);
 
     Status st = converter->convert_datum(f.type().get(), src_datum, f2.type().get(), &dst_datum, mem_pool.get());
     ASSERT_TRUE(st.ok());
@@ -268,7 +268,7 @@ TEST_F(SchemaChangeTest, convert_date_to_datetime) {
     int value = (time_tm.tm_year + 1900) * 16 * 32 + (time_tm.tm_mon + 1) * 32 + time_tm.tm_mday;
     src_datum.set_uint24(value);
     Datum dst_datum;
-    auto converter = vectorized::get_type_converter(OLAP_FIELD_TYPE_DATE, OLAP_FIELD_TYPE_DATETIME);
+    auto converter = vectorized::get_type_converter(LOGICAL_TYPE_DATE, LOGICAL_TYPE_DATETIME);
 
     Status st = converter->convert_datum(f.type().get(), src_datum, f2.type().get(), &dst_datum, mem_pool.get());
     ASSERT_TRUE(st.ok());
@@ -291,7 +291,7 @@ TEST_F(SchemaChangeTest, convert_int_to_date_v2) {
     strptime(origin_val.c_str(), "%Y-%m-%d", &time_tm);
     src_datum.set_int32(20210928);
     Datum dst_datum;
-    auto converter = vectorized::get_type_converter(OLAP_FIELD_TYPE_INT, OLAP_FIELD_TYPE_DATE_V2);
+    auto converter = vectorized::get_type_converter(LOGICAL_TYPE_INT, LOGICAL_TYPE_DATE_V2);
 
     Status st = converter->convert_datum(f.type().get(), src_datum, f2.type().get(), &dst_datum, mem_pool.get());
     ASSERT_TRUE(st.ok());
@@ -313,7 +313,7 @@ TEST_F(SchemaChangeTest, convert_int_to_date) {
     strptime(origin_val.c_str(), "%Y-%m-%d", &time_tm);
     src_datum.set_int32(20210928);
     Datum dst_datum;
-    auto converter = vectorized::get_type_converter(OLAP_FIELD_TYPE_INT, OLAP_FIELD_TYPE_DATE);
+    auto converter = vectorized::get_type_converter(LOGICAL_TYPE_INT, LOGICAL_TYPE_DATE);
 
     Status st = converter->convert_datum(f.type().get(), src_datum, f2.type().get(), &dst_datum, mem_pool.get());
     ASSERT_TRUE(st.ok());
@@ -337,7 +337,7 @@ TEST_F(SchemaChangeTest, convert_int_to_bitmap) {
     src_datum.set_int32(2);
     src_col->append_datum(src_datum);
 
-    auto converter = vectorized::get_materialized_converter(OLAP_FIELD_TYPE_INT, OLAP_MATERIALIZE_TYPE_BITMAP);
+    auto converter = vectorized::get_materialized_converter(LOGICAL_TYPE_INT, OLAP_MATERIALIZE_TYPE_BITMAP);
     Status st = converter->convert_materialized(src_col, dst_col, f.type().get());
     ASSERT_TRUE(st.ok());
 
@@ -363,7 +363,7 @@ TEST_F(SchemaChangeTest, convert_varchar_to_hll) {
     src_datum.set_slice(slice);
     src_col->append_datum(src_datum);
 
-    auto converter = vectorized::get_materialized_converter(OLAP_FIELD_TYPE_VARCHAR, OLAP_MATERIALIZE_TYPE_HLL);
+    auto converter = vectorized::get_materialized_converter(LOGICAL_TYPE_VARCHAR, OLAP_MATERIALIZE_TYPE_HLL);
     Status st = converter->convert_materialized(src_col, dst_col, f.type().get());
     ASSERT_TRUE(st.ok());
 
@@ -387,7 +387,7 @@ TEST_F(SchemaChangeTest, convert_int_to_count) {
     src_datum.set_int32(2);
     src_col->append_datum(src_datum);
 
-    auto converter = vectorized::get_materialized_converter(OLAP_FIELD_TYPE_INT, OLAP_MATERIALIZE_TYPE_COUNT);
+    auto converter = vectorized::get_materialized_converter(LOGICAL_TYPE_INT, OLAP_MATERIALIZE_TYPE_COUNT);
     Status st = converter->convert_materialized(src_col, dst_col, f.type().get());
     ASSERT_TRUE(st.ok());
 
@@ -722,9 +722,9 @@ TEST_F(SchemaChangeTest, convert_varchar_to_json) {
         JsonColumn::Ptr dst_column = JsonColumn::create();
         src_column->append(json_str);
 
-        auto converter = vectorized::get_type_converter(OLAP_FIELD_TYPE_VARCHAR, OLAP_FIELD_TYPE_JSON);
-        TypeInfoPtr type1 = get_type_info(OLAP_FIELD_TYPE_VARCHAR);
-        TypeInfoPtr type2 = get_type_info(OLAP_FIELD_TYPE_JSON);
+        auto converter = vectorized::get_type_converter(LOGICAL_TYPE_VARCHAR, LOGICAL_TYPE_JSON);
+        TypeInfoPtr type1 = get_type_info(LOGICAL_TYPE_VARCHAR);
+        TypeInfoPtr type2 = get_type_info(LOGICAL_TYPE_JSON);
         Status st = converter->convert_column(type1.get(), *src_column, type2.get(), dst_column.get(), mem_pool.get());
         ASSERT_TRUE(st.ok());
         ASSERT_EQ(*dst_column->get_object(0), expected);
@@ -738,10 +738,10 @@ TEST_F(SchemaChangeTest, convert_json_to_varchar) {
     BinaryColumn::Ptr dst_column = BinaryColumn::create();
     src_column->append(&json);
 
-    auto converter = vectorized::get_type_converter(OLAP_FIELD_TYPE_JSON, OLAP_FIELD_TYPE_VARCHAR);
+    auto converter = vectorized::get_type_converter(LOGICAL_TYPE_JSON, LOGICAL_TYPE_VARCHAR);
     auto mem_pool = std::make_unique<MemPool>();
-    TypeInfoPtr type1 = get_type_info(OLAP_FIELD_TYPE_JSON);
-    TypeInfoPtr type2 = get_type_info(OLAP_FIELD_TYPE_VARCHAR);
+    TypeInfoPtr type1 = get_type_info(LOGICAL_TYPE_JSON);
+    TypeInfoPtr type2 = get_type_info(LOGICAL_TYPE_VARCHAR);
     Status st = converter->convert_column(type1.get(), *src_column, type2.get(), dst_column.get(), mem_pool.get());
     ASSERT_TRUE(st.ok());
     ASSERT_EQ(dst_column->get_slice(0), json_str);

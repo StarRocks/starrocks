@@ -104,8 +104,8 @@ public:
 
 // NOLINTNEXTLINE
 TEST_F(BinaryPlainPageTest, test_seek_by_value) {
-    TestBinarySeekByValueSmallPage<BinaryPlainPageBuilder, BinaryPlainPageDecoder<OLAP_FIELD_TYPE_VARCHAR>, false>();
-    TestBinarySeekByValueSmallPage<BinaryPlainPageBuilder, BinaryPlainPageDecoder<OLAP_FIELD_TYPE_VARCHAR>, true>();
+    TestBinarySeekByValueSmallPage<BinaryPlainPageBuilder, BinaryPlainPageDecoder<LOGICAL_TYPE_VARCHAR>, false>();
+    TestBinarySeekByValueSmallPage<BinaryPlainPageBuilder, BinaryPlainPageDecoder<LOGICAL_TYPE_VARCHAR>, true>();
 }
 
 // NOLINTNEXTLINE
@@ -137,7 +137,7 @@ TEST_F(BinaryPlainPageTest, test_reserve_head) {
     Slice data_without_head = data_with_head.slice();
     data_without_head.remove_prefix(4);
 
-    BinaryPlainPageDecoder<OLAP_FIELD_TYPE_VARCHAR> decoder(data_without_head);
+    BinaryPlainPageDecoder<LOGICAL_TYPE_VARCHAR> decoder(data_without_head);
     ASSERT_TRUE(decoder.init().ok());
     ASSERT_EQ(5, decoder.count());
     for (uint32_t i = 0; i < 5; i++) {

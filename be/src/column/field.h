@@ -29,15 +29,16 @@ public:
               _flags((is_key << kIsKeyShift) | (nullable << kNullableShift)) {}
 
     // Non-key field of any type except for ARRAY
-    Field(ColumnId id, std::string_view name, FieldType type, int precision, int scale, bool nullable)
+    Field(ColumnId id, std::string_view name, LogicalType type, int precision, int scale, bool nullable)
             : Field(id, name, get_type_info(type, precision, scale), OLAP_FIELD_AGGREGATION_NONE, 0, false, nullable) {}
 
     // Non-key field of any type except for DECIMAL32, DECIMAL64, DECIMAL128, and ARRAY
-    Field(ColumnId id, std::string_view name, FieldType type, bool nullable) : Field(id, name, type, -1, -1, nullable) {
-        DCHECK(type != OLAP_FIELD_TYPE_DECIMAL32);
-        DCHECK(type != OLAP_FIELD_TYPE_DECIMAL64);
-        DCHECK(type != OLAP_FIELD_TYPE_DECIMAL128);
-        DCHECK(type != OLAP_FIELD_TYPE_ARRAY);
+    Field(ColumnId id, std::string_view name, LogicalType type, bool nullable)
+            : Field(id, name, type, -1, -1, nullable) {
+        DCHECK(type != LOGICAL_TYPE_DECIMAL32);
+        DCHECK(type != LOGICAL_TYPE_DECIMAL64);
+        DCHECK(type != LOGICAL_TYPE_DECIMAL128);
+        DCHECK(type != LOGICAL_TYPE_ARRAY);
     }
 
     // Non-key field of any type
@@ -134,7 +135,7 @@ public:
 
     starrocks::FieldAggregationMethod aggregate_method() const { return _agg_method; }
 
-    FieldPtr convert_to(FieldType to_type) const;
+    FieldPtr convert_to(LogicalType to_type) const;
 
     void add_sub_field(const Field& sub_field);
 
@@ -143,9 +144,9 @@ public:
     ColumnPtr create_column() const;
 
     static FieldPtr convert_to_dict_field(const Field& field) {
-        DCHECK(field.type()->type() == OLAP_FIELD_TYPE_VARCHAR);
+        DCHECK(field.type()->type() == LOGICAL_TYPE_VARCHAR);
         FieldPtr res = std::make_shared<Field>(field);
-        res->_type = get_type_info(OLAP_FIELD_TYPE_INT);
+        res->_type = get_type_info(LOGICAL_TYPE_INT);
         return res;
     }
 

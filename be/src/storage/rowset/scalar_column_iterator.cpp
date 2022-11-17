@@ -42,10 +42,10 @@ Status ScalarColumnIterator::init(const ColumnIteratorOptions& opts) {
         return Status::OK();
     }
 
-    if (_reader->column_type() == OLAP_FIELD_TYPE_CHAR) {
-        _init_dict_decoder_func = &ScalarColumnIterator::_do_init_dict_decoder<OLAP_FIELD_TYPE_CHAR>;
-    } else if (_reader->column_type() == OLAP_FIELD_TYPE_VARCHAR) {
-        _init_dict_decoder_func = &ScalarColumnIterator::_do_init_dict_decoder<OLAP_FIELD_TYPE_VARCHAR>;
+    if (_reader->column_type() == LOGICAL_TYPE_CHAR) {
+        _init_dict_decoder_func = &ScalarColumnIterator::_do_init_dict_decoder<LOGICAL_TYPE_CHAR>;
+    } else if (_reader->column_type() == LOGICAL_TYPE_VARCHAR) {
+        _init_dict_decoder_func = &ScalarColumnIterator::_do_init_dict_decoder<LOGICAL_TYPE_VARCHAR>;
     } else {
         return Status::NotSupported("dict encoding with unsupported field type");
     }
@@ -66,18 +66,18 @@ Status ScalarColumnIterator::init(const ColumnIteratorOptions& opts) {
         }
     }
 
-    if (_all_dict_encoded && _reader->column_type() == OLAP_FIELD_TYPE_CHAR) {
-        _decode_dict_codes_func = &ScalarColumnIterator::_do_decode_dict_codes<OLAP_FIELD_TYPE_CHAR>;
-        _dict_lookup_func = &ScalarColumnIterator::_do_dict_lookup<OLAP_FIELD_TYPE_CHAR>;
-        _next_dict_codes_func = &ScalarColumnIterator::_do_next_dict_codes<OLAP_FIELD_TYPE_CHAR>;
-        _next_batch_dict_codes_func = &ScalarColumnIterator::_do_next_batch_dict_codes<OLAP_FIELD_TYPE_CHAR>;
-        _fetch_all_dict_words_func = &ScalarColumnIterator::_fetch_all_dict_words<OLAP_FIELD_TYPE_CHAR>;
-    } else if (_all_dict_encoded && _reader->column_type() == OLAP_FIELD_TYPE_VARCHAR) {
-        _decode_dict_codes_func = &ScalarColumnIterator::_do_decode_dict_codes<OLAP_FIELD_TYPE_VARCHAR>;
-        _dict_lookup_func = &ScalarColumnIterator::_do_dict_lookup<OLAP_FIELD_TYPE_VARCHAR>;
-        _next_dict_codes_func = &ScalarColumnIterator::_do_next_dict_codes<OLAP_FIELD_TYPE_VARCHAR>;
-        _next_batch_dict_codes_func = &ScalarColumnIterator::_do_next_batch_dict_codes<OLAP_FIELD_TYPE_VARCHAR>;
-        _fetch_all_dict_words_func = &ScalarColumnIterator::_fetch_all_dict_words<OLAP_FIELD_TYPE_VARCHAR>;
+    if (_all_dict_encoded && _reader->column_type() == LOGICAL_TYPE_CHAR) {
+        _decode_dict_codes_func = &ScalarColumnIterator::_do_decode_dict_codes<LOGICAL_TYPE_CHAR>;
+        _dict_lookup_func = &ScalarColumnIterator::_do_dict_lookup<LOGICAL_TYPE_CHAR>;
+        _next_dict_codes_func = &ScalarColumnIterator::_do_next_dict_codes<LOGICAL_TYPE_CHAR>;
+        _next_batch_dict_codes_func = &ScalarColumnIterator::_do_next_batch_dict_codes<LOGICAL_TYPE_CHAR>;
+        _fetch_all_dict_words_func = &ScalarColumnIterator::_fetch_all_dict_words<LOGICAL_TYPE_CHAR>;
+    } else if (_all_dict_encoded && _reader->column_type() == LOGICAL_TYPE_VARCHAR) {
+        _decode_dict_codes_func = &ScalarColumnIterator::_do_decode_dict_codes<LOGICAL_TYPE_VARCHAR>;
+        _dict_lookup_func = &ScalarColumnIterator::_do_dict_lookup<LOGICAL_TYPE_VARCHAR>;
+        _next_dict_codes_func = &ScalarColumnIterator::_do_next_dict_codes<LOGICAL_TYPE_VARCHAR>;
+        _next_batch_dict_codes_func = &ScalarColumnIterator::_do_next_batch_dict_codes<LOGICAL_TYPE_VARCHAR>;
+        _fetch_all_dict_words_func = &ScalarColumnIterator::_fetch_all_dict_words<LOGICAL_TYPE_VARCHAR>;
     }
     return Status::OK();
 }
@@ -244,17 +244,17 @@ Status ScalarColumnIterator::_load_dict_page() {
             _reader->read_page(_opts, _reader->get_dict_page_pointer(), &_dict_page_handle, &dict_data, &dict_footer));
     // ignore dict_footer.dict_page_footer().encoding() due to only
     // PLAIN_ENCODING is supported for dict page right now
-    if (_reader->column_type() == OLAP_FIELD_TYPE_CHAR) {
-        _dict_decoder = std::make_unique<BinaryPlainPageDecoder<OLAP_FIELD_TYPE_CHAR>>(dict_data);
+    if (_reader->column_type() == LOGICAL_TYPE_CHAR) {
+        _dict_decoder = std::make_unique<BinaryPlainPageDecoder<LOGICAL_TYPE_CHAR>>(dict_data);
     } else {
-        _dict_decoder = std::make_unique<BinaryPlainPageDecoder<OLAP_FIELD_TYPE_VARCHAR>>(dict_data);
+        _dict_decoder = std::make_unique<BinaryPlainPageDecoder<LOGICAL_TYPE_VARCHAR>>(dict_data);
     }
     return _dict_decoder->init();
 }
 
-template <FieldType Type>
+template <LogicalType Type>
 Status ScalarColumnIterator::_do_init_dict_decoder() {
-    static_assert(Type == OLAP_FIELD_TYPE_CHAR || Type == OLAP_FIELD_TYPE_VARCHAR);
+    static_assert(Type == LOGICAL_TYPE_CHAR || Type == LOGICAL_TYPE_VARCHAR);
     auto dict_page_decoder = down_cast<BinaryDictPageDecoder<Type>*>(_page->data_decoder());
     if (dict_page_decoder->encoding_type() == DICT_ENCODING) {
         if (_dict_decoder == nullptr) {
@@ -334,13 +334,13 @@ Status ScalarColumnIterator::fetch_all_dict_words(std::vector<Slice>* words) con
     return (this->*_fetch_all_dict_words_func)(words);
 }
 
-template <FieldType Type>
+template <LogicalType Type>
 Status ScalarColumnIterator::_fetch_all_dict_words(std::vector<Slice>* words) const {
     auto dict = down_cast<BinaryPlainPageDecoder<Type>*>(_dict_decoder.get());
     uint32_t words_count = dict->count();
     words->reserve(words_count);
     for (uint32_t i = 0; i < words_count; i++) {
-        if constexpr (Type != OLAP_FIELD_TYPE_CHAR) {
+        if constexpr (Type != LOGICAL_TYPE_CHAR) {
             words->emplace_back(dict->string_at_index(i));
         } else {
             Slice s = dict->string_at_index(i);
@@ -351,13 +351,13 @@ Status ScalarColumnIterator::_fetch_all_dict_words(std::vector<Slice>* words) co
     return Status::OK();
 }
 
-template <FieldType Type>
+template <LogicalType Type>
 int ScalarColumnIterator::_do_dict_lookup(const Slice& word) {
     auto dict = down_cast<BinaryPlainPageDecoder<Type>*>(_dict_decoder.get());
     return dict->find(word);
 }
 
-template <FieldType Type>
+template <LogicalType Type>
 Status ScalarColumnIterator::_do_next_dict_codes(size_t* n, vectorized::Column* dst) {
     size_t remaining = *n;
     bool contain_delted_row = false;
@@ -384,7 +384,7 @@ Status ScalarColumnIterator::_do_next_dict_codes(size_t* n, vectorized::Column* 
     return Status::OK();
 }
 
-template <FieldType Type>
+template <LogicalType Type>
 Status ScalarColumnIterator::_do_next_batch_dict_codes(const vectorized::SparseRange& range, vectorized::Column* dst) {
     bool contain_deleted_row = false;
     vectorized::SparseRangeIterator iter = range.new_iterator();
@@ -432,14 +432,14 @@ Status ScalarColumnIterator::_do_next_batch_dict_codes(const vectorized::SparseR
     return Status::OK();
 }
 
-template <FieldType Type>
+template <LogicalType Type>
 Status ScalarColumnIterator::_do_decode_dict_codes(const int32_t* codes, size_t size, vectorized::Column* words) {
     auto dict = down_cast<BinaryPlainPageDecoder<Type>*>(_dict_decoder.get());
     std::vector<Slice> slices;
     slices.reserve(size);
     for (size_t i = 0; i < size; i++) {
         if (codes[i] >= 0) {
-            if constexpr (Type != OLAP_FIELD_TYPE_CHAR) {
+            if constexpr (Type != LOGICAL_TYPE_CHAR) {
                 slices.emplace_back(dict->string_at_index(codes[i]));
             } else {
                 Slice s = dict->string_at_index(codes[i]);
@@ -502,11 +502,11 @@ Status ScalarColumnIterator::fetch_dict_codes_by_rowid(const rowid_t* rowids, si
 }
 
 int ScalarColumnIterator::dict_size() {
-    if (_reader->column_type() == OLAP_FIELD_TYPE_CHAR) {
-        auto dict = down_cast<BinaryPlainPageDecoder<OLAP_FIELD_TYPE_CHAR>*>(_dict_decoder.get());
+    if (_reader->column_type() == LOGICAL_TYPE_CHAR) {
+        auto dict = down_cast<BinaryPlainPageDecoder<LOGICAL_TYPE_CHAR>*>(_dict_decoder.get());
         return static_cast<int>(dict->dict_size());
-    } else if (_reader->column_type() == OLAP_FIELD_TYPE_VARCHAR) {
-        auto dict = down_cast<BinaryPlainPageDecoder<OLAP_FIELD_TYPE_VARCHAR>*>(_dict_decoder.get());
+    } else if (_reader->column_type() == LOGICAL_TYPE_VARCHAR) {
+        auto dict = down_cast<BinaryPlainPageDecoder<LOGICAL_TYPE_VARCHAR>*>(_dict_decoder.get());
         return static_cast<int>(dict->dict_size());
     }
     __builtin_unreachable();

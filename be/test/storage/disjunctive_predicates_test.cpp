@@ -48,15 +48,15 @@ TEST(DisjunctivePredicatesTest, TwoPredicateTest) {
     ObjectPool pool;
     ConjunctivePredicates conjuncts0;
     // > 1
-    conjuncts0.vec_preds().push_back(pool.add(new_column_ge_predicate(get_type_info(OLAP_FIELD_TYPE_INT), 0, "2000")));
+    conjuncts0.vec_preds().push_back(pool.add(new_column_ge_predicate(get_type_info(LOGICAL_TYPE_INT), 0, "2000")));
     ConjunctivePredicates conjuncts1;
-    conjuncts1.vec_preds().push_back(pool.add(new_column_ge_predicate(get_type_info(OLAP_FIELD_TYPE_INT), 1, "2")));
+    conjuncts1.vec_preds().push_back(pool.add(new_column_ge_predicate(get_type_info(LOGICAL_TYPE_INT), 1, "2")));
     std::vector<uint8_t> dict_mapping;
     dict_mapping.resize(4);
     dict_mapping[2] = 1;
     dict_mapping[3] = 1;
     auto dict =
-            pool.add(new_column_dict_conjuct_predicate(get_type_info(OLAP_FIELD_TYPE_INT), 1, std::move(dict_mapping)));
+            pool.add(new_column_dict_conjuct_predicate(get_type_info(LOGICAL_TYPE_INT), 1, std::move(dict_mapping)));
     conjuncts1.non_vec_preds().push_back(dict);
 
     DisjunctivePredicates predicates;

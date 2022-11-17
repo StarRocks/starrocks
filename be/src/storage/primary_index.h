@@ -155,7 +155,7 @@ private:
     int64_t _table_id = 0;
     int64_t _tablet_id = 0;
     vectorized::Schema _pk_schema;
-    FieldType _enc_pk_type = OLAP_FIELD_TYPE_UNKNOWN;
+    LogicalType _enc_pk_type = LOGICAL_TYPE_UNKNOWN;
     std::unique_ptr<HashIndex> _pkey_to_rssid_rowid;
     std::unique_ptr<PersistentIndex> _persistent_index;
 };

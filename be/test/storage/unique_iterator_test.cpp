@@ -42,7 +42,7 @@ protected:
         void close() override {}
 
         static Schema new_schema() {
-            FieldPtr f = std::make_shared<Field>(0, "c1", get_type_info(OLAP_FIELD_TYPE_INT), false);
+            FieldPtr f = std::make_shared<Field>(0, "c1", get_type_info(LOGICAL_TYPE_INT), false);
             f->set_is_key(true);
             return Schema(std::vector<FieldPtr>{f});
         }

@@ -35,7 +35,7 @@ Status IndexedColumnReader::load(bool use_page_cache, bool kept_in_memory) {
     _use_page_cache = use_page_cache;
     _kept_in_memory = kept_in_memory;
 
-    _type_info = get_type_info((FieldType)_meta.data_type());
+    _type_info = get_type_info((LogicalType)_meta.data_type());
     if (_type_info == nullptr) {
         return Status::NotSupported(strings::Substitute("unsupported type=$0", _meta.data_type()));
     }
@@ -135,7 +135,7 @@ Status IndexedColumnIterator::seek_to_ordinal(ordinal_t idx) {
         // need to read the data page containing row at idx
         if (_reader->_has_index_page) {
             std::string key;
-            KeyCoderTraits<OLAP_FIELD_TYPE_UNSIGNED_BIGINT>::full_encode_ascending(&idx, &key);
+            KeyCoderTraits<LOGICAL_TYPE_UNSIGNED_BIGINT>::full_encode_ascending(&idx, &key);
             RETURN_IF_ERROR(_ordinal_iter.seek_at_or_before(key));
             RETURN_IF_ERROR(_read_data_page(_ordinal_iter.current_page_pointer()));
             _current_iter = &_ordinal_iter;

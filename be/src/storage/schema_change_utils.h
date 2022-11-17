@@ -36,7 +36,7 @@ public:
 
 private:
     const MaterializeTypeConverter* get_materialize_type_converter(const std::string& materialized_function,
-                                                                   FieldType type);
+                                                                   LogicalType type);
 
     // @brief column-mapping specification of new schema
     SchemaMapping _schema_mapping;

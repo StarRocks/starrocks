@@ -38,13 +38,13 @@ class BloomFilter;
 
 namespace starrocks::vectorized {
 
-template <FieldType ftype>
+template <LogicalType ftype>
 struct PredicateCmpTypeForField {
     using ValueType = typename CppTypeTraits<ftype>::CppType;
 };
 
 template <>
-struct PredicateCmpTypeForField<OLAP_FIELD_TYPE_JSON> {
+struct PredicateCmpTypeForField<LOGICAL_TYPE_JSON> {
     using ValueType = JsonValue;
 };
 

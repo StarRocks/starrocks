@@ -27,8 +27,9 @@ public:
 
     static bool is_supported(const vectorized::Schema& schema, const std::vector<ColumnId>& key_idxes);
 
-    // Return |OLAP_FIELD_TYPE_NONE| if no primary key contained in |schema|.
-    static FieldType encoded_primary_key_type(const vectorized::Schema& schema, const std::vector<ColumnId>& key_idxes);
+    // Return |LOGICAL_TYPE_NONE| if no primary key contained in |schema|.
+    static LogicalType encoded_primary_key_type(const vectorized::Schema& schema,
+                                                const std::vector<ColumnId>& key_idxes);
 
     // Return -1 if encoded key is not fixed size
     static size_t get_encoded_fixed_size(const vectorized::Schema& schema);

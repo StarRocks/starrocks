@@ -854,8 +854,8 @@ public:
     }
 };
 
-static std::unique_ptr<HashIndex> create_hash_index(FieldType key_type, size_t fix_size) {
-    if (key_type == OLAP_FIELD_TYPE_VARCHAR && fix_size > 0) {
+static std::unique_ptr<HashIndex> create_hash_index(LogicalType key_type, size_t fix_size) {
+    if (key_type == LOGICAL_TYPE_VARCHAR && fix_size > 0) {
         if (fix_size <= 8) {
             return std::make_unique<FixSliceHashIndex<2>>();
         } else if (fix_size <= 12) {
@@ -882,19 +882,19 @@ static std::unique_ptr<HashIndex> create_hash_index(FieldType key_type, size_t f
         return std::make_unique<HashIndexImpl<typename CppTypeTraits<type>::CppType>>()
 
     switch (key_type) {
-        CASE_TYPE(OLAP_FIELD_TYPE_BOOL);
-        CASE_TYPE(OLAP_FIELD_TYPE_TINYINT);
-        CASE_TYPE(OLAP_FIELD_TYPE_SMALLINT);
-        CASE_TYPE(OLAP_FIELD_TYPE_INT);
-        CASE_TYPE(OLAP_FIELD_TYPE_BIGINT);
-        CASE_TYPE(OLAP_FIELD_TYPE_LARGEINT);
-    case OLAP_FIELD_TYPE_CHAR:
+        CASE_TYPE(LOGICAL_TYPE_BOOL);
+        CASE_TYPE(LOGICAL_TYPE_TINYINT);
+        CASE_TYPE(LOGICAL_TYPE_SMALLINT);
+        CASE_TYPE(LOGICAL_TYPE_INT);
+        CASE_TYPE(LOGICAL_TYPE_BIGINT);
+        CASE_TYPE(LOGICAL_TYPE_LARGEINT);
+    case LOGICAL_TYPE_CHAR:
         return std::make_unique<ShardByLengthSliceHashIndex>();
-    case OLAP_FIELD_TYPE_VARCHAR:
+    case LOGICAL_TYPE_VARCHAR:
         return std::make_unique<ShardByLengthSliceHashIndex>();
-    case OLAP_FIELD_TYPE_DATE_V2:
+    case LOGICAL_TYPE_DATE_V2:
         return std::make_unique<HashIndexImpl<int32_t>>();
-    case OLAP_FIELD_TYPE_TIMESTAMP:
+    case LOGICAL_TYPE_TIMESTAMP:
         return std::make_unique<HashIndexImpl<int64_t>>();
     default:
         return nullptr;

@@ -71,23 +71,23 @@ static unique_ptr<Schema> create_schema(const string& desc, int nkey) {
         }
         ColumnId cid = i;
         string name = fs[0];
-        FieldType type = OLAP_FIELD_TYPE_UNKNOWN;
+        LogicalType type = LOGICAL_TYPE_UNKNOWN;
         if (fs[1] == "boolean") {
-            type = OLAP_FIELD_TYPE_BOOL;
+            type = LOGICAL_TYPE_BOOL;
         } else if (fs[1] == "tinyint") {
-            type = OLAP_FIELD_TYPE_TINYINT;
+            type = LOGICAL_TYPE_TINYINT;
         } else if (fs[1] == "smallint") {
-            type = OLAP_FIELD_TYPE_SMALLINT;
+            type = LOGICAL_TYPE_SMALLINT;
         } else if (fs[1] == "int") {
-            type = OLAP_FIELD_TYPE_INT;
+            type = LOGICAL_TYPE_INT;
         } else if (fs[1] == "bigint") {
-            type = OLAP_FIELD_TYPE_BIGINT;
+            type = LOGICAL_TYPE_BIGINT;
         } else if (fs[1] == "float") {
-            type = OLAP_FIELD_TYPE_FLOAT;
+            type = LOGICAL_TYPE_FLOAT;
         } else if (fs[1] == "double") {
-            type = OLAP_FIELD_TYPE_DOUBLE;
+            type = LOGICAL_TYPE_DOUBLE;
         } else if (fs[1] == "varchar") {
-            type = OLAP_FIELD_TYPE_VARCHAR;
+            type = LOGICAL_TYPE_VARCHAR;
         } else {
             CHECK(false) << "create_tuple_desc_slots type not support";
         }

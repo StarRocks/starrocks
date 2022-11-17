@@ -26,12 +26,12 @@ public:
     vectorized::SchemaPtr gen_v_schema(bool is_nullable);
     void check_chunk(Chunk* chunk, size_t column_size, size_t row_size);
     void check_chunk_nullable(Chunk* chunk, size_t column_size, size_t row_size);
-    void check_column(Column* column, FieldType type, size_t row_size);
+    void check_column(Column* column, LogicalType type, size_t row_size);
 
 private:
-    FieldType _type[9] = {OLAP_FIELD_TYPE_TINYINT, OLAP_FIELD_TYPE_SMALLINT, OLAP_FIELD_TYPE_INT,
-                          OLAP_FIELD_TYPE_BIGINT,  OLAP_FIELD_TYPE_LARGEINT, OLAP_FIELD_TYPE_FLOAT,
-                          OLAP_FIELD_TYPE_DOUBLE,  OLAP_FIELD_TYPE_VARCHAR,  OLAP_FIELD_TYPE_CHAR};
+    LogicalType _type[9] = {LOGICAL_TYPE_TINYINT, LOGICAL_TYPE_SMALLINT, LOGICAL_TYPE_INT,
+                            LOGICAL_TYPE_BIGINT,  LOGICAL_TYPE_LARGEINT, LOGICAL_TYPE_FLOAT,
+                            LOGICAL_TYPE_DOUBLE,  LOGICAL_TYPE_VARCHAR,  LOGICAL_TYPE_CHAR};
 
     PrimitiveType _primitive_type[9] = {
             PrimitiveType::TYPE_TINYINT, PrimitiveType::TYPE_SMALLINT, PrimitiveType::TYPE_INT,
@@ -109,15 +109,15 @@ void ChunkHelperTest::add_tablet_column(TabletSchemaPB& tablet_schema_pb, int32_
 
 vectorized::SchemaPtr ChunkHelperTest::gen_v_schema(bool is_nullable) {
     vectorized::Fields fields;
-    fields.emplace_back(std::make_shared<Field>(0, "c0", get_type_info(OLAP_FIELD_TYPE_TINYINT), is_nullable));
-    fields.emplace_back(std::make_shared<Field>(1, "c1", get_type_info(OLAP_FIELD_TYPE_SMALLINT), is_nullable));
-    fields.emplace_back(std::make_shared<Field>(2, "c2", get_type_info(OLAP_FIELD_TYPE_INT), is_nullable));
-    fields.emplace_back(std::make_shared<Field>(3, "c3", get_type_info(OLAP_FIELD_TYPE_BIGINT), is_nullable));
-    fields.emplace_back(std::make_shared<Field>(4, "c4", get_type_info(OLAP_FIELD_TYPE_LARGEINT), is_nullable));
-    fields.emplace_back(std::make_shared<Field>(5, "c5", get_type_info(OLAP_FIELD_TYPE_FLOAT), is_nullable));
-    fields.emplace_back(std::make_shared<Field>(6, "c6", get_type_info(OLAP_FIELD_TYPE_DOUBLE), is_nullable));
-    fields.emplace_back(std::make_shared<Field>(7, "c7", get_type_info(OLAP_FIELD_TYPE_VARCHAR), is_nullable));
-    fields.emplace_back(std::make_shared<Field>(8, "c8", get_type_info(OLAP_FIELD_TYPE_CHAR), is_nullable));
+    fields.emplace_back(std::make_shared<Field>(0, "c0", get_type_info(LOGICAL_TYPE_TINYINT), is_nullable));
+    fields.emplace_back(std::make_shared<Field>(1, "c1", get_type_info(LOGICAL_TYPE_SMALLINT), is_nullable));
+    fields.emplace_back(std::make_shared<Field>(2, "c2", get_type_info(LOGICAL_TYPE_INT), is_nullable));
+    fields.emplace_back(std::make_shared<Field>(3, "c3", get_type_info(LOGICAL_TYPE_BIGINT), is_nullable));
+    fields.emplace_back(std::make_shared<Field>(4, "c4", get_type_info(LOGICAL_TYPE_LARGEINT), is_nullable));
+    fields.emplace_back(std::make_shared<Field>(5, "c5", get_type_info(LOGICAL_TYPE_FLOAT), is_nullable));
+    fields.emplace_back(std::make_shared<Field>(6, "c6", get_type_info(LOGICAL_TYPE_DOUBLE), is_nullable));
+    fields.emplace_back(std::make_shared<Field>(7, "c7", get_type_info(LOGICAL_TYPE_VARCHAR), is_nullable));
+    fields.emplace_back(std::make_shared<Field>(8, "c8", get_type_info(LOGICAL_TYPE_CHAR), is_nullable));
     return std::make_shared<Schema>(fields);
 }
 
@@ -137,60 +137,60 @@ void ChunkHelperTest::check_chunk_nullable(Chunk* chunk, size_t column_size, siz
     }
 }
 
-void ChunkHelperTest::check_column(Column* column, FieldType type, size_t row_size) {
+void ChunkHelperTest::check_column(Column* column, LogicalType type, size_t row_size) {
     ASSERT_EQ(column->size(), row_size);
 
     switch (type) {
-    case OLAP_FIELD_TYPE_TINYINT: {
+    case LOGICAL_TYPE_TINYINT: {
         const auto* data = reinterpret_cast<const int8_t*>(static_cast<Int8Column*>(column)->raw_data());
         for (int i = 0; i < row_size; i++) {
             ASSERT_EQ(*(data + i), static_cast<int8_t>(i * 2));
         }
         break;
     }
-    case OLAP_FIELD_TYPE_SMALLINT: {
+    case LOGICAL_TYPE_SMALLINT: {
         const auto* data = reinterpret_cast<const int16_t*>(static_cast<Int16Column*>(column)->raw_data());
         for (int i = 0; i < row_size; i++) {
             ASSERT_EQ(*(data + i), static_cast<int16_t>(i * 2 * 10));
         }
         break;
     }
-    case OLAP_FIELD_TYPE_INT: {
+    case LOGICAL_TYPE_INT: {
         const auto* data = reinterpret_cast<const int32_t*>(static_cast<Int32Column*>(column)->raw_data());
         for (int i = 0; i < row_size; i++) {
             ASSERT_EQ(*(data + i), static_cast<int32_t>(i * 2 * 100));
         }
         break;
     }
-    case OLAP_FIELD_TYPE_BIGINT: {
+    case LOGICAL_TYPE_BIGINT: {
         const auto* data = reinterpret_cast<const int64_t*>(static_cast<Int64Column*>(column)->raw_data());
         for (int i = 0; i < row_size; i++) {
             ASSERT_EQ(*(data + i), static_cast<int64_t>(i * 2 * 1000));
         }
         break;
     }
-    case OLAP_FIELD_TYPE_LARGEINT: {
+    case LOGICAL_TYPE_LARGEINT: {
         const auto* data = reinterpret_cast<const int128_t*>(static_cast<Int128Column*>(column)->raw_data());
         for (int i = 0; i < row_size; i++) {
             ASSERT_EQ(*(data + i), static_cast<int128_t>(i * 2 * 10000));
         }
         break;
     }
-    case OLAP_FIELD_TYPE_FLOAT: {
+    case LOGICAL_TYPE_FLOAT: {
         const auto* data = reinterpret_cast<const float*>(static_cast<FloatColumn*>(column)->raw_data());
         for (int i = 0; i < row_size; i++) {
             ASSERT_EQ(*(data + i), static_cast<float>(i * 2 * 100000));
         }
         break;
     }
-    case OLAP_FIELD_TYPE_DOUBLE: {
+    case LOGICAL_TYPE_DOUBLE: {
         const auto* data = reinterpret_cast<const double*>(static_cast<DoubleColumn*>(column)->raw_data());
         for (int i = 0; i < row_size; i++) {
             ASSERT_EQ(*(data + i), static_cast<double>(i * 2 * 1000000));
         }
         break;
     }
-    case OLAP_FIELD_TYPE_VARCHAR: {
+    case LOGICAL_TYPE_VARCHAR: {
         const auto* data = reinterpret_cast<const BinaryColumn*>(column);
         for (int i = 0; i < row_size; i++) {
             Slice l = data->get_slice(i);
@@ -199,7 +199,7 @@ void ChunkHelperTest::check_column(Column* column, FieldType type, size_t row_si
         }
         break;
     }
-    case OLAP_FIELD_TYPE_CHAR: {
+    case LOGICAL_TYPE_CHAR: {
         const auto* data = reinterpret_cast<const BinaryColumn*>(column);
         for (int i = 0; i < row_size; i++) {
             Slice l = data->get_slice(i);

@@ -36,7 +36,7 @@ namespace starrocks {
 
 static const size_t PLAIN_PAGE_HEADER_SIZE = sizeof(uint32_t);
 
-template <FieldType Type>
+template <LogicalType Type>
 class PlainPageBuilder final : public PageBuilder {
 public:
     PlainPageBuilder(const PageBuilderOptions& options) : _options(options) {
@@ -108,7 +108,7 @@ private:
     faststring _last_value;
 };
 
-template <FieldType Type>
+template <LogicalType Type>
 class PlainPageDecoder : public PageDecoder {
 public:
     PlainPageDecoder(Slice data, const PageDecoderOptions& options)

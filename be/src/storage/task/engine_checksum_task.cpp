@@ -70,12 +70,12 @@ Status EngineChecksumTask::_compute_checksum() {
 
     size_t num_columns = tablet_schema.num_columns();
     for (size_t i = 0; i < num_columns; ++i) {
-        FieldType type = tablet_schema.column(i).type();
+        LogicalType type = tablet_schema.column(i).type();
         // The approximation of FLOAT/DOUBLE in a certain precision range, the binary of byte is not
         // a fixed value, so these two types are ignored in calculating checksum.
         // And also HLL/OBJCET/PERCENTILE is too large to calculate the checksum.
-        if (type == OLAP_FIELD_TYPE_FLOAT || type == OLAP_FIELD_TYPE_DOUBLE || type == OLAP_FIELD_TYPE_HLL ||
-            type == OLAP_FIELD_TYPE_OBJECT || type == OLAP_FIELD_TYPE_PERCENTILE || type == OLAP_FIELD_TYPE_JSON) {
+        if (type == LOGICAL_TYPE_FLOAT || type == LOGICAL_TYPE_DOUBLE || type == LOGICAL_TYPE_HLL ||
+            type == LOGICAL_TYPE_OBJECT || type == LOGICAL_TYPE_PERCENTILE || type == LOGICAL_TYPE_JSON) {
             continue;
         }
         return_columns.push_back(i);
