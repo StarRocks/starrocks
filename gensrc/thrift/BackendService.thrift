@@ -156,6 +156,4 @@ service BackendService {
     // release the context resource associated with the context_id
     StarrocksExternalService.TScanCloseResult close_scanner(1: StarrocksExternalService.TScanCloseParams params);
 
-    Status.TStatus submit_mv_maintenance_task(1: MVMaintenance.TMVMaintenanceTasks task);
-
 }

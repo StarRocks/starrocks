@@ -106,6 +106,10 @@ public:
     void get_pulsar_info(google::protobuf::RpcController* controller, const PPulsarProxyRequest* request,
                          PPulsarProxyResult* response, google::protobuf::Closure* done) override;
 
+    void submit_mv_maintenance_task(google::protobuf::RpcController* controller,
+                                    const PMVMaintenanceTaskRequest* request, PMVMaintenanceTaskResult* response,
+                                    google::protobuf::Closure* done) override;
+
 private:
     void _get_info_impl(const PProxyRequest* request, PProxyResult* response,
                         GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>* latch, int timeout_ms);

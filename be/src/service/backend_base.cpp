@@ -223,9 +223,4 @@ void BackendServiceBase::close_scanner(TScanCloseResult& result_, const TScanClo
     result_.status = t_status;
 }
 
-void BackendServiceBase::submit_mv_maintenance_task(TStatus& t_status, const TMVMaintenanceTasks& tasks) {
-    LOG(ERROR) << "not implemented";
-    return Status::NotSupported("TODO").to_thrift(&t_status);
-}
-
 } // namespace starrocks
