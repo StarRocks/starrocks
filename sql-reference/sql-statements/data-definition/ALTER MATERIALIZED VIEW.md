@@ -16,7 +16,7 @@ ALTER MATERIALIZED VIEW [database.]mv_name {REFRESH ASYNC new_refresh_scheme_des
 | ----------------------- | -------- | ------------------------------------------------------------ |
 | mv_name                 | 是       | 待修改属性的物化视图的名称。                                 |
 | new_refresh_scheme_desc | 否       | 新的异步刷新规则，详细信息请见 [SQL 参考 - CREATE MATERIALIZED VIEW - 参数](../data-definition/CREATE%20MATERIALIZED%20VIEW.md#参数)。 |
-| new_mv_name             | 否       | 新的物化视图的名称                                           |
+| new_mv_name             | 否       | 新的物化视图的名称。                                           |
 
 ## 示例
 
