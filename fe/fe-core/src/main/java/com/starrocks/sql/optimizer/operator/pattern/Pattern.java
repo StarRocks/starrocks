@@ -71,7 +71,15 @@ public class Pattern {
         return OperatorType.PATTERN_SCAN.equals(opType);
     }
 
+    public boolean isPatternMultiJoin() {
+        return OperatorType.PATTERN_MULTIJOIN.equals(opType);
+    }
+
     public boolean matchWithoutChild(GroupExpression expression) {
+        return matchWithoutChild(expression, 0);
+    }
+
+    public boolean matchWithoutChild(GroupExpression expression, int level) {
         if (expression == null) {
             return false;
         }
@@ -86,6 +94,10 @@ public class Pattern {
         }
 
         if (isPatternScan() && scanTypes.contains(expression.getOp().getOpType())) {
+            return true;
+        }
+
+        if (isPatternMultiJoin() && isMultiJoin(expression.getOp().getOpType(), level)) {
             return true;
         }
 
@@ -111,5 +123,15 @@ public class Pattern {
         }
 
         return getOpType().equals(expression.getOp().getOpType());
+    }
+
+    private boolean isMultiJoin(OperatorType operatorType, int level) {
+        if (scanTypes.contains(operatorType) && level != 0) {
+            return true;
+        } else if (operatorType.equals(OperatorType.LOGICAL_JOIN)) {
+            return true;
+        } else {
+            return false;
+        }
     }
 }
