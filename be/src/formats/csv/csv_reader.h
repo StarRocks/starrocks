@@ -22,7 +22,7 @@ public:
     // Does NOT take the ownership of |buff|.
     CSVBuffer(char* buff, size_t cap) : _begin(buff), _position_offset(0), _limit_offset(0), _end(buff + cap) {}
 
-    void append(char c) { 
+    void append(char c) {
         *(_begin + _limit_offset) = c;
         _limit_offset++;
     }
@@ -41,17 +41,17 @@ public:
     char* position() { return _begin + _position_offset; }
 
     // Returns this buffer's read position offset.
-    size_t position_offset() {return _position_offset;}
+    size_t position_offset() { return _position_offset; }
 
-    void set_position_offset(size_t position_offset) {_position_offset = position_offset;}
+    void set_position_offset(size_t position_offset) { _position_offset = position_offset; }
 
     // Returns this buffer's write position.
     char* limit() { return _begin + _limit_offset; }
 
     // Returns this buffer's write position offset.
-    size_t limit_offset() { return _limit_offset;}
+    size_t limit_offset() { return _limit_offset; }
 
-    void set_limit_offset(size_t limit_offset) {_limit_offset = limit_offset;}
+    void set_limit_offset(size_t limit_offset) { _limit_offset = limit_offset; }
 
     void add_limit(size_t n) { _limit_offset += n; }
 
@@ -66,9 +66,9 @@ public:
 
     void skip(size_t n) { _position_offset += n; }
 
-    char get_char(size_t p) {return _begin[p];}
+    char get_char(size_t p) { return _begin[p]; }
 
-    char* base_ptr() {return _begin;}
+    char* base_ptr() { return _begin; }
 
     // Compacts this buffer.
     // The bytes between the buffer's current position and its limit, if any,
@@ -86,15 +86,7 @@ private:
     char* _end;
 };
 
-enum ParseState {
-    START = 0,
-    ORDINARY = 1,
-    DELIMITER = 2,
-    NEWLINE = 3,
-    ESCAPE = 4,
-    ENCLOSE = 5,
-    ENCLOSE_ESCAPE = 6
-};
+enum ParseState { START = 0, ORDINARY = 1, DELIMITER = 2, NEWLINE = 3, ESCAPE = 4, ENCLOSE = 5, ENCLOSE_ESCAPE = 6 };
 
 class CSVReader {
 #ifndef BE_TEST

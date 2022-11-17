@@ -54,7 +54,7 @@ Status CSVScanner::ScannerCSVReader::_fill_buffer() {
             }
         }
         if (n == 0) {
-            _buff.skip(_row_delimiter_length);    
+            _buff.skip(_row_delimiter_length);
             // Has reached the end of file and the buffer is empty.
             return Status::EndOfFile(_file->filename());
         }
@@ -175,7 +175,8 @@ StatusOr<ChunkPtr> CSVScanner::get_next() {
                 return st;
             }
 
-            _curr_reader = std::make_unique<ScannerCSVReader>(file, _record_delimiter, _field_delimiter, _trim_space, _escape, _enclose);
+            _curr_reader = std::make_unique<ScannerCSVReader>(file, _record_delimiter, _field_delimiter, _trim_space,
+                                                              _escape, _enclose);
             _curr_reader->set_counter(_counter);
             if (_scan_range.ranges[_curr_file_index].size > 0 &&
                 _scan_range.ranges[_curr_file_index].format_type == TFileFormatType::FORMAT_CSV_PLAIN) {
@@ -270,7 +271,7 @@ Status CSVScanner::_parse_csv_v2(Chunk* chunk) {
                 std::stringstream error_msg;
                 error_msg << "Value count does not match column count. "
                           << "Expect " << _num_fields_in_csv << ", but got " << fields.size();
-                
+
                 _report_error(record.to_string(), error_msg.str());
             }
             continue;

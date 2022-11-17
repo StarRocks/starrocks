@@ -146,7 +146,7 @@ Status HdfsScannerCSVReader::_fill_buffer() {
         }
         if (n == 0) {
             _buff.skip(_row_delimiter_length);
-            return Status::EndOfFile(_file->filename());  
+            return Status::EndOfFile(_file->filename());
         }
     }
 
@@ -183,7 +183,6 @@ Status HdfsTextScanner::do_init(RuntimeState* runtime_state, const HdfsScannerPa
     } else {
         _escape = 0;
     }
-
 
     // In Hive, users can specify collection delimiter and mapkey delimiter as string type,
     // but in fact, only the first character of the delimiter will take effect.
@@ -540,7 +539,6 @@ Status HdfsTextScanner::_create_or_reinit_reader() {
                 }
             }
         }
-
     }
     return Status::OK();
 }

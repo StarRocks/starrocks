@@ -38,7 +38,8 @@ protected:
                                                    const std::vector<TBrokerRangeDesc>& ranges,
                                                    const string& multi_row_delimiter = "\n",
                                                    const string& multi_column_separator = "|",
-                                                   const int64_t skip_header = 0, const bool trim_space = false, const char enclose = 0, const char escape = 0) {
+                                                   const int64_t skip_header = 0, const bool trim_space = false,
+                                                   const char enclose = 0, const char escape = 0) {
         /// Init DescriptorTable
         TDescriptorTableBuilder desc_tbl_builder;
         TTupleDescriptorBuilder tuple_desc_builder;
@@ -612,7 +613,8 @@ TEST_F(CSVScannerTest, test_trim_space_with_ENCLOSE) {
 }
 
 TEST_F(CSVScannerTest, test_ENCLOSE) {
-    std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_VARCHAR)};
+    std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_VARCHAR),
+                                      TypeDescriptor(TYPE_VARCHAR)};
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -653,7 +655,8 @@ TEST_F(CSVScannerTest, test_ENCLOSE) {
 }
 
 TEST_F(CSVScannerTest, test_ESCAPE) {
-    std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_VARCHAR)};
+    std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_VARCHAR),
+                                      TypeDescriptor(TYPE_VARCHAR)};
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
