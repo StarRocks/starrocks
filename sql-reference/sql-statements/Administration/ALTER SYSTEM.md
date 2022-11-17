@@ -8,7 +8,7 @@
 
 ### FE
 
-- 添加 Follower FE。添加后，可使用 `SHOW PROC '/frontends'\G;` 命令查看新增FE 的状态。
+- 添加 Follower FE。添加后，可使用 `SHOW PROC '/frontends'\G` 命令查看新增FE 的状态。
 
    ```SQL
     ALTER SYSTEM ADD FOLLOWER "host:edit_log_port"[, ...];
@@ -20,7 +20,7 @@
     ALTER SYSTEM DROP FOLLOWER "host:edit_log_port"[, ...];
     ```
 
-- 添加 Observer FE。添加后，可通过 `SHOW PROC '/frontends'\G;` 命令查看新增FE 的状态。
+- 添加 Observer FE。添加后，可通过 `SHOW PROC '/frontends'\G` 命令查看新增FE 的状态。
 
     ```SQL
     ALTER SYSTEM ADD OBSERVER "host:edit_log_port"[, ...];
