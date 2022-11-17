@@ -435,7 +435,7 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
     if (!http_req->header(HTTP_TRIM_SPACE).empty()) {
         if (boost::iequals(http_req->header(HTTP_TRIM_SPACE), "false")) {
             request.__set_trimSpace(false);
-        } else if (boost::iequals(http_req->header(HTTP_TRIM_SPACE), "false")) {
+        } else if (boost::iequals(http_req->header(HTTP_TRIM_SPACE), "true")) {
             request.__set_trimSpace(true);
         } else {
             return Status::InvalidArgument("Invalid trim space format. Must be bool type");

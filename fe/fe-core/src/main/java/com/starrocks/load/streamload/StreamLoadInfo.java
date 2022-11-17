@@ -314,14 +314,14 @@ public class StreamLoadInfo {
         if (request.isSetSkipHeader()) {
             skipHeader = request.getSkipHeader();
         }
-        if (request.isSetTrimSpace()) {
-            trimSpace = request.getTrimSpace();
-        }
         if (request.isSetEnclose()) {
             enclose = request.getEnclose();
         }
         if (request.isSetEscape()) {
             escape = request.getEscape();
+        }
+        if (request.isSetTrimSpace()) {
+            trimSpace = request.isSetTrimSpace();
         }
         if (request.isSetPartitions()) {
             String[] partNames = PART_NAME_SPLIT.split(request.getPartitions().trim());
