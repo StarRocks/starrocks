@@ -11,6 +11,10 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.load.loadv2.LoadJob;
+import com.starrocks.load.loadv2.SparkLoadJob;
+import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
@@ -27,7 +31,9 @@ import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
+import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.AlterResourceStmt;
+import com.starrocks.sql.ast.AlterRoutineLoadStmt;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AnalyzeStmt;
@@ -37,11 +43,13 @@ import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.CancelAlterSystemStmt;
+import com.starrocks.sql.ast.CancelLoadStmt;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateFileStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateRoleStmt;
+import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DelSqlBlackListStmt;
@@ -61,8 +69,11 @@ import com.starrocks.sql.ast.InstallPluginStmt;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.KillAnalyzeStmt;
 import com.starrocks.sql.ast.KillStmt;
+import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.ast.PauseRoutineLoadStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RecoverDbStmt;
+import com.starrocks.sql.ast.ResumeRoutineLoadStmt;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.SetPassVar;
@@ -82,9 +93,12 @@ import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowFrontendsStmt;
 import com.starrocks.sql.ast.ShowGrantsStmt;
 import com.starrocks.sql.ast.ShowHistogramStatsMetaStmt;
+import com.starrocks.sql.ast.ShowLoadStmt;
 import com.starrocks.sql.ast.ShowPluginsStmt;
 import com.starrocks.sql.ast.ShowProcStmt;
 import com.starrocks.sql.ast.ShowRolesStmt;
+import com.starrocks.sql.ast.ShowRoutineLoadStmt;
+import com.starrocks.sql.ast.ShowRoutineLoadTaskStmt;
 import com.starrocks.sql.ast.ShowSmallFilesStmt;
 import com.starrocks.sql.ast.ShowSqlBlackListStmt;
 import com.starrocks.sql.ast.ShowTabletStmt;
@@ -92,9 +106,11 @@ import com.starrocks.sql.ast.ShowTransactionStmt;
 import com.starrocks.sql.ast.ShowUserPropertyStmt;
 import com.starrocks.sql.ast.ShowVariablesStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.StopRoutineLoadStmt;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UninstallPluginStmt;
+import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.UseCatalogStmt;
 import com.starrocks.sql.ast.UseDbStmt;
 import com.starrocks.sql.ast.ViewRelation;
@@ -103,6 +119,7 @@ import com.starrocks.statistic.AnalyzeManager;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.StatsConstants;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
@@ -122,11 +139,51 @@ public class PrivilegeCheckerV2 {
         if (!CatalogMgr.isInternalCatalog(tableName.getCatalog())) {
             throw new SemanticException(EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG);
         }
+        checkTableAction(context, tableName.getDb(), tableName.getTbl(), action);
+    }
+
+    public static void checkTableAction(ConnectContext context,
+                                        String dbName, String tableName,
+                                        PrivilegeType.TableAction action) {
         String actionStr = action.toString();
-        if (!PrivilegeManager.checkTableAction(context, tableName.getDb(), tableName.getTbl(), action)) {
+        if (!PrivilegeManager.checkTableAction(context, dbName, tableName, action)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR,
-                    actionStr, context.getQualifiedUser(), context.getRemoteIP(), tableName);
+                                                actionStr, context.getQualifiedUser(), context.getRemoteIP(), tableName);
         }
+    }
+
+    static void checkAnyActionOnTable(ConnectContext context, TableName tableName) {
+        if (!CatalogMgr.isInternalCatalog(tableName.getCatalog())) {
+            throw new SemanticException(EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG);
+        }
+        checkAnyActionOnTable(context, tableName.getDb(), tableName.getTbl());
+    }
+
+    static void checkAnyActionOnTable(ConnectContext context, String dbName, String tableName) {
+        if (!PrivilegeManager.checkAnyActionOnTable(context, dbName, tableName)) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_PRIVILEGE_ACCESS_TABLE_DENIED,
+                                                context.getQualifiedUser(), tableName);
+        }
+    }
+
+    static String getTableNameByRoutineLoadLabel(ConnectContext context,
+                                                 String dbName, String labelName) {
+        RoutineLoadJob job = null;
+        String tableName = null;
+        try {
+            job = context.getGlobalStateMgr().getRoutineLoadManager().getJob(dbName, labelName);
+        } catch (MetaNotFoundException e) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_PRIVILEGE_ROUTINELODE_JOB_NOT_FOUND, labelName);
+        }
+        if (null == job) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_PRIVILEGE_ROUTINELODE_JOB_NOT_FOUND, labelName);
+        }
+        try {
+            tableName = job.getTableName();
+        } catch (MetaNotFoundException e) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_PRIVILEGE_TABLE_NOT_FOUND);
+        }
+        return tableName;
     }
 
     static void checkDbAction(ConnectContext context, String catalogName, String dbName,
@@ -263,7 +320,7 @@ public class PrivilegeCheckerV2 {
             }
         } else if (analyzeJob != null) {
             Set<TableName> tableNames = PrivilegeCheckerV2.getAllTableNamesForAnalyzeJobStmt(analyzeJob.getDbId(),
-                    analyzeJob.getTableId());
+                                                                                             analyzeJob.getTableId());
             tableNames.forEach(tableName -> {
                 Database db = GlobalStateMgr.getCurrentState().getDb(tableName.getDb());
                 if (db != null) {
@@ -271,6 +328,49 @@ public class PrivilegeCheckerV2 {
                     checkTblPrivilegeForKillAnalyzeStmt(context, db, table, analyzeId);
                 }
             });
+        }
+    }
+
+    static void checkOperateLoadPrivilege(ConnectContext context, String dbName, String label) {
+        GlobalStateMgr globalStateMgr = context.getGlobalStateMgr();
+        Database db = globalStateMgr.getDb(dbName);
+        if (db == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_PRIVILEGE_DB_NOT_FOUND, dbName);
+        }
+        List<LoadJob> loadJobs = globalStateMgr.getLoadManager().
+                                                getLoadJobsByDb(db.getId(), label, false);
+        List<String> forbiddenInsertTableList = new ArrayList<>();
+        List<String> forbiddenUseResourceList = new ArrayList<>();
+        loadJobs.forEach(loadJob -> {
+            try {
+                if (loadJob instanceof SparkLoadJob &&
+                        !PrivilegeManager.checkResourceAction(context, loadJob.getResourceName(),
+                                                              PrivilegeType.ResourceAction.USAGE)) {
+                    forbiddenUseResourceList.add(loadJob.getResourceName());
+                }
+                loadJob.getTableNames().forEach(tableName -> {
+                    if (!PrivilegeManager.checkTableAction(context, dbName, tableName,
+                                                           PrivilegeType.TableAction.INSERT)) {
+                        forbiddenInsertTableList.add(tableName);
+                    }
+                });
+            } catch (MetaNotFoundException e) {
+                throw new RuntimeException(e);
+            }
+        });
+        if (forbiddenUseResourceList.size() > 0) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_PRIVILEGE_ACCESS_RESOURCE_DENIED,
+                                                PrivilegeType.ResourceAction.USAGE.toString(),
+                                                context.getQualifiedUser(),
+                                                context.getRemoteIP(),
+                                                forbiddenUseResourceList.toString());
+        }
+        if (forbiddenInsertTableList.size() > 0) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR,
+                                                PrivilegeType.TableAction.INSERT.toString(),
+                                                context.getQualifiedUser(),
+                                                context.getRemoteIP(),
+                                                forbiddenInsertTableList.toString());
         }
     }
 
@@ -291,6 +391,108 @@ public class PrivilegeCheckerV2 {
         @Override
         public Void visitInsertStatement(InsertStmt statement, ConnectContext session) {
             checkTableAction(session, statement.getTableName(), PrivilegeType.TableAction.INSERT);
+            return null;
+        }
+
+        @Override
+        public Void visitUpdateStatement(UpdateStmt statement, ConnectContext context) {
+            checkTableAction(context, statement.getTableName(), PrivilegeType.TableAction.UPDATE);
+            return null;
+        }
+
+        // --------------------------------- Routine Load Statement ---------------------------------
+        public Void visitCreateRoutineLoadStatement(CreateRoutineLoadStmt statement, ConnectContext context) {
+            checkTableAction(context, statement.getDBName(), statement.getTableName(),
+                                          PrivilegeType.TableAction.INSERT);
+            return null;
+        }
+
+        @Override
+        public Void visitAlterRoutineLoadStatement(AlterRoutineLoadStmt statement, ConnectContext context) {
+            String tableName = getTableNameByRoutineLoadLabel(context, statement.getDbName(), statement.getLabel());
+            checkTableAction(context, statement.getDbName(), tableName, PrivilegeType.TableAction.INSERT);
+            return null;
+        }
+
+        @Override
+        public Void visitStopRoutineLoadStatement(StopRoutineLoadStmt statement, ConnectContext context) {
+            String tableName = getTableNameByRoutineLoadLabel(context, statement.getDbFullName(), statement.getName());
+            checkTableAction(context, statement.getDbFullName(), tableName, PrivilegeType.TableAction.INSERT);
+            return null;
+        }
+
+        @Override
+        public Void visitPauseRoutineLoadStatement(PauseRoutineLoadStmt statement, ConnectContext context) {
+            String tableName = getTableNameByRoutineLoadLabel(context, statement.getDbFullName(), statement.getName());
+            checkTableAction(context, statement.getDbFullName(), tableName, PrivilegeType.TableAction.INSERT);
+            return null;
+        }
+
+        @Override
+        public Void visitResumeRoutineLoadStatement(ResumeRoutineLoadStmt statement, ConnectContext context) {
+            String tableName = getTableNameByRoutineLoadLabel(context, statement.getDbFullName(), statement.getName());
+            checkTableAction(context, statement.getDbFullName(), tableName, PrivilegeType.TableAction.INSERT);
+            return null;
+        }
+
+        @Override
+        public Void visitShowRoutineLoadStatement(ShowRoutineLoadStmt statement, ConnectContext context) {
+            // `show routine load` only show tables that user has any privilege on, we will check it in
+            // the execution logic, not here, see `ShowExecutor#handleShowRoutineLoad()` for details.
+            return null;
+        }
+
+        @Override
+        public Void visitShowRoutineLoadTaskStatement(ShowRoutineLoadTaskStmt statement, ConnectContext context) {
+            // `show routine load task` only show tables that user has any privilege on, we will check it in
+            // the execution logic, not here, see `ShowExecutor#handleShowRoutineLoadTask()` for details.
+            return null;
+        }
+
+        // --------------------------------- Load Statement -------------------------------------
+        @Override
+        public Void visitAlterLoadStatement(AlterLoadStmt statement, ConnectContext context) {
+            checkOperateLoadPrivilege(context, statement.getDbName(), statement.getLabel());
+            return null;
+        }
+
+        @Override
+        public Void visitLoadStatement(LoadStmt statement, ConnectContext context) {
+            // check resource privilege
+            if (null != statement.getResourceDesc()) {
+                String resourceName = statement.getResourceDesc().getName();
+                if (!PrivilegeManager.checkResourceAction(context, resourceName, PrivilegeType.ResourceAction.USAGE)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USAGE");
+                }
+            }
+            // check table privilege
+            String dbName = statement.getLabel().getDbName();
+            List<String> forbiddenInsertTableList = new ArrayList<>();
+            statement.getDataDescriptions().forEach(dataDescription -> {
+                String tableName = dataDescription.getTableName();
+                if (!PrivilegeManager.checkTableAction(context, dbName, tableName, PrivilegeType.TableAction.INSERT)) {
+                    forbiddenInsertTableList.add(tableName);
+                }
+            });
+            if (forbiddenInsertTableList.size() > 0) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR,
+                                                    PrivilegeType.TableAction.INSERT.toString(),
+                                                    context.getQualifiedUser(),
+                                                    context.getRemoteIP(),
+                                                    forbiddenInsertTableList.toString());
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowLoadStatement(ShowLoadStmt statement, ConnectContext context) {
+            // No authorization required
+            return null;
+        }
+
+        @Override
+        public Void visitCancelLoadStatement(CancelLoadStmt statement, ConnectContext context) {
+            checkOperateLoadPrivilege(context, statement.getDbName(), statement.getLabel());
             return null;
         }
 
@@ -775,7 +977,7 @@ public class PrivilegeCheckerV2 {
         // ---------------------------------------- Show Transaction Statement ---------------------------
         @Override
         public Void visitShowTransactionStatement(ShowTransactionStmt statement, ConnectContext context) {
-            // No authentication required
+            // No authorization required
             return null;
         }
 
@@ -814,7 +1016,7 @@ public class PrivilegeCheckerV2 {
         // ---------------------------------------- Show Variables Statement ------------------------------
         @Override
         public Void visitShowVariablesStatement(ShowVariablesStmt statement, ConnectContext context) {
-            // No authentication required
+            // No authorization required
             return null;
         }
 
