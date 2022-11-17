@@ -2,7 +2,7 @@
 
 ## 功能
 
-查看指定逻辑视图的创建语句。只有拥有该视图和视图对应基表的`SELECT_PRIV`权限的用户才可以查看。视图创建语句可以帮助您理解视图定义，作为后续修改视图或重建视图的参考。
+查看指定逻辑视图的创建语句。只有拥有该视图和视图对应基表的 `SELECT_PRIV` 权限的用户才可以查看。视图创建语句可以帮助您理解视图定义，作为后续修改视图或重建视图的参考。
 
 ## 语法
 
@@ -36,7 +36,7 @@ SHOW CREATE VIEW [db_name.]view_name;
 
 ## 示例
 
-创建表`example_table`。
+创建表 `example_table`。
 
 ```SQL
 CREATE TABLE example_table
@@ -51,14 +51,14 @@ AGGREGATE KEY(k1, k2)
 DISTRIBUTED BY HASH(k1) BUCKETS 10;
 ```
 
-在表`example_table`上创建视图`example_view`。
+在表 `example_table` 上创建视图 `example_view`。
 
 ```SQL
 CREATE VIEW example_view (k1, k2, k3, v1)
 AS SELECT k1, k2, k3, v1 FROM example_table;
 ```
 
-查看视图`example_view`的创建语句。
+查看视图 `example_view` 的创建语句。
 
 ```Plain
 SHOW CREATE VIEW example_db.example_view;
