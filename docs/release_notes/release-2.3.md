@@ -135,7 +135,7 @@ Release date: July 29, 2022
 
 - JDBC external tables can be used to conveniently query data in Oracle, PostgreSQL, MySQL, SQLServer, ClickHouse, and other databases. StarRocks also supports predicate pushdown, improving query performance. For more information, see [External table for a JDBC-compatible database](../data_source/External_table.md#external-table-for-a-JDBC-compatible-database).
 
-- [Preview] A new Data Source Connector framework is released to support external catalogs. You can use external catalogs to directly access and query Hive data without creating external tables. For more information, see [Use catalogs to manage internal and external data](../using_starrocks/Manage_data.md).
+- [Preview] A new Data Source Connector framework is released to support external catalogs. You can use external catalogs to directly access and query Hive data without creating external tables. For more information, see [Use catalogs to manage internal and external data](https://docs.starrocks.io/en-us/2.3/data_source/Manage_data).
 
 - Added the following functions:
   - [window_funnel](../sql-reference/sql-functions/aggregate-functions/window_funnel.md)
