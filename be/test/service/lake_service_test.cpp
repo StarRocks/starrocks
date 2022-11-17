@@ -218,6 +218,7 @@ TEST_F(LakeServiceTest, test_publish_version_for_write) {
         request.add_txn_ids(1001);
         _lake_service.publish_version(nullptr, &request, &response, nullptr);
         ASSERT_EQ(0, response.failed_tablets_size());
+        ASSERT_EQ(1, response.compaction_scores_size());
     }
     // Send publish version request again with an non-exist tablet
     {
@@ -231,6 +232,8 @@ TEST_F(LakeServiceTest, test_publish_version_for_write) {
         _lake_service.publish_version(nullptr, &request, &response, nullptr);
         ASSERT_EQ(1, response.failed_tablets_size());
         ASSERT_EQ(9999, response.failed_tablets(0));
+        ASSERT_EQ(1, response.compaction_scores_size());
+        ASSERT_TRUE(response.compaction_scores().contains(_tablet_id));
     }
     // Send publish version request again with an non-exist txnlog
     {
@@ -243,6 +246,7 @@ TEST_F(LakeServiceTest, test_publish_version_for_write) {
         _lake_service.publish_version(nullptr, &request, &response, nullptr);
         ASSERT_EQ(1, response.failed_tablets_size());
         ASSERT_EQ(_tablet_id, response.failed_tablets(0));
+        ASSERT_EQ(0, response.compaction_scores_size());
     }
     // Delete old version metadata then send publish version again
     tablet.delete_metadata(1);
@@ -256,6 +260,7 @@ TEST_F(LakeServiceTest, test_publish_version_for_write) {
         request.add_txn_ids(1001);
         _lake_service.publish_version(nullptr, &request, &response, nullptr);
         ASSERT_EQ(0, response.failed_tablets_size());
+        ASSERT_TRUE(response.compaction_scores().contains(_tablet_id));
     }
 }
 
@@ -447,6 +452,7 @@ TEST_F(LakeServiceTest, test_compact) {
         _lake_service.publish_version(&cntl, &request, &response, nullptr);
         ASSERT_FALSE(cntl.Failed());
         ASSERT_EQ(0, response.failed_tablets_size());
+        ASSERT_TRUE(response.compaction_scores().contains(_tablet_id));
     }
 }
 
@@ -605,6 +611,7 @@ TEST_F(LakeServiceTest, test_publish_version_for_schema_change) {
         _lake_service.publish_version(&cntl, &request, &response, nullptr);
         ASSERT_FALSE(cntl.Failed());
         ASSERT_EQ(0, response.failed_tablets_size());
+        ASSERT_TRUE(response.compaction_scores().contains(_tablet_id));
     }
 
     _tablet_mgr->prune_metacache();

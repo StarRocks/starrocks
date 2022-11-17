@@ -35,7 +35,8 @@
 namespace starrocks::lake {
 
 static Status apply_txn_log(const TxnLog& log, TabletMetadata* metadata);
-static Status publish(Tablet* tablet, int64_t base_version, int64_t new_version, const int64_t* txns, int txns_size);
+static StatusOr<double> publish(Tablet* tablet, int64_t base_version, int64_t new_version, const int64_t* txns,
+                                int txns_size);
 static void* metadata_gc_trigger(void* arg);
 static void* segment_gc_trigger(void* arg);
 
@@ -443,8 +444,8 @@ StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema(int64_t tablet_id) {
     return schema;
 }
 
-Status TabletManager::publish_version(int64_t tablet_id, int64_t base_version, int64_t new_version, const int64_t* txns,
-                                      int txns_size) {
+StatusOr<double> TabletManager::publish_version(int64_t tablet_id, int64_t base_version, int64_t new_version,
+                                                const int64_t* txns, int txns_size) {
     ASSIGN_OR_RETURN(auto tablet, get_tablet(tablet_id));
     return publish(&tablet, base_version, new_version, txns, txns_size);
 }
@@ -577,19 +578,28 @@ Status apply_txn_log(const TxnLog& log, TabletMetadata* metadata) {
     return Status::OK();
 }
 
-Status publish(Tablet* tablet, int64_t base_version, int64_t new_version, const int64_t* txns, int txns_size) {
+StatusOr<double> publish(Tablet* tablet, int64_t base_version, int64_t new_version, const int64_t* txns,
+                         int txns_size) {
+    auto compaction_score = [](const TabletMetadata& metadata) {
+        return std::max(base_compaction_score(metadata), cumulative_compaction_score(metadata));
+    };
+
     // Read base version metadata
     auto res = tablet->get_metadata(base_version);
-    if (!res.ok()) {
-        // Check if the new version metadata exist.
-        if (res.status().is_not_found() && tablet->get_metadata(new_version).ok()) {
-            // ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ optimization, there is no need to invoke `get_metadata` in all
-            // circumstances, e.g, network and permission problems.
-            return Status::OK();
+    if (res.status().is_not_found()) {
+        auto target_metadata_or = tablet->get_metadata(new_version);
+        if (target_metadata_or.ok()) {
+            // base version metadata does not exist but the new version metadata has been generated, maybe
+            // this is a duplicated publish version request.
+            return compaction_score(**target_metadata_or);
         }
+    }
+
+    if (!res.ok()) {
         LOG(WARNING) << "Fail to get " << tablet->metadata_location(base_version) << ": " << res.status();
         return res.status();
     }
+
     const TabletMetadataPtr& base_metadata = res.value();
 
     // make a copy of metadata
@@ -601,11 +611,17 @@ Status publish(Tablet* tablet, int64_t base_version, int64_t new_version, const 
     for (int i = 0; i < txns_size; i++) {
         auto txn_id = txns[i];
         auto txn_log_st = tablet->get_txn_log(txn_id);
-        if (txn_log_st.status().is_not_found() && tablet->get_metadata(new_version).ok()) {
-            // txn log does not exist but the new version metadata has been generated, maybe
-            // this is a duplicated publish version request.
-            return Status::OK();
-        } else if (!txn_log_st.ok()) {
+
+        if (txn_log_st.status().is_not_found()) {
+            auto target_metadata_or = tablet->get_metadata(new_version);
+            if (target_metadata_or.ok()) {
+                // txn log does not exist but the new version metadata has been generated, maybe
+                // this is a duplicated publish version request.
+                return compaction_score(**target_metadata_or);
+            }
+        }
+
+        if (!txn_log_st.ok()) {
             LOG(WARNING) << "Fail to get " << tablet->txn_log_location(txn_id) << ": " << txn_log_st.status();
             return txn_log_st.status();
         }
@@ -629,11 +645,16 @@ Status publish(Tablet* tablet, int64_t base_version, int64_t new_version, const 
         DCHECK(base_version == 1 && txns_size == 1);
         for (int64_t v = alter_version + 1; v < new_version; ++v) {
             auto txn_vlog = tablet->get_txn_vlog(v);
-            if (txn_vlog.status().is_not_found() && tablet->get_metadata(new_version).ok()) {
-                // txn version log does not exist but the new version metadata has been generated, maybe
-                // this is a duplicated publish version request.
-                return Status::OK();
-            } else if (!txn_vlog.ok()) {
+            if (txn_vlog.status().is_not_found()) {
+                auto target_metadata_or = tablet->get_metadata(new_version);
+                if (target_metadata_or.ok()) {
+                    // txn version log does not exist but the new version metadata has been generated, maybe
+                    // this is a duplicated publish version request.
+                    return compaction_score(**target_metadata_or);
+                }
+            }
+
+            if (!txn_vlog.ok()) {
                 LOG(WARNING) << "Fail to get " << tablet->txn_vlog_location(v) << ": " << txn_vlog.status();
                 return txn_vlog.status();
             }
@@ -665,7 +686,7 @@ Status publish(Tablet* tablet, int64_t base_version, int64_t new_version, const 
             LOG_IF(WARNING, !st.ok()) << "Fail to delete " << tablet->txn_vlog_location(v) << ": " << st;
         }
     }
-    return Status::OK();
+    return compaction_score(*new_metadata);
 }
 
 StatusOr<CompactionTaskPtr> TabletManager::compact(int64_t tablet_id, int64_t version, int64_t txn_id) {
