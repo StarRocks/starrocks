@@ -4,7 +4,7 @@
 
 该语句用于查看当前已创建的仓库。
 
-备份数据需要创建仓库，详细的备份恢复操作说明请参考: [备份恢复](/administration/Backup_and_restore.md)章节。
+备份数据需要创建仓库，详细的备份恢复操作说明请参考：[备份恢复](/administration/Backup_and_restore.md)章节。
 
 ## 语法
 
@@ -26,8 +26,8 @@ ErrMsg：     StarRocks 会定期检查仓库的连通性，如果出现问题�
 
 ## 示例
 
-1. 查看已创建的仓库：
+查看已创建的仓库：  
 
-    ```sql
-    SHOW REPOSITORIES;
-    ```
+```sql
+SHOW REPOSITORIES;
+```
