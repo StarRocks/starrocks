@@ -11,12 +11,12 @@
 
 namespace starrocks {
 
-VALUE_GUARD(FieldType, DecimalFTGuard, ft_is_decimal, OLAP_FIELD_TYPE_DECIMAL32, OLAP_FIELD_TYPE_DECIMAL64,
-            OLAP_FIELD_TYPE_DECIMAL128)
+VALUE_GUARD(LogicalType, DecimalFTGuard, ft_is_decimal, LOGICAL_TYPE_DECIMAL32, LOGICAL_TYPE_DECIMAL64,
+            LOGICAL_TYPE_DECIMAL128)
 
-VALUE_GUARD(FieldType, InvalidFTGuard, ft_is_invalid, OLAP_FIELD_TYPE_MAX_VALUE);
+VALUE_GUARD(LogicalType, InvalidFTGuard, ft_is_invalid, LOGICAL_TYPE_MAX_VALUE);
 
-template <FieldType TYPE, typename = DecimalFTGuard<TYPE>>
+template <LogicalType TYPE, typename = DecimalFTGuard<TYPE>>
 class DecimalTypeInfo final : public TypeInfo {
 public:
     virtual ~DecimalTypeInfo() = default;
@@ -61,11 +61,11 @@ public:
         return Status::OK();
     }
 
-    static inline Status to_decimal(FieldType src_type, FieldType dst_type, const void* src, void* dst,
+    static inline Status to_decimal(LogicalType src_type, LogicalType dst_type, const void* src, void* dst,
                                     int src_precision, int src_scale, int dst_precision, int dst_scale) {
 #define TO_DECIMAL_MACRO(n, m)                                                                               \
                                                                                                              \
-    if (src_type == OLAP_FIELD_TYPE_DECIMAL##n && dst_type == OLAP_FIELD_TYPE_DECIMAL##m) {                  \
+    if (src_type == LOGICAL_TYPE_DECIMAL##n && dst_type == LOGICAL_TYPE_DECIMAL##m) {                        \
         int##n##_t src_datum = 0;                                                                            \
         int##m##_t dst_datum = 0;                                                                            \
         src_datum = unaligned_load<typeof(src_datum)>(src);                                                  \
@@ -94,11 +94,12 @@ public:
         return Status::InvalidArgument("Fail to cast to decimal.");
     }
 
-    static inline Status to_decimal(FieldType src_type, FieldType dst_type, const Datum& src_datum, Datum& dst_datum,
-                                    int src_precision, int src_scale, int dst_precision, int dst_scale) {
+    static inline Status to_decimal(LogicalType src_type, LogicalType dst_type, const Datum& src_datum,
+                                    Datum& dst_datum, int src_precision, int src_scale, int dst_precision,
+                                    int dst_scale) {
 #define TO_DECIMAL_MACRO(n, m)                                                                           \
                                                                                                          \
-    if (src_type == OLAP_FIELD_TYPE_DECIMAL##n && dst_type == OLAP_FIELD_TYPE_DECIMAL##m) {              \
+    if (src_type == LOGICAL_TYPE_DECIMAL##n && dst_type == LOGICAL_TYPE_DECIMAL##m) {                    \
         int##m##_t dst_val = 0;                                                                          \
         int##n##_t src_val = src_datum.get_int##n();                                                     \
         auto overflow = to_decimal<int##n##_t, int##m##_t>(&src_val, &dst_val, src_precision, src_scale, \
@@ -166,7 +167,7 @@ public:
 
     int scale() const override { return _scale; }
 
-    FieldType type() const override { return TYPE; }
+    LogicalType type() const override { return TYPE; }
 
     std::string to_zone_map_string(const void* src) { return _delegate->to_string(src); }
 
@@ -183,14 +184,14 @@ private:
     const int _scale;
 };
 
-TypeInfoPtr get_decimal_type_info(FieldType type, int precision, int scale) {
+TypeInfoPtr get_decimal_type_info(LogicalType type, int precision, int scale) {
     switch (type) {
-    case OLAP_FIELD_TYPE_DECIMAL32:
-        return std::make_shared<DecimalTypeInfo<OLAP_FIELD_TYPE_DECIMAL32>>(precision, scale);
-    case OLAP_FIELD_TYPE_DECIMAL64:
-        return std::make_shared<DecimalTypeInfo<OLAP_FIELD_TYPE_DECIMAL64>>(precision, scale);
-    case OLAP_FIELD_TYPE_DECIMAL128:
-        return std::make_shared<DecimalTypeInfo<OLAP_FIELD_TYPE_DECIMAL128>>(precision, scale);
+    case LOGICAL_TYPE_DECIMAL32:
+        return std::make_shared<DecimalTypeInfo<LOGICAL_TYPE_DECIMAL32>>(precision, scale);
+    case LOGICAL_TYPE_DECIMAL64:
+        return std::make_shared<DecimalTypeInfo<LOGICAL_TYPE_DECIMAL64>>(precision, scale);
+    case LOGICAL_TYPE_DECIMAL128:
+        return std::make_shared<DecimalTypeInfo<LOGICAL_TYPE_DECIMAL128>>(precision, scale);
     default:
         return nullptr;
     }
@@ -198,16 +199,16 @@ TypeInfoPtr get_decimal_type_info(FieldType type, int precision, int scale) {
 
 std::string get_decimal_zone_map_string(TypeInfo* type_info, const char* value) {
     switch (type_info->type()) {
-    case OLAP_FIELD_TYPE_DECIMAL32: {
-        auto* decimal_type_info = down_cast<DecimalTypeInfo<OLAP_FIELD_TYPE_DECIMAL32>*>(type_info);
+    case LOGICAL_TYPE_DECIMAL32: {
+        auto* decimal_type_info = down_cast<DecimalTypeInfo<LOGICAL_TYPE_DECIMAL32>*>(type_info);
         return decimal_type_info->to_zone_map_string(value);
     }
-    case OLAP_FIELD_TYPE_DECIMAL64: {
-        auto* decimal_type_info = down_cast<DecimalTypeInfo<OLAP_FIELD_TYPE_DECIMAL64>*>(type_info);
+    case LOGICAL_TYPE_DECIMAL64: {
+        auto* decimal_type_info = down_cast<DecimalTypeInfo<LOGICAL_TYPE_DECIMAL64>*>(type_info);
         return decimal_type_info->to_zone_map_string(value);
     }
-    case OLAP_FIELD_TYPE_DECIMAL128: {
-        auto* decimal_type_info = down_cast<DecimalTypeInfo<OLAP_FIELD_TYPE_DECIMAL128>*>(type_info);
+    case LOGICAL_TYPE_DECIMAL128: {
+        auto* decimal_type_info = down_cast<DecimalTypeInfo<LOGICAL_TYPE_DECIMAL128>*>(type_info);
         return decimal_type_info->to_zone_map_string(value);
     }
     default:

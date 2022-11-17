@@ -56,7 +56,7 @@ enum { RLE_PAGE_HEADER_SIZE = 4 };
 // for these case.
 //
 // TODO(hkp): optimize rle algorithm
-template <FieldType Type>
+template <LogicalType Type>
 class RlePageBuilder final : public PageBuilder {
 public:
     explicit RlePageBuilder(const PageBuilderOptions& options)
@@ -67,7 +67,7 @@ public:
               _rle_encoder(nullptr),
               _first_value(0),
               _last_value(0) {
-        _bit_width = (Type == OLAP_FIELD_TYPE_BOOL) ? 1 : SIZE_OF_TYPE * 8;
+        _bit_width = (Type == LOGICAL_TYPE_BOOL) ? 1 : SIZE_OF_TYPE * 8;
         _rle_encoder = std::make_unique<RleEncoder<CppType>>(&_buf, _bit_width);
         reset();
     }
@@ -147,7 +147,7 @@ private:
     CppType _last_value;
 };
 
-template <FieldType Type>
+template <LogicalType Type>
 class RlePageDecoder final : public PageDecoder {
 public:
     RlePageDecoder(Slice slice, const PageDecoderOptions& options)
@@ -161,7 +161,7 @@ public:
         }
         _num_elements = decode_fixed32_le((const uint8_t*)&_data[0]);
         _parsed = true;
-        _bit_width = (Type == OLAP_FIELD_TYPE_BOOL) ? 1 : SIZE_OF_TYPE * 8;
+        _bit_width = (Type == LOGICAL_TYPE_BOOL) ? 1 : SIZE_OF_TYPE * 8;
         _rle_decoder = RleDecoder<CppType>((uint8_t*)_data.data + RLE_PAGE_HEADER_SIZE,
                                            _data.size - RLE_PAGE_HEADER_SIZE, _bit_width);
         seek_to_position_in_page(0);

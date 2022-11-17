@@ -44,7 +44,7 @@ class RlePageTest : public testing::Test {
 public:
     ~RlePageTest() override = default;
 
-    template <FieldType type, class PageDecoderType>
+    template <LogicalType type, class PageDecoderType>
     void copy_one(PageDecoderType* decoder, typename TypeTraits<type>::CppType* ret) {
         auto column = ChunkHelper::column_from_field_type(type, false);
 
@@ -54,7 +54,7 @@ public:
         *ret = *reinterpret_cast<const typename TypeTraits<type>::CppType*>(column->raw_data());
     }
 
-    template <FieldType Type, class PageBuilderType = RlePageBuilder<Type>>
+    template <LogicalType Type, class PageBuilderType = RlePageBuilder<Type>>
     OwnedSlice rle_encode(typename TypeTraits<Type>::CppType* src, size_t size) {
         typedef typename TypeTraits<Type>::CppType CppType;
         PageBuilderOptions builder_options;
@@ -74,7 +74,7 @@ public:
         return s;
     }
 
-    template <FieldType Type>
+    template <LogicalType Type>
     void test_encode_decode_page_template(typename TypeTraits<Type>::CppType* src, size_t size) {
         typedef typename TypeTraits<Type>::CppType CppType;
         OwnedSlice s = rle_encode<Type>(src, size);
@@ -110,7 +110,7 @@ public:
         }
     }
 
-    template <FieldType Type>
+    template <LogicalType Type>
     void test_encode_decode_page_vectorized(typename TypeTraits<Type>::CppType* src, size_t size) {
         typedef typename TypeTraits<Type>::CppType CppType;
         OwnedSlice s = rle_encode<Type>(src, size);
@@ -161,21 +161,21 @@ public:
 TEST_F(RlePageTest, TestRleInt32BlockEncoderRandom) {
     const uint32_t size = 10000;
 
-    // OLAP_FIELD_TYPE_INT
+    // LOGICAL_TYPE_INT
     {
-        using CppType = TypeTraits<OLAP_FIELD_TYPE_INT>::CppType;
+        using CppType = TypeTraits<LOGICAL_TYPE_INT>::CppType;
         std::vector<CppType> ints(size, 0);
         std::generate(std::begin(ints), std::end(ints), []() -> CppType { return rand(); });
-        test_encode_decode_page_template<OLAP_FIELD_TYPE_INT>(ints.data(), size);
-        test_encode_decode_page_vectorized<OLAP_FIELD_TYPE_INT>(ints.data(), size);
+        test_encode_decode_page_template<LOGICAL_TYPE_INT>(ints.data(), size);
+        test_encode_decode_page_vectorized<LOGICAL_TYPE_INT>(ints.data(), size);
     }
-    // OLAP_FIELD_TYPE_BIGINT
+    // LOGICAL_TYPE_BIGINT
     {
-        using CppType = TypeTraits<OLAP_FIELD_TYPE_BIGINT>::CppType;
+        using CppType = TypeTraits<LOGICAL_TYPE_BIGINT>::CppType;
         std::vector<CppType> ints(size, 0);
         std::generate(std::begin(ints), std::end(ints), []() -> CppType { return rand(); });
-        test_encode_decode_page_template<OLAP_FIELD_TYPE_BIGINT>(ints.data(), size);
-        test_encode_decode_page_vectorized<OLAP_FIELD_TYPE_BIGINT>(ints.data(), size);
+        test_encode_decode_page_template<LOGICAL_TYPE_BIGINT>(ints.data(), size);
+        test_encode_decode_page_vectorized<LOGICAL_TYPE_BIGINT>(ints.data(), size);
     }
 }
 
@@ -187,7 +187,7 @@ TEST_F(RlePageTest, TestRleInt32BlockEncoderEqual) {
         ints.get()[i] = 12345;
     }
 
-    test_encode_decode_page_template<OLAP_FIELD_TYPE_INT>(ints.get(), size);
+    test_encode_decode_page_template<LOGICAL_TYPE_INT>(ints.get(), size);
 }
 
 TEST_F(RlePageTest, TestRleInt32BlockEncoderSequence) {
@@ -198,7 +198,7 @@ TEST_F(RlePageTest, TestRleInt32BlockEncoderSequence) {
         ints.get()[i] = 12345 + i;
     }
 
-    test_encode_decode_page_template<OLAP_FIELD_TYPE_INT>(ints.get(), size);
+    test_encode_decode_page_template<LOGICAL_TYPE_INT>(ints.get(), size);
 }
 
 TEST_F(RlePageTest, TestRleInt32BlockEncoderSize) {
@@ -210,7 +210,7 @@ TEST_F(RlePageTest, TestRleInt32BlockEncoderSize) {
     }
     PageBuilderOptions builder_options;
     builder_options.data_page_size = 256 * 1024;
-    RlePageBuilder<OLAP_FIELD_TYPE_INT> rle_page_builder(builder_options);
+    RlePageBuilder<LOGICAL_TYPE_INT> rle_page_builder(builder_options);
     size = rle_page_builder.add(reinterpret_cast<const uint8_t*>(ints.get()), size);
     OwnedSlice s = rle_page_builder.finish()->build();
     // 4 bytes header
@@ -227,7 +227,7 @@ TEST_F(RlePageTest, TestRleBoolBlockEncoderRandom) {
         bools.get()[i] = (random() % 2 == 0);
     }
 
-    test_encode_decode_page_template<OLAP_FIELD_TYPE_BOOL>(bools.get(), size);
+    test_encode_decode_page_template<LOGICAL_TYPE_BOOL>(bools.get(), size);
 }
 
 TEST_F(RlePageTest, TestRleBoolBlockEncoderSize) {
@@ -239,7 +239,7 @@ TEST_F(RlePageTest, TestRleBoolBlockEncoderSize) {
     }
     PageBuilderOptions builder_options;
     builder_options.data_page_size = 256 * 1024;
-    RlePageBuilder<OLAP_FIELD_TYPE_BOOL> rle_page_builder(builder_options);
+    RlePageBuilder<LOGICAL_TYPE_BOOL> rle_page_builder(builder_options);
     size = rle_page_builder.add(reinterpret_cast<const uint8_t*>(bools.get()), size);
     OwnedSlice s = rle_page_builder.finish()->build();
     // 4 bytes header

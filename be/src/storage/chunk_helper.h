@@ -52,7 +52,7 @@ public:
 
     // Create a vectorized column from field .
     // REQUIRE: |type| must be scalar type.
-    static std::shared_ptr<vectorized::Column> column_from_field_type(FieldType type, bool nullable);
+    static std::shared_ptr<vectorized::Column> column_from_field_type(LogicalType type, bool nullable);
 
     // Create a vectorized column from field.
     static std::shared_ptr<vectorized::Column> column_from_field(const vectorized::Field& field);

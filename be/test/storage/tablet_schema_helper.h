@@ -57,7 +57,7 @@ inline TabletColumn create_int_key(int32_t id, bool is_nullable = true, bool is_
     TabletColumn column;
     column.set_unique_id(id);
     column.set_name(std::to_string(id));
-    column.set_type(OLAP_FIELD_TYPE_INT);
+    column.set_type(LOGICAL_TYPE_INT);
     column.set_is_key(true);
     column.set_is_nullable(is_nullable);
     column.set_length(4);
@@ -93,7 +93,7 @@ inline TabletColumn create_int_value(int32_t id, FieldAggregationMethod agg_meth
     TabletColumn column;
     column.set_unique_id(id);
     column.set_name(std::to_string(id));
-    column.set_type(OLAP_FIELD_TYPE_INT);
+    column.set_type(LOGICAL_TYPE_INT);
     column.set_is_key(false);
     column.set_aggregation(agg_method);
     column.set_is_nullable(is_nullable);
@@ -111,7 +111,7 @@ inline TabletColumn create_char_key(int32_t id, bool is_nullable = true, int len
     TabletColumn column;
     column.set_unique_id(id);
     column.set_name(std::to_string(id));
-    column.set_type(OLAP_FIELD_TYPE_CHAR);
+    column.set_type(LOGICAL_TYPE_CHAR);
     column.set_is_key(true);
     column.set_is_nullable(is_nullable);
     column.set_length(length);
@@ -123,7 +123,7 @@ inline TabletColumn create_varchar_key(int32_t id, bool is_nullable = true, int 
     TabletColumn column;
     column.set_unique_id(id);
     column.set_name(std::to_string(id));
-    column.set_type(OLAP_FIELD_TYPE_VARCHAR);
+    column.set_type(LOGICAL_TYPE_VARCHAR);
     column.set_is_key(true);
     column.set_is_nullable(is_nullable);
     column.set_length(length);
@@ -135,7 +135,7 @@ inline TabletColumn create_array(int32_t id, bool is_nullable = true, int length
     TabletColumn column;
     column.set_unique_id(id);
     column.set_name(std::to_string(id));
-    column.set_type(OLAP_FIELD_TYPE_ARRAY);
+    column.set_type(LOGICAL_TYPE_ARRAY);
     column.set_is_key(true);
     column.set_is_nullable(is_nullable);
     column.set_length(length);
@@ -153,7 +153,7 @@ inline ColumnPB create_with_default_value_pb(const std::string& col_type, std::s
     return column;
 }
 
-template <FieldType type>
+template <LogicalType type>
 inline TabletColumn create_with_default_value(std::string default_value) {
     TabletColumn column;
     column.set_type(type);

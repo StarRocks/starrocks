@@ -19,7 +19,7 @@ namespace starrocks::vectorized {
 class SegmentChunkIteratorAdapter final : public ChunkIterator {
 public:
     // |schema| is the output fields.
-    explicit SegmentChunkIteratorAdapter(const TabletSchema& tablet_schema, const std::vector<FieldType>& new_types,
+    explicit SegmentChunkIteratorAdapter(const TabletSchema& tablet_schema, const std::vector<LogicalType>& new_types,
                                          const Schema& out_schema, int chunk_size);
 
     ~SegmentChunkIteratorAdapter() override = default;
@@ -49,7 +49,7 @@ protected:
     Status do_get_next(Chunk* chunk, vector<uint32_t>* rowid) override;
 
     const TabletSchema& _tablet_schema;
-    const std::vector<FieldType>& _new_types;
+    const std::vector<LogicalType>& _new_types;
 
     Schema _in_schema;
     SegmentReadOptions _in_read_options;

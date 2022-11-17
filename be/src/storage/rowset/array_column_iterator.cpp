@@ -23,10 +23,10 @@ Status ArrayColumnIterator::init(const ColumnIteratorOptions& opts) {
     RETURN_IF_ERROR(_array_size_iterator->init(opts));
     RETURN_IF_ERROR(_element_iterator->init(opts));
 
-    const TypeInfoPtr& null_type = get_type_info(FieldType::OLAP_FIELD_TYPE_TINYINT);
+    const TypeInfoPtr& null_type = get_type_info(LogicalType::LOGICAL_TYPE_TINYINT);
     RETURN_IF_ERROR(ColumnVectorBatch::create(opts.chunk_size, true, null_type, nullptr, &_null_batch));
 
-    const TypeInfoPtr& array_size_type = get_type_info(FieldType::OLAP_FIELD_TYPE_INT);
+    const TypeInfoPtr& array_size_type = get_type_info(LogicalType::LOGICAL_TYPE_INT);
     RETURN_IF_ERROR(ColumnVectorBatch::create(opts.chunk_size, false, array_size_type, nullptr, &_array_size_batch));
     return Status::OK();
 }

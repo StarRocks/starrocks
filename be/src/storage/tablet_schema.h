@@ -58,9 +58,9 @@ public:
     using ColumnScale = uint8_t;
 
     TabletColumn();
-    TabletColumn(FieldAggregationMethod agg, FieldType type);
-    TabletColumn(FieldAggregationMethod agg, FieldType type, bool is_nullable);
-    TabletColumn(FieldAggregationMethod agg, FieldType type, bool is_nullable, int32_t unique_id, size_t length);
+    TabletColumn(FieldAggregationMethod agg, LogicalType type);
+    TabletColumn(FieldAggregationMethod agg, LogicalType type, bool is_nullable);
+    TabletColumn(FieldAggregationMethod agg, LogicalType type, bool is_nullable, int32_t unique_id, size_t length);
 
     ~TabletColumn();
 
@@ -81,8 +81,8 @@ public:
     std::string_view name() const { return {_col_name.data(), _col_name.size()}; }
     void set_name(std::string_view name) { _col_name.assign(name.data(), name.size()); }
 
-    FieldType type() const { return _type; }
-    void set_type(FieldType type) { _type = type; }
+    LogicalType type() const { return _type; }
+    void set_type(LogicalType type) { _type = type; }
 
     bool is_key() const { return _check_flag(kIsKeyShift); }
     void set_is_key(bool value) { _set_flag(kIsKeyShift, value); }
@@ -135,12 +135,12 @@ public:
     friend bool operator==(const TabletColumn& a, const TabletColumn& b);
     friend bool operator!=(const TabletColumn& a, const TabletColumn& b);
 
-    static std::string get_string_by_field_type(FieldType type);
+    static std::string get_string_by_field_type(LogicalType type);
     static std::string get_string_by_aggregation_type(FieldAggregationMethod aggregation_type);
-    static FieldType get_field_type_by_string(const std::string& str);
+    static LogicalType get_field_type_by_string(const std::string& str);
     static FieldAggregationMethod get_aggregation_type_by_string(const std::string& str);
     size_t estimate_field_size(size_t variable_length) const;
-    static uint32_t get_field_length_by_type(FieldType type, uint32_t string_length);
+    static uint32_t get_field_length_by_type(LogicalType type, uint32_t string_length);
 
     std::string debug_string() const;
 
@@ -190,7 +190,7 @@ private:
     ColumnUID _unique_id = 0;
     ColumnLength _length = 0;
     FieldAggregationMethod _aggregation = OLAP_FIELD_AGGREGATION_NONE;
-    FieldType _type = OLAP_FIELD_TYPE_UNKNOWN;
+    LogicalType _type = LOGICAL_TYPE_UNKNOWN;
 
     ColumnIndexLength _index_length = 0;
     ColumnPrecision _precision = 0;

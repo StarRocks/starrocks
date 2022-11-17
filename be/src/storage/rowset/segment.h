@@ -224,7 +224,7 @@ private:
     std::unique_ptr<ShortKeyIndexDecoder> _sk_index_decoder;
 
     // Actual storage type for each column, used to rewrite the input readoptions
-    std::unique_ptr<std::vector<FieldType>> _column_storage_types;
+    std::unique_ptr<std::vector<LogicalType>> _column_storage_types;
     // When reading old type format data this will be set to true.
     bool _needs_chunk_adapter = false;
     // When the storage types is different with TabletSchema

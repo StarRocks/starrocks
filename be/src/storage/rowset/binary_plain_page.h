@@ -168,7 +168,7 @@ private:
     bool _finished;
 };
 
-template <FieldType Type>
+template <LogicalType Type>
 class BinaryPlainPageDecoder final : public PageDecoder {
 public:
     explicit BinaryPlainPageDecoder(Slice data) : BinaryPlainPageDecoder(data, PageDecoderOptions()) {}

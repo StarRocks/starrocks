@@ -42,7 +42,7 @@ class BitShufflePageTest : public testing::Test {
 public:
     ~BitShufflePageTest() override = default;
 
-    template <FieldType type, class PageDecoderType>
+    template <LogicalType type, class PageDecoderType>
     void copy_one(PageDecoderType* decoder, typename TypeTraits<type>::CppType* ret) {
         auto column = ChunkHelper::column_from_field_type(type, true);
         size_t n = 1;
@@ -51,7 +51,7 @@ public:
         *ret = *reinterpret_cast<const typename TypeTraits<type>::CppType*>(column->raw_data());
     }
 
-    template <FieldType Type, class PageBuilderType, class PageDecoderType, int ReserveHead = 0>
+    template <LogicalType Type, class PageBuilderType, class PageDecoderType, int ReserveHead = 0>
     void test_encode_decode_page_template(typename TypeTraits<Type>::CppType* src, size_t size) {
         typedef typename TypeTraits<Type>::CppType CppType;
         PageBuilderOptions options;
@@ -112,7 +112,7 @@ public:
         }
     }
 
-    template <FieldType Type, class PageBuilderType, class PageDecoderType>
+    template <LogicalType Type, class PageBuilderType, class PageDecoderType>
     void test_encode_decode_page_vectorized() {
         using CppType = typename CppTypeTraits<Type>::CppType;
         auto src = ChunkHelper::column_from_field_type(Type, false);
@@ -221,7 +221,7 @@ public:
     }
 
     // The values inserted should be sorted.
-    template <FieldType Type, class PageBuilderType, class PageDecoderType>
+    template <LogicalType Type, class PageBuilderType, class PageDecoderType>
     void test_seek_at_or_after_value_template(typename TypeTraits<Type>::CppType* src, size_t size,
                                               typename TypeTraits<Type>::CppType* small_than_smallest,
                                               typename TypeTraits<Type>::CppType* bigger_than_biggest) {
@@ -288,8 +288,8 @@ TEST_F(BitShufflePageTest, TestBitShuffleInt32BlockEncoderRandom) {
         ints.get()[i] = random();
     }
 
-    test_encode_decode_page_template<OLAP_FIELD_TYPE_INT, BitshufflePageBuilder<OLAP_FIELD_TYPE_INT>,
-                                     BitShufflePageDecoder<OLAP_FIELD_TYPE_INT>>(ints.get(), size);
+    test_encode_decode_page_template<LOGICAL_TYPE_INT, BitshufflePageBuilder<LOGICAL_TYPE_INT>,
+                                     BitShufflePageDecoder<LOGICAL_TYPE_INT>>(ints.get(), size);
 }
 
 // NOLINTNEXTLINE
@@ -301,8 +301,8 @@ TEST_F(BitShufflePageTest, TestBitShuffleInt64BlockEncoderRandom) {
         ints.get()[i] = random();
     }
 
-    test_encode_decode_page_template<OLAP_FIELD_TYPE_BIGINT, BitshufflePageBuilder<OLAP_FIELD_TYPE_BIGINT>,
-                                     BitShufflePageDecoder<OLAP_FIELD_TYPE_BIGINT>>(ints.get(), size);
+    test_encode_decode_page_template<LOGICAL_TYPE_BIGINT, BitshufflePageBuilder<LOGICAL_TYPE_BIGINT>,
+                                     BitShufflePageDecoder<LOGICAL_TYPE_BIGINT>>(ints.get(), size);
 }
 
 // NOLINTNEXTLINE
@@ -314,8 +314,8 @@ TEST_F(BitShufflePageTest, TestBitShuffleFloatBlockEncoderRandom) {
         floats.get()[i] = random() + static_cast<float>(random()) / std::numeric_limits<int>::max();
     }
 
-    test_encode_decode_page_template<OLAP_FIELD_TYPE_FLOAT, BitshufflePageBuilder<OLAP_FIELD_TYPE_FLOAT>,
-                                     BitShufflePageDecoder<OLAP_FIELD_TYPE_FLOAT>>(floats.get(), size);
+    test_encode_decode_page_template<LOGICAL_TYPE_FLOAT, BitshufflePageBuilder<LOGICAL_TYPE_FLOAT>,
+                                     BitShufflePageDecoder<LOGICAL_TYPE_FLOAT>>(floats.get(), size);
 }
 
 // NOLINTNEXTLINE
@@ -327,8 +327,8 @@ TEST_F(BitShufflePageTest, TestBitShuffleDoubleBlockEncoderRandom) {
         doubles.get()[i] = random() + static_cast<double>(random()) / std::numeric_limits<int>::max();
     }
 
-    test_encode_decode_page_template<OLAP_FIELD_TYPE_DOUBLE, BitshufflePageBuilder<OLAP_FIELD_TYPE_DOUBLE>,
-                                     BitShufflePageDecoder<OLAP_FIELD_TYPE_DOUBLE>>(doubles.get(), size);
+    test_encode_decode_page_template<LOGICAL_TYPE_DOUBLE, BitshufflePageBuilder<LOGICAL_TYPE_DOUBLE>,
+                                     BitShufflePageDecoder<LOGICAL_TYPE_DOUBLE>>(doubles.get(), size);
 }
 
 // NOLINTNEXTLINE
@@ -340,8 +340,8 @@ TEST_F(BitShufflePageTest, TestBitShuffleDoubleBlockEncoderEqual) {
         doubles.get()[i] = 19880217.19890323;
     }
 
-    test_encode_decode_page_template<OLAP_FIELD_TYPE_DOUBLE, BitshufflePageBuilder<OLAP_FIELD_TYPE_DOUBLE>,
-                                     BitShufflePageDecoder<OLAP_FIELD_TYPE_DOUBLE>>(doubles.get(), size);
+    test_encode_decode_page_template<LOGICAL_TYPE_DOUBLE, BitshufflePageBuilder<LOGICAL_TYPE_DOUBLE>,
+                                     BitShufflePageDecoder<LOGICAL_TYPE_DOUBLE>>(doubles.get(), size);
 }
 
 // NOLINTNEXTLINE
@@ -356,8 +356,8 @@ TEST_F(BitShufflePageTest, TestBitShuffleDoubleBlockEncoderSequence) {
         doubles.get()[i] = base;
     }
 
-    test_encode_decode_page_template<OLAP_FIELD_TYPE_DOUBLE, BitshufflePageBuilder<OLAP_FIELD_TYPE_DOUBLE>,
-                                     BitShufflePageDecoder<OLAP_FIELD_TYPE_DOUBLE>>(doubles.get(), size);
+    test_encode_decode_page_template<LOGICAL_TYPE_DOUBLE, BitshufflePageBuilder<LOGICAL_TYPE_DOUBLE>,
+                                     BitShufflePageDecoder<LOGICAL_TYPE_DOUBLE>>(doubles.get(), size);
 }
 
 // NOLINTNEXTLINE
@@ -369,8 +369,8 @@ TEST_F(BitShufflePageTest, TestBitShuffleInt32BlockEncoderEqual) {
         ints.get()[i] = 12345;
     }
 
-    test_encode_decode_page_template<OLAP_FIELD_TYPE_INT, BitshufflePageBuilder<OLAP_FIELD_TYPE_INT>,
-                                     BitShufflePageDecoder<OLAP_FIELD_TYPE_INT>>(ints.get(), size);
+    test_encode_decode_page_template<LOGICAL_TYPE_INT, BitshufflePageBuilder<LOGICAL_TYPE_INT>,
+                                     BitShufflePageDecoder<LOGICAL_TYPE_INT>>(ints.get(), size);
 }
 
 // NOLINTNEXTLINE
@@ -382,8 +382,8 @@ TEST_F(BitShufflePageTest, TestBitShuffleInt32BlockEncoderMaxNumberEqual) {
         ints.get()[i] = 1234567890;
     }
 
-    test_encode_decode_page_template<OLAP_FIELD_TYPE_INT, BitshufflePageBuilder<OLAP_FIELD_TYPE_INT>,
-                                     BitShufflePageDecoder<OLAP_FIELD_TYPE_INT>>(ints.get(), size);
+    test_encode_decode_page_template<LOGICAL_TYPE_INT, BitshufflePageBuilder<LOGICAL_TYPE_INT>,
+                                     BitShufflePageDecoder<LOGICAL_TYPE_INT>>(ints.get(), size);
 }
 
 // NOLINTNEXTLINE
@@ -396,8 +396,8 @@ TEST_F(BitShufflePageTest, TestBitShuffleInt32BlockEncoderSequence) {
         ints.get()[i] = ++number;
     }
 
-    test_encode_decode_page_template<OLAP_FIELD_TYPE_INT, BitshufflePageBuilder<OLAP_FIELD_TYPE_INT>,
-                                     BitShufflePageDecoder<OLAP_FIELD_TYPE_INT>>(ints.get(), size);
+    test_encode_decode_page_template<LOGICAL_TYPE_INT, BitshufflePageBuilder<LOGICAL_TYPE_INT>,
+                                     BitShufflePageDecoder<LOGICAL_TYPE_INT>>(ints.get(), size);
 }
 
 // NOLINTNEXTLINE
@@ -411,8 +411,8 @@ TEST_F(BitShufflePageTest, TestBitShuffleInt32BlockEncoderMaxNumberSequence) {
         ++number;
     }
 
-    test_encode_decode_page_template<OLAP_FIELD_TYPE_INT, BitshufflePageBuilder<OLAP_FIELD_TYPE_INT>,
-                                     BitShufflePageDecoder<OLAP_FIELD_TYPE_INT>>(ints.get(), size);
+    test_encode_decode_page_template<LOGICAL_TYPE_INT, BitshufflePageBuilder<LOGICAL_TYPE_INT>,
+                                     BitShufflePageDecoder<LOGICAL_TYPE_INT>>(ints.get(), size);
 }
 
 // NOLINTNEXTLINE
@@ -425,8 +425,8 @@ TEST_F(BitShufflePageTest, TestBitShuffleFloatBlockEncoderSeekValue) {
 
     float small_than_smallest = 99.9;
     float bigger_than_biggest = 1111.1;
-    test_seek_at_or_after_value_template<OLAP_FIELD_TYPE_FLOAT, BitshufflePageBuilder<OLAP_FIELD_TYPE_FLOAT>,
-                                         BitShufflePageDecoder<OLAP_FIELD_TYPE_FLOAT>>(
+    test_seek_at_or_after_value_template<LOGICAL_TYPE_FLOAT, BitshufflePageBuilder<LOGICAL_TYPE_FLOAT>,
+                                         BitShufflePageDecoder<LOGICAL_TYPE_FLOAT>>(
             floats.get(), size, &small_than_smallest, &bigger_than_biggest);
 }
 
@@ -440,8 +440,8 @@ TEST_F(BitShufflePageTest, TestBitShuffleDoubleBlockEncoderSeekValue) {
 
     double small_than_smallest = 99.9;
     double bigger_than_biggest = 1111.1;
-    test_seek_at_or_after_value_template<OLAP_FIELD_TYPE_DOUBLE, BitshufflePageBuilder<OLAP_FIELD_TYPE_DOUBLE>,
-                                         BitShufflePageDecoder<OLAP_FIELD_TYPE_DOUBLE>>(
+    test_seek_at_or_after_value_template<LOGICAL_TYPE_DOUBLE, BitshufflePageBuilder<LOGICAL_TYPE_DOUBLE>,
+                                         BitShufflePageDecoder<LOGICAL_TYPE_DOUBLE>>(
             doubles.get(), size, &small_than_smallest, &bigger_than_biggest);
 }
 
@@ -455,8 +455,8 @@ TEST_F(BitShufflePageTest, TestBitShuffleDecimal12BlockEncoderSeekValue) {
 
     decimal12_t small_than_smallest = decimal12_t(99, 9);
     decimal12_t bigger_than_biggest = decimal12_t(1111, 1);
-    test_seek_at_or_after_value_template<OLAP_FIELD_TYPE_DECIMAL, BitshufflePageBuilder<OLAP_FIELD_TYPE_DECIMAL>,
-                                         BitShufflePageDecoder<OLAP_FIELD_TYPE_DECIMAL>>(
+    test_seek_at_or_after_value_template<LOGICAL_TYPE_DECIMAL, BitshufflePageBuilder<LOGICAL_TYPE_DECIMAL>,
+                                         BitShufflePageDecoder<LOGICAL_TYPE_DECIMAL>>(
             decimals.get(), size, &small_than_smallest, &bigger_than_biggest);
 }
 
@@ -469,19 +469,19 @@ TEST_F(BitShufflePageTest, TestReserveHead) {
         ints.get()[i] = random();
     }
 
-    test_encode_decode_page_template<OLAP_FIELD_TYPE_INT, BitshufflePageBuilder<OLAP_FIELD_TYPE_INT>,
-                                     BitShufflePageDecoder<OLAP_FIELD_TYPE_INT>, 4>(ints.get(), size);
+    test_encode_decode_page_template<LOGICAL_TYPE_INT, BitshufflePageBuilder<LOGICAL_TYPE_INT>,
+                                     BitShufflePageDecoder<LOGICAL_TYPE_INT>, 4>(ints.get(), size);
 }
 
 TEST_F(BitShufflePageTest, TestDecodeVectorized) {
-    test_encode_decode_page_vectorized<OLAP_FIELD_TYPE_TINYINT, BitshufflePageBuilder<OLAP_FIELD_TYPE_TINYINT>,
-                                       BitShufflePageDecoder<OLAP_FIELD_TYPE_TINYINT>>();
-    test_encode_decode_page_vectorized<OLAP_FIELD_TYPE_SMALLINT, BitshufflePageBuilder<OLAP_FIELD_TYPE_SMALLINT>,
-                                       BitShufflePageDecoder<OLAP_FIELD_TYPE_SMALLINT>>();
-    test_encode_decode_page_vectorized<OLAP_FIELD_TYPE_INT, BitshufflePageBuilder<OLAP_FIELD_TYPE_INT>,
-                                       BitShufflePageDecoder<OLAP_FIELD_TYPE_INT>>();
-    test_encode_decode_page_vectorized<OLAP_FIELD_TYPE_BIGINT, BitshufflePageBuilder<OLAP_FIELD_TYPE_BIGINT>,
-                                       BitShufflePageDecoder<OLAP_FIELD_TYPE_BIGINT>>();
+    test_encode_decode_page_vectorized<LOGICAL_TYPE_TINYINT, BitshufflePageBuilder<LOGICAL_TYPE_TINYINT>,
+                                       BitShufflePageDecoder<LOGICAL_TYPE_TINYINT>>();
+    test_encode_decode_page_vectorized<LOGICAL_TYPE_SMALLINT, BitshufflePageBuilder<LOGICAL_TYPE_SMALLINT>,
+                                       BitShufflePageDecoder<LOGICAL_TYPE_SMALLINT>>();
+    test_encode_decode_page_vectorized<LOGICAL_TYPE_INT, BitshufflePageBuilder<LOGICAL_TYPE_INT>,
+                                       BitShufflePageDecoder<LOGICAL_TYPE_INT>>();
+    test_encode_decode_page_vectorized<LOGICAL_TYPE_BIGINT, BitshufflePageBuilder<LOGICAL_TYPE_BIGINT>,
+                                       BitShufflePageDecoder<LOGICAL_TYPE_BIGINT>>();
 }
 
 } // namespace starrocks

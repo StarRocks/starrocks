@@ -31,7 +31,7 @@
 namespace starrocks {
 
 // Encode page use frame-of-reference coding
-template <FieldType Type>
+template <LogicalType Type>
 class FrameOfReferencePageBuilder final : public PageBuilder {
 public:
     explicit FrameOfReferencePageBuilder(const PageBuilderOptions& options)
@@ -100,7 +100,7 @@ private:
     ForEncoder<CppType> _encoder;
 };
 
-template <FieldType Type>
+template <LogicalType Type>
 class FrameOfReferencePageDecoder final : public PageDecoder {
 public:
     FrameOfReferencePageDecoder(Slice data, const PageDecoderOptions& options)
@@ -165,19 +165,19 @@ public:
         }
 
         // clang-format off
-        static_assert(Type == OLAP_FIELD_TYPE_TINYINT ||
-                      Type == OLAP_FIELD_TYPE_SMALLINT ||
-                      Type == OLAP_FIELD_TYPE_INT ||
-                      Type == OLAP_FIELD_TYPE_BIGINT ||
-                      Type == OLAP_FIELD_TYPE_LARGEINT ||
-                      Type == OLAP_FIELD_TYPE_DATE ||
-                      Type == OLAP_FIELD_TYPE_DATE_V2 ||
-                      Type == OLAP_FIELD_TYPE_DATETIME ||
-                      Type == OLAP_FIELD_TYPE_TIMESTAMP ||
-                      Type == OLAP_FIELD_TYPE_DECIMAL_V2 ||
-                      Type == OLAP_FIELD_TYPE_DECIMAL32 ||
-                      Type == OLAP_FIELD_TYPE_DECIMAL64 ||
-                      Type == OLAP_FIELD_TYPE_DECIMAL128,
+        static_assert(Type == LOGICAL_TYPE_TINYINT ||
+                      Type == LOGICAL_TYPE_SMALLINT ||
+                      Type == LOGICAL_TYPE_INT ||
+                      Type == LOGICAL_TYPE_BIGINT ||
+                      Type == LOGICAL_TYPE_LARGEINT ||
+                      Type == LOGICAL_TYPE_DATE ||
+                      Type == LOGICAL_TYPE_DATE_V2 ||
+                      Type == LOGICAL_TYPE_DATETIME ||
+                      Type == LOGICAL_TYPE_TIMESTAMP ||
+                      Type == LOGICAL_TYPE_DECIMAL_V2 ||
+                      Type == LOGICAL_TYPE_DECIMAL32 ||
+                      Type == LOGICAL_TYPE_DECIMAL64 ||
+                      Type == LOGICAL_TYPE_DECIMAL128,
                       "unexpected field type");
         // clang-format on
         size_t to_read =
