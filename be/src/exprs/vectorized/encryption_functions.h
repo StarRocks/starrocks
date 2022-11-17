@@ -8,8 +8,7 @@
 #include "exprs/vectorized/builtin_functions.h"
 #include "exprs/vectorized/function_helper.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 class EncryptionFunctions {
 public:
@@ -79,5 +78,4 @@ public:
     };
 };
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

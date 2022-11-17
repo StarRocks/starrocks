@@ -12,7 +12,7 @@ namespace starrocks::io {
 
 class MockSeekableInputStream : public io::SeekableInputStream {
 public:
-    explicit MockSeekableInputStream(char* contents, int64_t size) : _contents(contents), _size(size), _offset(0) {}
+    explicit MockSeekableInputStream(char* contents, int64_t size) : _contents(contents), _size(size) {}
 
     StatusOr<int64_t> read(void* data, int64_t count) override {
         count = std::min(count, _size - _offset);
@@ -33,7 +33,7 @@ public:
 private:
     const char* _contents;
     int64_t _size;
-    int64_t _offset;
+    int64_t _offset{0};
 };
 
 class CacheInputStreamTest : public ::testing::Test {

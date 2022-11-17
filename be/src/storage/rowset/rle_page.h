@@ -61,9 +61,7 @@ class RlePageBuilder final : public PageBuilder {
 public:
     explicit RlePageBuilder(const PageBuilderOptions& options)
             : _options(options),
-              _count(0),
-              _finished(false),
-              _bit_width(0),
+
               _rle_encoder(nullptr),
               _first_value(0),
               _last_value(0) {
@@ -72,7 +70,7 @@ public:
         reset();
     }
 
-    ~RlePageBuilder() override {}
+    ~RlePageBuilder() override = default;
 
     bool is_page_full() override { return _rle_encoder->len() >= _options.data_page_size; }
 
@@ -138,9 +136,9 @@ private:
     enum { SIZE_OF_TYPE = TypeTraits<Type>::size };
 
     PageBuilderOptions _options;
-    uint32_t _count;
-    bool _finished;
-    int _bit_width;
+    uint32_t _count{0};
+    bool _finished{false};
+    int _bit_width{0};
     std::unique_ptr<RleEncoder<CppType>> _rle_encoder;
     faststring _buf;
     CppType _first_value;
@@ -150,8 +148,7 @@ private:
 template <LogicalType Type>
 class RlePageDecoder final : public PageDecoder {
 public:
-    RlePageDecoder(Slice slice, const PageDecoderOptions& options)
-            : _data(slice), _options(options), _parsed(false), _num_elements(0), _cur_index(0), _bit_width(0) {}
+    RlePageDecoder(Slice slice, const PageDecoderOptions& options) : _data(slice), _options(options) {}
 
     Status init() override {
         CHECK(!_parsed);
@@ -238,10 +235,10 @@ private:
 
     Slice _data;
     PageDecoderOptions _options;
-    bool _parsed;
-    uint32_t _num_elements;
-    uint32_t _cur_index;
-    int _bit_width;
+    bool _parsed{false};
+    uint32_t _num_elements{0};
+    uint32_t _cur_index{0};
+    int _bit_width{0};
     RleDecoder<CppType> _rle_decoder;
 };
 

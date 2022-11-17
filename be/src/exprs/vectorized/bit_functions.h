@@ -7,8 +7,7 @@
 #include "exprs/vectorized/unary_function.h"
 #include "runtime/primitive_type.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 #define VECTORIZED_BIT_BINARY_IMPL(NAME, OP) \
     DEFINE_BINARY_FUNCTION_WITH_IMPL(NAME##Impl, l, r) { return l OP r; }
@@ -72,5 +71,4 @@ public:
         return VectorizedStrictUnaryFunction<bitNotImpl>::evaluate<Type>(v);
     }
 };
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

@@ -4,12 +4,10 @@
 
 #include "util/phmap/phmap.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 using AggDataPtr = uint8_t*;
 using Int32AggHashMap = phmap::flat_hash_map<int32_t, AggDataPtr>;
 using Int32AggTwoLevelHashMap = phmap::parallel_flat_hash_map<int32_t, AggDataPtr>;
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

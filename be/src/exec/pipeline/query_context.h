@@ -18,8 +18,7 @@
 #include "util/hash_util.hpp"
 #include "util/time.h"
 
-namespace starrocks {
-namespace pipeline {
+namespace starrocks::pipeline {
 
 using std::chrono::seconds;
 using std::chrono::milliseconds;
@@ -216,5 +215,4 @@ private:
     std::unique_ptr<UIntGauge> _query_ctx_cnt;
 };
 
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline

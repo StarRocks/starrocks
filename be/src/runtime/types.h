@@ -67,9 +67,9 @@ struct TypeDescriptor {
     // Only set if type == TYPE_MAP || type == TYPE_STRUCT.
     std::vector<bool> selected_fields;
 
-    TypeDescriptor() {}
+    TypeDescriptor() = default;
 
-    explicit TypeDescriptor(PrimitiveType type) : type(type), len(-1), precision(-1), scale(-1) {}
+    explicit TypeDescriptor(PrimitiveType type) : type(type) {}
 
     static TypeDescriptor create_char_type(int len) {
         TypeDescriptor ret;

@@ -34,8 +34,7 @@ namespace starrocks {
 template <LogicalType Type>
 class FrameOfReferencePageBuilder final : public PageBuilder {
 public:
-    explicit FrameOfReferencePageBuilder(const PageBuilderOptions& options)
-            : _options(options), _count(0), _finished(false), _encoder(&_buf) {}
+    explicit FrameOfReferencePageBuilder(const PageBuilderOptions& options) : _options(options), _encoder(&_buf) {}
 
     ~FrameOfReferencePageBuilder() override = default;
 
@@ -92,8 +91,8 @@ public:
 private:
     typedef typename TypeTraits<Type>::CppType CppType;
     PageBuilderOptions _options;
-    uint32_t _count;
-    bool _finished;
+    uint32_t _count{0};
+    bool _finished{false};
     faststring _buf;
     CppType _first_val;
     CppType _last_val;
@@ -104,10 +103,8 @@ template <LogicalType Type>
 class FrameOfReferencePageDecoder final : public PageDecoder {
 public:
     FrameOfReferencePageDecoder(Slice data, const PageDecoderOptions& options)
-            : _parsed(false),
-              _data(data),
-              _num_elements(0),
-              _cur_index(0),
+            : _data(data),
+
               _decoder((uint8_t*)_data.data, _data.size) {}
 
     ~FrameOfReferencePageDecoder() override = default;
@@ -206,10 +203,10 @@ public:
 private:
     typedef typename TypeTraits<Type>::CppType CppType;
 
-    bool _parsed;
+    bool _parsed{false};
     Slice _data;
-    uint32_t _num_elements;
-    uint32_t _cur_index;
+    uint32_t _num_elements{0};
+    uint32_t _cur_index{0};
     ForDecoder<CppType> _decoder;
 };
 

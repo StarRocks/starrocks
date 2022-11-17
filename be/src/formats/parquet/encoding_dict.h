@@ -53,7 +53,7 @@ public:
         int length = rle_encoder.Flush();
         _buffer.append(&bit_width, 1);
         _buffer.append(encoded_data.data(), length);
-        return Slice(_buffer.data(), _buffer.size());
+        return {_buffer.data(), _buffer.size()};
     }
 
     Status encode_dict(Encoder* dict_encoder, size_t* num_dicts) override {

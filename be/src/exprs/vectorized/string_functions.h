@@ -12,8 +12,7 @@
 #include "udf/udf.h"
 #include "util/url_parser.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 struct PadState {
     bool is_const;
@@ -503,5 +502,4 @@ ColumnPtr StringFunctions::money_format_decimal(FunctionContext* context,
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

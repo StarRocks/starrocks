@@ -10,8 +10,7 @@
 #include "exec/vectorized/schema_scan_node.h"
 #include "gen_cpp/Types_types.h"
 
-namespace starrocks {
-namespace pipeline {
+namespace starrocks::pipeline {
 
 class OlapSchemaScanOperatorFactory final : public ScanOperatorFactory {
 public:
@@ -59,5 +58,4 @@ private:
 
     OlapSchemaScanContextPtr _ctx;
 };
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline

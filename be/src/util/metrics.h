@@ -71,7 +71,7 @@ const char* unit_name(MetricUnit unit);
 
 class Metric {
 public:
-    Metric(MetricType type, MetricUnit unit) : _type(type), _unit(unit), _registry(nullptr) {}
+    Metric(MetricType type, MetricUnit unit) : _type(type), _unit(unit) {}
     virtual ~Metric() { hide(); }
     virtual std::string to_string() const = 0;
     MetricType type() const { return _type; }
@@ -84,7 +84,7 @@ private:
 
     MetricType _type = MetricType::UNTYPED;
     MetricUnit _unit = MetricUnit::NOUNIT;
-    MetricRegistry* _registry;
+    MetricRegistry* _registry{nullptr};
 };
 
 // Metric that only can increment

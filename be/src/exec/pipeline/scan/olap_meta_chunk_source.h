@@ -8,9 +8,7 @@
 #include "exec/vectorized/olap_meta_scan_node.h"
 #include "runtime/runtime_state.h"
 
-namespace starrocks {
-
-namespace pipeline {
+namespace starrocks::pipeline {
 
 class OlapMetaChunkSource final : public ChunkSource {
 public:
@@ -33,5 +31,4 @@ private:
     std::shared_ptr<vectorized::OlapMetaScanner> _scanner;
 };
 
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline

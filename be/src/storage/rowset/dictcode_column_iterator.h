@@ -82,7 +82,7 @@ public:
     GlobalDictCodeColumnIterator(ColumnId cid, ColumnIterator* iter, int16_t* code_convert_data, GlobalDictMap* gdict)
             : _cid(cid), _col_iter(iter), _local_to_global(code_convert_data) {}
 
-    ~GlobalDictCodeColumnIterator() = default;
+    ~GlobalDictCodeColumnIterator() override = default;
 
     ColumnId column_id() const { return _cid; }
 

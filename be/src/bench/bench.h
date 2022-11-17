@@ -19,7 +19,7 @@ inline int kTestChunkSize = 4096;
 
 class Bench {
 public:
-    static ColumnPtr create_series_column(TypeDescriptor type_desc, int num_rows, bool nullable = true) {
+    static ColumnPtr create_series_column(const TypeDescriptor& type_desc, int num_rows, bool nullable = true) {
         // TODO: support more types.
         DCHECK_EQ(TYPE_INT, type_desc.type);
 
@@ -32,7 +32,7 @@ public:
         return column;
     }
 
-    static ColumnPtr create_random_column(TypeDescriptor type_desc, int num_rows, bool low_card, bool nullable) {
+    static ColumnPtr create_random_column(const TypeDescriptor& type_desc, int num_rows, bool low_card, bool nullable) {
         using UniformInt = std::uniform_int_distribution<std::mt19937::result_type>;
         using PoissonInt = std::poisson_distribution<std::mt19937::result_type>;
         ColumnPtr column = ColumnHelper::create_column(type_desc, nullable);

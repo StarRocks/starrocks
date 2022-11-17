@@ -13,8 +13,7 @@
 #include "exprs/expr.h"
 #include "runtime/descriptors.h"
 
-namespace starrocks {
-namespace pipeline {
+namespace starrocks::pipeline {
 
 using HashJoiner = starrocks::vectorized::HashJoiner;
 
@@ -74,5 +73,4 @@ private:
     const TJoinDistributionMode::type _distribution_mode;
 };
 
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline

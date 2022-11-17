@@ -14,8 +14,7 @@
 #include "exprs/vectorized/jsonpath.h"
 #include "udf/udf.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 enum JsonFunctionType {
     JSON_FUN_INT = 0,
@@ -259,5 +258,4 @@ private:
                                     std::vector<SimpleJsonPath>* parsed_paths);
 };
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

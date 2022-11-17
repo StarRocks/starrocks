@@ -14,8 +14,7 @@
 #include "service/backend_options.h"
 #include "util/threadpool.h"
 
-namespace starrocks {
-namespace pipeline {
+namespace starrocks::pipeline {
 class ExecStateReporter {
 public:
     static TReportExecStatusParams create_report_exec_status_params(FragmentContext* fragment_ctx, const Status& status,
@@ -28,5 +27,4 @@ public:
 private:
     std::unique_ptr<ThreadPool> _thread_pool;
 };
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline

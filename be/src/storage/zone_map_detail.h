@@ -2,22 +2,26 @@
 
 #pragma once
 
+#include <utility>
+
 #include "column/datum.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 class ZoneMapDetail {
 public:
     // ctors
     ZoneMapDetail() = default;
-    ZoneMapDetail(Datum min_or_null_value, Datum max_value)
+    ZoneMapDetail(const Datum& min_or_null_value, Datum max_value)
             : _has_null(min_or_null_value.is_null()),
               _min_value(min_or_null_value),
-              _max_value(max_value),
+              _max_value(std::move(std::move(max_value))),
               _num_rows(0) {}
     ZoneMapDetail(Datum min_value, Datum max_value, bool has_null)
-            : _has_null(has_null), _min_value(min_value), _max_value(max_value), _num_rows(0) {}
+            : _has_null(has_null),
+              _min_value(std::move(std::move(min_value))),
+              _max_value(std::move(std::move(max_value))),
+              _num_rows(0) {}
 
     // methods
     bool has_null() const { return _has_null; }
@@ -41,5 +45,4 @@ private:
     Datum _max_value;
     size_t _num_rows;
 };
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

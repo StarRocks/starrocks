@@ -7,8 +7,7 @@
 #include "geo/geo_common.h"
 #include "udf/udf.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 class GeoFunctions {
 public:
@@ -116,5 +115,4 @@ public:
     static ColumnPtr st_contains(FunctionContext* ctx, const Columns& columns);
 };
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

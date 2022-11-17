@@ -35,7 +35,7 @@ public:
     uint64_t offset{0};
     uint32_t size{0};
 
-    PagePointer() {}
+    PagePointer() = default;
     PagePointer(uint64_t offset_, uint32_t size_) : offset(offset_), size(size_) {}
     PagePointer(const PagePointerPB& from) : offset(from.offset()), size(from.size()) {}
 
