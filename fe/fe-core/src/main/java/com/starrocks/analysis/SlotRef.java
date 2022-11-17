@@ -107,11 +107,12 @@ public class SlotRef extends Expr {
             this.col = parts.get(3);
             this.label = parts.get(3);
         } else {
+            // If parts.size() > 4, it must refer to a struct subfield name, so we set SlotRef's TableName null value,
+            // set col, label a qualified name here[Of course it's a wrong value].
+            // Correct value will be parsed in Analyzer according context.
             this.tblName = null;
-            this.col = null;
-            this.label = null;
-            // If parts.size() > 4, it must refer to a struct subfield name, so we set SlotRef's TableName, col and
-            // label null here, and it will be parsed in Analyzer according context.
+            this.col = qualifiedName.toString();
+            this.label = qualifiedName.toString();
         }
     }
 

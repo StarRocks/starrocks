@@ -34,6 +34,16 @@ public class AnalyzeStructTest {
                 "    \"replication_num\" = \"1\"\n" +
                 ");";
         starRocksAssert.withTable(createStructTableSql);
+
+        String deeperStructTableSql = "CREATE TABLE deeper_table(\n" +
+                "a INT, \n" +
+                "b STRUCT<b: STRUCT<c: STRUCT<d: STRUCT<e: INT>>>>,\n" +
+                "struct_a STRUCT<struct_a: STRUCT<struct_a: INT>, other: INT>\n" +
+                ") DISTRIBUTED BY HASH(`a`) BUCKETS 1\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");";
+        starRocksAssert.withTable(deeperStructTableSql);
     }
 
     @Test
@@ -66,5 +76,11 @@ public class AnalyzeStructTest {
         analyzeFail("select sum(b) from struct_a;");
         analyzeFail("select * from struct_a a join struct_a b on a.b=b.b;");
         analyzeFail("select sum(a) from struct_a group by b;");
+    }
+
+    @Test
+    public void testDeeperTable() {
+        analyzeFail("SELECT b.b.c.d.f FROM deeper_table");
+        analyzeSuccess("SELECT b.b.c.d.e FROM deeper_table");
     }
 }
