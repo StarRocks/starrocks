@@ -1065,7 +1065,11 @@ public class FunctionSet {
         for (Type t : Type.getSupportedTypes()) {
             // null/char/time is handled through type promotion
             // TODO: array/json/pseudo is not supported yet
+<<<<<<< HEAD
             if (t.isNull() || t.isChar() || t.isTime() || t.isArrayType() || t.isJsonType() || t.isPseudoType() || t.isFunctionType()) {
+=======
+            if (!t.canBeWindowFunctionArgumentTypes()) {
+>>>>>>> 9573c6bda ([BugFix] Fix several struct type bugs (#13566))
                 continue;
             }
             addBuiltin(AggregateFunction.createAnalyticBuiltin(

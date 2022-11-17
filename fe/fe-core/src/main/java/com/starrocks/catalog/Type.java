@@ -684,31 +684,61 @@ public abstract class Type implements Cloneable {
 
     public boolean canApplyToNumeric() {
         // TODO(mofei) support sum, avg for JSON
+<<<<<<< HEAD
         return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isStructType() && !isMapType();
     }
 
     public boolean canJoinOn() {
         return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isStructType() && !isMapType();
+=======
+        return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType() && !isStructType() &&
+                !isMapType();
+    }
+
+    public boolean canJoinOn() {
+        return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType() && !isStructType() &&
+                !isMapType();
+>>>>>>> 9573c6bda ([BugFix] Fix several struct type bugs (#13566))
     }
 
     public boolean canGroupBy() {
         // TODO(mofei) support group by for JSON
+<<<<<<< HEAD
         return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isStructType() && !isMapType();
+=======
+        return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType() && !isStructType() &&
+                !isMapType();
+>>>>>>> 9573c6bda ([BugFix] Fix several struct type bugs (#13566))
     }
 
     public boolean canOrderBy() {
         // TODO(mofei) support order by for JSON
+<<<<<<< HEAD
         return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isStructType() && !isMapType();
+=======
+        return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType() && !isStructType() &&
+                !isMapType();
+>>>>>>> 9573c6bda ([BugFix] Fix several struct type bugs (#13566))
     }
 
     public boolean canPartitionBy() {
         // TODO(mofei) support partition by for JSON
+<<<<<<< HEAD
         return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isStructType() && !isMapType();
+=======
+        return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType() && !isStructType() &&
+                !isMapType();
+>>>>>>> 9573c6bda ([BugFix] Fix several struct type bugs (#13566))
     }
 
     public boolean canDistinct() {
         // TODO(mofei) support distinct by for JSON
+<<<<<<< HEAD
         return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isStructType() && !isMapType();
+=======
+        return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType() && !isStructType() &&
+                !isMapType();
+>>>>>>> 9573c6bda ([BugFix] Fix several struct type bugs (#13566))
     }
 
     public boolean canStatistic() {
@@ -718,7 +748,22 @@ public abstract class Type implements Cloneable {
 
     public boolean canDistributedBy() {
         // TODO(mofei) support distributed by for JSON
+<<<<<<< HEAD
         return !isComplexType() && !isFloatingPointType() && !isOnlyMetricType() && !isJsonType() && !isFunctionType();
+=======
+        return !isComplexType() && !isFloatingPointType() && !isOnlyMetricType() && !isJsonType()
+                && !isFunctionType() && !isBinaryType();
+    }
+
+    public boolean isKeyType() {
+        // TODO(zhuming): support define a key column of type array.
+        return !(isFloatingPointType() || isComplexType() || isOnlyMetricType() || isJsonType() || isBinaryType());
+    }
+
+    public boolean canBeWindowFunctionArgumentTypes() {
+        return !(isNull() || isChar() || isTime() || isComplexType() || isJsonType()
+                || isPseudoType() || isFunctionType() || isBinaryType());
+>>>>>>> 9573c6bda ([BugFix] Fix several struct type bugs (#13566))
     }
 
     /**
