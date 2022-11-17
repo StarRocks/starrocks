@@ -282,4 +282,8 @@ public class OperationType {
 
     // stream load
     public static final short OP_CREATE_STREAM_LOAD_TASK = 11020;
+
+    // MaterializedView Maintenance
+    public static final short OP_MV_EPOCH_UPDATE = 11030;
+    public static final short OP_MV_JOB = 11031;
 }

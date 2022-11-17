@@ -3,7 +3,14 @@
 package com.starrocks.scheduler.mv;
 
 import com.google.common.base.Preconditions;
+import com.google.gson.annotations.SerializedName;
+import com.starrocks.common.io.Text;
+import com.starrocks.common.io.Writable;
+import com.starrocks.persist.gson.GsonUtils;
 
+import java.io.DataInput;
+import java.io.DataOutput;
+import java.io.IOException;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -15,16 +22,25 @@ import java.util.concurrent.atomic.AtomicReference;
  * 5. Commit the transaction to make is visible to user
  * 6. Commit the binlog consumption LSN(be atomic with transaction commitment to make)
  */
-public class MVEpoch {
-    public long dbId;
-    public long transactionId;
+public class MVEpoch implements Writable {
+    @SerializedName("mvId")
+    long mvId;
+    @SerializedName("epochState")
+    private final AtomicReference<EpochState> state;
+    @SerializedName("binlogState")
+    private BinlogConsumeStateVO binlogState;
+    @SerializedName("startTimeMilli")
     public long startTimeMilli;
+    @SerializedName("commitTimeMilli")
     public long commitTimeMilli;
-    private AtomicReference<EpochState> state;
+
+    // Ephemeral states
+    public transient long transactionId;
 
     public MVEpoch() {
         this.startTimeMilli = System.currentTimeMillis();
         this.state = new AtomicReference<>(EpochState.INIT);
+        this.binlogState = new BinlogConsumeStateVO();
     }
 
     public void onReady() {
@@ -45,9 +61,10 @@ public class MVEpoch {
         this.state.set(EpochState.COMMITTING);
     }
 
-    public void onCommitted() {
+    public void onCommitted(BinlogConsumeStateVO binlogState) {
         Preconditions.checkState(state.get().equals(EpochState.COMMITTING));
         this.state.set(EpochState.COMMITTED);
+        this.binlogState = binlogState;
         this.commitTimeMilli = System.currentTimeMillis();
     }
 
@@ -60,6 +77,32 @@ public class MVEpoch {
         this.state.set(EpochState.INIT);
     }
 
+    public static MVEpoch read(DataInput input) throws IOException {
+        return GsonUtils.GSON.fromJson(Text.readString(input), MVEpoch.class);
+    }
+
+    @Override
+    public void write(DataOutput out) throws IOException {
+        Text.writeString(out, GsonUtils.GSON.toJson(this));
+    }
+
+    /**
+     * ┌────────┐      ┌────────┐     ┌───────────┐           ┌────────┐
+     * │  INIT  ├──────┤ READY  ├────►│ RUNNING   ├──────────►│ FAILED │
+     * └────────┘      └────────┘     └─────┬─────┘           └────────┘
+     * ▲                │                     ▲
+     * │                │                     │
+     * │                │                     │
+     * │          ┌─────▼─────┐               │
+     * │          │ COMMITTING├───────────────┤
+     * │          └─────┬─────┘               │
+     * │                │                     │
+     * │                │                     │
+     * │                │                     │
+     * │          ┌─────▼─────┐               │
+     * └──────────┤ COMMITTED ├───────────────┘
+     * └───────────┘
+     */
     public enum EpochState {
         // Wait for data
         INIT,

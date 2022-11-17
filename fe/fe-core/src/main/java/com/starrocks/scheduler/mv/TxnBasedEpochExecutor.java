@@ -87,7 +87,13 @@ class TxnBasedEpochExecutor {
             this.epoch.onCommitting();
             GlobalStateMgr.getCurrentGlobalTransactionMgr().commitAndPublishTransaction(database,
                     this.epoch.transactionId, commitInfo, failedInfo, TXN_VISIBLE_TIMEOUT_MILLIS);
-            this.epoch.onCommitted();
+            // TODO(murphy) collect binlog consumption state from execution
+            BinlogConsumeStateVO binlogState = new BinlogConsumeStateVO();
+            this.epoch.onCommitted(binlogState);
+
+            // TODO(murphy) persist the epoch change seriously
+            // TODO(murphy) persist the epoch update and transaction commit atomic
+            GlobalStateMgr.getCurrentState().getEditLog().logMVEpochChange(this.epoch);
         } catch (UserException e) {
             this.epoch.onFailed();
             // TODO(murphy) handle error
