@@ -2,7 +2,7 @@
 
 ## 2.4.1
 
-Release date: November 14th, 2022
+Release date: November 14, 2022
 
 ### New Feature
 
@@ -46,7 +46,7 @@ Release date: November 14th, 2022
 
 ## 2.4.0
 
-Release date: October 20th, 2022
+Release date: October 20, 2022
 
 ### New Features
 
