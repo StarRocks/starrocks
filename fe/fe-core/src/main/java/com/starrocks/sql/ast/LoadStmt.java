@@ -29,7 +29,6 @@ import com.starrocks.common.util.LoadPriority;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.Load;
-import com.starrocks.sql.analyzer.AST2SQL;
 
 import java.util.List;
 import java.util.Map;
@@ -274,10 +273,5 @@ public class LoadStmt extends DdlStmt {
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitLoadStatement(this, context);
-    }
-
-    @Override
-    public String toString() {
-        return AST2SQL.toString(this);
     }
 }
