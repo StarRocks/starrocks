@@ -276,7 +276,7 @@ BE static parameters are as follows:
 | bitmap_max_filter_ratio | 1000 | N/A | |
 | bitmap_serialize_version | 1 | N/A | |
 | block_cache_block_size | 1048576 | N/A | |
-| block_cache_disk_path | /home/disk1/sr/qa_test_master_01/be/block_cache/ | N/A | |
+| block_cache_disk_path |  | N/A | |
 | block_cache_disk_size | 21474836480 | N/A | |
 | block_cache_enable | 0 | N/A | |
 | block_cache_mem_size | 2147483648 | N/A | |
@@ -304,7 +304,7 @@ BE static parameters are as follows:
 | dependency_librdkafka_debug_enable | 0 | N/A | |
 | dictionary_encoding_ratio | 0.7 | N/A | |
 | dictionary_speculate_min_chunk_size | 10000 | N/A | |
-| directory_of_inject | /src/exec/pipeline/hashjoin,/src/exec/pipeline/scan,/src/exec/pipeline/aggregate,/src/exec/pipeline/crossjoin,/src/exec/pipeline/sort,/src/exec/pipeline/exchange,/src/exec/pipeline/analysis | N/A | |
+| directory_of_inject |  | N/A | |
 | disable_column_pool | 0 | N/A | |
 | disable_mem_pools | 0 | N/A | |
 | download_worker_count | 1 | N/A | |
@@ -340,7 +340,7 @@ BE static parameters are as follows:
 | lake_gc_segment_expire_seconds | 259200 | N/A | |
 | lake_metadata_cache_limit | 2147483648 | N/A | |
 | late_materialization_ratio | 10 | N/A | |
-| local_library_dir | /home/disk1/sr/qa_test_master_01/be/lib/udf-runtime | N/A | |
+| local_library_dir |  | N/A | |
 | loop_count_wait_fragments_finish | 0 | N/A | |
 | madvise_huge_pages | 0 | N/A | |
 | make_snapshot_rpc_timeout_ms | 20000 | N/A | |
@@ -371,13 +371,13 @@ BE static parameters are as follows:
 | num_cores | 0 | N/A | |
 | num_disks | 0 | N/A | |
 | num_threads_per_disk | 0 | N/A | |
-| object_storage_access_key_id | LTAI4GFYjbX9e7QmFnAAvkt8 | N/A | |
-| object_storage_endpoint | http://oss-cn-zhangjiakou-internal.aliyuncs.com | N/A | |
+| object_storage_access_key_id |  | N/A | |
+| object_storage_endpoint |  | N/A | |
 | object_storage_endpoint_path_style_access | 0 | N/A | |
 | object_storage_endpoint_use_https | 0 | N/A | |
 | object_storage_max_connection | 102400 | N/A | |
 | object_storage_region | | N/A | |
-| object_storage_secret_access_key | pBTqpRUj3JTA9OBNU5pcgjFbscyS05 | N/A | |
+| object_storage_secret_access_key |  | N/A | |
 | orc_coalesce_read_enable | 1 | N/A | |
 | orc_file_cache_max_size | 8388608 | N/A | |
 | orc_natural_read_size | 8388608 | N/A | |
@@ -399,16 +399,16 @@ BE static parameters are as follows:
 | pipeline_sink_buffer_size | 64 | N/A | |
 | pipeline_sink_io_thread_pool_queue_size | 102400 | N/A | |
 | pipeline_sink_io_thread_pool_thread_num | 0 | N/A | |
-| plugin_path | /home/disk1/sr/qa_test_master_01/be/plugin | N/A | |
+| plugin_path |  | N/A | |
 | port | 20001 | N/A | |
-| pprof_profile_dir | /home/disk1/sr/qa_test_master_01/be/log | N/A | |
+| pprof_profile_dir |  | N/A | |
 | pre_aggregate_factor | 80 | N/A | |
 | priority_queue_remaining_tasks_increased_frequency | 512 | N/A | |
 | profile_report_interval | 30 | N/A | |
-| pull_load_task_dir | /home/disk1/sr/qa_test_master_01/be/var/pull_load | N/A | |
+| pull_load_task_dir |  | N/A | |
 | query_cache_capacity | 536870912 | N/A | |
-| query_debug_trace_dir | /home/disk1/sr/qa_test_master_01/be/query_debug_trace | N/A | |
-| query_scratch_dirs | /home/disk1/sr/qa_test_master_01/be | N/A | |
+| query_debug_trace_dir |  | N/A | |
+| query_scratch_dirs |  | N/A | |
 | read_size | 8388608 | N/A | |
 | release_snapshot_worker_count | 5 | N/A | |
 | repair_compaction_interval_seconds | 600 | N/A | |
@@ -423,7 +423,7 @@ BE static parameters are as follows:
 | sleep_one_second | 1 | N/A | |
 | sorter_block_size | 8388608 | N/A | |
 | storage_format_version | 2 | N/A | |
-| sys_minidump_dir | /home/disk1/sr/qa_test_master_01/be | N/A | |
+| sys_minidump_dir |  | N/A | |
 | sys_minidump_enable | 0 | N/A | |
 | sys_minidump_interval | 600 | N/A | |
 | sys_minidump_limit | 20480 | N/A | |
