@@ -2,7 +2,7 @@
 
 ## description
 
-该语句用于查看 RESTORE 任务。详细的Backup&restore操作说明请参考: [备份恢复](/administration/Backup_and_restore.md)章节。
+该语句用于查看 RESTORE 任务。详细的 Backup&restore 操作说明请参考: [备份恢复](/administration/Backup_and_restore.md)章节。
 
 语法：
 
@@ -15,7 +15,7 @@ SHOW RESTORE [FROM db_name];
 ```plain text
 1. StarRocks 中仅保存最近一次 RESTORE 任务。
 2. 各列含义如下：
-JobId：                  唯一作业id
+JobId：                  唯一作业 id
 Label：                  要恢复的备份的名称
 Timestamp：              要恢复的备份的时间版本
 DbName：                 所属数据库
@@ -43,7 +43,7 @@ Timeout：                作业超时时间，单位秒
 
 ## 示例
 
-1. 查看 example_db 下最近一次 RESTORE 任务。
+查看 example_db 下最近一次 RESTORE 任务。
 
 ```sql
 SHOW RESTORE FROM example_db;
