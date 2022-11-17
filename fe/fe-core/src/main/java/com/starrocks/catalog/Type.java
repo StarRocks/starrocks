@@ -745,7 +745,7 @@ public abstract class Type implements Cloneable {
         return !(isFloatingPointType() || isComplexType() || isOnlyMetricType() || isJsonType() || isBinaryType());
     }
 
-    public boolean canAggregateArguments() {
+    public boolean canBeWindowFunctionArgumentTypes() {
         return !(isNull() || isChar() || isTime() || isComplexType() || isJsonType()
                 || isPseudoType() || isFunctionType() || isBinaryType());
     }
