@@ -2,7 +2,7 @@
 
 ## 2.4.1
 
-发布日期：2022 年 11月14日
+发布日期：2022 年 11 月 14 日
 
 ### 新增特性
 
@@ -20,7 +20,7 @@
 
 - 查询数据湖时，延迟物化会导致查询结果错误。[#13133](https://github.com/StarRocks/starrocks/pull/13133)
 
-- 函数 get_json_int 函数报错。[#12997](https://github.com/StarRocks/starrocks/pull/12997)
+- 函数 get_json_int 报错。[#12997](https://github.com/StarRocks/starrocks/pull/12997)
 
 - 索引落盘的主键表删除数据时，可能导致数据不一致。[#12719](https://github.com/StarRocks/starrocks/pull/12719)
 
