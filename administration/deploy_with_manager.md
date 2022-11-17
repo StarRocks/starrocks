@@ -2,7 +2,7 @@
 
 本文介绍如何使用 StarRocks Manager 自动部署 StarRocks 集群。
 
-> StarRocksManager 为企业版功能，如需试用，请至 [StarRocks 官网](https://www.starrocks.com/zh-CN/download) 页面下方点击「现在咨询」获取。
+> StarRocks Manager 为企业版功能，如需试用，请至 [StarRocks 官网](https://www.starrocks.com/zh-CN/download) 页面下方点击「现在咨询」获取。
 
 ## 前提条件
 
@@ -11,9 +11,11 @@
 |依赖|说明|
 |----|----|
 |JDK（1.8 或以上）|下载完成后，您需要在 FE 节点配置文件 **fe.conf** 中的 `JAVA_HOME` 配置项下指定 JDK 的安装路径。|
-|Python（2.7 或以上）| |
-|python-setuptools|您可以通过 `yum install setuptools` 或 `apt-get install setuptools` 安装。|
-|MySQL（5.5 或以上）|您需要通过 MySQL 存储 StarRocksManager 平台的数据。|
+|Python（2.7 或以上）|Linux操作系统自带的 Python 2 版本已满足 Manager 部署要求。 |
+|python-setuptools|可执行 `easy_install --version` 命令进行检查，有返回值即可，对版本无特别要求。若无返回值，您可以通过 `yum install setuptools` 或 `apt-get install setuptools` 安装。|
+|MySQL（5.5 或以上）|您需要通过 MySQL 存储 StarRocks Manager 平台的数据。|
+
+> 在安装 python-setuptools 前，请执行`easy_install --version` 命令进行检查，若当前系统已具备该依赖，请务必不要再次通过 `yum` 或者 `apt-get` 命令手动安装，避免版本冲突导致后续安装报错。
 
 ## 安装 StarRocks Manager
 
