@@ -31,7 +31,7 @@ ADMIN SHOW FRONTEND CONFIG [LIKE "pattern"];
     ADMIN SHOW FRONTEND CONFIG;
     ```
 
-2. 使用 like 谓词搜索当前 Fe 节点的配置。
+2. 使用 like 谓词搜索当前 FE 节点的配置。
 
     ```plain text
     mysql> ADMIN SHOW FRONTEND CONFIG LIKE '%check_java_version%';
