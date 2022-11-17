@@ -52,12 +52,14 @@ public class StructType extends Type {
         Preconditions.checkArgument(structFields.size() > 0);
         this.fields = new ArrayList<>();
         for (StructField field : structFields) {
-            if (fieldMap.containsKey(field.getName())) {
-                LOG.warn(String.format("Contains the same struct subfield name: %s, ignore it", field.getName()));
+            // fieldName must be lowercase
+            String fieldName = field.getName();
+            if (fieldMap.containsKey(fieldName)) {
+                LOG.warn(String.format("Contains the same struct subfield name: %s, ignore it", fieldName));
             } else {
                 field.setPosition(fields.size());
                 fields.add(field);
-                fieldMap.put(field.getName(), field);
+                fieldMap.put(fieldName, field);
             }
         }
         selectedFields = new Boolean[fields.size()];

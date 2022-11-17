@@ -19,7 +19,7 @@ public class SubfieldExpr extends Expr {
     // Only used in parser, in parser, we can't determine column's type
     public SubfieldExpr(Expr child, String fieldName) {
         children.add(child);
-        this.fieldName = fieldName;
+        this.fieldName = fieldName.toLowerCase();
     }
 
     // In this constructor, we can determine column's type

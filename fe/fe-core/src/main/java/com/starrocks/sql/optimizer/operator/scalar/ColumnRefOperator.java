@@ -26,6 +26,7 @@ public final class ColumnRefOperator extends ScalarOperator {
     // TODO(SmithCruise) Ugly code, remove it in future.
     // Empty list for default
     // If it's empty, means select all
+    // Only used for map and struct type
     private final List<ImmutableList<Integer>> usedSubfieldPosGroup = new ArrayList<>();
 
     public ColumnRefOperator(int id, Type type, String name, boolean nullable) {

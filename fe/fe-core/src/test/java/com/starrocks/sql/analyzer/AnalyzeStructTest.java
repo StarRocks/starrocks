@@ -53,7 +53,18 @@ public class AnalyzeStructTest {
     }
 
     @Test
+    public void testSubfieldCaseSensitive() {
+        analyzeSuccess("select b.a from struct_a");
+        analyzeSuccess("select b.A from struct_a");
+        analyzeSuccess("select d.B[10].A from struct_a");
+    }
+
+    @Test
     public void testInvalidSql() {
         analyzeFail("select b + 1 from struct_a;");
+        analyzeFail("select * from struct_a order by b;");
+        analyzeFail("select sum(b) from struct_a;");
+        analyzeFail("select * from struct_a a join struct_a b on a.b=b.b;");
+        analyzeFail("select sum(a) from struct_a group by b;");
     }
 }
