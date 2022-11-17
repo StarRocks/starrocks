@@ -69,7 +69,7 @@ bin/install.sh -h \
 
 ### 安装 Broker
 
-建议您在所有节点上安装 Broker。端口的含义参考下方[端口列表](#端口列表)。
+建议您在所有 BE 节点上安装 Broker。端口的含义参考下方[端口列表](#端口列表)。
 
 ![HDFS Broker](../assets/8.1.1.3-5.png)
 
