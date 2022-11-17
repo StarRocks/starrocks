@@ -24,7 +24,7 @@ namespace starrocks {
 class RandomAccessFile;
 class WritableFile;
 class SequentialFile;
-class ResultFileOptions;
+struct ResultFileOptions;
 class TUploadReq;
 class TDownloadReq;
 struct WritableFileOptions;

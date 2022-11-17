@@ -452,8 +452,8 @@ void ScanOperator::_merge_chunk_source_profiles() {
     _unique_metrics->copy_all_counters_from(merged_profile);
 }
 
-void ScanOperator::set_query_ctx(std::shared_ptr<QueryContext> query_ctx) {
-    _query_ctx = std::move(query_ctx);
+void ScanOperator::set_query_ctx(const std::shared_ptr<QueryContext>& query_ctx) {
+    _query_ctx = query_ctx;
 }
 
 // ========== ScanOperatorFactory ==========
