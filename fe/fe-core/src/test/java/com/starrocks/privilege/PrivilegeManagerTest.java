@@ -3,6 +3,7 @@
 package com.starrocks.privilege;
 
 import com.starrocks.analysis.UserIdentity;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
@@ -1321,6 +1322,41 @@ public class PrivilegeManagerTest {
         Assert.assertTrue(PrivilegeManager.checkResourceAction(ctx, "hive0", PrivilegeType.ResourceAction.DROP));
         Assert.assertTrue(PrivilegeManager.checkResourceAction(ctx, "hive0", PrivilegeType.ResourceAction.USAGE));
         Assert.assertTrue(PrivilegeManager.checkResourceAction(ctx, "hive0", PrivilegeType.ResourceAction.ALTER));
+    }
+
+    @Test
+    public void testGrantOnCatalog() throws Exception {
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "create external catalog test_catalog properties (\"type\"=\"iceberg\")", ctx), ctx);
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "create user test_catalog_user", ctx), ctx);
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "grant drop on catalog 'test_catalog' to test_catalog_user", ctx), ctx);
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "grant usage on all catalogs to test_catalog_user", ctx), ctx);
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "grant create_database on all catalogs to test_catalog_user", ctx), ctx);
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "grant alter on all catalogs to test_catalog_user with grant option", ctx), ctx);
+        UserIdentity user = UserIdentity.createAnalyzedUserIdentWithIp("test_catalog_user", "%");
+        ctx.setCurrentUserIdentity(user);
+        Assert.assertTrue(PrivilegeManager.checkCatalogAction(ctx, "test_catalog",
+                PrivilegeType.CatalogAction.DROP));
+        Assert.assertTrue(PrivilegeManager.checkCatalogAction(ctx, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                PrivilegeType.CatalogAction.CREATE_DATABASE));
+        Assert.assertTrue(PrivilegeManager.checkCatalogAction(ctx, "test_catalog",
+                PrivilegeType.CatalogAction.USAGE));
+        Assert.assertTrue(PrivilegeManager.checkCatalogAction(ctx, "test_catalog",
+                PrivilegeType.CatalogAction.ALTER));
+
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "create user test_catalog_user2", ctx), ctx);
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "grant create_database on catalog " + InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME +
+                        " to test_catalog_user2 with grant option", ctx), ctx);
+        ctx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp("test_catalog_user2", "%"));
+        Assert.assertTrue(PrivilegeManager.checkCatalogAction(ctx, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                PrivilegeType.CatalogAction.CREATE_DATABASE));
     }
 
     @Test

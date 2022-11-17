@@ -1176,6 +1176,8 @@ privilegeActionReserved
     | SELECT
     | INSERT
     | DELETE
+    | USAGE
+    | CREATE_DATABASE
     | ALL
     ;
 

@@ -225,9 +225,11 @@ public class PrivilegeManager {
                         globalStateMgr));
                 collection.grant(typeId, actionSet, objects, false);
                 break;
+
             case USER:
             case DATABASE:
             case RESOURCE:
+            case CATALOG:
                 objects.add(provider.generateObject(
                         type.name(),
                         Arrays.asList(type.getPlural()),
@@ -621,6 +623,33 @@ public class PrivilegeManager {
         }
     }
 
+    public static boolean checkCatalogAction(ConnectContext context, String name,
+                                             PrivilegeType.CatalogAction action) {
+        PrivilegeManager manager = context.getGlobalStateMgr().getPrivilegeManager();
+        try {
+            PrivilegeCollection collection = manager.mergePrivilegeCollection(context);
+            return manager.checkCatalogAction(collection, name, action);
+        } catch (PrivilegeException e) {
+            LOG.warn("caught exception when check action[{}] on catalog {}", action, name, e);
+            return false;
+        }
+    }
+
+    public static boolean checkAnyActionOnCatalog(ConnectContext context, String name) {
+        PrivilegeManager manager = context.getGlobalStateMgr().getPrivilegeManager();
+        try {
+            PrivilegeCollection collection = manager.mergePrivilegeCollection(context);
+            // 1. check for any action on catalog
+            PEntryObject catalogObject = manager.provider.generateObject(
+                    PrivilegeType.CATALOG.name(), Arrays.asList(name), manager.globalStateMgr);
+            short catalogTypeId = manager.analyzeType(PrivilegeType.CATALOG.name());
+            return manager.provider.searchObject(catalogTypeId, catalogObject, collection);
+        } catch (PrivilegeException e) {
+            LOG.warn("caught exception when check any on catalog {}", name, e);
+            return false;
+        }
+    }
+
     public static boolean checkViewAction(
             ConnectContext context, String db, String view, PrivilegeType.ViewAction action) {
         PrivilegeManager manager = context.getGlobalStateMgr().getPrivilegeManager();
@@ -640,7 +669,7 @@ public class PrivilegeManager {
         PrivilegeManager manager = context.getGlobalStateMgr().getPrivilegeManager();
         try {
             PrivilegeCollection collection = manager.mergePrivilegeCollection(context);
-            // 1. check for any action in db
+            // 1. check for any action on db
             PEntryObject dbObject = manager.provider.generateObject(
                     PrivilegeType.DATABASE.name(), Arrays.asList(db), manager.globalStateMgr);
             short dbTypeId = manager.analyzeType(PrivilegeType.DATABASE.name());
@@ -739,6 +768,12 @@ public class PrivilegeManager {
     protected boolean checkResourceAction(PrivilegeCollection collection, String name, PrivilegeType.ResourceAction action)
             throws PrivilegeException {
         return checkAction(collection, PrivilegeType.RESOURCE, action.name(), Arrays.asList(name));
+    }
+
+    protected boolean checkCatalogAction(PrivilegeCollection collection, String name,
+                                         PrivilegeType.CatalogAction action)
+            throws PrivilegeException {
+        return checkAction(collection, PrivilegeType.CATALOG, action.name(), Arrays.asList(name));
     }
 
     protected boolean checkViewAction(
