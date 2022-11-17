@@ -49,7 +49,7 @@ RUN chmod +x $StarRocks_home/run_script.sh
 CMD $StarRocks_home/run_script.sh
 ```
 
-> 注意：将以上 `<url_to_download_specific_ver_of_starrocks>` 替换为实际[下载地址](https://www.starrocks.com/zh-CN/download)
+> 注意：将以上 `<url_to_download_specific_ver_of_starrocks>` 替换为实际[下载地址](https://www.starrocks.com/zh-CN/download)。
 
 ## 创建脚本文件
 
