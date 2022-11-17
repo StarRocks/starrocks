@@ -27,6 +27,7 @@
 
 #include "common/status.h"
 #include "gen_cpp/BackendService.h"
+#include "gen_cpp/MVMaintenance_types.h"
 
 namespace starrocks {
 
@@ -114,6 +115,8 @@ public:
 
     // used for external service, close some context and release resource related with this context
     void close_scanner(TScanCloseResult& result_, const TScanCloseParams& params) override;
+
+    void submit_mv_maintenance_task(TStatus& t_status, const TMVMaintenanceTasks& tasks) override;
 
 private:
     Status start_plan_fragment_execution(const TExecPlanFragmentParams& exec_params);

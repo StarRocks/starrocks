@@ -28,6 +28,7 @@ include "PlanNodes.thrift"
 include "AgentService.thrift"
 include "InternalService.thrift"
 include "StarrocksExternalService.thrift"
+include "MVMaintenance.thrift"
 
 struct TExportTaskRequest {
     1: required InternalService.TExecPlanFragmentParams params
@@ -130,8 +131,7 @@ service BackendService {
 
     AgentService.TAgentResult submit_etl_task(1:AgentService.TMiniLoadEtlTaskRequest request);
 
-    AgentService.TMiniLoadEtlStatusResult get_etl_status(
-            1:AgentService.TMiniLoadEtlStatusRequest request);
+    AgentService.TMiniLoadEtlStatusResult get_etl_status(1:AgentService.TMiniLoadEtlStatusRequest request);
 
     AgentService.TAgentResult delete_etl_files(1:AgentService.TDeleteEtlFilesRequest request);
 
@@ -155,5 +155,7 @@ service BackendService {
 
     // release the context resource associated with the context_id
     StarrocksExternalService.TScanCloseResult close_scanner(1: StarrocksExternalService.TScanCloseParams params);
+
+    Status.TStatus submit_mv_maintenance_task(1: MVMaintenance.TMVMaintenanceTasks task);
 
 }
