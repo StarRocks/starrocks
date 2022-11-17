@@ -2,6 +2,7 @@
 
 #include "storage/tablet_updates.h"
 
+#include <cmath>
 #include <ctime>
 #include <memory>
 
@@ -36,7 +37,6 @@
 #include "storage/types.h"
 #include "storage/update_compaction_state.h"
 #include "storage/update_manager.h"
-#include "storage/wrapper_field.h"
 #include "util/defer_op.h"
 #include "util/pretty_printer.h"
 #include "util/scoped_cleanup.h"
@@ -847,6 +847,26 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
     }
     int64_t t_apply = MonotonicMillis();
 
+    std::int32_t conditional_column = -1;
+    const auto& txn_meta = rowset->rowset_meta()->get_meta_pb().txn_meta();
+    if (txn_meta.has_merge_condition()) {
+        for (int i = 0; i < _tablet.tablet_schema().columns().size(); ++i) {
+            if (_tablet.tablet_schema().column(i).name() == txn_meta.merge_condition()) {
+                conditional_column = i;
+                if (!state.deletes().empty()) {
+                    std::string msg = Substitute(
+                            "_apply_rowset_commit error: apply rowset update state failed:"
+                            " delete with condition column $0.",
+                            txn_meta.merge_condition());
+                    LOG(ERROR) << msg;
+                    _set_error(msg);
+                    return;
+                }
+                break;
+            }
+        }
+    }
+
     span->AddEvent("update_index");
     // 3. generate delvec
     // add initial empty delvec for new segments
@@ -858,7 +878,7 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
     auto& upserts = state.upserts();
     for (uint32_t i = 0; i < upserts.size(); i++) {
         if (upserts[i] != nullptr) {
-            index.upsert(rowset_id + i, 0, *upserts[i], &new_deletes);
+            _do_update(rowset_id, i, conditional_column, upserts, index, tablet_id, &new_deletes);
             manager->index_cache().update_object_size(index_entry, index.memory_usage());
         }
     }
@@ -1088,6 +1108,78 @@ Status TabletUpdates::_wait_for_version(const EditVersion& version, int64_t time
             return Status::TimedOut(msg);
         }
     }
+    return Status::OK();
+}
+
+Status TabletUpdates::_do_update(std::uint32_t rowset_id, std::int32_t upsert_idx, std::int32_t condition_column,
+                                 const std::vector<ColumnUniquePtr>& upserts, PrimaryIndex& index,
+                                 std::int64_t tablet_id, DeletesMap* new_deletes) {
+    if (condition_column >= 0) {
+        auto tablet_column = _tablet.tablet_schema().column(condition_column);
+        std::vector<uint32_t> read_column_ids;
+        read_column_ids.push_back(condition_column);
+
+        std::vector<uint64_t> old_rowids(upserts[upsert_idx]->size());
+        index.get(*upserts[upsert_idx], &old_rowids);
+        bool non_old_value = std::all_of(old_rowids.begin(), old_rowids.end(), [](int id) { return -1 == id; });
+        if (!non_old_value) {
+            std::map<uint32_t, std::vector<uint32_t>> old_rowids_by_rssid;
+            size_t num_default = 0;
+            vector<uint32_t> idxes;
+            RowsetUpdateState::plan_read_by_rssid(old_rowids, &num_default, &old_rowids_by_rssid, &idxes);
+            std::vector<std::unique_ptr<vectorized::Column>> old_columns(1);
+            auto old_unordered_column =
+                    ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
+            old_columns[0] = old_unordered_column->clone_empty();
+            get_column_values(read_column_ids, num_default > 0, old_rowids_by_rssid, &old_columns);
+            auto old_column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
+            old_column->append_selective(*old_columns[0], idxes.data(), 0, idxes.size());
+
+            std::map<uint32_t, std::vector<uint32_t>> new_rowids_by_rssid;
+            std::vector<uint32_t> rowids;
+            for (int j = 0; j < upserts[upsert_idx]->size(); ++j) {
+                rowids.push_back(j);
+            }
+            new_rowids_by_rssid[rowset_id + upsert_idx] = rowids;
+            std::vector<std::unique_ptr<vectorized::Column>> new_columns(1);
+            auto new_column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
+            new_columns[0] = new_column->clone_empty();
+            get_column_values(read_column_ids, false, new_rowids_by_rssid, &new_columns);
+
+            int idx_begin = 0;
+            int upsert_idx_step = 0;
+            for (int j = 0; j < old_column->size(); ++j) {
+                if (num_default > 0 && idxes[j] == 0) {
+                    // plan_read_by_rssid will return idx with 0 if we have default value
+                    upsert_idx_step++;
+                } else {
+                    int r = old_column->compare_at(j, j, *new_columns[0].get(), -1);
+                    if (r > 0) {
+                        index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], idx_begin,
+                                     idx_begin + upsert_idx_step, new_deletes);
+
+                        idx_begin = j + 1;
+                        upsert_idx_step = 0;
+
+                        // Update delete vector of current segment which is being applied
+                        (*new_deletes)[rowset_id + upsert_idx].push_back(j);
+                    } else {
+                        upsert_idx_step++;
+                    }
+                }
+            }
+
+            if (idx_begin < old_column->size()) {
+                index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], idx_begin, idx_begin + upsert_idx_step,
+                             new_deletes);
+            }
+        } else {
+            index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], new_deletes);
+        }
+    } else {
+        index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], new_deletes);
+    }
+
     return Status::OK();
 }
 
@@ -2104,7 +2196,7 @@ void TabletUpdates::_print_rowsets(std::vector<uint32_t>& rowsets, std::string* 
                 auto& stats = *itr->second;
                 string bytes = PrettyPrinter::print(stats.byte_size, TUnit::BYTES);
                 // PrettyPrinter doesn't support negative value
-                string compaction = PrettyPrinter::print(abs(stats.compaction_score), TUnit::BYTES);
+                string compaction = PrettyPrinter::print(std::abs(stats.compaction_score), TUnit::BYTES);
                 const char* cprefix = "";
                 if (stats.compaction_score < 0) {
                     cprefix = "-";
@@ -2155,7 +2247,7 @@ RowsetSharedPtr TabletUpdates::get_delta_rowset(int64_t version) const {
     if (version < _edit_version_infos[0]->version.major() || _edit_version_infos.back()->version.major() < version) {
         return nullptr;
     }
-    int idx_hint = version - _edit_version_infos[0]->version.major();
+    int64_t idx_hint = version - _edit_version_infos[0]->version.major();
     for (auto i = idx_hint; i < _edit_version_infos.size(); i++) {
         const auto& vi = _edit_version_infos[i];
         if (vi->version.major() < version) {

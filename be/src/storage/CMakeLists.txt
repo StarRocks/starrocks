@@ -67,7 +67,6 @@ add_library(Storage STATIC
     types.cpp
     update_manager.cpp
     utils.cpp
-    wrapper_field.cpp
     compaction_utils.cpp
     rowset/array_column_iterator.cpp
     rowset/binary_plain_page.cpp
@@ -150,7 +149,6 @@ add_library(Storage STATIC
     rowset_merger.cpp
     column_predicate_rewriter.cpp
     column_predicate_dict_conjuct.cpp
-    compaction_context.cpp
     compaction_task.cpp
     compaction_utils.cpp
     compaction_manager.cpp
@@ -158,7 +156,7 @@ add_library(Storage STATIC
     horizontal_compaction_task.cpp
     vertical_compaction_task.cpp
     compaction_task_factory.cpp
-    base_and_cumulative_compaction_policy.cpp
+    default_compaction_policy.cpp
     cluster_id_mgr.cpp
     push_utils.cpp
     lake/async_delta_writer.cpp

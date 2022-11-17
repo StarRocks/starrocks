@@ -55,6 +55,7 @@ namespace starrocks {
 class TabletMgrTest : public testing::Test {
 public:
     void SetUp() override {
+        config::enable_event_based_compaction_framework = false;
         config::tablet_map_shard_size = 1;
         config::txn_map_shard_size = 1;
         config::txn_shard_size = 1;

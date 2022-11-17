@@ -138,7 +138,12 @@ export_shared_envvars() {
 
     # https://github.com/aws/aws-cli/issues/5623
     # https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-envvars.html
-    export AWS_EC2_METADATA_DISABLED=true
+    export AWS_EC2_METADATA_DISABLED=false
     # ===================================================================================
 }
 
+# Export cachelib libraries
+export_cachelib_lib_path() {
+    CACHELIB_DIR=$STARROCKS_HOME/lib/cachelib
+    export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$CACHELIB_DIR/lib:$CACHELIB_DIR/lib64:$CACHELIB_DIR/deps/lib:$CACHELIB_DIR/deps/lib64
+}

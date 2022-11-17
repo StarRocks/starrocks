@@ -46,9 +46,11 @@ TReportExecStatusParams ExecStateReporter::create_report_exec_status_params(Frag
     if (runtime_state->query_options().query_type == TQueryType::LOAD && !done && status.ok()) {
         // this is a load plan, and load is not finished, just make a brief report
         runtime_state->update_report_load_status(&params);
+        params.__set_load_type(runtime_state->query_options().load_job_type);
     } else {
         if (runtime_state->query_options().query_type == TQueryType::LOAD) {
             runtime_state->update_report_load_status(&params);
+            params.__set_load_type(runtime_state->query_options().load_job_type);
         }
         if (fragment_ctx->is_report_profile()) {
             profile->to_thrift(&params.profile);

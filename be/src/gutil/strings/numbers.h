@@ -59,7 +59,7 @@ bool safe_strtod(const string& str, double* value);
 
 // Parses buffer_size many characters from startptr into value.
 bool safe_strto32(const char* startptr, int buffer_size, int32* value);
-bool safe_strto64(const char* startptr, int buffer_size, int64* value);
+bool safe_strto64(const char* startptr, int64 buffer_size, int64* value);
 
 // Parses with a fixed base between 2 and 36. For base 16, leading "0x" is ok.
 // If base is set to 0, its value is inferred from the beginning of str:

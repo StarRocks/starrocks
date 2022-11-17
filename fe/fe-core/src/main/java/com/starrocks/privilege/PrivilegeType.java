@@ -10,7 +10,8 @@ public enum PrivilegeType {
     DATABASE(2, DbAction.actionMap(), "DATABASES"),
     SYSTEM(3, SystemAction.actionMap(), null),
     USER(4, UserAction.actionMap(), "USERS"),
-    RESOURCE(5, ResourceAction.actionMap(), "RESOURCES");
+    RESOURCE(5, ResourceAction.actionMap(), "RESOURCES"),
+    VIEW(6, ViewAction.actionMap(), "VIEWS");
 
     private final int id;
     private final Map<String, Action> actionMap;
@@ -43,7 +44,8 @@ public enum PrivilegeType {
         DROP(2),
         INSERT(3),
         SELECT(4),
-        SHOW(5);
+        ALTER(5),
+        EXPORT(6);
 
         private final int id;
 
@@ -63,7 +65,10 @@ public enum PrivilegeType {
     public enum DbAction {
         CREATE_TABLE(1),
         DROP(2),
-        SHOW(3);
+        ALTER(3),
+        CREATE_VIEW(4),
+        CREATE_FUNCTION(5),
+        CREATE_MATERIALIZED_VIEW(6);
 
         private final int id;
 
@@ -83,7 +88,11 @@ public enum PrivilegeType {
     public enum SystemAction {
         GRANT(1),
         NODE(2),
-        CREATE_RESOURCE(3);  // AND MORE...
+        CREATE_RESOURCE(3),
+        PLUGIN(4),
+        FILE(5),
+        BLACKLIST(6),
+        OPERATE(7);  // AND MORE...
 
         private final int id;
 
@@ -132,6 +141,26 @@ public enum PrivilegeType {
         public static Map<String, Action> actionMap() {
             Map<String, Action> ret = new HashMap<>();
             for (ResourceAction action : ResourceAction.values()) {
+                ret.put(action.toString(), new Action((short) action.id, action.toString()));
+            }
+            return ret;
+        }
+    }
+
+    public enum ViewAction {
+        SELECT(1),
+        ALTER(2),
+        DROP(3);
+
+        private final int id;
+
+        ViewAction(int id) {
+            this.id = id;
+        }
+
+        public static Map<String, Action> actionMap() {
+            Map<String, Action> ret = new HashMap<>();
+            for (ViewAction action : ViewAction.values()) {
                 ret.put(action.toString(), new Action((short) action.id, action.toString()));
             }
             return ret;

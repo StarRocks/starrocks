@@ -145,4 +145,16 @@ public class AnalyzeExprTest {
         analyzeFail("select array_filter([],[],[])");
         analyzeFail("select array_filter([2],1)");
     }
+
+    @Test
+    public void testBinaryLiteral() {
+        analyzeSuccess("select x'0000'");
+        analyzeSuccess("select x'0000' from tbinary ");
+        analyzeSuccess("select x\"0000\" from tbinary ");
+        analyzeSuccess("select hex(x'0000') from tbinary ");
+        analyzeSuccess("select hex(x\"0000\") from tbinary ");
+        analyzeSuccess("select hex(v_varbinary4) from tbinary ");
+        analyzeSuccess("select hex(v_varbinary) from tbinary ");
+        analyzeSuccess("insert into tbinary values(1, x'0000', x'0000' )");
+    }
 }

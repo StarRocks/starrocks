@@ -26,6 +26,8 @@ include "Types.thrift"
 include "Opcodes.thrift"
 
 enum TExprNodeType {
+  // Be careful, to keep the compatibility between differen version fe and be,
+  // please always add the new expr at last.
   AGG_EXPR,
   ARITHMETIC_EXPR,
   BINARY_PRED,
@@ -56,8 +58,6 @@ enum TExprNodeType {
   ARRAY_ELEMENT_EXPR,
   ARRAY_SLICE_EXPR,
 
-  MAP_ELEMENT_EXPR,
-
   TABLE_FUNCTION_EXPR,
 
   DICT_EXPR,
@@ -66,6 +66,8 @@ enum TExprNodeType {
   LAMBDA_FUNCTION_EXPR,
   SUBFIELD_EXPR,
   RUNTIME_FILTER_MIN_MAX_EXPR,
+  MAP_ELEMENT_EXPR,
+  BINARY_LITERAL,
 }
 
 //enum TAggregationOp {
@@ -117,6 +119,10 @@ struct TIntLiteral {
 
 struct TLargeIntLiteral {
   1: required string value
+}
+
+struct TBinaryLiteral {
+  1: required binary value
 }
 
 struct TInPredicate {
@@ -208,6 +214,7 @@ struct TExprNode {
 
   // Used for SubfieldExpr
   30: optional string used_subfield_name;
+  31: optional TBinaryLiteral binary_literal;
 
   // For vector query engine
   50: optional bool use_vectorized

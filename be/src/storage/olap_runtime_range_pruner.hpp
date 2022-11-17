@@ -18,7 +18,8 @@ struct RuntimeColumnPredicateBuilder {
                                                                        const RuntimeFilterProbeDescriptor* desc,
                                                                        const SlotDescriptor* slot) {
         // keep consistent with ColumnRangeBuilder
-        if constexpr (ptype == TYPE_TIME || ptype == TYPE_NULL || ptype == TYPE_JSON || pt_is_float<ptype>) {
+        if constexpr (ptype == TYPE_TIME || ptype == TYPE_NULL || ptype == TYPE_JSON || pt_is_float<ptype> ||
+                      pt_is_binary<ptype>) {
             CHECK(false) << "unreachable path";
             return Status::NotSupported("unreachable path");
         } else {

@@ -123,9 +123,7 @@ private:
 
     void (*_shallow_copy)(void* dest, const void* src);
     void (*_deep_copy)(void* dest, const void* src, MemPool* mem_pool);
-    void (*_copy_object)(void* dest, const void* src, MemPool* mem_pool);
     void (*_direct_copy)(void* dest, const void* src, MemPool* mem_pool);
-    Status (*_convert_from)(void* dest, const void* src, const TypeInfoPtr& src_type, MemPool* mem_pool);
 
     Status (*_from_string)(void* buf, const std::string& scan_key);
     std::string (*_to_string)(const void* src);
@@ -181,10 +179,6 @@ struct ScalarTypeInfoImplBase {
         unaligned_store<CppType>(dest, unaligned_load<CppType>(src));
     }
 
-    static void copy_object(void* dest, const void* src, MemPool* mem_pool __attribute__((unused))) {
-        unaligned_store<CppType>(dest, unaligned_load<CppType>(src));
-    }
-
     static void direct_copy(void* dest, const void* src, MemPool* mem_pool) {
         unaligned_store<CppType>(dest, unaligned_load<CppType>(src));
     }
@@ -228,7 +222,7 @@ template <FieldType field_type>
 struct ScalarTypeInfoImpl : public ScalarTypeInfoImplBase<field_type> {};
 
 // ScalarTypeInfoResolver
-// Manage all type-info instances, prodivding getter
+// Manage all type-info instances, providing getter
 class ScalarTypeInfoResolver {
     DECLARE_SINGLETON(ScalarTypeInfoResolver);
 
@@ -266,9 +260,7 @@ ScalarTypeInfo::ScalarTypeInfo([[maybe_unused]] TypeInfoImpl t)
           _cmp(TypeInfoImpl::cmp),
           _shallow_copy(TypeInfoImpl::shallow_copy),
           _deep_copy(TypeInfoImpl::deep_copy),
-          _copy_object(TypeInfoImpl::copy_object),
           _direct_copy(TypeInfoImpl::direct_copy),
-          _convert_from(TypeInfoImpl::convert_from),
           _from_string(TypeInfoImpl::from_string),
           _to_string(TypeInfoImpl::to_string),
           _set_to_max(TypeInfoImpl::set_to_max),
@@ -534,9 +526,6 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_LARGEINT> : public ScalarTypeInfoImplB
         unaligned_store<int128_t>(dest, unaligned_load<int128_t>(src));
     }
 
-    static void copy_object(void* dest, const void* src, MemPool* mem_pool __attribute__((unused))) {
-        unaligned_store<int128_t>(dest, unaligned_load<int128_t>(src));
-    }
     static void direct_copy(void* dest, const void* src, MemPool* mem_pool) {
         unaligned_store<int128_t>(dest, unaligned_load<int128_t>(src));
     }
@@ -673,9 +662,6 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_DECIMAL_V2> : public ScalarTypeInfoImp
         memcpy(dest, src, sizeof(CppType));
     }
 
-    static void copy_object(void* dest, const void* src, MemPool* mem_pool __attribute__((unused))) {
-        memcpy(dest, src, sizeof(CppType));
-    }
     static void direct_copy(void* dest, const void* src, MemPool* mem_pool) { memcpy(dest, src, sizeof(CppType)); }
 
     static void set_to_max(void* buf) {
@@ -955,8 +941,6 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_CHAR> : public ScalarTypeInfoImplBase<
         unaligned_store<Slice>(dest, l_slice);
     }
 
-    static void copy_object(void* dest, const void* src, MemPool* mem_pool) { deep_copy(dest, src, mem_pool); }
-
     static void direct_copy(void* dest, const void* src, MemPool* mem_pool) {
         auto l_slice = unaligned_load<Slice>(dest);
         auto r_slice = unaligned_load<Slice>(src);
@@ -1041,56 +1025,18 @@ template <>
 struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_HLL> : public ScalarTypeInfoImpl<OLAP_FIELD_TYPE_VARCHAR> {
     static const FieldType type = OLAP_FIELD_TYPE_HLL;
     static const int32_t size = TypeTraits<OLAP_FIELD_TYPE_HLL>::size;
-    /*
-     * Hyperloglog type only used as value, so
-     * cmp/from_string/set_to_max/set_to_min function
-     * in this struct has no significance
-     */
-
-    // See copy_row_in_memtable() in olap/row.h, will be removed in future.
-    static void copy_object(void* dest, const void* src, MemPool* mem_pool __attribute__((unused))) {
-        Slice dst_slice;
-        auto src_slice = unaligned_load<Slice>(src);
-        DCHECK_EQ(src_slice.size, 0);
-        dst_slice.data = src_slice.data;
-        dst_slice.size = 0;
-        unaligned_store<Slice>(dest, dst_slice);
-    }
 };
 
 template <>
 struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_OBJECT> : public ScalarTypeInfoImpl<OLAP_FIELD_TYPE_VARCHAR> {
     static const FieldType type = OLAP_FIELD_TYPE_OBJECT;
     static const int32_t size = TypeTraits<OLAP_FIELD_TYPE_OBJECT>::size;
-    /*
-     * Object type only used as value, so
-     * cmp/from_string/set_to_max/set_to_min function
-     * in this struct has no significance
-     */
-
-    // See copy_row_in_memtable() in olap/row.h, will be removed in future.
-    static void copy_object(void* dest, const void* src, MemPool* mem_pool __attribute__((unused))) {
-        Slice dst_slice;
-        auto src_slice = unaligned_load<Slice>(src);
-        DCHECK_EQ(src_slice.size, 0);
-        dst_slice.data = src_slice.data;
-        dst_slice.size = 0;
-        unaligned_store<Slice>(dest, dst_slice);
-    }
 };
 
 template <>
 struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_PERCENTILE> : public ScalarTypeInfoImpl<OLAP_FIELD_TYPE_VARCHAR> {
     static const FieldType type = OLAP_FIELD_TYPE_PERCENTILE;
     static const int32_t size = TypeTraits<OLAP_FIELD_TYPE_PERCENTILE>::size;
-    // See copy_row_in_memtable() in olap/row.h, will be removed in future.
-    static void copy_object(void* dest, const void* src, MemPool* mem_pool __attribute__((unused))) {
-        auto dst_slice = reinterpret_cast<Slice*>(dest);
-        auto src_slice = reinterpret_cast<const Slice*>(src);
-        DCHECK_EQ(src_slice->size, 0);
-        dst_slice->data = src_slice->data;
-        dst_slice->size = 0;
-    }
 };
 
 template <>
@@ -1104,10 +1050,16 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_JSON> : public ScalarTypeInfoImpl<OLAP
     }
 };
 
+template <>
+struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_VARBINARY> : public ScalarTypeInfoImpl<OLAP_FIELD_TYPE_VARCHAR> {
+    static const FieldType type = OLAP_FIELD_TYPE_VARBINARY;
+    static const int32_t size = TypeTraits<OLAP_FIELD_TYPE_VARBINARY>::size;
+};
+
 void (*ScalarTypeInfoImpl<OLAP_FIELD_TYPE_CHAR>::set_to_max)(void*) = nullptr;
 
 // NOTE
-// These code could not be moved proceeding ScalarTypeInfoImpl speciliazation, otherwise
+// These code could not be moved proceeding ScalarTypeInfoImpl specialization, otherwise
 // will encounter `specialization after instantiation` error
 template <FieldType ftype>
 int TypeComparator<ftype>::cmp(const void* lhs, const void* rhs) {

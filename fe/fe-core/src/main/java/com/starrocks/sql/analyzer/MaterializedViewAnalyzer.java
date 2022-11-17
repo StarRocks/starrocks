@@ -237,10 +237,9 @@ public class MaterializedViewAnalyzer {
                         requiredPropertySet,
                         new ColumnRefSet(logicalPlan.getOutputColumn()),
                         columnRefFactory);
+                optimizedPlan.deriveMVProperty();
 
                 // TODO: refine rules for mv plan
-                // TODO: infer key property
-                // TODO: infer retraction op
                 // TODO: infer state
                 // TODO: store the plan in create-mv statement and persist it at executor
             } finally {
@@ -721,4 +720,5 @@ public class MaterializedViewAnalyzer {
             }
         }
     }
+
 }

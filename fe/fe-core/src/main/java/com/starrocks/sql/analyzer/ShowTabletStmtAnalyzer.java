@@ -10,11 +10,15 @@ import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Replica;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.proc.LakeTabletsProcNode;
 import com.starrocks.common.proc.LocalTabletsProcDir;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.ShowTabletStmt;
@@ -74,6 +78,22 @@ public class ShowTabletStmtAnalyzer {
             // order by
             List<OrderByElement> orderByElements = statement.getOrderByElements();
             if (orderByElements != null && !orderByElements.isEmpty()) {
+                Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+                if (db == null) {
+                    throw new SemanticException("Database %s is not found", dbName);
+                }
+                String tableName = statement.getTableName();
+                Table table = null;
+                db.readLock();
+                try {
+                    table = db.getTable(tableName);
+                    if (table == null) {
+                        throw new SemanticException("Table %s is not found", tableName);
+                    }
+                } finally {
+                    db.readUnlock();
+                }
+
                 orderByPairs = new ArrayList<>();
                 for (OrderByElement orderByElement : orderByElements) {
                     if (!(orderByElement.getExpr() instanceof SlotRef)) {
@@ -82,7 +102,11 @@ public class ShowTabletStmtAnalyzer {
                     SlotRef slotRef = (SlotRef) orderByElement.getExpr();
                     int index = 0;
                     try {
-                        index = LocalTabletsProcDir.analyzeColumn(slotRef.getColumnName());
+                        if (table.isLakeTable()) {
+                            index = LakeTabletsProcNode.analyzeColumn(slotRef.getColumnName());
+                        } else {
+                            index = LocalTabletsProcDir.analyzeColumn(slotRef.getColumnName());
+                        }
                     } catch (AnalysisException e) {
                         throw new SemanticException(e.getMessage());
                     }

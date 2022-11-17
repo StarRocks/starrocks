@@ -200,6 +200,7 @@ public:
         config::min_cumulative_compaction_num_singleton_deltas = 2;
         config::max_cumulative_compaction_num_singleton_deltas = 5;
         config::max_compaction_concurrency = 1;
+        config::enable_event_based_compaction_framework = false;
         Compaction::init(config::max_compaction_concurrency);
 
         config::storage_root_path = std::filesystem::current_path().string() + "/data_test_cumulative_compaction";

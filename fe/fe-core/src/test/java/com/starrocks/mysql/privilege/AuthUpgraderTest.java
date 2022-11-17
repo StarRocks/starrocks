@@ -2,6 +2,7 @@
 
 package com.starrocks.mysql.privilege;
 
+import com.clearspring.analytics.util.Lists;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.persist.AuthUpgradeInfo;
@@ -67,7 +68,7 @@ public class AuthUpgraderTest {
     }
 
     private void replayUpgrade(UtFrameUtils.PseudoImage image) throws Exception {
-        // pretend it's a old privilege
+        // pretend it's an old privilege
         GlobalStateMgr.getCurrentState().initAuth(false);
         // 1. load image
         ctx = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
@@ -84,6 +85,7 @@ public class AuthUpgraderTest {
         ctx.setCurrentUserIdentity(user);
         ctx.setQualifiedUser(user.getQualifiedUser());
         for (String sql : verifiedSqls) {
+            System.err.println(sql);
             PrivilegeCheckerV2.check(UtFrameUtils.parseStmtWithNewParser(sql, ctx), ctx);
         }
     }
@@ -131,14 +133,15 @@ public class AuthUpgraderTest {
             for (int j = 0; j != 2; ++ j) {
                 String createTblStmtStr = "create table db" + i + ".tbl" + j
                         + "(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) "
-                        +
-                        "AGGREGATE KEY(k1, k2,k3,k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
+                        + "AGGREGATE KEY(k1, k2,k3,k4) distributed by hash(k1)"
+                        + " buckets 3 properties('replication_num' = '1');";
                 starRocksAssert.withTable(createTblStmtStr);
             }
+            starRocksAssert.withView("create view db" + i + ".view as select k1, k2 from db" + i + ".tbl0");
         }
         ctx = starRocksAssert.getCtx();
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
-        Config.ignore_invalid_privilege_authentications = true;
+        Config.ignore_invalid_privilege_authentications = false;
     }
 
     @After
@@ -156,12 +159,16 @@ public class AuthUpgraderTest {
                 "GRANT select_priv on db0.* TO dbSelect",
                 "create user tblSelect",
                 "GRANT select_priv on db0.tbl0 TO tblSelect",
+                "create user viewSelect",
+                "GRANT select_priv on db0.view TO viewSelect",
                 "create role globalSelect",
                 "GRANT select_priv on *.* TO role globalSelect",
                 "create role dbSelect",
                 "GRANT select_priv on db0.* TO role dbSelect",
                 "create role tblSelect",
-                "GRANT select_priv on db0.tbl0 TO role tblSelect");
+                "GRANT select_priv on db0.tbl0 TO role tblSelect",
+                "create role viewSelect",
+                "GRANT select_priv on db0.view TO role viewSelect");
         // check twice, the second time is as follower
         for (int i = 0; i != 2; ++ i) {
             if (i == 1) {
@@ -172,13 +179,16 @@ public class AuthUpgraderTest {
                     "select * from db1.tbl1",
                     "select * from db0.tbl0");
             UserIdentity user = createUserByRole("globalSelect");
-            checkPrivilegeAsUser(user, "select * from db1.tbl1", "select * from db0.tbl0");
+            checkPrivilegeAsUser(
+                    user, "select * from db1.tbl1", "select * from db0.tbl0", "select * from db0.view");
 
             user = UserIdentity.createAnalyzedUserIdentWithIp("dbSelect", "%");
-            checkPrivilegeAsUser(user, "select * from db0.tbl0", "select * from db0.tbl1");
+            checkPrivilegeAsUser(
+                    user, "select * from db0.tbl0", "select * from db0.tbl1", "select * from db0.view");
             checkBadPrivilegeAsUser(user, "select * from db1.tbl1", "SELECT command denied to user 'dbSelect'");
             user = createUserByRole("dbSelect");
-            checkPrivilegeAsUser(user, "select * from db0.tbl0", "select * from db0.tbl1");
+            checkPrivilegeAsUser(
+                    user, "select * from db0.tbl0", "select * from db0.tbl1", "select * from db0.view");
             checkBadPrivilegeAsUser(user, "select * from db1.tbl1", "SELECT command denied to user");
 
             user = UserIdentity.createAnalyzedUserIdentWithIp("tblSelect", "%");
@@ -186,6 +196,13 @@ public class AuthUpgraderTest {
             checkBadPrivilegeAsUser(user, "select * from db1.tbl1", "SELECT command denied to user 'tblSelect'");
             user = createUserByRole("tblSelect");
             checkPrivilegeAsUser(user, "select * from db0.tbl0");
+            checkBadPrivilegeAsUser(user, "select * from db1.tbl1", "SELECT command denied to user");
+
+            user = UserIdentity.createAnalyzedUserIdentWithIp("viewSelect", "%");
+            checkPrivilegeAsUser(user, "select * from db0.view");
+            checkBadPrivilegeAsUser(user, "select * from db0.tbl0", "SELECT command denied to user 'viewSelect'");
+            user = createUserByRole("viewSelect");
+            checkPrivilegeAsUser(user, "select * from db0.view");
             checkBadPrivilegeAsUser(user, "select * from db1.tbl1", "SELECT command denied to user");
         }
     }
@@ -308,6 +325,272 @@ public class AuthUpgraderTest {
     }
 
     @Test
+    public void testCreate() throws Exception {
+        UtFrameUtils.PseudoImage image = executeAndUpgrade(
+                true,
+                "create user userWithGlobalCreate",
+                "grant create_priv on *.* to userWithGlobalCreate",
+                "create role userWithGlobalCreate",
+                "grant create_priv on *.* to role userWithGlobalCreate",
+                "create user userWithResourceAllCreate",
+                "grant create_priv on resource * to userWithResourceAllCreate",
+                "create user userWithDbCreate",
+                "grant create_priv on db1.* to userWithDbCreate",
+                "create role userWithDbCreate",
+                "grant create_priv on db1.* to role userWithDbCreate",
+                "create user tableCreate",
+                "grant create_priv on db0.tbl0 to tableCreate",
+                "create role tableCreate",
+                "grant create_priv on db0.tbl0 to role tableCreate",
+                "create user viewCreate",
+                "grant create_priv on db0.view to viewCreate",
+                "create role viewCreate",
+                "grant create_priv on db0.view to role viewCreate");
+        // check twice, the second time is as follower
+        for (int i = 0; i != 2; ++ i) {
+            if (i == 1) {
+                replayUpgrade(image);
+            }
+
+            List<String> users = Lists.newArrayList();
+            users.add("userWithGlobalCreate");
+            users.add("userWithResourceAllCreate");
+            // check: grant create_priv on *.* | grant create_priv on resource *
+            for (String user : users) {
+                UserIdentity uid = UserIdentity.createAnalyzedUserIdentWithIp(user, "%");
+                ctx.setCurrentUserIdentity(uid);
+                Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db0", PrivilegeType.DbAction.CREATE_TABLE));
+                Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db0", PrivilegeType.DbAction.CREATE_VIEW));
+                Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db0", PrivilegeType.DbAction.CREATE_FUNCTION));
+                Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.DbAction.CREATE_TABLE));
+                Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db1",
+                        PrivilegeType.DbAction.CREATE_MATERIALIZED_VIEW));
+            }
+            ctx.setCurrentUserIdentity(createUserByRole("userWithGlobalCreate"));
+            Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.DbAction.CREATE_TABLE));
+            Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.DbAction.CREATE_VIEW));
+            Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.DbAction.CREATE_FUNCTION));
+            Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db0", PrivilegeType.DbAction.CREATE_TABLE));
+            Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db0",
+                    PrivilegeType.DbAction.CREATE_MATERIALIZED_VIEW));
+
+            // check: grant create_priv on db1.*
+            ctx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp("userWithDbCreate", "%"));
+            Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.DbAction.CREATE_TABLE));
+            Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.DbAction.CREATE_VIEW));
+            Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db0", PrivilegeType.DbAction.CREATE_TABLE));
+            Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db0", PrivilegeType.DbAction.CREATE_VIEW));
+            ctx.setCurrentUserIdentity(createUserByRole("userWithDbCreate"));
+            Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.DbAction.CREATE_TABLE));
+            Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.DbAction.CREATE_VIEW));
+            Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db0", PrivilegeType.DbAction.CREATE_TABLE));
+            Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db0", PrivilegeType.DbAction.CREATE_VIEW));
+
+            // can't create view or table any more
+            for (UserIdentity userIdentity : Arrays.asList(
+                    UserIdentity.createAnalyzedUserIdentWithIp("tableCreate", "%"),
+                    createUserByRole("tableCreate"),
+                    UserIdentity.createAnalyzedUserIdentWithIp("viewCreate", "%"),
+                    createUserByRole("viewCreate"))) {
+                ctx.setCurrentUserIdentity(userIdentity);
+                Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db0", PrivilegeType.DbAction.CREATE_TABLE));
+                Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db0", PrivilegeType.DbAction.CREATE_VIEW));
+            }
+        }
+    }
+
+    @Test
+    public void testDrop() throws Exception {
+        UtFrameUtils.PseudoImage image = executeAndUpgrade(
+                true,
+                "create user userWithGlobalDrop",
+                "grant drop_priv on *.* to userWithGlobalDrop",
+                "create role userWithGlobalDrop",
+                "grant drop_priv on *.* to role userWithGlobalDrop",
+                "create user userWithResourceAllDrop",
+                "grant drop_priv on resource * to userWithResourceAllDrop",
+                "create user userWithDbDrop",
+                "grant drop_priv on db1.* to userWithDbDrop",
+                "create role userWithDbDrop",
+                "grant drop_priv on db1.* to role userWithDbDrop",
+                "create user tableDrop",
+                "grant drop_priv on db0.tbl0 to tableDrop",
+                "create role tableDrop",
+                "grant drop_priv on db0.tbl0 to role tableDrop",
+                "create user viewDrop",
+                "grant drop_priv on db0.view to viewDrop",
+                "create role viewDrop",
+                "grant drop_priv on db0.view to role viewDrop");
+        // check twice, the second time is as follower
+        for (int i = 0; i != 2; ++ i) {
+            if (i == 1) {
+                replayUpgrade(image);
+            }
+
+            List<String> users = Lists.newArrayList();
+            users.add("userWithGlobalDrop");
+            users.add("userWithResourceAllDrop");
+            // check: grant drop_priv on *.* | grant drop_priv on resource *
+            for (String user : users) {
+                UserIdentity uid = UserIdentity.createAnalyzedUserIdentWithIp(user, "%");
+                ctx.setCurrentUserIdentity(uid);
+                Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.DbAction.DROP));
+                Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.DbAction.CREATE_VIEW));
+            }
+            ctx.setCurrentUserIdentity(createUserByRole("userWithGlobalDrop"));
+            Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.DbAction.DROP));
+            Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.DbAction.CREATE_VIEW));
+
+            // check: grant drop_priv on db1.*
+            for (UserIdentity userIdentity : Arrays.asList(
+                    UserIdentity.createAnalyzedUserIdentWithIp("userWithDbDrop", "%"),
+                    createUserByRole("userWithDbDrop"))) {
+                ctx.setCurrentUserIdentity(userIdentity);
+                Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.DbAction.DROP));
+                Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db0", PrivilegeType.DbAction.DROP));
+                Assert.assertTrue(PrivilegeManager.checkTableAction(
+                        ctx, "db1", "tbl0", PrivilegeType.TableAction.DROP));
+                Assert.assertFalse(PrivilegeManager.checkTableAction(
+                        ctx, "db0", "tbl0", PrivilegeType.TableAction.DROP));
+                Assert.assertTrue(PrivilegeManager.checkViewAction(
+                        ctx, "db1", "view", PrivilegeType.ViewAction.DROP));
+                Assert.assertFalse(PrivilegeManager.checkViewAction(
+                        ctx, "db0", "view", PrivilegeType.ViewAction.DROP));
+            }
+
+            // check drop on table
+            for (UserIdentity userIdentity : Arrays.asList(
+                    UserIdentity.createAnalyzedUserIdentWithIp("tableDrop", "%"),
+                    createUserByRole("tableDrop"))) {
+                ctx.setCurrentUserIdentity(userIdentity);
+                Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.DbAction.DROP));
+                Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db0", PrivilegeType.DbAction.DROP));
+                Assert.assertTrue(PrivilegeManager.checkTableAction(
+                        ctx, "db0", "tbl0", PrivilegeType.TableAction.DROP));
+                Assert.assertFalse(PrivilegeManager.checkTableAction(
+                        ctx, "db0", "tbl1", PrivilegeType.TableAction.DROP));
+                Assert.assertFalse(PrivilegeManager.checkViewAction(
+                        ctx, "db0", "view", PrivilegeType.ViewAction.DROP));
+                Assert.assertFalse(PrivilegeManager.checkViewAction(
+                        ctx, "db1", "view", PrivilegeType.ViewAction.DROP));
+            }
+
+            // check alter on view
+            for (UserIdentity userIdentity : Arrays.asList(
+                    UserIdentity.createAnalyzedUserIdentWithIp("viewDrop", "%"),
+                    createUserByRole("viewDrop"))) {
+                ctx.setCurrentUserIdentity(userIdentity);
+                Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.DbAction.DROP));
+                Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db0", PrivilegeType.DbAction.DROP));
+                Assert.assertFalse(PrivilegeManager.checkTableAction(
+                        ctx, "db0", "tbl0", PrivilegeType.TableAction.DROP));
+                Assert.assertFalse(PrivilegeManager.checkTableAction(
+                        ctx, "db0", "tbl1", PrivilegeType.TableAction.DROP));
+                Assert.assertTrue(PrivilegeManager.checkViewAction(
+                        ctx, "db0", "view", PrivilegeType.ViewAction.DROP));
+                Assert.assertFalse(PrivilegeManager.checkViewAction(
+                        ctx, "db1", "view", PrivilegeType.ViewAction.DROP));
+            }
+        }
+    }
+
+    @Test
+    public void testAlter() throws Exception {
+        UtFrameUtils.PseudoImage image = executeAndUpgrade(
+                true,
+                "create user userWithGlobalAlter",
+                "grant alter_priv on *.* to userWithGlobalAlter",
+                "create role userWithGlobalAlter",
+                "grant alter_priv on *.* to role userWithGlobalAlter",
+                "create user userWithResourceAllAlter",
+                "grant alter_priv on resource * to userWithResourceAllAlter",
+                "create user userWithDbAlter",
+                "grant alter_priv on db1.* to userWithDbAlter",
+                "create role userWithDbAlter",
+                "grant alter_priv on db1.* to role userWithDbAlter",
+                "create user tableAlter",
+                "grant alter_priv on db0.tbl0 to tableAlter",
+                "create role tableAlter",
+                "grant alter_priv on db0.tbl0 to role tableAlter",
+                "create user viewAlter",
+                "grant alter_priv on db0.view to viewAlter",
+                "create role viewAlter",
+                "grant alter_priv on db0.view to role viewAlter");
+        // check twice, the second time is as follower
+        for (int i = 0; i != 2; ++ i) {
+            if (i == 1) {
+                replayUpgrade(image);
+            }
+
+            // check global
+            List<String> users = Lists.newArrayList();
+            users.add("userWithGlobalAlter");
+            users.add("userWithResourceAllAlter");
+            // check: grant alter_priv on *.* | grant alter_priv on resource *
+            for (String user : users) {
+                UserIdentity uid = UserIdentity.createAnalyzedUserIdentWithIp(user, "%");
+                ctx.setCurrentUserIdentity(uid);
+                Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.DbAction.ALTER));
+                Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.DbAction.CREATE_VIEW));
+            }
+            ctx.setCurrentUserIdentity(createUserByRole("userWithGlobalAlter"));
+            Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.DbAction.ALTER));
+            Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.DbAction.CREATE_VIEW));
+
+            // check: grant alter_priv on db1.*
+            for (UserIdentity userIdentity : Arrays.asList(
+                    UserIdentity.createAnalyzedUserIdentWithIp("userWithDbAlter", "%"),
+                    createUserByRole("userWithDbAlter"))) {
+                ctx.setCurrentUserIdentity(userIdentity);
+                Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.DbAction.ALTER));
+                Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db0", PrivilegeType.DbAction.ALTER));
+                Assert.assertTrue(PrivilegeManager.checkTableAction(
+                        ctx, "db1", "tbl0", PrivilegeType.TableAction.ALTER));
+                Assert.assertFalse(PrivilegeManager.checkTableAction(
+                        ctx, "db0", "tbl0", PrivilegeType.TableAction.ALTER));
+                Assert.assertTrue(PrivilegeManager.checkViewAction(
+                        ctx, "db1", "view", PrivilegeType.ViewAction.ALTER));
+                Assert.assertFalse(PrivilegeManager.checkViewAction(
+                        ctx, "db0", "view", PrivilegeType.ViewAction.ALTER));
+            }
+
+            // check alter on table
+            for (UserIdentity userIdentity : Arrays.asList(
+                    UserIdentity.createAnalyzedUserIdentWithIp("tableAlter", "%"),
+                    createUserByRole("tableAlter"))) {
+                ctx.setCurrentUserIdentity(userIdentity);
+                Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.DbAction.ALTER));
+                Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db0", PrivilegeType.DbAction.ALTER));
+                Assert.assertTrue(PrivilegeManager.checkTableAction(
+                        ctx, "db0", "tbl0", PrivilegeType.TableAction.ALTER));
+                Assert.assertFalse(PrivilegeManager.checkTableAction(
+                        ctx, "db0", "tbl1", PrivilegeType.TableAction.ALTER));
+                Assert.assertFalse(PrivilegeManager.checkViewAction(
+                        ctx, "db0", "view", PrivilegeType.ViewAction.ALTER));
+                Assert.assertFalse(PrivilegeManager.checkViewAction(
+                        ctx, "db1", "view", PrivilegeType.ViewAction.ALTER));
+            }
+
+            // check alter on view
+            for (UserIdentity userIdentity : Arrays.asList(
+                    UserIdentity.createAnalyzedUserIdentWithIp("viewAlter", "%"),
+                    createUserByRole("viewAlter"))) {
+                ctx.setCurrentUserIdentity(userIdentity);
+                Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.DbAction.ALTER));
+                Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db0", PrivilegeType.DbAction.ALTER));
+                Assert.assertFalse(PrivilegeManager.checkTableAction(
+                        ctx, "db0", "tbl0", PrivilegeType.TableAction.ALTER));
+                Assert.assertFalse(PrivilegeManager.checkTableAction(
+                        ctx, "db0", "tbl1", PrivilegeType.TableAction.ALTER));
+                Assert.assertTrue(PrivilegeManager.checkViewAction(
+                        ctx, "db0", "view", PrivilegeType.ViewAction.ALTER));
+                Assert.assertFalse(PrivilegeManager.checkViewAction(
+                        ctx, "db1", "view", PrivilegeType.ViewAction.ALTER));
+            }
+        }
+    }
+
+    @Test
     public void testNodeAdmin() throws Exception {
         UtFrameUtils.PseudoImage image = executeAndUpgrade(
                 true,
@@ -338,15 +621,41 @@ public class AuthUpgraderTest {
             UserIdentity user = createUserByRole("adminrole");
             String createResourceStmt = "create external resource 'hive0' PROPERTIES(" +
                     "\"type\"  =  \"hive\", \"hive.metastore.uris\"  =  \"thrift://127.0.0.1:9083\")";
-            checkPrivilegeAsUser(user,
-                    "select * from db1.tbl1",
-                    "select * from db0.tbl0",
-                    createResourceStmt);
+            List<String> sqlList = new ArrayList<>();
+            // show node
+            sqlList.addAll(Arrays.asList("show backends", "show frontends", "show broker", "show compute nodes"));
+            // show txn
+            sqlList.addAll(Arrays.asList("SHOW TRANSACTION FROM db WHERE ID=4005;"));
+            // admin
+            sqlList.addAll(Arrays.asList(
+                    "admin set frontend config (\"key\" = \"value\");",
+                    "ADMIN SET REPLICA STATUS PROPERTIES(\"tablet_id\" = \"10003\", " +
+                    "\"backend_id\" = \"10001\", \"status\" = \"bad\");",
+                    "ADMIN SHOW FRONTEND CONFIG;",
+                    "ADMIN SHOW REPLICA DISTRIBUTION FROM example_db.example_table PARTITION(p1, p2);",
+                    "ADMIN SHOW REPLICA STATUS FROM example_db.example_table;",
+                    "ADMIN REPAIR TABLE example_db.example_table PARTITION(p1);",
+                    "ADMIN CANCEL REPAIR TABLE example_db.example_table PARTITION(p1);",
+                    "ADMIN CHECK TABLET (1, 2) PROPERTIES (\"type\" = \"CONSISTENCY\");"
+            ));
+            // alter system
+            sqlList.addAll(Arrays.asList(
+                    "ALTER SYSTEM ADD FOLLOWER \"127.0.0.1:9010\";",
+                    "CANCEL DECOMMISSION BACKEND \"host1:port\", \"host2:port\";"
+            ));
+            // kill, set, show proc
+            sqlList.addAll(Arrays.asList(
+                    "kill query 1", "show proc '/backends'", "SET PASSWORD FOR 'jack'@'192.%' = PASSWORD('123456');"
+            ));
+            // select, create
+            sqlList.addAll(Arrays.asList(
+                     "select * from db1.tbl1",
+                     "select * from db0.tbl0",
+                     createResourceStmt
+            ));
+            checkPrivilegeAsUser(user, sqlList.toArray(new String[0]));
             user = createUserByRole("adminrole");
-            checkPrivilegeAsUser(user,
-                    "select * from db1.tbl1",
-                    "select * from db0.tbl0",
-                    createResourceStmt);
+            checkPrivilegeAsUser(user, sqlList.toArray(new String[0]));
         }
     }
 
@@ -414,7 +723,19 @@ public class AuthUpgraderTest {
                 "GRANT SELECT ON ALL TABLES IN ALL DATABASES TO role public",
                 "GRANT SELECT ON ALL TABLES IN DATABASE db0 TO role public",
                 "GRANT SELECT ON db1.tbl1 TO role public",
-                "GRANT USAGE ON resource 'hive0' TO role public");
+                "GRANT USAGE ON resource 'hive0' TO role public",
+                "grant global_grant_role to global_grant_user",
+                "revoke global_grant_role from global_grant_user",
+                "create user xxx",
+                "drop user global_grant_user",
+                "alter user global_grant_user identified by 'asdf'",
+                "show roles",
+                "create role xxx",
+                "drop role global_grant_role",
+                "show grants for root",
+                "show authentication for root",
+                "show property for 'root' ",
+                "set property for 'root' 'max_user_connections' = '100'");
         checkGrant(image, "global_grant", allows, new ArrayList<>());
     }
 
@@ -426,7 +747,19 @@ public class AuthUpgraderTest {
         List<String> denies = Arrays.asList(
                 "GRANT SELECT ON ALL TABLES IN ALL DATABASES TO role public",
                 "GRANT USAGE ON resource 'hive0' TO role public",
-                "GRANT SELECT ON db1.tbl1 TO role public");
+                "GRANT SELECT ON db1.tbl1 TO role public",
+                "grant db_grant_role to db_grant_user",
+                "revoke db_grant_role from db_grant_user",
+                "create user xxx",
+                "drop user db_grant_user",
+                "alter user db_grant_user identified by 'asdf'",
+                "show roles",
+                "create role xxx",
+                "drop role db_grant_role",
+                "show grants for root",
+                "show authentication for root",
+                "show property for 'root' ",
+                "set property for 'root' 'max_user_connections' = '100'");
         checkGrant(image, "db_grant", allows, denies);
     }
 
@@ -438,7 +771,19 @@ public class AuthUpgraderTest {
         List<String> denies = Arrays.asList(
                 "GRANT SELECT ON ALL TABLES IN ALL DATABASES TO role public",
                 "GRANT USAGE ON resource 'hive0' TO role public",
-                "GRANT SELECT ON ALL TABLES IN DATABASE db0 TO role public");
+                "GRANT SELECT ON ALL TABLES IN DATABASE db0 TO role public",
+                "grant table_grant_role to table_grant_user",
+                "revoke table_grant_role from table_grant_user",
+                "create user xxx",
+                "drop user table_grant_user",
+                "alter user table_grant_user identified by 'asdf'",
+                "show roles",
+                "create role xxx",
+                "drop role table_grant_role",
+                "show grants for root",
+                "show authentication for root",
+                "show property for 'root' ",
+                "set property for 'root' 'max_user_connections' = '100'");
         checkGrant(image, "table_grant", allows, denies);
     }
 
@@ -450,7 +795,19 @@ public class AuthUpgraderTest {
         List<String> denies = Arrays.asList(
                 "GRANT SELECT ON ALL TABLES IN ALL DATABASES TO role public",
                 "GRANT SELECT ON ALL TABLES IN DATABASE db0 TO role public",
-                "GRANT SELECT ON db1.tbl1 TO role public");
+                "GRANT SELECT ON db1.tbl1 TO role public",
+                "grant resource_grant_role to resource_grant_user",
+                "revoke resource_grant_role from resource_grant_user",
+                "create user xxx",
+                "drop user resource_grant_user",
+                "alter user resource_grant_user identified by 'asdf'",
+                "show roles",
+                "create role xxx",
+                "drop role resource_grant_role",
+                "show grants for root",
+                "show authentication for root",
+                "show property for 'root' ",
+                "set property for 'root' 'max_user_connections' = '100'");
         checkGrant(image, "resource_grant", allows, denies);
     }
 
@@ -461,7 +818,109 @@ public class AuthUpgraderTest {
                 "GRANT SELECT ON ALL TABLES IN ALL DATABASES TO role public",
                 "GRANT SELECT ON ALL TABLES IN DATABASE db0 TO role public",
                 "GRANT SELECT ON db1.tbl1 TO role public",
-                "GRANT USAGE ON resource 'hive0' TO role public");
+                "GRANT USAGE ON resource 'hive0' TO role public",
+                "grant resource_global_grant_role to resource_global_grant_user",
+                "revoke resource_global_grant_role from resource_global_grant_user",
+                "create user xxx",
+                "drop user resource_global_grant_user",
+                "alter user resource_global_grant_user identified by 'asdf'",
+                "show roles",
+                "create role xxx",
+                "drop role resource_global_grant_role",
+                "show grants for root",
+                "show authentication for root",
+                "show property for 'root' ",
+                "set property for 'root' 'max_user_connections' = '100'");
         checkGrant(image, "resource_global_grant", allows, new ArrayList<>());
     }
+
+    @Test
+    public void testPluginStmts() throws Exception {
+        UtFrameUtils.PseudoImage image = executeAndUpgrade(
+                true,
+                "create user pluginUser",
+                "GRANT admin_priv on *.* TO pluginUser",
+                "create role pluginRole",
+                "GRANT admin_priv on *.* TO role pluginRole");
+        // check twice, the second time is as follower
+        for (int i = 0; i != 2; ++ i) {
+            if (i == 1) {
+                replayUpgrade(image);
+            }
+            checkPrivilegeAsUser(
+                    UserIdentity.createAnalyzedUserIdentWithIp("pluginUser", "%"),
+                    "INSTALL PLUGIN FROM \"/home/users/starrocks/auditdemo.zip\"",
+                    "UNINSTALL PLUGIN auditdemo",
+                    "SHOW PLUGINS");
+
+            checkPrivilegeAsUser(
+                    createUserByRole("pluginRole"),
+                    "INSTALL PLUGIN FROM \"/home/users/starrocks/auditdemo.zip\"",
+                    "UNINSTALL PLUGIN auditdemo",
+                    "SHOW PLUGINS");
+        }
+    }
+
+    @Test
+    public void testBlackList() throws Exception {
+        UtFrameUtils.PseudoImage image = executeAndUpgrade(
+                true,
+                "create user blacklistUser",
+                "GRANT admin_priv on *.* TO blacklistUser",
+                "create role blacklistRole",
+                "GRANT admin_priv on *.* TO role blacklistRole");
+        // check twice, the second time is as follower
+        for (int i = 0; i != 2; ++ i) {
+            if (i == 1) {
+                replayUpgrade(image);
+            }
+            checkPrivilegeAsUser(
+                    UserIdentity.createAnalyzedUserIdentWithIp("blacklistUser", "%"),
+                    "ADD SQLBLACKLIST \"select count\\\\(\\\\*\\\\) from .+\";",
+                    "DELETE SQLBLACKLIST 0",
+                    "SHOW SQLBLACKLIST");
+
+            checkPrivilegeAsUser(
+                    createUserByRole("blacklistRole"),
+                    "ADD SQLBLACKLIST \"select count\\\\(\\\\*\\\\) from .+\";",
+                    "DELETE SQLBLACKLIST 0",
+                    "SHOW SQLBLACKLIST");
+        }
+    }
+
+    @Test
+    public void testShowFile() throws Exception {
+        UtFrameUtils.PseudoImage image = executeAndUpgrade(
+                true,
+                "create user fileAdminUser",
+                "GRANT admin_priv on *.* TO fileAdminUser",
+                "create role fileAdminRole",
+                "GRANT admin_priv on *.* TO role fileAdminRole",
+                "create user fileDbUser",
+                "GRANT select_priv on db1.* TO fileDbUser",
+                "create role fileDbRole",
+                "GRANT select_priv on db1.* TO role fileDbRole",
+                "create user fileTblUser",
+                "GRANT select_priv on db1.tbl1 TO fileTblUser",
+                "create role fileTblRole",
+                "GRANT select_priv on db1.tbl1 TO role fileTblRole");
+        // check twice, the second time is as follower
+        for (int i = 0; i != 2; ++ i) {
+            if (i == 1) {
+                replayUpgrade(image);
+            }
+            List<UserIdentity> allUsers = Arrays.asList(
+                    UserIdentity.createAnalyzedUserIdentWithIp("fileAdminUser", "%"),
+                    createUserByRole("fileAdminRole"),
+                    UserIdentity.createAnalyzedUserIdentWithIp("fileDbUser", "%"),
+                    createUserByRole("fileDbRole"),
+                    UserIdentity.createAnalyzedUserIdentWithIp("fileTblUser", "%"),
+                    createUserByRole("fileTblRole")
+            );
+            for (UserIdentity user : allUsers) {
+                checkPrivilegeAsUser(user, "SHOW FILE FROM db1");
+            }
+        }
+    }
+    // TODO test table load
 }

@@ -162,6 +162,7 @@ void NodeChannel::try_open() {
 
 void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResult>* open_closure) {
     PTabletWriterOpenRequest request;
+    request.set_merge_condition(_parent->_merge_condition);
     request.set_allocated_id(&_parent->_load_id);
     request.set_index_id(index_id);
     request.set_txn_id(_parent->_txn_id);
@@ -248,6 +249,13 @@ Status NodeChannel::_open_wait(RefCountClosure<PTabletWriterOpenResult>* open_cl
     if (open_closure->cntl.Failed()) {
         _cancelled = true;
         _err_st = Status::InternalError(open_closure->cntl.ErrorText());
+
+        // tablet_id == -1 means add backend to blacklist
+        TTabletFailInfo fail_info;
+        fail_info.__set_tabletId(-1);
+        fail_info.__set_backendId(_node_id);
+        _runtime_state->append_tablet_fail_infos(std::move(fail_info));
+
         return _err_st;
     }
     Status status(open_closure->result.status());
@@ -255,6 +263,12 @@ Status NodeChannel::_open_wait(RefCountClosure<PTabletWriterOpenResult>* open_cl
     if (!status.ok()) {
         _cancelled = true;
         _err_st = status;
+
+        TTabletFailInfo fail_info;
+        fail_info.__set_tabletId(-1);
+        fail_info.__set_backendId(_node_id);
+        _runtime_state->append_tablet_fail_infos(std::move(fail_info));
+
         return _err_st;
     }
 
@@ -517,6 +531,11 @@ Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* 
     if (closure->cntl.Failed()) {
         _cancelled = true;
         _err_st = Status::InternalError(closure->cntl.ErrorText());
+
+        TTabletFailInfo fail_info;
+        fail_info.__set_tabletId(-1);
+        fail_info.__set_backendId(_node_id);
+        _runtime_state->append_tablet_fail_infos(std::move(fail_info));
         return _err_st;
     }
 
@@ -524,6 +543,18 @@ Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* 
     if (!st.ok()) {
         _cancelled = true;
         _err_st = st;
+
+        for (auto& tablet : closure->result.failed_tablet_vec()) {
+            TTabletFailInfo fail_info;
+            fail_info.__set_tabletId(tablet.tablet_id());
+            if (tablet.has_node_id()) {
+                fail_info.__set_backendId(tablet.node_id());
+            } else {
+                fail_info.__set_backendId(_node_id);
+            }
+            _runtime_state->append_tablet_fail_infos(std::move(fail_info));
+        }
+
         return _err_st;
     }
 
@@ -750,6 +781,7 @@ OlapTableSink::OlapTableSink(ObjectPool* pool, const std::vector<TExpr>& texprs,
 Status OlapTableSink::init(const TDataSink& t_sink) {
     DCHECK(t_sink.__isset.olap_table_sink);
     const auto& table_sink = t_sink.olap_table_sink;
+    _merge_condition = table_sink.merge_condition;
     _load_id.set_hi(table_sink.load_id.hi);
     _load_id.set_lo(table_sink.load_id.lo);
     _txn_id = table_sink.txn_id;
@@ -1539,7 +1571,8 @@ void OlapTableSink::_validate_data(RuntimeState* state, vectorized::Chunk* chunk
         vectorized::Column* column = chunk->get_column_by_slot_id(desc->id()).get();
         switch (desc->type().type) {
         case TYPE_CHAR:
-        case TYPE_VARCHAR: {
+        case TYPE_VARCHAR:
+        case TYPE_VARBINARY: {
             uint32_t len = desc->type().len;
             vectorized::Column* data_column = vectorized::ColumnHelper::get_data_column(column);
             auto* binary = down_cast<vectorized::BinaryColumn*>(data_column);
@@ -1601,7 +1634,7 @@ void OlapTableSink::_padding_char_column(vectorized::Chunk* chunk) {
             vectorized::Bytes& bytes = binary->get_bytes();
 
             // Padding 0 to CHAR field, the storage bitmap index and zone map need it.
-            // TODO(kks): we could improve this if there are many null valus
+            // TODO(kks): we could improve this if there are many null values
             auto new_binary = vectorized::BinaryColumn::create();
             vectorized::Offsets& new_offset = new_binary->get_offset();
             vectorized::Bytes& new_bytes = new_binary->get_bytes();

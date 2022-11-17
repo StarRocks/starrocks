@@ -164,7 +164,7 @@ public class MysqlSerializer {
         writeLenEncodedString(table);
         // Name: length encoded string
         writeLenEncodedString(column.getName());
-        // Orignal Name: length encoded string
+        // Original Name: length encoded string
         writeLenEncodedString(column.getName());
         // length of the following fields(always 0x0c)
         writeVInt(0x0c);
@@ -202,7 +202,7 @@ public class MysqlSerializer {
         writeLenEncodedString("");
         // Name: length encoded string
         writeLenEncodedString(colName);
-        // Orignal Name: length encoded string
+        // Original Name: length encoded string
         writeLenEncodedString(colName);
         // length of the following fields(always 0x0c)
         writeVInt(0x0c);

@@ -198,6 +198,13 @@ public:
     bool has_partition() const override { return false; }
 };
 
+class FileTableDescriptor : public HiveTableDescriptor {
+public:
+    FileTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool);
+    ~FileTableDescriptor() override = default;
+    bool has_partition() const override { return false; }
+};
+
 class DeltaLakeTableDescriptor : public HiveTableDescriptor {
 public:
     DeltaLakeTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool);

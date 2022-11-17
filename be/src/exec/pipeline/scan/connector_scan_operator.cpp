@@ -208,7 +208,13 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, vectorized::ChunkP
                 break;
             }
         } else if (!_status.is_end_of_file()) {
-            return _status;
+            if (_status.is_time_out()) {
+                Status t = _status;
+                _status = Status::OK();
+                return t;
+            } else {
+                return _status;
+            }
         } else {
             _ck_acc.finalize();
             DCHECK(_status.is_end_of_file());

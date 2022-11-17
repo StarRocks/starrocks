@@ -30,8 +30,8 @@ public class HiveColumnStats {
     private long totalSizeBytes;
     private long numNulls;
     private long ndv;
-    private double min;
-    private double max;
+    private double min = Double.NEGATIVE_INFINITY;
+    private double max = Double.POSITIVE_INFINITY;
     private StatisticType type;
 
     public HiveColumnStats() {
@@ -46,6 +46,13 @@ public class HiveColumnStats {
             ndv = 2;
         } else {
             ndv = -1;
+        }
+        min = boolStats.isSetNumFalses() ? 0 : 1;
+        max = boolStats.isSetNumTrues() ? 1 : 0;
+        if (min > max) {
+            // when this column is all null values
+            min = 0.0;
+            max = 0.0;
         }
         type = StatisticType.ESTIMATE;
     }

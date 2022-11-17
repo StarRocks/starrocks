@@ -21,14 +21,17 @@
 
 #pragma once
 
+#include <memory>
+
+#include "column/datum.h"
+#include "types/bitmap_value.h"
+#include "types/hll.h"
+#include "util/json.h"
+#include "util/percentile_value.h"
+
 namespace starrocks {
 
-class WrapperField;
-
 struct ColumnMapping {
-    ColumnMapping() {}
-    virtual ~ColumnMapping() = default;
-
     // <0: use default value
     // >=0: use origin column
     int32_t ref_column{-1};
@@ -36,10 +39,18 @@ struct ColumnMapping {
     // The base reader selects part of the column
     // so it's different to ref_column
     int32_t ref_base_reader_column_index = -1;
-    // normally for default value. stores values for filters
-    WrapperField* default_value{nullptr};
     // materialize view transform function used in schema change
     std::string materialized_function;
+
+    // the following data is used by default_value_datum, because default_value_datum only
+    // have the reference. We need to keep the content has the same life cycle as the
+    // default_value_datum;
+    std::unique_ptr<HyperLogLog> default_hll;
+    std::unique_ptr<BitmapValue> default_bitmap;
+    std::unique_ptr<PercentileValue> default_percentile;
+    std::unique_ptr<JsonValue> default_json;
+
+    vectorized::Datum default_value_datum;
 };
 
 typedef std::vector<ColumnMapping> SchemaMapping;

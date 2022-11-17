@@ -47,11 +47,8 @@
 namespace starrocks {
 
 class BlockCompressionCodec;
-class ColumnBlock;
-class ColumnBlockView;
 class ColumnVectorBatch;
 class MemTracker;
-class WrapperField;
 
 namespace vectorized {
 class ColumnPredicate;
@@ -62,7 +59,7 @@ class ZoneMapDetail;
 class BitmapIndexIterator;
 class BitmapIndexReader;
 class ColumnIterator;
-class ColumnIteratorOptions;
+struct ColumnIteratorOptions;
 class EncodingInfo;
 class PageDecoder;
 class PagePointer;

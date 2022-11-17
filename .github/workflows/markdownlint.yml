@@ -1,6 +1,5 @@
-name: markdownlint
-
-on: 
+name: document
+on:
   pull_request:
     types:
       - opened
@@ -10,7 +9,7 @@ on:
       - 'docs/**'
 
 jobs:
-  delivery:
+  markdownlint:
     runs-on: ubuntu-latest
     steps:
     - name: Check out code
@@ -22,8 +21,10 @@ jobs:
 #     - name: git diff file list
 #       id: diff
 #       run : echo "files=$(git diff HEAD HEAD^  --name-only -- '*.md')" >> $GITHUB_OUTPUT
-      
-    - name: markdown lint
-      uses: nosborn/github-action-markdown-cli@v3.2.0
+
+    - uses: articulate/actions-markdownlint@v1.1.0
       with:
-        files: docs # ${{ steps.diff.outputs.files }}
+        config: "docs/.markdownlint.yaml"
+        files: 'docs/**/*.md'
+        ignore: node_modules
+        version: 0.28.1

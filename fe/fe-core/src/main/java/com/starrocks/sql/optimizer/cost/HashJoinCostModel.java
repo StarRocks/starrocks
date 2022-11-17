@@ -4,9 +4,12 @@ package com.starrocks.sql.optimizer.cost;
 
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.ExpressionContext;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.sql.optimizer.statistics.ExpressionStatisticCalculator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
@@ -102,16 +105,8 @@ public class HashJoinCostModel {
 
     private double getAvgProbeCost() {
         JoinExecMode execMode = deriveJoinExecMode();
-        double keySize = 0;
-        for (BinaryPredicateOperator predicateOperator : eqOnPredicates) {
-            ColumnRefOperator leftCol = (ColumnRefOperator) predicateOperator.getChild(0);
-            ColumnRefOperator rightCol = (ColumnRefOperator) predicateOperator.getChild(1);
-            if (context.getChildStatistics(1).getColumnStatistics().containsKey(leftCol)) {
-                keySize += context.getChildStatistics(1).getColumnStatistic(leftCol).getAverageRowSize();
-            } else if (context.getChildStatistics(1).getColumnStatistics().containsKey(rightCol)) {
-                keySize += context.getChildStatistics(1).getColumnStatistic(rightCol).getAverageRowSize();
-            }
-        }
+        double keySize = calculateKeySize();
+
         double cachePenaltyFactor;
         int parallelFactor = Math.max(ConnectContext.get().getAliveBackendNumber(),
                 ConnectContext.get().getSessionVariable().getDegreeOfParallelism()) * 2;
@@ -141,6 +136,32 @@ public class HashJoinCostModel {
         }
     }
 
+    private double calculateKeySize() {
+        double keySize = 0;
+        for (BinaryPredicateOperator predicateOperator : eqOnPredicates) {
+            ScalarOperator leftOp = predicateOperator.getChild(0);
+            ScalarOperator rightOp = predicateOperator.getChild(1);
+            ScalarOperator buildMapOp;
+            ColumnRefSet rightTableCols = context.getChildOutputColumns(1);
+            Statistics rightTableStat = context.getChildStatistics(1);
+            if (rightTableCols.containsAll(leftOp.getUsedColumns())) {
+                buildMapOp = leftOp;
+            } else {
+                buildMapOp = rightOp;
+            }
+
+            if (buildMapOp.isColumnRef()) {
+                keySize += rightTableStat.getColumnStatistics().get(buildMapOp).getAverageRowSize();
+            } else {
+                Statistics.Builder allBuilder = Statistics.builder();
+                allBuilder.addColumnStatistics(rightTableStat.getColumnStatistics());
+                ColumnStatistic outputStatistic = ExpressionStatisticCalculator.calculate(buildMapOp, allBuilder.build());
+                keySize += outputStatistic.getAverageRowSize();
+            }
+        }
+        return keySize;
+    }
+
     private enum JoinExecMode {
         // no child input property info, use the original evaluation mode.
         EMPTY,
@@ -151,7 +172,4 @@ public class HashJoinCostModel {
         // right child without broadcast info, use the shuffle join evaluation mode.
         SHUFFLE
     }
-
-
-
 }

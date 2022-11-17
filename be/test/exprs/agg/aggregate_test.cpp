@@ -284,7 +284,7 @@ void test_agg_variance_function(FunctionContext* ctx, const AggregateFunction* f
     func->serialize_to_column(ctx, state->state(), serde_column.get());
     func->merge(ctx, serde_column.get(), state2->state(), 0);
     func->finalize_to_column(ctx, state2->state(), result_column.get());
-    ASSERT_TRUE(abs(merge_result - result_column->get_data()[2]) < 1e-8);
+    ASSERT_TRUE(std::abs(merge_result - result_column->get_data()[2]) < 1e-8);
 }
 
 TEST_F(AggregateTest, test_count) {

@@ -125,6 +125,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
             .add(LoadStmt.STRICT_MODE)
             .add(LoadStmt.TIMEZONE)
             .add(LoadStmt.PARTIAL_UPDATE)
+            .add(LoadStmt.MERGE_CONDITION)
             .build();
 
     private static final ImmutableSet<String> KAFKA_PROPERTIES_SET = new ImmutableSet.Builder<String>()
@@ -161,6 +162,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     private boolean strictMode = true;
     private String timezone = TimeUtils.DEFAULT_TIME_ZONE;
     private boolean partialUpdate = false;
+    private String conditionalColumn;
     /**
      * RoutineLoad support json data.
      * Require Params:
@@ -274,6 +276,10 @@ public class CreateRoutineLoadStmt extends DdlStmt {
 
     public boolean isPartialUpdate() {
         return partialUpdate;
+    }
+
+    public String getConditionalColumn() {
+        return conditionalColumn;
     }
 
     public String getFormat() {
@@ -439,6 +445,8 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         partialUpdate = Util.getBooleanPropertyOrDefault(jobProperties.get(LoadStmt.PARTIAL_UPDATE),
                 false,
                 LoadStmt.PARTIAL_UPDATE + " should be a boolean");
+
+        conditionalColumn = jobProperties.get(LoadStmt.MERGE_CONDITION);
 
         if (ConnectContext.get() != null) {
             timezone = ConnectContext.get().getSessionVariable().getTimeZone();

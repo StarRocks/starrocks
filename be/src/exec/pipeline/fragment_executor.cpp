@@ -19,6 +19,7 @@
 #include "exec/pipeline/scan/scan_operator.h"
 #include "exec/pipeline/sink/export_sink_operator.h"
 #include "exec/pipeline/sink/file_sink_operator.h"
+#include "exec/pipeline/sink/memory_scratch_sink_operator.h"
 #include "exec/pipeline/sink/mysql_table_sink_operator.h"
 #include "exec/scan_node.h"
 #include "exec/tablet_sink.h"
@@ -33,9 +34,12 @@
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/export_sink.h"
+#include "runtime/memory_scratch_sink.h"
 #include "runtime/multi_cast_data_stream_sink.h"
 #include "runtime/mysql_table_sink.h"
 #include "runtime/result_sink.h"
+#include "runtime/stream_load/stream_load_context.h"
+#include "runtime/stream_load/transaction_mgr.h"
 #include "util/debug/query_trace.h"
 #include "util/pretty_printer.h"
 #include "util/time.h"
@@ -144,7 +148,7 @@ Status FragmentExecutor::_prepare_fragment_ctx(const UnifiedExecPlanFragmentPara
     _fragment_ctx->set_fragment_instance_id(fragment_instance_id);
     _fragment_ctx->set_fe_addr(coord);
 
-    if (query_options.__isset.is_report_success && query_options.is_report_success) {
+    if (query_options.__isset.enable_profile && query_options.enable_profile) {
         _fragment_ctx->set_report_profile();
     }
     if (query_options.__isset.pipeline_profile_level) {
@@ -412,6 +416,58 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
     return Status::OK();
 }
 
+Status FragmentExecutor::_prepare_stream_load_pipe(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) {
+    const TExecPlanFragmentParams& unique_request = request.unique();
+    if (!unique_request.params.__isset.node_to_per_driver_seq_scan_ranges) {
+        return Status::OK();
+    }
+    const auto& scan_range_map = unique_request.params.node_to_per_driver_seq_scan_ranges;
+    if (scan_range_map.size() == 0) {
+        return Status::OK();
+    }
+    auto iter = scan_range_map.begin();
+    if (iter->second.size() == 0) {
+        return Status::OK();
+    }
+    auto iter2 = iter->second.begin();
+    if (iter2->second.size() == 0) {
+        return Status::OK();
+    }
+    if (!iter2->second[0].scan_range.__isset.broker_scan_range) {
+        return Status::OK();
+    }
+    if (!iter2->second[0].scan_range.broker_scan_range.__isset.channel_id) {
+        return Status::OK();
+    }
+    std::vector<StreamLoadContext*> stream_load_contexts;
+    for (; iter != scan_range_map.end(); iter++) {
+        for (; iter2 != iter->second.end(); iter2++) {
+            for (const auto& scan_range : iter2->second) {
+                const TBrokerScanRange& broker_scan_range = scan_range.scan_range.broker_scan_range;
+                int channel_id = broker_scan_range.channel_id;
+                const string& label = broker_scan_range.params.label;
+                const string& db_name = broker_scan_range.params.db_name;
+                const string& table_name = broker_scan_range.params.table_name;
+                TFileFormatType::type format = broker_scan_range.ranges[0].format_type;
+                TUniqueId load_id = broker_scan_range.ranges[0].load_id;
+                long txn_id = broker_scan_range.params.txn_id;
+                StreamLoadContext* ctx = nullptr;
+                RETURN_IF_ERROR(exec_env->stream_context_mgr()->create_channel_context(
+                        exec_env, label, channel_id, db_name, table_name, format, ctx, load_id, txn_id));
+                DeferOp op([&] {
+                    if (ctx->unref()) {
+                        delete ctx;
+                    }
+                });
+                RETURN_IF_ERROR(exec_env->stream_context_mgr()->put_channel_context(label, channel_id, ctx));
+                stream_load_contexts.push_back(ctx);
+            }
+        }
+    }
+    _fragment_ctx->set_stream_load_contexts(stream_load_contexts);
+    return Status::OK();
+}
+
 Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) {
     const auto& fragment_instance_id = request.fragment_instance_id();
     const auto degree_of_parallelism = _calc_dop(exec_env, request);
@@ -567,6 +623,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     RETURN_IF_ERROR(_prepare_exec_plan(exec_env, request));
     RETURN_IF_ERROR(_prepare_global_dict(request));
     RETURN_IF_ERROR(_prepare_pipeline_driver(exec_env, request));
+    RETURN_IF_ERROR(_prepare_stream_load_pipe(exec_env, request));
 
     RETURN_IF_ERROR(_query_ctx->fragment_mgr()->register_ctx(request.fragment_instance_id(), _fragment_ctx));
     prepare_success = true;
@@ -804,6 +861,15 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
         OpFactoryPtr op = std::make_shared<MysqlTableSinkOperatorFactory>(
                 context->next_operator_id(), request.output_sink().mysql_table_sink,
                 mysql_table_sink->get_output_expr(), dop, fragment_ctx);
+        fragment_ctx->pipelines().back()->add_op_factory(op);
+    } else if (typeid(*datasink) == typeid(starrocks::MemoryScratchSink)) {
+        auto* memory_scratch_sink = down_cast<starrocks::MemoryScratchSink*>(datasink.get());
+        auto output_expr = memory_scratch_sink->get_output_expr();
+        auto row_desc = memory_scratch_sink->get_row_desc();
+        auto dop = fragment_ctx->pipelines().back()->source_operator_factory()->degree_of_parallelism();
+        DCHECK_EQ(dop, 1);
+        OpFactoryPtr op = std::make_shared<MemoryScratchSinkOperatorFactory>(context->next_operator_id(), row_desc,
+                                                                             output_expr, fragment_ctx);
         fragment_ctx->pipelines().back()->add_op_factory(op);
     }
 

@@ -32,6 +32,7 @@
 #include "runtime/mem_tracker.h"
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_state.h"
+#include "runtime/stream_load/stream_load_executor.h"
 
 namespace starrocks {
 
@@ -136,6 +137,8 @@ public:
     }
 
 private:
+    Status _prepare_stream_load_pipe(const TExecPlanFragmentParams& request);
+
     ExecEnv* _exec_env;        // not owned
     ExecNode* _plan = nullptr; // lives in _runtime_state->obj_pool()
     TUniqueId _query_id;
@@ -156,9 +159,9 @@ private:
     // true if this fragment has not returned the thread token to the thread resource mgr
     bool _has_thread_token;
 
-    bool _is_report_success;
+    bool enable_profile;
 
-    // If this is set to false, and '_is_report_success' is false as well,
+    // If this is set to false, and 'enable_profile' is false as well,
     // This executor will not report status to FE on being cancelled.
     bool _is_report_on_cancel;
 
@@ -204,6 +207,9 @@ private:
 
     // If this is a runtime filter merge node for some query.
     bool _is_runtime_filter_merge_node;
+
+    std::vector<StreamLoadContext*> _stream_load_contexts;
+    bool _channel_stream_load = false;
 
     ObjectPool* obj_pool() { return _runtime_state->obj_pool(); }
 

@@ -37,6 +37,7 @@ import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TabletCommitInfo;
+import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.transaction.TxnCommitAttachment;
@@ -359,6 +360,7 @@ public class DeleteHandlerTest {
             {
                 try {
                     globalTransactionMgr.commitTransaction(anyLong, anyLong, (List<TabletCommitInfo>) any,
+                            (List<TabletFailInfo>) any,
                             (TxnCommitAttachment) any);
                 } catch (UserException e) {
                 }

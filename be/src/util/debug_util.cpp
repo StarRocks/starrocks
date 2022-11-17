@@ -96,10 +96,10 @@ std::string get_version_string(bool compact) {
     return ss.str();
 }
 
-std::string hexdump(const char* buf, int len) {
+std::string hexdump(const char* buf, size_t len) {
     std::stringstream ss;
     ss << std::hex << std::uppercase;
-    for (int i = 0; i < len; ++i) {
+    for (size_t i = 0; i < len; ++i) {
         ss << std::setfill('0') << std::setw(2) << ((uint16_t)buf[i] & 0xff);
     }
     return ss.str();

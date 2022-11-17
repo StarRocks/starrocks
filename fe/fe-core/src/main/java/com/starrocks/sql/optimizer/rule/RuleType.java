@@ -133,6 +133,7 @@ public enum RuleType {
     // The following are implementation rules:
     IMP_OLAP_LSCAN_TO_PSCAN,
     IMP_HIVE_LSCAN_TO_PSCAN,
+    IMP_FILE_LSCAN_TO_PSCAN,
     IMP_ICEBERG_LSCAN_TO_PSCAN,
     IMP_HUDI_LSCAN_TO_PSCAN,
     IMP_DELTALAKE_LSCAN_TO_PSCAN,

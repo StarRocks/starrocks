@@ -96,6 +96,10 @@ public class Projection {
         return AddDecodeNodeForDictStringRule.DecodeVisitor.couldApplyDictOptimize(operator, sids);
     }
 
+    public static boolean cannotApplyDictOptimize(ScalarOperator operator, Set<Integer> sids) {
+        return AddDecodeNodeForDictStringRule.DecodeVisitor.cannotApplyDictOptimize(operator, sids);
+    }
+
     private boolean couldApplyStringDict(ScalarOperator operator, ColumnRefSet dictSet, Set<Integer> sids) {
         ColumnRefSet usedColumns = operator.getUsedColumns();
         if (usedColumns.isIntersect(dictSet)) {
@@ -125,7 +129,7 @@ public class Projection {
     }
 
     private void fillDisableDictOptimizeColumns(ScalarOperator operator, ColumnRefSet columnRefSet, Set<Integer> sids) {
-        if (!couldApplyDictOptimize(operator, sids)) {
+        if (cannotApplyDictOptimize(operator, sids)) {
             columnRefSet.union(operator.getUsedColumns());
         }
     }

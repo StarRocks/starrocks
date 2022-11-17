@@ -20,6 +20,8 @@
 namespace starrocks::vectorized {
 ArrayMapExpr::ArrayMapExpr(const TExprNode& node) : Expr(node, false) {}
 
+ArrayMapExpr::ArrayMapExpr(TypeDescriptor type) : Expr(std::move(type), false) {}
+
 inline bool offsets_equal(const UInt32Column::Ptr& array1, const UInt32Column::Ptr& array2) {
     if (array1->size() != array2->size()) {
         return false;
@@ -31,6 +33,7 @@ inline bool offsets_equal(const UInt32Column::Ptr& array1, const UInt32Column::P
 
 // The input array column maybe nullable, so first remove the wrap of nullable property.
 // The result of lambda expressions do not change the offsets of the current array and the null map.
+// NOTE the return column must be of the return type.
 ColumnPtr ArrayMapExpr::evaluate(ExprContext* context, Chunk* chunk) {
     std::vector<ColumnPtr> inputs;
     NullColumnPtr input_null_map = nullptr;
@@ -45,7 +48,7 @@ ColumnPtr ArrayMapExpr::evaluate(ExprContext* context, Chunk* chunk) {
         ColumnPtr child_col = EVALUATE_NULL_IF_ERROR(context, _children[i], chunk);
         // the column is a null literal.
         if (child_col->only_null()) {
-            return child_col;
+            return ColumnHelper::align_return_type(child_col, type(), chunk->num_rows());
         }
         // no optimization for const columns.
         child_col = ColumnHelper::unpack_and_duplicate_const_column(child_col->size(), child_col);
@@ -79,7 +82,8 @@ ColumnPtr ArrayMapExpr::evaluate(ExprContext* context, Chunk* chunk) {
 
     ColumnPtr column = nullptr;
     if (input_array->elements_column()->size() == 0) { // arrays may be null or empty
-        column = input_array->elements_column();
+        column = ColumnHelper::create_column(type().children[0],
+                                             true); // array->elements must be of return array->elements' type
     } else {
         // construct a new chunk to evaluate the lambda expression.
         auto cur_chunk = std::make_shared<vectorized::Chunk>();
@@ -105,12 +109,14 @@ ColumnPtr ArrayMapExpr::evaluate(ExprContext* context, Chunk* chunk) {
         }
         if (cur_chunk->num_rows() <= chunk->num_rows() * 8) {
             column = EVALUATE_NULL_IF_ERROR(context, _children[0], cur_chunk.get());
+            column = ColumnHelper::align_return_type(column, type().children[0], cur_chunk->num_rows());
         } else { // split large chunks into small ones to avoid too large or various batch_size
             ChunkAccumulator accumulator(DEFAULT_CHUNK_SIZE);
             accumulator.push(std::move(cur_chunk));
             accumulator.finalize();
             while (auto tmp_chunk = accumulator.pull()) {
                 auto tmp_col = EVALUATE_NULL_IF_ERROR(context, _children[0], tmp_chunk.get());
+                tmp_col = ColumnHelper::align_return_type(tmp_col, type().children[0], tmp_chunk->num_rows());
                 if (column == nullptr) {
                     column = tmp_col;
                 } else {
@@ -121,15 +127,13 @@ ColumnPtr ArrayMapExpr::evaluate(ExprContext* context, Chunk* chunk) {
 
         // construct the result array
         DCHECK(column != nullptr);
-        // the elements of the new array should be nullable and not const.
-        column = ColumnHelper::unpack_and_duplicate_const_column(column->size(), column);
-
         if (auto nullable = std::dynamic_pointer_cast<NullableColumn>(column);
             nullable == nullptr && !column->is_nullable()) {
             NullColumnPtr null_col = NullColumn::create(column->size(), 0);
             column = NullableColumn::create(std::move(column), null_col);
         }
     }
+    // attach offsets
     auto array_col = std::make_shared<ArrayColumn>(column, input_array->offsets_column());
     if (input_null_map != nullptr) {
         return NullableColumn::create(std::move(array_col), input_null_map);

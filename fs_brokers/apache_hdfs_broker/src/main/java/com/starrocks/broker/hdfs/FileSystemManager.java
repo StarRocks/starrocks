@@ -315,6 +315,8 @@ public class FileSystemManager {
                 if (authentication.equals(AUTHENTICATION_KERBEROS)) {
                     conf.set(CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHENTICATION,
                             AUTHENTICATION_KERBEROS);
+                    conf.set(CommonConfigurationKeysPublic.HADOOP_KERBEROS_KEYTAB_LOGIN_AUTORENEWAL_ENABLED,
+                            "true");
 
                     String principal = preparePrincipal(properties.get(KERBEROS_PRINCIPAL));
                     String keytab = "";
@@ -343,7 +345,7 @@ public class FileSystemManager {
                     ugi = UserGroupInformation.loginUserFromKeytabAndReturnUGI(principal, keytab);
                     if (!hasSetGlobalUGI) {
                         // set a global ugi so that other components(kms for example) can get the kerberos token.
-                        UserGroupInformation.setLoginUser(ugi);
+                        UserGroupInformation.loginUserFromKeytab(principal, keytab);
                         hasSetGlobalUGI = true;
                     }
                     if (properties.containsKey(KERBEROS_KEYTAB_CONTENT)) {

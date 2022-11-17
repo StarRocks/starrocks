@@ -1012,6 +1012,71 @@ TEST_F(HdfsScannerTest, TestZeroSizeStream) {
     scanner->close(_runtime_state);
 }
 
+/**
+ * ORC format: struct<c0:int,c1:struct<cc0:int,Cc11:string>>
+ * Data:
+ * {c0: 1, c1: {cc0: 11, Cc1: "Smith"}}
+ * {c0: 2, c1: {cc0: 22, Cc1: "Cruise"}}
+ * {c0: 3, c1: {cc0: 33, Cc1: "hello"}}
+ * {c0: 4, c1: {cc0: 44, Cc1: "world"}}
+ */
+TEST_F(HdfsScannerTest, TestOrcLazyLoad) {
+    static const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/orc_test_struct_basic.orc";
+
+    SlotDesc c0{"c0", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)};
+    SlotDesc c1{"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_STRUCT)};
+    c1.type.children.push_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR));
+    c1.type.field_names.push_back("Cc1");
+    c1.type.selected_fields.reserve(1);
+    c1.type.selected_fields.clear();
+    c1.type.selected_fields.push_back(true);
+
+    SlotDesc slot_descs[] = {c0, c1, {""}};
+
+    auto scanner = std::make_shared<HdfsOrcScanner>();
+
+    auto* range = _create_scan_range(input_orc_file, 0, 0);
+    auto* tuple_desc = _create_tuple_desc(slot_descs);
+    auto* param = _create_param(input_orc_file, range, tuple_desc);
+
+    // c0 >= 3
+    // so return 2 rows.
+    {
+        std::vector<TExprNode> nodes;
+        TExprNode lit_node = create_int_literal_node(TPrimitiveType::INT, 3);
+        push_binary_pred_texpr_node(nodes, TExprOpcode::GE, tuple_desc->slots()[0], TPrimitiveType::INT, lit_node);
+        ExprContext* ctx = create_expr_context(&_pool, nodes);
+        std::cout << "greater&eq expr = " << ctx->root()->debug_string() << std::endl;
+        param->conjunct_ctxs_by_slot[0].push_back(ctx);
+    }
+
+    for (auto& it : param->conjunct_ctxs_by_slot) {
+        Expr::prepare(it.second, _runtime_state);
+        Expr::open(it.second, _runtime_state);
+    }
+
+    Status status = scanner->init(_runtime_state, *param);
+    EXPECT_TRUE(status.ok());
+
+    status = scanner->open(_runtime_state);
+    EXPECT_TRUE(status.ok());
+
+    auto chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
+    status = scanner->get_next(_runtime_state, &chunk);
+    EXPECT_TRUE(status.ok());
+
+    EXPECT_EQ(2, chunk->num_rows());
+
+    EXPECT_EQ("[3, {Cc1: 'hello'}]", chunk->debug_row(0));
+    EXPECT_EQ("[4, {Cc1: 'World'}]", chunk->debug_row(1));
+
+    status = scanner->get_next(_runtime_state, &chunk);
+    // Should be end of file in next read.
+    EXPECT_TRUE(status.is_end_of_file());
+
+    scanner->close(_runtime_state);
+}
+
 // =============================================================================
 
 /*

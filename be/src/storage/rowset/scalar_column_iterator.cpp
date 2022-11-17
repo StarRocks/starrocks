@@ -25,6 +25,7 @@
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/encoding_info.h"
 #include "storage/vectorized_column_predicate.h"
+#include "util/bitmap.h"
 
 namespace starrocks {
 
@@ -131,34 +132,6 @@ void ScalarColumnIterator::_seek_to_pos_in_page(ParsedPage* page, ordinal_t offs
         return;
     }
     page->seek(offset_in_page);
-}
-
-Status ScalarColumnIterator::next_batch(size_t* n, ColumnBlockView* dst, bool* has_null) {
-    size_t remaining = *n;
-    bool contain_deleted_row = false;
-    while (remaining > 0) {
-        if (_page->remaining() == 0) {
-            bool eos = false;
-            RETURN_IF_ERROR(_load_next_page(&eos));
-            if (eos) {
-                break;
-            }
-        }
-
-        contain_deleted_row |= _delete_partial_satisfied_pages.count(_page->page_index());
-        // number of rows to be read from this page
-        size_t nread = remaining;
-        RETURN_IF_ERROR(_page->read(dst, &nread));
-        _current_ordinal += nread;
-        remaining -= nread;
-    }
-    dst->column_block()->set_delete_state(contain_deleted_row ? DEL_PARTIAL_SATISFIED : DEL_NOT_SATISFIED);
-
-    *n -= remaining;
-    // TODO(hkp): for string type, the bytes_read should be passed to page decoder
-    // bytes_read = data size + null bitmap size
-    _opts.stats->bytes_read += static_cast<int64_t>(*n * dst->type_info()->size() + BitmapSize(*n));
-    return Status::OK();
 }
 
 Status ScalarColumnIterator::next_batch(size_t* n, vectorized::Column* dst) {
