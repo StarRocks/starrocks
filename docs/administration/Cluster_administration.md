@@ -86,65 +86,117 @@ StarRocks can perform a rolling upgrade, which allows you to first upgrade the B
 1. Confirm that the files of the previous version are replaced with the files of the new version.
 2. Restart the BEs one by one and then restart the FEs one by one. Start the next BE or FE only after the previous BE or FE has successfully started.
 
-##### Upgrade a  BE
+##### Upgrade a BE node
 
-```Plain%20Text
-cd be_work_dir
+1. Navigate to the BE working directory and stop the BE node.
 
-./bin/stop_be.sh
+    ```shell
+    cd StarRocks-x.x.x/be
+    sh bin/stop_be.sh
+    ```
 
-mv lib lib.bak 
+2. Replace the deployment files of BE.
 
-mv bin bin.bak
+    > **CAUTION**
+    >
+    > - If you want to upgrade your cluster to a minor version (for example, from 2.0.x to 2.0.y), you only need to replace the files in **/lib/starrocks_be**.
+    > - If you want to upgrade your cluster to a major version (for example, from 2.0.x to 2.1.y), you must replace the files under **bin** and **lib**.
 
-cp -r /tmp/StarRocks-SE-x.x.x/be/lib  .   
+    The following example upgrade a cluster to a major version.
 
-cp -r /tmp/StarRocks-SE-x.x.x/be/bin  .  
+    ```shell
+    mv lib lib.bak 
+    mv bin bin.bak
+    cp -r /tmp/StarRocks-SE-x.x.x/be/lib  .
+    cp -r /tmp/StarRocks-SE-x.x.x/be/bin  .
+    ```
 
-./bin/start_be.sh --daemon
+3. Start the BE node.
 
-ps aux | grep starrocks_be
-```
+    ```shell
+    sh bin/start_be.sh --daemon
+    ```
+
+4. Check if the node is started successfully.
+
+    ```shell
+    ps aux | grep starrocks_be
+    ```
+
+5. Repeat the above procedures to upgrade other BE nodes.
 
 ##### Upgrade an FE
 
-```Plain%20Text
-cd fe_work_dir
+You must upgrade all Follower FE nodes first and then the Leader FE node.
 
-./bin/stop_fe.sh
+1. Navigate to the FE working directory and stop the FE node.
 
-mv lib lib.bak 
+    ```shell
+    cd StarRocks-x.x.x/fe
+    sh bin/stop_fe.sh
+    ```
 
-mv bin bin.bak
+2. Replace the deployment files of FE.
 
-cp -r /tmp/StarRocks-SE-x.x.x/fe/lib  .   
+    > **CAUTION**
+    >
+    > - If you want to upgrade your cluster to a minor version (for example, from 2.0.x to 2.0.y), you only need to replace the files in **/lib/starrocks-fe.jar**.
+    > - If you want to upgrade your cluster to a major version (for example, from 2.0.x to 2.1.y), you must replace the files under **bin** and **lib**.
 
-cp -r /tmp/StarRocks-SE-x.x.x/fe/bin  .
+    The following example upgrade a cluster to a major version.
 
-./bin/start_fe.sh --daemon
+    ```shell
+    mv lib lib.bak 
+    mv bin bin.bak
+    cp -r /tmp/StarRocks-SE-x.x.x/fe/lib  .   
+    cp -r /tmp/StarRocks-SE-x.x.x/fe/bin  .
+    ```
 
-ps aux | grep StarRocksFE
-```
+3. Start the FE node.
+
+    ```shell
+    sh bin/start_fe.sh --daemon
+    ```
+
+4. Check if the node is started successfully.
+
+    ```shell
+    ps aux | grep StarRocksFE
+    ```
+
+5. Repeat the above procedures to upgrade other Follower FE nodes, and finally the Leader FE node.
 
 ##### Upgrade a Broker
 
-```Plain%20Text
-cd broker_work_dir 
+1. Navigate to the Broker working directory and stop the Broker node.
 
-mv lib lib.bak 
+    ```shell
+    cd StarRocks-x.x.x/apache_hdfs_broker
+    sh bin/stop_broker.sh
+    ```
 
-mv bin bin.bak
+2. Replace the deployment files of Broker.
 
-cp -r /tmp/StarRocks-SE-x.x.x/apache_hdfs_broker/lib  .   
+    ```shell
+    mv lib lib.bak 
+    mv bin bin.bak
+    cp -r /tmp/StarRocks-SE-x.x.x/apache_hdfs_broker/lib  .   
+    cp -r /tmp/StarRocks-SE-x.x.x/apache_hdfs_broker/bin  .
+    ```
 
-cp -r /tmp/StarRocks-SE-x.x.x/apache_hdfs_broker/bin  .
+3. Start the Broker node.
 
-./bin/stop_broker.sh
+    ```shell
+    sh bin/start_broker.sh --daemon
+    ```
 
-./bin/start_broker.sh --daemon
+4. Check if the node is started successfully.
 
-ps aux | grep broker
-```
+    ```shell
+    ps aux | grep broker
+    ```
+
+5. Repeat the above procedures to upgrade other Broker nodes.
 
 **Note**: You must update the BEs before you upgrade the FEs. If you upgrade the FEs before the BEs, the FEs of the new version may be incompatible with the BEs of the previous version. As a result, the commands that are issued by the FEs may cause the BEs not to work properly.
 

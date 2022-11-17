@@ -78,6 +78,8 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
 
     public static final String KAFKA_FILE_CATALOG = "kafka";
 
+    private static final String PROPERTY_KAFKA_GROUP_ID = "group.id";
+
     private String brokerList;
     private String topic;
     // optional, user want to load partitions.
@@ -448,6 +450,8 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         if (!stmt.getCustomKafkaProperties().isEmpty()) {
             setCustomKafkaProperties(stmt.getCustomKafkaProperties());
         }
+
+        setDefaultKafkaGroupID();
     }
 
     // this is a unprotected method which is called in the initialization function
@@ -460,6 +464,13 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
 
     private void setCustomKafkaProperties(Map<String, String> kafkaProperties) {
         this.customProperties = kafkaProperties;
+    }
+
+    private void setDefaultKafkaGroupID() {
+        if (this.customProperties.containsKey(PROPERTY_KAFKA_GROUP_ID)) {
+            return;
+        }
+        this.customProperties.put(PROPERTY_KAFKA_GROUP_ID, name + "_" + UUID.randomUUID());
     }
 
     @Override
