@@ -94,6 +94,9 @@ bin/install.sh -h \
 |FE|**query_port**|**9030**| FE <--> 用户|FE 上的 mysql server 端口。|
 |FE|edit_log_port|9010|FE <--> FE|FE 上的 BDBJE 之间通信端口。|
 |Broker|broker_ipc_port|8000|FE&nbsp;&nbsp; --> Broker <br/>BE&nbsp;&nbsp; --> Broker|Broker 上的 thrift server，<br/>用于接收请求。|
+|Drms|admin_console_port|19321|Drms对外|对外Web端口，nginx做了端口转发|
+|Supervisor|supervisor_http_port|19320/19319|supervisor内部|supervisor管理进程|
+|Agent|agent_port|19323|Agent --> Center|Agent和center service通讯，用户上报监控信息|
 
 其中 `http_port`、`query_port` 是常用端口，前者用于网页访问 FE，后者用于 MySQL 客户端访问。
 
