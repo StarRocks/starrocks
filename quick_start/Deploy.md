@@ -155,22 +155,21 @@ MySQL [(none)]> SHOW PROC '/frontends'\G
          HttpPort: 8030
         QueryPort: 9030
           RpcPort: 9020
-             Role: FOLLOWER
-         IsMaster: true
+             Role: LEADER
         ClusterId: 1160043595
              Join: true
             Alive: true
 ReplayedJournalId: 1303
-    LastHeartbeat: 2022-05-19 11:27:16
+    LastHeartbeat: 2022-10-19 11:27:16
          IsHelper: true
            ErrMsg:
-        StartTime: 2022-05-19 10:15:21
-          Version: 2.2.0-RC02-2ab1482
+        StartTime: 2022-10-19 10:15:21
+          Version: 2.4.0-c0fa2bb
 1 row in set (0.02 sec)
 ```
 
+* 当 **Role** 为 **LEADER** 时，当前 FE 节点为选主出的主节点。
 * 当 **Role** 为 **FOLLOWER** 时，当前节点是一个能参与选主的 FE 节点。
-* 当 **IsMaster** 为 **true** 时，当前 FE 节点为主节点 (Leader FE)。
 
 如果 MySQL 客户端连接失败，可以通过查看 **log/fe.warn.log** 日志文件发现问题。
 
