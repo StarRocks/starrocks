@@ -85,7 +85,7 @@ public class PrintableMap<K, V> {
                 sb.append("\"");
             }
             if (hidePassword && SENSITIVE_KEY.contains(entry.getKey())) {
-                sb.append("*XXX");
+                sb.append("***");
             } else {
                 sb.append(entry.getValue());
             }
