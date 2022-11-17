@@ -154,13 +154,6 @@ inline void make_room(std::vector<T>* v, size_t n) {
     v->swap(reinterpret_cast<std::vector<T>&>(rv));
 }
 
-template <class T>
-inline void make_room_pad16(std::vector<T>* v, size_t n) {
-    RawVectorPad16<T> rv;
-    rv.resize(n);
-    v->swap(reinterpret_cast<std::vector<T>&>(rv));
-}
-
 inline void make_room(std::string* s, size_t n) {
     RawStringPad16 rs;
     rs.resize(n);
