@@ -503,7 +503,7 @@ We recommend you set different scheduler algorithms in accordance with the mediu
 
 We recommend you use 10GB network in your StarRocks cluster. Otherwise, StarRocks will fail to achieve the expected performance. You can use iPerf to check the bandwidth of your cluster.
 
-### File system** **configurations
+### File system configurations
 
 We recommend you use the ext4 journaling file system. You can run the following command to check the mount type:
 
@@ -529,7 +529,7 @@ You can set the maximum number of user processes by running the following comman
 ulimit -u 40960
 ```
 
-### File descriptor** **configuration
+### File descriptor configuration
 
 Run the following command to the maximum number of file descriptors to `65535`.
 
