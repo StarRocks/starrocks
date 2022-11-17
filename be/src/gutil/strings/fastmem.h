@@ -138,48 +138,41 @@ inline void memcpy_inlined(void* __restrict _dst, const void* __restrict _src, s
             _mm256_storeu_si256(reinterpret_cast<__m256i*>(dst + size - 32),
                                 _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src + size - 32)));
         } else {
-            // erms version.
-            static constexpr size_t KB = 1024;
-            static constexpr size_t MB = 1024 * 1024;
-            if ((size >= 4 * KB && size <= 16 * KB) || (size >= 512 * KB && size <= 2 * MB)) {
-                asm volatile("rep movsb" : "=D"(dst), "=S"(src), "=c"(size) : "0"(dst), "1"(src), "2"(size) : "memory");
-            } else {
-                size_t padding = (32 - (reinterpret_cast<size_t>(dst) & 31)) & 31;
+            size_t padding = (32 - (reinterpret_cast<size_t>(dst) & 31)) & 31;
 
-                if (padding > 0) {
-                    __m256i head = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src));
-                    _mm256_storeu_si256(reinterpret_cast<__m256i*>(dst), head);
-                    dst += padding;
-                    src += padding;
-                    size -= padding;
-                }
-
-                while (size >= 256) {
-                    __m256i c0 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src));
-                    __m256i c1 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src + 32));
-                    __m256i c2 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src + 64));
-                    __m256i c3 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src + 96));
-                    __m256i c4 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src + 128));
-                    __m256i c5 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src + 160));
-                    __m256i c6 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src + 192));
-                    __m256i c7 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src + 224));
-                    src += 256;
-
-                    _mm256_store_si256((reinterpret_cast<__m256i*>(dst)), c0);
-                    _mm256_store_si256((reinterpret_cast<__m256i*>(dst + 32)), c1);
-                    _mm256_store_si256((reinterpret_cast<__m256i*>(dst + 64)), c2);
-                    _mm256_store_si256((reinterpret_cast<__m256i*>(dst + 96)), c3);
-                    _mm256_store_si256((reinterpret_cast<__m256i*>(dst + 128)), c4);
-                    _mm256_store_si256((reinterpret_cast<__m256i*>(dst + 160)), c5);
-                    _mm256_store_si256((reinterpret_cast<__m256i*>(dst + 192)), c6);
-                    _mm256_store_si256((reinterpret_cast<__m256i*>(dst + 224)), c7);
-                    dst += 256;
-
-                    size -= 256;
-                }
-
-                goto tail;
+            if (padding > 0) {
+                __m256i head = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src));
+                _mm256_storeu_si256(reinterpret_cast<__m256i*>(dst), head);
+                dst += padding;
+                src += padding;
+                size -= padding;
             }
+
+            while (size >= 256) {
+                __m256i c0 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src));
+                __m256i c1 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src + 32));
+                __m256i c2 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src + 64));
+                __m256i c3 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src + 96));
+                __m256i c4 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src + 128));
+                __m256i c5 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src + 160));
+                __m256i c6 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src + 192));
+                __m256i c7 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src + 224));
+                src += 256;
+
+                _mm256_store_si256((reinterpret_cast<__m256i*>(dst)), c0);
+                _mm256_store_si256((reinterpret_cast<__m256i*>(dst + 32)), c1);
+                _mm256_store_si256((reinterpret_cast<__m256i*>(dst + 64)), c2);
+                _mm256_store_si256((reinterpret_cast<__m256i*>(dst + 96)), c3);
+                _mm256_store_si256((reinterpret_cast<__m256i*>(dst + 128)), c4);
+                _mm256_store_si256((reinterpret_cast<__m256i*>(dst + 160)), c5);
+                _mm256_store_si256((reinterpret_cast<__m256i*>(dst + 192)), c6);
+                _mm256_store_si256((reinterpret_cast<__m256i*>(dst + 224)), c7);
+                dst += 256;
+
+                size -= 256;
+            }
+
+            goto tail;
         }
 #else
         std::memcpy(dst, src, size);
