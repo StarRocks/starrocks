@@ -21,5 +21,5 @@ user_identity:user@'host'
 删除用户 jack@'192.%'。
 
 ```sql
-DROP USER 'jack'@'192.%'
+DROP USER 'jack'@'192.%';
 ```
