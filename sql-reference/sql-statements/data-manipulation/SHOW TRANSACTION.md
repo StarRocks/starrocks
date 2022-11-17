@@ -37,7 +37,7 @@ TimeoutMs: 300000
 * COMMITTED：事务成功，但数据不可见
 * VISIBLE：事务成功且数据可见
 * ABORTED：事务失败
-* LoadJobSourceType：导入任务的类型。
+* LoadJobSourceType：导入任务的类型
 * PrepareTime：事务开始时间
 * CommitTime：事务提交成功的时间
 * FinishTime：数据可见的时间
