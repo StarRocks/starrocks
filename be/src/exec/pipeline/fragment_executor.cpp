@@ -354,6 +354,7 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const TExec
                                                                     _fragment_ctx.get(), driver_id++);
                 driver->set_morsel_queue(morsel_queue.get());
                 if (auto* scan_operator = driver->source_scan_operator()) {
+                    scan_operator->set_query_ctx(_query_ctx->get_shared_ptr());
                     if (_wg != nullptr) {
                         // Workgroup uses scan_executor instead of pipeline_scan_io_thread_pool.
                         scan_operator->set_workgroup(_wg);
