@@ -59,7 +59,7 @@ bin/install.sh -h \
 
 ![配置 FE 实例](../assets/8.1.1.3-3.png)
 
-`Meta Dir`：StarRocks 的元数据目录。建议您配置独立的 **starrocks-meta** 和 FE 节点 log 目录。
+`Meta Dir`：StarRocks 的元数据目录。建议您配置独立的 **meta** 和 FE 节点 log 目录。
 
 ### 安装 BE 节点
 
