@@ -308,7 +308,7 @@ public class InformationSchemaDataSource {
                         info.setAuto_increment(DEF_NULL_NUM);
                         info.setCreate_time(table.getCreateTime());
                         // UPDATE_TIME (depend on the table type)
-                        info.setCheck_time(table.getLastCheckTime()/1000);
+                        info.setCheck_time(table.getLastCheckTime() / 1000);
                         info.setTable_collation(UTF8_GENERAL_CI);
                         info.setChecksum(DEF_NULL_NUM);
                         info.setCreate_options(DEF_NULL);
