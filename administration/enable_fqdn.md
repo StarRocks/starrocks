@@ -102,7 +102,7 @@ sh bin/start_fe.sh --host_type IP --daemon
     SHOW PROC '/frontends'\G
     ```
 
-    任何 `Alive` 和 `isMaster` 为 `true` 的 FE 节点即为正常运行的 Leader FE 节点。
+    任何 `Alive` 和 `Role` 为 `LEADER` 的 FE 节点即为正常运行的 Leader FE 节点。
 
 3. 执行以下语句，将该 FE 节点的 IP 地址变更为 FQDN。
 
