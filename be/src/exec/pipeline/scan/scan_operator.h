@@ -62,6 +62,8 @@ public:
     void set_cache_operator(const query_cache::CacheOperatorPtr& cache_operator) { _cache_operator = cache_operator; }
     void set_ticket_checker(query_cache::TicketCheckerPtr& ticket_checker) { _ticket_checker = ticket_checker; }
 
+    void set_query_ctx(std::shared_ptr<QueryContext> query_ctx);
+
 protected:
     static constexpr size_t kIOTaskBatchSize = 64;
 

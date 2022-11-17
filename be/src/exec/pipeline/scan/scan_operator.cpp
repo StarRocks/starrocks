@@ -312,10 +312,6 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
     _num_running_io_tasks++;
     _is_io_task_running[chunk_source_index] = true;
 
-    // to avoid holding mutex in bthread, we choose to initialize lazily here instead of in prepare
-    if (is_uninitialized(_query_ctx)) {
-        _query_ctx = state->exec_env()->query_context_mgr()->get(state->query_id());
-    }
     starrocks::debug::QueryTraceContext query_trace_ctx = starrocks::debug::tls_trace_ctx;
     query_trace_ctx.id = reinterpret_cast<int64_t>(_chunk_sources[chunk_source_index].get());
     int32_t driver_id = CurrentThread::current().get_driver_id();
@@ -454,6 +450,10 @@ void ScanOperator::_merge_chunk_source_profiles() {
 
     _unique_metrics->copy_all_info_strings_from(merged_profile);
     _unique_metrics->copy_all_counters_from(merged_profile);
+}
+
+void ScanOperator::set_query_ctx(std::shared_ptr<QueryContext> query_ctx) {
+    _query_ctx = std::move(query_ctx);
 }
 
 // ========== ScanOperatorFactory ==========
