@@ -803,6 +803,13 @@ public class Coordinator {
     }
 
     /**
+     * Build query execution parameter for request
+     */
+    public List<TExecPlanFragmentParams> buildExecRequests() {
+        throw UnsupportedException.unsupportedException("TODO");
+    }
+
+    /**
      * Deliver multiple fragments concurrently according to the topological order,
      * and all the instances of a fragment to the same destination host are delivered in the same request.
      */

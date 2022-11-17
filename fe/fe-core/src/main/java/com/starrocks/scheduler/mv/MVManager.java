@@ -204,7 +204,7 @@ public class MVManager {
     }
 
     public List<MVMaintenanceJob> getRunnableJobs() {
-        return this.jobMap.values().stream().filter(job -> job.getState().isRunnable()).collect(Collectors.toList());
+        return this.jobMap.values().stream().filter(MVMaintenanceJob::isRunnable).collect(Collectors.toList());
     }
 
     public void onTxnPublished(MvId id) {

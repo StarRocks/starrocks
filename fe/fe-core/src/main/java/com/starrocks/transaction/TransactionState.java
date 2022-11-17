@@ -83,7 +83,8 @@ public class TransactionState implements Writable {
         BATCH_LOAD_JOB(5),              // load job v2 for broker load
         DELETE(6),                     // synchronization delete job use this type
         LAKE_COMPACTION(7),            // compaction of LakeTable
-        FRONTEND_STREAMING(8);               // FE streaming load use this type
+        FRONTEND_STREAMING(8),          // FE streaming load use this type
+        MV_REFRESH(9);                  // Refresh MV
 
         private final int flag;
 
@@ -113,6 +114,8 @@ public class TransactionState implements Writable {
                     return LAKE_COMPACTION;
                 case 8:
                     return FRONTEND_STREAMING;
+                case 9:
+                    return MV_REFRESH;
                 default:
                     return null;
             }

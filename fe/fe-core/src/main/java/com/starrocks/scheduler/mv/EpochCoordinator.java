@@ -39,7 +39,7 @@ public class EpochCoordinator extends LeaderDaemon {
         long startMillis = System.currentTimeMillis();
 
         for (MVMaintenanceJob job : jobs) {
-            if (!job.getState().isRunnable()) {
+            if (!job.isRunnable()) {
                 LOG.warn("Job {} is in {} state, skip it", job, job.getState());
                 continue;
             }
