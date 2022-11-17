@@ -61,7 +61,7 @@ struct GroupReaderParam {
 
     FileMetaData* file_metadata = nullptr;
 
-    bool case_sensitive = false;
+    bool case_sensitive = true;
 };
 
 class GroupReader {

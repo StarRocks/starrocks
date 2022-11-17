@@ -167,7 +167,7 @@ private:
     std::shared_ptr<Column::Filter> _broker_load_filter;
     size_t _num_rows_filtered;
     const std::vector<std::string>* _hive_column_names = nullptr;
-    bool _case_sensitive = false;
+    bool _case_sensitive = true;
     std::unordered_map<std::string, int> _name_to_column_id;
     RuntimeState* _state;
     SlotDescriptor* _current_slot;

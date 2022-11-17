@@ -124,7 +124,7 @@ struct HdfsScannerParams {
 
     std::vector<std::string>* hive_column_names = nullptr;
 
-    bool case_sensitive = false;
+    bool case_sensitive = true;
 
     HdfsScanProfile* profile = nullptr;
 
@@ -175,7 +175,7 @@ struct HdfsScannerContext {
     // runtime filters.
     const RuntimeFilterProbeCollector* runtime_filter_collector = nullptr;
 
-    bool case_sensitive = false;
+    bool case_sensitive = true;
 
     std::string timezone;
 
