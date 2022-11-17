@@ -50,7 +50,7 @@ After you submit a load job to an FE, the FE generates a query plan, splits the 
 
 The following figure shows the workflow of a Broker Load job.
 
-![Workflow of Broker Load](../assets/4.3-1.png)
+![Workflow of Broker Load](../assets/4.3-1-en.png)
 
 ## Basic operations
 
