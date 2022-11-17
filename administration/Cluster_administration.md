@@ -35,6 +35,13 @@ sh bin/start_fe.sh --daemon
 
 为了保证 FE 高可用，您需要部署多个 FE 节点。我们建议您部署 3 个 FE 节点，其中包含 1 个 Leader FE 节点和 2 个 Follower FE 节点。
 
+在初次部署时，第一个启动的 FE 会默认成为 Leader FE，后启动的 Follower FE 在**首次启动**时需要指定已存活在集群中的 Follower FE 作为 helper 节点（仅首次启动时需要指定，helper 节点通常选用 Leader FE 节点）。
+
+```shell
+cd StarRocks-x.x.x/fe
+sh bin/start_fe.sh --helper <Leader_FE_IP>:<edit_log_port> --daemon
+```
+
 > 注意
 >
 > 当拥有多个 Follower FE 节点时，集群内需要有半数以上的 Follower FE 节点存活才能够选举出 Leader FE 节点，从而提供查询服务。
