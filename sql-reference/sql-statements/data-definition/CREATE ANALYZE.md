@@ -6,7 +6,7 @@
 
 默认情况下，StarRocks 会周期性自动采集表的全量统计信息。默认检查更新时间为 5 分钟一次，如果发现有数据更新，会自动触发采集。如果您不希望使用自动全量采集，可以设置 FE 配置项 `enable_collect_full_statistic` 为 `false`，系统会停止自动全量采集，根据您创建的自定义任务进行定制化采集。
 
-创建自定义自动采集任务之前，需要先关闭自动全量采集`enable_collect_full_statistic=false`，否则自定义采集任务不生效。
+创建自定义自动采集任务之前，需要先关闭自动全量采集 `enable_collect_full_statistic=false`，否则自定义采集任务不生效。
 
 ## 语法
 
@@ -30,7 +30,7 @@ CREATE ANALYZE [FULL|SAMPLE] TABLE tbl_name (col_name [,col_name]) PROPERTIES (p
 
 - `col_name`: 要采集统计信息的列，多列使用逗号 (,)分隔。如果不指定，表示采集整张表的信息。
 
-- PROPERTIES: 采集任务的自定义参数。如果不配置，则采用`fe.conf`中的默认配置。任务实际执行中使用的 PROPERTIES，可以通过 [SHOW ANALYZE JOB](../data-definition/SHOW%20ANALYZE%20JOB.md) 中的 `Properties` 列查看。
+- PROPERTIES: 采集任务的自定义参数。如果不配置，则采用 `fe.conf` 中的默认配置。任务实际执行中使用的 PROPERTIES，可以通过 [SHOW ANALYZE JOB](../data-definition/SHOW%20ANALYZE%20JOB.md) 中的 `Properties` 列查看。
 
 | **PROPERTIES**                        | **类型** | **默认值** | **说明**                                                     |
 | ------------------------------------- | -------- | ---------- | ------------------------------------------------------------ |
@@ -77,4 +77,4 @@ CREATE ANALYZE SAMPLE TABLE tbl_name(c1, c2, c3) PROPERTIES(
 
 [KILL ANALYZE](../data-definition/KILL%20ANALYZE.md)：取消正在运行中（Running）的统计信息收集任务。
 
-想了解更多 CBO 统计信息采集的内容，参见[CBO 统计信息](../../../using_starrocks/Cost_based_optimizer.md)。
+想了解更多 CBO 统计信息采集的内容，参见 [CBO 统计信息](../../../using_starrocks/Cost_based_optimizer.md)。
