@@ -64,6 +64,7 @@ public class LimitPruneTabletsRule extends TransformationRule {
             MaterializedIndex index = partition.getIndex(olapScanOperator.getSelectedIndexId());
 
             for (Tablet tablet : index.getTablets()) {
+<<<<<<< HEAD
                 long tabletRowCount = 0L;
                 for (Replica replica : ((LocalTablet) tablet).getReplicas()) {
                     if (replica.checkVersionCatchUp(version, false)
@@ -72,6 +73,12 @@ public class LimitPruneTabletsRule extends TransformationRule {
                         break;
                     }
                 }
+=======
+                // Note: the tablet row count metadata in FE maybe delay because of BE tablet row count.
+                // So the tablet row count in FE is less than or equal real tablet row count.
+                long tabletRowCount = tablet.getRowCount(version);
+
+>>>>>>> 94dddc687 ([BugFix] Fix LimitPruneTabletsRule bug (#13407))
                 // Needn't select empty tablet
                 if (tabletRowCount == 0) {
                     continue;
@@ -85,9 +92,10 @@ public class LimitPruneTabletsRule extends TransformationRule {
             }
         }
 
-        // 1. Don't select any tablet
-        // 2. selected tablets don't change
-        if (result.isEmpty() || result.equals(olapScanOperator.getSelectedTabletId())) {
+        // 1. totalRow must larger than limit
+        // 2. Don't select any tablet
+        // 3. selected tablets don't change
+        if (totalRow < limit || result.isEmpty() || result.equals(olapScanOperator.getSelectedTabletId())) {
             return Collections.emptyList();
         }
 
