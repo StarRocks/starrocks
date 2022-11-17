@@ -398,6 +398,10 @@ private:
     RuntimeProfile::Counter* _probe_conjunct_evaluate_timer = nullptr;
     RuntimeProfile::Counter* _other_join_conjunct_evaluate_timer = nullptr;
     RuntimeProfile::Counter* _where_conjunct_evaluate_timer = nullptr;
+    RuntimeProfile::Counter* _probe_count = nullptr;
+    RuntimeProfile::Counter* _probe_step = nullptr;
+    RuntimeProfile::Counter* _sort_timer = nullptr;
+    RuntimeProfile::Counter* _sort_mater_timer = nullptr;
 };
 
 } // namespace vectorized

@@ -18,6 +18,8 @@
 #include "simd/simd.h"
 #include "util/debug_util.h"
 #include "util/runtime_profile.h"
+#include "exec/vectorized/sorting/sorting.h"
+#include "exec/vectorized/sorting/sort_permute.h"
 
 namespace starrocks::vectorized {
 
@@ -101,7 +103,10 @@ Status HashJoiner::prepare_prober(RuntimeState* state, RuntimeProfile* runtime_p
     _probe_conjunct_evaluate_timer = ADD_TIMER(runtime_profile, "ProbeConjunctEvaluateTime");
     _other_join_conjunct_evaluate_timer = ADD_TIMER(runtime_profile, "OtherJoinConjunctEvaluateTime");
     _where_conjunct_evaluate_timer = ADD_TIMER(runtime_profile, "WhereConjunctEvaluateTime");
-
+    _sort_timer = ADD_TIMER(runtime_profile, "SortChunkTime");
+    _sort_mater_timer = ADD_TIMER(runtime_profile, "SortChunkMaterialTime");
+    _probe_count = ADD_COUNTER(runtime_profile, "ProbeCount", TUnit::UNIT);
+    _probe_step =  ADD_COUNTER(runtime_profile, "ProbeStep", TUnit::UNIT);
     return Status::OK();
 }
 
@@ -199,8 +204,31 @@ bool HashJoiner::has_output() const {
 void HashJoiner::push_chunk(RuntimeState* state, ChunkPtr&& chunk) {
     DCHECK(chunk && !chunk->is_empty());
     DCHECK(!_probe_input_chunk);
-
     _probe_input_chunk = std::move(chunk);
+
+    // if (_probe_expr_ctxs.size() == 1) {
+    //     SCOPED_TIMER(_sort_timer);
+    //     auto& expr_ctx = _probe_expr_ctxs[0];
+    //     ColumnPtr column_ptr = EVALUATE_NULL_IF_ERROR(expr_ctx, expr_ctx->root(), _probe_input_chunk.get());
+
+    //     SortDesc sort(true, true);
+    //     size_t num_rows = _probe_input_chunk->num_rows();
+    //     Tie tie(num_rows, 1);
+    //     std::pair<int, int> range{0, num_rows};
+    //     SmallPermutation small_perm = create_small_permutation(num_rows);
+
+    //     sort_and_tie_column(false, column_ptr, sort, small_perm, tie, range, true);
+        
+    //     {
+    //         SCOPED_TIMER(_sort_mater_timer);
+    //         Permutation perm;
+    //         restore_small_permutation(small_perm, perm);
+    //         auto sortChunk = _probe_input_chunk->clone_empty();
+    //         materialize_by_permutation(sortChunk.get(), {_probe_input_chunk}, perm);
+    //         _probe_input_chunk = std::move(sortChunk);
+    //     }
+    // }
+
     _ht_has_remain = true;
     _prepare_probe_key_columns();
 }
@@ -220,6 +248,9 @@ StatusOr<ChunkPtr> HashJoiner::_pull_probe_output_chunk(RuntimeState* state) {
 
         TRY_CATCH_BAD_ALLOC(
                 RETURN_IF_ERROR(_ht.probe(state, _key_columns, &_probe_input_chunk, &chunk, &_ht_has_remain)));
+
+        COUNTER_SET(_probe_count, static_cast<int64_t>(_ht.get_probe_count()));
+        COUNTER_SET(_probe_step, static_cast<int64_t>(_ht.get_probe_step()));
         if (!_ht_has_remain) {
             _probe_input_chunk = nullptr;
         }

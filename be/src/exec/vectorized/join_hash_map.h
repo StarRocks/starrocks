@@ -116,14 +116,23 @@ struct JoinHashTableItems {
     RuntimeProfile::Counter* output_build_column_timer = nullptr;
 };
 
+struct ProbeRowIndex {
+    uint32_t probe_index = 0;
+    uint32_t build_index = 0;
+
+    ProbeRowIndex() = default;
+    ~ProbeRowIndex() = default;
+};
+
 struct HashTableProbeState {
     //TODO: memory release
     Buffer<uint8_t> is_nulls;
-    Buffer<uint32_t> buckets;
-    Buffer<uint32_t> build_index;
-    Buffer<uint32_t> probe_index;
-    Buffer<uint32_t> next;
+    Buffer<uint32_t> buckets; // chunk size 
+    Buffer<uint32_t> build_index; // chunk size + 8
+    Buffer<uint32_t> probe_index; // chunk size + 8
+    Buffer<uint32_t> next; // chunk size 
     Buffer<Slice> probe_slice;
+    Buffer<ProbeRowIndex> probe_row_index;
     Buffer<uint8_t>* null_array = nullptr;
     ColumnPtr probe_key_column;
     const Columns* key_columns = nullptr;
@@ -131,9 +140,9 @@ struct HashTableProbeState {
     // when exec right join
     // record the build items is matched or not
     // 0: not matched, 1: matched
-    Buffer<uint8_t> build_match_index;
-    Buffer<uint32_t> probe_match_index;
-    Buffer<uint8_t> probe_match_filter;
+    Buffer<uint8_t> build_match_index; // _table_items->row_count + 1
+    Buffer<uint32_t> probe_match_index; // chunk size
+    Buffer<uint8_t> probe_match_filter; // chunk size
     uint32_t count = 0; // current return values count
     // the rows of src probe chunk
     size_t probe_row_count = 0;
@@ -157,6 +166,8 @@ struct HashTableProbeState {
     RuntimeProfile::Counter* search_ht_timer = nullptr;
     RuntimeProfile::Counter* output_probe_column_timer = nullptr;
     RuntimeProfile::Counter* output_tuple_column_timer = nullptr;
+    size_t probe_count = 0;
+    size_t probe_step = 0;
 
     HashTableProbeState() = default;
     ~HashTableProbeState() = default;
@@ -255,7 +266,12 @@ public:
         if (expect_bucket_size >= MAX_BUCKET_SIZE) {
             return MAX_BUCKET_SIZE;
         }
-        return phmap::priv::NormalizeCapacity(expect_bucket_size) + 1;
+        uint32_t bucket = phmap::priv::NormalizeCapacity(expect_bucket_size) + 1;
+
+        // if (bucket > size) {
+        //     return size + 1;
+        // }
+        return bucket;
     }
 
     template <typename CppType>
@@ -687,6 +703,8 @@ public:
     size_t get_probe_column_count() const { return _table_items->probe_column_count; }
     size_t get_build_column_count() const { return _table_items->build_column_count; }
     size_t get_bucket_size() const { return _table_items->bucket_size; }
+    size_t get_probe_count() const { return _probe_state->probe_count; }
+    size_t get_probe_step() const { return _probe_state->probe_step; }
 
     void remove_duplicate_index(Column::Filter* filter);
 
