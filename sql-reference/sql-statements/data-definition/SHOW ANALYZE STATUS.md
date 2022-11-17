@@ -2,7 +2,7 @@
 
 ## 功能
 
-查看当前所有采集任务的状态。**该语句不支持查看自定义采集任务的状态，如要查看，请使用 SHOW ANALYZE JOB。**
+查看当前所有采集任务的状态。**该语句不支持查看自定义采集任务的状态，如要查看，请使用 SHOW ANALYZE JOB;。**
 
 ## 语法
 
@@ -16,12 +16,12 @@ SHOW ANALYZE STATUS [LIKE | WHERE predicate];
 
 | **列名**   | **说明**                                                     |
 | ---------- | ------------------------------------------------------------ |
-| Id         | 采集任务的ID。                                               |
+| Id         | 采集任务的 ID。                                               |
 | Database   | 数据库名。                                                   |
 | Table      | 表名。                                                       |
 | Columns    | 列名列表。                                                   |
 | Type       | 统计信息的类型，包括 FULL，SAMPLE，HISTOGRAM。               |
-| Schedule   | 调度的类型。`ONCE`表示手动，`SCHEDULE`表示自动。             |
+| Schedule   | 调度的类型。`ONCE` 表示手动，`SCHEDULE` 表示自动。             |
 | Status     | 任务状态，包括 RUNNING（正在执行）、SUCCESS（执行成功）和 FAILED（执行失败）。 |
 | StartTime  | 任务开始执行的时间。                                         |
 | EndTime    | 任务结束执行的时间。                                         |
@@ -34,4 +34,4 @@ SHOW ANALYZE STATUS [LIKE | WHERE predicate];
 
 [KILL ANALYZE](../data-definition/KILL%20ANALYZE.md)：取消正在运行中（Running）的统计信息收集任务。
 
-想了解更多 CBO 统计信息采集的内容，参见[CBO 统计信息](../../../using_starrocks/Cost_based_optimizer.md)。
+想了解更多 CBO 统计信息采集的内容，参见 [CBO 统计信息](../../../using_starrocks/Cost_based_optimizer.md)。
