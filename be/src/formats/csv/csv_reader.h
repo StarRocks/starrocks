@@ -36,7 +36,6 @@ public:
     // Returns this buffer's capacity.
     size_t capacity() const { return _end - _begin; }
 
-    // 返回已经读取的字节数
     size_t have_read() const { return _position_offset; }
 
     char* position() { return _begin + _position_offset; }
@@ -71,7 +70,6 @@ public:
 
     char* base_ptr() {return _begin;}
 
-    // 已经读取过的
     // Compacts this buffer.
     // The bytes between the buffer's current position and its limit, if any,
     // are copied to the beginning of the buffer.
@@ -153,17 +151,11 @@ protected:
     size_t _row_delimiter_length;
     size_t _column_separator_length;
     bool _trim_space;
-    // TODO(yangzaorang): 需要加一个bool类型方便处理吗
     char _escape;
     char _enclose;
     raw::RawVector<char> _storage;
-    // _buff其实就是一个连续的内存，作为存放读到的数据的容器
     CSVBuffer _buff;
     raw::RawVector<char> _escape_data;
-    // TODO(yangzaorang):
-    // 引入一个枚举类型用于表示状态机的状态
-    // 如何读数据
-
     virtual Status _fill_buffer() { return Status::InternalError("unsupported csv reader!"); }
 
 private:
@@ -171,11 +163,8 @@ private:
     Status _expand_buffer_loosely();
 
     size_t _parsed_bytes = 0;
-    // 这一个range的总数据是多少
     size_t _limit = 0;
     size_t _offset = 0;
-
-
 };
 
 } // namespace starrocks::vectorized

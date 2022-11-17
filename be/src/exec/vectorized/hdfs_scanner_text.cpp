@@ -97,18 +97,6 @@ Status HdfsScannerCSVReader::next_record(FieldOffsets* fields, size_t& parsed_st
         return Status::EndOfFile("");
     }
     Status status = CSVReader::next_record(fields, parsed_start, parsed_end);
-    // std::cout << "fields.size() = " << fields->size() << std::endl;
-    // int num = fields->size();
-    // for (int i=0; i<num; i++) {
-    //     std::tuple<size_t, size_t, bool> field_offset = (*fields)[i];
-    //     const char* start_addr = buffBasePtr() + std::get<0>(field_offset);
-    //     size_t len = std::get<1>(field_offset);
-    //     bool isTrim = std::get<2>(field_offset);
-    //     std::cout << "start addr: " << start_addr << std::endl;
-    //     std::cout << "len: " << len << std::endl;
-    //     std::cout << "isTrim: " << isTrim << std::endl;
-    // }
-
     // We should still read if remain_length is zero(we stop right at row delimiter)
     // because next scan range will skip a record till row delimiter.
     // so it's current reader's responsibility to consume this record.
@@ -272,7 +260,6 @@ Status HdfsTextScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk
     return Status::OK();
 }
 
-// 所以，这里我们需要引入v2
 Status HdfsTextScanner::parse_csv_v2(int chunk_size, ChunkPtr* chunk) {
     DCHECK_EQ(0, chunk->get()->num_rows());
     Status status;

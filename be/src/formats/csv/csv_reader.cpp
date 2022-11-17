@@ -76,7 +76,6 @@ bool CSVReader::isRowDelimiter(CSVBuffer& buff) {
             return true;
         }
     } else {
-        // 我们要判断接下来的一段字节流是否是row delimiter
         int i = 0;
         const char* base_ptr = _buff.base_ptr(); 
         size_t p = _buff.position_offset();
@@ -103,8 +102,7 @@ bool CSVReader::isRowDelimiter(CSVBuffer& buff) {
     }
     return false;
 }
-// 希望buffer可以在有数据的时候也能扩容
-// 当剩余的可读取的字节为0时，读取更多数据。
+
 Status CSVReader::readMore(CSVBuffer& buff) {
     if(buff.available() < 1) {
         if (buff.free_space() == 0) {
@@ -126,20 +124,17 @@ char* CSVReader::escapeDataPtr() {
     return _escape_data.data();
 }
 
-// 这个函数我们要从状态START开始，读取下一条记录。
-// 重载。
 Status CSVReader::next_record(FieldOffsets* fields, size_t& parsed_start, size_t& parsed_end) {
     fields->clear();
     if (_limit > 0 && _parsed_bytes > _limit) {
         return Status::EndOfFile("Reached limit");
     }
-    // TODO: 每次读一条记录时先做一次compact，这里性能会有问题
     _buff.compact();
     _escape_data.clear();
     std::unordered_set<size_t> escape_pos;
     ParseState curState = START;
     ParseState preState = curState;
-    // 将filed_start初始化为最大值，表示未进入START状态
+    // If filed_start is initialized to the maximum value, the START state is not entered.
     size_t filed_start = std::string::npos;
     parsed_start = _buff.position_offset();
     bool is_enclose_field = false;
@@ -147,7 +142,7 @@ Status CSVReader::next_record(FieldOffsets* fields, size_t& parsed_start, size_t
     size_t filed_end = 0;
     Status status = Status::OK();
     while (true) {
-        // 到了一行的行尾,或者字段尾部，此次不再读新的数据
+        // At the end of a row, or the end of a field, no new data is read.
         if (curState != NEWLINE && curState != DELIMITER) {
             status = readMore(_buff);
             if (!status.ok()) {
@@ -155,11 +150,11 @@ Status CSVReader::next_record(FieldOffsets* fields, size_t& parsed_start, size_t
                 goto newline_label;
             }
         }
-        // 每一次根据当前的状态+当前的字符流，来推进到下一个状态
+        // Advance to the next state each time based on the current state + the current character stream.
         switch (curState)
         {
         case START:
-            // 开启了trim space，START状态下跳过leading space
+            // Trim space is enabled and the leading space is skipped in the START state
             if (_trim_space) {
                 while (*(_buff.position()) == ' ') {
                     _buff.skip(1);
@@ -170,7 +165,6 @@ Status CSVReader::next_record(FieldOffsets* fields, size_t& parsed_start, size_t
                     }
                 }
             }
-            // 我们记录字段开始的位置
             filed_start = _buff.position_offset();
 
             // newline
@@ -199,10 +193,9 @@ Status CSVReader::next_record(FieldOffsets* fields, size_t& parsed_start, size_t
             // enclose
             if (*(_buff.position()) == _enclose) {
                 _buff.skip(1);
-                // TODO: 这里还需要调整
                 status = readMore(_buff);
                 if (!status.ok()) {
-                    // TODO: START状态下仅仅读到了单个的enclose字符，这种是不合法的pattern，可以直接退出。
+                    // TODO(yangzaorang): Just reading a single enclose character from the START state is an illegal pattern and can be exited directly
                     curState = NEWLINE;
                     goto newline_label;
                 }
@@ -213,28 +206,29 @@ Status CSVReader::next_record(FieldOffsets* fields, size_t& parsed_start, size_t
                     break;
                 } else {
                     // ""something
-                    // 空字段还是转义？
+                    // We need to determine whether the field is empty or escaped.
                     _buff.skip(1);
                     status = readMore(_buff);
                     if (!status.ok()) {
                         is_enclose_field = true;
                         curState = NEWLINE;
                         goto newline_label;
-                    }                    // ""rowseperator
+                    }
+                    // ""rowseperator
                     if (isRowDelimiter(_buff)) {
                         is_enclose_field = true;
                         curState = NEWLINE;
                         break;
                     }
                     
-                    // delimiter
+                    // ""delimiter
                     if (isColumnSeparator(_buff)) {
                         is_enclose_field = true;
                         curState = DELIMITER;
                         break;
                     }
 
-                    // ""普通字符,此时第一个enclose为转义字符
+                    // ""ordinary characters
                     curState = ORDINARY;
                     break;
                 }
@@ -243,18 +237,18 @@ Status CSVReader::next_record(FieldOffsets* fields, size_t& parsed_start, size_t
             _buff.skip(1);
             break;
 
-        // 只有在START状态下才能进入ENCLOSE状态
-        // START状态如何转换到ENCLOSE状态：
-        // 1. 没有开启trimspace
+        // ENCLOSE state can only be entered with a START state.
+        // How does the START state transition to the ENCLOSE state：
+        // 1. trimspace is not enabled
         //    a. "some
-        //    b. ""aaa, enclose只是用于转义，不能进入enclose状态
-        //    c. ""空字段，空字段接下来读到的一定是字段分隔符或者换行符
-        // 2. 开启了trimspace
-        //    去除空格后再判断
+        //    b. ""aaa, enclose is just used as an escape and you can't go into ENCLOSE state.
+        //    c. "", empty fields must be read next to field delimiters or newlines.
+        // 2. trimspace is enabled
+        //    Remove the leading space before judging.
         case ENCLOSE:
-            // ENCLOSE状态下再次遇到enclose, 有两种可能：
-            // 1. enclose状态结束
-            // 2. 遇到enclose转义
+            // enclose character again, There are two possibilities:
+            // 1. ENCLOSE state is over
+            // 2. enclose to escape
             if (*(_buff.position()) == _enclose) {
                 _buff.skip(1);
 
@@ -292,25 +286,24 @@ Status CSVReader::next_record(FieldOffsets* fields, size_t& parsed_start, size_t
 
         // TODO: review ESCAPE
         case ESCAPE:
-            // 转义enclose
+            // escape enclose
             if (*(_buff.position()) == _enclose) {
                 curState = preState;
                 _buff.skip(1);
                 break;
             }
-            // 转义 escape自身
+            // escape escape
             if (*(_buff.position()) == _escape) {
-                // TODO: 需要处理新的数据
                 curState = preState;
                 _buff.skip(1);
                 break;
             }
-            // 转义 row DELIMITER
+            // escape row DELIMITER
             if (isRowDelimiter(_buff)) {
                 curState = preState;
                 break;
             }
-            // 转义column separator
+            // escape column separator
             if (isColumnSeparator(_buff)) {
                 curState = preState;
                 break;
@@ -353,7 +346,7 @@ Status CSVReader::next_record(FieldOffsets* fields, size_t& parsed_start, size_t
 
         case DELIMITER:
             filed_end = _buff.position_offset();
-            // 字段存在escape，需要将该字段去掉转义符号并复制到单独的存储空间
+            // The field has an escape and needs to be stripped of the escape character and copied to a separate storage space.
             if (escape_pos.size() > 0) {
                 is_escape_field = true;
                 size_t new_filed_start = _escape_data.size();
@@ -377,7 +370,7 @@ Status CSVReader::next_record(FieldOffsets* fields, size_t& parsed_start, size_t
                     std::pair<const char*, size_t> newPos = trim(basePtr+filed_start, filed_end - _column_separator_length - filed_start - 1);
                     fields->emplace_back(newPos.first - basePtr, newPos.second, is_escape_field);
                 } else {
-                    // enclose字段要去除字段最后的enclose character
+                    // Remove the last enclose character.
                     fields->emplace_back(filed_start, filed_end - _column_separator_length - filed_start - 1, is_escape_field);
                 }
                 
@@ -404,9 +397,8 @@ Status CSVReader::next_record(FieldOffsets* fields, size_t& parsed_start, size_t
             _parsed_bytes += _buff.position_offset() - parsed_start;
             parsed_end = _buff.position_offset();
             // push line
-            // 如果未发生异常，那么将行分隔符从字段中去除，发生异常，不做修饰了。
             if (status.ok() || status.is_end_of_file()) {
-                // 跳过空行
+                // Skip empty line.
                 if (fields->size() == 0 && _buff.position_offset() - _row_delimiter_length - filed_start == 0) {
                     curState = START;
                     is_enclose_field = false;
@@ -414,7 +406,6 @@ Status CSVReader::next_record(FieldOffsets* fields, size_t& parsed_start, size_t
                 }
                 if (filed_start != std::string::npos) {
                     filed_end = _buff.position_offset();
-                    // 字段存在escape，需要将该字段去掉转义符号并复制到单独的存储空间
                     if (escape_pos.size() > 0) {
                         is_escape_field = true;
                         size_t new_filed_start = _escape_data.size();
@@ -461,19 +452,6 @@ Status CSVReader::next_record(FieldOffsets* fields, size_t& parsed_start, size_t
         default:
             return Status::NotSupported("Not supported state when csv parsing");
         }
-        // 每一次switch之后去判断是否要读新的数据
-        // 这块确认好了，再往下演进：
-        // 1. 如何读，何时读数据
-        // 当available没有剩余数据时，那么读数据。
-        // 每一次进行next record时，都做一次compact，当然这里会有性能开销，考虑如何优化
-        // 2. 读新的数据的边界
-        // 3. 这种方式处理多字节的delimiter和newline符号是否可行，或者对其他的状态流转是否可行
-        // 4. 对于转义在某种情况下会破坏我们感兴趣内存的连续性，如何处理？
-        // 到后面再做转义。需要多做一次扫描。这个方案不行，因为还有enclose转义。后面再考虑这个问题。
-        // 4.5 循环何时退出
-        // a. 拿到了一行完整记录. b. 超过缓冲区大小，但是还没有找到相关记录
-        // 5. 如何处理空行
-        // 6. 如何处理end of file
     }
 }
 
@@ -489,7 +467,7 @@ Status CSVReader::next_record(Record* record) {
         if (_buff.free_space() == 0) {
             RETURN_IF_ERROR(_expand_buffer());
         }
-        //  fill_buffer 进行了一次内存拷贝：将数据从文件中读取，写入到_buff中
+        // fill_buffer does a memory copy: it reads the data from the file and writes it to _buff
         RETURN_IF_ERROR(_fill_buffer());
     }
     size_t l = d - _buff.position();
@@ -500,7 +478,6 @@ Status CSVReader::next_record(Record* record) {
     return Status::OK();
 }
 
-// 将底层的storage(vector)扩大
 Status CSVReader::_expand_buffer() {
     if (UNLIKELY(_storage.size() >= kMaxBufferSize)) {
         return Status::InternalError("CSV line length exceed limit " + std::to_string(kMaxBufferSize));
@@ -516,8 +493,8 @@ Status CSVReader::_expand_buffer() {
     return Status::OK();
 }
 
-// _expand_buffer必须保证缓冲区中没有数据才可以扩容buffer，但是我们引入状态机解析器后，这个约束太强了，
-// 引入一个更宽松的buffer扩容函数。
+// _expand_buffer must ensure that there is no data in the buffer. However, after we introduced the state machine parser, 
+// this constraint became too strong and we introduced a more relaxed buffer expansion function.
 Status CSVReader::_expand_buffer_loosely() {
     if (UNLIKELY(_storage.size() >= kMaxBufferSize)) {
         return Status::InternalError("CSV line length exceed limit " + std::to_string(kMaxBufferSize));
