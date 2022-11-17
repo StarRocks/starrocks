@@ -258,20 +258,16 @@ public class MvUtils {
     public static ScalarOperator getCompensationPredicateForDisjunctive(ScalarOperator src, ScalarOperator target) {
         List<ScalarOperator> srcItems = Utils.extractDisjunctive(src);
         List<ScalarOperator> targetItems = Utils.extractDisjunctive(target);
-        int srcLength = srcItems.size();
-        int targetLength = targetItems.size();
         if (!targetItems.containsAll(srcItems)) {
             return null;
         }
         targetItems.removeAll(srcItems);
-        if (targetItems.isEmpty() && srcLength == targetLength) {
+        if (targetItems.isEmpty()) {
             // it is the same, so return true constant
             return ConstantOperator.createBoolean(true);
-        } else if (!targetItems.isEmpty()) {
+        } else {
             // the target has more or item, so return src
             return src;
-        } else {
-            return null;
         }
     }
 
