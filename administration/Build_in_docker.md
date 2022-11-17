@@ -57,5 +57,5 @@ StarRocks 版本分支与开发环境镜像版本的对应关系如下所示：
   git clone https://github.com/StarRocks/starrocks.git
   
   cd starrocks
-  sh /build.sh
+  sh build.sh
   ```
