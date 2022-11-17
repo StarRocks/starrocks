@@ -1196,10 +1196,10 @@ Status OrcChunkReader::init(std::unique_ptr<orc::InputStream> input_stream) {
     return Status::OK();
 }
 
-void OrcChunkReader::build_column_name_to_id_mapping(std::unordered_map<std::string, int>* mapping,
-                                                     const std::vector<std::string>* hive_column_names,
-                                                     const orc::Type& root_type, bool case_sensitive) {
-    mapping->clear();
+void OrcChunkReader::build_column_name_to_id_table(std::unordered_map<std::string, int>* table,
+                                                   const std::vector<std::string>* hive_column_names,
+                                                   const orc::Type& root_type, bool case_sensitive) {
+    table->clear();
     if (hive_column_names != nullptr) {
         // build hive column names index.
         // if there are 64 columns in hive meta, but actually there are 63 columns in orc file
@@ -1208,14 +1208,14 @@ void OrcChunkReader::build_column_name_to_id_mapping(std::unordered_map<std::str
         for (int i = 0; i < size; i++) {
             const auto& sub_type = root_type.getSubtype(i);
             std::string col_name = format_column_name(hive_column_names->at(i), case_sensitive);
-            mapping->insert(make_pair(col_name, static_cast<int>(sub_type->getColumnId())));
+            table->insert(make_pair(col_name, static_cast<int>(sub_type->getColumnId())));
         }
     } else {
         // build orc column names index.
         for (int i = 0; i < root_type.getSubtypeCount(); i++) {
             const auto& sub_type = root_type.getSubtype(i);
             std::string col_name = format_column_name(root_type.getFieldName(i), case_sensitive);
-            mapping->insert(make_pair(col_name, static_cast<int>(sub_type->getColumnId())));
+            table->insert(make_pair(col_name, static_cast<int>(sub_type->getColumnId())));
         }
     }
 }
@@ -1240,29 +1240,19 @@ void OrcChunkReader::build_column_name_set(std::unordered_set<std::string>* name
     }
 }
 
-Status OrcChunkReader::_slot_to_orc_column_name(const SlotDescriptor* desc,
-                                                const std::unordered_map<int, std::string>& column_id_to_orc_name,
-                                                std::string* orc_column_name) {
-    auto col_name = format_column_name(desc->col_name(), _case_sensitive);
-    auto it = _name_to_column_id.find(col_name);
+StatusOr<int> OrcChunkReader::_find_column_id_by_name(const std::string& name) {
+    auto it = _name_to_column_id.find(name);
     if (it == _name_to_column_id.end()) {
-        auto s = strings::Substitute("OrcChunkReader::init_include_columns. col name = $0 not found, file = $1",
-                                     desc->col_name(), _current_file_name);
+        auto s = strings::Substitute("OrcChunkReader::_find_column_id_by_name. col_name = $0, file = $1", name,
+                                     _current_file_name);
         return Status::NotFound(s);
     }
-    auto it2 = column_id_to_orc_name.find(it->second);
-    if (it2 == column_id_to_orc_name.end()) {
-        auto s = strings::Substitute("OrcChunkReader::init_include_columns. col name = $0 not found, file = $1",
-                                     desc->col_name(), _current_file_name);
-        return Status::NotFound(s);
-    }
-    *orc_column_name = it2->second;
-    return Status::OK();
+    return it->second;
 }
 
 Status OrcChunkReader::_init_include_columns(const std::unique_ptr<OrcMapping>& mapping) {
     // TODO(SmithCruise) delete _name_to_column_id, _hive_column_names when develop subfield lazy load.
-    build_column_name_to_id_mapping(&_name_to_column_id, _hive_column_names, _reader->getType(), _case_sensitive);
+    build_column_name_to_id_table(&_name_to_column_id, _hive_column_names, _reader->getType(), _case_sensitive);
 
     std::list<uint64_t> include_column_id;
     // NOTE(yan): No need to explicit include root column id, otherwise it will read out all fields.
@@ -1272,7 +1262,13 @@ Status OrcChunkReader::_init_include_columns(const std::unique_ptr<OrcMapping>& 
     for (size_t i = 0; i < _src_slot_descriptors.size(); i++) {
         SlotDescriptor* desc = _src_slot_descriptors[i];
         if (desc == nullptr) continue;
-        RETURN_IF_ERROR(mapping->set_include_column_id(i, desc->type(), &include_column_id));
+        if (!desc->type().is_complex_type()) {
+            auto st = _find_column_id_by_name(desc->col_name());
+            if (!st.ok()) return st.status();
+            include_column_id.emplace_back(st.value());
+        } else {
+            RETURN_IF_ERROR(mapping->set_include_column_id(i, desc->type(), &include_column_id));
+        }
     }
 
     _row_reader_options.includeTypes(include_column_id);
@@ -1283,7 +1279,13 @@ Status OrcChunkReader::_init_include_columns(const std::unique_ptr<OrcMapping>& 
         for (size_t pos : _lazy_load_ctx->lazy_load_indices) {
             SlotDescriptor* desc = _src_slot_descriptors[pos];
             if (desc == nullptr) continue;
-            RETURN_IF_ERROR(mapping->set_include_column_id(pos, desc->type(), &lazy_load_column_id));
+            if (!desc->type().is_complex_type()) {
+                auto st = _find_column_id_by_name(desc->col_name());
+                if (!st.ok()) return st.status();
+                lazy_load_column_id.emplace_back(st.value());
+            } else {
+                RETURN_IF_ERROR(mapping->set_include_column_id(pos, desc->type(), &lazy_load_column_id));
+            }
         }
 
         _row_reader_options.includeLazyLoadColumnIndexes(lazy_load_column_id);
@@ -1355,24 +1357,24 @@ Status OrcChunkReader::_init_position_in_orc() {
 
     for (int i = 0; i < column_size; i++) {
         auto slot_desc = _src_slot_descriptors[i];
-
+        int col_id = -1;
+        int pos = -1;
         if (slot_desc == nullptr) continue;
-        auto it = _name_to_column_id.find(slot_desc->col_name());
-        if (it == _name_to_column_id.end()) {
-            auto s = strings::Substitute(
-                    "OrcChunkReader::init_position_in_orc. failed to find position. col_name = $0, file = $1",
-                    slot_desc->col_name(), _current_file_name);
-            return Status::NotFound(s);
+        {
+            auto st = _find_column_id_by_name(slot_desc->col_name());
+            if (!st.ok()) return st.status();
+            col_id = st.value();
         }
-        int col_id = it->second;
-        auto it2 = column_id_to_pos.find(col_id);
-        if (it2 == column_id_to_pos.end()) {
-            auto s = strings::Substitute(
-                    "OrcChunkReader::init_position_in_orc. failed to find position. col_id = $0, file = $1",
-                    std::to_string(col_id), _current_file_name);
-            return Status::NotFound(s);
+        {
+            auto it = column_id_to_pos.find(col_id);
+            if (it == column_id_to_pos.end()) {
+                auto s = strings::Substitute(
+                        "OrcChunkReader::init_position_in_orc. failed to find position. col_id = $0, file = $1",
+                        std::to_string(col_id), _current_file_name);
+                return Status::NotFound(s);
+            }
+            pos = it->second;
         }
-        int pos = it2->second;
         _position_in_orc[i] = pos;
         SlotId id = slot_desc->id();
         _slot_id_to_position[id] = pos;

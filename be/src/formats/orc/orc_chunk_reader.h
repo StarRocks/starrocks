@@ -94,9 +94,9 @@ public:
     }
     void set_case_sensitive(bool case_sensitive) { _case_sensitive = case_sensitive; }
 
-    static void build_column_name_to_id_mapping(std::unordered_map<std::string, int>* mapping,
-                                                const std::vector<std::string>* hive_column_names,
-                                                const orc::Type& root_type, bool case_sensitive);
+    static void build_column_name_to_id_table(std::unordered_map<std::string, int>* table,
+                                              const std::vector<std::string>* hive_column_names,
+                                              const orc::Type& root_type, bool case_sensitive);
     static void build_column_name_set(std::unordered_set<std::string>* name_set,
                                       const std::vector<std::string>* hive_column_names, const orc::Type& root_type,
                                       bool case_sensitive);
@@ -146,14 +146,12 @@ private:
     std::unordered_map<SlotId, int> _slot_id_to_position;
     std::vector<Expr*> _cast_exprs;
     std::vector<FillColumnFunction> _fill_functions;
-    Status _slot_to_orc_column_name(const SlotDescriptor* slot,
-                                    const std::unordered_map<int, std::string>& column_id_to_orc_name,
-                                    std::string* orc_column_name);
     Status _init_include_columns(const std::unique_ptr<OrcMapping>& mapping);
     Status _init_position_in_orc();
     Status _init_src_types();
     Status _init_cast_exprs();
     Status _init_fill_functions();
+    StatusOr<int> _find_column_id_by_name(const std::string& name);
     // holding Expr* in cast_exprs;
     ObjectPool _pool;
     uint64_t _read_chunk_size;

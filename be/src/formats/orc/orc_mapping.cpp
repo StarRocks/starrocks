@@ -8,8 +8,8 @@ static std::string format_column_name(const std::string& col_name, bool case_sen
     return case_sensitive ? col_name : boost::algorithm::to_lower_copy(col_name);
 }
 
-const OrcMappingOrOrcColumnId& OrcMapping::get_column_id_or_child_mapping(size_t original_pos_in_table_defination) {
-    auto it = _mapping.find(original_pos_in_table_defination);
+const OrcMappingOrOrcColumnId& OrcMapping::get_column_id_or_child_mapping(size_t slot_position) {
+    auto it = _mapping.find(slot_position);
     if (it == _mapping.end()) {
         DCHECK(false);
     }
@@ -20,9 +20,8 @@ void OrcMapping::clear() {
     _mapping.clear();
 }
 
-void OrcMapping::add_mapping(size_t original_pos_in_table_defination, size_t orc_column_id,
-                             const OrcMappingPtr& child_mapping) {
-    _mapping.emplace(original_pos_in_table_defination, OrcMappingOrOrcColumnId{child_mapping, orc_column_id});
+void OrcMapping::add_mapping(size_t slot_position, size_t orc_column_id, const OrcMappingPtr& child_mapping) {
+    _mapping.emplace(slot_position, OrcMappingOrOrcColumnId{child_mapping, orc_column_id});
 }
 
 Status OrcMapping::set_include_column_id(const uint64_t slot_pos, const TypeDescriptor& desc,
