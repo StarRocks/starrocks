@@ -47,7 +47,7 @@ Group 归属于一个 Database，Group 名在一个 Database 内唯一。在内�
 
 CG 内表的一致的数据分布定义和子表副本映射，能够保证分桶键取值相同的数据行一定在相同 BE 节点上，因此当分桶键做 Join 列时，只需本地 Join 即可。
 
-### 删除 Colocation 表
+### 删除 Colocation Group
 
 当 Group 中最后一张表彻底删除后（彻底删除是指从回收站中删除。通常，一张表通过 `DROP TABLE` 命令被删除后，会在回收站默认停留一天的时间后，再被彻底删除），该 Group 也会被自动删除。
 
