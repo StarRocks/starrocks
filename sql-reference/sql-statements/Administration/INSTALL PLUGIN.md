@@ -15,7 +15,7 @@ INSTALL PLUGIN FROM [source] [PROPERTIES ("key"="value", ...)]
 ```plain text
 1. 指向一个 zip 文件的绝对路径。
 2. 指向一个插件目录的绝对路径。
-3. 指向一个 http 或 https 协议的 zip 文件下载路径
+3. 指向一个 http 或 https 协议的 zip 文件下载路径。
 ```
 
 **PROPERTIES：**
