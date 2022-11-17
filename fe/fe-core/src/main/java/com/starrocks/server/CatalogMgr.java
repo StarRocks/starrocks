@@ -39,6 +39,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
+import static com.starrocks.connector.ConnectorMgr.SUPPORT_CONNECTOR_TYPE;
 import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_URIS;
 
 public class CatalogMgr {
@@ -135,9 +136,9 @@ public class CatalogMgr {
         if (Strings.isNullOrEmpty(type)) {
             throw new DdlException("Missing properties 'type'");
         }
-        if (!CreateCatalogStmt.supportedCatalog.contains(type)) {
-            // if catalog type is not supported, skip it
-            LOG.warn("Replay catalog encounter unknown catalog type: " + type);
+        // skip unsupport connector type
+        if (!SUPPORT_CONNECTOR_TYPE.contains(type)) {
+            LOG.error("Replay catalog [{}] encounter unknown catalog type [{}], ignore it", catalogName, type);
             return;
         }
 
@@ -161,7 +162,10 @@ public class CatalogMgr {
         String catalogName = log.getCatalogName();
         readLock();
         try {
-            Preconditions.checkState(catalogs.containsKey(catalogName), "Catalog '%s' doesn't exist", catalogName);
+            if (!catalogs.containsKey(catalogName)) {
+                LOG.error("Catalog [{}] doesn't exist, unsupport this catalog type, ignore it", catalogName);
+                return;
+            }
         } finally {
             readUnlock();
         }
