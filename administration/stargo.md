@@ -356,7 +356,7 @@ ID                          ROLE    HOST                  PORT             STAT 
 ./stargo cluster start <cluster_name> --node <node_ID>
 ```
 
-您可以通过[查看指定集群信息](#查看指定集群信息) 查看集群中特定节点的 ID。
+您可以通过[查看指定集群信息](#查看指定集群信息)查看集群中特定节点的 ID。
 
 示例：
 
@@ -449,7 +449,7 @@ ID                          ROLE    HOST                  PORT             STAT 
 ./stargo cluster stop <cluster_name> --node <node_ID>
 ```
 
-您可以通过[查看指定集群信息](#查看指定集群信息) 查看集群中特定节点的 ID。
+您可以通过[查看指定集群信息](#查看指定集群信息)查看集群中特定节点的 ID。
 
 示例：
 
@@ -624,7 +624,7 @@ ID                          ROLE    HOST                  PORT             STAT 
 ./stargo cluster scale-in <cluster_name> --node <node_id>
 ```
 
-您可以通过[查看指定集群信息](#查看指定集群信息) 查看集群中特定节点的 ID。
+您可以通过[查看指定集群信息](#查看指定集群信息)查看集群中特定节点的 ID。
 
 示例：
 
