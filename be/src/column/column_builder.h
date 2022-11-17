@@ -9,8 +9,7 @@
 #include "column/type_traits.h"
 #include "util/raw_container.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 template <PrimitiveType Type>
 class ColumnBuilder {
@@ -198,5 +197,4 @@ public:
 
 private:
 };
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

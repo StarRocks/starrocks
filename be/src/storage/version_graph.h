@@ -135,7 +135,7 @@ using TimestampedVersionSharedPtr = std::shared_ptr<TimestampedVersion>;
 class TimestampedVersionPathContainer {
 public:
     /// TimestampedVersionPathContainer construction function, max_create_time is assigned to 0.
-    TimestampedVersionPathContainer() {}
+    TimestampedVersionPathContainer() = default;
 
     /// Return the max create time in a path version.
     int64_t max_create_time() { return _max_create_time; }

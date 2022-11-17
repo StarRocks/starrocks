@@ -76,7 +76,7 @@ public:
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         DCHECK(column->is_binary());
 
-        const BinaryColumn* hll_column = down_cast<const BinaryColumn*>(column);
+        const auto* hll_column = down_cast<const BinaryColumn*>(column);
         HyperLogLog hll(hll_column->get(row_num).get_slice());
         this->data(state).merge(hll);
     }
@@ -84,7 +84,7 @@ public:
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
                     size_t end) const override {
         DCHECK_GT(end, start);
-        Int64Column* column = down_cast<Int64Column*>(dst);
+        auto* column = down_cast<Int64Column*>(dst);
         int64_t result = this->data(state).estimate_cardinality();
 
         for (size_t i = start; i < end; ++i) {

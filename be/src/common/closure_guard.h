@@ -13,7 +13,7 @@ namespace starrocks {
 // the thread-local memory tracker will be reset to NULL.
 class ClosureGuard {
 public:
-    ClosureGuard() : _done(NULL) {}
+    ClosureGuard() : _done(nullptr) {}
 
     // Constructed with a closure which will be Run() inside dtor.
     explicit ClosureGuard(google::protobuf::Closure* done) : _done(done) {}
@@ -44,12 +44,12 @@ public:
     // Return and set internal closure to NULL.
     google::protobuf::Closure* release() {
         google::protobuf::Closure* const prev_done = _done;
-        _done = NULL;
+        _done = nullptr;
         return prev_done;
     }
 
     // True if no closure inside.
-    bool empty() const { return _done == NULL; }
+    bool empty() const { return _done == nullptr; }
 
     // Exchange closure with another guard.
     void swap(ClosureGuard& other) { std::swap(_done, other._done); }

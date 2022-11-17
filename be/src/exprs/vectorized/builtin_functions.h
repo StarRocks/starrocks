@@ -9,8 +9,7 @@
 #include "common/status.h"
 #include "udf/udf.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 using PrepareFunction = Status (*)(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
@@ -64,5 +63,4 @@ private:
     static FunctionTables _fn_tables;
 };
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

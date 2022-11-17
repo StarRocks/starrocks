@@ -25,7 +25,8 @@ class SegmentMetaCollecter;
 // Params for MetaReader
 // mainly include tablet
 struct MetaReaderParams {
-    MetaReaderParams(){};
+    MetaReaderParams() = default;
+    ;
     TabletSharedPtr tablet;
     Version version = Version(-1, 0);
     const std::vector<SlotDescriptor*>* slots = nullptr;

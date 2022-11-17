@@ -36,11 +36,9 @@ namespace starrocks {
 class FunctionContextImpl;
 }
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 class Column;
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized
 
 namespace starrocks_udf {
 

@@ -171,12 +171,12 @@ TEST(MemPoolTest, MaxAllocation) {
     // NOTE: exceed MAX_CHUNK_SIZE limit, will not *2
 #if !defined(ADDRESS_SANITIZER) || (__clang_major__ >= 3 && __clang_minor__ >= 7)
     ptr = p3.allocate(8);
-    EXPECT_TRUE(ptr != NULL);
+    EXPECT_TRUE(ptr != nullptr);
     EXPECT_EQ(int_max_rounded * 3 + 512 * 1024, p3.total_reserved_bytes());
     EXPECT_EQ(int_max_rounded * 3 + 8, p3.total_allocated_bytes());
     // Uses existing int_max_rounded * 4 chunk
     ptr = p3.allocate(LARGE_ALLOC_SIZE);
-    EXPECT_TRUE(ptr != NULL);
+    EXPECT_TRUE(ptr != nullptr);
     EXPECT_EQ(int_max_rounded * 4 + 512 * 1024, p3.total_reserved_bytes());
     EXPECT_EQ(int_max_rounded * 4 + 8, p3.total_allocated_bytes());
 #endif

@@ -374,7 +374,7 @@ private:
     TupleDescriptorMap _tuple_desc_map;
     SlotDescriptorMap _slot_desc_map;
 
-    DescriptorTbl() {}
+    DescriptorTbl() = default;
 };
 
 // Records positions of tuples within row produced by ExecNode.
@@ -391,9 +391,8 @@ public:
 
     // standard copy c'tor, made explicit here
     RowDescriptor(const RowDescriptor& desc)
-            : _tuple_desc_map(desc._tuple_desc_map),
-              _tuple_idx_nullable_map(desc._tuple_idx_nullable_map),
-              _tuple_idx_map(desc._tuple_idx_map) {}
+
+            = default;
 
     RowDescriptor(TupleDescriptor* tuple_desc, bool is_nullable);
 

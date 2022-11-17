@@ -10,8 +10,7 @@
 #include "util/hash_util.hpp"
 #include "util/slice.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 class TimestampValue;
 
 /**
@@ -133,8 +132,7 @@ inline std::ostream& operator<<(std::ostream& os, const DateValue& value) {
     os << value.to_string();
     return os;
 }
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized
 
 namespace std {
 template <>

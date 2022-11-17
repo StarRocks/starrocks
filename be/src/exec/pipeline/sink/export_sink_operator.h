@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <utility>
+
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/operator.h"
 #include "gen_cpp/DataSinks_types.h"
@@ -22,7 +24,7 @@ public:
     ExportSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                        std::shared_ptr<ExportSinkIOBuffer> export_sink_buffer)
             : Operator(factory, id, "export_sink", plan_node_id, driver_sequence),
-              _export_sink_buffer(export_sink_buffer) {}
+              _export_sink_buffer(std::move(std::move(export_sink_buffer))) {}
 
     ~ExportSinkOperator() override = default;
 
@@ -56,7 +58,7 @@ public:
                               int32_t num_sinkers, FragmentContext* fragment_ctx)
             : OperatorFactory(id, "export_sink", Operator::s_pseudo_plan_node_id_for_export_sink),
               _t_export_sink(t_export_sink),
-              _t_output_expr(t_output_expr),
+              _t_output_expr(std::move(std::move(t_output_expr))),
               _num_sinkers(num_sinkers),
               _fragment_ctx(fragment_ctx) {}
 

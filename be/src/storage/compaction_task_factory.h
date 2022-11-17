@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <utility>
 #include <vector>
 
 #include "common/statusor.h"
@@ -15,11 +16,10 @@ class CompactionTask;
 
 class CompactionTaskFactory {
 public:
-    CompactionTaskFactory(Version output_version, const TabletSharedPtr& tablet,
-                          std::vector<RowsetSharedPtr>&& input_rowsets, double compaction_score,
-                          CompactionType compaction_type)
+    CompactionTaskFactory(Version output_version, TabletSharedPtr tablet, std::vector<RowsetSharedPtr>&& input_rowsets,
+                          double compaction_score, CompactionType compaction_type)
             : _output_version(output_version),
-              _tablet(tablet),
+              _tablet(std::move(tablet)),
               _input_rowsets(std::move(input_rowsets)),
               _compaction_score(compaction_score),
               _compaction_type(compaction_type) {}

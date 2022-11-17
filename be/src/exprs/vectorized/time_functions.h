@@ -9,8 +9,7 @@
 #include "udf/udf.h"
 #include "util/timezone_hsscan.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 // TODO:
 class TimeFunctions {
@@ -636,7 +635,7 @@ private:
     struct FromUnixState {
         bool const_format{false};
         std::string format_content;
-        FromUnixState() {}
+        FromUnixState() = default;
     };
 
     // The context used for convert tz
@@ -669,5 +668,4 @@ private:
     friend ColumnPtr do_format(const FormatCtx* ctx, const Columns& cols);
 };
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

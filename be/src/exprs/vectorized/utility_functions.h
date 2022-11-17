@@ -4,8 +4,7 @@
 
 #include "exprs/vectorized/function_helper.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 class UtilityFunctions {
 public:
     /**
@@ -50,5 +49,4 @@ public:
     DEFINE_VECTORIZED_FN(host_name);
 };
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

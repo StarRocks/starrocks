@@ -165,7 +165,7 @@ public:
 
     // Constant value in the predicate. And this constant value might be adjusted according to schema.
     // For example, if column type is char(20), then this constant value might be zero-padded to 20 chars.
-    virtual Datum value() const { return Datum(); }
+    virtual Datum value() const { return {}; }
 
     // Constant value in the predicate in vector form. In contrast to `value()`, these value are un-modified.
     virtual std::vector<Datum> values() const { return std::vector<Datum>{}; }

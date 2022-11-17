@@ -5,8 +5,7 @@
 #include "column/column.h"
 #include "exprs/vectorized/function_helper.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 class BitmapFunctions {
 public:
     /**
@@ -144,5 +143,4 @@ public:
     DEFINE_VECTORIZED_FN(sub_bitmap);
 };
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

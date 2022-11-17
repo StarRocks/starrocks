@@ -9,7 +9,7 @@ namespace starrocks {
 class OutputStreamAdapter : public WritableFile {
 public:
     explicit OutputStreamAdapter(std::unique_ptr<io::OutputStream> os, std::string name)
-            : _os(std::move(os)), _name(std::move(name)), _bytes_written(0) {}
+            : _os(std::move(os)), _name(std::move(name)) {}
 
     Status append(const Slice& data) override {
         auto st = _os->write(data.data, data.size);
@@ -41,6 +41,6 @@ public:
 private:
     std::unique_ptr<io::OutputStream> _os;
     std::string _name;
-    uint64_t _bytes_written;
+    uint64_t _bytes_written{0};
 };
 } // namespace starrocks

@@ -20,7 +20,7 @@ class RowIdColumnIterator final : public starrocks::ColumnIterator {
     using rowid_t = starrocks::rowid_t;
 
 public:
-    RowIdColumnIterator() {}
+    RowIdColumnIterator() = default;
 
     ~RowIdColumnIterator() override = default;
 

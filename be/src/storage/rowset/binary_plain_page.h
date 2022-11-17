@@ -53,10 +53,7 @@ namespace starrocks {
 
 class BinaryPlainPageBuilder final : public PageBuilder {
 public:
-    explicit BinaryPlainPageBuilder(const PageBuilderOptions& options)
-            : _reserved_head_size(0), _size_estimate(0), _next_offset(0), _options(options), _finished(false) {
-        reset();
-    }
+    explicit BinaryPlainPageBuilder(const PageBuilderOptions& options) : _options(options) { reset(); }
 
     void reserve_head(uint8_t head_size) override {
         CHECK_EQ(0, _reserved_head_size);
@@ -71,7 +68,7 @@ public:
 
     uint32_t add(const uint8_t* vals, uint32_t count) override {
         DCHECK(!_finished);
-        const Slice* slices = reinterpret_cast<const Slice*>(vals);
+        const auto* slices = reinterpret_cast<const Slice*>(vals);
         for (auto i = 0; i < count; i++) {
             if (!add_slice(slices[i])) {
                 return i;
@@ -147,7 +144,7 @@ public:
         DCHECK_LT(idx, _offsets.size());
         size_t end = (idx + 1) < _offsets.size() ? _offsets[idx + 1] : _next_offset;
         size_t off = _offsets[idx];
-        return Slice(&_buffer[_reserved_head_size + off], end - off);
+        return {&_buffer[_reserved_head_size + off], end - off};
     }
 
 private:
@@ -156,16 +153,16 @@ private:
         value->assign_copy((const uint8_t*)s.data, s.size);
     }
 
-    uint8_t _reserved_head_size;
-    size_t _size_estimate;
-    size_t _next_offset;
+    uint8_t _reserved_head_size{0};
+    size_t _size_estimate{0};
+    size_t _next_offset{0};
     faststring _buffer;
     // Offsets of each entry, relative to the start of the page
     std::vector<uint32_t> _offsets;
     PageBuilderOptions _options;
     faststring _first_value;
     faststring _last_value;
-    bool _finished;
+    bool _finished{false};
 };
 
 template <LogicalType Type>
@@ -222,7 +219,7 @@ public:
     Slice string_at_index(uint32_t idx) const {
         const uint32_t start_offset = offset(idx);
         uint32_t len = offset(static_cast<int>(idx) + 1) - start_offset;
-        return Slice(&_data[start_offset], len);
+        return {&_data[start_offset], len};
     }
 
     int find(const Slice& word) const {
@@ -262,7 +259,7 @@ private:
 
     uint32_t offset_uncheck(int idx) const {
         const uint32_t pos = _offsets_pos + idx * static_cast<uint32_t>(sizeof(uint32_t));
-        const uint8_t* const p = reinterpret_cast<const uint8_t*>(&_data[pos]);
+        const auto* const p = reinterpret_cast<const uint8_t*>(&_data[pos]);
         return decode_fixed32_le(p);
     }
 

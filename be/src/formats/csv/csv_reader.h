@@ -80,7 +80,7 @@ public:
         _column_separator_length = column_separator.size();
     }
 
-    virtual ~CSVReader() {}
+    virtual ~CSVReader() = default;
 
     Status next_record(Record* record);
 

@@ -90,7 +90,7 @@ private:
     static __thread char _buf[BUF_SIZE];
 };
 
-inline bool is_io_error(Status status) {
+inline bool is_io_error(const Status& status) {
     return status.is_io_error();
 }
 

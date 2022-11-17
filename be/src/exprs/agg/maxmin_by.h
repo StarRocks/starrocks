@@ -200,7 +200,7 @@ public:
                 column->null_column_data().push_back(0);
             }
         } else {
-            BinaryColumn* column = down_cast<BinaryColumn*>(to);
+            auto* column = down_cast<BinaryColumn*>(to);
             column->append(Slice(buffer.data(), buffer.size()));
         }
     }
@@ -347,7 +347,7 @@ public:
                 column->null_column_data().push_back(0);
             }
         } else {
-            BinaryColumn* column = down_cast<BinaryColumn*>(to);
+            auto* column = down_cast<BinaryColumn*>(to);
             column->append(Slice(buffer.data(), buffer.size()));
         }
     }

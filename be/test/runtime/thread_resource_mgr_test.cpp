@@ -28,7 +28,7 @@ namespace starrocks {
 
 class NotifiedCounter {
 public:
-    NotifiedCounter() {}
+    NotifiedCounter() = default;
 
     void Notify(ThreadResourceMgr::ResourcePool* consumer) {
         DCHECK(consumer != nullptr);

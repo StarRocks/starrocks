@@ -90,7 +90,7 @@ public:
     // If column is const column, duplicate the data column to chunk_size
     static ColumnPtr unpack_and_duplicate_const_column(size_t chunk_size, const ColumnPtr& column) {
         if (column->is_constant()) {
-            ConstColumn* const_column = down_cast<ConstColumn*>(column.get());
+            auto* const_column = down_cast<ConstColumn*>(column.get());
             const_column->data_column()->assign(chunk_size, 0);
             return const_column->data_column();
         }
@@ -104,7 +104,7 @@ public:
             DCHECK(ok);
             return col;
         } else if (column->is_constant()) {
-            ConstColumn* const_column = down_cast<ConstColumn*>(column.get());
+            auto* const_column = down_cast<ConstColumn*>(column.get());
             const_column->data_column()->assign(size, 0);
             return const_column->data_column();
         }
