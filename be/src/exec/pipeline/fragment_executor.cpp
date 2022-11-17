@@ -271,6 +271,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
             for (size_t i = 0; i < cur_pipeline_dop; ++i) {
                 auto&& operators = pipeline->create_operators(cur_pipeline_dop, i);
                 DriverPtr driver = std::make_shared<PipelineDriver>(std::move(operators), _query_ctx,
+<<<<<<< HEAD
                                                                     fragment_ctx.get(), driver_id++);
                 driver->set_morsel_queue(std::move(morsel_queue_per_driver[i]));
                 auto* scan_operator = down_cast<ScanOperator*>(driver->source_operator());
@@ -279,6 +280,26 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
                     scan_operator->set_workgroup(wg);
                 } else {
                     scan_operator->set_io_threads(exec_env->pipeline_scan_io_thread_pool());
+=======
+                                                                    _fragment_ctx.get(), driver_id++);
+                driver->set_morsel_queue(morsel_queue_factory->create(i));
+                if (auto* scan_operator = driver->source_scan_operator()) {
+                    scan_operator->set_workgroup(_wg);
+                    scan_operator->set_query_ctx(_query_ctx->get_shared_ptr());
+                    if (dynamic_cast<ConnectorScanOperator*>(scan_operator) != nullptr) {
+                        if (_wg != nullptr) {
+                            scan_operator->set_scan_executor(exec_env->connector_scan_executor_with_workgroup());
+                        } else {
+                            scan_operator->set_scan_executor(exec_env->connector_scan_executor_without_workgroup());
+                        }
+                    } else {
+                        if (_wg != nullptr) {
+                            scan_operator->set_scan_executor(exec_env->scan_executor_with_workgroup());
+                        } else {
+                            scan_operator->set_scan_executor(exec_env->scan_executor_without_workgroup());
+                        }
+                    }
+>>>>>>> 7fa12d8f4 ([Enhancement] Reduce lock contention of query context (#13593))
                 }
                 setup_profile_hierarchy(pipeline, driver);
                 drivers.emplace_back(std::move(driver));

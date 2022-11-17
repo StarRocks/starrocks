@@ -22,7 +22,7 @@ using std::chrono::milliseconds;
 using std::chrono::steady_clock;
 using std::chrono::duration_cast;
 // The context for all fragment of one query in one BE
-class QueryContext {
+class QueryContext : public std::enable_shared_from_this<QueryContext> {
 public:
     QueryContext();
     ~QueryContext();
@@ -92,6 +92,8 @@ public:
     int64_t cur_scan_rows_num() const { return _cur_scan_rows_num; }
     void incr_cur_scan_bytes(int64_t scan_bytes) { _cur_scan_bytes += scan_bytes; }
     int64_t get_scan_bytes() const { return _cur_scan_bytes; }
+
+    QueryContextPtr get_shared_ptr() { return shared_from_this(); }
 
 public:
     static constexpr int DEFAULT_EXPIRE_SECONDS = 300;
