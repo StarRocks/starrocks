@@ -731,7 +731,9 @@ public class NodeMgr {
             frontends.put(fe.getNodeName(), fe);
             if (fe.getRole() == FrontendNodeType.FOLLOWER) {
                 helperNodes.add(Pair.create(fe.getHost(), fe.getEditLogPort()));
-                if (!GlobalStateMgr.isCheckpointThread()) {
+                // haProtocol is null when loading image.
+                if (!GlobalStateMgr.isCheckpointThread()
+                        && stateMgr.getHaProtocol() != null) {
                     BDBHA ha = (BDBHA) stateMgr.getHaProtocol();
                     ha.addHelperSocket(fe.getHost(), fe.getEditLogPort());
                 }
