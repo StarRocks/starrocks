@@ -530,6 +530,7 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
                 driver->set_morsel_queue(morsel_queue_factory->create(i));
                 if (auto* scan_operator = driver->source_scan_operator()) {
                     scan_operator->set_workgroup(_wg);
+                    scan_operator->set_query_ctx(_query_ctx->get_shared_ptr());
                     if (dynamic_cast<ConnectorScanOperator*>(scan_operator) != nullptr) {
                         if (_wg != nullptr) {
                             scan_operator->set_scan_executor(exec_env->connector_scan_executor_with_workgroup());
