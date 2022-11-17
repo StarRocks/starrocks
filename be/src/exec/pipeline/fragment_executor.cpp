@@ -354,9 +354,20 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const TExec
                                                                     _fragment_ctx.get(), driver_id++);
                 driver->set_morsel_queue(morsel_queue.get());
                 if (auto* scan_operator = driver->source_scan_operator()) {
+<<<<<<< HEAD
                     if (_wg != nullptr) {
                         // Workgroup uses scan_executor instead of pipeline_scan_io_thread_pool.
                         scan_operator->set_workgroup(_wg);
+=======
+                    scan_operator->set_workgroup(_wg);
+                    scan_operator->set_query_ctx(_query_ctx->get_shared_ptr());
+                    if (dynamic_cast<ConnectorScanOperator*>(scan_operator) != nullptr) {
+                        if (_wg != nullptr) {
+                            scan_operator->set_scan_executor(exec_env->connector_scan_executor_with_workgroup());
+                        } else {
+                            scan_operator->set_scan_executor(exec_env->connector_scan_executor_without_workgroup());
+                        }
+>>>>>>> 7fa12d8f4 ([Enhancement] Reduce lock contention of query context (#13593))
                     } else {
                         if (dynamic_cast<ConnectorScanOperator*>(scan_operator) != nullptr) {
                             scan_operator->set_io_threads(exec_env->pipeline_hdfs_scan_io_thread_pool());

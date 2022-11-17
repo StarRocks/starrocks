@@ -59,6 +59,32 @@ public:
     int64_t get_last_scan_rows_num() { return _last_scan_rows_num.exchange(0); }
     int64_t get_last_scan_bytes() { return _last_scan_bytes.exchange(0); }
 
+<<<<<<< HEAD
+=======
+    void set_lane_arbiter(const query_cache::LaneArbiterPtr& lane_arbiter) { _lane_arbiter = lane_arbiter; }
+    void set_cache_operator(const query_cache::CacheOperatorPtr& cache_operator) { _cache_operator = cache_operator; }
+    void set_ticket_checker(query_cache::TicketCheckerPtr& ticket_checker) { _ticket_checker = ticket_checker; }
+
+    void set_query_ctx(const QueryContextPtr& query_ctx);
+
+protected:
+    static constexpr size_t kIOTaskBatchSize = 64;
+
+    // TODO: remove this to the base ScanContext.
+    /// Shared scan
+    virtual void attach_chunk_source(int32_t source_index) = 0;
+    virtual void detach_chunk_source(int32_t source_index) {}
+    virtual bool has_shared_chunk_source() const = 0;
+    virtual ChunkPtr get_chunk_from_buffer() = 0;
+    virtual size_t num_buffered_chunks() const = 0;
+    virtual size_t buffer_size() const = 0;
+    virtual size_t buffer_capacity() const = 0;
+    virtual size_t default_buffer_capacity() const = 0;
+    virtual ChunkBufferTokenPtr pin_chunk(int num_chunks) = 0;
+    virtual bool is_buffer_full() const = 0;
+    virtual void set_buffer_finished() = 0;
+
+>>>>>>> 7fa12d8f4 ([Enhancement] Reduce lock contention of query context (#13593))
 private:
     // This method is only invoked when current morsel is reached eof
     // and all cached chunk of this morsel has benn read out
