@@ -42,7 +42,7 @@ SHOW DATABASES FROM default_catalog;
 +----------+
 ```
 
-示例二：通过 external catalog `hive1`查看 Apache Hive™ 中的数据库。
+示例二：通过 external catalog `hive1` 查看 Apache Hive™ 中的数据库。
 
 ```SQL
 SHOW DATABASES FROM hive1;
