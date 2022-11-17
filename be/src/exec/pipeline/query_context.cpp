@@ -186,7 +186,7 @@ void QueryContextManager::_clean_func(QueryContextManager* manager) {
 }
 
 size_t QueryContextManager::_slot_idx(const TUniqueId& query_id) {
-    return std::hash<size_t>()(query_id.lo) & _slot_mask;
+    return HashUtil::hash(&query_id.hi, sizeof(query_id.hi), 0) & _slot_mask;
 }
 
 QueryContextManager::~QueryContextManager() {
