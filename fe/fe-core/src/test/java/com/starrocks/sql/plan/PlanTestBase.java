@@ -1068,7 +1068,7 @@ public class PlanTestBase {
         Assert.assertFalse(text, text.contains(pattern));
     }
 
-    protected static void setTableStatistics(OlapTable table, long rowCount) {
+    public static void setTableStatistics(OlapTable table, long rowCount) {
         for (Partition partition : table.getAllPartitions()) {
             partition.getBaseIndex().setRowCount(rowCount);
         }

@@ -303,6 +303,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_MATERIALIZED_VIEW_REWRITE = "enable_materialized_view_rewrite";
     public static final String ENABLE_MATERIALIZED_VIEW_UNION_REWRITE = "enable_materialized_view_union_rewrite";
     public static final String ENABLE_RULE_BASED_MATERIALIZED_VIEW_REWRITE = "enable_rule_based_materialized_view_rewrite";
+    public static final String ENABLE_COST_BASED_MATERIALIZED_VIEW_REWRITE = "enable_cost_based_materialized_view_rewrite";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -750,6 +751,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_RULE_BASED_MATERIALIZED_VIEW_REWRITE)
     private boolean enableRuleBasedMaterializedViewRewrite = true;
+
+    @VarAttr(name = ENABLE_COST_BASED_MATERIALIZED_VIEW_REWRITE)
+    private boolean enableCostBasedMaterializedViewRewrite = true;
 
     public boolean getEnablePopulateBlockCache() {
         return enablePopulateBlockCache;
@@ -1417,6 +1421,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableRuleBasedMaterializedViewRewrite(boolean enableRuleBasedMaterializedViewRewrite) {
         this.enableRuleBasedMaterializedViewRewrite = enableRuleBasedMaterializedViewRewrite;
+    }
+
+    public boolean isEnableCostBasedMaterializedViewRewrite() {
+        return enableCostBasedMaterializedViewRewrite;
+    }
+
+    public void setEnableCostBasedMaterializedViewRewrite(boolean enableCostBasedMaterializedViewRewrite) {
+        this.enableCostBasedMaterializedViewRewrite = enableCostBasedMaterializedViewRewrite;
     }
 
     // Serialize to thrift object
