@@ -11,11 +11,9 @@ SHOW TABLE STATUS
 [FROM db] [LIKE "pattern"]
 ```
 
-说明：
-
-```PLAIN TEXT
-1. 该语句主要用于兼容 MySQL 语法，目前仅显示 Comment 等少量信息
-```
+> **说明**
+>
+> 该语句主要用于兼容 MySQL 语法，目前仅显示 Comment 等少量信息。
 
 ## 示例
 
