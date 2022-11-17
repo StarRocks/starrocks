@@ -58,6 +58,7 @@ import com.starrocks.sql.LoadPlanner;
 import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.TCompressionType;
@@ -300,9 +301,13 @@ public class Coordinator {
         }
 
         this.needReport = true;
-
         this.coordinatorPreprocessor =
                 new CoordinatorPreprocessor(queryId, context, fragments, scanNodes, queryGlobals, queryOptions);
+    }
+
+    // FIXME(murphy) implement the coordinator for MV Maintenance
+    public Coordinator() {
+        throw UnsupportedException.unsupportedException("TODO");
     }
 
     public long getJobId() {

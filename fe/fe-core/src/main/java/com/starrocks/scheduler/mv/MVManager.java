@@ -214,7 +214,7 @@ public class MVManager {
             return;
         }
 
-        job.triggerByTxn();
+        job.onTransactionPublish();
         LOG.info("trigger incremental maintenance of MV: " + id);
     }
 

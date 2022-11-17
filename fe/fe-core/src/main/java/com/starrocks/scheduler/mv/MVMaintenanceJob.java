@@ -3,19 +3,21 @@
 package com.starrocks.scheduler.mv;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.DuplicatedRequestException;
-import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Writable;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.system.Backend;
+import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TUniqueId;
-import com.starrocks.transaction.BeginTransactionException;
 import com.starrocks.transaction.TabletCommitInfo;
+import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionState;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -32,10 +34,16 @@ import java.util.concurrent.atomic.AtomicReference;
 public class MVMaintenanceJob implements Writable {
     private static final Logger LOG = LogManager.getLogger(MVMaintenanceJob.class);
 
+    // Static state
     private final MaterializedView view;
     private ExecPlan plan;
-    private final AtomicReference<JobState> state = new AtomicReference<>();
 
+    // Runtime state
+    private final AtomicReference<JobState> state = new AtomicReference<>();
+    private ConnectContext connectContext;
+    // TODO(murphy) implement a real query coordinator
+    private Coordinator queryCoordinator;
+    private TxnBasedEpochExecutor epochCoordinator;
 
     public MVMaintenanceJob(MaterializedView view) {
         this.view = view;
@@ -45,13 +53,20 @@ public class MVMaintenanceJob implements Writable {
     /**
      * Main entrance of the job:
      * 0. Generate the physical job structure, including fragment distribution, parallelism
-     * 1. Deliver tasks to executors on BE
+     * 1. Deploy tasks to executors on BE
      * 2. Trigger the epoch
      */
     public void start() {
+        this.state.set(JobState.PREPARING);
+        this.connectContext = new ConnectContext();
+        this.queryCoordinator = new Coordinator();
+        this.epochCoordinator = new TxnBasedEpochExecutor();
+        deployJob();
+        this.state.set(JobState.WAIT_EPOCH);
     }
 
     public void stop() {
+        this.state.set(JobState.PAUSED);
     }
 
     /**
@@ -73,6 +88,9 @@ public class MVMaintenanceJob implements Writable {
         throw UnsupportedException.unsupportedException("TODO: implement the daemon runner");
     }
 
+    /**
+     * On EpochCoordinator schedule
+     */
     public void onSchedule() {
         if (state.get().equals(JobState.WAIT_EPOCH)) {
             runEpoch();
@@ -87,14 +105,29 @@ public class MVMaintenanceJob implements Writable {
     /**
      * Trigger the incremental maintenance by transaction publish
      */
-    public void triggerByTxn() {
+    public void onTransactionPublish() {
         this.state.set(JobState.RUN_EPOCH);
         throw UnsupportedException.unsupportedException("TODO: implement ");
     }
 
+    /**
+     * Build physical fragments for the maintenance plan
+     */
+    private void buildPhysicalFragments() {
+        throw UnsupportedException.unsupportedException("TODO");
+    }
+
+    private void deployJob() {
+        long beId = 0;
+        Backend backend =
+                Preconditions.checkNotNull(GlobalStateMgr.getCurrentSystemInfo().getBackend(beId), "backend not found:" + beId);
+        TNetworkAddress address = new TNetworkAddress(backend.getHost(), backend.getBePort());
+
+        throw UnsupportedException.unsupportedException("TODO: implement the deploy fragment RPC interface");
+    }
+
     private void runEpoch() {
         try {
-            TxnBasedEpochExecutor epochCoordinator = new TxnBasedEpochExecutor(this);
             epochCoordinator.run();
             this.state.set(JobState.WAIT_EPOCH);
             LOG.debug("[MVJob] finish execution of job epoch: " + this);
@@ -125,15 +158,14 @@ public class MVMaintenanceJob implements Writable {
     /**
      * TODO(murphy) abstract it to support other kinds of EpochExecutor
      */
-    private static class TxnBasedEpochExecutor {
+    private class TxnBasedEpochExecutor {
         // TODO(murphy) make it configurable
         private static final long JOB_TIMEOUT = 120;
+        private static final long TXN_VISIBLE_TIMEOUT_MILLIS = 10_1000;
 
-        private final MVMaintenanceJob job;
         private final Epoch epoch;
 
-        public TxnBasedEpochExecutor(MVMaintenanceJob job) {
-            this.job = job;
+        public TxnBasedEpochExecutor() {
             this.epoch = new Epoch();
         }
 
@@ -143,9 +175,10 @@ public class MVMaintenanceJob implements Writable {
         }
 
         private void beginEpoch() {
-            MvId mvId = job.getView().getMvId();
-            long dbId = job.getView().getDbId();
-            List<Long> tableIdList = new ArrayList<>(job.getView().getBaseTableIds());
+            MaterializedView view = getView();
+            MvId mvId = view.getMvId();
+            long dbId = view.getDbId();
+            List<Long> tableIdList = new ArrayList<>(view.getBaseTableIds());
             String label = "mv_refresh_" + mvId;
             TUniqueId requestId = new TUniqueId();
             TransactionState.TxnCoordinator txnCoordinator = TransactionState.TxnCoordinator.fromThisFE();
@@ -154,28 +187,45 @@ public class MVMaintenanceJob implements Writable {
             try {
                 long txnId = GlobalStateMgr.getCurrentGlobalTransactionMgr()
                         .beginTransaction(dbId, tableIdList, label, txnCoordinator, loadSource, JOB_TIMEOUT);
+                this.epoch.state.set(EpochState.RUNNING);
                 this.epoch.transactionId = txnId;
-            } catch (AnalysisException e) {
-                throw new RuntimeException(e);
-            } catch (LabelAlreadyUsedException e) {
-                throw new RuntimeException(e);
-            } catch (BeginTransactionException e) {
-                throw new RuntimeException(e);
-            } catch (DuplicatedRequestException e) {
+            } catch (Exception e) {
+                this.epoch.state.set(EpochState.FINISHED);
+                LOG.warn("Failed to begin transaction for epoch {}", this.epoch);
                 throw new RuntimeException(e);
             }
         }
 
 
         private void commitEpoch() {
-            long dbId = job.getView().getDbId();
-            // TODO(murphy) implement
-            List<TabletCommitInfo> commitInfo = new ArrayList<>();
+            long dbId = getView().getDbId();
+            Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
+            // TODO(murphy) collect the commit info
+            List<TabletCommitInfo> commitInfo = TabletCommitInfo.fromThrift(queryCoordinator.getCommitInfos());
+            List<TabletFailInfo> failedInfo = TabletFailInfo.fromThrift(queryCoordinator.getFailInfos());
 
             try {
-                GlobalStateMgr.getCurrentGlobalTransactionMgr().commitTransaction(dbId, this.epoch.transactionId, commitInfo);
+                this.epoch.state.set(EpochState.COMMITTING);
+                GlobalStateMgr.getCurrentGlobalTransactionMgr().commitAndPublishTransaction(database,
+                        this.epoch.transactionId, commitInfo, failedInfo, TXN_VISIBLE_TIMEOUT_MILLIS);
+                this.epoch.state.set(EpochState.COMMITTED);
             } catch (UserException e) {
+                this.epoch.state.set(EpochState.FAILED);
                 // TODO(murphy) handle error
+            }
+        }
+
+        private void abortEpoch() {
+            Preconditions.checkState(this.epoch.state.get() == EpochState.FAILED);
+
+            long dbId = getView().getDbId();
+            long txnId = this.epoch.transactionId;
+            String failReason = "";
+            try {
+                GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(dbId, txnId, failReason);
+                this.epoch.state.set(EpochState.FINISHED);
+            } catch (UserException e) {
+                LOG.warn("Abort transaction failed: {}", txnId);
             }
 
         }
@@ -191,11 +241,13 @@ public class MVMaintenanceJob implements Writable {
      * 6. Commit the binlog consumption LSN(be atomic with transaction commitment to make)
      */
     public static class Epoch {
+        public long dbId;
         public long transactionId;
         public long startTimeMilli;
+        public AtomicReference<EpochState> state = new AtomicReference<>();
 
         public Epoch() {
-
+            this.startTimeMilli = System.currentTimeMillis();
         }
     }
 
@@ -228,8 +280,8 @@ public class MVMaintenanceJob implements Writable {
         RUNNING,
         COMMITTING,
         COMMITTED,
-        FINISHED,
-        FAILED;
+        FAILED,
+        FINISHED;
 
         public EpochState nextStateOnSuccess() {
             switch (this) {
