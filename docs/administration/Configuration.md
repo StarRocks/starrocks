@@ -475,7 +475,7 @@ You can only set the configuration items of a broker by changing them in the cor
 
 Linux kernel 3.10 or later is recommended.
 
-### CPU** **configurations
+### CPU configurations
 
 | Configuration item | Description | Recommended value | How to set |
 | ------------------ | ------------------------------------------------------------ | ----------------- | ------------------------------------------------------------ |
