@@ -18,17 +18,18 @@ public class SubfieldExpr extends Expr {
 
     // Only used in parser, in parser, we can't determine column's type
     public SubfieldExpr(Expr child, String fieldName) {
-        children.add(child);
-        this.fieldName = fieldName;
+        this(child, null, fieldName);
     }
 
     // In this constructor, we can determine column's type
     // child must be an StructType
     public SubfieldExpr(Expr child, Type type, String fieldName) {
-        Preconditions.checkArgument(child.getType().isStructType());
+        if (type != null) {
+            Preconditions.checkArgument(child.getType().isStructType());
+        }
         children.add(child);
         this.type = type;
-        this.fieldName = fieldName;
+        this.fieldName = fieldName.toLowerCase();
     }
 
     public SubfieldExpr(SubfieldExpr other) {

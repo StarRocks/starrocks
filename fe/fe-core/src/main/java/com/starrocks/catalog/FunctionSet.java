@@ -1065,7 +1065,7 @@ public class FunctionSet {
         for (Type t : Type.getSupportedTypes()) {
             // null/char/time is handled through type promotion
             // TODO: array/json/pseudo is not supported yet
-            if (!t.canAggregateArguments()) {
+            if (!t.canBeWindowFunctionArgumentTypes()) {
                 continue;
             }
             addBuiltin(AggregateFunction.createAnalyticBuiltin(
