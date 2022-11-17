@@ -114,7 +114,7 @@
 
 Scalar UDF，即用户自定义标量函数，可以对单行数据进行操作，输出单行结果。当您在查询时使用 Scalar UDF，每行数据最终都会按行出现在结果集中。典型的标量函数包括 `UPPER`、`LOWER`、`ROUND`、`ABS`。
 
-以下示例以提取 JSON 数据功能为例进行说明。例如，业务场景中，JSON 数据中某个字段的值可能是 JSON 字符串而不是 JSON 对象，因此在提取 JSON  字符串时，SQL 语句需要嵌套调用`GET_JSON_STRING`，即 `GET_JSON_STRING(GET_JSON_STRING('{"key":"{\\"k0\\":\\"v0\\"}"}', "$.key"), "$.k0")`。
+以下示例以提取 JSON 数据功能为例进行说明。例如，业务场景中，JSON 数据中某个字段的值可能是 JSON 字符串而不是 JSON 对象，因此在提取 JSON  字符串时，SQL 语句需要嵌套调用 `GET_JSON_STRING`，即 `GET_JSON_STRING(GET_JSON_STRING('{"key":"{\\"k0\\":\\"v0\\"}"}', "$.key"), "$.k0")`。
 
 为简化 SQL 语句，您可以开发一个 UDF，直接提取 JSON 字符串，例如：`MY_UDF_JSON_GET('{"key":"{\\"k0\\":\\"v0\\"}"}', "$.key.k0")`。
 
