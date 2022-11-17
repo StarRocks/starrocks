@@ -43,12 +43,12 @@ order by
     s_name,
     p_partkey limit 100;
 [fragment statistics]
-PLAN FRAGMENT 0(F17)
+PLAN FRAGMENT 0(F16)
 Output Exprs:16: S_ACCTBAL | 12: S_NAME | 26: N_NAME | 1: P_PARTKEY | 3: P_MFGR | 13: S_ADDRESS | 15: S_PHONE | 17: S_COMMENT
 Input Partition: UNPARTITIONED
 RESULT SINK
 
-38:MERGING-EXCHANGE
+37:MERGING-EXCHANGE
 limit: 100
 cardinality: 100
 column statistics:
@@ -67,9 +67,9 @@ PLAN FRAGMENT 1(F00)
 
 Input Partition: RANDOM
 OutPut Partition: UNPARTITIONED
-OutPut Exchange Id: 38
+OutPut Exchange Id: 37
 
-37:TOP-N
+36:TOP-N
 |  order by: [16, DOUBLE, false] DESC, [26, VARCHAR, false] ASC, [12, VARCHAR, false] ASC, [1, INT, false] ASC
 |  offset: 0
 |  limit: 100
@@ -86,7 +86,7 @@ OutPut Exchange Id: 38
 |  * PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 180000.0] ESTIMATE
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
 |
-36:Project
+35:Project
 |  output columns:
 |  1 <-> [1: P_PARTKEY, INT, false]
 |  3 <-> [3: P_MFGR, VARCHAR, false]
@@ -107,7 +107,7 @@ OutPut Exchange Id: 38
 |  * S_COMMENT-->[-Infinity, Infinity, 0.0, 101.0, 10000.0] ESTIMATE
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
 |
-35:HASH JOIN
+34:HASH JOIN
 |  join op: INNER JOIN (BUCKET_SHUFFLE)
 |  equal join conjunct: [11: S_SUPPKEY, INT, false] = [20: PS_SUPPKEY, INT, false]
 |  build runtime filters:
@@ -126,7 +126,7 @@ OutPut Exchange Id: 38
 |  * PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 180000.0] ESTIMATE
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
 |
-|----34:EXCHANGE
+|----33:EXCHANGE
 |       cardinality: 361080
 |
 9:Project
@@ -191,9 +191,9 @@ PLAN FRAGMENT 2(F05)
 
 Input Partition: RANDOM
 OutPut Partition: BUCKET_SHUFFLE_HASH_PARTITIONED: 20: PS_SUPPKEY
-OutPut Exchange Id: 34
+OutPut Exchange Id: 33
 
-33:Project
+32:Project
 |  output columns:
 |  1 <-> [1: P_PARTKEY, INT, false]
 |  3 <-> [3: P_MFGR, VARCHAR, false]
@@ -204,8 +204,9 @@ OutPut Exchange Id: 34
 |  * P_MFGR-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
 |  * PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 401200.0] ESTIMATE
 |
-32:HASH JOIN
-|  join op: INNER JOIN (BUCKET_SHUFFLE)
+31:HASH JOIN
+|  join op: INNER JOIN (COLOCATE)
+|  colocate: true
 |  equal join conjunct: [22: PS_SUPPLYCOST, DOUBLE, false] = [57: min, DOUBLE, true]
 |  equal join conjunct: [19: PS_PARTKEY, INT, false] = [1: P_PARTKEY, INT, false]
 |  build runtime filters:
@@ -221,8 +222,80 @@ OutPut Exchange Id: 34
 |  * PS_SUPPLYCOST-->[1.0, 1000.0, 0.0, 8.0, 99864.0] ESTIMATE
 |  * min-->[1.0, 1000.0, 0.0, 8.0, 99864.0] ESTIMATE
 |
-|----31:EXCHANGE
-|       cardinality: 100300
+|----30:Project
+|    |  output columns:
+|    |  1 <-> [1: P_PARTKEY, INT, false]
+|    |  3 <-> [3: P_MFGR, VARCHAR, false]
+|    |  57 <-> [57: min, DOUBLE, true]
+|    |  cardinality: 100300
+|    |  column statistics:
+|    |  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 100300.0] ESTIMATE
+|    |  * P_MFGR-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
+|    |  * min-->[1.0, 1000.0, 0.0, 8.0, 99864.0] ESTIMATE
+|    |
+|    29:HASH JOIN
+|    |  join op: INNER JOIN (BUCKET_SHUFFLE)
+|    |  equal join conjunct: [34: PS_PARTKEY, INT, false] = [1: P_PARTKEY, INT, false]
+|    |  build runtime filters:
+|    |  - filter_id = 5, build_expr = (1: P_PARTKEY), remote = false
+|    |  output columns: 1, 3, 57
+|    |  cardinality: 100300
+|    |  column statistics:
+|    |  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 100300.0] ESTIMATE
+|    |  * P_MFGR-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
+|    |  * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 100300.0] ESTIMATE
+|    |  * min-->[1.0, 1000.0, 0.0, 8.0, 99864.0] ESTIMATE
+|    |
+|    |----28:EXCHANGE
+|    |       cardinality: 100300
+|    |
+|    25:AGGREGATE (update finalize)
+|    |  aggregate: min[([37: PS_SUPPLYCOST, DOUBLE, false]); args: DOUBLE; result: DOUBLE; args nullable: false; result nullable: true]
+|    |  group by: [34: PS_PARTKEY, INT, false]
+|    |  having: 57: min IS NOT NULL
+|    |  cardinality: 16000000
+|    |  column statistics:
+|    |  * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 1.6E7] ESTIMATE
+|    |  * min-->[1.0, 1000.0, 0.0, 8.0, 99864.0] ESTIMATE
+|    |
+|    24:Project
+|    |  output columns:
+|    |  34 <-> [34: PS_PARTKEY, INT, false]
+|    |  37 <-> [37: PS_SUPPLYCOST, DOUBLE, false]
+|    |  cardinality: 16000000
+|    |  column statistics:
+|    |  * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 1.6E7] ESTIMATE
+|    |  * PS_SUPPLYCOST-->[1.0, 1000.0, 0.0, 8.0, 99864.0] ESTIMATE
+|    |
+|    23:HASH JOIN
+|    |  join op: INNER JOIN (BROADCAST)
+|    |  equal join conjunct: [35: PS_SUPPKEY, INT, false] = [40: S_SUPPKEY, INT, false]
+|    |  build runtime filters:
+|    |  - filter_id = 4, build_expr = (40: S_SUPPKEY), remote = false
+|    |  output columns: 34, 37
+|    |  cardinality: 16000000
+|    |  column statistics:
+|    |  * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 1.6E7] ESTIMATE
+|    |  * PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 200000.0] ESTIMATE
+|    |  * PS_SUPPLYCOST-->[1.0, 1000.0, 0.0, 8.0, 99864.0] ESTIMATE
+|    |  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 200000.0] ESTIMATE
+|    |
+|    |----22:EXCHANGE
+|    |       cardinality: 200000
+|    |
+|    11:OlapScanNode
+|       table: partsupp, rollup: partsupp
+|       preAggregation: on
+|       partitionsRatio=1/1, tabletsRatio=10/10
+|       actualRows=0, avgRowSize=24.0
+|       cardinality: 80000000
+|       probe runtime filters:
+|       - filter_id = 4, probe_expr = (35: PS_SUPPKEY)
+|       - filter_id = 5, probe_expr = (34: PS_PARTKEY)
+|       column statistics:
+|       * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
+|       * PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 1000000.0] ESTIMATE
+|       * PS_SUPPLYCOST-->[1.0, 1000.0, 0.0, 8.0, 99864.0] ESTIMATE
 |
 10:OlapScanNode
 table: partsupp, rollup: partsupp
@@ -238,88 +311,7 @@ column statistics:
 * PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 1000000.0] ESTIMATE
 * PS_SUPPLYCOST-->[1.0, 1000.0, 0.0, 8.0, 99864.0] ESTIMATE
 
-PLAN FRAGMENT 3(F06)
-
-Input Partition: RANDOM
-OutPut Partition: BUCKET_SHUFFLE_HASH_PARTITIONED: 1: P_PARTKEY
-OutPut Exchange Id: 31
-
-30:Project
-|  output columns:
-|  1 <-> [1: P_PARTKEY, INT, false]
-|  3 <-> [3: P_MFGR, VARCHAR, false]
-|  57 <-> [57: min, DOUBLE, true]
-|  cardinality: 100300
-|  column statistics:
-|  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 100300.0] ESTIMATE
-|  * P_MFGR-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
-|  * min-->[1.0, 1000.0, 0.0, 8.0, 99864.0] ESTIMATE
-|
-29:HASH JOIN
-|  join op: INNER JOIN (BUCKET_SHUFFLE)
-|  equal join conjunct: [34: PS_PARTKEY, INT, false] = [1: P_PARTKEY, INT, false]
-|  build runtime filters:
-|  - filter_id = 5, build_expr = (1: P_PARTKEY), remote = false
-|  output columns: 1, 3, 57
-|  cardinality: 100300
-|  column statistics:
-|  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 100300.0] ESTIMATE
-|  * P_MFGR-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
-|  * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 100300.0] ESTIMATE
-|  * min-->[1.0, 1000.0, 0.0, 8.0, 99864.0] ESTIMATE
-|
-|----28:EXCHANGE
-|       cardinality: 100300
-|
-25:AGGREGATE (update finalize)
-|  aggregate: min[([37: PS_SUPPLYCOST, DOUBLE, false]); args: DOUBLE; result: DOUBLE; args nullable: false; result nullable: true]
-|  group by: [34: PS_PARTKEY, INT, false]
-|  having: 57: min IS NOT NULL
-|  cardinality: 16000000
-|  column statistics:
-|  * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 1.6E7] ESTIMATE
-|  * min-->[1.0, 1000.0, 0.0, 8.0, 99864.0] ESTIMATE
-|
-24:Project
-|  output columns:
-|  34 <-> [34: PS_PARTKEY, INT, false]
-|  37 <-> [37: PS_SUPPLYCOST, DOUBLE, false]
-|  cardinality: 16000000
-|  column statistics:
-|  * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 1.6E7] ESTIMATE
-|  * PS_SUPPLYCOST-->[1.0, 1000.0, 0.0, 8.0, 99864.0] ESTIMATE
-|
-23:HASH JOIN
-|  join op: INNER JOIN (BROADCAST)
-|  equal join conjunct: [35: PS_SUPPKEY, INT, false] = [40: S_SUPPKEY, INT, false]
-|  build runtime filters:
-|  - filter_id = 4, build_expr = (40: S_SUPPKEY), remote = false
-|  output columns: 34, 37
-|  cardinality: 16000000
-|  column statistics:
-|  * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 1.6E7] ESTIMATE
-|  * PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 200000.0] ESTIMATE
-|  * PS_SUPPLYCOST-->[1.0, 1000.0, 0.0, 8.0, 99864.0] ESTIMATE
-|  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 200000.0] ESTIMATE
-|
-|----22:EXCHANGE
-|       cardinality: 200000
-|
-11:OlapScanNode
-table: partsupp, rollup: partsupp
-preAggregation: on
-partitionsRatio=1/1, tabletsRatio=10/10
-actualRows=0, avgRowSize=24.0
-cardinality: 80000000
-probe runtime filters:
-- filter_id = 4, probe_expr = (35: PS_SUPPKEY)
-- filter_id = 5, probe_expr = (34: PS_PARTKEY)
-column statistics:
-* PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE
-* PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 1000000.0] ESTIMATE
-* PS_SUPPLYCOST-->[1.0, 1000.0, 0.0, 8.0, 99864.0] ESTIMATE
-
-PLAN FRAGMENT 4(F13)
+PLAN FRAGMENT 3(F13)
 
 Input Partition: RANDOM
 OutPut Partition: BUCKET_SHUFFLE_HASH_PARTITIONED: 1: P_PARTKEY
@@ -347,7 +339,7 @@ column statistics:
 * P_TYPE-->[-Infinity, Infinity, 0.0, 25.0, 150.0] ESTIMATE
 * P_SIZE-->[12.0, 12.0, 0.0, 4.0, 1.0] ESTIMATE
 
-PLAN FRAGMENT 5(F07)
+PLAN FRAGMENT 4(F07)
 
 Input Partition: RANDOM
 OutPut Partition: UNPARTITIONED
@@ -387,7 +379,7 @@ column statistics:
 * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
 * S_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
 
-PLAN FRAGMENT 6(F08)
+PLAN FRAGMENT 5(F08)
 
 Input Partition: RANDOM
 OutPut Partition: UNPARTITIONED
@@ -427,7 +419,7 @@ column statistics:
 * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
 * N_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 5.0] ESTIMATE
 
-PLAN FRAGMENT 7(F09)
+PLAN FRAGMENT 6(F09)
 
 Input Partition: RANDOM
 OutPut Partition: UNPARTITIONED
@@ -451,7 +443,7 @@ column statistics:
 * R_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
 * R_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
 
-PLAN FRAGMENT 8(F01)
+PLAN FRAGMENT 7(F01)
 
 Input Partition: RANDOM
 OutPut Partition: UNPARTITIONED
@@ -495,7 +487,7 @@ column statistics:
 * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 * N_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 5.0] ESTIMATE
 
-PLAN FRAGMENT 9(F02)
+PLAN FRAGMENT 8(F02)
 
 Input Partition: RANDOM
 OutPut Partition: UNPARTITIONED
