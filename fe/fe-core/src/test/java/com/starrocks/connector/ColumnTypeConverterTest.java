@@ -231,21 +231,6 @@ public class ColumnTypeConverterTest {
             Type resType = ColumnTypeConverter.fromHiveType(typeStr);
             Assert.assertEquals(root, resType);
         }
-
-        {
-            String typeStr = "struct<Struct_test:int,C1:struct<c1:int,cC1:string>>";
-            StructType c1 = new StructType(Lists.newArrayList(
-                    new StructField("c1", ScalarType.createType(PrimitiveType.INT)),
-                    new StructField("cc1", ScalarType.createDefaultExternalTableString())
-            ));
-            StructType root = new StructType(Lists.newArrayList(
-                    new StructField("struct_test", ScalarType.createType(PrimitiveType.INT)),
-                    new StructField("c1", c1)
-            ));
-
-            Type resType = ColumnTypeConverter.fromHiveType(typeStr);
-            Assert.assertEquals(root, resType);
-        }
     }
 
     @Test

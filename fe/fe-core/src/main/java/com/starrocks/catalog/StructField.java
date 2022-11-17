@@ -36,9 +36,8 @@ public class StructField {
     private final String comment;
     private int position;  // in struct
 
-    // Struct subfield is case-insensitive, will convert to lowercase automatic.
     public StructField(String name, Type type, String comment) {
-        this.name = name.toLowerCase();
+        this.name = name;
         this.type = type;
         this.comment = comment;
     }
