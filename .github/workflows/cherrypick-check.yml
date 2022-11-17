@@ -35,5 +35,5 @@ jobs:
             ## Please check the version labels which this pr will be auto backported to target branch and click the checkbox:
 
             - [ ] check done.
-          GITHUB_TOKEN: ${{ secrets.PAT  }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN  }}
           reactions: eyes
