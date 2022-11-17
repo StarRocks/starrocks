@@ -21,6 +21,8 @@ StarRocks 版本分支与开发环境镜像版本的对应关系如下所示：
 | StarRocks 版本    | 镜像 Tag                      |
 | ---------------- | ------------------------------|
 | main             | starrocks/dev-env:main        |
+| StarRocks-2.4.*  | starrocks/dev-env:branch-2.4  |
+| StarRocks-2.3.*  | starrocks/dev-env:branch-2.3  |
 | StarRocks-2.2.*  | starrocks/dev-env:branch-2.2  |
 | StarRocks-2.1.*  | starrocks/dev-env:branch-2.1  |
 | StarRocks-2.0.*  | starrocks/dev-env:branch-2.0  |
