@@ -18,16 +18,20 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.EquivalenceClasses;
+import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.Projection;
-import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.rewrite.BaseScalarOperatorShuttle;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
+import org.apache.commons.collections4.iterators.PermutationIterator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -43,7 +47,7 @@ import java.util.stream.Collectors;
  * SPJG materialized view rewriter, based on
  * 《Optimizing Queries Using Materialized Views: A Practical, Scalable Solution》
  *
- *  This rewriter is for single or multi table join query rewrite
+ *  This rewriter is for single table or multi table join query rewrite
  */
 public class MaterializedViewRewriter {
     protected static final Logger LOG = LogManager.getLogger(MaterializedViewRewriter.class);
@@ -66,7 +70,7 @@ public class MaterializedViewRewriter {
     }
 
     public boolean isValidPlan(OptExpression expression) {
-        return Utils.isLogicalSPJ(expression);
+        return MvUtils.isLogicalSPJ(expression);
     }
 
     public List<OptExpression> rewrite() {
@@ -78,7 +82,7 @@ public class MaterializedViewRewriter {
         Map<ColumnRefOperator, ScalarOperator> queryLineage =
                 getLineage(queryExpression, materializationContext.getQueryRefFactory());
         ReplaceColumnRefRewriter queryColumnRefRewriter = new ReplaceColumnRefRewriter(queryLineage, true);
-        List<ScalarOperator> queryConjuncts = Utils.getAllPredicates(queryExpression);
+        List<ScalarOperator> queryConjuncts = MvUtils.getAllPredicates(queryExpression);
         ScalarOperator queryPredicate = null;
         if (!queryConjuncts.isEmpty()) {
             queryPredicate = Utils.compoundAnd(queryConjuncts);
@@ -88,10 +92,10 @@ public class MaterializedViewRewriter {
         EquivalenceClasses queryEc = createEquivalenceClasses(queryPredicateSplit.getEqualPredicates());
 
         // should get all query tables
-        List<Table> queryTables = Utils.getAllTables(queryExpression);
+        List<Table> queryTables = MvUtils.getAllTables(queryExpression);
 
         OptExpression mvExpression = materializationContext.getMvExpression();
-        List<Table> mvTables = Utils.getAllTables(mvExpression);
+        List<Table> mvTables = MvUtils.getAllTables(mvExpression);
         if (Collections.disjoint(queryTables, mvTables)) {
             // if table lists do not intersect, can not be rewritten
             return Lists.newArrayList();
@@ -119,7 +123,7 @@ public class MaterializedViewRewriter {
         Map<ColumnRefOperator, ScalarOperator> mvLineage =
                 getLineage(mvExpression, materializationContext.getMvColumnRefFactory());
         ReplaceColumnRefRewriter mvColumnRefRewriter = new ReplaceColumnRefRewriter(mvLineage, true);
-        List<ScalarOperator> mvConjuncts = Utils.getAllPredicates(mvExpression);
+        List<ScalarOperator> mvConjuncts = MvUtils.getAllPredicates(mvExpression);
         ScalarOperator mvPredicate = null;
         if (!mvConjuncts.isEmpty()) {
             mvPredicate = Utils.compoundAnd(mvConjuncts);
@@ -138,16 +142,16 @@ public class MaterializedViewRewriter {
         //    1. A1 -> A1, A2 -> A2, B -> B
         //    2. A1 -> A2, A2 -> A1, B -> B
         List<BiMap<Integer, Integer>> relationIdMappings = generateRelationIdMap(materializationContext.getQueryRefFactory(),
-                queryTables, materializationContext.getMvColumnRefFactory(), mvTables);
+                queryTables, queryExpression, materializationContext.getMvColumnRefFactory(), mvTables, mvExpression);
 
         // used to judge whether query scalar ops can be rewritten
         Set<ColumnRefOperator> queryColumnSet = queryRelationIdToColumns.values()
                 .stream().flatMap(List::stream)
                 .filter(columnRef -> !materializationContext.getScanMvOutputExpressions().contains(columnRef))
                 .collect(Collectors.toSet());
-        RewriteContext rewriteContext = new RewriteContext(queryExpression, /*queryProjection,*/
-                queryPredicateSplit, queryEc, queryRelationIdToColumns, materializationContext.getQueryRefFactory(),
-                queryColumnRefRewriter, mvExpression, /* mvTopProjection ,*/ mvPredicateSplit, mvRelationIdToColumns,
+        RewriteContext rewriteContext = new RewriteContext(queryExpression, queryPredicateSplit, queryEc,
+                queryRelationIdToColumns, materializationContext.getQueryRefFactory(),
+                queryColumnRefRewriter, mvExpression, mvPredicateSplit, mvRelationIdToColumns,
                 materializationContext.getMvColumnRefFactory(), mvColumnRefRewriter, outputMapping, queryColumnSet);
         List<OptExpression> results = Lists.newArrayList();
         for (BiMap<Integer, Integer> relationIdMapping : relationIdMappings) {
@@ -164,7 +168,10 @@ public class MaterializedViewRewriter {
 
     private OptExpression tryRewriteForRelationMapping(RewriteContext rewriteContext) {
         // the rewritten expression to replace query
-        OptExpression rewrittenExpression = OptExpression.create(materializationContext.getScanMvOperator());
+        // should copy the op because the op will be modified and reused
+        Operator.Builder builder = OperatorBuilderFactory.build(materializationContext.getScanMvOperator());
+        builder.withOperator(materializationContext.getScanMvOperator());
+        OptExpression rewrittenExpression = OptExpression.create(builder.build());
         deriveLogicalProperty(rewrittenExpression);
 
         // construct query based view EC
@@ -185,11 +192,11 @@ public class MaterializedViewRewriter {
             return tryUnionRewrite(rewriteContext, rewrittenExpression);
         } else {
             // all predicates are now query based
-            ScalarOperator equalPredicates = Utils.canonizePredicate(compensationPredicates.getEqualPredicates());
-            ScalarOperator otherPredicates = Utils.canonizePredicate(Utils.compoundAnd(
+            ScalarOperator equalPredicates = MvUtils.canonizePredicate(compensationPredicates.getEqualPredicates());
+            ScalarOperator otherPredicates = MvUtils.canonizePredicate(Utils.compoundAnd(
                     compensationPredicates.getRangePredicates(), compensationPredicates.getResidualPredicates()));
             if (!ConstantOperator.TRUE.equals(equalPredicates) || !ConstantOperator.TRUE.equals(otherPredicates)) {
-                Map<ColumnRefOperator, ScalarOperator> viewExprMap = Utils.getColumnRefMap(
+                Map<ColumnRefOperator, ScalarOperator> viewExprMap = MvUtils.getColumnRefMap(
                         rewriteContext.getMvExpression(), rewriteContext.getMvRefFactory());
 
                 if (!ConstantOperator.TRUE.equals(equalPredicates)) {
@@ -226,11 +233,17 @@ public class MaterializedViewRewriter {
                     otherPredicates = Utils.compoundAnd(rewrittens);
                 }
             }
-            ScalarOperator compensationPredicate = Utils.canonizePredicate(Utils.compoundAnd(equalPredicates, otherPredicates));
+            ScalarOperator compensationPredicate = MvUtils.canonizePredicate(Utils.compoundAnd(equalPredicates, otherPredicates));
             if (!ConstantOperator.TRUE.equals(compensationPredicate)) {
                 // add filter operator
-                LogicalFilterOperator filter = new LogicalFilterOperator(compensationPredicate);
-                rewrittenExpression = OptExpression.create(filter, rewrittenExpression);
+                ScalarOperator originalPredicate = rewrittenExpression.getOp().getPredicate();
+                ScalarOperator finalPredicate = Utils.compoundAnd(originalPredicate, compensationPredicate);
+                Operator.Builder newOpBuilder = OperatorBuilderFactory.build(rewrittenExpression.getOp());
+                newOpBuilder.withOperator(rewrittenExpression.getOp());
+                newOpBuilder.setPredicate(finalPredicate);
+                Operator newOp = newOpBuilder.build();
+                rewrittenExpression = OptExpression.create(newOp);
+                rewrittenExpression.setLogicalProperty(null);
                 deriveLogicalProperty(rewrittenExpression);
             }
 
@@ -241,22 +254,133 @@ public class MaterializedViewRewriter {
     }
 
     private OptExpression tryUnionRewrite(RewriteContext rewriteContext, OptExpression targetExpr) {
-        // TODO: add union rewrite
+        PredicateSplit compensationPredicates = getCompensationPredicates(rewriteContext, false);
+        if (compensationPredicates == null) {
+            return null;
+        }
+        Preconditions.checkState(!ConstantOperator.TRUE.equals(compensationPredicates.getEqualPredicates())
+                || !ConstantOperator.TRUE.equals(compensationPredicates.getRangePredicates())
+                || !ConstantOperator.TRUE.equals(compensationPredicates.getResidualPredicates()));
+
+        // for mv: select a, b from t where a < 10;
+        // query: select a, b from t where a < 20;
+        // queryBasedRewrite will return the tree of "select a, b from t where a >= 10 and a < 20"
+        // which is realized by adding the compensation predicate to original query expression
+        OptExpression queryInput = queryBasedRewrite(rewriteContext,
+                compensationPredicates, materializationContext.getQueryExpression());
+        if (queryInput == null) {
+            return null;
+        }
+        // viewBasedRewrite will return the tree of "select a, b from t where a < 10" based on mv expression
+        OptExpression viewInput = viewBasedRewrite(rewriteContext, targetExpr);
+        if (viewInput == null) {
+            return null;
+        }
+        // createUnion will return the union all result of queryInput and viewInput
+        //           Union
+        //       /          |
+        // partial query   view
+        return createUnion(queryInput, viewInput, rewriteContext);
+    }
+
+    protected OptExpression queryBasedRewrite(RewriteContext rewriteContext, PredicateSplit compensationPredicates,
+                                              OptExpression queryExpression) {
+        // query predicate and (not viewToQueryCompensationPredicate) is the final query compensation predicate
+        ScalarOperator queryCompensationPredicate = MvUtils.canonizePredicate(
+                Utils.compoundAnd(
+                        rewriteContext.getQueryPredicateSplit().toScalarOperator(),
+                        CompoundPredicateOperator.not(compensationPredicates.toScalarOperator())));
+        if (!ConstantOperator.TRUE.equals(queryCompensationPredicate)) {
+            // add filter to op
+            Operator.Builder builder = OperatorBuilderFactory.build(queryExpression.getOp());
+            builder.withOperator(queryExpression.getOp());
+            builder.setPredicate(queryCompensationPredicate);
+            Operator newQueryOp = builder.build();
+            OptExpression newQueryExpr = OptExpression.create(newQueryOp, queryExpression.getInputs());
+            deriveLogicalProperty(newQueryExpr);
+            return newQueryExpr;
+        }
         return null;
+    }
+
+    protected OptExpression createUnion(OptExpression queryInput, OptExpression viewInput, RewriteContext rewriteContext) {
+        Map<ColumnRefOperator, ScalarOperator> queryColumnRefMap =
+                MvUtils.getColumnRefMap(queryInput, rewriteContext.getQueryRefFactory());
+
+        // keys of queryColumnRefMap and mvColumnRefMap are the same
+        List<ColumnRefOperator> originalOutputColumns = queryColumnRefMap.keySet().stream().collect(Collectors.toList());
+
+        // rewrite query
+        OptExpressionDuplicator duplicator = new OptExpressionDuplicator(rewriteContext.getQueryRefFactory());
+        OptExpression newQueryInput = duplicator.duplicate(queryInput);
+        List<ColumnRefOperator> newQueryOutputColumns = duplicator.getMappedColumns(originalOutputColumns);
+
+        // rewrite viewInput
+        // for viewInput, there must be a projection,
+        // the keyset of the projection is the same as the keyset of queryColumnRefMap
+        Preconditions.checkState(viewInput.getOp().getProjection() != null);
+        Map<ColumnRefOperator, ScalarOperator> newColumnRefMap = Maps.newHashMap();
+        Map<ColumnRefOperator, ScalarOperator> mvProjection = viewInput.getOp().getProjection().getColumnRefMap();
+        List<ColumnRefOperator> newViewOutputColumns = Lists.newArrayList();
+        for (ColumnRefOperator columnRef : originalOutputColumns) {
+            ColumnRefOperator newColumn = rewriteContext.getQueryRefFactory().create(
+                    columnRef, columnRef.getType(), columnRef.isNullable());
+            newViewOutputColumns.add(newColumn);
+            newColumnRefMap.put(newColumn, mvProjection.get(columnRef));
+        }
+        Projection newMvProjection = new Projection(newColumnRefMap);
+        viewInput.getOp().setProjection(newMvProjection);
+        // reset the logical property, should be derived later again because output columns changed
+        viewInput.setLogicalProperty(null);
+
+        List<ColumnRefOperator> unionOutputColumns = originalOutputColumns.stream()
+                .map(c -> rewriteContext.getQueryRefFactory().create(c, c.getType(), c.isNullable()))
+                .collect(Collectors.toList());
+
+        // generate new projection
+        Map<ColumnRefOperator, ScalarOperator> unionProjection = Maps.newHashMap();
+        for (int i = 0; i < originalOutputColumns.size(); i++) {
+            unionProjection.put(originalOutputColumns.get(i), unionOutputColumns.get(i));
+        }
+        Projection projection = new Projection(unionProjection);
+        LogicalUnionOperator unionOperator = new LogicalUnionOperator.Builder()
+                .setOutputColumnRefOp(unionOutputColumns)
+                .setChildOutputColumns(Lists.newArrayList(newQueryOutputColumns, newViewOutputColumns))
+                .setProjection(projection)
+                .isUnionAll(true)
+                .build();
+        return OptExpression.create(unionOperator, newQueryInput, viewInput);
     }
 
     protected Multimap<ScalarOperator, ColumnRefOperator> normalizeAndReverseProjection(
             Map<ColumnRefOperator, ScalarOperator> viewProjection, RewriteContext rewriteContext, boolean isViewBased) {
+        return normalizeAndReverseProjection(viewProjection, rewriteContext, isViewBased, true);
+    }
+
+    protected Multimap<ScalarOperator, ColumnRefOperator> normalizeAndReverseProjection(
+            Map<ColumnRefOperator, ScalarOperator> columnRefMap,
+            RewriteContext rewriteContext,
+            boolean isViewBased, boolean isQueryAgainstView) {
         Multimap<ScalarOperator, ColumnRefOperator> reversedMap = ArrayListMultimap.create();
         ColumnRewriter columnRewriter = new ColumnRewriter(rewriteContext);
-        for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : viewProjection.entrySet()) {
+        for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : columnRefMap.entrySet()) {
             ScalarOperator rewritten = rewriteContext.getMvColumnRefRewriter().rewrite(entry.getValue());
-            if (isViewBased) {
-                ScalarOperator swapped = columnRewriter.rewriteViewToQueryWithViewEc(rewritten);
-                reversedMap.put(swapped, entry.getKey());
+            if (isQueryAgainstView) {
+                if (isViewBased) {
+                    ScalarOperator swapped = columnRewriter.rewriteViewToQueryWithViewEc(rewritten);
+                    reversedMap.put(swapped, entry.getKey());
+                } else {
+                    ScalarOperator swapped = columnRewriter.rewriteViewToQueryWithQueryEc(rewritten);
+                    reversedMap.put(swapped, entry.getKey());
+                }
             } else {
-                ScalarOperator swapped = columnRewriter.rewriteViewToQueryWithQueryEc(rewritten);
-                reversedMap.put(swapped, entry.getKey());
+                if (isViewBased) {
+                    ScalarOperator swapped = columnRewriter.rewriteByViewEc(rewritten);
+                    reversedMap.put(swapped, entry.getKey());
+                } else {
+                    ScalarOperator swapped = columnRewriter.rewriteByQueryEc(rewritten);
+                    reversedMap.put(swapped, entry.getKey());
+                }
             }
         }
         return reversedMap;
@@ -285,8 +409,8 @@ public class MaterializedViewRewriter {
 
     private MatchMode getMatchMode(OptExpression query, List<Table> queryTables,
                                    OptExpression mvExpression, List<Table> mvTables) {
-        boolean isQueryAllEqualJoin = Utils.isAllEqualInnerJoin(query);
-        boolean isMvAllEqualJoin = Utils.isAllEqualInnerJoin(mvExpression);
+        boolean isQueryAllEqualJoin = MvUtils.isAllEqualInnerJoin(query);
+        boolean isMvAllEqualJoin = MvUtils.isAllEqualInnerJoin(mvExpression);
         MatchMode matchMode = MatchMode.NOT_MATCH;
         if (isQueryAllEqualJoin && isMvAllEqualJoin) {
             // process table match
@@ -320,7 +444,7 @@ public class MaterializedViewRewriter {
 
     // TODO: consider no-loss type cast
     protected OptExpression viewBasedRewrite(RewriteContext rewriteContext, OptExpression targetExpr) {
-        Map<ColumnRefOperator, ScalarOperator> viewExprMap = Utils.getColumnRefMap(
+        Map<ColumnRefOperator, ScalarOperator> viewExprMap = MvUtils.getColumnRefMap(
                 rewriteContext.getMvExpression(), rewriteContext.getMvRefFactory());
         // normalize view projection by query relation and ec
         Multimap<ScalarOperator, ColumnRefOperator> normalizedMap =
@@ -332,7 +456,7 @@ public class MaterializedViewRewriter {
     protected OptExpression rewriteProjection(RewriteContext rewriteContext,
                                     Multimap<ScalarOperator, ColumnRefOperator> normalizedViewMap,
                                     OptExpression targetExpr) {
-        Map<ColumnRefOperator, ScalarOperator> queryMap = Utils.getColumnRefMap(
+        Map<ColumnRefOperator, ScalarOperator> queryMap = MvUtils.getColumnRefMap(
                 rewriteContext.getQueryExpression(), rewriteContext.getQueryRefFactory());
         Map<ColumnRefOperator, ScalarOperator> swappedQueryColumnMap = Maps.newHashMap();
         ColumnRewriter columnRewriter = new ColumnRewriter(rewriteContext);
@@ -444,9 +568,10 @@ public class MaterializedViewRewriter {
     }
 
     private List<BiMap<Integer, Integer>> generateRelationIdMap(
-            ColumnRefFactory queryRefFactory, List<Table> queryTables, ColumnRefFactory mvRefFactory, List<Table> mvTables) {
-        Map<Table, Set<Integer>> queryTableToRelationId = getTableToRelationid(queryRefFactory, queryTables);
-        Map<Table, Set<Integer>> mvTableToRelationId = getTableToRelationid(mvRefFactory, mvTables);
+            ColumnRefFactory queryRefFactory, List<Table> queryTables, OptExpression queryExpression,
+            ColumnRefFactory mvRefFactory, List<Table> mvTables, OptExpression mvExpression) {
+        Map<Table, Set<Integer>> queryTableToRelationId = getTableToRelationid(queryExpression, queryRefFactory, queryTables);
+        Map<Table, Set<Integer>> mvTableToRelationId = getTableToRelationid(mvExpression, mvRefFactory, mvTables);
         Preconditions.checkState(queryTableToRelationId.keySet().equals(mvTableToRelationId.keySet()));
         List<BiMap<Integer, Integer>> result = ImmutableList.of(HashBiMap.create());
         for (Map.Entry<Table, Set<Integer>> queryEntry : queryTableToRelationId.entrySet()) {
@@ -459,15 +584,17 @@ public class MaterializedViewRewriter {
                 }
             } else {
                 ImmutableList.Builder<BiMap<Integer, Integer>> newResult = ImmutableList.builder();
-                for (Integer src : queryEntry.getValue()) {
-                    for (Integer target : mvTableToRelationId.get(queryEntry.getKey())) {
-                        for (BiMap<Integer, Integer> m : result) {
-                            if (!m.containsValue(target)) {
-                                final BiMap<Integer, Integer> newM = HashBiMap.create(m);
-                                newM.put(src, target);
-                                newResult.add(newM);
-                            }
+                PermutationIterator<Integer> permutationIterator =
+                        new PermutationIterator<>(mvTableToRelationId.get(queryEntry.getKey()));
+                List<Integer> queryList = queryEntry.getValue().stream().collect(Collectors.toList());
+                while (permutationIterator.hasNext()) {
+                    List<Integer> permutation = permutationIterator.next();
+                    for (BiMap<Integer, Integer> m : result) {
+                        final BiMap<Integer, Integer> newM = HashBiMap.create(m);
+                        for (int i = 0; i < queryList.size(); i++) {
+                            newM.put(queryList.get(i), permutation.get(i));
                         }
+                        newResult.add(newM);
                     }
                 }
                 result = newResult.build();
@@ -476,21 +603,20 @@ public class MaterializedViewRewriter {
         return result;
     }
 
-    private Map<Table, Set<Integer>> getTableToRelationid(ColumnRefFactory refFactory, List<Table> tableList) {
+    private Map<Table, Set<Integer>> getTableToRelationid(
+            OptExpression optExpression, ColumnRefFactory refFactory, List<Table> tableList) {
         Map<Table, Set<Integer>> tableToRelationId = Maps.newHashMap();
-
+        List<ColumnRefOperator> validColumnRefs = MvUtils.collectScanColumn(optExpression);
         for (Map.Entry<ColumnRefOperator, Table> entry : refFactory.getColumnRefToTable().entrySet()) {
             if (!tableList.contains(entry.getValue())) {
                 continue;
             }
-            if (tableToRelationId.containsKey(entry.getValue())) {
-                Integer relationId = refFactory.getRelationId(entry.getKey().getId());
-                tableToRelationId.get(entry.getValue()).add(relationId);
-            } else {
-                Set<Integer> relationids = Sets.newHashSet();
-                relationids.add(refFactory.getRelationId(entry.getKey().getId()));
-                tableToRelationId.put(entry.getValue(), relationids);
+            if (!validColumnRefs.contains(entry.getKey())) {
+                continue;
             }
+            Set<Integer> relationIds = tableToRelationId.computeIfAbsent(entry.getValue(), k -> Sets.newHashSet());
+            Integer relationId = refFactory.getRelationId(entry.getKey().getId());
+            relationIds.add(relationId);
         }
         return tableToRelationId;
     }
@@ -527,7 +653,7 @@ public class MaterializedViewRewriter {
                 : rewriteContext.getMvPredicateSplit().getRangePredicates();
         ScalarOperator targetPr = isQueryAgainstView ? rewriteContext.getMvPredicateSplit().getRangePredicates()
                 : rewriteContext.getQueryPredicateSplit().getRangePredicates();
-        ScalarOperator compensationPr = getCompensationRangePredicate(srcPr, targetPr, columnRewriter);
+        ScalarOperator compensationPr = getCompensationRangePredicate(srcPr, targetPr, columnRewriter, isQueryAgainstView);
         if (compensationPr == null) {
             return null;
         }
@@ -542,7 +668,7 @@ public class MaterializedViewRewriter {
             // mv: empid < 5 or salary > 100
             srcPu = Utils.compoundAnd(compensationEqualPredicate, compensationPr);
         }
-        ScalarOperator compensationPu = getCompensationResidualPredicate(srcPu, targetPu, columnRewriter);
+        ScalarOperator compensationPu = getCompensationResidualPredicate(srcPu, targetPu, columnRewriter, isQueryAgainstView);
         if (compensationPu == null) {
             return null;
         }
@@ -552,7 +678,8 @@ public class MaterializedViewRewriter {
 
     private ScalarOperator getCompensationResidualPredicate(ScalarOperator srcPu,
                                                             ScalarOperator targetPu,
-                                                            ColumnRewriter columnRewriter) {
+                                                            ColumnRewriter columnRewriter,
+                                                            boolean isQueryAgainstView) {
         ScalarOperator compensationPu;
         if (srcPu == null && targetPu == null) {
             compensationPu = ConstantOperator.createBoolean(true);
@@ -561,12 +688,23 @@ public class MaterializedViewRewriter {
         } else if (srcPu != null && targetPu == null) {
             compensationPu = srcPu;
         } else {
-            ScalarOperator canonizedSrcPu = Utils.canonizePredicateForRewrite(srcPu.clone());
-            ScalarOperator canonizedTargetPu = Utils.canonizePredicateForRewrite(targetPu.clone());
-            ScalarOperator swappedSrcPu = columnRewriter.rewriteByQueryEc(canonizedSrcPu);
-            ScalarOperator swappedTargetPu = columnRewriter.rewriteViewToQueryWithQueryEc(canonizedTargetPu);
+            ScalarOperator canonizedSrcPu = MvUtils.canonizePredicateForRewrite(srcPu.clone());
+            ScalarOperator canonizedTargetPu = MvUtils.canonizePredicateForRewrite(targetPu.clone());
+            ScalarOperator swappedSrcPu;
+            ScalarOperator swappedTargetPu;
+            if (isQueryAgainstView) {
+                // src is query
+                swappedSrcPu = columnRewriter.rewriteByQueryEc(canonizedSrcPu);
+                // target is view
+                swappedTargetPu = columnRewriter.rewriteViewToQueryWithQueryEc(canonizedTargetPu);
+            } else {
+                // src is view
+                swappedSrcPu = columnRewriter.rewriteViewToQueryWithViewEc(canonizedSrcPu);
+                // target is query
+                swappedTargetPu = columnRewriter.rewriteByViewEc(canonizedTargetPu);
+            }
 
-            compensationPu = Utils.getCompensationPredicateForDisjunctive(swappedSrcPu, swappedTargetPu);
+            compensationPu = MvUtils.getCompensationPredicateForDisjunctive(swappedSrcPu, swappedTargetPu);
             if (compensationPu == null) {
                 compensationPu = getCompensationResidualPredicate(swappedSrcPu, swappedTargetPu);
                 if (compensationPu == null) {
@@ -574,7 +712,7 @@ public class MaterializedViewRewriter {
                 }
             }
         }
-        compensationPu = Utils.canonizePredicate(compensationPu);
+        compensationPu = MvUtils.canonizePredicate(compensationPu);
         return compensationPu;
     }
 
@@ -594,7 +732,8 @@ public class MaterializedViewRewriter {
 
     private ScalarOperator getCompensationRangePredicate(ScalarOperator srcPr,
                                                          ScalarOperator targetPr,
-                                                         ColumnRewriter columnRewriter) {
+                                                         ColumnRewriter columnRewriter,
+                                                         boolean isQueryAgainstView) {
         ScalarOperator compensationPr;
         if (srcPr == null && targetPr == null) {
             compensationPr = ConstantOperator.createBoolean(true);
@@ -603,17 +742,26 @@ public class MaterializedViewRewriter {
         } else if (srcPr != null && targetPr == null) {
             compensationPr = srcPr;
         } else {
-            ScalarOperator canonizedSrcPr = Utils.canonizePredicateForRewrite(srcPr.clone());
-            ScalarOperator canonizedTargetPr = Utils.canonizePredicateForRewrite(targetPr.clone());
+            ScalarOperator canonizedSrcPr = MvUtils.canonizePredicateForRewrite(srcPr.clone());
+            ScalarOperator canonizedTargetPr = MvUtils.canonizePredicateForRewrite(targetPr.clone());
 
             // swap column by query EC
-            ScalarOperator swappedSrcPr = columnRewriter.rewriteByQueryEc(canonizedSrcPr);
-            // swap column by relation mapping and query ec
-            ScalarOperator swappedTargetPr = columnRewriter.rewriteViewToQueryWithQueryEc(canonizedTargetPr);
+            ScalarOperator swappedSrcPr;
+            ScalarOperator swappedTargetPr;
+            if (isQueryAgainstView) {
+                // for query
+                swappedSrcPr = columnRewriter.rewriteByQueryEc(canonizedSrcPr);
+                // for view, swap column by relation mapping and query ec
+                swappedTargetPr = columnRewriter.rewriteViewToQueryWithQueryEc(canonizedTargetPr);
+            } else {
+                // for view
+                swappedSrcPr = columnRewriter.rewriteViewToQueryWithViewEc(canonizedSrcPr);
+                // for query
+                swappedTargetPr = columnRewriter.rewriteByViewEc(canonizedTargetPr);
+            }
             compensationPr = getCompensationRangePredicate(swappedSrcPr, swappedTargetPr);
         }
-        compensationPr = Utils.canonizePredicate(compensationPr);
-        return compensationPr;
+        return MvUtils.canonizePredicate(compensationPr);
     }
 
     private ScalarOperator getCompensationRangePredicate(ScalarOperator srcPr, ScalarOperator targetPr) {
@@ -673,7 +821,7 @@ public class MaterializedViewRewriter {
                 }
             }
         }
-        compensation = Utils.canonizePredicate(compensation);
+        compensation = MvUtils.canonizePredicate(compensation);
         return compensation;
     }
 
