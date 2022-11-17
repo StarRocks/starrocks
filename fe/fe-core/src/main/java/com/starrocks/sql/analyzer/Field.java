@@ -154,7 +154,6 @@ public class Field {
             if (!tmpType.isStructType()) {
                 return false;
             }
-            // Struct subfield is case-insensitive
             StructField structField = ((StructType) tmpType).getField(slotRefPartsArray[matchIndex]);
             if (structField == null) {
                 return false;
