@@ -30,13 +30,6 @@ protected:
         builder.append(Slice("v1"));
         return builder.build(true);
     }
-
-    ColumnPtr create_const_nullable_column() {
-        ColumnBuilder<TYPE_VARCHAR> builder(1);
-        builder.append(Slice("v1"), true);
-        return builder.build(true);
-    }
-
 };
 
 TEST_F(ColumnHelperTest, cast_to_nullable_column) {
@@ -44,9 +37,13 @@ TEST_F(ColumnHelperTest, cast_to_nullable_column) {
     ASSERT_TRUE(col->is_nullable());
     ASSERT_FALSE(col->is_constant());
 
-    auto col = ColumnHelper::cast_to_nullable_column(create_const_column());
-    ASSERT_TRUE(col->is_nullable());
+    col = ColumnHelper::cast_to_nullable_column(create_const_column());
+    ASSERT_FALSE(col->is_nullable());
     ASSERT_TRUE(col->is_constant());
+
+    col = ColumnHelper::cast_to_nullable_column(create_nullable_column());
+    ASSERT_TRUE(col->is_nullable());
+    ASSERT_FALSE(col->is_constant());
 }
 
 } // namespace starrocks::vectorized
