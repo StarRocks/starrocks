@@ -32,7 +32,7 @@
   + [Spark connector](./unloading/Spark_connector.md)
   + [Flink connector](./unloading/Flink_connector.md)
 + Query Data Sources
-  + [Use catalogs to manage internal and external data](./data_source/Manage_data.md.md)
+  + [Use catalogs to manage internal and external data](./data_source/Manage_data.md)
   + [External tables](./data_source/External_table.md)
 + Query Acceleration
   + [Gather CBO statistics](./using_starrocks/Cost_based_optimizer.md)
