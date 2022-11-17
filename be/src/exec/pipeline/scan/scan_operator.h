@@ -56,6 +56,15 @@ public:
     int64_t get_last_scan_rows_num() { return _last_scan_rows_num.exchange(0); }
     int64_t get_last_scan_bytes() { return _last_scan_bytes.exchange(0); }
 
+<<<<<<< HEAD
+=======
+    void set_lane_arbiter(const query_cache::LaneArbiterPtr& lane_arbiter) { _lane_arbiter = lane_arbiter; }
+    void set_cache_operator(const query_cache::CacheOperatorPtr& cache_operator) { _cache_operator = cache_operator; }
+    void set_ticket_checker(query_cache::TicketCheckerPtr& ticket_checker) { _ticket_checker = ticket_checker; }
+
+    void set_query_ctx(const QueryContextPtr& query_ctx);
+
+>>>>>>> 7fa12d8f4 ([Enhancement] Reduce lock contention of query context (#13593))
 protected:
     static constexpr size_t kIOTaskBatchSize = 64;
 

@@ -24,7 +24,13 @@ namespace starrocks {
 class RandomAccessFile;
 class WritableFile;
 class SequentialFile;
+<<<<<<< HEAD
 class ResultFileOptions;
+=======
+struct ResultFileOptions;
+class TUploadReq;
+class TDownloadReq;
+>>>>>>> 7fa12d8f4 ([Enhancement] Reduce lock contention of query context (#13593))
 struct WritableFileOptions;
 struct RandomAccessFileOptions;
 
@@ -246,6 +252,9 @@ public:
     WritableFile() = default;
     virtual ~WritableFile() = default;
 
+    // No copying allowed
+    DISALLOW_COPY(WritableFile);
+
     // Append data to the end of the file
     virtual Status append(const Slice& data) = 0;
 
@@ -282,11 +291,6 @@ public:
 
     // Returns the filename provided when the WritableFile was constructed.
     virtual const std::string& filename() const = 0;
-
-private:
-    // No copying allowed
-    WritableFile(const WritableFile&) = delete;
-    void operator=(const WritableFile&) = delete;
 };
 
 } // namespace starrocks
