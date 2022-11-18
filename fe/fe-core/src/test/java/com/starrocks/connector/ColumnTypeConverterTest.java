@@ -11,11 +11,14 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
-import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import org.apache.avro.Schema;
 import org.junit.Assert;
 import org.junit.Test;
+
+import java.util.ArrayList;
+import java.util.LinkedList;
+import java.util.List;
 
 import static com.starrocks.connector.ColumnTypeConverter.columnEquals;
 import static com.starrocks.connector.ColumnTypeConverter.fromHiveTypeToArrayType;
