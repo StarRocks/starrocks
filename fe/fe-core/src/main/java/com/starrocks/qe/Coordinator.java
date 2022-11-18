@@ -77,6 +77,11 @@ import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.LoadPlanner;
+import com.starrocks.sql.PlannerProfile;
+>>>>>>> 57712bd94 ([Enhancement] Add FE profile CoordPrepareExec and CoordDeliverExec (#13661))
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.system.Backend;
@@ -517,8 +522,19 @@ public class Coordinator {
     }
 
     public void exec() throws Exception {
+<<<<<<< HEAD
         prepareExec();
         deliverExecFragments();
+=======
+        QueryQueueManager.getInstance().maybeWait(connectContext, this);
+        try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("CoordPrepareExec")) {
+            prepareExec();
+        }
+
+        try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("CoordDeliverExec")) {
+            deliverExecFragments();
+        }
+>>>>>>> 57712bd94 ([Enhancement] Add FE profile CoordPrepareExec and CoordDeliverExec (#13661))
     }
 
     public static ResourceGroup prepareResourceGroup(ConnectContext connect) {
