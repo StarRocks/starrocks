@@ -114,17 +114,10 @@ bitmap列类型，不需要指定长度和默认值。表示整型的集合，�
 语法：
 
 ```sql
-INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] COMMENT 'xxxxxx'
+INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
 ```
 
-说明：
-
-**index_name**：索引名称
-
-**col_name**：列名
-
-注意：
-当前仅支持 BITMAP 索引， BITMAP 索引仅支持应用于单列。
+建表时仅支持创建 bitmap 索引，语法如下。有关参数说明和使用限制，请参见 [Bitmap 索引](/using_starrocks/Bitmap_index.md#创建索引)。
 
 ### **ENGINE 类型**
 
