@@ -290,7 +290,7 @@ public class ColumnTypeConverterTest {
     }
 
     @Test
-    public void testArraySchema() {
+    public void testArrayHudiSchema() {
         Schema unionSchema;
         Schema arraySchema;
 
@@ -313,6 +313,47 @@ public class ColumnTypeConverterTest {
         unionSchema = Schema.createUnion(Schema.create(Schema.Type.BYTES));
         arraySchema = Schema.createArray(unionSchema);
         Assert.assertEquals(fromHudiType(arraySchema), new ArrayType(ScalarType.createType(PrimitiveType.VARCHAR)));
+    }
+
+    @Test
+    public void testStructHudiSchema() {
+        Schema.Field field1 = new Schema.Field("field1", Schema.create(Schema.Type.INT), null, null);
+        Schema.Field field2 = new Schema.Field("field2", Schema.create(Schema.Type.STRING), null, null);
+        List<Schema.Field> fields = new LinkedList<>();
+        fields.add(field1);
+        fields.add(field2);
+        Schema structSchema = Schema.createRecord(fields);
+
+        StructField structField1 = new StructField("field1", ScalarType.createType(PrimitiveType.INT));
+        StructField structField2 = new StructField("field2", ScalarType.createDefaultString());
+        ArrayList<StructField> structFields = new ArrayList<>();
+        structFields.add(structField1);
+        structFields.add(structField2);
+        StructType structType = new StructType(structFields);
+        Assert.assertEquals(structType, fromHudiType(structSchema));
+    }
+
+    @Test
+    public void testMapHudiSchema() {
+        Schema.Field field1 = new Schema.Field("field1", Schema.create(Schema.Type.INT), null, null);
+        Schema.Field field2 = new Schema.Field("field2", Schema.create(Schema.Type.STRING), null, null);
+        List<Schema.Field> fields = new LinkedList<>();
+        fields.add(field1);
+        fields.add(field2);
+        Schema structSchema = Schema.createRecord(fields);
+
+        Schema mapSchema = Schema.createMap(structSchema);
+
+        StructField structField1 = new StructField("field1", ScalarType.createType(PrimitiveType.INT));
+        StructField structField2 = new StructField("field2", ScalarType.createDefaultString());
+        ArrayList<StructField> structFields = new ArrayList<>();
+        structFields.add(structField1);
+        structFields.add(structField2);
+        StructType structType = new StructType(structFields);
+
+        MapType mapType = new MapType(ScalarType.createDefaultString(), structType);
+
+        Assert.assertEquals(mapType, fromHudiType(mapSchema));
     }
 
     @Test
