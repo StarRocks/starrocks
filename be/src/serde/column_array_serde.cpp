@@ -20,7 +20,6 @@
 #include "column/object_column.h"
 #include "column/struct_column.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/descriptors.h"
 #include "serde/protobuf_serde.h"
 #include "types/hll.h"
 #include "util/coding.h"
@@ -431,28 +430,28 @@ public:
 
 class StructColumnSerde {
 public:
-    static int64_t max_serialized_size(const vectorized::StructColumn& column) {
+    static int64_t max_serialized_size(const vectorized::StructColumn& column, const int encode_level) {
         int64_t size = 0;
         for (const auto& field : column.fields()) {
-            size += serde::ColumnArraySerde::max_serialized_size(*field);
+            size += serde::ColumnArraySerde::max_serialized_size(*field, encode_level);
         }
-        size += serde::ColumnArraySerde::max_serialized_size(column.field_names());
+        size += serde::ColumnArraySerde::max_serialized_size(column.field_names(), encode_level);
         return size;
     }
 
-    static uint8_t* serialize(const vectorized::StructColumn& column, uint8_t* buff) {
+    static uint8_t* serialize(const vectorized::StructColumn& column, uint8_t* buff, const int encode_level) {
         for (const auto& field : column.fields()) {
-            buff = serde::ColumnArraySerde::serialize(*field, buff);
+            buff = serde::ColumnArraySerde::serialize(*field, buff, false, encode_level);
         }
-        buff = serde::ColumnArraySerde::serialize(column.field_names(), buff);
+        buff = serde::ColumnArraySerde::serialize(column.field_names(), buff, false, encode_level);
         return buff;
     }
 
-    static const uint8_t* deserialize(const uint8_t* buff, vectorized::StructColumn* column) {
+    static const uint8_t* deserialize(const uint8_t* buff, vectorized::StructColumn* column, const int encode_level) {
         for (const auto& field : column->fields_column()) {
-            buff = serde::ColumnArraySerde::deserialize(buff, field.get());
+            buff = serde::ColumnArraySerde::deserialize(buff, field.get(), false, encode_level);
         }
-        buff = serde::ColumnArraySerde::deserialize(buff, column->field_names_column().get());
+        buff = serde::ColumnArraySerde::deserialize(buff, column->field_names_column().get(), false, encode_level);
         return buff;
     }
 };
@@ -505,7 +504,7 @@ public:
     }
 
     Status do_visit(const vectorized::StructColumn& column) {
-        _size += StructColumnSerde::max_serialized_size(column);
+        _size += StructColumnSerde::max_serialized_size(column, _encode_level);
         return Status::OK();
     }
 
@@ -565,7 +564,7 @@ public:
     }
 
     Status do_visit(const vectorized::StructColumn& column) {
-        _cur = StructColumnSerde::serialize(column, _cur);
+        _cur = StructColumnSerde::serialize(column, _cur, _encode_level);
         return Status::OK();
     }
 
@@ -637,7 +636,7 @@ public:
     }
 
     Status do_visit(vectorized::StructColumn* column) {
-        _cur = StructColumnSerde::deserialize(_cur, column);
+        _cur = StructColumnSerde::deserialize(_cur, column, _encode_level);
         return Status::OK();
     }
 
