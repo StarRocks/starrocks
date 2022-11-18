@@ -41,10 +41,10 @@ std::string get_exception_name(const void* info) {
     int demangle_status;
     char* demangled_exception_name;
     std::string exception_name = "unknown";
-    if (exception_info != NULL) {
+    if (exception_info != nullptr) {
         // Demangle the name of the exception using the GNU C++ ABI:
-        demangled_exception_name = abi::__cxa_demangle(exception_info->name(), NULL, NULL, &demangle_status);
-        if (demangled_exception_name != NULL) {
+        demangled_exception_name = abi::__cxa_demangle(exception_info->name(), nullptr, nullptr, &demangle_status);
+        if (demangled_exception_name != nullptr) {
             exception_name = std::string(demangled_exception_name);
             // Free the memory from __cxa_demangle():
             free(demangled_exception_name);
