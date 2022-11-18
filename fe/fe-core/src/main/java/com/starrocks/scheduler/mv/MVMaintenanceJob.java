@@ -19,57 +19,43 @@ import com.starrocks.thrift.TNetworkAddress;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * Long-running job responsible for MV incremental maintenance
+ * Long-running job responsible for MV incremental maintenance.
+ * <p>
+ * Each job is event driven and single-thread execution:
+ * 1. Event driven: transaction commitment drives the execution of job
+ * 2. Execution: the job is executed in
  */
 public class MVMaintenanceJob implements Writable {
     private static final Logger LOG = LogManager.getLogger(MVMaintenanceJob.class);
 
-    // Static state
+    // Persisted state
+    // TODO(murphy) persist these state through edit-log
     private final MaterializedView view;
     private ExecPlan plan;
-
-    // Runtime state
     private final AtomicReference<JobState> state = new AtomicReference<>();
+    private final MVEpoch epoch;
+
+    // Runtime ephemeral state
     private ConnectContext connectContext;
     // TODO(murphy) implement a real query coordinator
     private Coordinator queryCoordinator;
-    private TxnBasedEpochExecutor epochCoordinator;
+    private TxnBasedEpochCoordinator epochCoordinator;
 
     public MVMaintenanceJob(MaterializedView view) {
         this.view = view;
+        this.epoch = new MVEpoch(view.getDbId());
         this.state.set(JobState.INIT);
     }
 
-    /**
-     * Main entrance of the job:
-     * 0. Generate the physical job structure, including fragment distribution, parallelism
-     * 1. Deploy tasks to executors on BE
-     * 2. Trigger the epoch
-     */
-    public void start() {
-        this.state.set(JobState.PREPARING);
-        this.connectContext = new ConnectContext();
-        this.queryCoordinator = new Coordinator();
-        this.epochCoordinator = new TxnBasedEpochExecutor(this);
-        deployJob();
-        this.state.set(JobState.RUN_EPOCH);
-    }
-
-    public void stop() {
-        this.state.set(JobState.PAUSED);
-    }
-
-    /**
-     * Destroy the job and correspond state
-     */
-    public void destroy() {
-        throw UnsupportedException.unsupportedException("TODO: implement destroy action");
+    public void stopJob() {
+        state.set(JobState.PAUSED);
     }
 
     public void pauseJob() {
@@ -84,15 +70,22 @@ public class MVMaintenanceJob implements Writable {
         throw UnsupportedException.unsupportedException("TODO: implement the daemon runner");
     }
 
-    /**
-     * On EpochCoordinator schedule
-     */
     public void onSchedule() {
-        if (state.get().equals(JobState.RUN_EPOCH)) {
-            // TODO(murphy) make sure it would not lose any update
-            throw UnsupportedException.unsupportedException("TODO: job is running, don't push me");
-        } else {
-            throw UnsupportedException.unsupportedException("TODO: implement ");
+        switch (state.get()) {
+            case INIT:
+                prepare();
+                break;
+            case PREPARING:
+            case PAUSED:
+            case FAILED:
+                Preconditions.checkState(false, "should not be scheduled");
+                break;
+            case RUN_EPOCH:
+                epoch.onSchedule();
+                epochCoordinator.beginEpoch(epoch);
+                epochCoordinator.commitEpoch(epoch);
+                break;
+            default:
         }
     }
 
@@ -100,20 +93,43 @@ public class MVMaintenanceJob implements Writable {
      * Trigger the incremental maintenance by transaction publish
      */
     public void onTransactionPublish() {
+        if (this.state.get().equals(JobState.RUN_EPOCH)) {
+            this.epoch.onReady();
+        } else {
+            throw UnsupportedException.unsupportedException("TODO: implement ");
+        }
+    }
+
+    /**
+     * Prepare the job
+     * 0. Generate the physical job structure, including fragment distribution, parallelism
+     * 1. Deploy tasks to executors on BE
+     * 2. Trigger the epoch
+     */
+    private void prepare() {
+        this.state.set(JobState.PREPARING);
+        // TODO(murphy) fill connection context
+        this.connectContext = new ConnectContext();
+        this.connectContext.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        this.queryCoordinator = new Coordinator();
+        this.epochCoordinator = new TxnBasedEpochCoordinator(this);
+        deployJob();
         this.state.set(JobState.RUN_EPOCH);
-        this.epochCoordinator.start();
-        throw UnsupportedException.unsupportedException("TODO: implement ");
     }
 
     /**
      * Build physical fragments for the maintenance plan
      */
-    private void buildPhysicalFragments() {
+    private void buildPhysicalTopology() {
         throw UnsupportedException.unsupportedException("TODO");
     }
 
+    /**
+     * Deploy job on BE executors
+     */
     private void deployJob() {
-        // FIXME(murphy) get real backend address for this job
+        // FIXME(murphy) build the real plan fragment params
+        // FIXME(murphy) get real backend address for job topology
         long beId = 0;
         Backend backend =
                 Preconditions.checkNotNull(GlobalStateMgr.getCurrentSystemInfo().getBackend(beId),
@@ -122,7 +138,6 @@ public class MVMaintenanceJob implements Writable {
 
         // Request information
         String dbName = GlobalStateMgr.getCurrentState().getDb(view.getDbId()).getFullName();
-        // FIXME(murphy) build the real plan fragment params
         List<TExecPlanFragmentParams> planParams = queryCoordinator.buildExecRequests();
         long taskId = 0;
         TExecPlanFragmentParams planParam = planParams.get(0);
@@ -146,22 +161,21 @@ public class MVMaintenanceJob implements Writable {
         }
     }
 
-    private void runEpoch() {
-        try {
-            epochCoordinator.run();
-            LOG.debug("[MVJob] finish execution of job epoch: " + this);
-        } catch (Exception e) {
-            LOG.warn("job {} run epoch failed: {}", this, e);
-            throw e;
-        }
-    }
-
     public boolean isRunnable() {
         JobState jobState = state.get();
-        if (jobState == JobState.INIT || jobState == JobState.RUN_EPOCH) {
-            return true;
+        switch (jobState) {
+            case INIT:
+            case PREPARING:
+                return true;
+            case PAUSED:
+            case FAILED:
+                return false;
+            case RUN_EPOCH:
+                MVEpoch.EpochState state = epoch.getState();
+                return state != MVEpoch.EpochState.INIT && state != MVEpoch.EpochState.FAILED;
+            default:
+                return false;
         }
-        return false;
     }
 
     public JobState getState() {
@@ -185,6 +199,10 @@ public class MVMaintenanceJob implements Writable {
         return String.format("MVJob of %s/%s", view.getName(), view.getId());
     }
 
+    public static MVMaintenanceJob read(DataInput input) {
+        throw UnsupportedException.unsupportedException("TODO");
+    }
+
     @Override
     public void write(DataOutput out) throws IOException {
         throw UnsupportedException.unsupportedException("TODO");
@@ -203,8 +221,8 @@ public class MVMaintenanceJob implements Writable {
         // Running the epoch
         RUN_EPOCH,
 
-        // Failed the whole job, needs reconstruction (unsupported environment change would cause job failure
-        FAILED;
+        // Failed the whole job, needs reconstruction
+        FAILED
     }
 
 }

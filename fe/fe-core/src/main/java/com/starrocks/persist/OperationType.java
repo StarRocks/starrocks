@@ -285,5 +285,5 @@ public class OperationType {
 
     // MaterializedView Maintenance
     public static final short OP_MV_EPOCH_UPDATE = 11030;
-    public static final short OP_MV_JOB = 11031;
+    public static final short OP_MV_JOB_STATE = 11031;
 }
