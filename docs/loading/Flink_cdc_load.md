@@ -138,7 +138,7 @@ To synchronize data from MySQL in real time, the system needs to read data from 
     log_bin_index =/var/lib/mysql/mysql-bin.index
     ```
 
-2. Run one of the following commands to restart MySQL for the modified configuration file to take effect. 
+2. Run one of the following commands to restart MySQL for the modified configuration file to take effect.
 
     ```Bash
     # Use service to restart MySQL.
@@ -283,7 +283,7 @@ Run the Flink cluster and submit a Flink job to continuously synchronize full an
     > 'sink.properties.row_delimiter' = '\\x02'  
     > ```
 
-    **Process data during synchronization** 
+    **Process data during synchronization**
 
     If you need to process data during synchronization, such as performing GROUP BY or JOIN on the data, you can modify the `flink-create.all.sql` file. The following example calculates real-time ranking of commodity sales by executing COUNT (*) and GROUP BY.
 
