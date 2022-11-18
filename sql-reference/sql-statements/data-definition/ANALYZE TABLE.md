@@ -6,7 +6,7 @@
 
 ### 手动采集基础统计信息
 
-关于基础统计信息，请参见[CBO 统计信息](../../../using_starrocks/Cost_based_optimizer.md#统计信息类型)。
+关于基础统计信息，请参见 [CBO 统计信息](../../../using_starrocks/Cost_based_optimizer.md#统计信息类型)。
 
 #### 语法
 
@@ -27,7 +27,7 @@ PROPERTIES (property [,property]);
 
 - `col_name`: 要采集统计信息的列，多列使用逗号分隔。如果不指定，表示采集整张表的信息。
 
-- PROPERTIES: 采集任务的自定义参数。如果不配置，则采用`fe.conf`中的默认配置。任务实际执行中使用的 PROPERTIES，可以通过 SHOW ANALYZE STATUS 返回结果中的 `Properties` 列查看。
+- PROPERTIES: 采集任务的自定义参数。如果不配置，则采用 `fe.conf` 中的默认配置。任务实际执行中使用的 PROPERTIES，可以通过 SHOW ANALYZE STATUS 返回结果中的 `Properties` 列查看。
 
 | **PROPERTIES**                | **类型** | **默认值** | **说明**                                                     |
 | ----------------------------- | -------- | ---------- | ------------------------------------------------------------ |
@@ -62,7 +62,7 @@ ANALYZE SAMPLE TABLE tbl_name (v1, v2, v3) PROPERTIES(
 
 ### 手动采集直方图统计信息
 
-关于直方图的说明，请参见[CBO 统计信息](../../../using_starrocks/Cost_based_optimizer.md#统计信息类型)。
+关于直方图的说明，请参见 [CBO 统计信息](../../../using_starrocks/Cost_based_optimizer.md#统计信息类型)。
 
 #### 语法
 
@@ -79,9 +79,9 @@ PROPERTIES (property [,property]);
 
 - `WITH SYNC | ASYNC MODE`: 如果不指定，默认为同步采集。
 
-- `WITH ``N`` BUCKETS`: `N`为直方图的分桶数。如果不指定，则使用`fe.conf`中的默认值。
+- `WITH ``N`` BUCKETS`: `N` 为直方图的分桶数。如果不指定，则使用 `fe.conf` 中的默认值。
 
-- PROPERTIES: 采集任务的自定义参数。如果不指定，则使用`fe.conf`中的默认配置。
+- PROPERTIES: 采集任务的自定义参数。如果不指定，则使用 `fe.conf` 中的默认配置。
 
 | **PROPERTIES**                 | **类型** | **默认值** | **说明**                                                     |
 | ------------------------------ | -------- | ---------- | ------------------------------------------------------------ |
@@ -90,17 +90,17 @@ PROPERTIES (property [,property]);
 | histogram_sample_ratio         | FLOAT    | 0.1        | 直方图采样比例。                                             |
 | histogram_max_sample_row_count | LONG     | 10000000   | 直方图最大采样行数。                                         |
 
-直方图的采样行数由多个参数共同控制，采样行数取`statistic_sample_collect_rows`和表总行数 * `histogram_sample_ratio` 两者中的最大值。最多不超过`histogram_max_sample_row_count`指定的行数。如果超过，则按照该参数定义的上限行数进行采集。
+直方图的采样行数由多个参数共同控制，采样行数取 `statistic_sample_collect_rows` 和表总行数 * `histogram_sample_ratio` 两者中的最大值。最多不超过`histogram_max_sample_row_count` 指定的行数。如果超过，则按照该参数定义的上限行数进行采集。
 
-直方图任务实际执行中使用的**PROPERTIES**，可以通过 SHOW ANALYZE STATUS 返回结果中的**PROPERTIES**列查看。
+直方图任务实际执行中使用的 **PROPERTIES**，可以通过 SHOW ANALYZE STATUS 返回结果中的 **PROPERTIES** 列查看。
 
 #### 示例
 
 ```SQL
--- 手动采集v1列的直方图信息，使用默认配置。
+-- 手动采集 v1 列的直方图信息，使用默认配置。
 ANALYZE TABLE tbl_name UPDATE HISTOGRAM ON v1;
 
--- 手动采集v1列的直方图信息，指定32个分桶，mcv指定为32个，采样比例为50%。
+-- 手动采集 v1 列的直方图信息，指定 32 个分桶，mcv 指定为 32 个，采样比例为 50%。
 ANALYZE TABLE tbl_name UPDATE HISTOGRAM ON v1,v2 WITH 32 BUCKETS 
 PROPERTIES(
    "histogram_mcv_size" = "32",
