@@ -363,7 +363,7 @@ Start a specific node in the cluster. Currently, only BE nodes are supported.
 ./sr-ctl cluster start <cluster_name> --node <node_ID>
 ```
 
-You can check the ID of a specific node by [viewing the information of a specific cluster](#View-the-information-of-a-specific-cluster).
+You can check the ID of a specific node by [viewing the information of a specific cluster](#view-the-information-of-a-specific-cluster).
 
 Example:
 
@@ -456,7 +456,7 @@ Stop a specific node in the cluster.
 ./sr-ctl cluster stop <cluster_name> --node <node_ID>
 ```
 
-You can check the ID of a specific node by [viewing the information of a specific cluster](#View-the-information-of-a-specific-cluster).
+You can check the ID of a specific node by [viewing the information of a specific cluster](#view-the-information-of-a-specific-cluster).
 
 Example:
 
@@ -522,11 +522,11 @@ be_servers:
 
 ### Build SSH mutual authentication
 
-If you are adding a new node to the cluster, you must build mutual authentication between the new node and the central control node. See [Prerequisites](#Prerequisites) for detailed instruction.
+If you are adding a new node to the cluster, you must build mutual authentication between the new node and the central control node. See [Prerequisites](#prerequisites) for detailed instruction.
 
 ### Create deployment directory (Optional)
 
-If the path under which the new node to be deployed does not exist, and you have the privilege to create such path, you do not have create these path, and StarGo will create them for you based on the configration file. If the the paths already exist, make sure you have the write access to them. You can also create necessary deployment directories on each node by running the following commands.
+If the path under which the new node to be deployed does not exist, and you have the privilege to create such path, you do not have create these path, and StarGo will create them for you based on the configuration file. If the the paths already exist, make sure you have the write access to them. You can also create necessary deployment directories on each node by running the following commands.
 
 - Create **meta** directory on FE nodes.
 
@@ -584,7 +584,7 @@ IP                    ssh auth         storage dir                     deploy di
 [20220503-213732  OUTPUT] Download StarRocks package & jdk ...
 [20220503-213732    INFO] The package has already exist [fileName = starrocks-2.0.1-quickstart.tar.gz, fileSize = 1227406189, fileModTime = 2022-05-03 17:32:03.478661923 +0800 CST]
 [20220503-213732  OUTPUT] Download done.
-[20220503-213732  OUTPUT] Decompress StarRocks pakcage & jdk ...
+[20220503-213732  OUTPUT] Decompress StarRocks pakage & jdk ...
 [20220503-213741    INFO] The tar file /home/sr-dev/.starrocks-controller/download/starrocks-2.0.1-quickstart.tar.gz has been decompressed under /home/sr-dev/.starrocks-controller/download
 [20220503-213837    INFO] The tar file /home/sr-dev/.starrocks-controller/download/StarRocks-2.0.1.tar.gz has been decompressed under /home/sr-dev/.starrocks-controller/download
 [20220503-213837    INFO] The tar file /home/sr-dev/.starrocks-controller/download/jdk-8u301-linux-x64.tar.gz has been decompressed under /home/sr-dev/.starrocks-controller/download
@@ -630,7 +630,7 @@ Remove a node in the cluster by running the following command.
 ./sr-ctl cluster scale-in <cluster_name> --node <node_id>
 ```
 
-You can check the ID of a specific node by [viewing the information of a specific cluster](#View-the-information-of-a-specific-cluster).
+You can check the ID of a specific node by [viewing the information of a specific cluster](#view-the-information-of-a-specific-cluster).
 
 Example:
 
