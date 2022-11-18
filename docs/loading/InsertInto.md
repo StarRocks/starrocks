@@ -189,7 +189,7 @@ MySQL > SELECT * FROM insert_wiki_edit;
 2 rows in set (0.01 sec)
 ```
 
-The following example overwrites the source table `source_wiki_edit` with two new rows. 
+The following example overwrites the source table `source_wiki_edit` with two new rows.
 
 ```SQL
 INSERT OVERWRITE source_wiki_edit

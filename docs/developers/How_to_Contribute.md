@@ -21,7 +21,7 @@ You can also report issues and problems, or suggest new features, on [GitHub](ht
 
 Our community strictly adheres to the [code of conduct](https://github.com/StarRocks/starrocks/blob/main/CODE_OF_CONDUCT.md).
 
-# Community roles
+## Community roles
 
 ![Community roles](../assets/contri-1.png)
 
@@ -35,7 +35,7 @@ The roles listed below are a few possible ways to get involved in the community,
 
 Participants are actively involved in the community and work to make StarRocks better for everyone.
 
-As a participant, you can submit issue reports on GitHub, contribute test cases, translate/modify documentation, help answer user questions in forums or communities, participate in events, share your experience with StarRocks, star StarRocks on GitHub, and more. 
+As a participant, you can submit issue reports on GitHub, contribute test cases, translate/modify documentation, help answer user questions in forums or communities, participate in events, share your experience with StarRocks, star StarRocks on GitHub, and more.
 
 Expectations and responsibilities:
 
@@ -188,7 +188,7 @@ PMCs are promoted from Committers. They have the authority to merge merge PRs in
 
 - Be awarded a StarRocks PMC e-certificate.
 
-# Contribution process
+## Contribution process
 
 If you don't know how to get started, this is the process we suggest for contributions. This process is designed to help reduce your learning curve and get your pull requests merged more efficiently!
 
@@ -204,9 +204,9 @@ If you don't know how to get started, this is the process we suggest for contrib
 
 3. Implement the change.
 
-   * If the change is major, split it into smaller PRs.
+   - If the change is major, split it into smaller PRs.
 
-   * Include tests and documentation as necessary.
+   - Include tests and documentation as necessary.
 
 4. Create a Github [pull request](https://github.com/StarRocks/starrocks/pulls):
 
@@ -217,13 +217,13 @@ If you don't know how to get started, this is the process we suggest for contrib
    - Check out a new branch based on the branch you expect to contribute to.
    - Commit your code changes to the new branch.
    - Push the branch with code changes to GitHub.
-   - Create a PR to submit your code changes. It is recommended to submit ONE commit in ONE PR. You can follow the [PR templated](https://github.com/StarRocks/starrocks/blob/main/.github/PULL_REQUEST_TEMPLATE.md) when submitting a PR. 
+   - Create a PR to submit your code changes. It is recommended to submit ONE commit in ONE PR. You can follow the [PR templated](https://github.com/StarRocks/starrocks/blob/main/.github/PULL_REQUEST_TEMPLATE.md) when submitting a PR.
    - Make sure the pull request passes the tests in CI.
 
 5. Review is required by at least 2 reviewers:
 
-   * For StarRocks project, we require at least 2 lgtm from reviewers (committers) to merge the pull request. 
+   - For StarRocks project, we require at least 2 lgtm from reviewers (committers) to merge the pull request.
 
-   * This normally happens within a few days, but may take longer if the change is major, complex, or if a critical reviewer is unavailable. (feel free to ping the reviewer on the pull request).
+   - This normally happens within a few days, but may take longer if the change is major, complex, or if a critical reviewer is unavailable. (feel free to ping the reviewer on the pull request).
 
 6. Maintainers merge the pull request after the final changes are accepted.
