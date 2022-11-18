@@ -21,12 +21,17 @@ struct TMVMaintenanceStopTask {
     2: required i64 task_id
 }
 
+struct TBinlogLSN {
+    1: required Types.TVersion version
+    2: required i64 lsn
+}
+
 struct TBinlogScanRange {
   1: optional string db_name
-  2: optional string table_name
-  3: optional i64 partition_id
+  2: required Types.TTableId table_id
+  3: required Types.TPartitionId partition_id
   4: required Types.TTabletId tablet_id
-  5: required i64 start_lsn;
+  5: required TBinlogLSN lsn
 }
 
 struct TMVEpoch {
@@ -34,9 +39,10 @@ struct TMVEpoch {
     2: optional i64 epoch_id
     3: optional Types.TTimestamp start_ts
     4: optional Types.TTimestamp commit_ts
-    5: optional TBinlogScanRange binlog_scan
-    6: optional i64 max_exec_millis
-    7: optional i64 max_scan_rows
+    5: optional list<TBinlogScanRange> binlog_scan
+
+    11: optional i64 max_exec_millis
+    12: optional i64 max_scan_rows
 }
 
 struct TMVStartEpochTask {
