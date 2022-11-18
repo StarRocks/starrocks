@@ -39,9 +39,7 @@ Status metadata_gc(std::string_view root_location, TabletManager* tablet_mgr, in
     std::vector<std::string> txn_logs;
     std::unordered_map<int64_t, std::unordered_set<int64_t>> locked_tablet_metadatas;
 
-    auto start_time =
-            std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch())
-                    .count();
+    auto start_time = std::time(nullptr);
     {
         auto iter_st = fs->iterate_dir(metadata_root_location, [&](std::string_view name) {
             if (is_tablet_metadata(name)) {
@@ -81,10 +79,10 @@ Status metadata_gc(std::string_view root_location, TabletManager* tablet_mgr, in
                         continue;
                     }
                 }
-                VLOG(5) << "Deleting " << tablet_metadata_filename(tablet_id, versions[i]);
-                auto st = tablet_mgr->delete_tablet_metadata(tablet_id, versions[i]);
-                LOG_IF(WARNING, !st.ok() && !st.is_not_found())
-                        << "Fail to delete " << tablet_metadata_filename(tablet_id, versions[i]) << ": " << st;
+                auto path = join_path(metadata_root_location, tablet_metadata_filename(tablet_id, versions[i]));
+                LOG(INFO) << "Deleting " << path;
+                auto st = fs->delete_file(path);
+                LOG_IF(WARNING, !st.ok() && !st.is_not_found()) << "Fail to delete " << path << ": " << st;
             }
         }
     }
