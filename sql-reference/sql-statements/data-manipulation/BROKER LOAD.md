@@ -190,16 +190,18 @@ INTO TABLE <table_name>
 - HA 配置
 
   可以为 HDFS 集群中的 NameNode 节点配置 HA 机制，从而确保发生 NameNode 节点切换时，StarRocks 能够自动识别新切换到的 NameNode 节点。  
-  目前 Broker 节点有两种方案可以读取到 Hdfs 节点信息，第一种方式是将 `hdfs-site.xml` 文件放在每个 Broker 节点的 `{deploy}/conf` 目录下，Broker 进程重启时会将 `{deploy_dir}/conf/` 目录添加到 CLASSPATH 环境变量的方式读取文件信息。  
-  另一种是在 Broker load 任务创建时增加如下 HA 配置：
+  目前 Broker 节点支持使用如下两种方式读取 HDFS 集群中节点的信息：
+  
+  - 将 `hdfs-site.xml` 文件放在 Broker 所在的每个节点的 `{deploy}/conf` 目录下。Broker 进程重启时，会将 `{deploy_dir}/conf/` 目录添加到 `CLASSPATH` 环境变量的方式读取文件信息。
+  - 在创建 Broker Load 作业时增加如下 HA 配置：
 
-  ```Plain
-  "dfs.nameservices" = "ha_cluster",
-  "dfs.ha.namenodes.ha_cluster" = "ha_n1,ha_n2",
-  "dfs.namenode.rpc-address.ha_cluster.ha_n1" = "<hdfs_host>:<hdfs_port>",
-  "dfs.namenode.rpc-address.ha_cluster.ha_n2" = "<hdfs_host>:<hdfs_port>",
-  "dfs.client.failover.proxy.provider" = "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider"
-  ```
+     ```Plain
+     "dfs.nameservices" = "ha_cluster",
+     "dfs.ha.namenodes.ha_cluster" = "ha_n1,ha_n2",
+     "dfs.namenode.rpc-address.ha_cluster.ha_n1" = "<hdfs_host>:<hdfs_port>",
+     "dfs.namenode.rpc-address.ha_cluster.ha_n2" = "<hdfs_host>:<hdfs_port>",
+     "dfs.client.failover.proxy.provider" = "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider"
+     ```
 
   上述配置中的参数说明如下表所述：
 
