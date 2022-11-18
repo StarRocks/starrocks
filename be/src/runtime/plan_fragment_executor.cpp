@@ -301,8 +301,6 @@ Status PlanFragmentExecutor::get_next(vectorized::ChunkPtr* chunk) {
     if (_done) {
         LOG(INFO) << "Finished executing fragment query_id=" << print_id(_query_id)
                   << " instance_id=" << print_id(_runtime_state->fragment_instance_id());
-        // Query is done, return the thread token
-        release_thread_token();
         send_report(true);
     }
 
