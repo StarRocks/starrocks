@@ -9,16 +9,12 @@ include "AgentService.thrift"
 include "InternalService.thrift"
 
 struct TMVMaintenanceStartTask {
-    1: required i64 job_id
-    2: required i64 task_id
-    3: required string db_name
-    4: required string mv_name
-    5: optional InternalService.TExecPlanFragmentParams plan_params
+    1: required string db_name
+    2: required string mv_name
+    3: optional InternalService.TExecPlanFragmentParams plan_params
 }
 
 struct TMVMaintenanceStopTask {
-    1: required i64 job_id
-    2: required i64 task_id
 }
 
 struct TBinlogLSN {
@@ -68,6 +64,8 @@ struct TMVMaintenanceTasks {
     1: required AgentService.TAgentServiceVersion protocol_version
     2: required MVTaskType task_type
     3: required i64 signature
+    4: required i64 job_id
+    5: required i64 task_id
 
     11: optional TMVMaintenanceStartTask start_maintenance
     12: optional TMVMaintenanceStopTask stop_maintenance
