@@ -59,8 +59,8 @@ public:
         size_t items_size = *reinterpret_cast<size_t*>(slice.data + sizeof(double));
         auto data_ptr = slice.data + sizeof(double) + sizeof(size_t);
 
-        vector<InputCppType> res;
-        vector<InputCppType>& vec = this->data(state).items;
+        std::vector<InputCppType> res;
+        std::vector<InputCppType>& vec = this->data(state).items;
         res.resize(vec.size() + items_size);
 
         std::merge(vec.begin(), vec.end(), reinterpret_cast<InputCppType*>(data_ptr),

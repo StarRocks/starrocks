@@ -253,7 +253,7 @@ private:
 
     // roaring bitmap size
     mutable uint64_t _reverted_index_size = 0;
-    mutable vector<BitmapUpdateContext*> _late_update_context_vector;
+    mutable std::vector<BitmapUpdateContext*> _late_update_context_vector;
 };
 
 } // namespace
