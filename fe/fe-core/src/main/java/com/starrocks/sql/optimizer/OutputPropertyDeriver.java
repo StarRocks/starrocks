@@ -100,12 +100,12 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
                                                                   HashDistributionSpec rightScanDistributionSpec) {
 
         HashDistributionSpec dominatedOutputSpec = joinType.isRightJoin() ?
-                rightScanDistributionSpec :leftScanDistributionSpec;
+                rightScanDistributionSpec : leftScanDistributionSpec;
         DistributionSpec.PropertyInfo leftInfo = leftScanDistributionSpec.getPropertyInfo();
         DistributionSpec.PropertyInfo rightInfo = rightScanDistributionSpec.getPropertyInfo();
 
         List<Integer> dominatedOutputCols = joinType.isRightJoin() ?
-                rightScanDistributionSpec.getShuffleColumns() :leftScanDistributionSpec.getShuffleColumns();
+                rightScanDistributionSpec.getShuffleColumns() : leftScanDistributionSpec.getShuffleColumns();
 
         ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentColocateIndex();
         long leftTableId = leftInfo.tableId;
