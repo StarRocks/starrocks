@@ -44,26 +44,26 @@ public class IcebergTableStatisticCalculator {
         this.icebergTable = icebergTable;
     }
 
-    public static Statistics getTableStatistics(List<Expression> icebergPredicates,
+    public static Statistics getTableStatistics(Expression icebergPredicate,
                                                 Table icebergTable,
                                                 Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
         return new IcebergTableStatisticCalculator(icebergTable)
-                .makeTableStatistics(icebergPredicates, colRefToColumnMetaMap);
+                .makeTableStatistics(icebergPredicate, colRefToColumnMetaMap);
     }
 
-    public static List<ColumnStatistic> getColumnStatistics(List<Expression> icebergPredicates,
+    public static List<ColumnStatistic> getColumnStatistics(Expression icebergPredicate,
                                                             Table icebergTable,
                                                             Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
         return new IcebergTableStatisticCalculator(icebergTable)
-                .makeColumnStatistics(icebergPredicates, colRefToColumnMetaMap);
+                .makeColumnStatistics(icebergPredicate, colRefToColumnMetaMap);
     }
 
-    private List<ColumnStatistic> makeColumnStatistics(List<Expression> icebergPredicates,
+    private List<ColumnStatistic> makeColumnStatistics(Expression icebergPredicate,
                                                        Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
         List<ColumnStatistic> columnStatistics = new ArrayList<>();
         List<Types.NestedField> columns = icebergTable.schema().columns();
         IcebergFileStats icebergFileStats = new IcebergTableStatisticCalculator(icebergTable).
-                generateIcebergFileStats(icebergPredicates, columns);
+                generateIcebergFileStats(icebergPredicate, columns);
 
         Map<Integer, String> idToColumnNames = columns.stream().
                 filter(column -> !IcebergUtil.convertColumnType(column.type()).isUnknown())
@@ -86,11 +86,10 @@ public class IcebergTableStatisticCalculator {
         return columnStatistics;
     }
 
-    private Statistics makeTableStatistics(List<Expression> icebergPredicates,
-                                           Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
+    private Statistics makeTableStatistics(Expression icebergPredicate, Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
         LOG.debug("Begin to make iceberg table statistics!");
         List<Types.NestedField> columns = icebergTable.schema().columns();
-        IcebergFileStats icebergFileStats = generateIcebergFileStats(icebergPredicates, columns);
+        IcebergFileStats icebergFileStats = generateIcebergFileStats(icebergPredicate, columns);
 
         Map<Integer, String> idToColumnNames = columns.stream()
                 .filter(column -> !IcebergUtil.convertColumnType(column.type()).isUnknown())
@@ -192,7 +191,7 @@ public class IcebergTableStatisticCalculator {
         }
     }
 
-    private IcebergFileStats generateIcebergFileStats(List<Expression> icebergPredicates,
+    private IcebergFileStats generateIcebergFileStats(Expression icebergPredicate,
                                                       List<Types.NestedField> columns) {
         Optional<Snapshot> snapshot = IcebergUtil.getCurrentTableSnapshot(icebergTable);
         if (!snapshot.isPresent()) {
@@ -213,7 +212,7 @@ public class IcebergTableStatisticCalculator {
                 .collect(toImmutableList());
 
         TableScan tableScan = IcebergUtil.getTableScan(icebergTable,
-                snapshot.get(), icebergPredicates);
+                snapshot.get(), icebergPredicate);
 
         IcebergFileStats icebergFileStats = null;
         for (CombinedScanTask combinedScanTask : tableScan.planTasks()) {
