@@ -175,7 +175,6 @@ public class AnalyzeTestUtil {
                 "PROPERTIES('replication_num' = '1');");
         starRocksAssert.withView("create view test.view_to_drop as select * from test.table_to_drop;");
 
-
         starRocksAssert.withDatabase("db1");
         starRocksAssert.withDatabase("db2");
         starRocksAssert.withTable("CREATE TABLE db1.`t0` (\n" +
@@ -197,6 +196,20 @@ public class AnalyzeTestUtil {
                 ") ENGINE=OLAP\n" +
                 "DUPLICATE KEY(`v1`, `v2`, v3)\n" +
                 "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ");");
+
+        // varbinary table
+        starRocksAssert.withTable("CREATE TABLE `tbinary` (\n" +
+                "  `v_int`  bigint NULL COMMENT \"\",\n" +
+                "  `v_varbinary4`  varbinary(4) NULL COMMENT \"\",\n" +
+                "  `v_varbinary` varbinary NULL COMMENT \"\" \n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`v_int`)\n" +
+                "DISTRIBUTED BY HASH(`v_int`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +

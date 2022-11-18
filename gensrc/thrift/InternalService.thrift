@@ -54,7 +54,9 @@ enum TLoadJobType {
     BROKER,
     SPARK,
     INSERT_QUERY,
-    INSERT_VALUES
+    INSERT_VALUES,
+    STREAM_LOAD,
+    ROUTINE_LOAD,
 }
 
 enum TErrorHubType {
@@ -116,7 +118,7 @@ struct TQueryOptions {
   12: optional i64 mem_limit = 2147483648
   13: optional bool abort_on_default_limit_exceeded = 0
   14: optional i32 query_timeout = 3600
-  15: optional bool is_report_success = 0
+  15: optional bool enable_profile = 0
   16: optional i32 codegen_level = 0
   // INT64::MAX
   17: optional i64 kudu_latest_observed_ts = 9223372036854775807 // Deprecated
@@ -189,8 +191,6 @@ struct TQueryOptions {
   63: optional TTabletInternalParallelMode tablet_internal_parallel_mode;
 
   64: optional TLoadJobType load_job_type
-
-  65: optional bool enable_replicated_storage;
 
   66: optional bool use_scan_block_cache;
 
@@ -314,7 +314,7 @@ struct TExecPlanFragmentParams {
 
   // Whether reportd when the backend fails
   // required in V1
-  9: optional bool is_report_success
+  9: optional bool enable_profile
 
   // required in V1
   10: optional Types.TResourceInfo resource_info

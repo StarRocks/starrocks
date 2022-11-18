@@ -116,7 +116,7 @@ Status IndexedColumnWriter::_finish_current_data_page() {
 
     if (_options.write_ordinal_index) {
         std::string key;
-        KeyCoderTraits<OLAP_FIELD_TYPE_UNSIGNED_BIGINT>::full_encode_ascending(&first_ordinal, &key);
+        KeyCoderTraits<LOGICAL_TYPE_UNSIGNED_BIGINT>::full_encode_ascending(&first_ordinal, &key);
         _ordinal_index_builder->add(key, _last_data_page);
     }
 

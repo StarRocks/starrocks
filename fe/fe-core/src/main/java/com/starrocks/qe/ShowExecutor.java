@@ -30,6 +30,7 @@ import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.analysis.TableName;
 import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.Repository;
@@ -80,6 +81,8 @@ import com.starrocks.load.ExportMgr;
 import com.starrocks.load.Load;
 import com.starrocks.load.routineload.RoutineLoadFunctionalExprProvider;
 import com.starrocks.load.routineload.RoutineLoadJob;
+import com.starrocks.load.streamload.StreamLoadFunctionalExprProvider;
+import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.meta.BlackListSql;
 import com.starrocks.meta.SqlBlackList;
 import com.starrocks.mysql.privilege.PrivPredicate;
@@ -137,6 +140,7 @@ import com.starrocks.sql.ast.ShowSmallFilesStmt;
 import com.starrocks.sql.ast.ShowSnapshotStmt;
 import com.starrocks.sql.ast.ShowSqlBlackListStmt;
 import com.starrocks.sql.ast.ShowStmt;
+import com.starrocks.sql.ast.ShowStreamLoadStmt;
 import com.starrocks.sql.ast.ShowTableStatusStmt;
 import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.ShowTabletStmt;
@@ -161,6 +165,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+
+import static com.starrocks.catalog.Table.TableType.JDBC;
 
 // Execute one show statement.
 public class ShowExecutor {
@@ -216,6 +222,8 @@ public class ShowExecutor {
             handleShowRoutineLoad();
         } else if (stmt instanceof ShowRoutineLoadTaskStmt) {
             handleShowRoutineLoadTask();
+        } else if (stmt instanceof ShowStreamLoadStmt) {
+            handleShowStreamLoad();
         } else if (stmt instanceof ShowDeleteStmt) {
             handleShowDelete();
         } else if (stmt instanceof ShowAlterStmt) {
@@ -522,7 +530,7 @@ public class ShowExecutor {
             }
 
             if (ctx.getGlobalStateMgr().isUsingNewPrivilege()) {
-                if (CatalogMgr.isInternalCatalog(catalogName) && !PrivilegeManager.checkAnyActionInDb(ctx, dbName)) {
+                if (CatalogMgr.isInternalCatalog(catalogName) && !PrivilegeManager.checkAnyActionOnOrUnderDb(ctx, dbName)) {
                     continue;
                 }
             } else {
@@ -565,7 +573,7 @@ public class ShowExecutor {
                         }
                         // check tbl privs
                         if (ctx.getGlobalStateMgr().isUsingNewPrivilege()) {
-                            if (!PrivilegeManager.checkAnyActionInTable(ctx, db.getFullName(), tbl.getName())) {
+                            if (!PrivilegeManager.checkAnyActionOnTable(ctx, db.getFullName(), tbl.getName())) {
                                 continue;
                             }
                         } else {
@@ -672,6 +680,63 @@ public class ShowExecutor {
     // Show create table
     private void handleShowCreateTable() throws AnalysisException {
         ShowCreateTableStmt showStmt = (ShowCreateTableStmt) stmt;
+        TableName tbl = showStmt.getTbl();
+        String catalogName = tbl.getCatalog();
+        if (catalogName == null) {
+            catalogName = ctx.getCurrentCatalog();
+        }
+        if (CatalogMgr.isInternalCatalog(catalogName)) {
+            showCreateInternalTbl(showStmt);
+        } else {
+            showCreateExternalTbl(tbl, catalogName);
+        }
+    }
+
+    private void showCreateExternalTbl(TableName tbl, String catalogName) {
+        String dbName = tbl.getDb();
+        String tableName = tbl.getTbl();
+        MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
+        Database db = metadataMgr.getDb(catalogName, dbName);
+        if (db == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+        }
+        Table table = metadataMgr.getTable(catalogName, dbName, tableName);
+        if (table == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
+        }
+
+        // create table catalogName.dbName.tableName (
+        StringBuilder createTableSql = new StringBuilder();
+        createTableSql.append("CREATE TABLE ")
+                .append(catalogName)
+                .append(".")
+                .append(dbName)
+                .append(".")
+                .append(tableName)
+                .append(" (\n");
+
+        // Columns
+        List<String> columns = table.getFullSchema().stream().map(
+                column -> toDDL(column)).collect(Collectors.toList());
+        createTableSql.append(String.join(",\n", columns))
+                .append("\n)");
+
+        // Partition column names
+        if (table.getType() != JDBC && !table.isUnPartitioned()) {
+            createTableSql.append("\nWITH (\n partitioned_by = ARRAY [ ");
+            createTableSql.append(String.join(", ", table.getPartitionColumnNames())).append(" ]\n)");
+        }
+
+        List<List<String>> rows = Lists.newArrayList();
+        rows.add(Lists.newArrayList(tableName, createTableSql.toString()));
+        resultSet = new ShowResultSet(stmt.getMetaData(), rows);
+    }
+
+    private String toDDL(Column column) {
+        return "`" + column.getName() + "` " + column.getType();
+    }
+
+    private void showCreateInternalTbl(ShowCreateTableStmt showStmt) throws AnalysisException {
         Database db = ctx.getGlobalStateMgr().getDb(showStmt.getDb());
         if (db == null) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_DB_ERROR, showStmt.getDb());
@@ -1010,6 +1075,41 @@ public class ShowExecutor {
         // get routine load task info
         rows.addAll(routineLoadJob.getTasksShowInfo());
         resultSet = new ShowResultSet(showRoutineLoadTaskStmt.getMetaData(), rows);
+    }
+
+    private void handleShowStreamLoad() throws AnalysisException {
+        ShowStreamLoadStmt showStreamLoadStmt = (ShowStreamLoadStmt) stmt;
+        List<List<String>> rows = Lists.newArrayList();
+        // if task exists
+        List<StreamLoadTask> streamLoadTaskList;
+        try {
+            streamLoadTaskList = GlobalStateMgr.getCurrentState().getStreamLoadManager()
+                    .getTask(showStreamLoadStmt.getDbFullName(),
+                            showStreamLoadStmt.getName(),
+                            showStreamLoadStmt.isIncludeHistory());
+        } catch (MetaNotFoundException e) {
+            LOG.warn(e.getMessage(), e);
+            throw new AnalysisException(e.getMessage());
+        }
+
+        if (streamLoadTaskList != null) {
+            StreamLoadFunctionalExprProvider fProvider = showStreamLoadStmt.getFunctionalExprProvider(this.ctx);
+            rows = streamLoadTaskList.parallelStream()
+                    .filter(fProvider.getPredicateChain())
+                    .sorted(fProvider.getOrderComparator())
+                    .skip(fProvider.getSkipCount())
+                    .limit(fProvider.getLimitCount())
+                    .map(task -> task.getShowInfo())
+                    .collect(Collectors.toList());
+        }
+
+        if (!Strings.isNullOrEmpty(showStreamLoadStmt.getName()) && rows.isEmpty()) {
+            // if the label has been specified
+            throw new AnalysisException("There is no label named " + showStreamLoadStmt.getName()
+                    + " in db " + showStreamLoadStmt.getDbFullName()
+                    + ". Include history? " + showStreamLoadStmt.isIncludeHistory());
+        }
+        resultSet = new ShowResultSet(showStreamLoadStmt.getMetaData(), rows);
     }
 
     // Show user property statement

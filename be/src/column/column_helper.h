@@ -90,7 +90,7 @@ public:
     // If column is const column, duplicate the data column to chunk_size
     static ColumnPtr unpack_and_duplicate_const_column(size_t chunk_size, const ColumnPtr& column) {
         if (column->is_constant()) {
-            ConstColumn* const_column = down_cast<ConstColumn*>(column.get());
+            auto* const_column = down_cast<ConstColumn*>(column.get());
             const_column->data_column()->assign(chunk_size, 0);
             return const_column->data_column();
         }
@@ -104,7 +104,7 @@ public:
             DCHECK(ok);
             return col;
         } else if (column->is_constant()) {
-            ConstColumn* const_column = down_cast<ConstColumn*>(column.get());
+            auto* const_column = down_cast<ConstColumn*>(column.get());
             const_column->data_column()->assign(size, 0);
             return const_column->data_column();
         }
@@ -185,6 +185,11 @@ public:
 
     // Create an empty column
     static ColumnPtr create_column(const TypeDescriptor& type_desc, bool nullable);
+
+    // expression trees' return column should align return type when some return columns may be different from
+    // the required return type. e.g., concat_ws returns col from create_const_null_column(), it's type is Nullable(int8),
+    // but required return type is nullable(string), so col need align return type to nullable(string).
+    static ColumnPtr align_return_type(const ColumnPtr& old_col, const TypeDescriptor& type_desc, size_t num_rows);
 
     // Create a column with specified size, the column will be resized to size
     static ColumnPtr create_column(const TypeDescriptor& type_desc, bool nullable, bool is_const, size_t size);

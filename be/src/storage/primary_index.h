@@ -55,6 +55,9 @@ public:
     // [not thread-safe]
     void upsert(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks, DeletesMap* deletes);
 
+    void upsert(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks, uint32_t idx_begin,
+                uint32_t idx_end, DeletesMap* deletes);
+
     // TODO(qzc): maybe unused, remove it or refactor it with the methods in use by template after a period of time
     // used for compaction, try replace input rowsets' rowid with output segment's rowid, if
     // input rowsets' rowid doesn't exist, this indicates that the row of output rowset is
@@ -127,12 +130,13 @@ private:
     Status _build_persistent_values(uint32_t rssid, const vector<uint32_t>& rowids, uint32_t idx_begin,
                                     uint32_t idx_end, std::vector<uint64_t>* values) const;
 
-    const Slice* _build_persistent_keys(const vectorized::Column& pks, std::vector<Slice>* key_slices) const;
+    const Slice* _build_persistent_keys(const vectorized::Column& pks, uint32_t idx_begin, uint32_t idx_end,
+                                        std::vector<Slice>* key_slices) const;
 
     Status _insert_into_persistent_index(uint32_t rssid, const vector<uint32_t>& rowids, const vectorized::Column& pks);
 
     void _upsert_into_persistent_index(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks,
-                                       DeletesMap* deletes);
+                                       uint32_t idx_begin, uint32_t idx_end, DeletesMap* deletes);
 
     void _erase_persistent_index(const vectorized::Column& key_col, DeletesMap* deletes);
 
@@ -151,7 +155,7 @@ private:
     int64_t _table_id = 0;
     int64_t _tablet_id = 0;
     vectorized::Schema _pk_schema;
-    FieldType _enc_pk_type = OLAP_FIELD_TYPE_UNKNOWN;
+    LogicalType _enc_pk_type = LOGICAL_TYPE_UNKNOWN;
     std::unique_ptr<HashIndex> _pkey_to_rssid_rowid;
     std::unique_ptr<PersistentIndex> _persistent_index;
 };

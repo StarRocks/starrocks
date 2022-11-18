@@ -14,9 +14,7 @@
 #include "types/constexpr.h"
 #include "util/json.h"
 
-namespace starrocks {
-
-namespace vectorized {
+namespace starrocks::vectorized {
 
 template <bool B, typename T>
 struct cond {
@@ -92,6 +90,8 @@ template <>
 inline constexpr bool isArithmeticPT<TYPE_PERCENTILE> = false;
 template <>
 inline constexpr bool isArithmeticPT<TYPE_JSON> = false;
+template <>
+inline constexpr bool isArithmeticPT<TYPE_VARBINARY> = false;
 
 template <PrimitiveType primitive_type>
 constexpr bool isSlicePT = false;
@@ -101,6 +101,9 @@ inline constexpr bool isSlicePT<TYPE_CHAR> = true;
 
 template <>
 inline constexpr bool isSlicePT<TYPE_VARCHAR> = true;
+
+template <>
+inline constexpr bool isSlicePT<TYPE_VARBINARY> = true;
 
 template <PrimitiveType primitive_type>
 struct RunTimeTypeTraits {};
@@ -235,6 +238,12 @@ template <>
 struct RunTimeTypeTraits<TYPE_JSON> {
     using CppType = JsonValue*;
     using ColumnType = JsonColumn;
+};
+
+template <>
+struct RunTimeTypeTraits<TYPE_VARBINARY> {
+    using CppType = Slice;
+    using ColumnType = BinaryColumn;
 };
 
 template <PrimitiveType Type>
@@ -393,5 +402,4 @@ struct RunTimeTypeLimits<TYPE_JSON> {
     static value_type max_value() { return JsonValue{vpack::Slice::maxKeySlice()}; }
 };
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

@@ -19,7 +19,7 @@ From StarRocks 2.4 onwards, you can use multiple COUNT(DISTINCT) in one statemen
 
 ## Syntax
 
-~~~sql
+~~~Haskell
 COUNT(expr)
 COUNT(DISTINCT expr [,expr,...])`
 ~~~

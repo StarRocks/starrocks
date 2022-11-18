@@ -7,8 +7,7 @@
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_fwd.h"
 
-namespace starrocks {
-namespace pipeline {
+namespace starrocks::pipeline {
 // OperatorWithDependency is used to decompose multi-input ExecNode, such as HashJoinNode, CrossJoinNode and etc.
 // In multi-input ExecNode, right child is evaluated in ExecNode::open() at first, then chunks are pulled from
 // left child one by one in ExecNode::get_next(). Every multi-input ExecNode(e.g. HashJoinNode) is decomposed into
@@ -32,7 +31,7 @@ public:
     OperatorWithDependency(OperatorFactory* factory, int32_t id, const std::string& name, int32_t plan_node_id,
                            int32_t driver_sequence)
             : Operator(factory, id, name, plan_node_id, driver_sequence) {}
-    ~OperatorWithDependency() = default;
+    ~OperatorWithDependency() override = default;
     // return true if the corresponding right operator is full materialized, otherwise return false.
     virtual bool is_ready() const = 0;
 };
@@ -42,8 +41,7 @@ public:
     OperatorWithDependencyFactory(int32_t id, const std::string& name, int32_t plan_node_id)
             : OperatorFactory(id, name, plan_node_id) {}
 
-    ~OperatorWithDependencyFactory() = default;
+    ~OperatorWithDependencyFactory() override = default;
 };
 
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline

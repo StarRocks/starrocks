@@ -147,12 +147,12 @@ struct DecimalNonDecimalCast<check_overflow, DecimalType, NonDecimalType, Decima
                                                                                                 &result_data[i]);
             } else if constexpr (pt_is_datetime<NonDecimalType>) {
                 static_assert(std::is_same_v<NonDecimalCppType, TimestampValue>, "TimestampValue type is required");
-                int64_t datum = (int64_t)(((TimestampValue&)data[i]).to_timestamp_literal());
+                auto datum = (int64_t)(((TimestampValue&)data[i]).to_timestamp_literal());
                 overflow = DecimalV3Cast::from_integer<int64_t, DecimalCppType, check_overflow>(datum, scale_factor,
                                                                                                 &result_data[i]);
             } else if constexpr (pt_is_decimalv2<NonDecimalType>) {
                 static_assert(std::is_same_v<NonDecimalCppType, DecimalV2Value>, "TimestampValue type is required");
-                int128_t datum = (int128_t)(((DecimalV2Value&)data[i]).value());
+                auto datum = (int128_t)(((DecimalV2Value&)data[i]).value());
                 if (scale == DecimalV2Value::SCALE) {
                     overflow = DecimalV3Cast::to_decimal_trivial<int128_t, DecimalCppType, check_overflow>(
                             datum, &result_data[i]);
@@ -231,7 +231,7 @@ struct DecimalNonDecimalCast<check_overflow, DecimalType, NonDecimalType, Decima
                 int64_t datum;
                 overflow = DecimalV3Cast::to_integer<DecimalCppType, int64_t, check_overflow>(data[i], scale_factor,
                                                                                               &datum);
-                DateValue& date_value = (DateValue&)result_data[i];
+                auto& date_value = (DateValue&)result_data[i];
                 if constexpr (check_overflow) {
                     overflow = overflow || !date_value.from_date_literal_with_check(datum);
                 } else {
@@ -242,7 +242,7 @@ struct DecimalNonDecimalCast<check_overflow, DecimalType, NonDecimalType, Decima
                 int64_t datum;
                 overflow = DecimalV3Cast::to_integer<DecimalCppType, int64_t, check_overflow>(data[i], scale_factor,
                                                                                               &datum);
-                TimestampValue& timestamp_value = (TimestampValue&)result_data[i];
+                auto& timestamp_value = (TimestampValue&)result_data[i];
                 if constexpr (check_overflow) {
                     overflow = overflow || !timestamp_value.from_timestamp_literal_with_check((uint64_t)datum);
                 } else {

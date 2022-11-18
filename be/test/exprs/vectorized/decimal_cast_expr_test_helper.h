@@ -1,8 +1,9 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
-
 #include <gtest/gtest.h>
+
+#include <cmath>
 
 #include "butil/time.h"
 #include "column/column_helper.h"
@@ -189,7 +190,7 @@ void assert_equal(std::string const& expect, std::string const& actual, [[maybe_
         auto expect_value = cast_value<TYPE_VARCHAR, Type>(expect, -1, -1, precision, scale);
         auto actual_value = cast_value<TYPE_VARCHAR, Type>(actual, -1, -1, precision, scale);
         auto delta = (expect_value - actual_value);
-        double epsilon = abs(double(delta)) / double(expect_value + (expect_value == CppType(0)));
+        double epsilon = std::abs(double(delta)) / double(expect_value + (expect_value == CppType(0)));
         ASSERT_TRUE(epsilon < 0.0000001);
     } else {
         compare_decimal_string(expect, actual, scale);
@@ -246,9 +247,9 @@ void test_cast_all(CastTestCaseArray const& test_cases) {
     int i = -1;
     for (auto& tc : test_cases) {
         ++i;
-        std::cout << "test#" << i << ": input_precision=" << std::get<0>(tc) << ", input_scale=" << std::get<1>(tc)
-                  << ", input_value=" << std::get<2>(tc) << ", output_precision=" << std::get<3>(tc)
-                  << ", output_scale=" << std::get<4>(tc) << ", output_value=" << std::get<5>(tc) << std::endl;
+        VLOG(10) << "test#" << i << ": input_precision=" << std::get<0>(tc) << ", input_scale=" << std::get<1>(tc)
+                 << ", input_value=" << std::get<2>(tc) << ", output_precision=" << std::get<3>(tc)
+                 << ", output_scale=" << std::get<4>(tc) << ", output_value=" << std::get<5>(tc) << std::endl;
 
         test_cast_const_null<FromType, ToType>(tc, front_fill_size, rear_fill_size);
         test_cast_simple<FromType, ToType>(tc, front_fill_size, rear_fill_size);
@@ -264,9 +265,9 @@ void test_cast_all_fail(CastTestCaseArray const& test_cases) {
     int i = -1;
     for (auto& tc : test_cases) {
         ++i;
-        std::cout << "fail_test#" << i << ": input_precision=" << std::get<0>(tc) << ", input_scale=" << std::get<1>(tc)
-                  << ", input_value=" << std::get<2>(tc) << ", output_precision=" << std::get<3>(tc)
-                  << ", output_scale=" << std::get<4>(tc) << ", output_value=" << std::get<5>(tc) << std::endl;
+        VLOG(10) << "fail_test#" << i << ": input_precision=" << std::get<0>(tc) << ", input_scale=" << std::get<1>(tc)
+                 << ", input_value=" << std::get<2>(tc) << ", output_precision=" << std::get<3>(tc)
+                 << ", output_scale=" << std::get<4>(tc) << ", output_value=" << std::get<5>(tc) << std::endl;
 
         test_cast_fail<FromType, ToType, ColumnPackedType::SIMPLE>(tc, front_fill_size, rear_fill_size);
         test_cast_fail<FromType, ToType, ColumnPackedType::CONST_NULL>(tc, front_fill_size, rear_fill_size);

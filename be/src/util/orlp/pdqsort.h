@@ -27,6 +27,8 @@ applications, and to alter it and redistribute it freely, subject to the followi
 #include <iterator>
 #include <utility>
 
+#include "common/compiler_util.h"
+
 #if __cplusplus >= 201103L
 #include <cstdint>
 #include <type_traits>

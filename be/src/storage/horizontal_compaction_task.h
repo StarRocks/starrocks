@@ -20,7 +20,7 @@ class Schema;
 class HorizontalCompactionTask : public CompactionTask {
 public:
     HorizontalCompactionTask() : CompactionTask(HORIZONTAL_COMPACTION) {}
-    ~HorizontalCompactionTask() = default;
+    ~HorizontalCompactionTask() override = default;
     Status run_impl() override;
 
 private:

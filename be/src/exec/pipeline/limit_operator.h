@@ -4,8 +4,7 @@
 
 #include "exec/pipeline/operator.h"
 
-namespace starrocks {
-namespace pipeline {
+namespace starrocks::pipeline {
 class LimitOperator final : public Operator {
 public:
     LimitOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
@@ -50,5 +49,4 @@ private:
     std::atomic<int64_t> _limit;
 };
 
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline

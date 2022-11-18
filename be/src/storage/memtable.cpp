@@ -28,7 +28,7 @@ Schema MemTable::convert_schema(const TabletSchema* tablet_schema, const std::ve
         slot_descs->back()->col_name() == LOAD_OP_COLUMN) {
         // load slots have __op field, so add to _vectorized_schema
         auto op_column = std::make_shared<starrocks::vectorized::Field>((ColumnId)-1, LOAD_OP_COLUMN,
-                                                                        FieldType::OLAP_FIELD_TYPE_TINYINT, false);
+                                                                        LogicalType::LOGICAL_TYPE_TINYINT, false);
         op_column->set_aggregate_method(OLAP_FIELD_AGGREGATION_REPLACE);
         schema.append(op_column);
     }
@@ -42,6 +42,22 @@ void MemTable::_init_aggregator_if_needed() {
         // otherwise it will take up a lot of memory and may not be released.
         _aggregator = std::make_unique<ChunkAggregator>(_vectorized_schema, 0, INT_MAX, 0);
     }
+}
+
+MemTable::MemTable(int64_t tablet_id, const Schema* schema, const std::vector<SlotDescriptor*>* slot_descs,
+                   MemTableSink* sink, std::string merge_condition, MemTracker* mem_tracker)
+        : _tablet_id(tablet_id),
+          _vectorized_schema(schema),
+          _slot_descs(slot_descs),
+          _keys_type(schema->keys_type()),
+          _sink(sink),
+          _aggregator(nullptr),
+          _merge_condition(std::move(merge_condition)),
+          _mem_tracker(mem_tracker) {
+    if (_keys_type == KeysType::PRIMARY_KEYS && _slot_descs->back()->col_name() == LOAD_OP_COLUMN) {
+        _has_op_slot = true;
+    }
+    _init_aggregator_if_needed();
 }
 
 MemTable::MemTable(int64_t tablet_id, const Schema* schema, const std::vector<SlotDescriptor*>* slot_descs,
@@ -377,11 +393,23 @@ void MemTable::_sort_column_inc(bool by_sort_key) {
     } else {
         sort_key_idxes = _vectorized_schema->sort_key_idxes();
     }
+
     for (auto sort_key_idx : sort_key_idxes) {
         columns.push_back(_chunk->get_column_by_index(sort_key_idx));
     }
-    Status st = stable_sort_and_tie_columns(false, columns, SortDescs::asc_null_first(sort_key_idxes.size()),
-                                            &_permutations);
+
+    auto sort_descs = SortDescs::asc_null_first(sort_key_idxes.size());
+    if (!_merge_condition.empty()) {
+        for (int i = 0; i < _vectorized_schema->num_fields(); ++i) {
+            if (_vectorized_schema->field(i)->name() == _merge_condition) {
+                columns.push_back(_chunk->get_column_by_index(i));
+                sort_descs.descs.emplace_back(1, -1);
+                break;
+            }
+        }
+    }
+
+    Status st = stable_sort_and_tie_columns(false, columns, sort_descs, &_permutations);
     CHECK(st.ok());
 }
 

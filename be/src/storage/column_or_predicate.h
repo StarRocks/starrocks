@@ -39,7 +39,7 @@ public:
     PredicateType type() const override { return PredicateType::kOr; }
 
     // Always return `NULL`.
-    Datum value() const override { return Datum(); }
+    Datum value() const override { return {}; }
 
     // Always return an empty set.
     std::vector<Datum> values() const override { return std::vector<Datum>{}; }

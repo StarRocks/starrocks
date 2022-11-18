@@ -18,10 +18,10 @@ struct ExceptSliceFlagHash;
 
 class ExceptSliceFlag {
 public:
-    ExceptSliceFlag(const uint8_t* d, size_t n) : slice(d, n), deleted(false) {}
+    ExceptSliceFlag(const uint8_t* d, size_t n) : slice(d, n) {}
 
     Slice slice;
-    mutable bool deleted;
+    mutable bool deleted{false};
 };
 
 struct ExceptSliceFlagEqual {

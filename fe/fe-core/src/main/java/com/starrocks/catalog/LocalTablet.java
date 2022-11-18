@@ -207,8 +207,8 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
     }
 
     // return map of (BE id -> path hash) of normal replicas
-    public Multimap<Long, Long> getNormalReplicaBackendPathMap(int clusterId) {
-        Multimap<Long, Long> map = HashMultimap.create();
+    public Multimap<Replica, Long> getNormalReplicaBackendPathMap(int clusterId) {
+        Multimap<Replica, Long> map = HashMultimap.create();
         SystemInfoService infoService = GlobalStateMgr.getCurrentState().getOrCreateSystemInfo(clusterId);
         for (Replica replica : replicas) {
             if (replica.isBad()) {
@@ -218,7 +218,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
             ReplicaState state = replica.getState();
             if (infoService.checkBackendAlive(replica.getBackendId())
                     && (state == ReplicaState.NORMAL || state == ReplicaState.ALTER)) {
-                map.put(replica.getBackendId(), replica.getPathHash());
+                map.put(replica, replica.getPathHash());
             }
         }
         return map;

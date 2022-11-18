@@ -27,13 +27,11 @@ class JavaUDAFAggregateFunction : public AggregateFunction {
 public:
     using State = JavaUDAFState;
 
-    void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
-                size_t row_num) const override final {
+    void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state, size_t row_num) const final {
         CHECK(false) << "unreadable path";
     }
 
-    void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state,
-               size_t row_num) const override final {
+    void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const final {
         // TODO merge
         const BinaryColumn* input_column = nullptr;
         if (column->is_nullable()) {
@@ -56,7 +54,7 @@ public:
     }
 
     void serialize_to_column([[maybe_unused]] FunctionContext* ctx, ConstAggDataPtr __restrict state,
-                             Column* to) const override final {
+                             Column* to) const final {
         BinaryColumn* column = nullptr;
         // TODO serialize
         if (to->is_nullable()) {
@@ -86,7 +84,7 @@ public:
     }
 
     void finalize_to_column([[maybe_unused]] FunctionContext* ctx, ConstAggDataPtr __restrict state,
-                            Column* to) const override final {
+                            Column* to) const final {
         auto* udaf_ctx = ctx->impl()->udaf_ctxs();
         jvalue val = udaf_ctx->_func->finalize(this->data(state).handle);
         append_jvalue(udaf_ctx->finalize->method_desc[0], to, val);
@@ -94,7 +92,7 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t batch_size,
-                                     ColumnPtr* dst) const override final {
+                                     ColumnPtr* dst) const final {
         auto& helper = JVMFunctionHelper::getInstance();
         auto* env = helper.getEnv();
         auto* udf_ctxs = ctx->impl()->udaf_ctxs();
@@ -116,7 +114,7 @@ public:
         helper.batch_update_state(ctx, ctx->impl()->udaf_ctxs()->handle.handle(),
                                   ctx->impl()->udaf_ctxs()->update->method.handle(), args.data(), args.size());
         // 3 get serialize size
-        jintArray serialize_szs = (jintArray)helper.int_batch_call(
+        auto serialize_szs = (jintArray)helper.int_batch_call(
                 ctx, rets, ctx->impl()->udaf_ctxs()->serialize_size->method.handle(), batch_size);
         LOCAL_REF_GUARD_ENV(env, serialize_szs);
         int length = env->GetArrayLength(serialize_szs);
@@ -143,8 +141,8 @@ public:
         // append result to dst column
         CHECK((*dst)->append_strings(slices));
         // 6 clean up arrays
-        for (int i = 0; i < args.size(); ++i) {
-            env->DeleteLocalRef(args[i]);
+        for (auto& arg : args) {
+            env->DeleteLocalRef(arg);
         }
     }
 
@@ -316,7 +314,7 @@ public:
         auto state_array = helper.convert_handles_to_jobjects(ctx, state_id_list);
         LOCAL_REF_GUARD_ENV(env, state_array);
         // step 2 serialize size
-        jintArray serialize_szs = (jintArray)helper.int_batch_call(
+        auto serialize_szs = (jintArray)helper.int_batch_call(
                 ctx, state_array, ctx->impl()->udaf_ctxs()->serialize_size->method.handle(), batch_size);
         LOCAL_REF_GUARD_ENV(env, serialize_szs);
         int length = env->GetArrayLength(serialize_szs);

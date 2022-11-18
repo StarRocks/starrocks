@@ -61,7 +61,6 @@ import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TPartitionType;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.thrift.TUniqueId;
-import com.starrocks.thrift.TWriteQuorumType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -86,6 +85,7 @@ public class LoadingTaskPlanner {
     private final boolean partialUpdate;
     private final int parallelInstanceNum;
     private final long startTime;
+    private String mergeConditionStr;
 
     // Something useful
     // ConnectContext here is just a dummy object to avoid some NPE problem, like ctx.getDatabase()
@@ -107,7 +107,7 @@ public class LoadingTaskPlanner {
     public LoadingTaskPlanner(Long loadJobId, long txnId, long dbId, OlapTable table,
             BrokerDesc brokerDesc, List<BrokerFileGroup> brokerFileGroups,
             boolean strictMode, String timezone, long timeoutS,
-            long startTime, boolean partialUpdate, Map<String, String> sessionVariables) {
+            long startTime, boolean partialUpdate, Map<String, String> sessionVariables, String mergeConditionStr) {
         this.loadJobId = loadJobId;
         this.txnId = txnId;
         this.dbId = dbId;
@@ -118,6 +118,7 @@ public class LoadingTaskPlanner {
         this.analyzer.setTimezone(timezone);
         this.timeoutS = timeoutS;
         this.partialUpdate = partialUpdate;
+        this.mergeConditionStr = mergeConditionStr;
         this.parallelInstanceNum = Config.load_parallel_instance_num;
         this.startTime = startTime;
         this.sessionVariables = sessionVariables;
@@ -190,10 +191,9 @@ public class LoadingTaskPlanner {
         descTable.computeMemLayout();
 
         // 2. Olap table sink
-        TWriteQuorumType writeQuorum = table.writeQuorum();
-
         List<Long> partitionIds = getAllPartitionIds();
-        OlapTableSink olapTableSink = new OlapTableSink(table, tupleDesc, partitionIds, true, writeQuorum);
+        OlapTableSink olapTableSink = new OlapTableSink(table, tupleDesc, partitionIds, true,
+                table.writeQuorum(), table.enableReplicatedStorage());
         olapTableSink.init(loadId, txnId, dbId, timeoutS);
         olapTableSink.complete();
 
@@ -265,11 +265,9 @@ public class LoadingTaskPlanner {
         scanFragment.setOutputPartition(dataPartition);
 
         // 4. Olap table sink
-        TWriteQuorumType writeQuorum = table.writeQuorum();
-
         List<Long> partitionIds = getAllPartitionIds();
-
-        OlapTableSink olapTableSink = new OlapTableSink(table, tupleDesc, partitionIds, true, writeQuorum);
+        OlapTableSink olapTableSink = new OlapTableSink(table, tupleDesc, partitionIds, true,
+                table.writeQuorum(), table.enableReplicatedStorage());
         olapTableSink.init(loadId, txnId, dbId, timeoutS);
         olapTableSink.complete();
 
@@ -307,6 +305,10 @@ public class LoadingTaskPlanner {
         }
 
         if (table.getDefaultReplicationNum() <= 1) {
+            return false;
+        }
+
+        if (table.enableReplicatedStorage()) {
             return false;
         }
 

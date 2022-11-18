@@ -129,8 +129,12 @@ public class TaskManager {
             if (initialDelay < 0) {
                 initialDelay = 0;
             }
+            // Tasks that run automatically have the lowest priority,
+            // but are automatically merged if they are found to be merge-able.
+            ExecuteOption option = new ExecuteOption(Constants.TaskRunPriority.LOWEST.value(),
+                    true, task.getProperties());
             ScheduledFuture<?> future = periodScheduler.scheduleAtFixedRate(() ->
-                            executeTask(task.getName()), initialDelay,
+                            executeTask(task.getName(), option), initialDelay,
                     TimeUtils.convertTimeUnitValueToSecond(taskSchedule.getPeriod(),
                             taskSchedule.getTimeUnit()), TimeUnit.SECONDS);
             periodFutureMap.put(task.getId(), future);

@@ -313,6 +313,14 @@ struct THdfsTable {
     5: optional list<string> partition_prefixes
 }
 
+struct TFileTable {
+    // File table base dir
+    1: optional string location
+
+    // Schema columns
+    2: optional list<TColumn> columns
+}
+
 struct TIcebergTable {
     // table location
     1: optional string location
@@ -414,6 +422,9 @@ struct TTableDescriptor {
 
   // Delta Lake schema
   33: optional TDeltaLakeTable deltaLakeTable
+
+  // File Table
+  34: optional TFileTable fileTable
 }
 
 struct TDescriptorTable {

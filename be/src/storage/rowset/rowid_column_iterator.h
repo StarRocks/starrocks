@@ -20,7 +20,7 @@ class RowIdColumnIterator final : public starrocks::ColumnIterator {
     using rowid_t = starrocks::rowid_t;
 
 public:
-    RowIdColumnIterator() {}
+    RowIdColumnIterator() = default;
 
     ~RowIdColumnIterator() override = default;
 
@@ -75,10 +75,6 @@ public:
     }
 
     ordinal_t get_current_ordinal() const override { return _current_rowid; }
-
-    Status next_batch(size_t* n, ColumnBlockView* dst, bool* has_null) override {
-        return Status::NotSupported("Not supported by RowIdColumnIterator: next_batch");
-    }
 
     Status get_row_ranges_by_zone_map(const std::vector<const vectorized::ColumnPredicate*>& predicates,
                                       const vectorized::ColumnPredicate* del_predicate,

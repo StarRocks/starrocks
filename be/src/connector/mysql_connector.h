@@ -8,9 +8,7 @@
 #include "connector/connector.h"
 #include "exec/mysql_scanner.h"
 
-namespace starrocks {
-
-namespace connector {
+namespace starrocks::connector {
 class MySQLConnector final : public Connector {
 public:
     ~MySQLConnector() override = default;
@@ -88,5 +86,4 @@ private:
     void append_value_to_column(vectorized::Column* column, CppType& value);
 };
 
-} // namespace connector
-} // namespace starrocks
+} // namespace starrocks::connector

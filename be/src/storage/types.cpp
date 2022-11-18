@@ -32,15 +32,14 @@
 #include "storage/convert_helper.h"
 #include "storage/decimal12.h"
 #include "storage/decimal_type_info.h"
-#include "storage/olap_common.h"
 #include "storage/olap_define.h"
 #include "storage/olap_type_infra.h"
 #include "storage/tablet_schema.h" // for TabletColumn
 #include "storage/type_traits.h"
-#include "storage/uint24.h"
 #include "types/date_value.hpp"
 #include "util/hash_util.hpp"
 #include "util/mem_util.hpp"
+#include "util/mysql_global.h"
 #include "util/slice.h"
 #include "util/string_parser.hpp"
 #include "util/unaligned_access.h"
@@ -54,7 +53,7 @@ static const std::vector<std::string> DATE_FORMATS{
 
 template <typename T>
 static Status convert_int_from_varchar(void* dest, const void* src) {
-    using SrcType = typename CppTypeTraits<OLAP_FIELD_TYPE_VARCHAR>::CppType;
+    using SrcType = typename CppTypeTraits<LOGICAL_TYPE_VARCHAR>::CppType;
     auto src_value = unaligned_load<SrcType>(src);
     StringParser::ParseResult parse_res;
     T result = StringParser::string_to_int<T>(src_value.get_data(), src_value.get_size(), &parse_res);
@@ -68,7 +67,7 @@ static Status convert_int_from_varchar(void* dest, const void* src) {
 
 template <typename T>
 static Status convert_float_from_varchar(void* dest, const void* src) {
-    using SrcType = typename CppTypeTraits<OLAP_FIELD_TYPE_VARCHAR>::CppType;
+    using SrcType = typename CppTypeTraits<LOGICAL_TYPE_VARCHAR>::CppType;
     auto src_value = unaligned_load<SrcType>(src);
     StringParser::ParseResult parse_res;
     T result = StringParser::string_to_float<T>(src_value.get_data(), src_value.get_size(), &parse_res);
@@ -98,19 +97,8 @@ public:
 
     void deep_copy(void* dest, const void* src, MemPool* mem_pool) const override { _deep_copy(dest, src, mem_pool); }
 
-    // See copy_row_in_memtable() in olap/row.h, will be removed in future.
-    // It is same with deep_copy() for all type except for HLL and OBJECT type
-    void copy_object(void* dest, const void* src, MemPool* mem_pool) const override {
-        _copy_object(dest, src, mem_pool);
-    }
-
     void direct_copy(void* dest, const void* src, MemPool* mem_pool) const override {
         _direct_copy(dest, src, mem_pool);
-    }
-
-    //convert and deep copy value from other type's source
-    Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type, MemPool* mem_pool) const override {
-        return _convert_from(dest, src, src_type, mem_pool);
     }
 
     Status from_string(void* buf, const std::string& scan_key) const override { return _from_string(buf, scan_key); }
@@ -123,7 +111,7 @@ public:
     uint32_t hash_code(const void* data, uint32_t seed) const override { return _hash_code(data, seed); }
     size_t size() const override { return _size; }
 
-    FieldType type() const override { return _field_type; }
+    LogicalType type() const override { return _field_type; }
 
 protected:
     int _datum_cmp_impl(const Datum& left, const Datum& right) const override { return _datum_cmp(left, right); }
@@ -134,9 +122,7 @@ private:
 
     void (*_shallow_copy)(void* dest, const void* src);
     void (*_deep_copy)(void* dest, const void* src, MemPool* mem_pool);
-    void (*_copy_object)(void* dest, const void* src, MemPool* mem_pool);
     void (*_direct_copy)(void* dest, const void* src, MemPool* mem_pool);
-    Status (*_convert_from)(void* dest, const void* src, const TypeInfoPtr& src_type, MemPool* mem_pool);
 
     Status (*_from_string)(void* buf, const std::string& scan_key);
     std::string (*_to_string)(const void* src);
@@ -150,7 +136,7 @@ private:
     int (*_datum_cmp)(const Datum& left, const Datum& right);
 
     const size_t _size;
-    const FieldType _field_type;
+    const LogicalType _field_type;
 
     friend class ScalarTypeInfoResolver;
     template <typename TypeTraitsClass>
@@ -159,11 +145,11 @@ private:
 
 // ScalarTypeInfoImplBase
 // Base implementation for ScalarTypeInfo, use as default
-template <FieldType field_type>
+template <LogicalType field_type>
 struct ScalarTypeInfoImplBase {
     using CppType = typename CppTypeTraits<field_type>::CppType;
 
-    static const FieldType type = field_type;
+    static const LogicalType type = field_type;
     static const int32_t size = sizeof(CppType);
 
     static bool equal(const void* left, const void* right) {
@@ -189,10 +175,6 @@ struct ScalarTypeInfoImplBase {
     }
 
     static void deep_copy(void* dest, const void* src, MemPool* mem_pool __attribute__((unused))) {
-        unaligned_store<CppType>(dest, unaligned_load<CppType>(src));
-    }
-
-    static void copy_object(void* dest, const void* src, MemPool* mem_pool __attribute__((unused))) {
         unaligned_store<CppType>(dest, unaligned_load<CppType>(src));
     }
 
@@ -235,29 +217,29 @@ struct ScalarTypeInfoImplBase {
 };
 
 // Default template does nothing but inherit from ScalarTypeInfoImplBase
-template <FieldType field_type>
+template <LogicalType field_type>
 struct ScalarTypeInfoImpl : public ScalarTypeInfoImplBase<field_type> {};
 
 // ScalarTypeInfoResolver
-// Manage all type-info instances, prodivding getter
+// Manage all type-info instances, providing getter
 class ScalarTypeInfoResolver {
     DECLARE_SINGLETON(ScalarTypeInfoResolver);
 
 public:
-    const TypeInfoPtr get_type_info(const FieldType t) {
+    const TypeInfoPtr get_type_info(const LogicalType t) {
         if (this->_mapping.find(t) == this->_mapping.end()) {
-            return std::make_shared<ScalarTypeInfo>(*this->_mapping[OLAP_FIELD_TYPE_NONE].get());
+            return std::make_shared<ScalarTypeInfo>(*this->_mapping[LOGICAL_TYPE_NONE].get());
         }
         return std::make_shared<ScalarTypeInfo>(*this->_mapping[t].get());
     }
 
-    const ScalarTypeInfo* get_scalar_type_info(const FieldType t) {
+    const ScalarTypeInfo* get_scalar_type_info(const LogicalType t) {
         DCHECK(is_scalar_field_type(t));
         return this->_mapping[t].get();
     }
 
 private:
-    template <FieldType field_type>
+    template <LogicalType field_type>
     void add_mapping() {
         ScalarTypeInfoImpl<field_type> traits;
         std::unique_ptr<ScalarTypeInfo> scalar_type_info(new ScalarTypeInfo(traits));
@@ -265,7 +247,7 @@ private:
     }
 
     // item_type_info -> list_type_info
-    std::unordered_map<FieldType, std::unique_ptr<ScalarTypeInfo>, std::hash<size_t>> _mapping;
+    std::unordered_map<LogicalType, std::unique_ptr<ScalarTypeInfo>, std::hash<size_t>> _mapping;
 
     ScalarTypeInfoResolver(const ScalarTypeInfoResolver&) = delete;
     const ScalarTypeInfoResolver& operator=(const ScalarTypeInfoResolver&) = delete;
@@ -277,9 +259,7 @@ ScalarTypeInfo::ScalarTypeInfo([[maybe_unused]] TypeInfoImpl t)
           _cmp(TypeInfoImpl::cmp),
           _shallow_copy(TypeInfoImpl::shallow_copy),
           _deep_copy(TypeInfoImpl::deep_copy),
-          _copy_object(TypeInfoImpl::copy_object),
           _direct_copy(TypeInfoImpl::direct_copy),
-          _convert_from(TypeInfoImpl::convert_from),
           _from_string(TypeInfoImpl::from_string),
           _to_string(TypeInfoImpl::to_string),
           _set_to_max(TypeInfoImpl::set_to_max),
@@ -293,44 +273,44 @@ ScalarTypeInfoResolver::ScalarTypeInfoResolver() {
 #define M(ftype) add_mapping<ftype>();
     APPLY_FOR_SUPPORTED_FIELD_TYPE(M)
 #undef M
-    add_mapping<OLAP_FIELD_TYPE_NONE>();
+    add_mapping<LOGICAL_TYPE_NONE>();
 }
 
 ScalarTypeInfoResolver::~ScalarTypeInfoResolver() = default;
 
-bool is_scalar_field_type(FieldType field_type) {
+bool is_scalar_field_type(LogicalType field_type) {
     switch (field_type) {
-    case OLAP_FIELD_TYPE_STRUCT:
-    case OLAP_FIELD_TYPE_ARRAY:
-    case OLAP_FIELD_TYPE_MAP:
-    case OLAP_FIELD_TYPE_DECIMAL32:
-    case OLAP_FIELD_TYPE_DECIMAL64:
-    case OLAP_FIELD_TYPE_DECIMAL128:
+    case LOGICAL_TYPE_STRUCT:
+    case LOGICAL_TYPE_ARRAY:
+    case LOGICAL_TYPE_MAP:
+    case LOGICAL_TYPE_DECIMAL32:
+    case LOGICAL_TYPE_DECIMAL64:
+    case LOGICAL_TYPE_DECIMAL128:
         return false;
     default:
         return true;
     }
 }
 
-bool is_complex_metric_type(FieldType field_type) {
+bool is_complex_metric_type(LogicalType field_type) {
     switch (field_type) {
-    case OLAP_FIELD_TYPE_OBJECT:
-    case OLAP_FIELD_TYPE_PERCENTILE:
-    case OLAP_FIELD_TYPE_HLL:
+    case LOGICAL_TYPE_OBJECT:
+    case LOGICAL_TYPE_PERCENTILE:
+    case LOGICAL_TYPE_HLL:
         return true;
     default:
         return false;
     }
 }
 
-TypeInfoPtr get_type_info(FieldType field_type) {
+TypeInfoPtr get_type_info(LogicalType field_type) {
     return ScalarTypeInfoResolver::instance()->get_type_info(field_type);
 }
 
 TypeInfoPtr get_type_info(const ColumnMetaPB& column_meta_pb) {
-    auto type = static_cast<FieldType>(column_meta_pb.type());
+    auto type = static_cast<LogicalType>(column_meta_pb.type());
     TypeInfoPtr type_info;
-    if (type == OLAP_FIELD_TYPE_ARRAY) {
+    if (type == LOGICAL_TYPE_ARRAY) {
         const ColumnMetaPB& child = column_meta_pb.children_columns(0);
         TypeInfoPtr child_type_info = get_type_info(child);
         type_info = get_array_type_info(child_type_info);
@@ -342,7 +322,7 @@ TypeInfoPtr get_type_info(const ColumnMetaPB& column_meta_pb) {
 
 TypeInfoPtr get_type_info(const TabletColumn& col) {
     TypeInfoPtr type_info;
-    if (col.type() == OLAP_FIELD_TYPE_ARRAY) {
+    if (col.type() == LOGICAL_TYPE_ARRAY) {
         const TabletColumn& child = col.subcolumn(0);
         TypeInfoPtr child_type_info = get_type_info(child);
         type_info = get_array_type_info(child_type_info);
@@ -352,11 +332,11 @@ TypeInfoPtr get_type_info(const TabletColumn& col) {
     }
 }
 
-TypeInfoPtr get_type_info(FieldType field_type, [[maybe_unused]] int precision, [[maybe_unused]] int scale) {
+TypeInfoPtr get_type_info(LogicalType field_type, [[maybe_unused]] int precision, [[maybe_unused]] int scale) {
     if (is_scalar_field_type(field_type)) {
         return get_type_info(field_type);
-    } else if (field_type == OLAP_FIELD_TYPE_DECIMAL32 || field_type == OLAP_FIELD_TYPE_DECIMAL64 ||
-               field_type == OLAP_FIELD_TYPE_DECIMAL128) {
+    } else if (field_type == LOGICAL_TYPE_DECIMAL32 || field_type == LOGICAL_TYPE_DECIMAL64 ||
+               field_type == LOGICAL_TYPE_DECIMAL128) {
         return get_decimal_type_info(field_type, precision, scale);
     } else {
         return nullptr;
@@ -367,13 +347,13 @@ TypeInfoPtr get_type_info(const TypeInfo* type_info) {
     return get_type_info(type_info->type(), type_info->precision(), type_info->scale());
 }
 
-const TypeInfo* get_scalar_type_info(FieldType type) {
+const TypeInfo* get_scalar_type_info(LogicalType type) {
     DCHECK(is_scalar_field_type(type));
     return ScalarTypeInfoResolver::instance()->get_scalar_type_info(type);
 }
 
 template <>
-struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_BOOL> : public ScalarTypeInfoImplBase<OLAP_FIELD_TYPE_BOOL> {
+struct ScalarTypeInfoImpl<LOGICAL_TYPE_BOOL> : public ScalarTypeInfoImplBase<LOGICAL_TYPE_BOOL> {
     static std::string to_string(const void* src) {
         char buf[1024] = {'\0'};
         snprintf(buf, sizeof(buf), "%d", *reinterpret_cast<const bool*>(src));
@@ -391,10 +371,10 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_BOOL> : public ScalarTypeInfoImplBase<
 };
 
 template <>
-struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_NONE> : public ScalarTypeInfoImplBase<OLAP_FIELD_TYPE_NONE> {};
+struct ScalarTypeInfoImpl<LOGICAL_TYPE_NONE> : public ScalarTypeInfoImplBase<LOGICAL_TYPE_NONE> {};
 
 template <>
-struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_TINYINT> : public ScalarTypeInfoImplBase<OLAP_FIELD_TYPE_TINYINT> {
+struct ScalarTypeInfoImpl<LOGICAL_TYPE_TINYINT> : public ScalarTypeInfoImplBase<LOGICAL_TYPE_TINYINT> {
     static std::string to_string(const void* src) {
         char buf[1024] = {'\0'};
         snprintf(buf, sizeof(buf), "%d", *reinterpret_cast<const int8_t*>(src));
@@ -403,7 +383,7 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_TINYINT> : public ScalarTypeInfoImplBa
 
     static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
                                MemPool* mem_pool __attribute__((unused))) {
-        if (src_type->type() == OLAP_FIELD_TYPE_VARCHAR) {
+        if (src_type->type() == LOGICAL_TYPE_VARCHAR) {
             return convert_int_from_varchar<CppType>(dest, src);
         }
         return Status::InternalError("Fail to cast to tinyint.");
@@ -411,7 +391,7 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_TINYINT> : public ScalarTypeInfoImplBa
 };
 
 template <>
-struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_SMALLINT> : public ScalarTypeInfoImplBase<OLAP_FIELD_TYPE_SMALLINT> {
+struct ScalarTypeInfoImpl<LOGICAL_TYPE_SMALLINT> : public ScalarTypeInfoImplBase<LOGICAL_TYPE_SMALLINT> {
     static std::string to_string(const void* src) {
         char buf[1024] = {'\0'};
         snprintf(buf, sizeof(buf), "%d", unaligned_load<int16_t>(src));
@@ -419,7 +399,7 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_SMALLINT> : public ScalarTypeInfoImplB
     }
     static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
                                MemPool* mem_pool __attribute__((unused))) {
-        if (src_type->type() == OLAP_FIELD_TYPE_VARCHAR) {
+        if (src_type->type() == LOGICAL_TYPE_VARCHAR) {
             return convert_int_from_varchar<CppType>(dest, src);
         }
         return Status::InternalError("Fail to cast to smallint.");
@@ -427,7 +407,7 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_SMALLINT> : public ScalarTypeInfoImplB
 };
 
 template <>
-struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_INT> : public ScalarTypeInfoImplBase<OLAP_FIELD_TYPE_INT> {
+struct ScalarTypeInfoImpl<LOGICAL_TYPE_INT> : public ScalarTypeInfoImplBase<LOGICAL_TYPE_INT> {
     static std::string to_string(const void* src) {
         char buf[1024] = {'\0'};
         snprintf(buf, sizeof(buf), "%d", unaligned_load<int32_t>(src));
@@ -435,7 +415,7 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_INT> : public ScalarTypeInfoImplBase<O
     }
     static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
                                MemPool* mem_pool __attribute__((unused))) {
-        if (src_type->type() == OLAP_FIELD_TYPE_VARCHAR) {
+        if (src_type->type() == LOGICAL_TYPE_VARCHAR) {
             return convert_int_from_varchar<CppType>(dest, src);
         }
         return Status::InternalError("Fail to cast to int.");
@@ -443,7 +423,7 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_INT> : public ScalarTypeInfoImplBase<O
 };
 
 template <>
-struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_BIGINT> : public ScalarTypeInfoImplBase<OLAP_FIELD_TYPE_BIGINT> {
+struct ScalarTypeInfoImpl<LOGICAL_TYPE_BIGINT> : public ScalarTypeInfoImplBase<LOGICAL_TYPE_BIGINT> {
     static std::string to_string(const void* src) {
         char buf[1024] = {'\0'};
         snprintf(buf, sizeof(buf), "%" PRId64, unaligned_load<int64_t>(src));
@@ -451,7 +431,7 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_BIGINT> : public ScalarTypeInfoImplBas
     }
     static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
                                MemPool* mem_pool __attribute__((unused))) {
-        if (src_type->type() == OLAP_FIELD_TYPE_VARCHAR) {
+        if (src_type->type() == LOGICAL_TYPE_VARCHAR) {
             return convert_int_from_varchar<CppType>(dest, src);
         }
         return Status::InternalError("Fail to cast to bigint.");
@@ -459,7 +439,7 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_BIGINT> : public ScalarTypeInfoImplBas
 };
 
 template <>
-struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_LARGEINT> : public ScalarTypeInfoImplBase<OLAP_FIELD_TYPE_LARGEINT> {
+struct ScalarTypeInfoImpl<LOGICAL_TYPE_LARGEINT> : public ScalarTypeInfoImplBase<LOGICAL_TYPE_LARGEINT> {
     static Status from_string(void* buf, const std::string& scan_key) {
         int128_t value;
 
@@ -545,9 +525,6 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_LARGEINT> : public ScalarTypeInfoImplB
         unaligned_store<int128_t>(dest, unaligned_load<int128_t>(src));
     }
 
-    static void copy_object(void* dest, const void* src, MemPool* mem_pool __attribute__((unused))) {
-        unaligned_store<int128_t>(dest, unaligned_load<int128_t>(src));
-    }
     static void direct_copy(void* dest, const void* src, MemPool* mem_pool) {
         unaligned_store<int128_t>(dest, unaligned_load<int128_t>(src));
     }
@@ -555,7 +532,7 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_LARGEINT> : public ScalarTypeInfoImplB
     static void set_to_min(void* buf) { unaligned_store<int128_t>(buf, (int128_t)(1) << 127); }
     static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
                                MemPool* mem_pool __attribute__((unused))) {
-        if (src_type->type() == OLAP_FIELD_TYPE_VARCHAR) {
+        if (src_type->type() == LOGICAL_TYPE_VARCHAR) {
             return convert_int_from_varchar<CppType>(dest, src);
         }
         return Status::InternalError("Fail to cast to largeint.");
@@ -569,7 +546,7 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_LARGEINT> : public ScalarTypeInfoImplB
 };
 
 template <>
-struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_FLOAT> : public ScalarTypeInfoImplBase<OLAP_FIELD_TYPE_FLOAT> {
+struct ScalarTypeInfoImpl<LOGICAL_TYPE_FLOAT> : public ScalarTypeInfoImplBase<LOGICAL_TYPE_FLOAT> {
     static Status from_string(void* buf, const std::string& scan_key) {
         CppType value = 0.0f;
         if (scan_key.length() > 0) {
@@ -586,7 +563,7 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_FLOAT> : public ScalarTypeInfoImplBase
     }
     static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
                                MemPool* mem_pool __attribute__((unused))) {
-        if (src_type->type() == OLAP_FIELD_TYPE_VARCHAR) {
+        if (src_type->type() == LOGICAL_TYPE_VARCHAR) {
             return convert_float_from_varchar<CppType>(dest, src);
         }
         return Status::InternalError("Fail to cast to float.");
@@ -594,7 +571,7 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_FLOAT> : public ScalarTypeInfoImplBase
 };
 
 template <>
-struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_DOUBLE> : public ScalarTypeInfoImplBase<OLAP_FIELD_TYPE_DOUBLE> {
+struct ScalarTypeInfoImpl<LOGICAL_TYPE_DOUBLE> : public ScalarTypeInfoImplBase<LOGICAL_TYPE_DOUBLE> {
     static Status from_string(void* buf, const std::string& scan_key) {
         CppType value = 0.0;
         if (scan_key.length() > 0) {
@@ -612,8 +589,8 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_DOUBLE> : public ScalarTypeInfoImplBas
     static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
                                MemPool* mem_pool __attribute__((unused))) {
         //only support float now
-        if (src_type->type() == OLAP_FIELD_TYPE_FLOAT) {
-            using SrcType = typename CppTypeTraits<OLAP_FIELD_TYPE_FLOAT>::CppType;
+        if (src_type->type() == LOGICAL_TYPE_FLOAT) {
+            using SrcType = typename CppTypeTraits<LOGICAL_TYPE_FLOAT>::CppType;
             //http://www.softelectro.ru/ieee754_en.html
             //According to the definition of IEEE754, the effect of converting a float binary to a double binary
             //is the same as that of static_cast . Data precision cannot be guaranteed, but the progress of
@@ -630,7 +607,7 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_DOUBLE> : public ScalarTypeInfoImplBas
             unaligned_store<CppType>(dest, strtod(buf, &tg));
             return Status::OK();
         }
-        if (src_type->type() == OLAP_FIELD_TYPE_VARCHAR) {
+        if (src_type->type() == LOGICAL_TYPE_VARCHAR) {
             return convert_float_from_varchar<CppType>(dest, src);
         }
         return Status::InternalError("Fail to cast to double.");
@@ -638,7 +615,7 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_DOUBLE> : public ScalarTypeInfoImplBas
 };
 
 template <>
-struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_DECIMAL> : public ScalarTypeInfoImplBase<OLAP_FIELD_TYPE_DECIMAL> {
+struct ScalarTypeInfoImpl<LOGICAL_TYPE_DECIMAL> : public ScalarTypeInfoImplBase<LOGICAL_TYPE_DECIMAL> {
     static Status from_string(void* buf, const std::string& scan_key) {
         CppType t;
         RETURN_IF_ERROR(t.from_string(scan_key));
@@ -664,7 +641,7 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_DECIMAL> : public ScalarTypeInfoImplBa
 };
 
 template <>
-struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_DECIMAL_V2> : public ScalarTypeInfoImplBase<OLAP_FIELD_TYPE_DECIMAL_V2> {
+struct ScalarTypeInfoImpl<LOGICAL_TYPE_DECIMAL_V2> : public ScalarTypeInfoImplBase<LOGICAL_TYPE_DECIMAL_V2> {
     static Status from_string(void* buf, const std::string& scan_key) {
         CppType val;
         if (val.parse_from_str(scan_key.c_str(), scan_key.size()) != E_DEC_OK) {
@@ -684,9 +661,6 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_DECIMAL_V2> : public ScalarTypeInfoImp
         memcpy(dest, src, sizeof(CppType));
     }
 
-    static void copy_object(void* dest, const void* src, MemPool* mem_pool __attribute__((unused))) {
-        memcpy(dest, src, sizeof(CppType));
-    }
     static void direct_copy(void* dest, const void* src, MemPool* mem_pool) { memcpy(dest, src, sizeof(CppType)); }
 
     static void set_to_max(void* buf) {
@@ -708,7 +682,7 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_DECIMAL_V2> : public ScalarTypeInfoImp
 };
 
 template <>
-struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_DATE> : public ScalarTypeInfoImplBase<OLAP_FIELD_TYPE_DATE> {
+struct ScalarTypeInfoImpl<LOGICAL_TYPE_DATE> : public ScalarTypeInfoImplBase<LOGICAL_TYPE_DATE> {
     static Status from_string(void* buf, const std::string& scan_key) {
         tm time_tm;
         char* res = strptime(scan_key.c_str(), "%Y-%m-%d", &time_tm);
@@ -730,8 +704,8 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_DATE> : public ScalarTypeInfoImplBase<
 
     static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
                                MemPool* mem_pool __attribute__((unused))) {
-        if (src_type->type() == FieldType::OLAP_FIELD_TYPE_DATETIME) {
-            using SrcType = typename CppTypeTraits<OLAP_FIELD_TYPE_DATETIME>::CppType;
+        if (src_type->type() == LogicalType::LOGICAL_TYPE_DATETIME) {
+            using SrcType = typename CppTypeTraits<LOGICAL_TYPE_DATETIME>::CppType;
             auto src_value = unaligned_load<SrcType>(src);
             //only need part one
             SrcType part1 = (src_value / 1000000L);
@@ -742,7 +716,7 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_DATE> : public ScalarTypeInfoImplBase<
             return Status::OK();
         }
 
-        if (src_type->type() == FieldType::OLAP_FIELD_TYPE_TIMESTAMP) {
+        if (src_type->type() == LogicalType::LOGICAL_TYPE_TIMESTAMP) {
             int year, month, day, hour, minute, second, usec;
             auto src_value = unaligned_load<vectorized::TimestampValue>(src);
             src_value.to_timestamp(&year, &month, &day, &hour, &minute, &second, &usec);
@@ -750,8 +724,8 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_DATE> : public ScalarTypeInfoImplBase<
             return Status::OK();
         }
 
-        if (src_type->type() == FieldType::OLAP_FIELD_TYPE_INT) {
-            using SrcType = typename CppTypeTraits<OLAP_FIELD_TYPE_INT>::CppType;
+        if (src_type->type() == LogicalType::LOGICAL_TYPE_INT) {
+            using SrcType = typename CppTypeTraits<LOGICAL_TYPE_INT>::CppType;
             auto src_value = unaligned_load<SrcType>(src);
             DateTimeValue dt;
             if (!dt.from_date_int64(src_value)) {
@@ -764,8 +738,8 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_DATE> : public ScalarTypeInfoImplBase<
             return Status::OK();
         }
 
-        if (src_type->type() == FieldType::OLAP_FIELD_TYPE_VARCHAR) {
-            using SrcType = typename CppTypeTraits<OLAP_FIELD_TYPE_VARCHAR>::CppType;
+        if (src_type->type() == LogicalType::LOGICAL_TYPE_VARCHAR) {
+            using SrcType = typename CppTypeTraits<LOGICAL_TYPE_VARCHAR>::CppType;
             auto src_value = unaligned_load<SrcType>(src);
             DateTimeValue dt;
             for (const auto& format : DATE_FORMATS) {
@@ -791,11 +765,11 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_DATE> : public ScalarTypeInfoImplBase<
 };
 
 template <>
-struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_DATE_V2> : public ScalarTypeInfoImplBase<OLAP_FIELD_TYPE_DATE_V2> {
+struct ScalarTypeInfoImpl<LOGICAL_TYPE_DATE_V2> : public ScalarTypeInfoImplBase<LOGICAL_TYPE_DATE_V2> {
     static Status from_string(void* buf, const std::string& scan_key) {
         vectorized::DateValue date;
         if (!date.from_string(scan_key.data(), scan_key.size())) {
-            // Compatible with OLAP_FIELD_TYPE_DATE
+            // Compatible with LOGICAL_TYPE_DATE
             date.from_string("1400-01-01", sizeof("1400-01-01") - 1);
         }
         unaligned_store<vectorized::DateValue>(buf, date);
@@ -809,7 +783,7 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_DATE_V2> : public ScalarTypeInfoImplBa
 
     static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
                                MemPool* mem_pool __attribute__((unused))) {
-        auto converter = vectorized::get_type_converter(src_type->type(), OLAP_FIELD_TYPE_DATE_V2);
+        auto converter = vectorized::get_type_converter(src_type->type(), LOGICAL_TYPE_DATE_V2);
         RETURN_IF_ERROR(converter->convert(dest, src, mem_pool));
         return Status::OK();
     }
@@ -824,7 +798,7 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_DATE_V2> : public ScalarTypeInfoImplBa
 };
 
 template <>
-struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_DATETIME> : public ScalarTypeInfoImplBase<OLAP_FIELD_TYPE_DATETIME> {
+struct ScalarTypeInfoImpl<LOGICAL_TYPE_DATETIME> : public ScalarTypeInfoImplBase<LOGICAL_TYPE_DATETIME> {
     static Status from_string(void* buf, const std::string& scan_key) {
         tm time_tm;
         char* res = strptime(scan_key.c_str(), "%Y-%m-%d %H:%M:%S", &time_tm);
@@ -863,8 +837,8 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_DATETIME> : public ScalarTypeInfoImplB
     static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
                                MemPool* memPool __attribute__((unused))) {
         // when convert date to datetime, automatic padding zero
-        if (src_type->type() == FieldType::OLAP_FIELD_TYPE_DATE) {
-            using SrcType = typename CppTypeTraits<OLAP_FIELD_TYPE_DATE>::CppType;
+        if (src_type->type() == LogicalType::LOGICAL_TYPE_DATE) {
+            using SrcType = typename CppTypeTraits<LOGICAL_TYPE_DATE>::CppType;
             auto value = unaligned_load<SrcType>(src);
             int day = static_cast<int>(value & 31);
             int mon = static_cast<int>(value >> 5 & 15);
@@ -874,7 +848,7 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_DATETIME> : public ScalarTypeInfoImplB
         }
 
         // when convert date to datetime, automatic padding zero
-        if (src_type->type() == FieldType::OLAP_FIELD_TYPE_DATE_V2) {
+        if (src_type->type() == LogicalType::LOGICAL_TYPE_DATE_V2) {
             auto src_value = unaligned_load<vectorized::DateValue>(src);
             int year, month, day;
             src_value.to_date(&year, &month, &day);
@@ -889,11 +863,11 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_DATETIME> : public ScalarTypeInfoImplB
 };
 
 template <>
-struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_TIMESTAMP> : public ScalarTypeInfoImplBase<OLAP_FIELD_TYPE_TIMESTAMP> {
+struct ScalarTypeInfoImpl<LOGICAL_TYPE_TIMESTAMP> : public ScalarTypeInfoImplBase<LOGICAL_TYPE_TIMESTAMP> {
     static Status from_string(void* buf, const std::string& scan_key) {
         auto timestamp = unaligned_load<vectorized::TimestampValue>(buf);
         if (!timestamp.from_string(scan_key.data(), scan_key.size())) {
-            // Compatible with OLAP_FIELD_TYPE_DATETIME
+            // Compatible with LOGICAL_TYPE_DATETIME
             timestamp.from_string("1400-01-01 00:00:00", sizeof("1400-01-01 00:00:00") - 1);
         }
         unaligned_store<vectorized::TimestampValue>(buf, timestamp);
@@ -907,7 +881,7 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_TIMESTAMP> : public ScalarTypeInfoImpl
 
     static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type, MemPool* mem_pool) {
         vectorized::TimestampValue value;
-        auto converter = vectorized::get_type_converter(src_type->type(), OLAP_FIELD_TYPE_TIMESTAMP);
+        auto converter = vectorized::get_type_converter(src_type->type(), LOGICAL_TYPE_TIMESTAMP);
         auto st = converter->convert(&value, src, mem_pool);
         unaligned_store<vectorized::TimestampValue>(dest, value);
         RETURN_IF_ERROR(st);
@@ -918,7 +892,7 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_TIMESTAMP> : public ScalarTypeInfoImpl
 };
 
 template <>
-struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_CHAR> : public ScalarTypeInfoImplBase<OLAP_FIELD_TYPE_CHAR> {
+struct ScalarTypeInfoImpl<LOGICAL_TYPE_CHAR> : public ScalarTypeInfoImplBase<LOGICAL_TYPE_CHAR> {
     static bool equal(const void* left, const void* right) {
         auto l_slice = unaligned_load<Slice>(left);
         auto r_slice = unaligned_load<Slice>(right);
@@ -966,8 +940,6 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_CHAR> : public ScalarTypeInfoImplBase<
         unaligned_store<Slice>(dest, l_slice);
     }
 
-    static void copy_object(void* dest, const void* src, MemPool* mem_pool) { deep_copy(dest, src, mem_pool); }
-
     static void direct_copy(void* dest, const void* src, MemPool* mem_pool) {
         auto l_slice = unaligned_load<Slice>(dest);
         auto r_slice = unaligned_load<Slice>(src);
@@ -996,9 +968,9 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_CHAR> : public ScalarTypeInfoImplBase<
 };
 
 template <>
-struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_VARCHAR> : public ScalarTypeInfoImpl<OLAP_FIELD_TYPE_CHAR> {
-    static const FieldType type = OLAP_FIELD_TYPE_VARCHAR;
-    static const int32_t size = TypeTraits<OLAP_FIELD_TYPE_VARCHAR>::size;
+struct ScalarTypeInfoImpl<LOGICAL_TYPE_VARCHAR> : public ScalarTypeInfoImpl<LOGICAL_TYPE_CHAR> {
+    static const LogicalType type = LOGICAL_TYPE_VARCHAR;
+    static const int32_t size = TypeTraits<LOGICAL_TYPE_VARCHAR>::size;
 
     static Status from_string(void* buf, const std::string& scan_key) {
         size_t value_len = scan_key.length();
@@ -1017,12 +989,12 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_VARCHAR> : public ScalarTypeInfoImpl<O
     }
 
     static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type, MemPool* mem_pool) {
-        if (src_type->type() == OLAP_FIELD_TYPE_TINYINT || src_type->type() == OLAP_FIELD_TYPE_SMALLINT ||
-            src_type->type() == OLAP_FIELD_TYPE_INT || src_type->type() == OLAP_FIELD_TYPE_BIGINT ||
-            src_type->type() == OLAP_FIELD_TYPE_LARGEINT || src_type->type() == OLAP_FIELD_TYPE_FLOAT ||
-            src_type->type() == OLAP_FIELD_TYPE_DOUBLE || src_type->type() == OLAP_FIELD_TYPE_DECIMAL ||
-            src_type->type() == OLAP_FIELD_TYPE_DECIMAL_V2 || src_type->type() == OLAP_FIELD_TYPE_DECIMAL32 ||
-            src_type->type() == OLAP_FIELD_TYPE_DECIMAL64 || src_type->type() == OLAP_FIELD_TYPE_DECIMAL128) {
+        if (src_type->type() == LOGICAL_TYPE_TINYINT || src_type->type() == LOGICAL_TYPE_SMALLINT ||
+            src_type->type() == LOGICAL_TYPE_INT || src_type->type() == LOGICAL_TYPE_BIGINT ||
+            src_type->type() == LOGICAL_TYPE_LARGEINT || src_type->type() == LOGICAL_TYPE_FLOAT ||
+            src_type->type() == LOGICAL_TYPE_DOUBLE || src_type->type() == LOGICAL_TYPE_DECIMAL ||
+            src_type->type() == LOGICAL_TYPE_DECIMAL_V2 || src_type->type() == LOGICAL_TYPE_DECIMAL32 ||
+            src_type->type() == LOGICAL_TYPE_DECIMAL64 || src_type->type() == LOGICAL_TYPE_DECIMAL128) {
             auto result = src_type->to_string(src);
             auto slice = reinterpret_cast<Slice*>(dest);
             slice->data = reinterpret_cast<char*>(mem_pool->allocate(result.size()));
@@ -1049,65 +1021,27 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_VARCHAR> : public ScalarTypeInfoImpl<O
 };
 
 template <>
-struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_HLL> : public ScalarTypeInfoImpl<OLAP_FIELD_TYPE_VARCHAR> {
-    static const FieldType type = OLAP_FIELD_TYPE_HLL;
-    static const int32_t size = TypeTraits<OLAP_FIELD_TYPE_HLL>::size;
-    /*
-     * Hyperloglog type only used as value, so
-     * cmp/from_string/set_to_max/set_to_min function
-     * in this struct has no significance
-     */
-
-    // See copy_row_in_memtable() in olap/row.h, will be removed in future.
-    static void copy_object(void* dest, const void* src, MemPool* mem_pool __attribute__((unused))) {
-        Slice dst_slice;
-        auto src_slice = unaligned_load<Slice>(src);
-        DCHECK_EQ(src_slice.size, 0);
-        dst_slice.data = src_slice.data;
-        dst_slice.size = 0;
-        unaligned_store<Slice>(dest, dst_slice);
-    }
+struct ScalarTypeInfoImpl<LOGICAL_TYPE_HLL> : public ScalarTypeInfoImpl<LOGICAL_TYPE_VARCHAR> {
+    static const LogicalType type = LOGICAL_TYPE_HLL;
+    static const int32_t size = TypeTraits<LOGICAL_TYPE_HLL>::size;
 };
 
 template <>
-struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_OBJECT> : public ScalarTypeInfoImpl<OLAP_FIELD_TYPE_VARCHAR> {
-    static const FieldType type = OLAP_FIELD_TYPE_OBJECT;
-    static const int32_t size = TypeTraits<OLAP_FIELD_TYPE_OBJECT>::size;
-    /*
-     * Object type only used as value, so
-     * cmp/from_string/set_to_max/set_to_min function
-     * in this struct has no significance
-     */
-
-    // See copy_row_in_memtable() in olap/row.h, will be removed in future.
-    static void copy_object(void* dest, const void* src, MemPool* mem_pool __attribute__((unused))) {
-        Slice dst_slice;
-        auto src_slice = unaligned_load<Slice>(src);
-        DCHECK_EQ(src_slice.size, 0);
-        dst_slice.data = src_slice.data;
-        dst_slice.size = 0;
-        unaligned_store<Slice>(dest, dst_slice);
-    }
+struct ScalarTypeInfoImpl<LOGICAL_TYPE_OBJECT> : public ScalarTypeInfoImpl<LOGICAL_TYPE_VARCHAR> {
+    static const LogicalType type = LOGICAL_TYPE_OBJECT;
+    static const int32_t size = TypeTraits<LOGICAL_TYPE_OBJECT>::size;
 };
 
 template <>
-struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_PERCENTILE> : public ScalarTypeInfoImpl<OLAP_FIELD_TYPE_VARCHAR> {
-    static const FieldType type = OLAP_FIELD_TYPE_PERCENTILE;
-    static const int32_t size = TypeTraits<OLAP_FIELD_TYPE_PERCENTILE>::size;
-    // See copy_row_in_memtable() in olap/row.h, will be removed in future.
-    static void copy_object(void* dest, const void* src, MemPool* mem_pool __attribute__((unused))) {
-        auto dst_slice = reinterpret_cast<Slice*>(dest);
-        auto src_slice = reinterpret_cast<const Slice*>(src);
-        DCHECK_EQ(src_slice->size, 0);
-        dst_slice->data = src_slice->data;
-        dst_slice->size = 0;
-    }
+struct ScalarTypeInfoImpl<LOGICAL_TYPE_PERCENTILE> : public ScalarTypeInfoImpl<LOGICAL_TYPE_VARCHAR> {
+    static const LogicalType type = LOGICAL_TYPE_PERCENTILE;
+    static const int32_t size = TypeTraits<LOGICAL_TYPE_PERCENTILE>::size;
 };
 
 template <>
-struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_JSON> : public ScalarTypeInfoImpl<OLAP_FIELD_TYPE_OBJECT> {
-    static const FieldType type = OLAP_FIELD_TYPE_JSON;
-    static const int32_t size = TypeTraits<OLAP_FIELD_TYPE_JSON>::size;
+struct ScalarTypeInfoImpl<LOGICAL_TYPE_JSON> : public ScalarTypeInfoImpl<LOGICAL_TYPE_OBJECT> {
+    static const LogicalType type = LOGICAL_TYPE_JSON;
+    static const int32_t size = TypeTraits<LOGICAL_TYPE_JSON>::size;
 
     static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type, MemPool* mem_pool) {
         // TODO(mofei)
@@ -1115,12 +1049,18 @@ struct ScalarTypeInfoImpl<OLAP_FIELD_TYPE_JSON> : public ScalarTypeInfoImpl<OLAP
     }
 };
 
-void (*ScalarTypeInfoImpl<OLAP_FIELD_TYPE_CHAR>::set_to_max)(void*) = nullptr;
+template <>
+struct ScalarTypeInfoImpl<LOGICAL_TYPE_VARBINARY> : public ScalarTypeInfoImpl<LOGICAL_TYPE_VARCHAR> {
+    static const LogicalType type = LOGICAL_TYPE_VARBINARY;
+    static const int32_t size = TypeTraits<LOGICAL_TYPE_VARBINARY>::size;
+};
+
+void (*ScalarTypeInfoImpl<LOGICAL_TYPE_CHAR>::set_to_max)(void*) = nullptr;
 
 // NOTE
-// These code could not be moved proceeding ScalarTypeInfoImpl speciliazation, otherwise
+// These code could not be moved proceeding ScalarTypeInfoImpl specialization, otherwise
 // will encounter `specialization after instantiation` error
-template <FieldType ftype>
+template <LogicalType ftype>
 int TypeComparator<ftype>::cmp(const void* lhs, const void* rhs) {
     return ScalarTypeInfoImpl<ftype>::cmp(lhs, rhs);
 }

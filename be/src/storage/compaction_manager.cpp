@@ -8,7 +8,9 @@
 
 namespace starrocks {
 
-CompactionManager::CompactionManager() : _next_task_id(0) {
+CompactionManager::CompactionManager()
+        : _next_task_id(0), _dispatch_update_candidate_thread(&CompactionManager::_dispatch_worker, this) {
+    Thread::set_thread_name(_dispatch_update_candidate_thread, "dispatch_candidate");
     auto st = ThreadPoolBuilder("up_candidates")
                       .set_min_threads(1)
                       .set_max_threads(5)
@@ -18,6 +20,8 @@ CompactionManager::CompactionManager() : _next_task_id(0) {
 }
 
 CompactionManager::~CompactionManager() {
+    _stop.store(true, std::memory_order_release);
+    _dispatch_update_candidate_thread.join();
     _update_candidate_pool->wait();
 }
 
@@ -33,7 +37,7 @@ void CompactionManager::update_candidates(std::vector<CompactionCandidate> candi
         for (auto iter = _compaction_candidates.begin(); iter != _compaction_candidates.end();) {
             bool has_erase = false;
             for (auto& candidate : candidates) {
-                if (candidate.tablet->tablet_id() == iter->tablet->tablet_id() && candidate.type == iter->type) {
+                if (candidate.tablet->tablet_id() == iter->tablet->tablet_id()) {
                     iter = _compaction_candidates.erase(iter);
                     erase_num++;
                     has_erase = true;
@@ -45,58 +49,161 @@ void CompactionManager::update_candidates(std::vector<CompactionCandidate> candi
             }
         }
         for (auto& candidate : candidates) {
-            candidate.score = candidate.tablet->compaction_score(candidate.type) * 100;
+            VLOG(1) << "update candidate " << candidate.tablet->tablet_id() << " type "
+                    << starrocks::to_string(candidate.type) << " score " << candidate.score;
             _compaction_candidates.emplace(std::move(candidate));
         }
-        VLOG(2) << "_compaction_candidates size:" << _compaction_candidates.size()
-                << ", to add candidates:" << candidates.size() << " erase candidates: " << erase_num;
     }
-    if (candidates.size() != erase_num) {
-        VLOG(2) << "new compaction candidate added. notify scheduler";
-        _notify_schedulers();
-    }
+    _notify_schedulers();
 }
 
-void CompactionManager::insert_candidates(std::vector<CompactionCandidate> candidates) {
-    std::lock_guard lg(_candidates_mutex);
-    for (auto& candidate : candidates) {
-        candidate.score = candidate.tablet->compaction_score(candidate.type) * 100;
-        _compaction_candidates.emplace(std::move(candidate));
+bool CompactionManager::_check_precondition(const CompactionCandidate& candidate) {
+    if (!candidate.tablet) {
+        LOG(WARNING) << "candidate with null tablet";
+        return false;
     }
+    const TabletSharedPtr& tablet = candidate.tablet;
+    if (tablet->tablet_state() != TABLET_RUNNING) {
+        VLOG(2) << "skip tablet:" << tablet->tablet_id() << " because tablet state is:" << tablet->tablet_state()
+                << ", not RUNNING";
+        return false;
+    }
+
+    if (tablet->has_compaction_task()) {
+        // tablet already has a running compaction task, skip it
+        VLOG(2) << "skip tablet:" << tablet->tablet_id() << " because there is another running compaction task.";
+        return false;
+    }
+
+    int64_t last_failure_ts = 0;
+    DataDir* data_dir = tablet->data_dir();
+    if (candidate.type == CUMULATIVE_COMPACTION) {
+        std::unique_lock lk(tablet->get_cumulative_lock(), std::try_to_lock);
+        if (!lk.owns_lock()) {
+            VLOG(2) << "skip tablet:" << tablet->tablet_id() << " for cumulative lock";
+            return false;
+        }
+        // control the concurrent running tasks's limit
+        // allow overruns up to twice the configured limit
+        uint16_t num = StorageEngine::instance()->compaction_manager()->running_cumulative_tasks_num_for_dir(data_dir);
+        if (config::cumulative_compaction_num_threads_per_disk > 0 &&
+            num >= config::cumulative_compaction_num_threads_per_disk * 2) {
+            VLOG(2) << "skip tablet:" << tablet->tablet_id()
+                    << " for limit of cumulative compaction task per disk. disk path:" << data_dir->path()
+                    << ", running num:" << num;
+            return false;
+        }
+        last_failure_ts = tablet->last_cumu_compaction_failure_time();
+    } else if (candidate.type == BASE_COMPACTION) {
+        std::unique_lock lk(tablet->get_base_lock(), std::try_to_lock);
+        if (!lk.owns_lock()) {
+            VLOG(2) << "skip tablet:" << tablet->tablet_id() << " for base lock";
+            return false;
+        }
+        uint16_t num = StorageEngine::instance()->compaction_manager()->running_base_tasks_num_for_dir(data_dir);
+        if (config::base_compaction_num_threads_per_disk > 0 &&
+            num >= config::base_compaction_num_threads_per_disk * 2) {
+            VLOG(2) << "skip tablet:" << tablet->tablet_id()
+                    << " for limit of base compaction task per disk. disk path:" << data_dir->path()
+                    << ", running num:" << num;
+            return false;
+        }
+        last_failure_ts = tablet->last_base_compaction_failure_time();
+    }
+
+    int64_t now_ms = UnixMillis();
+    if (candidate.type == CompactionType::CUMULATIVE_COMPACTION) {
+        if (now_ms - last_failure_ts <= config::min_cmumulative_compaction_failure_interval_sec * 1000) {
+            VLOG(1) << "Too often to schedule failure compaction, skip it."
+                    << "compaction_type=" << starrocks::to_string(candidate.type)
+                    << ", min_cmumulative_compaction_failure_interval_sec="
+                    << config::min_cmumulative_compaction_failure_interval_sec
+                    << ", last_failure_timestamp=" << last_failure_ts / 1000 << ", tablet_id=" << tablet->tablet_id();
+            return false;
+        }
+    } else if (candidate.type == CompactionType::BASE_COMPACTION) {
+        if (now_ms - last_failure_ts <= config::min_compaction_failure_interval_sec * 1000) {
+            VLOG(1) << "Too often to schedule failure compaction, skip it."
+                    << "compaction_type=" << starrocks::to_string(candidate.type)
+                    << ", min_compaction_failure_interval_sec=" << config::min_compaction_failure_interval_sec
+                    << ", last_failure_timestamp=" << last_failure_ts / 1000 << ", tablet_id=" << tablet->tablet_id();
+            return false;
+        }
+    }
+
+    return true;
 }
 
-CompactionCandidate CompactionManager::pick_candidate() {
+bool CompactionManager::pick_candidate(CompactionCandidate* candidate) {
     std::lock_guard lg(_candidates_mutex);
     if (_compaction_candidates.empty()) {
-        static CompactionCandidate invalid_candidate;
-        return invalid_candidate;
+        return false;
     }
 
     auto iter = _compaction_candidates.begin();
-    CompactionCandidate ret = *iter;
-    _compaction_candidates.erase(iter);
-    return ret;
+    while (iter != _compaction_candidates.end()) {
+        if (_check_precondition(*iter)) {
+            *candidate = *iter;
+            _compaction_candidates.erase(iter);
+            return true;
+        }
+        iter++;
+    }
+
+    return false;
 }
 
-void CompactionManager::update_tablet_async(const TabletSharedPtr& tablet, bool need_update_context,
-                                            bool is_compaction) {
-    Status st = _update_candidate_pool->submit_func([tablet, need_update_context, is_compaction, this] {
-        update_tablet(tablet, need_update_context, is_compaction);
-    });
-    if (!st.ok()) {
-        LOG(WARNING) << "update candidate failed. status:" << st.to_string();
+void CompactionManager::_dispatch_worker() {
+    while (!_stop.load(std::memory_order_consume)) {
+        {
+            std::lock_guard lock(_dispatch_mutex);
+            if (!_dispatch_map.empty()) {
+                for (auto& [id, tablet_pair] : _dispatch_map) {
+                    auto& tablet = tablet_pair.first;
+                    Status st = _update_candidate_pool->submit_func([tablet, this] { update_tablet(tablet); });
+                    if (!st.ok()) {
+                        LOG(WARNING) << "update candidate tablet " << id << "failed. status:" << st.to_string();
+                    }
+                }
+                _dispatch_map.clear();
+            }
+        }
+        int32_t left_seconds = 10;
+        do {
+            sleep(1);
+            --left_seconds;
+        } while (!_stop.load(std::memory_order_consume) && left_seconds > 0 &&
+                 _max_dispatch_count < config::min_cumulative_compaction_num_singleton_deltas &&
+                 _dispatch_map.size() < 10240);
     }
 }
 
-void CompactionManager::update_tablet(const TabletSharedPtr& tablet, bool need_update_context, bool is_compaction) {
-    std::vector<CompactionCandidate> candidates = tablet->get_compaction_candidates(need_update_context);
-    if (candidates.empty()) {
+void CompactionManager::update_tablet_async(TabletSharedPtr tablet) {
+    std::lock_guard lock(_dispatch_mutex);
+    auto iter = _dispatch_map.find(tablet->tablet_id());
+    if (iter != _dispatch_map.end()) {
+        iter->second.first = tablet;
+        iter->second.second++;
+        if (iter->second.second > _max_dispatch_count) {
+            _max_dispatch_count = iter->second.second;
+        }
+    } else {
+        _dispatch_map.emplace(tablet->tablet_id(), std::make_pair(tablet, 0));
+    }
+}
+
+void CompactionManager::update_tablet(TabletSharedPtr tablet) {
+    if (_disable_update_tablet) {
         return;
     }
-    if (is_compaction) {
-        LOG(INFO) << "compaction finished. and should do compaction again";
+    VLOG(1) << "update tablet " << tablet->tablet_id();
+    if (tablet->need_compaction()) {
+        CompactionCandidate candidate;
+        candidate.tablet = tablet;
+        candidate.score = tablet->compaction_score();
+        candidate.type = tablet->compaction_type();
+        update_candidates({candidate});
     }
-    update_candidates(candidates);
 }
 
 bool CompactionManager::register_task(CompactionTask* compaction_task) {
@@ -106,21 +213,6 @@ bool CompactionManager::register_task(CompactionTask* compaction_task) {
     std::lock_guard lg(_tasks_mutex);
     TabletSharedPtr& tablet = compaction_task->tablet();
     DataDir* data_dir = tablet->data_dir();
-    if (compaction_task->compaction_type() == CUMULATIVE_COMPACTION) {
-        if (config::cumulative_compaction_num_threads_per_disk >= 0 &&
-            _data_dir_to_cumulative_task_num_map[data_dir] >= config::cumulative_compaction_num_threads_per_disk) {
-            LOG(WARNING) << "register compaction task failed for disk's running cumulative tasks reach limit:"
-                         << config::cumulative_compaction_num_threads_per_disk;
-            return false;
-        }
-    } else if (compaction_task->compaction_type() == BASE_COMPACTION) {
-        if (config::base_compaction_num_threads_per_disk >= 0 &&
-            _data_dir_to_base_task_num_map[data_dir] >= config::base_compaction_num_threads_per_disk) {
-            LOG(WARNING) << "register compaction task failed for disk's running base tasks reach limit:"
-                         << config::base_compaction_num_threads_per_disk;
-            return false;
-        }
-    }
     auto p = _running_tasks.insert(compaction_task);
     if (!p.second) {
         // duplicate task

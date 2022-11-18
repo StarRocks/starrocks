@@ -32,6 +32,7 @@ namespace starrocks {
     M(TYPE_DATETIME)                 \
     M(TYPE_TIME)                     \
     M(TYPE_JSON)                     \
+    M(TYPE_VARBINARY)                \
     M(TYPE_BOOLEAN)
 
 #define APPLY_FOR_ALL_SCALAR_TYPE_WITH_NULL(M) \
@@ -53,7 +54,6 @@ namespace starrocks {
     M(DOUBLE)                           \
     M(DATE)                             \
     M(DATETIME)                         \
-    M(BINARY)                           \
     M(DECIMAL)                          \
     M(CHAR)                             \
     M(LARGEINT)                         \
@@ -67,6 +67,8 @@ namespace starrocks {
     M(DECIMAL64)                        \
     M(DECIMAL128)                       \
     M(FUNCTION)                         \
+    M(BINARY)                           \
+    M(VARBINARY)                        \
     M(JSON)
 
 #define _TYPE_DISPATCH_CASE(type) \

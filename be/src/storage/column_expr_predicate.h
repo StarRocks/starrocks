@@ -1,6 +1,8 @@
 
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
+#include <utility>
+
 #include "storage/olap_common.h"
 #include "storage/types.h"
 #include "storage/vectorized_column_predicate.h"
@@ -78,7 +80,7 @@ private:
 
 class ColumnTruePredicate : public ColumnPredicate {
 public:
-    ColumnTruePredicate(TypeInfoPtr type_info, ColumnId column_id) : ColumnPredicate(type_info, column_id) {}
+    ColumnTruePredicate(TypeInfoPtr type_info, ColumnId column_id) : ColumnPredicate(std::move(type_info), column_id) {}
     ~ColumnTruePredicate() override = default;
     Status evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override;
     Status evaluate_and(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const override;

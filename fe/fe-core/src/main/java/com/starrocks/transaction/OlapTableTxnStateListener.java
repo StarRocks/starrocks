@@ -5,6 +5,7 @@ package com.starrocks.transaction;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -46,7 +47,8 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
     }
 
     @Override
-    public void preCommit(TransactionState txnState, List<TabletCommitInfo> tabletCommitInfos) throws TransactionException {
+    public void preCommit(TransactionState txnState, List<TabletCommitInfo> tabletCommitInfos,
+            List<TabletFailInfo> failedTablets) throws TransactionException {
         Preconditions.checkState(txnState.getTransactionStatus() != TransactionStatus.COMMITTED);
         if (table.getState() == OlapTable.OlapTableState.RESTORE) {
             throw new TransactionCommitFailedException("Cannot write RESTORE state table \"" + table.getName() + "\"");
@@ -59,6 +61,7 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
 
         TabletInvertedIndex tabletInvertedIndex = dbTxnMgr.getGlobalStateMgr().getTabletInvertedIndex();
         Map<Long, Set<Long>> tabletToBackends = new HashMap<>();
+        Set<Long> allCommittedBackends = new HashSet<>();
 
         // 2. validate potential exists problem: db->table->partition
         // guarantee exist exception during a transaction
@@ -86,6 +89,7 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
             dirtyPartitionSet.add(partitionId);
             tabletToBackends.computeIfAbsent(tabletId, id -> new HashSet<>())
                     .add(tabletCommitInfos.get(i).getBackendId());
+            allCommittedBackends.add(tabletCommitInfos.get(i).getBackendId());
 
             // Invalid column set should union
             invalidDictCacheColumns.addAll(tabletCommitInfos.get(i).getInvalidDictCacheColumns());
@@ -99,6 +103,29 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
 
             if (i == tabletMetaList.size() - 1) {
                 validDictCacheColumns.removeAll(invalidDictCacheColumns);
+            }
+        }
+
+        // update write failed backend/replica
+        // use for selection of primary replica for replicated storage
+        for (TabletFailInfo failedTablet : failedTablets) {
+            if (failedTablet.getTabletId() == -1) {
+                Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(failedTablet.getBackendId());
+                if (backend != null) {
+                    backend.setLastWriteFail(true);
+                }
+            } else {
+                Replica replica = tabletInvertedIndex.getReplica(failedTablet.getTabletId(), failedTablet.getBackendId());
+                if (replica != null) {
+                    replica.setLastWriteFail(true);
+                }
+            }
+        }
+
+        for (Long committedBackend : allCommittedBackends) {
+            Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(committedBackend);
+            if (backend != null) {
+                backend.setLastWriteFail(false);
             }
         }
 
@@ -143,15 +170,18 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
                                         String.format("%d:{be:%d %s V:%d LFV:%d},", replica.getId(), tabletBackend,
                                                 backend == null ? "" : backend.getHost(), replica.getVersion(), lfv));
                             }
+                            replica.setLastWriteFail(false);
                         } else {
                             Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(tabletBackend);
                             failedReplicaInfoSB.append(
                                     String.format("%d:{be:%d %s V:%d LFV:%d},", replica.getId(), tabletBackend,
                                             backend == null ? "" : backend.getHost(), replica.getVersion(),
                                             replica.getLastSuccessVersion()));
-                            errorReplicaIds.add(replica.getId());
                             // not remove rollup task here, because the commit maybe failed
                             // remove rollup task when commit successfully
+                            errorReplicaIds.add(replica.getId());
+
+                            replica.setLastWriteFail(true);
                         }
                     }
 
@@ -208,7 +238,36 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
     }
 
     @Override
-    public void postAbort(TransactionState txnState) {
+    public void postAbort(TransactionState txnState, List<TabletFailInfo> failedTablets) {
+        Database db = GlobalStateMgr.getCurrentState().getDb(txnState.getDbId());
+        if (db != null) {
+            db.readLock();
+            try {
+                TabletInvertedIndex tabletInvertedIndex = dbTxnMgr.getGlobalStateMgr().getTabletInvertedIndex();
+                // update write failed backend/replica
+                // use for selection of primary replica for replicated storage
+                for (TabletFailInfo failedTablet : failedTablets) {
+                    LOG.info(failedTablet);
+                    if (failedTablet.getTabletId() == -1) {
+                        Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(failedTablet.getBackendId());
+                        if (backend != null) {
+                            backend.setLastWriteFail(true);
+                        }
+                    } else {
+                        Replica replica = tabletInvertedIndex.getReplica(failedTablet.getTabletId(),
+                                failedTablet.getBackendId());
+                        if (replica != null) {
+                            replica.setLastWriteFail(true);
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                LOG.warn(e);
+            } finally {
+                db.readUnlock();
+            }
+        }
+
         // Optimization for multi-table transaction: avoid sending duplicated requests to BE nodes.
         if (table.getId() != txnState.getTableIdList().get(0)) {
             return;

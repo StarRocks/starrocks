@@ -23,7 +23,7 @@ class CString {
     friend void swap(CString& lhs, CString& rhs);
 
 public:
-    CString() {}
+    CString() = default;
     ~CString() { _dealloc_if_needed(); }
 
     explicit CString(std::string_view v) {
@@ -35,7 +35,7 @@ public:
     CString(const CString& rhs) { assign(rhs.data(), rhs.size()); }
 
     // Move ctor
-    CString(CString&& rhs) : _data(rhs._data) { rhs._data = &kStaticStorage; }
+    CString(CString&& rhs) noexcept : _data(rhs._data) { rhs._data = &kStaticStorage; }
 
     // Copy assignment
     CString& operator=(const CString& rhs) {
@@ -44,7 +44,7 @@ public:
     }
 
     // Move assignment
-    CString& operator=(CString&& rhs) {
+    CString& operator=(CString&& rhs) noexcept {
         _dealloc_if_needed();
         _data = rhs._data;
         rhs._data = &kStaticStorage;

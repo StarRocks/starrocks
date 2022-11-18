@@ -544,107 +544,107 @@ public:
 #define CASE_REPLACE(CASE_TYPE, COLUMN_TYPE, STATE_TYPE) \
     CASE_NEW_VALUE_AGGREGATOR(CASE_TYPE, COLUMN_TYPE, STATE_TYPE, ReplaceAggregator)
 
-ValueColumnAggregatorPtr create_value_aggregator(FieldType type, FieldAggregationMethod method) {
+ValueColumnAggregatorPtr create_value_aggregator(LogicalType type, FieldAggregationMethod method) {
     switch (method) {
     case OLAP_FIELD_AGGREGATION_SUM: {
         switch (type) {
-            CASE_SUM(OLAP_FIELD_TYPE_TINYINT, Int8Column, int8_t)
-            CASE_SUM(OLAP_FIELD_TYPE_SMALLINT, Int16Column, int16_t)
-            CASE_SUM(OLAP_FIELD_TYPE_INT, Int32Column, int32_t)
-            CASE_SUM(OLAP_FIELD_TYPE_BIGINT, Int64Column, int64_t)
-            CASE_SUM(OLAP_FIELD_TYPE_LARGEINT, Int128Column, int128_t)
-            CASE_SUM(OLAP_FIELD_TYPE_FLOAT, FloatColumn, float)
-            CASE_SUM(OLAP_FIELD_TYPE_DOUBLE, DoubleColumn, double)
-            CASE_SUM(OLAP_FIELD_TYPE_DECIMAL, DecimalColumn, DecimalV2Value)
-            CASE_SUM(OLAP_FIELD_TYPE_DECIMAL_V2, DecimalColumn, DecimalV2Value)
-            CASE_SUM(OLAP_FIELD_TYPE_DECIMAL32, Decimal32Column, int32_t)
-            CASE_SUM(OLAP_FIELD_TYPE_DECIMAL64, Decimal64Column, int64_t)
-            CASE_SUM(OLAP_FIELD_TYPE_DECIMAL128, Decimal128Column, int128_t)
-            CASE_SUM(OLAP_FIELD_TYPE_BOOL, BooleanColumn, uint8_t)
+            CASE_SUM(LOGICAL_TYPE_TINYINT, Int8Column, int8_t)
+            CASE_SUM(LOGICAL_TYPE_SMALLINT, Int16Column, int16_t)
+            CASE_SUM(LOGICAL_TYPE_INT, Int32Column, int32_t)
+            CASE_SUM(LOGICAL_TYPE_BIGINT, Int64Column, int64_t)
+            CASE_SUM(LOGICAL_TYPE_LARGEINT, Int128Column, int128_t)
+            CASE_SUM(LOGICAL_TYPE_FLOAT, FloatColumn, float)
+            CASE_SUM(LOGICAL_TYPE_DOUBLE, DoubleColumn, double)
+            CASE_SUM(LOGICAL_TYPE_DECIMAL, DecimalColumn, DecimalV2Value)
+            CASE_SUM(LOGICAL_TYPE_DECIMAL_V2, DecimalColumn, DecimalV2Value)
+            CASE_SUM(LOGICAL_TYPE_DECIMAL32, Decimal32Column, int32_t)
+            CASE_SUM(LOGICAL_TYPE_DECIMAL64, Decimal64Column, int64_t)
+            CASE_SUM(LOGICAL_TYPE_DECIMAL128, Decimal128Column, int128_t)
+            CASE_SUM(LOGICAL_TYPE_BOOL, BooleanColumn, uint8_t)
             CASE_DEFAULT_WARNING(type)
         }
     }
     case OLAP_FIELD_AGGREGATION_MAX: {
         switch (type) {
-            CASE_MAX(OLAP_FIELD_TYPE_TINYINT, Int8Column, int8_t)
-            CASE_MAX(OLAP_FIELD_TYPE_SMALLINT, Int16Column, int16_t)
-            CASE_MAX(OLAP_FIELD_TYPE_INT, Int32Column, int32_t)
-            CASE_MAX(OLAP_FIELD_TYPE_BIGINT, Int64Column, int64_t)
-            CASE_MAX(OLAP_FIELD_TYPE_LARGEINT, Int128Column, int128_t)
-            CASE_MAX(OLAP_FIELD_TYPE_FLOAT, FloatColumn, float)
-            CASE_MAX(OLAP_FIELD_TYPE_DOUBLE, DoubleColumn, double)
-            CASE_MAX(OLAP_FIELD_TYPE_DECIMAL, DecimalColumn, DecimalV2Value)
-            CASE_MAX(OLAP_FIELD_TYPE_DECIMAL_V2, DecimalColumn, DecimalV2Value)
-            CASE_MAX(OLAP_FIELD_TYPE_DECIMAL32, Decimal32Column, int32_t)
-            CASE_MAX(OLAP_FIELD_TYPE_DECIMAL64, Decimal64Column, int64_t)
-            CASE_MAX(OLAP_FIELD_TYPE_DECIMAL128, Decimal128Column, int128_t)
-            CASE_MAX(OLAP_FIELD_TYPE_DATE, DateColumn, DateValue)
-            CASE_MAX(OLAP_FIELD_TYPE_DATE_V2, DateColumn, DateValue)
-            CASE_MAX(OLAP_FIELD_TYPE_DATETIME, TimestampColumn, TimestampValue)
-            CASE_MAX(OLAP_FIELD_TYPE_TIMESTAMP, TimestampColumn, TimestampValue)
-            CASE_MAX(OLAP_FIELD_TYPE_CHAR, BinaryColumn, SliceState)
-            CASE_MAX(OLAP_FIELD_TYPE_VARCHAR, BinaryColumn, SliceState)
-            CASE_MAX(OLAP_FIELD_TYPE_BOOL, BooleanColumn, uint8_t)
+            CASE_MAX(LOGICAL_TYPE_TINYINT, Int8Column, int8_t)
+            CASE_MAX(LOGICAL_TYPE_SMALLINT, Int16Column, int16_t)
+            CASE_MAX(LOGICAL_TYPE_INT, Int32Column, int32_t)
+            CASE_MAX(LOGICAL_TYPE_BIGINT, Int64Column, int64_t)
+            CASE_MAX(LOGICAL_TYPE_LARGEINT, Int128Column, int128_t)
+            CASE_MAX(LOGICAL_TYPE_FLOAT, FloatColumn, float)
+            CASE_MAX(LOGICAL_TYPE_DOUBLE, DoubleColumn, double)
+            CASE_MAX(LOGICAL_TYPE_DECIMAL, DecimalColumn, DecimalV2Value)
+            CASE_MAX(LOGICAL_TYPE_DECIMAL_V2, DecimalColumn, DecimalV2Value)
+            CASE_MAX(LOGICAL_TYPE_DECIMAL32, Decimal32Column, int32_t)
+            CASE_MAX(LOGICAL_TYPE_DECIMAL64, Decimal64Column, int64_t)
+            CASE_MAX(LOGICAL_TYPE_DECIMAL128, Decimal128Column, int128_t)
+            CASE_MAX(LOGICAL_TYPE_DATE, DateColumn, DateValue)
+            CASE_MAX(LOGICAL_TYPE_DATE_V2, DateColumn, DateValue)
+            CASE_MAX(LOGICAL_TYPE_DATETIME, TimestampColumn, TimestampValue)
+            CASE_MAX(LOGICAL_TYPE_TIMESTAMP, TimestampColumn, TimestampValue)
+            CASE_MAX(LOGICAL_TYPE_CHAR, BinaryColumn, SliceState)
+            CASE_MAX(LOGICAL_TYPE_VARCHAR, BinaryColumn, SliceState)
+            CASE_MAX(LOGICAL_TYPE_BOOL, BooleanColumn, uint8_t)
             CASE_DEFAULT_WARNING(type)
         }
     }
     case OLAP_FIELD_AGGREGATION_MIN: {
         switch (type) {
-            CASE_MIN(OLAP_FIELD_TYPE_TINYINT, Int8Column, int8_t)
-            CASE_MIN(OLAP_FIELD_TYPE_SMALLINT, Int16Column, int16_t)
-            CASE_MIN(OLAP_FIELD_TYPE_INT, Int32Column, int32_t)
-            CASE_MIN(OLAP_FIELD_TYPE_BIGINT, Int64Column, int64_t)
-            CASE_MIN(OLAP_FIELD_TYPE_LARGEINT, Int128Column, int128_t)
-            CASE_MIN(OLAP_FIELD_TYPE_FLOAT, FloatColumn, float)
-            CASE_MIN(OLAP_FIELD_TYPE_DOUBLE, DoubleColumn, double)
-            CASE_MIN(OLAP_FIELD_TYPE_DECIMAL, DecimalColumn, DecimalV2Value)
-            CASE_MIN(OLAP_FIELD_TYPE_DECIMAL32, Decimal32Column, int32_t)
-            CASE_MIN(OLAP_FIELD_TYPE_DECIMAL64, Decimal64Column, int64_t)
-            CASE_MIN(OLAP_FIELD_TYPE_DECIMAL128, Decimal128Column, int128_t)
-            CASE_MIN(OLAP_FIELD_TYPE_DECIMAL_V2, DecimalColumn, DecimalV2Value)
-            CASE_MIN(OLAP_FIELD_TYPE_DATE, DateColumn, DateValue)
-            CASE_MIN(OLAP_FIELD_TYPE_DATE_V2, DateColumn, DateValue)
-            CASE_MIN(OLAP_FIELD_TYPE_DATETIME, TimestampColumn, TimestampValue)
-            CASE_MIN(OLAP_FIELD_TYPE_TIMESTAMP, TimestampColumn, TimestampValue)
-            CASE_MIN(OLAP_FIELD_TYPE_CHAR, BinaryColumn, SliceState)
-            CASE_MIN(OLAP_FIELD_TYPE_VARCHAR, BinaryColumn, SliceState)
-            CASE_MIN(OLAP_FIELD_TYPE_BOOL, BooleanColumn, uint8_t)
+            CASE_MIN(LOGICAL_TYPE_TINYINT, Int8Column, int8_t)
+            CASE_MIN(LOGICAL_TYPE_SMALLINT, Int16Column, int16_t)
+            CASE_MIN(LOGICAL_TYPE_INT, Int32Column, int32_t)
+            CASE_MIN(LOGICAL_TYPE_BIGINT, Int64Column, int64_t)
+            CASE_MIN(LOGICAL_TYPE_LARGEINT, Int128Column, int128_t)
+            CASE_MIN(LOGICAL_TYPE_FLOAT, FloatColumn, float)
+            CASE_MIN(LOGICAL_TYPE_DOUBLE, DoubleColumn, double)
+            CASE_MIN(LOGICAL_TYPE_DECIMAL, DecimalColumn, DecimalV2Value)
+            CASE_MIN(LOGICAL_TYPE_DECIMAL32, Decimal32Column, int32_t)
+            CASE_MIN(LOGICAL_TYPE_DECIMAL64, Decimal64Column, int64_t)
+            CASE_MIN(LOGICAL_TYPE_DECIMAL128, Decimal128Column, int128_t)
+            CASE_MIN(LOGICAL_TYPE_DECIMAL_V2, DecimalColumn, DecimalV2Value)
+            CASE_MIN(LOGICAL_TYPE_DATE, DateColumn, DateValue)
+            CASE_MIN(LOGICAL_TYPE_DATE_V2, DateColumn, DateValue)
+            CASE_MIN(LOGICAL_TYPE_DATETIME, TimestampColumn, TimestampValue)
+            CASE_MIN(LOGICAL_TYPE_TIMESTAMP, TimestampColumn, TimestampValue)
+            CASE_MIN(LOGICAL_TYPE_CHAR, BinaryColumn, SliceState)
+            CASE_MIN(LOGICAL_TYPE_VARCHAR, BinaryColumn, SliceState)
+            CASE_MIN(LOGICAL_TYPE_BOOL, BooleanColumn, uint8_t)
             CASE_DEFAULT_WARNING(type)
         }
     }
     case OLAP_FIELD_AGGREGATION_REPLACE:
     case OLAP_FIELD_AGGREGATION_REPLACE_IF_NOT_NULL: {
         switch (type) {
-            CASE_REPLACE(OLAP_FIELD_TYPE_TINYINT, Int8Column, int8_t)
-            CASE_REPLACE(OLAP_FIELD_TYPE_SMALLINT, Int16Column, int16_t)
-            CASE_REPLACE(OLAP_FIELD_TYPE_INT, Int32Column, int32_t)
-            CASE_REPLACE(OLAP_FIELD_TYPE_BIGINT, Int64Column, int64_t)
-            CASE_REPLACE(OLAP_FIELD_TYPE_LARGEINT, Int128Column, int128_t)
-            CASE_REPLACE(OLAP_FIELD_TYPE_FLOAT, FloatColumn, float)
-            CASE_REPLACE(OLAP_FIELD_TYPE_DOUBLE, DoubleColumn, double)
-            CASE_REPLACE(OLAP_FIELD_TYPE_DECIMAL, DecimalColumn, DecimalV2Value)
-            CASE_REPLACE(OLAP_FIELD_TYPE_DECIMAL_V2, DecimalColumn, DecimalV2Value)
-            CASE_REPLACE(OLAP_FIELD_TYPE_DECIMAL32, Decimal32Column, int32_t)
-            CASE_REPLACE(OLAP_FIELD_TYPE_DECIMAL64, Decimal64Column, int64_t)
-            CASE_REPLACE(OLAP_FIELD_TYPE_DECIMAL128, Decimal128Column, int128_t)
-            CASE_REPLACE(OLAP_FIELD_TYPE_DATE, DateColumn, DateValue)
-            CASE_REPLACE(OLAP_FIELD_TYPE_DATE_V2, DateColumn, DateValue)
-            CASE_REPLACE(OLAP_FIELD_TYPE_DATETIME, TimestampColumn, TimestampValue)
-            CASE_REPLACE(OLAP_FIELD_TYPE_TIMESTAMP, TimestampColumn, TimestampValue)
-            CASE_REPLACE(OLAP_FIELD_TYPE_CHAR, BinaryColumn, SliceState)
-            CASE_REPLACE(OLAP_FIELD_TYPE_VARCHAR, BinaryColumn, SliceState)
-            CASE_REPLACE(OLAP_FIELD_TYPE_BOOL, BooleanColumn, uint8_t)
-            CASE_REPLACE(OLAP_FIELD_TYPE_ARRAY, ArrayColumn, ArrayState)
-            CASE_REPLACE(OLAP_FIELD_TYPE_HLL, HyperLogLogColumn, HyperLogLog)
-            CASE_REPLACE(OLAP_FIELD_TYPE_OBJECT, BitmapColumn, BitmapValue)
-            CASE_REPLACE(OLAP_FIELD_TYPE_PERCENTILE, PercentileColumn, PercentileValue)
-            CASE_REPLACE(OLAP_FIELD_TYPE_JSON, JsonColumn, JsonValue)
+            CASE_REPLACE(LOGICAL_TYPE_TINYINT, Int8Column, int8_t)
+            CASE_REPLACE(LOGICAL_TYPE_SMALLINT, Int16Column, int16_t)
+            CASE_REPLACE(LOGICAL_TYPE_INT, Int32Column, int32_t)
+            CASE_REPLACE(LOGICAL_TYPE_BIGINT, Int64Column, int64_t)
+            CASE_REPLACE(LOGICAL_TYPE_LARGEINT, Int128Column, int128_t)
+            CASE_REPLACE(LOGICAL_TYPE_FLOAT, FloatColumn, float)
+            CASE_REPLACE(LOGICAL_TYPE_DOUBLE, DoubleColumn, double)
+            CASE_REPLACE(LOGICAL_TYPE_DECIMAL, DecimalColumn, DecimalV2Value)
+            CASE_REPLACE(LOGICAL_TYPE_DECIMAL_V2, DecimalColumn, DecimalV2Value)
+            CASE_REPLACE(LOGICAL_TYPE_DECIMAL32, Decimal32Column, int32_t)
+            CASE_REPLACE(LOGICAL_TYPE_DECIMAL64, Decimal64Column, int64_t)
+            CASE_REPLACE(LOGICAL_TYPE_DECIMAL128, Decimal128Column, int128_t)
+            CASE_REPLACE(LOGICAL_TYPE_DATE, DateColumn, DateValue)
+            CASE_REPLACE(LOGICAL_TYPE_DATE_V2, DateColumn, DateValue)
+            CASE_REPLACE(LOGICAL_TYPE_DATETIME, TimestampColumn, TimestampValue)
+            CASE_REPLACE(LOGICAL_TYPE_TIMESTAMP, TimestampColumn, TimestampValue)
+            CASE_REPLACE(LOGICAL_TYPE_CHAR, BinaryColumn, SliceState)
+            CASE_REPLACE(LOGICAL_TYPE_VARCHAR, BinaryColumn, SliceState)
+            CASE_REPLACE(LOGICAL_TYPE_BOOL, BooleanColumn, uint8_t)
+            CASE_REPLACE(LOGICAL_TYPE_ARRAY, ArrayColumn, ArrayState)
+            CASE_REPLACE(LOGICAL_TYPE_HLL, HyperLogLogColumn, HyperLogLog)
+            CASE_REPLACE(LOGICAL_TYPE_OBJECT, BitmapColumn, BitmapValue)
+            CASE_REPLACE(LOGICAL_TYPE_PERCENTILE, PercentileColumn, PercentileValue)
+            CASE_REPLACE(LOGICAL_TYPE_JSON, JsonColumn, JsonValue)
             CASE_DEFAULT_WARNING(type)
         }
     }
     case OLAP_FIELD_AGGREGATION_HLL_UNION: {
         switch (type) {
-        case OLAP_FIELD_TYPE_HLL: {
+        case LOGICAL_TYPE_HLL: {
             return std::make_unique<HllUnionAggregator>();
         }
             CASE_DEFAULT_WARNING(type)
@@ -652,7 +652,7 @@ ValueColumnAggregatorPtr create_value_aggregator(FieldType type, FieldAggregatio
     }
     case OLAP_FIELD_AGGREGATION_BITMAP_UNION: {
         switch (type) {
-        case OLAP_FIELD_TYPE_OBJECT: {
+        case LOGICAL_TYPE_OBJECT: {
             return std::make_unique<BitmapUnionAggregator>();
         }
             CASE_DEFAULT_WARNING(type)
@@ -660,7 +660,7 @@ ValueColumnAggregatorPtr create_value_aggregator(FieldType type, FieldAggregatio
     }
     case OLAP_FIELD_AGGREGATION_PERCENTILE_UNION: {
         switch (type) {
-        case OLAP_FIELD_TYPE_PERCENTILE: {
+        case LOGICAL_TYPE_PERCENTILE: {
             return std::make_unique<PercentileUnionAggregator>();
         }
             CASE_DEFAULT_WARNING(type)
@@ -676,33 +676,33 @@ ValueColumnAggregatorPtr create_value_aggregator(FieldType type, FieldAggregatio
 
 ColumnAggregatorPtr ColumnAggregatorFactory::create_key_column_aggregator(
         const starrocks::vectorized::FieldPtr& field) {
-    FieldType type = field->type()->type();
+    LogicalType type = field->type()->type();
     starrocks::FieldAggregationMethod method = field->aggregate_method();
     if (method != OLAP_FIELD_AGGREGATION_NONE) {
         CHECK(false) << "key column's aggregation method should be NONE";
     }
     switch (type) {
-        CASE_NEW_KEY_AGGREGATOR(OLAP_FIELD_TYPE_TINYINT, Int8Column)
-        CASE_NEW_KEY_AGGREGATOR(OLAP_FIELD_TYPE_SMALLINT, Int16Column)
-        CASE_NEW_KEY_AGGREGATOR(OLAP_FIELD_TYPE_INT, Int32Column)
-        CASE_NEW_KEY_AGGREGATOR(OLAP_FIELD_TYPE_BIGINT, Int64Column)
-        CASE_NEW_KEY_AGGREGATOR(OLAP_FIELD_TYPE_LARGEINT, Int128Column)
-        CASE_NEW_KEY_AGGREGATOR(OLAP_FIELD_TYPE_BOOL, BooleanColumn)
-        CASE_NEW_KEY_AGGREGATOR(OLAP_FIELD_TYPE_CHAR, BinaryColumn)
-        CASE_NEW_KEY_AGGREGATOR(OLAP_FIELD_TYPE_VARCHAR, BinaryColumn)
-        CASE_NEW_KEY_AGGREGATOR(OLAP_FIELD_TYPE_DECIMAL_V2, DecimalColumn)
-        CASE_NEW_KEY_AGGREGATOR(OLAP_FIELD_TYPE_DECIMAL32, Decimal32Column)
-        CASE_NEW_KEY_AGGREGATOR(OLAP_FIELD_TYPE_DECIMAL64, Decimal64Column)
-        CASE_NEW_KEY_AGGREGATOR(OLAP_FIELD_TYPE_DECIMAL128, Decimal128Column)
-        CASE_NEW_KEY_AGGREGATOR(OLAP_FIELD_TYPE_DATE_V2, DateColumn)
-        CASE_NEW_KEY_AGGREGATOR(OLAP_FIELD_TYPE_TIMESTAMP, TimestampColumn)
+        CASE_NEW_KEY_AGGREGATOR(LOGICAL_TYPE_TINYINT, Int8Column)
+        CASE_NEW_KEY_AGGREGATOR(LOGICAL_TYPE_SMALLINT, Int16Column)
+        CASE_NEW_KEY_AGGREGATOR(LOGICAL_TYPE_INT, Int32Column)
+        CASE_NEW_KEY_AGGREGATOR(LOGICAL_TYPE_BIGINT, Int64Column)
+        CASE_NEW_KEY_AGGREGATOR(LOGICAL_TYPE_LARGEINT, Int128Column)
+        CASE_NEW_KEY_AGGREGATOR(LOGICAL_TYPE_BOOL, BooleanColumn)
+        CASE_NEW_KEY_AGGREGATOR(LOGICAL_TYPE_CHAR, BinaryColumn)
+        CASE_NEW_KEY_AGGREGATOR(LOGICAL_TYPE_VARCHAR, BinaryColumn)
+        CASE_NEW_KEY_AGGREGATOR(LOGICAL_TYPE_DECIMAL_V2, DecimalColumn)
+        CASE_NEW_KEY_AGGREGATOR(LOGICAL_TYPE_DECIMAL32, Decimal32Column)
+        CASE_NEW_KEY_AGGREGATOR(LOGICAL_TYPE_DECIMAL64, Decimal64Column)
+        CASE_NEW_KEY_AGGREGATOR(LOGICAL_TYPE_DECIMAL128, Decimal128Column)
+        CASE_NEW_KEY_AGGREGATOR(LOGICAL_TYPE_DATE_V2, DateColumn)
+        CASE_NEW_KEY_AGGREGATOR(LOGICAL_TYPE_TIMESTAMP, TimestampColumn)
         CASE_DEFAULT_WARNING(type)
     }
 }
 
 ColumnAggregatorPtr ColumnAggregatorFactory::create_value_column_aggregator(
         const starrocks::vectorized::FieldPtr& field) {
-    FieldType type = field->type()->type();
+    LogicalType type = field->type()->type();
     starrocks::FieldAggregationMethod method = field->aggregate_method();
     if (method == OLAP_FIELD_AGGREGATION_NONE) {
         CHECK(false) << "bad agg method NONE for column: " << field->name();

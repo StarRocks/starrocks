@@ -171,6 +171,14 @@ public class ConnectProcessor {
                 }
             }
             ctx.getAuditEventBuilder().setIsQuery(true);
+            if (ctx.getSessionVariable().isEnableBigQueryLog()) {
+                ctx.getAuditEventBuilder().setBigQueryLogCPUSecondThreshold(
+                        ctx.getSessionVariable().getBigQueryLogCPUSecondThreshold());
+                ctx.getAuditEventBuilder().setBigQueryLogScanBytesThreshold(
+                        ctx.getSessionVariable().getBigQueryLogScanBytesThreshold());
+                ctx.getAuditEventBuilder().setBigQueryLogScanRowsThreshold(
+                        ctx.getSessionVariable().getBigQueryLogScanRowsThreshold());
+            }
         } else {
             ctx.getAuditEventBuilder().setIsQuery(false);
         }

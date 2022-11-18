@@ -898,8 +898,9 @@ std::shared_ptr<arrow::Array> create_const_decimal_array(size_t num_elements,
     return array;
 }
 template <PrimitiveType PT, typename CppType = RunTimeCppType<PT>>
-void add_arrow_to_decimal_column(std::shared_ptr<arrow::Decimal128Type> type, Column* column, size_t num_elements,
-                                 int128_t value, CppType expect_value, size_t& counter, bool fail) {
+void add_arrow_to_decimal_column(const std::shared_ptr<arrow::Decimal128Type>& type, Column* column,
+                                 size_t num_elements, int128_t value, CppType expect_value, size_t& counter,
+                                 bool fail) {
     using ColumnType = RunTimeColumnType<PT>;
     ASSERT_EQ(column->size(), counter);
     auto array = create_const_decimal_array<false>(num_elements, std::move(type), value, counter);
@@ -924,7 +925,7 @@ void add_arrow_to_decimal_column(std::shared_ptr<arrow::Decimal128Type> type, Co
 }
 
 template <PrimitiveType PT, typename CppType = RunTimeCppType<PT>>
-void add_arrow_to_nullable_decimal_column(std::shared_ptr<arrow::Decimal128Type> type, Column* column,
+void add_arrow_to_nullable_decimal_column(const std::shared_ptr<arrow::Decimal128Type>& type, Column* column,
                                           size_t num_elements, int128_t value, CppType expect_value, size_t& counter,
                                           bool fail) {
     using ColumnType = RunTimeColumnType<PT>;

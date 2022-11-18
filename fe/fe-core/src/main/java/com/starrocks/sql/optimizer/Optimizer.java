@@ -4,7 +4,14 @@ package com.starrocks.sql.optimizer;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.SinglePartitionInfo;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.Explain;
@@ -15,6 +22,7 @@ import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.cost.CostEstimate;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.join.ReorderJoinRule;
@@ -35,6 +43,7 @@ import com.starrocks.sql.optimizer.rule.transformation.PushLimitAndFilterToCTEPr
 import com.starrocks.sql.optimizer.rule.transformation.RemoveAggregationFromAggTable;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteGroupingSetsByCTERule;
 import com.starrocks.sql.optimizer.rule.transformation.SemiReorderRule;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.rule.tree.AddDecodeNodeForDictStringRule;
 import com.starrocks.sql.optimizer.rule.tree.ExchangeSortToMergeRule;
 import com.starrocks.sql.optimizer.rule.tree.PreAggregateTurnOnRule;
@@ -47,11 +56,13 @@ import com.starrocks.sql.optimizer.rule.tree.UseSortAggregateRule;
 import com.starrocks.sql.optimizer.task.OptimizeGroupTask;
 import com.starrocks.sql.optimizer.task.RewriteTreeTask;
 import com.starrocks.sql.optimizer.task.TaskContext;
+import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Optimizer's entrance class
@@ -92,7 +103,7 @@ public class Optimizer {
     }
 
     // Optimize by rule will return logical plan.
-    // Used by Materialized view query rewrite optimization.
+    // Used by materialized view query rewrite optimization.
     private OptExpression optimizeByRule(ConnectContext connectContext,
                                          OptExpression logicOperatorTree,
                                          PhysicalPropertySet requiredProperty,
@@ -182,9 +193,66 @@ public class Optimizer {
         context = new OptimizerContext(memo, columnRefFactory, connectContext);
         context.setTraceInfo(new OptimizerTraceInfo(connectContext.getQueryId()));
 
-        // process materialized views
-        if (Config.enable_experimental_mv) {
-            // TODO: register materialized views
+        if (Config.enable_experimental_mv
+                && connectContext.getSessionVariable().isEnableMaterializedViewRewrite()
+                && !optimizerConfig.isRuleBased()) {
+            try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.registerMvs")) {
+                registerMaterializedViews(logicOperatorTree, connectContext);
+            }
+        }
+    }
+
+    private void registerMaterializedViews(OptExpression logicOperatorTree, ConnectContext connectContext) {
+        List<Table> tables = MvUtils.getAllTables(logicOperatorTree);
+
+        // get all related materialized views, include nested mvs
+        Set<MaterializedView> relatedMvs =
+                MvUtils.getRelatedMvs(connectContext.getSessionVariable().getNestedMvRewriteMaxLevel(), tables);
+
+        for (MaterializedView mv : relatedMvs) {
+            if (!mv.isActive()) {
+                continue;
+            }
+            Set<String> partitionNamesToRefresh = mv.getPartitionNamesToRefreshForMv();
+            PartitionInfo partitionInfo = mv.getPartitionInfo();
+            if (partitionInfo instanceof SinglePartitionInfo) {
+                if (!partitionNamesToRefresh.isEmpty()) {
+                    continue;
+                }
+            } else if (partitionNamesToRefresh.containsAll(mv.getPartitionNames())) {
+                // if the mv is partitioned, and all partitions need refresh,
+                // then it can not be an candidate
+                continue;
+            }
+
+            // 1. build mv query logical plan
+            ColumnRefFactory columnRefFactory = new ColumnRefFactory();
+            MaterializedViewOptimizer mvOptimizer = new MaterializedViewOptimizer();
+            OptExpression mvPlan = mvOptimizer.optimize(mv, columnRefFactory, connectContext);
+            if (!MvUtils.isValidMVPlan(mvPlan)) {
+                continue;
+            }
+
+            List<ColumnRefOperator> outputExpressions = mvOptimizer.getOutputExpressions();
+            MaterializationContext materializationContext = new MaterializationContext(
+                    mv, mvPlan, columnRefFactory, outputExpressions);
+
+            // generate scan mv plan
+            Database db = context.getCatalog().getDb(mv.getDbId());
+            TableName tableName = new TableName(db.getFullName(), mv.getName());
+            String selectMvSql = "select * from " + tableName.toSql();
+            Pair<OptExpression, LogicalPlan> scanMvPlans =
+                    MvUtils.getRuleOptimizedLogicalPlan(selectMvSql, context.getColumnRefFactory(), connectContext);
+            OptExpression scanMvPlan = scanMvPlans.first;
+            if (!MvUtils.isLogicalSPJ(scanMvPlan)) {
+                continue;
+            }
+            if (!(scanMvPlan.getOp() instanceof LogicalOlapScanOperator)) {
+                continue;
+            }
+            materializationContext.setScanMvOperator(scanMvPlan.getOp());
+            materializationContext.setScanMvOutputExpressions(scanMvPlans.second.getOutputColumn());
+            context.addCandidateMvs(materializationContext);
         }
     }
 
@@ -290,6 +358,12 @@ public class Optimizer {
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.INTERSECT_REWRITE);
         ruleRewriteIterative(tree, rootTaskContext, new RemoveAggregationFromAggTable());
 
+        if (!optimizerConfig.isRuleSetTypeDisable(RuleSetType.SINGLE_TABLE_MV_REWRITE)
+                && sessionVariable.isEnableMaterializedViewRewrite()
+                && sessionVariable.isEnableRuleBasedMaterializedViewRewrite()) {
+            // now add single table materialized view rewrite rules in rule based rewrite phase to boost optimization
+            ruleRewriteIterative(tree, rootTaskContext, RuleSetType.SINGLE_TABLE_MV_REWRITE);
+        }
         return tree.getInputs().get(0);
     }
 
@@ -335,21 +409,25 @@ public class Optimizer {
             }
         }
 
-        //add join implementRule
-        String joinImplementationMode = ConnectContext.get().getSessionVariable().getJoinImplementationMode();
-        if ("merge".equalsIgnoreCase(joinImplementationMode)) {
-            context.getRuleSet().addMergeJoinImplementationRule();
-        } else if ("hash".equalsIgnoreCase(joinImplementationMode)) {
-            context.getRuleSet().addHashJoinImplementationRule();
-        } else if ("nestloop".equalsIgnoreCase(joinImplementationMode)) {
-            context.getRuleSet().addNestLoopJoinImplementationRule();
+        if (!sessionVariable.isMVPlanner()) {
+            //add join implementRule
+            String joinImplementationMode = ConnectContext.get().getSessionVariable().getJoinImplementationMode();
+            if ("merge".equalsIgnoreCase(joinImplementationMode)) {
+                context.getRuleSet().addMergeJoinImplementationRule();
+            } else if ("hash".equalsIgnoreCase(joinImplementationMode)) {
+                context.getRuleSet().addHashJoinImplementationRule();
+            } else if ("nestloop".equalsIgnoreCase(joinImplementationMode)) {
+                context.getRuleSet().addNestLoopJoinImplementationRule();
+            } else {
+                context.getRuleSet().addAutoJoinImplementationRule();
+            }
         } else {
-            context.getRuleSet().addAutoJoinImplementationRule();
+            context.getRuleSet().addRealtimeMVRules();
         }
 
-        // add realtime mv rules
-        if (sessionVariable.isMVPlanner() && sessionVariable.isEnableRealtimeRefreshMV()) {
-            context.getRuleSet().addRealtimeMVRules();
+        if (!context.getCandidateMvs().isEmpty()
+                && connectContext.getSessionVariable().isEnableCostBasedMaterializedViewRewrite()) {
+            context.getRuleSet().addMultiTableMvRewriteRule();
         }
 
         context.getTaskScheduler().pushTask(new OptimizeGroupTask(rootTaskContext, memo.getRootGroup()));

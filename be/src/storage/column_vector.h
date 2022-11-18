@@ -32,13 +32,13 @@
 
 namespace starrocks {
 
+class Field;
+
 // struct that contains column data(null bitmap), data array in sub class.
 class ColumnVectorBatch {
 public:
     explicit ColumnVectorBatch(TypeInfoPtr type_info, bool is_nullable)
             : _type_info(std::move(type_info)),
-              _capacity(0),
-              _delete_state(DEL_NOT_SATISFIED),
 
               _nullable(is_nullable) {}
 
@@ -103,8 +103,8 @@ public:
 
 private:
     TypeInfoPtr _type_info;
-    size_t _capacity;
-    DelCondSatisfied _delete_state;
+    size_t _capacity{0};
+    DelCondSatisfied _delete_state{DEL_NOT_SATISFIED};
     std::vector<uint8_t> _null_signs;
     bool _nullable;
 };

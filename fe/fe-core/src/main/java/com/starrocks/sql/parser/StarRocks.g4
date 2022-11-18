@@ -23,11 +23,11 @@ statement
     | useDatabaseStatement
     | useCatalogStatement
     | showDatabasesStatement
-    | alterDbQuotaStmtatement
+    | alterDbQuotaStatement
     | createDbStatement
     | dropDbStatement
     | showCreateDbStatement
-    | alterDatabaseRename
+    | alterDatabaseRenameStatement
     | recoverDbStmt
     | showDataStmt
 
@@ -91,6 +91,9 @@ statement
     | pauseRoutineLoadStatement
     | showRoutineLoadStatement
     | showRoutineLoadTaskStatement
+
+    //StreamLoad Statement
+    | showStreamLoadStatement
 
     // Admin Statement
     | adminSetConfigStatement
@@ -242,7 +245,7 @@ showDatabasesStatement
     | SHOW SCHEMAS ((LIKE pattern=string) | (WHERE expression))?
     ;
 
-alterDbQuotaStmtatement
+alterDbQuotaStatement
     : ALTER DATABASE identifier SET DATA QUOTA identifier
     | ALTER DATABASE identifier SET REPLICA QUOTA INTEGER_VALUE
     ;
@@ -259,7 +262,7 @@ showCreateDbStatement
     : SHOW CREATE (DATABASE | SCHEMA) identifier
     ;
 
-alterDatabaseRename
+alterDatabaseRenameStatement
     : ALTER DATABASE identifier RENAME identifier
     ;
 
@@ -352,7 +355,9 @@ fromRollup
 
 createTableAsSelectStatement
     : CREATE TABLE (IF NOT EXISTS)? qualifiedName
-        ('(' identifier (',' identifier)* ')')? comment?
+        ('(' identifier (',' identifier)* ')')?
+        keyDesc?
+        comment?
         partitionDesc?
         distributionDesc?
         properties?
@@ -492,7 +497,7 @@ dropMaterializedViewStatement
     ;
 
 alterMaterializedViewStatement
-    : ALTER MATERIALIZED VIEW mvName=qualifiedName (refreshSchemeDesc | tableRenameClause)
+    : ALTER MATERIALIZED VIEW mvName=qualifiedName (refreshSchemeDesc | tableRenameClause | modifyTablePropertiesClause)
     ;
 
 refreshMaterializedViewStatement
@@ -829,6 +834,12 @@ showRoutineLoadTaskStatement
     : SHOW ROUTINE LOAD TASK
         (FROM db=qualifiedName)?
         WHERE expression
+    ;
+
+showStreamLoadStatement
+    : SHOW ALL? STREAM LOAD (FOR (db=qualifiedName '.')? name=identifier)?
+        (FROM db=qualifiedName)?
+        (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 // ------------------------------------------- Analyze Statement -------------------------------------------------------
 
@@ -1344,7 +1355,7 @@ installPluginStatement
     ;
 
 uninstallPluginStatement
-    : UNINSTALL PLUGIN FROM identifierOrString
+    : UNINSTALL PLUGIN identifierOrString
     ;
 
 // ------------------------------------------- File Statement ----------------------------------------------------------
@@ -1474,9 +1485,8 @@ limitElement
 querySpecification
     : SELECT setVarHint* setQuantifier? selectItem (',' selectItem)*
       fromClause
-      (WHERE where=expression)?
-      (GROUP BY groupingElement)?
-      (HAVING having=expression)?
+      ((QUALIFY qualifyFunction=selectItem comparisonOperator limit=INTEGER_VALUE)?
+      | (WHERE where=expression)? (GROUP BY groupingElement)? (HAVING having=expression)?)
     ;
 
 fromClause
@@ -1666,6 +1676,7 @@ primaryExpression
     | primaryExpression COLLATE (identifier | string)                                     #collate
     | literalExpression                                                                   #literal
     | columnReference                                                                     #columnRef
+    | base = primaryExpression '.' fieldName = identifier                                 #dereference
     | left = primaryExpression CONCAT right = primaryExpression                           #concat
     | operator = (MINUS_SYMBOL | PLUS_SYMBOL | BITNOT) primaryExpression                  #arithmeticUnary
     | operator = LOGICAL_NOT primaryExpression                                            #arithmeticUnary
@@ -1691,6 +1702,7 @@ literalExpression
     | string                                                                              #stringLiteral
     | interval                                                                            #intervalLiteral
     | unitBoundary                                                                        #unitBoundaryLiteral
+    | binary                                                                              #binaryLiteral
     ;
 
 functionCall
@@ -1723,7 +1735,6 @@ systemVariable
 
 columnReference
     : identifier
-    | qualifiedName
     ;
 
 informationFunctionExpression
@@ -1932,6 +1943,11 @@ string
     | DOUBLE_QUOTED_TEXT
     ;
 
+binary
+    : BINARY_SINGLE_QUOTED_TEXT
+    | BINARY_DOUBLE_QUOTED_TEXT
+    ;
+
 comparisonOperator
     : EQ | NEQ | LT | LTE | GT | GTE | EQ_FOR_NULL
     ;
@@ -1956,10 +1972,23 @@ type
     : baseType
     | decimalType
     | arrayType
+    | structType
     ;
 
 arrayType
     : ARRAY '<' type '>'
+    ;
+
+columnNameColonType
+    : identifier ':' type comment?
+    ;
+
+columnNameColonTypeList
+    : columnNameColonType (',' columnNameColonType)*
+    ;
+
+structType
+    : STRUCT '<' columnNameColonTypeList '>'
     ;
 
 typeParameter
@@ -1990,6 +2019,7 @@ baseType
     | HLL
     | PERCENTILE
     | JSON
+    | VARBINARY typeParameter?
     ;
 
 decimalType

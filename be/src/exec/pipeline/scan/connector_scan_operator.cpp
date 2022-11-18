@@ -168,6 +168,9 @@ Status ConnectorChunkSource::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ChunkSource::prepare(state));
     _runtime_state = state;
     _ck_acc.set_max_size(state->chunk_size());
+    if (config::connector_min_max_predicate_from_runtime_filter_enable) {
+        _data_source->parse_runtime_filters(state);
+    }
     return Status::OK();
 }
 
@@ -205,7 +208,13 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, vectorized::ChunkP
                 break;
             }
         } else if (!_status.is_end_of_file()) {
-            return _status;
+            if (_status.is_time_out()) {
+                Status t = _status;
+                _status = Status::OK();
+                return t;
+            } else {
+                return _status;
+            }
         } else {
             _ck_acc.finalize();
             DCHECK(_status.is_end_of_file());

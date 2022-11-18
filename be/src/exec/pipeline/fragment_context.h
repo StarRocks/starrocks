@@ -24,6 +24,8 @@
 #include "util/hash_util.hpp"
 
 namespace starrocks {
+class StreamLoadContext;
+
 namespace pipeline {
 
 using RuntimeFilterPort = starrocks::RuntimeFilterPort;
@@ -33,7 +35,7 @@ class FragmentContext {
     friend FragmentContextManager;
 
 public:
-    FragmentContext() {}
+    FragmentContext() = default;
     ~FragmentContext() {
         _runtime_filter_hub.close_all_in_filters(_runtime_state.get());
         _drivers.clear();
@@ -79,14 +81,7 @@ public:
         return status == nullptr ? Status::OK() : *status;
     }
 
-    void cancel(const Status& status) {
-        _runtime_state->set_is_cancelled(true);
-        set_final_status(status);
-        if (_runtime_state->query_options().query_type == TQueryType::LOAD) {
-            starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_pipeline_load(_query_id,
-                                                                                                 _fragment_instance_id);
-        }
-    }
+    void cancel(const Status& status);
 
     void finish() { cancel(Status::OK()); }
 
@@ -128,6 +123,8 @@ public:
 
     PerDriverScanRangesMap& scan_ranges_per_driver() { return _scan_ranges_per_driver_seq; }
 
+    void set_stream_load_contexts(const std::vector<StreamLoadContext*>& contexts);
+
 private:
     // Id of this query
     TUniqueId _query_id;
@@ -165,6 +162,8 @@ private:
     query_cache::CacheParam _cache_param;
     bool _enable_cache = false;
     PerDriverScanRangesMap _scan_ranges_per_driver_seq;
+    std::vector<StreamLoadContext*> _stream_load_contexts;
+    bool _channel_stream_load = false;
 };
 
 class FragmentContextManager {

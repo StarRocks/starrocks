@@ -114,8 +114,8 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNotSuperSet) {
     seg_options.stats = &stats;
 
     vectorized::Schema vec_schema;
-    vec_schema.append(std::make_shared<vectorized::Field>(0, "c1", OLAP_FIELD_TYPE_INT, -1, -1, false));
-    vec_schema.append(std::make_shared<vectorized::Field>(1, "c2", OLAP_FIELD_TYPE_VARCHAR, -1, -1, false));
+    vec_schema.append(std::make_shared<vectorized::Field>(0, "c1", LOGICAL_TYPE_INT, -1, -1, false));
+    vec_schema.append(std::make_shared<vectorized::Field>(1, "c2", LOGICAL_TYPE_VARCHAR, -1, -1, false));
 
     ObjectPool pool;
     vectorized::SegmentReadOptions seg_opts;
@@ -123,7 +123,7 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNotSuperSet) {
     seg_opts.stats = &stats;
 
     auto* con = pool.add(new vectorized::ConjunctivePredicates());
-    auto type_varchar = get_type_info(OLAP_FIELD_TYPE_VARCHAR);
+    auto type_varchar = get_type_info(LOGICAL_TYPE_VARCHAR);
     con->add(pool.add(vectorized::new_column_ge_predicate(type_varchar, 1, Slice(values[8]))));
     seg_opts.delete_predicates.add(*con);
 
@@ -247,8 +247,8 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNoLocalDict) {
     ASSERT_FALSE(scalar_iter->all_page_dict_encoded());
 
     vectorized::Schema vec_schema;
-    vec_schema.append(std::make_shared<vectorized::Field>(0, "c1", OLAP_FIELD_TYPE_INT, -1, -1, false));
-    vec_schema.append(std::make_shared<vectorized::Field>(1, "c2", OLAP_FIELD_TYPE_VARCHAR, -1, -1, false));
+    vec_schema.append(std::make_shared<vectorized::Field>(0, "c1", LOGICAL_TYPE_INT, -1, -1, false));
+    vec_schema.append(std::make_shared<vectorized::Field>(1, "c2", LOGICAL_TYPE_VARCHAR, -1, -1, false));
 
     ObjectPool pool;
     vectorized::SegmentReadOptions seg_opts;

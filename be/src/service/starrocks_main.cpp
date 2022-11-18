@@ -33,6 +33,7 @@
 #include <curl/curl.h>
 #include <thrift/TOutput.h>
 
+#include "agent/agent_server.h"
 #include "agent/heartbeat_server.h"
 #include "agent/status.h"
 #include "common/config.h"
@@ -186,6 +187,7 @@ int main(int argc, char** argv) {
                         {.path = p.path, .size = static_cast<size_t>(starrocks::config::block_cache_disk_size)});
             }
         }
+        cache_options.meta_path = starrocks::config::block_cache_meta_path;
         cache_options.block_size = starrocks::config::block_cache_block_size;
         cache_options.checksum = starrocks::config::block_cache_checksum_enable;
         cache->init(cache_options);
@@ -304,6 +306,10 @@ int main(int argc, char** argv) {
         start_be();
     }
 
+#ifdef WITH_BLOCK_CACHE
+    starrocks::BlockCache::instance()->shutdown();
+#endif
+
     daemon->stop();
     daemon.reset();
 
@@ -316,6 +322,7 @@ int main(int argc, char** argv) {
     heartbeat_thrift_server->stop();
     heartbeat_thrift_server->join();
 
+    exec_env->agent_server()->stop();
     engine->stop();
     delete engine;
     starrocks::ExecEnv::destroy(exec_env);

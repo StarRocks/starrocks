@@ -24,8 +24,8 @@ struct AvgDispatcher {
 struct ArrayAggDispatcher {
     template <PrimitiveType pt>
     void operator()(AggregateFuncResolver* resolver) {
-        if constexpr (pt_is_aggregate<pt> || pt_is_string<pt>) {
-            auto func = AggregateFactory::MakeArrayAggAggregateFunction<pt>();
+        if constexpr (pt_is_aggregate<pt> || pt_is_string<pt> || pt_is_json<pt>) {
+            auto func = std::make_shared<ArrayAggAggregateFunction<pt>>();
             using AggState = ArrayAggAggregateState<pt>;
             resolver->add_aggregate_mapping<pt, TYPE_ARRAY, AggState, AggregateFunctionPtr, false>("array_agg", false,
                                                                                                    func);
@@ -38,6 +38,7 @@ void AggregateFuncResolver::register_avg() {
         type_dispatch_all(type, AvgDispatcher(), this);
         type_dispatch_all(type, ArrayAggDispatcher(), this);
     }
+    type_dispatch_all(TYPE_JSON, ArrayAggDispatcher(), this);
     add_decimal_mapping<TYPE_DECIMAL32, TYPE_DECIMAL128, true>("decimal_avg");
     add_decimal_mapping<TYPE_DECIMAL64, TYPE_DECIMAL128, true>("decimal_avg");
     add_decimal_mapping<TYPE_DECIMAL128, TYPE_DECIMAL128, true>("decimal_avg");

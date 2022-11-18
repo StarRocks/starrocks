@@ -46,6 +46,9 @@ public:
         return _check_and_resolve_conflict(tablet, rowset, rowset_id, latest_applied_version, read_column_ids, index);
     }
 
+    static void plan_read_by_rssid(const vector<uint64_t>& rowids, size_t* num_default,
+                                   std::map<uint32_t, std::vector<uint32_t>>* rowids_by_rssid, vector<uint32_t>* idxes);
+
 private:
     Status _do_load(Tablet* tablet, Rowset* rowset);
 
@@ -54,8 +57,6 @@ private:
     Status _check_and_resolve_conflict(Tablet* tablet, Rowset* rowset, uint32_t rowset_id,
                                        EditVersion latest_applied_version, std::vector<uint32_t>& read_column_ids,
                                        const PrimaryIndex& index);
-
-    Status _update_rowset_meta(Tablet* tablet, Rowset* rowset);
 
     std::once_flag _load_once_flag;
     Status _status;

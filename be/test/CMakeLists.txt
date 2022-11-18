@@ -126,6 +126,9 @@ set(EXEC_FILES
         ./formats/json/numeric_column_test.cpp
         ./formats/json/nullable_column_test.cpp
         ./formats/orc/orc_chunk_reader_test.cpp
+        ./formats/orc/orc_lazy_load_test.cpp
+        ./formats/orc/orc_test_util/MemoryOutputStream.cc
+        ./formats/orc/orc_test_util/MemoryInputStream.cc
         ./formats/parquet/parquet_schema_test.cpp
         ./formats/parquet/encoding_test.cpp
         ./formats/parquet/page_reader_test.cpp
@@ -205,9 +208,8 @@ set(EXEC_FILES
         ./storage/tablet_updates_test.cpp
         ./storage/update_manager_test.cpp
         ./storage/compaction_utils_test.cpp
-        ./storage/compaction_context_test.cpp
         ./storage/compaction_manager_test.cpp
-        ./storage/base_and_cumulative_compaction_policy_test.cpp
+	./storage/default_compaction_policy_test.cpp
         ./storage/aggregate_iterator_test.cpp
         ./storage/chunk_aggregator_test.cpp
         ./storage/chunk_helper_test.cpp
@@ -232,7 +234,6 @@ set(EXEC_FILES
         ./runtime/datetime_value_test.cpp
         ./runtime/decimalv2_value_test.cpp
         ./runtime/decimalv3_test.cpp
-        ./runtime/decimal_value_test.cpp
         ./runtime/external_scan_context_mgr_test.cpp
         ./runtime/fragment_mgr_test.cpp
         ./runtime/free_list_test.cpp
@@ -250,7 +251,6 @@ set(EXEC_FILES
         ./runtime/stream_load_pipe_test.cpp
         ./runtime/string_value_test.cpp
         ./runtime/type_descriptor_test.cpp
-        ./runtime/thread_resource_mgr_test.cpp
         ./runtime/type_descriptor_test.cpp
         ./runtime/vectorized/sorted_chunks_merger_test.cpp
         ./runtime/memory_scratch_sink_test_issue_8676.cpp
@@ -306,6 +306,7 @@ set(EXEC_FILES
         ./util/starrocks_metrics_test.cpp
         ./util/system_metrics_test.cpp
         ./util/ratelimit_test.cpp
+        ./util/cpu_usage_info_test.cpp
         ./gutil/sysinfo-test.cc
         ./service/lake_service_test.cpp
         )

@@ -41,12 +41,7 @@ using PulsarConsumerPipe = KafkaConsumerPipe;
 
 class DataConsumer {
 public:
-    DataConsumer()
-            : _id(UniqueId::gen_uid()),
-              _grp_id(UniqueId::gen_uid()),
-              _init(false),
-              _cancelled(false),
-              _last_visit_time(0) {}
+    DataConsumer() : _id(UniqueId::gen_uid()), _grp_id(UniqueId::gen_uid()) {}
 
     virtual ~DataConsumer() = default;
 
@@ -74,9 +69,9 @@ protected:
 
     // lock to protect the following bools
     std::mutex _lock;
-    bool _init;
-    bool _cancelled;
-    time_t _last_visit_time;
+    bool _init{false};
+    bool _cancelled{false};
+    time_t _last_visit_time{0};
 };
 
 class KafkaEventCb : public RdKafka::EventCb {

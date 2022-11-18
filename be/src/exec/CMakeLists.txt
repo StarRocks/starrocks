@@ -162,6 +162,7 @@ set(EXEC_FILES
     pipeline/sink/file_sink_operator.cpp
     pipeline/sink/export_sink_operator.cpp
     pipeline/sink/mysql_table_sink_operator.cpp
+    pipeline/sink/memory_scratch_sink_operator.cpp
     pipeline/select_operator.cpp
     pipeline/nljoin/nljoin_context.cpp
     pipeline/nljoin/nljoin_build_operator.cpp
@@ -216,7 +217,8 @@ set(EXEC_FILES
     query_cache/cache_operator.cpp
     query_cache/cache_manager.cpp
     query_cache/lane_arbiter.cpp
-    query_cache/conjugate_operator.cpp)
+    query_cache/conjugate_operator.cpp
+    query_cache/ticket_checker.cpp)
 
 # simdjson Runtime Implement Dispatch: https://github.com/simdjson/simdjson/blob/master/doc/implementation-selection.md#runtime-cpu-detection
 # Unset architecture-specific flags to avoid breaking implement runtime dispatch.

@@ -129,6 +129,10 @@ public:
         start_nanos = MonotonicNanos();
     }
 
+    explicit StreamLoadContext(ExecEnv* exec_env, UniqueId id) : id(id), _exec_env(exec_env), _refs(0) {
+        start_nanos = MonotonicNanos();
+    }
+
     ~StreamLoadContext() {
         if (need_rollback) {
             _exec_env->stream_load_executor()->rollback_txn(this);
@@ -224,6 +228,7 @@ public:
     std::unique_ptr<PulsarLoadInfo> pulsar_info;
 
     std::vector<TTabletCommitInfo> commit_infos;
+    std::vector<TTabletFailInfo> fail_infos;
 
     std::mutex lock;
 
@@ -237,6 +242,7 @@ public:
     Status status;
 
     int32_t idle_timeout_sec = -1;
+    int channel_id = -1;
 
     // buffer for reading data from ev_buffer
     static constexpr size_t kDefaultBufferSize = 64 * 1024;
@@ -247,6 +253,7 @@ public:
     TStreamLoadPutRequest request;
 
 public:
+    bool is_channel_stream_load_context() { return channel_id != -1; }
     ExecEnv* exec_env() { return _exec_env; }
 
 private:

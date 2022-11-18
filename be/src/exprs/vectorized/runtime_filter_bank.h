@@ -49,6 +49,10 @@ public:
 
     static bool filter_zonemap_with_min_max(PrimitiveType type, const JoinRuntimeFilter* filter,
                                             const Column* min_column, const Column* max_column);
+
+    // create min/max predicate from filter.
+    static void create_min_max_value_predicate(ObjectPool* pool, SlotId slot_id, PrimitiveType slot_type,
+                                               const JoinRuntimeFilter* filter, Expr** min_max_predicate);
 };
 
 // how to generate & publish this runtime filter
@@ -117,7 +121,7 @@ public:
     bool is_probe_slot_ref(SlotId* slot_id) const {
         Expr* probe_expr = _probe_expr_ctx->root();
         if (!probe_expr->is_slotref()) return false;
-        ColumnRef* slot_ref = down_cast<ColumnRef*>(probe_expr);
+        auto* slot_ref = down_cast<ColumnRef*>(probe_expr);
         *slot_id = slot_ref->slot_id();
         return true;
     }

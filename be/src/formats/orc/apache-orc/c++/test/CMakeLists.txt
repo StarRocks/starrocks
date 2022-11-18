@@ -54,7 +54,6 @@ add_executable (orc-test
   TestTimezone.cc
   TestType.cc
   TestWriter.cc
-  TestLazyLoad.cc
 )
 
 target_link_libraries (orc-test

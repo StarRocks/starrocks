@@ -85,7 +85,7 @@ Status MetaReader::_build_collect_context(const MetaReaderParams& read_params) {
         }
 
         // get column type
-        FieldType type = _tablet->tablet_schema().column(index).type();
+        LogicalType type = _tablet->tablet_schema().column(index).type();
         _collect_context.seg_collecter_params.field_type.emplace_back(type);
 
         // get collect field
@@ -277,7 +277,7 @@ Status SegmentMetaCollecter::collect(std::vector<vectorized::Column*>* dsts) {
 }
 
 Status SegmentMetaCollecter::_collect(const std::string& name, ColumnId cid, vectorized::Column* column,
-                                      FieldType type) {
+                                      LogicalType type) {
     if (name == "dict_merge") {
         return _collect_dict(cid, column, type);
     } else if (name == "max") {
@@ -289,7 +289,7 @@ Status SegmentMetaCollecter::_collect(const std::string& name, ColumnId cid, vec
 }
 
 // collect dict
-Status SegmentMetaCollecter::_collect_dict(ColumnId cid, vectorized::Column* column, FieldType type) {
+Status SegmentMetaCollecter::_collect_dict(ColumnId cid, vectorized::Column* column, LogicalType type) {
     if (!_column_iterators[cid]) {
         return Status::InvalidArgument("Invalid Collect Params.");
     }
@@ -321,16 +321,16 @@ Status SegmentMetaCollecter::_collect_dict(ColumnId cid, vectorized::Column* col
     return Status::OK();
 }
 
-Status SegmentMetaCollecter::_collect_max(ColumnId cid, vectorized::Column* column, FieldType type) {
+Status SegmentMetaCollecter::_collect_max(ColumnId cid, vectorized::Column* column, LogicalType type) {
     return __collect_max_or_min<true>(cid, column, type);
 }
 
-Status SegmentMetaCollecter::_collect_min(ColumnId cid, vectorized::Column* column, FieldType type) {
+Status SegmentMetaCollecter::_collect_min(ColumnId cid, vectorized::Column* column, LogicalType type) {
     return __collect_max_or_min<false>(cid, column, type);
 }
 
 template <bool is_max>
-Status SegmentMetaCollecter::__collect_max_or_min(ColumnId cid, vectorized::Column* column, FieldType type) {
+Status SegmentMetaCollecter::__collect_max_or_min(ColumnId cid, vectorized::Column* column, LogicalType type) {
     if (cid >= _segment->num_columns()) {
         return Status::NotFound("");
     }

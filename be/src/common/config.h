@@ -135,6 +135,8 @@ CONF_mInt32(report_disk_state_interval_seconds, "60");
 CONF_mInt32(report_tablet_interval_seconds, "60");
 // The interval time(seconds) for agent report workgroup to FE.
 CONF_mInt32(report_workgroup_interval_seconds, "5");
+// The interval time (millisecond) for agent report resource usage to FE.
+CONF_mInt32(report_resource_usage_interval_ms, "1000");
 // The max download speed(KB/s).
 CONF_mInt32(max_download_speed_kbps, "50000");
 // The download low speed limit(KB/s).
@@ -318,7 +320,7 @@ CONF_mInt32(compaction_trace_threshold, "60");
 // the columns will be divided into groups for vertical compaction.
 CONF_Int64(vertical_compaction_max_columns_per_group, "5");
 
-CONF_Bool(enable_event_based_compaction_framework, "false");
+CONF_Bool(enable_event_based_compaction_framework, "true");
 
 CONF_Bool(enable_check_string_lengths, "true");
 // 5GB
@@ -662,7 +664,8 @@ CONF_mInt32(sys_minidump_limit, "20480");
 // Interval(seconds) for cleaning old minidumps.
 CONF_mInt32(sys_minidump_interval, "600");
 #endif
-
+// dump trace info such as query-id and some runtime state
+CONF_Bool(dump_trace_info, "true");
 // The maximum number of version per tablet. If the
 // number of version exceeds this value, new write
 // requests will fail.
@@ -757,6 +760,7 @@ CONF_Int32(connector_io_tasks_per_scan_operator, "16");
 CONF_Int32(io_tasks_per_scan_operator, "4");
 CONF_Bool(connector_chunk_source_accumulate_chunk_enable, "true");
 CONF_Bool(connector_dynamic_chunk_buffer_limiter_enable, "true");
+CONF_Bool(connector_min_max_predicate_from_runtime_filter_enable, "true");
 
 // Enable output trace logs in aws-sdk-cpp for diagnosis purpose.
 // Once logging is enabled in your application, the SDK will generate log files in your current working directory
@@ -866,11 +870,13 @@ CONF_Int64(max_length_for_bitmap_function, "1000000");
 CONF_Bool(block_cache_enable, "false");
 CONF_Int64(block_cache_disk_size, "0");
 CONF_String(block_cache_disk_path, "${STARROCKS_HOME}/block_cache/");
+CONF_String(block_cache_meta_path, "${STARROCKS_HOME}/block_cache/");
 CONF_Int64(block_cache_block_size, "1048576");  // 1MB
 CONF_Int64(block_cache_mem_size, "2147483648"); // 2GB
 CONF_Bool(block_cache_checksum_enable, "true");
 
 CONF_mInt64(l0_l1_merge_ratio, "10");
+CONF_mInt64(l0_max_file_size, "209715200"); // 200MB
 
 // Used by query cache, cache entries are evicted when it exceeds its capacity(500MB in default)
 CONF_Int64(query_cache_capacity, "536870912");

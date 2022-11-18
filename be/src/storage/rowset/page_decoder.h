@@ -23,7 +23,6 @@
 
 #include "common/status.h" // for Status
 #include "gen_cpp/segment.pb.h"
-#include "storage/column_block.h" // for ColumnBlockView
 #include "storage/range.h"
 #include "storage/rowset/page_pointer.h"
 #include "types/timestamp_value.h"
@@ -81,16 +80,6 @@ public:
         seek_to_position_in_page(current_index() + step);
         return step;
     }
-
-    // Fetch the next vector of values from the page into 'column_vector_view'.
-    // The output vector must have space for up to n cells.
-    //
-    // Return the size of read entries .
-    //
-    // In the case that the values are themselves references
-    // to other memory (eg Slices), the referred-to memory is
-    // allocated in the column_vector_view's mem_pool.
-    virtual Status next_batch(size_t* n, ColumnBlockView* dst) = 0;
 
     virtual Status next_batch(size_t* n, vectorized::Column* column) {
         return Status::NotSupported("vectorized not supported yet");

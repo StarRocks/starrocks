@@ -1267,6 +1267,53 @@ TEST_F(VecMathFunctionsTest, Atan2Test) {
     }
 }
 
+TEST_F(VecMathFunctionsTest, TrigonometricFunctionTest) {
+    Columns columns;
+    auto tc1 = DoubleColumn::create();
+    tc1->append(-1);
+    tc1->append(0);
+    tc1->append(1);
+    tc1->append(3.1415926);
+    tc1->append(30);
+    columns.emplace_back(tc1);
+
+    {
+        std::vector<double> result_expect = {std::sinh(-1), std::sinh(0), std::sinh(1), std::sinh(3.1415926),
+                                             std::sinh(30)};
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        ColumnPtr result = MathFunctions::sinh(ctx.get(), columns);
+        auto v = ColumnHelper::cast_to<TYPE_DOUBLE>(result);
+        ASSERT_EQ(v->size(), result_expect.size());
+        for (size_t i = 0; i < v->size(); i++) {
+            ASSERT_EQ(v->get_data()[i], result_expect[i]);
+        }
+    }
+
+    {
+        std::vector<double> result_expect = {std::cosh(-1), std::cosh(0), std::cosh(1), std::cosh(3.1415926),
+                                             std::cosh(30)};
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        ColumnPtr result = MathFunctions::cosh(ctx.get(), columns);
+        auto v = ColumnHelper::cast_to<TYPE_DOUBLE>(result);
+        ASSERT_EQ(v->size(), result_expect.size());
+        for (size_t i = 0; i < v->size(); i++) {
+            ASSERT_EQ(v->get_data()[i], result_expect[i]);
+        }
+    }
+
+    {
+        std::vector<double> result_expect = {std::tanh(-1), std::tanh(0), std::tanh(1), std::tanh(3.1415926),
+                                             std::tanh(30)};
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        ColumnPtr result = MathFunctions::tanh(ctx.get(), columns);
+        auto v = ColumnHelper::cast_to<TYPE_DOUBLE>(result);
+        ASSERT_EQ(v->size(), result_expect.size());
+        for (size_t i = 0; i < v->size(); i++) {
+            ASSERT_EQ(v->get_data()[i], result_expect[i]);
+        }
+    }
+}
+
 TEST_F(VecMathFunctionsTest, OutputNanTest) {
     Columns columns;
     auto tc1 = DoubleColumn::create();
@@ -1301,6 +1348,39 @@ TEST_F(VecMathFunctionsTest, OutputNanTest) {
         std::vector<bool> null_expect = {true, false, true};
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr result = MathFunctions::asin(ctx.get(), columns);
+        auto nullable = ColumnHelper::as_raw_column<NullableColumn>(result);
+        ASSERT_EQ(nullable->size(), null_expect.size());
+        for (size_t i = 0; i < nullable->size(); i++) {
+            ASSERT_EQ(nullable->is_null(i), null_expect[i]);
+        }
+    }
+
+    {
+        std::vector<bool> null_expect = {false, false, true};
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        ColumnPtr result = MathFunctions::sinh(ctx.get(), columns);
+        auto nullable = ColumnHelper::as_raw_column<NullableColumn>(result);
+        ASSERT_EQ(nullable->size(), null_expect.size());
+        for (size_t i = 0; i < nullable->size(); i++) {
+            ASSERT_EQ(nullable->is_null(i), null_expect[i]);
+        }
+    }
+
+    {
+        std::vector<bool> null_expect = {false, false, true};
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        ColumnPtr result = MathFunctions::cosh(ctx.get(), columns);
+        auto nullable = ColumnHelper::as_raw_column<NullableColumn>(result);
+        ASSERT_EQ(nullable->size(), null_expect.size());
+        for (size_t i = 0; i < nullable->size(); i++) {
+            ASSERT_EQ(nullable->is_null(i), null_expect[i]);
+        }
+    }
+
+    {
+        std::vector<bool> null_expect = {false, false, true};
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        ColumnPtr result = MathFunctions::tanh(ctx.get(), columns);
         auto nullable = ColumnHelper::as_raw_column<NullableColumn>(result);
         ASSERT_EQ(nullable->size(), null_expect.size());
         for (size_t i = 0; i < nullable->size(); i++) {

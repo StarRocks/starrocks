@@ -158,6 +158,47 @@ public class Config extends ConfigBase {
     public static String dump_log_delete_age = "7d";
 
     /**
+     * big_query_log_dir:
+     * This specifies FE big query log dir.
+     * Dump log fe.big_query.log contains all information about big query.
+     * The structure of each log record is very similar to the audit log.
+     * If the cpu cost of a query exceeds big_query_log_cpu_second_threshold,
+     * or scan rows exceeds big_query_log_scan_rows_threshold,
+     * or scan bytes exceeds big_query_log_scan_bytes_threshold,
+     * we will consider it as a big query.
+     * These thresholds are defined by the user.
+     * <p>
+     * big_query_log_roll_num:
+     * Maximal FE log files to be kept within an big_query_log_roll_interval.
+     * <p>
+     * big_query_log_modules:
+     * Informations for all big queries.
+     * <p>
+     * big_query_log_roll_interval:
+     * DAY:  log suffix is yyyyMMdd
+     * HOUR: log suffix is yyyyMMddHH
+     * <p>
+     * big_query_log_delete_age:
+     * default is 7 days, if log's last modify time is 7 days ago, it will be deleted.
+     * support format:
+     * 7d      7 days
+     * 10h     10 hours
+     * 60m     60 mins
+     * 120s    120 seconds
+     */
+    @ConfField
+    public static String big_query_log_dir = StarRocksFE.STARROCKS_HOME_DIR + "/log";
+    @ConfField
+    public static int big_query_log_roll_num = 10;
+    @ConfField
+    public static String[] big_query_log_modules = {"query"};
+    @ConfField
+    public static String big_query_log_roll_interval = "DAY";
+    @ConfField
+    public static String big_query_log_delete_age = "7d";
+
+
+    /**
      * plugin_dir:
      * plugin install directory
      */
@@ -190,6 +231,7 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static int label_clean_interval_second = 4 * 3600; // 4 hours
+
 
     /**
      * For Task framework do some background operation like cleanup Task/TaskRun.
@@ -690,6 +732,12 @@ public class Config extends ConfigBase {
     public static int max_stream_load_timeout_second = 259200; // 3days
 
     /**
+     * Max stream load load batch size
+     */
+    @ConfField(mutable = true) 
+    public static int max_stream_load_batch_size_mb = 100;
+
+    /**
      * Default prepared transaction timeout
      */
     @ConfField(mutable = true)
@@ -1066,6 +1114,7 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, aliases = {"storage_cooldown_second"})
     public static long tablet_sched_storage_cooldown_second = -1L; // won't cool down by default
 
+
     /**
      * FOR BeLoadBalancer:
      * the threshold of cluster balance score, if a backend's load score is 10% lower than average score,
@@ -1117,6 +1166,13 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static int tablet_sched_max_migration_task_sent_once = 1000;
+
+    /**
+     * After checked tablet_checker_partition_batch_num partitions, db lock will be released,
+     * so that other threads can get the lock.
+     */
+    @ConfField(mutable = true)
+    public static int tablet_checker_partition_batch_num = 500;
 
     @Deprecated
     @ConfField(mutable = true)
@@ -1493,6 +1549,12 @@ public class Config extends ConfigBase {
     public static long remote_file_cache_ttl_s = 3600 * 36L;
 
     /**
+     * The maximum number of partitions to fetch from the metastore in one RPC.
+     */
+    @ConfField
+    public static int max_hive_partitions_per_rpc = 1000;
+
+    /**
      * The interval of lazy refreshing remote file's metadata cache
      */
     @ConfField
@@ -1674,6 +1736,12 @@ public class Config extends ConfigBase {
     public static String starmgr_s3_sk = "";
 
     /**
+     * default storage cache ttl of lake table
+     */
+    @ConfField(mutable = true)
+    public static long lake_default_storage_cache_ttl_seconds = 2592000L;
+
+    /**
      * default bucket number when create OLAP table without buckets info
      */
     @ConfField(mutable = true)
@@ -1778,7 +1846,7 @@ public class Config extends ConfigBase {
     public static String metadata_journal_skip_bad_journal_ids = "";
 
     @ConfField(mutable = true)
-    public static boolean recursive_dir_search_enabled = false;
+    public static boolean recursive_dir_search_enabled = true;
 
     /**
      * Number of profile infos reserved by `ProfileManager` for recently executed query.
@@ -1805,4 +1873,28 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean ignore_invalid_privilege_authentications = false;
+
+    /**
+     * the keystore file path
+     */
+    @ConfField
+    public static String ssl_keystore_location = "";
+
+    /**
+     * the password of keystore file
+     */
+    @ConfField
+    public static String ssl_keystore_password = "";
+
+    /**
+     * the password of private key
+     */
+    @ConfField
+    public static String ssl_key_password = "";
+
+    /**
+     * ignore check db status when show proc '/catalog/catalog_name'
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_check_db_state = true;
 }

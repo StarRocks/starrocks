@@ -30,6 +30,7 @@ import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.VariableExpr;
@@ -44,6 +45,7 @@ import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinRelation;
+import com.starrocks.sql.ast.LambdaFunctionExpr;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
@@ -552,6 +554,27 @@ public class AST2SQL {
             return sb.toString();
         }
 
+        // Logical is the same as toSqlImpl() in LambdaFunctionExpr
+        @Override
+        public String visitLambdaFunctionExpr(LambdaFunctionExpr node, Void context) {
+            List<Expr> children = node.getChildren();
+            String names = visit(children.get(1));
+
+            if (children.size() > 2) {
+                names = "(" + visit(children.get(1));
+                for (int i = 2; i < children.size(); ++i) {
+                    names = names + ", " + visit(children.get(i));
+                }
+                names = names + ")";
+            }
+            return String.format("%s -> %s", names, visit(children.get(0)));
+        }
+
+        @Override
+        public String visitSubfieldExpr(SubfieldExpr node, Void context) {
+            return String.format("%s.%s", visit(node.getChild(0)), node.getFieldName());
+        }
+
         public String visitGroupingFunctionCall(GroupingFunctionCallExpr node, Void context) {
             return visitFunctionCall(node, context);
         }
@@ -605,7 +628,19 @@ public class AST2SQL {
         }
 
         public String visitVariableExpr(VariableExpr node, Void context) {
-            return visitExpression(node, context);
+            StringBuilder sb = new StringBuilder();
+            if (node.getSetType() == SetType.USER) {
+                sb.append("@");
+            } else {
+                sb.append("@@");
+                if (node.getSetType() == SetType.GLOBAL) {
+                    sb.append("GLOBAL.");
+                } else {
+                    sb.append("SESSION.");
+                }
+            }
+            sb.append(node.getName());
+            return sb.toString();
         }
 
         @Override

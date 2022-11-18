@@ -140,8 +140,10 @@ Expr::Expr(TypeDescriptor type, bool is_slotref)
         case TYPE_ARRAY:
             _node_type = (TExprNodeType::ARRAY_EXPR);
             break;
+        case TYPE_VARBINARY:
+            _node_type = (TExprNodeType::BINARY_LITERAL);
+            break;
         case INVALID_TYPE:
-        case TYPE_BINARY:
         case TYPE_STRUCT:
         case TYPE_MAP:
         case TYPE_DECIMAL32:
@@ -254,6 +256,7 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
     case TExprNodeType::DECIMAL_LITERAL:
     case TExprNodeType::DATE_LITERAL:
     case TExprNodeType::STRING_LITERAL:
+    case TExprNodeType::BINARY_LITERAL:
     case TExprNodeType::NULL_LITERAL: {
         *expr = pool->add(new vectorized::VectorizedLiteral(texpr_node));
         break;
@@ -370,6 +373,7 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
     case TExprNodeType::LIKE_PRED:
     case TExprNodeType::LITERAL_PRED:
     case TExprNodeType::TUPLE_IS_NULL_PRED:
+    case TExprNodeType::RUNTIME_FILTER_MIN_MAX_EXPR:
         break;
     }
     if (*expr == nullptr) {
@@ -598,6 +602,10 @@ StatusOr<ColumnPtr> Expr::evaluate_const(ExprContext* context) {
 
 ColumnPtr Expr::evaluate(ExprContext* context, vectorized::Chunk* ptr) {
     return nullptr;
+}
+
+ColumnPtr Expr::evaluate_with_filter(ExprContext* context, vectorized::Chunk* ptr, uint8_t* filter) {
+    return evaluate(context, ptr);
 }
 
 vectorized::ColumnRef* Expr::get_column_ref() {

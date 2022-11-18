@@ -84,7 +84,8 @@ enum TPrimitiveType {
   DECIMAL64,
   DECIMAL128,
   JSON,
-  FUNCTION
+  FUNCTION,
+  VARBINARY
 }
 
 enum TTypeNodeType {
@@ -363,7 +364,8 @@ enum TTableType {
     DELTALAKE_TABLE,
     JDBC_TABLE,
     VIEW = 20,
-    MATERIALIZED_VIEW
+    MATERIALIZED_VIEW,
+    FILE_TABLE
 }
 
 enum TKeysType {
@@ -407,6 +409,11 @@ struct TTabletCommitInfo {
     2: required i64 backendId
     3: optional list<string> invalid_dict_cache_columns
     4: optional list<string> valid_dict_cache_columns
+}
+
+struct TTabletFailInfo {
+    1: optional i64 tabletId
+    2: optional i64 backendId
 }
 
 enum TLoadType {

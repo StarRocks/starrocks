@@ -8,8 +8,7 @@
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/vectorized/hash_joiner.h"
 
-namespace starrocks {
-namespace pipeline {
+namespace starrocks::pipeline {
 
 using HashJoiner = starrocks::vectorized::HashJoiner;
 
@@ -62,5 +61,4 @@ private:
     HashJoinerFactoryPtr _hash_joiner_factory;
 };
 
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline

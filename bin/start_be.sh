@@ -76,8 +76,8 @@ else
     fi
 fi
 
-CACHELIB_DIR=$STARROCKS_HOME/lib/cachelib
-export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/hadoop/native:$CACHELIB_DIR/lib:$CACHELIB_DIR/lib64:$CACHELIB_DIR/deps/lib:$CACHELIB_DIR/deps/lib64:$LD_LIBRARY_PATH
+export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/hadoop/native:$LD_LIBRARY_PATH
+export_cachelib_lib_path
 
 # check java version and choose correct JAVA_OPTS
 JAVA_VERSION=$(jdk_version)
@@ -126,6 +126,7 @@ fi
 export JEMALLOC_CONF="percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:5000,metadata_thp:auto,background_thread:true"
 # enable coredump when BE build with ASAN
 export ASAN_OPTIONS=abort_on_error=1:disable_coredump=0:unmap_shadow_on_exit=1
+export LSAN_OPTIONS=suppressions=${STARROCKS_HOME}/conf/asan_suppressions.conf
 
 # Prevent JVM from handling any internally or externally generated signals.
 # Otherwise, JVM will overwrite the signal handlers for SIGINT and SIGTERM.

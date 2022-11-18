@@ -26,65 +26,23 @@
 
 #include "common/logging.h"
 #include "exprs/agg/java_udaf_function.h"
+#include "runtime/runtime_state.h"
 #include "runtime/types.h"
 #include "types/hll.h"
 #include "udf/udf_internal.h"
 
-#if STARROCKS_UDF_SDK_BUILD
-// For the SDK build, we are building the .lib that the developers would use to
-// write UDFs. They want to link against this to run their UDFs in a test environment.
-// Pulling in free-pool is very undesirable since it pulls in many other libraries.
-// Instead, we'll implement a dummy version that is not used.
-// When they build their library to a .so, they'd use the version of FunctionContext
-// in the main binary, which does include FreePool.
-namespace starrocks {
-class FreePool {
-public:
-    FreePool(MemPool*) {}
-
-    uint8_t* allocate(int byte_size) { return reinterpret_cast<uint8_t*>(malloc(byte_size)); }
-
-    uint8_t* reallocate(uint8_t* ptr, int byte_size) { return reinterpret_cast<uint8_t*>(realloc(ptr, byte_size)); }
-
-    void free(uint8_t* ptr) { ::free(ptr); }
-};
-
-class RuntimeState {
-public:
-    void set_process_status(const std::string& error_msg) { assert(false); }
-
-    bool log_error(const std::string& error) {
-        assert(false);
-        return false;
-    }
-
-    const std::string& user() const { return _user; }
-
-private:
-    std::string _user;
-};
-} // namespace starrocks
-#else
-#include "runtime/free_pool.hpp"
-#include "runtime/runtime_state.h"
-#endif
-
 namespace starrocks {
 
 FunctionContextImpl::FunctionContextImpl(starrocks_udf::FunctionContext* parent)
-        : _varargs_buffer(nullptr),
-          _varargs_buffer_size(0),
-          _num_updates(0),
+        : _num_updates(0),
           _num_removes(0),
           _context(parent),
-          _pool(nullptr),
           _state(nullptr),
           _debug(false),
           _version(starrocks_udf::FunctionContext::V2_0),
           _num_warnings(0),
           _thread_local_fn_state(nullptr),
           _fragment_local_fn_state(nullptr),
-          _external_bytes_tracked(0),
           _closed(false) {}
 
 FunctionContextImpl::~FunctionContextImpl() = default;
@@ -94,43 +52,7 @@ void FunctionContextImpl::close() {
         return;
     }
 
-    if (_external_bytes_tracked > 0) {
-        // This isn't ideal because the memory is still leaked, but don't track it so our
-        // accounting stays sane.
-        // TODO: we need to modify the memtrackers to allow leaked user-allocated memory.
-        _context->free(_external_bytes_tracked);
-    }
-
-    free(_varargs_buffer);
-    _varargs_buffer = nullptr;
-
     _closed = true;
-}
-
-uint8_t* FunctionContextImpl::allocate_local(int64_t byte_size) {
-    uint8_t* buffer = _pool->allocate(byte_size);
-    _local_allocations.push_back(buffer);
-    return buffer;
-}
-
-bool FunctionContextImpl::check_allocations_empty() {
-    if (_allocations.empty() && _external_bytes_tracked == 0) {
-        return true;
-    }
-
-    // TODO: fix this
-    //if (_debug) _context->set_error("Leaked allocations.");
-    return false;
-}
-
-bool FunctionContextImpl::check_local_allocations_empty() {
-    if (_local_allocations.empty()) {
-        return true;
-    }
-
-    // TODO: fix this
-    //if (_debug) _context->set_error("Leaked local allocations.");
-    return false;
 }
 
 void FunctionContextImpl::set_error(const char* error_msg) {
@@ -162,40 +84,18 @@ const char* FunctionContextImpl::error_msg() {
 starrocks_udf::FunctionContext* FunctionContextImpl::create_context(
         RuntimeState* state, MemPool* pool, const starrocks_udf::FunctionContext::TypeDesc& return_type,
         const std::vector<starrocks_udf::FunctionContext::TypeDesc>& arg_types, int varargs_buffer_size, bool debug) {
-    starrocks_udf::FunctionContext::TypeDesc invalid_type;
-    invalid_type.type = INVALID_TYPE;
-    invalid_type.precision = 0;
-    invalid_type.scale = 0;
-    return FunctionContextImpl::create_context(state, pool, invalid_type, return_type, arg_types, varargs_buffer_size,
-                                               debug);
-}
-
-starrocks_udf::FunctionContext* FunctionContextImpl::create_context(
-        RuntimeState* state, MemPool* pool, const starrocks_udf::FunctionContext::TypeDesc& intermediate_type,
-        const starrocks_udf::FunctionContext::TypeDesc& return_type,
-        const std::vector<starrocks_udf::FunctionContext::TypeDesc>& arg_types, int varargs_buffer_size, bool debug) {
     auto* ctx = new starrocks_udf::FunctionContext();
     ctx->_impl->_state = state;
     ctx->_impl->_mem_pool = pool;
-    ctx->_impl->_pool = new FreePool(pool);
-    ctx->_impl->_intermediate_type = intermediate_type;
     ctx->_impl->_return_type = return_type;
     ctx->_impl->_arg_types = arg_types;
-    // UDFs may manipulate DecimalVal arguments via SIMD instructions such as 'movaps'
-    // that require 16-byte memory alignment.
-    // ctx->_impl->_varargs_buffer =
-    //     reinterpret_cast<uint8_t*>(aligned_malloc(varargs_buffer_size, 16));
-    ctx->_impl->_varargs_buffer = reinterpret_cast<uint8_t*>(malloc(varargs_buffer_size));
-    ctx->_impl->_varargs_buffer_size = varargs_buffer_size;
     ctx->_impl->_debug = debug;
     ctx->_impl->_jvm_udaf_ctxs = std::make_unique<vectorized::JavaUDAFContext>();
-    VLOG_ROW << "Created FunctionContext: " << ctx << " with pool " << ctx->_impl->_pool;
     return ctx;
 }
 
 FunctionContext* FunctionContextImpl::clone(MemPool* pool) {
-    starrocks_udf::FunctionContext* new_context =
-            create_context(_state, pool, _intermediate_type, _return_type, _arg_types, _varargs_buffer_size, _debug);
+    starrocks_udf::FunctionContext* new_context = create_context(_state, pool, _return_type, _arg_types, 0, _debug);
 
     new_context->_impl->_constant_columns = _constant_columns;
     new_context->_impl->_fragment_local_fn_state = _fragment_local_fn_state;
@@ -211,7 +111,6 @@ FunctionContext* FunctionContext::create_test_context() {
     auto* context = new FunctionContext();
     context->impl()->_debug = true;
     context->impl()->_state = nullptr;
-    context->impl()->_pool = new starrocks::FreePool(nullptr);
     return context;
 }
 
@@ -225,11 +124,6 @@ FunctionContext* FunctionContext::create_test_context(std::vector<TypeDesc>&& ar
 FunctionContext::FunctionContext() : _impl(new starrocks::FunctionContextImpl(this)) {}
 
 FunctionContext::~FunctionContext() {
-    // TODO: this needs to free local allocations but there's a mem issue
-    // in the uda harness now.
-    _impl->check_local_allocations_empty();
-    _impl->check_allocations_empty();
-    delete _impl->_pool;
     delete _impl;
 }
 
@@ -247,12 +141,8 @@ const char* FunctionContext::user() const {
 
 FunctionContext::UniqueId FunctionContext::query_id() const {
     UniqueId id;
-#if STARROCKS_UDF_SDK_BUILD
-    id.hi = id.lo = 0;
-#else
     id.hi = _impl->_state->query_id().hi;
     id.lo = _impl->_state->query_id().lo;
-#endif
     return id;
 }
 
@@ -266,54 +156,6 @@ const char* FunctionContext::error_msg() const {
     }
 
     return nullptr;
-}
-
-uint8_t* FunctionContext::allocate(int byte_size) {
-    uint8_t* buffer = _impl->_pool->allocate(byte_size);
-    _impl->_allocations[buffer] = byte_size;
-
-    if (_impl->_debug) {
-        memset(buffer, 0xff, byte_size);
-    }
-
-    return buffer;
-}
-
-uint8_t* FunctionContext::reallocate(uint8_t* ptr, int byte_size) {
-    _impl->_allocations.erase(ptr);
-    ptr = _impl->_pool->reallocate(ptr, byte_size);
-    _impl->_allocations[ptr] = byte_size;
-    return ptr;
-}
-
-void FunctionContext::free(uint8_t* buffer) {
-    if (buffer == nullptr) {
-        return;
-    }
-
-    if (_impl->_debug) {
-        auto it = _impl->_allocations.find(buffer);
-
-        if (it != _impl->_allocations.end()) {
-            // fill in garbage value into the buffer to increase the chance of detecting misuse
-            memset(buffer, 0xff, it->second);
-            _impl->_allocations.erase(it);
-            _impl->_pool->free(buffer);
-        } else {
-            set_error("FunctionContext::free() on buffer that is not freed or was not allocated.");
-        }
-    } else {
-        _impl->_allocations.erase(buffer);
-        _impl->_pool->free(buffer);
-    }
-}
-
-void FunctionContext::track_allocation(int64_t bytes) {
-    _impl->_external_bytes_tracked += bytes;
-}
-
-void FunctionContext::free(int64_t bytes) {
-    _impl->_external_bytes_tracked -= bytes;
 }
 
 void FunctionContext::set_function_state(FunctionStateScope scope, void* ptr) {

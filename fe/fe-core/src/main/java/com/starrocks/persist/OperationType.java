@@ -199,6 +199,7 @@ public class OperationType {
     public static final short OP_ERASE_MULTI_TABLES = 10004;
     public static final short OP_MODIFY_ENABLE_PERSISTENT_INDEX = 10005;
     public static final short OP_MODIFY_WRITE_QUORUM = 10006;
+    public static final short OP_MODIFY_REPLICATED_STORAGE = 10007;
 
     // statistic 10010 ~ 10020
     public static final short OP_ADD_ANALYZER_JOB = 10010;
@@ -241,6 +242,7 @@ public class OperationType {
     // materialized view 10091 ~ 10100
     public static final short OP_RENAME_MATERIALIZED_VIEW = 10091;
     public static final short OP_CHANGE_MATERIALIZED_VIEW_REFRESH_SCHEME = 10092;
+    public static final short OP_ALTER_MATERIALIZED_VIEW_PROPERTIES = 10093;
     public static final short OP_CREATE_MATERIALIZED_VIEW = 10094;
     public static final short OP_CREATE_INSERT_OVERWRITE = 10095;
     public static final short OP_INSERT_OVERWRITE_STATE_CHANGE = 10096;
@@ -278,4 +280,6 @@ public class OperationType {
     // alter load
     public static final short OP_ALTER_LOAD_JOB = 11100;
 
+    // stream load
+    public static final short OP_CREATE_STREAM_LOAD_TASK = 11020;
 }

@@ -22,7 +22,7 @@ using DataSegmentPtr = std::shared_ptr<DataSegment>;
 // so we made desctuctor private to avoid alloc memory in stack
 class ChunkHolder {
 public:
-    ChunkHolder(DataSegmentPtr&& ref_value) : _ref_count(0), _ref_val(std::move(ref_value)) {}
+    ChunkHolder(DataSegmentPtr&& ref_value) : _ref_val(std::move(ref_value)) {}
     ChunkHolder(const ChunkHolder&) = delete;
     void unref() noexcept {
         DCHECK_GT(_ref_count, 0);
@@ -39,7 +39,7 @@ public:
 
 private:
     ~ChunkHolder() noexcept = default;
-    int _ref_count;
+    int _ref_count{0};
     DataSegmentPtr _ref_val;
 };
 
@@ -62,13 +62,13 @@ public:
         return *this;
     }
 
-    ChunkRowCursor(ChunkRowCursor&& other) {
+    ChunkRowCursor(ChunkRowCursor&& other) noexcept {
         _row_id = other._row_id;
         _holder = other._holder;
         other._holder = nullptr;
     }
 
-    ChunkRowCursor& operator=(ChunkRowCursor&& other) {
+    ChunkRowCursor& operator=(ChunkRowCursor&& other) noexcept {
         std::swap(_row_id, other._row_id);
         std::swap(_holder, other._holder);
         return *this;
@@ -218,7 +218,7 @@ public:
             : ChunksSorter(state, sort_exprs, is_asc_order, is_null_first, sort_keys, true),
               _offset(offset),
               _limit(limit) {}
-    ~ChunksSorterHeapSort() = default;
+    ~ChunksSorterHeapSort() override = default;
 
     Status update(RuntimeState* state, const ChunkPtr& chunk) override;
     Status done(RuntimeState* state) override;

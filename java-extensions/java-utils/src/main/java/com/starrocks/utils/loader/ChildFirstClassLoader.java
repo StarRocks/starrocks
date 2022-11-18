@@ -2,8 +2,6 @@
 
 package com.starrocks.utils.loader;
 
-import com.starrocks.utils.NativeMethodHelper;
-
 import java.io.IOException;
 import java.net.URL;
 import java.net.URLClassLoader;
@@ -28,7 +26,7 @@ public class ChildFirstClassLoader extends URLClassLoader {
         super(urls, null);
         this.parent = new ParentClassLoader(parent);
         // load native method class from parent
-        this.parentFirstClass = new ArrayList<>(Collections.singleton(NativeMethodHelper.class.getName()));
+        this.parentFirstClass = new ArrayList<>(Collections.singleton("com.starrocks.utils.NativeMethodHelper"));
     }
 
     @Override

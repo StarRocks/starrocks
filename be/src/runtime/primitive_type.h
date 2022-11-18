@@ -26,7 +26,7 @@
 #include "common/logging.h"
 #include "gen_cpp/Opcodes_types.h"
 #include "gen_cpp/Types_types.h"
-#include "storage/olap_common.h"
+#include "types/logical_type.h"
 #include "util/guard.h"
 
 namespace starrocks {
@@ -63,9 +63,20 @@ enum PrimitiveType {
     TYPE_DECIMAL64,  /* 25 */
     TYPE_DECIMAL128, /* 26 */
 
-    TYPE_JSON,     /* 27 */
-    TYPE_FUNCTION, /* 28 */
+    TYPE_JSON,      /* 27 */
+    TYPE_FUNCTION,  /* 28 */
+    TYPE_VARBINARY, /* 29 */
 };
+
+inline bool is_binary_type(PrimitiveType type) {
+    switch (type) {
+    case TYPE_BINARY:
+    case TYPE_VARBINARY:
+        return true;
+    default:
+        return false;
+    }
+}
 
 inline bool is_enumeration_type(PrimitiveType type) {
     switch (type) {
@@ -115,6 +126,7 @@ inline bool is_scalar_primitive_type(PrimitiveType ptype) {
     case TYPE_DATE:     /* 11 */
     case TYPE_DATETIME: /* 12 */
     case TYPE_BINARY:
+    case TYPE_VARBINARY:
     /* 13 */              // Not implemented
     case TYPE_DECIMAL:    /* 14 */
     case TYPE_CHAR:       /* 15 */
@@ -146,6 +158,7 @@ VALUE_GUARD(PrimitiveType, SumDecimal64PTGuard, pt_is_sum_decimal64, TYPE_DECIMA
 VALUE_GUARD(PrimitiveType, HllPTGuard, pt_is_hll, TYPE_HLL)
 VALUE_GUARD(PrimitiveType, ObjectPTGuard, pt_is_object, TYPE_OBJECT)
 VALUE_GUARD(PrimitiveType, StringPTGuard, pt_is_string, TYPE_CHAR, TYPE_VARCHAR)
+VALUE_GUARD(PrimitiveType, BinaryPTGuard, pt_is_binary, TYPE_BINARY, TYPE_VARBINARY)
 VALUE_GUARD(PrimitiveType, JsonGuard, pt_is_json, TYPE_JSON)
 VALUE_GUARD(PrimitiveType, FunctionGuard, pt_is_function, TYPE_FUNCTION)
 
@@ -188,7 +201,7 @@ TTypeDesc gen_type_desc(const TPrimitiveType::type val);
 TTypeDesc gen_type_desc(const TPrimitiveType::type val, const std::string& name);
 TTypeDesc gen_array_type_desc(const TPrimitiveType::type field_type);
 
-PrimitiveType scalar_field_type_to_primitive_type(FieldType field_type);
+PrimitiveType scalar_field_type_to_primitive_type(LogicalType field_type);
 
 // Return length of fixed-length type, return 0 for dynamic length type
 size_t get_size_of_fixed_length_type(PrimitiveType ptype);

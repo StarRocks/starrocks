@@ -41,21 +41,21 @@ Status ColumnVectorBatch::resize(size_t new_cap) {
     return Status::OK();
 }
 
-template <FieldType ftype>
+template <LogicalType ftype>
 struct BatchT {
     using value = ScalarColumnVectorBatch<typename CppTypeTraits<ftype>::CppType>;
 };
 template <>
-struct BatchT<OLAP_FIELD_TYPE_BOOL> {
-    using value = ScalarColumnVectorBatch<typename CppTypeTraits<OLAP_FIELD_TYPE_TINYINT>::CppType>;
+struct BatchT<LOGICAL_TYPE_BOOL> {
+    using value = ScalarColumnVectorBatch<typename CppTypeTraits<LOGICAL_TYPE_TINYINT>::CppType>;
 };
 
 struct BatchBuilder {
-    template <FieldType ftype>
+    template <LogicalType ftype>
     StatusOr<std::unique_ptr<ColumnVectorBatch>> operator()(const TypeInfoPtr& type_info, bool nullable, Field* field,
                                                             size_t capacity) {
         switch (ftype) {
-        case OLAP_FIELD_TYPE_ARRAY: {
+        case LOGICAL_TYPE_ARRAY: {
             if (field == nullptr) {
                 return Status::InvalidArgument("`Field` cannot be NULL when create ArrayColumnVectorBatch");
             }

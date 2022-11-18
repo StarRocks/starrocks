@@ -224,7 +224,7 @@ public:
     DirectByteBuffer(const DirectByteBuffer&) = delete;
     DirectByteBuffer& operator=(const DirectByteBuffer& other) = delete;
 
-    DirectByteBuffer(DirectByteBuffer&& other) {
+    DirectByteBuffer(DirectByteBuffer&& other) noexcept {
         _handle = other._handle;
         _data = other._data;
         _capacity = other._capacity;
@@ -234,7 +234,7 @@ public:
         other._capacity = 0;
     }
 
-    DirectByteBuffer& operator=(DirectByteBuffer&& other) {
+    DirectByteBuffer& operator=(DirectByteBuffer&& other) noexcept {
         DirectByteBuffer tmp(std::move(other));
         std::swap(this->_handle, tmp._handle);
         std::swap(this->_data, tmp._data);
@@ -259,12 +259,12 @@ public:
     ~JavaGlobalRef();
     JavaGlobalRef(const JavaGlobalRef&) = delete;
 
-    JavaGlobalRef(JavaGlobalRef&& other) {
+    JavaGlobalRef(JavaGlobalRef&& other) noexcept {
         _handle = other._handle;
         other._handle = nullptr;
     }
 
-    JavaGlobalRef& operator=(JavaGlobalRef&& other) {
+    JavaGlobalRef& operator=(JavaGlobalRef&& other) noexcept {
         JavaGlobalRef tmp(std::move(other));
         std::swap(this->_handle, tmp._handle);
         return *this;
@@ -289,9 +289,9 @@ public:
     JVMClass& operator=(const JVMClass&&) = delete;
     JVMClass& operator=(const JVMClass& other) = delete;
 
-    JVMClass(JVMClass&& other) : _clazz(nullptr) { _clazz = std::move(other._clazz); }
+    JVMClass(JVMClass&& other) noexcept : _clazz(nullptr) { _clazz = std::move(other._clazz); }
 
-    JVMClass& operator=(JVMClass&& other) {
+    JVMClass& operator=(JVMClass&& other) noexcept {
         JVMClass tmp(std::move(other));
         std::swap(this->_clazz, tmp._clazz);
         return *this;

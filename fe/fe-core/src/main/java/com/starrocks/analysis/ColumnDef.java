@@ -144,6 +144,10 @@ public class ColumnDef {
         return isAllowNull;
     }
 
+    public void setAllowNull(Boolean allowNull) {
+        isAllowNull = allowNull;
+    }
+
     // The columns will obey NULL constraint if not specified. The primary key column should abide by the NOT NULL constraint default to be compatible with ANSI.
     // So add a new setPrimaryKeyNonNullable() to set isAllowNull to be true for primary key columns.
     public void setPrimaryKeyNonNullable() {
@@ -200,7 +204,7 @@ public class ColumnDef {
         }
         FeNameFormat.checkColumnName(name);
 
-        // When string type length is not assigned, it need to be assigned to 1.
+        // When string type length is not assigned, it needs to be assigned to 1.
         if (typeDef.getType().isScalarType()) {
             final ScalarType targetType = (ScalarType) typeDef.getType();
             if (targetType.getPrimitiveType().isStringType()) {

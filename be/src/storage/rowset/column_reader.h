@@ -47,11 +47,8 @@
 namespace starrocks {
 
 class BlockCompressionCodec;
-class ColumnBlock;
-class ColumnBlockView;
 class ColumnVectorBatch;
 class MemTracker;
-class WrapperField;
 
 namespace vectorized {
 class ColumnPredicate;
@@ -62,7 +59,7 @@ class ZoneMapDetail;
 class BitmapIndexIterator;
 class BitmapIndexReader;
 class ColumnIterator;
-class ColumnIteratorOptions;
+struct ColumnIteratorOptions;
 class EncodingInfo;
 class PageDecoder;
 class PagePointer;
@@ -121,7 +118,7 @@ public:
     ZoneMapPB* segment_zone_map() const { return _segment_zone_map.get(); }
 
     PagePointer get_dict_page_pointer() const { return _dict_page_pointer; }
-    FieldType column_type() const { return _column_type; }
+    LogicalType column_type() const { return _column_type; }
     bool has_all_dict_encoded() const { return _flags & kHasAllDictEncodedMask; }
     bool all_dict_encoded() const { return _flags & kAllDictEncodedMask; }
 
@@ -181,7 +178,7 @@ private:
     // ColumnReader will be resident in memory. When there are many columns in the table,
     // the meta in ColumnReader takes up a lot of memory,
     // and now the content that is not needed in Meta is not saved to ColumnReader
-    FieldType _column_type = OLAP_FIELD_TYPE_UNKNOWN;
+    LogicalType _column_type = LOGICAL_TYPE_UNKNOWN;
     PagePointer _dict_page_pointer;
     uint64_t _total_mem_footprint = 0;
 

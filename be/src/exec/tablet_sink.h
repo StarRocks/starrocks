@@ -176,6 +176,7 @@ private:
     std::map<int64_t, std::vector<PTabletWithPartition>> _index_tablets_map;
 
     std::vector<TTabletCommitInfo> _tablet_commit_infos;
+    std::vector<TTabletFailInfo> _tablet_fail_infos;
 
     AddBatchCounter _add_batch_counter;
     int64_t _serialize_batch_ns = 0;
@@ -346,6 +347,7 @@ private:
     int _num_repicas = -1;
     bool _need_gen_rollup = false;
     int _tuple_desc_id = -1;
+    std::string _merge_condition;
 
     // this is tuple descriptor of destination OLAP table
     TupleDescriptor* _output_tuple_desc = nullptr;
@@ -371,9 +373,6 @@ private:
 
     // index_channel
     std::vector<std::unique_ptr<IndexChannel>> _channels;
-
-    std::vector<DecimalValue> _max_decimal_val;
-    std::vector<DecimalValue> _min_decimal_val;
 
     std::vector<DecimalV2Value> _max_decimalv2_val;
     std::vector<DecimalV2Value> _min_decimalv2_val;

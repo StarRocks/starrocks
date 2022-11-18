@@ -34,7 +34,7 @@ class MemTracker;
 
 struct StorePath {
     StorePath() = default;
-    explicit StorePath(std::string path_) : path(std::move(path_)), storage_medium(TStorageMedium::HDD) {}
+    explicit StorePath(std::string path_) : path(std::move(path_)) {}
     std::string path;
     TStorageMedium::type storage_medium{TStorageMedium::HDD};
 };

@@ -1017,6 +1017,9 @@ public class FunctionSet {
         addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG,
                 Lists.newArrayList(Type.TIME), Type.ARRAY_DATETIME, Type.ARRAY_DATETIME,
                 false, false, false));
+        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG,
+                Lists.newArrayList(Type.JSON), Type.ARRAY_JSON, Type.ARRAY_JSON,
+                false, false, false));
 
         // Group_concat(string)
         addBuiltin(AggregateFunction.createBuiltin(GROUP_CONCAT,
@@ -1062,7 +1065,7 @@ public class FunctionSet {
         for (Type t : Type.getSupportedTypes()) {
             // null/char/time is handled through type promotion
             // TODO: array/json/pseudo is not supported yet
-            if (t.isNull() || t.isChar() || t.isTime() || t.isArrayType() || t.isJsonType() || t.isPseudoType() || t.isFunctionType()) {
+            if (!t.canBeWindowFunctionArgumentTypes()) {
                 continue;
             }
             addBuiltin(AggregateFunction.createAnalyticBuiltin(

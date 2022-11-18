@@ -16,7 +16,7 @@ using namespace starrocks::vectorized;
 
 namespace starrocks {
 
-template <FieldType field_type, typename DatumType>
+template <LogicalType field_type, typename DatumType>
 void test_integral_pk() {
     auto f = std::make_shared<vectorized::Field>(0, "c0", field_type, false);
     f->set_is_key(true);
@@ -122,26 +122,26 @@ void test_integral_pk() {
 }
 
 PARALLEL_TEST(PrimaryIndexTest, test_tinyint) {
-    test_integral_pk<OLAP_FIELD_TYPE_TINYINT, int8_t>();
+    test_integral_pk<LOGICAL_TYPE_TINYINT, int8_t>();
 }
 
 PARALLEL_TEST(PrimaryIndexTest, test_smallint) {
-    test_integral_pk<OLAP_FIELD_TYPE_SMALLINT, int16_t>();
+    test_integral_pk<LOGICAL_TYPE_SMALLINT, int16_t>();
 }
 
 PARALLEL_TEST(PrimaryIndexTest, test_int) {
-    test_integral_pk<OLAP_FIELD_TYPE_INT, int32_t>();
+    test_integral_pk<LOGICAL_TYPE_INT, int32_t>();
 }
 
 PARALLEL_TEST(PrimaryIndexTest, test_bigint) {
-    test_integral_pk<OLAP_FIELD_TYPE_BIGINT, int64_t>();
+    test_integral_pk<LOGICAL_TYPE_BIGINT, int64_t>();
 }
 
 PARALLEL_TEST(PrimaryIndexTest, test_largeint) {
-    test_integral_pk<OLAP_FIELD_TYPE_LARGEINT, __int128>();
+    test_integral_pk<LOGICAL_TYPE_LARGEINT, __int128>();
 }
 
-template <FieldType field_type>
+template <LogicalType field_type>
 void test_binary_pk() {
     auto f = std::make_shared<vectorized::Field>(0, "c0", field_type, false);
     f->set_is_key(true);
@@ -252,13 +252,13 @@ void test_binary_pk() {
 }
 
 PARALLEL_TEST(PrimaryIndexTest, test_varchar) {
-    test_binary_pk<OLAP_FIELD_TYPE_VARCHAR>();
+    test_binary_pk<LOGICAL_TYPE_VARCHAR>();
 }
 
 PARALLEL_TEST(PrimaryIndexTest, test_composite_key) {
-    auto f1 = std::make_shared<vectorized::Field>(0, "c0", OLAP_FIELD_TYPE_TINYINT, false);
+    auto f1 = std::make_shared<vectorized::Field>(0, "c0", LOGICAL_TYPE_TINYINT, false);
     f1->set_is_key(true);
-    auto f2 = std::make_shared<vectorized::Field>(1, "c1", OLAP_FIELD_TYPE_SMALLINT, false);
+    auto f2 = std::make_shared<vectorized::Field>(1, "c1", LOGICAL_TYPE_SMALLINT, false);
     f2->set_is_key(true);
     auto schema = std::make_shared<vectorized::Schema>(Fields{f1, f2}, PRIMARY_KEYS, std::vector<ColumnId>{0, 1});
     auto pk_index = TEST_create_primary_index(*schema);

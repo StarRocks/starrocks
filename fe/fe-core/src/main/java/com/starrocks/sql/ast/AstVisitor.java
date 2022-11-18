@@ -27,6 +27,7 @@ import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.VariableExpr;
@@ -92,7 +93,7 @@ public abstract class AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
-    public R visitAlterDatabaseRename(AlterDatabaseRename statement, C context) {
+    public R visitAlterDatabaseRenameStatement(AlterDatabaseRenameStatement statement, C context) {
         return visitStatement(statement, context);
     }
 
@@ -311,6 +312,11 @@ public abstract class AstVisitor<R, C> {
     public R visitShowRoutineLoadTaskStatement(ShowRoutineLoadTaskStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
+
+    public R visitShowStreamLoadStatement(ShowStreamLoadStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
 
     // ------------------------------------------- Admin Statement -----------------------------------------------------
 
@@ -626,6 +632,10 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    public R visitShowPluginsStatement(ShowPluginsStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     // --------------------------------------- File Statement ----------------------------------------------------------
 
     public R visitCreateFileStatement(CreateFileStmt statement, C context) {
@@ -929,6 +939,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitSlot(SlotRef node, C context) {
+        return visitExpression(node, context);
+    }
+
+    public R visitSubfieldExpr(SubfieldExpr node, C context) {
         return visitExpression(node, context);
     }
 

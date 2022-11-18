@@ -90,6 +90,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 import java.util.zip.Adler32;
 
 /**
@@ -627,6 +628,10 @@ public class OlapTable extends Table implements GsonPostProcessable {
         return new ArrayList<Column>();
     }
 
+    public List<Column> getKeyColumns() {
+        return getColumns().stream().filter(Column::isKey).collect(Collectors.toList());
+    }
+
     public List<Column> getKeyColumnsByIndexId(Long indexId) {
         ArrayList<Column> keyColumns = Lists.newArrayList();
         List<Column> allColumns = this.getSchemaByIndexId(indexId);
@@ -690,8 +695,8 @@ public class OlapTable extends Table implements GsonPostProcessable {
         return rangePartitionMap;
     }
 
-    public Set<String> getPartitionColumnNames() {
-        Set<String> partitionColumnNames = Sets.newHashSet();
+    public List<String> getPartitionColumnNames() {
+        List<String> partitionColumnNames = Lists.newArrayList();
         if (partitionInfo instanceof SinglePartitionInfo) {
             return partitionColumnNames;
         }
@@ -1642,6 +1647,23 @@ public class OlapTable extends Table implements GsonPostProcessable {
                 .modifyTableProperties(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX,
                         Boolean.valueOf(enablePersistentIndex).toString());
         tableProperty.buildEnablePersistentIndex();
+    }
+
+    public Boolean enableReplicatedStorage() {
+        if (tableProperty != null) {
+            return tableProperty.enableReplicatedStorage();
+        }
+        return false;
+    }
+
+    public void setEnableReplicatedStorage(boolean enableReplicatedStorage) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        tableProperty
+                .modifyTableProperties(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE,
+                        Boolean.valueOf(enableReplicatedStorage).toString());
+        tableProperty.buildReplicatedStorage();
     }
 
     public TWriteQuorumType writeQuorum() {

@@ -26,7 +26,7 @@ namespace vpack = arangodb::velocypack;
 struct ArraySelector {
     ArraySelectorType type = INVALID;
 
-    ArraySelector() {}
+    ArraySelector() = default;
     virtual ~ArraySelector() = default;
 
     static Status parse(const std::string& str, std::unique_ptr<ArraySelector>* output);
@@ -39,7 +39,7 @@ struct ArraySelector {
 struct ArraySelectorNone final : public ArraySelector {
     ArraySelectorNone() { type = NONE; }
 
-    virtual void iterate(vpack::Slice array_slice, std::function<void(vpack::Slice)> callback) override { return; }
+    void iterate(vpack::Slice array_slice, std::function<void(vpack::Slice)> callback) override { return; }
 };
 
 struct ArraySelectorSingle final : public ArraySelector {
@@ -75,10 +75,10 @@ struct JsonPathPiece {
     std::string key;
     std::shared_ptr<ArraySelector> array_selector;
 
-    JsonPathPiece(const std::string& key, std::shared_ptr<ArraySelector> selector)
-            : key(key), array_selector(selector) {}
+    JsonPathPiece(std::string key, std::shared_ptr<ArraySelector> selector)
+            : key(std::move(key)), array_selector(std::move(std::move(selector))) {}
 
-    JsonPathPiece(const std::string& key, ArraySelector* selector) : key(key), array_selector(selector) {}
+    JsonPathPiece(std::string key, ArraySelector* selector) : key(std::move(key)), array_selector(selector) {}
 
     static Status parse(const std::string& path_string, std::vector<JsonPathPiece>* parsed_path);
 
@@ -90,7 +90,7 @@ struct JsonPathPiece {
 struct JsonPath {
     std::vector<JsonPathPiece> paths;
 
-    explicit JsonPath(const std::vector<JsonPathPiece>& value) : paths(value) {}
+    explicit JsonPath(std::vector<JsonPathPiece> value) : paths(std::move(value)) {}
     JsonPath() = default;
     JsonPath(JsonPath&&) = default;
     JsonPath(const JsonPath& rhs) = default;

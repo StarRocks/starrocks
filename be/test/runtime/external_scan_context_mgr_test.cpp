@@ -27,9 +27,9 @@
 
 #include "common/config.h"
 #include "common/status.h"
+#include "exec/pipeline/query_context.h"
 #include "runtime/fragment_mgr.h"
 #include "runtime/result_queue_mgr.h"
-#include "runtime/thread_resource_mgr.h"
 
 namespace starrocks {
 
@@ -37,16 +37,16 @@ class ExternalScanContextMgrTest : public testing::Test {
 public:
     ExternalScanContextMgrTest() {
         auto* fragment_mgr = new FragmentMgr(&_exec_env);
-        auto* thread_mgr = new ThreadResourceMgr();
         auto* result_queue_mgr = new ResultQueueMgr();
+        auto* query_ctx_mgr = new pipeline::QueryContextManager(5);
         _exec_env._fragment_mgr = fragment_mgr;
-        _exec_env._thread_mgr = thread_mgr;
         _exec_env._result_queue_mgr = result_queue_mgr;
+        _exec_env._query_context_mgr = query_ctx_mgr;
     }
     ~ExternalScanContextMgrTest() override {
         delete _exec_env._fragment_mgr;
-        delete _exec_env._thread_mgr;
         delete _exec_env._result_queue_mgr;
+        delete _exec_env._query_context_mgr;
     }
 
 protected:

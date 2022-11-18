@@ -62,7 +62,8 @@ public class CreateTableAnalyzer {
         ICEBERG,
         HUDI,
         JDBC,
-        STARROCKS
+        STARROCKS,
+        FILE
     }
 
     public enum CharsetType {

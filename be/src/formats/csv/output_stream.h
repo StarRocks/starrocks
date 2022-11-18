@@ -7,6 +7,7 @@
 #include "runtime/decimalv2_value.h"
 #include "types/date_value.hpp"
 #include "types/timestamp_value.h"
+#include "util/mysql_global.h"
 
 namespace starrocks::vectorized::csv {
 

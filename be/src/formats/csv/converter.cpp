@@ -58,6 +58,7 @@ static std::unique_ptr<Converter> get_converter(const TypeDescriptor& t) {
     case INVALID_TYPE:
     case TYPE_NULL:
     case TYPE_BINARY:
+    case TYPE_VARBINARY:
     case TYPE_STRUCT:
     case TYPE_MAP:
     case TYPE_HLL:

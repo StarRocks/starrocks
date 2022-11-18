@@ -144,7 +144,7 @@ public:
 
     // equal to ExecNode::eval_conjuncts(_conjunct_ctxs, chunk), is used to apply in-filters to Operators.
     Status eval_conjuncts_and_in_filters(const std::vector<ExprContext*>& conjuncts, vectorized::Chunk* chunk,
-                                         vectorized::FilterPtr* filter = nullptr);
+                                         vectorized::FilterPtr* filter = nullptr, bool apply_filter = true);
 
     // Evaluate conjuncts without cache
     Status eval_conjuncts(const std::vector<ExprContext*>& conjuncts, vectorized::Chunk* chunk,
@@ -157,6 +157,7 @@ public:
     // for example, LocalExchangeSinkOperator, LocalExchangeSourceOperator
     // 2. (s_pseudo_plan_node_id_upper_bound, -1] is for operator which is in the query's plan
     // for example, ResultSink
+    static const int32_t s_pseudo_plan_node_id_for_memory_scratch_sink;
     static const int32_t s_pseudo_plan_node_id_for_export_sink;
     static const int32_t s_pseudo_plan_node_id_for_olap_table_sink;
     static const int32_t s_pseudo_plan_node_id_for_result_sink;

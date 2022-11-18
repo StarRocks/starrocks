@@ -68,7 +68,7 @@ public:
 
     size_t get_field_index_by_name(const std::string& name) const;
 
-    void convert_to(Schema* new_schema, const std::vector<FieldType>& new_types) const;
+    void convert_to(Schema* new_schema, const std::vector<LogicalType>& new_types) const;
 
     KeysType keys_type() const { return static_cast<KeysType>(_keys_type); }
 

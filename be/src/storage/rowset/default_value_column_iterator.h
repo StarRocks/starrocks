@@ -40,8 +40,7 @@ public:
               _is_nullable(is_nullable),
               _type_info(std::move(type_info)),
               _schema_length(schema_length),
-              _is_default_value_null(false),
-              _type_size(0),
+
               _pool(),
               _num_rows(num_rows) {}
 
@@ -56,8 +55,6 @@ public:
         _current_rowid = ord_idx;
         return Status::OK();
     }
-
-    Status next_batch(size_t* n, ColumnBlockView* dst, bool* has_null) override;
 
     Status next_batch(size_t* n, vectorized::Column* dst) override;
 
@@ -89,8 +86,8 @@ private:
     bool _is_nullable;
     TypeInfoPtr _type_info;
     size_t _schema_length;
-    bool _is_default_value_null;
-    size_t _type_size;
+    bool _is_default_value_null{false};
+    size_t _type_size{0};
     void* _mem_value = nullptr;
     MemPool _pool;
 

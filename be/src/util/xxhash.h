@@ -467,7 +467,7 @@ XXH_PUBLIC_API XXH_CONSTF unsigned XXH_versionNumber(void);
 /* ****************************
 *  Common basic types
 ******************************/
-#include <stddef.h> /* size_t */
+#include <cstddef> /* size_t */
 /*!
  * @brief Exit code for the streaming API.
  */
@@ -489,7 +489,7 @@ typedef uint32_t XXH32_hash_t;
 
 #elif !defined(__VMS) && \
         (defined(__cplusplus) || (defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 199901L) /* C99 */))
-#include <stdint.h>
+#include <cstdint>
 typedef uint32_t XXH32_hash_t;
 
 #else
@@ -760,7 +760,7 @@ XXH_PUBLIC_API XXH_PUREF XXH32_hash_t XXH32_hashFromCanonical(const XXH32_canoni
 typedef uint64_t XXH64_hash_t;
 #elif !defined(__VMS) && \
         (defined(__cplusplus) || (defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 199901L) /* C99 */))
-#include <stdint.h>
+#include <cstdint>
 typedef uint64_t XXH64_hash_t;
 #else
 #include <limits.h>

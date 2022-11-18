@@ -6,7 +6,7 @@ Concatenates the elements of an array into a string.
 
 ## Syntax
 
-```SQL
+```Haskell
 array_join(array, sep[, null_replace_str])
 ```
 

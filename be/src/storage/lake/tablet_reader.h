@@ -15,7 +15,7 @@ namespace vectorized {
 class Chunk;
 class ChunkIterator;
 class ColumnPredicate;
-class RowSourceMask;
+struct RowSourceMask;
 class RowSourceMaskBuffer;
 class SeekRange;
 class SeekTuple;

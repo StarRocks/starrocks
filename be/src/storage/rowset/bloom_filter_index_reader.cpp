@@ -25,6 +25,9 @@
 
 #include <memory>
 
+#include "column/column_helper.h"
+#include "column/column_viewer.h"
+#include "storage/chunk_helper.h"
 #include "storage/rowset/bloom_filter.h"
 #include "storage/types.h"
 
@@ -54,7 +57,7 @@ StatusOr<bool> BloomFilterIndexReader::load(FileSystem* fs, const std::string& f
 
 Status BloomFilterIndexReader::_do_load(FileSystem* fs, const std::string& filename, const BloomFilterIndexPB& meta,
                                         bool use_page_cache, bool kept_in_memory) {
-    _typeinfo = get_type_info(OLAP_FIELD_TYPE_VARCHAR);
+    _typeinfo = get_type_info(LOGICAL_TYPE_VARCHAR);
     _algorithm = meta.algorithm();
     _hash_strategy = meta.hash_strategy();
     const IndexedColumnMetaPB& bf_index_meta = meta.bloom_filter();
@@ -78,21 +81,19 @@ Status BloomFilterIndexReader::new_iterator(std::unique_ptr<BloomFilterIndexIter
 }
 
 Status BloomFilterIndexIterator::read_bloom_filter(rowid_t ordinal, std::unique_ptr<BloomFilter>* bf) {
-    size_t num_to_read = 1;
-    std::unique_ptr<ColumnVectorBatch> cvb;
-    RETURN_IF_ERROR(ColumnVectorBatch::create(num_to_read, false, _reader->type_info(), nullptr, &cvb));
-    ColumnBlock block(cvb.get(), _pool.get());
-    ColumnBlockView column_block_view(&block);
-
+    auto column = ChunkHelper::column_from_field_type(LOGICAL_TYPE_VARCHAR, false);
     RETURN_IF_ERROR(_bloom_filter_iter->seek_to_ordinal(ordinal));
+    size_t num_to_read = 1;
     size_t num_read = num_to_read;
-    RETURN_IF_ERROR(_bloom_filter_iter->next_batch(&num_read, &column_block_view));
+    RETURN_IF_ERROR(_bloom_filter_iter->next_batch(&num_read, column.get()));
     DCHECK(num_to_read == num_read);
+
+    vectorized::ColumnViewer<TYPE_VARCHAR> viewer(column);
+    auto value = viewer.value(0);
     // construct bloom filter
     BloomFilter::create(_reader->_algorithm, bf);
-    const auto* value_ptr = reinterpret_cast<const Slice*>(block.data());
-    RETURN_IF_ERROR((*bf)->init(value_ptr->data, value_ptr->size, _reader->_hash_strategy));
-    _pool->clear();
+
+    RETURN_IF_ERROR((*bf)->init(value.data, value.size, _reader->_hash_strategy));
     return Status::OK();
 }
 

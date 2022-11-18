@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <utility>
+
 #include "exec/pipeline/operator.h"
 #include "exec/vectorized/analytor.h"
 
@@ -63,8 +65,10 @@ private:
 class AnalyticSinkOperatorFactory final : public OperatorFactory {
 public:
     AnalyticSinkOperatorFactory(int32_t id, int32_t plan_node_id, const TPlanNode& tnode,
-                                const AnalytorFactoryPtr& analytor_factory)
-            : OperatorFactory(id, "analytic_sink", plan_node_id), _tnode(tnode), _analytor_factory(analytor_factory) {}
+                                AnalytorFactoryPtr analytor_factory)
+            : OperatorFactory(id, "analytic_sink", plan_node_id),
+              _tnode(tnode),
+              _analytor_factory(std::move(analytor_factory)) {}
 
     ~AnalyticSinkOperatorFactory() override = default;
 

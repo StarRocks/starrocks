@@ -2,7 +2,6 @@
 
 package com.starrocks.sql.plan;
 
-import com.starrocks.sql.analyzer.SemanticException;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -35,6 +34,22 @@ public class NestLoopJoinTest extends PlanTestBase {
                 "  |  other join predicates: 3: v3 < 6: v3\n" +
                 "  |  \n" +
                 "  |----2:EXCHANGE\n"));
+
+        // Prune should make the HASH JOIN(LEFT ANTI) could output the left table, but not join slot
+        sql = "select distinct('const') from t0, t1, " +
+                " (select * from t2 where cast(v7 as string) like 'ss%' ) sub1 " +
+                "left anti join " +
+                " (select * from t3 where cast(v10 as string) like 'ss%' ) sub2" +
+                " on substr(cast(sub1.v7 as string), 1) = substr(cast(sub2.v10 as string), 1)";
+
+        PlanTestBase.connectContext.getSessionVariable().setJoinImplementationMode("auto");
+        assertPlanContains(sql, " 11:Project\n" +
+                "  |  <slot 14> : 14: substr\n" +
+                "  |  \n" +
+                "  10:HASH JOIN\n" +
+                "  |  join op: LEFT ANTI JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 14: substr = 15: substr");
     }
 
     @Test
@@ -106,7 +121,7 @@ public class NestLoopJoinTest extends PlanTestBase {
     }
 
     @Test
-    public void testUnsupportedNLJoin() {
+    public void testSemiNLJoin() throws Exception {
         String sql = "select v1 from t0 where 1 IN ((SELECT v4 FROM t1, t2, t3 WHERE CASE WHEN true " +
                 "THEN (CAST(((((-1710265121)%(1583445171)))%(CAST(v1 AS INT ) )) AS STRING ) )  " +
                 "BETWEEN (v4) AND (v5)   " +
@@ -115,8 +130,27 @@ public class NestLoopJoinTest extends PlanTestBase {
                 "CASE WHEN (((((331435726)/(599089901)))%(((-1103769432)/(1943795037)))))  " +
                 "BETWEEN (((((468244514)%(2000495251)))/(560246333))) AND (((CAST(v8 AS INT ) )/(170534098))) " +
                 "THEN (NOT (true)) WHEN NULL THEN (DAYOFMONTH('1969-12-30')) IN (154771541, NULL, 91180822) END END));";
+        assertPlanContains(sql, "NESTLOOP JOIN");
 
-        Assert.assertThrows(SemanticException.class, () -> getFragmentPlan(sql));
+        assertPlanContains("select * from t0,t1 where 1 in (select 2 from t2,t3 where t0.v1 = 1 and t1.v4 = 2)", "NESTLOOP JOIN");
+        assertPlanContains("select * from t0,t1 where 1 in (select v7 from t2,t3 where t0.v1 = 1 and t1.v4 = 2)",
+                "NESTLOOP JOIN");
+        assertPlanContains("select * from t0,t1 where v1 in (select 1+2+3 from t2,t3 where t0.v1 = 1 and t1.v4 = 2)",
+                "NESTLOOP JOIN");
+        assertPlanContains("select * from t0,t1 where abs(1) - 1 in (select 'abc' from t2,t3 where t0.v1 = 1 and t1.v4 = 2)",
+                "NESTLOOP JOIN");
+        assertPlanContains("select * from t0,t1 where 1 not in (select v7 from t2,t3 where t0.v1 = 1 and t1.v4 = 2)",
+                "NESTLOOP JOIN");
+        assertPlanContains("select * from t0,t1 where 1 not in (select v7 from t2,t3 where t0.v1 = 1 and t1.v4 = 2)",
+                "NESTLOOP JOIN");
+        assertPlanContains("select * from t0,t1 where v1 not in (select 1+2+3 from t2,t3 where t0.v1 = 1 and t1.v4 = 2)",
+                "NESTLOOP JOIN");
+        assertPlanContains("select * from t0,t1 where abs(1) - 1 not in (select v7 + 1 from t2,t3 where t0.v1 = 1 and t1.v4 = 2)",
+                "NESTLOOP JOIN");
+        assertPlanContains("select * from t0 left semi join t1 on t0.v1 < t1.v4", "NESTLOOP JOIN");
+        assertPlanContains("select * from t0 left anti join t1 on t0.v1 < t1.v4", "NESTLOOP JOIN");
+        assertPlanContains("select * from t0 right semi join t1 on t0.v1 < t1.v4", "NESTLOOP JOIN");
+        assertPlanContains("select * from t0 right anti join t1 on t0.v1 < t1.v4", "NESTLOOP JOIN");
     }
 
     @Test

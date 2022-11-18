@@ -16,7 +16,9 @@ Stream Load is suitable for the following business scenarios:
 
 Additionally, Stream Load supports data transformation at data loading. For more information, see [Transform data at loading](../loading/Etl_in_loading.md).
 
-> Note: After you load data into a StarRocks table by using Stream Load, the data of the materialized views that are created on that table is also updated.
+> **NOTE**
+>
+> After you load data into a StarRocks table by using Stream Load, the data of the materialized views that are created on that table is also updated.
 
 ## Supported data file formats
 
@@ -28,19 +30,23 @@ Stream Load supports the following data file formats:
 
 You can use the `streaming_load_max_mb` parameter to specify the maximum size of each data file you want to load. The default maximum size is 10 GB. We recommend that you retain the default value of this parameter. For more information, see the "[Parameter configurations](../loading/StreamLoad.md#parameter-configurations)" section of this topic.
 
+> **NOTE**
+>
+> For CSV data, you can use a UTF-8 string, such as a comma (,), tab, or pipe (|), whose length does not exceed 50 bytes as a text delimiter.
+
 ## Limits
 
 Stream Load does not support loading the data of a CSV file that contains a JSON-formatted column.
 
 ## Principles
 
-If you choose the loading method Stream Load, you must submit a load request on your client to an FE according to HTTP. The FE uses an HTTP redirect to forward the load request to a specific BE.
+You can submit a load request on your client to an FE according to HTTP, and the FE then uses an HTTP redirect to forward the load request to a specific BE. You can also directly submit a load request on your client to a BE of your choice.
 
-> Note: You can also create a load job on your client to send a load request to a BE of your choice.
+> **NOTE**
+>
+> If you submit load requests to an FE, the FE uses a polling mechanism to decide which BE will serve as a coordinator to receive and process the load requests. The polling mechanism helps achieve load balancing within your StarRocks cluster. Therefore, we recommend that you send load requests to an FE.
 
-The BE that receives the load request runs as the Coordinator BE to split data based on the used schema into portions and assign each portion of the data to the other involved BEs. After the load finishes, the Coordinator BE returns the result of the load job to your client.
-
-> Note: If you send load requests to an FE, the FE uses a polling mechanism to decide which BE will receive the load requests. The polling mechanism helps achieve load balancing within your StarRocks cluster. Therefore, we recommend that you send load requests to an FE and let the FE decide which BE will run as the Coordinator BE to process the load requests.
+The BE that receives the load request runs as the Coordinator BE to split data based on the used schema into portions and assign each portion of the data to the other involved BEs. After the load finishes, the Coordinator BE returns the result of the load job to your client. Note that if you stop the Coordinator BE during the load, the load job fails.
 
 The following figure shows the workflow of a Stream Load job.
 
@@ -157,7 +163,9 @@ The mappings shown in the preceding figure are described as follows:
 
 - StarRocks extracts the `city` and `tmp_id` fields declared in the `columns` parameter and **maps them by name** onto the `city` and `id` columns of `table2`.
 
-> Note: In the preceding example, the value of `code` in `example2.json` is multiplied by 100 before it is loaded into the `id` column of `table2`.
+> **NOTE**
+>
+> In the preceding example, the value of `code` in `example2.json` is multiplied by 100 before it is loaded into the `id` column of `table2`.
 
 For detailed mappings between `jsonpaths`, `columns`, and the columns of the StarRocks table, see the "Column mappings" section in [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md).
 
@@ -205,7 +213,7 @@ This section describes some system parameters that you need to configure if you 
 
   After you increase the value of this parameter, the new value can take effect only after you restart the BEs of your StarRocks cluster. Additionally, system performance may deteriorate, and the costs of retries in the event of load failures also increase.
 
-  > Note:
+  > **NOTE**
   >
   > When you load the data of a JSON file, take note of the following points:
   >
@@ -221,7 +229,9 @@ This section describes some system parameters that you need to configure if you 
 
   For example, if the size of the data file that you want to load is 10 GB and the average loading speed of your StarRocks cluster is 100 MB/s, set the timeout period to more than 100 seconds.
 
-  > Note: **Average loading speed** in the preceding formula is the average loading speed of your StarRocks cluster. It varies depending on the disk I/O and the number of BEs in your StarRocks cluster.
+  > **NOTE**
+  >
+  > **Average loading speed** in the preceding formula is the average loading speed of your StarRocks cluster. It varies depending on the disk I/O and the number of BEs in your StarRocks cluster.
 
   Stream Load also provides the `timeout` parameter, which allows you to specify the timeout period of an individual load job. For more information, see [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md).
 

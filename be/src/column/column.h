@@ -353,7 +353,7 @@ public:
     // Only used for debug one item in this column
     virtual std::string debug_item(uint32_t idx) const { return ""; }
 
-    virtual std::string debug_string() const { return std::string(); }
+    virtual std::string debug_string() const { return {}; }
 
     // memory usage includes container memory usage and element memory usage.
     // 1. container memory usage: container capacity * type size.

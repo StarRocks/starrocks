@@ -52,7 +52,9 @@ static const std::string HTTP_PARTIAL_UPDATE = "partial_update";
 static const std::string HTTP_TRANSMISSION_COMPRESSION_TYPE = "transmission_compression_type";
 static const std::string HTTP_LOAD_DOP = "load_dop";
 static const std::string HTTP_ENABLE_REPLICATED_STORAGE = "enable_replicated_storage";
+static const std::string HTTP_MERGE_CONDITION = "merge_condition";
 
 static const std::string HTTP_100_CONTINUE = "100-continue";
+static const std::string HTTP_CHANNEL_ID = "channel_id";
 
 } // namespace starrocks

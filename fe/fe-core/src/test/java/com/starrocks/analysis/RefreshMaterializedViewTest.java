@@ -60,7 +60,7 @@ public class RefreshMaterializedViewTest {
                         "PROPERTIES('replication_num' = '1');")
                 .withNewMaterializedView("create materialized view mv_to_refresh\n" +
                         "distributed by hash(k2) buckets 3\n" +
-                        "refresh async\n" +
+                        "refresh manual\n" +
                         "as select k2, sum(v1) as total from tbl_with_mv group by k2;")
                 .withNewMaterializedView("create materialized view mv2_to_refresh\n" +
                         "PARTITION BY k1\n"+
@@ -148,6 +148,6 @@ public class RefreshMaterializedViewTest {
         partitionsToRefresh1 = mv1.getPartitionNamesToRefreshForMv();
         Assert.assertEquals(Sets.newHashSet("mv_to_refresh"), partitionsToRefresh1);
         partitionsToRefresh2 = mv2.getPartitionNamesToRefreshForMv();
-        Assert.assertEquals(Sets.newHashSet("p2"), partitionsToRefresh2);
+        Assert.assertTrue(partitionsToRefresh2.contains("p2"));
     }
 }

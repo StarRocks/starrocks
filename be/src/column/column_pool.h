@@ -319,8 +319,7 @@ private:
     }
 
     bool _push_free_block(const FreeBlock& blk) {
-        DynamicFreeBlock* p =
-                (DynamicFreeBlock*)malloc(offsetof(DynamicFreeBlock, ptrs) + sizeof(*blk.ptrs) * blk.nfree);
+        auto* p = (DynamicFreeBlock*)malloc(offsetof(DynamicFreeBlock, ptrs) + sizeof(*blk.ptrs) * blk.nfree);
         if (UNLIKELY(p == nullptr)) {
             return false;
         }

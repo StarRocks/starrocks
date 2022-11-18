@@ -57,6 +57,7 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
     private static final LocalDateTime MIN_DATETIME = LocalDateTime.of(0, 1, 1, 0, 0, 0);
 
     public static final ConstantOperator TRUE = ConstantOperator.createBoolean(true);
+    public static final ConstantOperator FALSE = ConstantOperator.createBoolean(false);
 
     // Don't need fixWidth
     private static final DateTimeFormatter DATE_TIME_FORMATTER_MS =
@@ -78,7 +79,7 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
         this.isNull = true;
     }
 
-    private ConstantOperator(Object value, Type type) {
+    public ConstantOperator(Object value, Type type) {
         super(OperatorType.CONSTANT, type);
         Objects.requireNonNull(value, "constant value is null");
         this.value = value;
@@ -153,6 +154,10 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
 
     public static ConstantOperator createChar(String value, Type charType) {
         return new ConstantOperator(value, charType);
+    }
+
+    public static ConstantOperator createBinary(byte[] value, Type binaryType) {
+        return new ConstantOperator(value, binaryType);
     }
 
     public boolean isNull() {
@@ -246,6 +251,10 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
 
     public String getChar() {
         return (String) Optional.ofNullable(value).orElse("");
+    }
+
+    public byte[] getBinary() {
+        return (byte[]) (value);
     }
 
     @Override

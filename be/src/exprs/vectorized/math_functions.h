@@ -116,6 +116,12 @@ public:
      * @param columns: [DoubleColumn]
      * @return DoubleColumn
      */
+    DEFINE_VECTORIZED_FN(sinh);
+
+    /**
+     * @param columns: [DoubleColumn]
+     * @return DoubleColumn
+     */
     DEFINE_VECTORIZED_FN(cos);
 
     /**
@@ -128,6 +134,12 @@ public:
      * @param columns: [DoubleColumn]
      * @return DoubleColumn
      */
+    DEFINE_VECTORIZED_FN(cosh);
+
+    /**
+     * @param columns: [DoubleColumn]
+     * @return DoubleColumn
+     */
     DEFINE_VECTORIZED_FN(tan);
 
     /**
@@ -135,6 +147,12 @@ public:
      * @return DoubleColumn
      */
     DEFINE_VECTORIZED_FN(atan);
+
+    /**
+     * @param columns: [DoubleColumn]
+     * @return DoubleColumn
+     */
+    DEFINE_VECTORIZED_FN(tanh);
 
     /**
     * @param columns: [DoubleColumn]
@@ -271,14 +289,6 @@ public:
      * Get the pseudo-random number that normalize to [0,1] with a seed
      */
     DEFINE_VECTORIZED_FN(rand_seed);
-
-    static void generate_randoms(ColumnBuilder<TYPE_DOUBLE>* result, int32_t num_rows, uint32_t* seed) {
-        for (int i = 0; i < num_rows; ++i) {
-            *seed = ::rand_r(seed);
-            // Normalize to [0,1].
-            result->append(static_cast<double>(*seed) / RAND_MAX);
-        }
-    }
 
     //
     /**

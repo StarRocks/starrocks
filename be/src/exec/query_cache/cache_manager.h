@@ -10,8 +10,7 @@
 #include "util/lru_cache.h"
 #include "util/slice.h"
 
-namespace starrocks {
-namespace query_cache {
+namespace starrocks::query_cache {
 class CacheManager;
 using CacheManagerRawPtr = CacheManager*;
 using CacheManagerPtr = std::shared_ptr<CacheManager>;
@@ -19,39 +18,27 @@ using CacheManagerPtr = std::shared_ptr<CacheManager>;
 using CacheResult = std::vector<vectorized::ChunkPtr>;
 
 struct CacheValue {
-    int64_t latest_hit_time;
-    int64_t hit_count;
+    int64_t latest_hit_time{0};
+    int64_t hit_count{0};
     int64_t populate_time;
     int64_t version;
     CacheResult result;
 
     CacheValue(int64_t populate_time, int64_t cache_version, CacheResult&& cache_result)
-            : latest_hit_time(0),
-              hit_count(0),
-              populate_time(populate_time),
-              version(cache_version),
-              result(cache_result) {}
+            : populate_time(populate_time), version(cache_version), result(cache_result) {}
 
     CacheValue(const CacheValue& that)
-            : latest_hit_time(that.latest_hit_time),
-              hit_count(that.hit_count),
-              populate_time(that.populate_time),
-              version(that.version),
-              result(that.result) {}
 
-    CacheValue& operator=(const CacheValue& that) {
-        this->latest_hit_time = that.latest_hit_time;
-        this->hit_count = that.hit_count;
-        this->populate_time = that.populate_time;
-        this->version = that.version;
-        this->result = that.result;
-        return *this;
-    }
+            = default;
+
+    CacheValue& operator=(const CacheValue& that) = default;
 
     ~CacheValue() { result.clear(); }
 
     size_t size() {
-        size_t value_size = 0;
+        // zero-charge cache entry can not be purged in LRU cache, so size of CacheValue must be at least
+        // greater than zero, so add sizeof(CacheValue) to size.
+        size_t value_size = sizeof(CacheValue);
         for (auto& chk : result) {
             value_size += chk->memory_usage();
         }
@@ -75,5 +62,4 @@ public:
 private:
     ShardedLRUCache _cache;
 };
-} // namespace query_cache
-} // namespace starrocks
+} // namespace starrocks::query_cache

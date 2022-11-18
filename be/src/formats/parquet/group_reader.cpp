@@ -15,7 +15,7 @@
 namespace starrocks::parquet {
 
 constexpr static const PrimitiveType kDictCodePrimitiveType = TYPE_INT;
-constexpr static const FieldType kDictCodeFieldType = OLAP_FIELD_TYPE_INT;
+constexpr static const LogicalType kDictCodeFieldType = LOGICAL_TYPE_INT;
 
 GroupReader::GroupReader(GroupReaderParam& param, int row_group_number) : _param(param) {
     _row_group_metadata =
@@ -138,6 +138,7 @@ void GroupReader::close() {
 Status GroupReader::_init_column_readers() {
     ColumnReaderOptions& opts = _column_reader_opts;
     opts.timezone = _param.timezone;
+    opts.case_sensitive = _param.case_sensitive;
     opts.chunk_size = _param.chunk_size;
     opts.stats = _param.stats;
     opts.sb_stream = _param.shared_buffered_stream;
@@ -229,11 +230,11 @@ void GroupReader::_collect_field_io_range(const ParquetField& field,
     // and it may not be equal to col_idx_in_chunk.
     // 3. For array type, the physical_column_index is 0, we need to iterate the children and
     // collect their io ranges.
-    if (field.type.type == TYPE_ARRAY) {
+    if (field.type.type == PrimitiveType::TYPE_ARRAY || field.type.type == PrimitiveType::TYPE_STRUCT) {
         for (auto& child : field.children) {
             _collect_field_io_range(child, ranges, end_offset);
         }
-    } else if (field.type.type == TYPE_MAP) {
+    } else if (field.type.type == PrimitiveType::TYPE_MAP) {
         // ParquetFiled Map -> Map<Struct<key,value>>
         DCHECK(field.children[0].type.type == TYPE_STRUCT);
         for (auto& child : field.children[0].children) {

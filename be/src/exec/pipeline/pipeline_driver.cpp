@@ -13,6 +13,7 @@
 #include "exec/query_cache/cache_operator.h"
 #include "exec/query_cache/lane_arbiter.h"
 #include "exec/query_cache/multilane_operator.h"
+#include "exec/query_cache/ticket_checker.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
@@ -56,8 +57,20 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
 
     DCHECK(_state == DriverState::NOT_READY);
 
-    source_operator()->add_morsel_queue(_morsel_queue);
+    auto* source_op = source_operator();
+    // attach ticket_checker to both ScanOperator and SplitMorselQueue
+    auto should_attach_ticket_checker = (dynamic_cast<ScanOperator*>(source_op) != nullptr) &&
+                                        (dynamic_cast<SplitMorselQueue*>(_morsel_queue) != nullptr) &&
+                                        _fragment_ctx->enable_cache();
+    if (should_attach_ticket_checker) {
+        auto* scan_op = dynamic_cast<ScanOperator*>(source_op);
+        auto* split_morsel_queue = dynamic_cast<SplitMorselQueue*>(_morsel_queue);
+        auto ticket_checker = std::make_shared<query_cache::TicketChecker>();
+        scan_op->set_ticket_checker(ticket_checker);
+        split_morsel_queue->set_ticket_checker(ticket_checker);
+    }
 
+    source_op->add_morsel_queue(_morsel_queue);
     // fill OperatorWithDependency instances into _dependencies from _operators.
     DCHECK(_dependencies.empty());
     _dependencies.reserve(_operators.size());
@@ -160,7 +173,7 @@ static inline bool is_multilane(pipeline::OperatorPtr& op) {
 StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int worker_id) {
     COUNTER_UPDATE(_schedule_counter, 1);
     SCOPED_TIMER(_active_timer);
-    QUERY_TRACE_SCOPED("process", "");
+    QUERY_TRACE_SCOPED("process", _driver_name);
     set_driver_state(DriverState::RUNNING);
     size_t total_chunks_moved = 0;
     size_t total_rows_moved = 0;
@@ -374,7 +387,7 @@ void PipelineDriver::_close_operators(RuntimeState* runtime_state) {
 void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
     VLOG_ROW << "[Driver] finalize, driver=" << this;
     DCHECK(state == DriverState::FINISH || state == DriverState::CANCELED || state == DriverState::INTERNAL_ERROR);
-    QUERY_TRACE_BEGIN("finalize", "");
+    QUERY_TRACE_BEGIN("finalize", _driver_name);
     _close_operators(runtime_state);
 
     set_driver_state(state);
@@ -413,14 +426,14 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
             auto query_ctx_ptr = uintptr_t(_query_ctx);
             if (ExecEnv::GetInstance()->query_context_mgr()->remove(query_id)) {
                 if (wg) {
-                    VLOG_ROW << "decrease num running queries in workgroup " << wg->id() << "query_id=" << query_id
-                             << ",fragment_ctx address=" << fragment_ctx_ptr << ",fragment_instance_id=" << frag_id
-                             << ",active_drivers=" << active_drivers << ", active_fragments=" << active_fragments
-                             << ", query_ctx address=" << query_ctx_ptr;
+                    LOG(INFO) << "decrease num running queries in workgroup " << wg->id()
+                              << " query_id=" << print_id(query_id) << ", fragment_ctx address=" << fragment_ctx_ptr
+                              << ", fragment_instance_id=" << print_id(frag_id) << ", active_drivers=" << active_drivers
+                              << ", active_fragments=" << active_fragments << ", query_ctx address=" << query_ctx_ptr;
                     wg->decr_num_queries();
                 }
             }
-            QUERY_TRACE_END("finalize", "");
+            QUERY_TRACE_END("finalize", _driver_name);
             // @TODO(silverbullet233): if necessary, remove the dump from the execution thread
             // considering that this feature is generally used for debugging,
             // I think it should not have a big impact now
@@ -428,7 +441,7 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
             return;
         }
     }
-    QUERY_TRACE_END("finalize", "");
+    QUERY_TRACE_END("finalize", _driver_name);
 }
 
 void PipelineDriver::_update_overhead_timer() {
@@ -502,8 +515,8 @@ Status PipelineDriver::_mark_operator_finishing(OperatorPtr& op, RuntimeState* s
         return Status::OK();
     }
 
-    VLOG_ROW << strings::Substitute("[Driver] finishing operator [driver=$0] [operator=$1]", to_readable_string(),
-                                    op->get_name());
+    VLOG_ROW << strings::Substitute("[Driver] finishing operator [fragment_id=$0] [driver=$1] [operator=$2]",
+                                    print_id(state->fragment_instance_id()), to_readable_string(), op->get_name());
     {
         SCOPED_TIMER(op->_finishing_timer);
         op_state = OperatorStage::FINISHING;
@@ -519,8 +532,8 @@ Status PipelineDriver::_mark_operator_finished(OperatorPtr& op, RuntimeState* st
         return Status::OK();
     }
 
-    VLOG_ROW << strings::Substitute("[Driver] finished operator [driver=$0] [operator=$1]", to_readable_string(),
-                                    op->get_name());
+    VLOG_ROW << strings::Substitute("[Driver] finished operator [fragment_id=$0] [driver=$1] [operator=$2]",
+                                    print_id(state->fragment_instance_id()), to_readable_string(), op->get_name());
     {
         SCOPED_TIMER(op->_finished_timer);
         op_state = OperatorStage::FINISHED;
@@ -530,14 +543,19 @@ Status PipelineDriver::_mark_operator_finished(OperatorPtr& op, RuntimeState* st
 }
 
 Status PipelineDriver::_mark_operator_cancelled(OperatorPtr& op, RuntimeState* state) {
-    RETURN_IF_ERROR(_mark_operator_finished(op, state));
+    Status res = _mark_operator_finished(op, state);
+    if (!res.ok()) {
+        LOG(WARNING) << fmt::format("fragment_id {} driver {} cancels operator {} with finished error {}",
+                                    print_id(state->fragment_instance_id()), to_readable_string(), op->get_name(),
+                                    res.get_error_msg());
+    }
     auto& op_state = _operator_stages[op->get_id()];
     if (op_state >= OperatorStage::CANCELLED) {
         return Status::OK();
     }
 
-    VLOG_ROW << strings::Substitute("[Driver] cancelled operator [driver=$0] [operator=$1]", to_readable_string(),
-                                    op->get_name());
+    VLOG_ROW << strings::Substitute("[Driver] cancelled operator [fragment_id=$0] [driver=$1] [operator=$2]",
+                                    print_id(state->fragment_instance_id()), to_readable_string(), op->get_name());
     op_state = OperatorStage::CANCELLED;
     return op->set_cancelled(state);
 }
@@ -554,8 +572,8 @@ Status PipelineDriver::_mark_operator_closed(OperatorPtr& op, RuntimeState* stat
         return Status::OK();
     }
 
-    VLOG_ROW << strings::Substitute("[Driver] close operator [driver=$0] [operator=$1]", to_readable_string(),
-                                    op->get_name());
+    VLOG_ROW << strings::Substitute("[Driver] close operator [fragment_id=$0] [driver=$1] [operator=$2]",
+                                    print_id(state->fragment_instance_id()), to_readable_string(), op->get_name());
     {
         SCOPED_TIMER(op->_close_timer);
         op_state = OperatorStage::CLOSED;

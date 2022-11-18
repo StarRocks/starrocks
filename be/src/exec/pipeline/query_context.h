@@ -18,15 +18,14 @@
 #include "util/hash_util.hpp"
 #include "util/time.h"
 
-namespace starrocks {
-namespace pipeline {
+namespace starrocks::pipeline {
 
 using std::chrono::seconds;
 using std::chrono::milliseconds;
 using std::chrono::steady_clock;
 using std::chrono::duration_cast;
 // The context for all fragment of one query in one BE
-class QueryContext {
+class QueryContext : public std::enable_shared_from_this<QueryContext> {
 public:
     QueryContext();
     ~QueryContext();
@@ -137,6 +136,8 @@ public:
     bool is_result_sink() const { return _is_result_sink; }
     void set_result_sink(bool value) { _is_result_sink = value; }
 
+    QueryContextPtr get_shared_ptr() { return shared_from_this(); }
+
 public:
     static constexpr int DEFAULT_EXPIRE_SECONDS = 300;
 
@@ -216,5 +217,4 @@ private:
     std::unique_ptr<UIntGauge> _query_ctx_cnt;
 };
 
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline

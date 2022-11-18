@@ -67,7 +67,7 @@ static void get_shutdown_tablets(std::ostream& os, void*) {
 
 bvar::PassiveStatus<std::string> g_shutdown_tablets("starrocks_shutdown_tablets", get_shutdown_tablets, nullptr);
 
-TabletManager::TabletManager(int32_t tablet_map_lock_shard_size)
+TabletManager::TabletManager(int64_t tablet_map_lock_shard_size)
         : _tablets_shards(tablet_map_lock_shard_size),
           _tablets_shards_mask(tablet_map_lock_shard_size - 1),
           _last_update_stat_ms(0) {
@@ -145,8 +145,8 @@ Status TabletManager::create_tablet(const TCreateTabletReq& request, std::vector
     // the shard where the target tablet is located need to be locked.
     // In order to prevent deadlock, the order of locking needs to be fixed.
     if (request.__isset.base_tablet_id && request.base_tablet_id > 0) {
-        int shard_idx = _get_tablets_shard_idx(tablet_id);
-        int base_shard_idx = _get_tablets_shard_idx(request.base_tablet_id);
+        int64_t shard_idx = _get_tablets_shard_idx(tablet_id);
+        int64_t base_shard_idx = _get_tablets_shard_idx(request.base_tablet_id);
 
         if (shard_idx == base_shard_idx) {
             wlock.lock();
@@ -597,9 +597,9 @@ TabletSharedPtr TabletManager::find_best_tablet_to_compaction(CompactionType com
     }
 
     if (best_tablet != nullptr) {
-        LOG(INFO) << "Found the best tablet to compact. "
-                  << "compaction_type=" << compaction_type_str << " tablet_id=" << best_tablet->tablet_id()
-                  << " highest_score=" << highest_score;
+        VLOG(1) << "Found the best tablet to compact. "
+                << "compaction_type=" << compaction_type_str << " tablet_id=" << best_tablet->tablet_id()
+                << " highest_score=" << highest_score;
         // TODO(lingbin): Remove 'max' from metric name, it would be misunderstood as the
         // biggest in history(like peak), but it is really just the value at current moment.
         if (compaction_type == CompactionType::BASE_COMPACTION) {
@@ -724,7 +724,7 @@ Status TabletManager::load_tablet_from_meta(DataDir* data_dir, TTabletId tablet_
     LOG_IF(WARNING, !st.ok()) << "Fail to add tablet " << tablet->full_name();
     // no concurrent access here
     if (config::enable_event_based_compaction_framework) {
-        StorageEngine::instance()->compaction_manager()->update_tablet_async(tablet, true, false);
+        StorageEngine::instance()->compaction_manager()->update_tablet_async(tablet);
     }
 
     return st;

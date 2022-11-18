@@ -34,6 +34,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.ResourceGroup;
+import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
@@ -131,6 +132,7 @@ import com.starrocks.thrift.TResultBatch;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.InsertTxnCommitAttachment;
 import com.starrocks.transaction.TabletCommitInfo;
+import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionCommitFailedException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
@@ -422,7 +424,7 @@ public class StmtExecutor {
 
                         handleQueryStmt(execPlan);
 
-                        if (context.getSessionVariable().isReportSucc()) {
+                        if (context.getSessionVariable().isEnableProfile()) {
                             writeProfile(beginTimeInNanoSecond);
                         }
                         break;
@@ -460,7 +462,7 @@ public class StmtExecutor {
             } else if (parsedStmt instanceof DmlStmt) {
                 try {
                     handleDMLStmt(execPlan, (DmlStmt) parsedStmt);
-                    if (context.getSessionVariable().isReportSucc()) {
+                    if (context.getSessionVariable().isEnableProfile()) {
                         writeProfile(beginTimeInNanoSecond);
                     }
                 } catch (Throwable t) {
@@ -547,7 +549,7 @@ public class StmtExecutor {
             InsertStmt insertStmt = createTableAsSelectStmt.getInsertStmt();
             ExecPlan execPlan = new StatementPlanner().plan(insertStmt, context);
             handleDMLStmt(execPlan, ((CreateTableAsSelectStmt) parsedStmt).getInsertStmt());
-            if (context.getSessionVariable().isReportSucc()) {
+            if (context.getSessionVariable().isEnableProfile()) {
                 writeProfile(beginTimeInNanoSecond);
             }
             if (context.getState().getStateType() == MysqlStateType.ERR) {
@@ -666,14 +668,15 @@ public class StmtExecutor {
             // Suicide
             context.setKilled();
         } else {
-            // Check auth
-            // Only user itself and user with admin priv can kill connection
-            if (!killCtx.getQualifiedUser().equals(ConnectContext.get().getQualifiedUser())
-                    && !GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(),
-                    PrivPredicate.ADMIN)) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_KILL_DENIED_ERROR, id);
+            if (!GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                // Check auth
+                // Only user itself and user with admin priv can kill connection
+                if (!killCtx.getQualifiedUser().equals(ConnectContext.get().getQualifiedUser())
+                        && !GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(),
+                                                                                   PrivPredicate.ADMIN)) {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_KILL_DENIED_ERROR, id);
+                }
             }
-
             killCtx.kill(killStmt.isConnectionKill());
         }
         context.getState().setOk();
@@ -699,11 +702,11 @@ public class StmtExecutor {
         context.getMysqlChannel().reset();
 
         if (parsedStmt.isExplain()) {
-            handleExplainStmt(buildExplainString(execPlan));
+            handleExplainStmt(buildExplainString(execPlan, ResourceGroupClassifier.QueryType.SELECT));
             return;
         }
         if (context.getQueryDetail() != null) {
-            context.getQueryDetail().setExplain(buildExplainString(execPlan));
+            context.getQueryDetail().setExplain(buildExplainString(execPlan, ResourceGroupClassifier.QueryType.SELECT));
         }
 
         StatementBase queryStmt = parsedStmt;
@@ -1057,11 +1060,11 @@ public class StmtExecutor {
         context.getState().setEof();
     }
 
-    private String buildExplainString(ExecPlan execPlan) {
+    private String buildExplainString(ExecPlan execPlan, ResourceGroupClassifier.QueryType queryType) {
         String explainString = "";
         if (parsedStmt.getExplainLevel() == StatementBase.ExplainLevel.VERBOSE) {
             if (context.getSessionVariable().isEnableResourceGroup()) {
-                ResourceGroup resourceGroup = Coordinator.prepareResourceGroup(context);
+                ResourceGroup resourceGroup = Coordinator.prepareResourceGroup(context, queryType);
                 String resourceGroupStr =
                         resourceGroup != null ? resourceGroup.getName() : ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME;
                 explainString += "RESOURCE GROUP: " + resourceGroupStr + "\n\n";
@@ -1172,11 +1175,11 @@ public class StmtExecutor {
 
     public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
         if (stmt.isExplain()) {
-            handleExplainStmt(buildExplainString(execPlan));
+            handleExplainStmt(buildExplainString(execPlan, ResourceGroupClassifier.QueryType.INSERT));
             return;
         }
         if (context.getQueryDetail() != null) {
-            context.getQueryDetail().setExplain(buildExplainString(execPlan));
+            context.getQueryDetail().setExplain(buildExplainString(execPlan, ResourceGroupClassifier.QueryType.INSERT));
         }
 
         // special handling for delete of non-primary key table, using old handler
@@ -1273,7 +1276,7 @@ public class StmtExecutor {
         boolean insertError = false;
         try {
             if (execPlan.getFragments().get(0).getSink() instanceof OlapTableSink) {
-                //if sink is OlapTableSink Assigned to Be execute this sql [cn execute OlapTableSink will crash]
+                // if sink is OlapTableSink Assigned to Be execute this sql [cn execute OlapTableSink will crash]
                 context.getSessionVariable().setPreferComputeNode(false);
                 context.getSessionVariable().setUseComputeNodes(0);
                 OlapTableSink dataSink = (OlapTableSink) execPlan.getFragments().get(0).getSink();
@@ -1289,9 +1292,9 @@ public class StmtExecutor {
             List<ScanNode> scanNodes = execPlan.getScanNodes();
 
             boolean containOlapScanNode = false;
-            for (int i = 0; i < scanNodes.size(); i++) {
-                if (scanNodes.get(i) instanceof OlapScanNode) {
-                    estimateScanRows += ((OlapScanNode) scanNodes.get(i)).getActualRows();
+            for (ScanNode scanNode : scanNodes) {
+                if (scanNode instanceof OlapScanNode) {
+                    estimateScanRows += ((OlapScanNode) scanNode).getActualRows();
                     containOlapScanNode = true;
                 }
             }
@@ -1368,7 +1371,8 @@ public class StmtExecutor {
                                 database.getId(),
                                 transactionId,
                                 TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking_url = "
-                                        + coord.getTrackingUrl()
+                                        + coord.getTrackingUrl(),
+                                TabletFailInfo.fromThrift(coord.getFailInfos())
                         );
                     }
                     context.getState().setError("Insert has filtered data in strict mode, txn_id = " +
@@ -1415,6 +1419,7 @@ public class StmtExecutor {
                         database,
                         transactionId,
                         TabletCommitInfo.fromThrift(coord.getCommitInfos()),
+                        TabletFailInfo.fromThrift(coord.getFailInfos()),
                         context.getSessionVariable().getTransactionVisibleWaitTimeout() * 1000,
                         new InsertTxnCommitAttachment(loadedRows))) {
                     txnStatus = TransactionStatus.VISIBLE;
@@ -1446,7 +1451,8 @@ public class StmtExecutor {
                 } else {
                     GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
                             database.getId(), transactionId,
-                            t.getMessage() == null ? "Unknown reason" : t.getMessage());
+                            t.getMessage() == null ? "Unknown reason" : t.getMessage(),
+                            TabletFailInfo.fromThrift(coord.getFailInfos()));
                 }
             } catch (Exception abortTxnException) {
                 // just print a log if abort txn failed. This failure do not need to pass to user.
@@ -1455,7 +1461,7 @@ public class StmtExecutor {
             }
 
             // if not using old load usage pattern, error will be returned directly to user
-            StringBuilder sb = new StringBuilder(t.getMessage());
+            StringBuilder sb = new StringBuilder(t.getMessage() == null ? "Unknown reason" : t.getMessage());
             if (coord != null && !Strings.isNullOrEmpty(coord.getTrackingUrl())) {
                 sb.append(". url: ").append(coord.getTrackingUrl());
             }

@@ -72,6 +72,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalDeltaLakeScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalExceptOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalFileScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHudiScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
@@ -320,10 +321,16 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
             throw unsupportedException("New Planner only support Query Statement");
         }
 
-        if (setOperationRelation.hasOrderByClause()) {
+        root = addOrderByLimit(root, setOperationRelation);
+        return new LogicalPlan(root, outputColumns, null);
+    }
+
+    private OptExprBuilder addOrderByLimit(OptExprBuilder root, QueryRelation relation) {
+        List<OrderByElement> orderBy = relation.getOrderBy();
+        if (relation.hasOrderByClause()) {
             List<Ordering> orderings = new ArrayList<>();
             List<ColumnRefOperator> orderByColumns = Lists.newArrayList();
-            for (OrderByElement item : setOperationRelation.getOrderBy()) {
+            for (OrderByElement item : orderBy) {
                 ColumnRefOperator column = (ColumnRefOperator) SqlToScalarOperatorTranslator.translate(item.getExpr(),
                         root.getExpressionMapping(), columnRefFactory);
                 Ordering ordering = new Ordering(column, item.getIsAsc(),
@@ -336,12 +343,12 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
             root = root.withNewRoot(new LogicalTopNOperator(orderings));
         }
 
-        LimitElement limit = setOperationRelation.getLimit();
+        LimitElement limit = relation.getLimit();
         if (limit != null) {
             LogicalLimitOperator limitOperator = LogicalLimitOperator.init(limit.getLimit(), limit.getOffset());
             root = root.withNewRoot(limitOperator);
         }
-        return new LogicalPlan(root, outputColumns, null);
+        return root;
     }
 
     @Override
@@ -396,7 +403,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                     column.getKey().getType(),
                     column.getValue().isAllowNull());
             columnRefFactory.updateColumnToRelationIds(columnRef.getId(), relationId);
-            columnRefFactory.updateColumnRefToColumns(columnRef, column.getValue());
+            columnRefFactory.updateColumnRefToColumns(columnRef, column.getValue(), node.getTable());
             outputVariablesBuilder.add(columnRef);
             colRefToColumnMetaMapBuilder.put(columnRef, column.getValue());
             columnMetaToColRefMapBuilder.put(column.getValue(), columnRef);
@@ -434,6 +441,9 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
             }
         } else if (Table.TableType.HIVE.equals(node.getTable().getType())) {
             scanOperator = new LogicalHiveScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
+                    columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
+        } else if (Table.TableType.FILE.equals(node.getTable().getType())) {
+            scanOperator = new LogicalFileScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
                     columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
         } else if (Table.TableType.ICEBERG.equals(node.getTable().getType())) {
             if (!((IcebergTable) node.getTable()).isCatalogTbl()) {
@@ -526,29 +536,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                 logicalPlan.getRootBuilder().getInputs(),
                 new ExpressionMapping(node.getScope(), logicalPlan.getOutputColumn()));
 
-
-        if (node.hasOrderByClause()) {
-            List<Ordering> orderings = new ArrayList<>();
-            List<ColumnRefOperator> orderByColumns = Lists.newArrayList();
-            for (OrderByElement item : node.getOrderBy()) {
-                ColumnRefOperator column = (ColumnRefOperator) SqlToScalarOperatorTranslator.translate(item.getExpr(),
-                        builder.getExpressionMapping(), columnRefFactory);
-                Ordering ordering = new Ordering(column, item.getIsAsc(),
-                        OrderByElement.nullsFirst(item.getNullsFirstParam()));
-                if (!orderByColumns.contains(column)) {
-                    orderByColumns.add(column);
-                    orderings.add(ordering);
-                }
-            }
-            builder = builder.withNewRoot(new LogicalTopNOperator(orderings));
-        }
-
-        LimitElement limit = node.getLimit();
-        if (limit != null) {
-            LogicalLimitOperator limitOperator = LogicalLimitOperator.init(limit.getLimit(), limit.getOffset());
-            builder = builder.withNewRoot(limitOperator);
-        }
-
+        builder = addOrderByLimit(builder, node);
         return new LogicalPlan(builder, logicalPlan.getOutputColumn(), logicalPlan.getCorrelation());
     }
 

@@ -52,7 +52,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.HashSet;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -571,7 +571,7 @@ public class Database extends MetaObject implements Writable {
     public Set<String> getTableNamesWithLock() {
         readLock();
         try {
-            return new HashSet<>(this.nameToTable.keySet());
+            return Collections.unmodifiableSet(this.nameToTable.keySet());
         } finally {
             readUnlock();
         }

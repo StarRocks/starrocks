@@ -26,8 +26,8 @@ public:
         long row_count = state->get_columns()[0]->size();
 
         std::vector<ColumnPtr> compacted_array_list;
-        for (int col_idx = 0; col_idx < state->get_columns().size(); ++col_idx) {
-            Column* column = state->get_columns()[col_idx].get();
+        for (auto& col_idx : state->get_columns()) {
+            Column* column = col_idx.get();
 
             auto* col_array = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(column));
             ColumnPtr compacted_array_elements = col_array->elements_column()->clone_empty();
@@ -39,8 +39,8 @@ public:
         compacted_offset_column->append(offset);
         for (int row_idx = 0; row_idx < row_count; ++row_idx) {
             long max_length_array_size = 0;
-            for (int col_idx = 0; col_idx < state->get_columns().size(); ++col_idx) {
-                Column* column = state->get_columns()[col_idx].get();
+            for (auto& col_idx : state->get_columns()) {
+                Column* column = col_idx.get();
                 auto* col_array = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(column));
                 auto offset_column = col_array->offsets_column();
 
@@ -69,8 +69,8 @@ public:
         }
 
         Columns result;
-        for (int col_idx = 0; col_idx < compacted_array_list.size(); ++col_idx) {
-            result.emplace_back(compacted_array_list[col_idx]);
+        for (auto& col_idx : compacted_array_list) {
+            result.emplace_back(col_idx);
         }
 
         return std::make_pair(result, compacted_offset_column);

@@ -18,7 +18,7 @@ namespace starrocks {
 
 class StarletFileSystemTest : public ::testing::TestWithParam<std::string> {
 public:
-    StarletFileSystemTest() { srand(time(NULL)); }
+    StarletFileSystemTest() { srand(time(nullptr)); }
     ~StarletFileSystemTest() override = default;
     void SetUp() override {
         std::string test_type = GetParam();
@@ -43,7 +43,7 @@ public:
         if (test_type == "cachefs") {
             shard_info.cache_setting.enable_cache = true;
             std::string tmpl("/tmp/sr_starlet_ut_XXXXXX");
-            EXPECT_TRUE(::mkdtemp(tmpl.data()) != NULL);
+            EXPECT_TRUE(::mkdtemp(tmpl.data()) != nullptr);
             config::starlet_cache_dir = tmpl;
         }
 

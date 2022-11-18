@@ -9,8 +9,7 @@
 namespace starrocks_udf {
 class FunctionContext;
 }
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 class FunctionHelper {
 public:
@@ -77,5 +76,4 @@ public:
         }                                    \
     } while (false)
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

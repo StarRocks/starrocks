@@ -56,6 +56,7 @@ void TabletReader::close() {
 }
 
 Status TabletReader::prepare() {
+    SCOPED_RAW_TIMER(&_stats.get_rowsets_ns);
     std::shared_lock l(_tablet->get_header_lock());
     auto st = _tablet->capture_consistent_rowsets(_version, &_rowsets);
     if (!st.ok()) {
@@ -384,8 +385,8 @@ Status TabletReader::_to_seek_tuple(const TabletSchema& tablet_schema, const Ola
         // If the type of the storage level is CHAR,
         // we treat it as VARCHAR, because the execution level CHAR is VARCHAR
         // CHAR type strings are truncated at the storage level after '\0'.
-        if (f->type()->type() == OLAP_FIELD_TYPE_CHAR) {
-            RETURN_IF_ERROR(datum_from_string(get_type_info(OLAP_FIELD_TYPE_VARCHAR).get(), &values.back(),
+        if (f->type()->type() == LOGICAL_TYPE_CHAR) {
+            RETURN_IF_ERROR(datum_from_string(get_type_info(LOGICAL_TYPE_VARCHAR).get(), &values.back(),
                                               input.get_value(i), mempool));
         } else {
             RETURN_IF_ERROR(datum_from_string(f->type().get(), &values.back(), input.get_value(i), mempool));

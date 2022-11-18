@@ -12,7 +12,7 @@
 
 namespace starrocks::vectorized {
 
-template <FieldType field_type>
+template <LogicalType field_type>
 class ColumnNotInPredicate : public ColumnPredicate {
     using ValueType = typename CppTypeTraits<field_type>::CppType;
 
@@ -104,7 +104,7 @@ public:
             return Status::OK();
         }
 
-        if (to_type == OLAP_FIELD_TYPE_DECIMAL128) {
+        if (to_type == LOGICAL_TYPE_DECIMAL128) {
             std::vector<std::string> strs;
             const auto type_info = this->type_info();
             for (ValueType value : _values) {
@@ -113,7 +113,7 @@ public:
             *output = obj_pool->add(new_column_not_in_predicate(target_type_info, _column_id, strs));
             return Status::OK();
         }
-        if constexpr (field_type == OLAP_FIELD_TYPE_DECIMAL128) {
+        if constexpr (field_type == LOGICAL_TYPE_DECIMAL128) {
             std::vector<std::string> strs;
             for (ValueType value : _values) {
                 strs.emplace_back(DecimalV3Cast::to_string<ValueType>(value, 27, 9));
@@ -135,7 +135,7 @@ private:
 };
 
 // Template specialization for binary column
-template <FieldType field_type>
+template <LogicalType field_type>
 class BinaryColumnNotInPredicate : public ColumnPredicate {
 public:
     BinaryColumnNotInPredicate(const TypeInfoPtr& type_info, ColumnId id, std::vector<std::string> strings)
@@ -267,71 +267,72 @@ ColumnPredicate* new_column_not_in_predicate(const TypeInfoPtr& type_info, Colum
                                              const std::vector<std::string>& strs) {
     auto type = type_info->type();
     switch (type) {
-    case OLAP_FIELD_TYPE_BOOL:
-        return new ColumnNotInPredicate<OLAP_FIELD_TYPE_BOOL>(type_info, id, strs);
-    case OLAP_FIELD_TYPE_TINYINT:
-        return new ColumnNotInPredicate<OLAP_FIELD_TYPE_TINYINT>(type_info, id, strs);
-    case OLAP_FIELD_TYPE_SMALLINT:
-        return new ColumnNotInPredicate<OLAP_FIELD_TYPE_SMALLINT>(type_info, id, strs);
-    case OLAP_FIELD_TYPE_INT:
-        return new ColumnNotInPredicate<OLAP_FIELD_TYPE_INT>(type_info, id, strs);
-    case OLAP_FIELD_TYPE_BIGINT:
-        return new ColumnNotInPredicate<OLAP_FIELD_TYPE_BIGINT>(type_info, id, strs);
-    case OLAP_FIELD_TYPE_LARGEINT:
-        return new ColumnNotInPredicate<OLAP_FIELD_TYPE_LARGEINT>(type_info, id, strs);
-    case OLAP_FIELD_TYPE_DECIMAL:
-        return new ColumnNotInPredicate<OLAP_FIELD_TYPE_DECIMAL>(type_info, id, strs);
-    case OLAP_FIELD_TYPE_DECIMAL_V2:
-        return new ColumnNotInPredicate<OLAP_FIELD_TYPE_DECIMAL_V2>(type_info, id, strs);
-    case OLAP_FIELD_TYPE_DECIMAL32: {
+    case LOGICAL_TYPE_BOOL:
+        return new ColumnNotInPredicate<LOGICAL_TYPE_BOOL>(type_info, id, strs);
+    case LOGICAL_TYPE_TINYINT:
+        return new ColumnNotInPredicate<LOGICAL_TYPE_TINYINT>(type_info, id, strs);
+    case LOGICAL_TYPE_SMALLINT:
+        return new ColumnNotInPredicate<LOGICAL_TYPE_SMALLINT>(type_info, id, strs);
+    case LOGICAL_TYPE_INT:
+        return new ColumnNotInPredicate<LOGICAL_TYPE_INT>(type_info, id, strs);
+    case LOGICAL_TYPE_BIGINT:
+        return new ColumnNotInPredicate<LOGICAL_TYPE_BIGINT>(type_info, id, strs);
+    case LOGICAL_TYPE_LARGEINT:
+        return new ColumnNotInPredicate<LOGICAL_TYPE_LARGEINT>(type_info, id, strs);
+    case LOGICAL_TYPE_DECIMAL:
+        return new ColumnNotInPredicate<LOGICAL_TYPE_DECIMAL>(type_info, id, strs);
+    case LOGICAL_TYPE_DECIMAL_V2:
+        return new ColumnNotInPredicate<LOGICAL_TYPE_DECIMAL_V2>(type_info, id, strs);
+    case LOGICAL_TYPE_DECIMAL32: {
         const auto scale = type_info->scale();
-        using SetType = ItemHashSet<CppTypeTraits<OLAP_FIELD_TYPE_DECIMAL32>::CppType>;
-        SetType values = predicate_internal::strings_to_decimal_set<OLAP_FIELD_TYPE_DECIMAL32>(scale, strs);
-        return new ColumnNotInPredicate<OLAP_FIELD_TYPE_DECIMAL32>(type_info, id, std::move(values));
+        using SetType = ItemHashSet<CppTypeTraits<LOGICAL_TYPE_DECIMAL32>::CppType>;
+        SetType values = predicate_internal::strings_to_decimal_set<LOGICAL_TYPE_DECIMAL32>(scale, strs);
+        return new ColumnNotInPredicate<LOGICAL_TYPE_DECIMAL32>(type_info, id, std::move(values));
     }
-    case OLAP_FIELD_TYPE_DECIMAL64: {
+    case LOGICAL_TYPE_DECIMAL64: {
         const auto scale = type_info->scale();
-        using SetType = ItemHashSet<CppTypeTraits<OLAP_FIELD_TYPE_DECIMAL64>::CppType>;
-        SetType values = predicate_internal::strings_to_decimal_set<OLAP_FIELD_TYPE_DECIMAL64>(scale, strs);
-        return new ColumnNotInPredicate<OLAP_FIELD_TYPE_DECIMAL64>(type_info, id, std::move(values));
+        using SetType = ItemHashSet<CppTypeTraits<LOGICAL_TYPE_DECIMAL64>::CppType>;
+        SetType values = predicate_internal::strings_to_decimal_set<LOGICAL_TYPE_DECIMAL64>(scale, strs);
+        return new ColumnNotInPredicate<LOGICAL_TYPE_DECIMAL64>(type_info, id, std::move(values));
     }
-    case OLAP_FIELD_TYPE_DECIMAL128: {
+    case LOGICAL_TYPE_DECIMAL128: {
         const auto scale = type_info->scale();
-        using SetType = ItemHashSet<CppTypeTraits<OLAP_FIELD_TYPE_DECIMAL128>::CppType>;
-        SetType values = predicate_internal::strings_to_decimal_set<OLAP_FIELD_TYPE_DECIMAL128>(scale, strs);
-        return new ColumnNotInPredicate<OLAP_FIELD_TYPE_DECIMAL128>(type_info, id, std::move(values));
+        using SetType = ItemHashSet<CppTypeTraits<LOGICAL_TYPE_DECIMAL128>::CppType>;
+        SetType values = predicate_internal::strings_to_decimal_set<LOGICAL_TYPE_DECIMAL128>(scale, strs);
+        return new ColumnNotInPredicate<LOGICAL_TYPE_DECIMAL128>(type_info, id, std::move(values));
     }
-    case OLAP_FIELD_TYPE_CHAR:
-        return new BinaryColumnNotInPredicate<OLAP_FIELD_TYPE_CHAR>(type_info, id, strs);
-    case OLAP_FIELD_TYPE_VARCHAR:
-        return new BinaryColumnNotInPredicate<OLAP_FIELD_TYPE_VARCHAR>(type_info, id, strs);
-    case OLAP_FIELD_TYPE_DATE:
-        return new ColumnNotInPredicate<OLAP_FIELD_TYPE_DATE>(type_info, id, strs);
-    case OLAP_FIELD_TYPE_DATE_V2:
-        return new ColumnNotInPredicate<OLAP_FIELD_TYPE_DATE_V2>(type_info, id, strs);
-    case OLAP_FIELD_TYPE_DATETIME:
-        return new ColumnNotInPredicate<OLAP_FIELD_TYPE_DATETIME>(type_info, id, strs);
-    case OLAP_FIELD_TYPE_TIMESTAMP:
-        return new ColumnNotInPredicate<OLAP_FIELD_TYPE_TIMESTAMP>(type_info, id, strs);
-    case OLAP_FIELD_TYPE_FLOAT:
-        return new ColumnNotInPredicate<OLAP_FIELD_TYPE_FLOAT>(type_info, id, strs);
-    case OLAP_FIELD_TYPE_DOUBLE:
-        return new ColumnNotInPredicate<OLAP_FIELD_TYPE_DOUBLE>(type_info, id, strs);
-    case OLAP_FIELD_TYPE_UNSIGNED_TINYINT:
-    case OLAP_FIELD_TYPE_UNSIGNED_SMALLINT:
-    case OLAP_FIELD_TYPE_UNSIGNED_INT:
-    case OLAP_FIELD_TYPE_UNSIGNED_BIGINT:
-    case OLAP_FIELD_TYPE_DISCRETE_DOUBLE:
-    case OLAP_FIELD_TYPE_STRUCT:
-    case OLAP_FIELD_TYPE_ARRAY:
-    case OLAP_FIELD_TYPE_MAP:
-    case OLAP_FIELD_TYPE_UNKNOWN:
-    case OLAP_FIELD_TYPE_NONE:
-    case OLAP_FIELD_TYPE_HLL:
-    case OLAP_FIELD_TYPE_OBJECT:
-    case OLAP_FIELD_TYPE_PERCENTILE:
-    case OLAP_FIELD_TYPE_JSON:
-    case OLAP_FIELD_TYPE_MAX_VALUE:
+    case LOGICAL_TYPE_CHAR:
+        return new BinaryColumnNotInPredicate<LOGICAL_TYPE_CHAR>(type_info, id, strs);
+    case LOGICAL_TYPE_VARCHAR:
+        return new BinaryColumnNotInPredicate<LOGICAL_TYPE_VARCHAR>(type_info, id, strs);
+    case LOGICAL_TYPE_DATE:
+        return new ColumnNotInPredicate<LOGICAL_TYPE_DATE>(type_info, id, strs);
+    case LOGICAL_TYPE_DATE_V2:
+        return new ColumnNotInPredicate<LOGICAL_TYPE_DATE_V2>(type_info, id, strs);
+    case LOGICAL_TYPE_DATETIME:
+        return new ColumnNotInPredicate<LOGICAL_TYPE_DATETIME>(type_info, id, strs);
+    case LOGICAL_TYPE_TIMESTAMP:
+        return new ColumnNotInPredicate<LOGICAL_TYPE_TIMESTAMP>(type_info, id, strs);
+    case LOGICAL_TYPE_FLOAT:
+        return new ColumnNotInPredicate<LOGICAL_TYPE_FLOAT>(type_info, id, strs);
+    case LOGICAL_TYPE_DOUBLE:
+        return new ColumnNotInPredicate<LOGICAL_TYPE_DOUBLE>(type_info, id, strs);
+    case LOGICAL_TYPE_UNSIGNED_TINYINT:
+    case LOGICAL_TYPE_UNSIGNED_SMALLINT:
+    case LOGICAL_TYPE_UNSIGNED_INT:
+    case LOGICAL_TYPE_UNSIGNED_BIGINT:
+    case LOGICAL_TYPE_DISCRETE_DOUBLE:
+    case LOGICAL_TYPE_STRUCT:
+    case LOGICAL_TYPE_ARRAY:
+    case LOGICAL_TYPE_MAP:
+    case LOGICAL_TYPE_UNKNOWN:
+    case LOGICAL_TYPE_NONE:
+    case LOGICAL_TYPE_HLL:
+    case LOGICAL_TYPE_OBJECT:
+    case LOGICAL_TYPE_PERCENTILE:
+    case LOGICAL_TYPE_JSON:
+    case LOGICAL_TYPE_MAX_VALUE:
+    case LOGICAL_TYPE_VARBINARY:
         return nullptr;
         // No default to ensure newly added enumerator will be handled.
     }

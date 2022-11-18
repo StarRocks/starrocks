@@ -854,8 +854,8 @@ public:
     }
 };
 
-static std::unique_ptr<HashIndex> create_hash_index(FieldType key_type, size_t fix_size) {
-    if (key_type == OLAP_FIELD_TYPE_VARCHAR && fix_size > 0) {
+static std::unique_ptr<HashIndex> create_hash_index(LogicalType key_type, size_t fix_size) {
+    if (key_type == LOGICAL_TYPE_VARCHAR && fix_size > 0) {
         if (fix_size <= 8) {
             return std::make_unique<FixSliceHashIndex<2>>();
         } else if (fix_size <= 12) {
@@ -882,19 +882,19 @@ static std::unique_ptr<HashIndex> create_hash_index(FieldType key_type, size_t f
         return std::make_unique<HashIndexImpl<typename CppTypeTraits<type>::CppType>>()
 
     switch (key_type) {
-        CASE_TYPE(OLAP_FIELD_TYPE_BOOL);
-        CASE_TYPE(OLAP_FIELD_TYPE_TINYINT);
-        CASE_TYPE(OLAP_FIELD_TYPE_SMALLINT);
-        CASE_TYPE(OLAP_FIELD_TYPE_INT);
-        CASE_TYPE(OLAP_FIELD_TYPE_BIGINT);
-        CASE_TYPE(OLAP_FIELD_TYPE_LARGEINT);
-    case OLAP_FIELD_TYPE_CHAR:
+        CASE_TYPE(LOGICAL_TYPE_BOOL);
+        CASE_TYPE(LOGICAL_TYPE_TINYINT);
+        CASE_TYPE(LOGICAL_TYPE_SMALLINT);
+        CASE_TYPE(LOGICAL_TYPE_INT);
+        CASE_TYPE(LOGICAL_TYPE_BIGINT);
+        CASE_TYPE(LOGICAL_TYPE_LARGEINT);
+    case LOGICAL_TYPE_CHAR:
         return std::make_unique<ShardByLengthSliceHashIndex>();
-    case OLAP_FIELD_TYPE_VARCHAR:
+    case LOGICAL_TYPE_VARCHAR:
         return std::make_unique<ShardByLengthSliceHashIndex>();
-    case OLAP_FIELD_TYPE_DATE_V2:
+    case LOGICAL_TYPE_DATE_V2:
         return std::make_unique<HashIndexImpl<int32_t>>();
-    case OLAP_FIELD_TYPE_TIMESTAMP:
+    case LOGICAL_TYPE_TIMESTAMP:
         return std::make_unique<HashIndexImpl<int64_t>>();
     default:
         return nullptr;
@@ -1151,12 +1151,13 @@ Status PrimaryIndex::_build_persistent_values(uint32_t rssid, const vector<uint3
     return Status::OK();
 }
 
-const Slice* PrimaryIndex::_build_persistent_keys(const vectorized::Column& pks, std::vector<Slice>* key_slices) const {
+const Slice* PrimaryIndex::_build_persistent_keys(const vectorized::Column& pks, uint32_t idx_begin, uint32_t idx_end,
+                                                  std::vector<Slice>* key_slices) const {
     if (pks.is_binary()) {
         return reinterpret_cast<const Slice*>(pks.raw_data());
     } else {
         const uint8_t* keys = pks.raw_data();
-        for (size_t i = 0; i < pks.size(); i++) {
+        for (size_t i = idx_begin; i < idx_end; i++) {
             key_slices->emplace_back(keys, _key_size);
             keys += _key_size;
         }
@@ -1170,19 +1171,20 @@ Status PrimaryIndex::_insert_into_persistent_index(uint32_t rssid, const vector<
     std::vector<uint64_t> values;
     values.reserve(pks.size());
     _build_persistent_values(rssid, rowids, 0, pks.size(), &values);
-    const Slice* vkeys = _build_persistent_keys(pks, &keys);
+    const Slice* vkeys = _build_persistent_keys(pks, 0, pks.size(), &keys);
     RETURN_IF_ERROR(_persistent_index->insert(pks.size(), vkeys, reinterpret_cast<IndexValue*>(values.data()), true));
     return Status::OK();
 }
 
 void PrimaryIndex::_upsert_into_persistent_index(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks,
-                                                 DeletesMap* deletes) {
+                                                 uint32_t idx_begin, uint32_t idx_end, DeletesMap* deletes) {
+    uint32_t n = idx_end - idx_begin;
     std::vector<Slice> keys;
     std::vector<uint64_t> values;
-    values.reserve(pks.size());
-    std::vector<uint64_t> old_values(pks.size(), NullIndexValue);
-    const Slice* vkeys = _build_persistent_keys(pks, &keys);
-    _build_persistent_values(rssid, rowid_start, 0, pks.size(), &values);
+    values.reserve(n);
+    std::vector<uint64_t> old_values(n, NullIndexValue);
+    const Slice* vkeys = _build_persistent_keys(pks, idx_begin, idx_end, &keys);
+    _build_persistent_values(rssid, rowid_start, idx_begin, idx_end, &values);
     _persistent_index->upsert(pks.size(), vkeys, reinterpret_cast<IndexValue*>(values.data()),
                               reinterpret_cast<IndexValue*>(old_values.data()));
     for (unsigned long old : old_values) {
@@ -1198,7 +1200,7 @@ void PrimaryIndex::_upsert_into_persistent_index(uint32_t rssid, uint32_t rowid_
 void PrimaryIndex::_erase_persistent_index(const vectorized::Column& key_col, DeletesMap* deletes) {
     std::vector<Slice> keys;
     std::vector<uint64_t> old_values(key_col.size(), NullIndexValue);
-    const Slice* vkeys = _build_persistent_keys(key_col, &keys);
+    const Slice* vkeys = _build_persistent_keys(key_col, 0, key_col.size(), &keys);
     Status st = _persistent_index->erase(key_col.size(), vkeys, reinterpret_cast<IndexValue*>(old_values.data()));
     if (!st.ok()) {
         LOG(WARNING) << "erase persistent index failed";
@@ -1212,7 +1214,7 @@ void PrimaryIndex::_erase_persistent_index(const vectorized::Column& key_col, De
 
 void PrimaryIndex::_get_from_persistent_index(const vectorized::Column& key_col, std::vector<uint64_t>* rowids) const {
     std::vector<Slice> keys;
-    const Slice* vkeys = _build_persistent_keys(key_col, &keys);
+    const Slice* vkeys = _build_persistent_keys(key_col, 0, key_col.size(), &keys);
     Status st = _persistent_index->get(key_col.size(), vkeys, reinterpret_cast<IndexValue*>(rowids->data()));
     if (!st.ok()) {
         LOG(WARNING) << "failed get value from persistent index";
@@ -1227,7 +1229,7 @@ void PrimaryIndex::_get_from_persistent_index(const vectorized::Column& key_col,
     std::vector<uint64_t> values;
     values.reserve(pks.size());
     _build_persistent_values(rssid, rowid_start, 0, pks.size(), &values);
-    Status st = _persistent_index->try_replace(pks.size(), _build_persistent_keys(pks, &keys),
+    Status st = _persistent_index->try_replace(pks.size(), _build_persistent_keys(pks, 0, pks.size(), &keys),
                                                reinterpret_cast<IndexValue*>(values.data()), src_rssid, deletes);
     if (!st.ok()) {
         LOG(WARNING) << "try replace persistent index failed";
@@ -1240,7 +1242,7 @@ void PrimaryIndex::_replace_persistent_index(uint32_t rssid, uint32_t rowid_star
     std::vector<uint64_t> values;
     values.reserve(pks.size());
     _build_persistent_values(rssid, rowid_start, 0, pks.size(), &values);
-    Status st = _persistent_index->try_replace(pks.size(), _build_persistent_keys(pks, &keys),
+    Status st = _persistent_index->try_replace(pks.size(), _build_persistent_keys(pks, 0, pks.size(), &keys),
                                                reinterpret_cast<IndexValue*>(values.data()), max_src_rssid, deletes);
     if (!st.ok()) {
         LOG(WARNING) << "try replace persistent index failed";
@@ -1266,9 +1268,19 @@ Status PrimaryIndex::insert(uint32_t rssid, uint32_t rowid_start, const vectoriz
 void PrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks, DeletesMap* deletes) {
     DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
     if (_persistent_index != nullptr) {
-        _upsert_into_persistent_index(rssid, rowid_start, pks, deletes);
+        _upsert_into_persistent_index(rssid, rowid_start, pks, 0, pks.size(), deletes);
     } else {
         _pkey_to_rssid_rowid->upsert(rssid, rowid_start, pks, 0, pks.size(), deletes);
+    }
+}
+
+void PrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks, uint32_t idx_begin,
+                          uint32_t idx_end, DeletesMap* deletes) {
+    DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
+    if (_persistent_index != nullptr) {
+        _upsert_into_persistent_index(rssid, rowid_start, pks, idx_begin, idx_end, deletes);
+    } else {
+        _pkey_to_rssid_rowid->upsert(rssid, rowid_start, pks, idx_begin, idx_end, deletes);
     }
 }
 

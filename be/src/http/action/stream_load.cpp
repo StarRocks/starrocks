@@ -478,6 +478,9 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
             return Status::InvalidArgument("Invalid partial update flag format. Must be bool type");
         }
     }
+    if (!http_req->header(HTTP_MERGE_CONDITION).empty()) {
+        request.__set_merge_condition(http_req->header(HTTP_MERGE_CONDITION));
+    }
     if (!http_req->header(HTTP_TRANSMISSION_COMPRESSION_TYPE).empty()) {
         request.__set_transmission_compression_type(http_req->header(HTTP_TRANSMISSION_COMPRESSION_TYPE));
     }
@@ -487,15 +490,6 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
             request.__set_load_dop(parallel_request_num);
         } catch (const std::invalid_argument& e) {
             return Status::InvalidArgument("Invalid load_dop format");
-        }
-    }
-    if (!http_req->header(HTTP_ENABLE_REPLICATED_STORAGE).empty()) {
-        if (boost::iequals(http_req->header(HTTP_ENABLE_REPLICATED_STORAGE), "false")) {
-            request.__set_enable_replicated_storage(false);
-        } else if (boost::iequals(http_req->header(HTTP_ENABLE_REPLICATED_STORAGE), "true")) {
-            request.__set_enable_replicated_storage(true);
-        } else {
-            return Status::InvalidArgument("Invalid enable replicated storage flag format. Must be bool type");
         }
     }
     if (ctx->timeout_second != -1) {

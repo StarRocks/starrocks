@@ -58,6 +58,7 @@ import com.starrocks.load.MultiDeleteInfo;
 import com.starrocks.load.loadv2.LoadJob.LoadJobStateUpdateInfo;
 import com.starrocks.load.loadv2.LoadJobFinalOperation;
 import com.starrocks.load.routineload.RoutineLoadJob;
+import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.privilege.UserPropertyInfo;
@@ -279,6 +280,12 @@ public class EditLog {
                     ChangeMaterializedViewRefreshSchemeLog log =
                             (ChangeMaterializedViewRefreshSchemeLog) journal.getData();
                     globalStateMgr.replayChangeMaterializedViewRefreshScheme(log);
+                    break;
+                }
+                case OperationType.OP_ALTER_MATERIALIZED_VIEW_PROPERTIES: {
+                    ModifyTablePropertyOperationLog log =
+                            (ModifyTablePropertyOperationLog) journal.getData();
+                    globalStateMgr.replayAlterMaterializedViewProperties(opCode, log);
                     break;
                 }
                 case OperationType.OP_RENAME_MATERIALIZED_VIEW: {
@@ -599,6 +606,11 @@ public class EditLog {
                     globalStateMgr.getRoutineLoadManager().replayRemoveOldRoutineLoad(operation);
                     break;
                 }
+                case OperationType.OP_CREATE_STREAM_LOAD_TASK: {
+                    StreamLoadTask streamLoadTask = (StreamLoadTask) journal.getData();
+                    globalStateMgr.getStreamLoadManager().replayCreateLoadTask(streamLoadTask);
+                    break;
+                }
                 case OperationType.OP_CREATE_LOAD_JOB: {
                     com.starrocks.load.loadv2.LoadJob loadJob =
                             (com.starrocks.load.loadv2.LoadJob) journal.getData();
@@ -702,6 +714,7 @@ public class EditLog {
                 case OperationType.OP_SET_FORBIT_GLOBAL_DICT:
                 case OperationType.OP_MODIFY_REPLICATION_NUM:
                 case OperationType.OP_MODIFY_WRITE_QUORUM:
+                case OperationType.OP_MODIFY_REPLICATED_STORAGE:
                 case OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX: {
                     ModifyTablePropertyOperationLog modifyTablePropertyOperationLog =
                             (ModifyTablePropertyOperationLog) journal.getData();
@@ -1370,6 +1383,10 @@ public class EditLog {
         logEdit(OperationType.OP_REMOVE_ROUTINE_LOAD_JOB, operation);
     }
 
+    public void logCreateStreamLoadJob(StreamLoadTask streamLoadTask) {
+        logEdit(OperationType.OP_CREATE_STREAM_LOAD_TASK, streamLoadTask);
+    }
+
     public void logCreateLoadJob(com.starrocks.load.loadv2.LoadJob loadJob) {
         logEdit(OperationType.OP_CREATE_LOAD_JOB, loadJob);
     }
@@ -1432,6 +1449,10 @@ public class EditLog {
 
     public void logModifyWriteQuorum(ModifyTablePropertyOperationLog info) {
         logEdit(OperationType.OP_MODIFY_WRITE_QUORUM, info);
+    }
+
+    public void logModifyReplicatedStorage(ModifyTablePropertyOperationLog info) {
+        logEdit(OperationType.OP_MODIFY_REPLICATED_STORAGE, info);
     }
 
     public void logReplaceTempPartition(ReplacePartitionOperationLog info) {
@@ -1528,6 +1549,10 @@ public class EditLog {
 
     public void logMvChangeRefreshScheme(ChangeMaterializedViewRefreshSchemeLog log) {
         logEdit(OperationType.OP_CHANGE_MATERIALIZED_VIEW_REFRESH_SCHEME, log);
+    }
+
+    public void logAlterMaterializedViewProperties(ModifyTablePropertyOperationLog log) {
+        logEdit(OperationType.OP_ALTER_MATERIALIZED_VIEW_PROPERTIES, log);
     }
 
     public void logAddUnusedShard(Set<Long> shardIds) {

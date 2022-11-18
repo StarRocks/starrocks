@@ -141,7 +141,7 @@ struct DistinctAggregateState<PT, SumPT, StringPTGuard<PT>> {
     // then we could only one memcpy.
     void serialize(uint8_t* dst) const {
         for (auto& key : set) {
-            uint32_t size = (uint32_t)key.size;
+            auto size = (uint32_t)key.size;
             memcpy(dst, &size, sizeof(uint32_t));
             dst += sizeof(uint32_t);
             memcpy(dst, key.data, key.size);
@@ -402,7 +402,7 @@ public:
                 size_t new_size = old_size + key.size + sizeof(uint32_t);
                 bytes.resize(new_size);
 
-                uint32_t size = (uint32_t)key.size;
+                auto size = (uint32_t)key.size;
                 memcpy(bytes.data() + old_size, &size, sizeof(uint32_t));
                 old_size += sizeof(uint32_t);
                 memcpy(bytes.data() + old_size, key.data, key.size);

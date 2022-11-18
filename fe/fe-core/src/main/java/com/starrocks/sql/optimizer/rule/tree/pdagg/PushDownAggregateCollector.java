@@ -524,7 +524,7 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePus
 
         // 4. medium cardinality <= 2
         if (lower.size() <= 2) {
-            if (sessionVariable.getCboPushDownAggregateMode() >= 2) {
+            if (sessionVariable.getCboPushDownAggregateMode() >= PUSH_DOWN_MEDIUM_CARDINALITY_AGG) {
                 return true;
             }
             return statistics.getOutputRowCount() >=
@@ -534,9 +534,9 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePus
         return false;
     }
 
-    // high(2): cardinality/count > 1/5
-    // medium(1): cardinality/count < 1/5 and > 1/20
-    // lower(0): cardinality/count < 1/20
+    // high(2): cardinality/count > MEDIUM_AGGREGATE
+    // medium(1): cardinality/count <= MEDIUM_AGGREGATE and > LOW_AGGREGATE
+    // lower(0): cardinality/count < LOW_AGGREGATE
     private int groupByCardinality(ColumnStatistic statistic, double rowCount) {
         if (statistic.isUnknown()) {
             return 2;
@@ -544,11 +544,12 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePus
 
         double distinct = statistic.getDistinctValuesCount();
 
-        if (rowCount == 0 || distinct * 5 >= rowCount) {
+        if (rowCount == 0 || distinct * StatisticsEstimateCoefficient.MEDIUM_AGGREGATE_EFFECT_COEFFICIENT > rowCount) {
             return 2;
-        } else if (distinct * 5 < rowCount && distinct * 20 >= rowCount) {
+        } else if (distinct * StatisticsEstimateCoefficient.MEDIUM_AGGREGATE_EFFECT_COEFFICIENT <= rowCount &&
+                distinct * StatisticsEstimateCoefficient.LOW_AGGREGATE_EFFECT_COEFFICIENT > rowCount) {
             return 1;
-        } else if (distinct * 20 <= rowCount) {
+        } else if (distinct * StatisticsEstimateCoefficient.LOW_AGGREGATE_EFFECT_COEFFICIENT <= rowCount) {
             return 0;
         }
 

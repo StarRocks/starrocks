@@ -14,19 +14,19 @@ class BitmapUnionAggregateFunction final
         : public AggregateFunctionBatchHelper<BitmapValue, BitmapUnionAggregateFunction> {
 public:
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
-        const BitmapColumn* col = down_cast<const BitmapColumn*>(columns[0]);
+        const auto* col = down_cast<const BitmapColumn*>(columns[0]);
         this->data(state) |= *(col->get_object(row_num));
     }
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
-        const BitmapColumn* col = down_cast<const BitmapColumn*>(column);
+        const auto* col = down_cast<const BitmapColumn*>(column);
         DCHECK(col->is_object());
         this->data(state) |= *(col->get_object(row_num));
     }
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
-        BitmapColumn* col = down_cast<BitmapColumn*>(to);
-        BitmapValue& bitmap = const_cast<BitmapValue&>(this->data(state));
+        auto* col = down_cast<BitmapColumn*>(to);
+        auto& bitmap = const_cast<BitmapValue&>(this->data(state));
         col->append(std::move(bitmap));
     }
 
@@ -36,8 +36,8 @@ public:
     }
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
-        BitmapColumn* col = down_cast<BitmapColumn*>(to);
-        BitmapValue& bitmap = const_cast<BitmapValue&>(this->data(state));
+        auto* col = down_cast<BitmapColumn*>(to);
+        auto& bitmap = const_cast<BitmapValue&>(this->data(state));
         col->append(std::move(bitmap));
     }
 

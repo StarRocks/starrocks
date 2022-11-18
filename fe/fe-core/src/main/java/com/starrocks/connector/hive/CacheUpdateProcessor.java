@@ -24,6 +24,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 
+import static com.starrocks.connector.ColumnTypeConverter.columnEquals;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
 
 public class CacheUpdateProcessor {
@@ -98,7 +99,7 @@ public class CacheUpdateProcessor {
                 isSchemaChange = true;
                 break;
             }
-            if (!baseColumn.equals(column)) {
+            if (!columnEquals(baseColumn, column)) {
                 isSchemaChange = true;
                 break;
             }

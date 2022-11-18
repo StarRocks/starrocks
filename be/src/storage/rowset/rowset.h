@@ -282,8 +282,8 @@ public:
 
     static StatusOr<size_t> get_segment_num(const std::vector<RowsetSharedPtr>& rowsets) {
         size_t num_segments = 0;
-        for (int i = 0; i < rowsets.size(); i++) {
-            auto iterator_num_res = rowsets[i]->estimate_compaction_segment_iterator_num();
+        for (const auto& rowset : rowsets) {
+            auto iterator_num_res = rowset->estimate_compaction_segment_iterator_num();
             if (!iterator_num_res.ok()) {
                 return iterator_num_res.status();
             }

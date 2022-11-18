@@ -58,6 +58,10 @@ public class SplitAggregateRule extends TransformationRule {
     }
 
     public boolean check(final OptExpression input, OptimizerContext context) {
+        // TODO(murphy) support multi-stage StreamAgg
+        if (context.getSessionVariable().isMVPlanner()) {
+            return false;
+        }
         LogicalAggregationOperator agg = (LogicalAggregationOperator) input.getOp();
         // Only apply this rule if the aggregate type is global and not split
         return agg.getType().isGlobal() && !agg.isSplit();
@@ -157,7 +161,7 @@ public class SplitAggregateRule extends TransformationRule {
 
         double inputRowCount = Math.max(1, inputStatistics.getOutputRowCount());
         double rowCount = Math.max(1, statistics.getOutputRowCount());
-        if (rowCount / inputRowCount < StatisticsEstimateCoefficient.DEFAULT_AGGREGATE_EFFECT_COEFFICIENT) {
+        if (rowCount * StatisticsEstimateCoefficient.LOW_AGGREGATE_EFFECT_COEFFICIENT < inputRowCount) {
             return true;
         }
         return false;

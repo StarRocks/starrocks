@@ -44,8 +44,6 @@ public:
 
     Status seek_to_ordinal_and_calc_element_ordinal(ordinal_t ord) override;
 
-    Status next_batch(size_t* n, ColumnBlockView* dst, bool* has_null) override;
-
     Status next_batch(size_t* n, vectorized::Column* dst) override;
 
     Status next_batch(const vectorized::SparseRange& range, vectorized::Column* dst) override;
@@ -90,22 +88,22 @@ private:
     Status _load_next_page(bool* eos);
     Status _read_data_page(const OrdinalPageIndexIterator& iter);
 
-    template <FieldType Type>
+    template <LogicalType Type>
     int _do_dict_lookup(const Slice& word);
 
-    template <FieldType Type>
+    template <LogicalType Type>
     Status _do_next_dict_codes(size_t* n, vectorized::Column* dst);
 
-    template <FieldType Type>
+    template <LogicalType Type>
     Status _do_next_batch_dict_codes(const vectorized::SparseRange& range, vectorized::Column* dst);
 
-    template <FieldType Type>
+    template <LogicalType Type>
     Status _do_decode_dict_codes(const int32_t* codes, size_t size, vectorized::Column* words);
 
-    template <FieldType Type>
+    template <LogicalType Type>
     Status _do_init_dict_decoder();
 
-    template <FieldType Type>
+    template <LogicalType Type>
     Status _fetch_all_dict_words(std::vector<Slice>* words) const;
 
     template <typename ParseFunc>

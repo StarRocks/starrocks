@@ -21,28 +21,18 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.SetType;
-import com.starrocks.thrift.TBoolLiteral;
-import com.starrocks.thrift.TExprNode;
-import com.starrocks.thrift.TExprNodeType;
-import com.starrocks.thrift.TFloatLiteral;
-import com.starrocks.thrift.TIntLiteral;
-import com.starrocks.thrift.TStringLiteral;
 
 import java.util.Objects;
 
 // System variable
 // Converted to StringLiteral in analyze, if this variable is not exist, throw AnalysisException.
 public class VariableExpr extends Expr {
-    private final String name;
     private final SetType setType;
+    private final String name;
+    private Object value;
     private boolean isNull;
-    private boolean boolValue;
-    private long intValue;
-    private double floatValue;
-    private String strValue;
 
     public VariableExpr(String name) {
         this(name, SetType.SESSION);
@@ -55,13 +45,39 @@ public class VariableExpr extends Expr {
 
     protected VariableExpr(VariableExpr other) {
         super(other);
-        name = other.name;
         setType = other.setType;
+        name = other.name;
+        value = other.value;
         isNull = other.isNull;
-        boolValue = other.boolValue;
-        intValue = other.intValue;
-        floatValue = other.floatValue;
-        strValue = other.strValue;
+    }
+
+    public SetType getSetType() {
+        return setType;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public Object getValue() {
+        return value;
+    }
+
+    public void setValue(Object value) {
+        this.value = value;
+    }
+
+    public boolean isNull() {
+        return isNull;
+    }
+
+    public void setIsNull() {
+        isNull = true;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitVariableExpr(this, context);
     }
 
     @Override
@@ -70,132 +86,16 @@ public class VariableExpr extends Expr {
     }
 
     @Override
-    public void analyzeImpl(Analyzer analyzer) throws AnalysisException {
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public SetType getSetType() {
-        return setType;
-    }
-
-    public void setIsNull() {
-        isNull = true;
-    }
-
-    public boolean isNull() {
-        return isNull;
-    }
-
-    public void setBoolValue(boolean value) {
-        this.boolValue = value;
-    }
-
-    public boolean getBoolValue() {
-        return this.boolValue;
-    }
-
-    public void setIntValue(long value) {
-        this.intValue = value;
-    }
-
-    public long getIntValue() {
-        return intValue;
-    }
-
-    public void setFloatValue(double value) {
-        this.floatValue = value;
-    }
-
-    public double getFloatValue() {
-        return floatValue;
-    }
-
-    public void setStringValue(String value) {
-        this.strValue = value;
-    }
-
-    public String getStrValue() {
-        return strValue;
-    }
-
-    @Override
-    protected void toThrift(TExprNode msg) {
-        switch (type.getPrimitiveType()) {
-            case BOOLEAN:
-                msg.node_type = TExprNodeType.BOOL_LITERAL;
-                msg.bool_literal = new TBoolLiteral(boolValue);
-                break;
-            case TINYINT:
-            case SMALLINT:
-            case INT:
-            case BIGINT:
-                msg.node_type = TExprNodeType.INT_LITERAL;
-                msg.int_literal = new TIntLiteral(intValue);
-                break;
-            case FLOAT:
-            case DOUBLE:
-                msg.node_type = TExprNodeType.FLOAT_LITERAL;
-                msg.float_literal = new TFloatLiteral(floatValue);
-                break;
-            default:
-                msg.node_type = TExprNodeType.STRING_LITERAL;
-                msg.string_literal = new TStringLiteral(strValue);
-        }
-    }
-
-    @Override
-    public String toSqlImpl() {
-        StringBuilder sb = new StringBuilder();
-        if (setType == SetType.USER) {
-            sb.append("@");
-        } else {
-            sb.append("@@");
-            if (setType == SetType.GLOBAL) {
-                sb.append("GLOBAL.");
-            } else {
-                sb.append("SESSION.");
-            }
-        }
-        sb.append(name);
-        return sb.toString();
-    }
-
-    @Override
-    public String toString() {
-        return toSql();
-    }
-
-    /**
-     * Below function is added by new analyzer
-     */
-    @Override
-    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitVariableExpr(this, context);
+    public int hashCode() {
+        return Objects.hash(super.hashCode(), name, setType, value, isNull);
     }
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
-        if (!super.equals(o)) {
-            return false;
-        }
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        if (!super.equals(o)) return false;
         VariableExpr that = (VariableExpr) o;
-        return boolValue == that.boolValue && intValue == that.intValue &&
-                Double.compare(that.floatValue, floatValue) == 0 && Objects.equals(name, that.name) &&
-                setType == that.setType && Objects.equals(strValue, that.strValue) &&
-                Objects.equals(isNull, that.isNull);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(super.hashCode(), name, setType, boolValue, intValue, floatValue, strValue, isNull);
+        return isNull == that.isNull && setType == that.setType && Objects.equals(name, that.name) && Objects.equals(value, that.value);
     }
 }
