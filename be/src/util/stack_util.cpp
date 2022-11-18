@@ -18,6 +18,7 @@
 #include "util/stack_util.h"
 
 #include <cxxabi.h>
+#include <fmt/format.h>
 
 #include <string>
 
@@ -63,9 +64,13 @@ std::string get_exception_name(const void* info) {
 void __wrap___cxa_throw(void* thrown_exception, void* info, void (*dest)(void*)) {
     auto query_id = CurrentThread::current().query_id();
     auto fragment_instance_id = CurrentThread::current().fragment_instance_id();
-    fprintf(stderr, "%s, query_id=%s, fragment_instance_id=%s throws exception: %s, trace:\n %s \n",
-            ToStringFromUnixMicros(GetCurrentTimeMicros()).c_str(), print_id(query_id).c_str(),
-            print_id(fragment_instance_id).c_str(), get_exception_name(info).c_str(), get_stack_trace().c_str());
+    auto stack = fmt::format("{}, query_id={}, fragment_instance_id={} throws exception: {}, trace:\n {} \n",
+                             ToStringFromUnixMicros(GetCurrentTimeMicros()).c_str(), print_id(query_id).c_str(),
+                             print_id(fragment_instance_id).c_str(), get_exception_name(info).c_str(),
+                             get_stack_trace().c_str());
+
+    std::cerr << stack << std::endl;
+    LOG(ERROR) << stack;
 
     // call the real __cxa_throw():
     __real___cxa_throw(thrown_exception, info, dest);

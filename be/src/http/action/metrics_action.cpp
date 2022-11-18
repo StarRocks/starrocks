@@ -216,10 +216,10 @@ void MetricsAction::handle(HttpRequest* req) {
     }
 
     req->add_output_header(HttpHeaders::CONTENT_TYPE, "text/plain; version=0.0.4");
-    if (_func == nullptr) {
+    if (_mock_func == nullptr) {
         HttpChannel::send_reply(req, str);
     } else {
-        (*_func)(str);
+        (*_mock_func)(str);
     }
 }
 
