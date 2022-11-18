@@ -403,6 +403,13 @@ void PInternalServiceImplBase<T>::trigger_profile_report(google::protobuf::RpcCo
     st.to_protobuf(result->mutable_status());
 }
 
+template<typename T>
+void PInternalServiceImplBase<T>::collect_query_statistics(google::protobuf::RpcController* controller,
+    const PCollectQueryStatisticsRequest* request, PCollectQueryStatisticsResult* result, google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    _exec_env->query_context_mgr()->collect_query_statistics(request, result);
+}
+
 template <typename T>
 void PInternalServiceImplBase<T>::get_info(google::protobuf::RpcController* controller, const PProxyRequest* request,
                                            PProxyResult* response, google::protobuf::Closure* done) {

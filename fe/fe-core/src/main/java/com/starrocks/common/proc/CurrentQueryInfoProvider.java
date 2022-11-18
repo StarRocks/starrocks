@@ -29,10 +29,13 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.Counter;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.RuntimeProfile;
+import com.starrocks.proto.PCollectQueryStatistics;
+import com.starrocks.proto.PCollectQueryStatisticsResult;
 import com.starrocks.proto.PTriggerProfileReportResult;
 import com.starrocks.proto.PUniqueId;
 import com.starrocks.qe.QueryStatisticsItem;
 import com.starrocks.rpc.BackendServiceClient;
+import com.starrocks.rpc.PCollectQueryStatisticsRequest;
 import com.starrocks.rpc.PTriggerProfileReportRequest;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
@@ -44,8 +47,10 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -88,6 +93,11 @@ public class CurrentQueryInfoProvider {
             queryStatisticsMap.put(item.getQueryId(), new QueryStatistics(item.getQueryProfile()));
         }
         return queryStatisticsMap;
+    }
+
+    public Map<String, QueryStatisticsV2> getQueryStatisticsV2(Collection<QueryStatisticsItem> items)
+        throws AnalysisException {
+        return collectQueryStatistics(items, true);
     }
 
     /**
@@ -221,6 +231,59 @@ public class CurrentQueryInfoProvider {
         recvResponse(sendRequest(requests));
     }
 
+    private Map<String, QueryStatisticsV2> collectQueryStatistics(Collection<QueryStatisticsItem> items, boolean allQuery)
+            throws AnalysisException {
+        final Map<TNetworkAddress, Request> requests = Maps.newHashMap();
+        final Map<TNetworkAddress, TNetworkAddress> brpcAddresses = Maps.newHashMap();
+        for (QueryStatisticsItem item : items) {
+            for (QueryStatisticsItem.FragmentInstanceInfo instanceInfo : item.getFragmentInstanceInfos()) {
+                TNetworkAddress brpcNetAddress = brpcAddresses.get(instanceInfo.getAddress());
+                if (brpcNetAddress == null) {
+                    try {
+                        brpcNetAddress = toBrpcHost(instanceInfo.getAddress());
+                        brpcAddresses.put(instanceInfo.getAddress(), brpcNetAddress);
+                    } catch (Exception e) {
+                        LOG.warn(e.getMessage());
+                        throw new AnalysisException(e.getMessage());
+                    }
+                }
+                Request request = requests.get(brpcNetAddress);
+                if (request == null) {
+                    request = new Request(brpcNetAddress);
+                    requests.put(brpcNetAddress, request);
+                    LOG.info("new request to addr {}:{}", brpcNetAddress.hostname, brpcNetAddress.port);
+                }
+                request.addQueryId(item.getExecutionId());
+            }
+        }
+        return handleCollectResponse(sendCollectRequest(requests));
+    }
+
+    private List<Pair<Request, Future<PCollectQueryStatisticsResult>>> sendCollectRequest(
+            Map<TNetworkAddress, Request> requests) throws AnalysisException {
+        final List<Pair<Request, Future<PCollectQueryStatisticsResult>>> futures = Lists.newArrayList();
+        for (TNetworkAddress address : requests.keySet()) {
+            final Request request = requests.get(address);
+            LOG.info("send request to addr {}: {}, query num: {}",
+                    address.hostname, address.port, request.getQueryIds().size());
+            List<PUniqueId> queryIds = Lists.newArrayList();
+            for (TUniqueId tQueryId : request.getQueryIds()) {
+                PUniqueId queryId = new PUniqueId();
+                queryId.hi = tQueryId.hi;
+                queryId.lo = tQueryId.lo;
+                queryIds.add(queryId);
+            }
+            final PCollectQueryStatisticsRequest pbRequest = new PCollectQueryStatisticsRequest(queryIds);
+            try {
+                futures.add(Pair.create(
+                        request, BackendServiceClient.getInstance().collectQueryStatisticsAsync(address, pbRequest)));
+            } catch (RpcException e) {
+                throw new AnalysisException("Sending collect query statistics request fails.");
+            }
+        }
+        return futures;
+    }
+
     private List<Pair<Request, Future<PTriggerProfileReportResult>>> sendRequest(
             Map<TNetworkAddress, Request> requests) throws AnalysisException {
         final List<Pair<Request, Future<PTriggerProfileReportResult>>> futures = Lists.newArrayList();
@@ -236,6 +299,34 @@ public class CurrentQueryInfoProvider {
             }
         }
         return futures;
+    }
+
+    private Map<String, QueryStatisticsV2> handleCollectResponse(
+            List<Pair<Request, Future<PCollectQueryStatisticsResult>>> futures) throws AnalysisException {
+        Map<String, QueryStatisticsV2> statisticsV2Map = Maps.newHashMap();
+        for (Pair<Request, Future<PCollectQueryStatisticsResult>> pair : futures) {
+            try {
+                final PCollectQueryStatisticsResult result = pair.second.get(2, TimeUnit.SECONDS);
+                for (PCollectQueryStatistics queryStatistics : result.queryStatistics) {
+                    LOG.info(" cpu {}, scan bytes {}, scan rows {}",
+                            queryStatistics.cpuCostNs, queryStatistics.scanBytes, queryStatistics.scanRows);
+                    final String queryIdStr = DebugUtil.printId(queryStatistics.queryId);
+                    QueryStatisticsV2 statisticsV2 = statisticsV2Map.get(queryIdStr);
+                    if (statisticsV2 == null) {
+                        statisticsV2 = new QueryStatisticsV2();
+                        statisticsV2Map.put(queryIdStr, statisticsV2);
+                    }
+                    statisticsV2.updateCpuCostNs(queryStatistics.cpuCostNs);
+                    statisticsV2.updateScanBytes(queryStatistics.scanBytes);
+                    statisticsV2.updateScanRows(queryStatistics.scanRows);
+                }
+                LOG.info("receive response");
+            } catch (InterruptedException | ExecutionException | TimeoutException e) {
+                LOG.warn("fail to receive result" + e.getCause());
+                throw new AnalysisException(e.getMessage());
+            }
+        }
+        return statisticsV2Map;
     }
 
     private void recvResponse(List<Pair<Request, Future<PTriggerProfileReportResult>>> futures)
@@ -277,6 +368,40 @@ public class CurrentQueryInfoProvider {
             throw new AnalysisException("BRPC port is't exist.");
         }
         return new TNetworkAddress(backend.getHost(), backend.getBrpcPort());
+    }
+
+    public static class QueryStatisticsV2 {
+        long cpuCostNs = 0;
+        long scanBytes = 0;
+        long scanRows = 0;
+
+        public QueryStatisticsV2() {
+
+        }
+
+        public long getCpuCostNs() {
+            return cpuCostNs;
+        }
+
+        public void updateCpuCostNs(long value) {
+            cpuCostNs += value;
+        }
+
+        public long getScanBytes() {
+            return scanBytes;
+        }
+
+        public void updateScanBytes(long value) {
+            scanBytes += value;
+        }
+
+        public long getScanRows() {
+            return scanRows;
+        }
+
+        public void updateScanRows(long value) {
+            scanRows += value;
+        }
     }
 
     public static class QueryStatistics {
@@ -355,10 +480,12 @@ public class CurrentQueryInfoProvider {
     private static class Request {
         private final TNetworkAddress address;
         private final List<PUniqueId> instanceIds;
+        private final Set<TUniqueId> queryIds;
 
         public Request(TNetworkAddress address) {
             this.address = address;
             this.instanceIds = Lists.newArrayList();
+            this.queryIds = new HashSet<>();
         }
 
         public TNetworkAddress getAddress() {
@@ -371,6 +498,14 @@ public class CurrentQueryInfoProvider {
 
         public void addInstanceId(PUniqueId instanceId) {
             this.instanceIds.add(instanceId);
+        }
+
+        public List<TUniqueId> getQueryIds() {
+            return Lists.newArrayList(queryIds);
+        }
+
+        public void addQueryId(TUniqueId queryId) {
+            this.queryIds.add(queryId);
         }
     }
 }

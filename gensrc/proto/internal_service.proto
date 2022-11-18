@@ -291,6 +291,22 @@ message PTriggerProfileReportResult {
     required StatusPB status = 1;
 };
 
+message PCollectQueryStatisticsRequest {
+    repeated PUniqueId query_ids = 1;
+};
+
+message PCollectQueryStatistics {
+    optional PUniqueId query_id = 1;
+    optional int64 cpu_cost_ns = 2;
+    optional int64 scan_bytes = 3;
+    optional int64 scan_rows = 4;
+}
+
+message PCollectQueryStatisticsResult {
+    // @TODO need status?
+    repeated PCollectQueryStatistics query_statistics = 1;
+};
+
 message PStringPair {
     required string key = 1;
     required string val = 2;
@@ -403,6 +419,7 @@ service PInternalService {
     rpc tablet_writer_add_batch(PTabletWriterAddBatchRequest) returns (PTabletWriterAddBatchResult);
     rpc tablet_writer_cancel(PTabletWriterCancelRequest) returns (PTabletWriterCancelResult);
     rpc trigger_profile_report(PTriggerProfileReportRequest) returns (PTriggerProfileReportResult);
+    rpc collect_query_statistics(PCollectQueryStatisticsRequest) returns (PCollectQueryStatisticsResult);
     rpc get_info(PProxyRequest) returns (PProxyResult); 
     rpc get_pulsar_info(PPulsarProxyRequest) returns (PPulsarProxyResult); 
 

@@ -102,8 +102,10 @@ public final class QeProcessorImpl implements QeProcessor {
                 continue;
             }
             final String queryIdStr = DebugUtil.printId(info.getConnectContext().getExecutionId());
+            LOG.info("query id {} exec id {}", queryIdStr, DebugUtil.printId(info.getConnectContext().getQueryId()));
             final QueryStatisticsItem item = new QueryStatisticsItem.Builder()
                     .queryId(queryIdStr)
+                    .executionId(info.getConnectContext().getExecutionId())
                     .queryStartTime(info.getStartExecTime())
                     .sql(info.getSql())
                     .user(context.getQualifiedUser())
@@ -134,6 +136,7 @@ public final class QeProcessorImpl implements QeProcessor {
             return result;
         }
         try {
+            LOG.info("update fragment exec status");
             info.getCoord().updateFragmentExecStatus(params);
         } catch (Exception e) {
             LOG.warn("ReportExecStatus() failed, fragment_instance_id={}, query_id={}, error: {}",
