@@ -4,7 +4,7 @@
 
 Release date: November 14, 2022
 
-### New Feature
+### New Features
 
 - Supports non-equi joins - LEFT SEMI JOIN and ANTI JOIN. Optimized the JOIN function. [#13019](https://github.com/StarRocks/starrocks/pull/13019)
 
