@@ -22,6 +22,7 @@
 #include "exprs/expr.h"
 #include "gen_cpp/QueryPlanExtra_constants.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
@@ -204,7 +205,7 @@ public:
     void compute_batch_agg_states_with_selection(size_t chunk_size);
 
     // Convert one row agg states to chunk
-    void convert_to_chunk_no_groupby(vectorized::ChunkPtr* chunk);
+    Status convert_to_chunk_no_groupby(vectorized::ChunkPtr* chunk);
 
     void process_limit(vectorized::ChunkPtr* chunk);
 
@@ -349,14 +350,16 @@ protected:
 public:
     void build_hash_map(size_t chunk_size, bool agg_group_by_with_limit = false);
     void build_hash_map_with_selection(size_t chunk_size);
-    void convert_hash_map_to_chunk(int32_t chunk_size, vectorized::ChunkPtr* chunk);
+    Status convert_hash_map_to_chunk(int32_t chunk_size, vectorized::ChunkPtr* chunk);
 
     void build_hash_set(size_t chunk_size);
     void build_hash_set_with_selection(size_t chunk_size);
     void convert_hash_set_to_chunk(int32_t chunk_size, vectorized::ChunkPtr* chunk);
 
 protected:
-    bool _reached_limit() { return _limit != -1 && _num_rows_returned >= _limit; }
+    bool _reached_limit() {
+        return _limit != -1 && _num_rows_returned >= _limit;
+    }
 
     bool _use_intermediate_as_input() {
         if (is_pending_reset_state()) {
@@ -390,12 +393,22 @@ protected:
     vectorized::ChunkPtr _build_output_chunk(const vectorized::Columns& group_by_columns,
                                              const vectorized::Columns& agg_result_columns);
 
-    void _set_passthrough(bool flag) { _is_passthrough = flag; }
-    bool is_passthrough() const { return _is_passthrough; }
+    void _set_passthrough(bool flag) {
+        _is_passthrough = flag;
+    }
+    bool is_passthrough() const {
+        return _is_passthrough;
+    }
 
-    void begin_pending_reset_state() { _is_pending_reset_state = true; }
-    void end_pending_reset_state() { _is_pending_reset_state = false; }
-    bool is_pending_reset_state() { return _is_pending_reset_state; }
+    void begin_pending_reset_state() {
+        _is_pending_reset_state = true;
+    }
+    void end_pending_reset_state() {
+        _is_pending_reset_state = false;
+    }
+    bool is_pending_reset_state() {
+        return _is_pending_reset_state;
+    }
 
     void _reset_exprs();
     Status _evaluate_exprs(vectorized::Chunk* chunk);
