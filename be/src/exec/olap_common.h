@@ -195,7 +195,6 @@ using ColumnValueRangeType =  std::variant<
         ColumnValueRange<StringValue>, // TODO: remove
         ColumnValueRange<Slice>,
         ColumnValueRange<DateTimeValue>,
-        ColumnValueRange<DecimalValue>,
         ColumnValueRange<DecimalV2Value>,
         ColumnValueRange<bool>,
         ColumnValueRange<vectorized::DateValue>,

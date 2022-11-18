@@ -27,6 +27,7 @@
 #include "types/hll.h"
 #include "util/date_func.h"
 #include "util/json.h"
+#include "util/mysql_global.h"
 #include "velocypack/Iterator.h"
 
 namespace starrocks::vectorized {

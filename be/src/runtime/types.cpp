@@ -25,7 +25,6 @@
 
 #include "gutil/strings/substitute.h"
 #include "runtime/datetime_value.h"
-#include "runtime/decimal_value.h"
 #include "runtime/primitive_type.h"
 #include "runtime/string_value.h"
 #include "storage/array_type_info.h"
@@ -340,7 +339,7 @@ int TypeDescriptor::get_slot_size() const {
         return sizeof(DateTimeValue);
 
     case TYPE_DECIMAL:
-        return sizeof(DecimalValue);
+        return 40;
 
     case TYPE_LARGEINT:
     case TYPE_DECIMALV2:

@@ -24,7 +24,6 @@
 #include <sstream>
 
 #include "runtime/datetime_value.h"
-#include "runtime/decimal_value.h"
 #include "runtime/decimalv2_value.h"
 #include "runtime/large_int_value.h"
 #include "runtime/mem_pool.h"
@@ -41,8 +40,6 @@ int RawValue::compare(const void* v1, const void* v2, const TypeDescriptor& type
     const StringValue* string_value2;
     const DateTimeValue* ts_value1;
     const DateTimeValue* ts_value2;
-    const DecimalValue* decimal_value1;
-    const DecimalValue* decimal_value2;
     float f1 = 0;
     float f2 = 0;
     double d1 = 0;
@@ -108,11 +105,6 @@ int RawValue::compare(const void* v1, const void* v2, const TypeDescriptor& type
         ts_value1 = reinterpret_cast<const DateTimeValue*>(v1);
         ts_value2 = reinterpret_cast<const DateTimeValue*>(v2);
         return *ts_value1 > *ts_value2 ? 1 : (*ts_value1 < *ts_value2 ? -1 : 0);
-
-    case TYPE_DECIMAL:
-        decimal_value1 = reinterpret_cast<const DecimalValue*>(v1);
-        decimal_value2 = reinterpret_cast<const DecimalValue*>(v2);
-        return (*decimal_value1 > *decimal_value2) ? 1 : (*decimal_value1 < *decimal_value2 ? -1 : 0);
 
     case TYPE_DECIMALV2: {
         DecimalV2Value decimal_value1(unaligned_load<int128_t>(v1));

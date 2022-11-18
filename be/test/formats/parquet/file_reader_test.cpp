@@ -189,7 +189,7 @@ private:
 };
 
 struct SlotDesc {
-    string name;
+    std::string name;
     TypeDescriptor type;
 };
 

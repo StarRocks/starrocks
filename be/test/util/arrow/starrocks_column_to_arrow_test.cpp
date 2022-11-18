@@ -293,7 +293,7 @@ TEST_F(StarRocksColumnToArrowTest, testDoubleColumn) {
 }
 
 TEST_F(StarRocksColumnToArrowTest, testStringColumn) {
-    std::vector<string> strings{"a", "", "abc", "", "", "abcdefg"};
+    std::vector<std::string> strings{"a", "", "abc", "", "", "abcdefg"};
     std::vector<Slice> data;
     for (auto& s : strings) {
         data.emplace_back(s);
@@ -399,7 +399,7 @@ TEST_F(StarRocksColumnToArrowTest, testNullableDoubleColumn) {
 }
 
 TEST_F(StarRocksColumnToArrowTest, testNullableStringColumn) {
-    std::vector<string> strings{"a", "", "abc", "", "", "abcdefg"};
+    std::vector<std::string> strings{"a", "", "abc", "", "", "abcdefg"};
     std::vector<Slice> data;
     for (auto& s : strings) {
         data.emplace_back(s);
