@@ -216,7 +216,11 @@ void MetricsAction::handle(HttpRequest* req) {
     }
 
     req->add_output_header(HttpHeaders::CONTENT_TYPE, "text/plain; version=0.0.4");
-    HttpChannel::send_reply(req, str);
+    if (_func == nullptr) {
+        HttpChannel::send_reply(req, str);
+    } else {
+        (*_func)(str);
+    }
 }
 
 } // namespace starrocks

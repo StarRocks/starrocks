@@ -21,6 +21,7 @@
 
 #include <string>
 
+#include "runtime/current_thread.h"
 #include "util/time.h"
 
 namespace google::glog_internal_namespace_ {
@@ -61,9 +62,11 @@ std::string get_exception_name(const void* info) {
 // as including `current_thread.h` cause linking errors for starrocks_test,
 // so `__cxa_throw` does not print query and instance info here.
 void __wrap___cxa_throw(void* thrown_exception, void* info, void (*dest)(void*)) {
-    fprintf(stderr, "%s SR throws exception: %s, trace:\n %s \n",
-            ToStringFromUnixMicros(GetCurrentTimeMicros()).c_str(), get_exception_name(info).c_str(),
-            get_stack_trace().c_str());
+    auto query_id = CurrentThread::current().query_id();
+    auto fragment_instance_id = CurrentThread::current().fragment_instance_id();
+    fprintf(stderr, "%s, query_id=%s, fragment_instance_id=%s throws exception: %s, trace:\n %s \n",
+            ToStringFromUnixMicros(GetCurrentTimeMicros()).c_str(), print_id(query_id).c_str(),
+            print_id(fragment_instance_id).c_str(), get_exception_name(info).c_str(), get_stack_trace().c_str());
 
     // call the real __cxa_throw():
     __real___cxa_throw(thrown_exception, info, dest);
