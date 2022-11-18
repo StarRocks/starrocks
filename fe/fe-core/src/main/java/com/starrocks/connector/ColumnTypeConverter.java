@@ -3,6 +3,7 @@
 package com.starrocks.connector;
 
 import com.starrocks.catalog.ArrayType;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
@@ -456,5 +457,33 @@ public class ColumnTypeConverter {
             default:
                 return false;
         }
+    }
+
+    public static boolean columnEquals(Column base, Column other) {
+        if (base == other) {
+            return true;
+        }
+
+        if (!base.getName().equalsIgnoreCase(other.getName())) {
+            return false;
+        }
+
+        if (!base.getType().equals(other.getType())) {
+            return false;
+        }
+
+        if (base.getStrLen() != other.getStrLen()) {
+            return false;
+        }
+
+        if (base.getPrecision() != other.getPrecision()) {
+            return false;
+        }
+
+        if (base.getScale() != other.getScale()) {
+            return false;
+        }
+
+        return true;
     }
 }
