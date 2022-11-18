@@ -93,7 +93,7 @@ private:
                                    int64_t scan_bytes);
     void _detach_chunk_sources();
 
-    void _merge_chunk_source_profiles(RuntimeState* state);
+    void _merge_chunk_source_profiles();
     size_t _buffer_unplug_threshold() const;
 
     // emit EOS chunk when we receive the last chunk of the tablet.

@@ -85,7 +85,7 @@ void ScanOperator::close(RuntimeState* state) {
     _tablets_counter->enable_skip_merge();
     COUNTER_SET(_tablets_counter, static_cast<int64_t>(_source_factory()->num_total_original_morsels()));
 
-    _merge_chunk_source_profiles(state);
+    _merge_chunk_source_profiles();
 
     do_close(state);
     Operator::close(state);
@@ -443,8 +443,9 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
     return Status::OK();
 }
 
-void ScanOperator::_merge_chunk_source_profiles(RuntimeState* state) {
-    auto query_ctx = state->exec_env()->query_context_mgr()->get(state->query_id());
+void ScanOperator::_merge_chunk_source_profiles() {
+    auto query_ctx = _query_ctx.lock();
+    DCHECK(query_ctx != nullptr);
     if (!query_ctx->is_report_profile()) {
         return;
     }
