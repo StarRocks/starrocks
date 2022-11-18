@@ -410,6 +410,7 @@ Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_
     }
     // clean this to prevent DeferOp clean files
     rewrite_files.clear();
+<<<<<<< HEAD
     auto beta_rowset = down_cast<BetaRowset*>(rowset);
     RETURN_IF_ERROR(beta_rowset->reload());
     // Be may crash during the rewrite or after the rewrite
@@ -419,13 +420,10 @@ Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_
     // If rewrite is finished, the partial_segment_footer should be removed from rowset_meta
     // to make sure the new full rowset could be read normally after be restarted
     RETURN_IF_ERROR(_update_rowset_meta(tablet, rowset));
+=======
+    RETURN_IF_ERROR(rowset->reload());
+>>>>>>> cdf6bc3f2 ([BugFix] Fix the bug of not locking when cleaning txn_meta (#13285))
     return Status::OK();
-}
-
-Status RowsetUpdateState::_update_rowset_meta(Tablet* tablet, Rowset* rowset) {
-    rowset->rowset_meta()->clear_txn_meta();
-    auto& rowset_meta_pb = rowset->rowset_meta()->get_meta_pb();
-    return TabletMetaManager::write_rowset_meta(tablet->data_dir(), tablet->tablet_id(), rowset_meta_pb, string());
 }
 
 std::string RowsetUpdateState::to_string() const {

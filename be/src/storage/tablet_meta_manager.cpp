@@ -797,7 +797,14 @@ Status TabletMetaManager::rowset_iterate(DataDir* store, TTabletId tablet_id, co
 Status TabletMetaManager::apply_rowset_commit(DataDir* store, TTabletId tablet_id, int64_t logid,
                                               const EditVersion& version,
                                               vector<std::pair<uint32_t, DelVectorPtr>>& delvecs,
+<<<<<<< HEAD
                                               const PersistentIndexMetaPB& index_meta, bool enable_persistent_index) {
+=======
+                                              const PersistentIndexMetaPB& index_meta, bool enable_persistent_index,
+                                              const RowsetMetaPB* rowset_meta) {
+    auto span = Tracer::Instance().start_trace_tablet("apply_save_meta", tablet_id);
+    span->SetAttribute("version", version.to_string());
+>>>>>>> cdf6bc3f2 ([BugFix] Fix the bug of not locking when cleaning txn_meta (#13285))
     WriteBatch batch;
     auto handle = store->get_meta()->handle(META_COLUMN_FAMILY_INDEX);
     string logkey = encode_meta_log_key(tablet_id, logid);
@@ -830,6 +837,16 @@ Status TabletMetaManager::apply_rowset_commit(DataDir* store, TTabletId tablet_i
         auto meta_key = encode_persistent_index_key(tsid.tablet_id);
         auto meta_value = index_meta.SerializeAsString();
         st = batch.Put(handle, meta_key, meta_value);
+        if (!st.ok()) {
+            LOG(WARNING) << "rowset_commit failed, rocksdb.batch.put failed";
+            return to_status(st);
+        }
+    }
+
+    if (rowset_meta != nullptr) {
+        string rowset_key = encode_meta_rowset_key(tablet_id, rowset_meta->rowset_seg_id());
+        auto rowset_value = rowset_meta->SerializeAsString();
+        st = batch.Put(handle, rowset_key, rowset_value);
         if (!st.ok()) {
             LOG(WARNING) << "rowset_commit failed, rocksdb.batch.put failed";
             return to_status(st);
