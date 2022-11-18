@@ -35,5 +35,4 @@ void __wrap___cxa_throw(void* thrown_exception, void* infov, void (*dest)(void*)
 }
 #endif
 
-
 } // namespace starrocks
