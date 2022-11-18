@@ -688,7 +688,7 @@ public abstract class Type implements Cloneable {
     }
 
     public boolean canJoinOn() {
-        return !isOnlyMetricType() && !isJsonType() && !isFunctionType() !isStructType() && !isMapType();
+        return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isStructType() && !isMapType();
     }
 
     public boolean canGroupBy() {
