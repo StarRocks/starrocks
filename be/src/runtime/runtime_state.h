@@ -38,7 +38,6 @@
 #include "gen_cpp/Types_types.h"           // for TUniqueId
 #include "runtime/global_dicts.h"
 #include "runtime/mem_pool.h"
-#include "runtime/thread_resource_mgr.h"
 #include "util/logging.h"
 #include "util/runtime_profile.h"
 
@@ -80,10 +79,6 @@ public:
     // Empty d'tor to avoid issues with std::unique_ptr.
     ~RuntimeState();
 
-    // Set per-query state.
-    Status init(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
-                const TQueryGlobals& query_globals, ExecEnv* exec_env);
-
     // Set up four-level hierarchy of mem trackers: process, query, fragment instance.
     // The instance tracker is tied to our profile.
     // Specific parts of the fragment (i.e. exec nodes, sinks, data stream senders, etc)
@@ -120,7 +115,6 @@ public:
     std::shared_ptr<MemTracker> query_mem_tracker_ptr() { return _query_mem_tracker; }
     const std::shared_ptr<MemTracker>& query_mem_tracker_ptr() const { return _query_mem_tracker; }
     std::shared_ptr<MemTracker> instance_mem_tracker_ptr() { return _instance_mem_tracker; }
-    ThreadResourceMgr::ResourcePool* resource_pool() { return _resource_pool; }
     RuntimeFilterPort* runtime_filter_port() { return _runtime_filter_port; }
     const std::atomic<bool>& cancelled_ref() const { return _is_cancelled; }
 
@@ -288,6 +282,10 @@ public:
     std::shared_ptr<QueryStatisticsRecvr> query_recv();
 
 private:
+    // Set per-query state.
+    void _init(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
+               const TQueryGlobals& query_globals, ExecEnv* exec_env);
+
     Status create_error_log_file();
 
     Status _build_global_dict(const GlobalDictLists& global_dict_list, vectorized::GlobalDictMaps* result);
@@ -323,10 +321,6 @@ private:
     TUniqueId _fragment_instance_id;
     TQueryOptions _query_options;
     ExecEnv* _exec_env = nullptr;
-
-    // Thread resource management object for this fragment's execution.  The runtime
-    // state is responsible for returning this pool to the thread mgr.
-    ThreadResourceMgr::ResourcePool* _resource_pool = nullptr;
 
     // MemTracker that is shared by all fragment instances running on this host.
     // The query mem tracker must be released after the _instance_mem_tracker.
