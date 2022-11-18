@@ -52,7 +52,6 @@ class ResultBufferMgr;
 class ResultQueueMgr;
 class TMasterInfo;
 class LoadChannelMgr;
-class ThreadResourceMgr;
 class WebPageHandler;
 class StreamLoadExecutor;
 class RoutineLoadTaskExecutor;
@@ -127,7 +126,6 @@ public:
     MemTracker* clone_mem_tracker() { return _clone_mem_tracker; }
     MemTracker* consistency_mem_tracker() { return _consistency_mem_tracker; }
 
-    ThreadResourceMgr* thread_mgr() { return _thread_mgr; }
     PriorityThreadPool* thread_pool() { return _thread_pool; }
     PriorityThreadPool* pipeline_scan_io_thread_pool() { return _pipeline_scan_io_thread_pool; }
     PriorityThreadPool* pipeline_hdfs_scan_io_thread_pool() { return _pipeline_hdfs_scan_io_thread_pool; }
@@ -223,7 +221,6 @@ private:
 
     MemTracker* _consistency_mem_tracker = nullptr;
 
-    ThreadResourceMgr* _thread_mgr = nullptr;
     PriorityThreadPool* _thread_pool = nullptr;
     PriorityThreadPool* _pipeline_scan_io_thread_pool = nullptr;
     PriorityThreadPool* _pipeline_hdfs_scan_io_thread_pool = nullptr;

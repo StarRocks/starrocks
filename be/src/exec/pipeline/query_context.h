@@ -24,13 +24,13 @@ using std::chrono::milliseconds;
 using std::chrono::steady_clock;
 using std::chrono::duration_cast;
 // The context for all fragment of one query in one BE
-class QueryContext {
+class QueryContext : public std::enable_shared_from_this<QueryContext> {
 public:
     QueryContext();
     ~QueryContext();
     void set_exec_env(ExecEnv* exec_env) { _exec_env = exec_env; }
     void set_query_id(const TUniqueId& query_id) { _query_id = query_id; }
-    TUniqueId query_id() { return _query_id; }
+    TUniqueId query_id() const { return _query_id; }
     void set_total_fragments(size_t total_fragments) { _total_fragments = total_fragments; }
 
     void increment_num_fragments() {
@@ -129,6 +129,8 @@ public:
     std::shared_ptr<QueryStatisticsRecvr> maintained_query_recv();
     bool is_result_sink() const { return _is_result_sink; }
     void set_result_sink(bool value) { _is_result_sink = value; }
+
+    QueryContextPtr get_shared_ptr() { return shared_from_this(); }
 
 public:
     static constexpr int DEFAULT_EXPIRE_SECONDS = 300;

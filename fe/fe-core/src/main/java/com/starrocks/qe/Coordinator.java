@@ -72,6 +72,7 @@ import com.starrocks.rpc.BackendServiceProxy;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.system.Backend;
@@ -423,20 +424,24 @@ public class Coordinator {
                     DebugUtil.printId(queryId), descTable);
         }
 
-        // prepare information
-        prepare();
+        try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("CoordPrepareExec")) {
+            // prepare information
+            prepare();
 
-        // prepare workgroup
-        this.workGroup = prepareWorkGroup(connectContext);
+            // prepare workgroup
+            this.workGroup = prepareWorkGroup(connectContext);
 
-        // compute Fragment Instance
-        computeScanRangeAssignment();
+            // compute Fragment Instance
+            computeScanRangeAssignment();
 
-        computeFragmentExecParams();
+            computeFragmentExecParams();
 
-        traceInstance();
+            traceInstance();
+        }
 
-        prepareResultSink();
+        try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("CoordDeliverExec")) {
+            prepareResultSink();
+        }
     }
 
     public static WorkGroup prepareWorkGroup(ConnectContext connect) {

@@ -52,7 +52,6 @@ PlanFragmentExecutor::PlanFragmentExecutor(ExecEnv* exec_env, report_status_call
           _done(false),
           _prepared(false),
           _closed(false),
-          _has_thread_token(false),
           _is_report_success(true),
           _is_report_on_cancel(true),
           _collect_query_statistics_with_every_batch(false),
@@ -80,14 +79,6 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
     if (request.query_options.__isset.is_report_success) {
         _is_report_success = request.query_options.is_report_success;
     }
-
-    // Reserve one main thread from the pool
-    _runtime_state->resource_pool()->acquire_thread_token();
-    _has_thread_token = true;
-
-    _average_thread_tokens = profile()->add_sampling_counter(
-            "AverageThreadTokens", std::bind<int64_t>(std::mem_fn(&ThreadResourceMgr::ResourcePool::num_threads),
-                                                      _runtime_state->resource_pool()));
 
     // set up desc tbl
     DescriptorTbl* desc_tbl = nullptr;
@@ -259,8 +250,6 @@ Status PlanFragmentExecutor::_open_internal_vectorized() {
     _sink.reset(nullptr);
     _done = true;
 
-    release_thread_token();
-
     send_report(true);
 
     return close_status;
@@ -310,8 +299,6 @@ Status PlanFragmentExecutor::get_next(vectorized::ChunkPtr* chunk) {
     if (_done) {
         LOG(INFO) << "Finished executing fragment query_id=" << print_id(_query_id)
                   << " instance_id=" << print_id(_runtime_state->fragment_instance_id());
-        // Query is done, return the thread token
-        release_thread_token();
         send_report(true);
     }
 
@@ -392,14 +379,6 @@ void PlanFragmentExecutor::report_profile_once() {
     }
 
     send_report(false);
-}
-
-void PlanFragmentExecutor::release_thread_token() {
-    if (_has_thread_token) {
-        _has_thread_token = false;
-        _runtime_state->resource_pool()->release_thread_token(true);
-        profile()->stop_sampling_counters_updates(_average_thread_tokens);
-    }
 }
 
 void PlanFragmentExecutor::close() {
