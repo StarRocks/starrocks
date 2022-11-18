@@ -38,6 +38,8 @@ public:
     // to objects owned by FragmentContext.
     virtual void report_exec_state(FragmentContext* fragment_ctx, const Status& status, bool done) = 0;
 
+    virtual void iterate_immutable_blocking_driver(const IterateImmutableDriverFunc& call) const = 0;
+
 protected:
     std::string _name;
 };
@@ -51,6 +53,8 @@ public:
     void submit(DriverRawPtr driver) override;
     void cancel(DriverRawPtr driver) override;
     void report_exec_state(FragmentContext* fragment_ctx, const Status& status, bool done) override;
+
+    void iterate_immutable_blocking_driver(const IterateImmutableDriverFunc& call) const override;
 
 private:
     using Base = FactoryMethod<DriverExecutor, GlobalDriverExecutor>;
