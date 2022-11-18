@@ -41,6 +41,7 @@ service PBackendService {
     rpc tablet_writer_cancel(starrocks.PTabletWriterCancelRequest) returns (starrocks.PTabletWriterCancelResult);
     rpc trigger_profile_report(starrocks.PTriggerProfileReportRequest) returns (starrocks.PTriggerProfileReportResult);
     rpc collect_query_statistics(starrocks.PCollectQueryStatisticsRequest) returns (starrocks.PCollectQueryStatisticsResult);
+    rpc collect_fragment_statistics(starrocks.PCollectFragmentStatisticsRequest) returns (starrocks.PCollectFragmentStatisticsResult);
     rpc get_info(starrocks.PProxyRequest) returns (starrocks.PProxyResult);
     rpc get_pulsar_info(starrocks.PPulsarProxyRequest) returns (starrocks.PPulsarProxyResult);
 

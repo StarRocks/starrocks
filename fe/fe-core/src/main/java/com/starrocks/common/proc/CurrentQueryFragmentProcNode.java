@@ -24,6 +24,7 @@ package com.starrocks.common.proc;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.QueryStatisticsFormatter;
 import com.starrocks.qe.QueryStatisticsItem;
 import com.starrocks.server.GlobalStateMgr;
@@ -43,7 +44,7 @@ public class CurrentQueryFragmentProcNode implements ProcNodeInterface {
     private static final Logger LOG = LogManager.getLogger(CurrentQueryFragmentProcNode.class);
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("FragmentId").add("InstanceId").add("Host")
-            .add("ScanBytes").add("ProcessRows").build();
+            .add("ScanBytes").add("ScanRows").add("CpuCostSeconds").build();
     private QueryStatisticsItem item;
 
     public CurrentQueryFragmentProcNode(QueryStatisticsItem item) {
@@ -74,19 +75,21 @@ public class CurrentQueryFragmentProcNode implements ProcNodeInterface {
 
     private ProcResult requestFragmentExecInfos() throws AnalysisException {
         final CurrentQueryInfoProvider provider = new CurrentQueryInfoProvider();
-        final Collection<CurrentQueryInfoProvider.InstanceStatistics> instanceStatisticsCollection
-                = provider.getInstanceStatistics(item);
+        final Collection<CurrentQueryInfoProvider.InstanceStatisticsV2> instanceStatisticsCollection
+                = provider.getInstanceStatisticsV2(item);
         final List<List<String>> sortedRowDatas = Lists.newArrayList();
-        for (CurrentQueryInfoProvider.InstanceStatistics instanceStatistics :
+        for (CurrentQueryInfoProvider.InstanceStatisticsV2 instanceStatistics :
                 instanceStatisticsCollection) {
             final List<String> rowData = Lists.newArrayList();
             rowData.add(instanceStatistics.getFragmentId());
-            rowData.add(instanceStatistics.getInstanceId().toString());
-            rowData.add(instanceStatistics.getAddress().toString());
+            rowData.add(DebugUtil.printId(instanceStatistics.getInstanceId()));
+            rowData.add(String.format(
+                    "%s:%d", instanceStatistics.getAddress().getHostname(), instanceStatistics.getAddress().getPort()));
             rowData.add(QueryStatisticsFormatter.getScanBytes(
                     instanceStatistics.getScanBytes()));
             rowData.add(QueryStatisticsFormatter.getRowsReturned(
-                    instanceStatistics.getRowsReturned()));
+                    instanceStatistics.getScanRows()));
+            rowData.add(QueryStatisticsFormatter.getCPUCostSeconds(instanceStatistics.getCPUCostNs()));
             sortedRowDatas.add(rowData);
         }
 
@@ -94,9 +97,7 @@ public class CurrentQueryFragmentProcNode implements ProcNodeInterface {
         sortedRowDatas.sort(new Comparator<List<String>>() {
             @Override
             public int compare(List<String> l1, List<String> l2) {
-                final Integer fragmentId1 = Integer.valueOf(l1.get(0));
-                final Integer fragmentId2 = Integer.valueOf(l2.get(0));
-                return fragmentId1.compareTo(fragmentId2);
+                return l1.get(0).compareTo(l2.get(0));
             }
         });
         final BaseProcResult result = new BaseProcResult();

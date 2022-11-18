@@ -22,6 +22,7 @@ import com.starrocks.common.ClientPool;
 import com.starrocks.leader.LeaderImpl;
 import com.starrocks.proto.PCancelPlanFragmentRequest;
 import com.starrocks.proto.PCancelPlanFragmentResult;
+import com.starrocks.proto.PCollectFragmentStatisticsResult;
 import com.starrocks.proto.PCollectQueryStatisticsResult;
 import com.starrocks.proto.PExecBatchPlanFragmentsResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
@@ -35,6 +36,7 @@ import com.starrocks.proto.PTriggerProfileReportResult;
 import com.starrocks.proto.StatusPB;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.PBackendService;
+import com.starrocks.rpc.PCollectFragmentStatisticsRequest;
 import com.starrocks.rpc.PCollectQueryStatisticsRequest;
 import com.starrocks.rpc.PExecBatchPlanFragmentsRequest;
 import com.starrocks.rpc.PExecPlanFragmentRequest;
@@ -385,6 +387,12 @@ public class MockedBackend {
 
         @Override
         public Future<PCollectQueryStatisticsResult> collectQueryStatistics(PCollectQueryStatisticsRequest request) {
+            return null;
+        }
+
+        @Override
+        public Future<PCollectFragmentStatisticsResult> collectFragmentStatistics(
+                PCollectFragmentStatisticsRequest request) {
             return null;
         }
 

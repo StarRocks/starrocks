@@ -29,12 +29,15 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.Counter;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.RuntimeProfile;
+import com.starrocks.proto.PCollectFragmentStatistcs;
+import com.starrocks.proto.PCollectFragmentStatisticsResult;
 import com.starrocks.proto.PCollectQueryStatistics;
 import com.starrocks.proto.PCollectQueryStatisticsResult;
 import com.starrocks.proto.PTriggerProfileReportResult;
 import com.starrocks.proto.PUniqueId;
 import com.starrocks.qe.QueryStatisticsItem;
 import com.starrocks.rpc.BackendServiceClient;
+import com.starrocks.rpc.PCollectFragmentStatisticsRequest;
 import com.starrocks.rpc.PCollectQueryStatisticsRequest;
 import com.starrocks.rpc.PTriggerProfileReportRequest;
 import com.starrocks.rpc.RpcException;
@@ -124,6 +127,10 @@ public class CurrentQueryInfoProvider {
             instanceStatisticsList.add(Statistics);
         }
         return instanceStatisticsList;
+    }
+
+    public Collection<InstanceStatisticsV2> getInstanceStatisticsV2(QueryStatisticsItem item) throws AnalysisException {
+        return collectFragmentStatistics(item);
     }
 
     /**
@@ -229,6 +236,97 @@ public class CurrentQueryInfoProvider {
             }
         }
         recvResponse(sendRequest(requests));
+    }
+
+    private Collection<InstanceStatisticsV2> collectFragmentStatistics(
+            QueryStatisticsItem item) throws AnalysisException {
+        final Map<TNetworkAddress, Request> requests = Maps.newHashMap();
+        final Map<TNetworkAddress, TNetworkAddress> brpcAddresses = Maps.newHashMap();
+
+        for (QueryStatisticsItem.FragmentInstanceInfo instanceInfo : item.getFragmentInstanceInfos()) {
+            TNetworkAddress brpcNetAddress = brpcAddresses.get(instanceInfo.getAddress());
+            if (brpcNetAddress == null) {
+                try {
+                    brpcNetAddress = toBrpcHost(instanceInfo.getAddress());
+                    brpcAddresses.put(instanceInfo.getAddress(), brpcNetAddress);
+                } catch (Exception e) {
+                    LOG.warn(e.getMessage());
+                    throw new AnalysisException(e.getMessage());
+                }
+            }
+            Request request = requests.get(brpcNetAddress);
+            if (request == null) {
+                request = new Request(brpcNetAddress);
+                request.addQueryId(item.getExecutionId());
+                requests.put(brpcNetAddress, request);
+            }
+            PUniqueId instanceId = new PUniqueId();
+            instanceId.hi = instanceInfo.getInstanceId().hi;
+            instanceId.lo = instanceInfo.getInstanceId().lo;
+            request.addInstanceId(instanceId);
+        }
+        Map<String, QueryStatisticsV2> statisticsV2Map
+                = handleCollectFragmentResponse(sendCollectFragmentRequest(requests));
+        List<InstanceStatisticsV2> instanceStatisticsList = Lists.newArrayList();
+        for (QueryStatisticsItem.FragmentInstanceInfo fragmentInstanceInfo : item.getFragmentInstanceInfos()) {
+            TUniqueId instanceId = fragmentInstanceInfo.getInstanceId();
+            QueryStatisticsV2 queryStatisticsV2 = statisticsV2Map.get(DebugUtil.printId(instanceId));
+            if (queryStatisticsV2 == null) {
+                continue;
+            }
+            String fragmentId = fragmentInstanceInfo.getFragmentId();
+            TNetworkAddress address = fragmentInstanceInfo.getAddress();
+            InstanceStatisticsV2 instanceStatisticsV2 =
+                    new InstanceStatisticsV2(fragmentId, instanceId, address, queryStatisticsV2);
+            instanceStatisticsList.add(instanceStatisticsV2);
+        }
+        return instanceStatisticsList;
+    }
+
+    private List<Pair<Request, Future<PCollectFragmentStatisticsResult>>> sendCollectFragmentRequest(
+            Map<TNetworkAddress, Request> requests) throws AnalysisException {
+        final List<Pair<Request, Future<PCollectFragmentStatisticsResult>>> futures = Lists.newArrayList();
+        for (TNetworkAddress address : requests.keySet()) {
+            final Request request = requests.get(address);
+            List<TUniqueId> queryIds = request.getQueryIds();
+            PUniqueId queryId = new PUniqueId();
+            queryId.hi = queryIds.get(0).hi;
+            queryId.lo = queryIds.get(0).lo;
+            final PCollectFragmentStatisticsRequest pbRequest =
+                    new PCollectFragmentStatisticsRequest(queryId, request.getInstanceIds());
+            try {
+                futures.add(Pair.create(
+                        request, BackendServiceClient.getInstance().collectFragmentStatisticsAsync(address, pbRequest)));
+            } catch (RpcException e) {
+                throw new AnalysisException("Sending collect query statistics request fails.");
+            }
+        }
+        return futures;
+    }
+
+    private Map<String, QueryStatisticsV2> handleCollectFragmentResponse(
+            List<Pair<Request, Future<PCollectFragmentStatisticsResult>>> futures) throws AnalysisException {
+        Map<String, QueryStatisticsV2> statisticsV2Map = Maps.newHashMap();
+        for (Pair<Request, Future<PCollectFragmentStatisticsResult>> pair : futures) {
+            try {
+                final PCollectFragmentStatisticsResult result = pair.second.get(2, TimeUnit.SECONDS);
+                for (PCollectFragmentStatistcs fragmentStatistics : result.fragmentStatistics) {
+                    LOG.info("instance {} cpu {}, scan bytes {}, scan rows {}",
+                            DebugUtil.printId(fragmentStatistics.fragmentInstanceId),
+                            fragmentStatistics.cpuCostNs, fragmentStatistics.scanBytes, fragmentStatistics.scanRows);
+                    String instanceIdStr = DebugUtil.printId(fragmentStatistics.fragmentInstanceId);
+                    QueryStatisticsV2 statisticsV2 = new QueryStatisticsV2();
+                    statisticsV2.updateCpuCostNs(fragmentStatistics.cpuCostNs);
+                    statisticsV2.updateScanBytes(fragmentStatistics.scanBytes);
+                    statisticsV2.updateScanRows(fragmentStatistics.scanRows);
+                    statisticsV2Map.put(instanceIdStr, statisticsV2);
+                }
+            } catch (InterruptedException | ExecutionException | TimeoutException e) {
+                LOG.warn("fail to receive result" + e.getCause());
+                throw new AnalysisException(e.getMessage());
+            }
+        }
+        return statisticsV2Map;
     }
 
     private Map<String, QueryStatisticsV2> collectQueryStatistics(Collection<QueryStatisticsItem> items, boolean allQuery)
@@ -436,6 +534,45 @@ public class CurrentQueryInfoProvider {
                 rowsReturned += counter == null ? 0 : counter.getValue();
             }
             return rowsReturned;
+        }
+    }
+
+    public static class InstanceStatisticsV2 {
+        private final String fragmentId;
+        private final TUniqueId instanceId;
+        private final TNetworkAddress address;
+        private final QueryStatisticsV2 statisticsV2;
+
+        public InstanceStatisticsV2(String fragmentId,
+                                    TUniqueId instanceId, TNetworkAddress address, QueryStatisticsV2 statisticsV2) {
+            this.fragmentId = fragmentId;
+            this.instanceId = instanceId;
+            this.address = address;
+            this.statisticsV2 = statisticsV2;
+        }
+
+        public String getFragmentId() {
+            return fragmentId;
+        }
+
+        public TUniqueId getInstanceId() {
+            return instanceId;
+        }
+
+        public TNetworkAddress getAddress() {
+            return address;
+        }
+
+        public long getScanBytes() {
+            return statisticsV2.getScanBytes();
+        }
+
+        public long getScanRows() {
+            return statisticsV2.getScanRows();
+        }
+
+        public long getCPUCostNs() {
+            return statisticsV2.getCpuCostNs();
         }
     }
 

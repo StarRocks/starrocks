@@ -393,6 +393,34 @@ void QueryContextManager::collect_query_statistics(const PCollectQueryStatistics
     }
 }
 
+void QueryContextManager::collect_fragment_statistics(const PCollectFragmentStatisticsRequest* request, PCollectFragmentStatisticsResult* response) {
+    const PUniqueId& p_query_id = request->query_id();
+    TUniqueId id;
+    id.__set_hi(p_query_id.hi());
+    id.__set_lo(p_query_id.lo());
+    if (auto query_ctx = get(id); query_ctx != nullptr) {
+        auto fragment_ctx_mgr = query_ctx->fragment_mgr();
+        for (int i = 0;i < request->fragment_instance_id_size();i++){
+            const PUniqueId& p_fragment_instance_id = request->fragment_instance_id(i);
+            TUniqueId t_fragment_instance_id;
+            t_fragment_instance_id.__set_hi(p_fragment_instance_id.hi());
+            t_fragment_instance_id.__set_lo(p_fragment_instance_id.lo());
+            if (auto fragment_ctx = fragment_ctx_mgr->get(t_fragment_instance_id); fragment_ctx != nullptr) {
+                auto stats = response->add_fragment_statistics();
+                auto query_id = stats->mutable_query_id();
+                query_id->set_hi(p_query_id.hi());
+                query_id->set_lo(p_query_id.lo());
+                auto fragment_instance_id = stats->mutable_fragment_instance_id();
+                fragment_instance_id->set_hi(p_fragment_instance_id.hi());
+                fragment_instance_id->set_lo(p_fragment_instance_id.lo());
+                stats->set_cpu_cost_ns(fragment_ctx->cpu_cost());
+                stats->set_scan_rows(fragment_ctx->scan_rows());
+                stats->set_scan_bytes(fragment_ctx->scan_bytes());
+            }
+        }
+    }
+}
+
 void QueryContextManager::report_fragments(
         const std::vector<PipeLineReportTaskKey>& pipeline_need_report_query_fragment_ids) {
     std::vector<std::shared_ptr<FragmentContext>> need_report_fragment_context;
