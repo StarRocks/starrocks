@@ -404,6 +404,17 @@ public:
      */
     DEFINE_VECTORIZED_FN(sm3);
 
+    /**
+     * Compare two strings. Returns 0 if lhs and rhs compare equal,
+     * -1 if lhs appears before rhs in lexicographical order,
+     * 1 if lhs appears after rhs in lexicographical order.
+     *
+     * @param: [string_value, string_value]
+     * @paramType: [BinaryColumn, BinaryColumn]
+     * @return: IntColumn
+     */
+    DEFINE_VECTORIZED_FN(strcmp);
+
     static inline char _DUMMY_STRING_FOR_EMPTY_PATTERN = 'A';
 
 private:
