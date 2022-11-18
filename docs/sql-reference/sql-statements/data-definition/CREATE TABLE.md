@@ -179,14 +179,7 @@ Syntax:
 INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] COMMENT 'xxxxxx'
 ```
 
-Note:
-
-index_name: Index name
-
-col_name: Column name
-
-> Note:
-> Currently only BITMAP index is supported and it only applies to single columns.
+You can only create bitmap indexes when you create tables. For more information about parameter descriptions and usage notes, see [Bitmap indexing](../../../using_starrocks/Bitmap_index.md#create-a-bitmap-index).
 
 ### ENGINE type
 
