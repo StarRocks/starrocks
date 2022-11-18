@@ -6,6 +6,8 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.thrift.TBinlogLSN;
+import com.starrocks.thrift.TBinlogScanRange;
 import lombok.Data;
 import lombok.Value;
 import org.jetbrains.annotations.NotNull;
@@ -13,7 +15,9 @@ import org.jetbrains.annotations.NotNull;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -24,6 +28,20 @@ import java.util.Map;
 public class BinlogConsumeStateVO implements Writable {
     @SerializedName("binlogMap")
     private Map<BinlogIdVO, BinlogLSNVO> binlogMap = new HashMap<>();
+
+    public List<TBinlogScanRange> toThrift() {
+        List<TBinlogScanRange> res = new ArrayList<>();
+        binlogMap.forEach((key, value) -> {
+            TBinlogScanRange scan = new TBinlogScanRange();
+            scan.setTable_id(key.getTableId());
+            scan.setTablet_id(key.getTabletId());
+            // TODO(murphy) partitionId ?
+            scan.setPartition_id(0);
+            scan.setLsn(value.toThrift());
+            res.add(scan);
+        });
+        return res;
+    }
 
     public static BinlogConsumeStateVO read(DataInput input) throws IOException {
         return GsonUtils.GSON.fromJson(Text.readString(input), BinlogConsumeStateVO.class);
@@ -68,6 +86,10 @@ public class BinlogConsumeStateVO implements Writable {
 
         @SerializedName("sequence")
         long logicalSequence;
+
+        public TBinlogLSN toThrift() {
+            return new TBinlogLSN(version, logicalSequence);
+        }
 
         public static BinlogLSNVO read(DataInput input) throws IOException {
             String json = Text.readString(input);

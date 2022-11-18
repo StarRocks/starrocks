@@ -2,7 +2,6 @@
 
 package com.starrocks.scheduler.mv;
 
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.LeaderDaemon;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -20,10 +19,11 @@ import java.util.stream.Collectors;
  * TODO(murphy) extend executor to multi-threading
  */
 public class MVJobExecutor extends LeaderDaemon {
+    private static final long EXECUTOR_INTERVAL_MILLIS = 1000;
     private static final Logger LOG = LogManager.getLogger(MVJobExecutor.class);
 
     public MVJobExecutor() {
-        super("MV Epoch Coordinator", FeConstants.EPOCH_COORDINATOR_RUNNING_INTERVAL_MILLIS);
+        super("MV Job Executor", EXECUTOR_INTERVAL_MILLIS);
     }
 
     @Override
@@ -44,12 +44,16 @@ public class MVJobExecutor extends LeaderDaemon {
                 LOG.warn("Job {} is in {} state, skip it", job, job.getState());
                 continue;
             }
-            job.onSchedule();
+            try {
+                job.onSchedule();
+            } catch (Exception e) {
+                LOG.warn("[MVJobExecutor] execute job {} got exception {}", job, e);
+            }
         }
 
         String mvNameList = jobs.stream().map(x -> x.getView().getName()).collect(Collectors.joining(", "));
         long duration = System.currentTimeMillis() - startMillis;
-        LOG.info("[EpochCoordinator] finish schedule batch of jobs in {}ms: {}", duration, mvNameList);
+        LOG.info("[MVJobExecutor] finish schedule batch of jobs in {}ms: {}", duration, mvNameList);
     }
 
 }

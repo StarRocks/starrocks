@@ -64,6 +64,7 @@ import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
+import com.starrocks.scheduler.mv.MVManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AlterClause;
@@ -249,6 +250,8 @@ public class Alter {
                         + "Do not allow to do ALTER ops");
             }
 
+            MVManager.getInstance().stopMaintainMV(materializedView);
+
             // rename materialized view
             if (newMvName != null) {
                 processRenameMaterializedView(oldMvName, newMvName, db, materializedView);
@@ -264,6 +267,8 @@ public class Alter {
             } else {
                 throw new DdlException("Unsupported modification for materialized view");
             }
+
+            MVManager.getInstance().rebuildMaintainMV(materializedView);
         } finally {
             db.writeUnlock();
         }

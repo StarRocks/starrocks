@@ -7,7 +7,6 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.thrift.TBinlogScanRange;
 import com.starrocks.thrift.TMVEpoch;
 import lombok.Data;
 
@@ -96,14 +95,13 @@ public class MVEpoch implements Writable {
 
     public TMVEpoch toThrift() {
         TMVEpoch res = new TMVEpoch();
-        // TODO(murphy) generate an epoch id instead of txn id
         res.setMax_exec_millis(MAX_EXEC_MILLIS);
         res.setMax_scan_rows(MAX_SCAN_ROWS);
+        // TODO(murphy) generate an epoch id instead of txn id
         res.setEpoch_id(txnId);
         res.setStart_ts(startTimeMilli);
         // TODO(murphy) retrieve actual binlog state
-        TBinlogScanRange binlog = new TBinlogScanRange();
-        res.setBinlog_scan(binlog);
+        res.setBinlog_scan(binlogState.toThrift());
 
         return res;
     }

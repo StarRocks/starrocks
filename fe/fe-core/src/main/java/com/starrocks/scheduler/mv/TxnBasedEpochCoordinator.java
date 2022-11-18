@@ -112,27 +112,49 @@ class TxnBasedEpochCoordinator implements EpochCoordinator {
     }
 
     // TODO(murphy) notify all executors, and wait for finishing
-    private void execute(MVEpoch epoch) {
-        long beId = 0;
-        Backend backend = Preconditions.checkNotNull(GlobalStateMgr.getCurrentSystemInfo().getBackend(beId));
-        TNetworkAddress address = new TNetworkAddress(backend.getHost(), backend.getBePort());
+    private void execute(MVEpoch epoch) throws Exception {
+        List<MVMaintenanceTask> tasks = mvMaintenanceJob.getTasks();
+        List<Future<PMVMaintenanceTaskResult>> results = new ArrayList<>();
+        String dbName = GlobalStateMgr.getCurrentState().getDb(mvMaintenanceJob.getView().getDbId()).getFullName();
 
-        // Request information
-        MaterializedView view = mvMaintenanceJob.getView();
-        String dbName = GlobalStateMgr.getCurrentState().getDb(view.getDbId()).getFullName();
-        long taskId = 0;
+        for (MVMaintenanceTask task : tasks) {
+            long beId = task.getBeId();
+            long taskId = task.getTaskId();
+            Backend backend = Preconditions.checkNotNull(GlobalStateMgr.getCurrentSystemInfo().getBackend(beId));
+            TNetworkAddress address = new TNetworkAddress(backend.getHost(), backend.getBePort());
 
-        // Build request
-        TMVMaintenanceTasks request = new TMVMaintenanceTasks();
-        request.setTask_type(MVTaskType.START_EPOCH);
-        request.start_epoch = new TMVStartEpochTask();
-        request.start_epoch.setEpoch(epoch.toThrift());
-        try {
-            resFuture = BackendServiceClient.getInstance().submitMVMaintenanceTaskAsync(address, request);
-        } catch (Exception e) {
-            epoch.onFailed();
-            LOG.warn("deploy job of MV {} failed: ", view.getName());
-            throw new RuntimeException(e);
+            // Request information
+            MaterializedView view = mvMaintenanceJob.getView();
+
+            // Build request
+            TMVMaintenanceTasks request = new TMVMaintenanceTasks();
+            request.setTask_type(MVTaskType.START_EPOCH);
+            TMVStartEpochTask taskMsg = new TMVStartEpochTask();
+            request.start_epoch = taskMsg;
+            taskMsg.setEpoch(epoch.toThrift());
+            try {
+                resFuture = BackendServiceClient.getInstance().submitMVMaintenanceTaskAsync(address, request);
+            } catch (Exception e) {
+                epoch.onFailed();
+                LOG.warn("deploy job of MV {} failed: ", view.getName());
+                throw new RuntimeException(e);
+            }
+        }
+
+        // Wait for all RPC
+        Exception ex = null;
+        for (Future<PMVMaintenanceTaskResult> future : results) {
+            try {
+                future.wait();
+            } catch (InterruptedException e) {
+                if (ex == null) {
+                    ex = e;
+                }
+                LOG.error("deploy MV task failed", e);
+            }
+        }
+        if (ex != null) {
+            throw ex;
         }
     }
 }

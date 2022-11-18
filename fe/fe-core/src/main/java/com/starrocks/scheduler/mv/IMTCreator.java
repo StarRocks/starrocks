@@ -9,9 +9,12 @@ import com.starrocks.analysis.KeysDesc;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.common.DdlException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.CreateTableAnalyzer;
@@ -19,6 +22,7 @@ import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
+import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -31,17 +35,81 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * Create Intermediate-Materialized-Table for MV
+ * Create various tables for MV
  */
 class IMTCreator {
     private static final Logger LOG = LogManager.getLogger(IMTCreator.class);
 
-    private static final IMTCreator INSTANCE = new IMTCreator();
+    /*
+     * TODO(murphy) partial duplicated with LocalMetaStore::createMaterializedView
+     * Create sink table with
+     * 1. Columns
+     * 2. Distribute by key buckets
+     * 3. Duplicate Key/Primary Key
+     *
+     * Prefer user specified key, otherwise inferred key from plan
+     */
+    public static MaterializedView createSinkTable(CreateMaterializedViewStatement stmt, long mvId, long dbId)
+            throws DdlException {
+        ExecPlan plan = Preconditions.checkNotNull(stmt.getMaintenancePlan());
+        OptExpression physicalPlan = plan.getPhysicalPlan();
+        MVOperatorProperty property =
+                Preconditions.checkNotNull(physicalPlan.getMvOperatorProperty(), "incremental mv must have property");
+        KeyInference.KeyPropertySet keys = property.getKeySet();
+        if (keys.empty()) {
+            throw UnsupportedException.unsupportedException("mv could not infer keys");
+        }
+        keys.sortKeys();
+        KeyInference.KeyProperty key = keys.getKeys().get(0);
+
+        // Columns
+        List<Column> columns = stmt.getMvColumnItems();
+
+        // Duplicate/Primary Key
+        Map<Integer, String> columnNames = plan.getOutputColumns().stream().collect(
+                Collectors.toMap(ColumnRefOperator::getId, ColumnRefOperator::getName));
+        Set<String> keyColumns = key.columns.getStream().mapToObj(columnNames::get).collect(Collectors.toSet());
+        for (Column col : columns) {
+            col.setIsKey(keyColumns.contains(col.getName()));
+        }
+        if (!property.getModify().isInsertOnly()) {
+            stmt.setKeysType(KeysType.PRIMARY_KEYS);
+        }
+
+        // Partition scheme
+        PartitionDesc partitionDesc = stmt.getPartitionExpDesc();
+        PartitionInfo partitionInfo;
+        if (partitionDesc != null) {
+            partitionInfo = partitionDesc.toPartitionInfo(Collections.singletonList(stmt.getPartitionColumn()),
+                    Maps.newHashMap(), false);
+        } else {
+            partitionInfo = new SinglePartitionInfo();
+        }
+
+        // Distribute Key, already set in MVAnalyzer
+        DistributionDesc distributionDesc = stmt.getDistributionDesc();
+        Preconditions.checkNotNull(distributionDesc);
+        DistributionInfo distributionInfo = distributionDesc.toDistributionInfo(columns);
+        if (distributionInfo.getBucketNum() == 0) {
+            int numBucket = calBucketNumAccordingToBackends();
+            distributionInfo.setBucketNum(numBucket);
+        }
+
+        // Refresh
+        MaterializedView.MvRefreshScheme mvRefreshScheme = new MaterializedView.MvRefreshScheme();
+        mvRefreshScheme.setType(MaterializedView.RefreshType.INCREMENTAL);
+
+        String mvName = stmt.getTableName().getTbl();
+        return new MaterializedView(mvId, dbId, mvName, columns, stmt.getKeysType(), partitionInfo,
+                distributionInfo, mvRefreshScheme);
+    }
 
     public static void createIMT(CreateMaterializedViewStatement stmt, MaterializedView view) throws DdlException {
         ExecPlan maintenancePlan = stmt.getMaintenancePlan();
@@ -100,7 +168,8 @@ class IMTCreator {
 
         // Key type
         KeysType keyType = property.getModify().isInsertOnly() ? KeysType.DUP_KEYS : KeysType.PRIMARY_KEYS;
-        KeysDesc keyDesc = new KeysDesc(keyType, keyColumns.stream().map(x -> x.getName()).collect(Collectors.toList()));
+        KeysDesc keyDesc =
+                new KeysDesc(keyType, keyColumns.stream().map(x -> x.getName()).collect(Collectors.toList()));
 
         // Partition scheme
         // TODO(murphy) support partition the IMT, current we don't support it
@@ -110,10 +179,9 @@ class IMTCreator {
         DistributionDesc distributionDesc = new DistributionDesc();
         Preconditions.checkNotNull(distributionDesc);
         HashDistributionInfo distributionInfo = new HashDistributionInfo();
-        distributionInfo.setBucketNum(MVManager.calBucketNumAccordingToBackends());
+        distributionInfo.setBucketNum(calBucketNumAccordingToBackends());
         distributionInfo.setDistributionColumns(keyColumns);
 
-        // Table name: imt_mvname_operatorid_seq;
         // TODO(murphy) refine it
         String mvName = stmt.getTableName().getTbl();
         long seq = GlobalStateMgr.getCurrentState().getNextId();
@@ -135,4 +203,23 @@ class IMTCreator {
         }
         root.getInputs().forEach(child -> collectStreamOperators(child, output));
     }
+
+    // Copy from LocalMetaStore
+    public static int calBucketNumAccordingToBackends() {
+        int backendNum = GlobalStateMgr.getCurrentSystemInfo().getBackendIds().size();
+        // When POC, the backends is not greater than three most of the time.
+        // The bucketNum will be given a small multiplier factor for small backends.
+        int bucketNum = 0;
+        if (backendNum <= 3) {
+            bucketNum = 2 * backendNum;
+        } else if (backendNum <= 6) {
+            bucketNum = backendNum;
+        } else if (backendNum <= 12) {
+            bucketNum = 12;
+        } else {
+            bucketNum = Math.min(backendNum, 48);
+        }
+        return bucketNum;
+    }
+
 }

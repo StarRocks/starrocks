@@ -3480,6 +3480,9 @@ public class LocalMetastore implements ConnectorMetadata {
             db.readUnlock();
         }
         if (table instanceof MaterializedView) {
+            MaterializedView view = (MaterializedView) table;
+            MVManager.getInstance().stopMaintainMV(view);
+
             MvId mvId = new MvId(db.getId(), table.getId());
             db.dropTable(table.getName(), stmt.isSetIfExists(), true);
             List<MaterializedView.BaseTableInfo> baseTableInfos = ((MaterializedView) table).getBaseTableInfos();
@@ -3496,7 +3499,6 @@ public class LocalMetastore implements ConnectorMetadata {
             if (refreshTask != null) {
                 taskManager.dropTasks(Lists.newArrayList(refreshTask.getId()), false);
             }
-            MVManager.getInstance().stopMaintainMV(mvId);
         } else {
             stateMgr.getAlterInstance().processDropMaterializedView(stmt);
         }

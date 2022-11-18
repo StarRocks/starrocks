@@ -53,9 +53,6 @@ public class FeConstants {
     // default scheduler interval is 10 seconds
     public static int default_scheduler_interval_millisecond = 10000;
 
-    // Running interval for epoch coordinator
-    public static final int EPOCH_COORDINATOR_RUNNING_INTERVAL_MILLIS = 1000;
-
     // general model
     // Current meta data version. Use this version to write journals and image
     // for community meta version
