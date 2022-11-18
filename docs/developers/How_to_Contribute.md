@@ -23,9 +23,9 @@ Our community strictly adheres to the [code of conduct](https://github.com/StarR
 
 # Community roles
 
-![img](../assets/contri-1.png)
+![Community roles](../assets/contri-1.png)
 
-Everyone is encouraged to participate in the StarRocks project. Anyone can make an impact by simply being involved in the discussions about new features, project roadmap, architecture, and even reporting issues you are facing. 
+Everyone is encouraged to participate in the StarRocks project. Anyone can make an impact by simply being involved in the discussions about new features, project roadmap, architecture, and even reporting issues you are facing.
 
 The roles listed below are a few possible ways to get involved in the community, it also defines what is expected from each role.
 
