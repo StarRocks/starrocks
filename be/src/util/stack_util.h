@@ -27,7 +27,7 @@ namespace starrocks {
 std::string get_stack_trace();
 
 #if defined(__GNUC__)
-// wrap libc's _cxa_throw to print stack trace
+// wrap libc's _cxa_throw to print stack trace of exceptions
 extern "C" {
 void __real___cxa_throw(void* thrown_exception, void* infov, void (*dest)(void*));
 
