@@ -127,6 +127,14 @@ inline const char* field_type_to_string(LogicalType type) {
         return "PERCENTILE";
     case LOGICAL_TYPE_JSON:
         return "JSON";
+    case LOGICAL_TYPE_NULL:
+        return "NULL";
+    case LOGICAL_TYPE_FUNCTION:
+        return "FUNCTION";
+    case LOGCIAL_TYPE_TIME:
+        return "TIME";
+    case LOGCIAL_TYPE_BINARY:
+        return "BINARY";
     case LOGICAL_TYPE_VARBINARY:
         return "VARBINARY";
     case LOGICAL_TYPE_MAX_VALUE:
