@@ -4,6 +4,7 @@ package com.starrocks.connector.iceberg;
 
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -280,11 +281,8 @@ public class ScalarOperatorToIcebergExpr {
             return operator.getName();
         }
 
-        public String visitConstant(ConstantOperator operator, Void context) {
-            if (operator.getChild(0) == null) {
-                return null;
-            }
-            return operator.getChild(0).accept(this, null);
+        public String visitCastOperator(CastOperator operator, Void context) {
+            return operator.getChild(0).accept(this, context);
         }
     }
 }
