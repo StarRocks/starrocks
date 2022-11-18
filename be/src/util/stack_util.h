@@ -26,9 +26,14 @@ namespace starrocks {
 // for recursive calls.
 std::string get_stack_trace();
 
+#if defined(__GNUC__)
 // wrap libc's _cxa_throw to print stack trace
 extern "C" {
-void __wrap___cxa_throw(void* thrown_exception, void* infov, void (*dest)(void*)) ;
+void __real___cxa_throw(void* thrown_exception, void* infov, void (*dest)(void*));
+
+void __wrap___cxa_throw(void* thrown_exception, void* infov, void (*dest)(void*));
 }
+#endif
+
 
 } // namespace starrocks
