@@ -357,9 +357,7 @@ public:
     void convert_hash_set_to_chunk(int32_t chunk_size, vectorized::ChunkPtr* chunk);
 
 protected:
-    bool _reached_limit() {
-        return _limit != -1 && _num_rows_returned >= _limit;
-    }
+    bool _reached_limit() { return _limit != -1 && _num_rows_returned >= _limit; }
 
     bool _use_intermediate_as_input() {
         if (is_pending_reset_state()) {
@@ -393,22 +391,12 @@ protected:
     vectorized::ChunkPtr _build_output_chunk(const vectorized::Columns& group_by_columns,
                                              const vectorized::Columns& agg_result_columns);
 
-    void _set_passthrough(bool flag) {
-        _is_passthrough = flag;
-    }
-    bool is_passthrough() const {
-        return _is_passthrough;
-    }
+    void _set_passthrough(bool flag) { _is_passthrough = flag; }
+    bool is_passthrough() const { return _is_passthrough; }
 
-    void begin_pending_reset_state() {
-        _is_pending_reset_state = true;
-    }
-    void end_pending_reset_state() {
-        _is_pending_reset_state = false;
-    }
-    bool is_pending_reset_state() {
-        return _is_pending_reset_state;
-    }
+    void begin_pending_reset_state() { _is_pending_reset_state = true; }
+    void end_pending_reset_state() { _is_pending_reset_state = false; }
+    bool is_pending_reset_state() { return _is_pending_reset_state; }
 
     void _reset_exprs();
     Status _evaluate_exprs(vectorized::Chunk* chunk);
