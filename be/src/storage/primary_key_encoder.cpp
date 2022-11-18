@@ -341,8 +341,8 @@ Status PrimaryKeyEncoder::create_column(const vectorized::Schema& schema, std::u
 
 typedef void (*EncodeOp)(const void*, int, std::string*);
 
-static void prepare_ops_datas(const vectorized::Schema& schema, const vectorized::Chunk& chunk, std::vector<EncodeOp>* pops,
-                              std::vector<const void*>* pdatas) {
+static void prepare_ops_datas(const vectorized::Schema& schema, const vectorized::Chunk& chunk,
+                              std::vector<EncodeOp>* pops, std::vector<const void*>* pdatas) {
     int ncol = schema.num_key_fields();
     auto& ops = *pops;
     auto& datas = *pdatas;
@@ -357,7 +357,9 @@ static void prepare_ops_datas(const vectorized::Schema& schema, const vectorized
             };
             break;
         case LOGICAL_TYPE_TINYINT:
-            ops[j] = [](const void* data, int idx, std::string* buff) { encode_integral(((const int8_t*)data)[idx], buff); };
+            ops[j] = [](const void* data, int idx, std::string* buff) {
+                encode_integral(((const int8_t*)data)[idx], buff);
+            };
             break;
         case LOGICAL_TYPE_SMALLINT:
             ops[j] = [](const void* data, int idx, std::string* buff) {

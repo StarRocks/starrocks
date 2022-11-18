@@ -97,8 +97,8 @@ public:
             }
 
             std::string res = "exchange " + std::to_string(this->data(state).bytes) + " bytes in " +
-                         std::to_string(elapsed_time * 1.0 / NANOS_PER_SEC) +
-                         " s, speed = " + fmt::format("{:.4f} ", speed) + unit;
+                              std::to_string(elapsed_time * 1.0 / NANOS_PER_SEC) +
+                              " s, speed = " + fmt::format("{:.4f} ", speed) + unit;
             auto* column = down_cast<BinaryColumn*>(to);
             column->append(Slice(res));
         }
