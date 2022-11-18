@@ -21,7 +21,7 @@ StarRocks 2.3 及以上版本提供了 internal catalog（内部数据目录）�
     SHOW DATABASES FROM default_catalog;
     ```
 
-3. （可选）执行如下语句切换到指定数据库。
+3. （可选）执行如下语句切换到指定数据库。有关参数说明和示例，请参见 [USE](/sql-reference/sql-statements/data-definition/USE.md)。
 
     ```SQL
     USE db_name;
