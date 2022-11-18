@@ -58,9 +58,8 @@ std::string get_exception_name(const void* info) {
     return exception_name;
 }
 
+#if defined(__GNUC__)
 // wrap libc's _cxa_throw that must not throw exceptions again, otherwise causing crash.
-// as including `current_thread.h` cause linking errors for starrocks_test,
-// so `__cxa_throw` does not print query and instance info here.
 void __wrap___cxa_throw(void* thrown_exception, void* info, void (*dest)(void*)) {
     auto query_id = CurrentThread::current().query_id();
     auto fragment_instance_id = CurrentThread::current().fragment_instance_id();
@@ -71,5 +70,5 @@ void __wrap___cxa_throw(void* thrown_exception, void* info, void (*dest)(void*))
     // call the real __cxa_throw():
     __real___cxa_throw(thrown_exception, info, dest);
 }
-
+#endif
 } // namespace starrocks
