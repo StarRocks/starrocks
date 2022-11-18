@@ -177,13 +177,15 @@ INTO TABLE <table_name>
     | kerberos_keytab         | 用于指定 Kerberos 的 Key Table（简称为“keytab”）文件的路径。该文件必须在 Broker 所在服务器上。 |
     | kerberos_keytab_content | 用于指定 Kerberos 中 keytab 文件的内容经过 Base64 编码之后的内容。该参数跟 `kerberos_keytab` 参数二选一配置。 |
 
-   注：使用 kerberos 认证时，需要修改 Broker 服务的 start_broker.sh 启动脚本，在文件 42 行附近修改如下信息让 Broker 服务读取 krb5.conf 文件信息。  
-   `/etc/krb5.conf` 文件路径根据实际情况进行修改，Broker 进程需要有权限读取该文件。  
-   部署多个 Broker 节点时，每个节点均需要修改如下信息，重启后生效。  
+   使用 Kerberos 认证时，需要打开 Broker 服务的启动脚本文件 **start_broker.sh**，在文件 42 行附近修改如下信息让 Broker 服务读取 **krb5.conf** 文件信息：
 
     ```Plain
     export JAVA_OPTS="-Dlog4j2.formatMsgNoLookups=true -Xmx1024m -Dfile.encoding=UTF-8 -Djava.security.krb5.conf=/etc/krb5.conf"
     ```
+
+   > **说明**
+   >
+   > **/etc/krb5.conf** 文件路径根据实际情况进行修改，Broker 进程需要有权限读取该文件。 部署多组 Broker 时，每组 Broker 均需要修改如下信息，重启后生效。
 
 - HA 配置
 
