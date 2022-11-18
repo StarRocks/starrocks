@@ -1003,8 +1003,17 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
             return;
         }
         // 4. write meta
-        st = TabletMetaManager::apply_rowset_commit(_tablet.data_dir(), tablet_id, _next_log_id, version, new_del_vecs,
-                                                    index_meta, enable_persistent_index);
+        const auto& rowset_meta_pb = rowset->rowset_meta()->get_meta_pb();
+        if (rowset_meta_pb.has_txn_meta()) {
+            rowset->rowset_meta()->clear_txn_meta();
+            st = TabletMetaManager::apply_rowset_commit(_tablet.data_dir(), tablet_id, _next_log_id, version,
+                                                        new_del_vecs, index_meta, enable_persistent_index,
+                                                        &(rowset->rowset_meta()->get_meta_pb()));
+        } else {
+            st = TabletMetaManager::apply_rowset_commit(_tablet.data_dir(), tablet_id, _next_log_id, version,
+                                                        new_del_vecs, index_meta, enable_persistent_index, nullptr);
+        }
+
         if (!st.ok()) {
             std::string msg = Substitute("_apply_rowset_commit error: write meta failed: $0 $1", st.to_string(),
                                          _debug_string(false));
@@ -1474,7 +1483,7 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
         }
         // 3. write meta
         st = TabletMetaManager::apply_rowset_commit(_tablet.data_dir(), tablet_id, _next_log_id, version_info.version,
-                                                    delvecs, index_meta, enable_persistent_index);
+                                                    delvecs, index_meta, enable_persistent_index, nullptr);
         if (!st.ok()) {
             manager->index_cache().release(index_entry);
             std::string msg = Substitute("_apply_compaction_commit error: write meta failed: $0 $1", st.to_string(),
@@ -3227,6 +3236,16 @@ Status TabletUpdates::get_rowsets_for_incremental_snapshot(const std::vector<int
                                      _debug_version_info(true), JoinInts(missing_version_ranges, ","),
                                      JoinInts(versions, ","));
     return Status::OK();
+}
+
+void TabletUpdates::to_rowset_meta_pb(const std::vector<RowsetMetaSharedPtr>& rowset_metas,
+                                      std::vector<RowsetMetaPB>& rowset_metas_pb) {
+    std::lock_guard wl(_lock);
+    rowset_metas_pb.reserve(rowset_metas.size());
+    for (const auto& rowset_meta : rowset_metas) {
+        RowsetMetaPB& meta_pb = rowset_metas_pb.emplace_back();
+        rowset_meta->to_rowset_pb(&meta_pb);
+    }
 }
 
 } // namespace starrocks
