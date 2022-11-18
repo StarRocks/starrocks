@@ -507,7 +507,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
     private static void analyzeOrderByClause(CreateMaterializedViewStmt statement,
                                              SelectRelation selectRelation,
                                              int beginIndexOfAggregation) {
-        if (!selectRelation.hasOrderByClause()) {
+        if (!selectRelation.hasOrderByClause() || selectRelation.getGroupBy().size() != selectRelation.getOrderBy().size()) {
             supplyOrderColumn(statement);
             return;
         }
