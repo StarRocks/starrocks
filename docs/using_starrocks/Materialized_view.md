@@ -444,7 +444,7 @@ The following examples involve two base tables:
 
 - Table `goods` records the item ID `item_id1`, item name `item_name`, and item price `price`.
 
-- Table `order_list` records the order ID ``, client ID ``, item ID `item_id2`, and order date `order_date`.
+- Table `order_list` records the order ID `order_id`, client ID `client_id`, item ID `item_id2`, and order date `order_date`.
 
 Column `item_id1` is equivalent to column `item_id2`.
 
