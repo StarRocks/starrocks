@@ -144,7 +144,13 @@ public:
 
     // update meta after state of a rowset commit is applied
     static Status apply_rowset_commit(DataDir* store, TTabletId tablet_id, int64_t logid, const EditVersion& version,
+<<<<<<< HEAD
                                       std::vector<std::pair<uint32_t, DelVectorPtr>>& delvecs);
+=======
+                                      std::vector<std::pair<uint32_t, DelVectorPtr>>& delvecs,
+                                      const PersistentIndexMetaPB& index_meta, bool enable_persistent_index,
+                                      const starrocks::RowsetMetaPB* rowset_meta);
+>>>>>>> cdf6bc3f2 ([BugFix] Fix the bug of not locking when cleaning txn_meta (#13285))
 
     // traverse all the op logs for a tablet
     static Status traverse_meta_logs(DataDir* store, TTabletId tablet_id,
