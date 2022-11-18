@@ -27,12 +27,13 @@ public class IcebergRESTCatalog extends RESTCatalog implements IcebergCatalog {
 
     public static synchronized IcebergRESTCatalog getInstance(Map<String, String> properties) {
         String uri = properties.get(CatalogProperties.URI);
-        if (!REST_URI_TO_CATALOG.containsKey(uri)) {
-            properties.put(CatalogProperties.URI, uri);
-            REST_URI_TO_CATALOG.put(uri, (IcebergRESTCatalog) CatalogLoader.rest(String.format("rest-%s", uri),
-                new Configuration(), properties).loadCatalog());
-        }
-        return REST_URI_TO_CATALOG.get(uri);
+        return REST_URI_TO_CATALOG.computeIfAbsent(
+            uri,
+            key ->
+                (IcebergRESTCatalog) CatalogLoader.rest(
+                    String.format("rest-%s", uri), new Configuration(), properties
+                ).loadCatalog()
+        );
     }
 
     @Override
