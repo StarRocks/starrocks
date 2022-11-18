@@ -90,10 +90,10 @@ public class TableFactory {
         HiveTable hiveTable = tableBuilder.build();
 
         // partition key, commented for show partition key
-        String partitionCmt = "PARTITION BY (" + String.join(", ", hiveTable.getPartitionColumnNames()) + ")";
-        if (Strings.isNullOrEmpty(stmt.getComment())) {
+        if (Strings.isNullOrEmpty(stmt.getComment()) && hiveTable.getPartitionColumnNames().size() > 0) {
+            String partitionCmt = "PARTITION BY (" + String.join(", ", hiveTable.getPartitionColumnNames()) + ")";
             hiveTable.setComment(partitionCmt);
-        } else {
+        } else if (!Strings.isNullOrEmpty(stmt.getComment())) {
             hiveTable.setComment(stmt.getComment());
         }
         return hiveTable;
@@ -163,10 +163,10 @@ public class TableFactory {
         HudiTable hudiTable = tableBuilder.build();
 
         // partition key, commented for show partition key
-        String partitionCmt = "PARTITION BY (" + String.join(", ", hudiTable.getPartitionColumnNames()) + ")";
-        if (Strings.isNullOrEmpty(stmt.getComment())) {
+        if (Strings.isNullOrEmpty(stmt.getComment()) && hudiTable.getPartitionColumnNames().size() > 0) {
+            String partitionCmt = "PARTITION BY (" + String.join(", ", hudiTable.getPartitionColumnNames()) + ")";
             hudiTable.setComment(partitionCmt);
-        } else {
+        } else if (!Strings.isNullOrEmpty(stmt.getComment())) {
             hudiTable.setComment(stmt.getComment());
         }
         return hudiTable;
