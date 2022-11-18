@@ -43,7 +43,7 @@ public:
     }
 
     // like get_next(Chunk* chunk), but also returns each row's rowid(ordinal id)
-    Status get_next(Chunk* chunk, vector<uint32_t>* rowid) {
+    Status get_next(Chunk* chunk, std::vector<uint32_t>* rowid) {
         Status st = do_get_next(chunk, rowid);
         DCHECK_CHUNK(chunk);
         return st;
@@ -109,7 +109,7 @@ public:
 
 protected:
     virtual Status do_get_next(Chunk* chunk) = 0;
-    virtual Status do_get_next(Chunk* chunk, vector<uint32_t>* rowid) {
+    virtual Status do_get_next(Chunk* chunk, std::vector<uint32_t>* rowid) {
         return Status::NotSupported("Chunk* chunk, vector<uint32_t>* rowid) not supported");
     }
     virtual Status do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks) {

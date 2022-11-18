@@ -105,7 +105,7 @@ Status JniScanner::_init_jni_table_scanner(JNIEnv* _jni_env, RuntimeState* runti
             _jni_env->GetMethodID(hashmap_class, "put", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;");
     RETURN_IF_ERROR(_check_jni_exception(_jni_env, "Failed to get the HashMap methods."));
 
-    string message = "Initialize a scanner with parameters: ";
+    std::string message = "Initialize a scanner with parameters: ";
     for (const auto& it : _jni_scanner_params) {
         jstring key = _jni_env->NewStringUTF(it.first.c_str());
         jstring value = _jni_env->NewStringUTF(it.second.c_str());

@@ -129,9 +129,6 @@ template <>
 void ColumnValueRange<Slice>::convert_to_fixed_value() {}
 
 template <>
-void ColumnValueRange<DecimalValue>::convert_to_fixed_value() {}
-
-template <>
 void ColumnValueRange<DecimalV2Value>::convert_to_fixed_value() {}
 
 template <>
@@ -693,7 +690,6 @@ template class ColumnValueRange<__int128>;
 template class ColumnValueRange<StringValue>;
 template class ColumnValueRange<Slice>;
 template class ColumnValueRange<DateTimeValue>;
-template class ColumnValueRange<DecimalValue>;
 template class ColumnValueRange<DecimalV2Value>;
 template class ColumnValueRange<bool>;
 template class ColumnValueRange<vectorized::DateValue>;
@@ -710,8 +706,6 @@ template Status OlapScanKeys::extend_scan_key<StringValue>(ColumnValueRange<Stri
 template Status OlapScanKeys::extend_scan_key<Slice>(ColumnValueRange<Slice>& range, int32_t max_scan_key_num);
 template Status OlapScanKeys::extend_scan_key<DateTimeValue>(ColumnValueRange<DateTimeValue>& range,
                                                              int32_t max_scan_key_num);
-template Status OlapScanKeys::extend_scan_key<DecimalValue>(ColumnValueRange<DecimalValue>& range,
-                                                            int32_t max_scan_key_num);
 template Status OlapScanKeys::extend_scan_key<DecimalV2Value>(ColumnValueRange<DecimalV2Value>& range,
                                                               int32_t max_scan_key_num);
 template Status OlapScanKeys::extend_scan_key<bool>(ColumnValueRange<bool>& range, int32_t max_scan_key_num);

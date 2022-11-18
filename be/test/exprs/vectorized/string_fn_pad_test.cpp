@@ -526,12 +526,12 @@ struct PadNullableStrConstLenFillTestCase {
     std::vector<std::string> lpad_expected_results;
     std::vector<bool> lpad_expected_nulls;
 
-    PadNullableStrConstLenFillTestCase(const vector<std::string>& strs, const vector<bool>& str_nulls, int len,
-                                       string fill, bool rpad_expected_null,
-                                       const vector<std::string>& rpad_expected_results,
-                                       const vector<bool>& rpad_expected_nulls, bool lpad_expected_null,
-                                       const vector<std::string>& lpad_expected_results,
-                                       const vector<bool>& lpad_expected_nulls)
+    PadNullableStrConstLenFillTestCase(const std::vector<std::string>& strs, const std::vector<bool>& str_nulls, int len,
+                                       std::string fill, bool rpad_expected_null,
+                                       const std::vector<std::string>& rpad_expected_results,
+                                       const std::vector<bool>& rpad_expected_nulls, bool lpad_expected_null,
+                                       const std::vector<std::string>& lpad_expected_results,
+                                       const std::vector<bool>& lpad_expected_nulls)
             : strs(strs),
               str_nulls(str_nulls),
               len(len),

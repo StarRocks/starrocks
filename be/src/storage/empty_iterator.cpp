@@ -12,10 +12,10 @@ public:
 
 protected:
     Status do_get_next(Chunk* chunk) override { return Status::EndOfFile("end of empty iterator"); }
-    Status do_get_next(Chunk* chunk, vector<uint32_t>* rowid) override {
+    Status do_get_next(Chunk* chunk, std::vector<uint32_t>* rowid) override {
         return Status::EndOfFile("end of empty iterator");
     }
-    Status do_get_next(Chunk* chunk, vector<RowSourceMask>* source_masks) override {
+    Status do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks) override {
         return Status::EndOfFile("end of empty iterator");
     }
 };

@@ -90,13 +90,13 @@ public:
             if (elapsed_time > 0) {
                 speed = this->data(state).bytes * 1.0 / 1048576.0 * 1000000 / (elapsed_time / 1000.0);
             }
-            string unit = "MB/s";
+            std::string unit = "MB/s";
             if (speed >= 1024) {
                 speed /= 1024;
                 unit = "GB/s";
             }
 
-            string res = "exchange " + std::to_string(this->data(state).bytes) + " bytes in " +
+            std::string res = "exchange " + std::to_string(this->data(state).bytes) + " bytes in " +
                          std::to_string(elapsed_time * 1.0 / NANOS_PER_SEC) +
                          " s, speed = " + fmt::format("{:.4f} ", speed) + unit;
             auto* column = down_cast<BinaryColumn*>(to);

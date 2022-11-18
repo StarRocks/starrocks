@@ -46,7 +46,7 @@ public:
 
 protected:
     Status do_get_next(Chunk* chunk) override;
-    Status do_get_next(Chunk* chunk, vector<uint32_t>* rowid) override;
+    Status do_get_next(Chunk* chunk, std::vector<uint32_t>* rowid) override;
 
     const TabletSchema& _tablet_schema;
     const std::vector<LogicalType>& _new_types;

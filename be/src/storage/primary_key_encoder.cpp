@@ -33,6 +33,7 @@
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "gutil/endian.h"
+#include "gutil/stringprintf.h"
 #include "storage/tablet_schema.h"
 #include "types/date_value.hpp"
 
@@ -63,7 +64,7 @@ uint128_t to_bigendian(uint128_t v) {
 }
 
 template <class T>
-void encode_integral(const T& v, string* dest) {
+void encode_integral(const T& v, std::string* dest) {
     if constexpr (std::is_signed<T>::value) {
         typedef typename std::make_unsigned<T>::type UT;
         UT uv = v;
@@ -147,7 +148,7 @@ static inline void EncodeChunkLoop(const uint8_t** srcp, uint8_t** dstp, int len
     }
 }
 
-inline void encode_slice(const Slice& s, string* dst, bool is_last) {
+inline void encode_slice(const Slice& s, std::string* dst, bool is_last) {
     if (is_last) {
         dst->append(s.data, s.size);
     } else {
@@ -201,7 +202,7 @@ inline void encode_slice(const Slice& s, string* dst, bool is_last) {
     }
 }
 
-inline Status decode_slice(Slice* src, string* dest, bool is_last) {
+inline Status decode_slice(Slice* src, std::string* dest, bool is_last) {
     if (is_last) {
         dest->append(src->data, src->size);
     } else {
@@ -338,10 +339,10 @@ Status PrimaryKeyEncoder::create_column(const vectorized::Schema& schema, std::u
     return Status::OK();
 }
 
-typedef void (*EncodeOp)(const void*, int, string*);
+typedef void (*EncodeOp)(const void*, int, std::string*);
 
-static void prepare_ops_datas(const vectorized::Schema& schema, const vectorized::Chunk& chunk, vector<EncodeOp>* pops,
-                              vector<const void*>* pdatas) {
+static void prepare_ops_datas(const vectorized::Schema& schema, const vectorized::Chunk& chunk, std::vector<EncodeOp>* pops,
+                              std::vector<const void*>* pdatas) {
     int ncol = schema.num_key_fields();
     auto& ops = *pops;
     auto& datas = *pdatas;
@@ -351,51 +352,51 @@ static void prepare_ops_datas(const vectorized::Schema& schema, const vectorized
         datas[j] = chunk.get_column_by_index(j)->raw_data();
         switch (schema.field(j)->type()->type()) {
         case LOGICAL_TYPE_BOOL:
-            ops[j] = [](const void* data, int idx, string* buff) {
+            ops[j] = [](const void* data, int idx, std::string* buff) {
                 encode_integral(((const uint8_t*)data)[idx], buff);
             };
             break;
         case LOGICAL_TYPE_TINYINT:
-            ops[j] = [](const void* data, int idx, string* buff) { encode_integral(((const int8_t*)data)[idx], buff); };
+            ops[j] = [](const void* data, int idx, std::string* buff) { encode_integral(((const int8_t*)data)[idx], buff); };
             break;
         case LOGICAL_TYPE_SMALLINT:
-            ops[j] = [](const void* data, int idx, string* buff) {
+            ops[j] = [](const void* data, int idx, std::string* buff) {
                 encode_integral(((const int16_t*)data)[idx], buff);
             };
             break;
         case LOGICAL_TYPE_INT:
-            ops[j] = [](const void* data, int idx, string* buff) {
+            ops[j] = [](const void* data, int idx, std::string* buff) {
                 encode_integral(((const int32_t*)data)[idx], buff);
             };
             break;
         case LOGICAL_TYPE_BIGINT:
-            ops[j] = [](const void* data, int idx, string* buff) {
+            ops[j] = [](const void* data, int idx, std::string* buff) {
                 encode_integral(((const int64_t*)data)[idx], buff);
             };
             break;
         case LOGICAL_TYPE_LARGEINT:
-            ops[j] = [](const void* data, int idx, string* buff) {
+            ops[j] = [](const void* data, int idx, std::string* buff) {
                 encode_integral(((const int128_t*)data)[idx], buff);
             };
             break;
         case LOGICAL_TYPE_VARCHAR:
             if (j + 1 == ncol) {
-                ops[j] = [](const void* data, int idx, string* buff) {
+                ops[j] = [](const void* data, int idx, std::string* buff) {
                     encode_slice(((const Slice*)data)[idx], buff, true);
                 };
             } else {
-                ops[j] = [](const void* data, int idx, string* buff) {
+                ops[j] = [](const void* data, int idx, std::string* buff) {
                     encode_slice(((const Slice*)data)[idx], buff, false);
                 };
             }
             break;
         case LOGICAL_TYPE_DATE_V2:
-            ops[j] = [](const void* data, int idx, string* buff) {
+            ops[j] = [](const void* data, int idx, std::string* buff) {
                 encode_integral(((const int32_t*)data)[idx], buff);
             };
             break;
         case LOGICAL_TYPE_TIMESTAMP:
-            ops[j] = [](const void* data, int idx, string* buff) {
+            ops[j] = [](const void* data, int idx, std::string* buff) {
                 encode_integral(((const int64_t*)data)[idx], buff);
             };
             break;
@@ -415,12 +416,12 @@ void PrimaryKeyEncoder::encode(const vectorized::Schema& schema, const vectorize
     } else {
         CHECK(dest->is_binary()) << "dest column should be binary";
         int ncol = schema.num_key_fields();
-        vector<EncodeOp> ops;
-        vector<const void*> datas;
+        std::vector<EncodeOp> ops;
+        std::vector<const void*> datas;
         prepare_ops_datas(schema, chunk, &ops, &datas);
         auto& bdest = down_cast<vectorized::BinaryColumn&>(*dest);
         bdest.reserve(bdest.size() + len);
-        string buff;
+        std::string buff;
         for (size_t i = 0; i < len; i++) {
             buff.clear();
             for (int j = 0; j < ncol; j++) {
@@ -440,12 +441,12 @@ void PrimaryKeyEncoder::encode_selective(const vectorized::Schema& schema, const
     } else {
         CHECK(dest->is_binary()) << "dest column should be binary";
         int ncol = schema.num_key_fields();
-        vector<EncodeOp> ops;
-        vector<const void*> datas;
+        std::vector<EncodeOp> ops;
+        std::vector<const void*> datas;
         prepare_ops_datas(schema, chunk, &ops, &datas);
         auto& bdest = down_cast<vectorized::BinaryColumn&>(*dest);
         bdest.reserve(bdest.size() + len);
-        string buff;
+        std::string buff;
         for (int i = 0; i < len; i++) {
             uint32_t idx = indexes[i];
             buff.clear();
@@ -460,7 +461,7 @@ void PrimaryKeyEncoder::encode_selective(const vectorized::Schema& schema, const
 bool PrimaryKeyEncoder::encode_exceed_limit(const vectorized::Schema& schema, const vectorized::Chunk& chunk,
                                             size_t offset, size_t len, const size_t limit_size) {
     int ncol = schema.num_key_fields();
-    vector<const void*> datas(ncol, nullptr);
+    std::vector<const void*> datas(ncol, nullptr);
     if (ncol == 1) {
         if (schema.field(0)->type()->type() == LOGICAL_TYPE_VARCHAR) {
             if (static_cast<const Slice*>(static_cast<const void*>(chunk.get_column_by_index(0)->raw_data()))
@@ -559,7 +560,7 @@ Status PrimaryKeyEncoder::decode(const vectorized::Schema& schema, const vectori
                 } break;
                 case LOGICAL_TYPE_VARCHAR: {
                     auto& tc = down_cast<vectorized::BinaryColumn&>(column);
-                    string v;
+                    std::string v;
                     RETURN_IF_ERROR(decode_slice(&s, &v, j + 1 == ncol));
                     tc.append(v);
                 } break;
