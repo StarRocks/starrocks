@@ -6,6 +6,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
+import lombok.Data;
 import lombok.Value;
 import org.jetbrains.annotations.NotNull;
 
@@ -19,9 +20,10 @@ import java.util.Map;
  * Binlog group consumption state of MV
  * NOTE: not thread-safe for updating
  */
-@Value
+@Data
 public class BinlogConsumeStateVO implements Writable {
-    Map<BinlogIdVO, BinlogLSNVO> binlogMap = new HashMap<>();
+    @SerializedName("binlogMap")
+    private Map<BinlogIdVO, BinlogLSNVO> binlogMap = new HashMap<>();
 
     public static BinlogConsumeStateVO read(DataInput input) throws IOException {
         return GsonUtils.GSON.fromJson(Text.readString(input), BinlogConsumeStateVO.class);

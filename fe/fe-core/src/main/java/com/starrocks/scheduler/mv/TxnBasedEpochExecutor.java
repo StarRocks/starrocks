@@ -33,7 +33,7 @@ class TxnBasedEpochExecutor {
 
     public TxnBasedEpochExecutor(MVMaintenanceJob mvMaintenanceJob) {
         this.mvMaintenanceJob = mvMaintenanceJob;
-        this.epoch = new MVEpoch();
+        this.epoch = new MVEpoch(mvMaintenanceJob.getView().getDbId());
     }
 
     public void start() {
@@ -67,7 +67,7 @@ class TxnBasedEpochExecutor {
         try {
             long txnId = GlobalStateMgr.getCurrentGlobalTransactionMgr()
                     .beginTransaction(dbId, tableIdList, label, txnCoordinator, loadSource, JOB_TIMEOUT);
-            this.epoch.transactionId = txnId;
+            this.epoch.setTxnId(txnId);
         } catch (Exception e) {
             this.epoch.onFailed();
             LOG.warn("Failed to begin transaction for epoch {}", this.epoch);
@@ -86,7 +86,7 @@ class TxnBasedEpochExecutor {
         try {
             this.epoch.onCommitting();
             GlobalStateMgr.getCurrentGlobalTransactionMgr().commitAndPublishTransaction(database,
-                    this.epoch.transactionId, commitInfo, failedInfo, TXN_VISIBLE_TIMEOUT_MILLIS);
+                    this.epoch.getTxnId(), commitInfo, failedInfo, TXN_VISIBLE_TIMEOUT_MILLIS);
             // TODO(murphy) collect binlog consumption state from execution
             BinlogConsumeStateVO binlogState = new BinlogConsumeStateVO();
             this.epoch.onCommitted(binlogState);
@@ -102,7 +102,7 @@ class TxnBasedEpochExecutor {
 
     private void abortEpoch() {
         long dbId = mvMaintenanceJob.getView().getDbId();
-        long txnId = this.epoch.transactionId;
+        long txnId = this.epoch.getTxnId();
         String failReason = "";
         try {
             GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(dbId, txnId, failReason);
