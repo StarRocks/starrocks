@@ -212,13 +212,13 @@ public class ScalarOperatorToIcebergExpr {
             return null;
         }
 
-        return new ExtractLiteralValue().visit(operator, null);
+        return operator.accept(new ExtractLiteralValue(), null);
     }
 
     private static class ExtractLiteralValue extends ScalarOperatorVisitor<Object, Void> {
         @Override
         public Object visit(ScalarOperator scalarOperator, Void context) {
-            return scalarOperator.accept(this, context);
+            return null;
         }
 
         @Override
@@ -263,7 +263,7 @@ public class ScalarOperatorToIcebergExpr {
             return null;
         }
 
-        String columnName = new ExtractColumnName().visit(operator, null);
+        String columnName = operator.accept(new ExtractColumnName(), null);
         if (columnName == null || columnName.isEmpty()) {
             return null;
         }
@@ -274,7 +274,7 @@ public class ScalarOperatorToIcebergExpr {
 
         @Override
         public String visit(ScalarOperator scalarOperator, Void context) {
-            return scalarOperator.accept(this, context);
+            return null;
         }
 
         public String visitVariableReference(ColumnRefOperator operator, Void context) {
