@@ -39,7 +39,7 @@ public class ExportRelativeStmtTest {
         fsBroker.handleHbResponse(hbResponse, false);
         GlobalStateMgr.getCurrentState().getBrokerMgr().replayAddBrokers("broker", Lists.newArrayList(fsBroker));
         String originStmt = "EXPORT TABLE tall TO \"hdfs://hdfs_host:port/a/b/c/\" " +
-                "WITH BROKER \"broker\" (\"username\"=\"test\", \"password\"=\"test\");";
+                "WITH BROKER \"broker\" (\"username\"=\"test\", \"password\"=\"***\");";
         ExportStmt stmt = (ExportStmt) analyzeSuccess(originStmt);
         Assert.assertNotNull(stmt.getRedirectStatus());
         Assert.assertTrue(stmt.needAuditEncryption());

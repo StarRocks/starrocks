@@ -138,7 +138,7 @@ public class PrivilegeCheckerTest {
         TablePattern db1TablePattern = new TablePattern("*", "*");
         db1TablePattern.analyze();
         String originStmt = "EXPORT TABLE tbl1 TO \"hdfs://hdfs_host:port/a/b/c/\" " +
-                "WITH BROKER \"broker\" (\"username\"=\"test\", \"password\"=\"test\");";
+                "WITH BROKER \"broker\" (\"username\"=\"test\", \"password\"=\"***\");";
         StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(originStmt,
                 starRocksAssert.getCtx().getSessionVariable()).get(0);
         Analyzer.analyze(statementBase, starRocksAssert.getCtx());
