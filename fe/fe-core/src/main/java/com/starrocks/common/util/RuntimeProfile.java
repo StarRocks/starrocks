@@ -628,6 +628,7 @@ public class RuntimeProfile {
             long minValue = Long.MAX_VALUE;
             long maxValue = Long.MIN_VALUE;
             boolean alreadyMerged = false;
+            boolean skipMerge = false;
             for (RuntimeProfile profile : profiles) {
                 Counter counter = profile.getCounter(name);
 
@@ -642,6 +643,9 @@ public class RuntimeProfile {
                             "find non-isomorphic counter, profileName={}, counterName={}, existType={}, anotherType={}",
                             profile0.name, name, type.name(), counter.getType().name());
                     return;
+                }
+                if (counter.isSkipMerge()) {
+                    skipMerge = true;
                 }
 
                 Counter minCounter = profile.getCounter(MERGED_INFO_PREFIX_MIN + name);
@@ -679,6 +683,9 @@ public class RuntimeProfile {
                                 profile0.name, name, parentName);
                     }
                     counter0 = profile0.addCounter(name, type);
+                }
+                if (skipMerge) {
+                    counter0.setSkipMerge(true);
                 }
             }
             counter0.setValue(mergedValue);
