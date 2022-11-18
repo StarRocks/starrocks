@@ -237,6 +237,7 @@ void PipeLineFileScanNodeTest::prepare_pipeline() {
                         std::make_shared<PipelineDriver>(std::move(operators), _query_ctx, _fragment_ctx, driver_id++);
                 driver->set_morsel_queue(morsel_queue_factory->create(i));
                 if (auto* scan_operator = driver->source_scan_operator()) {
+                    scan_operator->set_query_ctx(_query_ctx->get_shared_ptr());
                     if (dynamic_cast<starrocks::pipeline::ConnectorScanOperator*>(scan_operator) != nullptr) {
                         scan_operator->set_scan_executor(_exec_env->connector_scan_executor_without_workgroup());
                     } else {
