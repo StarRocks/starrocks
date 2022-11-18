@@ -14,6 +14,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.connector.iceberg.ScalarOperatorToIcebergExpr;
 import com.starrocks.connector.iceberg.cost.IcebergTableStatisticCalculator;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -32,13 +33,14 @@ import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import org.apache.iceberg.expressions.Expression;
+import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Collection;
@@ -356,8 +358,13 @@ public class Utils {
             } else if (operator instanceof LogicalIcebergScanOperator) {
                 IcebergTable table = (IcebergTable) scanOperator.getTable();
                 try {
+                    List<ScalarOperator> predicates = Utils.extractConjuncts(operator.getPredicate());
+                    Types.StructType schema = table.getIcebergTable().schema().asStruct();
+                    ScalarOperatorToIcebergExpr.IcebergContext icebergContext =
+                            new ScalarOperatorToIcebergExpr.IcebergContext(schema);
+                    Expression icebergPredicate = new ScalarOperatorToIcebergExpr().convert(predicates, icebergContext);
                     List<ColumnStatistic> columnStatisticList = IcebergTableStatisticCalculator.getColumnStatistics(
-                            new ArrayList<>(), table.getIcebergTable(),
+                            icebergPredicate, table.getIcebergTable(),
                             scanOperator.getColRefToColumnMetaMap());
                     return columnStatisticList.stream().anyMatch(ColumnStatistic::isUnknown);
                 } catch (Exception e) {

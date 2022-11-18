@@ -53,6 +53,10 @@ public class InPredicateOperator extends PredicateOperator {
                 .anyMatch(child -> (child.isConstantRef() && ((ConstantOperator) child).isNull()));
     }
 
+    public List<ScalarOperator> getListChildren() {
+        return getChildren().subList(1, getChildren().size());
+    }
+
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
