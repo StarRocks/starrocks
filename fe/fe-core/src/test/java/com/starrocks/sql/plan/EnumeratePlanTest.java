@@ -88,7 +88,7 @@ public class EnumeratePlanTest extends DistributedEnvPlanTestBase {
 
     @Test
     public void testTPCHQ13EnumPlan() {
-        runFileUnitTest("enumerate-plan/tpch-q13");
+        runFileUnitTest("enumerate-plan/tpch-q13", true);
     }
 
     @Test
