@@ -2629,4 +2629,43 @@ PARALLEL_TEST(VecStringFunctionsTest, substrNotConstUtf8Test) {
     test_substr_not_const(cases);
 }
 
+PARALLEL_TEST(VecStringFunctionsTest, strcmpTest) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    Columns columns;
+    auto lhs = BinaryColumn::create();
+    auto rhs = BinaryColumn::create();
+
+    lhs->append("");
+    rhs->append("");
+
+    lhs->append("");
+    rhs->append("text1");
+
+    lhs->append("text2");
+    rhs->append("");
+
+    lhs->append("text1");
+    rhs->append("text1");
+
+    lhs->append("text1");
+    rhs->append("text2");
+
+    lhs->append("text2");
+    rhs->append("text1");
+
+    columns.emplace_back(lhs);
+    columns.emplace_back(rhs);
+
+    ColumnPtr result = StringFunctions::strcmp(ctx.get(), columns);
+    auto v = ColumnHelper::cast_to<TYPE_INT>(result);
+
+    ASSERT_EQ(6, result->size());
+    ASSERT_EQ(0, v->get_data()[0]);
+    ASSERT_EQ(-1, v->get_data()[1]);
+    ASSERT_EQ(1, v->get_data()[2]);
+    ASSERT_EQ(0, v->get_data()[3]);
+    ASSERT_EQ(-1, v->get_data()[4]);
+    ASSERT_EQ(1, v->get_data()[5]);
+}
+
 } // namespace starrocks::vectorized
