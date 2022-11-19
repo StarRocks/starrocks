@@ -186,11 +186,11 @@ public:
     }
 };
 
-template <PrimitiveType Type, typename OP>
+template <LogicalType Type, typename OP>
 class VectorizedBitShiftArithmeticExpr final : public Expr {
 public:
     DEFINE_CLASS_CONSTRUCTOR(VectorizedBitShiftArithmeticExpr);
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {
         auto l = _children[0]->evaluate(context, ptr);
         auto r = _children[1]->evaluate(context, ptr);
         

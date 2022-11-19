@@ -83,7 +83,7 @@ public:
      * @param: [TypeColumn, TypeColumn]
      * @return: TypeColumn
      */
-    template <PrimitiveType Type>
+    template <LogicalType Type>
     DEFINE_VECTORIZED_FN(bitShiftLeft) {
         auto l = VECTORIZED_FN_ARGS(0);
         auto r = VECTORIZED_FN_ARGS(1);
@@ -95,7 +95,7 @@ public:
      * @param: [TypeColumn, TypeColumn]
      * @return: TypeColumn
      */
-    template <PrimitiveType Type>
+    template <LogicalType Type>
     DEFINE_VECTORIZED_FN(bitShiftRight) {
         auto l = VECTORIZED_FN_ARGS(0);
         auto r = VECTORIZED_FN_ARGS(1);
@@ -107,7 +107,7 @@ public:
      * @param: [TypeColumn, TypeColumn]
      * @return: TypeColumn
      */
-    template <PrimitiveType Type>
+    template <LogicalType Type>
     DEFINE_VECTORIZED_FN(bitShiftRightLogical) {
         auto l = VECTORIZED_FN_ARGS(0);
         auto r = VECTORIZED_FN_ARGS(1);
