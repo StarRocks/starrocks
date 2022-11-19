@@ -157,7 +157,7 @@ public class ColumnTypeConverter {
                 if (type.isArrayType()) {
                     return type;
                 } else {
-                    isConvertedFailed = false;
+                    isConvertedFailed = true;
                     break;
                 }
             case FIXED:
@@ -186,6 +186,7 @@ public class ColumnTypeConverter {
                     Type fieldType = fromHudiType(field.schema());
                     if (fieldType.isUnknown()) {
                         isConvertedFailed = true;
+                        break;
                     }
                     structFields.add(new StructField(fieldName, fieldType));
                 }
@@ -198,6 +199,7 @@ public class ColumnTypeConverter {
                 Type valueType = fromHudiType(value);
                 if (valueType.isUnknown()) {
                     isConvertedFailed = true;
+                    break;
                 }
 
                 if (!isConvertedFailed) {
