@@ -2149,10 +2149,11 @@ ColumnPtr StringFunctions::get_char(FunctionContext* context, const Columns& col
 
 // strcmp
 DEFINE_BINARY_FUNCTION_WITH_IMPL(strcmpImpl, lhs, rhs) {
-    if (lhs == rhs) {
+    int ret = lhs.compare(rhs);
+    if (ret == 0) {
         return 0;
     }
-    return lhs > rhs ? 1 : -1;
+    return ret > 0 ? 1 : -1;
 }
 
 ColumnPtr StringFunctions::strcmp(FunctionContext* context, const Columns& columns) {
