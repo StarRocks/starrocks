@@ -89,8 +89,8 @@ uint32_t TabletColumn::get_field_length_by_type(LogicalType type, uint32_t strin
     case LOGICAL_TYPE_NONE:
     case LOGICAL_TYPE_NULL:
     case LOGICAL_TYPE_FUNCTION:
-    case LOGCIAL_TYPE_TIME:
-    case LOGCIAL_TYPE_BINARY:
+    case LOGICAL_TYPE_TIME:
+    case LOGICAL_TYPE_BINARY:
     case LOGICAL_TYPE_MAX_VALUE:
     case LOGICAL_TYPE_BOOL:
     case LOGICAL_TYPE_TINYINT:

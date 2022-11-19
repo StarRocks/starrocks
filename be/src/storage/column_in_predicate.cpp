@@ -433,8 +433,8 @@ ColumnPredicate* new_column_in_predicate_generic(const TypeInfoPtr& type_info, C
     case LOGICAL_TYPE_JSON:
     case LOGICAL_TYPE_NULL:
     case LOGICAL_TYPE_FUNCTION:
-    case LOGCIAL_TYPE_TIME:
-    case LOGCIAL_TYPE_BINARY:
+    case LOGICAL_TYPE_TIME:
+    case LOGICAL_TYPE_BINARY:
     case LOGICAL_TYPE_VARBINARY:
     case LOGICAL_TYPE_MAX_VALUE:
         return nullptr;
