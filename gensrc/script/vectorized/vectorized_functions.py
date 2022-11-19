@@ -263,6 +263,7 @@ vectorized_functions = [
 
     [30410, 'parse_url', 'VARCHAR', ['VARCHAR', 'VARCHAR'], 'StringFunctions::parse_url',
      'StringFunctions::parse_url_prepare', 'StringFunctions::parse_url_close'],
+    [30420, 'strcmp', 'INT', ['VARCHAR', 'VARCHAR'], 'StringFunctions::strcmp'],
 
     # 50xxx: timestamp functions
     [50008, 'year', 'SMALLINT', ['DATE'], 'TimeFunctions::yearV3'],

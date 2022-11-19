@@ -2147,6 +2147,19 @@ ColumnPtr StringFunctions::get_char(FunctionContext* context, const Columns& col
     return VectorizedStringStrictUnaryFunction<get_charImpl>::evaluate<TYPE_INT, TYPE_CHAR>(columns[0]);
 }
 
+// strcmp
+DEFINE_BINARY_FUNCTION_WITH_IMPL(strcmpImpl, lhs, rhs) {
+    int ret = lhs.compare(rhs);
+    if (ret == 0) {
+        return 0;
+    }
+    return ret > 0 ? 1 : -1;
+}
+
+ColumnPtr StringFunctions::strcmp(FunctionContext* context, const Columns& columns) {
+    return VectorizedStrictBinaryFunction<strcmpImpl>::evaluate<TYPE_VARCHAR, TYPE_INT>(columns[0], columns[1]);
+}
+
 static inline ColumnPtr concat_const_not_null(Columns const& columns, BinaryColumn* src, const ConcatState* state) {
     NullableBinaryColumnBuilder builder;
     auto* binary = down_cast<BinaryColumn*>(builder.data_column().get());
