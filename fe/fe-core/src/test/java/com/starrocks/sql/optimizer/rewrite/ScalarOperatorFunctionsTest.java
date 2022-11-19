@@ -879,6 +879,81 @@ public class ScalarOperatorFunctionsTest {
     }
 
     @Test
+    public void bitShiftLeftTinyInt() {
+        assertEquals(0, ScalarOperatorFunctions.bitShiftLeftTinyInt(O_TI_10, O_BI_3).getTinyInt());
+    }
+
+    @Test
+    public void bitShiftLeftSmallInt() {
+        assertEquals(0, ScalarOperatorFunctions.bitShiftLeftSmallInt(O_SI_10, O_BI_3).getSmallint());
+    }
+
+    @Test
+    public void bitShiftLeftInt() {
+        assertEquals(0, ScalarOperatorFunctions.bitShiftLeftInt(O_INT_10, O_BI_3).getInt());
+    }
+
+    @Test
+    public void bitShiftLeftBigint() {
+        assertEquals(0, ScalarOperatorFunctions.bitShiftLeftBigint(O_BI_100, O_BI_3).getBigint());
+    }
+
+    @Test
+    public void bitShiftLeftLargeInt() {
+        assertEquals("0", ScalarOperatorFunctions.bitShiftLeftLargeInt(O_LI_100, O_BI_3).getLargeInt().toString());
+    }
+
+    @Test
+    public void bitShiftRightTinyInt() {
+        assertEquals(0, ScalarOperatorFunctions.bitShiftRightTinyInt(O_TI_10, O_BI_3).getTinyInt());
+    }
+
+    @Test
+    public void bitShiftRightSmallInt() {
+        assertEquals(0, ScalarOperatorFunctions.bitShiftRightSmallInt(O_SI_10, O_BI_3).getSmallint());
+    }
+
+    @Test
+    public void bitShiftRightInt() {
+        assertEquals(0, ScalarOperatorFunctions.bitShiftRightInt(O_INT_10, O_BI_3).getInt());
+    }
+
+    @Test
+    public void bitShiftRightBigint() {
+        assertEquals(0, ScalarOperatorFunctions.bitShiftRightBigint(O_BI_100, O_BI_3).getBigint());
+    }
+
+    @Test
+    public void bitShiftRightLargeInt() {
+        assertEquals("0", ScalarOperatorFunctions.bitShiftRightLargeInt(O_LI_100, O_BI_3).getLargeInt().toString());
+    }
+
+    @Test
+    public void bitShiftRightLogicalTinyInt() {
+        assertEquals(0, ScalarOperatorFunctions.bitShiftRightLogicalTinyInt(O_TI_10, O_BI_3).getTinyInt());
+    }
+
+    @Test
+    public void bitShiftRightLogicalSmallInt() {
+        assertEquals(0, ScalarOperatorFunctions.bitShiftRightLogicalSmallInt(O_SI_10, O_BI_3).getSmallint());
+    }
+
+    @Test
+    public void bitShiftRightLogicalInt() {
+        assertEquals(0, ScalarOperatorFunctions.bitShiftRightLogicalInt(O_INT_10, O_BI_3).getInt());
+    }
+
+    @Test
+    public void bitShiftRightLogicalBigint() {
+        assertEquals(0, ScalarOperatorFunctions.bitShiftRightLogicalBigint(O_BI_100, O_BI_3).getBigint());
+    }
+
+    @Test
+    public void bitShiftRightLogicalLargeInt() {
+        assertEquals("0", ScalarOperatorFunctions.bitShiftRightLogicalLargeInt(O_LI_100, O_BI_3).getLargeInt().toString());
+    }
+
+    @Test
     public void concat() {
         ConstantOperator[] arg = {ConstantOperator.createVarchar("1"),
                 ConstantOperator.createVarchar("2"),

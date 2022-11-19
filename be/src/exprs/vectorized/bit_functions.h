@@ -15,8 +15,26 @@ namespace starrocks::vectorized {
 VECTORIZED_BIT_BINARY_IMPL(bitAnd, &);
 VECTORIZED_BIT_BINARY_IMPL(bitOr, |);
 VECTORIZED_BIT_BINARY_IMPL(bitXor, ^);
+VECTORIZED_BIT_BINARY_IMPL(bitShiftLeft, <<);
+VECTORIZED_BIT_BINARY_IMPL(bitShiftRight, >>);
 
 #undef VECTORIZED_BIT_BINARY_IMPL
+
+DEFINE_BINARY_FUNCTION_WITH_IMPL(bitShiftRightLogicalImpl, v, shift) {
+    if constexpr (std::is_same(LType, int8_t)) {
+        return uint8_t(l) >> r;
+    } else if constexpr (std::is_same(LType, int16_t)) {
+        return uint16_t(l) >> r;
+    } else if constexpr (std::is_same(LType, int32_t)) {
+        return uint32_t(l) >> r;
+    } else if constexpr (std::is_same(LType, int64_t)) {
+        return uint64_t(l) >> r;
+    } else if constexpr (std::is_same(LType, __int128_t)) {
+        return uint128_t(l) >> r;
+    } else {
+        return l >> r;
+    }
+}
 
 DEFINE_UNARY_FN_WITH_IMPL(bitNotImpl, v) {
     return ~v;
@@ -58,6 +76,42 @@ public:
         auto l = VECTORIZED_FN_ARGS(0);
         auto r = VECTORIZED_FN_ARGS(1);
         return VectorizedStrictBinaryFunction<bitXorImpl>::evaluate<Type>(l, r);
+    }
+
+    /**
+     * @tparam : TYPE_TINYINT, TYPE_SMALLINT, TYPE_INT, TYPE_BIGINT, TYPE_LARGEINT
+     * @param: [TypeColumn, TypeColumn]
+     * @return: TypeColumn
+     */
+    template <PrimitiveType Type>
+    DEFINE_VECTORIZED_FN(bitShiftLeft) {
+        auto l = VECTORIZED_FN_ARGS(0);
+        auto r = VECTORIZED_FN_ARGS(1);
+        return VectorizedStrictBinaryFunction<bitShiftLeftImpl>::evaluate<Type>(l, r);
+    }
+
+    /**
+     * @tparam : TYPE_TINYINT, TYPE_SMALLINT, TYPE_INT, TYPE_BIGINT, TYPE_LARGEINT
+     * @param: [TypeColumn, TypeColumn]
+     * @return: TypeColumn
+     */
+    template <PrimitiveType Type>
+    DEFINE_VECTORIZED_FN(bitShiftRight) {
+        auto l = VECTORIZED_FN_ARGS(0);
+        auto r = VECTORIZED_FN_ARGS(1);
+        return VectorizedStrictBinaryFunction<bitShiftRightImpl>::evaluate<Type>(l, r);
+    }
+
+    /**
+     * @tparam : TYPE_TINYINT, TYPE_SMALLINT, TYPE_INT, TYPE_BIGINT, TYPE_LARGEINT
+     * @param: [TypeColumn, TypeColumn]
+     * @return: TypeColumn
+     */
+    template <PrimitiveType Type>
+    DEFINE_VECTORIZED_FN(bitShiftRightLogical) {
+        auto l = VECTORIZED_FN_ARGS(0);
+        auto r = VECTORIZED_FN_ARGS(1);
+        return VectorizedStrictBinaryFunction<bitShiftRightLogicalImpl>::evaluate<Type>(l, r);
     }
 
     /**

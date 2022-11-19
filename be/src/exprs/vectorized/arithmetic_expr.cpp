@@ -255,6 +255,12 @@ Expr* VectorizedArithmeticExprFactory::from_thrift(const starrocks::TExprNode& n
         SWITCH_INT_TYPE(BitOrOp);
     case TExprOpcode::BITXOR:
         SWITCH_INT_TYPE(BitXorOp);
+    case TExprOpcode::BIT_SHIFT_LEFT:
+        SWITCH_INT_TYPE(BitShiftLeftOp);
+    case TExprOpcode::BIT_SHIFT_RIGHT:
+        SWITCH_INT_TYPE(BitShiftRightOp);
+    case TExprOpcode::BIT_SHIFT_LEFT_LOGICAL:
+        SWITCH_INT_TYPE(BitShiftRightLogicalOp);    
 
 #undef CASE_FN
 

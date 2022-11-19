@@ -376,6 +376,9 @@ BITAND: '&';
 BITOR: '|';
 BITXOR: '^';
 BITNOT: '~';
+BIT_SHIFT_LEFT: '<<';
+BIT_SHIFT_RIGHT: '>>';
+BIT_SHIFT_RIGHT_LOGICAL: '>>>';
 
 ARROW: '->';
 AT: '@';
