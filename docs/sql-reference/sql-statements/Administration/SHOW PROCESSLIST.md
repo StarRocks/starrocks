@@ -31,19 +31,19 @@ SHOW [FULL] PROCESSLIST FROM 'fe_host';
 
 ## Return
 
-| Return              | Description                                                            |
-|---------------------|------------------------------------------------------------------------|
-| FeHost              | the hostname of frontend.                                              |
-| Id                  | Connection ID.                                                         |
-| User                | The name of the user who runs the operation.                           |
-| ClientHost          | The hostname of the client which runs the operation.                   |
-| Db                  | The name of the database where the operation is executed.              |
-| Command             | The type of the command.                                               |
+| Return        | Description                                                            |
+|---------------|------------------------------------------------------------------------|
+| Id            | Connection ID.                                                         |
+| User          | The name of the user who runs the operation.                           |
+| Host          | The hostname of the client which runs the operation.                   |
+| Db            | The name of the database where the operation is executed.              |
+| Command       | The type of the command.                                               |
 | ConnectionStartTime | Time when the connection starts.                                       |
-| Time                | The time (in second) since the operation has entered the current state. |
-| State               | The state of the operation.                                            |
-| Info                | The command that the operation is executing.                           |
-| IsPending           | Whether the operation is being queued.                                 |
+| Time          | The time (in second) since the operation has entered the current state. |
+| State         | The state of the operation.                                            |
+| Info          | The command that the operation is executing.                           |
+| IsPending     | Whether the operation is being queued.                                 |
+| FeHost        | the hostname of frontend.                                              |
 
 ## Usage note
 
@@ -55,33 +55,33 @@ Example 1: lists the operations state via the user `root`.
 
 ```Plain
 SHOW PROCESSLIST;
-+---------------+------+------+---------------------+------+---------+---------------------+------+-------+---------------------------+-----------+
-| FeHost        | Id   | User | ClientHost          | Db   | Command | ConnectionStartTime | Time | State | Info                      | IsPending |
-+---------------+------+------+---------------------+------+---------+---------------------+------+-------+---------------------------+-----------+
-| x.x.x.1       |    0 | root | x.x.x.x:xxxx        | ssb  | Query   | 2022-11-13 21:18:19 |    0 | OK    | show processlist          | false     |
-+---------------+------+------+---------------------+------+---------+---------------------+------+-------+---------------------------+-----------+
++------+------+---------------------+------+---------+---------------------+------+-------+---------------------------+-----------+---------------+
+| Id   | User | Host                | Db   | Command | ConnectionStartTime | Time | State | Info                      | IsPending | FeHost        |
++------+------+---------------------+------+---------+---------------------+------+-------+---------------------------+-----------+---------------+
+|    0 | root | x.x.x.x:xxxx        | ssb  | Query   | 2022-11-13 21:18:19 |    0 | OK    | show processlist          | false     | x.x.x.1       |
++------+------+---------------------+------+---------+---------------------+------+-------+---------------------------+-----------+---------------+
 ```
 
 Example 2: lists the operations state of all frontend via the user `root`.
 
 ```Plain
 SHOW PROCESSLIST FROM ALL;
-+---------------+------+------+---------------------+------+---------+---------------------+------+-------+---------------------------+-----------+
-| FeHost        | Id   | User | ClientHost          | Db   | Command | ConnectionStartTime | Time | State | Info                      | IsPending |
-+---------------+------+------+---------------------+------+---------+---------------------+------+-------+---------------------------+-----------+
-| x.x.x.1       |    0 | root | x.x.x.x:xxxx        | ssb  | Query   | 2022-11-13 21:18:19 |    0 | OK    | show processlist          | false     |
-+---------------+------+------+---------------------+------+---------+---------------------+------+-------+---------------------------+-----------+
-| x.x.x.2       |    0 | root | x.x.x.x:xxxx        | ssb  | Sleep   | 2022-11-13 21:19:00 |    0 | OK    | show processlist from all | false     |
-+---------------+------+------+---------------------+------+---------+---------------------+------+-------+---------------------------+-----------+
++------+------+---------------------+------+---------+---------------------+------+-------+---------------------------+-----------+---------------+
+| Id   | User | Host                | Db   | Command | ConnectionStartTime | Time | State | Info                      | IsPending | FeHost        |
++------+------+---------------------+------+---------+---------------------+------+-------+---------------------------+-----------+---------------+
+|    0 | root | x.x.x.x:xxxx        | ssb  | Query   | 2022-11-13 21:18:19 |    0 | OK    | show processlist          | false     | x.x.x.1       |
++------+------+---------------------+------+---------+---------------------+------+-------+---------------------------+-----------+---------------+
+|    0 | root | x.x.x.x:xxxx        | ssb  | Sleep   | 2022-11-13 21:19:00 |    0 | OK    | show processlist from all | false     | x.x.x.2       |
++------+------+---------------------+------+---------+---------------------+------+-------+---------------------------+-----------+---------------+
 ```
 
 Example 3: lists the operations state of specify frontend via the user `root`.
 
 ```Plain
 SHOW PROCESSLIST FROM 'x.x.x.1';
-+---------------+------+------+---------------------+------+---------+---------------------+------+-------+---------------------------+-----------+
-| FeHost        | Id   | User | ClientHost          | Db   | Command | ConnectionStartTime | Time | State | Info                      | IsPending |
-+---------------+------+------+---------------------+------+---------+---------------------+------+-------+---------------------------+-----------+
-| x.x.x.1       |    0 | root | x.x.x.x:xxxx        | ssb  | Query   | 2022-11-13 21:18:19 |    0 | OK    | show processlist          | false     |
-+---------------+------+------+---------------------+------+---------+---------------------+------+-------+---------------------------+-----------+
++------+------+---------------------+------+---------+---------------------+------+-------+---------------------------+-----------+---------------+
+| Id   | User | Host                | Db   | Command | ConnectionStartTime | Time | State | Info                      | IsPending | FeHost        |
++------+------+---------------------+------+---------+---------------------+------+-------+---------------------------+-----------+---------------+
+|    0 | root | x.x.x.x:xxxx        | ssb  | Query   | 2022-11-13 21:18:19 |    0 | OK    | show processlist          | false     | x.x.x.1       |
++------+------+---------------------+------+---------+---------------------+------+-------+---------------------------+-----------+---------------+
 ```
