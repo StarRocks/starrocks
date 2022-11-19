@@ -43,10 +43,9 @@ public class SessionAction extends WebBaseAction {
     private static final ArrayList<String> SESSION_TABLE_HEADER = Lists.newArrayList();
 
     static {
-        SESSION_TABLE_HEADER.add("FeHost");
         SESSION_TABLE_HEADER.add("Id");
         SESSION_TABLE_HEADER.add("User");
-        SESSION_TABLE_HEADER.add("ClientHost");
+        SESSION_TABLE_HEADER.add("Host");
         SESSION_TABLE_HEADER.add("Db");
         SESSION_TABLE_HEADER.add("Command");
         SESSION_TABLE_HEADER.add("ConnectionStartTime");
@@ -54,6 +53,7 @@ public class SessionAction extends WebBaseAction {
         SESSION_TABLE_HEADER.add("State");
         SESSION_TABLE_HEADER.add("Info");
         SESSION_TABLE_HEADER.add("IsPending");
+        SESSION_TABLE_HEADER.add("FeHost");
     }
 
     private boolean isShowAll;
@@ -113,5 +113,4 @@ public class SessionAction extends WebBaseAction {
         appendTableBody(buffer, rowSet);
         appendTableFooter(buffer);
     }
-
 }
