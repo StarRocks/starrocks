@@ -113,40 +113,40 @@ std::string DeleteConditionHandler::construct_sub_predicates(const TCondition& c
 
 bool DeleteConditionHandler::is_condition_value_valid(const TabletColumn& column, const TCondition& cond,
                                                       const string& value_str) {
-    FieldType field_type = column.type();
+    LogicalType field_type = column.type();
     bool valid_condition = false;
 
     if ("IS" == cond.condition_op && ("NULL" == value_str || "NOT NULL" == value_str)) {
         valid_condition = true;
-    } else if (field_type == OLAP_FIELD_TYPE_TINYINT) {
+    } else if (field_type == LOGICAL_TYPE_TINYINT) {
         valid_condition = valid_signed_number<int8_t>(value_str);
-    } else if (field_type == OLAP_FIELD_TYPE_SMALLINT) {
+    } else if (field_type == LOGICAL_TYPE_SMALLINT) {
         valid_condition = valid_signed_number<int16_t>(value_str);
-    } else if (field_type == OLAP_FIELD_TYPE_INT) {
+    } else if (field_type == LOGICAL_TYPE_INT) {
         valid_condition = valid_signed_number<int32_t>(value_str);
-    } else if (field_type == OLAP_FIELD_TYPE_BIGINT) {
+    } else if (field_type == LOGICAL_TYPE_BIGINT) {
         valid_condition = valid_signed_number<int64_t>(value_str);
-    } else if (field_type == OLAP_FIELD_TYPE_LARGEINT) {
+    } else if (field_type == LOGICAL_TYPE_LARGEINT) {
         valid_condition = valid_signed_number<int128_t>(value_str);
-    } else if (field_type == OLAP_FIELD_TYPE_UNSIGNED_TINYINT) {
+    } else if (field_type == LOGICAL_TYPE_UNSIGNED_TINYINT) {
         valid_condition = valid_unsigned_number<uint8_t>(value_str);
-    } else if (field_type == OLAP_FIELD_TYPE_UNSIGNED_SMALLINT) {
+    } else if (field_type == LOGICAL_TYPE_UNSIGNED_SMALLINT) {
         valid_condition = valid_unsigned_number<uint16_t>(value_str);
-    } else if (field_type == OLAP_FIELD_TYPE_UNSIGNED_INT) {
+    } else if (field_type == LOGICAL_TYPE_UNSIGNED_INT) {
         valid_condition = valid_unsigned_number<uint32_t>(value_str);
-    } else if (field_type == OLAP_FIELD_TYPE_UNSIGNED_BIGINT) {
+    } else if (field_type == LOGICAL_TYPE_UNSIGNED_BIGINT) {
         valid_condition = valid_unsigned_number<uint64_t>(value_str);
-    } else if (field_type == OLAP_FIELD_TYPE_DECIMAL || field_type == OLAP_FIELD_TYPE_DECIMAL_V2 ||
+    } else if (field_type == LOGICAL_TYPE_DECIMAL || field_type == LOGICAL_TYPE_DECIMAL_V2 ||
                is_decimalv3_field_type(field_type)) {
         valid_condition = valid_decimal(value_str, column.precision(), column.scale());
-    } else if (field_type == OLAP_FIELD_TYPE_CHAR || field_type == OLAP_FIELD_TYPE_VARCHAR) {
+    } else if (field_type == LOGICAL_TYPE_CHAR || field_type == LOGICAL_TYPE_VARCHAR) {
         if (value_str.size() <= column.length()) {
             valid_condition = true;
         }
-    } else if (field_type == OLAP_FIELD_TYPE_DATE || field_type == OLAP_FIELD_TYPE_DATE_V2 ||
-               field_type == OLAP_FIELD_TYPE_DATETIME || field_type == OLAP_FIELD_TYPE_TIMESTAMP) {
+    } else if (field_type == LOGICAL_TYPE_DATE || field_type == LOGICAL_TYPE_DATE_V2 ||
+               field_type == LOGICAL_TYPE_DATETIME || field_type == LOGICAL_TYPE_TIMESTAMP) {
         valid_condition = valid_datetime(value_str);
-    } else if (field_type == OLAP_FIELD_TYPE_BOOL) {
+    } else if (field_type == LOGICAL_TYPE_BOOL) {
         valid_condition = valid_bool(value_str);
     } else {
         LOG(WARNING) << "unknown field type " << field_type;
@@ -167,8 +167,8 @@ Status DeleteConditionHandler::check_condition_valid(const TabletSchema& schema,
     // Checks that the specified column is a key, is it type float or double.
     const TabletColumn& column = schema.column(field_index);
 
-    if ((!column.is_key() && schema.keys_type() != KeysType::DUP_KEYS) || column.type() == OLAP_FIELD_TYPE_DOUBLE ||
-        column.type() == OLAP_FIELD_TYPE_FLOAT) {
+    if ((!column.is_key() && schema.keys_type() != KeysType::DUP_KEYS) || column.type() == LOGICAL_TYPE_DOUBLE ||
+        column.type() == LOGICAL_TYPE_FLOAT) {
         LOG(WARNING) << "field is not key column, or storage model is not duplicate, or data type "
                         "is float or double.";
         return Status::InvalidArgument("Field is not key column");

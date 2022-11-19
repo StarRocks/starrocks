@@ -188,7 +188,7 @@ private:
 
 class PartitionInfo {
 public:
-    PartitionInfo() {}
+    PartitionInfo() = default;
 
     static Status from_thrift(ObjectPool* pool, const TRangePartition& t_partition, PartitionInfo* partition,
                               int32_t chunk_size);

@@ -6,9 +6,7 @@
 #include "exec/pipeline/source_operator.h"
 #include "exec/vectorized/olap_meta_scan_node.h"
 
-namespace starrocks {
-
-namespace pipeline {
+namespace starrocks::pipeline {
 
 class OlapMetaScanPrepareOperator final : public SourceOperator {
 public:
@@ -50,5 +48,4 @@ private:
     std::shared_ptr<OlapMetaScanContextFactory> _scan_ctx_factory;
 };
 
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline

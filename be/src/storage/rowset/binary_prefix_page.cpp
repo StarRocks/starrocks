@@ -100,7 +100,7 @@ faststring* BinaryPrefixPageBuilder::finish() {
     return &_buffer;
 }
 
-template <FieldType Type>
+template <LogicalType Type>
 const uint8_t* BinaryPrefixPageDecoder<Type>::_decode_value_lengths(const uint8_t* ptr, uint32_t* shared,
                                                                     uint32_t* non_shared) {
     if ((ptr = decode_varint32_ptr(ptr, _footer_start, shared)) == nullptr) {
@@ -115,7 +115,7 @@ const uint8_t* BinaryPrefixPageDecoder<Type>::_decode_value_lengths(const uint8_
     return ptr;
 }
 
-template <FieldType Type>
+template <LogicalType Type>
 Status BinaryPrefixPageDecoder<Type>::_read_next_value() {
     if (_cur_pos >= _num_values) {
         return Status::NotFound("no more value to read");
@@ -132,14 +132,14 @@ Status BinaryPrefixPageDecoder<Type>::_read_next_value() {
     return Status::OK();
 }
 
-template <FieldType Type>
+template <LogicalType Type>
 Status BinaryPrefixPageDecoder<Type>::_seek_to_restart_point(uint32_t restart_point_index) {
     _cur_pos = restart_point_index * _restart_point_internal;
     _next_ptr = _get_restart_point(restart_point_index);
     return _read_next_value();
 }
 
-template <FieldType Type>
+template <LogicalType Type>
 Status BinaryPrefixPageDecoder<Type>::init() {
     _cur_pos = 0;
     _next_ptr = reinterpret_cast<const uint8_t*>(_data.get_data());
@@ -154,7 +154,7 @@ Status BinaryPrefixPageDecoder<Type>::init() {
     return _read_next_value();
 }
 
-template <FieldType Type>
+template <LogicalType Type>
 Status BinaryPrefixPageDecoder<Type>::seek_to_position_in_page(uint32_t pos) {
     DCHECK(_parsed);
     DCHECK_LE(pos, _num_values);
@@ -174,7 +174,7 @@ Status BinaryPrefixPageDecoder<Type>::seek_to_position_in_page(uint32_t pos) {
     return Status::OK();
 }
 
-template <FieldType Type>
+template <LogicalType Type>
 Status BinaryPrefixPageDecoder<Type>::seek_at_or_after_value(const void* value, bool* exact_match) {
     DCHECK(_parsed);
     Slice target = *reinterpret_cast<const Slice*>(value);
@@ -212,7 +212,7 @@ Status BinaryPrefixPageDecoder<Type>::seek_at_or_after_value(const void* value, 
     }
 }
 
-template <FieldType Type>
+template <LogicalType Type>
 Status BinaryPrefixPageDecoder<Type>::_read_next_value_to_output(Slice prev, MemPool* mem_pool, Slice* output) {
     if (_cur_pos >= _num_values) {
         return Status::NotFound("no more value to read");
@@ -238,7 +238,7 @@ Status BinaryPrefixPageDecoder<Type>::_read_next_value_to_output(Slice prev, Mem
     return Status::OK();
 }
 
-template <FieldType Type>
+template <LogicalType Type>
 Status BinaryPrefixPageDecoder<Type>::_copy_current_to_output(MemPool* mem_pool, Slice* output) {
     output->size = _current_value.size();
     if (output->size > 0) {
@@ -251,7 +251,7 @@ Status BinaryPrefixPageDecoder<Type>::_copy_current_to_output(MemPool* mem_pool,
     return Status::OK();
 }
 
-template <FieldType Type>
+template <LogicalType Type>
 Status BinaryPrefixPageDecoder<Type>::_next_value(faststring* value) {
     if (_cur_pos >= _num_values) {
         return Status::NotFound("no more value to read");
@@ -269,7 +269,7 @@ Status BinaryPrefixPageDecoder<Type>::_next_value(faststring* value) {
     return Status::OK();
 }
 
-template <FieldType Type>
+template <LogicalType Type>
 Status BinaryPrefixPageDecoder<Type>::next_batch(size_t* n, vectorized::Column* dst) {
     vectorized::SparseRange read_range;
     uint32_t begin = current_index();
@@ -279,7 +279,7 @@ Status BinaryPrefixPageDecoder<Type>::next_batch(size_t* n, vectorized::Column* 
     return Status::OK();
 }
 
-template <FieldType Type>
+template <LogicalType Type>
 Status BinaryPrefixPageDecoder<Type>::next_batch(const vectorized::SparseRange& range, vectorized::Column* dst) {
     DCHECK(_parsed);
     if (PREDICT_FALSE(_cur_pos >= _num_values)) {
@@ -288,7 +288,7 @@ Status BinaryPrefixPageDecoder<Type>::next_batch(const vectorized::SparseRange& 
     size_t to_read = std::min(static_cast<size_t>(range.span_size()), static_cast<size_t>(_num_values - _cur_pos));
 
     vectorized::SparseRangeIterator iter = range.new_iterator();
-    if constexpr (Type == OLAP_FIELD_TYPE_CHAR) {
+    if constexpr (Type == LOGICAL_TYPE_CHAR) {
         while (to_read > 0) {
             seek_to_position_in_page(iter.begin());
             bool ok = dst->append_strings({_current_value});
@@ -317,7 +317,7 @@ Status BinaryPrefixPageDecoder<Type>::next_batch(const vectorized::SparseRange& 
     return Status::OK();
 }
 
-template class BinaryPrefixPageDecoder<OLAP_FIELD_TYPE_CHAR>;
-template class BinaryPrefixPageDecoder<OLAP_FIELD_TYPE_VARCHAR>;
+template class BinaryPrefixPageDecoder<LOGICAL_TYPE_CHAR>;
+template class BinaryPrefixPageDecoder<LOGICAL_TYPE_VARCHAR>;
 
 } // namespace starrocks

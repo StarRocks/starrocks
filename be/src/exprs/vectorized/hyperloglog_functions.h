@@ -4,8 +4,7 @@
 
 #include "exprs/vectorized/function_helper.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 class HyperloglogFunction {
 public:
     /**
@@ -37,5 +36,4 @@ public:
     DEFINE_VECTORIZED_FN(hll_empty);
 };
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

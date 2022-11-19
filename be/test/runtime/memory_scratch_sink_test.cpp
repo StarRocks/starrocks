@@ -51,7 +51,6 @@
 #include "runtime/primitive_type.h"
 #include "runtime/result_queue_mgr.h"
 #include "runtime/runtime_state.h"
-#include "runtime/thread_resource_mgr.h"
 #include "storage/options.h"
 #include "testutil/desc_tbl_builder.h"
 #include "util/blocking_queue.hpp"

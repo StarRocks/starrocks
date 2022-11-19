@@ -33,42 +33,43 @@
 
 namespace starrocks {
 
-FieldType TabletColumn::get_field_type_by_string(const std::string& type_str) {
+LogicalType TabletColumn::get_field_type_by_string(const std::string& type_str) {
     std::string upper_type_str = type_str;
     std::transform(type_str.begin(), type_str.end(), upper_type_str.begin(), ::toupper);
-    if (upper_type_str == "TINYINT") return OLAP_FIELD_TYPE_TINYINT;
-    if (upper_type_str == "SMALLINT") return OLAP_FIELD_TYPE_SMALLINT;
-    if (upper_type_str == "INT") return OLAP_FIELD_TYPE_INT;
-    if (upper_type_str == "BIGINT") return OLAP_FIELD_TYPE_BIGINT;
-    if (upper_type_str == "LARGEINT") return OLAP_FIELD_TYPE_LARGEINT;
-    if (upper_type_str == "UNSIGNED_TINYINT") return OLAP_FIELD_TYPE_UNSIGNED_TINYINT;
-    if (upper_type_str == "UNSIGNED_SMALLINT") return OLAP_FIELD_TYPE_UNSIGNED_SMALLINT;
-    if (upper_type_str == "UNSIGNED_INT") return OLAP_FIELD_TYPE_UNSIGNED_INT;
-    if (upper_type_str == "UNSIGNED_BIGINT") return OLAP_FIELD_TYPE_UNSIGNED_BIGINT;
-    if (upper_type_str == "FLOAT") return OLAP_FIELD_TYPE_FLOAT;
-    if (upper_type_str == "DISCRETE_DOUBLE") return OLAP_FIELD_TYPE_DISCRETE_DOUBLE;
-    if (upper_type_str == "DOUBLE") return OLAP_FIELD_TYPE_DOUBLE;
-    if (upper_type_str == "CHAR") return OLAP_FIELD_TYPE_CHAR;
-    if (upper_type_str == "DATE_V2") return OLAP_FIELD_TYPE_DATE_V2;
-    if (upper_type_str == "DATE") return OLAP_FIELD_TYPE_DATE;
-    if (upper_type_str == "DATETIME") return OLAP_FIELD_TYPE_DATETIME;
-    if (upper_type_str == "TIMESTAMP") return OLAP_FIELD_TYPE_TIMESTAMP;
-    if (upper_type_str == "DECIMAL_V2") return OLAP_FIELD_TYPE_DECIMAL_V2;
-    if (upper_type_str == "DECIMAL") return OLAP_FIELD_TYPE_DECIMAL;
-    if (upper_type_str == "VARCHAR") return OLAP_FIELD_TYPE_VARCHAR;
-    if (upper_type_str == "BOOLEAN") return OLAP_FIELD_TYPE_BOOL;
-    if (upper_type_str == "HLL") return OLAP_FIELD_TYPE_HLL;
-    if (upper_type_str == "STRUCT") return OLAP_FIELD_TYPE_STRUCT;
-    if (upper_type_str == "ARRAY") return OLAP_FIELD_TYPE_ARRAY;
-    if (upper_type_str == "MAP") return OLAP_FIELD_TYPE_MAP;
-    if (upper_type_str == "OBJECT") return OLAP_FIELD_TYPE_OBJECT;
-    if (upper_type_str == "PERCENTILE") return OLAP_FIELD_TYPE_PERCENTILE;
-    if (upper_type_str == "DECIMAL32") return OLAP_FIELD_TYPE_DECIMAL32;
-    if (upper_type_str == "DECIMAL64") return OLAP_FIELD_TYPE_DECIMAL64;
-    if (upper_type_str == "DECIMAL128") return OLAP_FIELD_TYPE_DECIMAL128;
-    if (upper_type_str == "JSON") return OLAP_FIELD_TYPE_JSON;
+    if (upper_type_str == "TINYINT") return LOGICAL_TYPE_TINYINT;
+    if (upper_type_str == "SMALLINT") return LOGICAL_TYPE_SMALLINT;
+    if (upper_type_str == "INT") return LOGICAL_TYPE_INT;
+    if (upper_type_str == "BIGINT") return LOGICAL_TYPE_BIGINT;
+    if (upper_type_str == "LARGEINT") return LOGICAL_TYPE_LARGEINT;
+    if (upper_type_str == "UNSIGNED_TINYINT") return LOGICAL_TYPE_UNSIGNED_TINYINT;
+    if (upper_type_str == "UNSIGNED_SMALLINT") return LOGICAL_TYPE_UNSIGNED_SMALLINT;
+    if (upper_type_str == "UNSIGNED_INT") return LOGICAL_TYPE_UNSIGNED_INT;
+    if (upper_type_str == "UNSIGNED_BIGINT") return LOGICAL_TYPE_UNSIGNED_BIGINT;
+    if (upper_type_str == "FLOAT") return LOGICAL_TYPE_FLOAT;
+    if (upper_type_str == "DISCRETE_DOUBLE") return LOGICAL_TYPE_DISCRETE_DOUBLE;
+    if (upper_type_str == "DOUBLE") return LOGICAL_TYPE_DOUBLE;
+    if (upper_type_str == "CHAR") return LOGICAL_TYPE_CHAR;
+    if (upper_type_str == "DATE_V2") return LOGICAL_TYPE_DATE_V2;
+    if (upper_type_str == "DATE") return LOGICAL_TYPE_DATE;
+    if (upper_type_str == "DATETIME") return LOGICAL_TYPE_DATETIME;
+    if (upper_type_str == "TIMESTAMP") return LOGICAL_TYPE_TIMESTAMP;
+    if (upper_type_str == "DECIMAL_V2") return LOGICAL_TYPE_DECIMAL_V2;
+    if (upper_type_str == "DECIMAL") return LOGICAL_TYPE_DECIMAL;
+    if (upper_type_str == "VARCHAR") return LOGICAL_TYPE_VARCHAR;
+    if (upper_type_str == "BOOLEAN") return LOGICAL_TYPE_BOOL;
+    if (upper_type_str == "HLL") return LOGICAL_TYPE_HLL;
+    if (upper_type_str == "STRUCT") return LOGICAL_TYPE_STRUCT;
+    if (upper_type_str == "ARRAY") return LOGICAL_TYPE_ARRAY;
+    if (upper_type_str == "MAP") return LOGICAL_TYPE_MAP;
+    if (upper_type_str == "OBJECT") return LOGICAL_TYPE_OBJECT;
+    if (upper_type_str == "PERCENTILE") return LOGICAL_TYPE_PERCENTILE;
+    if (upper_type_str == "DECIMAL32") return LOGICAL_TYPE_DECIMAL32;
+    if (upper_type_str == "DECIMAL64") return LOGICAL_TYPE_DECIMAL64;
+    if (upper_type_str == "DECIMAL128") return LOGICAL_TYPE_DECIMAL128;
+    if (upper_type_str == "JSON") return LOGICAL_TYPE_JSON;
+    if (upper_type_str == "VARBINARY") return LOGICAL_TYPE_VARBINARY;
     LOG(WARNING) << "invalid type string. [type='" << type_str << "']";
-    return OLAP_FIELD_TYPE_UNKNOWN;
+    return LOGICAL_TYPE_UNKNOWN;
 }
 
 FieldAggregationMethod TabletColumn::get_aggregation_type_by_string(const std::string& str) {
@@ -88,76 +89,78 @@ FieldAggregationMethod TabletColumn::get_aggregation_type_by_string(const std::s
     return OLAP_FIELD_AGGREGATION_UNKNOWN;
 }
 
-std::string TabletColumn::get_string_by_field_type(FieldType type) {
+std::string TabletColumn::get_string_by_field_type(LogicalType type) {
     switch (type) {
-    case OLAP_FIELD_TYPE_TINYINT:
+    case LOGICAL_TYPE_TINYINT:
         return "TINYINT";
-    case OLAP_FIELD_TYPE_UNSIGNED_TINYINT:
+    case LOGICAL_TYPE_UNSIGNED_TINYINT:
         return "UNSIGNED_TINYINT";
-    case OLAP_FIELD_TYPE_SMALLINT:
+    case LOGICAL_TYPE_SMALLINT:
         return "SMALLINT";
-    case OLAP_FIELD_TYPE_UNSIGNED_SMALLINT:
+    case LOGICAL_TYPE_UNSIGNED_SMALLINT:
         return "UNSIGNED_SMALLINT";
-    case OLAP_FIELD_TYPE_INT:
+    case LOGICAL_TYPE_INT:
         return "INT";
-    case OLAP_FIELD_TYPE_UNSIGNED_INT:
+    case LOGICAL_TYPE_UNSIGNED_INT:
         return "UNSIGNED_INT";
-    case OLAP_FIELD_TYPE_BIGINT:
+    case LOGICAL_TYPE_BIGINT:
         return "BIGINT";
-    case OLAP_FIELD_TYPE_LARGEINT:
+    case LOGICAL_TYPE_LARGEINT:
         return "LARGEINT";
-    case OLAP_FIELD_TYPE_UNSIGNED_BIGINT:
+    case LOGICAL_TYPE_UNSIGNED_BIGINT:
         return "UNSIGNED_BIGINT";
-    case OLAP_FIELD_TYPE_FLOAT:
+    case LOGICAL_TYPE_FLOAT:
         return "FLOAT";
-    case OLAP_FIELD_TYPE_DOUBLE:
+    case LOGICAL_TYPE_DOUBLE:
         return "DOUBLE";
-    case OLAP_FIELD_TYPE_DISCRETE_DOUBLE:
+    case LOGICAL_TYPE_DISCRETE_DOUBLE:
         return "DISCRETE_DOUBLE";
-    case OLAP_FIELD_TYPE_CHAR:
+    case LOGICAL_TYPE_CHAR:
         return "CHAR";
-    case OLAP_FIELD_TYPE_DATE:
+    case LOGICAL_TYPE_DATE:
         return "DATE";
-    case OLAP_FIELD_TYPE_DATE_V2:
+    case LOGICAL_TYPE_DATE_V2:
         return "DATE_V2";
-    case OLAP_FIELD_TYPE_DATETIME:
+    case LOGICAL_TYPE_DATETIME:
         return "DATETIME";
-    case OLAP_FIELD_TYPE_TIMESTAMP:
+    case LOGICAL_TYPE_TIMESTAMP:
         return "TIMESTAMP";
-    case OLAP_FIELD_TYPE_DECIMAL:
+    case LOGICAL_TYPE_DECIMAL:
         return "DECIMAL";
-    case OLAP_FIELD_TYPE_DECIMAL_V2:
+    case LOGICAL_TYPE_DECIMAL_V2:
         return "DECIMAL_V2";
-    case OLAP_FIELD_TYPE_DECIMAL32:
+    case LOGICAL_TYPE_DECIMAL32:
         return "DECIMAL32";
-    case OLAP_FIELD_TYPE_DECIMAL64:
+    case LOGICAL_TYPE_DECIMAL64:
         return "DECIMAL64";
-    case OLAP_FIELD_TYPE_DECIMAL128:
+    case LOGICAL_TYPE_DECIMAL128:
         return "DECIMAL128";
-    case OLAP_FIELD_TYPE_VARCHAR:
+    case LOGICAL_TYPE_VARCHAR:
         return "VARCHAR";
-    case OLAP_FIELD_TYPE_BOOL:
+    case LOGICAL_TYPE_BOOL:
         return "BOOLEAN";
-    case OLAP_FIELD_TYPE_HLL:
+    case LOGICAL_TYPE_HLL:
         return "HLL";
-    case OLAP_FIELD_TYPE_STRUCT:
+    case LOGICAL_TYPE_STRUCT:
         return "STRUCT";
-    case OLAP_FIELD_TYPE_ARRAY:
+    case LOGICAL_TYPE_ARRAY:
         return "ARRAY";
-    case OLAP_FIELD_TYPE_MAP:
+    case LOGICAL_TYPE_MAP:
         return "MAP";
-    case OLAP_FIELD_TYPE_OBJECT:
+    case LOGICAL_TYPE_OBJECT:
         return "OBJECT";
-    case OLAP_FIELD_TYPE_PERCENTILE:
+    case LOGICAL_TYPE_PERCENTILE:
         return "PERCENTILE";
-    case OLAP_FIELD_TYPE_JSON:
+    case LOGICAL_TYPE_JSON:
         return "JSON";
-    case OLAP_FIELD_TYPE_UNKNOWN:
+    case LOGICAL_TYPE_UNKNOWN:
         return "UNKNOWN";
-    case OLAP_FIELD_TYPE_NONE:
+    case LOGICAL_TYPE_NONE:
         return "NONE";
-    case OLAP_FIELD_TYPE_MAX_VALUE:
+    case LOGICAL_TYPE_MAX_VALUE:
         return "MAX_VALUE";
+    case LOGICAL_TYPE_VARBINARY:
+        return "VARBINARY";
     }
     return "";
 }
@@ -192,51 +195,52 @@ size_t TabletColumn::estimate_field_size(size_t variable_length) const {
     return TypeUtils::estimate_field_size(_type, variable_length);
 }
 
-uint32_t TabletColumn::get_field_length_by_type(FieldType type, uint32_t string_length) {
+uint32_t TabletColumn::get_field_length_by_type(LogicalType type, uint32_t string_length) {
     switch (type) {
-    case OLAP_FIELD_TYPE_UNKNOWN:
-    case OLAP_FIELD_TYPE_DISCRETE_DOUBLE:
-    case OLAP_FIELD_TYPE_STRUCT:
-    case OLAP_FIELD_TYPE_MAP:
-    case OLAP_FIELD_TYPE_NONE:
-    case OLAP_FIELD_TYPE_MAX_VALUE:
-    case OLAP_FIELD_TYPE_BOOL:
-    case OLAP_FIELD_TYPE_TINYINT:
-    case OLAP_FIELD_TYPE_UNSIGNED_TINYINT:
+    case LOGICAL_TYPE_UNKNOWN:
+    case LOGICAL_TYPE_DISCRETE_DOUBLE:
+    case LOGICAL_TYPE_STRUCT:
+    case LOGICAL_TYPE_MAP:
+    case LOGICAL_TYPE_NONE:
+    case LOGICAL_TYPE_MAX_VALUE:
+    case LOGICAL_TYPE_BOOL:
+    case LOGICAL_TYPE_TINYINT:
+    case LOGICAL_TYPE_UNSIGNED_TINYINT:
         return 1;
-    case OLAP_FIELD_TYPE_SMALLINT:
-    case OLAP_FIELD_TYPE_UNSIGNED_SMALLINT:
+    case LOGICAL_TYPE_SMALLINT:
+    case LOGICAL_TYPE_UNSIGNED_SMALLINT:
         return 2;
-    case OLAP_FIELD_TYPE_DATE:
+    case LOGICAL_TYPE_DATE:
         return 3;
-    case OLAP_FIELD_TYPE_INT:
-    case OLAP_FIELD_TYPE_UNSIGNED_INT:
-    case OLAP_FIELD_TYPE_FLOAT:
-    case OLAP_FIELD_TYPE_DATE_V2:
-    case OLAP_FIELD_TYPE_DECIMAL32:
+    case LOGICAL_TYPE_INT:
+    case LOGICAL_TYPE_UNSIGNED_INT:
+    case LOGICAL_TYPE_FLOAT:
+    case LOGICAL_TYPE_DATE_V2:
+    case LOGICAL_TYPE_DECIMAL32:
         return 4;
-    case OLAP_FIELD_TYPE_BIGINT:
-    case OLAP_FIELD_TYPE_UNSIGNED_BIGINT:
-    case OLAP_FIELD_TYPE_DOUBLE:
-    case OLAP_FIELD_TYPE_DATETIME:
-    case OLAP_FIELD_TYPE_TIMESTAMP:
-    case OLAP_FIELD_TYPE_DECIMAL64:
+    case LOGICAL_TYPE_BIGINT:
+    case LOGICAL_TYPE_UNSIGNED_BIGINT:
+    case LOGICAL_TYPE_DOUBLE:
+    case LOGICAL_TYPE_DATETIME:
+    case LOGICAL_TYPE_TIMESTAMP:
+    case LOGICAL_TYPE_DECIMAL64:
         return 8;
-    case OLAP_FIELD_TYPE_DECIMAL:
+    case LOGICAL_TYPE_DECIMAL:
         return 12;
-    case OLAP_FIELD_TYPE_LARGEINT:
-    case OLAP_FIELD_TYPE_OBJECT:
-    case OLAP_FIELD_TYPE_DECIMAL_V2:
-    case OLAP_FIELD_TYPE_DECIMAL128:
+    case LOGICAL_TYPE_LARGEINT:
+    case LOGICAL_TYPE_OBJECT:
+    case LOGICAL_TYPE_DECIMAL_V2:
+    case LOGICAL_TYPE_DECIMAL128:
         return 16;
-    case OLAP_FIELD_TYPE_CHAR:
+    case LOGICAL_TYPE_CHAR:
         return string_length;
-    case OLAP_FIELD_TYPE_VARCHAR:
-    case OLAP_FIELD_TYPE_HLL:
-    case OLAP_FIELD_TYPE_PERCENTILE:
-    case OLAP_FIELD_TYPE_JSON:
+    case LOGICAL_TYPE_VARCHAR:
+    case LOGICAL_TYPE_HLL:
+    case LOGICAL_TYPE_PERCENTILE:
+    case LOGICAL_TYPE_JSON:
+    case LOGICAL_TYPE_VARBINARY:
         return string_length + sizeof(OLAP_STRING_MAX_LENGTH);
-    case OLAP_FIELD_TYPE_ARRAY:
+    case LOGICAL_TYPE_ARRAY:
         return string_length;
     }
     return 0;
@@ -244,15 +248,15 @@ uint32_t TabletColumn::get_field_length_by_type(FieldType type, uint32_t string_
 
 TabletColumn::TabletColumn() = default;
 
-TabletColumn::TabletColumn(FieldAggregationMethod agg, FieldType type) : _aggregation(agg), _type(type) {}
+TabletColumn::TabletColumn(FieldAggregationMethod agg, LogicalType type) : _aggregation(agg), _type(type) {}
 
-TabletColumn::TabletColumn(FieldAggregationMethod agg, FieldType type, bool is_nullable)
+TabletColumn::TabletColumn(FieldAggregationMethod agg, LogicalType type, bool is_nullable)
         : _aggregation(agg), _type(type) {
     _length = get_type_info(type)->size();
     _set_flag(kIsNullableShift, is_nullable);
 }
 
-TabletColumn::TabletColumn(FieldAggregationMethod agg, FieldType type, bool is_nullable, int32_t unique_id,
+TabletColumn::TabletColumn(FieldAggregationMethod agg, LogicalType type, bool is_nullable, int32_t unique_id,
                            size_t length)
         : _unique_id(unique_id), _length(length), _aggregation(agg), _type(type) {
     _set_flag(kIsNullableShift, is_nullable);
@@ -531,7 +535,7 @@ std::unique_ptr<TabletSchema> TabletSchema::convert_to_format(DataFormatVersion 
         auto* col_pb = schema_pb.mutable_column(i);
         auto t1 = column(i).type();
         auto t2 = TypeUtils::convert_to_format(t1, format);
-        if (UNLIKELY(t2 == OLAP_FIELD_TYPE_UNKNOWN)) {
+        if (UNLIKELY(t2 == LOGICAL_TYPE_UNKNOWN)) {
             return nullptr;
         }
         if (t1 != t2) {

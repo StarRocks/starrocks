@@ -137,7 +137,7 @@ private:
 
 class OlapScanKeys {
 public:
-    OlapScanKeys() {}
+    OlapScanKeys() = default;
 
     template <class T>
     Status extend_scan_key(ColumnValueRange<T>& range, int32_t max_scan_key_num);
@@ -195,7 +195,6 @@ using ColumnValueRangeType =  std::variant<
         ColumnValueRange<StringValue>, // TODO: remove
         ColumnValueRange<Slice>,
         ColumnValueRange<DateTimeValue>,
-        ColumnValueRange<DecimalValue>,
         ColumnValueRange<DecimalV2Value>,
         ColumnValueRange<bool>,
         ColumnValueRange<vectorized::DateValue>,

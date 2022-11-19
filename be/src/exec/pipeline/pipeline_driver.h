@@ -82,7 +82,7 @@ static inline std::string ds_to_string(DriverState ds) {
 // for schedule.
 class DriverAcct {
 public:
-    DriverAcct() {}
+    DriverAcct() = default;
     //TODO:
     // get_level return a non-negative value that is a hint used by DriverQueue to choose
     // the target internal queue for put_back.
@@ -149,12 +149,11 @@ public:
     PipelineDriver(const Operators& operators, QueryContext* query_ctx, FragmentContext* fragment_ctx,
                    int32_t driver_id)
             : _operators(operators),
-              _first_unfinished(0),
+
               _query_ctx(query_ctx),
               _fragment_ctx(fragment_ctx),
               _source_node_id(operators[0]->get_plan_node_id()),
-              _driver_id(driver_id),
-              _state(DriverState::NOT_READY) {
+              _driver_id(driver_id) {
         _runtime_profile = std::make_shared<RuntimeProfile>(strings::Substitute("PipelineDriver (id=$0)", _driver_id));
         for (auto& op : _operators) {
             _operator_stages[op->get_id()] = OperatorStage::INIT;
@@ -399,7 +398,7 @@ private:
     bool _all_global_rf_ready_or_timeout = false;
     int64_t _global_rf_wait_timeout_ns = -1;
 
-    size_t _first_unfinished;
+    size_t _first_unfinished{0};
     QueryContext* _query_ctx;
     FragmentContext* _fragment_ctx;
     // The default value -1 means no source
@@ -410,7 +409,7 @@ private:
     // The first one is source operator
     MorselQueue* _morsel_queue = nullptr;
     // _state must be set by set_driver_state() to record state timer.
-    DriverState _state;
+    DriverState _state{DriverState::NOT_READY};
     std::shared_ptr<RuntimeProfile> _runtime_profile = nullptr;
 
     phmap::flat_hash_map<int32_t, OperatorStage> _operator_stages;

@@ -19,7 +19,7 @@ class HttpRequest;
 // used to register all streams in process so that other module can get this stream
 class StreamContextMgr {
 public:
-    StreamContextMgr() {}
+    StreamContextMgr() = default;
 
     ~StreamContextMgr() {
         std::lock_guard<std::mutex> l(_lock);

@@ -17,7 +17,7 @@ protected:
 
 // NOLINTNEXTLINE
 TEST_F(DefaultValueColumnIteratorTest, delete_after_column) {
-    TypeInfoPtr type_info = get_type_info(OLAP_FIELD_TYPE_INT);
+    TypeInfoPtr type_info = get_type_info(LOGICAL_TYPE_INT);
     DefaultValueColumnIterator iter(false, "", true, type_info, 0, 10);
 
     ColumnIteratorOptions opts;

@@ -78,58 +78,60 @@ static FieldAggregationMethod t_aggregation_type_to_field_aggregation_method(TAg
     return OLAP_FIELD_AGGREGATION_NONE;
 }
 
-static FieldType t_primitive_type_to_field_type(TPrimitiveType::type primitive_type, FieldTypeVersion v) {
+static LogicalType t_primitive_type_to_field_type(TPrimitiveType::type primitive_type, FieldTypeVersion v) {
     switch (primitive_type) {
     case TPrimitiveType::INVALID_TYPE:
     case TPrimitiveType::NULL_TYPE:
     case TPrimitiveType::BINARY:
     case TPrimitiveType::TIME:
-        return OLAP_FIELD_TYPE_UNKNOWN;
+        return LOGICAL_TYPE_UNKNOWN;
     case TPrimitiveType::BOOLEAN:
-        return OLAP_FIELD_TYPE_BOOL;
+        return LOGICAL_TYPE_BOOL;
     case TPrimitiveType::TINYINT:
-        return OLAP_FIELD_TYPE_TINYINT;
+        return LOGICAL_TYPE_TINYINT;
     case TPrimitiveType::SMALLINT:
-        return OLAP_FIELD_TYPE_SMALLINT;
+        return LOGICAL_TYPE_SMALLINT;
     case TPrimitiveType::INT:
-        return OLAP_FIELD_TYPE_INT;
+        return LOGICAL_TYPE_INT;
     case TPrimitiveType::BIGINT:
-        return OLAP_FIELD_TYPE_BIGINT;
+        return LOGICAL_TYPE_BIGINT;
     case TPrimitiveType::FLOAT:
-        return OLAP_FIELD_TYPE_FLOAT;
+        return LOGICAL_TYPE_FLOAT;
     case TPrimitiveType::DOUBLE:
-        return OLAP_FIELD_TYPE_DOUBLE;
+        return LOGICAL_TYPE_DOUBLE;
     case TPrimitiveType::DATE:
-        return v == FieldTypeVersion::kV1 ? OLAP_FIELD_TYPE_DATE : OLAP_FIELD_TYPE_DATE_V2;
+        return v == FieldTypeVersion::kV1 ? LOGICAL_TYPE_DATE : LOGICAL_TYPE_DATE_V2;
     case TPrimitiveType::DATETIME:
-        return v == FieldTypeVersion::kV1 ? OLAP_FIELD_TYPE_DATETIME : OLAP_FIELD_TYPE_TIMESTAMP;
+        return v == FieldTypeVersion::kV1 ? LOGICAL_TYPE_DATETIME : LOGICAL_TYPE_TIMESTAMP;
     case TPrimitiveType::CHAR:
-        return OLAP_FIELD_TYPE_CHAR;
+        return LOGICAL_TYPE_CHAR;
     case TPrimitiveType::LARGEINT:
-        return OLAP_FIELD_TYPE_LARGEINT;
+        return LOGICAL_TYPE_LARGEINT;
     case TPrimitiveType::VARCHAR:
-        return OLAP_FIELD_TYPE_VARCHAR;
+        return LOGICAL_TYPE_VARCHAR;
     case TPrimitiveType::HLL:
-        return OLAP_FIELD_TYPE_HLL;
+        return LOGICAL_TYPE_HLL;
     case TPrimitiveType::DECIMAL:
     case TPrimitiveType::DECIMALV2:
-        return v == FieldTypeVersion::kV1 ? OLAP_FIELD_TYPE_DECIMAL : OLAP_FIELD_TYPE_DECIMAL_V2;
+        return v == FieldTypeVersion::kV1 ? LOGICAL_TYPE_DECIMAL : LOGICAL_TYPE_DECIMAL_V2;
     case TPrimitiveType::DECIMAL32:
-        return OLAP_FIELD_TYPE_DECIMAL32;
+        return LOGICAL_TYPE_DECIMAL32;
     case TPrimitiveType::DECIMAL64:
-        return OLAP_FIELD_TYPE_DECIMAL64;
+        return LOGICAL_TYPE_DECIMAL64;
     case TPrimitiveType::DECIMAL128:
-        return OLAP_FIELD_TYPE_DECIMAL128;
+        return LOGICAL_TYPE_DECIMAL128;
     case TPrimitiveType::OBJECT:
-        return OLAP_FIELD_TYPE_OBJECT;
+        return LOGICAL_TYPE_OBJECT;
     case TPrimitiveType::PERCENTILE:
-        return OLAP_FIELD_TYPE_PERCENTILE;
+        return LOGICAL_TYPE_PERCENTILE;
     case TPrimitiveType::JSON:
-        return OLAP_FIELD_TYPE_JSON;
+        return LOGICAL_TYPE_JSON;
+    case TPrimitiveType::VARBINARY:
+        return LOGICAL_TYPE_VARCHAR;
     case TPrimitiveType::FUNCTION:
-        return OLAP_FIELD_TYPE_UNKNOWN;
+        return LOGICAL_TYPE_UNKNOWN;
     }
-    return OLAP_FIELD_TYPE_UNKNOWN;
+    return LOGICAL_TYPE_UNKNOWN;
 }
 
 static Status t_column_to_pb_column(int32_t unique_id, const TColumn& t_column, FieldTypeVersion v, ColumnPB* column_pb,
@@ -168,13 +170,13 @@ static Status t_column_to_pb_column(int32_t unique_id, const TColumn& t_column, 
         }
         TScalarType scalar = curr_type_node.scalar_type;
 
-        FieldType field_type = t_primitive_type_to_field_type(scalar.type, v);
+        LogicalType field_type = t_primitive_type_to_field_type(scalar.type, v);
         column_pb->set_type(TabletColumn::get_string_by_field_type(field_type));
         column_pb->set_length(TabletColumn::get_field_length_by_type(field_type, scalar.len));
         column_pb->set_index_length(column_pb->length());
         column_pb->set_frac(curr_type_node.scalar_type.scale);
         column_pb->set_precision(curr_type_node.scalar_type.precision);
-        if (field_type == OLAP_FIELD_TYPE_VARCHAR) {
+        if (field_type == LOGICAL_TYPE_VARCHAR) {
             int32_t index_len = depth == 0 && t_column.__isset.index_len ? t_column.index_len : 10;
             column_pb->set_index_length(index_len);
         }
@@ -187,8 +189,8 @@ static Status t_column_to_pb_column(int32_t unique_id, const TColumn& t_column, 
         return Status::OK();
     }
     case TTypeNodeType::ARRAY:
-        column_pb->set_type(TabletColumn::get_string_by_field_type(OLAP_FIELD_TYPE_ARRAY));
-        column_pb->set_length(TabletColumn::get_field_length_by_type(OLAP_FIELD_TYPE_ARRAY, sizeof(Collection)));
+        column_pb->set_type(TabletColumn::get_string_by_field_type(LOGICAL_TYPE_ARRAY));
+        column_pb->set_length(TabletColumn::get_field_length_by_type(LOGICAL_TYPE_ARRAY, sizeof(Collection)));
         column_pb->set_index_length(column_pb->length());
         return t_column_to_pb_column(kFakeUniqueId, t_column, v, column_pb->add_children_columns(), depth + 1);
     case TTypeNodeType::STRUCT:

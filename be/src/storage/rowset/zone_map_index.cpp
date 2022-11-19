@@ -60,7 +60,7 @@ struct ZoneMap {
     }
 };
 
-template <FieldType type>
+template <LogicalType type>
 class ZoneMapIndexWriterImpl final : public ZoneMapIndexWriter {
     using CppType = typename TypeTraits<type>::CppType;
 
@@ -100,7 +100,7 @@ private:
     uint64_t _estimated_size = 0;
 };
 
-template <FieldType type>
+template <LogicalType type>
 ZoneMapIndexWriterImpl<type>::ZoneMapIndexWriterImpl(Field* field) : _field(field) {
     _page_zone_map.min_value = _field->allocate_value(&_pool);
     _page_zone_map.max_value = _field->allocate_value(&_pool);
@@ -110,7 +110,7 @@ ZoneMapIndexWriterImpl<type>::ZoneMapIndexWriterImpl(Field* field) : _field(fiel
     _reset_zone_map(&_segment_zone_map);
 }
 
-template <FieldType type>
+template <LogicalType type>
 void ZoneMapIndexWriterImpl<type>::add_values(const void* values, size_t count) {
     if (count > 0) {
         _page_zone_map.has_not_null = true;
@@ -125,7 +125,7 @@ void ZoneMapIndexWriterImpl<type>::add_values(const void* values, size_t count) 
     }
 }
 
-template <FieldType type>
+template <LogicalType type>
 Status ZoneMapIndexWriterImpl<type>::flush() {
     // Update segment zone map.
     if (_field->compare(_segment_zone_map.min_value, _page_zone_map.min_value) > 0) {
@@ -156,7 +156,7 @@ Status ZoneMapIndexWriterImpl<type>::flush() {
 }
 
 struct ZoneMapIndexWriterBuilder {
-    template <FieldType ftype>
+    template <LogicalType ftype>
     std::unique_ptr<ZoneMapIndexWriter> operator()(Field* field) {
         return std::make_unique<ZoneMapIndexWriterImpl<ftype>>(field);
     }
@@ -166,7 +166,7 @@ std::unique_ptr<ZoneMapIndexWriter> ZoneMapIndexWriter::create(starrocks::Field*
     return field_type_dispatch_zonemap_index(field->type(), ZoneMapIndexWriterBuilder(), field);
 }
 
-template <FieldType type>
+template <LogicalType type>
 Status ZoneMapIndexWriterImpl<type>::finish(WritableFile* wfile, ColumnIndexMetaPB* index_meta) {
     index_meta->set_type(ZONE_MAP_INDEX);
     ZoneMapIndexPB* meta = index_meta->mutable_zone_map_index();
@@ -174,11 +174,11 @@ Status ZoneMapIndexWriterImpl<type>::finish(WritableFile* wfile, ColumnIndexMeta
     _segment_zone_map.to_proto(meta->mutable_segment_zone_map(), _field);
 
     // write out zone map for each data pages
-    TypeInfoPtr typeinfo = get_type_info(OLAP_FIELD_TYPE_OBJECT);
+    TypeInfoPtr typeinfo = get_type_info(LOGICAL_TYPE_OBJECT);
     IndexedColumnWriterOptions options;
     options.write_ordinal_index = true;
     options.write_value_index = false;
-    options.encoding = EncodingInfo::get_default_encoding(OLAP_FIELD_TYPE_OBJECT, false);
+    options.encoding = EncodingInfo::get_default_encoding(LOGICAL_TYPE_OBJECT, false);
     options.compression = NO_COMPRESSION; // currently not compressed
 
     IndexedColumnWriter writer(options, typeinfo, wfile);
@@ -222,7 +222,7 @@ Status ZoneMapIndexReader::_do_load(FileSystem* fs, const std::string& filename,
 
     _page_zone_maps.resize(reader.num_values());
 
-    auto column = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_VARCHAR, false);
+    auto column = ChunkHelper::column_from_field_type(LOGICAL_TYPE_VARCHAR, false);
     // read and cache all page zone maps
     for (int i = 0; i < reader.num_values(); ++i) {
         RETURN_IF_ERROR(iter->seek_to_ordinal(i));

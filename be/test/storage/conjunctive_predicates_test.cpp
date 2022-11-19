@@ -59,11 +59,11 @@ using PredicatePtr = std::unique_ptr<ColumnPredicate>;
 // NOLINTNEXTLINE
 TEST(ConjunctivePredicatesTest, test_evaluate) {
     SchemaPtr schema(new Schema());
-    auto c0_field = std::make_shared<Field>(0, "c0", OLAP_FIELD_TYPE_INT, true);
-    auto c1_field = std::make_shared<Field>(1, "c1", OLAP_FIELD_TYPE_CHAR, true);
-    auto c2_field = std::make_shared<Field>(2, "c2", OLAP_FIELD_TYPE_DATE_V2, true);
-    auto c3_field = std::make_shared<Field>(3, "c3", OLAP_FIELD_TYPE_TIMESTAMP, true);
-    auto c4_field = std::make_shared<Field>(4, "c4", OLAP_FIELD_TYPE_DECIMAL_V2, true);
+    auto c0_field = std::make_shared<Field>(0, "c0", LOGICAL_TYPE_INT, true);
+    auto c1_field = std::make_shared<Field>(1, "c1", LOGICAL_TYPE_CHAR, true);
+    auto c2_field = std::make_shared<Field>(2, "c2", LOGICAL_TYPE_DATE_V2, true);
+    auto c3_field = std::make_shared<Field>(3, "c3", LOGICAL_TYPE_TIMESTAMP, true);
+    auto c4_field = std::make_shared<Field>(4, "c4", LOGICAL_TYPE_DECIMAL_V2, true);
 
     schema->append(c0_field);
     schema->append(c1_field);
@@ -116,7 +116,7 @@ TEST(ConjunctivePredicatesTest, test_evaluate) {
 
     // c3 > '1991-01-01 00:00:00'
     {
-        PredicatePtr p0(new_column_gt_predicate(get_type_info(OLAP_FIELD_TYPE_TIMESTAMP), 3, "1991-01-01 00:00:00"));
+        PredicatePtr p0(new_column_gt_predicate(get_type_info(LOGICAL_TYPE_TIMESTAMP), 3, "1991-01-01 00:00:00"));
 
         ConjunctivePredicates conjuncts({p0.get()});
 
@@ -125,8 +125,8 @@ TEST(ConjunctivePredicatesTest, test_evaluate) {
     }
     // c3 > '1991-01-01 00:00:00' and c3 <= '1992-02-10 00:00:00'
     {
-        PredicatePtr p0(new_column_gt_predicate(get_type_info(OLAP_FIELD_TYPE_TIMESTAMP), 3, "1991-01-01 00:00:00"));
-        PredicatePtr p1(new_column_le_predicate(get_type_info(OLAP_FIELD_TYPE_TIMESTAMP), 3, "1992-02-10 00:00:00"));
+        PredicatePtr p0(new_column_gt_predicate(get_type_info(LOGICAL_TYPE_TIMESTAMP), 3, "1991-01-01 00:00:00"));
+        PredicatePtr p1(new_column_le_predicate(get_type_info(LOGICAL_TYPE_TIMESTAMP), 3, "1992-02-10 00:00:00"));
 
         ConjunctivePredicates conjuncts({p0.get(), p1.get()});
 
@@ -135,8 +135,8 @@ TEST(ConjunctivePredicatesTest, test_evaluate) {
     }
     // c2 < '2020-01-01' and c0 is not null
     {
-        PredicatePtr p0(new_column_lt_predicate(get_type_info(OLAP_FIELD_TYPE_DATE_V2), 2, "2020-01-01"));
-        PredicatePtr p1(new_column_null_predicate(get_type_info(OLAP_FIELD_TYPE_INT), 0, false));
+        PredicatePtr p0(new_column_lt_predicate(get_type_info(LOGICAL_TYPE_DATE_V2), 2, "2020-01-01"));
+        PredicatePtr p1(new_column_null_predicate(get_type_info(LOGICAL_TYPE_INT), 0, false));
 
         ConjunctivePredicates conjuncts({p0.get(), p1.get()});
 
@@ -145,10 +145,9 @@ TEST(ConjunctivePredicatesTest, test_evaluate) {
     }
     // c0 is not null and c1 >= 'aaa' and c4 in ('0.000001', '0.000003')
     {
-        PredicatePtr p0(new_column_null_predicate(get_type_info(OLAP_FIELD_TYPE_INT), 0, false));
-        PredicatePtr p1(new_column_ge_predicate(get_type_info(OLAP_FIELD_TYPE_CHAR), 1, "aaa"));
-        PredicatePtr p2(
-                new_column_in_predicate(get_type_info(OLAP_FIELD_TYPE_DECIMAL_V2), 4, {"0.000001", "0.000003"}));
+        PredicatePtr p0(new_column_null_predicate(get_type_info(LOGICAL_TYPE_INT), 0, false));
+        PredicatePtr p1(new_column_ge_predicate(get_type_info(LOGICAL_TYPE_CHAR), 1, "aaa"));
+        PredicatePtr p2(new_column_in_predicate(get_type_info(LOGICAL_TYPE_DECIMAL_V2), 4, {"0.000001", "0.000003"}));
 
         ConjunctivePredicates conjuncts({p0.get(), p1.get(), p2.get()});
 
@@ -160,9 +159,9 @@ TEST(ConjunctivePredicatesTest, test_evaluate) {
 // NOLINTNEXTLINE
 TEST(ConjunctivePredicatesTest, test_evaluate_and) {
     SchemaPtr schema(new Schema());
-    schema->append(std::make_shared<Field>(0, "c0", OLAP_FIELD_TYPE_INT, true));
+    schema->append(std::make_shared<Field>(0, "c0", LOGICAL_TYPE_INT, true));
 
-    auto c0 = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_INT, true);
+    auto c0 = ChunkHelper::column_from_field_type(LOGICAL_TYPE_INT, true);
 
     // +------+
     // | c0   |
@@ -183,7 +182,7 @@ TEST(ConjunctivePredicatesTest, test_evaluate_and) {
         std::vector<uint8_t> selection(chunk->num_rows(), 0);
 
         // c0 is not null
-        PredicatePtr p0(new_column_null_predicate(get_type_info(OLAP_FIELD_TYPE_INT), 0, false));
+        PredicatePtr p0(new_column_null_predicate(get_type_info(LOGICAL_TYPE_INT), 0, false));
 
         ConjunctivePredicates conjuncts({p0.get()});
 
@@ -199,9 +198,9 @@ TEST(ConjunctivePredicatesTest, test_evaluate_and) {
 // NOLINTNEXTLINE
 TEST(ConjunctivePredicatesTest, test_evaluate_or) {
     SchemaPtr schema(new Schema());
-    schema->append(std::make_shared<Field>(0, "c0", OLAP_FIELD_TYPE_INT, true));
+    schema->append(std::make_shared<Field>(0, "c0", LOGICAL_TYPE_INT, true));
 
-    auto c0 = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_INT, true);
+    auto c0 = ChunkHelper::column_from_field_type(LOGICAL_TYPE_INT, true);
 
     // +------+
     // | c0   |
@@ -222,7 +221,7 @@ TEST(ConjunctivePredicatesTest, test_evaluate_or) {
         std::vector<uint8_t> selection(chunk->num_rows(), 0);
 
         // c0 is not null
-        PredicatePtr p0(new_column_null_predicate(get_type_info(OLAP_FIELD_TYPE_INT), 0, false));
+        PredicatePtr p0(new_column_null_predicate(get_type_info(LOGICAL_TYPE_INT), 0, false));
 
         ConjunctivePredicates conjuncts({p0.get()});
 

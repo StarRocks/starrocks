@@ -43,7 +43,7 @@ BinaryDictPageBuilder::BinaryDictPageBuilder(const PageBuilderOptions& options)
           _dict_builder(nullptr),
           _encoding_type(DICT_ENCODING) {
     // initially use DICT_ENCODING
-    _data_page_builder = std::make_unique<BitshufflePageBuilder<OLAP_FIELD_TYPE_INT>>(options);
+    _data_page_builder = std::make_unique<BitshufflePageBuilder<LOGICAL_TYPE_INT>>(options);
     _data_page_builder->reserve_head(BINARY_DICT_PAGE_HEADER_SIZE);
     PageBuilderOptions dict_builder_options;
     dict_builder_options.data_page_size = _options.dict_page_size;
@@ -65,7 +65,7 @@ uint32_t BinaryDictPageBuilder::add(const uint8_t* vals, uint32_t count) {
         const auto* src = reinterpret_cast<const Slice*>(vals);
         uint32_t value_code = -1;
         // Manually devirtualization.
-        auto* code_page = down_cast<BitshufflePageBuilder<OLAP_FIELD_TYPE_INT>*>(_data_page_builder.get());
+        auto* code_page = down_cast<BitshufflePageBuilder<LOGICAL_TYPE_INT>*>(_data_page_builder.get());
 
         if (_data_page_builder->count() == 0) {
             auto s = unaligned_load<Slice>(src);
@@ -162,7 +162,7 @@ bool BinaryDictPageBuilder::is_valid_global_dict(const vectorized::GlobalDictMap
     return true;
 }
 
-template <FieldType Type>
+template <LogicalType Type>
 BinaryDictPageDecoder<Type>::BinaryDictPageDecoder(Slice data, const PageDecoderOptions& options)
         : _data(data),
           _options(options),
@@ -170,7 +170,7 @@ BinaryDictPageDecoder<Type>::BinaryDictPageDecoder(Slice data, const PageDecoder
           _parsed(false),
           _encoding_type(UNKNOWN_ENCODING) {}
 
-template <FieldType Type>
+template <LogicalType Type>
 Status BinaryDictPageDecoder<Type>::init() {
     CHECK(!_parsed);
     if (_data.size < BINARY_DICT_PAGE_HEADER_SIZE) {
@@ -183,10 +183,10 @@ Status BinaryDictPageDecoder<Type>::init() {
     if (_encoding_type == DICT_ENCODING) {
         // copy the codewords into a temporary buffer first
         // And then copy the strings corresponding to the codewords to the destination buffer
-        const TypeInfoPtr& type_info = get_type_info(OLAP_FIELD_TYPE_INT);
+        const TypeInfoPtr& type_info = get_type_info(LOGICAL_TYPE_INT);
 
         RETURN_IF_ERROR(ColumnVectorBatch::create(0, false, type_info, nullptr, &_batch));
-        _data_page_decoder = std::make_unique<BitShufflePageDecoder<OLAP_FIELD_TYPE_INT>>(_data, _options);
+        _data_page_decoder = std::make_unique<BitShufflePageDecoder<LOGICAL_TYPE_INT>>(_data, _options);
     } else if (_encoding_type == PLAIN_ENCODING) {
         DCHECK_EQ(_encoding_type, PLAIN_ENCODING);
         _data_page_decoder.reset(new BinaryPlainPageDecoder<Type>(_data, _options));
@@ -200,18 +200,18 @@ Status BinaryDictPageDecoder<Type>::init() {
     return Status::OK();
 }
 
-template <FieldType Type>
+template <LogicalType Type>
 Status BinaryDictPageDecoder<Type>::seek_to_position_in_page(uint32_t pos) {
     return _data_page_decoder->seek_to_position_in_page(pos);
 }
 
-template <FieldType Type>
+template <LogicalType Type>
 void BinaryDictPageDecoder<Type>::set_dict_decoder(PageDecoder* dict_decoder) {
     _dict_decoder = down_cast<BinaryPlainPageDecoder<Type>*>(dict_decoder);
     _max_value_legth = _dict_decoder->max_value_length();
 }
 
-template <FieldType Type>
+template <LogicalType Type>
 Status BinaryDictPageDecoder<Type>::next_batch(size_t* n, vectorized::Column* dst) {
     vectorized::SparseRange read_range;
     uint32_t begin = current_index();
@@ -221,7 +221,7 @@ Status BinaryDictPageDecoder<Type>::next_batch(size_t* n, vectorized::Column* ds
     return Status::OK();
 }
 
-template <FieldType Type>
+template <LogicalType Type>
 Status BinaryDictPageDecoder<Type>::next_batch(const vectorized::SparseRange& range, vectorized::Column* dst) {
     if (_encoding_type == PLAIN_ENCODING) {
         return _data_page_decoder->next_batch(range, dst);
@@ -230,18 +230,18 @@ Status BinaryDictPageDecoder<Type>::next_batch(const vectorized::SparseRange& ra
     DCHECK(_parsed);
     DCHECK(_dict_decoder != nullptr) << "dict decoder pointer is nullptr";
     if (_vec_code_buf == nullptr) {
-        _vec_code_buf = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_INT, false);
+        _vec_code_buf = ChunkHelper::column_from_field_type(LOGICAL_TYPE_INT, false);
     }
     _vec_code_buf->resize(0);
     _vec_code_buf->reserve(range.span_size());
 
     RETURN_IF_ERROR(_data_page_decoder->next_batch(range, _vec_code_buf.get()));
     size_t nread = _vec_code_buf->size();
-    using cast_type = CppTypeTraits<OLAP_FIELD_TYPE_INT>::CppType;
+    using cast_type = CppTypeTraits<LOGICAL_TYPE_INT>::CppType;
     const auto* codewords = reinterpret_cast<const cast_type*>(_vec_code_buf->raw_data());
     std::vector<Slice> slices;
     slices.reserve(nread);
-    if constexpr (Type == OLAP_FIELD_TYPE_CHAR) {
+    if constexpr (Type == LOGICAL_TYPE_CHAR) {
         for (int i = 0; i < nread; ++i) {
             Slice element = _dict_decoder->string_at_index(codewords[i]);
             // Strip trailing '\x00'
@@ -258,21 +258,21 @@ Status BinaryDictPageDecoder<Type>::next_batch(const vectorized::SparseRange& ra
     return Status::OK();
 }
 
-template <FieldType Type>
+template <LogicalType Type>
 Status BinaryDictPageDecoder<Type>::next_dict_codes(size_t* n, vectorized::Column* dst) {
     DCHECK(_encoding_type == DICT_ENCODING);
     DCHECK(_parsed);
     return _data_page_decoder->next_batch(n, dst);
 }
 
-template <FieldType Type>
+template <LogicalType Type>
 Status BinaryDictPageDecoder<Type>::next_dict_codes(const vectorized::SparseRange& range, vectorized::Column* dst) {
     DCHECK(_encoding_type == DICT_ENCODING);
     DCHECK(_parsed);
     return _data_page_decoder->next_batch(range, dst);
 }
 
-template class BinaryDictPageDecoder<OLAP_FIELD_TYPE_CHAR>;
-template class BinaryDictPageDecoder<OLAP_FIELD_TYPE_VARCHAR>;
+template class BinaryDictPageDecoder<LOGICAL_TYPE_CHAR>;
+template class BinaryDictPageDecoder<LOGICAL_TYPE_VARCHAR>;
 
 } // namespace starrocks

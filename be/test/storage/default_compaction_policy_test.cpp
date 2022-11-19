@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
-#include "storage/cumulative_compaction.h"
+#include "storage/default_compaction_policy.h"
 
 #include <fmt/format.h>
 #include <gtest/gtest.h>
@@ -16,7 +16,7 @@
 #include "storage/compaction_context.h"
 #include "storage/compaction_manager.h"
 #include "storage/compaction_utils.h"
-#include "storage/default_compaction_policy.h"
+#include "storage/cumulative_compaction.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
@@ -35,7 +35,7 @@ public:
             _engine = nullptr;
         }
     }
-    void write_new_version(TabletMetaSharedPtr tablet_meta) {
+    void write_new_version(const TabletMetaSharedPtr& tablet_meta) {
         RowsetWriterContext rowset_writer_context;
         create_rowset_writer_context(&rowset_writer_context, _version);
         _version++;
@@ -52,7 +52,7 @@ public:
         tablet_meta->add_rs_meta(src_rowset->rowset_meta());
     }
 
-    void write_specify_version(TabletSharedPtr tablet, int64_t version) {
+    void write_specify_version(const TabletSharedPtr& tablet, int64_t version) {
         RowsetWriterContext rowset_writer_context;
         create_rowset_writer_context(&rowset_writer_context, version);
         std::unique_ptr<RowsetWriter> rowset_writer;
@@ -68,7 +68,7 @@ public:
         ASSERT_TRUE(tablet->add_rowset(src_rowset).ok());
     }
 
-    void write_delete_version(TabletMetaSharedPtr tablet_meta, int64_t version) {
+    void write_delete_version(const TabletMetaSharedPtr& tablet_meta, int64_t version) {
         RowsetWriterContext rowset_writer_context;
         create_rowset_writer_context(&rowset_writer_context, version);
         std::unique_ptr<RowsetWriter> rowset_writer;
@@ -177,13 +177,13 @@ public:
         CHECK_OK(writer->add_chunk(*chunk));
     }
 
-    void init_compaction_context(TabletSharedPtr tablet) {
+    void init_compaction_context(const TabletSharedPtr& tablet) {
         std::unique_ptr<CompactionContext> compaction_context = std::make_unique<CompactionContext>();
         compaction_context->policy = std::make_unique<DefaultCumulativeBaseCompactionPolicy>(tablet.get());
         tablet->set_compaction_context(compaction_context);
     }
 
-    Status compact(TabletSharedPtr tablet) {
+    Status compact(const TabletSharedPtr& tablet) {
         if (!tablet->need_compaction()) {
             LOG(WARNING) << "no need compact";
             return Status::InternalError("no need compact");

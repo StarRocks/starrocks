@@ -27,6 +27,7 @@
 #include "types/hll.h"
 #include "util/date_func.h"
 #include "util/json.h"
+#include "util/mysql_global.h"
 #include "velocypack/Iterator.h"
 
 namespace starrocks::vectorized {
@@ -1471,11 +1472,11 @@ Expr* VectorizedCastExprFactory::from_thrift(ObjectPool* pool, const TExprNode& 
         }
     }
 
-    if (to_type == TYPE_VARCHAR || to_type == TYPE_CHAR) {
+    if (to_type == TYPE_CHAR) {
         to_type = TYPE_VARCHAR;
     }
 
-    if (from_type == TYPE_VARCHAR || from_type == TYPE_CHAR) {
+    if (from_type == TYPE_CHAR) {
         from_type = TYPE_VARCHAR;
     }
 
@@ -1590,6 +1591,10 @@ Expr* VectorizedCastExprFactory::from_thrift(ObjectPool* pool, const TExprNode& 
                 return nullptr;
             }
         }
+    } else if (is_binary_type(from_type) || is_binary_type(to_type)) {
+        LOG(WARNING) << "vectorized engine not support from type: " << type_to_string(from_type)
+                     << ", to type: " << type_to_string(to_type);
+        return nullptr;
     } else {
         switch (to_type) {
             CASE_TO_TYPE(TYPE_BOOLEAN, allow_throw_exception);

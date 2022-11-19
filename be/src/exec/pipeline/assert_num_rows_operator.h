@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <utility>
+
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
 #include "exec/pipeline/source_operator.h"
@@ -56,10 +58,10 @@ private:
 class AssertNumRowsOperatorFactory final : public OperatorFactory {
 public:
     AssertNumRowsOperatorFactory(int32_t id, int32_t plan_node_id, int64_t desired_num_rows,
-                                 const std::string& subquery_string, TAssertion::type assertion)
+                                 std::string subquery_string, TAssertion::type assertion)
             : OperatorFactory(id, "assert_num_rows_sink", plan_node_id),
               _desired_num_rows(desired_num_rows),
-              _subquery_string(subquery_string),
+              _subquery_string(std::move(subquery_string)),
               _assertion(assertion) {}
 
     ~AssertNumRowsOperatorFactory() override = default;

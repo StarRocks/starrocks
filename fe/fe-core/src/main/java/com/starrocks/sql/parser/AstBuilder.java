@@ -64,6 +64,7 @@ import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.analysis.UserDesc;
 import com.starrocks.analysis.UserIdentity;
+import com.starrocks.analysis.VarBinaryLiteral;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.ArrayType;
@@ -4644,6 +4645,17 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new StringLiteral(escapeBackSlash(quotedString));
     }
 
+    @Override
+    public ParseNode visitBinary(StarRocksParser.BinaryContext context) {
+        String quotedText;
+        if (context.BINARY_SINGLE_QUOTED_TEXT() != null) {
+            quotedText = context.BINARY_SINGLE_QUOTED_TEXT().getText();
+        } else {
+            quotedText = context.BINARY_DOUBLE_QUOTED_TEXT().getText();
+        }
+        return new VarBinaryLiteral(quotedText.substring(2, quotedText.length() - 1));
+    }
+
     private static String escapeBackSlash(String str) {
         StringWriter writer = new StringWriter();
         int strLen = str.length();
@@ -5233,6 +5245,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             ScalarType type = ScalarType.createHllType();
             type.setAssignedStrLenInColDefinition();
             return type;
+        } else if (context.VARBINARY() != null) {
+            ScalarType type = ScalarType.createVarbinary(length);
+            if (length != -1) {
+                type.setAssignedStrLenInColDefinition();
+            }
+            return type;
         } else {
             return ScalarType.createType(context.getChild(0).getText());
         }
@@ -5406,3 +5424,4 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return dataSourceProperties;
     }
 }
+

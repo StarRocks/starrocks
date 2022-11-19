@@ -7,8 +7,7 @@
 
 #include "exec/vectorized/hash_joiner.h"
 
-namespace starrocks {
-namespace pipeline {
+namespace starrocks::pipeline {
 
 using HashJoiner = starrocks::vectorized::HashJoiner;
 using HashJoinerPtr = std::shared_ptr<HashJoiner>;
@@ -65,5 +64,4 @@ private:
     HashJoiners _read_only_probers;
 };
 
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline

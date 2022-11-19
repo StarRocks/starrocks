@@ -7,8 +7,7 @@
 #include "exprs/expr.h"
 #include "gen_cpp/Exprs_types.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 // place holder for function call. representing an input column for function call.
 // now it was only used in global dictionary optimization
 class PlaceHolderRef final : public Expr {
@@ -25,5 +24,4 @@ public:
 private:
     SlotId _column_id;
 };
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

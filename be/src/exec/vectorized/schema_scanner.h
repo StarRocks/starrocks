@@ -43,7 +43,7 @@ struct SchemaScannerParam {
 
     SchemaScannerParam()
 
-    {}
+            = default;
 };
 
 // virtual scanner for all schema table

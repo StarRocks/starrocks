@@ -223,7 +223,7 @@ public final class SqlToScalarOperatorTranslator {
         // Example: the Deque is [1,2,3,4]
         // when push(5) -> [5,1,2,3,4]
         // then pop() -> [1,2,3,4]
-        // -1 means select all fields in the same level, 0 means select 0th field in this level
+        // Empty usedSubFieldPos means select all fields
         private final Deque<Integer> usedSubFieldPos = new ArrayDeque<>();
         public Visitor(ExpressionMapping expressionMapping, ColumnRefFactory columnRefFactory,
                        List<ColumnRefOperator> correlation, ConnectContext session,
@@ -272,15 +272,20 @@ public final class SqlToScalarOperatorTranslator {
                 Preconditions.checkArgument(node.getUsedStructFieldPos() != null, "StructType SlotRef must have" +
                         "an non-empty usedStructFiledPos!");
                 Preconditions.checkArgument(node.getUsedStructFieldPos().size() > 0);
-                List<Integer> usedStructFieldPos = node.getUsedStructFieldPos();
-                returnValue = SubfieldOperator.build(columnRefOperator, node.getOriginType(), usedStructFieldPos);
+                returnValue = SubfieldOperator.build(columnRefOperator, node.getOriginType(), node.getUsedStructFieldPos());
 
                 for (int i = node.getUsedStructFieldPos().size() - 1; i >= 0; i--) {
                     usedSubFieldPos.push(node.getUsedStructFieldPos().get(i));
                 }
-            }
 
-            columnRefOperator.addUsedSubfieldPos(ImmutableList.copyOf(usedSubFieldPos));
+                columnRefOperator.addUsedSubfieldPos(ImmutableList.copyOf(usedSubFieldPos));
+
+                for (int i = 0; i < node.getUsedStructFieldPos().size(); i++) {
+                    usedSubFieldPos.pop();
+                }
+            } else {
+                columnRefOperator.addUsedSubfieldPos(ImmutableList.copyOf(usedSubFieldPos));
+            }
             return returnValue;
         }
 
@@ -296,7 +301,10 @@ public final class SqlToScalarOperatorTranslator {
 
         @Override
         public ScalarOperator visitFieldReference(FieldReference node, Context context) {
-            return expressionMapping.getColumnRefWithIndex(node.getFieldIndex());
+            ColumnRefOperator scalarOperator = expressionMapping.getColumnRefWithIndex(node.getFieldIndex());
+            // Consider a Table [a:int, b:int], for SELECT * FROM tbl, a and b will be FieldReference, not SlotRef.
+            scalarOperator.addUsedSubfieldPos(ImmutableList.copyOf(usedSubFieldPos));
+            return scalarOperator;
         }
 
         @Override
@@ -627,6 +635,8 @@ public final class SqlToScalarOperatorTranslator {
                 return ConstantOperator.createVarchar((String) value);
             } else if (type.isChar()) {
                 return ConstantOperator.createChar((String) value);
+            } else if (type.isBinaryType()) {
+                return ConstantOperator.createBinary((byte[]) value, type);
             } else {
                 throw new UnsupportedOperationException("nonsupport constant type");
             }

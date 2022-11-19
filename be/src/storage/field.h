@@ -32,6 +32,7 @@
 #include "storage/tablet_schema.h"
 #include "storage/types.h"
 #include "storage/utils.h"
+#include "types/logical_type.h"
 #include "util/hash_util.hpp"
 #include "util/slice.h"
 
@@ -49,8 +50,8 @@ public:
               _index_size(column.index_length()),
               _length(column.length()),
               _is_nullable(column.is_nullable()) {
-        DCHECK(column.type() != OLAP_FIELD_TYPE_DECIMAL32 && column.type() != OLAP_FIELD_TYPE_DECIMAL64 &&
-               column.type() != OLAP_FIELD_TYPE_DECIMAL128);
+        DCHECK(column.type() != LOGICAL_TYPE_DECIMAL32 && column.type() != LOGICAL_TYPE_DECIMAL64 &&
+               column.type() != LOGICAL_TYPE_DECIMAL128);
     }
 
     Field(const TabletColumn& column, std::shared_ptr<TypeInfo>&& type_info)
@@ -104,7 +105,7 @@ public:
         return ss.str();
     }
 
-    FieldType type() const { return _type_info->type(); }
+    LogicalType type() const { return _type_info->type(); }
     const TypeInfoPtr& type_info() const { return _type_info; }
     bool is_nullable() const { return _is_nullable; }
 
@@ -125,9 +126,9 @@ public:
 
     std::string to_zone_map_string(const char* value) const {
         switch (type()) {
-        case OLAP_FIELD_TYPE_DECIMAL32:
-        case OLAP_FIELD_TYPE_DECIMAL64:
-        case OLAP_FIELD_TYPE_DECIMAL128:
+        case LOGICAL_TYPE_DECIMAL32:
+        case LOGICAL_TYPE_DECIMAL64:
+        case LOGICAL_TYPE_DECIMAL128:
             return get_decimal_zone_map_string(type_info().get(), value);
         default:
             return type_info()->to_string(value);
@@ -167,7 +168,7 @@ protected:
 
 class CharField : public Field {
 public:
-    explicit CharField() {}
+    explicit CharField() = default;
     explicit CharField(const TabletColumn& column) : Field(column) {}
 
     char* allocate_value(MemPool* pool) const override { return Field::allocate_string_value(pool); }
@@ -181,7 +182,7 @@ public:
 
 class VarcharField : public Field {
 public:
-    explicit VarcharField() {}
+    explicit VarcharField() = default;
     explicit VarcharField(const TabletColumn& column) : Field(column) {}
 
     char* allocate_value(MemPool* pool) const override { return Field::allocate_string_value(pool); }
@@ -195,19 +196,19 @@ public:
 
 class BitmapAggField : public Field {
 public:
-    explicit BitmapAggField() {}
+    explicit BitmapAggField() = default;
     explicit BitmapAggField(const TabletColumn& column) : Field(column) {}
 };
 
 class HllAggField : public Field {
 public:
-    explicit HllAggField() {}
+    explicit HllAggField() = default;
     explicit HllAggField(const TabletColumn& column) : Field(column) {}
 };
 
 class PercentileAggField : public Field {
 public:
-    PercentileAggField() {}
+    PercentileAggField() = default;
     explicit PercentileAggField(const TabletColumn& column) : Field(column) {}
 };
 
@@ -217,19 +218,19 @@ public:
         // for key column
         if (column.is_key()) {
             switch (column.type()) {
-            case OLAP_FIELD_TYPE_CHAR:
+            case LOGICAL_TYPE_CHAR:
                 return new CharField(column);
-            case OLAP_FIELD_TYPE_VARCHAR:
+            case LOGICAL_TYPE_VARCHAR:
                 return new VarcharField(column);
-            case OLAP_FIELD_TYPE_ARRAY: {
+            case LOGICAL_TYPE_ARRAY: {
                 std::unique_ptr<Field> item_field(FieldFactory::create(column.subcolumn(0)));
                 auto* local = new Field(column);
                 local->add_sub_field(std::move(item_field));
                 return local;
             }
-            case OLAP_FIELD_TYPE_DECIMAL32:
-            case OLAP_FIELD_TYPE_DECIMAL64:
-            case OLAP_FIELD_TYPE_DECIMAL128:
+            case LOGICAL_TYPE_DECIMAL32:
+            case LOGICAL_TYPE_DECIMAL64:
+            case LOGICAL_TYPE_DECIMAL128:
                 return new Field(column, get_decimal_type_info(column.type(), column.precision(), column.scale()));
             default:
                 return new Field(column);
@@ -245,19 +246,19 @@ public:
         case OLAP_FIELD_AGGREGATION_REPLACE:
         case OLAP_FIELD_AGGREGATION_REPLACE_IF_NOT_NULL:
             switch (column.type()) {
-            case OLAP_FIELD_TYPE_CHAR:
+            case LOGICAL_TYPE_CHAR:
                 return new CharField(column);
-            case OLAP_FIELD_TYPE_VARCHAR:
+            case LOGICAL_TYPE_VARCHAR:
                 return new VarcharField(column);
-            case OLAP_FIELD_TYPE_ARRAY: {
+            case LOGICAL_TYPE_ARRAY: {
                 std::unique_ptr<Field> item_field(FieldFactory::create(column.subcolumn(0)));
                 std::unique_ptr<Field> local = std::make_unique<Field>(column);
                 local->add_sub_field(std::move(item_field));
                 return local.release();
             }
-            case OLAP_FIELD_TYPE_DECIMAL32:
-            case OLAP_FIELD_TYPE_DECIMAL64:
-            case OLAP_FIELD_TYPE_DECIMAL128:
+            case LOGICAL_TYPE_DECIMAL32:
+            case LOGICAL_TYPE_DECIMAL64:
+            case LOGICAL_TYPE_DECIMAL128:
                 return new Field(column, get_decimal_type_info(column.type(), column.precision(), column.scale()));
             default:
                 return new Field(column);
@@ -276,7 +277,7 @@ public:
         return nullptr;
     }
 
-    static Field* create_by_type(const FieldType& type) {
+    static Field* create_by_type(const LogicalType& type) {
         TabletColumn column(OLAP_FIELD_AGGREGATION_NONE, type);
         return create(column);
     }

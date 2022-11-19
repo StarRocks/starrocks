@@ -20,7 +20,7 @@ namespace starrocks::vectorized {
 // [2] "RK" -> false
 //
 
-template <FieldType field_type>
+template <LogicalType field_type>
 class DictConjuctPredicateOperator {
 public:
     static constexpr bool skip_null = false;
@@ -73,9 +73,9 @@ private:
 // used in low_card dict code
 ColumnPredicate* new_column_dict_conjuct_predicate(const TypeInfoPtr& type_info, ColumnId id,
                                                    std::vector<uint8_t> dict_mapping) {
-    DCHECK(type_info->type() == OLAP_FIELD_TYPE_INT);
-    if (type_info->type() == OLAP_FIELD_TYPE_INT) {
-        return new ColumnOperatorPredicate<OLAP_FIELD_TYPE_INT, LowCardDictColumn, DictConjuctPredicateOperator,
+    DCHECK(type_info->type() == LOGICAL_TYPE_INT);
+    if (type_info->type() == LOGICAL_TYPE_INT) {
+        return new ColumnOperatorPredicate<LOGICAL_TYPE_INT, LowCardDictColumn, DictConjuctPredicateOperator,
                                            decltype(dict_mapping)>(type_info, id, std::move(dict_mapping));
     }
 

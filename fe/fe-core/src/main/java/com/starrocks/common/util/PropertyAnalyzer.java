@@ -212,8 +212,8 @@ public class PropertyAnalyzer {
             } catch (NumberFormatException e) {
                 throw new AnalysisException("Partition TTL Number: " + e.getMessage());
             }
-            if (partitionTimeToLive <= 0) {
-                partitionTimeToLive = INVALID;
+            if (partitionTimeToLive <= 0 && partitionTimeToLive != INVALID) {
+                throw new AnalysisException("Illegal Partition TTL Number: " + partitionTimeToLive);
             }
             properties.remove(PROPERTIES_PARTITION_TTL_NUMBER);
         }
@@ -232,8 +232,8 @@ public class PropertyAnalyzer {
             } catch (NumberFormatException e) {
                 throw new AnalysisException("Auto Refresh Partitions Limit: " + e.getMessage());
             }
-            if (autoRefreshPartitionsLimit <= 0) {
-                autoRefreshPartitionsLimit = INVALID;
+            if (autoRefreshPartitionsLimit <= 0 && autoRefreshPartitionsLimit != INVALID) {
+                throw new AnalysisException("Illegal Auto Refresh Partitions Limit: " + autoRefreshPartitionsLimit);
             }
             properties.remove(PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT);
         }
@@ -248,8 +248,8 @@ public class PropertyAnalyzer {
             } catch (NumberFormatException e) {
                 throw new AnalysisException("Partition Refresh Number: " + e.getMessage());
             }
-            if (partitionRefreshNumber <= 0) {
-                partitionRefreshNumber = INVALID;
+            if (partitionRefreshNumber <= 0 && partitionRefreshNumber != INVALID) {
+                throw new AnalysisException("Illegal Partition Refresh Number: " + partitionRefreshNumber);
             }
             properties.remove(PROPERTIES_PARTITION_REFRESH_NUMBER);
         }

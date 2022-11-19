@@ -91,7 +91,7 @@ public class Table extends MetaObject implements Writable {
     @SerializedName(value = "createTime")
     protected long createTime;
     /*
-     *  fullSchema and nameToColumn should contains all columns, both visible and shadow.
+     *  fullSchema and nameToColumn should contain all columns, both visible and shadow.
      *  eg. for OlapTable, when doing schema change, there will be some shadow columns which are not visible
      *      to query but visible to load process.
      *  If you want to get all visible columns, you should call getBaseSchema() method, which is override in

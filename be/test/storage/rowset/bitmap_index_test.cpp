@@ -58,7 +58,7 @@ protected:
         ASSERT_OK((*reader)->new_iterator(iter));
     }
 
-    template <FieldType type>
+    template <LogicalType type>
     void write_index_file(std::string& filename, const void* values, size_t value_count, size_t null_count,
                           ColumnIndexMetaPB* meta) {
         TypeInfoPtr type_info = get_type_info(type);
@@ -89,7 +89,7 @@ TEST_F(BitmapIndexTest, test_invert) {
 
     std::string file_name = kTestDir + "/invert";
     ColumnIndexMetaPB meta;
-    write_index_file<OLAP_FIELD_TYPE_INT>(file_name, val, num_uint8_rows, 0, &meta);
+    write_index_file<LOGICAL_TYPE_INT>(file_name, val, num_uint8_rows, 0, &meta);
     {
         std::unique_ptr<RandomAccessFile> rfile;
         BitmapIndexReader* reader = nullptr;
@@ -143,7 +143,7 @@ TEST_F(BitmapIndexTest, test_invert_2) {
 
     std::string file_name = kTestDir + "/invert2";
     ColumnIndexMetaPB meta;
-    write_index_file<OLAP_FIELD_TYPE_INT>(file_name, val, num_uint8_rows, 0, &meta);
+    write_index_file<LOGICAL_TYPE_INT>(file_name, val, num_uint8_rows, 0, &meta);
 
     {
         BitmapIndexReader* reader = nullptr;
@@ -178,7 +178,7 @@ TEST_F(BitmapIndexTest, test_multi_pages) {
 
     std::string file_name = kTestDir + "/mul";
     ColumnIndexMetaPB meta;
-    write_index_file<OLAP_FIELD_TYPE_BIGINT>(file_name, val, num_uint8_rows, 0, &meta);
+    write_index_file<LOGICAL_TYPE_BIGINT>(file_name, val, num_uint8_rows, 0, &meta);
     {
         BitmapIndexReader* reader = nullptr;
         BitmapIndexIterator* iter = nullptr;
@@ -209,7 +209,7 @@ TEST_F(BitmapIndexTest, test_null) {
 
     std::string file_name = kTestDir + "/null";
     ColumnIndexMetaPB meta;
-    write_index_file<OLAP_FIELD_TYPE_BIGINT>(file_name, val, num_uint8_rows, 30, &meta);
+    write_index_file<LOGICAL_TYPE_BIGINT>(file_name, val, num_uint8_rows, 30, &meta);
     {
         BitmapIndexReader* reader = nullptr;
         BitmapIndexIterator* iter = nullptr;
@@ -234,7 +234,7 @@ TEST_F(BitmapIndexTest, test_concurrent_load) {
 
     std::string file_name = kTestDir + "/null";
     ColumnIndexMetaPB meta;
-    write_index_file<OLAP_FIELD_TYPE_BIGINT>(file_name, val, num_uint8_rows, 30, &meta);
+    write_index_file<LOGICAL_TYPE_BIGINT>(file_name, val, num_uint8_rows, 30, &meta);
 
     auto reader = std::make_unique<BitmapIndexReader>();
     std::atomic<int> count{0};

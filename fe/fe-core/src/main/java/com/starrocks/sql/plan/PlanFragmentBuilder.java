@@ -943,6 +943,8 @@ public class PlanFragmentBuilder {
                     icebergScanNode.getConjuncts()
                             .add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
                 }
+
+                icebergScanNode.preProcessIcebergPredicate(predicates);
                 icebergScanNode.getScanRangeLocations();
                 //set slot for equality delete file
                 icebergScanNode.appendEqualityColumns(node, columnRefFactory, context);

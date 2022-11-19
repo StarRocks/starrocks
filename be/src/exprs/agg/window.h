@@ -139,7 +139,7 @@ class RowNumberWindowFunction final : public WindowFunction<RowNumberState> {
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
                     size_t end) const override {
         DCHECK_GT(end, start);
-        Int64Column* column = down_cast<Int64Column*>(dst);
+        auto* column = down_cast<Int64Column*>(dst);
         column->get_data()[start] = this->data(state).cur_positon;
     }
 
@@ -173,7 +173,7 @@ class RankWindowFunction final : public WindowFunction<RankState> {
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
                     size_t end) const override {
         DCHECK_GT(end, start);
-        Int64Column* column = down_cast<Int64Column*>(dst);
+        auto* column = down_cast<Int64Column*>(dst);
         for (size_t i = start; i < end; ++i) {
             column->get_data()[i] = this->data(state).rank;
         }
@@ -205,7 +205,7 @@ class DenseRankWindowFunction final : public WindowFunction<DenseRankState> {
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
                     size_t end) const override {
         DCHECK_GT(end, start);
-        Int64Column* column = down_cast<Int64Column*>(dst);
+        auto* column = down_cast<Int64Column*>(dst);
         for (size_t i = start; i < end; ++i) {
             column->get_data()[i] = this->data(state).rank;
         }
@@ -470,7 +470,7 @@ class FirstValueWindowFunction<PT, Slice, StringPTGuard<PT>> final : public Wind
         const Column* data_column = ColumnHelper::get_data_column(columns[0]);
         const auto* column = down_cast<const BinaryColumn*>(data_column);
         Slice slice = column->get_slice(frame_start);
-        const uint8_t* p = reinterpret_cast<const uint8_t*>(slice.data);
+        const auto* p = reinterpret_cast<const uint8_t*>(slice.data);
         this->data(state).buffer.insert(this->data(state).buffer.end(), p, p + slice.size);
         this->data(state).has_value = true;
     }
@@ -510,7 +510,7 @@ class LastValueWindowFunction<PT, Slice, StringPTGuard<PT>> final : public Windo
         const Column* data_column = ColumnHelper::get_data_column(columns[0]);
         const auto* column = down_cast<const BinaryColumn*>(data_column);
         Slice slice = column->get_slice(frame_end - 1);
-        const uint8_t* p = reinterpret_cast<const uint8_t*>(slice.data);
+        const auto* p = reinterpret_cast<const uint8_t*>(slice.data);
         this->data(state).buffer.clear();
         this->data(state).buffer.insert(this->data(state).buffer.end(), p, p + slice.size);
     }
@@ -546,7 +546,7 @@ class LeadLagWindowFunction<PT, Slice, StringPTGuard<PT>> final : public WindowF
         } else {
             this->data(state).default_value.clear();
             Slice slice = default_column->get(0).get<Slice>();
-            const uint8_t* p = reinterpret_cast<const uint8_t*>(slice.data);
+            const auto* p = reinterpret_cast<const uint8_t*>(slice.data);
             this->data(state).default_value.insert(this->data(state).default_value.end(), p, p + slice.size);
         }
     }
@@ -573,7 +573,7 @@ class LeadLagWindowFunction<PT, Slice, StringPTGuard<PT>> final : public WindowF
         const Column* data_column = ColumnHelper::get_data_column(columns[0]);
         const auto* column = down_cast<const BinaryColumn*>(data_column);
         Slice slice = column->get_slice(frame_end - 1);
-        const uint8_t* p = reinterpret_cast<const uint8_t*>(slice.data);
+        const auto* p = reinterpret_cast<const uint8_t*>(slice.data);
         this->data(state).value.insert(this->data(state).value.end(), p, p + slice.size);
     }
 

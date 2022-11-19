@@ -67,9 +67,9 @@ struct TypeDescriptor {
     // Only set if type == TYPE_MAP || type == TYPE_STRUCT.
     std::vector<bool> selected_fields;
 
-    TypeDescriptor() {}
+    TypeDescriptor() = default;
 
-    explicit TypeDescriptor(PrimitiveType type) : type(type), len(-1), precision(-1), scale(-1) {}
+    explicit TypeDescriptor(PrimitiveType type) : type(type) {}
 
     static TypeDescriptor create_char_type(int len) {
         TypeDescriptor ret;
@@ -244,7 +244,7 @@ struct TypeDescriptor {
 
     inline bool is_string_type() const {
         return type == TYPE_VARCHAR || type == TYPE_CHAR || type == TYPE_HLL || type == TYPE_OBJECT ||
-               type == TYPE_PERCENTILE;
+               type == TYPE_PERCENTILE || type == TYPE_VARBINARY;
     }
 
     inline bool is_date_type() const { return type == TYPE_DATE || type == TYPE_DATETIME; }
@@ -255,11 +255,6 @@ struct TypeDescriptor {
 
     inline bool is_decimal_type() const {
         return (type == TYPE_DECIMAL || type == TYPE_DECIMALV2 || is_decimalv3_type());
-    }
-
-    inline bool is_var_len_string_type() const {
-        return type == TYPE_VARCHAR || type == TYPE_HLL || type == TYPE_CHAR || type == TYPE_OBJECT ||
-               type == TYPE_PERCENTILE;
     }
 
     inline bool is_complex_type() const { return type == TYPE_STRUCT || type == TYPE_ARRAY || type == TYPE_MAP; }

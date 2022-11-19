@@ -128,7 +128,7 @@ void encode_key(std::string* buf, const RowType& row, size_t num_keys) {
 class ShortKeyIndexBuilder {
 public:
     ShortKeyIndexBuilder(uint32_t segment_id, uint32_t num_rows_per_block)
-            : _segment_id(segment_id), _num_rows_per_block(num_rows_per_block), _num_items(0) {}
+            : _segment_id(segment_id), _num_rows_per_block(num_rows_per_block) {}
 
     Status add_item(const Slice& key);
 
@@ -139,7 +139,7 @@ public:
 private:
     uint32_t _segment_id;
     uint32_t _num_rows_per_block;
-    uint32_t _num_items;
+    uint32_t _num_items{0};
 
     faststring _key_buf;
     faststring _offset_buf;
@@ -208,7 +208,7 @@ private:
 //      auto iter = decoder.lower_bound(key);
 class ShortKeyIndexDecoder {
 public:
-    ShortKeyIndexDecoder() {}
+    ShortKeyIndexDecoder() = default;
 
     // client should assure that body is available when this class is used
     Status parse(const Slice& body, const ShortKeyFooterPB& footer);

@@ -88,7 +88,7 @@ protected:
         return std::make_shared<Segment>(Segment::private_type(0), fs, fname, 1, _dummy_segment_schema.get());
     }
 
-    template <FieldType type, EncodingTypePB encoding, uint32_t version>
+    template <LogicalType type, EncodingTypePB encoding, uint32_t version>
     void test_nullable_data(const vectorized::Column& src, const std::string& null_encoding = "0",
                             const std::string& null_ratio = "0") {
         config::set_config("null_encoding", null_encoding);
@@ -114,7 +114,7 @@ protected:
             writer_opts.meta->set_column_id(0);
             writer_opts.meta->set_unique_id(0);
             writer_opts.meta->set_type(type);
-            if (type == OLAP_FIELD_TYPE_CHAR || type == OLAP_FIELD_TYPE_VARCHAR) {
+            if (type == LOGICAL_TYPE_CHAR || type == LOGICAL_TYPE_VARCHAR) {
                 writer_opts.meta->set_length(128);
             } else {
                 writer_opts.meta->set_length(0);
@@ -125,9 +125,9 @@ protected:
             writer_opts.need_zone_map = true;
 
             TabletColumn column(OLAP_FIELD_AGGREGATION_NONE, type);
-            if (type == OLAP_FIELD_TYPE_VARCHAR) {
+            if (type == LOGICAL_TYPE_VARCHAR) {
                 column = create_varchar_key(1, true, 128);
-            } else if (type == OLAP_FIELD_TYPE_CHAR) {
+            } else if (type == LOGICAL_TYPE_CHAR) {
                 column = create_char_key(1, true, 128);
             }
             ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(writer_opts, &column, wfile.get()));
@@ -244,7 +244,7 @@ protected:
         }
     }
 
-    template <FieldType type>
+    template <LogicalType type>
     void test_read_default_value(string value, void* result) {
         using Type = typename TypeTraits<type>::CppType;
         TypeInfoPtr type_info = get_type_info(type);
@@ -268,11 +268,11 @@ protected:
                 st = iter.next_batch(&rows_read, column.get());
                 ASSERT_TRUE(st.ok());
                 for (int j = 0; j < rows_read; ++j) {
-                    if (type == OLAP_FIELD_TYPE_CHAR) {
+                    if (type == LOGICAL_TYPE_CHAR) {
                         ASSERT_EQ(*(string*)result, reinterpret_cast<const Slice*>(column->raw_data())[j].to_string())
                                 << "j:" << j;
-                    } else if (type == OLAP_FIELD_TYPE_VARCHAR || type == OLAP_FIELD_TYPE_HLL ||
-                               type == OLAP_FIELD_TYPE_OBJECT) {
+                    } else if (type == LOGICAL_TYPE_VARCHAR || type == LOGICAL_TYPE_HLL ||
+                               type == LOGICAL_TYPE_OBJECT) {
                         ASSERT_EQ(value, reinterpret_cast<const Slice*>(column->raw_data())[j].to_string())
                                 << "j:" << j;
                     } else {
@@ -294,12 +294,12 @@ protected:
                     st = iter.next_batch(&rows_read, column.get());
                     ASSERT_TRUE(st.ok());
                     for (int j = 0; j < rows_read; ++j) {
-                        if (type == OLAP_FIELD_TYPE_CHAR) {
+                        if (type == LOGICAL_TYPE_CHAR) {
                             ASSERT_EQ(*(string*)result,
                                       reinterpret_cast<const Slice*>(column->raw_data())[j].to_string())
                                     << "j:" << j;
-                        } else if (type == OLAP_FIELD_TYPE_VARCHAR || type == OLAP_FIELD_TYPE_HLL ||
-                                   type == OLAP_FIELD_TYPE_OBJECT) {
+                        } else if (type == LOGICAL_TYPE_VARCHAR || type == LOGICAL_TYPE_HLL ||
+                                   type == LOGICAL_TYPE_OBJECT) {
                             ASSERT_EQ(value, reinterpret_cast<const Slice*>(column->raw_data())[j].to_string());
                         } else {
                             ASSERT_EQ(*(Type*)result, reinterpret_cast<const Type*>(column->raw_data())[j]);
@@ -351,7 +351,7 @@ protected:
             writer_opts.meta = &meta;
             writer_opts.meta->set_column_id(0);
             writer_opts.meta->set_unique_id(0);
-            writer_opts.meta->set_type(OLAP_FIELD_TYPE_ARRAY);
+            writer_opts.meta->set_type(LOGICAL_TYPE_ARRAY);
             writer_opts.meta->set_length(0);
             writer_opts.meta->set_encoding(DEFAULT_ENCODING);
             writer_opts.meta->set_compression(starrocks::LZ4_FRAME);
@@ -420,7 +420,7 @@ protected:
         }
     }
 
-    template <FieldType type>
+    template <LogicalType type>
     vectorized::ColumnPtr numeric_data(int null_ratio) {
         using CppType = typename CppTypeTraits<type>::CppType;
         auto col = ChunkHelper::column_from_field_type(type, true);
@@ -442,7 +442,7 @@ protected:
         static std::string s1(4, 'a');
         static std::string s2(4, 'b');
         size_t count = 128 * 1024 / 4;
-        auto col = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_VARCHAR, true);
+        auto col = ChunkHelper::column_from_field_type(LOGICAL_TYPE_VARCHAR, true);
         auto nc = down_cast<vectorized::NullableColumn*>(col.get());
         nc->reserve(count);
         down_cast<vectorized::BinaryColumn*>(nc->data_column().get())->get_data().reserve(s1.size() * count);
@@ -468,7 +468,7 @@ protected:
         std::string s7("gbcdefghijklmnopqrstuvwxyz");
         std::string s8("hbcdefghijklmnopqrstuvwxyz");
 
-        auto col = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_VARCHAR, true);
+        auto col = ChunkHelper::column_from_field_type(LOGICAL_TYPE_VARCHAR, true);
         size_t count = (128 * 1024 / s1.size()) / 8 * 8;
         auto nc = down_cast<vectorized::NullableColumn*>(col.get());
         nc->reserve(count);
@@ -495,7 +495,7 @@ protected:
 
     vectorized::ColumnPtr date_values(int null_ratio) {
         size_t count = 4 * 1024 * 1024 / sizeof(vectorized::DateValue);
-        auto col = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_DATE_V2, true);
+        auto col = ChunkHelper::column_from_field_type(LOGICAL_TYPE_DATE_V2, true);
         vectorized::DateValue value = vectorized::DateValue::create(2020, 10, 1);
         for (size_t i = 0; i < count; i++) {
             CHECK_EQ(1, col->append_numbers(&value, sizeof(value)));
@@ -510,7 +510,7 @@ protected:
 
     vectorized::ColumnPtr datetime_values(int null_ratio) {
         size_t count = 4 * 1024 * 1024 / sizeof(vectorized::TimestampValue);
-        auto col = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_TIMESTAMP, true);
+        auto col = ChunkHelper::column_from_field_type(LOGICAL_TYPE_TIMESTAMP, true);
         vectorized::TimestampValue value = vectorized::TimestampValue::create(2020, 10, 1, 10, 20, 1);
         for (size_t i = 0; i < count; i++) {
             CHECK_EQ(1, col->append_numbers(&value, sizeof(value)));
@@ -523,7 +523,7 @@ protected:
         return col;
     }
 
-    template <FieldType type>
+    template <LogicalType type>
     void test_numeric_types() {
         auto col = numeric_data<type>(1);
         test_nullable_data<type, BIT_SHUFFLE, 1>(*col, "0", "1");
@@ -547,49 +547,49 @@ protected:
 
 // NOLINTNEXTLINE
 TEST_F(ColumnReaderWriterTest, test_int) {
-    test_numeric_types<OLAP_FIELD_TYPE_INT>();
+    test_numeric_types<LOGICAL_TYPE_INT>();
 }
 
 // NOLINTNEXTLINE
 TEST_F(ColumnReaderWriterTest, test_double) {
-    test_numeric_types<OLAP_FIELD_TYPE_DOUBLE>();
+    test_numeric_types<LOGICAL_TYPE_DOUBLE>();
 }
 
 // NOLINTNEXTLINE
 TEST_F(ColumnReaderWriterTest, test_date) {
     auto col = date_values(100);
-    test_nullable_data<OLAP_FIELD_TYPE_DATE_V2, BIT_SHUFFLE, 1>(*col, "0", "100");
-    test_nullable_data<OLAP_FIELD_TYPE_DATE_V2, BIT_SHUFFLE, 2>(*col, "0", "100");
-    test_nullable_data<OLAP_FIELD_TYPE_DATE_V2, BIT_SHUFFLE, 2>(*col, "1", "100");
+    test_nullable_data<LOGICAL_TYPE_DATE_V2, BIT_SHUFFLE, 1>(*col, "0", "100");
+    test_nullable_data<LOGICAL_TYPE_DATE_V2, BIT_SHUFFLE, 2>(*col, "0", "100");
+    test_nullable_data<LOGICAL_TYPE_DATE_V2, BIT_SHUFFLE, 2>(*col, "1", "100");
 }
 
 // NOLINTNEXTLINE
 TEST_F(ColumnReaderWriterTest, test_datetime) {
     auto col = datetime_values(100);
-    test_nullable_data<OLAP_FIELD_TYPE_TIMESTAMP, BIT_SHUFFLE, 1>(*col, "0", "100");
-    test_nullable_data<OLAP_FIELD_TYPE_TIMESTAMP, BIT_SHUFFLE, 2>(*col, "0", "100");
-    test_nullable_data<OLAP_FIELD_TYPE_TIMESTAMP, BIT_SHUFFLE, 2>(*col, "1", "100");
+    test_nullable_data<LOGICAL_TYPE_TIMESTAMP, BIT_SHUFFLE, 1>(*col, "0", "100");
+    test_nullable_data<LOGICAL_TYPE_TIMESTAMP, BIT_SHUFFLE, 2>(*col, "0", "100");
+    test_nullable_data<LOGICAL_TYPE_TIMESTAMP, BIT_SHUFFLE, 2>(*col, "1", "100");
 }
 
 // NOLINTNEXTLINE
 TEST_F(ColumnReaderWriterTest, test_binary) {
     auto c = low_cardinality_strings(10000);
-    test_nullable_data<OLAP_FIELD_TYPE_VARCHAR, DICT_ENCODING, 1>(*c, "0", "10000");
-    test_nullable_data<OLAP_FIELD_TYPE_VARCHAR, DICT_ENCODING, 2>(*c, "0", "10000");
-    test_nullable_data<OLAP_FIELD_TYPE_VARCHAR, DICT_ENCODING, 2>(*c, "1", "10000");
+    test_nullable_data<LOGICAL_TYPE_VARCHAR, DICT_ENCODING, 1>(*c, "0", "10000");
+    test_nullable_data<LOGICAL_TYPE_VARCHAR, DICT_ENCODING, 2>(*c, "0", "10000");
+    test_nullable_data<LOGICAL_TYPE_VARCHAR, DICT_ENCODING, 2>(*c, "1", "10000");
 
-    test_nullable_data<OLAP_FIELD_TYPE_CHAR, DICT_ENCODING, 1>(*c, "0", "10000");
-    test_nullable_data<OLAP_FIELD_TYPE_CHAR, DICT_ENCODING, 2>(*c, "0", "10000");
-    test_nullable_data<OLAP_FIELD_TYPE_CHAR, DICT_ENCODING, 2>(*c, "1", "10000");
+    test_nullable_data<LOGICAL_TYPE_CHAR, DICT_ENCODING, 1>(*c, "0", "10000");
+    test_nullable_data<LOGICAL_TYPE_CHAR, DICT_ENCODING, 2>(*c, "0", "10000");
+    test_nullable_data<LOGICAL_TYPE_CHAR, DICT_ENCODING, 2>(*c, "1", "10000");
 
     c = high_cardinality_strings(100);
-    test_nullable_data<OLAP_FIELD_TYPE_VARCHAR, DICT_ENCODING, 1>(*c, "0", "100");
-    test_nullable_data<OLAP_FIELD_TYPE_VARCHAR, DICT_ENCODING, 2>(*c, "0", "100");
-    test_nullable_data<OLAP_FIELD_TYPE_VARCHAR, DICT_ENCODING, 2>(*c, "1", "100");
+    test_nullable_data<LOGICAL_TYPE_VARCHAR, DICT_ENCODING, 1>(*c, "0", "100");
+    test_nullable_data<LOGICAL_TYPE_VARCHAR, DICT_ENCODING, 2>(*c, "0", "100");
+    test_nullable_data<LOGICAL_TYPE_VARCHAR, DICT_ENCODING, 2>(*c, "1", "100");
 
-    test_nullable_data<OLAP_FIELD_TYPE_CHAR, DICT_ENCODING, 1>(*c, "0", "100");
-    test_nullable_data<OLAP_FIELD_TYPE_CHAR, DICT_ENCODING, 2>(*c, "0", "100");
-    test_nullable_data<OLAP_FIELD_TYPE_CHAR, DICT_ENCODING, 2>(*c, "1", "100");
+    test_nullable_data<LOGICAL_TYPE_CHAR, DICT_ENCODING, 1>(*c, "0", "100");
+    test_nullable_data<LOGICAL_TYPE_CHAR, DICT_ENCODING, 2>(*c, "0", "100");
+    test_nullable_data<LOGICAL_TYPE_CHAR, DICT_ENCODING, 2>(*c, "1", "100");
 }
 
 #ifdef STRING_COLUMN_WRITER_TEST
@@ -597,7 +597,7 @@ TEST_F(ColumnReaderWriterTest, test_binary) {
 TEST_F(ColumnReaderWriterTest, test_string_column_writer_benchmark) {
     for (int i = 0; i < 10000; i++) {
         auto c = high_cardinality_strings(100000);
-        test_nullable_data<OLAP_FIELD_TYPE_VARCHAR, PLAIN_ENCODING, 1>(*c, "0", "10000");
+        test_nullable_data<LOGICAL_TYPE_VARCHAR, PLAIN_ENCODING, 1>(*c, "0", "10000");
     }
 }
 #endif
@@ -606,48 +606,48 @@ TEST_F(ColumnReaderWriterTest, test_string_column_writer_benchmark) {
 TEST_F(ColumnReaderWriterTest, test_default_value) {
     std::string v_int("1");
     int32_t result = 1;
-    test_read_default_value<OLAP_FIELD_TYPE_TINYINT>(v_int, &result);
-    test_read_default_value<OLAP_FIELD_TYPE_SMALLINT>(v_int, &result);
-    test_read_default_value<OLAP_FIELD_TYPE_INT>(v_int, &result);
+    test_read_default_value<LOGICAL_TYPE_TINYINT>(v_int, &result);
+    test_read_default_value<LOGICAL_TYPE_SMALLINT>(v_int, &result);
+    test_read_default_value<LOGICAL_TYPE_INT>(v_int, &result);
 
     std::string v_bigint("9223372036854775807");
     int64_t result_bigint = std::numeric_limits<int64_t>::max();
-    test_read_default_value<OLAP_FIELD_TYPE_BIGINT>(v_bigint, &result_bigint);
+    test_read_default_value<LOGICAL_TYPE_BIGINT>(v_bigint, &result_bigint);
     int128_t result_largeint = std::numeric_limits<int64_t>::max();
-    test_read_default_value<OLAP_FIELD_TYPE_LARGEINT>(v_bigint, &result_largeint);
+    test_read_default_value<LOGICAL_TYPE_LARGEINT>(v_bigint, &result_largeint);
 
     std::string v_float("1.00");
     float result2 = 1.00;
-    test_read_default_value<OLAP_FIELD_TYPE_FLOAT>(v_float, &result2);
+    test_read_default_value<LOGICAL_TYPE_FLOAT>(v_float, &result2);
 
     std::string v_double("1.00");
     double result3 = 1.00;
-    test_read_default_value<OLAP_FIELD_TYPE_DOUBLE>(v_double, &result3);
+    test_read_default_value<LOGICAL_TYPE_DOUBLE>(v_double, &result3);
 
     std::string v_varchar("varchar");
-    test_read_default_value<OLAP_FIELD_TYPE_VARCHAR>(v_varchar, &v_varchar);
+    test_read_default_value<LOGICAL_TYPE_VARCHAR>(v_varchar, &v_varchar);
 
     std::string v_char("char");
-    test_read_default_value<OLAP_FIELD_TYPE_CHAR>(v_char, &v_char);
+    test_read_default_value<LOGICAL_TYPE_CHAR>(v_char, &v_char);
 
     char* c = (char*)malloc(1);
     c[0] = 0;
     std::string v_object(c, 1);
-    test_read_default_value<OLAP_FIELD_TYPE_HLL>(v_object, &v_object);
-    test_read_default_value<OLAP_FIELD_TYPE_OBJECT>(v_object, &v_object);
+    test_read_default_value<LOGICAL_TYPE_HLL>(v_object, &v_object);
+    test_read_default_value<LOGICAL_TYPE_OBJECT>(v_object, &v_object);
     free(c);
 
     std::string v_date("2019-11-12");
     uint24_t result_date(1034092);
-    test_read_default_value<OLAP_FIELD_TYPE_DATE>(v_date, &result_date);
+    test_read_default_value<LOGICAL_TYPE_DATE>(v_date, &result_date);
 
     std::string v_datetime("2019-11-12 12:01:08");
     int64_t result_datetime = 20191112120108;
-    test_read_default_value<OLAP_FIELD_TYPE_DATETIME>(v_datetime, &result_datetime);
+    test_read_default_value<LOGICAL_TYPE_DATETIME>(v_datetime, &result_datetime);
 
     std::string v_decimal("102418.000000002");
     decimal12_t decimal(102418, 2);
-    test_read_default_value<OLAP_FIELD_TYPE_DECIMAL>(v_decimal, &decimal);
+    test_read_default_value<LOGICAL_TYPE_DECIMAL>(v_decimal, &decimal);
 }
 
 // test array<int>, and nullable
@@ -657,7 +657,7 @@ TEST_F(ColumnReaderWriterTest, test_array_int) {
 }
 
 TEST_F(ColumnReaderWriterTest, test_scalar_column_total_mem_footprint) {
-    auto col = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_INT, true);
+    auto col = ChunkHelper::column_from_field_type(LOGICAL_TYPE_INT, true);
     size_t count = 1024;
     col->reserve(count);
     for (int32_t i = 0; i < count; ++i) {
@@ -683,14 +683,14 @@ TEST_F(ColumnReaderWriterTest, test_scalar_column_total_mem_footprint) {
         writer_opts.meta = &meta;
         writer_opts.meta->set_column_id(0);
         writer_opts.meta->set_unique_id(0);
-        writer_opts.meta->set_type(OLAP_FIELD_TYPE_INT);
+        writer_opts.meta->set_type(LOGICAL_TYPE_INT);
         writer_opts.meta->set_length(0);
         writer_opts.meta->set_encoding(BIT_SHUFFLE);
         writer_opts.meta->set_compression(starrocks::LZ4_FRAME);
         writer_opts.meta->set_is_nullable(true);
         writer_opts.need_zone_map = true;
 
-        TabletColumn column(OLAP_FIELD_AGGREGATION_NONE, OLAP_FIELD_TYPE_INT);
+        TabletColumn column(OLAP_FIELD_AGGREGATION_NONE, LOGICAL_TYPE_INT);
         ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(writer_opts, &column, wfile.get()));
         ASSERT_OK(writer->init());
 

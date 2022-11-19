@@ -23,7 +23,7 @@ class RowSourceMask;
 class VerticalCompactionTask : public CompactionTask {
 public:
     VerticalCompactionTask() : CompactionTask(VERTICAL_COMPACTION) {}
-    ~VerticalCompactionTask() = default;
+    ~VerticalCompactionTask() override = default;
 
     Status run_impl() override;
 

@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <utility>
+
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
@@ -37,8 +39,8 @@ struct JDBCScannerProfile {
 
 class JDBCScanner {
 public:
-    JDBCScanner(const JDBCScanContext& context, const TupleDescriptor* tuple_desc, RuntimeProfile* runtime_profile)
-            : _scan_ctx(context), _slot_descs(tuple_desc->slots()), _runtime_profile(runtime_profile) {}
+    JDBCScanner(JDBCScanContext context, const TupleDescriptor* tuple_desc, RuntimeProfile* runtime_profile)
+            : _scan_ctx(std::move(context)), _slot_descs(tuple_desc->slots()), _runtime_profile(runtime_profile) {}
 
     ~JDBCScanner() = default;
 

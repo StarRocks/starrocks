@@ -32,7 +32,7 @@ namespace starrocks {
 //   output ranges: [0,2), [4,8), [10,11), [15,18), [18,20) (when max_range_size=3)
 class BitmapRangeIterator {
 public:
-    explicit BitmapRangeIterator(const Roaring& bitmap) : _last_val(0), _buf_pos(0), _buf_size(0), _eof(false) {
+    explicit BitmapRangeIterator(const Roaring& bitmap) {
         roaring_init_iterator(&bitmap.roaring, &_iter);
         _read_next_batch();
     }
@@ -72,10 +72,10 @@ private:
     static const uint32_t kBatchSize = 256;
 
     roaring_uint32_iterator_t _iter{};
-    uint32_t _last_val;
-    uint32_t _buf_pos;
-    uint32_t _buf_size;
-    bool _eof;
+    uint32_t _last_val{0};
+    uint32_t _buf_pos{0};
+    uint32_t _buf_size{0};
+    bool _eof{false};
     uint32_t _buf[kBatchSize];
 };
 

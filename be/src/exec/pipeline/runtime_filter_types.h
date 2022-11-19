@@ -3,6 +3,7 @@
 #pragma once
 #include <memory>
 #include <mutex>
+#include <utility>
 
 #include "common/statusor.h"
 #include "exec/vectorized/hash_join_node.h"
@@ -10,8 +11,7 @@
 #include "exprs/predicate.h"
 #include "exprs/vectorized/runtime_filter_bank.h"
 
-namespace starrocks {
-namespace pipeline {
+namespace starrocks::pipeline {
 class RuntimeFilterHolder;
 using RuntimeFilterHolderPtr = std::unique_ptr<RuntimeFilterHolder>;
 // TODO: rename RuntimeInFilter
@@ -34,7 +34,7 @@ struct RuntimeBloomFilterBuildParam;
 using OptRuntimeBloomFilterBuildParams = std::vector<std::optional<RuntimeBloomFilterBuildParam>>;
 // Parameters used to build runtime bloom-filters.
 struct RuntimeBloomFilterBuildParam {
-    RuntimeBloomFilterBuildParam(bool eq_null, const ColumnPtr& column) : eq_null(eq_null), column(column) {}
+    RuntimeBloomFilterBuildParam(bool eq_null, ColumnPtr column) : eq_null(eq_null), column(std::move(column)) {}
     bool eq_null;
     ColumnPtr column;
 };
@@ -383,5 +383,4 @@ private:
     RuntimeBloomFilters _bloom_filter_descriptors;
 };
 
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline

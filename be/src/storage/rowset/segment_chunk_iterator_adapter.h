@@ -19,7 +19,7 @@ namespace starrocks::vectorized {
 class SegmentChunkIteratorAdapter final : public ChunkIterator {
 public:
     // |schema| is the output fields.
-    explicit SegmentChunkIteratorAdapter(const TabletSchema& tablet_schema, const std::vector<FieldType>& new_types,
+    explicit SegmentChunkIteratorAdapter(const TabletSchema& tablet_schema, const std::vector<LogicalType>& new_types,
                                          const Schema& out_schema, int chunk_size);
 
     ~SegmentChunkIteratorAdapter() override = default;
@@ -33,12 +33,12 @@ public:
 
     void set_iterator(std::shared_ptr<ChunkIterator> iterator) { _inner_iter = std::move(iterator); }
 
-    virtual Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) override {
+    Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) override {
         _inner_iter->init_encoded_schema(dict_maps);
         ChunkIterator::init_encoded_schema(dict_maps);
         return Status::OK();
     }
-    virtual Status init_output_schema(const std::unordered_set<uint32_t>& unused_output_column_ids) override {
+    Status init_output_schema(const std::unordered_set<uint32_t>& unused_output_column_ids) override {
         _inner_iter->init_output_schema(unused_output_column_ids);
         ChunkIterator::init_output_schema(unused_output_column_ids);
         return Status::OK();
@@ -46,10 +46,10 @@ public:
 
 protected:
     Status do_get_next(Chunk* chunk) override;
-    Status do_get_next(Chunk* chunk, vector<uint32_t>* rowid) override;
+    Status do_get_next(Chunk* chunk, std::vector<uint32_t>* rowid) override;
 
     const TabletSchema& _tablet_schema;
-    const std::vector<FieldType>& _new_types;
+    const std::vector<LogicalType>& _new_types;
 
     Schema _in_schema;
     SegmentReadOptions _in_read_options;

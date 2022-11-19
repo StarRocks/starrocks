@@ -204,7 +204,7 @@ size_t Schema::get_field_index_by_name(const std::string& name) const {
     return p->second;
 }
 
-void Schema::convert_to(Schema* new_schema, const std::vector<FieldType>& new_types) const {
+void Schema::convert_to(Schema* new_schema, const std::vector<LogicalType>& new_types) const {
     int num_fields = _fields.size();
     new_schema->_fields.resize(num_fields);
     for (int i = 0; i < num_fields; ++i) {

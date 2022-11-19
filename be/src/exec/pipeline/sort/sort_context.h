@@ -25,7 +25,7 @@ using vectorized::SortDescs;
 class SortContext final : public ContextWithDependency {
 public:
     explicit SortContext(RuntimeState* state, const TTopNType::type topn_type, int64_t offset, int64_t limit,
-                         const int32_t num_right_sinkers, const std::vector<ExprContext*> sort_exprs,
+                         const int32_t num_right_sinkers, const std::vector<ExprContext*>& sort_exprs,
                          const SortDescs& sort_descs)
             : _state(state),
               _topn_type(topn_type),

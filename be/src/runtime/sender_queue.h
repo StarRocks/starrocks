@@ -3,6 +3,7 @@
 #pragma once
 
 #include <condition_variable>
+#include <utility>
 
 #include "column/vectorized_fwd.h"
 #include "runtime/data_stream_recvr.h"
@@ -174,7 +175,7 @@ private:
         // Time in nano of saving closure
         int64_t queue_enter_time = -1;
 
-        ChunkItem() {}
+        ChunkItem() = default;
 
         ChunkItem(int64_t chunk_bytes, int32_t driver_sequence, google::protobuf::Closure* closure,
                   ChunkUniquePtr&& chunk_ptr)
@@ -183,9 +184,11 @@ private:
                   closure(closure),
                   chunk_ptr(std::move(chunk_ptr)) {}
 
-        ChunkItem(int64_t chunk_bytes, int32_t driver_sequence, google::protobuf::Closure* closure,
-                  const ChunkPB& pchunk)
-                : chunk_bytes(chunk_bytes), driver_sequence(driver_sequence), closure(closure), pchunk(pchunk) {}
+        ChunkItem(int64_t chunk_bytes, int32_t driver_sequence, google::protobuf::Closure* closure, ChunkPB pchunk)
+                : chunk_bytes(chunk_bytes),
+                  driver_sequence(driver_sequence),
+                  closure(closure),
+                  pchunk(std::move(pchunk)) {}
     };
 
     typedef std::list<ChunkItem> ChunkList;

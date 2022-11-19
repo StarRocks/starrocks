@@ -24,8 +24,8 @@ TEST_F(JsonConverterTest, test_read_string) {
     auto conv = csv::get_converter(_type, false);
     auto json_column = JsonColumn::create();
 
-    string s1 = "{\"key\": 1}";
-    string s2 = R"({"a":1,"b":2})";
+    std::string s1 = "{\"key\": 1}";
+    std::string s2 = R"({"a":1,"b":2})";
     EXPECT_TRUE(conv->read_string(json_column.get(), s1, Converter::Options()));
     EXPECT_TRUE(conv->read_string(json_column.get(), s2, Converter::Options()));
 

@@ -26,6 +26,7 @@
 
 #include <atomic>
 #include <thread>
+#include <utility>
 
 #include "common/status.h"
 #include "gutil/ref_counted.h"
@@ -149,17 +150,11 @@ private:
 
     // User function to be executed by this thread.
     typedef std::function<void()> ThreadFunctor;
-    Thread(const std::string& category, const std::string& name, ThreadFunctor functor)
-            : _thread(0),
-              _tid(INVALID_TID),
-              _functor(std::move(functor)),
-              _category(category),
-              _name(name),
-              _done(1),
-              _joinable(false) {}
+    Thread(std::string category, std::string name, ThreadFunctor functor)
+            : _functor(std::move(functor)), _category(std::move(category)), _name(std::move(name)), _done(1) {}
 
     // Library-specific thread ID.
-    pthread_t _thread;
+    pthread_t _thread{0};
 
     // OS-specific thread ID. Once the constructor finishes start_thread(),
     // guaranteed to be set either to a non-negative integer, or to INVALID_TID.
@@ -170,7 +165,7 @@ private:
     //    thread has not yet begun running. Therefore the TID is not yet known
     //    but it will be set once the thread starts.
     // 3. <positive value>: the thread is running.
-    int64_t _tid;
+    int64_t _tid{INVALID_TID};
 
     const ThreadFunctor _functor;
 
@@ -184,7 +179,7 @@ private:
     // alive when a Joiner finishes.
     CountDownLatch _done;
 
-    bool _joinable;
+    bool _joinable{false};
 
     // Thread local pointer to the current thread of execution. Will be NULL if the current
     // thread is not a Thread.

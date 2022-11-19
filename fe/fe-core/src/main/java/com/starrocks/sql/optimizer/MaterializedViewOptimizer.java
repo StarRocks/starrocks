@@ -27,6 +27,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
@@ -39,7 +40,7 @@ public class MaterializedViewOptimizer {
 
     public OptExpression optimize(MaterializedView mv, ColumnRefFactory columnRefFactory, ConnectContext connectContext) {
         String mvSql = mv.getViewDefineSql();
-        Pair<OptExpression, LogicalPlan> plans = Utils.getRuleOptimizedLogicalPlan(mvSql, columnRefFactory, connectContext);
+        Pair<OptExpression, LogicalPlan> plans = MvUtils.getRuleOptimizedLogicalPlan(mvSql, columnRefFactory, connectContext);
         if (plans == null) {
             return null;
         }
@@ -113,7 +114,7 @@ public class MaterializedViewOptimizer {
         if (partitionTableAndColumns == null) {
             return;
         }
-        List<OptExpression> scanExprs = Utils.collectScanExprs(mvPlan);
+        List<OptExpression> scanExprs = MvUtils.collectScanExprs(mvPlan);
         for (OptExpression scanExpr : scanExprs) {
             LogicalScanOperator scanOperator = (LogicalScanOperator) scanExpr.getOp();
             Table scanTable = scanOperator.getTable();

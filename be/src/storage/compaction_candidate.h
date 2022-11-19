@@ -4,6 +4,7 @@
 
 #include <memory>
 #include <set>
+#include <utility>
 #include <vector>
 
 #include "storage/olap_common.h"

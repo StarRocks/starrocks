@@ -16,8 +16,7 @@
 #include "function_helper.h"
 #include "simd/simd.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 class NopCheck {
     template <typename Type, typename ResultType>
@@ -303,5 +302,4 @@ using VectorizedOutputCheckUnaryFunction = DealNullableColumnUnaryFunction<
     template <typename Type, typename ResultType>           \
     std::string NAME::apply(const Type& VALUE)
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

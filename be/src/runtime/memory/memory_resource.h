@@ -26,7 +26,7 @@ public:
               _upstream(upstream) {
         ASAN_POISON_MEMORY_REGION(_stack_addr_start, sz);
     }
-    virtual ~stack_memory_resource() {
+    ~stack_memory_resource() override {
         size_t sz = (uint8_t*)_stack_addr_end - (uint8_t*)_stack_addr_start;
         ASAN_UNPOISON_MEMORY_REGION(_stack_addr_start, sz);
     }

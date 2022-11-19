@@ -686,7 +686,7 @@ struct AggHashMapWithSerializedKeyFixedSize : public AggHashMapWithKey<HashMap> 
               mem_pool(std::make_unique<MemPool>()),
               _chunk_size(chunk_size) {
         caches.reserve(chunk_size);
-        uint8_t* buffer = reinterpret_cast<uint8_t*>(caches.data());
+        auto* buffer = reinterpret_cast<uint8_t*>(caches.data());
         memset(buffer, 0x0, max_fixed_size * _chunk_size);
     }
 
@@ -695,7 +695,7 @@ struct AggHashMapWithSerializedKeyFixedSize : public AggHashMapWithKey<HashMap> 
     template <typename Func>
     void compute_agg_prefetch(size_t chunk_size, const Columns& key_columns, Buffer<AggDataPtr>* agg_states,
                               Func&& allocate_func) {
-        uint8_t* buffer = reinterpret_cast<uint8_t*>(caches.data());
+        auto* buffer = reinterpret_cast<uint8_t*>(caches.data());
         for (const auto& key_column : key_columns) {
             key_column->serialize_batch(buffer, slice_sizes, chunk_size, max_fixed_size);
         }
@@ -727,11 +727,11 @@ struct AggHashMapWithSerializedKeyFixedSize : public AggHashMapWithKey<HashMap> 
     void compute_agg_noprefetch(size_t chunk_size, const Columns& key_columns, Buffer<AggDataPtr>* agg_states,
                                 Func&& allocate_func) {
         constexpr int key_size = sizeof(FixedSizeSliceKey);
-        uint8_t* buffer = reinterpret_cast<uint8_t*>(caches.data());
+        auto* buffer = reinterpret_cast<uint8_t*>(caches.data());
         for (const auto& key_column : key_columns) {
             key_column->serialize_batch(buffer, slice_sizes, chunk_size, key_size);
         }
-        FixedSizeSliceKey* key = reinterpret_cast<FixedSizeSliceKey*>(caches.data());
+        auto* key = reinterpret_cast<FixedSizeSliceKey*>(caches.data());
         if (has_null_column) {
             for (size_t i = 0; i < chunk_size; ++i) {
                 key[i].u.size = slice_sizes[i];
@@ -750,7 +750,7 @@ struct AggHashMapWithSerializedKeyFixedSize : public AggHashMapWithKey<HashMap> 
         DCHECK(fixed_byte_size != -1);
         slice_sizes.assign(chunk_size, 0);
 
-        uint8_t* buffer = reinterpret_cast<uint8_t*>(caches.data());
+        auto* buffer = reinterpret_cast<uint8_t*>(caches.data());
         if (has_null_column) {
             memset(buffer, 0x0, max_fixed_size * chunk_size);
         }
@@ -771,7 +771,7 @@ struct AggHashMapWithSerializedKeyFixedSize : public AggHashMapWithKey<HashMap> 
         DCHECK(fixed_byte_size != -1);
         slice_sizes.assign(chunk_size, 0);
 
-        uint8_t* buffer = reinterpret_cast<uint8_t*>(caches.data());
+        auto* buffer = reinterpret_cast<uint8_t*>(caches.data());
         if (has_null_column) {
             memset(buffer, 0x0, max_fixed_size * chunk_size);
         }

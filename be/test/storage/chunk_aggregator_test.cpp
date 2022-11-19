@@ -13,11 +13,11 @@
 namespace starrocks::vectorized {
 
 TEST(ChunkAggregatorTest, testNoneAggregator) {
-    FieldPtr key = std::make_shared<Field>(1, "key", FieldType::OLAP_FIELD_TYPE_INT, false);
+    FieldPtr key = std::make_shared<Field>(1, "key", LogicalType::LOGICAL_TYPE_INT, false);
     key->set_aggregate_method(FieldAggregationMethod::OLAP_FIELD_AGGREGATION_NONE);
     key->set_is_key(true);
 
-    FieldPtr value = std::make_shared<Field>(1, "value", FieldType::OLAP_FIELD_TYPE_INT, false);
+    FieldPtr value = std::make_shared<Field>(1, "value", LogicalType::LOGICAL_TYPE_INT, false);
     value->set_aggregate_method(FieldAggregationMethod::OLAP_FIELD_AGGREGATION_SUM);
     value->set_is_key(false);
 
@@ -67,7 +67,7 @@ TEST(ChunkAggregatorTest, testNoneAggregator) {
 }
 
 TEST(ChunkAggregatorTest, testNonKeyColumnsByMask) {
-    FieldPtr value = std::make_shared<Field>(1, "value", FieldType::OLAP_FIELD_TYPE_INT, false);
+    FieldPtr value = std::make_shared<Field>(1, "value", LogicalType::LOGICAL_TYPE_INT, false);
     value->set_aggregate_method(FieldAggregationMethod::OLAP_FIELD_AGGREGATION_SUM);
     value->set_is_key(false);
 

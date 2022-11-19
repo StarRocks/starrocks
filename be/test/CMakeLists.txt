@@ -234,7 +234,6 @@ set(EXEC_FILES
         ./runtime/datetime_value_test.cpp
         ./runtime/decimalv2_value_test.cpp
         ./runtime/decimalv3_test.cpp
-        ./runtime/decimal_value_test.cpp
         ./runtime/external_scan_context_mgr_test.cpp
         ./runtime/fragment_mgr_test.cpp
         ./runtime/free_list_test.cpp
@@ -252,7 +251,6 @@ set(EXEC_FILES
         ./runtime/stream_load_pipe_test.cpp
         ./runtime/string_value_test.cpp
         ./runtime/type_descriptor_test.cpp
-        ./runtime/thread_resource_mgr_test.cpp
         ./runtime/type_descriptor_test.cpp
         ./runtime/vectorized/sorted_chunks_merger_test.cpp
         ./runtime/memory_scratch_sink_test_issue_8676.cpp

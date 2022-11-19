@@ -103,7 +103,7 @@ private:
     static const uint8_t RESTART_POINT_INTERVAL = 16;
 };
 
-template <FieldType Type>
+template <LogicalType Type>
 class BinaryPrefixPageDecoder final : public PageDecoder {
 public:
     BinaryPrefixPageDecoder(Slice data, const PageDecoderOptions& options) : _data(data) {}

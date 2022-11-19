@@ -26,8 +26,7 @@
 
 #include "util/slice.h"
 
-namespace starrocks {
-namespace crc32c {
+namespace starrocks::crc32c {
 
 // Return the crc32c of concat(A, data[0,n-1]) where init_crc is the
 // crc32c of some string A.  Extend() is often used to maintain the
@@ -48,5 +47,4 @@ inline uint32_t Value(const std::vector<Slice>& slices) {
     return crc;
 }
 
-} // namespace crc32c
-} // namespace starrocks
+} // namespace starrocks::crc32c

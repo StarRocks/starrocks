@@ -43,7 +43,7 @@ class PagePointer;
 
 class ParsedPage {
 public:
-    ParsedPage() {}
+    ParsedPage() = default;
 
     virtual ~ParsedPage() = default;
 

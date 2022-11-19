@@ -5,8 +5,7 @@
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 /**
  * Wrap a column, support :
@@ -56,5 +55,4 @@ private:
     const size_t _null_mask;
 };
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

@@ -40,7 +40,7 @@ private:
     MemPool _pool;
 };
 
-template <FieldType type>
+template <LogicalType type>
 void test_integer_encode() {
     using CppType = typename CppTypeTraits<type>::CppType;
 
@@ -106,20 +106,20 @@ void test_integer_encode() {
 }
 
 TEST_F(KeyCoderTest, test_int) {
-    test_integer_encode<OLAP_FIELD_TYPE_TINYINT>();
-    test_integer_encode<OLAP_FIELD_TYPE_SMALLINT>();
-    test_integer_encode<OLAP_FIELD_TYPE_INT>();
-    test_integer_encode<OLAP_FIELD_TYPE_UNSIGNED_INT>();
-    test_integer_encode<OLAP_FIELD_TYPE_BIGINT>();
-    test_integer_encode<OLAP_FIELD_TYPE_UNSIGNED_BIGINT>();
-    test_integer_encode<OLAP_FIELD_TYPE_LARGEINT>();
+    test_integer_encode<LOGICAL_TYPE_TINYINT>();
+    test_integer_encode<LOGICAL_TYPE_SMALLINT>();
+    test_integer_encode<LOGICAL_TYPE_INT>();
+    test_integer_encode<LOGICAL_TYPE_UNSIGNED_INT>();
+    test_integer_encode<LOGICAL_TYPE_BIGINT>();
+    test_integer_encode<LOGICAL_TYPE_UNSIGNED_BIGINT>();
+    test_integer_encode<LOGICAL_TYPE_LARGEINT>();
 
-    test_integer_encode<OLAP_FIELD_TYPE_DATETIME>();
+    test_integer_encode<LOGICAL_TYPE_DATETIME>();
 }
 
 TEST_F(KeyCoderTest, test_date) {
     using CppType = uint24_t;
-    auto key_coder = get_key_coder(OLAP_FIELD_TYPE_DATE);
+    auto key_coder = get_key_coder(LOGICAL_TYPE_DATE);
 
     {
         std::string buf;
@@ -178,7 +178,7 @@ TEST_F(KeyCoderTest, test_date) {
 }
 
 TEST_F(KeyCoderTest, test_decimal) {
-    auto key_coder = get_key_coder(OLAP_FIELD_TYPE_DECIMAL);
+    auto key_coder = get_key_coder(LOGICAL_TYPE_DECIMAL);
 
     decimal12_t val1(1, 100000000);
     std::string buf1;
@@ -222,7 +222,7 @@ TEST_F(KeyCoderTest, test_decimal) {
 }
 
 TEST_F(KeyCoderTest, test_char) {
-    auto key_coder = get_key_coder(OLAP_FIELD_TYPE_CHAR);
+    auto key_coder = get_key_coder(LOGICAL_TYPE_CHAR);
 
     char buf[] = "1234567890";
     Slice slice(buf, 10);
@@ -255,7 +255,7 @@ TEST_F(KeyCoderTest, test_char) {
 }
 
 TEST_F(KeyCoderTest, test_varchar) {
-    auto key_coder = get_key_coder(OLAP_FIELD_TYPE_VARCHAR);
+    auto key_coder = get_key_coder(LOGICAL_TYPE_VARCHAR);
 
     char buf[] = "1234567890";
     Slice slice(buf, 10);

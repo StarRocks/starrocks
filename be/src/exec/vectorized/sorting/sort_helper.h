@@ -134,7 +134,7 @@ static inline Status sort_and_tie_helper_nullable_vertical(const std::atomic<boo
 // 2. Sort by not-null values
 template <class NullPred>
 static inline Status sort_and_tie_helper_nullable(const std::atomic<bool>& cancel, const NullableColumn* column,
-                                                  const ColumnPtr data_column, NullPred null_pred,
+                                                  const ColumnPtr& data_column, NullPred null_pred,
                                                   const SortDesc& sort_desc, SmallPermutation& permutation, Tie& tie,
                                                   std::pair<int, int> range, bool build_tie) {
     TieIterator iterator(tie, range.first, range.second);

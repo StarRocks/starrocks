@@ -15,7 +15,7 @@ namespace starrocks::vectorized {
 template <typename T>
 struct Bucket {
 public:
-    Bucket() {}
+    Bucket() = default;
     Bucket(T lower, T upper, size_t count, size_t upper_repeats)
             : lower(lower), upper(upper), count(count), upper_repeats(upper_repeats), count_in_bucket(1) {}
     T lower;
@@ -30,7 +30,7 @@ public:
 
 template <typename T>
 struct HistogramState {
-    HistogramState() {}
+    HistogramState() = default;
     std::vector<T> data;
 };
 
@@ -83,8 +83,7 @@ public:
 
     std::string toBucketJson(std::string lower, std::string upper, size_t count, size_t upper_repeats,
                              double sample_ratio) const {
-        return fmt::format("[\"{}\",\"{}\",\"{}\",\"{}\"]", lower, upper,
-                           std::to_string((int64_t)(count * sample_ratio)),
+        return fmt::format(R"(["{}","{}","{}","{}"])", lower, upper, std::to_string((int64_t)(count * sample_ratio)),
                            std::to_string((int64_t)(upper_repeats * sample_ratio)));
     }
 

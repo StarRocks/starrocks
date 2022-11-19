@@ -104,8 +104,7 @@ public:
               _dict_column_iter(std::move(dict_iter)),
               _bitmap_column_iter(std::move(bitmap_iter)),
               _has_null(has_null),
-              _num_bitmap(num_bitmap),
-              _current_rowid(0) {}
+              _num_bitmap(num_bitmap) {}
 
     bool has_null_bitmap() const { return _has_null; }
 
@@ -151,7 +150,7 @@ private:
     std::unique_ptr<IndexedColumnIterator> _bitmap_column_iter;
     bool _has_null;
     rowid_t _num_bitmap;
-    rowid_t _current_rowid;
+    rowid_t _current_rowid{0};
 };
 
 } // namespace starrocks
