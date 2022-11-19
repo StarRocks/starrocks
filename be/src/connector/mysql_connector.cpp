@@ -248,7 +248,7 @@ int64_t MySQLDataSource::num_bytes_read() const {
 }
 
 int64_t MySQLDataSource::cpu_time_spent() const {
-    return _cpu_time_spent_ns;
+    return _cpu_time_ns;
 }
 
 void MySQLDataSource::close(RuntimeState* state) {
@@ -256,7 +256,7 @@ void MySQLDataSource::close(RuntimeState* state) {
 }
 
 Status MySQLDataSource::fill_chunk(vectorized::ChunkPtr* chunk, char** data, size_t* length) {
-    SCOPED_RAW_TIMER(&_cpu_time_spent_ns);
+    SCOPED_RAW_TIMER(&_cpu_time_ns);
 
     int materialized_col_idx = -1;
     for (size_t col_idx = 0; col_idx < _slot_num; ++col_idx) {
