@@ -329,7 +329,7 @@ Status PrimaryKeyEncoder::create_column(const vectorized::Schema& schema, std::u
             *pcolumn = vectorized::TimestampColumn::create_mutable();
             break;
         default:
-            return Status::NotSupported(StringPrintf("primary key type not support: %s", field_type_to_string(type)));
+            return Status::NotSupported(StringPrintf("primary key type not support: %s", logical_type_to_string(type)));
         }
     } else {
         // composite keys encoding to binary
@@ -404,7 +404,7 @@ static void prepare_ops_datas(const vectorized::Schema& schema, const vectorized
             break;
         default:
             CHECK(false) << "type not supported for primary key encoding "
-                         << field_type_to_string(schema.field(j)->type()->type());
+                         << logical_type_to_string(schema.field(j)->type()->type());
         }
     }
 }

@@ -59,95 +59,6 @@ enum LogicalType {
     LOGICAL_TYPE_MAX_VALUE = 55
 };
 
-inline const char* field_type_to_string(LogicalType type) {
-    switch (type) {
-    case LOGICAL_TYPE_TINYINT:
-        return "TINYINT";
-    case LOGICAL_TYPE_UNSIGNED_TINYINT:
-        return "UNSIGNED TINYINT";
-    case LOGICAL_TYPE_SMALLINT:
-        return "SMALLINT";
-    case LOGICAL_TYPE_UNSIGNED_SMALLINT:
-        return "UNSIGNED SMALLINT";
-    case LOGICAL_TYPE_INT:
-        return "INT";
-    case LOGICAL_TYPE_UNSIGNED_INT:
-        return "UNSIGNED INT";
-    case LOGICAL_TYPE_BIGINT:
-        return "BIGINT";
-    case LOGICAL_TYPE_UNSIGNED_BIGINT:
-        return "UNSIGNED BIGINT";
-    case LOGICAL_TYPE_LARGEINT:
-        return "LARGEINT";
-    case LOGICAL_TYPE_FLOAT:
-        return "FLOAT";
-    case LOGICAL_TYPE_DOUBLE:
-        return "DOUBLE";
-    case LOGICAL_TYPE_DISCRETE_DOUBLE:
-        return "DISCRETE DOUBLE";
-    case LOGICAL_TYPE_CHAR:
-        return "CHAR";
-    case LOGICAL_TYPE_DATE:
-        return "DATE";
-    case LOGICAL_TYPE_DATETIME:
-        return "DATETIME";
-    case LOGICAL_TYPE_DECIMAL:
-        return "DECIMAL";
-    case LOGICAL_TYPE_VARCHAR:
-        return "VARCHAR";
-    case LOGICAL_TYPE_STRUCT:
-        return "STRUCT";
-    case LOGICAL_TYPE_ARRAY:
-        return "ARRAY";
-    case LOGICAL_TYPE_MAP:
-        return "MAP";
-    case LOGICAL_TYPE_UNKNOWN:
-        return "UNKNOWN";
-    case LOGICAL_TYPE_NONE:
-        return "NONE";
-    case LOGICAL_TYPE_HLL:
-        return "HLL";
-    case LOGICAL_TYPE_BOOL:
-        return "BOOL";
-    case LOGICAL_TYPE_OBJECT:
-        return "OBJECT";
-    case LOGICAL_TYPE_DECIMAL32:
-        return "DECIMAL32";
-    case LOGICAL_TYPE_DECIMAL64:
-        return "DECIMAL64";
-    case LOGICAL_TYPE_DECIMAL128:
-        return "DECIMAL128";
-    case LOGICAL_TYPE_DATE_V2:
-        return "DATE V2";
-    case LOGICAL_TYPE_TIMESTAMP:
-        return "TIMESTAMP";
-    case LOGICAL_TYPE_DECIMAL_V2:
-        return "DECIMAL V2";
-    case LOGICAL_TYPE_PERCENTILE:
-        return "PERCENTILE";
-    case LOGICAL_TYPE_JSON:
-        return "JSON";
-    case LOGICAL_TYPE_NULL:
-        return "NULL";
-    case LOGICAL_TYPE_FUNCTION:
-        return "FUNCTION";
-    case LOGCIAL_TYPE_TIME:
-        return "TIME";
-    case LOGCIAL_TYPE_BINARY:
-        return "BINARY";
-    case LOGICAL_TYPE_VARBINARY:
-        return "VARBINARY";
-    case LOGICAL_TYPE_MAX_VALUE:
-        return "MAX VALUE";
-    }
-    return "";
-}
-
-inline std::ostream& operator<<(std::ostream& os, LogicalType type) {
-    os << field_type_to_string(type);
-    return os;
-}
-
 // TODO(lism): support varbinary for zone map.
 inline bool is_zone_map_key_type(LogicalType type) {
     return type != LOGICAL_TYPE_CHAR && type != LOGICAL_TYPE_VARCHAR && type != LOGICAL_TYPE_JSON &&
@@ -184,4 +95,13 @@ inline bool is_decimalv3_field_type(LogicalType type) {
     return type == LOGICAL_TYPE_DECIMAL32 || type == LOGICAL_TYPE_DECIMAL64 || type == LOGICAL_TYPE_DECIMAL128;
 }
 
+LogicalType string_to_logical_type(const std::string& type_str);
+const char* logical_type_to_string(LogicalType type);
+
 } // namespace starrocks
+
+inline std::ostream& operator<<(std::ostream& os, starrocks::LogicalType type) {
+    os << starrocks::logical_type_to_string(type);
+    return os;
+}
+
