@@ -31,19 +31,19 @@ SHOW [FULL] PROCESSLIST FROM 'fe_host';
 
 ## Return
 
-| Return        | Description                                                            |
-|---------------|------------------------------------------------------------------------|
-| Id            | Connection ID.                                                         |
-| User          | The name of the user who runs the operation.                           |
-| Host          | The hostname of the client which runs the operation.                   |
-| Db            | The name of the database where the operation is executed.              |
-| Command       | The type of the command.                                               |
+| Return              | Description                                                            |
+|---------------------|------------------------------------------------------------------------|
+| Id                  | Connection ID.                                                         |
+| User                | The name of the user who runs the operation.                           |
+| Host                | The hostname of the client which runs the operation.                   |
+| Db                  | The name of the database where the operation is executed.              |
+| Command             | The type of the command.                                               |
 | ConnectionStartTime | Time when the connection starts.                                       |
-| Time          | The time (in second) since the operation has entered the current state. |
-| State         | The state of the operation.                                            |
-| Info          | The command that the operation is executing.                           |
-| IsPending     | Whether the operation is being queued.                                 |
-| FeHost        | the hostname of frontend.                                              |
+| Time                | The time (in second) since the operation has entered the current state. |
+| State               | The state of the operation.                                            |
+| Info                | The command that the operation is executing.                           |
+| IsPending           | Whether the operation is being queued.                                 |
+| FeHost              | the hostname of frontend.                                              |
 
 ## Usage note
 
