@@ -1830,8 +1830,8 @@ const FieldConverter* get_field_converter(LogicalType from_type, LogicalType to_
         case LOGICAL_TYPE_NONE:
         case LOGICAL_TYPE_NULL:
         case LOGICAL_TYPE_FUNCTION:
-        case LOGCIAL_TYPE_TIME:
-        case LOGCIAL_TYPE_BINARY:
+        case LOGICAL_TYPE_TIME:
+        case LOGICAL_TYPE_BINARY:
         case LOGICAL_TYPE_MAX_VALUE:
             return nullptr;
         }
