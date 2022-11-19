@@ -131,4 +131,4 @@ const char* logical_type_to_string(LogicalType type) {
     return "";
 }
 
-}
+} // namespace starrocks

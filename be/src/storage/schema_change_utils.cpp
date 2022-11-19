@@ -70,8 +70,8 @@ ColumnMapping* ChunkChanger::get_mutable_column_mapping(size_t column_index) {
             TYPE_REINTERPRET_CAST(from_type, double);                               \
         default:                                                                    \
             LOG(WARNING) << "the column type which was altered to was unsupported." \
-                         << " origin_type=" << logical_type_to_string(ref_type)       \
-                         << ", alter_type=" << logical_type_to_string(new_type);      \
+                         << " origin_type=" << logical_type_to_string(ref_type)     \
+                         << ", alter_type=" << logical_type_to_string(new_type);    \
             return false;                                                           \
         }                                                                           \
         break;                                                                      \
