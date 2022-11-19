@@ -13,7 +13,7 @@
 #include "runtime/decimalv3.h"
 #include "util/pred_guard.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 #define DEFINE_CLASS_CONSTRUCTOR(CLASS_NAME)          \
     CLASS_NAME(const TExprNode& node) : Expr(node) {} \
@@ -45,7 +45,7 @@ class VectorizedArithmeticExpr final : public Expr {
 public:
     DEFINE_CLASS_CONSTRUCTOR(VectorizedArithmeticExpr);
 
-    std::optional<ColumnPtr> evaluate_decimal_fast_mul(ExprContext* context, vectorized::Chunk* chunk) {
+    std::optional<ColumnPtr> evaluate_decimal_fast_mul(ExprContext* context, Chunk* chunk) {
         auto lhs_pt_opt = eliminate_trivial_cast_for_decimal_mul(_children[0]);
         auto rhs_pt_opt = eliminate_trivial_cast_for_decimal_mul(_children[1]);
         if (lhs_pt_opt.has_value() && rhs_pt_opt.has_value()) {
@@ -79,7 +79,7 @@ public:
         return {};
     }
 
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
+    ColumnPtr evaluate(ExprContext* context, Chunk* ptr) override {
 #if defined(__x86_64__) && defined(__GNUC__)
         if constexpr (is_mul_op<OP> && pt_is_decimal<Type>) {
             auto opt_result = evaluate_decimal_fast_mul(context, ptr);
@@ -113,7 +113,7 @@ template <PrimitiveType Type, typename Op>
 class VectorizedDivArithmeticExpr final : public Expr {
 public:
     DEFINE_CLASS_CONSTRUCTOR(VectorizedDivArithmeticExpr);
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
+    ColumnPtr evaluate(ExprContext* context, Chunk* ptr) override {
         if constexpr (is_intdiv_op<Op> && pt_is_bigint<Type>) {
             using CastFunction = VectorizedUnaryFunction<DecimalTo<true>>;
             switch (_children[0]->type().type) {
@@ -139,7 +139,7 @@ public:
 
 private:
     template <PrimitiveType LType>
-    ColumnPtr evaluate_internal(ExprContext* context, vectorized::Chunk* ptr) {
+    ColumnPtr evaluate_internal(ExprContext* context, Chunk* ptr) {
         auto l = _children[0]->evaluate(context, ptr);
         auto r = _children[1]->evaluate(context, ptr);
         if constexpr (pt_is_decimal<LType>) {
@@ -158,7 +158,7 @@ template <PrimitiveType Type>
 class VectorizedModArithmeticExpr final : public Expr {
 public:
     DEFINE_CLASS_CONSTRUCTOR(VectorizedModArithmeticExpr);
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
+    ColumnPtr evaluate(ExprContext* context, Chunk* ptr) override {
         auto l = _children[0]->evaluate(context, ptr);
         auto r = _children[1]->evaluate(context, ptr);
 
@@ -178,7 +178,7 @@ template <PrimitiveType Type>
 class VectorizedBitNotArithmeticExpr final : public Expr {
 public:
     DEFINE_CLASS_CONSTRUCTOR(VectorizedBitNotArithmeticExpr);
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
+    ColumnPtr evaluate(ExprContext* context, Chunk* ptr) override {
         auto l = _children[0]->evaluate(context, ptr);
         using ArithmeticBitNot = ArithmeticUnaryOperator<BitNotOp, Type>;
         return VectorizedStrictUnaryFunction<ArithmeticBitNot>::template evaluate<Type>(l);
@@ -288,4 +288,4 @@ Expr* VectorizedArithmeticExprFactory::from_thrift(const starrocks::TExprNode& n
 #undef SWITCH_NUMBER_TYPE
 #undef SWITCH_ALL_TYPE
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

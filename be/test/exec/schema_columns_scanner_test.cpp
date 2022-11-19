@@ -8,7 +8,7 @@
 #include <tuple>
 #include <vector>
 
-namespace starrocks::vectorized {
+namespace starrocks {
 class SchemaColumnsScannerTest : public ::testing::Test {};
 
 TEST_F(SchemaColumnsScannerTest, test_to_decimal_to_type_string) {
@@ -35,4 +35,4 @@ TEST_F(SchemaColumnsScannerTest, test_to_decimal_to_type_string) {
         ASSERT_EQ(actual_type_string, type_string);
     }
 }
-} // namespace starrocks::vectorized
+} // namespace starrocks

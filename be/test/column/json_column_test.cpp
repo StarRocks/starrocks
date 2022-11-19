@@ -19,7 +19,7 @@
 #include "testutil/parallel_test.h"
 #include "util/json.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(JsonColumnTest, test_parse) {
@@ -371,4 +371,4 @@ PARALLEL_TEST(JsonColumnTest, test_assign) {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -4,7 +4,7 @@
 
 #include "column/chunk.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 Status DisjunctivePredicates::evaluate(const Chunk* chunk, uint8_t* selection) const {
     return evaluate(chunk, selection, 0, static_cast<uint16_t>(chunk->num_rows()));
@@ -18,4 +18,4 @@ Status DisjunctivePredicates::evaluate(const Chunk* chunk, uint8_t* selection, u
     return Status::OK();
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

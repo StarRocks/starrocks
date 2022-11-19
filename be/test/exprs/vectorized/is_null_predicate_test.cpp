@@ -12,7 +12,7 @@
 #include "column/fixed_length_column.h"
 #include "exprs/vectorized/mock_vectorized_expr.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class VectorizedIsNullExprTest : public ::testing::Test {
 public:
@@ -179,4 +179,4 @@ TEST_F(VectorizedIsNullExprTest, isNotNullTest) {
         ASSERT_TRUE(v);
     }
 }
-} // namespace starrocks::vectorized
+} // namespace starrocks

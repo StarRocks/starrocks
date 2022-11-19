@@ -2,7 +2,7 @@
 
 #include "gtest/gtest.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 class TableFunctionNodeTest : public testing::Test {
 public:
     TableFunctionNodeTest() : _runtime_state(TQueryGlobals()) {}
@@ -67,4 +67,4 @@ TEST_F(TableFunctionNodeTest, close_after_not_init) {
     TableFunctionNode table_function_node(&_object_pool, _tnode, *_desc_tbl);
     ASSERT_TRUE(table_function_node.close(&_runtime_state).ok());
 }
-} // namespace starrocks::vectorized
+} // namespace starrocks

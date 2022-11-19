@@ -8,7 +8,7 @@
 #include "exprs/vectorized/mock_vectorized_expr.h"
 #include "exprs/vectorized/string_functions.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class StringFunctionSubstrTest : public ::testing::Test {
 public:
@@ -125,7 +125,7 @@ TEST_F(StringFunctionSubstrTest, substrConstASCIITest) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     auto state = std::make_unique<SubstrState>();
     ctx->set_function_state(FunctionContext::FRAGMENT_LOCAL, state.get());
-    starrocks::vectorized::Columns columns;
+    starrocks::Columns columns;
     columns.emplace_back(str);
     for (auto& e : cases) {
         auto [offset, len, expect] = e;
@@ -173,7 +173,7 @@ TEST_F(StringFunctionSubstrTest, substrConstZhTest) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     auto state = std::make_unique<SubstrState>();
     ctx->set_function_state(FunctionContext::FRAGMENT_LOCAL, state.get());
-    starrocks::vectorized::Columns columns;
+    starrocks::Columns columns;
     columns.emplace_back(str);
     for (auto& e : cases) {
         auto [offset, len, expect] = e;
@@ -256,7 +256,7 @@ TEST_F(StringFunctionSubstrTest, substrConstUtf8Test) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     auto state = std::make_unique<SubstrState>();
     ctx->set_function_state(FunctionContext::FRAGMENT_LOCAL, state.get());
-    starrocks::vectorized::Columns columns;
+    starrocks::Columns columns;
     columns.emplace_back(str);
     for (auto& e : cases) {
         auto [offset, len, expect] = e;
@@ -812,4 +812,4 @@ TEST_F(StringFunctionSubstrTest, substrNotConstUtf8Test) {
     test_substr_not_const(cases);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

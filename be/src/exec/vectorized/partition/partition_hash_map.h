@@ -12,7 +12,7 @@
 #include "runtime/mem_pool.h"
 #include "util/phmap/phmap.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 struct PartitionChunks {
     Chunks chunks;
@@ -246,7 +246,7 @@ template <PrimitiveType primitive_type, typename HashMap>
 struct PartitionHashMapWithOneNumberKey : public PartitionHashMapBase {
     using Iterator = typename HashMap::iterator;
     using ColumnType = RunTimeColumnType<primitive_type>;
-    using FieldType = RunTimeCppType<primitive_type>;
+    using LogicalType = RunTimeCppType<primitive_type>;
     HashMap hash_map;
 
     PartitionHashMapWithOneNumberKey(int32_t chunk_size) : PartitionHashMapBase(chunk_size) {}
@@ -257,7 +257,7 @@ struct PartitionHashMapWithOneNumberKey : public PartitionHashMapBase {
         const auto& key_column_data = key_column->get_data();
         append_chunk_for_one_key(
                 hash_map, chunk, [&](uint32_t offset) { return key_column_data[offset]; },
-                [](const FieldType& key) { return key; }, obj_pool);
+                [](const LogicalType& key) { return key; }, obj_pool);
         return is_downgrade;
     }
 };
@@ -266,7 +266,7 @@ template <PrimitiveType primitive_type, typename HashMap>
 struct PartitionHashMapWithOneNullableNumberKey : public PartitionHashMapBase {
     using Iterator = typename HashMap::iterator;
     using ColumnType = RunTimeColumnType<primitive_type>;
-    using FieldType = RunTimeCppType<primitive_type>;
+    using LogicalType = RunTimeCppType<primitive_type>;
     HashMap hash_map;
     PartitionChunks null_key_value;
 
@@ -278,7 +278,7 @@ struct PartitionHashMapWithOneNullableNumberKey : public PartitionHashMapBase {
         const auto& key_column_data = down_cast<ColumnType*>(nullable_key_column->data_column().get())->get_data();
         append_chunk_for_one_nullable_key(
                 hash_map, null_key_value, chunk, nullable_key_column,
-                [&](uint32_t offset) { return key_column_data[offset]; }, [](const FieldType& key) { return key; },
+                [&](uint32_t offset) { return key_column_data[offset]; }, [](const LogicalType& key) { return key; },
                 obj_pool);
         return is_downgrade;
     }
@@ -357,4 +357,4 @@ struct PartitionHashMapWithSerializedKeyFixedSize {
     }
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

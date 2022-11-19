@@ -12,7 +12,7 @@
 #include <immintrin.h>
 #endif
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 template <PrimitiveType TYPE>
 class SIMD_muti_selector {
@@ -122,4 +122,4 @@ public:
         }
     }
 };
-} // namespace starrocks::vectorized
+} // namespace starrocks

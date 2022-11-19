@@ -10,11 +10,6 @@
 
 namespace starrocks::pipeline {
 
-using vectorized::GlobalDictDecoderPtr;
-using vectorized::DictOptimizeContext;
-using vectorized::DictOptimizeParser;
-using vectorized::Columns;
-
 class DictDecodeOperator final : public Operator {
 public:
     DictDecodeOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
@@ -42,9 +37,9 @@ public:
         return Status::OK();
     }
 
-    StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
-    Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
+    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
     Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
 
@@ -54,7 +49,7 @@ private:
     const std::vector<GlobalDictDecoderPtr>& _decoders;
 
     bool _is_finished = false;
-    vectorized::ChunkPtr _cur_chunk = nullptr;
+    ChunkPtr _cur_chunk = nullptr;
 };
 
 class DictDecodeOperatorFactory final : public OperatorFactory {

@@ -8,7 +8,7 @@
 #include "column/decimalv3_column.h"
 #include "column/vectorized_fwd.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 struct FunctionHelperTest : public ::testing::Test {};
 TEST_F(FunctionHelperTest, testMergeOnlyNullColumnMergeWithNullColumn) {
     auto only_null_column = ColumnHelper::create_const_null_column(10);
@@ -106,4 +106,4 @@ TEST_F(FunctionHelperTest, testMergeNotNullableColumnMergeWithNullColumn) {
         }
     }
 }
-} // namespace starrocks::vectorized
+} // namespace starrocks

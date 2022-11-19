@@ -9,7 +9,7 @@
 #include "exprs/agg/aggregate.h"
 #include "gutil/casts.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 template <PrimitiveType PT, typename = guard::Guard>
 inline constexpr PrimitiveType GroupConcatResultPT = TYPE_VARCHAR;
 
@@ -277,4 +277,4 @@ public:
     std::string get_name() const override { return "group concat"; }
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

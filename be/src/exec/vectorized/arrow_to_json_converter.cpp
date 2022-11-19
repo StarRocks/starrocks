@@ -13,7 +13,7 @@
 #include "gutil/strings/substitute.h"
 #include "util/json.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 using namespace arrow;
 using ArrowStatus = Status;
@@ -382,4 +382,4 @@ Status convert_arrow_to_json(const Array* array, JsonColumn* output) {
     return Status::OK();
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

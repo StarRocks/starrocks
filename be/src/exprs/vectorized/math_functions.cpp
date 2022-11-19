@@ -12,7 +12,7 @@
 #include "exprs/expr.h"
 #include "util/time.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 static const double MAX_EXP_PARAMETER = std::log(std::numeric_limits<double>::max());
 
@@ -736,4 +736,4 @@ ColumnPtr MathFunctions::rand_seed(FunctionContext* context, const Columns& colu
     return rand(context, columns);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

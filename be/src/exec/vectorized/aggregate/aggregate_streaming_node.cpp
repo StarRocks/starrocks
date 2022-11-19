@@ -12,7 +12,7 @@
 #include "runtime/current_thread.h"
 #include "simd/simd.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 Status AggregateStreamingNode::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(AggregateBaseNode::prepare(state));
@@ -261,4 +261,4 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateStreamingNode:
     return ops_with_source;
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -17,7 +17,7 @@
 #include "util/pretty_printer.h"
 #include "util/starrocks_metrics.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class RowsetMerger {
 public:
@@ -25,7 +25,7 @@ public:
 
     virtual ~RowsetMerger() = default;
 
-    virtual Status do_merge(Tablet& tablet, int64_t version, const Schema& schema,
+    virtual Status do_merge(Tablet& tablet, int64_t version, const VectorizedSchema& schema,
                             const vector<RowsetSharedPtr>& rowsets, RowsetWriter* writer, const MergeConfig& cfg) = 0;
 };
 
@@ -40,9 +40,9 @@ struct MergeEntry {
     ChunkIteratorPtr segment_itr;
     std::unique_ptr<RowsetReleaseGuard> rowset_release_guard;
     // set |encode_schema| if require encode chunk pk columns
-    const vectorized::Schema* encode_schema = nullptr;
+    const VectorizedSchema* encode_schema = nullptr;
     uint16_t order;
-    std::vector<vectorized::RowSourceMask>* source_masks = nullptr;
+    std::vector<RowSourceMask>* source_masks = nullptr;
 
     MergeEntry() = default;
     ~MergeEntry() { close(); }
@@ -206,8 +206,8 @@ public:
         return Status::EndOfFile("merge end");
     }
 
-    Status do_merge(Tablet& tablet, int64_t version, const Schema& schema, const vector<RowsetSharedPtr>& rowsets,
-                    RowsetWriter* writer, const MergeConfig& cfg) override {
+    Status do_merge(Tablet& tablet, int64_t version, const VectorizedSchema& schema,
+                    const vector<RowsetSharedPtr>& rowsets, RowsetWriter* writer, const MergeConfig& cfg) override {
         _chunk_size = cfg.chunk_size;
 
         size_t total_input_size = 0;
@@ -246,12 +246,12 @@ public:
     }
 
 private:
-    Status _do_merge_horizontally(Tablet& tablet, int64_t version, const Schema& schema,
+    Status _do_merge_horizontally(Tablet& tablet, int64_t version, const VectorizedSchema& schema,
                                   const vector<RowsetSharedPtr>& rowsets, RowsetWriter* writer, const MergeConfig& cfg,
                                   size_t* total_input_size, size_t* total_rows, size_t* total_chunk,
                                   OlapReaderStatistics* stats, RowSourceMaskBuffer* mask_buffer = nullptr,
                                   std::vector<std::unique_ptr<RowSourceMaskBuffer>>* rowsets_mask_buffer = nullptr) {
-        std::unique_ptr<vectorized::Column> sort_column;
+        std::unique_ptr<Column> sort_column;
         std::vector<ColumnId> sort_key_idxes;
         if (schema.sort_key_idxes().size() > 1) {
             sort_key_idxes = schema.sort_key_idxes();
@@ -408,7 +408,8 @@ private:
             rowsets_mask_buffer.emplace_back(std::move(rowset_mask_buffer));
         }
         {
-            Schema schema = ChunkHelper::convert_schema_to_format_v2(tablet.tablet_schema(), column_groups[0]);
+            VectorizedSchema schema =
+                    ChunkHelper::convert_schema_to_format_v2(tablet.tablet_schema(), column_groups[0]);
             RETURN_IF_ERROR(_do_merge_horizontally(tablet, version, schema, rowsets, writer, cfg, total_input_size,
                                                    total_rows, total_chunk, stats, mask_buffer.get(),
                                                    &rowsets_mask_buffer));
@@ -422,10 +423,11 @@ private:
 
             _entries.clear();
             _entries.reserve(rowsets.size());
-            vector<vectorized::ChunkIteratorPtr> iterators;
+            vector<ChunkIteratorPtr> iterators;
             iterators.reserve(rowsets.size());
             OlapReaderStatistics non_key_stats;
-            Schema schema = ChunkHelper::convert_schema_to_format_v2(tablet.tablet_schema(), column_groups[i]);
+            VectorizedSchema schema =
+                    ChunkHelper::convert_schema_to_format_v2(tablet.tablet_schema(), column_groups[i]);
             for (size_t j = 0; j < rowsets.size(); j++) {
                 const auto& rowset = rowsets[j];
                 rowsets_mask_buffer[j]->flip_to_read();
@@ -437,7 +439,7 @@ private:
                 if (!res.ok()) {
                     return res.status();
                 }
-                vector<vectorized::ChunkIteratorPtr> segment_iters;
+                vector<ChunkIteratorPtr> segment_iters;
                 for (const auto& segment_iter : res.value()) {
                     if (segment_iter) {
                         segment_iters.emplace_back(segment_iter);
@@ -513,7 +515,7 @@ private:
 
 Status compaction_merge_rowsets(Tablet& tablet, int64_t version, const vector<RowsetSharedPtr>& rowsets,
                                 RowsetWriter* writer, const MergeConfig& cfg) {
-    Schema schema = ChunkHelper::convert_schema_to_format_v2(tablet.tablet_schema());
+    VectorizedSchema schema = ChunkHelper::convert_schema_to_format_v2(tablet.tablet_schema());
     std::unique_ptr<RowsetMerger> merger;
     auto key_type = PrimaryKeyEncoder::encoded_primary_key_type(schema, schema.sort_key_idxes());
     switch (key_type) {
@@ -550,4 +552,4 @@ Status compaction_merge_rowsets(Tablet& tablet, int64_t version, const vector<Ro
     return merger->do_merge(tablet, version, schema, rowsets, writer, cfg);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

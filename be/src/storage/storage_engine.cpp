@@ -665,7 +665,7 @@ Status StorageEngine::_perform_cumulative_compaction(DataDir* data_dir,
 
     std::unique_ptr<MemTracker> mem_tracker =
             std::make_unique<MemTracker>(MemTracker::COMPACTION, -1, "", _options.compaction_mem_tracker);
-    vectorized::CumulativeCompaction cumulative_compaction(mem_tracker.get(), best_tablet);
+    CumulativeCompaction cumulative_compaction(mem_tracker.get(), best_tablet);
 
     Status res = cumulative_compaction.compact();
     if (!res.ok()) {
@@ -708,7 +708,7 @@ Status StorageEngine::_perform_base_compaction(DataDir* data_dir, std::pair<int3
 
     std::unique_ptr<MemTracker> mem_tracker =
             std::make_unique<MemTracker>(MemTracker::COMPACTION, -1, "", _options.compaction_mem_tracker);
-    vectorized::BaseCompaction base_compaction(mem_tracker.get(), best_tablet);
+    BaseCompaction base_compaction(mem_tracker.get(), best_tablet);
 
     Status res = base_compaction.compact();
     if (!res.ok()) {

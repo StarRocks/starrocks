@@ -8,7 +8,7 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/primitive_type.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 template <typename T>
 static Status add_nullable_numeric_column(Column* column, const TypeDescriptor& type_desc, const std::string& name,
@@ -211,4 +211,4 @@ Status add_nullable_column(Column* column, const TypeDescriptor& type_desc, cons
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

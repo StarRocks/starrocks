@@ -2,7 +2,7 @@
 
 #include "storage/chunk_iterator.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class TimedChunkIterator final : public ChunkIterator {
 public:
@@ -56,4 +56,4 @@ ChunkIteratorPtr timed_chunk_iterator(const ChunkIteratorPtr& iter, RuntimeProfi
     return std::make_shared<TimedChunkIterator>(iter, counter);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

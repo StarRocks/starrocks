@@ -30,7 +30,7 @@ public:
 
     Status set_finished(RuntimeState* state) override { return _except_ctx->set_finished(); }
 
-    StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
     void close(RuntimeState* state) override;
 

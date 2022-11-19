@@ -13,7 +13,7 @@
 #include "util/md5.h"
 #include "util/sha.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 ColumnPtr EncryptionFunctions::aes_encrypt(FunctionContext* ctx, const Columns& columns) {
     auto src_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
@@ -406,4 +406,4 @@ Status EncryptionFunctions::sha2_close(FunctionContext* context, FunctionContext
     return Status::OK();
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

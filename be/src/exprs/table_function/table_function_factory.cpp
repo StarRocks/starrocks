@@ -12,7 +12,7 @@
 #include "exprs/table_function/unnest.h"
 #include "udf/java/java_function_fwd.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 struct TableFunctionMapHash {
     size_t operator()(
@@ -100,4 +100,4 @@ const TableFunction* get_table_function(const std::string& name, const std::vect
     }
     return nullptr;
 }
-} // namespace starrocks::vectorized
+} // namespace starrocks

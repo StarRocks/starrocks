@@ -10,7 +10,7 @@
 #include "column/fixed_length_column.h"
 #include "exprs/vectorized/mock_vectorized_expr.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class VectorizedArithmeticExprTest : public ::testing::Test {
 public:
@@ -611,4 +611,4 @@ TEST_F(VectorizedArithmeticExprTest, constModN128Expr) {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

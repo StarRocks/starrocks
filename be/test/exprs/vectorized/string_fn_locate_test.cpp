@@ -4,7 +4,7 @@
 #include "exprs/vectorized/string_functions.h"
 #include "gen_cpp/Exprs_types.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class StringFunctionLocateTest : public ::testing::Test {
 public:
@@ -544,4 +544,4 @@ TEST_F(StringFunctionLocateTest, locatePosChineseTest) {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

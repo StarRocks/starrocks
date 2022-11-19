@@ -14,7 +14,7 @@
 
 #include "column/column_hash.h"
 #include "glog/logging.h"
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // FixedSizeHashMap
 // Key: KeyType integer type eg: uint8 uint16
@@ -190,4 +190,4 @@ private:
     uint8_t _hash_table[hash_table_size + 1];
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

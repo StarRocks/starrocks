@@ -12,8 +12,8 @@
 #include "column/chunk.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
-#include "column/schema.h"
 #include "column/vectorized_fwd.h"
+#include "column/vectorized_schema.h"
 #include "common/logging.h"
 #include "fs/fs_util.h"
 #include "runtime/exec_env.h"
@@ -31,10 +31,10 @@
 
 namespace starrocks::lake {
 
-using namespace starrocks::vectorized;
+using namespace starrocks;
 
-using VSchema = starrocks::vectorized::Schema;
-using VChunk = starrocks::vectorized::Chunk;
+using VSchema = starrocks::VectorizedSchema;
+using VChunk = starrocks::Chunk;
 
 class DuplicateKeyHorizontalCompactionTest : public testing::Test {
 public:

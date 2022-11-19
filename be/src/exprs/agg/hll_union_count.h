@@ -8,7 +8,7 @@
 #include "exprs/agg/aggregate.h"
 #include "gutil/casts.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 /**
  * RETURN_TYPE: TYPE_BIGINT
@@ -79,4 +79,4 @@ public:
     std::string get_name() const override { return "hll_union_agg"; }
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

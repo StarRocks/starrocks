@@ -31,7 +31,7 @@
 
 namespace starrocks {
 
-enum class FieldTypeVersion {
+enum class LogicalTypeVersion {
     kV1,
     kV2,
 };
@@ -78,7 +78,7 @@ static FieldAggregationMethod t_aggregation_type_to_field_aggregation_method(TAg
     return OLAP_FIELD_AGGREGATION_NONE;
 }
 
-static LogicalType t_primitive_type_to_field_type(TPrimitiveType::type primitive_type, FieldTypeVersion v) {
+static LogicalType t_primitive_type_to_field_type(TPrimitiveType::type primitive_type, LogicalTypeVersion v) {
     switch (primitive_type) {
     case TPrimitiveType::INVALID_TYPE:
     case TPrimitiveType::NULL_TYPE:
@@ -100,9 +100,9 @@ static LogicalType t_primitive_type_to_field_type(TPrimitiveType::type primitive
     case TPrimitiveType::DOUBLE:
         return LOGICAL_TYPE_DOUBLE;
     case TPrimitiveType::DATE:
-        return v == FieldTypeVersion::kV1 ? LOGICAL_TYPE_DATE : LOGICAL_TYPE_DATE_V2;
+        return v == LogicalTypeVersion::kV1 ? LOGICAL_TYPE_DATE : LOGICAL_TYPE_DATE_V2;
     case TPrimitiveType::DATETIME:
-        return v == FieldTypeVersion::kV1 ? LOGICAL_TYPE_DATETIME : LOGICAL_TYPE_TIMESTAMP;
+        return v == LogicalTypeVersion::kV1 ? LOGICAL_TYPE_DATETIME : LOGICAL_TYPE_TIMESTAMP;
     case TPrimitiveType::CHAR:
         return LOGICAL_TYPE_CHAR;
     case TPrimitiveType::LARGEINT:
@@ -113,7 +113,7 @@ static LogicalType t_primitive_type_to_field_type(TPrimitiveType::type primitive
         return LOGICAL_TYPE_HLL;
     case TPrimitiveType::DECIMAL:
     case TPrimitiveType::DECIMALV2:
-        return v == FieldTypeVersion::kV1 ? LOGICAL_TYPE_DECIMAL : LOGICAL_TYPE_DECIMAL_V2;
+        return v == LogicalTypeVersion::kV1 ? LOGICAL_TYPE_DECIMAL : LOGICAL_TYPE_DECIMAL_V2;
     case TPrimitiveType::DECIMAL32:
         return LOGICAL_TYPE_DECIMAL32;
     case TPrimitiveType::DECIMAL64:
@@ -134,7 +134,7 @@ static LogicalType t_primitive_type_to_field_type(TPrimitiveType::type primitive
     return LOGICAL_TYPE_UNKNOWN;
 }
 
-static Status t_column_to_pb_column(int32_t unique_id, const TColumn& t_column, FieldTypeVersion v, ColumnPB* column_pb,
+static Status t_column_to_pb_column(int32_t unique_id, const TColumn& t_column, LogicalTypeVersion v, ColumnPB* column_pb,
                                     size_t depth = 0) {
     const int32_t kFakeUniqueId = -1;
 
@@ -245,9 +245,9 @@ Status convert_t_schema_to_pb_schema(const TTabletSchema& tablet_schema, uint32_
         return Status::InternalError("Unexpected compression type");
     }
 
-    FieldTypeVersion field_version = FieldTypeVersion::kV1;
+    LogicalTypeVersion field_version = LogicalTypeVersion::kV1;
     if (config::storage_format_version == 2) {
-        field_version = FieldTypeVersion::kV2;
+        field_version = LogicalTypeVersion::kV2;
     }
 
     // set column information

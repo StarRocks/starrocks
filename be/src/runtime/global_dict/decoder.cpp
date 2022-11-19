@@ -10,25 +10,25 @@
 #include "runtime/global_dict/config.h"
 #include "runtime/global_dict/types.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 template <PrimitiveType type, typename Dict, PrimitiveType result_type>
 class GlobalDictDecoderBase : public GlobalDictDecoder {
 public:
-    using FieldType = RunTimeCppType<type>;
+    using LogicalType = RunTimeCppType<type>;
     using ResultColumnType = RunTimeColumnType<result_type>;
     using ColumnType = RunTimeColumnType<type>;
 
     GlobalDictDecoderBase(Dict dict) : _dict(std::move(dict)) {}
 
-    Status decode(vectorized::Column* in, vectorized::Column* out) override;
+    Status decode(Column* in, Column* out) override;
 
 private:
     Dict _dict;
 };
 
 template <PrimitiveType type, typename Dict, PrimitiveType result_type>
-Status GlobalDictDecoderBase<type, Dict, result_type>::decode(vectorized::Column* in, vectorized::Column* out) {
+Status GlobalDictDecoderBase<type, Dict, result_type>::decode(Column* in, Column* out) {
     DCHECK(in != nullptr);
     DCHECK(out != nullptr);
 
@@ -49,7 +49,7 @@ Status GlobalDictDecoderBase<type, Dict, result_type>::decode(vectorized::Column
         auto res_column = down_cast<ResultColumnType*>(out);
         auto column = down_cast<ColumnType*>(in);
         for (size_t i = 0; i < in->size(); i++) {
-            FieldType key = column->get_data()[i];
+            LogicalType key = column->get_data()[i];
             auto iter = _dict.find(key);
             if (iter == _dict.end()) {
                 return Status::InternalError(fmt::format("Dict Decode failed, Dict can't take cover all key :{}", key));
@@ -69,7 +69,7 @@ Status GlobalDictDecoderBase<type, Dict, result_type>::decode(vectorized::Column
     for (size_t i = 0; i < in->size(); i++) {
         if (column->null_column_data()[i] == 0) {
             res_column->null_column_data()[i] = 0;
-            FieldType key = data_column->get_data()[i];
+            LogicalType key = data_column->get_data()[i];
             auto iter = _dict.find(key);
             if (iter == _dict.end()) {
                 return Status::InternalError(fmt::format("Dict Decode failed, Dict can't take cover all key :{}", key));
@@ -91,4 +91,4 @@ GlobalDictDecoderPtr create_global_dict_decoder(const DictType& dict) {
 // explicit instantiation
 template GlobalDictDecoderPtr create_global_dict_decoder<RGlobalDictMap>(const RGlobalDictMap& dict);
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

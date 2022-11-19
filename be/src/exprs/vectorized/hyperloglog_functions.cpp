@@ -10,7 +10,7 @@
 #include "udf/udf.h"
 #include "util/phmap/phmap.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // hll_cardinality_from_string
 DEFINE_UNARY_FN_WITH_IMPL(hllCardinalityFromStringImpl, str) {
@@ -19,7 +19,7 @@ DEFINE_UNARY_FN_WITH_IMPL(hllCardinalityFromStringImpl, str) {
 }
 
 ColumnPtr HyperloglogFunction::hll_cardinality_from_string(FunctionContext* context,
-                                                           const starrocks::vectorized::Columns& columns) {
+                                                           const starrocks::Columns& columns) {
     return VectorizedStrictUnaryFunction<hllCardinalityFromStringImpl>::evaluate<TYPE_VARCHAR, TYPE_BIGINT>(columns[0]);
 }
 
@@ -28,8 +28,7 @@ DEFINE_UNARY_FN_WITH_IMPL(hllCardinalityImpl, hll_ptr) {
     return hll_ptr->estimate_cardinality();
 }
 
-ColumnPtr HyperloglogFunction::hll_cardinality(FunctionContext* context,
-                                               const starrocks::vectorized::Columns& columns) {
+ColumnPtr HyperloglogFunction::hll_cardinality(FunctionContext* context, const starrocks::Columns& columns) {
     return VectorizedStrictUnaryFunction<hllCardinalityImpl>::evaluate<TYPE_HLL, TYPE_BIGINT>(columns[0]);
 }
 
@@ -66,4 +65,4 @@ ColumnPtr HyperloglogFunction::hll_empty(FunctionContext* context, const Columns
     return ConstColumn::create(p, 1);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

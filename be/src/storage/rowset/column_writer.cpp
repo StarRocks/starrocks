@@ -203,7 +203,7 @@ public:
 
     Status init() override { return _scalar_column_writer->init(); };
 
-    Status append(const vectorized::Column& column) override;
+    Status append(const Column& column) override;
 
     Status append(const uint8_t* data, const uint8_t* null_flags, size_t count, bool has_null) override {
         // if column is Array<String>, encoding maybe not set
@@ -216,10 +216,10 @@ public:
     };
 
     // Speculate char/varchar encoding and reset encoding
-    void speculate_column_and_set_encoding(const vectorized::Column& column);
+    void speculate_column_and_set_encoding(const Column& column);
 
     // Speculate char/varchar encoding
-    EncodingTypePB speculate_string_encoding(const vectorized::BinaryColumn& bin_col);
+    EncodingTypePB speculate_string_encoding(const BinaryColumn& bin_col);
 
     Status finish_current_page() override { return _scalar_column_writer->finish_current_page(); };
 
@@ -240,12 +240,12 @@ public:
 
     uint64_t total_mem_footprint() const override { return _scalar_column_writer->total_mem_footprint(); }
 
-    Status check_string_lengths(const vectorized::Column& column);
+    Status check_string_lengths(const Column& column);
 
 private:
     std::unique_ptr<ScalarColumnWriter> _scalar_column_writer;
     bool _is_speculated = false;
-    vectorized::ColumnPtr _buf_column = nullptr;
+    ColumnPtr _buf_column = nullptr;
 };
 
 StatusOr<std::unique_ptr<ColumnWriter>> ColumnWriter::create(const ColumnWriterOptions& opts,
@@ -606,23 +606,23 @@ Status ScalarColumnWriter::finish_current_page() {
     return Status::OK();
 }
 
-Status ScalarColumnWriter::append(const vectorized::Column& column) {
+Status ScalarColumnWriter::append(const Column& column) {
     _total_mem_footprint += column.byte_size();
 
     const uint8_t* ptr = column.raw_data();
     const uint8_t* null =
-            is_nullable() ? down_cast<const vectorized::NullableColumn*>(&column)->null_column()->raw_data() : nullptr;
+            is_nullable() ? down_cast<const NullableColumn*>(&column)->null_column()->raw_data() : nullptr;
     return append(ptr, null, column.size(), column.has_null());
 }
 
-Status ScalarColumnWriter::append_array_offsets(const vectorized::Column& column) {
+Status ScalarColumnWriter::append_array_offsets(const Column& column) {
     _total_mem_footprint += column.byte_size();
 
     // Write offset column, it's only used in ArrayColumn
     // [1, 2, 3], [4, 5, 6]
     // In memory, it will be transformed by actual offset(0, 3, 6)
     // In disk, offset is stored as length array(3, 3)
-    auto& offsets = down_cast<const vectorized::UInt32Column&>(column);
+    auto& offsets = down_cast<const UInt32Column&>(column);
     auto& data = offsets.get_data();
 
     std::vector<uint32_t> array_size;
@@ -779,15 +779,15 @@ Status ArrayColumnWriter::init() {
     return Status::OK();
 }
 
-Status ArrayColumnWriter::append(const vectorized::Column& column) {
-    const vectorized::ArrayColumn* array_column = nullptr;
-    vectorized::NullColumn* null_column = nullptr;
+Status ArrayColumnWriter::append(const Column& column) {
+    const ArrayColumn* array_column = nullptr;
+    NullColumn* null_column = nullptr;
     if (is_nullable()) {
-        const auto& nullable_column = down_cast<const vectorized::NullableColumn&>(column);
-        array_column = down_cast<vectorized::ArrayColumn*>(nullable_column.data_column().get());
-        null_column = down_cast<vectorized::NullColumn*>(nullable_column.null_column().get());
+        const auto& nullable_column = down_cast<const NullableColumn&>(column);
+        array_column = down_cast<ArrayColumn*>(nullable_column.data_column().get());
+        null_column = down_cast<NullColumn*>(nullable_column.null_column().get());
     } else {
-        array_column = down_cast<const vectorized::ArrayColumn*>(&column);
+        array_column = down_cast<const ArrayColumn*>(&column);
     }
 
     // 1. Write null column when necessary
@@ -896,7 +896,7 @@ StringColumnWriter::StringColumnWriter(const ColumnWriterOptions& opts, std::uni
                                        std::unique_ptr<ScalarColumnWriter> column_writer)
         : ColumnWriter(std::move(field), opts.meta->is_nullable()), _scalar_column_writer(std::move(column_writer)) {}
 
-Status StringColumnWriter::append(const vectorized::Column& column) {
+Status StringColumnWriter::append(const Column& column) {
     if (config::enable_check_string_lengths) {
         RETURN_IF_ERROR(check_string_lengths(column));
     }
@@ -928,20 +928,20 @@ Status StringColumnWriter::append(const vectorized::Column& column) {
     }
 }
 
-inline void StringColumnWriter::speculate_column_and_set_encoding(const vectorized::Column& column) {
+inline void StringColumnWriter::speculate_column_and_set_encoding(const Column& column) {
     if (column.is_nullable()) {
-        const auto& data_col = down_cast<const vectorized::NullableColumn&>(column).data_column();
-        const auto& bin_col = down_cast<vectorized::BinaryColumn&>(*data_col);
+        const auto& data_col = down_cast<const NullableColumn&>(column).data_column();
+        const auto& bin_col = down_cast<BinaryColumn&>(*data_col);
         const auto detect_encoding = speculate_string_encoding(bin_col);
         _scalar_column_writer->set_encoding(detect_encoding);
     } else if (column.is_binary()) {
-        const auto& bin_col = down_cast<const vectorized::BinaryColumn&>(column);
+        const auto& bin_col = down_cast<const BinaryColumn&>(column);
         auto detect_encoding = speculate_string_encoding(bin_col);
         _scalar_column_writer->set_encoding(detect_encoding);
     }
 }
 
-inline EncodingTypePB StringColumnWriter::speculate_string_encoding(const vectorized::BinaryColumn& bin_col) {
+inline EncodingTypePB StringColumnWriter::speculate_string_encoding(const BinaryColumn& bin_col) {
     const size_t dictionary_min_rowcount = 256;
 
     auto row_count = bin_col.size();
@@ -951,7 +951,7 @@ inline EncodingTypePB StringColumnWriter::speculate_string_encoding(const vector
     if (row_count > dictionary_min_rowcount) {
         phmap::flat_hash_set<size_t> hash_set;
         for (size_t i = 0; i < row_count; i++) {
-            size_t hash = vectorized::SliceHash()(bin_col.get_slice(i));
+            size_t hash = SliceHash()(bin_col.get_slice(i));
             hash_set.insert(hash);
             if (hash_set.size() > max_card) {
                 return PLAIN_ENCODING;
@@ -980,22 +980,22 @@ Status StringColumnWriter::finish() {
     return _scalar_column_writer->finish();
 }
 
-Status StringColumnWriter::check_string_lengths(const vectorized::Column& column) {
+Status StringColumnWriter::check_string_lengths(const Column& column) {
     size_t limit = get_field()->length();
     auto row_count = column.size();
     const uint8_t* null =
-            is_nullable() ? down_cast<const vectorized::NullableColumn*>(&column)->null_column()->raw_data() : nullptr;
-    const vectorized::BinaryColumn* bin_col;
+            is_nullable() ? down_cast<const NullableColumn*>(&column)->null_column()->raw_data() : nullptr;
+    const BinaryColumn* bin_col;
 
     if (is_nullable()) {
-        const auto& data_col = down_cast<const vectorized::NullableColumn*>(&column)->data_column();
-        bin_col = down_cast<const vectorized::BinaryColumn*>(data_col.get());
+        const auto& data_col = down_cast<const NullableColumn*>(&column)->data_column();
+        bin_col = down_cast<const BinaryColumn*>(data_col.get());
     } else {
-        bin_col = down_cast<const vectorized::BinaryColumn*>(&column);
+        bin_col = down_cast<const BinaryColumn*>(&column);
     }
     for (size_t i = 0; i < row_count; i++) {
         // skip string length check if it is null
-        if (null != nullptr && null[i] == starrocks::vectorized::DATUM_NULL) {
+        if (null != nullptr && null[i] == starrocks::DATUM_NULL) {
             continue;
         }
         // here we shouldn't use raw_data() api of column to get a vector of slices in advance,

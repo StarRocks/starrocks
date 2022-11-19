@@ -8,7 +8,7 @@
 #include "common/object_pool.h"
 #include "util/raw_container.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class ArrayElementExpr final : public Expr {
 public:
@@ -17,7 +17,7 @@ public:
     ArrayElementExpr(const ArrayElementExpr&) = default;
     ArrayElementExpr(ArrayElementExpr&&) = default;
 
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* chunk) override {
+    ColumnPtr evaluate(ExprContext* context, Chunk* chunk) override {
         DCHECK_EQ(2, _children.size());
         DCHECK_EQ(_type, _children[0]->type().children[0]);
         ColumnPtr arg0 = _children[0]->evaluate(context, chunk);
@@ -111,4 +111,4 @@ Expr* ArrayElementExprFactory::from_thrift(const TExprNode& node) {
     return new ArrayElementExpr(node);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

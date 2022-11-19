@@ -8,7 +8,7 @@
 #include "runtime/primitive_type.h"
 #include "runtime/primitive_type_infra.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 struct HistogramDispatcher {
     template <PrimitiveType pt>
@@ -31,4 +31,4 @@ void AggregateFuncResolver::register_utility() {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

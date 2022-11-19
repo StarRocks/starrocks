@@ -6,7 +6,7 @@
 #include "runtime/descriptors.h"
 #include "runtime/types.h"
 
-namespace starrocks::vectorized::csv {
+namespace starrocks::csv {
 
 Status BinaryConverter::write_string(OutputStream* os, const Column& column, size_t row_num,
                                      const Options& options) const {
@@ -99,4 +99,4 @@ bool BinaryConverter::read_quoted_string(Column* column, Slice s, const Options&
     return true;
 }
 
-} // namespace starrocks::vectorized::csv
+} // namespace starrocks::csv

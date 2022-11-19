@@ -23,7 +23,7 @@
 #include "storage/vectorized_column_predicate.h"
 #include "testutil/assert.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 inline TExprOpcode::type convert_predicate_type_to_thrift(PredicateType p) {
     static std::unordered_map<PredicateType, TExprOpcode::type> mapping = {
@@ -58,12 +58,12 @@ using PredicatePtr = std::unique_ptr<ColumnPredicate>;
 
 // NOLINTNEXTLINE
 TEST(ConjunctivePredicatesTest, test_evaluate) {
-    SchemaPtr schema(new Schema());
-    auto c0_field = std::make_shared<Field>(0, "c0", LOGICAL_TYPE_INT, true);
-    auto c1_field = std::make_shared<Field>(1, "c1", LOGICAL_TYPE_CHAR, true);
-    auto c2_field = std::make_shared<Field>(2, "c2", LOGICAL_TYPE_DATE_V2, true);
-    auto c3_field = std::make_shared<Field>(3, "c3", LOGICAL_TYPE_TIMESTAMP, true);
-    auto c4_field = std::make_shared<Field>(4, "c4", LOGICAL_TYPE_DECIMAL_V2, true);
+    VectorizedSchemaPtr schema(new VectorizedSchema());
+    auto c0_field = std::make_shared<VectorizedField>(0, "c0", LOGICAL_TYPE_INT, true);
+    auto c1_field = std::make_shared<VectorizedField>(1, "c1", LOGICAL_TYPE_CHAR, true);
+    auto c2_field = std::make_shared<VectorizedField>(2, "c2", LOGICAL_TYPE_DATE_V2, true);
+    auto c3_field = std::make_shared<VectorizedField>(3, "c3", LOGICAL_TYPE_TIMESTAMP, true);
+    auto c4_field = std::make_shared<VectorizedField>(4, "c4", LOGICAL_TYPE_DECIMAL_V2, true);
 
     schema->append(c0_field);
     schema->append(c1_field);
@@ -158,8 +158,8 @@ TEST(ConjunctivePredicatesTest, test_evaluate) {
 
 // NOLINTNEXTLINE
 TEST(ConjunctivePredicatesTest, test_evaluate_and) {
-    SchemaPtr schema(new Schema());
-    schema->append(std::make_shared<Field>(0, "c0", LOGICAL_TYPE_INT, true));
+    VectorizedSchemaPtr schema(new VectorizedSchema());
+    schema->append(std::make_shared<VectorizedField>(0, "c0", LOGICAL_TYPE_INT, true));
 
     auto c0 = ChunkHelper::column_from_field_type(LOGICAL_TYPE_INT, true);
 
@@ -197,8 +197,8 @@ TEST(ConjunctivePredicatesTest, test_evaluate_and) {
 
 // NOLINTNEXTLINE
 TEST(ConjunctivePredicatesTest, test_evaluate_or) {
-    SchemaPtr schema(new Schema());
-    schema->append(std::make_shared<Field>(0, "c0", LOGICAL_TYPE_INT, true));
+    VectorizedSchemaPtr schema(new VectorizedSchema());
+    schema->append(std::make_shared<VectorizedField>(0, "c0", LOGICAL_TYPE_INT, true));
 
     auto c0 = ChunkHelper::column_from_field_type(LOGICAL_TYPE_INT, true);
 
@@ -385,4 +385,4 @@ INSTANTIATE_TEST_SUITE_P(ConjunctiveTest, ConjunctiveTestFixture,
                                                           PrimitiveType::TYPE_LARGEINT, PrimitiveType::TYPE_VARCHAR,
                                                           PrimitiveType::TYPE_CHAR, PrimitiveType::TYPE_BOOLEAN)));
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

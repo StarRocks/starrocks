@@ -83,7 +83,7 @@ public:
     Status open(RuntimeState* state) override;
 
     // Send a chunk into this sink.
-    Status send_chunk(RuntimeState* state, vectorized::Chunk* chunk) override;
+    Status send_chunk(RuntimeState* state, Chunk* chunk) override;
 
     // Flush all buffered data and close all existing channels to destination
     // hosts. Further send() calls are illegal after calling close().
@@ -91,7 +91,7 @@ public:
 
     // For the first chunk , serialize the chunk data and meta to ChunkPB both.
     // For other chunk, only serialize the chunk data to ChunkPB.
-    Status serialize_chunk(const vectorized::Chunk* chunk, ChunkPB* dst, bool* is_first_chunk, int num_receivers = 1);
+    Status serialize_chunk(const Chunk* chunk, ChunkPB* dst, bool* is_first_chunk, int num_receivers = 1);
 
     void construct_brpc_attachment(PTransmitChunkParams* _chunk_request, butil::IOBuf* attachment);
 
@@ -139,7 +139,7 @@ private:
     size_t _request_bytes_threshold = 0;
 
     std::vector<uint32_t> _hash_values;
-    vectorized::Columns _partitions_columns;
+    Columns _partitions_columns;
     bool _is_first_chunk = true;
     // String to write compressed chunk data in serialize().
     // This is a string so we can swap() with the string in the ChunkPB we're serializing

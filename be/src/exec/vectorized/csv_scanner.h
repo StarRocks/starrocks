@@ -16,7 +16,7 @@ namespace starrocks {
 class SequentialFile;
 }
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class CSVScanner final : public FileScanner {
 public:
@@ -66,4 +66,4 @@ private:
     std::vector<ConverterPtr> _converters;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

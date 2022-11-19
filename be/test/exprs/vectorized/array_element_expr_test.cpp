@@ -8,7 +8,7 @@
 #include "column/array_column.h"
 #include "column/column_helper.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 namespace {
 
@@ -519,4 +519,4 @@ TEST_F(ArrayElementExprTest, test_two_dim_array) {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

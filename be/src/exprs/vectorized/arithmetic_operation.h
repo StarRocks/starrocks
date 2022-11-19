@@ -7,7 +7,7 @@
 #include "runtime/primitive_type.h"
 #include "util/guard.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 struct AddOp {};
 struct SubOp {};
 struct ReverseSubOp {};
@@ -376,4 +376,4 @@ struct ArithmeticRightZeroCheck<TYPE_DECIMALV2, guard::Guard> {
         return r == DecimalV2Value::ZERO;
     }
 };
-} //namespace starrocks::vectorized
+} //namespace starrocks

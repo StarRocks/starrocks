@@ -17,7 +17,7 @@
 #include "runtime/mem_pool.h"
 #include "runtime/primitive_type.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 template <PrimitiveType child_type>
 struct VectorizedCaseExprTestBuilder {
@@ -553,4 +553,4 @@ TEST_F(VectorizedCaseExprTest, NoCaseWhenNullReturnIntElse) {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

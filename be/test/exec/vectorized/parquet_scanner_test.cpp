@@ -17,7 +17,7 @@
 #include "runtime/types.h"
 #include "testutil//assert.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class ParquetScannerTest : public ::testing::Test {
     std::vector<TBrokerRangeDesc> generate_ranges(const std::vector<std::string>& file_names,
@@ -562,4 +562,4 @@ TEST_F(ParquetScannerTest, test_selected_parquet_data) {
     validate(scanner, 36865, check);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -9,7 +9,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
-#include "runtime/memory/chunk_allocator.h"
+#include "runtime/memory/mem_chunk_allocator.h"
 #include "runtime/time_types.h"
 #include "runtime/user_function_cache.h"
 #include "storage/options.h"
@@ -45,7 +45,7 @@ int main(int argc, char** argv) {
     starrocks::MemInfo::init();
     starrocks::UserFunctionCache::instance()->init(starrocks::config::user_function_dir);
 
-    starrocks::vectorized::date::init_date_cache();
+    starrocks::date::init_date_cache();
     starrocks::TimezoneUtils::init_time_zones();
 
     std::vector<starrocks::StorePath> paths;
@@ -83,7 +83,7 @@ int main(int argc, char** argv) {
     // clear some trash objects kept in tablet_manager so mem_tracker checks will not fail
     starrocks::StorageEngine::instance()->tablet_manager()->start_trash_sweep();
     (void)butil::DeleteFile(storage_root, true);
-    starrocks::vectorized::TEST_clear_all_columns_this_thread();
+    starrocks::TEST_clear_all_columns_this_thread();
     // delete engine
     starrocks::StorageEngine::instance()->stop();
     // destroy exec env

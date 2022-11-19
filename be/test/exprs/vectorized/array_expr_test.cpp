@@ -11,7 +11,7 @@
 #include "column/column_helper.h"
 #include "exprs/vectorized/mock_vectorized_expr.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 namespace {
 
@@ -192,4 +192,4 @@ TEST_F(ArrayExprTest, test_evaluate) {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

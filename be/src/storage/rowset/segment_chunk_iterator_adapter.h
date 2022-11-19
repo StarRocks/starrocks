@@ -5,7 +5,7 @@
 #include <memory>
 #include <vector>
 
-#include "column/schema.h"
+#include "column/vectorized_schema.h"
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "segment_options.h"
@@ -14,13 +14,13 @@
 #include "storage/tablet_schema.h"
 #include "util/runtime_profile.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class SegmentChunkIteratorAdapter final : public ChunkIterator {
 public:
     // |schema| is the output fields.
     explicit SegmentChunkIteratorAdapter(const TabletSchema& tablet_schema, const std::vector<LogicalType>& new_types,
-                                         const Schema& out_schema, int chunk_size);
+                                         const VectorizedSchema& out_schema, int chunk_size);
 
     ~SegmentChunkIteratorAdapter() override = default;
 
@@ -28,7 +28,7 @@ public:
 
     void close() override;
 
-    const Schema& in_schema() const { return _in_schema; }
+    const VectorizedSchema& in_schema() const { return _in_schema; }
     const SegmentReadOptions& in_read_options() const { return _in_read_options; };
 
     void set_iterator(std::shared_ptr<ChunkIterator> iterator) { _inner_iter = std::move(iterator); }
@@ -51,7 +51,7 @@ protected:
     const TabletSchema& _tablet_schema;
     const std::vector<LogicalType>& _new_types;
 
-    Schema _in_schema;
+    VectorizedSchema _in_schema;
     SegmentReadOptions _in_read_options;
     ObjectPool _obj_pool;
 
@@ -64,4 +64,4 @@ protected:
     ChunkPtr _in_chunk;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

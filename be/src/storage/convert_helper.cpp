@@ -8,7 +8,7 @@
 #include "column/datum_convert.h"
 #include "column/decimalv3_column.h"
 #include "column/nullable_column.h"
-#include "column/schema.h"
+#include "column/vectorized_schema.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/datetime_value.h"
 #include "runtime/decimalv2_value.h"
@@ -25,7 +25,7 @@
 #include "util/stack_util.h"
 #include "util/unaligned_access.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 using strings::Substitute;
 
@@ -1888,7 +1888,7 @@ Status RowConverter::init(const TabletSchema& in_schema, const TabletSchema& out
     return Status::OK();
 }
 
-Status RowConverter::init(const Schema& in_schema, const Schema& out_schema) {
+Status RowConverter::init(const VectorizedSchema& in_schema, const VectorizedSchema& out_schema) {
     auto num_columns = in_schema.num_fields();
     _converters.resize(num_columns);
     for (int i = 0; i < num_columns; ++i) {
@@ -1908,7 +1908,7 @@ void RowConverter::convert(std::vector<Datum>* dst, const std::vector<Datum>& sr
     }
 }
 
-Status ChunkConverter::init(const Schema& in_schema, const Schema& out_schema) {
+Status ChunkConverter::init(const VectorizedSchema& in_schema, const VectorizedSchema& out_schema) {
     DCHECK_EQ(in_schema.num_fields(), out_schema.num_fields());
     DCHECK_EQ(in_schema.num_key_fields(), out_schema.num_key_fields());
     auto num_columns = in_schema.num_fields();
@@ -1922,12 +1922,12 @@ Status ChunkConverter::init(const Schema& in_schema, const Schema& out_schema) {
             return Status::NotSupported("Cannot get field converter");
         }
     }
-    _out_schema = std::make_shared<Schema>(out_schema);
+    _out_schema = std::make_shared<VectorizedSchema>(out_schema);
     return Status::OK();
 }
 
 std::unique_ptr<Chunk> ChunkConverter::copy_convert(const Chunk& from) const {
-    auto dest = std::make_unique<Chunk>(Columns{}, std::make_shared<Schema>());
+    auto dest = std::make_unique<Chunk>(Columns{}, std::make_shared<VectorizedSchema>());
     auto num_columns = _converters.size();
     DCHECK_EQ(num_columns, from.num_columns());
     for (int i = 0; i < num_columns; ++i) {
@@ -1939,7 +1939,7 @@ std::unique_ptr<Chunk> ChunkConverter::copy_convert(const Chunk& from) const {
 }
 
 std::unique_ptr<Chunk> ChunkConverter::move_convert(Chunk* from) const {
-    auto dest = std::make_unique<Chunk>(Columns{}, std::make_shared<Schema>());
+    auto dest = std::make_unique<Chunk>(Columns{}, std::make_shared<VectorizedSchema>());
     auto num_columns = _converters.size();
     DCHECK_EQ(num_columns, from->num_columns());
     for (int i = 0; i < num_columns; ++i) {
@@ -1950,4 +1950,4 @@ std::unique_ptr<Chunk> ChunkConverter::move_convert(Chunk* from) const {
     return dest;
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

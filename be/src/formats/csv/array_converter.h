@@ -5,7 +5,7 @@
 #include "formats/csv/array_reader.h"
 #include "formats/csv/converter.h"
 
-namespace starrocks::vectorized::csv {
+namespace starrocks::csv {
 
 class ArrayConverter final : public Converter {
 public:
@@ -23,4 +23,4 @@ private:
     std::unique_ptr<Converter> _element_converter;
 };
 
-} // namespace starrocks::vectorized::csv
+} // namespace starrocks::csv

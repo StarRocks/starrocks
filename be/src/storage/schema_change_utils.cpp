@@ -8,7 +8,7 @@
 #include "types/hll.h"
 #include "util/percentile_value.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 ChunkChanger::ChunkChanger(const TabletSchema& tablet_schema) {
     _schema_mapping.resize(tablet_schema.num_columns());
@@ -218,7 +218,7 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const
                 }
                 ColumnPtr& base_col = base_chunk->get_column_by_index(ref_column);
                 ColumnPtr& new_col = new_chunk->get_column_by_index(i);
-                Field ref_field = ChunkHelper::convert_field_to_format_v2(
+                VectorizedField ref_field = ChunkHelper::convert_field_to_format_v2(
                         ref_column, base_tablet_meta->tablet_schema().column(ref_column));
                 Status st = converter->convert_materialized(base_col, new_col, ref_field.type().get());
                 if (!st.ok()) {
@@ -272,9 +272,9 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const
                     return false;
                 }
 
-                Field ref_field = ChunkHelper::convert_field_to_format_v2(
+                VectorizedField ref_field = ChunkHelper::convert_field_to_format_v2(
                         ref_column, base_tablet_meta->tablet_schema().column(ref_column));
-                Field new_field =
+                VectorizedField new_field =
                         ChunkHelper::convert_field_to_format_v2(i, new_tablet_meta->tablet_schema().column(i));
 
                 Status st = converter->convert_column(ref_field.type().get(), *base_col, new_field.type().get(),
@@ -325,8 +325,8 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const
     return true;
 }
 
-bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const Schema& base_schema,
-                                   const Schema& new_schema, MemPool* mem_pool) {
+bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const VectorizedSchema& base_schema,
+                                   const VectorizedSchema& new_schema, MemPool* mem_pool) {
     if (new_chunk->num_columns() != _schema_mapping.size()) {
         LOG(WARNING) << "new chunk does not match with schema mapping rules. "
                      << "chunk_schema_size=" << new_chunk->num_columns()
@@ -655,4 +655,4 @@ Status SchemaChangeUtils::init_column_mapping(ColumnMapping* column_mapping, con
     return Status::OK();
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -4,7 +4,7 @@
 
 #include "gtest/gtest.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class ColumnHelperTest : public testing::Test {
 public:
@@ -12,4 +12,4 @@ public:
     void TearDown() override {}
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

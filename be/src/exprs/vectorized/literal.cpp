@@ -10,7 +10,7 @@
 #include "gutil/strings/fastmem.h"
 #include "types/constexpr.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 #define CASE_TYPE_COLUMN(NODE_TYPE, CHECK_TYPE, LITERAL_VALUE)                              \
     case NODE_TYPE: {                                                                       \
@@ -142,7 +142,7 @@ VectorizedLiteral::VectorizedLiteral(ColumnPtr&& value, const TypeDescriptor& ty
 
 #undef CASE_TYPE_COLUMN
 
-ColumnPtr VectorizedLiteral::evaluate(ExprContext* context, vectorized::Chunk* ptr) {
+ColumnPtr VectorizedLiteral::evaluate(ExprContext* context, Chunk* ptr) {
     ColumnPtr column = _value->clone_empty();
     column->append(*_value, 0, 1);
     if (ptr != nullptr) {
@@ -160,4 +160,4 @@ std::string VectorizedLiteral::debug_string() const {
 
 VectorizedLiteral::~VectorizedLiteral() = default;
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -7,7 +7,7 @@
 #include "runtime/primitive_type.h"
 #include "runtime/string_value.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaTablesConfigScanner::_s_table_tables_config_columns[] = {
         //   name,       type,          size,     is_null
@@ -196,4 +196,4 @@ Status SchemaTablesConfigScanner::fill_chunk(ChunkPtr* chunk) {
     return Status::OK();
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -6,7 +6,7 @@
 #include "column/column_helper.h"
 #include "column/const_column.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 VectorizedInfoFunc::VectorizedInfoFunc(const TExprNode& node) : Expr(node) {
     switch (_type.type) {
@@ -26,7 +26,7 @@ VectorizedInfoFunc::VectorizedInfoFunc(const TExprNode& node) : Expr(node) {
     }
 }
 
-ColumnPtr VectorizedInfoFunc::evaluate(ExprContext* context, vectorized::Chunk* ptr) {
+ColumnPtr VectorizedInfoFunc::evaluate(ExprContext* context, Chunk* ptr) {
     ColumnPtr column = _value->clone_empty();
     column->append(*_value, 0, 1);
     if (ptr != nullptr) {
@@ -44,4 +44,4 @@ std::string VectorizedInfoFunc::debug_string() const {
 
 VectorizedInfoFunc::~VectorizedInfoFunc() = default;
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

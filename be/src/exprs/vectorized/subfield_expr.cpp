@@ -9,7 +9,7 @@
 #include "column/struct_column.h"
 #include "common/object_pool.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class SubfieldExpr final : public Expr {
 public:
@@ -18,7 +18,7 @@ public:
     SubfieldExpr(const SubfieldExpr&) = default;
     SubfieldExpr(SubfieldExpr&&) = default;
 
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* chunk) override {
+    ColumnPtr evaluate(ExprContext* context, Chunk* chunk) override {
         DCHECK_EQ(1, _children.size());
 
         ColumnPtr col = _children.at(0)->evaluate(context, chunk);
@@ -70,4 +70,4 @@ Expr* SubfieldExprFactory::from_thrift(const TExprNode& node) {
     return new SubfieldExpr(node);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

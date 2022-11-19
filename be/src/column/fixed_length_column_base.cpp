@@ -12,7 +12,7 @@
 #include "util/mysql_row_buffer.h"
 #include "util/value_generator.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 template <typename T>
 StatusOr<ColumnPtr> FixedLengthColumnBase<T>::upgrade_if_overflow() {
@@ -340,4 +340,4 @@ template class FixedLengthColumnBase<DateValue>;
 template class FixedLengthColumnBase<DecimalV2Value>;
 template class FixedLengthColumnBase<TimestampValue>;
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

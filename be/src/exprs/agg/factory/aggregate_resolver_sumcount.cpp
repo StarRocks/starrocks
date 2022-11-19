@@ -7,7 +7,7 @@
 #include "exprs/agg/sum.h"
 #include "runtime/primitive_type.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 struct SumDispatcher {
     template <PrimitiveType pt>
@@ -62,4 +62,4 @@ void AggregateFuncResolver::register_distinct() {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

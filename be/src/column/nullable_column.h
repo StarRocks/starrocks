@@ -5,7 +5,7 @@
 #include "column/fixed_length_column.h"
 #include "common/logging.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 using NullData = FixedLengthColumn<uint8_t>::Container;
 using NullColumn = FixedLengthColumn<uint8_t>;
@@ -296,4 +296,4 @@ private:
     bool _has_null;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -13,7 +13,7 @@
 #include "exprs/vectorized/column_ref.h"
 #include "runtime/types.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class VectorizedCastExprFactory {
 public:
@@ -40,7 +40,7 @@ public:
 
     ~VectorizedCastArrayExpr() override = default;
 
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override;
+    ColumnPtr evaluate(ExprContext* context, Chunk* ptr) override;
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new VectorizedCastArrayExpr(*this)); }
 
@@ -54,7 +54,7 @@ public:
     CastStringToArray(const TExprNode& node, Expr* cast_element, TypeDescriptor type_desc)
             : Expr(node), _cast_elements_expr(cast_element), _cast_to_type_desc(std::move(type_desc)) {}
     ~CastStringToArray() override = default;
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* input_chunk) override;
+    ColumnPtr evaluate(ExprContext* context, Chunk* input_chunk) override;
     Expr* clone(ObjectPool* pool) const override { return pool->add(new CastStringToArray(*this)); }
 
 private:
@@ -71,7 +71,7 @@ public:
             : Expr(node), _cast_elements_expr(cast_element), _cast_to_type_desc(std::move(type_desc)) {}
     ~CastJsonToArray() override = default;
 
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* input_chunk) override;
+    ColumnPtr evaluate(ExprContext* context, Chunk* input_chunk) override;
     Expr* clone(ObjectPool* pool) const override { return pool->add(new CastJsonToArray(*this)); }
 
 private:
@@ -79,4 +79,4 @@ private:
     TypeDescriptor _cast_to_type_desc;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

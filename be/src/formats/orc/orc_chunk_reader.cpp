@@ -25,7 +25,7 @@
 #include "simd/simd.h"
 #include "util/timezone_utils.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 const FillColumnFunction& find_fill_func(PrimitiveType type, bool nullable);
 
@@ -2528,4 +2528,4 @@ void ORCHdfsFileStream::setIORanges(std::vector<orc::InputStream::IORange>& io_r
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

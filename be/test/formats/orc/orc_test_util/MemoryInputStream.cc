@@ -20,8 +20,8 @@
 
 #include "MemoryInputStream.hh"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 MemoryInputStream::~MemoryInputStream() {}
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

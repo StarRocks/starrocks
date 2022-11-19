@@ -17,7 +17,7 @@
     M(TYPE_FLOAT)                  \
     M(TYPE_DOUBLE)
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 template <PrimitiveType TYPE>
 jvalue cast_to_jvalue(RunTimeCppType<TYPE> data_value, JVMFunctionHelper& helper);
@@ -278,4 +278,4 @@ void JavaDataTypeConverter::convert_to_boxed_array(FunctionContext* ctx, std::ve
         res->emplace_back(arg);
     }
 }
-} // namespace starrocks::vectorized
+} // namespace starrocks

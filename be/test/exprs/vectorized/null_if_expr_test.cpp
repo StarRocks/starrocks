@@ -9,7 +9,7 @@
 #include "exprs/vectorized/condition_expr.h"
 #include "exprs/vectorized/mock_vectorized_expr.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class VectorizedNullIfExprTest : public ::testing::Test {
 public:
@@ -115,4 +115,4 @@ TEST_F(VectorizedNullIfExprTest, nullIfLeftNullRightNull) {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

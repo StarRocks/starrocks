@@ -5,7 +5,7 @@
 #include "common/object_pool.h"
 #include "exprs/expr.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class ColumnRef final : public Expr {
 public:
@@ -37,9 +37,9 @@ public:
     std::string debug_string() const override;
 
     // vector query engine
-    vectorized::ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override;
+    ColumnPtr evaluate(ExprContext* context, Chunk* ptr) override;
 
-    static vectorized::ColumnPtr& get_column(Expr* expr, vectorized::Chunk* chunk);
+    static ColumnPtr& get_column(Expr* expr, Chunk* chunk);
 
 private:
     // FixMe(kks): currenly, join runtime filter depend on _tuple_id.
@@ -49,4 +49,4 @@ private:
     TupleId _tuple_id = 0; // used for desc this slot from
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

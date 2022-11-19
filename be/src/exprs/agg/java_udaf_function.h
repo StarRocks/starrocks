@@ -21,7 +21,7 @@
 #include "udf/udf_internal.h"
 #include "util/defer_op.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class JavaUDAFAggregateFunction : public AggregateFunction {
 public:
@@ -372,4 +372,4 @@ public:
 
     std::string get_name() const override { return "java_udaf"; }
 };
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -8,7 +8,7 @@
 #include "util/starrocks_metrics.h"
 #include "util/trace.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 BaseCompaction::BaseCompaction(MemTracker* mem_tracker, TabletSharedPtr tablet)
         : Compaction(mem_tracker, std::move(tablet)) {}
@@ -144,4 +144,4 @@ Status BaseCompaction::_check_rowset_overlapping(const std::vector<RowsetSharedP
     return Status::OK();
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

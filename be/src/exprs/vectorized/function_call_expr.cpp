@@ -13,7 +13,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/user_function_cache.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 VectorizedFunctionCallExpr::VectorizedFunctionCallExpr(const TExprNode& node) : Expr(node), _fn_desc(nullptr) {}
 
@@ -114,7 +114,7 @@ bool VectorizedFunctionCallExpr::is_constant() const {
     return Expr::is_constant();
 }
 
-ColumnPtr VectorizedFunctionCallExpr::evaluate(starrocks::ExprContext* context, vectorized::Chunk* ptr) {
+ColumnPtr VectorizedFunctionCallExpr::evaluate(starrocks::ExprContext* context, Chunk* ptr) {
     FunctionContext* fn_ctx = context->fn_context(_fn_context_index);
 
     Columns args;
@@ -157,4 +157,4 @@ ColumnPtr VectorizedFunctionCallExpr::evaluate(starrocks::ExprContext* context, 
     return result;
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

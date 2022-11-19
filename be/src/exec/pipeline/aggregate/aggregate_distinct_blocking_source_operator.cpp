@@ -23,11 +23,11 @@ void AggregateDistinctBlockingSourceOperator::close(RuntimeState* state) {
     SourceOperator::close(state);
 }
 
-StatusOr<vectorized::ChunkPtr> AggregateDistinctBlockingSourceOperator::pull_chunk(RuntimeState* state) {
+StatusOr<ChunkPtr> AggregateDistinctBlockingSourceOperator::pull_chunk(RuntimeState* state) {
     RETURN_IF_CANCELLED(state);
 
     int32_t chunk_size = state->chunk_size();
-    vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
+    ChunkPtr chunk = std::make_shared<Chunk>();
     _aggregator->hash_set_variant().visit([&](auto& hash_set_with_key) {
         _aggregator->convert_hash_set_to_chunk(*hash_set_with_key, chunk_size, &chunk);
     });

@@ -8,7 +8,7 @@
 #include "exec/vectorized/schema_scanner.h"
 #include "gen_cpp/FrontendService_types.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class SchemaVariablesScanner : public SchemaScanner {
 public:
@@ -28,4 +28,4 @@ private:
     std::map<std::string, std::string>::iterator _begin;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

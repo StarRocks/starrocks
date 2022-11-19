@@ -12,8 +12,6 @@ class MysqlRowBuffer;
 class BufferControlBlock;
 class RuntimeProfile;
 
-namespace vectorized {
-
 class VariableResultWriter final : public ResultWriter {
 public:
     VariableResultWriter(BufferControlBlock* sinker, const std::vector<ExprContext*>& output_expr_ctxs,
@@ -23,9 +21,9 @@ public:
 
     Status init(RuntimeState* state) override;
 
-    Status append_chunk(vectorized::Chunk* chunk) override;
+    Status append_chunk(Chunk* chunk) override;
 
-    StatusOr<TFetchDataResultPtrs> process_chunk(vectorized::Chunk* chunk) override;
+    StatusOr<TFetchDataResultPtrs> process_chunk(Chunk* chunk) override;
 
     StatusOr<bool> try_add_batch(TFetchDataResultPtrs& results) override;
 
@@ -34,7 +32,7 @@ public:
 private:
     void _init_profile();
 
-    StatusOr<TFetchDataResultPtr> _process_chunk(vectorized::Chunk* chunk);
+    StatusOr<TFetchDataResultPtr> _process_chunk(Chunk* chunk);
 
 private:
     BufferControlBlock* _sinker;
@@ -50,5 +48,4 @@ private:
     RuntimeProfile::Counter* _sent_rows_counter = nullptr;
 };
 
-} // namespace vectorized
 } // namespace starrocks

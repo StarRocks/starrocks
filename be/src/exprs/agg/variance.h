@@ -8,7 +8,7 @@
 #include "exprs/agg/aggregate.h"
 #include "gutil/casts.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 template <PrimitiveType PT, typename = guard::Guard>
 inline constexpr PrimitiveType DevFromAveResultPT = TYPE_DOUBLE;
@@ -428,4 +428,4 @@ public:
     std::string get_name() const override { return "stddev"; }
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

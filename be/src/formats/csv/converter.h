@@ -23,7 +23,7 @@ namespace starrocks {
 struct TypeDescriptor;
 } // namespace starrocks
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class Column;
 
@@ -102,4 +102,4 @@ protected:
 std::unique_ptr<Converter> get_converter(const TypeDescriptor& type_desc, bool nullable);
 
 } // namespace csv
-} // namespace starrocks::vectorized
+} // namespace starrocks

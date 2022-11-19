@@ -7,7 +7,7 @@
 #include "formats/csv/output_stream_string.h"
 #include "runtime/types.h"
 
-namespace starrocks::vectorized::csv {
+namespace starrocks::csv {
 
 class DecimalV2ConverterTest : public ::testing::Test {
 public:
@@ -85,4 +85,4 @@ TEST_F(DecimalV2ConverterTest, test_write_string) {
     ASSERT_EQ("0.00000001-0.0000000199999999999999999.00000001", buff2.as_string());
 }
 
-} // namespace starrocks::vectorized::csv
+} // namespace starrocks::csv

@@ -26,7 +26,7 @@
 #include "util/phmap/phmap_dump.h"
 #include "util/slice.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 enum AggDistinctType { COUNT = 0, SUM = 1 };
 
@@ -609,4 +609,4 @@ public:
     std::string get_name() const override { return "dict_merge"; }
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

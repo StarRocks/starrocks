@@ -20,10 +20,10 @@
 
 namespace starrocks::lake {
 
-using namespace starrocks::vectorized;
+using namespace starrocks;
 
-using VSchema = starrocks::vectorized::Schema;
-using VChunk = starrocks::vectorized::Chunk;
+using VSchema = starrocks::VectorizedSchema;
+using VChunk = starrocks::Chunk;
 
 class LinkedSchemaChangeTest : public testing::Test {
 public:

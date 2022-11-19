@@ -9,7 +9,7 @@
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 TEST(StructColumnTest, test_create) {
     auto field_name = BinaryColumn::create();
@@ -518,4 +518,4 @@ TEST(StructColumnTest, test_assign) {
     ASSERT_EQ("{id: 1, name: 'smith'}", column->debug_item(1));
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

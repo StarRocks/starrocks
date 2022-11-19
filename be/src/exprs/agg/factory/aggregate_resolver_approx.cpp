@@ -7,7 +7,7 @@
 #include "runtime/primitive_type.h"
 #include "types/hll.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 struct HLLUnionBuilder {
     template <PrimitiveType pt>
@@ -41,4 +41,4 @@ void AggregateFuncResolver::register_approx() {
                                                               AggregateFactory::MakeHllUnionCountAggregateFunction());
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

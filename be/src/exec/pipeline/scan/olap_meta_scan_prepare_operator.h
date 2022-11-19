@@ -11,7 +11,7 @@ namespace starrocks::pipeline {
 class OlapMetaScanPrepareOperator final : public SourceOperator {
 public:
     OlapMetaScanPrepareOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
-                                vectorized::OlapMetaScanNode* const scan_node, OlapMetaScanContextPtr scan_ctx);
+                                OlapMetaScanNode* const scan_node, OlapMetaScanContextPtr scan_ctx);
     ~OlapMetaScanPrepareOperator() override;
 
     Status prepare(RuntimeState* state) override;
@@ -20,18 +20,18 @@ public:
     bool has_output() const override;
     bool is_finished() const override;
 
-    StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
 private:
     Status _prepare_scan_context(RuntimeState* state);
 
-    vectorized::OlapMetaScanNode* const _scan_node;
+    OlapMetaScanNode* const _scan_node;
     OlapMetaScanContextPtr _scan_ctx;
 };
 
 class OlapMetaScanPrepareOperatorFactory final : public SourceOperatorFactory {
 public:
-    OlapMetaScanPrepareOperatorFactory(int32_t id, int32_t plan_node_id, vectorized::OlapMetaScanNode* const scan_node,
+    OlapMetaScanPrepareOperatorFactory(int32_t id, int32_t plan_node_id, OlapMetaScanNode* const scan_node,
                                        std::shared_ptr<OlapMetaScanContextFactory> scan_ctx_factory);
 
     ~OlapMetaScanPrepareOperatorFactory() override = default;
@@ -44,7 +44,7 @@ public:
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
 
 private:
-    vectorized::OlapMetaScanNode* const _scan_node;
+    OlapMetaScanNode* const _scan_node;
     std::shared_ptr<OlapMetaScanContextFactory> _scan_ctx_factory;
 };
 

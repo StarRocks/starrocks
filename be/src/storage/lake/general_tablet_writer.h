@@ -28,7 +28,7 @@ public:
 
     Status open() override;
 
-    Status write(const starrocks::vectorized::Chunk& data) override;
+    Status write(const starrocks::Chunk& data) override;
 
     Status flush() override;
 

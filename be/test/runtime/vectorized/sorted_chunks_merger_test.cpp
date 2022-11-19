@@ -12,7 +12,7 @@
 #include "runtime/runtime_state.h"
 #include "testutil/assert.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class SortedChunksMergerTest : public ::testing::Test {
 public:
@@ -307,4 +307,4 @@ TEST_F(SortedChunksMergerTest, three_suppliers) {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

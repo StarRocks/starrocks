@@ -11,7 +11,7 @@
 #include "testutil/assert.h"
 #include "testutil/parallel_test.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class JsonParserTest : public ::testing::Test {
 public:
@@ -445,4 +445,4 @@ PARALLEL_TEST(JsonParserTest, test_illegal_json_array) {
     {"key4": 4}])");
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

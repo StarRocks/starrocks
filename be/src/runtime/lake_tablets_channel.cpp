@@ -7,6 +7,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <iostream>
 #include <unordered_map>
 #include <vector>
 
@@ -44,7 +45,7 @@ public:
 
     Status open(const PTabletWriterOpenRequest& params, std::shared_ptr<OlapTableSchemaParam> schema) override;
 
-    void add_chunk(vectorized::Chunk* chunk, const PTabletWriterAddChunkRequest& request,
+    void add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
                    PTabletWriterAddBatchResult* response) override;
 
     void cancel() override;
@@ -72,7 +73,7 @@ private:
             if (status.ok()) {
                 return;
             }
-            std::string msg = fmt::format("{}: {}", BackendOptions::get_localhost(), status.message());
+            std::string msg = fmt::format("{}: {}", BackendOptions::get_localhost(), status.get_error_msg());
             std::lock_guard l(_mtx);
             if (_response->status().status_code() == TStatusCode::OK) {
                 _response->mutable_status()->set_status_code(status.code());
@@ -93,7 +94,7 @@ private:
         mutable bthread::Mutex _mtx;
         PTabletWriterAddBatchResult* _response;
 
-        vectorized::Chunk _chunk;
+        Chunk _chunk;
         std::unique_ptr<uint32_t[]> _row_indexes;
         std::unique_ptr<uint32_t[]> _channel_row_idx_start_points;
     };
@@ -102,13 +103,13 @@ private:
 
     Status _build_chunk_meta(const ChunkPB& pb_chunk);
 
-    StatusOr<std::unique_ptr<WriteContext>> _create_write_context(vectorized::Chunk* chunk,
+    StatusOr<std::unique_ptr<WriteContext>> _create_write_context(Chunk* chunk,
                                                                   const PTabletWriterAddChunkRequest& request,
                                                                   PTabletWriterAddBatchResult* response);
 
     int _close_sender(const int64_t* partitions, size_t partitions_size);
 
-    Status _deserialize_chunk(const ChunkPB& pchunk, vectorized::Chunk& chunk, faststring* uncompressed_buffer);
+    Status _deserialize_chunk(const ChunkPB& pchunk, Chunk& chunk, faststring* uncompressed_buffer);
 
     LoadChannel* _load_channel;
 
@@ -151,7 +152,7 @@ Status LakeTabletsChannel::open(const PTabletWriterOpenRequest& params, std::sha
     return Status::OK();
 }
 
-void LakeTabletsChannel::add_chunk(vectorized::Chunk* chunk, const PTabletWriterAddChunkRequest& request,
+void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
                                    PTabletWriterAddBatchResult* response) {
     auto t0 = std::chrono::steady_clock::now();
 
@@ -346,7 +347,7 @@ void LakeTabletsChannel::cancel() {
 }
 
 StatusOr<std::unique_ptr<LakeTabletsChannel::WriteContext>> LakeTabletsChannel::_create_write_context(
-        vectorized::Chunk* chunk, const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response) {
+        Chunk* chunk, const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response) {
     if (chunk == nullptr && !request.eos()) {
         return Status::InvalidArgument("PTabletWriterAddChunkRequest has no chunk or eos");
     }

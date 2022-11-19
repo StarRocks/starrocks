@@ -5,7 +5,7 @@
 #include "column/column_helper.h"
 #include "exprs/vectorized/unary_function.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 #define DEFINE_CLASS_CONSTRUCT_FN(NAME)              \
     NAME(const TExprNode& node) : Predicate(node) {} \
@@ -22,7 +22,7 @@ class VectorizedIsNullPredicate final : public Predicate {
 public:
     DEFINE_CLASS_CONSTRUCT_FN(VectorizedIsNullPredicate);
 
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
+    ColumnPtr evaluate(ExprContext* context, Chunk* ptr) override {
         ColumnPtr column = _children[0]->evaluate(context, ptr);
 
         if (column->only_null()) {
@@ -46,7 +46,7 @@ class VectorizedIsNotNullPredicate final : public Predicate {
 public:
     DEFINE_CLASS_CONSTRUCT_FN(VectorizedIsNotNullPredicate);
 
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
+    ColumnPtr evaluate(ExprContext* context, Chunk* ptr) override {
         ColumnPtr column = _children[0]->evaluate(context, ptr);
 
         if (column->only_null()) {
@@ -70,4 +70,4 @@ Expr* VectorizedIsNullPredicateFactory::from_thrift(const TExprNode& node) {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

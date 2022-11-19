@@ -18,8 +18,6 @@ namespace starrocks {
 
 class Expr;
 
-namespace vectorized {
-
 struct RValueCheckZeroImpl;
 struct RValueCheckZeroDecimalv2Impl;
 struct pmodImpl;
@@ -547,5 +545,4 @@ DEFINE_UNARY_FN_WITH_IMPL(negativeImpl, v) {
     return -v;
 }
 
-} // namespace vectorized
 } // namespace starrocks

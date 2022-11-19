@@ -12,11 +12,11 @@
 #include "gutil/strings/substitute.h"
 #include "velocypack/Iterator.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 static const char* kArrayDelimeter = ",";
 
-ColumnPtr VectorizedCastArrayExpr::evaluate(ExprContext* context, vectorized::Chunk* ptr) {
+ColumnPtr VectorizedCastArrayExpr::evaluate(ExprContext* context, Chunk* ptr) {
     ColumnPtr column = _children[0]->evaluate(context, ptr);
     if (ColumnHelper::count_nulls(column) == column->size()) {
         return ColumnHelper::create_const_null_column(column->size());
@@ -62,7 +62,7 @@ ColumnPtr VectorizedCastArrayExpr::evaluate(ExprContext* context, vectorized::Ch
 };
 
 // Cast string to array<ANY>
-ColumnPtr CastStringToArray::evaluate(ExprContext* context, vectorized::Chunk* input_chunk) {
+ColumnPtr CastStringToArray::evaluate(ExprContext* context, Chunk* input_chunk) {
     ColumnPtr column = _children[0]->evaluate(context, input_chunk);
     if (column->only_null()) {
         return ColumnHelper::create_const_null_column(column->size());
@@ -143,7 +143,7 @@ Slice CastStringToArray::_unquote(Slice slice) {
     return slice;
 }
 
-ColumnPtr CastJsonToArray::evaluate(ExprContext* context, vectorized::Chunk* input_chunk) {
+ColumnPtr CastJsonToArray::evaluate(ExprContext* context, Chunk* input_chunk) {
     ColumnPtr column = _children[0]->evaluate(context, input_chunk);
     if (column->only_null()) {
         return ColumnHelper::create_const_null_column(column->size());
@@ -197,4 +197,4 @@ ColumnPtr CastJsonToArray::evaluate(ExprContext* context, vectorized::Chunk* inp
     return res;
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

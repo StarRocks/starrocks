@@ -7,7 +7,7 @@
 #include "formats/csv/output_stream_string.h"
 #include "runtime/types.h"
 
-namespace starrocks::vectorized::csv {
+namespace starrocks::csv {
 
 class BinaryConverterTest : public ::testing::Test {
 public:
@@ -170,4 +170,4 @@ TEST_F(BinaryConverterTest, test_write_string) {
     ASSERT_EQ("\"aaaaaaaaaaaa\"\"bbbbbbbb\"\"\"\"\"\"\"\"ccccc\"", buff2.as_string());
 }
 
-} // namespace starrocks::vectorized::csv
+} // namespace starrocks::csv

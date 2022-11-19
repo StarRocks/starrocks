@@ -6,7 +6,7 @@
 
 #include "column/fixed_length_column.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 class AnalytorTest : public ::testing::Test {
 public:
     void SetUp() override { config::vector_chunk_size = 1024; }
@@ -124,4 +124,4 @@ TEST_F(AnalytorTest, find_partition_end) {
     ASSERT_EQ(analytor3.found_partition_end().second, 0);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

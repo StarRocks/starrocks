@@ -14,8 +14,6 @@ namespace starrocks {
 
 class RuntimeState;
 
-namespace vectorized {
-
 OlapTablePartitionParam::OlapTablePartitionParam(std::shared_ptr<OlapTableSchemaParam> schema,
                                                  const TOlapTablePartitionParam& t_param)
         : _schema(std::move(schema)), _t_param(t_param) {}
@@ -263,5 +261,4 @@ void OlapTablePartitionParam::_compute_hashes(Chunk* chunk, std::vector<uint32_t
     }
 }
 
-} // namespace vectorized
 } // namespace starrocks

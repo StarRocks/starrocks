@@ -39,16 +39,14 @@ using strings::Substitute;
 using FullEncodeAscendingFunc = void (*)(const void* value, std::string* buf);
 using EncodeAscendingFunc = void (*)(const void* value, size_t index_size, std::string* buf);
 using DecodeAscendingFunc = Status (*)(Slice* encoded_key, size_t index_size, uint8_t* cell_ptr, MemPool* pool);
-using FullEncodeAscendingFuncDatum = void (*)(const vectorized::Datum& value, std::string* buf);
-using EncodeAscendingFuncDatum = void (*)(const vectorized::Datum& value, size_t index_size, std::string* buf);
+using FullEncodeAscendingFuncDatum = void (*)(const Datum& value, std::string* buf);
+using EncodeAscendingFuncDatum = void (*)(const Datum& value, size_t index_size, std::string* buf);
 
 // Order-preserving binary encoding for values of a particular type so that
 // those values can be compared by memcpy their encoded bytes.
 //
 // To obtain instance of this class, use the `get_key_coder(LogicalType)` method.
 class KeyCoder {
-    using Datum = vectorized::Datum;
-
 public:
     template <typename TraitsType>
     explicit KeyCoder(TraitsType traits);
@@ -91,7 +89,6 @@ class KeyCoderTraits<field_type,
 public:
     using CppType = typename CppTypeTraits<field_type>::CppType;
     using UnsignedCppType = typename CppTypeTraits<field_type>::UnsignedCppType;
-    using Datum = vectorized::Datum;
 
 public:
     static void full_encode_ascending(const void* value, std::string* buf) {
@@ -143,7 +140,6 @@ template <>
 class KeyCoderTraits<LOGICAL_TYPE_BOOL> {
 public:
     using CppType = typename CppTypeTraits<LOGICAL_TYPE_BOOL>::CppType;
-    using Datum = vectorized::Datum;
 
 public:
     static void full_encode_ascending(const void* value, std::string* buf) {
@@ -185,7 +181,6 @@ class KeyCoderTraits<LOGICAL_TYPE_DATE> {
 public:
     using CppType = typename CppTypeTraits<LOGICAL_TYPE_DATE>::CppType;
     using UnsignedCppType = typename CppTypeTraits<LOGICAL_TYPE_DATE>::UnsignedCppType;
-    using Datum = vectorized::Datum;
 
 public:
     static void full_encode_ascending(const void* value, std::string* buf) {
@@ -226,8 +221,6 @@ public:
 
 template <>
 class KeyCoderTraits<LOGICAL_TYPE_DECIMAL> {
-    using Datum = vectorized::Datum;
-
 public:
     static void full_encode_ascending(const void* value, std::string* buf) {
         decimal12_t decimal_val;
@@ -264,8 +257,6 @@ public:
 
 template <>
 class KeyCoderTraits<LOGICAL_TYPE_DECIMAL_V2> {
-    using Datum = vectorized::Datum;
-
 public:
     static void full_encode_ascending(const void* value, std::string* buf) {
         KeyCoderTraits<LOGICAL_TYPE_LARGEINT>::full_encode_ascending(value, buf);
@@ -305,8 +296,6 @@ class KeyCoderTraits<LOGICAL_TYPE_DECIMAL128> : KeyCoderTraits<LOGICAL_TYPE_LARG
 
 template <>
 class KeyCoderTraits<LOGICAL_TYPE_CHAR> {
-    using Datum = vectorized::Datum;
-
 public:
     static void full_encode_ascending(const void* value, std::string* buf) {
         auto slice = reinterpret_cast<const Slice*>(value);
@@ -348,8 +337,6 @@ public:
 
 template <>
 class KeyCoderTraits<LOGICAL_TYPE_VARCHAR> {
-    using Datum = vectorized::Datum;
-
 public:
     static void full_encode_ascending(const void* value, std::string* buf) {
         auto slice = reinterpret_cast<const Slice*>(value);

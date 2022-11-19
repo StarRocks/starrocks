@@ -22,7 +22,7 @@
 #include "exec/query_cache/transform_operator.h"
 #include "gutil/strings/substitute.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 struct CacheTest : public ::testing::Test {
     RuntimeState state;
     query_cache::CacheManagerPtr cache_mgr = std::make_shared<query_cache::CacheManager>(10240);
@@ -255,7 +255,7 @@ Tasks create_test_pipelines(const query_cache::CacheParam& cache_param, size_t d
     return tasks;
 }
 
-bool exec_test_pipeline(Task& task, RuntimeState* state, const vectorized::ChunkPtr& input_chunk, int max_step,
+bool exec_test_pipeline(Task& task, RuntimeState* state, const ChunkPtr& input_chunk, int max_step,
                         bool set_first_op_finished) {
     auto& first_op = task.upstream[0];
     auto& upstream = task.upstream;
@@ -1196,7 +1196,7 @@ TEST_F(CacheTest, testTicketChecker) {
     test_func2(1L, 100);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks
 
 int main(int argc, char** argv) {
     ::testing::InitGoogleTest(&argc, argv);

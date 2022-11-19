@@ -15,7 +15,7 @@
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class CSVScannerTest : public ::testing::Test {
 protected:
@@ -652,4 +652,4 @@ TEST_F(CSVScannerTest, test_empty) {
     run_test(TYPE_DATETIME);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

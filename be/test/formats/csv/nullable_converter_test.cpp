@@ -7,7 +7,7 @@
 #include "formats/csv/output_stream_string.h"
 #include "runtime/types.h"
 
-namespace starrocks::vectorized::csv {
+namespace starrocks::csv {
 
 class NullableConverterTest : public ::testing::Test {
 public:
@@ -101,4 +101,4 @@ TEST_F(NullableConverterTest, test_write_string) {
     ASSERT_EQ("\\N10null10", buff.as_string());
 }
 
-} // namespace starrocks::vectorized::csv
+} // namespace starrocks::csv

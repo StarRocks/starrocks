@@ -2,7 +2,7 @@
 
 #include "formats/orc/orc_mapping.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 static std::string format_column_name(const std::string& col_name, bool case_sensitive) {
     return case_sensitive ? col_name : boost::algorithm::to_lower_copy(col_name);
@@ -209,4 +209,4 @@ Status OrcMappingFactory::_set_child_mapping(const OrcMappingPtr& mapping, const
     return Status::OK();
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

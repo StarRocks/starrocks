@@ -9,7 +9,7 @@
 #include "exprs/vectorized/mock_vectorized_expr.h"
 #include "exprs/vectorized/string_functions.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class StringFunctionReverseTest : public ::testing::Test {
 public:
@@ -77,4 +77,4 @@ TEST_F(StringFunctionReverseTest, reverseUtf8Test) {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

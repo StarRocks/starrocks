@@ -12,8 +12,6 @@ namespace starrocks {
 class Rowset;
 class Segment;
 
-namespace vectorized {
-
 // It represents a specific rowid range on the segment with `segment_id` of the rowset with `rowset_id`.
 struct RowidRangeOption {
 public:
@@ -28,5 +26,4 @@ public:
     const SparseRange rowid_range;
 };
 
-} // namespace vectorized
 } // namespace starrocks

@@ -10,7 +10,7 @@
 #include "testutil/parallel_test.h"
 #include "util/value_generator.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 template <PrimitiveType TYPE, template <typename T> class Gen1, template <typename T> class Gen2,
           template <typename T> class Gen3, int TEST_SIZE>
@@ -149,4 +149,4 @@ PARALLEL_TEST(SIMDSelectorTest, SelectorTest) {
                             TYPE_DOUBLE>();
     // clang-format on
 }
-} // namespace starrocks::vectorized
+} // namespace starrocks

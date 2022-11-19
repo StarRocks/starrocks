@@ -48,14 +48,13 @@ inline size_t difference<Slice>(const Slice& low, const Slice& high) {
 }
 
 template <>
-inline size_t difference<vectorized::DateValue>(const vectorized::DateValue& low, const vectorized::DateValue& high) {
+inline size_t difference<DateValue>(const DateValue& low, const DateValue& high) {
     DCHECK_LE(low, high);
     return high.julian() - low.julian();
 }
 
 template <>
-inline size_t difference<vectorized::TimestampValue>(const vectorized::TimestampValue& low,
-                                                     const vectorized::TimestampValue& high) {
+inline size_t difference<TimestampValue>(const TimestampValue& low, const TimestampValue& high) {
     DCHECK_LE(low, high);
     return high.timestamp() - low.timestamp();
 }
@@ -66,13 +65,13 @@ inline void increase(T& value) {
 }
 
 template <>
-inline void increase(vectorized::DateValue& value) {
-    value = value.add<vectorized::TimeUnit::DAY>(1);
+inline void increase(DateValue& value) {
+    value = value.add<TimeUnit::DAY>(1);
 }
 
 template <>
-inline void increase(vectorized::TimestampValue& value) {
-    value = value.add<vectorized::TimeUnit::SECOND>(1);
+inline void increase(TimestampValue& value) {
+    value = value.add<TimeUnit::SECOND>(1);
 }
 
 } // namespace helper
@@ -83,12 +82,12 @@ inline std::string cast_to_string(T value) {
 }
 
 template <>
-inline std::string cast_to_string<vectorized::DateValue>(vectorized::DateValue value) {
+inline std::string cast_to_string<DateValue>(DateValue value) {
     return value.to_string();
 }
 
 template <>
-inline std::string cast_to_string<vectorized::TimestampValue>(vectorized::TimestampValue value) {
+inline std::string cast_to_string<TimestampValue>(TimestampValue value) {
     return value.to_string();
 }
 
@@ -99,15 +98,15 @@ inline std::string cast_to_string(T value, [[maybe_unused]] PrimitiveType pt, [[
                                   [[maybe_unused]] int scale) {
     switch (pt) {
     case TYPE_DECIMAL32: {
-        using CppType = vectorized::RunTimeCppType<TYPE_DECIMAL32>;
+        using CppType = RunTimeCppType<TYPE_DECIMAL32>;
         return DecimalV3Cast::to_string<CppType>(*reinterpret_cast<CppType*>(&value), precision, scale);
     }
     case TYPE_DECIMAL64: {
-        using CppType = vectorized::RunTimeCppType<TYPE_DECIMAL64>;
+        using CppType = RunTimeCppType<TYPE_DECIMAL64>;
         return DecimalV3Cast::to_string<CppType>(*reinterpret_cast<CppType*>(&value), precision, scale);
     }
     case TYPE_DECIMAL128: {
-        using CppType = vectorized::RunTimeCppType<TYPE_DECIMAL128>;
+        using CppType = RunTimeCppType<TYPE_DECIMAL128>;
         return DecimalV3Cast::to_string<CppType>(*reinterpret_cast<CppType*>(&value), precision, scale);
     }
     default:
@@ -692,8 +691,8 @@ template class ColumnValueRange<Slice>;
 template class ColumnValueRange<DateTimeValue>;
 template class ColumnValueRange<DecimalV2Value>;
 template class ColumnValueRange<bool>;
-template class ColumnValueRange<vectorized::DateValue>;
-template class ColumnValueRange<vectorized::TimestampValue>;
+template class ColumnValueRange<DateValue>;
+template class ColumnValueRange<TimestampValue>;
 
 template Status OlapScanKeys::extend_scan_key<int8_t>(ColumnValueRange<int8_t>& range, int32_t max_scan_key_num);
 template Status OlapScanKeys::extend_scan_key<uint8_t>(ColumnValueRange<uint8_t>& range, int32_t max_scan_key_num);
@@ -709,11 +708,8 @@ template Status OlapScanKeys::extend_scan_key<DateTimeValue>(ColumnValueRange<Da
 template Status OlapScanKeys::extend_scan_key<DecimalV2Value>(ColumnValueRange<DecimalV2Value>& range,
                                                               int32_t max_scan_key_num);
 template Status OlapScanKeys::extend_scan_key<bool>(ColumnValueRange<bool>& range, int32_t max_scan_key_num);
-template Status OlapScanKeys::extend_scan_key<vectorized::DateValue>(ColumnValueRange<vectorized::DateValue>& range,
-                                                                     int32_t max_scan_key_num);
-template Status OlapScanKeys::extend_scan_key<vectorized::TimestampValue>(
-        ColumnValueRange<vectorized::TimestampValue>& range, int32_t max_scan_key_num);
+template Status OlapScanKeys::extend_scan_key<DateValue>(ColumnValueRange<DateValue>& range, int32_t max_scan_key_num);
+template Status OlapScanKeys::extend_scan_key<TimestampValue>(ColumnValueRange<TimestampValue>& range,
+                                                              int32_t max_scan_key_num);
 
 } // namespace starrocks
-
-/* vim: set expandtab ts=4 sw=4 sts=4 tw=100: */

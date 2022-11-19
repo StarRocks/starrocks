@@ -5,7 +5,7 @@
 #include "formats/csv/converter.h"
 #include "util/decimal_types.h"
 
-namespace starrocks::vectorized::csv {
+namespace starrocks::csv {
 
 template <typename T>
 class DecimalV3Converter final : public Converter {
@@ -25,4 +25,4 @@ private:
     int _scale;
 };
 
-} // namespace starrocks::vectorized::csv
+} // namespace starrocks::csv

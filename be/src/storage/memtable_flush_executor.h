@@ -36,9 +36,7 @@ class DataDir;
 class ExecEnv;
 class SegmentPB;
 
-namespace vectorized {
 class MemTable;
-}
 
 // the statistic of a certain flush handler.
 // use atomic because it may be updated by multi threads
@@ -63,7 +61,7 @@ public:
     explicit FlushToken(std::unique_ptr<ThreadPoolToken> flush_pool_token)
             : _flush_token(std::move(flush_pool_token)), _status() {}
 
-    Status submit(std::unique_ptr<vectorized::MemTable> mem_table, bool eos = false,
+    Status submit(std::unique_ptr<MemTable> mem_table, bool eos = false,
                   std::function<void(std::unique_ptr<SegmentPB>, bool)> cb = nullptr);
 
     // error has happpens, so we cancel this token
@@ -90,7 +88,7 @@ public:
 private:
     friend class MemtableFlushTask;
 
-    void _flush_memtable(vectorized::MemTable* memtable, SegmentPB* segment);
+    void _flush_memtable(MemTable* memtable, SegmentPB* segment);
 
     std::unique_ptr<ThreadPoolToken> _flush_token;
 

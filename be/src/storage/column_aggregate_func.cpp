@@ -7,7 +7,7 @@
 #include "storage/column_aggregator.h"
 #include "util/percentile_value.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // SUM
 template <typename ColumnType, typename StateType>
@@ -674,8 +674,7 @@ ValueColumnAggregatorPtr create_value_aggregator(LogicalType type, FieldAggregat
     return nullptr;
 }
 
-ColumnAggregatorPtr ColumnAggregatorFactory::create_key_column_aggregator(
-        const starrocks::vectorized::FieldPtr& field) {
+ColumnAggregatorPtr ColumnAggregatorFactory::create_key_column_aggregator(const VectorizedFieldPtr& field) {
     LogicalType type = field->type()->type();
     starrocks::FieldAggregationMethod method = field->aggregate_method();
     if (method != OLAP_FIELD_AGGREGATION_NONE) {
@@ -700,8 +699,7 @@ ColumnAggregatorPtr ColumnAggregatorFactory::create_key_column_aggregator(
     }
 }
 
-ColumnAggregatorPtr ColumnAggregatorFactory::create_value_column_aggregator(
-        const starrocks::vectorized::FieldPtr& field) {
+ColumnAggregatorPtr ColumnAggregatorFactory::create_value_column_aggregator(const VectorizedFieldPtr& field) {
     LogicalType type = field->type()->type();
     starrocks::FieldAggregationMethod method = field->aggregate_method();
     if (method == OLAP_FIELD_AGGREGATION_NONE) {
@@ -723,4 +721,4 @@ ColumnAggregatorPtr ColumnAggregatorFactory::create_value_column_aggregator(
         }
     }
 }
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -10,7 +10,7 @@
 #include "runtime/primitive_type.h"
 #include "util/thrift_util.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 const int STATISTIC_DATA_VERSION1 = 1;
 const int STATISTIC_HISTOGRAM_VERSION = 2;
@@ -37,7 +37,7 @@ void StatisticResultWriter::_init_profile() {
     _sent_rows_counter = ADD_COUNTER(_parent_profile, "NumSentRows", TUnit::UNIT);
 }
 
-Status StatisticResultWriter::append_chunk(vectorized::Chunk* chunk) {
+Status StatisticResultWriter::append_chunk(Chunk* chunk) {
     SCOPED_TIMER(_total_timer);
     auto process_status = _process_chunk(chunk);
     if (!process_status.ok() || process_status.value() == nullptr) {
@@ -57,7 +57,7 @@ Status StatisticResultWriter::append_chunk(vectorized::Chunk* chunk) {
     return status;
 }
 
-StatusOr<TFetchDataResultPtrs> StatisticResultWriter::process_chunk(vectorized::Chunk* chunk) {
+StatusOr<TFetchDataResultPtrs> StatisticResultWriter::process_chunk(Chunk* chunk) {
     SCOPED_TIMER(_total_timer);
     TFetchDataResultPtrs results;
     auto process_status = _process_chunk(chunk);
@@ -90,7 +90,7 @@ StatusOr<bool> StatisticResultWriter::try_add_batch(TFetchDataResultPtrs& result
     return status;
 }
 
-StatusOr<TFetchDataResultPtr> StatisticResultWriter::_process_chunk(vectorized::Chunk* chunk) {
+StatusOr<TFetchDataResultPtr> StatisticResultWriter::_process_chunk(Chunk* chunk) {
     if (nullptr == chunk || 0 == chunk->num_rows()) {
         return nullptr;
     }
@@ -98,7 +98,7 @@ StatusOr<TFetchDataResultPtr> StatisticResultWriter::_process_chunk(vectorized::
     // Step 1: compute expr
     int num_columns = _output_expr_ctxs.size();
 
-    vectorized::Columns result_columns;
+    Columns result_columns;
     result_columns.reserve(num_columns);
 
     for (int i = 0; i < num_columns; ++i) {
@@ -132,8 +132,8 @@ StatusOr<TFetchDataResultPtr> StatisticResultWriter::_process_chunk(vectorized::
     return result;
 }
 
-Status StatisticResultWriter::_fill_dict_statistic_data(int version, const vectorized::Columns& columns,
-                                                        const vectorized::Chunk* chunk, TFetchDataResult* result) {
+Status StatisticResultWriter::_fill_dict_statistic_data(int version, const Columns& columns, const Chunk* chunk,
+                                                        TFetchDataResult* result) {
     SCOPED_TIMER(_serialize_timer);
     DCHECK(columns.size() == 3);
     auto versioncolumn = ColumnHelper::cast_to_raw<TYPE_BIGINT>(columns[1]);
@@ -161,8 +161,8 @@ Status StatisticResultWriter::_fill_dict_statistic_data(int version, const vecto
     return Status::OK();
 }
 
-Status StatisticResultWriter::_fill_statistic_data_v1(int version, const vectorized::Columns& columns,
-                                                      const vectorized::Chunk* chunk, TFetchDataResult* result) {
+Status StatisticResultWriter::_fill_statistic_data_v1(int version, const Columns& columns, const Chunk* chunk,
+                                                      TFetchDataResult* result) {
     SCOPED_TIMER(_serialize_timer);
 
     // mapping with Data.thrift.TStatisticData
@@ -207,8 +207,8 @@ Status StatisticResultWriter::_fill_statistic_data_v1(int version, const vectori
     return Status::OK();
 }
 
-Status StatisticResultWriter::_fill_statistic_histogram(int version, const vectorized::Columns& columns,
-                                                        const vectorized::Chunk* chunk, TFetchDataResult* result) {
+Status StatisticResultWriter::_fill_statistic_histogram(int version, const Columns& columns, const Chunk* chunk,
+                                                        TFetchDataResult* result) {
     SCOPED_TIMER(_serialize_timer);
     DCHECK(columns.size() == 5);
 
@@ -243,4 +243,4 @@ Status StatisticResultWriter::close() {
     return Status::OK();
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

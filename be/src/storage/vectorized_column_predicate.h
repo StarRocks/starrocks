@@ -36,7 +36,7 @@ class BitmapIndexIterator;
 class BloomFilter;
 } // namespace starrocks
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 template <LogicalType ftype>
 struct PredicateCmpTypeForField {
@@ -220,4 +220,4 @@ ColumnPredicate* new_column_null_predicate(const TypeInfoPtr& type, ColumnId, bo
 ColumnPredicate* new_column_dict_conjuct_predicate(const TypeInfoPtr& type_info, ColumnId id,
                                                    std::vector<uint8_t> dict_mapping);
 
-} //namespace starrocks::vectorized
+} //namespace starrocks

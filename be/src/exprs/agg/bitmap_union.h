@@ -8,7 +8,7 @@
 #include "gutil/casts.h"
 #include "types/bitmap_value.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class BitmapUnionAggregateFunction final
         : public AggregateFunctionBatchHelper<BitmapValue, BitmapUnionAggregateFunction> {
@@ -44,4 +44,4 @@ public:
     std::string get_name() const override { return "bitmap_union"; }
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

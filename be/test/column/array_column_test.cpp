@@ -13,7 +13,7 @@
 #include "column/vectorized_fwd.h"
 #include "testutil/parallel_test.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(ArrayColumnTest, test_create) {
@@ -1115,4 +1115,4 @@ PARALLEL_TEST(ArrayColumnTest, test_replicate) {
     ASSERT_EQ("[]", res->debug_item(6));
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

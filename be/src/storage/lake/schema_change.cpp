@@ -15,11 +15,11 @@
 
 namespace starrocks::lake {
 
-using ChunkChanger = vectorized::ChunkChanger;
-using ChunkPtr = vectorized::ChunkPtr;
-using Schema = vectorized::Schema;
-using SchemaChangeUtils = vectorized::SchemaChangeUtils;
-using TabletReaderParams = vectorized::TabletReaderParams;
+using ChunkChanger = ChunkChanger;
+using ChunkPtr = ChunkPtr;
+using VectorizedSchema = VectorizedSchema;
+using SchemaChangeUtils = SchemaChangeUtils;
+using TabletReaderParams = TabletReaderParams;
 
 class SchemaChange {
 public:
@@ -62,8 +62,8 @@ protected:
 
     TabletReaderParams _read_params;
     std::shared_ptr<const TabletSchema> _new_tablet_schema;
-    Schema _base_schema;
-    Schema _new_schema;
+    VectorizedSchema _base_schema;
+    VectorizedSchema _new_schema;
     ChunkPtr _base_chunk;
     ChunkPtr _new_chunk;
     std::vector<size_t> _char_field_indexes;
@@ -278,7 +278,7 @@ Status SchemaChangeHandler::do_process_alter_tablet(const TAlterTabletReqV2& req
     SchemaChangeParams sc_params;
     sc_params.base_tablet = &base_tablet;
     sc_params.new_tablet = &new_tablet;
-    sc_params.chunk_changer = std::make_unique<vectorized::ChunkChanger>(*new_schema);
+    sc_params.chunk_changer = std::make_unique<ChunkChanger>(*new_schema);
     sc_params.version = alter_version;
 
     SchemaChangeUtils::init_materialized_params(request, &sc_params.materialized_params_map);

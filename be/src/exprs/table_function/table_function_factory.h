@@ -5,7 +5,7 @@
 #include "exprs/table_function/table_function.h"
 #include "runtime/primitive_type.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class TableFunctionFactory {
 public:
@@ -15,4 +15,4 @@ extern const TableFunction* get_table_function(const std::string& name, const st
                                                const std::vector<PrimitiveType>& return_type,
                                                TFunctionBinaryType::type binary_type = TFunctionBinaryType::BUILTIN);
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

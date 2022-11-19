@@ -6,7 +6,7 @@
 
 #include "runtime/user_function_cache.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 const AggregateFunction* getJavaWindowFunction() {
     static JavaWindowFunction java_window_func;
@@ -59,4 +59,4 @@ Status window_init_jvm_context(int64_t fid, const std::string& url, const std::s
 
     return Status::OK();
 }
-} // namespace starrocks::vectorized
+} // namespace starrocks

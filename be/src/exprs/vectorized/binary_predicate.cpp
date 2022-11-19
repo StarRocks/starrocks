@@ -10,7 +10,7 @@
 #include "runtime/primitive_type_infra.h"
 #include "storage/vectorized_column_predicate.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 template <PrimitiveType ptype>
 struct PredicateCmpType {
@@ -53,7 +53,7 @@ public:
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new VectorizedBinaryPredicate(*this)); }
 
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
+    ColumnPtr evaluate(ExprContext* context, Chunk* ptr) override {
         auto l = _children[0]->evaluate(context, ptr);
         auto r = _children[1]->evaluate(context, ptr);
         return VectorizedStrictBinaryFunction<OP>::template evaluate<Type, TYPE_BOOLEAN>(l, r);
@@ -72,7 +72,7 @@ public:
     // if v1 null and v2 not null = false
     // if v1 not null and v2 null = false
     // if v1 not null and v2 not null = v1 OP v2
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
+    ColumnPtr evaluate(ExprContext* context, Chunk* ptr) override {
         auto l = _children[0]->evaluate(context, ptr);
         auto r = _children[1]->evaluate(context, ptr);
 
@@ -134,4 +134,4 @@ Expr* VectorizedBinaryPredicateFactory::from_thrift(const TExprNode& node) {
     return type_dispatch_predicate<Expr*>(type, true, BinaryPredicateBuilder(), node);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

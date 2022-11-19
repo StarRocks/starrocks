@@ -4,7 +4,7 @@
 
 #pragma once
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // Some native implementations of JavaUDF, mainly for calling some C++ functions in Java functions
 // For example, calling Column::resize in Java function
@@ -20,4 +20,4 @@ struct JavaNativeMethods {
 
     static void memory_free(JNIEnv* env, jclass clazz, jlong address);
 };
-} // namespace starrocks::vectorized
+} // namespace starrocks

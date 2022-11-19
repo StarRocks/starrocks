@@ -8,7 +8,7 @@
 #include "storage/vectorized_column_predicate.h"
 #include "testutil/assert.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // to string of boolean values, e.g,
 //   [1,2,3] => "1,1,1"
@@ -500,8 +500,9 @@ TEST(ColumnPredicateTest, test_eq) {
     }
     // decimal_v2
     {
-        std::unique_ptr<ColumnPredicate> p(new_column_eq_predicate(get_type_info(LOGICAL_TYPE_DECIMAL_V2), 0, "1.23"));
-        auto field = std::make_shared<Field>(1, "test", LOGICAL_TYPE_DECIMAL_V2, 27, 9, false);
+        std::unique_ptr<ColumnPredicate> p(
+                new_column_eq_predicate(get_type_info(LOGICAL_TYPE_DECIMAL_V2), 0, "1.23"));
+        auto field = std::make_shared<VectorizedField>(1, "test", LOGICAL_TYPE_DECIMAL_V2, 27, 9, false);
         auto c = ChunkHelper::column_from_field(*field);
         c->append_datum(Datum(DecimalV2Value("1.23")));
         c->append_datum(Datum(DecimalV2Value("1.24")));
@@ -2214,4 +2215,4 @@ TEST(ColumnPredicateTest, test_convert_cmp_binary_predicate) {
         EXPECT_EQ(new_p->type(), p->type());
     }
 }
-} // namespace starrocks::vectorized
+} // namespace starrocks

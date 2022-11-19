@@ -24,7 +24,7 @@
 #include "udf/java/utils.h"
 #include "udf/udf.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 struct UDFFunctionCallHelper {
     JavaUDFContext* fn_desc;
@@ -82,7 +82,7 @@ struct UDFFunctionCallHelper {
 
 JavaFunctionCallExpr::JavaFunctionCallExpr(const TExprNode& node) : Expr(node) {}
 
-ColumnPtr JavaFunctionCallExpr::evaluate(ExprContext* context, vectorized::Chunk* ptr) {
+ColumnPtr JavaFunctionCallExpr::evaluate(ExprContext* context, Chunk* ptr) {
     Columns columns(children().size());
 
     for (int i = 0; i < _children.size(); ++i) {
@@ -253,4 +253,4 @@ void JavaFunctionCallExpr::_call_udf_close() {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

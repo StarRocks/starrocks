@@ -5,9 +5,9 @@
 #include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/column.h"
-#include "column/field.h"
 #include "column/nullable_column.h"
-#include "column/schema.h"
+#include "column/vectorized_field.h"
+#include "column/vectorized_schema.h"
 #include "common/object_pool.h"
 #include "gtest/gtest.h"
 #include "runtime/descriptor_helper.h"
@@ -17,13 +17,13 @@
 #include "runtime/runtime_state.h"
 #include "util/logging.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class ChunkHelperTest : public testing::Test {
 public:
     void add_tablet_column(TabletSchemaPB& tablet_schema_pb, int32_t id, bool is_key, const std::string& type,
                            int32_t length, bool is_nullable);
-    vectorized::SchemaPtr gen_v_schema(bool is_nullable);
+    VectorizedSchemaPtr gen_v_schema(bool is_nullable);
     void check_chunk(Chunk* chunk, size_t column_size, size_t row_size);
     void check_chunk_nullable(Chunk* chunk, size_t column_size, size_t row_size);
     void check_column(Column* column, LogicalType type, size_t row_size);
@@ -107,18 +107,22 @@ void ChunkHelperTest::add_tablet_column(TabletSchemaPB& tablet_schema_pb, int32_
     column->set_aggregation("NONE");
 }
 
-vectorized::SchemaPtr ChunkHelperTest::gen_v_schema(bool is_nullable) {
-    vectorized::Fields fields;
-    fields.emplace_back(std::make_shared<Field>(0, "c0", get_type_info(LOGICAL_TYPE_TINYINT), is_nullable));
-    fields.emplace_back(std::make_shared<Field>(1, "c1", get_type_info(LOGICAL_TYPE_SMALLINT), is_nullable));
-    fields.emplace_back(std::make_shared<Field>(2, "c2", get_type_info(LOGICAL_TYPE_INT), is_nullable));
-    fields.emplace_back(std::make_shared<Field>(3, "c3", get_type_info(LOGICAL_TYPE_BIGINT), is_nullable));
-    fields.emplace_back(std::make_shared<Field>(4, "c4", get_type_info(LOGICAL_TYPE_LARGEINT), is_nullable));
-    fields.emplace_back(std::make_shared<Field>(5, "c5", get_type_info(LOGICAL_TYPE_FLOAT), is_nullable));
-    fields.emplace_back(std::make_shared<Field>(6, "c6", get_type_info(LOGICAL_TYPE_DOUBLE), is_nullable));
-    fields.emplace_back(std::make_shared<Field>(7, "c7", get_type_info(LOGICAL_TYPE_VARCHAR), is_nullable));
-    fields.emplace_back(std::make_shared<Field>(8, "c8", get_type_info(LOGICAL_TYPE_CHAR), is_nullable));
-    return std::make_shared<Schema>(fields);
+VectorizedSchemaPtr ChunkHelperTest::gen_v_schema(bool is_nullable) {
+    VectorizedFields fields;
+    fields.emplace_back(
+            std::make_shared<VectorizedField>(0, "c0", get_type_info(LOGICAL_TYPE_TINYINT), is_nullable));
+    fields.emplace_back(
+            std::make_shared<VectorizedField>(1, "c1", get_type_info(LOGICAL_TYPE_SMALLINT), is_nullable));
+    fields.emplace_back(std::make_shared<VectorizedField>(2, "c2", get_type_info(LOGICAL_TYPE_INT), is_nullable));
+    fields.emplace_back(std::make_shared<VectorizedField>(3, "c3", get_type_info(LOGICAL_TYPE_BIGINT), is_nullable));
+    fields.emplace_back(
+            std::make_shared<VectorizedField>(4, "c4", get_type_info(LOGICAL_TYPE_LARGEINT), is_nullable));
+    fields.emplace_back(std::make_shared<VectorizedField>(5, "c5", get_type_info(LOGICAL_TYPE_FLOAT), is_nullable));
+    fields.emplace_back(std::make_shared<VectorizedField>(6, "c6", get_type_info(LOGICAL_TYPE_DOUBLE), is_nullable));
+    fields.emplace_back(
+            std::make_shared<VectorizedField>(7, "c7", get_type_info(LOGICAL_TYPE_VARCHAR), is_nullable));
+    fields.emplace_back(std::make_shared<VectorizedField>(8, "c8", get_type_info(LOGICAL_TYPE_CHAR), is_nullable));
+    return std::make_shared<VectorizedSchema>(fields);
 }
 
 void ChunkHelperTest::check_chunk(Chunk* chunk, size_t column_size, size_t row_size) {
@@ -298,4 +302,4 @@ TEST_F(ChunkHelperTest, Accumulator) {
     EXPECT_EQ(input_rows, output_rows);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

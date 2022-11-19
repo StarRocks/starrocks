@@ -19,7 +19,7 @@
 #include "runtime/runtime_state.h"
 #include "simd/gather.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // Dict Function Expr.
 // The original Expr will be rewritten to DictFunctionExpr in the global dictionary optimization.
@@ -49,7 +49,7 @@ public:
         }
     }
 
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
+    ColumnPtr evaluate(ExprContext* context, Chunk* ptr) override {
         size_t num_rows = ptr->num_rows();
         if (_always_null) {
             return ColumnHelper::create_const_null_column(num_rows);
@@ -296,4 +296,4 @@ void DictOptimizeParser::rewrite_descriptor(RuntimeState* runtime_state, const s
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

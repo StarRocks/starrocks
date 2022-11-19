@@ -36,11 +36,9 @@ namespace starrocks {
 class MemPool;
 class RuntimeState;
 
-namespace vectorized {
 class Column;
 struct JavaUDAFContext;
 using ColumnPtr = std::shared_ptr<Column>;
-} // namespace vectorized
 
 // This class actually implements the interface of FunctionContext. This is split to
 // hide the details from the external header.
@@ -64,7 +62,7 @@ public:
     /// it.
     starrocks_udf::FunctionContext* clone(MemPool* pool);
 
-    void set_constant_columns(std::vector<vectorized::ColumnPtr> columns) { _constant_columns = std::move(columns); }
+    void set_constant_columns(std::vector<ColumnPtr> columns) { _constant_columns = std::move(columns); }
 
     bool closed() const { return _closed; }
 
@@ -86,7 +84,7 @@ public:
     bool has_error();
     const char* error_msg();
 
-    vectorized::JavaUDAFContext* udaf_ctxs() { return _jvm_udaf_ctxs.get(); }
+    JavaUDAFContext* udaf_ctxs() { return _jvm_udaf_ctxs.get(); }
 
 private:
     friend class starrocks_udf::FunctionContext;
@@ -127,7 +125,7 @@ private:
     // Type descriptors for each argument of the function.
     std::vector<starrocks_udf::FunctionContext::TypeDesc> _arg_types;
 
-    std::vector<vectorized::ColumnPtr> _constant_columns;
+    std::vector<ColumnPtr> _constant_columns;
 
     // Indicates whether this context has been closed. Used for verification/debugging.
     bool _closed;
@@ -136,7 +134,7 @@ private:
     size_t _mem_usage = 0;
 
     // UDAF Context
-    std::unique_ptr<vectorized::JavaUDAFContext> _jvm_udaf_ctxs;
+    std::unique_ptr<JavaUDAFContext> _jvm_udaf_ctxs;
 };
 
 } // namespace starrocks

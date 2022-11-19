@@ -11,7 +11,7 @@
 #include "common/object_pool.h"
 #include "gen_cpp/PlanNodes_types.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // Modify from https://github.com/FastFilter/fastfilter_cpp/blob/master/src/bloom/simd-block.h
 // This is avx2 simd implementation for paper <<Cache-, Hash- and Space-Efficient Bloom Filters>>
@@ -667,4 +667,4 @@ private:
     bool _has_min_max = true;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

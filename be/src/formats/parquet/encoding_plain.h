@@ -98,7 +98,7 @@ public:
         return Status::OK();
     }
 
-    Status next_batch(size_t count, ColumnContentType content_type, vectorized::Column* dst) override {
+    Status next_batch(size_t count, ColumnContentType content_type, Column* dst) override {
         size_t max_fetch = count * SIZE_OF_TYPE;
         if (max_fetch + _offset > _data.size) {
             return Status::InternalError(strings::Substitute(
@@ -146,7 +146,7 @@ public:
         return Status::OK();
     }
 
-    Status next_batch(size_t count, ColumnContentType content_type, vectorized::Column* dst) override {
+    Status next_batch(size_t count, ColumnContentType content_type, Column* dst) override {
         std::vector<Slice> slices;
         slices.reserve(count);
 
@@ -204,7 +204,7 @@ public:
         return Status::OK();
     }
 
-    Status next_batch(size_t count, ColumnContentType content_type, vectorized::Column* dst) override {
+    Status next_batch(size_t count, ColumnContentType content_type, Column* dst) override {
         auto original_size = dst->size();
         dst->resize(original_size + count);
         auto num_unpacked_values = unpack_batch(count, dst->mutable_raw_data() + original_size);
@@ -326,7 +326,7 @@ public:
         return Status::OK();
     }
 
-    Status next_batch(size_t count, ColumnContentType content_type, vectorized::Column* dst) override {
+    Status next_batch(size_t count, ColumnContentType content_type, Column* dst) override {
         if (_offset + _type_length * count > _data.size) {
             return Status::InternalError(strings::Substitute(
                     "going to read out-of-bounds data, offset=$0,count=$1,size=$2", _offset, count, _data.size));

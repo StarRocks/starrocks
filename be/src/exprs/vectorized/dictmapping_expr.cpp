@@ -2,7 +2,7 @@
 
 #include "exprs/vectorized/dictmapping_expr.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 DictMappingExpr::DictMappingExpr(const TExprNode& node) : Expr(node, false) {}
 
 ColumnPtr DictMappingExpr::evaluate(ExprContext* context, Chunk* ptr) {
@@ -16,4 +16,4 @@ ColumnPtr DictMappingExpr::evaluate(ExprContext* context, Chunk* ptr) {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

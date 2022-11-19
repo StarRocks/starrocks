@@ -19,23 +19,22 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "runtime/memory/chunk_allocator.h"
-
 #include <gtest/gtest.h>
 
 #include "common/config.h"
-#include "runtime/memory/chunk.h"
+#include "runtime/memory/mem_chunk.h"
+#include "runtime/memory/mem_chunk_allocator.h"
 
 namespace starrocks {
 
 TEST(ChunkAllocatorTest, Normal) {
     config::use_mmap_allocate_chunk = true;
     for (size_t size = 4096; size <= 1024 * 1024; size <<= 1) {
-        Chunk chunk;
-        ASSERT_TRUE(ChunkAllocator::instance()->allocate(size, &chunk));
+        MemChunk chunk;
+        ASSERT_TRUE(MemChunkAllocator::instance()->allocate(size, &chunk));
         ASSERT_NE(nullptr, chunk.data);
         ASSERT_EQ(size, chunk.size);
-        ChunkAllocator::instance()->free(chunk);
+        MemChunkAllocator::instance()->free(chunk);
     }
 }
 } // namespace starrocks

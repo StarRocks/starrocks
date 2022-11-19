@@ -13,7 +13,7 @@
 #include "util/orlp/pdqsort.h"
 #include "util/stopwatch.hpp"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 ChunksSorterTopn::ChunksSorterTopn(RuntimeState* state, const std::vector<ExprContext*>* sort_exprs,
                                    const std::vector<bool>* is_asc_order, const std::vector<bool>* is_null_first,
@@ -515,4 +515,4 @@ void ChunksSorterTopn::_rank_pruning() {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

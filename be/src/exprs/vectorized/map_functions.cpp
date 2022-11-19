@@ -6,7 +6,7 @@
 #include "column/map_column.h"
 #include "column/type_traits.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 ColumnPtr MapFunctions::map_size(starrocks_udf::FunctionContext* context, const Columns& columns) {
     DCHECK_EQ(1, columns.size());
@@ -68,4 +68,4 @@ ColumnPtr MapFunctions::map_values(starrocks_udf::FunctionContext* context, cons
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

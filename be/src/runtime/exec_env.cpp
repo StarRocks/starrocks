@@ -48,7 +48,7 @@
 #include "runtime/load_channel_mgr.h"
 #include "runtime/load_path_mgr.h"
 #include "runtime/mem_tracker.h"
-#include "runtime/memory/chunk_allocator.h"
+#include "runtime/memory/mem_chunk_allocator.h"
 #include "runtime/profile_report_worker.h"
 #include "runtime/result_buffer_mgr.h"
 #include "runtime/result_queue_mgr.h"
@@ -388,10 +388,10 @@ Status ExecEnv::init_mem_tracker() {
     int64_t consistency_mem_limit = calc_max_consistency_memory(process_mem_tracker()->limit());
     _consistency_mem_tracker = regist_tracker(consistency_mem_limit, "consistency", process_mem_tracker());
 
-    ChunkAllocator::init_instance(_chunk_allocator_mem_tracker.get(), config::chunk_reserved_bytes_limit);
+    MemChunkAllocator::init_instance(_chunk_allocator_mem_tracker.get(), config::chunk_reserved_bytes_limit);
 
     SetMemTrackerForColumnPool op(column_pool_mem_tracker());
-    vectorized::ForEach<vectorized::ColumnPoolList>(op);
+    ForEach<ColumnPoolList>(op);
     _init_storage_page_cache();
     return Status::OK();
 }

@@ -16,7 +16,6 @@ class DescriptorTbl;
 class RuntimeState;
 class ExprContext;
 
-namespace vectorized {
 class ColumnRef;
 class RuntimeFilterBuildDescriptor;
 
@@ -141,5 +140,4 @@ private:
     RuntimeProfile::Counter* _where_conjunct_evaluate_timer = nullptr;
 };
 
-} // namespace vectorized
 } // namespace starrocks

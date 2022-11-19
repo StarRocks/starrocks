@@ -6,7 +6,7 @@
 #include "column/column.h"
 #include "column/fixed_length_column.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 class StructColumn final : public ColumnFactory<Column, StructColumn> {
     friend class ColumnFactory<Column, StructColumn>;
 
@@ -156,4 +156,4 @@ private:
     // _fields and _field_names should have the same size (_fields.size() == _field_names.size()).
     BinaryColumn::Ptr _field_names;
 };
-} // namespace starrocks::vectorized
+} // namespace starrocks

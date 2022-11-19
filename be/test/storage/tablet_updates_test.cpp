@@ -47,8 +47,7 @@ enum PartialUpdateCloneCase {
 class TabletUpdatesTest : public testing::Test {
 public:
     RowsetSharedPtr create_rowset(const TabletSharedPtr& tablet, const vector<int64_t>& keys,
-                                  vectorized::Column* one_delete = nullptr, bool empty = false,
-                                  bool has_merge_condition = false) {
+                                  Column* one_delete = nullptr, bool empty = false, bool has_merge_condition = false) {
         RowsetWriterContext writer_context;
         RowsetId rowset_id = StorageEngine::instance()->next_rowset_id();
         writer_context.rowset_id = rowset_id;
@@ -74,20 +73,20 @@ public:
         auto& cols = chunk->columns();
         for (int64_t key : keys) {
             if (schema.num_key_fields() == 1) {
-                cols[0]->append_datum(vectorized::Datum(key));
+                cols[0]->append_datum(Datum(key));
             } else {
-                cols[0]->append_datum(vectorized::Datum(key));
+                cols[0]->append_datum(Datum(key));
                 string v = fmt::to_string(key * 234234342345);
-                cols[1]->append_datum(vectorized::Datum(Slice(v)));
-                cols[2]->append_datum(vectorized::Datum((int32_t)key));
+                cols[1]->append_datum(Datum(Slice(v)));
+                cols[2]->append_datum(Datum((int32_t)key));
             }
             int vcol_start = schema.num_key_fields();
-            cols[vcol_start]->append_datum(vectorized::Datum((int16_t)(key % 100 + 1)));
+            cols[vcol_start]->append_datum(Datum((int16_t)(key % 100 + 1)));
             if (cols[vcol_start + 1]->is_binary()) {
                 string v = fmt::to_string(key % 1000 + 2);
-                cols[vcol_start + 1]->append_datum(vectorized::Datum(Slice(v)));
+                cols[vcol_start + 1]->append_datum(Datum(Slice(v)));
             } else {
-                cols[vcol_start + 1]->append_datum(vectorized::Datum((int32_t)(key % 1000 + 2)));
+                cols[vcol_start + 1]->append_datum(Datum((int32_t)(key % 1000 + 2)));
             }
         }
         if (one_delete == nullptr && !keys.empty()) {
@@ -127,8 +126,8 @@ public:
             EXPECT_TRUE(2 == chunk->num_columns());
             auto& cols = chunk->columns();
             for (long key : keys) {
-                cols[0]->append_datum(vectorized::Datum(key));
-                cols[1]->append_datum(vectorized::Datum((int16_t)(key % 100 + 3)));
+                cols[0]->append_datum(Datum(key));
+                cols[1]->append_datum(Datum((int16_t)(key % 100 + 3)));
             }
             CHECK_OK(writer->flush_chunk(*chunk));
         }
@@ -158,9 +157,9 @@ public:
             auto chunk = ChunkHelper::new_chunk(schema, max_rows_per_segment);
             auto& cols = chunk->columns();
             for (size_t i = 0; i < max_rows_per_segment; i++) {
-                cols[0]->append_datum(vectorized::Datum(keys[written_rows + i]));
-                cols[1]->append_datum(vectorized::Datum((int16_t)(keys[written_rows + i] % 100 + 1)));
-                cols[2]->append_datum(vectorized::Datum((int32_t)(keys[written_rows + i] % 1000 + 2)));
+                cols[0]->append_datum(Datum(keys[written_rows + i]));
+                cols[1]->append_datum(Datum((int16_t)(keys[written_rows + i] % 100 + 1)));
+                cols[2]->append_datum(Datum((int32_t)(keys[written_rows + i] % 1000 + 2)));
             }
             CHECK_OK(writer->flush_chunk(*chunk));
         }
@@ -506,9 +505,8 @@ static TabletSharedPtr load_same_tablet_from_store(const TabletSharedPtr& tablet
     return tablet1;
 }
 
-static vectorized::ChunkIteratorPtr create_tablet_iterator(vectorized::TabletReader& reader,
-                                                           vectorized::Schema& schema) {
-    vectorized::TabletReaderParams params;
+static ChunkIteratorPtr create_tablet_iterator(TabletReader& reader, VectorizedSchema& schema) {
+    TabletReaderParams params;
     if (!reader.prepare().ok()) {
         LOG(ERROR) << "reader prepare failed";
         return nullptr;
@@ -519,19 +517,19 @@ static vectorized::ChunkIteratorPtr create_tablet_iterator(vectorized::TabletRea
         return nullptr;
     }
     if (seg_iters.empty()) {
-        return vectorized::new_empty_iterator(schema, DEFAULT_CHUNK_SIZE);
+        return new_empty_iterator(schema, DEFAULT_CHUNK_SIZE);
     }
-    return vectorized::new_union_iterator(seg_iters);
+    return new_union_iterator(seg_iters);
 }
 
-static ssize_t read_and_compare(const vectorized::ChunkIteratorPtr& iter, const vector<int64_t>& keys) {
+static ssize_t read_and_compare(const ChunkIteratorPtr& iter, const vector<int64_t>& keys) {
     auto chunk = ChunkHelper::new_chunk(iter->schema(), 100);
     auto full_chunk = ChunkHelper::new_chunk(iter->schema(), keys.size());
     auto& cols = full_chunk->columns();
     for (long key : keys) {
-        cols[0]->append_datum(vectorized::Datum(key));
-        cols[1]->append_datum(vectorized::Datum((int16_t)(key % 100 + 1)));
-        cols[2]->append_datum(vectorized::Datum((int32_t)(key % 1000 + 2)));
+        cols[0]->append_datum(Datum(key));
+        cols[1]->append_datum(Datum((int16_t)(key % 100 + 1)));
+        cols[2]->append_datum(Datum((int32_t)(key % 1000 + 2)));
     }
     size_t count = 0;
     while (true) {
@@ -551,7 +549,7 @@ static ssize_t read_and_compare(const vectorized::ChunkIteratorPtr& iter, const 
     return count;
 }
 
-static ssize_t read_until_eof(const vectorized::ChunkIteratorPtr& iter) {
+static ssize_t read_until_eof(const ChunkIteratorPtr& iter) {
     auto chunk = ChunkHelper::new_chunk(iter->schema(), 100);
     size_t count = 0;
     while (true) {
@@ -570,8 +568,8 @@ static ssize_t read_until_eof(const vectorized::ChunkIteratorPtr& iter) {
 }
 
 static ssize_t read_tablet(const TabletSharedPtr& tablet, int64_t version) {
-    vectorized::Schema schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
-    vectorized::TabletReader reader(tablet, Version(0, version), schema);
+    VectorizedSchema schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
+    TabletReader reader(tablet, Version(0, version), schema);
     auto iter = create_tablet_iterator(reader, schema);
     if (iter == nullptr) {
         return -1;
@@ -580,8 +578,8 @@ static ssize_t read_tablet(const TabletSharedPtr& tablet, int64_t version) {
 }
 
 static ssize_t read_tablet_and_compare(const TabletSharedPtr& tablet, int64_t version, const vector<int64_t>& keys) {
-    vectorized::Schema schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
-    vectorized::TabletReader reader(tablet, Version(0, version), schema);
+    VectorizedSchema schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
+    TabletReader reader(tablet, Version(0, version), schema);
     auto iter = create_tablet_iterator(reader, schema);
     if (iter == nullptr) {
         return -1;
@@ -591,8 +589,8 @@ static ssize_t read_tablet_and_compare(const TabletSharedPtr& tablet, int64_t ve
 
 static ssize_t read_tablet_and_compare_schema_changed(const TabletSharedPtr& tablet, int64_t version,
                                                       const vector<int64_t>& keys) {
-    vectorized::Schema schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
-    vectorized::TabletReader reader(tablet, Version(0, version), schema);
+    VectorizedSchema schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
+    TabletReader reader(tablet, Version(0, version), schema);
     auto iter = create_tablet_iterator(reader, schema);
     if (iter == nullptr) {
         return -1;
@@ -600,10 +598,10 @@ static ssize_t read_tablet_and_compare_schema_changed(const TabletSharedPtr& tab
     auto full_chunk = ChunkHelper::new_chunk(iter->schema(), keys.size());
     auto& cols = full_chunk->columns();
     for (long key : keys) {
-        cols[0]->append_datum(vectorized::Datum((int64_t)key));
-        cols[1]->append_datum(vectorized::Datum((int16_t)(key % 100 + 1)));
+        cols[0]->append_datum(Datum((int64_t)key));
+        cols[1]->append_datum(Datum((int16_t)(key % 100 + 1)));
         auto v = std::to_string((int64_t)(key % 1000 + 2));
-        cols[2]->append_datum(vectorized::Datum(Slice{v}));
+        cols[2]->append_datum(Datum(Slice{v}));
     }
     auto chunk = ChunkHelper::new_chunk(iter->schema(), 100);
     size_t count = 0;
@@ -697,7 +695,7 @@ void TabletUpdatesTest::test_writeread_with_delete(bool enable_persistent_index)
     ASSERT_EQ(2, _tablet->updates()->max_version());
 
     // Delete [0, 1, 2 ... N/2)
-    vectorized::Int64Column deletes;
+    Int64Column deletes;
     deletes.append_numbers(keys.data(), sizeof(int64_t) * keys.size() / 2);
     ASSERT_TRUE(_tablet->rowset_commit(3, create_rowset(_tablet, {}, &deletes)).ok());
     ASSERT_EQ(3, _tablet->updates()->max_version());
@@ -735,7 +733,7 @@ TEST_F(TabletUpdatesTest, writeread_with_delete_with_sort_key) {
     ASSERT_EQ(2, _tablet->updates()->max_version());
 
     // Delete [0, 1, 2 ... N/2)
-    vectorized::Int64Column deletes;
+    Int64Column deletes;
     deletes.append_numbers(keys.data(), sizeof(int64_t) * keys.size() / 2);
     ASSERT_TRUE(_tablet->rowset_commit(3, create_rowset(_tablet, {}, &deletes)).ok());
     ASSERT_EQ(3, _tablet->updates()->max_version());
@@ -777,7 +775,7 @@ TEST_F(TabletUpdatesTest, writeread_with_overlapping_deletes_only_batches) {
     // Insert [2N, 2N + 1, 2N + 2 ... 3N)
     ASSERT_TRUE(_tablet->rowset_commit(4, create_rowset(_tablet, keys)).ok());
 
-    vectorized::Int64Column deletes;
+    Int64Column deletes;
     for (int i = N / 2; i < N + N / 2; i++) {
         deletes.append(i);
     }
@@ -937,11 +935,11 @@ void TabletUpdatesTest::test_remove_expired_versions(bool enable_persistent_inde
     ASSERT_EQ(0, read_tablet(_tablet, 1));
 
     // Create iterators before remove expired version, but read them after removal.
-    vectorized::Schema schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
-    vectorized::TabletReader reader1(_tablet, Version(0, 1), schema);
-    vectorized::TabletReader reader2(_tablet, Version(0, 2), schema);
-    vectorized::TabletReader reader3(_tablet, Version(0, 3), schema);
-    vectorized::TabletReader reader4(_tablet, Version(0, 4), schema);
+    VectorizedSchema schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
+    TabletReader reader1(_tablet, Version(0, 1), schema);
+    TabletReader reader2(_tablet, Version(0, 2), schema);
+    TabletReader reader3(_tablet, Version(0, 3), schema);
+    TabletReader reader4(_tablet, Version(0, 4), schema);
     auto iter_v1 = create_tablet_iterator(reader1, schema);
     auto iter_v2 = create_tablet_iterator(reader2, schema);
     auto iter_v3 = create_tablet_iterator(reader3, schema);
@@ -1149,7 +1147,7 @@ void TabletUpdatesTest::test_compaction_score_enough_duplicate(bool enable_persi
         keys.push_back(i);
     }
     // Delete [0, 1, 2 ... 86)
-    vectorized::Int64Column deletes;
+    Int64Column deletes;
     deletes.append_numbers(keys.data(), sizeof(int64_t) * 86);
     // This (keys and deletes has duplicate keys) is illegal and won't happen in real world
     // but currently underlying implementation still support this, so we test this case anyway
@@ -1180,7 +1178,7 @@ void TabletUpdatesTest::test_compaction_score_enough_normal(bool enable_persiste
     }
     ASSERT_TRUE(_tablet->rowset_commit(2, create_rowset(_tablet, keys)).ok());
     // Delete [0, 1, 2 ... 86)
-    vectorized::Int64Column deletes;
+    Int64Column deletes;
     deletes.append_numbers(keys.data(), sizeof(int64_t) * 86);
     ASSERT_TRUE(_tablet->rowset_commit(3, create_rowset(_tablet, {}, &deletes)).ok());
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
@@ -1451,7 +1449,7 @@ void TabletUpdatesTest::test_convert_from(bool enable_persistent_index) {
     ASSERT_TRUE(_tablet->rowset_commit(4, create_rowset(_tablet, keys)).ok());
 
     tablet_to_schema_change->set_tablet_state(TABLET_NOTREADY);
-    auto chunk_changer = std::make_unique<vectorized::ChunkChanger>(tablet_to_schema_change->tablet_schema());
+    auto chunk_changer = std::make_unique<ChunkChanger>(tablet_to_schema_change->tablet_schema());
     for (int i = 0; i < tablet_to_schema_change->tablet_schema().num_columns(); ++i) {
         const auto& new_column = tablet_to_schema_change->tablet_schema().column(i);
         int32_t column_index = _tablet->field_index(std::string{new_column.name()});
@@ -1485,7 +1483,7 @@ void TabletUpdatesTest::test_convert_from_with_pending(bool enable_persistent_in
     ASSERT_TRUE(_tablet->rowset_commit(2, create_rowset(_tablet, keys2)).ok());
 
     tablet_to_schema_change->set_tablet_state(TABLET_NOTREADY);
-    auto chunk_changer = std::make_unique<vectorized::ChunkChanger>(tablet_to_schema_change->tablet_schema());
+    auto chunk_changer = std::make_unique<ChunkChanger>(tablet_to_schema_change->tablet_schema());
     for (int i = 0; i < tablet_to_schema_change->tablet_schema().num_columns(); ++i) {
         const auto& new_column = tablet_to_schema_change->tablet_schema().column(i);
         int32_t column_index = _tablet->field_index(std::string{new_column.name()});
@@ -2514,7 +2512,7 @@ void TabletUpdatesTest::test_get_column_values(bool enable_persistent_index) {
     ASSERT_TRUE(tablet->rowset_commit(2, create_rowsets(tablet, keys, max_rows_per_segment)).ok());
     ASSERT_TRUE(tablet->rowset_commit(3, create_rowsets(tablet, keys, max_rows_per_segment)).ok());
     std::vector<uint32_t> read_column_ids = {1, 2};
-    std::vector<std::unique_ptr<vectorized::Column>> read_columns(read_column_ids.size());
+    std::vector<std::unique_ptr<Column>> read_columns(read_column_ids.size());
     const auto& tablet_schema = tablet->tablet_schema();
     for (auto i = 0; i < read_column_ids.size(); i++) {
         const auto read_column_id = read_column_ids[i];

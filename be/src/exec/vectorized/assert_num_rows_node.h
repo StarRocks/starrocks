@@ -17,7 +17,7 @@
 #include "util/phmap/phmap.h"
 #include "util/slice.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // Node for assert row count
 class AssertNumRowsNode final : public ExecNode {
@@ -42,4 +42,4 @@ private:
     bool _has_assert;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

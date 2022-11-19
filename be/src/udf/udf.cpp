@@ -90,7 +90,7 @@ starrocks_udf::FunctionContext* FunctionContextImpl::create_context(
     ctx->_impl->_return_type = return_type;
     ctx->_impl->_arg_types = arg_types;
     ctx->_impl->_debug = debug;
-    ctx->_impl->_jvm_udaf_ctxs = std::make_unique<vectorized::JavaUDAFContext>();
+    ctx->_impl->_jvm_udaf_ctxs = std::make_unique<JavaUDAFContext>();
     return ctx;
 }
 

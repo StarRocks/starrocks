@@ -12,11 +12,8 @@
 
 namespace starrocks {
 
-class ScanNode;
-
-namespace vectorized {
 class RuntimeFilterProbeCollector;
-}
+class ScanNode;
 
 namespace pipeline {
 
@@ -25,12 +22,9 @@ using OlapScanContextPtr = std::shared_ptr<OlapScanContext>;
 class OlapScanContextFactory;
 using OlapScanContextFactoryPtr = std::shared_ptr<OlapScanContextFactory>;
 
-using namespace vectorized;
-
 class OlapScanContext final : public ContextWithDependency {
 public:
-    explicit OlapScanContext(vectorized::OlapScanNode* scan_node, int32_t dop, bool shared_scan,
-                             BalancedChunkBuffer& chunk_buffer)
+    explicit OlapScanContext(OlapScanNode* scan_node, int32_t dop, bool shared_scan, BalancedChunkBuffer& chunk_buffer)
             : _scan_node(scan_node), _chunk_buffer(chunk_buffer), _shared_scan(shared_scan) {}
 
     Status prepare(RuntimeState* state);
@@ -42,8 +36,8 @@ public:
     Status parse_conjuncts(RuntimeState* state, const std::vector<ExprContext*>& runtime_in_filters,
                            RuntimeFilterProbeCollector* runtime_bloom_filters);
 
-    vectorized::OlapScanNode* scan_node() const { return _scan_node; }
-    vectorized::OlapScanConjunctsManager& conjuncts_manager() { return _conjuncts_manager; }
+    OlapScanNode* scan_node() const { return _scan_node; }
+    OlapScanConjunctsManager& conjuncts_manager() { return _conjuncts_manager; }
     const std::vector<ExprContext*>& not_push_down_conjuncts() const { return _not_push_down_conjuncts; }
     const std::vector<std::unique_ptr<OlapScanRange>>& key_ranges() const { return _key_ranges; }
     BalancedChunkBuffer& get_chunk_buffer() { return _chunk_buffer; }
@@ -57,14 +51,14 @@ public:
     BalancedChunkBuffer& get_shared_buffer();
 
 private:
-    vectorized::OlapScanNode* _scan_node;
+    OlapScanNode* _scan_node;
 
     std::vector<ExprContext*> _conjunct_ctxs;
-    vectorized::OlapScanConjunctsManager _conjuncts_manager;
+    OlapScanConjunctsManager _conjuncts_manager;
     // The conjuncts couldn't push down to storage engine
     std::vector<ExprContext*> _not_push_down_conjuncts;
     std::vector<std::unique_ptr<OlapScanRange>> _key_ranges;
-    vectorized::DictOptimizeParser _dict_optimize_parser;
+    DictOptimizeParser _dict_optimize_parser;
     ObjectPool _obj_pool;
 
     // For shared_scan mechanism
@@ -83,8 +77,8 @@ private:
 // Otherwise, it outputs the same context for each scan operator.
 class OlapScanContextFactory {
 public:
-    OlapScanContextFactory(vectorized::OlapScanNode* const scan_node, int32_t dop, bool shared_morsel_queue,
-                           bool shared_scan, ChunkBufferLimiterPtr chunk_buffer_limiter)
+    OlapScanContextFactory(OlapScanNode* const scan_node, int32_t dop, bool shared_morsel_queue, bool shared_scan,
+                           ChunkBufferLimiterPtr chunk_buffer_limiter)
             : _scan_node(scan_node),
               _dop(dop),
               _shared_morsel_queue(shared_morsel_queue),
@@ -96,7 +90,7 @@ public:
     OlapScanContextPtr get_or_create(int32_t driver_sequence);
 
 private:
-    vectorized::OlapScanNode* const _scan_node;
+    OlapScanNode* const _scan_node;
     const int32_t _dop;
     const bool _shared_morsel_queue;   // Whether the scan operators share a morsel queue.
     const bool _shared_scan;           // Whether the scan operators share a chunk buffer.

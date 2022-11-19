@@ -50,12 +50,12 @@ using std::shared_ptr;
 
 using std::vector;
 
-using ValueGenerator = std::function<vectorized::Datum(size_t rid, int cid, int block_id)>;
+using ValueGenerator = std::function<Datum(size_t rid, int cid, int block_id)>;
 
 // 0,  1,  2,  3
 // 10, 11, 12, 13
 // 20, 21, 22, 23
-static vectorized::Datum DefaultIntGenerator(size_t rid, int cid, int block_id) {
+static Datum DefaultIntGenerator(size_t rid, int cid, int block_id) {
     return {static_cast<int32_t>(rid * 10 + cid)};
 }
 
@@ -133,7 +133,7 @@ TEST_F(SegmentReaderWriterTest, estimate_segment_size) {
     for (size_t rid = 0; rid < nrows; ++rid) {
         auto& cols = chunk->columns();
         for (int cid = 0; cid < tablet_schema->num_columns(); ++cid) {
-            cols[cid]->append_datum(vectorized::Datum(static_cast<int32_t>(rid * 10 + cid)));
+            cols[cid]->append_datum(Datum(static_cast<int32_t>(rid * 10 + cid)));
         }
     }
     ASSERT_OK(writer.append_chunk(*chunk));
@@ -191,10 +191,10 @@ TEST_F(SegmentReaderWriterTest, TestHorizontalWrite) {
         chunk->reset();
         auto& cols = chunk->columns();
         for (auto j = 0; j < chunk_size && i * chunk_size + j < num_rows; ++j) {
-            cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j)));
-            cols[1]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j + 1)));
-            cols[2]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j + 2)));
-            cols[3]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j + 3)));
+            cols[0]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j)));
+            cols[1]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j + 1)));
+            cols[2]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j + 2)));
+            cols[3]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j + 3)));
         }
         ASSERT_OK(writer.append_chunk(*chunk));
     }
@@ -207,7 +207,7 @@ TEST_F(SegmentReaderWriterTest, TestHorizontalWrite) {
     auto segment = *Segment::open(_fs, file_name, 0, tablet_schema.get());
     ASSERT_EQ(segment->num_rows(), num_rows);
 
-    vectorized::SegmentReadOptions seg_options;
+    SegmentReadOptions seg_options;
     seg_options.fs = _fs;
     OlapReaderStatistics stats;
     seg_options.stats = &stats;
@@ -262,8 +262,8 @@ TEST_F(SegmentReaderWriterTest, TestVerticalWrite) {
             chunk->reset();
             auto& cols = chunk->columns();
             for (auto j = 0; j < chunk_size && i * chunk_size + j < num_rows; ++j) {
-                cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j)));
-                cols[1]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j + 1)));
+                cols[0]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j)));
+                cols[1]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j + 1)));
             }
             ASSERT_OK(writer.append_chunk(*chunk));
         }
@@ -280,7 +280,7 @@ TEST_F(SegmentReaderWriterTest, TestVerticalWrite) {
             chunk->reset();
             auto& cols = chunk->columns();
             for (auto j = 0; j < chunk_size && i * chunk_size + j < num_rows; ++j) {
-                cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j + 2)));
+                cols[0]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j + 2)));
             }
             ASSERT_OK(writer.append_chunk(*chunk));
         }
@@ -297,7 +297,7 @@ TEST_F(SegmentReaderWriterTest, TestVerticalWrite) {
             chunk->reset();
             auto& cols = chunk->columns();
             for (auto j = 0; j < chunk_size && i * chunk_size + j < num_rows; ++j) {
-                cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j + 3)));
+                cols[0]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j + 3)));
             }
             ASSERT_OK(writer.append_chunk(*chunk));
         }
@@ -309,7 +309,7 @@ TEST_F(SegmentReaderWriterTest, TestVerticalWrite) {
     auto segment = *Segment::open(_fs, file_name, 0, tablet_schema.get());
     ASSERT_EQ(segment->num_rows(), num_rows);
 
-    vectorized::SegmentReadOptions seg_options;
+    SegmentReadOptions seg_options;
     seg_options.fs = _fs;
     OlapReaderStatistics stats;
     seg_options.stats = &stats;
@@ -379,8 +379,8 @@ TEST_F(SegmentReaderWriterTest, TestReadMultipleTypesColumn) {
             chunk->reset();
             auto& cols = chunk->columns();
             for (auto j = 0; j < chunk_size && i * chunk_size + j < num_rows; ++j) {
-                cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j)));
-                cols[1]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j + 1)));
+                cols[0]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j)));
+                cols[1]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j + 1)));
             }
             ASSERT_OK(writer.append_chunk(*chunk));
         }
@@ -397,7 +397,7 @@ TEST_F(SegmentReaderWriterTest, TestReadMultipleTypesColumn) {
             chunk->reset();
             auto& cols = chunk->columns();
             for (auto j = 0; j < chunk_size && i * chunk_size + j < num_rows; ++j) {
-                cols[0]->append_datum(vectorized::Datum(data_strs[j % 8]));
+                cols[0]->append_datum(Datum(data_strs[j % 8]));
             }
             ASSERT_OK(writer.append_chunk(*chunk));
         }
@@ -408,7 +408,7 @@ TEST_F(SegmentReaderWriterTest, TestReadMultipleTypesColumn) {
     auto segment = *Segment::open(_fs, file_name, 0, tablet_schema.get());
     ASSERT_EQ(segment->num_rows(), num_rows);
 
-    vectorized::SegmentReadOptions seg_options;
+    SegmentReadOptions seg_options;
     seg_options.fs = _fs;
     OlapReaderStatistics stats;
     seg_options.stats = &stats;

@@ -4,7 +4,7 @@
 
 #include "exprs/expr.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class CloneExpr final : public Expr {
 public:
@@ -19,4 +19,4 @@ public:
         return column->clone_shared();
     }
 };
-} // namespace starrocks::vectorized
+} // namespace starrocks

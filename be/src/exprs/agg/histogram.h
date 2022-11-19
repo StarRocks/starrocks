@@ -10,7 +10,7 @@
 #include "gutil/casts.h"
 #include "runtime/large_int_value.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 template <typename T>
 struct Bucket {
@@ -172,4 +172,4 @@ public:
     std::string get_name() const override { return "histogram"; }
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

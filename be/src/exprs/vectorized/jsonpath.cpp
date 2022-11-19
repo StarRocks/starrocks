@@ -16,7 +16,7 @@
 #include "util/json.h"
 #include "velocypack/vpack.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 static const re2::RE2 JSONPATH_PATTERN(R"(^([^\"\[\]]*)(?:\[([0-9\:\*]+)\])?)", re2::RE2::Quiet);
 static const re2::RE2 ARRAY_SINGLE_SELECTOR(R"(\d+)", re2::RE2::Quiet);
@@ -235,4 +235,4 @@ vpack::Slice JsonPath::extract(const JsonValue* json, const JsonPath& jsonpath, 
     return JsonPathPiece::extract(json, jsonpath.paths, b);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

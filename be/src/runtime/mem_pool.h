@@ -33,7 +33,7 @@
 #include "common/logging.h"
 #include "common/status.h"
 #include "gutil/dynamic_annotations.h"
-#include "runtime/memory/chunk.h"
+#include "runtime/memory/mem_chunk.h"
 #include "storage/olap_define.h"
 #include "util/bit_util.h"
 
@@ -148,11 +148,11 @@ private:
     static const int MAX_CHUNK_SIZE = 512 * 1024;
 
     struct ChunkInfo {
-        Chunk chunk;
+        MemChunk chunk;
         /// bytes allocated via Allocate() in this chunk
         int64_t allocated_bytes{0};
-        explicit ChunkInfo(const Chunk& chunk);
-        ChunkInfo() = default;
+        explicit ChunkInfo(const MemChunk& chunk);
+        ChunkInfo() {}
     };
 
     /// A static field used as non-NULL pointer for zero length allocations. NULL is

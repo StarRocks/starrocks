@@ -12,7 +12,7 @@
 #include "runtime/exec_env.h"
 #include "util/priority_thread_pool.hpp"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // ======================================================
 
@@ -567,4 +567,4 @@ int ConnectorScanNode::io_tasks_per_scan_operator() const {
     return config::connector_io_tasks_per_scan_operator;
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

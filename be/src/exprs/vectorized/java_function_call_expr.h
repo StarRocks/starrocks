@@ -7,7 +7,7 @@
 #include "exprs/expr.h"
 #include "runtime/runtime_state.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 struct JavaUDFContext;
 struct UDFFunctionCallHelper;
 
@@ -17,7 +17,7 @@ public:
     ~JavaFunctionCallExpr() override;
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new JavaFunctionCallExpr(*this)); }
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override;
+    ColumnPtr evaluate(ExprContext* context, Chunk* ptr) override;
     Status prepare(RuntimeState* state, ExprContext* context) override;
     Status open(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) override;
     void close(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) override;
@@ -30,4 +30,4 @@ private:
     std::shared_ptr<UDFFunctionCallHelper> _call_helper;
     bool _is_returning_random_value;
 };
-} // namespace starrocks::vectorized
+} // namespace starrocks

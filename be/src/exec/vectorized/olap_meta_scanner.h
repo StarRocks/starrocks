@@ -8,7 +8,7 @@
 #include "runtime/runtime_state.h"
 #include "storage/meta_reader.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class OlapMetaScanNode;
 
@@ -55,4 +55,4 @@ private:
     int64_t _version = 0;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

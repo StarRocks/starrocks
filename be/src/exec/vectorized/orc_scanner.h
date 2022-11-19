@@ -8,7 +8,7 @@
 #include "formats/orc/orc_chunk_reader.h"
 #include "fs/fs.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class ORCScanner : public FileScanner {
 public:
@@ -16,7 +16,7 @@ public:
                                         const TypeDescriptor& slot_desc);
 
     ORCScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRange& scan_range,
-               starrocks::vectorized::ScannerCounter* counter);
+               starrocks::ScannerCounter* counter);
 
     ~ORCScanner() override = default;
 
@@ -50,4 +50,4 @@ private:
     std::vector<SlotDescriptor*> _orc_slot_descriptors;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -7,7 +7,7 @@
 #include "storage/conjunctive_predicates.h"
 #include "storage/vectorized_column_predicate.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class Chunk;
 class ConjunctivePredicates;
@@ -67,4 +67,4 @@ private:
     std::vector<ConjunctivePredicates> _preds;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -10,7 +10,7 @@
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 class TableFunctionNode final : public ExecNode {
 public:
     TableFunctionNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& desc);
@@ -59,4 +59,4 @@ private:
     RuntimeProfile::Counter* _table_function_exec_timer = nullptr;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

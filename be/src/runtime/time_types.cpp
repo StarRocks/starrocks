@@ -6,10 +6,7 @@
 #include "gutil/strings/substitute.h"
 #include "util/raw_container.h"
 
-namespace starrocks::vectorized {
-
-// two-digit years < this are 20..; >= this are 19..
-const int YY_PART_YEAR = 70;
+namespace starrocks {
 
 const uint64_t LOG_10_INT[] = {1,         10,         100,         1000,         10000UL,       100000UL,
                                1000000UL, 10000000UL, 100000000UL, 1000000000UL, 10000000000UL, 100000000000UL};
@@ -585,4 +582,4 @@ int timestamp::to_string(Timestamp timestamp, char* to, size_t n) {
     return 19;
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

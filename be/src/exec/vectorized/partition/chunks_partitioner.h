@@ -12,7 +12,7 @@
 #include "partition_hash_variant.h"
 #include "runtime/current_thread.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 struct PartitionColumnType {
     TypeDescriptor result_type;
@@ -203,4 +203,4 @@ private:
     bool _hash_map_eos = false;
     bool _null_key_eos = false;
 };
-} // namespace starrocks::vectorized
+} // namespace starrocks

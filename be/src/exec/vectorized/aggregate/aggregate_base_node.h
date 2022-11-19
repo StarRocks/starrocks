@@ -7,7 +7,7 @@
 #include "exec/exec_node.h"
 #include "exec/vectorized/aggregator.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class AggregateBaseNode : public ExecNode {
 public:
@@ -16,8 +16,7 @@ public:
     Status init(const TPlanNode& tnode, RuntimeState* state = nullptr) override;
     Status prepare(RuntimeState* state) override;
     Status close(RuntimeState* state) override;
-    void push_down_join_runtime_filter(RuntimeState* state,
-                                       vectorized::RuntimeFilterProbeCollector* collector) override;
+    void push_down_join_runtime_filter(RuntimeState* state, RuntimeFilterProbeCollector* collector) override;
 
 protected:
     const TPlanNode& _tnode;
@@ -28,4 +27,4 @@ protected:
     bool _child_eos = false;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

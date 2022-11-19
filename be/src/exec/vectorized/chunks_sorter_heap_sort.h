@@ -14,7 +14,7 @@
 #include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 namespace detail {
 using DataSegmentPtr = std::shared_ptr<DataSegment>;
@@ -264,4 +264,4 @@ private:
     DataSegment _merged_segment;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

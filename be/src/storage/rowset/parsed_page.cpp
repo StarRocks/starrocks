@@ -92,7 +92,7 @@ public:
         return Status::OK();
     }
 
-    Status read(vectorized::Column* column, size_t* count) override {
+    Status read(Column* column, size_t* count) override {
         *count = std::min(*count, remaining());
         size_t nrows_to_read = *count;
         if (_has_null) {
@@ -118,13 +118,13 @@ public:
         return Status::OK();
     }
 
-    Status read(vectorized::Column* column, const vectorized::SparseRange& range) override {
+    Status read(Column* column, const SparseRange& range) override {
         DCHECK_LE(range.span_size(), remaining());
         if (_has_null) {
-            vectorized::SparseRangeIterator iter = range.new_iterator();
+            SparseRangeIterator iter = range.new_iterator();
             size_t to_read = range.span_size();
             while (to_read > 0) {
-                vectorized::Range r = iter.next(to_read);
+                Range r = iter.next(to_read);
                 RETURN_IF_ERROR(seek(r.begin()));
                 size_t n = r.span_size();
                 RETURN_IF_ERROR(read(column, &n));
@@ -137,7 +137,7 @@ public:
         return Status::OK();
     }
 
-    Status read_dict_codes(vectorized::Column* column, size_t* count) override {
+    Status read_dict_codes(Column* column, size_t* count) override {
         *count = std::min(*count, remaining());
         size_t nrows_to_read = *count;
         if (_has_null) {
@@ -171,13 +171,13 @@ public:
         return Status::OK();
     }
 
-    Status read_dict_codes(vectorized::Column* column, const vectorized::SparseRange& range) override {
+    Status read_dict_codes(Column* column, const SparseRange& range) override {
         DCHECK_LE(range.span_size(), remaining());
         if (_has_null) {
             size_t to_read = range.span_size();
-            vectorized::SparseRangeIterator iter = range.new_iterator();
+            SparseRangeIterator iter = range.new_iterator();
             while (to_read > 0) {
-                vectorized::Range r = iter.next(to_read);
+                Range r = iter.next(to_read);
                 RETURN_IF_ERROR(seek(r.begin()));
                 size_t n = r.span_size();
                 RETURN_IF_ERROR(read_dict_codes(column, &n));
@@ -211,12 +211,12 @@ public:
         return Status::OK();
     }
 
-    Status read(vectorized::Column* column, size_t* count) override {
+    Status read(Column* column, size_t* count) override {
         DCHECK_EQ(_offset_in_page, _data_decoder->current_index());
         if (_null_flags.size() == 0) {
             RETURN_IF_ERROR(_data_decoder->next_batch(count, column));
         } else {
-            auto nc = down_cast<vectorized::NullableColumn*>(column);
+            auto nc = down_cast<NullableColumn*>(column);
             RETURN_IF_ERROR(_data_decoder->next_batch(count, nc->data_column().get()));
             nc->null_column()->append_numbers(_null_flags.data() + _offset_in_page, *count);
             nc->update_has_null();
@@ -225,20 +225,20 @@ public:
         return Status::OK();
     }
 
-    Status read(vectorized::Column* column, const vectorized::SparseRange& range) override {
+    Status read(Column* column, const SparseRange& range) override {
         DCHECK_EQ(_offset_in_page, range.begin());
         DCHECK_EQ(_offset_in_page, _data_decoder->current_index());
         if (_null_flags.size() == 0) {
             RETURN_IF_ERROR(_data_decoder->next_batch(range, column));
             _offset_in_page = range.end();
         } else {
-            auto nc = down_cast<vectorized::NullableColumn*>(column);
+            auto nc = down_cast<NullableColumn*>(column);
             RETURN_IF_ERROR(_data_decoder->next_batch(range, nc->data_column().get()));
-            vectorized::SparseRangeIterator iter = range.new_iterator();
+            SparseRangeIterator iter = range.new_iterator();
             size_t size = range.span_size();
             while (iter.has_more()) {
                 _offset_in_page = iter.begin();
-                vectorized::Range r = iter.next(size);
+                Range r = iter.next(size);
                 nc->null_column()->append_numbers(_null_flags.data() + _offset_in_page, r.span_size());
                 _offset_in_page += r.span_size();
                 size -= r.span_size();
@@ -248,11 +248,11 @@ public:
         return Status::OK();
     }
 
-    Status read_dict_codes(vectorized::Column* column, size_t* count) override {
+    Status read_dict_codes(Column* column, size_t* count) override {
         if (_null_flags.size() == 0) {
             RETURN_IF_ERROR(_data_decoder->next_dict_codes(count, column));
         } else {
-            auto nc = down_cast<vectorized::NullableColumn*>(column);
+            auto nc = down_cast<NullableColumn*>(column);
             RETURN_IF_ERROR(_data_decoder->next_dict_codes(count, nc->data_column().get()));
             (void)nc->null_column()->append_numbers(_null_flags.data() + _offset_in_page, *count);
             nc->update_has_null();
@@ -261,7 +261,7 @@ public:
         return Status::OK();
     }
 
-    Status read_dict_codes(vectorized::Column* column, const vectorized::SparseRange& range) override {
+    Status read_dict_codes(Column* column, const SparseRange& range) override {
         DCHECK_EQ(_offset_in_page, range.begin());
         DCHECK_EQ(_offset_in_page, _data_decoder->current_index());
 
@@ -269,13 +269,13 @@ public:
             RETURN_IF_ERROR(_data_decoder->next_dict_codes(range, column));
             _offset_in_page = range.end();
         } else {
-            auto nc = down_cast<vectorized::NullableColumn*>(column);
+            auto nc = down_cast<NullableColumn*>(column);
             RETURN_IF_ERROR(_data_decoder->next_dict_codes(range, nc->data_column().get()));
-            vectorized::SparseRangeIterator iter = range.new_iterator();
+            SparseRangeIterator iter = range.new_iterator();
             size_t size = range.span_size();
             while (iter.has_more()) {
                 _offset_in_page = iter.begin();
-                vectorized::Range r = iter.next(size);
+                Range r = iter.next(size);
                 nc->null_column()->append_numbers(_null_flags.data() + _offset_in_page, r.span_size());
                 _offset_in_page += r.span_size();
             }

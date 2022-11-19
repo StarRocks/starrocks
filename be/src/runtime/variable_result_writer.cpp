@@ -11,7 +11,7 @@
 #include "runtime/primitive_type.h"
 #include "util/thrift_util.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 VariableResultWriter::VariableResultWriter(BufferControlBlock* sinker,
                                            const std::vector<ExprContext*>& output_expr_ctxs,
@@ -34,7 +34,7 @@ void VariableResultWriter::_init_profile() {
     _sent_rows_counter = ADD_COUNTER(_parent_profile, "NumSentRows", TUnit::UNIT);
 }
 
-Status VariableResultWriter::append_chunk(vectorized::Chunk* chunk) {
+Status VariableResultWriter::append_chunk(Chunk* chunk) {
     SCOPED_TIMER(_total_timer);
     auto process_status = _process_chunk(chunk);
     if (!process_status.ok() || process_status.value() == nullptr) {
@@ -53,7 +53,7 @@ Status VariableResultWriter::append_chunk(vectorized::Chunk* chunk) {
     return status;
 }
 
-StatusOr<TFetchDataResultPtrs> VariableResultWriter::process_chunk(vectorized::Chunk* chunk) {
+StatusOr<TFetchDataResultPtrs> VariableResultWriter::process_chunk(Chunk* chunk) {
     SCOPED_TIMER(_total_timer);
     TFetchDataResultPtrs results;
     auto process_status = _process_chunk(chunk);
@@ -85,13 +85,13 @@ StatusOr<bool> VariableResultWriter::try_add_batch(TFetchDataResultPtrs& results
     return status;
 }
 
-StatusOr<TFetchDataResultPtr> VariableResultWriter::_process_chunk(vectorized::Chunk* chunk) {
+StatusOr<TFetchDataResultPtr> VariableResultWriter::_process_chunk(Chunk* chunk) {
     if (nullptr == chunk || 0 == chunk->num_rows()) {
         return nullptr;
     }
 
     int num_columns = _output_expr_ctxs.size();
-    vectorized::Columns result_columns;
+    Columns result_columns;
     result_columns.reserve(num_columns);
     for (int i = 0; i < num_columns; ++i) {
         ASSIGN_OR_RETURN(auto col, _output_expr_ctxs[i]->evaluate(chunk));
@@ -128,4 +128,4 @@ Status VariableResultWriter::close() {
     return Status::OK();
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

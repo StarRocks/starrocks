@@ -225,9 +225,8 @@ private:
     std::unique_ptr<MemTracker> _page_cache_mem_tracker = nullptr;
 };
 
-static vectorized::ChunkIteratorPtr create_tablet_iterator(vectorized::TabletReader& reader,
-                                                           vectorized::Schema& schema) {
-    vectorized::TabletReaderParams params;
+static ChunkIteratorPtr create_tablet_iterator(TabletReader& reader, VectorizedSchema& schema) {
+    TabletReaderParams params;
     if (!reader.prepare().ok()) {
         LOG(ERROR) << "reader prepare failed";
         return nullptr;
@@ -238,9 +237,9 @@ static vectorized::ChunkIteratorPtr create_tablet_iterator(vectorized::TabletRea
         return nullptr;
     }
     if (seg_iters.empty()) {
-        return vectorized::new_empty_iterator(schema, DEFAULT_CHUNK_SIZE);
+        return new_empty_iterator(schema, DEFAULT_CHUNK_SIZE);
     }
-    return vectorized::new_union_iterator(seg_iters);
+    return new_union_iterator(seg_iters);
 }
 
 void RowsetTest::test_final_merge(bool has_merge_condition = false) {
@@ -264,11 +263,11 @@ void RowsetTest::test_final_merge(bool has_merge_condition = false) {
         auto chunk = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
         auto& cols = chunk->columns();
         for (auto i = 0; i < rows_per_segment; i++) {
-            cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
-            cols[1]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
-            cols[2]->append_datum(vectorized::Datum(static_cast<int32_t>(1)));
-            cols[3]->append_datum(vectorized::Datum(static_cast<int32_t>(1)));
-            cols[4]->append_datum(vectorized::Datum(static_cast<int32_t>(1)));
+            cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
+            cols[1]->append_datum(Datum(static_cast<int32_t>(i)));
+            cols[2]->append_datum(Datum(static_cast<int32_t>(1)));
+            cols[3]->append_datum(Datum(static_cast<int32_t>(1)));
+            cols[4]->append_datum(Datum(static_cast<int32_t>(1)));
         }
         ASSERT_OK(rowset_writer->add_chunk(*chunk.get()));
         ASSERT_OK(rowset_writer->flush());
@@ -278,11 +277,11 @@ void RowsetTest::test_final_merge(bool has_merge_condition = false) {
         auto chunk = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
         auto& cols = chunk->columns();
         for (auto i = rows_per_segment / 2; i < rows_per_segment + rows_per_segment / 2; i++) {
-            cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
-            cols[1]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
-            cols[2]->append_datum(vectorized::Datum(static_cast<int32_t>(2)));
-            cols[3]->append_datum(vectorized::Datum(static_cast<int32_t>(2)));
-            cols[4]->append_datum(vectorized::Datum(static_cast<int32_t>(2)));
+            cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
+            cols[1]->append_datum(Datum(static_cast<int32_t>(i)));
+            cols[2]->append_datum(Datum(static_cast<int32_t>(2)));
+            cols[3]->append_datum(Datum(static_cast<int32_t>(2)));
+            cols[4]->append_datum(Datum(static_cast<int32_t>(2)));
         }
         ASSERT_OK(rowset_writer->add_chunk(*chunk.get()));
         ASSERT_OK(rowset_writer->flush());
@@ -292,11 +291,11 @@ void RowsetTest::test_final_merge(bool has_merge_condition = false) {
         auto chunk = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
         auto& cols = chunk->columns();
         for (auto i = rows_per_segment; i < rows_per_segment * 2; i++) {
-            cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
-            cols[1]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
-            cols[2]->append_datum(vectorized::Datum(static_cast<int32_t>(3)));
-            cols[3]->append_datum(vectorized::Datum(static_cast<int32_t>(3)));
-            cols[4]->append_datum(vectorized::Datum(static_cast<int32_t>(3)));
+            cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
+            cols[1]->append_datum(Datum(static_cast<int32_t>(i)));
+            cols[2]->append_datum(Datum(static_cast<int32_t>(3)));
+            cols[3]->append_datum(Datum(static_cast<int32_t>(3)));
+            cols[4]->append_datum(Datum(static_cast<int32_t>(3)));
         }
         ASSERT_OK(rowset_writer->add_chunk(*chunk.get()));
         ASSERT_OK(rowset_writer->flush());
@@ -311,7 +310,7 @@ void RowsetTest::test_final_merge(bool has_merge_condition = false) {
     {
         size_t count = 0;
         for (size_t seg_id = 0; seg_id < rowset->rowset_meta()->num_segments(); seg_id++) {
-            vectorized::SegmentReadOptions seg_options;
+            SegmentReadOptions seg_options;
             ASSIGN_OR_ABORT(seg_options.fs, FileSystem::CreateSharedFromString("posix://"));
             seg_options.stats = &_stats;
             std::string segment_file =
@@ -322,7 +321,7 @@ void RowsetTest::test_final_merge(bool has_merge_condition = false) {
             ASSERT_FALSE(res.status().is_end_of_file() || !res.ok() || res.value() == nullptr);
             auto seg_iterator = res.value();
 
-            seg_iterator->init_encoded_schema(vectorized::EMPTY_GLOBAL_DICTMAPS);
+            seg_iterator->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS);
 
             auto chunk = ChunkHelper::new_chunk(schema, 100);
             while (true) {
@@ -363,7 +362,7 @@ void RowsetTest::test_final_merge(bool has_merge_condition = false) {
     ASSERT_EQ(2, tablet->updates()->version_history_count());
 
     {
-        vectorized::TabletReader reader(tablet, Version(0, 2), schema);
+        TabletReader reader(tablet, Version(0, 2), schema);
         auto iter = create_tablet_iterator(reader, schema);
         ASSERT_TRUE(iter != nullptr);
         auto chunk = ChunkHelper::new_chunk(iter->schema(), 100);
@@ -423,11 +422,11 @@ TEST_F(RowsetTest, FinalMergeVerticalTest) {
         auto chunk = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
         auto& cols = chunk->columns();
         for (auto i = 0; i < rows_per_segment; i++) {
-            cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
-            cols[1]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
-            cols[2]->append_datum(vectorized::Datum(static_cast<int32_t>(1)));
-            cols[3]->append_datum(vectorized::Datum(static_cast<int32_t>(1)));
-            cols[4]->append_datum(vectorized::Datum(static_cast<int32_t>(1)));
+            cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
+            cols[1]->append_datum(Datum(static_cast<int32_t>(i)));
+            cols[2]->append_datum(Datum(static_cast<int32_t>(1)));
+            cols[3]->append_datum(Datum(static_cast<int32_t>(1)));
+            cols[4]->append_datum(Datum(static_cast<int32_t>(1)));
         }
         ASSERT_OK(rowset_writer->add_chunk(*chunk.get()));
         ASSERT_OK(rowset_writer->flush());
@@ -437,11 +436,11 @@ TEST_F(RowsetTest, FinalMergeVerticalTest) {
         auto chunk = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
         auto& cols = chunk->columns();
         for (auto i = rows_per_segment / 2; i < rows_per_segment + rows_per_segment / 2; i++) {
-            cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
-            cols[1]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
-            cols[2]->append_datum(vectorized::Datum(static_cast<int32_t>(2)));
-            cols[3]->append_datum(vectorized::Datum(static_cast<int32_t>(2)));
-            cols[4]->append_datum(vectorized::Datum(static_cast<int32_t>(2)));
+            cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
+            cols[1]->append_datum(Datum(static_cast<int32_t>(i)));
+            cols[2]->append_datum(Datum(static_cast<int32_t>(2)));
+            cols[3]->append_datum(Datum(static_cast<int32_t>(2)));
+            cols[4]->append_datum(Datum(static_cast<int32_t>(2)));
         }
         ASSERT_OK(rowset_writer->add_chunk(*chunk.get()));
         ASSERT_OK(rowset_writer->flush());
@@ -451,11 +450,11 @@ TEST_F(RowsetTest, FinalMergeVerticalTest) {
         auto chunk = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
         auto& cols = chunk->columns();
         for (auto i = rows_per_segment; i < rows_per_segment * 2; i++) {
-            cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
-            cols[1]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
-            cols[2]->append_datum(vectorized::Datum(static_cast<int32_t>(3)));
-            cols[3]->append_datum(vectorized::Datum(static_cast<int32_t>(3)));
-            cols[4]->append_datum(vectorized::Datum(static_cast<int32_t>(3)));
+            cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
+            cols[1]->append_datum(Datum(static_cast<int32_t>(i)));
+            cols[2]->append_datum(Datum(static_cast<int32_t>(3)));
+            cols[3]->append_datum(Datum(static_cast<int32_t>(3)));
+            cols[4]->append_datum(Datum(static_cast<int32_t>(3)));
         }
         ASSERT_OK(rowset_writer->add_chunk(*chunk.get()));
         ASSERT_OK(rowset_writer->flush());
@@ -470,7 +469,7 @@ TEST_F(RowsetTest, FinalMergeVerticalTest) {
     {
         size_t count = 0;
         for (size_t seg_id = 0; seg_id < rowset->rowset_meta()->num_segments(); seg_id++) {
-            vectorized::SegmentReadOptions seg_options;
+            SegmentReadOptions seg_options;
             ASSIGN_OR_ABORT(seg_options.fs, FileSystem::CreateSharedFromString("posix://"));
             seg_options.stats = &_stats;
 
@@ -483,7 +482,7 @@ TEST_F(RowsetTest, FinalMergeVerticalTest) {
             ASSERT_FALSE(res.status().is_end_of_file() || !res.ok() || res.value() == nullptr);
 
             auto seg_iterator = res.value();
-            seg_iterator->init_encoded_schema(vectorized::EMPTY_GLOBAL_DICTMAPS);
+            seg_iterator->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS);
             auto chunk = ChunkHelper::new_chunk(seg_iterator->schema(), 100);
             while (true) {
                 auto st = seg_iterator->get_next(chunk.get());
@@ -523,7 +522,7 @@ TEST_F(RowsetTest, FinalMergeVerticalTest) {
     ASSERT_EQ(2, tablet->updates()->version_history_count());
 
     {
-        vectorized::TabletReader reader(tablet, Version(0, 2), schema);
+        TabletReader reader(tablet, Version(0, 2), schema);
         auto iter = create_tablet_iterator(reader, schema);
         ASSERT_TRUE(iter != nullptr);
         auto chunk = ChunkHelper::new_chunk(iter->schema(), 100);
@@ -557,26 +556,26 @@ TEST_F(RowsetTest, FinalMergeVerticalTest) {
     }
 }
 
-static ssize_t read_and_compare(const vectorized::ChunkIteratorPtr& iter, int64_t nkeys) {
+static ssize_t read_and_compare(const ChunkIteratorPtr& iter, int64_t nkeys) {
     auto full_chunk = ChunkHelper::new_chunk(iter->schema(), nkeys);
     auto& cols = full_chunk->columns();
     for (size_t i = 0; i < nkeys / 4; i++) {
-        cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
-        cols[1]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
-        cols[2]->append_datum(vectorized::Datum(static_cast<int32_t>(1)));
-        cols[3]->append_datum(vectorized::Datum(static_cast<int32_t>(1)));
+        cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
+        cols[1]->append_datum(Datum(static_cast<int32_t>(i)));
+        cols[2]->append_datum(Datum(static_cast<int32_t>(1)));
+        cols[3]->append_datum(Datum(static_cast<int32_t>(1)));
     }
     for (size_t i = nkeys / 4; i < nkeys / 2; i++) {
-        cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
-        cols[1]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
-        cols[2]->append_datum(vectorized::Datum(static_cast<int32_t>(2)));
-        cols[3]->append_datum(vectorized::Datum(static_cast<int32_t>(2)));
+        cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
+        cols[1]->append_datum(Datum(static_cast<int32_t>(i)));
+        cols[2]->append_datum(Datum(static_cast<int32_t>(2)));
+        cols[3]->append_datum(Datum(static_cast<int32_t>(2)));
     }
     for (size_t i = nkeys / 2; i < nkeys; i++) {
-        cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
-        cols[1]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
-        cols[2]->append_datum(vectorized::Datum(static_cast<int32_t>(3)));
-        cols[3]->append_datum(vectorized::Datum(static_cast<int32_t>(3)));
+        cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
+        cols[1]->append_datum(Datum(static_cast<int32_t>(i)));
+        cols[2]->append_datum(Datum(static_cast<int32_t>(3)));
+        cols[3]->append_datum(Datum(static_cast<int32_t>(3)));
     }
     size_t count = 0;
     auto chunk = ChunkHelper::new_chunk(iter->schema(), 100);
@@ -600,8 +599,8 @@ static ssize_t read_and_compare(const vectorized::ChunkIteratorPtr& iter, int64_
 static ssize_t read_tablet_and_compare(const TabletSharedPtr& tablet,
                                        const std::shared_ptr<TabletSchema>& partial_schema, int64_t version,
                                        int64_t nkeys) {
-    vectorized::Schema schema = ChunkHelper::convert_schema_to_format_v2(*partial_schema);
-    vectorized::TabletReader reader(tablet, Version(0, version), schema);
+    VectorizedSchema schema = ChunkHelper::convert_schema_to_format_v2(*partial_schema);
+    TabletReader reader(tablet, Version(0, version), schema);
     auto iter = create_tablet_iterator(reader, schema);
     if (iter == nullptr) {
         return -1;
@@ -629,10 +628,10 @@ TEST_F(RowsetTest, FinalMergeVerticalPartialTest) {
         auto chunk = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
         auto& cols = chunk->columns();
         for (auto i = 0; i < rows_per_segment; i++) {
-            cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
-            cols[1]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
-            cols[2]->append_datum(vectorized::Datum(static_cast<int32_t>(1)));
-            cols[3]->append_datum(vectorized::Datum(static_cast<int32_t>(1)));
+            cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
+            cols[1]->append_datum(Datum(static_cast<int32_t>(i)));
+            cols[2]->append_datum(Datum(static_cast<int32_t>(1)));
+            cols[3]->append_datum(Datum(static_cast<int32_t>(1)));
         }
         ASSERT_OK(rowset_writer->add_chunk(*chunk.get()));
         ASSERT_OK(rowset_writer->flush());
@@ -642,10 +641,10 @@ TEST_F(RowsetTest, FinalMergeVerticalPartialTest) {
         auto chunk = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
         auto& cols = chunk->columns();
         for (auto i = rows_per_segment / 2; i < rows_per_segment + rows_per_segment / 2; i++) {
-            cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
-            cols[1]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
-            cols[2]->append_datum(vectorized::Datum(static_cast<int32_t>(2)));
-            cols[3]->append_datum(vectorized::Datum(static_cast<int32_t>(2)));
+            cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
+            cols[1]->append_datum(Datum(static_cast<int32_t>(i)));
+            cols[2]->append_datum(Datum(static_cast<int32_t>(2)));
+            cols[3]->append_datum(Datum(static_cast<int32_t>(2)));
         }
         ASSERT_OK(rowset_writer->add_chunk(*chunk.get()));
         ASSERT_OK(rowset_writer->flush());
@@ -655,10 +654,10 @@ TEST_F(RowsetTest, FinalMergeVerticalPartialTest) {
         auto chunk = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
         auto& cols = chunk->columns();
         for (auto i = rows_per_segment; i < rows_per_segment * 2; i++) {
-            cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
-            cols[1]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
-            cols[2]->append_datum(vectorized::Datum(static_cast<int32_t>(3)));
-            cols[3]->append_datum(vectorized::Datum(static_cast<int32_t>(3)));
+            cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
+            cols[1]->append_datum(Datum(static_cast<int32_t>(i)));
+            cols[2]->append_datum(Datum(static_cast<int32_t>(3)));
+            cols[3]->append_datum(Datum(static_cast<int32_t>(3)));
         }
         ASSERT_OK(rowset_writer->add_chunk(*chunk.get()));
         ASSERT_OK(rowset_writer->flush());
@@ -697,8 +696,8 @@ TEST_F(RowsetTest, VerticalWriteTest) {
             chunk->reset();
             auto& cols = chunk->columns();
             for (auto j = 0; j < chunk_size && i * chunk_size + j < num_rows; ++j) {
-                cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j)));
-                cols[1]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j + 1)));
+                cols[0]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j)));
+                cols[1]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j + 1)));
             }
             ASSERT_OK(rowset_writer->add_columns(*chunk, column_indexes, true));
         }
@@ -714,7 +713,7 @@ TEST_F(RowsetTest, VerticalWriteTest) {
             chunk->reset();
             auto& cols = chunk->columns();
             for (auto j = 0; j < chunk_size && i * chunk_size + j < num_rows; ++j) {
-                cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j + 2)));
+                cols[0]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j + 2)));
             }
             ASSERT_OK(rowset_writer->add_columns(*chunk, column_indexes, false));
         }
@@ -779,9 +778,9 @@ TEST_F(RowsetTest, SegmentWriteTest) {
             chunk->reset();
             auto& cols = chunk->columns();
             for (auto j = 0; j < chunk_size && i * chunk_size + j < num_rows; ++j) {
-                cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j)));
-                cols[1]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j + 1)));
-                cols[2]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j + 2)));
+                cols[0]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j)));
+                cols[1]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j + 1)));
+                cols[2]->append_datum(Datum(static_cast<int32_t>(i * chunk_size + j + 2)));
             }
             seg_infos.emplace_back(std::make_unique<SegmentPB>());
             ASSERT_OK(rowset_writer->flush_chunk(*chunk, seg_infos.back().get()));

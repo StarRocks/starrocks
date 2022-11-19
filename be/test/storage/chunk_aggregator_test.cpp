@@ -10,22 +10,22 @@
 #include "column/column_helper.h"
 #include "storage/column_aggregate_func.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 TEST(ChunkAggregatorTest, testNoneAggregator) {
-    FieldPtr key = std::make_shared<Field>(1, "key", LogicalType::LOGICAL_TYPE_INT, false);
+    VectorizedFieldPtr key = std::make_shared<VectorizedField>(1, "key", LogicalType::LOGICAL_TYPE_INT, false);
     key->set_aggregate_method(FieldAggregationMethod::OLAP_FIELD_AGGREGATION_NONE);
     key->set_is_key(true);
 
-    FieldPtr value = std::make_shared<Field>(1, "value", LogicalType::LOGICAL_TYPE_INT, false);
+    VectorizedFieldPtr value = std::make_shared<VectorizedField>(1, "value", LogicalType::LOGICAL_TYPE_INT, false);
     value->set_aggregate_method(FieldAggregationMethod::OLAP_FIELD_AGGREGATION_SUM);
     value->set_is_key(false);
 
-    Fields fields;
+    VectorizedFields fields;
     fields.emplace_back(key);
     fields.emplace_back(value);
 
-    SchemaPtr schema = std::make_shared<Schema>(fields);
+    VectorizedSchemaPtr schema = std::make_shared<VectorizedSchema>(fields);
 
     ChunkAggregator aggregator(schema.get(), 1024, 0.9);
 
@@ -67,14 +67,14 @@ TEST(ChunkAggregatorTest, testNoneAggregator) {
 }
 
 TEST(ChunkAggregatorTest, testNonKeyColumnsByMask) {
-    FieldPtr value = std::make_shared<Field>(1, "value", LogicalType::LOGICAL_TYPE_INT, false);
+    VectorizedFieldPtr value = std::make_shared<VectorizedField>(1, "value", LogicalType::LOGICAL_TYPE_INT, false);
     value->set_aggregate_method(FieldAggregationMethod::OLAP_FIELD_AGGREGATION_SUM);
     value->set_is_key(false);
 
-    Fields fields;
+    VectorizedFields fields;
     fields.emplace_back(value);
 
-    SchemaPtr schema = std::make_shared<Schema>(fields);
+    VectorizedSchemaPtr schema = std::make_shared<VectorizedSchema>(fields);
 
     ChunkAggregator aggregator(schema.get(), 1024, 0, true, false);
 
@@ -114,4 +114,4 @@ TEST(ChunkAggregatorTest, testNonKeyColumnsByMask) {
     ASSERT_EQ(false, aggregator.is_finish());
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -5,9 +5,9 @@
 #include <gtest/gtest.h>
 
 #include "column/chunk.h"
-#include "column/field.h"
 #include "column/fixed_length_column.h"
-#include "column/schema.h"
+#include "column/vectorized_field.h"
+#include "column/vectorized_schema.h"
 #include "runtime/types.h"
 #include "testutil/parallel_test.h"
 
@@ -19,33 +19,33 @@ std::string make_string(size_t i) {
     return std::string("c").append(std::to_string(static_cast<int32_t>(i)));
 }
 
-vectorized::FieldPtr make_field(size_t i) {
-    return std::make_shared<vectorized::Field>(i, make_string(i), get_type_info(LOGICAL_TYPE_INT), false);
+VectorizedFieldPtr make_field(size_t i) {
+    return std::make_shared<VectorizedField>(i, make_string(i), get_type_info(LOGICAL_TYPE_INT), false);
 }
 
-vectorized::Fields make_fields(size_t size) {
-    vectorized::Fields fields;
+VectorizedFields make_fields(size_t size) {
+    VectorizedFields fields;
     for (size_t i = 0; i < size; i++) {
         fields.emplace_back(make_field(i));
     }
     return fields;
 }
 
-vectorized::SchemaPtr make_schema(size_t i) {
-    vectorized::Fields fields = make_fields(i);
-    return std::make_shared<vectorized::Schema>(fields);
+VectorizedSchemaPtr make_schema(size_t i) {
+    VectorizedFields fields = make_fields(i);
+    return std::make_shared<VectorizedSchema>(fields);
 }
 
-vectorized::ColumnPtr make_column(size_t start) {
-    auto column = vectorized::FixedLengthColumn<int32_t>::create();
+ColumnPtr make_column(size_t start) {
+    auto column = FixedLengthColumn<int32_t>::create();
     for (int i = 0; i < 100; i++) {
         column->append(start + i);
     }
     return column;
 }
 
-vectorized::Columns make_columns(size_t size) {
-    vectorized::Columns columns;
+Columns make_columns(size_t size) {
+    Columns columns;
     for (size_t i = 0; i < size; i++) {
         columns.emplace_back(make_column(i));
     }
@@ -55,7 +55,7 @@ vectorized::Columns make_columns(size_t size) {
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(ProtobufChunkSerde, test_serde) {
-    auto chunk = std::make_unique<vectorized::Chunk>(make_columns(2), make_schema(2));
+    auto chunk = std::make_unique<Chunk>(make_columns(2), make_schema(2));
 
     StatusOr<ChunkPB> res = serde::ProtobufChunkSerde::serialize_without_meta(*chunk);
     ASSERT_TRUE(res.ok()) << res.status();
@@ -73,7 +73,7 @@ PARALLEL_TEST(ProtobufChunkSerde, test_serde) {
     ProtobufChunkDeserializer deserializer(meta);
     auto chunk_or = deserializer.deserialize(serialized_data);
     ASSERT_TRUE(chunk_or.ok()) << chunk_or.status();
-    vectorized::Chunk& new_chunk = *chunk_or;
+    Chunk& new_chunk = *chunk_or;
     ASSERT_EQ(new_chunk.num_rows(), chunk->num_rows());
     for (size_t i = 0; i < chunk->columns().size(); ++i) {
         ASSERT_EQ(chunk->columns()[i]->size(), new_chunk.columns()[i]->size());

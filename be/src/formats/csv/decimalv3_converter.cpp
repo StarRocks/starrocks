@@ -6,7 +6,7 @@
 #include "common/logging.h"
 #include "runtime/decimalv3.h"
 
-namespace starrocks::vectorized::csv {
+namespace starrocks::csv {
 
 template <typename T>
 Status DecimalV3Converter<T>::write_string(OutputStream* os, const Column& column, size_t row_num,
@@ -45,4 +45,4 @@ template class DecimalV3Converter<int32_t>;
 template class DecimalV3Converter<int64_t>;
 template class DecimalV3Converter<int128_t>;
 
-} // namespace starrocks::vectorized::csv
+} // namespace starrocks::csv

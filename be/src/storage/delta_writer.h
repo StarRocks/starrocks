@@ -16,12 +16,10 @@ namespace starrocks {
 class FlushToken;
 class ReplicateToken;
 class MemTracker;
-class Schema;
+class VectorizedSchema;
 class StorageEngine;
 class TupleDescriptor;
 class SlotDescriptor;
-
-namespace vectorized {
 
 class MemTable;
 class MemTableSink;
@@ -42,7 +40,7 @@ struct DeltaWriterOptions {
     PUniqueId load_id;
     // slots are in order of tablet's schema
     const std::vector<SlotDescriptor*>* slots;
-    vectorized::GlobalDictByNameMaps* global_dicts = nullptr;
+    GlobalDictByNameMaps* global_dicts = nullptr;
     Span parent_span;
     int64_t index_id;
     int64_t node_id;
@@ -116,7 +114,7 @@ public:
     const ReplicateToken* replicate_token() const { return _replicate_token.get(); }
 
     // REQUIRE: has successfully `commit()`ed
-    const vectorized::DictColumnsValidMap& global_dict_columns_valid_info() const {
+    const DictColumnsValidMap& global_dict_columns_valid_info() const {
         CHECK_EQ(kCommitted, _state);
         CHECK(_rowset_writer != nullptr);
         return _rowset_writer->global_dict_columns_valid_info();
@@ -156,7 +154,7 @@ private:
     RowsetSharedPtr _cur_rowset;
     std::unique_ptr<RowsetWriter> _rowset_writer;
     bool _schema_initialized;
-    Schema _vectorized_schema;
+    VectorizedSchema _vectorized_schema;
     std::unique_ptr<MemTable> _mem_table;
     std::unique_ptr<MemTableSink> _mem_table_sink;
     const TabletSchema* _tablet_schema;
@@ -165,7 +163,5 @@ private:
     std::unique_ptr<ReplicateToken> _replicate_token;
     bool _with_rollback_log;
 };
-
-} // namespace vectorized
 
 } // namespace starrocks

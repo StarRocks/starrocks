@@ -9,7 +9,7 @@
 #include "exec/vectorized/sorting/sort_permute.h"
 #include "runtime/chunk_cursor.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 struct SortDesc;
 struct SortDescs;
@@ -106,4 +106,4 @@ struct SortDescs {
     SortDesc get_column_desc(int col) const { return descs[col]; }
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

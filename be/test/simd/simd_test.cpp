@@ -23,7 +23,7 @@
 
 #include "gtest/gtest.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class SIMDTest : public testing::Test {
 public:
@@ -76,4 +76,4 @@ TEST_F(SIMDTest, count_nonzero) {
     EXPECT_EQ(30u, SIMD::count_nonzero(numbers));
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

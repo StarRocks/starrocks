@@ -68,7 +68,7 @@ public:
         return StoredColumnReader::create(_opts, field, chunk_metadata, &_reader);
     }
 
-    Status prepare_batch(size_t* num_records, ColumnContentType content_type, vectorized::Column* dst) override {
+    Status prepare_batch(size_t* num_records, ColumnContentType content_type, Column* dst) override {
         if (!converter->need_convert) {
             return _reader->read_records(num_records, content_type, dst);
         } else {
@@ -92,9 +92,9 @@ public:
         _reader->get_levels(def_levels, rep_levels, num_levels);
     }
 
-    Status get_dict_values(vectorized::Column* column) override { return _reader->get_dict_values(column); }
+    Status get_dict_values(Column* column) override { return _reader->get_dict_values(column); }
 
-    Status get_dict_values(const std::vector<int32_t>& dict_codes, vectorized::Column* column) override {
+    Status get_dict_values(const std::vector<int32_t>& dict_codes, Column* column) override {
         return _reader->get_dict_values(dict_codes, column);
     }
 
@@ -119,16 +119,16 @@ public:
         return Status::OK();
     }
 
-    Status prepare_batch(size_t* num_records, ColumnContentType content_type, vectorized::Column* dst) override {
-        vectorized::NullableColumn* nullable_column = nullptr;
-        vectorized::ArrayColumn* array_column = nullptr;
+    Status prepare_batch(size_t* num_records, ColumnContentType content_type, Column* dst) override {
+        NullableColumn* nullable_column = nullptr;
+        ArrayColumn* array_column = nullptr;
         if (dst->is_nullable()) {
-            nullable_column = down_cast<vectorized::NullableColumn*>(dst);
+            nullable_column = down_cast<NullableColumn*>(dst);
             DCHECK(nullable_column->mutable_data_column()->is_array());
-            array_column = down_cast<vectorized::ArrayColumn*>(nullable_column->mutable_data_column());
+            array_column = down_cast<ArrayColumn*>(nullable_column->mutable_data_column());
         } else {
             DCHECK(dst->is_array());
-            array_column = down_cast<vectorized::ArrayColumn*>(dst);
+            array_column = down_cast<ArrayColumn*>(dst);
         }
         auto* child_column = array_column->elements_column().get();
         auto st = _element_reader->prepare_batch(num_records, content_type, child_column);
@@ -140,7 +140,7 @@ public:
 
         auto& offsets = array_column->offsets_column()->get_data();
         offsets.resize(num_levels + 1);
-        vectorized::NullColumn null_column(num_levels);
+        NullColumn null_column(num_levels);
         auto& is_nulls = null_column.get_data();
         size_t num_offsets = 0;
         bool has_null = false;
@@ -182,17 +182,17 @@ public:
         return Status::OK();
     }
 
-    Status prepare_batch(size_t* num_records, ColumnContentType content_type, vectorized::Column* dst) override {
-        vectorized::NullableColumn* nullable_column = nullptr;
-        vectorized::MapColumn* map_column = nullptr;
+    Status prepare_batch(size_t* num_records, ColumnContentType content_type, Column* dst) override {
+        NullableColumn* nullable_column = nullptr;
+        MapColumn* map_column = nullptr;
         if (_field->is_nullable) {
             DCHECK(dst->is_nullable());
-            nullable_column = down_cast<vectorized::NullableColumn*>(dst);
+            nullable_column = down_cast<NullableColumn*>(dst);
             DCHECK(nullable_column->mutable_data_column()->is_map());
-            map_column = down_cast<vectorized::MapColumn*>(nullable_column->mutable_data_column());
+            map_column = down_cast<MapColumn*>(nullable_column->mutable_data_column());
         } else {
             DCHECK(dst->is_map());
-            map_column = down_cast<vectorized::MapColumn*>(dst);
+            map_column = down_cast<MapColumn*>(dst);
         }
         auto* key_column = map_column->keys_column().get();
         auto* value_column = map_column->values_column().get();
@@ -226,7 +226,7 @@ public:
 
         auto& offsets = map_column->offsets_column()->get_data();
         offsets.resize(num_levels + 1);
-        vectorized::NullColumn null_column(num_levels);
+        NullColumn null_column(num_levels);
         auto& is_nulls = null_column.get_data();
         size_t num_offsets = 0;
         bool has_null = false;
@@ -283,25 +283,25 @@ public:
         return Status::OK();
     }
 
-    Status prepare_batch(size_t* num_records, ColumnContentType content_type, vectorized::Column* dst) override {
-        vectorized::NullableColumn* nullable_column = nullptr;
-        vectorized::StructColumn* struct_column = nullptr;
+    Status prepare_batch(size_t* num_records, ColumnContentType content_type, Column* dst) override {
+        NullableColumn* nullable_column = nullptr;
+        StructColumn* struct_column = nullptr;
         if (_field->is_nullable) {
             DCHECK(dst->is_nullable());
-            nullable_column = down_cast<vectorized::NullableColumn*>(dst);
+            nullable_column = down_cast<NullableColumn*>(dst);
             DCHECK(nullable_column->mutable_data_column()->is_struct());
-            struct_column = down_cast<vectorized::StructColumn*>(nullable_column->mutable_data_column());
+            struct_column = down_cast<StructColumn*>(nullable_column->mutable_data_column());
         } else {
             DCHECK(dst->is_struct());
-            struct_column = down_cast<vectorized::StructColumn*>(dst);
+            struct_column = down_cast<StructColumn*>(dst);
         }
 
-        vectorized::Columns fields_column = struct_column->fields_column();
+        Columns fields_column = struct_column->fields_column();
 
         DCHECK_EQ(fields_column.size(), _child_readers.size());
 
         for (size_t i = 0; i < fields_column.size(); i++) {
-            vectorized::Column* child_column = fields_column[i].get();
+            Column* child_column = fields_column[i].get();
             RETURN_IF_ERROR(_child_readers[i]->prepare_batch(num_records, content_type, child_column));
         }
 
@@ -310,7 +310,7 @@ public:
             DCHECK(nullable_column != nullptr);
             // Assume all rows are not null in struct level.
             // Use subfield's NullableColumn instead.
-            vectorized::NullColumn null_column(fields_column[0]->size(), 0);
+            NullColumn null_column(fields_column[0]->size(), 0);
             nullable_column->mutable_null_column()->swap_column(null_column);
             nullable_column->set_has_null(false);
         }

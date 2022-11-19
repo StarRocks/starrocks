@@ -5,7 +5,7 @@
 #include <gtest/gtest.h>
 
 #include "column/chunk.h"
-#include "column/schema.h"
+#include "column/vectorized_schema.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/descriptors.h"
@@ -13,7 +13,7 @@
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class PushHandlerTest : public testing::Test {
 public:
@@ -21,7 +21,7 @@ public:
 
 private:
     void _init();
-    Schema _create_schema();
+    VectorizedSchema _create_schema();
     void _create_src_dst_tuple(TDescriptorTable& t_desc_table);
     void _create_expr_info();
     TDescriptorTable _init_desc_table();
@@ -30,14 +30,16 @@ private:
     TBrokerScanRangeParams _params;
 };
 
-Schema PushHandlerTest::_create_schema() {
-    Fields fields;
-    fields.emplace_back(std::make_shared<Field>(0, "k1_int", get_type_info(LOGICAL_TYPE_INT), true));
-    fields.emplace_back(std::make_shared<Field>(1, "k2_smallint", get_type_info(LOGICAL_TYPE_SMALLINT), true));
-    fields.emplace_back(std::make_shared<Field>(2, "k3_varchar", get_type_info(LOGICAL_TYPE_VARCHAR), true));
-    fields.emplace_back(std::make_shared<Field>(3, "k4_bigint", get_type_info(LOGICAL_TYPE_BIGINT), true));
+VectorizedSchema PushHandlerTest::_create_schema() {
+    VectorizedFields fields;
+    fields.emplace_back(std::make_shared<VectorizedField>(0, "k1_int", get_type_info(LOGICAL_TYPE_INT), true));
+    fields.emplace_back(
+            std::make_shared<VectorizedField>(1, "k2_smallint", get_type_info(LOGICAL_TYPE_SMALLINT), true));
+    fields.emplace_back(
+            std::make_shared<VectorizedField>(2, "k3_varchar", get_type_info(LOGICAL_TYPE_VARCHAR), true));
+    fields.emplace_back(std::make_shared<VectorizedField>(3, "k4_bigint", get_type_info(LOGICAL_TYPE_BIGINT), true));
     fields.back()->set_aggregate_method(OLAP_FIELD_AGGREGATION_SUM);
-    return Schema(fields);
+    return VectorizedSchema(fields);
 }
 
 void PushHandlerTest::_create_src_dst_tuple(TDescriptorTable& t_desc_table) {
@@ -315,7 +317,7 @@ TEST_F(PushHandlerTest, PushBrokerReaderNormal) {
     // 0           2       a1      3
     // 1           4       a2      6
     PushBrokerReader reader;
-    Schema schema = _create_schema();
+    VectorizedSchema schema = _create_schema();
     reader.init(broker_scan_range, request);
     ChunkPtr chunk = ChunkHelper::new_chunk(schema, 0);
 
@@ -345,4 +347,4 @@ TEST_F(PushHandlerTest, PushBrokerReaderNormal) {
 
     reader.close();
 }
-} // namespace starrocks::vectorized
+} // namespace starrocks

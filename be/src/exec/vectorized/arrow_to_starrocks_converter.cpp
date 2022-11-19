@@ -24,7 +24,7 @@
 #include "runtime/types.h"
 #include "util/pred_guard.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 Status illegal_converting_error(const std::string& arrow_type_name, const std::string& type_name) {
     return Status::InternalError(strings::Substitute("Illegal converting from arrow type($0) to StarRocks type($1)",
@@ -368,11 +368,11 @@ struct RectifyDecimalType<DecimalV2Value> {
 
 template <typename T>
 using rectify_decimal_type = typename RectifyDecimalType<T>::type;
-VALUE_GUARD(PrimitiveType, DecimalOfAnyVersionPTGuard, pt_is_decimal_of_any_version, TYPE_DECIMAL, TYPE_DECIMALV2,
+VALUE_GUARD(PrimitiveType, DecimalAnyVersionPTGuard, pt_decimal_of_any_version, TYPE_DECIMAL, TYPE_DECIMALV2,
             TYPE_DECIMAL32, TYPE_DECIMAL64, TYPE_DECIMAL128)
 
 template <PrimitiveType PT, bool is_nullable, bool is_strict>
-struct ArrowConverter<ArrowTypeId::DECIMAL, PT, is_nullable, is_strict, guard::Guard, DecimalOfAnyVersionPTGuard<PT>> {
+struct ArrowConverter<ArrowTypeId::DECIMAL, PT, is_nullable, is_strict, guard::Guard, DecimalAnyVersionPTGuard<PT>> {
     static constexpr ArrowTypeId AT = ArrowTypeId::DECIMAL;
     using ArrowType = ArrowTypeIdToType<AT>;
     using ArrowArrayType = ArrowTypeIdToArrayType<AT>;
@@ -953,4 +953,4 @@ void ArrowConvertContext::report_error_message(const std::string& reason, const 
     state->append_error_msg_to_file(error_msg, reason);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

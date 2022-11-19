@@ -30,7 +30,7 @@
 #include "util/mysql_global.h"
 #include "velocypack/Iterator.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 #define THROW_RUNTIME_ERROR_WITH_TYPE(TYPE)              \
     std::stringstream ss;                                \
@@ -1050,7 +1050,7 @@ template <PrimitiveType FromType, PrimitiveType ToType, bool AllowThrowException
 class VectorizedCastExpr final : public Expr {
 public:
     DEFINE_CAST_CONSTRUCT(VectorizedCastExpr);
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
+    ColumnPtr evaluate(ExprContext* context, Chunk* ptr) override {
         ColumnPtr column = _children[0]->evaluate(context, ptr);
         if (ColumnHelper::count_nulls(column) == column->size() && column->size() != 0) {
             return ColumnHelper::create_const_null_column(column->size());
@@ -1126,7 +1126,7 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(timeToDatetime, date, time) {
             return Status::OK();                                                                                \
         }                                                                                                       \
                                                                                                                 \
-        ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {                             \
+        ColumnPtr evaluate(ExprContext* context, Chunk* ptr) override {                                         \
             ColumnPtr column = _children[0]->evaluate(context, ptr);                                            \
             if (ColumnHelper::count_nulls(column) == column->size() && column->size() != 0) {                   \
                 return ColumnHelper::create_const_null_column(column->size());                                  \
@@ -1240,7 +1240,7 @@ template <PrimitiveType Type, bool AllowThrowException>
 class VectorizedCastToStringExpr final : public Expr {
 public:
     DEFINE_CAST_CONSTRUCT(VectorizedCastToStringExpr);
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
+    ColumnPtr evaluate(ExprContext* context, Chunk* ptr) override {
         ColumnPtr column = _children[0]->evaluate(context, ptr);
         if (ColumnHelper::count_nulls(column) == column->size() && column->size() != 0) {
             return ColumnHelper::create_const_null_column(column->size());
@@ -1673,4 +1673,4 @@ Expr* VectorizedCastExprFactory::from_type(const TypeDescriptor& from, const Typ
     return expr;
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

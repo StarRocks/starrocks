@@ -10,7 +10,7 @@
 #include "runtime/primitive_type.h"
 #include "udf/udf.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // AvgResultPT for final result
 template <PrimitiveType PT, typename = guard::Guard>
@@ -251,4 +251,4 @@ template <PrimitiveType PT, typename = DecimalPTGuard<PT>>
 using DecimalAvgAggregateFunction =
         AvgAggregateFunction<PT, RunTimeCppType<PT>, TYPE_DECIMAL128, RunTimeCppType<TYPE_DECIMAL128>>;
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -11,7 +11,6 @@
 namespace starrocks {
 class SlotDescriptor;
 
-namespace vectorized {
 class RuntimeFilterProbeDescriptor;
 class PredicateParser;
 class ColumnPredicate;
@@ -60,5 +59,4 @@ private:
 
     void _init(const UnarrivedRuntimeFilterList& params);
 };
-} // namespace vectorized
 } // namespace starrocks

@@ -7,7 +7,6 @@
 
 namespace starrocks {
 class RuntimeState;
-namespace vectorized {
 struct ChunkRow {
     ChunkRow() = default;
     ChunkRow(Columns* columns_, uint32_t index_) : columns(columns_), index(index_) {}
@@ -100,5 +99,4 @@ private:
     std::vector<OlapTablePartition*> _partitions;
     std::map<ChunkRow*, OlapTablePartition*, PartionKeyComparator> _partitions_map;
 };
-} // namespace vectorized
 } // namespace starrocks

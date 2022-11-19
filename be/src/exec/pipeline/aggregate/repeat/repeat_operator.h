@@ -12,7 +12,6 @@
 namespace starrocks {
 class TupleDescriptor;
 namespace pipeline {
-using namespace vectorized;
 class RepeatOperator : public Operator {
 public:
     RepeatOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
@@ -39,8 +38,8 @@ public:
 
     Status prepare(RuntimeState* state) override;
 
-    StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
-    Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
+    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
 private:
     static ColumnPtr generate_repeat_column(int64_t value, int64_t num_rows) {
@@ -49,7 +48,7 @@ private:
         return ConstColumn::create(column, num_rows);
     }
 
-    void extend_and_update_columns(vectorized::ChunkPtr* curr_chunk);
+    void extend_and_update_columns(ChunkPtr* curr_chunk);
 
     /*
      * _curr_chunk

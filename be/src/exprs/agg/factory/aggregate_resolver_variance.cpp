@@ -6,7 +6,7 @@
 #include "exprs/agg/variance.h"
 #include "runtime/primitive_type.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 struct StdDispatcher {
     template <PrimitiveType pt>
@@ -43,4 +43,4 @@ void AggregateFuncResolver::register_variance() {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

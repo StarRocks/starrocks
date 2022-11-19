@@ -8,7 +8,7 @@
 #include "column/fixed_length_column.h"
 #include "testutil/parallel_test.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(ConstColumnTest, test_const_column_upgrade_if_overflow) {
@@ -342,4 +342,4 @@ PARALLEL_TEST(ConstColumnTest, test_replicate) {
     ASSERT_EQ(1, c2->get(6).get_int32());
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

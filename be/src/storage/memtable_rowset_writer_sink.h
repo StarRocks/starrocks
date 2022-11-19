@@ -6,7 +6,7 @@
 #include "storage/memtable_sink.h"
 #include "storage/rowset/rowset_writer.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class MemTableRowsetWriterSink : public MemTableSink {
 public:
@@ -28,4 +28,4 @@ private:
     RowsetWriter* _rowset_writer;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

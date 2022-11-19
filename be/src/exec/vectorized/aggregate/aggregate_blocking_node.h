@@ -8,7 +8,7 @@
 
 // Aggregate means this node handle query with aggregate functions.
 // Blocking means this node will consume all input and build hash map in open phase.
-namespace starrocks::vectorized {
+namespace starrocks {
 class AggregateBlockingNode final : public AggregateBaseNode {
 public:
     AggregateBlockingNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
@@ -27,4 +27,4 @@ private:
             std::vector<std::shared_ptr<pipeline::OperatorFactory>>& ops_with_sink,
             pipeline::PipelineBuilderContext* context);
 };
-} // namespace starrocks::vectorized
+} // namespace starrocks

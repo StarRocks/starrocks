@@ -9,7 +9,7 @@
 #include "column/nullable_column.h"
 #include "exec/vectorized/sorting/sorting.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // NOLINTNEXTLINE
 TEST(FixedLengthColumnTest, test_basic) {
@@ -610,4 +610,4 @@ TEST(FixedLengthColumnTest, test_replicate) {
     ASSERT_EQ(c2->get(4).get_int32(), 3);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

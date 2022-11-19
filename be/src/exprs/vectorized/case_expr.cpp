@@ -16,7 +16,7 @@
 #include "simd/mulselector.h"
 #include "util/percentile_value.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 /**
  * Support Case expression, like:
@@ -55,7 +55,7 @@ public:
         return _children.size() % 2 == 1 ? Status::OK() : Status::InvalidArgument("case when children is error!");
     }
 
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* chunk) override {
+    ColumnPtr evaluate(ExprContext* context, Chunk* chunk) override {
         if (_has_case_expr) {
             return evaluate_case(context, chunk);
         } else {
@@ -84,7 +84,7 @@ private:
     //   If ALL `WHEN` is null, return NULL
     //   If `CASE` equals `WHEN`, return `THEN`
     //   If `CASE` can't match ANY `WHEN`, return NULL
-    ColumnPtr evaluate_case(ExprContext* context, vectorized::Chunk* chunk) {
+    ColumnPtr evaluate_case(ExprContext* context, Chunk* chunk) {
         ColumnPtr else_column = nullptr;
         if (!_has_else_expr) {
             else_column = ColumnHelper::create_const_null_column(chunk != nullptr ? chunk->num_rows() : 1);
@@ -195,7 +195,7 @@ private:
     //  Special CASE-WHEN statment, and `WHEN` clause must be boolean.
     //  If all `WHEN` is null/false, return NULL
     //  If `WHEN` is not null and true, return `THEN`
-    ColumnPtr evaluate_no_case(ExprContext* context, vectorized::Chunk* chunk) {
+    ColumnPtr evaluate_no_case(ExprContext* context, Chunk* chunk) {
         ColumnPtr else_column = nullptr;
         if (!_has_else_expr) {
             else_column = ColumnHelper::create_const_null_column(chunk != nullptr ? chunk->num_rows() : 1);
@@ -407,4 +407,4 @@ Expr* VectorizedCaseExprFactory::from_thrift(const starrocks::TExprNode& node) {
 #undef SWITCH_ALL_WHEN_TYPE
 #undef CASE_RESULT_TYPE
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

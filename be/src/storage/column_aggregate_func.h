@@ -2,14 +2,14 @@
 
 #pragma once
 
-#include "column/field.h"
+#include "column/vectorized_field.h"
 #include "storage/column_aggregator.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 class ColumnAggregatorFactory {
 public:
-    static ColumnAggregatorPtr create_key_column_aggregator(const FieldPtr& field);
-    static ColumnAggregatorPtr create_value_column_aggregator(const FieldPtr& field);
+    static ColumnAggregatorPtr create_key_column_aggregator(const VectorizedFieldPtr& field);
+    static ColumnAggregatorPtr create_value_column_aggregator(const VectorizedFieldPtr& field);
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

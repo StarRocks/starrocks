@@ -8,7 +8,7 @@
 #include "exprs/agg/factory/aggregate_resolver.hpp"
 #include "runtime/primitive_type.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 struct AvgDispatcher {
     template <PrimitiveType pt>
@@ -44,4 +44,4 @@ void AggregateFuncResolver::register_avg() {
     add_decimal_mapping<TYPE_DECIMAL128, TYPE_DECIMAL128, true>("decimal_avg");
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

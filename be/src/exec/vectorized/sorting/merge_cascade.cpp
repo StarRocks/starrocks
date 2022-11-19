@@ -9,7 +9,7 @@
 #include "exec/vectorized/sorting/sorting.h"
 #include "runtime/chunk_cursor.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // Some search algorithms with cursor
 struct CursorAlgo {
@@ -255,4 +255,4 @@ Status merge_sorted_cursor_cascade(const SortDescs& sort_desc,
     return Status::OK();
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

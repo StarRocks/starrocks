@@ -42,9 +42,7 @@ class TypeInfo;
 class BlockCompressionCodec;
 class WritableFile;
 
-namespace vectorized {
 class Column;
-} // namespace vectorized
 
 struct ColumnWriterOptions {
     // input and output parameter:
@@ -65,7 +63,7 @@ struct ColumnWriterOptions {
 
     // when column data is encoding by dict
     // if global_dict is not nullptr, will checkout whether global_dict can cover all data
-    vectorized::GlobalDictMap* global_dict = nullptr;
+    GlobalDictMap* global_dict = nullptr;
 };
 
 class BitmapIndexWriter;
@@ -89,7 +87,7 @@ public:
 
     virtual Status init() = 0;
 
-    virtual Status append(const vectorized::Column& column) = 0;
+    virtual Status append(const Column& column) = 0;
 
     virtual Status append(const uint8_t* data, const uint8_t* null_map, size_t count, bool has_null) = 0;
 
@@ -141,7 +139,7 @@ public:
 
     Status init() override;
 
-    Status append(const vectorized::Column& column) override;
+    Status append(const Column& column) override;
 
     Status append(const uint8_t* data, const uint8_t* null_flags, size_t count, bool has_null) override;
 
@@ -149,7 +147,7 @@ public:
     Status append_array_offsets(const uint8_t* data, const uint8_t* null_flags, size_t count, bool has_null);
 
     // Write offset column, it's only used in ArrayColumn
-    Status append_array_offsets(const vectorized::Column& column);
+    Status append_array_offsets(const Column& column);
 
     // rebuild char/varchar encoding when _page_builder is empty
     Status set_encoding(const EncodingTypePB& encoding);
@@ -255,7 +253,7 @@ public:
 
     Status init() override;
 
-    Status append(const vectorized::Column& column) override;
+    Status append(const Column& column) override;
 
     Status append(const uint8_t* data, const uint8_t* null_map, size_t count, bool has_null) override;
 

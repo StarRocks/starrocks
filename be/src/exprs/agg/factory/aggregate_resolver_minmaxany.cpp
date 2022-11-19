@@ -12,7 +12,7 @@
 #include "runtime/primitive_type_infra.h"
 #include "types/bitmap_value.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 void AggregateFuncResolver::register_bitmap() {
     add_aggregate_mapping<TYPE_TINYINT, TYPE_BIGINT, BitmapValue>(
@@ -81,4 +81,4 @@ void AggregateFuncResolver::register_minmaxany() {
     type_dispatch_all(TYPE_JSON, MinMaxAnyDispatcher(), this);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

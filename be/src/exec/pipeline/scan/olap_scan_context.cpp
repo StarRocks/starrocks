@@ -7,8 +7,6 @@
 
 namespace starrocks::pipeline {
 
-using namespace vectorized;
-
 /// OlapScanContext.
 void OlapScanContext::attach_shared_input(int32_t operator_seq, int32_t source_index) {
     auto key = std::make_pair(operator_seq, source_index);
@@ -51,13 +49,13 @@ Status OlapScanContext::parse_conjuncts(RuntimeState* state, const std::vector<E
 
     // eval_const_conjuncts.
     Status status;
-    RETURN_IF_ERROR(vectorized::OlapScanConjunctsManager::eval_const_conjuncts(_conjunct_ctxs, &status));
+    RETURN_IF_ERROR(OlapScanConjunctsManager::eval_const_conjuncts(_conjunct_ctxs, &status));
     if (!status.ok()) {
         return status;
     }
 
     // Init _conjuncts_manager.
-    vectorized::OlapScanConjunctsManager& cm = _conjuncts_manager;
+    OlapScanConjunctsManager& cm = _conjuncts_manager;
     cm.conjunct_ctxs_ptr = &_conjunct_ctxs;
     cm.tuple_desc = tuple_desc;
     cm.obj_pool = &_obj_pool;

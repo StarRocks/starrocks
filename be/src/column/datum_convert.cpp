@@ -6,7 +6,7 @@
 #include "storage/olap_type_infra.h"
 #include "storage/type_traits.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 using strings::Substitute;
 
@@ -92,4 +92,4 @@ std::string datum_to_string(TypeInfo* type_info, const Datum& datum) {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

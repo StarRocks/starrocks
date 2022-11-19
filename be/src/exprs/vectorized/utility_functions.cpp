@@ -33,7 +33,7 @@
 #include "util/time.h"
 #include "util/uid_util.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 ColumnPtr UtilityFunctions::version(FunctionContext* context, const Columns& columns) {
     return ColumnHelper::create_const_column<TYPE_VARCHAR>("5.1.0", 1);
@@ -247,4 +247,4 @@ ColumnPtr UtilityFunctions::host_name(starrocks_udf::FunctionContext* context, c
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

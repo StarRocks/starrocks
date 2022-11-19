@@ -20,7 +20,7 @@
 #include "util/defer_op.h"
 #include "util/json.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class JsonFunctionsTest : public ::testing::Test {
 public:
@@ -912,4 +912,4 @@ INSTANTIATE_TEST_SUITE_P(GetJsonXXXTest, GetJsonXXXTestFixture,
                                  // clang-format: on
                                  ));
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

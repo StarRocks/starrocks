@@ -6,7 +6,7 @@
 
 #include "storage/compaction.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class CumulativeCompaction : public Compaction {
 public:
@@ -31,4 +31,4 @@ protected:
     ReaderType compaction_type() const override { return ReaderType::READER_CUMULATIVE_COMPACTION; }
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

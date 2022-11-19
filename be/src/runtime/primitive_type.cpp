@@ -173,9 +173,9 @@ TTypeDesc gen_type_desc(const TPrimitiveType::type val, const std::string& name)
     return type_desc;
 }
 
-class ScalarFieldTypeToPrimitiveTypeMapping {
+class ScalarLogicalTypeToPrimitiveTypeMapping {
 public:
-    ScalarFieldTypeToPrimitiveTypeMapping() {
+    ScalarLogicalTypeToPrimitiveTypeMapping() {
         for (auto& i : _data) {
             i = INVALID_TYPE;
         }
@@ -207,7 +207,7 @@ private:
     PrimitiveType _data[LOGICAL_TYPE_MAX_VALUE];
 };
 
-static ScalarFieldTypeToPrimitiveTypeMapping g_scalar_ftype_to_ptype;
+static ScalarLogicalTypeToPrimitiveTypeMapping g_scalar_ftype_to_ptype;
 
 PrimitiveType scalar_field_type_to_primitive_type(LogicalType field_type) {
     PrimitiveType ptype = g_scalar_ftype_to_ptype.get_primitive_type(field_type);
@@ -218,7 +218,7 @@ PrimitiveType scalar_field_type_to_primitive_type(LogicalType field_type) {
 struct FixedLengthTypeGetter {
     template <PrimitiveType ptype>
     size_t operator()() {
-        return vectorized::RunTimeFixedTypeLength<ptype>::value;
+        return RunTimeFixedTypeLength<ptype>::value;
     }
 };
 

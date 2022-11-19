@@ -22,8 +22,6 @@ class ColumnStatistics;
 namespace starrocks {
 class RandomAccessFile;
 class RuntimeState;
-} // namespace starrocks
-namespace starrocks::vectorized {
 
 using FillColumnFunction = void (*)(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size,
                                     const TypeDescriptor& type_desc, const OrcMappingPtr& mapping, void* ctx);
@@ -225,4 +223,4 @@ private:
     bool _buffer_stream_enabled = false;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

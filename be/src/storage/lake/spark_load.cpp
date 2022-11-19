@@ -10,7 +10,7 @@
 
 namespace starrocks::lake {
 
-using PushBrokerReader = starrocks::vectorized::PushBrokerReader;
+using PushBrokerReader = starrocks::PushBrokerReader;
 
 Status SparkLoadHandler::process_streaming_ingestion(Tablet& tablet, const TPushReq& request, PushType push_type,
                                                      std::vector<TTabletInfo>* tablet_info_vec) {
@@ -42,7 +42,7 @@ Status SparkLoadHandler::_load_convert(Tablet& cur_tablet) {
     DeferOp defer([&]() { writer->close(); });
 
     ASSIGN_OR_RETURN(auto tablet_schema, cur_tablet.get_schema());
-    vectorized::Schema schema = ChunkHelper::convert_schema_to_format_v2(*tablet_schema);
+    VectorizedSchema schema = ChunkHelper::convert_schema_to_format_v2(*tablet_schema);
     auto chunk = ChunkHelper::new_chunk(schema, 0);
     auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
 

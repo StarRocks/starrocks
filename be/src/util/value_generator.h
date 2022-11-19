@@ -5,7 +5,7 @@
 #include "types/date_value.h"
 #include "types/timestamp_value.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 template <class T>
 struct DefaultValueGenerator {
     static T next_value() { return T(); }
@@ -46,4 +46,4 @@ struct ContainerIniter {
     }
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

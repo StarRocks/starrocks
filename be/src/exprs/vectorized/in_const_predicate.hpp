@@ -17,7 +17,6 @@ class ObjectPool;
 class Expr;
 class ExprContext;
 
-namespace vectorized {
 
 namespace in_const_pred_detail {
 template <PrimitiveType Type, typename Enable = void>
@@ -271,7 +270,7 @@ public:
         return result;
     }
 
-    ColumnPtr evaluate_with_filter(ExprContext* context, vectorized::Chunk* ptr, uint8_t* filter) override {
+    ColumnPtr evaluate_with_filter(ExprContext* context, Chunk* ptr, uint8_t* filter) override {
         ColumnPtr lhs = _children[0]->evaluate(context, ptr);
         if (!_eq_null && ColumnHelper::count_nulls(lhs) == lhs->size()) {
             return ColumnHelper::create_const_null_column(lhs->size());
@@ -307,7 +306,7 @@ public:
         }
     }
 
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
+    ColumnPtr evaluate(ExprContext* context, Chunk* ptr) override {
         return evaluate_with_filter(context, ptr, nullptr);
     }
 
@@ -422,5 +421,4 @@ private:
     Status _st;
 };
 
-} // namespace vectorized
 } // namespace starrocks

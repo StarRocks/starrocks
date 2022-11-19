@@ -34,7 +34,7 @@ public:
         return Status::OK();
     }
 
-    StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
     void close(RuntimeState* state) override;
 

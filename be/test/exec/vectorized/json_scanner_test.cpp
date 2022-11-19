@@ -15,7 +15,7 @@
 #include "testutil/assert.h"
 #include "testutil/parallel_test.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class JsonScannerTest : public ::testing::Test {
 protected:
@@ -1082,4 +1082,4 @@ TEST_F(JsonScannerTest, test_column_2x_than_columns_with_json_root) {
               chunk->debug_row(4));
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

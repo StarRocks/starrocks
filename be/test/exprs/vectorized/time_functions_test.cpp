@@ -22,7 +22,7 @@
 #include "testutil/function_utils.h"
 #include "udf/udf.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class TimeFunctionsTest : public ::testing::Test {
 public:
@@ -3096,4 +3096,4 @@ TEST_F(TimeFunctionsTest, DateSliceCeilTest) {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -81,9 +81,9 @@ Status EngineChecksumTask::_compute_checksum() {
         return_columns.push_back(i);
     }
 
-    vectorized::Schema schema = ChunkHelper::convert_schema_to_format_v2(tablet_schema, return_columns);
+    VectorizedSchema schema = ChunkHelper::convert_schema_to_format_v2(tablet_schema, return_columns);
 
-    vectorized::TabletReader reader(tablet, Version(0, _version), schema);
+    TabletReader reader(tablet, Version(0, _version), schema);
 
     Status st = reader.prepare();
     if (!st.ok()) {
@@ -92,7 +92,7 @@ Status EngineChecksumTask::_compute_checksum() {
         return st;
     }
 
-    vectorized::TabletReaderParams reader_params;
+    TabletReaderParams reader_params;
     reader_params.reader_type = READER_CHECKSUM;
     reader_params.chunk_size = config::vector_chunk_size;
 

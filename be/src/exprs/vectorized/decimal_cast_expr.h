@@ -7,7 +7,7 @@
 #include "column/column_builder.h"
 #include "runtime/decimalv3.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 UNION_VALUE_GUARD(PrimitiveType, FixedNonDecimalTypeGuard, pt_is_fixed_non_decimal, pt_is_boolean_struct,
                   pt_is_integer_struct, pt_is_float_struct, pt_is_date_struct, pt_is_datetime_struct,
@@ -381,4 +381,4 @@ struct DecimalTo {
     }
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

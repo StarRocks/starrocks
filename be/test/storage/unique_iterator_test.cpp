@@ -9,10 +9,10 @@
 
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
-#include "column/schema.h"
+#include "column/vectorized_schema.h"
 #include "storage/chunk_helper.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class UniqueIteratorTest : public testing::Test {
 protected:
@@ -41,10 +41,11 @@ protected:
 
         void close() override {}
 
-        static Schema new_schema() {
-            FieldPtr f = std::make_shared<Field>(0, "c1", get_type_info(LOGICAL_TYPE_INT), false);
+        static VectorizedSchema new_schema() {
+            VectorizedFieldPtr f =
+                    std::make_shared<VectorizedField>(0, "c1", get_type_info(LOGICAL_TYPE_INT), false);
             f->set_is_key(true);
-            return Schema(std::vector<FieldPtr>{f});
+            return VectorizedSchema(std::vector<VectorizedFieldPtr>{f});
         }
 
     private:
@@ -187,4 +188,4 @@ TEST_F(UniqueIteratorTest, single_int) {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

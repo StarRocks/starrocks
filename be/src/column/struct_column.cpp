@@ -5,7 +5,7 @@
 #include "column/column_helper.h"
 #include "util/mysql_row_buffer.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 bool StructColumn::is_struct() const {
     return true;
@@ -444,4 +444,4 @@ BinaryColumn::Ptr& StructColumn::field_names_column() {
     return _field_names;
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -61,7 +61,7 @@ public:
 
     bool need_input() const override { return false; }
 
-    Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override {
+    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override {
         return Status::InternalError("Shouldn't push chunk to source operator");
     }
 

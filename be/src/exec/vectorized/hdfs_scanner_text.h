@@ -6,7 +6,7 @@
 #include "formats/csv/converter.h"
 #include "formats/csv/csv_reader.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class HdfsTextScanner final : public HdfsScanner {
 public:
@@ -36,4 +36,4 @@ private:
     std::unordered_map<std::string, int> _columns_index;
     bool _no_data = false;
 };
-} // namespace starrocks::vectorized
+} // namespace starrocks

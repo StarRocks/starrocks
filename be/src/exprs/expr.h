@@ -51,13 +51,9 @@ class TExprNode;
 class Literal;
 class UserFunctionCacheEntry;
 
-namespace vectorized {
 class Chunk;
 class ColumnRef;
 class ColumnPredicateRewriter;
-} // namespace vectorized
-
-using vectorized::ColumnPtr;
 
 // This is the superclass of all expr evaluation nodes.
 class Expr {
@@ -190,11 +186,11 @@ public:
     // for vector query engine
     virtual StatusOr<ColumnPtr> evaluate_const(ExprContext* context);
 
-    virtual ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr);
-    virtual ColumnPtr evaluate_with_filter(ExprContext* context, vectorized::Chunk* ptr, uint8_t* filter);
+    virtual ColumnPtr evaluate(ExprContext* context, Chunk* ptr);
+    virtual ColumnPtr evaluate_with_filter(ExprContext* context, Chunk* ptr, uint8_t* filter);
 
     // get the first column ref in expr
-    vectorized::ColumnRef* get_column_ref();
+    ColumnRef* get_column_ref();
 
 protected:
     friend class MathFunctions;
@@ -203,7 +199,7 @@ protected:
     friend class JsonFunctions;
     friend class Literal;
     friend class ExprContext;
-    friend class vectorized::ColumnPredicateRewriter;
+    friend class ColumnPredicateRewriter;
 
     explicit Expr(TypeDescriptor type);
     explicit Expr(const TExprNode& node);

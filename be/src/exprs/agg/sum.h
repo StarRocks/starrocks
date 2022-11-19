@@ -7,7 +7,7 @@
 #include "gutil/casts.h"
 #include "runtime/primitive_type.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 template <PrimitiveType PT, typename = guard::Guard>
 inline constexpr PrimitiveType SumResultPT = PT;
@@ -158,4 +158,4 @@ template <PrimitiveType PT, typename = DecimalPTGuard<PT>>
 using DecimalSumAggregateFunction =
         SumAggregateFunction<PT, RunTimeCppType<PT>, TYPE_DECIMAL128, RunTimeCppType<TYPE_DECIMAL128>>;
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

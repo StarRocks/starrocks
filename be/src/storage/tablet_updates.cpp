@@ -1136,7 +1136,7 @@ Status TabletUpdates::_do_update(std::uint32_t rowset_id, std::int32_t upsert_id
             size_t num_default = 0;
             vector<uint32_t> idxes;
             RowsetUpdateState::plan_read_by_rssid(old_rowids, &num_default, &old_rowids_by_rssid, &idxes);
-            std::vector<std::unique_ptr<vectorized::Column>> old_columns(1);
+            std::vector<std::unique_ptr<Column>> old_columns(1);
             auto old_unordered_column =
                     ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
             old_columns[0] = old_unordered_column->clone_empty();
@@ -1150,7 +1150,7 @@ Status TabletUpdates::_do_update(std::uint32_t rowset_id, std::int32_t upsert_id
                 rowids.push_back(j);
             }
             new_rowids_by_rssid[rowset_id + upsert_idx] = rowids;
-            std::vector<std::unique_ptr<vectorized::Column>> new_columns(1);
+            std::vector<std::unique_ptr<Column>> new_columns(1);
             auto new_column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
             new_columns[0] = new_column->clone_empty();
             get_column_values(read_column_ids, false, new_rowids_by_rssid, &new_columns);
@@ -1241,11 +1241,11 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo) {
         LOG(WARNING) << ss.str();
         return Status::InternalError(ss.str());
     }
-    vectorized::MergeConfig cfg;
+    MergeConfig cfg;
     cfg.chunk_size = config::vector_chunk_size;
     cfg.algorithm = algorithm;
-    RETURN_IF_ERROR(vectorized::compaction_merge_rowsets(_tablet, info->start_version.major(), input_rowsets,
-                                                         rowset_writer.get(), cfg));
+    RETURN_IF_ERROR(
+            compaction_merge_rowsets(_tablet, info->start_version.major(), input_rowsets, rowset_writer.get(), cfg));
     auto output_rowset = rowset_writer->build();
     if (!output_rowset.ok()) return output_rowset.status();
     // 4. commit compaction
@@ -1261,7 +1261,7 @@ Status TabletUpdates::_commit_compaction(std::unique_ptr<CompactionInfo>* pinfo,
                                          EditVersion* commit_version) {
     auto span = Tracer::Instance().start_trace_tablet("commit_compaction", _tablet.tablet_id());
     auto scoped_span = trace::Scope(span);
-    _compaction_state = std::make_unique<vectorized::CompactionState>();
+    _compaction_state = std::make_unique<CompactionState>();
     const auto status = _compaction_state->load(rowset.get());
     if (!status.ok()) {
         _compaction_state.reset();
@@ -1378,7 +1378,7 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
     // if compaction_state == null, it must be the case that BE restarted
     // need to rebuild/load state from disk
     if (!_compaction_state) {
-        _compaction_state = std::make_unique<vectorized::CompactionState>();
+        _compaction_state = std::make_unique<CompactionState>();
     }
     int64_t t_start = MonotonicMillis();
     auto manager = StorageEngine::instance()->update_manager();
@@ -2459,7 +2459,7 @@ Status TabletUpdates::link_from(Tablet* base_tablet, int64_t request_version) {
 }
 
 Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, int64_t request_version,
-                                   vectorized::ChunkChanger* chunk_changer) {
+                                   ChunkChanger* chunk_changer) {
     OlapStopWatch watch;
     DCHECK(_tablet.tablet_state() == TABLET_NOTREADY)
             << "tablet state is not TABLET_NOTREADY, convert_from is not allowed"
@@ -2490,7 +2490,7 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
     uint32_t next_rowset_id = 0;
     std::vector<RowsetLoadInfo> new_rowset_load_infos(src_rowsets.size());
 
-    vectorized::Schema base_schema = ChunkHelper::convert_schema_to_format_v2(base_tablet->tablet_schema());
+    VectorizedSchema base_schema = ChunkHelper::convert_schema_to_format_v2(base_tablet->tablet_schema());
 
     OlapReaderStatistics stats;
 
@@ -2624,14 +2624,14 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
 }
 
 Status TabletUpdates::_convert_from_base_rowset(const std::shared_ptr<Tablet>& base_tablet,
-                                                const std::vector<vectorized::ChunkIteratorPtr>& seg_iterators,
-                                                vectorized::ChunkChanger* chunk_changer,
+                                                const std::vector<ChunkIteratorPtr>& seg_iterators,
+                                                ChunkChanger* chunk_changer,
                                                 const std::unique_ptr<RowsetWriter>& rowset_writer) {
-    vectorized::Schema base_schema = ChunkHelper::convert_schema_to_format_v2(base_tablet->tablet_schema());
-    vectorized::ChunkPtr base_chunk = ChunkHelper::new_chunk(base_schema, config::vector_chunk_size);
+    VectorizedSchema base_schema = ChunkHelper::convert_schema_to_format_v2(base_tablet->tablet_schema());
+    ChunkPtr base_chunk = ChunkHelper::new_chunk(base_schema, config::vector_chunk_size);
 
-    vectorized::Schema new_schema = ChunkHelper::convert_schema_to_format_v2(_tablet.tablet_schema());
-    vectorized::ChunkPtr new_chunk = ChunkHelper::new_chunk(new_schema, config::vector_chunk_size);
+    VectorizedSchema new_schema = ChunkHelper::convert_schema_to_format_v2(_tablet.tablet_schema());
+    ChunkPtr new_chunk = ChunkHelper::new_chunk(new_schema, config::vector_chunk_size);
 
     std::unique_ptr<MemPool> mem_pool(new MemPool());
 
@@ -3020,7 +3020,7 @@ void TabletUpdates::_update_total_stats(const std::vector<uint32_t>& rowsets, si
 
 Status TabletUpdates::get_column_values(std::vector<uint32_t>& column_ids, bool with_default,
                                         std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
-                                        vector<std::unique_ptr<vectorized::Column>>* columns) {
+                                        vector<std::unique_ptr<Column>>* columns) {
     std::map<uint32_t, RowsetSharedPtr> rssid_to_rowsets;
     {
         std::lock_guard<std::mutex> l(_rowsets_lock);

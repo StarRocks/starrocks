@@ -16,7 +16,7 @@
 #include "simd/simd.h"
 #include "udf/udf.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 template <typename T>
 constexpr bool IsWindowFunctionSliceState = false;
@@ -847,4 +847,4 @@ public:
     }
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

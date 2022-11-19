@@ -21,9 +21,6 @@ class BitmapValue;
 class HyperLogLog;
 class PercentileValue;
 class JsonValue;
-} // namespace starrocks
-
-namespace starrocks::vectorized {
 
 typedef __int128 int128_t;
 typedef unsigned __int128 uint128_t;
@@ -175,4 +172,4 @@ static const Datum kNullDatum{};
 
 Datum convert2Datum(const DatumKey& key);
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

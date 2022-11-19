@@ -14,7 +14,7 @@
 #include "udf/udf.h"
 #include "util/bitmap_intersect.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 template <PrimitiveType PT, typename = guard::Guard>
 inline constexpr PrimitiveType IntersectCountResultPT = TYPE_BIGINT;
 
@@ -177,4 +177,4 @@ public:
     std::string get_name() const override { return "intersect count"; }
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

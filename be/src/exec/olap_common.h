@@ -197,8 +197,8 @@ using ColumnValueRangeType =  std::variant<
         ColumnValueRange<DateTimeValue>,
         ColumnValueRange<DecimalV2Value>,
         ColumnValueRange<bool>,
-        ColumnValueRange<vectorized::DateValue>,
-        ColumnValueRange<vectorized::TimestampValue>>;
+        ColumnValueRange<DateValue>,
+        ColumnValueRange<TimestampValue>>;
 // clang-format on
 
 } // namespace starrocks

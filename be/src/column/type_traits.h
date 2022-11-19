@@ -14,7 +14,7 @@
 #include "types/constexpr.h"
 #include "util/json.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 template <bool B, typename T>
 struct cond {
@@ -402,4 +402,4 @@ struct RunTimeTypeLimits<TYPE_JSON> {
     static value_type max_value() { return JsonValue{vpack::Slice::maxKeySlice()}; }
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -1,7 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 #include "column/fixed_length_column.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 template class FixedLengthColumn<uint8_t>;
 template class FixedLengthColumn<uint16_t>;
 template class FixedLengthColumn<uint32_t>;
@@ -23,4 +23,4 @@ template class FixedLengthColumn<decimal12_t>;
 template class FixedLengthColumn<DateValue>;
 template class FixedLengthColumn<DecimalV2Value>;
 template class FixedLengthColumn<TimestampValue>;
-} // namespace starrocks::vectorized
+} // namespace starrocks

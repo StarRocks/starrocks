@@ -20,7 +20,7 @@ class TabletSchema;
 class KVStore;
 } // namespace starrocks
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class ColumnPredicate;
 struct RowidRangeOption;
@@ -75,4 +75,4 @@ public:
     std::string debug_string() const;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

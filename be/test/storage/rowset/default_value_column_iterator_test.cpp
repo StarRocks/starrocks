@@ -8,7 +8,7 @@
 #include "storage/types.h"
 #include "storage/vectorized_column_predicate.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 class DefaultValueColumnIteratorTest : public testing::Test {
 protected:
     void SetUp() override {}
@@ -44,4 +44,4 @@ TEST_F(DefaultValueColumnIteratorTest, delete_after_column) {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -8,7 +8,7 @@
 #include "gutil/strings/substitute.h"
 #include "util/json.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // The value must be in type simdjson::ondemand::json_type::number;
 static Status add_column_with_numeric_value(BinaryColumn* column, const TypeDescriptor& type_desc,
@@ -146,4 +146,4 @@ Status add_binary_column_from_json_object(Column* column, const TypeDescriptor& 
     return Status::OK();
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

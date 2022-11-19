@@ -29,14 +29,12 @@ class SnapshotMeta;
 class Tablet;
 class TTabletInfo;
 
-namespace vectorized {
 class ChunkIterator;
 class CompactionState;
-class Schema;
+class VectorizedSchema;
 class TabletReader;
 class ChunkChanger;
 class SegmentIterator;
-} // namespace vectorized
 
 struct CompactionInfo {
     EditVersion start_version;
@@ -47,7 +45,7 @@ struct CompactionInfo {
 // maintain all states for updatable tablets
 class TabletUpdates {
 public:
-    using ColumnUniquePtr = std::unique_ptr<vectorized::Column>;
+    using ColumnUniquePtr = std::unique_ptr<Column>;
     using segment_rowid_t = uint32_t;
     using DeletesMap = std::unordered_map<uint32_t, vector<segment_rowid_t>>;
 
@@ -60,7 +58,7 @@ public:
 
     std::string get_error_msg() const { return _error_msg; }
 
-    using IteratorList = std::vector<std::shared_ptr<vectorized::ChunkIterator>>;
+    using IteratorList = std::vector<std::shared_ptr<ChunkIterator>>;
 
     // get latest version's number of rows
     size_t num_rows() const;
@@ -161,7 +159,7 @@ public:
     Status link_from(Tablet* base_tablet, int64_t request_version);
 
     Status convert_from(const std::shared_ptr<Tablet>& base_tablet, int64_t request_version,
-                        vectorized::ChunkChanger* chunk_changer);
+                        ChunkChanger* chunk_changer);
 
     Status load_snapshot(const SnapshotMeta& snapshot_meta, bool restore_from_backup = false);
 
@@ -220,7 +218,7 @@ public:
     // ]
     Status get_column_values(std::vector<uint32_t>& column_ids, bool with_default,
                              std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
-                             vector<std::unique_ptr<vectorized::Column>>* columns);
+                             vector<std::unique_ptr<Column>>* columns);
 
     Status prepare_partial_update_states(Tablet* tablet, const std::vector<ColumnUniquePtr>& upserts,
                                          EditVersion* read_version, uint32_t* next_rowset_id,
@@ -340,8 +338,7 @@ private:
     void _update_total_stats(const std::vector<uint32_t>& rowsets, size_t* row_count_before, size_t* row_count_after);
 
     Status _convert_from_base_rowset(const std::shared_ptr<Tablet>& base_tablet,
-                                     const std::vector<vectorized::ChunkIteratorPtr>& seg_iterators,
-                                     vectorized::ChunkChanger* chunk_changer,
+                                     const std::vector<ChunkIteratorPtr>& seg_iterators, ChunkChanger* chunk_changer,
                                      const std::unique_ptr<RowsetWriter>& rowset_writer);
 
     void _check_creation_time_increasing();
@@ -400,7 +397,7 @@ private:
     size_t _cur_total_dels = 0;
 
     // state used in compaction process
-    std::unique_ptr<vectorized::CompactionState> _compaction_state;
+    std::unique_ptr<CompactionState> _compaction_state;
 
     // if tablet is in error state, it means some fatal error occurred and we want to
     // keep the scene(internal state) unchanged for further investigation, and don't crash

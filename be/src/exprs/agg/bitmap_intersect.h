@@ -10,7 +10,7 @@
 #include "gutil/casts.h"
 #include "types/bitmap_value.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 struct BitmapValuePacked {
     BitmapValue bitmap;
     bool initial = false;
@@ -60,4 +60,4 @@ public:
     std::string get_name() const override { return "bitmap_intersect"; }
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

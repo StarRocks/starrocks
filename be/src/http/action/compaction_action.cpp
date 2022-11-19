@@ -147,7 +147,7 @@ Status CompactionAction::_handle_compaction(HttpRequest* req, std::string* json_
 
     if (compaction_type == to_string(CompactionType::CUMULATIVE_COMPACTION)) {
         StarRocksMetrics::instance()->cumulative_compaction_request_total.increment(1);
-        vectorized::CumulativeCompaction cumulative_compaction(mem_tracker, tablet);
+        CumulativeCompaction cumulative_compaction(mem_tracker, tablet);
 
         Status res = cumulative_compaction.compact();
         if (!res.ok()) {
@@ -164,7 +164,7 @@ Status CompactionAction::_handle_compaction(HttpRequest* req, std::string* json_
         tablet->set_last_cumu_compaction_failure_time(0);
     } else if (compaction_type == to_string(CompactionType::BASE_COMPACTION)) {
         StarRocksMetrics::instance()->base_compaction_request_total.increment(1);
-        vectorized::BaseCompaction base_compaction(mem_tracker, tablet);
+        BaseCompaction base_compaction(mem_tracker, tablet);
 
         Status res = base_compaction.compact();
         if (!res.ok()) {

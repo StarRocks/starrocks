@@ -5,7 +5,7 @@
 #include "runtime/primitive_type.h"
 #include "runtime/string_value.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaStatisticsScanner::_s_cols_statistics[] = {
         //   name,       type,          size,                     is_null
@@ -32,4 +32,4 @@ SchemaStatisticsScanner::SchemaStatisticsScanner()
 
 SchemaStatisticsScanner::~SchemaStatisticsScanner() = default;
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

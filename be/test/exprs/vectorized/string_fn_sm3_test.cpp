@@ -3,7 +3,7 @@
 
 #include "exprs/vectorized/string_functions.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class StringFunctionSm3Test : public ::testing::Test {};
 TEST_F(StringFunctionSm3Test, abcA1Test) {
@@ -125,4 +125,4 @@ TEST_F(StringFunctionSm3Test, abcNullLiteralTest) {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

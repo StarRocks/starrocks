@@ -8,7 +8,7 @@ namespace starrocks {
 class SegmentPB;
 }
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class Chunk;
 class Column;
@@ -22,4 +22,4 @@ public:
                                             SegmentPB* seg_info = nullptr) = 0;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

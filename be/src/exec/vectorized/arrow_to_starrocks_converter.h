@@ -21,9 +21,6 @@ namespace starrocks {
 class RuntimeState;
 class SlotDescriptor;
 
-} // namespace starrocks
-namespace starrocks::vectorized {
-
 struct ArrowConvertContext {
     class RuntimeState* state;
     class SlotDescriptor* current_slot;
@@ -74,4 +71,4 @@ ListConvertFunc get_arrow_list_converter();
 // phase2: convert pt0->pt by VectorCastExpr.
 PrimitiveType get_strict_type(ArrowTypeId at);
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

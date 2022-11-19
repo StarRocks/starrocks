@@ -4,7 +4,7 @@
 
 #include "formats/csv/converter.h"
 
-namespace starrocks::vectorized::csv {
+namespace starrocks::csv {
 class ArrayReader {
 public:
     explicit ArrayReader(char array_delimiter) : _array_delimiter(array_delimiter) {}
@@ -64,4 +64,4 @@ public:
     static char get_collection_delimiter(char collection_delimiter, char mapkey_delimiter, size_t nested_array_level);
 };
 
-} // namespace starrocks::vectorized::csv
+} // namespace starrocks::csv

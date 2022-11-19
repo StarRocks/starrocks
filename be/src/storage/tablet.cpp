@@ -82,7 +82,7 @@ Status Tablet::_init_once_action() {
     SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
 
     _compaction_context = std::make_unique<CompactionContext>();
-    _compaction_context->policy = std::make_unique<vectorized::DefaultCumulativeBaseCompactionPolicy>(this);
+    _compaction_context->policy = std::make_unique<DefaultCumulativeBaseCompactionPolicy>(this);
 
     VLOG(3) << "begin to load tablet. tablet=" << full_name() << ", version_size=" << _tablet_meta->version_count();
     if (keys_type() == PRIMARY_KEYS) {

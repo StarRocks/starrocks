@@ -12,19 +12,19 @@
 #include "storage/column_aggregate_func.h"
 #include "storage/row_source_mask.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class ChunkAggregator {
 private:
-    ChunkAggregator(const Schema* schema, uint32_t reserve_rows, uint32_t max_aggregate_rows, double factor,
+    ChunkAggregator(const VectorizedSchema* schema, uint32_t reserve_rows, uint32_t max_aggregate_rows, double factor,
                     bool is_vertical_merge, bool is_key);
 
 public:
-    ChunkAggregator(const Schema* schema, uint32_t reserve_rows, uint32_t max_aggregate_rows, double factor);
+    ChunkAggregator(const VectorizedSchema* schema, uint32_t reserve_rows, uint32_t max_aggregate_rows, double factor);
 
-    ChunkAggregator(const Schema* schema, uint32_t max_aggregate_rows, double factor);
+    ChunkAggregator(const VectorizedSchema* schema, uint32_t max_aggregate_rows, double factor);
 
-    ChunkAggregator(const Schema* schema, uint32_t max_aggregate_rows, double factor, bool is_vertical_merge,
+    ChunkAggregator(const VectorizedSchema* schema, uint32_t max_aggregate_rows, double factor, bool is_vertical_merge,
                     bool is_key);
 
     void update_source(ChunkPtr& chunk) { update_source(chunk, nullptr); }
@@ -59,7 +59,7 @@ private:
     bool _row_equal(const Chunk* lhs, size_t m, const Chunk* rhs, size_t n) const;
 
     // chunk mate
-    const Schema* _schema;
+    const VectorizedSchema* _schema;
 
     size_t _key_fields;
 
@@ -111,4 +111,4 @@ private:
     bool _is_key = false;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

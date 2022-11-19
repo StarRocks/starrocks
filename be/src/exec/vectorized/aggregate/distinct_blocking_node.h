@@ -6,7 +6,7 @@
 
 // Distinct means this node handle distinct or group by no aggregate function query.
 // Blocking means this node will consume all input and build hash set in open phase.
-namespace starrocks::vectorized {
+namespace starrocks {
 class DistinctBlockingNode final : public AggregateBaseNode {
 public:
     DistinctBlockingNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
@@ -19,4 +19,4 @@ public:
     std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
             pipeline::PipelineBuilderContext* context) override;
 };
-} // namespace starrocks::vectorized
+} // namespace starrocks

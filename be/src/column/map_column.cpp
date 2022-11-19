@@ -12,7 +12,7 @@
 #include "gutil/strings/fastmem.h"
 #include "util/mysql_row_buffer.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 void MapColumn::check_or_die() const {
     CHECK_EQ(_offsets->get_data().back(), _keys->size());
@@ -540,4 +540,4 @@ StatusOr<ColumnPtr> MapColumn::downgrade() {
     return downgrade_helper_func(&_values);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

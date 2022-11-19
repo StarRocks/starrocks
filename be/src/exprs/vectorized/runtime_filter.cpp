@@ -3,7 +3,7 @@
 #include "exprs/vectorized/runtime_filter.h"
 
 #include "util/compression/stream_compression.h"
-namespace starrocks::vectorized {
+namespace starrocks {
 
 void SimdBlockFilter::init(size_t nums) {
     nums = std::max(1UL, nums);
@@ -180,4 +180,4 @@ bool JoinRuntimeFilter::check_equal(const JoinRuntimeFilter& rf) const {
     return true;
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -8,7 +8,7 @@
 #include "glog/logging.h"
 #include "simd/simd.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 struct PermutationItem {
     uint32_t chunk_index;
@@ -125,4 +125,4 @@ private:
 // Compare result of column, value must be -1,0,1
 using CompareVector = std::vector<int8_t>;
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

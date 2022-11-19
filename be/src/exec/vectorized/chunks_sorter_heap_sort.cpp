@@ -15,7 +15,7 @@
 #include "runtime/primitive_type_infra.h"
 #include "util/defer_op.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 Status ChunksSorterHeapSort::update(RuntimeState* state, const ChunkPtr& chunk) {
     ScopedTimer<MonotonicStopWatch> timer(_build_timer);
@@ -259,4 +259,4 @@ void ChunksSorterHeapSort::setup_runtime(RuntimeProfile* profile) {
     _sort_filter_rows = ADD_COUNTER(profile, "SortFilterRows", TUnit::UNIT);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

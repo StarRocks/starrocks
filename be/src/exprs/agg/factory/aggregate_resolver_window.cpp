@@ -7,7 +7,7 @@
 #include "runtime/primitive_type.h"                 // for TYPE_BIGINT, Pri...
 #include "runtime/primitive_type_infra.h"           // for type_dispatch_all
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 struct WindowDispatcher {
     template <PrimitiveType pt>
@@ -37,4 +37,4 @@ void AggregateFuncResolver::register_window() {
     add_aggregate_mapping_notnull<TYPE_BIGINT, TYPE_BIGINT>("ntile", true, AggregateFactory::MakeNtileWindowFunction());
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

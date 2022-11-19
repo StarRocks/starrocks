@@ -4,7 +4,7 @@
 
 #include "formats/csv/output_stream.h"
 
-namespace starrocks::vectorized::csv {
+namespace starrocks::csv {
 
 class OutputStreamString final : public OutputStream {
 public:
@@ -22,4 +22,4 @@ private:
     std::string _str;
 };
 
-} // namespace starrocks::vectorized::csv
+} // namespace starrocks::csv

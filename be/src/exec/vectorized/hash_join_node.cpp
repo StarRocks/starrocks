@@ -27,7 +27,7 @@
 #include "simd/simd.h"
 #include "util/runtime_profile.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 HashJoinNode::HashJoinNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : ExecNode(pool, tnode, descs),
@@ -950,4 +950,4 @@ Status HashJoinNode::_create_implicit_local_join_runtime_filters(RuntimeState* s
     return Status::OK();
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

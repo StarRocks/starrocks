@@ -2,7 +2,7 @@
 
 #include "formats/csv/csv_reader.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 Status CSVReader::next_record(Record* record) {
     if (_limit > 0 && _parsed_bytes > _limit) {
@@ -70,4 +70,4 @@ void CSVReader::split_record(const Record& record, Fields* fields) const {
     fields->emplace_back(value, ptr - value);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

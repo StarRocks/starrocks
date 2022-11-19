@@ -6,7 +6,7 @@
 #include "runtime/primitive_type.h"
 #include "runtime/string_value.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaTriggersScanner::_s_cols_triggers[] = {
         //   name,       type,          size,                     is_null
@@ -39,4 +39,4 @@ SchemaTriggersScanner::SchemaTriggersScanner()
 
 SchemaTriggersScanner::~SchemaTriggersScanner() = default;
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

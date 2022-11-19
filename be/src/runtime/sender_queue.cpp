@@ -67,7 +67,7 @@ Status DataStreamRecvr::SenderQueue::_build_chunk_meta(const ChunkPB& pb_chunk) 
     return Status::OK();
 }
 
-Status DataStreamRecvr::SenderQueue::_deserialize_chunk(const ChunkPB& pchunk, vectorized::Chunk* chunk,
+Status DataStreamRecvr::SenderQueue::_deserialize_chunk(const ChunkPB& pchunk, Chunk* chunk,
                                                         faststring* uncompressed_buffer) {
     if (pchunk.compress_type() == CompressionTypePB::NO_COMPRESSION) {
         SCOPED_TIMER(_recvr->_deserialize_chunk_timer);
@@ -101,7 +101,7 @@ Status DataStreamRecvr::SenderQueue::_deserialize_chunk(const ChunkPB& pchunk, v
 DataStreamRecvr::NonPipelineSenderQueue::NonPipelineSenderQueue(DataStreamRecvr* parent_recvr, int32_t num_senders)
         : SenderQueue(parent_recvr), _num_remaining_senders(num_senders) {}
 
-Status DataStreamRecvr::NonPipelineSenderQueue::get_chunk(vectorized::Chunk** chunk, const int32_t driver_sequence) {
+Status DataStreamRecvr::NonPipelineSenderQueue::get_chunk(Chunk** chunk, const int32_t driver_sequence) {
     std::unique_lock<Mutex> l(_lock);
     // wait until something shows up or we know we're done
     while (!_is_cancelled && _chunk_queue.empty() && _num_remaining_senders > 0) {
@@ -157,7 +157,7 @@ bool DataStreamRecvr::NonPipelineSenderQueue::has_chunk() {
 }
 
 // try_get_chunk will only be used when has_chunk return true(explicitly or implicitly).
-bool DataStreamRecvr::NonPipelineSenderQueue::try_get_chunk(vectorized::Chunk** chunk) {
+bool DataStreamRecvr::NonPipelineSenderQueue::try_get_chunk(Chunk** chunk) {
     std::lock_guard<Mutex> l(_lock);
     if (_is_cancelled) {
         return false;
@@ -250,7 +250,7 @@ Status DataStreamRecvr::NonPipelineSenderQueue::add_chunks(const PTransmitChunkP
     for (auto i = 0; i < request.chunks().size(); ++i) {
         auto& pchunk = request.chunks().Get(i);
         int64_t chunk_bytes = pchunk.data().size();
-        ChunkUniquePtr chunk = std::make_unique<vectorized::Chunk>();
+        ChunkUniquePtr chunk = std::make_unique<Chunk>();
         RETURN_IF_ERROR(_deserialize_chunk(pchunk, chunk.get(), &uncompressed_buffer));
         ChunkItem item{chunk_bytes, std::move(chunk), nullptr};
         chunks.emplace_back(std::move(item));
@@ -400,7 +400,7 @@ DataStreamRecvr::PipelineSenderQueue::PipelineSenderQueue(DataStreamRecvr* paren
     }
 }
 
-Status DataStreamRecvr::PipelineSenderQueue::get_chunk(vectorized::Chunk** chunk, const int32_t driver_sequence) {
+Status DataStreamRecvr::PipelineSenderQueue::get_chunk(Chunk** chunk, const int32_t driver_sequence) {
     if (_is_cancelled) {
         return Status::Cancelled("Cancelled SenderQueueForPipeline::get_chunk");
     }
@@ -415,7 +415,7 @@ Status DataStreamRecvr::PipelineSenderQueue::get_chunk(vectorized::Chunk** chunk
         return Status::OK();
     }
     if (item.chunk_ptr == nullptr) {
-        ChunkUniquePtr chunk_ptr = std::make_unique<vectorized::Chunk>();
+        ChunkUniquePtr chunk_ptr = std::make_unique<Chunk>();
         faststring uncompressed_buffer;
         RETURN_IF_ERROR(_deserialize_chunk(item.pchunk, chunk_ptr.get(), &uncompressed_buffer));
         *chunk = chunk_ptr.release();
@@ -448,7 +448,7 @@ bool DataStreamRecvr::PipelineSenderQueue::has_chunk() {
     return true;
 }
 
-bool DataStreamRecvr::PipelineSenderQueue::try_get_chunk(vectorized::Chunk** chunk) {
+bool DataStreamRecvr::PipelineSenderQueue::try_get_chunk(Chunk** chunk) {
     if (_is_cancelled) {
         return false;
     }
@@ -585,7 +585,7 @@ StatusOr<DataStreamRecvr::PipelineSenderQueue::ChunkList> DataStreamRecvr::Pipel
         int32_t driver_sequence = _is_pipeline_level_shuffle ? request.driver_sequences(i) : -1;
         int64_t chunk_bytes = pchunk.data().size();
         if constexpr (need_deserialization) {
-            ChunkUniquePtr chunk = std::make_unique<vectorized::Chunk>();
+            ChunkUniquePtr chunk = std::make_unique<Chunk>();
             RETURN_IF_ERROR(_deserialize_chunk(pchunk, chunk.get(), &uncompressed_buffer));
             chunks.emplace_back(chunk_bytes, driver_sequence, nullptr, std::move(chunk));
         } else {

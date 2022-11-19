@@ -13,7 +13,7 @@
 #include "runtime/descriptors.h"
 #include "runtime/types.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class OrcMapping;
 using OrcMappingPtr = std::shared_ptr<OrcMapping>;
@@ -105,4 +105,4 @@ private:
                                      const orc::Type& orc_type, const bool case_sensitive);
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

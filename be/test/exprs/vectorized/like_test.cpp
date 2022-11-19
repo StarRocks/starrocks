@@ -7,7 +7,7 @@
 #include "exprs/vectorized/like_predicate.h"
 #include "exprs/vectorized/mock_vectorized_expr.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class LikeTest : public ::testing::Test {
 public:
@@ -646,4 +646,4 @@ TEST_F(LikeTest, constValueLikeComplicateForHyperscan) {
                         .ok());
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

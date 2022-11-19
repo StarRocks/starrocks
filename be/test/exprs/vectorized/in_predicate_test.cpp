@@ -11,7 +11,7 @@
 #include "column/fixed_length_column.h"
 #include "exprs/vectorized/mock_vectorized_expr.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class VectorizedInPredicateTest : public ::testing::Test {
 public:
@@ -256,4 +256,4 @@ TEST_F(VectorizedInPredicateTest, inConstPred) {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

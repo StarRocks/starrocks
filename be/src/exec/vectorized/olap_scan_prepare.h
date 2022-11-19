@@ -10,7 +10,6 @@
 
 namespace starrocks {
 class RuntimeState;
-namespace vectorized {
 
 class RuntimeFilterProbeCollector;
 class PredicateParser;
@@ -84,5 +83,4 @@ private:
     void build_column_expr_predicates();
 };
 
-} // namespace vectorized
 } // namespace starrocks

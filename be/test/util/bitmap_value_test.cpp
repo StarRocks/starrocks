@@ -33,7 +33,7 @@
 #include "udf/udf.h"
 #include "util/phmap/phmap.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 TEST(BitmapValueTest, bitmap_union) {
     BitmapValue empty;
@@ -406,4 +406,4 @@ TEST(BitmapValueTest, bitmap_xor) {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

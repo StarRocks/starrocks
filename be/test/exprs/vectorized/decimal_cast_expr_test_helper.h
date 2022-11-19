@@ -16,13 +16,13 @@
 #include "runtime/time_types.h"
 #include "testutil/parallel_test.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 template <PrimitiveType Type>
 class VerbatimVectorizedExpr : public MockCostExpr {
 public:
     VerbatimVectorizedExpr(const TExprNode& t, ColumnPtr column) : MockCostExpr(t), column(column) {}
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override { return column; }
+    ColumnPtr evaluate(ExprContext* context, Chunk* ptr) override { return column; }
 
 private:
     ColumnPtr column;
@@ -276,4 +276,4 @@ void test_cast_all_fail(CastTestCaseArray const& test_cases) {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

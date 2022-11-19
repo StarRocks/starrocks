@@ -28,7 +28,7 @@
 #include "util/thrift_util.h"
 #include "util/unaligned_access.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class AggregateTest : public testing::Test {
 public:
@@ -729,7 +729,7 @@ TEST_F(AggregateTest, test_max) {
     func = get_aggregate_function("max", TYPE_DATE, TYPE_DATE, false);
     test_agg_function<DateValue, DateValue>(ctx, func, DateValue::create(2019, 1, 1), DateValue::create(2000, 1, 1),
                                             DateValue::create(2019, 1, 1));
-} // namespace starrocks::vectorized
+} // namespace starrocks
 
 TEST_F(AggregateTest, test_min) {
     const AggregateFunction* func = get_aggregate_function("min", TYPE_SMALLINT, TYPE_SMALLINT, false);
@@ -1482,4 +1482,4 @@ TEST_F(AggregateTest, test_exchange_bytes) {
     ASSERT_EQ(data_column_bigint->byte_size() + data_column->byte_size(), result_column->get_data()[0]);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

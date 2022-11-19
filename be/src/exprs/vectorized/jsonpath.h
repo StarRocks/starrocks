@@ -7,7 +7,7 @@
 #include "exprs/vectorized/function_helper.h"
 #include "velocypack/vpack.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 enum ArraySelectorType {
     INVALID,
@@ -103,4 +103,4 @@ struct JsonPath {
     static vpack::Slice extract(const JsonValue* json, const JsonPath& jsonpath, vpack::Builder* b);
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

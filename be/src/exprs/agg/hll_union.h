@@ -7,7 +7,7 @@
 #include "exprs/agg/aggregate.h"
 #include "gutil/casts.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 /**
  * RETURN_TYPE: TYPE_HLL
@@ -77,4 +77,4 @@ public:
     std::string get_name() const override { return "hll_union"; }
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

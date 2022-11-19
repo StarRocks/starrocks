@@ -13,7 +13,7 @@
 #include "types/timestamp_value.h"
 #include "util/timezone_utils.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 static const char* FIELD_SCROLL_ID = "_scroll_id";
 static const char* FIELD_HITS = "hits";
@@ -271,7 +271,7 @@ bool ScrollParser::_is_pure_doc_value(const rapidjson::Value& obj) {
 template <PrimitiveType type, typename CppType>
 void ScrollParser::_append_data(Column* column, CppType& value) {
     auto appender = [](auto* column, CppType& value) {
-        using ColumnType = typename vectorized::RunTimeColumnType<type>;
+        using ColumnType = RunTimeColumnType<type>;
         auto* runtime_column = down_cast<ColumnType*>(column);
         runtime_column->append(value);
     };
@@ -630,4 +630,4 @@ Status ScrollParser::_append_date_val(const rapidjson::Value& col, Column* colum
     return Status::OK();
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

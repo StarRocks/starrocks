@@ -4,7 +4,7 @@
 
 #include "runtime/string_value.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaDummyScanner::_s_dummy_columns[] = {};
 
@@ -22,4 +22,4 @@ Status SchemaDummyScanner::get_next(ChunkPtr* chunk, bool* eos) {
     return Status::OK();
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

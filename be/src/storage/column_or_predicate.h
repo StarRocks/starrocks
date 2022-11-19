@@ -6,7 +6,7 @@
 
 #include "storage/vectorized_column_predicate.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class ColumnOrPredicate : public ColumnPredicate {
 public:
@@ -55,4 +55,4 @@ private:
     mutable std::vector<uint8_t> _buff;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

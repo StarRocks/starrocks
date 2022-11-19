@@ -8,7 +8,7 @@
 #include "exprs/vectorized/mock_vectorized_expr.h"
 #include "util/phmap/phmap.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 class HyperLogLogFunctionsTest : public ::testing::Test {
 public:
     void SetUp() override {
@@ -158,4 +158,4 @@ TEST_F(HyperLogLogFunctionsTest, hllCardinalityFromStringTest) {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

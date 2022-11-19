@@ -13,8 +13,6 @@ namespace starrocks {
 
 class Rowset;
 
-namespace vectorized {
-
 class CompactionState {
 public:
     CompactionState();
@@ -36,7 +34,5 @@ private:
     Status _status;
     size_t _memory_usage = 0;
 };
-
-} // namespace vectorized
 
 } // namespace starrocks

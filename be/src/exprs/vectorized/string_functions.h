@@ -12,7 +12,7 @@
 #include "udf/udf.h"
 #include "util/url_parser.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 struct PadState {
     bool is_const;
@@ -311,31 +311,31 @@ public:
      * @paramType: [DoubleColumn]
      * @return: BinaryColumn
      */
-    static ColumnPtr money_format_double(FunctionContext* context, const starrocks::vectorized::Columns& columns);
+    static ColumnPtr money_format_double(FunctionContext* context, const starrocks::Columns& columns);
 
     /**
      * @param: [BIGINT]
      * @paramType: [Int64Column]
      * @return: BinaryColumn
      */
-    static ColumnPtr money_format_bigint(FunctionContext* context, const starrocks::vectorized::Columns& columns);
+    static ColumnPtr money_format_bigint(FunctionContext* context, const starrocks::Columns& columns);
 
     /**
      * @param: [DECIMALV2]
      * @paramType: [DecimalColumn]
      * @return: BinaryColumn
      */
-    static ColumnPtr money_format_largeint(FunctionContext* context, const starrocks::vectorized::Columns& columns);
+    static ColumnPtr money_format_largeint(FunctionContext* context, const starrocks::Columns& columns);
 
     /**
      * @param: [LARGEINT]
      * @paramType: [Int128Column]
      * @return: BinaryColumn
      */
-    static ColumnPtr money_format_decimalv2val(FunctionContext* context, const starrocks::vectorized::Columns& columns);
+    static ColumnPtr money_format_decimalv2val(FunctionContext* context, const starrocks::Columns& columns);
 
     template <PrimitiveType Type>
-    static ColumnPtr money_format_decimal(FunctionContext* context, const starrocks::vectorized::Columns& columns);
+    static ColumnPtr money_format_decimal(FunctionContext* context, const starrocks::Columns& columns);
 
     // parse's auxiliary method
     static Status parse_url_prepare(starrocks_udf::FunctionContext* context,
@@ -446,9 +446,9 @@ private:
         ParseUrlState() : url_part() {}
     };
 
-    static ColumnPtr parse_url_general(FunctionContext* context, const starrocks::vectorized::Columns& columns);
+    static ColumnPtr parse_url_general(FunctionContext* context, const starrocks::Columns& columns);
     static ColumnPtr parse_url_const(UrlParser::UrlPart* url_part, FunctionContext* context,
-                                     const starrocks::vectorized::Columns& columns);
+                                     const starrocks::Columns& columns);
 
     template <PrimitiveType Type, bool scale_up, bool check_overflow>
     static inline void money_format_decimal_impl(FunctionContext* context, ColumnViewer<Type> const& money_viewer,
@@ -492,8 +492,7 @@ void StringFunctions::money_format_decimal_impl(FunctionContext* context, Column
 }
 
 template <PrimitiveType Type>
-ColumnPtr StringFunctions::money_format_decimal(FunctionContext* context,
-                                                const starrocks::vectorized::Columns& columns) {
+ColumnPtr StringFunctions::money_format_decimal(FunctionContext* context, const starrocks::Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
     using CppType = RunTimeCppType<Type>;
     static_assert(pt_is_decimal<Type>, "Invalid decimal type");
@@ -513,4 +512,4 @@ ColumnPtr StringFunctions::money_format_decimal(FunctionContext* context,
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -9,7 +9,7 @@
 #include "util/time.h"
 #include "util/trace.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 bool DefaultCumulativeBaseCompactionPolicy::need_compaction(int64_t* score, CompactionType* type) {
     _tablet->calculate_cumulative_point();
@@ -386,4 +386,4 @@ Status DefaultCumulativeBaseCompactionPolicy::_check_version_overlapping(const s
     return Status::OK();
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

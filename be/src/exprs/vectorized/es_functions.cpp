@@ -6,7 +6,7 @@
 #include "column/column_viewer.h"
 #include "udf/udf_internal.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 ColumnPtr ESFunctions::match(FunctionContext* context, const Columns& columns) {
     auto size = columns[0]->size();
@@ -18,4 +18,4 @@ ColumnPtr ESFunctions::match(FunctionContext* context, const Columns& columns) {
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

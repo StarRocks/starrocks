@@ -10,7 +10,7 @@
 #include "common/logging.h"
 #include "runtime/descriptors.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 // ====================================================================================================================
 
 ParquetReaderWrap::~ParquetReaderWrap() {
@@ -336,4 +336,4 @@ arrow::Result<std::shared_ptr<arrow::Buffer>> ParquetChunkFile::Read(int64_t nby
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -14,14 +14,14 @@
 #include "storage/tablet.h"
 #include "storage/tablet_reader_params.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class ColumnPredicate;
 
 class TabletReader final : public ChunkIterator {
 public:
-    TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema);
-    TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema, bool is_key,
+    TabletReader(TabletSharedPtr tablet, const Version& version, VectorizedSchema schema);
+    TabletReader(TabletSharedPtr tablet, const Version& version, VectorizedSchema schema, bool is_key,
                  RowSourceMaskBuffer* mask_buffer);
     ~TabletReader() override { close(); }
 
@@ -87,4 +87,4 @@ private:
     RowSourceMaskBuffer* _mask_buffer = nullptr;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

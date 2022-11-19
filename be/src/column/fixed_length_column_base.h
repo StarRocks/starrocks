@@ -14,7 +14,7 @@
 #include "util/raw_container.h"
 #include "util/value_generator.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 template <typename T>
 constexpr bool IsDecimal = false;
@@ -227,4 +227,4 @@ private:
     using Column::append;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

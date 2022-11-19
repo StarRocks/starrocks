@@ -4,7 +4,7 @@
 
 #include "exprs/vectorized/function_helper.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 class ESFunctions {
 public:
     /**
@@ -14,4 +14,4 @@ public:
     DEFINE_VECTORIZED_FN(match);
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

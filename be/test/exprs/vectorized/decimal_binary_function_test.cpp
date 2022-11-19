@@ -10,7 +10,7 @@
 
 #include "exprs/vectorized/decimal_cast_expr_test_helper.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class DecimalBinaryFunctionTest : public ::testing::Test {};
 using DecimalTestCase = std::tuple<std::string, std::string, std::string>;
@@ -3074,4 +3074,4 @@ TEST_F(DecimalBinaryFunctionTest, test_decimal_fast_mul_64x64) {
                                                                                                 4, 38, 8);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

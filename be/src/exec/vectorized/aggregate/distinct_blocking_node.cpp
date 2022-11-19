@@ -15,7 +15,7 @@
 #include "exec/vectorized/aggregator.h"
 #include "runtime/current_thread.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 Status DistinctBlockingNode::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(AggregateBaseNode::prepare(state));
@@ -188,4 +188,4 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > DistinctBlockingNode::d
     return ops_with_source;
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

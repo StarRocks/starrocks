@@ -11,7 +11,7 @@
 #include "exprs/vectorized/column_ref.h"
 #include "glog/logging.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // array_map(lambda function, array0, array1...)
 
@@ -26,4 +26,4 @@ public:
 
     ColumnPtr evaluate(ExprContext* context, Chunk* ptr) override;
 };
-} // namespace starrocks::vectorized
+} // namespace starrocks

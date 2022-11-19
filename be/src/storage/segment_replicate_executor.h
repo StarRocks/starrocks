@@ -21,11 +21,7 @@ class SegmentPB;
 class PTabletInfo;
 class FileSystem;
 
-namespace vectorized {
 class DeltaWriterOptions;
-}
-
-using DeltaWriterOptions = starrocks::vectorized::DeltaWriterOptions;
 
 class ReplicateChannel {
 public:

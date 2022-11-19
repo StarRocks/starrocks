@@ -16,7 +16,7 @@
 #include "runtime/runtime_state.h"
 #include "testutil/assert.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class VectorizedFunctionCallExprTest : public ::testing::Test {
 public:
@@ -268,4 +268,4 @@ TEST_F(VectorizedFunctionCallExprTest, prepareFaileCase) {
     exprContext.close(nullptr);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

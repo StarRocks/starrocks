@@ -27,7 +27,7 @@ public:
     explicit MockColumnReader(tparquet::Type::type type) : _type(type) {}
     ~MockColumnReader() override = default;
 
-    Status prepare_batch(size_t* num_records, ColumnContentType content_type, vectorized::Column* column) override {
+    Status prepare_batch(size_t* num_records, ColumnContentType content_type, Column* column) override {
         if (_step > 1) {
             *num_records = 0;
             return Status::EndOfFile("");
@@ -66,25 +66,25 @@ public:
     void get_levels(int16_t** def_levels, int16_t** rep_levels, size_t* num_levels) override {}
 
 private:
-    static void _append_int32_column(vectorized::Column* column, size_t start, size_t num_rows) {
+    static void _append_int32_column(Column* column, size_t start, size_t num_rows) {
         for (int i = 0; i < num_rows; i++) {
             (*column).append_datum(i + static_cast<int32_t>(start));
         }
     }
 
-    static void _append_int64_column(vectorized::Column* column, size_t start, size_t num_rows) {
+    static void _append_int64_column(Column* column, size_t start, size_t num_rows) {
         for (int64_t i = 0; i < num_rows; i++) {
             (*column).append_datum(i + static_cast<int64_t>(start));
         }
     }
 
-    static void _append_int96_column(vectorized::Column* column, size_t start, size_t num_rows) {
+    static void _append_int96_column(Column* column, size_t start, size_t num_rows) {
         for (int64_t i = 0; i < num_rows; i++) {
             (*column).append_datum(i + static_cast<int64_t>(start));
         }
     }
 
-    static void _append_binary_column(vectorized::Column* column, size_t start, size_t num_rows) {
+    static void _append_binary_column(Column* column, size_t start, size_t num_rows) {
         for (size_t i = 0; i < num_rows; i++) {
             std::string str = std::string("str") + std::to_string(i + start);
             Slice slice;
@@ -94,13 +94,13 @@ private:
         }
     }
 
-    static void _append_float_column(vectorized::Column* column, size_t start, size_t num_rows) {
+    static void _append_float_column(Column* column, size_t start, size_t num_rows) {
         for (int64_t i = 0; i < num_rows; i++) {
             (*column).append_datum(0.5f * (i + start));
         }
     }
 
-    static void _append_double_column(vectorized::Column* column, size_t start, size_t num_rows) {
+    static void _append_double_column(Column* column, size_t start, size_t num_rows) {
         for (int64_t i = 0; i < num_rows; i++) {
             (*column).append_datum(1.5 * (i + start));
         }
@@ -124,36 +124,36 @@ private:
     tparquet::SchemaElement* _create_schema_element(const std::string& col_name, tparquet::Type::type type);
     Status _create_filemeta(FileMetaData** file_meta, GroupReaderParam* param);
     GroupReaderParam* _create_group_reader_param();
-    static vectorized::ChunkPtr _create_chunk(GroupReaderParam* param);
+    static ChunkPtr _create_chunk(GroupReaderParam* param);
 
-    static void _check_int32_column(vectorized::Column* column, size_t start, size_t count);
-    static void _check_int64_column(vectorized::Column* column, size_t start, size_t count);
-    static void _check_int96_column(vectorized::Column* column, size_t start, size_t count);
-    static void _check_binary_column(vectorized::Column* column, size_t start, size_t count);
-    static void _check_float_column(vectorized::Column* column, size_t start, size_t count);
-    static void _check_double_column(vectorized::Column* column, size_t start, size_t count);
-    static void _check_chunk(GroupReaderParam* param, const vectorized::ChunkPtr& chunk, size_t start, size_t count);
+    static void _check_int32_column(Column* column, size_t start, size_t count);
+    static void _check_int64_column(Column* column, size_t start, size_t count);
+    static void _check_int96_column(Column* column, size_t start, size_t count);
+    static void _check_binary_column(Column* column, size_t start, size_t count);
+    static void _check_float_column(Column* column, size_t start, size_t count);
+    static void _check_double_column(Column* column, size_t start, size_t count);
+    static void _check_chunk(GroupReaderParam* param, const ChunkPtr& chunk, size_t start, size_t count);
 
     ObjectPool _pool;
 };
 
-vectorized::ChunkPtr GroupReaderTest::_create_chunk(GroupReaderParam* param) {
-    vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
+ChunkPtr GroupReaderTest::_create_chunk(GroupReaderParam* param) {
+    ChunkPtr chunk = std::make_shared<Chunk>();
     for (auto& column : param->read_cols) {
-        auto c = vectorized::ColumnHelper::create_column(column.col_type_in_chunk, true);
+        auto c = ColumnHelper::create_column(column.col_type_in_chunk, true);
         chunk->append_column(c, column.col_idx_in_chunk);
     }
     return chunk;
 }
 
-void GroupReaderTest::_check_int32_column(vectorized::Column* column, size_t start, size_t count) {
+void GroupReaderTest::_check_int32_column(Column* column, size_t start, size_t count) {
     ASSERT_EQ(column->size(), count);
     for (size_t i = 0; i < count; i++) {
         ASSERT_EQ(column->get(i).get_int32(), static_cast<int32_t>(start + i));
     }
 }
 
-void GroupReaderTest::_check_int64_column(vectorized::Column* column, size_t start, size_t count) {
+void GroupReaderTest::_check_int64_column(Column* column, size_t start, size_t count) {
     ASSERT_EQ(column->size(), count);
 
     for (size_t i = 0; i < count; i++) {
@@ -161,7 +161,7 @@ void GroupReaderTest::_check_int64_column(vectorized::Column* column, size_t sta
     }
 }
 
-void GroupReaderTest::_check_int96_column(vectorized::Column* column, size_t start, size_t count) {
+void GroupReaderTest::_check_int96_column(Column* column, size_t start, size_t count) {
     ASSERT_EQ(column->size(), count);
 
     for (size_t i = 0; i < count; i++) {
@@ -169,7 +169,7 @@ void GroupReaderTest::_check_int96_column(vectorized::Column* column, size_t sta
     }
 }
 
-void GroupReaderTest::_check_binary_column(vectorized::Column* column, size_t start, size_t count) {
+void GroupReaderTest::_check_binary_column(Column* column, size_t start, size_t count) {
     for (size_t i = 0; i < count; i++) {
         auto check_slice = column->get(i).get_slice();
         std::string str = std::string("str") + std::to_string(i + start);
@@ -180,7 +180,7 @@ void GroupReaderTest::_check_binary_column(vectorized::Column* column, size_t st
     }
 }
 
-void GroupReaderTest::_check_float_column(vectorized::Column* column, size_t start, size_t count) {
+void GroupReaderTest::_check_float_column(Column* column, size_t start, size_t count) {
     for (size_t i = 0; i < count; i++) {
         float value = column->get(i).get_float();
         float exp = 0.5f * (start + i);
@@ -188,7 +188,7 @@ void GroupReaderTest::_check_float_column(vectorized::Column* column, size_t sta
     }
 }
 
-void GroupReaderTest::_check_double_column(vectorized::Column* column, size_t start, size_t count) {
+void GroupReaderTest::_check_double_column(Column* column, size_t start, size_t count) {
     for (size_t i = 0; i < count; i++) {
         double value = column->get(i).get_double();
         double exp = 1.5 * (start + i);
@@ -196,8 +196,7 @@ void GroupReaderTest::_check_double_column(vectorized::Column* column, size_t st
     }
 }
 
-void GroupReaderTest::_check_chunk(GroupReaderParam* param, const vectorized::ChunkPtr& chunk, size_t start,
-                                   size_t count) {
+void GroupReaderTest::_check_chunk(GroupReaderParam* param, const ChunkPtr& chunk, size_t start, size_t count) {
     ASSERT_EQ(param->read_cols.size(), chunk->num_columns());
     for (size_t i = 0; i < param->read_cols.size(); i++) {
         auto column = chunk->columns()[i].get();
@@ -312,7 +311,7 @@ static GroupReaderParam::Column _create_group_reader_param_of_column(int idx, tp
     return c;
 }
 
-static vectorized::HdfsScanStats g_hdfs_scan_stats;
+static HdfsScanStats g_hdfs_scan_stats;
 GroupReaderParam* GroupReaderTest::_create_group_reader_param() {
     GroupReaderParam::Column c1 =
             _create_group_reader_param_of_column(0, tparquet::Type::type::INT32, PrimitiveType::TYPE_INT);

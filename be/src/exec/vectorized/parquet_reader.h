@@ -23,7 +23,7 @@
 #include "fs/fs.h"
 #include "runtime/types.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 using RecordBatch = ::arrow::RecordBatch;
 using RecordBatchPtr = std::shared_ptr<RecordBatch>;
@@ -105,4 +105,4 @@ private:
     State _state;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

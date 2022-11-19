@@ -9,7 +9,7 @@
 
 #include "column/const_column.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 namespace {
 TypeDescriptor array_type(const TypeDescriptor& child_type) {
@@ -4680,4 +4680,4 @@ TEST_F(ArrayFunctionsTest, array_distinct_only_null) {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

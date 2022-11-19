@@ -14,7 +14,7 @@
 #include "runtime/primitive_type_infra.h"
 #include "udf/java/java_function_fwd.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 AggregateFuncResolver::AggregateFuncResolver() {
     register_avg();
@@ -131,4 +131,4 @@ const AggregateFunction* get_window_function(const std::string& name, PrimitiveT
     return nullptr;
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

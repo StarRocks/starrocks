@@ -68,19 +68,17 @@ class ProtobufChunkDeserializer;
 
 class ProtobufChunkSerde {
 public:
-    static int64_t max_serialized_size(const vectorized::Chunk& chunk,
-                                       const std::shared_ptr<EncodeContext>& context = nullptr);
+    static int64_t max_serialized_size(const Chunk& chunk, const std::shared_ptr<EncodeContext>& context = nullptr);
 
     // Write the contents of |chunk| to ChunkPB
-    static StatusOr<ChunkPB> serialize(const vectorized::Chunk& chunk,
-                                       const std::shared_ptr<EncodeContext>& context = nullptr);
+    static StatusOr<ChunkPB> serialize(const Chunk& chunk, const std::shared_ptr<EncodeContext>& context = nullptr);
 
     // Like `serialize()` but leave the following fields of ChunkPB unfilled:
     //  - slot_id_map()
     //  - tuple_id_map()
     //  - is_nulls()
     //  - is_consts()
-    static StatusOr<ChunkPB> serialize_without_meta(const vectorized::Chunk& chunk,
+    static StatusOr<ChunkPB> serialize_without_meta(const Chunk& chunk,
                                                     const std::shared_ptr<EncodeContext>& context = nullptr);
 
     // REQUIRE: the following fields of |chunk_pb| must be non-empty:
@@ -88,16 +86,16 @@ public:
     //  - tuple_id_map()
     //  - is_nulls()
     //  - is_consts()
-    static StatusOr<vectorized::Chunk> deserialize(const RowDescriptor& row_desc, const ChunkPB& chunk_pb,
-                                                   const int encode_level = 0);
+    static StatusOr<Chunk> deserialize(const RowDescriptor& row_desc, const ChunkPB& chunk_pb,
+                                       const int encode_level = 0);
 };
 
 struct ProtobufChunkMeta {
     std::vector<TypeDescriptor> types;
     std::vector<bool> is_nulls;
     std::vector<bool> is_consts;
-    vectorized::Chunk::SlotHashMap slot_id_to_index;
-    vectorized::Chunk::TupleHashMap tuple_id_to_index;
+    Chunk::SlotHashMap slot_id_to_index;
+    Chunk::TupleHashMap tuple_id_to_index;
 };
 
 class ProtobufChunkDeserializer {
@@ -115,7 +113,7 @@ public:
         }
     }
 
-    StatusOr<vectorized::Chunk> deserialize(std::string_view buff, int64_t* deserialized_bytes = nullptr);
+    StatusOr<Chunk> deserialize(std::string_view buff, int64_t* deserialized_bytes = nullptr);
 
 private:
     const ProtobufChunkMeta& _meta;

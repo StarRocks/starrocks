@@ -4,7 +4,7 @@
 
 #include "column/chunk.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 PlaceHolderRef::PlaceHolderRef(const TExprNode& node) : Expr(node, true), _column_id(node.vslot_ref.slot_id) {}
 
 ColumnPtr PlaceHolderRef::evaluate(ExprContext* context, Chunk* ptr) {
@@ -12,4 +12,4 @@ ColumnPtr PlaceHolderRef::evaluate(ExprContext* context, Chunk* ptr) {
     return column;
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

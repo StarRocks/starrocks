@@ -13,10 +13,8 @@ namespace starrocks {
 
 class RowsetWriter;
 
-namespace vectorized {
 class TabletReader;
-class Schema;
-} // namespace vectorized
+class VectorizedSchema;
 class HorizontalCompactionTask : public CompactionTask {
 public:
     HorizontalCompactionTask() : CompactionTask(HORIZONTAL_COMPACTION) {}
@@ -25,8 +23,8 @@ public:
 
 private:
     Status _horizontal_compact_data(Statistics* statistics);
-    StatusOr<size_t> _compact_data(int32_t chunk_size, vectorized::TabletReader& reader,
-                                   const vectorized::Schema& schema, RowsetWriter* output_rs_writer);
+    StatusOr<size_t> _compact_data(int32_t chunk_size, TabletReader& reader, const VectorizedSchema& schema,
+                                   RowsetWriter* output_rs_writer);
     void _failure_callback();
     void _success_callback();
 };

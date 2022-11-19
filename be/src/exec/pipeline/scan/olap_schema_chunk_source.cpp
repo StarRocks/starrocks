@@ -32,7 +32,7 @@ Status OlapSchemaChunkSource::prepare(RuntimeState* state) {
 
     _filter_timer = ADD_TIMER(_runtime_profile, "FilterTime");
 
-    _scanner = vectorized::SchemaScanner::create(schema_table->schema_table_type());
+    _scanner = SchemaScanner::create(schema_table->schema_table_type());
     if (_scanner == nullptr) {
         return Status::InternalError("schema scanner get null pointer");
     }
@@ -44,19 +44,18 @@ Status OlapSchemaChunkSource::prepare(RuntimeState* state) {
 void OlapSchemaChunkSource::close(RuntimeState* state) {}
 
 Status OlapSchemaChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
-    ChunkPtr chunk_src = std::make_shared<vectorized::Chunk>();
+    ChunkPtr chunk_src = std::make_shared<Chunk>();
     if (chunk_src == nullptr) {
         return Status::InternalError("Failed to allocated new chunk.");
     }
     const std::vector<SlotDescriptor*>& dest_slot_descs = _dest_tuple_desc->slots();
 
-    ChunkPtr chunk_dst = std::make_shared<vectorized::Chunk>();
+    ChunkPtr chunk_dst = std::make_shared<Chunk>();
     if (chunk_dst == nullptr) {
         return Status::InternalError("Failed to allocate new chunk");
     }
     for (auto dest_slot_desc : dest_slot_descs) {
-        ColumnPtr column =
-                vectorized::ColumnHelper::create_column(dest_slot_desc->type(), dest_slot_desc->is_nullable());
+        ColumnPtr column = ColumnHelper::create_column(dest_slot_desc->type(), dest_slot_desc->is_nullable());
         chunk_dst->append_column(std::move(column), dest_slot_desc->id());
     }
 

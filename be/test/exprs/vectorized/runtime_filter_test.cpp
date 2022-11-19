@@ -12,7 +12,7 @@
 #include "exprs/vectorized/runtime_filter_bank.h"
 #include "simd/simd.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class RuntimeFilterTest : public ::testing::Test {
 public:
@@ -729,4 +729,4 @@ TEST_F(RuntimeFilterTest, TestMultiColumnsOnRuntimeFilter_ShuffleJoin) {
                                            {});
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

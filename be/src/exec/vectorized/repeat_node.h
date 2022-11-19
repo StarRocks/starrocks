@@ -9,9 +9,7 @@ namespace starrocks {
 class DescriptorTbl;
 class SlotDescriptor;
 class TupleDescriptor;
-} // namespace starrocks
 
-namespace starrocks::vectorized {
 class RepeatNode final : public ExecNode {
 public:
     RepeatNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
@@ -83,4 +81,4 @@ private:
     RuntimeProfile::Counter* _update_column_timer = nullptr;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

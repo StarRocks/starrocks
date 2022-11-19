@@ -21,13 +21,6 @@ namespace starrocks {
 class MemTracker;
 
 class LocalTabletsChannel : public TabletsChannel {
-    using AsyncDeltaWriter = vectorized::AsyncDeltaWriter;
-    using AsyncDeltaWriterCallback = vectorized::AsyncDeltaWriterCallback;
-    using AsyncDeltaWriterRequest = vectorized::AsyncDeltaWriterRequest;
-    using AsyncDeltaWriterSegmentRequest = vectorized::AsyncDeltaWriterSegmentRequest;
-    using CommittedRowsetInfo = vectorized::CommittedRowsetInfo;
-    using FailedRowsetInfo = vectorized::FailedRowsetInfo;
-
 public:
     LocalTabletsChannel(LoadChannel* load_channel, const TabletsChannelKey& key, MemTracker* mem_tracker);
     ~LocalTabletsChannel() override;
@@ -41,7 +34,7 @@ public:
 
     Status open(const PTabletWriterOpenRequest& params, std::shared_ptr<OlapTableSchemaParam> schema) override;
 
-    void add_chunk(vectorized::Chunk* chunk, const PTabletWriterAddChunkRequest& request,
+    void add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
                    PTabletWriterAddBatchResult* response) override;
 
     void add_segment(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
@@ -116,7 +109,7 @@ private:
         PTabletWriterAddBatchResult* _response;
         BThreadCountDownLatch* _latch{nullptr};
 
-        vectorized::Chunk _chunk;
+        Chunk _chunk;
         std::unique_ptr<uint32_t[]> _row_indexes;
         std::unique_ptr<uint32_t[]> _channel_row_idx_start_points;
     };
@@ -140,7 +133,7 @@ private:
 
     Status _open_all_writers(const PTabletWriterOpenRequest& params);
 
-    StatusOr<std::shared_ptr<WriteContext>> _create_write_context(vectorized::Chunk* chunk,
+    StatusOr<std::shared_ptr<WriteContext>> _create_write_context(Chunk* chunk,
                                                                   const PTabletWriterAddChunkRequest& request,
                                                                   PTabletWriterAddBatchResult* response);
 
@@ -171,7 +164,7 @@ private:
     // tablet_id -> TabletChannel
     std::unordered_map<int64_t, std::unique_ptr<AsyncDeltaWriter>> _delta_writers;
 
-    vectorized::GlobalDictByNameMaps _global_dicts;
+    GlobalDictByNameMaps _global_dicts;
     std::unique_ptr<MemPool> _mem_pool;
 
     bool _is_replicated_storage = false;

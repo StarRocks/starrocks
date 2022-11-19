@@ -1,7 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 #include <exprs/vectorized/arithmetic_operation.h>
 #include <gtest/gtest.h>
-namespace starrocks::vectorized {
+namespace starrocks {
 class ArithmeticOperationTest : public ::testing::Test {};
 TEST_F(ArithmeticOperationTest, test_decimal_div_integer) {
     std::vector<std::tuple<std::string, int64_t, std::string>> test_cases{
@@ -70,4 +70,4 @@ TEST_F(ArithmeticOperationTest, test_decimal_div_integer) {
         ASSERT_EQ(s_expect_quotient, s_actual_quotient);
     }
 }
-} // namespace starrocks::vectorized
+} // namespace starrocks

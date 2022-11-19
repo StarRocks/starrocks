@@ -25,14 +25,14 @@
 #include "storage/rowset/scalar_column_iterator.h"
 #include "storage/vectorized_column_predicate.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 constexpr static const LogicalType kDictCodeType = LOGICAL_TYPE_INT;
 
 Status ColumnPredicateRewriter::rewrite_predicate(ObjectPool* pool) {
     // because schema has reordered
     // so we only need to check the first `predicate_column_size` fields
     for (size_t i = 0; i < _column_size; i++) {
-        const FieldPtr& field = _schema.field(i);
+        const VectorizedFieldPtr& field = _schema.field(i);
         ColumnId cid = field->id();
         if (_need_rewrite[cid]) {
             RETURN_IF_ERROR(_rewrite_predicate(pool, field));
@@ -41,7 +41,7 @@ Status ColumnPredicateRewriter::rewrite_predicate(ObjectPool* pool) {
     return Status::OK();
 }
 
-StatusOr<bool> ColumnPredicateRewriter::_rewrite_predicate(ObjectPool* pool, const FieldPtr& field) {
+StatusOr<bool> ColumnPredicateRewriter::_rewrite_predicate(ObjectPool* pool, const VectorizedFieldPtr& field) {
     auto cid = field->id();
     DCHECK(_column_iterators[cid]->all_page_dict_encoded());
     auto iter = _predicates.find(cid);
@@ -427,4 +427,4 @@ Status ZonemapPredicatesRewriter::_rewrite_column_expr_predicates(ObjectPool* po
     return column_expr_pred->try_to_rewrite_for_zone_map_filter(pool, new_preds);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

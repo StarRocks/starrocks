@@ -20,7 +20,7 @@
 #include "velocypack/Builder.h"
 #include "velocypack/Iterator.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // static const re2::RE2 JSON_PATTERN("^([a-zA-Z0-9_\\-\\:\\s#\\|\\.]*)(?:\\[([0-9]+)\\])?");
 // json path cannot contains: ", [, ]
@@ -411,7 +411,7 @@ ColumnPtr JsonFunctions::json_query(FunctionContext* context, const Columns& col
 
 // Convert the JSON Slice to a PrimitiveType through ColumnBuilder
 template <PrimitiveType ResultType>
-static Status _convert_json_slice(const vpack::Slice& slice, vectorized::ColumnBuilder<ResultType>& result) {
+static Status _convert_json_slice(const vpack::Slice& slice, ColumnBuilder<ResultType>& result) {
     try {
         if (slice.isNone()) {
             result.append_null();
@@ -714,4 +714,4 @@ ColumnPtr JsonFunctions::json_keys(FunctionContext* context, const Columns& colu
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -28,7 +28,7 @@ private:
 
     OlapMetaScanContextPtr _scan_ctx;
 
-    std::shared_ptr<vectorized::OlapMetaScanner> _scanner;
+    std::shared_ptr<OlapMetaScanner> _scanner;
 };
 
 } // namespace starrocks::pipeline

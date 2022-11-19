@@ -14,7 +14,7 @@
 #include "runtime/descriptor_helper.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
-#include "runtime/memory/chunk_allocator.h"
+#include "runtime/memory/mem_chunk_allocator.h"
 #include "runtime/time_types.h"
 #include "runtime/user_function_cache.h"
 #include "storage/chunk_helper.h"
@@ -125,10 +125,10 @@ public:
         for (size_t i = 0; i < 1024; ++i) {
             test_data.push_back("well" + std::to_string(i));
             auto& cols = chunk->columns();
-            cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
+            cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
             Slice field_1(test_data[i]);
-            cols[1]->append_datum(vectorized::Datum(field_1));
-            cols[2]->append_datum(vectorized::Datum(static_cast<int32_t>(10000 + i)));
+            cols[1]->append_datum(Datum(field_1));
+            cols[2]->append_datum(Datum(static_cast<int32_t>(10000 + i)));
         }
         auto st = writer->add_chunk(*chunk);
         ASSERT_TRUE(st.ok()) << st.to_string() << ", version:" << writer->version();
@@ -227,7 +227,7 @@ TEST_F(EngineStorageMigrationTaskTest, test_concurrent_ingestion_and_migration) 
         TabletSharedPtr tablet = tablet_manager->get_tablet(12345);
         old_tablet_uid = tablet->tablet_uid();
     }
-    vectorized::DeltaWriterOptions writer_options;
+    DeltaWriterOptions writer_options;
     writer_options.tablet_id = 12345;
     writer_options.schema_hash = 1111;
     writer_options.txn_id = 2222;
@@ -239,7 +239,7 @@ TEST_F(EngineStorageMigrationTaskTest, test_concurrent_ingestion_and_migration) 
 
     {
         MemTracker mem_checker(1024 * 1024 * 1024);
-        auto writer_status = vectorized::DeltaWriter::open(writer_options, &mem_checker);
+        auto writer_status = DeltaWriter::open(writer_options, &mem_checker);
         ASSERT_TRUE(writer_status.ok());
         auto delta_writer = std::move(writer_status.value());
         ASSERT_TRUE(delta_writer != nullptr);
@@ -263,10 +263,10 @@ TEST_F(EngineStorageMigrationTaskTest, test_concurrent_ingestion_and_migration) 
             indexes.push_back(i);
             test_data.push_back("well" + std::to_string(i));
             auto& cols = chunk->columns();
-            cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
+            cols[0]->append_datum(Datum(static_cast<int32_t>(i)));
             Slice field_1(test_data[i]);
-            cols[1]->append_datum(vectorized::Datum(field_1));
-            cols[2]->append_datum(vectorized::Datum(static_cast<int32_t>(10000 + i)));
+            cols[1]->append_datum(Datum(field_1));
+            cols[2]->append_datum(Datum(static_cast<int32_t>(10000 + i)));
         }
         auto st = delta_writer->write(*chunk, indexes.data(), 0, indexes.size());
         ASSERT_TRUE(st.ok());
@@ -331,7 +331,7 @@ int main(int argc, char** argv) {
     starrocks::MemInfo::init();
     starrocks::UserFunctionCache::instance()->init(starrocks::config::user_function_dir);
 
-    starrocks::vectorized::date::init_date_cache();
+    starrocks::date::init_date_cache();
     starrocks::TimezoneUtils::init_time_zones();
 
     // first create the starrocks::config::storage_root_path ahead
@@ -365,7 +365,7 @@ int main(int argc, char** argv) {
     // clear some trash objects kept in tablet_manager so mem_tracker checks will not fail
     starrocks::StorageEngine::instance()->tablet_manager()->start_trash_sweep();
     starrocks::fs::remove_all(storage_root.value());
-    starrocks::vectorized::TEST_clear_all_columns_this_thread();
+    starrocks::TEST_clear_all_columns_this_thread();
     // delete engine
     engine->stop();
     delete engine;

@@ -35,9 +35,7 @@ namespace starrocks {
 class FileSystem;
 class TypeInfo;
 
-namespace vectorized {
 class SparseRange;
-}
 
 class BitmapIndexIterator;
 class IndexedColumnReader;
@@ -138,7 +136,7 @@ public:
     // for (size_t i = 0; i < range.size(); i++) {
     //     read_union_bitmap(range[i].begin(), range[i].end(), &result);
     // }
-    Status read_union_bitmap(const vectorized::SparseRange& range, Roaring* result);
+    Status read_union_bitmap(const SparseRange& range, Roaring* result);
 
     rowid_t bitmap_nums() const { return _num_bitmap; }
 

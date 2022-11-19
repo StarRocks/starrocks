@@ -18,7 +18,7 @@
 #include "exec/vectorized/sorting/sorting.h"
 #include "runtime/chunk_cursor.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 struct EqualRange {
     using Range = std::pair<uint32_t, uint32_t>;
@@ -522,4 +522,4 @@ Status merge_sorted_chunks_two_way_rowwise(const SortDescs& descs, const Columns
     return Status::OK();
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

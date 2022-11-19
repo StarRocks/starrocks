@@ -7,7 +7,7 @@
 #include "arrow/type.h"
 #include "util/pred_guard.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 using ArrowTypeId = ::arrow::Type::type;
 
 template <ArrowTypeId AT>
@@ -76,4 +76,4 @@ struct ArrowTypeIdToCppTypeStruct<ArrowTypeId::MAP, guard::Guard> {
 
 template <ArrowTypeId AT>
 using ArrowTypeIdToCppType = typename ArrowTypeIdToCppTypeStruct<AT>::type;
-} // namespace starrocks::vectorized
+} // namespace starrocks

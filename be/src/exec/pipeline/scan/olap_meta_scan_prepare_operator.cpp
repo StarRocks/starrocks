@@ -15,8 +15,7 @@
 namespace starrocks::pipeline {
 
 OlapMetaScanPrepareOperator::OlapMetaScanPrepareOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
-                                                         int32_t driver_sequence,
-                                                         vectorized::OlapMetaScanNode* const scan_node,
+                                                         int32_t driver_sequence, OlapMetaScanNode* const scan_node,
                                                          OlapMetaScanContextPtr scan_ctx)
         : SourceOperator(factory, id, "olap_meta_scan_prepare", plan_node_id, driver_sequence),
           _scan_node(scan_node),
@@ -43,16 +42,16 @@ bool OlapMetaScanPrepareOperator::is_finished() const {
     return true;
 }
 
-StatusOr<vectorized::ChunkPtr> OlapMetaScanPrepareOperator::pull_chunk(RuntimeState* state) {
+StatusOr<ChunkPtr> OlapMetaScanPrepareOperator::pull_chunk(RuntimeState* state) {
     return nullptr;
 }
 
 Status OlapMetaScanPrepareOperator::_prepare_scan_context(RuntimeState* state) {
     auto meta_scan_ranges = _morsel_queue->olap_scan_ranges();
     for (auto& scan_range : meta_scan_ranges) {
-        vectorized::OlapMetaScannerParams params;
+        OlapMetaScannerParams params;
         params.scan_range = scan_range;
-        auto scanner = std::make_shared<vectorized::OlapMetaScanner>(_scan_node);
+        auto scanner = std::make_shared<OlapMetaScanner>(_scan_node);
         RETURN_IF_ERROR(scanner->init(state, params));
         TTabletId tablet_id = scan_range->tablet_id;
         _scan_ctx->add_scanner(tablet_id, scanner);
@@ -61,7 +60,7 @@ Status OlapMetaScanPrepareOperator::_prepare_scan_context(RuntimeState* state) {
 }
 
 OlapMetaScanPrepareOperatorFactory::OlapMetaScanPrepareOperatorFactory(
-        int32_t id, int32_t plan_node_id, vectorized::OlapMetaScanNode* const scan_node,
+        int32_t id, int32_t plan_node_id, OlapMetaScanNode* const scan_node,
         std::shared_ptr<OlapMetaScanContextFactory> scan_ctx_factory)
         : SourceOperatorFactory(id, "olap_meta_scan_prepare", plan_node_id),
           _scan_node(scan_node),

@@ -16,7 +16,7 @@
 #include "storage/rowset/rowset.h"
 #include "storage/tablet.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 std::vector<std::string> SegmentMetaCollecter::support_collect_fields = {"dict_merge", "max", "min"};
 
@@ -165,10 +165,10 @@ Status MetaReader::_fill_result_chunk(Chunk* chunk) {
             TypeDescriptor desc;
             desc.type = TYPE_ARRAY;
             desc.children.emplace_back(item_desc);
-            vectorized::ColumnPtr column = vectorized::ColumnHelper::create_column(desc, false);
+            ColumnPtr column = ColumnHelper::create_column(desc, false);
             chunk->append_column(std::move(column), slot->id());
         } else {
-            vectorized::ColumnPtr column = vectorized::ColumnHelper::create_column(slot->type(), false);
+            ColumnPtr column = ColumnHelper::create_column(slot->type(), false);
             chunk->append_column(std::move(column), slot->id());
         }
     }
@@ -179,7 +179,7 @@ Status MetaReader::do_get_next(ChunkPtr* result) {
     const uint32_t chunk_capacity = _chunk_size;
     uint16_t chunk_start = 0;
 
-    *result = std::make_shared<vectorized::Chunk>();
+    *result = std::make_shared<Chunk>();
     if (nullptr == result->get()) {
         return Status::InternalError("Failed to allocate new chunk.");
     }
@@ -201,7 +201,7 @@ Status MetaReader::open() {
 }
 
 Status MetaReader::_read(Chunk* chunk, size_t n) {
-    std::vector<vectorized::Column*> columns;
+    std::vector<Column*> columns;
     for (size_t i = 0; i < _collect_context.seg_collecter_params.fields.size(); ++i) {
         const ColumnPtr& col = chunk->get_column_by_index(i);
         columns.emplace_back(col.get());
@@ -267,7 +267,7 @@ Status SegmentMetaCollecter::_init_return_column_iterators() {
     return Status::OK();
 }
 
-Status SegmentMetaCollecter::collect(std::vector<vectorized::Column*>* dsts) {
+Status SegmentMetaCollecter::collect(std::vector<Column*>* dsts) {
     DCHECK_EQ(dsts->size(), _params->fields.size());
 
     for (size_t i = 0; i < _params->fields.size(); i++) {
@@ -276,8 +276,7 @@ Status SegmentMetaCollecter::collect(std::vector<vectorized::Column*>* dsts) {
     return Status::OK();
 }
 
-Status SegmentMetaCollecter::_collect(const std::string& name, ColumnId cid, vectorized::Column* column,
-                                      LogicalType type) {
+Status SegmentMetaCollecter::_collect(const std::string& name, ColumnId cid, Column* column, LogicalType type) {
     if (name == "dict_merge") {
         return _collect_dict(cid, column, type);
     } else if (name == "max") {
@@ -289,7 +288,7 @@ Status SegmentMetaCollecter::_collect(const std::string& name, ColumnId cid, vec
 }
 
 // collect dict
-Status SegmentMetaCollecter::_collect_dict(ColumnId cid, vectorized::Column* column, LogicalType type) {
+Status SegmentMetaCollecter::_collect_dict(ColumnId cid, Column* column, LogicalType type) {
     if (!_column_iterators[cid]) {
         return Status::InvalidArgument("Invalid Collect Params.");
     }
@@ -305,8 +304,8 @@ Status SegmentMetaCollecter::_collect_dict(ColumnId cid, vectorized::Column* col
         return Status::GlobalDictError("global dict greater than DICT_DECODE_MAX_SIZE");
     }
 
-    vectorized::ArrayColumn* array_column = nullptr;
-    array_column = down_cast<vectorized::ArrayColumn*>(column);
+    ArrayColumn* array_column = nullptr;
+    array_column = down_cast<ArrayColumn*>(column);
 
     auto* offsets = array_column->offsets_column().get();
     auto& data = offsets->get_data();
@@ -321,16 +320,16 @@ Status SegmentMetaCollecter::_collect_dict(ColumnId cid, vectorized::Column* col
     return Status::OK();
 }
 
-Status SegmentMetaCollecter::_collect_max(ColumnId cid, vectorized::Column* column, LogicalType type) {
+Status SegmentMetaCollecter::_collect_max(ColumnId cid, Column* column, LogicalType type) {
     return __collect_max_or_min<true>(cid, column, type);
 }
 
-Status SegmentMetaCollecter::_collect_min(ColumnId cid, vectorized::Column* column, LogicalType type) {
+Status SegmentMetaCollecter::_collect_min(ColumnId cid, Column* column, LogicalType type) {
     return __collect_max_or_min<false>(cid, column, type);
 }
 
 template <bool is_max>
-Status SegmentMetaCollecter::__collect_max_or_min(ColumnId cid, vectorized::Column* column, LogicalType type) {
+Status SegmentMetaCollecter::__collect_max_or_min(ColumnId cid, Column* column, LogicalType type) {
     if (cid >= _segment->num_columns()) {
         return Status::NotFound("");
     }
@@ -344,19 +343,19 @@ Status SegmentMetaCollecter::__collect_max_or_min(ColumnId cid, vectorized::Colu
     const ZoneMapPB* segment_zone_map_pb = col_reader->segment_zone_map();
     TypeInfoPtr type_info = get_type_info(delegate_type(type));
     if constexpr (!is_max) {
-        vectorized::Datum min;
+        Datum min;
         if (!segment_zone_map_pb->has_null()) {
-            RETURN_IF_ERROR(vectorized::datum_from_string(type_info.get(), &min, segment_zone_map_pb->min(), nullptr));
+            RETURN_IF_ERROR(datum_from_string(type_info.get(), &min, segment_zone_map_pb->min(), nullptr));
             column->append_datum(min);
         }
     } else if constexpr (is_max) {
-        vectorized::Datum max;
+        Datum max;
         if (segment_zone_map_pb->has_not_null()) {
-            RETURN_IF_ERROR(vectorized::datum_from_string(type_info.get(), &max, segment_zone_map_pb->max(), nullptr));
+            RETURN_IF_ERROR(datum_from_string(type_info.get(), &max, segment_zone_map_pb->max(), nullptr));
             column->append_datum(max);
         }
     }
     return Status::OK();
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -10,10 +10,8 @@
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
-namespace vectorized {
 class SchemaScannerParam;
 class SchemaScanner;
-} // namespace vectorized
 
 namespace pipeline {
 
@@ -34,7 +32,7 @@ private:
     const workgroup::WorkGroupScanSchedEntity* _scan_sched_entity(const workgroup::WorkGroup* wg) const override;
 
     const TupleDescriptor* _dest_tuple_desc;
-    std::unique_ptr<vectorized::SchemaScanner> _scanner;
+    std::unique_ptr<SchemaScanner> _scanner;
 
     OlapSchemaScanContextPtr _ctx;
 

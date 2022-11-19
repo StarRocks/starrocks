@@ -6,7 +6,7 @@
 
 #include <iostream>
 
-namespace starrocks::vectorized {
+namespace starrocks {
 LambdaFunction::LambdaFunction(const TExprNode& node) : Expr(node, false) {}
 
 Status LambdaFunction::prepare(starrocks::RuntimeState* state, starrocks::ExprContext* context) {
@@ -56,4 +56,4 @@ void LambdaFunction::close(RuntimeState* state, ExprContext* context, FunctionCo
     _captured_slot_ids.clear();
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

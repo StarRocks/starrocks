@@ -10,7 +10,7 @@
 #include "exec/vectorized/sorting/sorting.h"
 #include "runtime/chunk_cursor.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // SortedRun represents part of sorted chunk, specified by the range
 // The chunk is sorted based on `orderby` columns
@@ -155,4 +155,4 @@ Status merge_sorted_cursor_cascade(const SortDescs& sort_desc,
 Status merge_sorted_chunks_two_way_rowwise(const SortDescs& descs, const Columns& left, const Columns& right,
                                            Permutation* output, size_t limit);
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

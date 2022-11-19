@@ -8,7 +8,7 @@
 #include "storage/segment_flush_executor.h"
 #include "storage/storage_engine.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 AsyncDeltaWriter::~AsyncDeltaWriter() {
     _close();
@@ -160,4 +160,4 @@ void AsyncDeltaWriter::_close() {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

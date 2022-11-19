@@ -18,7 +18,7 @@
 #include "udf/java/java_udf.h"
 #include "udf/java/utils.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 const TableFunction* getJavaUDTFFunction() {
     static JavaUDTFFunction java_table_function;
@@ -179,4 +179,4 @@ std::pair<Columns, ColumnPtr> JavaUDTFFunction::process(TableFunctionState* stat
     return std::make_pair(std::move(res), std::move(offsets_col));
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

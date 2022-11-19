@@ -14,7 +14,7 @@
 #include "exprs/vectorized/builtin_functions.h"
 #include "exprs/vectorized/function_helper.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class LikePredicate {
 public:
@@ -211,4 +211,4 @@ private:
         }
     };
 };
-} // namespace starrocks::vectorized
+} // namespace starrocks

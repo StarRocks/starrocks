@@ -7,7 +7,7 @@
 #include "exec/vectorized/hdfs_scanner.h"
 #include "formats/orc/orc_chunk_reader.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class OrcRowReaderFilter;
 
@@ -41,4 +41,4 @@ private:
     Filter _chunk_filter;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

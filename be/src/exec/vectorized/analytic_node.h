@@ -8,7 +8,7 @@
 #include "exprs/expr.h"
 #include "runtime/descriptors.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class AnalyticNode final : public ExecNode {
 public:
@@ -44,4 +44,4 @@ private:
     Status _fetch_next_chunk(RuntimeState* state);
     Status _try_fetch_next_partition_data(RuntimeState* state);
 };
-} // namespace starrocks::vectorized
+} // namespace starrocks

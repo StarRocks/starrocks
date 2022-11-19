@@ -13,7 +13,7 @@
 #include "column/datum_tuple.h"
 #include "common/config.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 inline int kTestChunkSize = 4096;
 
@@ -79,4 +79,4 @@ public:
     }
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -8,7 +8,7 @@
 #include "common/object_pool.h"
 #include "util/raw_container.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class MapElementExpr final : public Expr {
 public:
@@ -17,7 +17,7 @@ public:
     MapElementExpr(const MapElementExpr&) = default;
     MapElementExpr(MapElementExpr&&) = default;
 
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* chunk) override {
+    ColumnPtr evaluate(ExprContext* context, Chunk* chunk) override {
         DCHECK_EQ(2, _children.size());
         // check the map's value type is the same as the expr's type
         DCHECK_EQ(_type, _children[0]->type().children[1]);
@@ -102,4 +102,4 @@ Expr* MapElementExprFactory::from_thrift(const TExprNode& node) {
     return new MapElementExpr(node);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

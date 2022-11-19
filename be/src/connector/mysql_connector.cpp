@@ -21,18 +21,16 @@ namespace starrocks::connector {
     M(TYPE_CHAR, APPEND_TO_SQL)                       \
     M(TYPE_VARCHAR, APPEND_TO_SQL)
 
-using namespace vectorized;
-
 // ================================
 
-DataSourceProviderPtr MySQLConnector::create_data_source_provider(vectorized::ConnectorScanNode* scan_node,
+DataSourceProviderPtr MySQLConnector::create_data_source_provider(ConnectorScanNode* scan_node,
                                                                   const TPlanNode& plan_node) const {
     return std::make_unique<MySQLDataSourceProvider>(scan_node, plan_node);
 }
 
 // ================================
 
-MySQLDataSourceProvider::MySQLDataSourceProvider(vectorized::ConnectorScanNode* scan_node, const TPlanNode& plan_node)
+MySQLDataSourceProvider::MySQLDataSourceProvider(ConnectorScanNode* scan_node, const TPlanNode& plan_node)
         : _scan_node(scan_node), _mysql_scan_node(plan_node.mysql_scan_node) {}
 
 DataSourcePtr MySQLDataSourceProvider::create_data_source(const TScanRange& scan_range) {
@@ -196,7 +194,7 @@ Status MySQLDataSource::open(RuntimeState* state) {
     return Status::OK();
 }
 
-Status MySQLDataSource::get_next(RuntimeState* state, vectorized::ChunkPtr* chunk) {
+Status MySQLDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
     VLOG(1) << "MySQLDataSource::GetNext";
 
     DCHECK(state != nullptr && chunk != nullptr);
@@ -255,7 +253,7 @@ void MySQLDataSource::close(RuntimeState* state) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
 }
 
-Status MySQLDataSource::fill_chunk(vectorized::ChunkPtr* chunk, char** data, size_t* length) {
+Status MySQLDataSource::fill_chunk(ChunkPtr* chunk, char** data, size_t* length) {
     SCOPED_RAW_TIMER(&_cpu_time_spent_ns);
 
     int materialized_col_idx = -1;
@@ -467,7 +465,7 @@ Status MySQLDataSource::append_text_to_column(const char* data, const int& len, 
 
 template <PrimitiveType PT, typename CppType>
 void MySQLDataSource::append_value_to_column(Column* column, CppType& value) {
-    using ColumnType = typename vectorized::RunTimeColumnType<PT>;
+    using ColumnType = RunTimeColumnType<PT>;
 
     auto* runtime_column = down_cast<ColumnType*>(column);
     runtime_column->append(value);

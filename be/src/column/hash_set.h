@@ -9,7 +9,7 @@
 #include "util/phmap/phmap_dump.h"
 #include "util/slice.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 template <typename T>
 using HashSet = phmap::flat_hash_set<T, StdHash<T>>;
@@ -145,4 +145,4 @@ public:
     }
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

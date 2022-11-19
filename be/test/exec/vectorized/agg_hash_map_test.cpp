@@ -16,7 +16,7 @@
 #include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 template <typename T>
 std::vector<T> get_keys() {
@@ -163,4 +163,4 @@ TEST(HashMapTest, TwoLevelConvert) {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

@@ -7,7 +7,7 @@
 
 #pragma once
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // Date: Julian Date -2000-01-01 ~ 9999-01-01
 // MAX USE 22 bits
@@ -22,17 +22,47 @@ static const uint8_t TIMESTAMP_BITS = 40;
 static const Timestamp TIMESTAMP_BITS_TIME{UINT64_MAX >> 24};
 
 // TimeUnit
-enum class TimeUnit {
-    MICROSECOND = 0,
-    SECOND = 1,
-    MINUTE = 2,
-    HOUR = 3,
-    DAY = 4,
-    WEEK = 5,
-    MONTH = 6,
-    QUARTER = 7,
-    YEAR = 8,
+enum TimeUnit {
+    MICROSECOND,
+    SECOND,
+    MINUTE,
+    HOUR,
+    DAY,
+    WEEK,
+    MONTH,
+    QUARTER,
+    YEAR,
+    SECOND_MICROSECOND,
+    MINUTE_MICROSECOND,
+    MINUTE_SECOND,
+    HOUR_MICROSECOND,
+    HOUR_SECOND,
+    HOUR_MINUTE,
+    DAY_MICROSECOND,
+    DAY_SECOND,
+    DAY_MINUTE,
+    DAY_HOUR,
+    YEAR_MONTH
 };
+
+// Used to compute week
+const int WEEK_MONDAY_FIRST = 1;
+const int WEEK_YEAR = 2;
+const int WEEK_FIRST_WEEKDAY = 4;
+
+// 9999-99-99 99:99:99.999999; 26 + 1('\0')
+const int MAX_DTVALUE_STR_LEN = 27;
+
+const int DATE_MAX_DAYNR = 3652424;
+// two-digit years < this are 20..; >= this are 19..
+const int YY_PART_YEAR = 70;
+
+// Limits of time value
+const int TIME_MAX_HOUR = 838;
+const int TIME_MAX_MINUTE = 59;
+const int TIME_MAX_SECOND = 59;
+const int TIME_MAX_VALUE = 10000 * TIME_MAX_HOUR + 100 * TIME_MAX_MINUTE + TIME_MAX_SECOND;
+const int TIME_MAX_VALUE_SECONDS = 3600 * TIME_MAX_HOUR + 60 * TIME_MAX_MINUTE + TIME_MAX_SECOND;
 
 // const value
 static const int32_t MONTHS_PER_YEAR = 12;
@@ -417,4 +447,4 @@ inline void date::to_date_with_cache(JulianDate julian, int* year, int* month, i
 
     return to_date(julian, year, month, day);
 }
-} // namespace starrocks::vectorized
+} // namespace starrocks

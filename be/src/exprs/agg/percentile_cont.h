@@ -12,7 +12,7 @@
 #include "exprs/agg/aggregate.h"
 #include "gutil/casts.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // AvgResultPT for final result
 template <PrimitiveType PT, typename = guard::Guard>
@@ -151,4 +151,4 @@ public:
     std::string get_name() const override { return "percentile_cont"; }
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

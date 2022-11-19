@@ -23,7 +23,7 @@
 #include <iostream>
 #include <orc/OrcFile.hh>
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 class MemoryOutputStream : public orc::OutputStream {
 public:
@@ -53,4 +53,4 @@ private:
     std::string name;
     uint64_t length, naturalWriteSize;
 };
-} // namespace starrocks::vectorized
+} // namespace starrocks

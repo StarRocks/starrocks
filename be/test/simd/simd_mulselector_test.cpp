@@ -9,7 +9,7 @@
 #include "testutil/parallel_test.h"
 #include "util/value_generator.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 template <PrimitiveType TYPE, int CASE_SIZE, int TEST_SIZE>
 void test_simd_multi_select_if() {
@@ -85,4 +85,4 @@ PARALLEL_TEST(SIMDMultiSelectorTest, TestVarVar) {
             TYPE_DOUBLE>();
     // clang-format on
 }
-} // namespace starrocks::vectorized
+} // namespace starrocks

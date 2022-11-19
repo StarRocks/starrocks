@@ -5,7 +5,7 @@
 #include "column/column.h"
 #include "exprs/vectorized/function_helper.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 class PercentileFunctions {
 public:
     /**
@@ -29,4 +29,4 @@ public:
      */
     DEFINE_VECTORIZED_FN(percentile_approx_raw);
 };
-} // namespace starrocks::vectorized
+} // namespace starrocks

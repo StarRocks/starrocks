@@ -10,7 +10,7 @@
 #include "gutil/casts.h"
 #include "types/hll.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 /**
  * RETURN_TYPE: TYPE_BIGINT
@@ -161,4 +161,4 @@ public:
     }
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

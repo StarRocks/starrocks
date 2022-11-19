@@ -13,7 +13,7 @@
 #include "glog/logging.h"
 #include "gutil/casts.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 // LambdaFunction has various children such as lambda expression, arg_0, arg_1,....
 
@@ -45,4 +45,4 @@ private:
     std::vector<SlotId> _captured_slot_ids;
     std::vector<SlotId> _arguments_ids;
 };
-} // namespace starrocks::vectorized
+} // namespace starrocks

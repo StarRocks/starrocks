@@ -34,7 +34,7 @@ public:
 
     bool is_finished() const override;
 
-    StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
     void add_morsel(Morsel* morsel) {}
 

@@ -6,9 +6,9 @@
 
 #include "column/datum.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
-class Schema;
+class VectorizedSchema;
 
 class DatumTuple {
 public:
@@ -29,7 +29,7 @@ public:
 
     Datum& get(size_t n) { return _datums.at(n); }
 
-    int compare(const Schema& schema, const DatumTuple& rhs) const;
+    int compare(const VectorizedSchema& schema, const DatumTuple& rhs) const;
 
     const std::vector<Datum>& datums() const { return _datums; }
 
@@ -37,4 +37,4 @@ private:
     std::vector<Datum> _datums;
 };
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

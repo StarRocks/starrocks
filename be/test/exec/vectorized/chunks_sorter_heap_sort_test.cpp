@@ -23,7 +23,7 @@
 #include "testutil/assert.h"
 #include "util/value_generator.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 struct ChunksSorterHeapSortTest : public testing::Test {
     void SetUp() override {
@@ -313,4 +313,4 @@ TEST_F(ChunksSorterHeapSortTest, single_column_order_by_nullable_test) {
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

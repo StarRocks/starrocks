@@ -8,7 +8,7 @@
 #include "simd/simd.h"
 #include "util/coding.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 ConstColumn::ConstColumn(ColumnPtr data) : ConstColumn(std::move(data), 0) {}
 
@@ -94,4 +94,4 @@ StatusOr<ColumnPtr> ConstColumn::downgrade() {
     return downgrade_helper_func(&_data);
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

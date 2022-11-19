@@ -8,15 +8,13 @@
 #include "gen_cpp/Types_types.h"
 
 namespace starrocks {
-namespace vectorized {
 class OlapMetaScanner;
 class OlapMetaScanNode;
-} // namespace vectorized
 namespace pipeline {
 
 class OlapMetaScanContext;
 using OlapMetaScanContextPtr = std::shared_ptr<OlapMetaScanContext>;
-using OlapMetaScannerPtr = std::shared_ptr<vectorized::OlapMetaScanner>;
+using OlapMetaScannerPtr = std::shared_ptr<OlapMetaScanner>;
 
 class OlapMetaScanContext {
 public:
@@ -49,7 +47,7 @@ private:
 
 class OlapMetaScanContextFactory {
 public:
-    OlapMetaScanContextFactory(vectorized::OlapMetaScanNode* const scan_node, int32_t dop, bool shared_morsel_queue,
+    OlapMetaScanContextFactory(OlapMetaScanNode* const scan_node, int32_t dop, bool shared_morsel_queue,
                                ChunkBufferLimiterPtr chunk_buffer_limiter)
             : _dop(dop),
               _shared_morsel_queue(shared_morsel_queue),

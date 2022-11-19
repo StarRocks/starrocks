@@ -10,7 +10,7 @@
 #include "column/column_viewer.h"
 #include "exprs/vectorized/string_functions.h"
 
-namespace starrocks::vectorized {
+namespace starrocks {
 
 const void* _memchr(const void* big, size_t big_len, const void* little, size_t little_len) {
     return memchr(big, *((char*)little), big_len);
@@ -71,7 +71,7 @@ Status StringFunctions::split_close(starrocks_udf::FunctionContext* context,
 * @paramType: [BinaryColumn, BinaryColumn]
 * @return: ArrayColumn
 */
-ColumnPtr StringFunctions::split(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
+ColumnPtr StringFunctions::split(FunctionContext* context, const starrocks::Columns& columns) {
     DCHECK_EQ(columns.size(), 2);
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
@@ -195,4 +195,4 @@ ColumnPtr StringFunctions::split(FunctionContext* context, const starrocks::vect
     }
 }
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

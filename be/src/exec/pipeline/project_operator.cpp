@@ -19,11 +19,11 @@ void ProjectOperator::close(RuntimeState* state) {
     Operator::close(state);
 }
 
-StatusOr<vectorized::ChunkPtr> ProjectOperator::pull_chunk(RuntimeState* state) {
+StatusOr<ChunkPtr> ProjectOperator::pull_chunk(RuntimeState* state) {
     return std::move(_cur_chunk);
 }
 
-Status ProjectOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
+Status ProjectOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     TRY_CATCH_ALLOC_SCOPE_START()
     for (size_t i = 0; i < _common_sub_column_ids.size(); ++i) {
         ASSIGN_OR_RETURN(auto col, _common_sub_expr_ctxs[i]->evaluate(chunk.get()));
@@ -31,8 +31,7 @@ Status ProjectOperator::push_chunk(RuntimeState* state, const vectorized::ChunkP
         RETURN_IF_HAS_ERROR(_common_sub_expr_ctxs);
     }
 
-    using namespace vectorized;
-    vectorized::Columns result_columns(_column_ids.size());
+    Columns result_columns(_column_ids.size());
     {
         for (size_t i = 0; i < _column_ids.size(); ++i) {
             ASSIGN_OR_RETURN(result_columns[i], _expr_ctxs[i]->evaluate(chunk.get()));
@@ -59,7 +58,7 @@ Status ProjectOperator::push_chunk(RuntimeState* state, const vectorized::ChunkP
         RETURN_IF_HAS_ERROR(_expr_ctxs);
     }
 
-    _cur_chunk = std::make_shared<vectorized::Chunk>();
+    _cur_chunk = std::make_shared<Chunk>();
     for (size_t i = 0; i < result_columns.size(); ++i) {
         _cur_chunk->append_column(result_columns[i], _column_ids[i]);
     }

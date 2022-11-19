@@ -18,7 +18,7 @@
 
 namespace starrocks {
 
-using NullMasks = vectorized::NullColumn::Container;
+using NullMasks = NullColumn::Container;
 
 // compare the value by column
 //
@@ -33,8 +33,8 @@ public:
               _cmp_vector(cmp_vector),
               _null_masks(null_masks) {}
 
-    Status do_visit(const vectorized::NullableColumn& column) {
-        ColumnPtr ptr = down_cast<vectorized::NullableColumn*>(_first_column.get())->data_column();
+    Status do_visit(const NullableColumn& column) {
+        ColumnPtr ptr = down_cast<NullableColumn*>(_first_column.get())->data_column();
         ColumnSelfComparator comparator(ptr, _cmp_vector, column.immutable_null_column_data());
         RETURN_IF_ERROR(column.data_column()->accept(&comparator));
 
@@ -47,17 +47,17 @@ public:
         }
         return Status::OK();
     }
-    Status do_visit(const vectorized::ConstColumn& column) {
+    Status do_visit(const ConstColumn& column) {
         return Status::NotSupported("Unsupported const column in column wise comparator");
     }
-    Status do_visit(const vectorized::ArrayColumn& column) {
+    Status do_visit(const ArrayColumn& column) {
         return Status::NotSupported("Unsupported array column in column wise comparator");
     }
-    Status do_visit(const vectorized::LargeBinaryColumn& column) {
+    Status do_visit(const LargeBinaryColumn& column) {
         return Status::NotSupported("Unsupported large binary column in column wise comparator");
     }
 
-    Status do_visit(const vectorized::BinaryColumn& column) {
+    Status do_visit(const BinaryColumn& column) {
         size_t num_rows = column.size();
         if (!_first_column->empty()) {
             _cmp_vector[0] |= _first_column->compare_at(0, 0, column, 1) != 0;
@@ -82,7 +82,7 @@ public:
     }
 
     template <typename T>
-    Status do_visit(const vectorized::FixedLengthColumnBase<T>& column) {
+    Status do_visit(const FixedLengthColumnBase<T>& column) {
         size_t num_rows = column.size();
         if (!_first_column->empty()) {
             _cmp_vector[0] |= _first_column->compare_at(0, 0, column, 1) != 0;
@@ -108,22 +108,22 @@ public:
     }
 
     template <typename T>
-    Status do_visit(const vectorized::ObjectColumn<T>& column) {
+    Status do_visit(const ObjectColumn<T>& column) {
         return Status::NotSupported("Unsupported object column in column wise comparator");
     }
 
-    Status do_visit(const vectorized::MapColumn& column) {
+    Status do_visit(const MapColumn& column) {
         return Status::NotSupported("Unsupported map column in column wise comparator");
     }
 
-    Status do_visit(const vectorized::StructColumn& column) {
+    Status do_visit(const StructColumn& column) {
         return Status::NotSupported("Unsupported struct column in column wise comparator");
     }
 
 private:
     const ColumnPtr& _first_column;
     std::vector<uint8_t>& _cmp_vector;
-    const vectorized::NullColumn::Container& _null_masks;
+    const NullColumn::Container& _null_masks;
 };
 
 // append the result by selector
@@ -132,14 +132,14 @@ private:
 class AppendWithMask : public ColumnVisitorMutableAdapter<AppendWithMask> {
 public:
     using SelMask = std::vector<uint8_t>;
-    AppendWithMask(vectorized::Column* column, SelMask sel_mask, size_t selected_size)
+    AppendWithMask(Column* column, SelMask sel_mask, size_t selected_size)
             : ColumnVisitorMutableAdapter(this),
               _column(column),
               _sel_mask(std::move(sel_mask)),
               _selected_size(selected_size) {}
 
-    Status do_visit(vectorized::NullableColumn* column) {
-        auto col = down_cast<vectorized::NullableColumn*>(_column);
+    Status do_visit(NullableColumn* column) {
+        auto col = down_cast<NullableColumn*>(_column);
         AppendWithMask data_appender(col->data_column().get(), _sel_mask, _selected_size);
         RETURN_IF_ERROR(column->data_column()->accept_mutable(&data_appender));
         AppendWithMask null_appender(col->null_column().get(), _sel_mask, _selected_size);
@@ -148,20 +148,20 @@ public:
         return Status::OK();
     }
 
-    Status do_visit(vectorized::ConstColumn* column) {
+    Status do_visit(ConstColumn* column) {
         return Status::NotSupported("Unsupported const column in column wise comparator");
     }
 
-    Status do_visit(vectorized::ArrayColumn* column) {
+    Status do_visit(ArrayColumn* column) {
         return Status::NotSupported("Unsupported array column in column wise comparator");
     }
 
-    Status do_visit(vectorized::LargeBinaryColumn* column) {
+    Status do_visit(LargeBinaryColumn* column) {
         return Status::NotSupported("Unsupported large binary column in column wise comparator");
     }
 
-    Status do_visit(vectorized::BinaryColumn* column) {
-        auto col = down_cast<vectorized::BinaryColumn*>(_column);
+    Status do_visit(BinaryColumn* column) {
+        auto col = down_cast<BinaryColumn*>(_column);
         auto& slices = col->get_data();
         std::vector<Slice> datas(_sel_mask.size());
         size_t offsets = 0;
@@ -177,8 +177,8 @@ public:
     }
 
     template <typename T>
-    Status do_visit(vectorized::FixedLengthColumnBase<T>* column) {
-        auto col = down_cast<vectorized::FixedLengthColumnBase<T>*>(_column);
+    Status do_visit(FixedLengthColumnBase<T>* column) {
+        auto col = down_cast<FixedLengthColumnBase<T>*>(_column);
         const auto& container = col->get_data();
         std::vector<T> datas(_sel_mask.size());
         size_t offsets = 0;
@@ -196,20 +196,20 @@ public:
     }
 
     template <typename T>
-    Status do_visit(vectorized::ObjectColumn<T>* column) {
+    Status do_visit(ObjectColumn<T>* column) {
         return Status::NotSupported("Unsupported object column in column wise comparator");
     }
 
-    Status do_visit(vectorized::MapColumn* column) {
+    Status do_visit(MapColumn* column) {
         return Status::NotSupported("Unsupported map column in column wise comparator");
     }
 
-    Status do_visit(vectorized::StructColumn* column) {
+    Status do_visit(StructColumn* column) {
         return Status::NotSupported("Unsupported struct column in column wise comparator");
     }
 
 private:
-    vectorized::Column* _column;
+    Column* _column;
     const SelMask _sel_mask;
     size_t _selected_size;
 };
@@ -349,7 +349,7 @@ Status SortedStreamingAggregator::_update_states(size_t chunk_size) {
     {
         SCOPED_TIMER(_agg_stat->allocate_state_timer);
         auto batch_allocated_states = _streaming_state_allocator->allocated(_last_state);
-        vectorized::AggDataPtr last_state = _last_state;
+        AggDataPtr last_state = _last_state;
         size_t cnt = 0;
         //
         for (size_t i = 0; i < _cmp_vector.size(); ++i) {
@@ -395,7 +395,7 @@ Status SortedStreamingAggregator::_update_states(size_t chunk_size) {
 }
 
 void SortedStreamingAggregator::_get_agg_result_columns(size_t chunk_size, const std::vector<uint8_t>& selector,
-                                                        vectorized::Columns& agg_result_columns) {
+                                                        Columns& agg_result_columns) {
     SCOPED_TIMER(_agg_stat->get_results_timer);
     if (_cmp_vector[0] != 0 && _last_state) {
         _finalize_to_chunk(_last_state, agg_result_columns);
@@ -422,7 +422,7 @@ void SortedStreamingAggregator::_close_group_by(size_t chunk_size, const std::ve
 
 Status SortedStreamingAggregator::_build_group_by_columns(size_t chunk_size, size_t selected_size,
                                                           const std::vector<uint8_t>& selector,
-                                                          vectorized::Columns& agg_group_by_columns) {
+                                                          Columns& agg_group_by_columns) {
     SCOPED_TIMER(_agg_stat->agg_append_timer);
     if (_cmp_vector[0] != 0 && _last_state) {
         for (size_t i = 0; i < agg_group_by_columns.size(); ++i) {
@@ -437,7 +437,7 @@ Status SortedStreamingAggregator::_build_group_by_columns(size_t chunk_size, siz
     return Status::OK();
 }
 
-StatusOr<vectorized::ChunkPtr> SortedStreamingAggregator::pull_eos_chunk() {
+StatusOr<ChunkPtr> SortedStreamingAggregator::pull_eos_chunk() {
     if (_last_state == nullptr) {
         return nullptr;
     }
