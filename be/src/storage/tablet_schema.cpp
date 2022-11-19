@@ -157,6 +157,14 @@ std::string TabletColumn::get_string_by_field_type(LogicalType type) {
         return "UNKNOWN";
     case LOGICAL_TYPE_NONE:
         return "NONE";
+    case LOGICAL_TYPE_NULL:
+        return "NULL";
+    case LOGICAL_TYPE_FUNCTION:
+        return "FUNCTION";
+    case LOGCIAL_TYPE_TIME:
+        return "TIME";
+    case LOGCIAL_TYPE_BINARY:
+        return "BINARY";
     case LOGICAL_TYPE_MAX_VALUE:
         return "MAX_VALUE";
     case LOGICAL_TYPE_VARBINARY:
@@ -202,6 +210,10 @@ uint32_t TabletColumn::get_field_length_by_type(LogicalType type, uint32_t strin
     case LOGICAL_TYPE_STRUCT:
     case LOGICAL_TYPE_MAP:
     case LOGICAL_TYPE_NONE:
+    case LOGICAL_TYPE_NULL:
+    case LOGICAL_TYPE_FUNCTION:
+    case LOGCIAL_TYPE_TIME:
+    case LOGCIAL_TYPE_BINARY:
     case LOGICAL_TYPE_MAX_VALUE:
     case LOGICAL_TYPE_BOOL:
     case LOGICAL_TYPE_TINYINT:

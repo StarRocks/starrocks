@@ -38,6 +38,10 @@ enum LogicalType {
 
     // Reserved some field for commutiy version
 
+    LOGICAL_TYPE_NULL = 42,
+    LOGICAL_TYPE_FUNCTION = 43,
+    LOGCIAL_TYPE_TIME = 44,
+    LOGCIAL_TYPE_BINARY = 45,
     LOGICAL_TYPE_VARBINARY = 46,
     // decimal v3 type
     LOGICAL_TYPE_DECIMAL32 = 47,
@@ -123,6 +127,14 @@ inline const char* field_type_to_string(LogicalType type) {
         return "PERCENTILE";
     case LOGICAL_TYPE_JSON:
         return "JSON";
+    case LOGICAL_TYPE_NULL:
+        return "NULL";
+    case LOGICAL_TYPE_FUNCTION:
+        return "FUNCTION";
+    case LOGCIAL_TYPE_TIME:
+        return "TIME";
+    case LOGCIAL_TYPE_BINARY:
+        return "BINARY";
     case LOGICAL_TYPE_VARBINARY:
         return "VARBINARY";
     case LOGICAL_TYPE_MAX_VALUE:

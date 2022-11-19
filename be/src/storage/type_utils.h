@@ -103,8 +103,12 @@ public:
             case LOGICAL_TYPE_DECIMAL_V2:
             case LOGICAL_TYPE_PERCENTILE:
             case LOGICAL_TYPE_JSON:
-            case LOGICAL_TYPE_MAX_VALUE:
+            case LOGICAL_TYPE_NULL:
+            case LOGICAL_TYPE_FUNCTION:
+            case LOGCIAL_TYPE_TIME:
+            case LOGCIAL_TYPE_BINARY:
             case LOGICAL_TYPE_VARBINARY:
+            case LOGICAL_TYPE_MAX_VALUE:
                 return type;
                 // no default by intention.
             }
@@ -124,6 +128,10 @@ public:
             case LOGICAL_TYPE_DECIMAL32:
             case LOGICAL_TYPE_DECIMAL64:
             case LOGICAL_TYPE_DECIMAL128:
+            case LOGICAL_TYPE_NULL:
+            case LOGICAL_TYPE_FUNCTION:
+            case LOGCIAL_TYPE_TIME:
+            case LOGCIAL_TYPE_BINARY:
             case LOGICAL_TYPE_VARBINARY:
                 return LOGICAL_TYPE_UNKNOWN;
             case LOGICAL_TYPE_TINYINT:
