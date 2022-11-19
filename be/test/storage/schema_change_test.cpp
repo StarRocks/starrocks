@@ -110,7 +110,7 @@ protected:
     template <typename T>
     void test_convert_to_varchar(LogicalType type, int type_size, T val, const std::string& expect_val) {
         auto src_tablet_schema =
-                SetTabletSchema("SrcColumn", field_type_to_string(type), "REPLACE", type_size, false, false);
+                SetTabletSchema("SrcColumn", logical_type_to_string(type), "REPLACE", type_size, false, false);
         auto dst_tablet_schema = SetTabletSchema("VarcharColumn", "VARCHAR", "REPLACE", 255, false, false);
 
         Field f = ChunkHelper::convert_field_to_format_v2(0, src_tablet_schema->column(0));
@@ -131,7 +131,7 @@ protected:
     void test_convert_from_varchar(LogicalType type, int type_size, std::string val, T expect_val) {
         auto src_tablet_schema = SetTabletSchema("VarcharColumn", "VARCHAR", "REPLACE", 255, false, false);
         auto dst_tablet_schema =
-                SetTabletSchema("DstColumn", field_type_to_string(type), "REPLACE", type_size, false, false);
+                SetTabletSchema("DstColumn", logical_type_to_string(type), "REPLACE", type_size, false, false);
 
         Field f = ChunkHelper::convert_field_to_format_v2(0, src_tablet_schema->column(0));
         Field f2 = ChunkHelper::convert_field_to_format_v2(0, dst_tablet_schema->column(0));

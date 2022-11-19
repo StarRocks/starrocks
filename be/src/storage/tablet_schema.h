@@ -135,9 +135,7 @@ public:
     friend bool operator==(const TabletColumn& a, const TabletColumn& b);
     friend bool operator!=(const TabletColumn& a, const TabletColumn& b);
 
-    static std::string get_string_by_field_type(LogicalType type);
     static std::string get_string_by_aggregation_type(FieldAggregationMethod aggregation_type);
-    static LogicalType get_field_type_by_string(const std::string& str);
     static FieldAggregationMethod get_aggregation_type_by_string(const std::string& str);
     size_t estimate_field_size(size_t variable_length) const;
     static uint32_t get_field_length_by_type(LogicalType type, uint32_t string_length);

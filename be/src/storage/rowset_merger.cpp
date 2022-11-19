@@ -545,7 +545,7 @@ Status compaction_merge_rowsets(Tablet& tablet, int64_t version, const vector<Ro
         merger = std::make_unique<RowsetMergerImpl<int64_t>>();
         break;
     default:
-        return Status::NotSupported(StringPrintf("primary key type not support: %s", field_type_to_string(key_type)));
+        return Status::NotSupported(StringPrintf("primary key type not support: %s", logical_type_to_string(key_type)));
     }
     return merger->do_merge(tablet, version, schema, rowsets, writer, cfg);
 }

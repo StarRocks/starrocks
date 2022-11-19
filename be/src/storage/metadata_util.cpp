@@ -171,7 +171,7 @@ static Status t_column_to_pb_column(int32_t unique_id, const TColumn& t_column, 
         TScalarType scalar = curr_type_node.scalar_type;
 
         LogicalType field_type = t_primitive_type_to_field_type(scalar.type, v);
-        column_pb->set_type(TabletColumn::get_string_by_field_type(field_type));
+        column_pb->set_type(logical_type_to_string(field_type));
         column_pb->set_length(TabletColumn::get_field_length_by_type(field_type, scalar.len));
         column_pb->set_index_length(column_pb->length());
         column_pb->set_frac(curr_type_node.scalar_type.scale);
@@ -189,7 +189,7 @@ static Status t_column_to_pb_column(int32_t unique_id, const TColumn& t_column, 
         return Status::OK();
     }
     case TTypeNodeType::ARRAY:
-        column_pb->set_type(TabletColumn::get_string_by_field_type(LOGICAL_TYPE_ARRAY));
+        column_pb->set_type(logical_type_to_string(LOGICAL_TYPE_ARRAY));
         column_pb->set_length(TabletColumn::get_field_length_by_type(LOGICAL_TYPE_ARRAY, sizeof(Collection)));
         column_pb->set_index_length(column_pb->length());
         return t_column_to_pb_column(kFakeUniqueId, t_column, v, column_pb->add_children_columns(), depth + 1);
