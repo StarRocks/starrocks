@@ -178,8 +178,8 @@ Status MySQLDataSource::open(RuntimeState* state) {
         }
     }
 
-    RETURN_IF_ERROR(
-            _mysql_scanner->query(_table_name, _columns, _filters, filters_in, filters_null_in_set, _read_limit, _temporal_clause));
+    RETURN_IF_ERROR(_mysql_scanner->query(_table_name, _columns, _filters, filters_in, filters_null_in_set, _read_limit,
+                                          _temporal_clause));
     // check materialize slot num
     int materialize_num = 0;
 
