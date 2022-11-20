@@ -2,14 +2,12 @@
 
 #pragma once
 
-#include <algorithm>
 #include <any>
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <mutex>
 #include <queue>
-#include <type_traits>
 #include <utility>
 
 #include "column/chunk.h"

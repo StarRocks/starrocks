@@ -1122,6 +1122,7 @@ void Aggregator::convert_hash_set_to_chunk(int32_t chunk_size, vectorized::Chunk
         *chunk = std::move(result_chunk);
     });
 }
+
 void Aggregator::_release_agg_memory() {
     // If all function states are of POD type,
     // then we don't have to traverse the hash table to call destroy method.

@@ -104,9 +104,7 @@ Status DistinctStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
                 } else {
                     {
                         SCOPED_TIMER(_aggregator->agg_compute_timer());
-                        TRY_CATCH_ALLOC_SCOPE_START()
-                        _aggregator->build_hash_set_with_selection(input_chunk_size);
-                        TRY_CATCH_ALLOC_SCOPE_END()
+                        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_set_with_selection(input_chunk_size));
                     }
 
                     {

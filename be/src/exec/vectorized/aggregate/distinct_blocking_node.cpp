@@ -54,7 +54,7 @@ Status DistinctBlockingNode::open(RuntimeState* state) {
 
         {
             SCOPED_TIMER(_aggregator->agg_compute_timer());
-            _aggregator->build_hash_set(chunk->num_rows());
+            TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_set(chunk->num_rows()));
             _mem_tracker->set(_aggregator->hash_set_variant().reserved_memory_usage(_aggregator->mem_pool()));
             TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_set());
 
