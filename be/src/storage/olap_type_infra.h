@@ -19,15 +19,15 @@ namespace starrocks {
 
 #define APPLY_FOR_TYPE_DECIMAL(M) \
     M(LOGICAL_TYPE_DECIMAL)       \
-    M(LOGICAL_TYPE_DECIMALV2)    \
+    M(LOGICAL_TYPE_DECIMALV2)     \
     M(LOGICAL_TYPE_DECIMAL32)     \
     M(LOGICAL_TYPE_DECIMAL64)     \
     M(LOGICAL_TYPE_DECIMAL128)
 
-#define APPLY_FOR_TYPE_TIME(M) \
-    M(LOGICAL_TYPE_DATE_V1)       \
-    M(LOGICAL_TYPE_DATE)    \
-    M(LOGICAL_TYPE_DATETIME_V1)   \
+#define APPLY_FOR_TYPE_TIME(M)  \
+    M(LOGICAL_TYPE_DATE_V1)     \
+    M(LOGICAL_TYPE_DATE)        \
+    M(LOGICAL_TYPE_DATETIME_V1) \
     M(LOGICAL_TYPE_DATETIME)
 
 // Types that support bitmap index
@@ -39,7 +39,7 @@ namespace starrocks {
     M(LOGICAL_TYPE_DOUBLE)             \
     M(LOGICAL_TYPE_CHAR)               \
     M(LOGICAL_TYPE_VARCHAR)            \
-    M(LOGICAL_TYPE_BOOLEAN)               \
+    M(LOGICAL_TYPE_BOOLEAN)            \
     M(LOGICAL_TYPE_DECIMAL)            \
     M(LOGICAL_TYPE_DECIMALV2)
 

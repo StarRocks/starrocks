@@ -416,8 +416,7 @@ TEST(ColumnPredicateTest, test_eq) {
     }
     // date_v2
     {
-        std::unique_ptr<ColumnPredicate> p(
-                new_column_eq_predicate(get_type_info(LOGICAL_TYPE_DATE), 0, "1990-01-01"));
+        std::unique_ptr<ColumnPredicate> p(new_column_eq_predicate(get_type_info(LOGICAL_TYPE_DATE), 0, "1990-01-01"));
         auto c = ChunkHelper::column_from_field_type(LOGICAL_TYPE_DATE, false);
         c->append_datum(Datum(DateValue::create(1990, 1, 1)));
         c->append_datum(Datum(DateValue::create(1991, 1, 1)));

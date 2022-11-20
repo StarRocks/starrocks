@@ -106,18 +106,18 @@ struct DatumBuilder<LOGICAL_TYPE_DATETIME> {
     }
 };
 
-[[maybe_unused]] static DatumBuilder<LOGICAL_TYPE_BOOLEAN> COL_BOOLEAN;       // NOLINT
-[[maybe_unused]] static DatumBuilder<LOGICAL_TYPE_CHAR> COL_CHAR;          // NOLINT
-[[maybe_unused]] static DatumBuilder<LOGICAL_TYPE_VARCHAR> COL_VARCHAR;    // NOLINT
-[[maybe_unused]] static DatumBuilder<LOGICAL_TYPE_TINYINT> COL_TINYINT;    // NOLINT
-[[maybe_unused]] static DatumBuilder<LOGICAL_TYPE_SMALLINT> COL_SMALLINT;  // NOLINT
-[[maybe_unused]] static DatumBuilder<LOGICAL_TYPE_INT> COL_INT;            // NOLINT
-[[maybe_unused]] static DatumBuilder<LOGICAL_TYPE_BIGINT> COL_BIGINT;      // NOLINT
-[[maybe_unused]] static DatumBuilder<LOGICAL_TYPE_LARGEINT> COL_LARGEINT;  // NOLINT
-[[maybe_unused]] static DatumBuilder<LOGICAL_TYPE_FLOAT> COL_FLOAT;        // NOLINT
-[[maybe_unused]] static DatumBuilder<LOGICAL_TYPE_DOUBLE> COL_DOUBLE;      // NOLINT
+[[maybe_unused]] static DatumBuilder<LOGICAL_TYPE_BOOLEAN> COL_BOOLEAN;   // NOLINT
+[[maybe_unused]] static DatumBuilder<LOGICAL_TYPE_CHAR> COL_CHAR;         // NOLINT
+[[maybe_unused]] static DatumBuilder<LOGICAL_TYPE_VARCHAR> COL_VARCHAR;   // NOLINT
+[[maybe_unused]] static DatumBuilder<LOGICAL_TYPE_TINYINT> COL_TINYINT;   // NOLINT
+[[maybe_unused]] static DatumBuilder<LOGICAL_TYPE_SMALLINT> COL_SMALLINT; // NOLINT
+[[maybe_unused]] static DatumBuilder<LOGICAL_TYPE_INT> COL_INT;           // NOLINT
+[[maybe_unused]] static DatumBuilder<LOGICAL_TYPE_BIGINT> COL_BIGINT;     // NOLINT
+[[maybe_unused]] static DatumBuilder<LOGICAL_TYPE_LARGEINT> COL_LARGEINT; // NOLINT
+[[maybe_unused]] static DatumBuilder<LOGICAL_TYPE_FLOAT> COL_FLOAT;       // NOLINT
+[[maybe_unused]] static DatumBuilder<LOGICAL_TYPE_DOUBLE> COL_DOUBLE;     // NOLINT
 [[maybe_unused]] static DatumBuilder<LOGICAL_TYPE_DECIMALV2> COL_DECIMAL; // NOLINT
-[[maybe_unused]] static DatumBuilder<LOGICAL_TYPE_DATE> COL_DATE;       // NOLINT
+[[maybe_unused]] static DatumBuilder<LOGICAL_TYPE_DATE> COL_DATE;         // NOLINT
 [[maybe_unused]] static DatumBuilder<LOGICAL_TYPE_DATETIME> COL_DATETIME; // NOLINT
 
 /// VectorChunkIterator
