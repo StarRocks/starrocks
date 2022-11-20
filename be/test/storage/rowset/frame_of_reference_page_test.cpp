@@ -203,9 +203,9 @@ TEST_F(FrameOfReferencePageTest, TestInt64BlockEncoderSequence) {
     test_encode_decode_page_template<LOGICAL_TYPE_BIGINT>(ints.get(), size);
     test_encode_decode_page_vectorize<LOGICAL_TYPE_BIGINT>(ints.get(), size);
 
-    test_encode_decode_page_template<LOGICAL_TYPE_DATETIME>(ints.get(), size);
+    test_encode_decode_page_template<LOGICAL_TYPE_DATETIME_V1>(ints.get(), size);
     // TODO(zhuming): uncomment this line after Column for DATETIME is implemented.
-    // test_encode_decode_page_vectorize<LOGICAL_TYPE_DATETIME>(ints.get(), size);
+    // test_encode_decode_page_vectorize<LOGICAL_TYPE_DATETIME_V1>(ints.get(), size);
 }
 
 TEST_F(FrameOfReferencePageTest, TestInt24BlockEncoderSequence) {
@@ -218,9 +218,9 @@ TEST_F(FrameOfReferencePageTest, TestInt24BlockEncoderSequence) {
         ints.get()[i] = first_value + i;
     }
 
-    test_encode_decode_page_template<LOGICAL_TYPE_DATE>(ints.get(), size);
+    test_encode_decode_page_template<LOGICAL_TYPE_DATE_V1>(ints.get(), size);
     // TODO(zhuming): uncomment this line after Column for DATE is implemented.
-    // test_encode_decode_page_vectorize<LOGICAL_TYPE_DATE>(ints.get(), size);
+    // test_encode_decode_page_vectorize<LOGICAL_TYPE_DATE_V1>(ints.get(), size);
 }
 
 TEST_F(FrameOfReferencePageTest, TestInt128BlockEncoderSequence) {
@@ -242,9 +242,9 @@ TEST_F(FrameOfReferencePageTest, TestInt24BlockEncoderMinMax) {
     ints.get()[0] = 0;
     ints.get()[1] = 0xFFFFFF;
 
-    test_encode_decode_page_template<LOGICAL_TYPE_DATE>(ints.get(), 2);
+    test_encode_decode_page_template<LOGICAL_TYPE_DATE_V1>(ints.get(), 2);
     // TODO(zhuming): uncomment this line after Column for DATE is implemented.
-    // test_encode_decode_page_vectorize<LOGICAL_TYPE_DATE>(ints.get(), 2);
+    // test_encode_decode_page_vectorize<LOGICAL_TYPE_DATE_V1>(ints.get(), 2);
 }
 
 TEST_F(FrameOfReferencePageTest, TestInt128BlockEncoderMinMax) {

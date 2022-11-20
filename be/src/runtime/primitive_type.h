@@ -35,7 +35,7 @@ namespace starrocks {
 // Because this type is not persisted in any format, so we keep the value
 // for each type equals with the type in LogicalType.
 enum PrimitiveType {
-    INVALID_TYPE = 0,
+    TYPE_UNKNOWN = 0,
     TYPE_TINYINT = 1,
     TYPE_SMALLINT = 3,
     TYPE_INT = 5,

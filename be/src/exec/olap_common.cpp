@@ -221,7 +221,7 @@ void ColumnValueRange<T>::to_olap_filter(std::vector<TCondition>& filters) {
 
 template <class T>
 Status ColumnValueRange<T>::add_fixed_values(SQLFilterOp op, const std::set<T>& values) {
-    if (INVALID_TYPE == _column_type) {
+    if (TYPE_UNKNOWN == _column_type) {
         return Status::InternalError("AddFixedValue failed, Invalid type");
     }
     if (op == FILTER_IN) {
@@ -352,7 +352,7 @@ void ColumnValueRange<T>::convert_to_fixed_value() {
 
 template <class T>
 Status ColumnValueRange<T>::add_range(SQLFilterOp op, T value) {
-    if (INVALID_TYPE == _column_type) {
+    if (TYPE_UNKNOWN == _column_type) {
         return Status::InternalError("AddRange failed, Invalid type");
     }
 
@@ -615,7 +615,7 @@ bool ColumnValueRange<T>::is_fixed_value_range() const {
 
 template <class T>
 bool ColumnValueRange<T>::is_empty_value_range() const {
-    if (INVALID_TYPE == _column_type) {
+    if (TYPE_UNKNOWN == _column_type) {
         return true;
     }
     // TODO(yan): sometimes we don't have Fixed Value Range, but have

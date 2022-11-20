@@ -882,7 +882,7 @@ static std::unique_ptr<HashIndex> create_hash_index(LogicalType key_type, size_t
         return std::make_unique<HashIndexImpl<typename CppTypeTraits<type>::CppType>>()
 
     switch (key_type) {
-        CASE_TYPE(LOGICAL_TYPE_BOOL);
+        CASE_TYPE(LOGICAL_TYPE_BOOLEAN);
         CASE_TYPE(LOGICAL_TYPE_TINYINT);
         CASE_TYPE(LOGICAL_TYPE_SMALLINT);
         CASE_TYPE(LOGICAL_TYPE_INT);
@@ -892,9 +892,9 @@ static std::unique_ptr<HashIndex> create_hash_index(LogicalType key_type, size_t
         return std::make_unique<ShardByLengthSliceHashIndex>();
     case LOGICAL_TYPE_VARCHAR:
         return std::make_unique<ShardByLengthSliceHashIndex>();
-    case LOGICAL_TYPE_DATE_V2:
+    case LOGICAL_TYPE_DATE:
         return std::make_unique<HashIndexImpl<int32_t>>();
-    case LOGICAL_TYPE_TIMESTAMP:
+    case LOGICAL_TYPE_DATETIME:
         return std::make_unique<HashIndexImpl<int64_t>>();
     default:
         return nullptr;

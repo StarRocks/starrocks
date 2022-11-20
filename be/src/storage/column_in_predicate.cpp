@@ -328,10 +328,10 @@ ColumnPredicate* new_column_in_predicate_generic(const TypeInfoPtr& type_info, C
     auto type = type_info->type();
     auto scale = type_info->scale();
     switch (type) {
-    case LOGICAL_TYPE_BOOL: {
-        using SetType = Set<CppTypeTraits<LOGICAL_TYPE_BOOL>::CppType, (Args)...>;
-        SetType values = predicate_internal::strings_to_set<LOGICAL_TYPE_BOOL>(strs);
-        return new ColumnInPredicate<LOGICAL_TYPE_BOOL, SetType>(type_info, id, std::move(values));
+    case LOGICAL_TYPE_BOOLEAN: {
+        using SetType = Set<CppTypeTraits<LOGICAL_TYPE_BOOLEAN>::CppType, (Args)...>;
+        SetType values = predicate_internal::strings_to_set<LOGICAL_TYPE_BOOLEAN>(strs);
+        return new ColumnInPredicate<LOGICAL_TYPE_BOOLEAN, SetType>(type_info, id, std::move(values));
     }
     case LOGICAL_TYPE_TINYINT: {
         using SetType = Set<CppTypeTraits<LOGICAL_TYPE_TINYINT>::CppType, (Args)...>;
@@ -363,10 +363,10 @@ ColumnPredicate* new_column_in_predicate_generic(const TypeInfoPtr& type_info, C
         SetType values = predicate_internal::strings_to_set<LOGICAL_TYPE_DECIMAL>(strs);
         return new ColumnInPredicate<LOGICAL_TYPE_DECIMAL, SetType>(type_info, id, std::move(values));
     }
-    case LOGICAL_TYPE_DECIMAL_V2: {
-        using SetType = Set<CppTypeTraits<LOGICAL_TYPE_DECIMAL_V2>::CppType, (Args)...>;
-        SetType values = predicate_internal::strings_to_set<LOGICAL_TYPE_DECIMAL_V2>(strs);
-        return new ColumnInPredicate<LOGICAL_TYPE_DECIMAL_V2, SetType>(type_info, id, std::move(values));
+    case LOGICAL_TYPE_DECIMALV2: {
+        using SetType = Set<CppTypeTraits<LOGICAL_TYPE_DECIMALV2>::CppType, (Args)...>;
+        SetType values = predicate_internal::strings_to_set<LOGICAL_TYPE_DECIMALV2>(strs);
+        return new ColumnInPredicate<LOGICAL_TYPE_DECIMALV2, SetType>(type_info, id, std::move(values));
     }
     case LOGICAL_TYPE_DECIMAL32: {
         using SetType = Set<CppTypeTraits<LOGICAL_TYPE_DECIMAL32>::CppType, (Args)...>;
@@ -387,25 +387,25 @@ ColumnPredicate* new_column_in_predicate_generic(const TypeInfoPtr& type_info, C
         return new BinaryColumnInPredicate<LOGICAL_TYPE_CHAR>(type_info, id, strs);
     case LOGICAL_TYPE_VARCHAR:
         return new BinaryColumnInPredicate<LOGICAL_TYPE_VARCHAR>(type_info, id, strs);
+    case LOGICAL_TYPE_DATE_V1: {
+        using SetType = Set<CppTypeTraits<LOGICAL_TYPE_DATE_V1>::CppType, (Args)...>;
+        SetType values = predicate_internal::strings_to_set<LOGICAL_TYPE_DATE_V1>(strs);
+        return new ColumnInPredicate<LOGICAL_TYPE_DATE_V1, SetType>(type_info, id, std::move(values));
+    }
     case LOGICAL_TYPE_DATE: {
         using SetType = Set<CppTypeTraits<LOGICAL_TYPE_DATE>::CppType, (Args)...>;
         SetType values = predicate_internal::strings_to_set<LOGICAL_TYPE_DATE>(strs);
         return new ColumnInPredicate<LOGICAL_TYPE_DATE, SetType>(type_info, id, std::move(values));
     }
-    case LOGICAL_TYPE_DATE_V2: {
-        using SetType = Set<CppTypeTraits<LOGICAL_TYPE_DATE_V2>::CppType, (Args)...>;
-        SetType values = predicate_internal::strings_to_set<LOGICAL_TYPE_DATE_V2>(strs);
-        return new ColumnInPredicate<LOGICAL_TYPE_DATE_V2, SetType>(type_info, id, std::move(values));
+    case LOGICAL_TYPE_DATETIME_V1: {
+        using SetType = Set<CppTypeTraits<LOGICAL_TYPE_DATETIME_V1>::CppType, (Args)...>;
+        SetType values = predicate_internal::strings_to_set<LOGICAL_TYPE_DATETIME_V1>(strs);
+        return new ColumnInPredicate<LOGICAL_TYPE_DATETIME_V1, SetType>(type_info, id, std::move(values));
     }
     case LOGICAL_TYPE_DATETIME: {
         using SetType = Set<CppTypeTraits<LOGICAL_TYPE_DATETIME>::CppType, (Args)...>;
         SetType values = predicate_internal::strings_to_set<LOGICAL_TYPE_DATETIME>(strs);
         return new ColumnInPredicate<LOGICAL_TYPE_DATETIME, SetType>(type_info, id, std::move(values));
-    }
-    case LOGICAL_TYPE_TIMESTAMP: {
-        using SetType = Set<CppTypeTraits<LOGICAL_TYPE_TIMESTAMP>::CppType, (Args)...>;
-        SetType values = predicate_internal::strings_to_set<LOGICAL_TYPE_TIMESTAMP>(strs);
-        return new ColumnInPredicate<LOGICAL_TYPE_TIMESTAMP, SetType>(type_info, id, std::move(values));
     }
     case LOGICAL_TYPE_FLOAT: {
         using SetType = Set<CppTypeTraits<LOGICAL_TYPE_FLOAT>::CppType, (Args)...>;

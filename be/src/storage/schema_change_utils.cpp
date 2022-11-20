@@ -115,8 +115,8 @@ ConvertTypeResolver::ConvertTypeResolver() {
     add_convert_type_mapping<LOGICAL_TYPE_VARCHAR, LOGICAL_TYPE_LARGEINT>();
     add_convert_type_mapping<LOGICAL_TYPE_VARCHAR, LOGICAL_TYPE_FLOAT>();
     add_convert_type_mapping<LOGICAL_TYPE_VARCHAR, LOGICAL_TYPE_DOUBLE>();
+    add_convert_type_mapping<LOGICAL_TYPE_VARCHAR, LOGICAL_TYPE_DATE_V1>();
     add_convert_type_mapping<LOGICAL_TYPE_VARCHAR, LOGICAL_TYPE_DATE>();
-    add_convert_type_mapping<LOGICAL_TYPE_VARCHAR, LOGICAL_TYPE_DATE_V2>();
     add_convert_type_mapping<LOGICAL_TYPE_VARCHAR, LOGICAL_TYPE_DECIMAL32>();
     add_convert_type_mapping<LOGICAL_TYPE_VARCHAR, LOGICAL_TYPE_DECIMAL64>();
     add_convert_type_mapping<LOGICAL_TYPE_VARCHAR, LOGICAL_TYPE_DECIMAL128>();
@@ -131,36 +131,36 @@ ConvertTypeResolver::ConvertTypeResolver() {
     add_convert_type_mapping<LOGICAL_TYPE_FLOAT, LOGICAL_TYPE_VARCHAR>();
     add_convert_type_mapping<LOGICAL_TYPE_DOUBLE, LOGICAL_TYPE_VARCHAR>();
     add_convert_type_mapping<LOGICAL_TYPE_DECIMAL, LOGICAL_TYPE_VARCHAR>();
-    add_convert_type_mapping<LOGICAL_TYPE_DECIMAL_V2, LOGICAL_TYPE_VARCHAR>();
+    add_convert_type_mapping<LOGICAL_TYPE_DECIMALV2, LOGICAL_TYPE_VARCHAR>();
     add_convert_type_mapping<LOGICAL_TYPE_DECIMAL32, LOGICAL_TYPE_VARCHAR>();
     add_convert_type_mapping<LOGICAL_TYPE_DECIMAL64, LOGICAL_TYPE_VARCHAR>();
     add_convert_type_mapping<LOGICAL_TYPE_DECIMAL128, LOGICAL_TYPE_VARCHAR>();
     add_convert_type_mapping<LOGICAL_TYPE_CHAR, LOGICAL_TYPE_VARCHAR>();
     add_convert_type_mapping<LOGICAL_TYPE_JSON, LOGICAL_TYPE_VARCHAR>();
 
+    add_convert_type_mapping<LOGICAL_TYPE_DATE_V1, LOGICAL_TYPE_DATETIME_V1>();
+    add_convert_type_mapping<LOGICAL_TYPE_DATE_V1, LOGICAL_TYPE_DATETIME>();
+    add_convert_type_mapping<LOGICAL_TYPE_DATE, LOGICAL_TYPE_DATETIME_V1>();
     add_convert_type_mapping<LOGICAL_TYPE_DATE, LOGICAL_TYPE_DATETIME>();
-    add_convert_type_mapping<LOGICAL_TYPE_DATE, LOGICAL_TYPE_TIMESTAMP>();
-    add_convert_type_mapping<LOGICAL_TYPE_DATE_V2, LOGICAL_TYPE_DATETIME>();
-    add_convert_type_mapping<LOGICAL_TYPE_DATE_V2, LOGICAL_TYPE_TIMESTAMP>();
 
+    add_convert_type_mapping<LOGICAL_TYPE_DATETIME_V1, LOGICAL_TYPE_DATE_V1>();
+    add_convert_type_mapping<LOGICAL_TYPE_DATETIME_V1, LOGICAL_TYPE_DATE>();
+    add_convert_type_mapping<LOGICAL_TYPE_DATETIME, LOGICAL_TYPE_DATE_V1>();
     add_convert_type_mapping<LOGICAL_TYPE_DATETIME, LOGICAL_TYPE_DATE>();
-    add_convert_type_mapping<LOGICAL_TYPE_DATETIME, LOGICAL_TYPE_DATE_V2>();
-    add_convert_type_mapping<LOGICAL_TYPE_TIMESTAMP, LOGICAL_TYPE_DATE>();
-    add_convert_type_mapping<LOGICAL_TYPE_TIMESTAMP, LOGICAL_TYPE_DATE_V2>();
 
     add_convert_type_mapping<LOGICAL_TYPE_FLOAT, LOGICAL_TYPE_DOUBLE>();
 
+    add_convert_type_mapping<LOGICAL_TYPE_INT, LOGICAL_TYPE_DATE_V1>();
     add_convert_type_mapping<LOGICAL_TYPE_INT, LOGICAL_TYPE_DATE>();
-    add_convert_type_mapping<LOGICAL_TYPE_INT, LOGICAL_TYPE_DATE_V2>();
 
-    add_convert_type_mapping<LOGICAL_TYPE_DATE, LOGICAL_TYPE_DATE_V2>();
-    add_convert_type_mapping<LOGICAL_TYPE_DATE_V2, LOGICAL_TYPE_DATE>();
-    add_convert_type_mapping<LOGICAL_TYPE_DATETIME, LOGICAL_TYPE_TIMESTAMP>();
-    add_convert_type_mapping<LOGICAL_TYPE_TIMESTAMP, LOGICAL_TYPE_DATETIME>();
-    add_convert_type_mapping<LOGICAL_TYPE_DECIMAL, LOGICAL_TYPE_DECIMAL_V2>();
-    add_convert_type_mapping<LOGICAL_TYPE_DECIMAL_V2, LOGICAL_TYPE_DECIMAL>();
+    add_convert_type_mapping<LOGICAL_TYPE_DATE_V1, LOGICAL_TYPE_DATE>();
+    add_convert_type_mapping<LOGICAL_TYPE_DATE, LOGICAL_TYPE_DATE_V1>();
+    add_convert_type_mapping<LOGICAL_TYPE_DATETIME_V1, LOGICAL_TYPE_DATETIME>();
+    add_convert_type_mapping<LOGICAL_TYPE_DATETIME, LOGICAL_TYPE_DATETIME_V1>();
+    add_convert_type_mapping<LOGICAL_TYPE_DECIMAL, LOGICAL_TYPE_DECIMALV2>();
+    add_convert_type_mapping<LOGICAL_TYPE_DECIMALV2, LOGICAL_TYPE_DECIMAL>();
     add_convert_type_mapping<LOGICAL_TYPE_DECIMAL, LOGICAL_TYPE_DECIMAL128>();
-    add_convert_type_mapping<LOGICAL_TYPE_DECIMAL_V2, LOGICAL_TYPE_DECIMAL128>();
+    add_convert_type_mapping<LOGICAL_TYPE_DECIMALV2, LOGICAL_TYPE_DECIMAL128>();
 
     add_convert_type_mapping<LOGICAL_TYPE_DECIMAL32, LOGICAL_TYPE_DECIMAL32>();
     add_convert_type_mapping<LOGICAL_TYPE_DECIMAL32, LOGICAL_TYPE_DECIMAL64>();

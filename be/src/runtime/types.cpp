@@ -287,7 +287,7 @@ TypeDescriptor TypeDescriptor::from_storage_type_info(TypeInfo* type_info) {
     }
 
     PrimitiveType ptype = scalar_field_type_to_primitive_type(ftype);
-    DCHECK(ptype != INVALID_TYPE);
+    DCHECK(ptype != TYPE_UNKNOWN);
     int len = TypeDescriptor::MAX_VARCHAR_LENGTH;
     int precision = type_info->precision();
     int scale = type_info->scale();
@@ -355,7 +355,7 @@ int TypeDescriptor::get_slot_size() const {
         }
         return struct_size;
     }
-    case INVALID_TYPE:
+    case TYPE_UNKNOWN:
     case TYPE_BINARY:
     case TYPE_FUNCTION:
         DCHECK(false);

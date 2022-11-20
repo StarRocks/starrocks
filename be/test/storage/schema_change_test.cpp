@@ -244,7 +244,7 @@ TEST_F(SchemaChangeTest, convert_datetime_to_date) {
                     time_tm.tm_hour * 10000L + time_tm.tm_min * 100L + time_tm.tm_sec;
     src_datum.set_int64(value);
     Datum dst_datum;
-    auto converter = vectorized::get_type_converter(LOGICAL_TYPE_DATETIME, LOGICAL_TYPE_DATE);
+    auto converter = vectorized::get_type_converter(LOGICAL_TYPE_DATETIME_V1, LOGICAL_TYPE_DATE_V1);
 
     Status st = converter->convert_datum(f.type().get(), src_datum, f2.type().get(), &dst_datum, mem_pool.get());
     ASSERT_TRUE(st.ok());
@@ -268,7 +268,7 @@ TEST_F(SchemaChangeTest, convert_date_to_datetime) {
     int value = (time_tm.tm_year + 1900) * 16 * 32 + (time_tm.tm_mon + 1) * 32 + time_tm.tm_mday;
     src_datum.set_uint24(value);
     Datum dst_datum;
-    auto converter = vectorized::get_type_converter(LOGICAL_TYPE_DATE, LOGICAL_TYPE_DATETIME);
+    auto converter = vectorized::get_type_converter(LOGICAL_TYPE_DATE_V1, LOGICAL_TYPE_DATETIME_V1);
 
     Status st = converter->convert_datum(f.type().get(), src_datum, f2.type().get(), &dst_datum, mem_pool.get());
     ASSERT_TRUE(st.ok());
@@ -291,7 +291,7 @@ TEST_F(SchemaChangeTest, convert_int_to_date_v2) {
     strptime(origin_val.c_str(), "%Y-%m-%d", &time_tm);
     src_datum.set_int32(20210928);
     Datum dst_datum;
-    auto converter = vectorized::get_type_converter(LOGICAL_TYPE_INT, LOGICAL_TYPE_DATE_V2);
+    auto converter = vectorized::get_type_converter(LOGICAL_TYPE_INT, LOGICAL_TYPE_DATE);
 
     Status st = converter->convert_datum(f.type().get(), src_datum, f2.type().get(), &dst_datum, mem_pool.get());
     ASSERT_TRUE(st.ok());
@@ -313,7 +313,7 @@ TEST_F(SchemaChangeTest, convert_int_to_date) {
     strptime(origin_val.c_str(), "%Y-%m-%d", &time_tm);
     src_datum.set_int32(20210928);
     Datum dst_datum;
-    auto converter = vectorized::get_type_converter(LOGICAL_TYPE_INT, LOGICAL_TYPE_DATE);
+    auto converter = vectorized::get_type_converter(LOGICAL_TYPE_INT, LOGICAL_TYPE_DATE_V1);
 
     Status st = converter->convert_datum(f.type().get(), src_datum, f2.type().get(), &dst_datum, mem_pool.get());
     ASSERT_TRUE(st.ok());

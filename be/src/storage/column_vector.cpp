@@ -46,7 +46,7 @@ struct BatchT {
     using value = ScalarColumnVectorBatch<typename CppTypeTraits<ftype>::CppType>;
 };
 template <>
-struct BatchT<LOGICAL_TYPE_BOOL> {
+struct BatchT<LOGICAL_TYPE_BOOLEAN> {
     using value = ScalarColumnVectorBatch<typename CppTypeTraits<LOGICAL_TYPE_TINYINT>::CppType>;
 };
 

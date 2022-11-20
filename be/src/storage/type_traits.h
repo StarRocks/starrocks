@@ -37,7 +37,7 @@ template <LogicalType field_type>
 struct CppTypeTraits {};
 
 template <>
-struct CppTypeTraits<LOGICAL_TYPE_BOOL> {
+struct CppTypeTraits<LOGICAL_TYPE_BOOLEAN> {
     using CppType = bool;
     using UnsignedCppType = bool;
 };
@@ -107,7 +107,7 @@ struct CppTypeTraits<LOGICAL_TYPE_DECIMAL> {
     using UnsignedCppType = decimal12_t;
 };
 template <>
-struct CppTypeTraits<LOGICAL_TYPE_DECIMAL_V2> {
+struct CppTypeTraits<LOGICAL_TYPE_DECIMALV2> {
     using CppType = DecimalV2Value;
     using UnsignedCppType = DecimalV2Value;
 };
@@ -131,22 +131,22 @@ struct CppTypeTraits<LOGICAL_TYPE_DECIMAL128> {
 };
 
 template <>
-struct CppTypeTraits<LOGICAL_TYPE_DATE> {
+struct CppTypeTraits<LOGICAL_TYPE_DATE_V1> {
     using CppType = uint24_t;
     using UnsignedCppType = uint24_t;
 };
 template <>
-struct CppTypeTraits<LOGICAL_TYPE_DATE_V2> {
+struct CppTypeTraits<LOGICAL_TYPE_DATE> {
     using CppType = int32_t;
     using UnsignedCppType = uint32_t;
 };
 template <>
-struct CppTypeTraits<LOGICAL_TYPE_DATETIME> {
+struct CppTypeTraits<LOGICAL_TYPE_DATETIME_V1> {
     using CppType = int64_t;
     using UnsignedCppType = uint64_t;
 };
 template <>
-struct CppTypeTraits<LOGICAL_TYPE_TIMESTAMP> {
+struct CppTypeTraits<LOGICAL_TYPE_DATETIME> {
     using CppType = int64_t;
     using UnsignedCppType = uint64_t;
 };

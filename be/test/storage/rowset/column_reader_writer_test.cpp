@@ -495,7 +495,7 @@ protected:
 
     vectorized::ColumnPtr date_values(int null_ratio) {
         size_t count = 4 * 1024 * 1024 / sizeof(vectorized::DateValue);
-        auto col = ChunkHelper::column_from_field_type(LOGICAL_TYPE_DATE_V2, true);
+        auto col = ChunkHelper::column_from_field_type(LOGICAL_TYPE_DATE, true);
         vectorized::DateValue value = vectorized::DateValue::create(2020, 10, 1);
         for (size_t i = 0; i < count; i++) {
             CHECK_EQ(1, col->append_numbers(&value, sizeof(value)));
@@ -510,7 +510,7 @@ protected:
 
     vectorized::ColumnPtr datetime_values(int null_ratio) {
         size_t count = 4 * 1024 * 1024 / sizeof(vectorized::TimestampValue);
-        auto col = ChunkHelper::column_from_field_type(LOGICAL_TYPE_TIMESTAMP, true);
+        auto col = ChunkHelper::column_from_field_type(LOGICAL_TYPE_DATETIME, true);
         vectorized::TimestampValue value = vectorized::TimestampValue::create(2020, 10, 1, 10, 20, 1);
         for (size_t i = 0; i < count; i++) {
             CHECK_EQ(1, col->append_numbers(&value, sizeof(value)));
@@ -558,17 +558,17 @@ TEST_F(ColumnReaderWriterTest, test_double) {
 // NOLINTNEXTLINE
 TEST_F(ColumnReaderWriterTest, test_date) {
     auto col = date_values(100);
-    test_nullable_data<LOGICAL_TYPE_DATE_V2, BIT_SHUFFLE, 1>(*col, "0", "100");
-    test_nullable_data<LOGICAL_TYPE_DATE_V2, BIT_SHUFFLE, 2>(*col, "0", "100");
-    test_nullable_data<LOGICAL_TYPE_DATE_V2, BIT_SHUFFLE, 2>(*col, "1", "100");
+    test_nullable_data<LOGICAL_TYPE_DATE, BIT_SHUFFLE, 1>(*col, "0", "100");
+    test_nullable_data<LOGICAL_TYPE_DATE, BIT_SHUFFLE, 2>(*col, "0", "100");
+    test_nullable_data<LOGICAL_TYPE_DATE, BIT_SHUFFLE, 2>(*col, "1", "100");
 }
 
 // NOLINTNEXTLINE
 TEST_F(ColumnReaderWriterTest, test_datetime) {
     auto col = datetime_values(100);
-    test_nullable_data<LOGICAL_TYPE_TIMESTAMP, BIT_SHUFFLE, 1>(*col, "0", "100");
-    test_nullable_data<LOGICAL_TYPE_TIMESTAMP, BIT_SHUFFLE, 2>(*col, "0", "100");
-    test_nullable_data<LOGICAL_TYPE_TIMESTAMP, BIT_SHUFFLE, 2>(*col, "1", "100");
+    test_nullable_data<LOGICAL_TYPE_DATETIME, BIT_SHUFFLE, 1>(*col, "0", "100");
+    test_nullable_data<LOGICAL_TYPE_DATETIME, BIT_SHUFFLE, 2>(*col, "0", "100");
+    test_nullable_data<LOGICAL_TYPE_DATETIME, BIT_SHUFFLE, 2>(*col, "1", "100");
 }
 
 // NOLINTNEXTLINE
@@ -639,11 +639,11 @@ TEST_F(ColumnReaderWriterTest, test_default_value) {
 
     std::string v_date("2019-11-12");
     uint24_t result_date(1034092);
-    test_read_default_value<LOGICAL_TYPE_DATE>(v_date, &result_date);
+    test_read_default_value<LOGICAL_TYPE_DATE_V1>(v_date, &result_date);
 
     std::string v_datetime("2019-11-12 12:01:08");
     int64_t result_datetime = 20191112120108;
-    test_read_default_value<LOGICAL_TYPE_DATETIME>(v_datetime, &result_datetime);
+    test_read_default_value<LOGICAL_TYPE_DATETIME_V1>(v_datetime, &result_datetime);
 
     std::string v_decimal("102418.000000002");
     decimal12_t decimal(102418, 2);

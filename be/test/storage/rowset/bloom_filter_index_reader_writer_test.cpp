@@ -241,7 +241,7 @@ TEST_F(BloomFilterIndexReaderWriterTest, test_date) {
 
     std::string file_name = "bloom_filter_date";
     uint24_t not_exist_value = 18888;
-    test_bloom_filter_index_reader_writer_template<LOGICAL_TYPE_DATE>(file_name, val, num, 1, &not_exist_value);
+    test_bloom_filter_index_reader_writer_template<LOGICAL_TYPE_DATE_V1>(file_name, val, num, 1, &not_exist_value);
     delete[] val;
 }
 
@@ -255,7 +255,7 @@ TEST_F(BloomFilterIndexReaderWriterTest, test_datetime) {
 
     std::string file_name = "bloom_filter_datetime";
     int64_t not_exist_value = 18888;
-    test_bloom_filter_index_reader_writer_template<LOGICAL_TYPE_DATETIME>(file_name, val, num, 1, &not_exist_value);
+    test_bloom_filter_index_reader_writer_template<LOGICAL_TYPE_DATETIME_V1>(file_name, val, num, 1, &not_exist_value);
     delete[] val;
 }
 
