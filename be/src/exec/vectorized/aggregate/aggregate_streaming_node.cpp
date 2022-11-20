@@ -71,9 +71,7 @@ Status AggregateStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bo
                        TStreamingPreaggregationMode::FORCE_PREAGGREGATION) {
                 RETURN_IF_ERROR(state->check_mem_limit("AggrNode"));
                 SCOPED_TIMER(_aggregator->agg_compute_timer());
-                TRY_CATCH_BAD_ALLOC(_aggregator->hash_map_variant().visit([&](auto& hash_map_with_key) {
-                    _aggregator->build_hash_map(*hash_map_with_key, input_chunk_size);
-                }));
+                TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map(input_chunk_size));
                 if (_aggregator->is_none_group_by_exprs()) {
                     _aggregator->compute_single_agg_state(input_chunk_size);
                 } else {
@@ -108,9 +106,7 @@ Status AggregateStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bo
                     RETURN_IF_ERROR(state->check_mem_limit("AggrNode"));
                     // hash table is not full or allow expand the hash table according reduction rate
                     SCOPED_TIMER(_aggregator->agg_compute_timer());
-                    TRY_CATCH_BAD_ALLOC(_aggregator->hash_map_variant().visit([&](auto& hash_map_with_key) {
-                        _aggregator->build_hash_map(*hash_map_with_key, input_chunk_size);
-                    }));
+                    TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map(input_chunk_size));
                     if (_aggregator->is_none_group_by_exprs()) {
                         _aggregator->compute_single_agg_state(input_chunk_size);
                     } else {
@@ -125,10 +121,7 @@ Status AggregateStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bo
                     // TODO: direct call the function may affect the performance of some aggregated cases
                     {
                         SCOPED_TIMER(_aggregator->agg_compute_timer());
-                        TRY_CATCH_BAD_ALLOC(_aggregator->hash_map_variant().visit(
-                                [input_chunk_size, this](auto& hash_map_with_key) {
-                                    _aggregator->build_hash_map_with_selection(*hash_map_with_key, input_chunk_size);
-                                }));
+                        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map_with_selection(input_chunk_size));
                     }
 
                     size_t zero_count = SIMD::count_zero(_aggregator->streaming_selection());
@@ -197,9 +190,7 @@ void AggregateStreamingNode::_output_chunk_from_hash_map(ChunkPtr* chunk) {
         COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_map_variant().size());
     }
 
-    _aggregator->hash_map_variant().visit([&](auto& hash_map_with_key) {
-        _aggregator->convert_hash_map_to_chunk(*hash_map_with_key, runtime_state()->chunk_size(), chunk);
-    });
+    _aggregator->convert_hash_map_to_chunk(runtime_state()->chunk_size(), chunk);
 }
 
 std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateStreamingNode::decompose_to_pipeline(
