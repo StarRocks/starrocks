@@ -156,7 +156,7 @@ TEST(TabletMetaTest, test_create) {
 
     ASSERT_EQ("_c1_1", c1.subcolumn(0).name());
     ASSERT_EQ(kInvalidUniqueId, c1.subcolumn(0).unique_id());
-    ASSERT_EQ(LOGICAL_TYPE_DECIMAL_V2, c1.subcolumn(0).type());
+    ASSERT_EQ(LOGICAL_TYPE_DECIMALV2, c1.subcolumn(0).type());
     ASSERT_FALSE(c1.subcolumn(0).is_key());
     ASSERT_FALSE(c1.subcolumn(0).is_bf_column());
     ASSERT_TRUE(c1.subcolumn(0).is_nullable());

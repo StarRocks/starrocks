@@ -227,7 +227,7 @@ TEST_F(RlePageTest, TestRleBoolBlockEncoderRandom) {
         bools.get()[i] = (random() % 2 == 0);
     }
 
-    test_encode_decode_page_template<LOGICAL_TYPE_BOOL>(bools.get(), size);
+    test_encode_decode_page_template<LOGICAL_TYPE_BOOLEAN>(bools.get(), size);
 }
 
 TEST_F(RlePageTest, TestRleBoolBlockEncoderSize) {
@@ -239,7 +239,7 @@ TEST_F(RlePageTest, TestRleBoolBlockEncoderSize) {
     }
     PageBuilderOptions builder_options;
     builder_options.data_page_size = 256 * 1024;
-    RlePageBuilder<LOGICAL_TYPE_BOOL> rle_page_builder(builder_options);
+    RlePageBuilder<LOGICAL_TYPE_BOOLEAN> rle_page_builder(builder_options);
     size = rle_page_builder.add(reinterpret_cast<const uint8_t*>(bools.get()), size);
     OwnedSlice s = rle_page_builder.finish()->build();
     // 4 bytes header

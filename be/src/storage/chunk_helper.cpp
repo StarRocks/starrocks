@@ -31,23 +31,23 @@ struct CppColumnTraits {
 };
 
 template <>
-struct CppColumnTraits<LOGICAL_TYPE_BOOL> {
+struct CppColumnTraits<LOGICAL_TYPE_BOOLEAN> {
     using ColumnType = vectorized::UInt8Column;
 };
 
 // deprecated
 template <>
-struct CppColumnTraits<LOGICAL_TYPE_DATE> {
+struct CppColumnTraits<LOGICAL_TYPE_DATE_V1> {
     using ColumnType = vectorized::FixedLengthColumn<uint24_t>;
 };
 
 template <>
-struct CppColumnTraits<LOGICAL_TYPE_DATE_V2> {
+struct CppColumnTraits<LOGICAL_TYPE_DATE> {
     using ColumnType = vectorized::DateColumn;
 };
 
 template <>
-struct CppColumnTraits<LOGICAL_TYPE_TIMESTAMP> {
+struct CppColumnTraits<LOGICAL_TYPE_DATETIME> {
     using ColumnType = vectorized::TimestampColumn;
 };
 

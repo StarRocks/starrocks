@@ -753,7 +753,7 @@ PrimitiveType get_strict_type(ArrowTypeId at) {
     if (pt_it != global_strict_arrow_conv_table.end()) {
         return pt_it->second;
     }
-    return INVALID_TYPE;
+    return TYPE_UNKNOWN;
 }
 
 struct ArrowListConverter {

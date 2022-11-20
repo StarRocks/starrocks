@@ -116,7 +116,7 @@ public:
 
 private:
     std::string _column_name;
-    PrimitiveType _column_type{INVALID_TYPE}; // Column type (eg: TINYINT,SMALLINT,INT,BIGINT)
+    PrimitiveType _column_type{TYPE_UNKNOWN}; // Column type (eg: TINYINT,SMALLINT,INT,BIGINT)
     int _precision;                           // casting a decimalv3-typed value into string need precision
     int _scale;                               // casting a decimalv3-typed value into string need scale
     T _type_min;                              // Column type's min value

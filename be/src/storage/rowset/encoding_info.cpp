@@ -82,13 +82,13 @@ struct TypeEncodingTraits<type, BIT_SHUFFLE, CppType,
 };
 
 template <>
-struct TypeEncodingTraits<LOGICAL_TYPE_BOOL, RLE, bool> {
+struct TypeEncodingTraits<LOGICAL_TYPE_BOOLEAN, RLE, bool> {
     static Status create_page_builder(const PageBuilderOptions& opts, PageBuilder** builder) {
-        *builder = new RlePageBuilder<LOGICAL_TYPE_BOOL>(opts);
+        *builder = new RlePageBuilder<LOGICAL_TYPE_BOOLEAN>(opts);
         return Status::OK();
     }
     static Status create_page_decoder(const Slice& data, const PageDecoderOptions& opts, PageDecoder** decoder) {
-        *decoder = new RlePageDecoder<LOGICAL_TYPE_BOOL>(data, opts);
+        *decoder = new RlePageDecoder<LOGICAL_TYPE_BOOLEAN>(data, opts);
         return Status::OK();
     }
 };
@@ -106,13 +106,13 @@ struct TypeEncodingTraits<type, DICT_ENCODING, Slice> {
 };
 
 template <>
-struct TypeEncodingTraits<LOGICAL_TYPE_DATE, FOR_ENCODING, typename CppTypeTraits<LOGICAL_TYPE_DATE>::CppType> {
+struct TypeEncodingTraits<LOGICAL_TYPE_DATE_V1, FOR_ENCODING, typename CppTypeTraits<LOGICAL_TYPE_DATE_V1>::CppType> {
     static Status create_page_builder(const PageBuilderOptions& opts, PageBuilder** builder) {
-        *builder = new FrameOfReferencePageBuilder<LOGICAL_TYPE_DATE>(opts);
+        *builder = new FrameOfReferencePageBuilder<LOGICAL_TYPE_DATE_V1>(opts);
         return Status::OK();
     }
     static Status create_page_decoder(const Slice& data, const PageDecoderOptions& opts, PageDecoder** decoder) {
-        *decoder = new FrameOfReferencePageDecoder<LOGICAL_TYPE_DATE>(data, opts);
+        *decoder = new FrameOfReferencePageDecoder<LOGICAL_TYPE_DATE_V1>(data, opts);
         return Status::OK();
     }
 };
@@ -223,31 +223,31 @@ EncodingInfoResolver::EncodingInfoResolver() {
     _add_map<LOGICAL_TYPE_VARCHAR, PLAIN_ENCODING>();
     _add_map<LOGICAL_TYPE_VARCHAR, PREFIX_ENCODING, true>();
 
-    _add_map<LOGICAL_TYPE_BOOL, RLE>();
-    _add_map<LOGICAL_TYPE_BOOL, BIT_SHUFFLE>();
-    _add_map<LOGICAL_TYPE_BOOL, PLAIN_ENCODING, true>();
+    _add_map<LOGICAL_TYPE_BOOLEAN, RLE>();
+    _add_map<LOGICAL_TYPE_BOOLEAN, BIT_SHUFFLE>();
+    _add_map<LOGICAL_TYPE_BOOLEAN, PLAIN_ENCODING, true>();
+
+    _add_map<LOGICAL_TYPE_DATE_V1, BIT_SHUFFLE>();
+    _add_map<LOGICAL_TYPE_DATE_V1, PLAIN_ENCODING>();
+    _add_map<LOGICAL_TYPE_DATE_V1, FOR_ENCODING, true>();
 
     _add_map<LOGICAL_TYPE_DATE, BIT_SHUFFLE>();
     _add_map<LOGICAL_TYPE_DATE, PLAIN_ENCODING>();
     _add_map<LOGICAL_TYPE_DATE, FOR_ENCODING, true>();
 
-    _add_map<LOGICAL_TYPE_DATE_V2, BIT_SHUFFLE>();
-    _add_map<LOGICAL_TYPE_DATE_V2, PLAIN_ENCODING>();
-    _add_map<LOGICAL_TYPE_DATE_V2, FOR_ENCODING, true>();
+    _add_map<LOGICAL_TYPE_DATETIME_V1, BIT_SHUFFLE>();
+    _add_map<LOGICAL_TYPE_DATETIME_V1, PLAIN_ENCODING>();
+    _add_map<LOGICAL_TYPE_DATETIME_V1, FOR_ENCODING, true>();
 
     _add_map<LOGICAL_TYPE_DATETIME, BIT_SHUFFLE>();
     _add_map<LOGICAL_TYPE_DATETIME, PLAIN_ENCODING>();
     _add_map<LOGICAL_TYPE_DATETIME, FOR_ENCODING, true>();
 
-    _add_map<LOGICAL_TYPE_TIMESTAMP, BIT_SHUFFLE>();
-    _add_map<LOGICAL_TYPE_TIMESTAMP, PLAIN_ENCODING>();
-    _add_map<LOGICAL_TYPE_TIMESTAMP, FOR_ENCODING, true>();
-
     _add_map<LOGICAL_TYPE_DECIMAL, BIT_SHUFFLE, true>();
     _add_map<LOGICAL_TYPE_DECIMAL, PLAIN_ENCODING>();
 
-    _add_map<LOGICAL_TYPE_DECIMAL_V2, BIT_SHUFFLE, true>();
-    _add_map<LOGICAL_TYPE_DECIMAL_V2, PLAIN_ENCODING>();
+    _add_map<LOGICAL_TYPE_DECIMALV2, BIT_SHUFFLE, true>();
+    _add_map<LOGICAL_TYPE_DECIMALV2, PLAIN_ENCODING>();
 
     _add_map<LOGICAL_TYPE_HLL, PLAIN_ENCODING>();
 

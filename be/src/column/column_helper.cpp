@@ -215,7 +215,7 @@ struct ColumnBuilder {
     template <PrimitiveType ptype>
     ColumnPtr operator()(const TypeDescriptor& type_desc, size_t size) {
         switch (ptype) {
-        case INVALID_TYPE:
+        case TYPE_UNKNOWN:
         case TYPE_NULL:
         case TYPE_BINARY:
         case TYPE_DECIMAL:

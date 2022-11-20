@@ -267,8 +267,8 @@ ColumnPredicate* new_column_not_in_predicate(const TypeInfoPtr& type_info, Colum
                                              const std::vector<std::string>& strs) {
     auto type = type_info->type();
     switch (type) {
-    case LOGICAL_TYPE_BOOL:
-        return new ColumnNotInPredicate<LOGICAL_TYPE_BOOL>(type_info, id, strs);
+    case LOGICAL_TYPE_BOOLEAN:
+        return new ColumnNotInPredicate<LOGICAL_TYPE_BOOLEAN>(type_info, id, strs);
     case LOGICAL_TYPE_TINYINT:
         return new ColumnNotInPredicate<LOGICAL_TYPE_TINYINT>(type_info, id, strs);
     case LOGICAL_TYPE_SMALLINT:
@@ -281,8 +281,8 @@ ColumnPredicate* new_column_not_in_predicate(const TypeInfoPtr& type_info, Colum
         return new ColumnNotInPredicate<LOGICAL_TYPE_LARGEINT>(type_info, id, strs);
     case LOGICAL_TYPE_DECIMAL:
         return new ColumnNotInPredicate<LOGICAL_TYPE_DECIMAL>(type_info, id, strs);
-    case LOGICAL_TYPE_DECIMAL_V2:
-        return new ColumnNotInPredicate<LOGICAL_TYPE_DECIMAL_V2>(type_info, id, strs);
+    case LOGICAL_TYPE_DECIMALV2:
+        return new ColumnNotInPredicate<LOGICAL_TYPE_DECIMALV2>(type_info, id, strs);
     case LOGICAL_TYPE_DECIMAL32: {
         const auto scale = type_info->scale();
         using SetType = ItemHashSet<CppTypeTraits<LOGICAL_TYPE_DECIMAL32>::CppType>;
@@ -305,14 +305,14 @@ ColumnPredicate* new_column_not_in_predicate(const TypeInfoPtr& type_info, Colum
         return new BinaryColumnNotInPredicate<LOGICAL_TYPE_CHAR>(type_info, id, strs);
     case LOGICAL_TYPE_VARCHAR:
         return new BinaryColumnNotInPredicate<LOGICAL_TYPE_VARCHAR>(type_info, id, strs);
+    case LOGICAL_TYPE_DATE_V1:
+        return new ColumnNotInPredicate<LOGICAL_TYPE_DATE_V1>(type_info, id, strs);
     case LOGICAL_TYPE_DATE:
         return new ColumnNotInPredicate<LOGICAL_TYPE_DATE>(type_info, id, strs);
-    case LOGICAL_TYPE_DATE_V2:
-        return new ColumnNotInPredicate<LOGICAL_TYPE_DATE_V2>(type_info, id, strs);
+    case LOGICAL_TYPE_DATETIME_V1:
+        return new ColumnNotInPredicate<LOGICAL_TYPE_DATETIME_V1>(type_info, id, strs);
     case LOGICAL_TYPE_DATETIME:
         return new ColumnNotInPredicate<LOGICAL_TYPE_DATETIME>(type_info, id, strs);
-    case LOGICAL_TYPE_TIMESTAMP:
-        return new ColumnNotInPredicate<LOGICAL_TYPE_TIMESTAMP>(type_info, id, strs);
     case LOGICAL_TYPE_FLOAT:
         return new ColumnNotInPredicate<LOGICAL_TYPE_FLOAT>(type_info, id, strs);
     case LOGICAL_TYPE_DOUBLE:

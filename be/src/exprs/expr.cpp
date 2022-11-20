@@ -143,7 +143,7 @@ Expr::Expr(TypeDescriptor type, bool is_slotref)
         case TYPE_VARBINARY:
             _node_type = (TExprNodeType::BINARY_LITERAL);
             break;
-        case INVALID_TYPE:
+        case TYPE_UNKNOWN:
         case TYPE_STRUCT:
         case TYPE_MAP:
         case TYPE_DECIMAL32:
@@ -414,7 +414,7 @@ Status Expr::prepare(const std::vector<ExprContext*>& ctxs, RuntimeState* state)
 }
 
 Status Expr::prepare(RuntimeState* state, ExprContext* context) {
-    DCHECK(_type.type != INVALID_TYPE);
+    DCHECK(_type.type != TYPE_UNKNOWN);
     for (auto& i : _children) {
         RETURN_IF_ERROR(i->prepare(state, context));
     }
@@ -429,7 +429,7 @@ Status Expr::open(const std::vector<ExprContext*>& ctxs, RuntimeState* state) {
 }
 
 Status Expr::open(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) {
-    DCHECK(_type.type != INVALID_TYPE);
+    DCHECK(_type.type != TYPE_UNKNOWN);
     for (auto& i : _children) {
         RETURN_IF_ERROR(i->open(state, context, scope));
     }

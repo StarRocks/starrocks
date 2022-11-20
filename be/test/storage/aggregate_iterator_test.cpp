@@ -35,9 +35,9 @@ TEST_F(AggregateIteratorTest, agg_max) {
     auto c2 = std::make_shared<Field>(2, "c2", LOGICAL_TYPE_LARGEINT, false);
     auto c3 = std::make_shared<Field>(3, "c3", LOGICAL_TYPE_FLOAT, false);
     auto c4 = std::make_shared<Field>(4, "c4", LOGICAL_TYPE_DOUBLE, false);
-    auto c5 = std::make_shared<Field>(5, "c5", LOGICAL_TYPE_DECIMAL_V2, false);
-    auto c6 = std::make_shared<Field>(6, "c6", LOGICAL_TYPE_DATE_V2, false);
-    auto c7 = std::make_shared<Field>(7, "c7", LOGICAL_TYPE_TIMESTAMP, false);
+    auto c5 = std::make_shared<Field>(5, "c5", LOGICAL_TYPE_DECIMALV2, false);
+    auto c6 = std::make_shared<Field>(6, "c6", LOGICAL_TYPE_DATE, false);
+    auto c7 = std::make_shared<Field>(7, "c7", LOGICAL_TYPE_DATETIME, false);
     auto c8 = std::make_shared<Field>(8, "c8", LOGICAL_TYPE_VARCHAR, false);
 
     k1->set_is_key(true);
@@ -114,9 +114,9 @@ TEST_F(AggregateIteratorTest, agg_min) {
     auto c2 = std::make_shared<Field>(2, "c2", LOGICAL_TYPE_LARGEINT, false);
     auto c3 = std::make_shared<Field>(3, "c3", LOGICAL_TYPE_FLOAT, false);
     auto c4 = std::make_shared<Field>(4, "c4", LOGICAL_TYPE_DOUBLE, false);
-    auto c5 = std::make_shared<Field>(5, "c5", LOGICAL_TYPE_DECIMAL_V2, false);
-    auto c6 = std::make_shared<Field>(6, "c6", LOGICAL_TYPE_DATE_V2, false);
-    auto c7 = std::make_shared<Field>(7, "c7", LOGICAL_TYPE_TIMESTAMP, false);
+    auto c5 = std::make_shared<Field>(5, "c5", LOGICAL_TYPE_DECIMALV2, false);
+    auto c6 = std::make_shared<Field>(6, "c6", LOGICAL_TYPE_DATE, false);
+    auto c7 = std::make_shared<Field>(7, "c7", LOGICAL_TYPE_DATETIME, false);
     auto c8 = std::make_shared<Field>(8, "c8", LOGICAL_TYPE_VARCHAR, false);
 
     k1->set_is_key(true);
@@ -196,7 +196,7 @@ TEST_F(AggregateIteratorTest, agg_sum) {
     auto c5 = std::make_shared<Field>(5, "c5", LOGICAL_TYPE_LARGEINT, false);
     auto c6 = std::make_shared<Field>(6, "c6", LOGICAL_TYPE_FLOAT, false);
     auto c7 = std::make_shared<Field>(7, "c7", LOGICAL_TYPE_DOUBLE, false);
-    auto c8 = std::make_shared<Field>(8, "c8", LOGICAL_TYPE_DECIMAL_V2, false);
+    auto c8 = std::make_shared<Field>(8, "c8", LOGICAL_TYPE_DECIMALV2, false);
 
     k1->set_is_key(true);
     k1->set_aggregate_method(OLAP_FIELD_AGGREGATION_NONE);
@@ -267,9 +267,9 @@ TEST_F(AggregateIteratorTest, agg_replace) {
     auto c2 = std::make_shared<Field>(2, "c2", LOGICAL_TYPE_LARGEINT, false);
     auto c3 = std::make_shared<Field>(3, "c3", LOGICAL_TYPE_FLOAT, false);
     auto c4 = std::make_shared<Field>(4, "c4", LOGICAL_TYPE_DOUBLE, false);
-    auto c5 = std::make_shared<Field>(5, "c5", LOGICAL_TYPE_DECIMAL_V2, false);
-    auto c6 = std::make_shared<Field>(6, "c6", LOGICAL_TYPE_DATE_V2, false);
-    auto c7 = std::make_shared<Field>(7, "c7", LOGICAL_TYPE_TIMESTAMP, false);
+    auto c5 = std::make_shared<Field>(5, "c5", LOGICAL_TYPE_DECIMALV2, false);
+    auto c6 = std::make_shared<Field>(6, "c6", LOGICAL_TYPE_DATE, false);
+    auto c7 = std::make_shared<Field>(7, "c7", LOGICAL_TYPE_DATETIME, false);
     auto c8 = std::make_shared<Field>(8, "c8", LOGICAL_TYPE_VARCHAR, false);
 
     k1->set_is_key(true);
@@ -509,7 +509,7 @@ TEST_F(AggregateIteratorTest, agg_max_all_duplicate) {
 TEST_F(AggregateIteratorTest, agg_boolean_key) {
     config::vector_chunk_size = 2;
 
-    auto k1 = std::make_shared<Field>(0, "k1", LOGICAL_TYPE_BOOL, false);
+    auto k1 = std::make_shared<Field>(0, "k1", LOGICAL_TYPE_BOOLEAN, false);
     auto c1 = std::make_shared<Field>(1, "c1", LOGICAL_TYPE_SMALLINT, false);
 
     k1->set_is_key(true);
@@ -651,7 +651,7 @@ TEST_F(AggregateIteratorTest, agg_varchar_key) {
 TEST_F(AggregateIteratorTest, agg_date_key) {
     config::vector_chunk_size = 2;
 
-    auto k1 = std::make_shared<Field>(0, "k1", LOGICAL_TYPE_DATE_V2, false);
+    auto k1 = std::make_shared<Field>(0, "k1", LOGICAL_TYPE_DATE, false);
     auto c1 = std::make_shared<Field>(1, "c1", LOGICAL_TYPE_SMALLINT, false);
 
     k1->set_is_key(true);
@@ -746,7 +746,7 @@ TEST_F(AggregateIteratorTest, agg_date_key) {
 TEST_F(AggregateIteratorTest, agg_decimal_key) {
     config::vector_chunk_size = 2;
 
-    auto k1 = std::make_shared<Field>(0, "k1", LOGICAL_TYPE_DECIMAL_V2, false);
+    auto k1 = std::make_shared<Field>(0, "k1", LOGICAL_TYPE_DECIMALV2, false);
     auto c1 = std::make_shared<Field>(1, "c1", LOGICAL_TYPE_SMALLINT, false);
 
     k1->set_is_key(true);
@@ -842,7 +842,7 @@ TEST_F(AggregateIteratorTest, agg_varchar_date_key) {
     config::vector_chunk_size = 2;
 
     auto k1 = std::make_shared<Field>(0, "k1", LOGICAL_TYPE_VARCHAR, false);
-    auto k2 = std::make_shared<Field>(1, "k2", LOGICAL_TYPE_DATE_V2, false);
+    auto k2 = std::make_shared<Field>(1, "k2", LOGICAL_TYPE_DATE, false);
     auto c1 = std::make_shared<Field>(2, "c1", LOGICAL_TYPE_SMALLINT, false);
 
     k1->set_is_key(true);
@@ -975,7 +975,7 @@ TEST_F(AggregateIteratorTest, agg_varchar_date_key_with_null) {
     config::vector_chunk_size = 2;
 
     auto k1 = std::make_shared<Field>(0, "k1", LOGICAL_TYPE_VARCHAR, true);
-    auto k2 = std::make_shared<Field>(1, "k2", LOGICAL_TYPE_DATE_V2, true);
+    auto k2 = std::make_shared<Field>(1, "k2", LOGICAL_TYPE_DATE, true);
     auto c1 = std::make_shared<Field>(2, "c1", LOGICAL_TYPE_SMALLINT, false);
 
     k1->set_is_key(true);

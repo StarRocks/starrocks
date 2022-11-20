@@ -177,7 +177,7 @@ Status ParquetScanner::new_column(const arrow::DataType* arrow_type, const SlotD
 
     Status error = illegal_converting_error(arrow_type->name(), type_desc.debug_string());
     auto strict_pt = get_strict_type(at);
-    if (strict_pt == INVALID_TYPE) {
+    if (strict_pt == TYPE_UNKNOWN) {
         return error;
     }
 

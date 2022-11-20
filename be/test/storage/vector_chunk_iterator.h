@@ -44,7 +44,7 @@ static std::vector<const char*> to_cstring(const std::vector<std::string>& v) {
 }
 
 template <>
-struct DatumBuilder<LOGICAL_TYPE_DECIMAL_V2> {
+struct DatumBuilder<LOGICAL_TYPE_DECIMALV2> {
     Datums operator()(const std::vector<std::string>& data) const { return operator()(to_cstring(data)); }
 
     Datums operator()(const std::vector<const char*>& data) const {
@@ -52,7 +52,7 @@ struct DatumBuilder<LOGICAL_TYPE_DECIMAL_V2> {
         datums.resize(data.size());
         for (size_t i = 0; i < data.size(); i++) {
             Datum& d = datums[i];
-            auto type_info = get_type_info(LOGICAL_TYPE_DECIMAL_V2);
+            auto type_info = get_type_info(LOGICAL_TYPE_DECIMALV2);
             CHECK(datum_from_string(type_info.get(), &d, data[i], nullptr).ok());
         }
         return datums;
@@ -65,7 +65,7 @@ struct DatumBuilder<LOGICAL_TYPE_DECIMAL_V2> {
 };
 
 template <>
-struct DatumBuilder<LOGICAL_TYPE_DATE_V2> {
+struct DatumBuilder<LOGICAL_TYPE_DATE> {
     Datums operator()(const std::vector<std::string>& data) const { return operator()(to_cstring(data)); }
 
     Datums operator()(const std::vector<const char*>& data) const {
@@ -73,7 +73,7 @@ struct DatumBuilder<LOGICAL_TYPE_DATE_V2> {
         datums.resize(data.size());
         for (size_t i = 0; i < data.size(); i++) {
             Datum& d = datums[i];
-            auto type_info = get_type_info(LOGICAL_TYPE_DATE_V2);
+            auto type_info = get_type_info(LOGICAL_TYPE_DATE);
             CHECK(datum_from_string(type_info.get(), &d, data[i], nullptr).ok());
         }
         return datums;
@@ -86,7 +86,7 @@ struct DatumBuilder<LOGICAL_TYPE_DATE_V2> {
 };
 
 template <>
-struct DatumBuilder<LOGICAL_TYPE_TIMESTAMP> {
+struct DatumBuilder<LOGICAL_TYPE_DATETIME> {
     Datums operator()(const std::vector<std::string>& data) const { return operator()(to_cstring(data)); }
 
     Datums operator()(const std::vector<const char*>& data) const {
@@ -94,7 +94,7 @@ struct DatumBuilder<LOGICAL_TYPE_TIMESTAMP> {
         datums.resize(data.size());
         for (size_t i = 0; i < data.size(); i++) {
             Datum& d = datums[i];
-            auto type_info = get_type_info(LOGICAL_TYPE_TIMESTAMP);
+            auto type_info = get_type_info(LOGICAL_TYPE_DATETIME);
             CHECK(datum_from_string(type_info.get(), &d, data[i], nullptr).ok());
         }
         return datums;
@@ -106,19 +106,19 @@ struct DatumBuilder<LOGICAL_TYPE_TIMESTAMP> {
     }
 };
 
-[[maybe_unused]] static DatumBuilder<LOGICAL_TYPE_BOOL> COL_BOOLEAN;       // NOLINT
-[[maybe_unused]] static DatumBuilder<LOGICAL_TYPE_CHAR> COL_CHAR;          // NOLINT
-[[maybe_unused]] static DatumBuilder<LOGICAL_TYPE_VARCHAR> COL_VARCHAR;    // NOLINT
-[[maybe_unused]] static DatumBuilder<LOGICAL_TYPE_TINYINT> COL_TINYINT;    // NOLINT
-[[maybe_unused]] static DatumBuilder<LOGICAL_TYPE_SMALLINT> COL_SMALLINT;  // NOLINT
-[[maybe_unused]] static DatumBuilder<LOGICAL_TYPE_INT> COL_INT;            // NOLINT
-[[maybe_unused]] static DatumBuilder<LOGICAL_TYPE_BIGINT> COL_BIGINT;      // NOLINT
-[[maybe_unused]] static DatumBuilder<LOGICAL_TYPE_LARGEINT> COL_LARGEINT;  // NOLINT
-[[maybe_unused]] static DatumBuilder<LOGICAL_TYPE_FLOAT> COL_FLOAT;        // NOLINT
-[[maybe_unused]] static DatumBuilder<LOGICAL_TYPE_DOUBLE> COL_DOUBLE;      // NOLINT
-[[maybe_unused]] static DatumBuilder<LOGICAL_TYPE_DECIMAL_V2> COL_DECIMAL; // NOLINT
-[[maybe_unused]] static DatumBuilder<LOGICAL_TYPE_DATE_V2> COL_DATE;       // NOLINT
-[[maybe_unused]] static DatumBuilder<LOGICAL_TYPE_TIMESTAMP> COL_DATETIME; // NOLINT
+[[maybe_unused]] static DatumBuilder<LOGICAL_TYPE_BOOLEAN> COL_BOOLEAN;   // NOLINT
+[[maybe_unused]] static DatumBuilder<LOGICAL_TYPE_CHAR> COL_CHAR;         // NOLINT
+[[maybe_unused]] static DatumBuilder<LOGICAL_TYPE_VARCHAR> COL_VARCHAR;   // NOLINT
+[[maybe_unused]] static DatumBuilder<LOGICAL_TYPE_TINYINT> COL_TINYINT;   // NOLINT
+[[maybe_unused]] static DatumBuilder<LOGICAL_TYPE_SMALLINT> COL_SMALLINT; // NOLINT
+[[maybe_unused]] static DatumBuilder<LOGICAL_TYPE_INT> COL_INT;           // NOLINT
+[[maybe_unused]] static DatumBuilder<LOGICAL_TYPE_BIGINT> COL_BIGINT;     // NOLINT
+[[maybe_unused]] static DatumBuilder<LOGICAL_TYPE_LARGEINT> COL_LARGEINT; // NOLINT
+[[maybe_unused]] static DatumBuilder<LOGICAL_TYPE_FLOAT> COL_FLOAT;       // NOLINT
+[[maybe_unused]] static DatumBuilder<LOGICAL_TYPE_DOUBLE> COL_DOUBLE;     // NOLINT
+[[maybe_unused]] static DatumBuilder<LOGICAL_TYPE_DECIMALV2> COL_DECIMAL; // NOLINT
+[[maybe_unused]] static DatumBuilder<LOGICAL_TYPE_DATE> COL_DATE;         // NOLINT
+[[maybe_unused]] static DatumBuilder<LOGICAL_TYPE_DATETIME> COL_DATETIME; // NOLINT
 
 /// VectorChunkIterator
 class VectorChunkIterator final : public ChunkIterator {

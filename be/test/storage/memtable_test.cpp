@@ -73,7 +73,7 @@ static unique_ptr<Schema> create_schema(const string& desc, int nkey) {
         string name = fs[0];
         LogicalType type = LOGICAL_TYPE_UNKNOWN;
         if (fs[1] == "boolean") {
-            type = LOGICAL_TYPE_BOOL;
+            type = LOGICAL_TYPE_BOOLEAN;
         } else if (fs[1] == "tinyint") {
             type = LOGICAL_TYPE_TINYINT;
         } else if (fs[1] == "smallint") {
@@ -114,7 +114,7 @@ static const std::vector<SlotDescriptor*>* create_tuple_desc_slots(RuntimeState*
         if (fs.size() < 2) {
             CHECK(false) << "create_tuple_desc_slots bad desc";
         }
-        PrimitiveType type = INVALID_TYPE;
+        PrimitiveType type = TYPE_UNKNOWN;
         if (fs[1] == "boolean") {
             type = TYPE_BOOLEAN;
         } else if (fs[1] == "tinyint") {

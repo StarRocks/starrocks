@@ -509,7 +509,7 @@ Status ScrollParser::_append_array_val(const rapidjson::Value& col, const TypeDe
                                        bool pure_doc_value) {
     // Array type must have child type.
     const auto& child_type = type_desc.children[0];
-    DCHECK(child_type.type != INVALID_TYPE);
+    DCHECK(child_type.type != TYPE_UNKNOWN);
 
     // In Elasticsearch, n-dimensional array will be flattened into one-dimensional array.
     // https://www.elastic.co/guide/en/elasticsearch/reference/8.3/array.html

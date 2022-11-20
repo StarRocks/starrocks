@@ -312,7 +312,7 @@ TEST(ColumnAggregator, testStringMin) {
 }
 
 TEST(ColumnAggregator, testNullBooleanMin) {
-    FieldPtr field = std::make_shared<Field>(1, "test_boolean", LogicalType::LOGICAL_TYPE_BOOL, true);
+    FieldPtr field = std::make_shared<Field>(1, "test_boolean", LogicalType::LOGICAL_TYPE_BOOLEAN, true);
     field->set_aggregate_method(FieldAggregationMethod::OLAP_FIELD_AGGREGATION_MIN);
 
     auto agg = NullableColumn::create(BooleanColumn::create(), NullColumn::create());

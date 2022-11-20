@@ -517,7 +517,7 @@ Status compaction_merge_rowsets(Tablet& tablet, int64_t version, const vector<Ro
     std::unique_ptr<RowsetMerger> merger;
     auto key_type = PrimaryKeyEncoder::encoded_primary_key_type(schema, schema.sort_key_idxes());
     switch (key_type) {
-    case LOGICAL_TYPE_BOOL:
+    case LOGICAL_TYPE_BOOLEAN:
         merger = std::make_unique<RowsetMergerImpl<uint8_t>>();
         break;
     case LOGICAL_TYPE_TINYINT:
@@ -538,10 +538,10 @@ Status compaction_merge_rowsets(Tablet& tablet, int64_t version, const vector<Ro
     case LOGICAL_TYPE_VARCHAR:
         merger = std::make_unique<RowsetMergerImpl<Slice>>();
         break;
-    case LOGICAL_TYPE_DATE_V2:
+    case LOGICAL_TYPE_DATE:
         merger = std::make_unique<RowsetMergerImpl<int32_t>>();
         break;
-    case LOGICAL_TYPE_TIMESTAMP:
+    case LOGICAL_TYPE_DATETIME:
         merger = std::make_unique<RowsetMergerImpl<int64_t>>();
         break;
     default:

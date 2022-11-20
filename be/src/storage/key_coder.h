@@ -106,7 +106,7 @@ public:
     }
 
     static void full_encode_ascending_datum(const Datum& value, std::string* buf) {
-        static_assert(field_type != LOGICAL_TYPE_DECIMAL && field_type != LOGICAL_TYPE_DATE);
+        static_assert(field_type != LOGICAL_TYPE_DECIMAL && field_type != LOGICAL_TYPE_DATE_V1);
         CppType raw = value.get<CppType>();
         full_encode_ascending(&raw, buf);
     }
@@ -140,9 +140,9 @@ public:
 };
 
 template <>
-class KeyCoderTraits<LOGICAL_TYPE_BOOL> {
+class KeyCoderTraits<LOGICAL_TYPE_BOOLEAN> {
 public:
-    using CppType = typename CppTypeTraits<LOGICAL_TYPE_BOOL>::CppType;
+    using CppType = typename CppTypeTraits<LOGICAL_TYPE_BOOLEAN>::CppType;
     using Datum = vectorized::Datum;
 
 public:
@@ -181,10 +181,10 @@ public:
 };
 
 template <>
-class KeyCoderTraits<LOGICAL_TYPE_DATE> {
+class KeyCoderTraits<LOGICAL_TYPE_DATE_V1> {
 public:
-    using CppType = typename CppTypeTraits<LOGICAL_TYPE_DATE>::CppType;
-    using UnsignedCppType = typename CppTypeTraits<LOGICAL_TYPE_DATE>::UnsignedCppType;
+    using CppType = typename CppTypeTraits<LOGICAL_TYPE_DATE_V1>::CppType;
+    using UnsignedCppType = typename CppTypeTraits<LOGICAL_TYPE_DATE_V1>::UnsignedCppType;
     using Datum = vectorized::Datum;
 
 public:
@@ -263,7 +263,7 @@ public:
 };
 
 template <>
-class KeyCoderTraits<LOGICAL_TYPE_DECIMAL_V2> {
+class KeyCoderTraits<LOGICAL_TYPE_DECIMALV2> {
     using Datum = vectorized::Datum;
 
 public:

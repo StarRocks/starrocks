@@ -167,11 +167,11 @@ public:
                       Type == LOGICAL_TYPE_INT ||
                       Type == LOGICAL_TYPE_BIGINT ||
                       Type == LOGICAL_TYPE_LARGEINT ||
+                      Type == LOGICAL_TYPE_DATE_V1 ||
                       Type == LOGICAL_TYPE_DATE ||
-                      Type == LOGICAL_TYPE_DATE_V2 ||
+                      Type == LOGICAL_TYPE_DATETIME_V1 ||
                       Type == LOGICAL_TYPE_DATETIME ||
-                      Type == LOGICAL_TYPE_TIMESTAMP ||
-                      Type == LOGICAL_TYPE_DECIMAL_V2 ||
+                      Type == LOGICAL_TYPE_DECIMALV2 ||
                       Type == LOGICAL_TYPE_DECIMAL32 ||
                       Type == LOGICAL_TYPE_DECIMAL64 ||
                       Type == LOGICAL_TYPE_DECIMAL128,
