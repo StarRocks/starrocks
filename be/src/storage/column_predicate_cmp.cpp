@@ -69,8 +69,8 @@ template <template <LogicalType> typename Predicate, template <LogicalType> type
 static ColumnPredicate* new_column_predicate(const TypeInfoPtr& type_info, ColumnId id, const Slice& operand) {
     auto type = type_info->type();
     switch (type) {
-    case LOGICAL_TYPE_BOOL:
-        return new Predicate<LOGICAL_TYPE_BOOL>(type_info, id, string_to_int<int>(operand) != 0);
+    case LOGICAL_TYPE_BOOLEAN:
+        return new Predicate<LOGICAL_TYPE_BOOLEAN>(type_info, id, string_to_int<int>(operand) != 0);
     case LOGICAL_TYPE_TINYINT:
         return new Predicate<LOGICAL_TYPE_TINYINT>(type_info, id, string_to_int<int8_t>(operand));
     case LOGICAL_TYPE_UNSIGNED_TINYINT:
@@ -101,11 +101,11 @@ static ColumnPredicate* new_column_predicate(const TypeInfoPtr& type_info, Colum
         DCHECK(st.ok());
         return new Predicate<LOGICAL_TYPE_DECIMAL>(type_info, id, value);
     }
-    case LOGICAL_TYPE_DECIMAL_V2: {
+    case LOGICAL_TYPE_DECIMALV2: {
         DecimalV2Value value;
         auto st = type_info->from_string(&value, operand.to_string());
         DCHECK(st.ok());
-        return new Predicate<LOGICAL_TYPE_DECIMAL_V2>(type_info, id, value);
+        return new Predicate<LOGICAL_TYPE_DECIMALV2>(type_info, id, value);
     }
     case LOGICAL_TYPE_DECIMAL32: {
         int32_t value;
@@ -125,29 +125,29 @@ static ColumnPredicate* new_column_predicate(const TypeInfoPtr& type_info, Colum
         DCHECK(st.ok());
         return new Predicate<LOGICAL_TYPE_DECIMAL128>(type_info, id, value);
     }
-    case LOGICAL_TYPE_DATE: {
+    case LOGICAL_TYPE_DATE_V1: {
         uint24_t value = 0;
+        auto st = type_info->from_string(&value, operand.to_string());
+        DCHECK(st.ok());
+        return new Predicate<LOGICAL_TYPE_DATE_V1>(type_info, id, value);
+    }
+    case LOGICAL_TYPE_DATE: {
+        int32_t value = 0;
         auto st = type_info->from_string(&value, operand.to_string());
         DCHECK(st.ok());
         return new Predicate<LOGICAL_TYPE_DATE>(type_info, id, value);
     }
-    case LOGICAL_TYPE_DATE_V2: {
-        int32_t value = 0;
-        auto st = type_info->from_string(&value, operand.to_string());
-        DCHECK(st.ok());
-        return new Predicate<LOGICAL_TYPE_DATE_V2>(type_info, id, value);
-    }
-    case LOGICAL_TYPE_DATETIME: {
+    case LOGICAL_TYPE_DATETIME_V1: {
         uint64_t value = 0;
         auto st = type_info->from_string(&value, operand.to_string());
         DCHECK(st.ok());
-        return new Predicate<LOGICAL_TYPE_DATETIME>(type_info, id, value);
+        return new Predicate<LOGICAL_TYPE_DATETIME_V1>(type_info, id, value);
     }
-    case LOGICAL_TYPE_TIMESTAMP: {
+    case LOGICAL_TYPE_DATETIME: {
         int64_t value = 0;
         auto st = type_info->from_string(&value, operand.to_string());
         DCHECK(st.ok());
-        return new Predicate<LOGICAL_TYPE_TIMESTAMP>(type_info, id, value);
+        return new Predicate<LOGICAL_TYPE_DATETIME>(type_info, id, value);
     }
     case LOGICAL_TYPE_CHAR:
         return new BinaryPredicate<LOGICAL_TYPE_CHAR>(type_info, id, operand);

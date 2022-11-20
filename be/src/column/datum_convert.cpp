@@ -31,7 +31,7 @@ Status datum_from_string(TypeInfo* type_info, Datum* dst, const std::string& str
         M(LOGICAL_TYPE_FLOAT)
         M(LOGICAL_TYPE_DOUBLE)
 #undef M
-    case LOGICAL_TYPE_BOOL: {
+    case LOGICAL_TYPE_BOOLEAN: {
         bool v;
         RETURN_IF_ERROR(type_info->from_string(&v, str));
         dst->set_int8(v);
@@ -77,7 +77,7 @@ std::string datum_to_string(TypeInfo* type_info, const Datum& datum) {
     }
     const auto type = type_info->type();
     switch (type) {
-    case LOGICAL_TYPE_BOOL:
+    case LOGICAL_TYPE_BOOLEAN:
         return datum_to_string<LOGICAL_TYPE_TINYINT>(type_info, datum);
     case LOGICAL_TYPE_CHAR:
     case LOGICAL_TYPE_VARCHAR:

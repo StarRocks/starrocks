@@ -287,12 +287,12 @@ StatusOr<std::unique_ptr<ColumnWriter>> ColumnWriter::create(const ColumnWriterO
                 null_options.meta = opts.meta->add_children_columns();
                 null_options.meta->set_column_id(opts.meta->column_id());
                 null_options.meta->set_unique_id(opts.meta->unique_id());
-                null_options.meta->set_type(LOGICAL_TYPE_BOOL);
+                null_options.meta->set_type(LOGICAL_TYPE_BOOLEAN);
                 null_options.meta->set_length(1);
                 null_options.meta->set_encoding(DEFAULT_ENCODING);
                 null_options.meta->set_compression(opts.meta->compression());
                 null_options.meta->set_is_nullable(false);
-                std::unique_ptr<Field> bool_field(FieldFactory::create_by_type(LogicalType::LOGICAL_TYPE_BOOL));
+                std::unique_ptr<Field> bool_field(FieldFactory::create_by_type(LogicalType::LOGICAL_TYPE_BOOLEAN));
                 null_writer = std::make_unique<ScalarColumnWriter>(null_options, std::move(bool_field), wfile);
             }
 

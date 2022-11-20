@@ -152,7 +152,7 @@ Status MySQLDataSource::open(RuntimeState* state) {
 #undef APPLY_FOR_VARCHAR_DATE_TYPE
 #undef CONVERT_APPEND_TO_SQL
 
-            case INVALID_TYPE:
+            case TYPE_UNKNOWN:
             case TYPE_NULL:
             case TYPE_BINARY:
             case TYPE_DECIMAL:

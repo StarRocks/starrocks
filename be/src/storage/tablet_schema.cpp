@@ -92,33 +92,33 @@ uint32_t TabletColumn::get_field_length_by_type(LogicalType type, uint32_t strin
     case LOGICAL_TYPE_TIME:
     case LOGICAL_TYPE_BINARY:
     case LOGICAL_TYPE_MAX_VALUE:
-    case LOGICAL_TYPE_BOOL:
+    case LOGICAL_TYPE_BOOLEAN:
     case LOGICAL_TYPE_TINYINT:
     case LOGICAL_TYPE_UNSIGNED_TINYINT:
         return 1;
     case LOGICAL_TYPE_SMALLINT:
     case LOGICAL_TYPE_UNSIGNED_SMALLINT:
         return 2;
-    case LOGICAL_TYPE_DATE:
+    case LOGICAL_TYPE_DATE_V1:
         return 3;
     case LOGICAL_TYPE_INT:
     case LOGICAL_TYPE_UNSIGNED_INT:
     case LOGICAL_TYPE_FLOAT:
-    case LOGICAL_TYPE_DATE_V2:
+    case LOGICAL_TYPE_DATE:
     case LOGICAL_TYPE_DECIMAL32:
         return 4;
     case LOGICAL_TYPE_BIGINT:
     case LOGICAL_TYPE_UNSIGNED_BIGINT:
     case LOGICAL_TYPE_DOUBLE:
+    case LOGICAL_TYPE_DATETIME_V1:
     case LOGICAL_TYPE_DATETIME:
-    case LOGICAL_TYPE_TIMESTAMP:
     case LOGICAL_TYPE_DECIMAL64:
         return 8;
     case LOGICAL_TYPE_DECIMAL:
         return 12;
     case LOGICAL_TYPE_LARGEINT:
     case LOGICAL_TYPE_OBJECT:
-    case LOGICAL_TYPE_DECIMAL_V2:
+    case LOGICAL_TYPE_DECIMALV2:
     case LOGICAL_TYPE_DECIMAL128:
         return 16;
     case LOGICAL_TYPE_CHAR:

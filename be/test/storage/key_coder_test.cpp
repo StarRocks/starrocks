@@ -114,12 +114,12 @@ TEST_F(KeyCoderTest, test_int) {
     test_integer_encode<LOGICAL_TYPE_UNSIGNED_BIGINT>();
     test_integer_encode<LOGICAL_TYPE_LARGEINT>();
 
-    test_integer_encode<LOGICAL_TYPE_DATETIME>();
+    test_integer_encode<LOGICAL_TYPE_DATETIME_V1>();
 }
 
 TEST_F(KeyCoderTest, test_date) {
     using CppType = uint24_t;
-    auto key_coder = get_key_coder(LOGICAL_TYPE_DATE);
+    auto key_coder = get_key_coder(LOGICAL_TYPE_DATE_V1);
 
     {
         std::string buf;

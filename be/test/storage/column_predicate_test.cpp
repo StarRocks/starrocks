@@ -27,8 +27,8 @@ static inline std::string to_string(const std::vector<uint8_t>& v) {
 TEST(ColumnPredicateTest, test_eq) {
     // boolean
     {
-        std::unique_ptr<ColumnPredicate> p(new_column_eq_predicate(get_type_info(LOGICAL_TYPE_BOOL), 0, "1"));
-        auto c = ChunkHelper::column_from_field_type(LOGICAL_TYPE_BOOL, false);
+        std::unique_ptr<ColumnPredicate> p(new_column_eq_predicate(get_type_info(LOGICAL_TYPE_BOOLEAN), 0, "1"));
+        auto c = ChunkHelper::column_from_field_type(LOGICAL_TYPE_BOOLEAN, false);
         c->append_datum(Datum((uint8_t)1));
         c->append_datum(Datum((uint8_t)0));
         c->append_datum(Datum((uint8_t)0));
@@ -416,9 +416,8 @@ TEST(ColumnPredicateTest, test_eq) {
     }
     // date_v2
     {
-        std::unique_ptr<ColumnPredicate> p(
-                new_column_eq_predicate(get_type_info(LOGICAL_TYPE_DATE_V2), 0, "1990-01-01"));
-        auto c = ChunkHelper::column_from_field_type(LOGICAL_TYPE_DATE_V2, false);
+        std::unique_ptr<ColumnPredicate> p(new_column_eq_predicate(get_type_info(LOGICAL_TYPE_DATE), 0, "1990-01-01"));
+        auto c = ChunkHelper::column_from_field_type(LOGICAL_TYPE_DATE, false);
         c->append_datum(Datum(DateValue::create(1990, 1, 1)));
         c->append_datum(Datum(DateValue::create(1991, 1, 1)));
         c->append_datum(Datum(DateValue::create(1992, 1, 1)));
@@ -459,8 +458,8 @@ TEST(ColumnPredicateTest, test_eq) {
     // timestamp
     {
         std::unique_ptr<ColumnPredicate> p(
-                new_column_eq_predicate(get_type_info(LOGICAL_TYPE_TIMESTAMP), 0, "1990-01-01 00:00:00"));
-        auto c = ChunkHelper::column_from_field_type(LOGICAL_TYPE_TIMESTAMP, false);
+                new_column_eq_predicate(get_type_info(LOGICAL_TYPE_DATETIME), 0, "1990-01-01 00:00:00"));
+        auto c = ChunkHelper::column_from_field_type(LOGICAL_TYPE_DATETIME, false);
         c->append_datum(Datum(TimestampValue::create(1990, 1, 1, 0, 0, 0)));
         c->append_datum(Datum(TimestampValue::create(1990, 1, 1, 0, 0, 1)));
         c->append_datum(Datum(TimestampValue::create(1990, 1, 1, 0, 0, 2)));
@@ -500,8 +499,8 @@ TEST(ColumnPredicateTest, test_eq) {
     }
     // decimal_v2
     {
-        std::unique_ptr<ColumnPredicate> p(new_column_eq_predicate(get_type_info(LOGICAL_TYPE_DECIMAL_V2), 0, "1.23"));
-        auto field = std::make_shared<Field>(1, "test", LOGICAL_TYPE_DECIMAL_V2, 27, 9, false);
+        std::unique_ptr<ColumnPredicate> p(new_column_eq_predicate(get_type_info(LOGICAL_TYPE_DECIMALV2), 0, "1.23"));
+        auto field = std::make_shared<Field>(1, "test", LOGICAL_TYPE_DECIMALV2, 27, 9, false);
         auto c = ChunkHelper::column_from_field(*field);
         c->append_datum(Datum(DecimalV2Value("1.23")));
         c->append_datum(Datum(DecimalV2Value("1.24")));
@@ -662,8 +661,8 @@ TEST(ColumnPredicateTest, test_eq) {
 TEST(ColumnPredicateTest, test_ne) {
     // boolean
     {
-        std::unique_ptr<ColumnPredicate> p(new_column_ne_predicate(get_type_info(LOGICAL_TYPE_BOOL), 0, "1"));
-        auto c = ChunkHelper::column_from_field_type(LOGICAL_TYPE_BOOL, false);
+        std::unique_ptr<ColumnPredicate> p(new_column_ne_predicate(get_type_info(LOGICAL_TYPE_BOOLEAN), 0, "1"));
+        auto c = ChunkHelper::column_from_field_type(LOGICAL_TYPE_BOOLEAN, false);
         c->append_datum(Datum((uint8_t)1));
         c->append_datum(Datum((uint8_t)0));
         c->append_datum(Datum((uint8_t)1));
@@ -2169,7 +2168,7 @@ TEST(ColumnPredicateTest, test_convert_cmp_predicate) {
 
     for (auto predicate : testcases) {
         std::unique_ptr<ColumnPredicate> p(
-                new_column_cmp_predicate(predicate, get_type_info(LOGICAL_TYPE_BOOL), 0, "1"));
+                new_column_cmp_predicate(predicate, get_type_info(LOGICAL_TYPE_BOOLEAN), 0, "1"));
         const ColumnPredicate* new_p;
         ObjectPool op;
 
@@ -2182,7 +2181,7 @@ TEST(ColumnPredicateTest, test_convert_cmp_predicate) {
 
         // same type
         {
-            TypeInfoPtr new_type = get_type_info(LOGICAL_TYPE_BOOL);
+            TypeInfoPtr new_type = get_type_info(LOGICAL_TYPE_BOOLEAN);
             ASSERT_OK(p->convert_to(&new_p, new_type, &op));
             EXPECT_EQ(new_p->type(), p->type());
         }

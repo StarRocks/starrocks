@@ -86,7 +86,7 @@ static LogicalType t_primitive_type_to_field_type(TPrimitiveType::type primitive
     case TPrimitiveType::TIME:
         return LOGICAL_TYPE_UNKNOWN;
     case TPrimitiveType::BOOLEAN:
-        return LOGICAL_TYPE_BOOL;
+        return LOGICAL_TYPE_BOOLEAN;
     case TPrimitiveType::TINYINT:
         return LOGICAL_TYPE_TINYINT;
     case TPrimitiveType::SMALLINT:
@@ -100,9 +100,9 @@ static LogicalType t_primitive_type_to_field_type(TPrimitiveType::type primitive
     case TPrimitiveType::DOUBLE:
         return LOGICAL_TYPE_DOUBLE;
     case TPrimitiveType::DATE:
-        return v == FieldTypeVersion::kV1 ? LOGICAL_TYPE_DATE : LOGICAL_TYPE_DATE_V2;
+        return v == FieldTypeVersion::kV1 ? LOGICAL_TYPE_DATE_V1 : LOGICAL_TYPE_DATE;
     case TPrimitiveType::DATETIME:
-        return v == FieldTypeVersion::kV1 ? LOGICAL_TYPE_DATETIME : LOGICAL_TYPE_TIMESTAMP;
+        return v == FieldTypeVersion::kV1 ? LOGICAL_TYPE_DATETIME_V1 : LOGICAL_TYPE_DATETIME;
     case TPrimitiveType::CHAR:
         return LOGICAL_TYPE_CHAR;
     case TPrimitiveType::LARGEINT:
@@ -113,7 +113,7 @@ static LogicalType t_primitive_type_to_field_type(TPrimitiveType::type primitive
         return LOGICAL_TYPE_HLL;
     case TPrimitiveType::DECIMAL:
     case TPrimitiveType::DECIMALV2:
-        return v == FieldTypeVersion::kV1 ? LOGICAL_TYPE_DECIMAL : LOGICAL_TYPE_DECIMAL_V2;
+        return v == FieldTypeVersion::kV1 ? LOGICAL_TYPE_DECIMAL : LOGICAL_TYPE_DECIMALV2;
     case TPrimitiveType::DECIMAL32:
         return LOGICAL_TYPE_DECIMAL32;
     case TPrimitiveType::DECIMAL64:

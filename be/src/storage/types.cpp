@@ -353,7 +353,7 @@ const TypeInfo* get_scalar_type_info(LogicalType type) {
 }
 
 template <>
-struct ScalarTypeInfoImpl<LOGICAL_TYPE_BOOL> : public ScalarTypeInfoImplBase<LOGICAL_TYPE_BOOL> {
+struct ScalarTypeInfoImpl<LOGICAL_TYPE_BOOLEAN> : public ScalarTypeInfoImplBase<LOGICAL_TYPE_BOOLEAN> {
     static std::string to_string(const void* src) {
         char buf[1024] = {'\0'};
         snprintf(buf, sizeof(buf), "%d", *reinterpret_cast<const bool*>(src));
@@ -641,7 +641,7 @@ struct ScalarTypeInfoImpl<LOGICAL_TYPE_DECIMAL> : public ScalarTypeInfoImplBase<
 };
 
 template <>
-struct ScalarTypeInfoImpl<LOGICAL_TYPE_DECIMAL_V2> : public ScalarTypeInfoImplBase<LOGICAL_TYPE_DECIMAL_V2> {
+struct ScalarTypeInfoImpl<LOGICAL_TYPE_DECIMALV2> : public ScalarTypeInfoImplBase<LOGICAL_TYPE_DECIMALV2> {
     static Status from_string(void* buf, const std::string& scan_key) {
         CppType val;
         if (val.parse_from_str(scan_key.c_str(), scan_key.size()) != E_DEC_OK) {
@@ -682,7 +682,7 @@ struct ScalarTypeInfoImpl<LOGICAL_TYPE_DECIMAL_V2> : public ScalarTypeInfoImplBa
 };
 
 template <>
-struct ScalarTypeInfoImpl<LOGICAL_TYPE_DATE> : public ScalarTypeInfoImplBase<LOGICAL_TYPE_DATE> {
+struct ScalarTypeInfoImpl<LOGICAL_TYPE_DATE_V1> : public ScalarTypeInfoImplBase<LOGICAL_TYPE_DATE_V1> {
     static Status from_string(void* buf, const std::string& scan_key) {
         tm time_tm;
         char* res = strptime(scan_key.c_str(), "%Y-%m-%d", &time_tm);
@@ -704,8 +704,8 @@ struct ScalarTypeInfoImpl<LOGICAL_TYPE_DATE> : public ScalarTypeInfoImplBase<LOG
 
     static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
                                MemPool* mem_pool __attribute__((unused))) {
-        if (src_type->type() == LogicalType::LOGICAL_TYPE_DATETIME) {
-            using SrcType = typename CppTypeTraits<LOGICAL_TYPE_DATETIME>::CppType;
+        if (src_type->type() == LogicalType::LOGICAL_TYPE_DATETIME_V1) {
+            using SrcType = typename CppTypeTraits<LOGICAL_TYPE_DATETIME_V1>::CppType;
             auto src_value = unaligned_load<SrcType>(src);
             //only need part one
             SrcType part1 = (src_value / 1000000L);
@@ -716,7 +716,7 @@ struct ScalarTypeInfoImpl<LOGICAL_TYPE_DATE> : public ScalarTypeInfoImplBase<LOG
             return Status::OK();
         }
 
-        if (src_type->type() == LogicalType::LOGICAL_TYPE_TIMESTAMP) {
+        if (src_type->type() == LogicalType::LOGICAL_TYPE_DATETIME) {
             int year, month, day, hour, minute, second, usec;
             auto src_value = unaligned_load<vectorized::TimestampValue>(src);
             src_value.to_timestamp(&year, &month, &day, &hour, &minute, &second, &usec);
@@ -765,11 +765,11 @@ struct ScalarTypeInfoImpl<LOGICAL_TYPE_DATE> : public ScalarTypeInfoImplBase<LOG
 };
 
 template <>
-struct ScalarTypeInfoImpl<LOGICAL_TYPE_DATE_V2> : public ScalarTypeInfoImplBase<LOGICAL_TYPE_DATE_V2> {
+struct ScalarTypeInfoImpl<LOGICAL_TYPE_DATE> : public ScalarTypeInfoImplBase<LOGICAL_TYPE_DATE> {
     static Status from_string(void* buf, const std::string& scan_key) {
         vectorized::DateValue date;
         if (!date.from_string(scan_key.data(), scan_key.size())) {
-            // Compatible with LOGICAL_TYPE_DATE
+            // Compatible with LOGICAL_TYPE_DATE_V1
             date.from_string("1400-01-01", sizeof("1400-01-01") - 1);
         }
         unaligned_store<vectorized::DateValue>(buf, date);
@@ -783,7 +783,7 @@ struct ScalarTypeInfoImpl<LOGICAL_TYPE_DATE_V2> : public ScalarTypeInfoImplBase<
 
     static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
                                MemPool* mem_pool __attribute__((unused))) {
-        auto converter = vectorized::get_type_converter(src_type->type(), LOGICAL_TYPE_DATE_V2);
+        auto converter = vectorized::get_type_converter(src_type->type(), LOGICAL_TYPE_DATE);
         RETURN_IF_ERROR(converter->convert(dest, src, mem_pool));
         return Status::OK();
     }
@@ -798,7 +798,7 @@ struct ScalarTypeInfoImpl<LOGICAL_TYPE_DATE_V2> : public ScalarTypeInfoImplBase<
 };
 
 template <>
-struct ScalarTypeInfoImpl<LOGICAL_TYPE_DATETIME> : public ScalarTypeInfoImplBase<LOGICAL_TYPE_DATETIME> {
+struct ScalarTypeInfoImpl<LOGICAL_TYPE_DATETIME_V1> : public ScalarTypeInfoImplBase<LOGICAL_TYPE_DATETIME_V1> {
     static Status from_string(void* buf, const std::string& scan_key) {
         tm time_tm;
         char* res = strptime(scan_key.c_str(), "%Y-%m-%d %H:%M:%S", &time_tm);
@@ -837,8 +837,8 @@ struct ScalarTypeInfoImpl<LOGICAL_TYPE_DATETIME> : public ScalarTypeInfoImplBase
     static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
                                MemPool* memPool __attribute__((unused))) {
         // when convert date to datetime, automatic padding zero
-        if (src_type->type() == LogicalType::LOGICAL_TYPE_DATE) {
-            using SrcType = typename CppTypeTraits<LOGICAL_TYPE_DATE>::CppType;
+        if (src_type->type() == LogicalType::LOGICAL_TYPE_DATE_V1) {
+            using SrcType = typename CppTypeTraits<LOGICAL_TYPE_DATE_V1>::CppType;
             auto value = unaligned_load<SrcType>(src);
             int day = static_cast<int>(value & 31);
             int mon = static_cast<int>(value >> 5 & 15);
@@ -848,7 +848,7 @@ struct ScalarTypeInfoImpl<LOGICAL_TYPE_DATETIME> : public ScalarTypeInfoImplBase
         }
 
         // when convert date to datetime, automatic padding zero
-        if (src_type->type() == LogicalType::LOGICAL_TYPE_DATE_V2) {
+        if (src_type->type() == LogicalType::LOGICAL_TYPE_DATE) {
             auto src_value = unaligned_load<vectorized::DateValue>(src);
             int year, month, day;
             src_value.to_date(&year, &month, &day);
@@ -863,11 +863,11 @@ struct ScalarTypeInfoImpl<LOGICAL_TYPE_DATETIME> : public ScalarTypeInfoImplBase
 };
 
 template <>
-struct ScalarTypeInfoImpl<LOGICAL_TYPE_TIMESTAMP> : public ScalarTypeInfoImplBase<LOGICAL_TYPE_TIMESTAMP> {
+struct ScalarTypeInfoImpl<LOGICAL_TYPE_DATETIME> : public ScalarTypeInfoImplBase<LOGICAL_TYPE_DATETIME> {
     static Status from_string(void* buf, const std::string& scan_key) {
         auto timestamp = unaligned_load<vectorized::TimestampValue>(buf);
         if (!timestamp.from_string(scan_key.data(), scan_key.size())) {
-            // Compatible with LOGICAL_TYPE_DATETIME
+            // Compatible with LOGICAL_TYPE_DATETIME_V1
             timestamp.from_string("1400-01-01 00:00:00", sizeof("1400-01-01 00:00:00") - 1);
         }
         unaligned_store<vectorized::TimestampValue>(buf, timestamp);
@@ -881,7 +881,7 @@ struct ScalarTypeInfoImpl<LOGICAL_TYPE_TIMESTAMP> : public ScalarTypeInfoImplBas
 
     static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type, MemPool* mem_pool) {
         vectorized::TimestampValue value;
-        auto converter = vectorized::get_type_converter(src_type->type(), LOGICAL_TYPE_TIMESTAMP);
+        auto converter = vectorized::get_type_converter(src_type->type(), LOGICAL_TYPE_DATETIME);
         auto st = converter->convert(&value, src, mem_pool);
         unaligned_store<vectorized::TimestampValue>(dest, value);
         RETURN_IF_ERROR(st);
@@ -993,7 +993,7 @@ struct ScalarTypeInfoImpl<LOGICAL_TYPE_VARCHAR> : public ScalarTypeInfoImpl<LOGI
             src_type->type() == LOGICAL_TYPE_INT || src_type->type() == LOGICAL_TYPE_BIGINT ||
             src_type->type() == LOGICAL_TYPE_LARGEINT || src_type->type() == LOGICAL_TYPE_FLOAT ||
             src_type->type() == LOGICAL_TYPE_DOUBLE || src_type->type() == LOGICAL_TYPE_DECIMAL ||
-            src_type->type() == LOGICAL_TYPE_DECIMAL_V2 || src_type->type() == LOGICAL_TYPE_DECIMAL32 ||
+            src_type->type() == LOGICAL_TYPE_DECIMALV2 || src_type->type() == LOGICAL_TYPE_DECIMAL32 ||
             src_type->type() == LOGICAL_TYPE_DECIMAL64 || src_type->type() == LOGICAL_TYPE_DECIMAL128) {
             auto result = src_type->to_string(src);
             auto slice = reinterpret_cast<Slice*>(dest);

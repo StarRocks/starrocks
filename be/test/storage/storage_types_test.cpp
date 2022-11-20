@@ -125,7 +125,7 @@ void common_test<LOGICAL_TYPE_VARCHAR>(Slice src_val) {
 }
 
 TEST(StorageLayerTypesTest, copy_and_equal) {
-    common_test<LOGICAL_TYPE_BOOL>(true);
+    common_test<LOGICAL_TYPE_BOOLEAN>(true);
     common_test<LOGICAL_TYPE_TINYINT>(112);
     common_test<LOGICAL_TYPE_SMALLINT>(54321);
     common_test<LOGICAL_TYPE_INT>(-123454321);
@@ -138,8 +138,8 @@ TEST(StorageLayerTypesTest, copy_and_equal) {
     decimal12_t decimal_val(123, 2345);
     common_test<LOGICAL_TYPE_DECIMAL>(decimal_val);
 
-    common_test<LOGICAL_TYPE_DATE>((1988 << 9) | (2 << 5) | 1);
-    common_test<LOGICAL_TYPE_DATETIME>(19880201010203L);
+    common_test<LOGICAL_TYPE_DATE_V1>((1988 << 9) | (2 << 5) | 1);
+    common_test<LOGICAL_TYPE_DATETIME_V1>(19880201010203L);
 
     Slice slice("12345abcde");
     common_test<LOGICAL_TYPE_CHAR>(slice);

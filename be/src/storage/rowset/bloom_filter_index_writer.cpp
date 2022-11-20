@@ -58,7 +58,7 @@ constexpr bool is_slice_type() {
 
 template <LogicalType type>
 constexpr bool is_int128() {
-    return type == LOGICAL_TYPE_LARGEINT || type == LOGICAL_TYPE_DECIMAL_V2;
+    return type == LOGICAL_TYPE_LARGEINT || type == LOGICAL_TYPE_DECIMALV2;
 }
 
 template <LogicalType type>

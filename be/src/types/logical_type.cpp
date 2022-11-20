@@ -24,14 +24,14 @@ LogicalType string_to_logical_type(const std::string& type_str) {
     if (upper_type_str == "DISCRETE_DOUBLE") return LOGICAL_TYPE_DISCRETE_DOUBLE;
     if (upper_type_str == "DOUBLE") return LOGICAL_TYPE_DOUBLE;
     if (upper_type_str == "CHAR") return LOGICAL_TYPE_CHAR;
-    if (upper_type_str == "DATE_V2") return LOGICAL_TYPE_DATE_V2;
-    if (upper_type_str == "DATE") return LOGICAL_TYPE_DATE;
-    if (upper_type_str == "DATETIME") return LOGICAL_TYPE_DATETIME;
-    if (upper_type_str == "TIMESTAMP") return LOGICAL_TYPE_TIMESTAMP;
-    if (upper_type_str == "DECIMAL_V2") return LOGICAL_TYPE_DECIMAL_V2;
+    if (upper_type_str == "DATE_V2") return LOGICAL_TYPE_DATE;
+    if (upper_type_str == "DATE") return LOGICAL_TYPE_DATE_V1;
+    if (upper_type_str == "DATETIME") return LOGICAL_TYPE_DATETIME_V1;
+    if (upper_type_str == "TIMESTAMP") return LOGICAL_TYPE_DATETIME;
+    if (upper_type_str == "DECIMAL_V2") return LOGICAL_TYPE_DECIMALV2;
     if (upper_type_str == "DECIMAL") return LOGICAL_TYPE_DECIMAL;
     if (upper_type_str == "VARCHAR") return LOGICAL_TYPE_VARCHAR;
-    if (upper_type_str == "BOOLEAN") return LOGICAL_TYPE_BOOL;
+    if (upper_type_str == "BOOLEAN") return LOGICAL_TYPE_BOOLEAN;
     if (upper_type_str == "HLL") return LOGICAL_TYPE_HLL;
     if (upper_type_str == "STRUCT") return LOGICAL_TYPE_STRUCT;
     if (upper_type_str == "ARRAY") return LOGICAL_TYPE_ARRAY;
@@ -75,17 +75,17 @@ const char* logical_type_to_string(LogicalType type) {
         return "DISCRETE_DOUBLE";
     case LOGICAL_TYPE_CHAR:
         return "CHAR";
-    case LOGICAL_TYPE_DATE:
+    case LOGICAL_TYPE_DATE_V1:
         return "DATE";
-    case LOGICAL_TYPE_DATE_V2:
+    case LOGICAL_TYPE_DATE:
         return "DATE_V2";
-    case LOGICAL_TYPE_DATETIME:
+    case LOGICAL_TYPE_DATETIME_V1:
         return "DATETIME";
-    case LOGICAL_TYPE_TIMESTAMP:
+    case LOGICAL_TYPE_DATETIME:
         return "TIMESTAMP";
     case LOGICAL_TYPE_DECIMAL:
         return "DECIMAL";
-    case LOGICAL_TYPE_DECIMAL_V2:
+    case LOGICAL_TYPE_DECIMALV2:
         return "DECIMAL_V2";
     case LOGICAL_TYPE_DECIMAL32:
         return "DECIMAL32";
@@ -95,7 +95,7 @@ const char* logical_type_to_string(LogicalType type) {
         return "DECIMAL128";
     case LOGICAL_TYPE_VARCHAR:
         return "VARCHAR";
-    case LOGICAL_TYPE_BOOL:
+    case LOGICAL_TYPE_BOOLEAN:
         return "BOOLEAN";
     case LOGICAL_TYPE_HLL:
         return "HLL";

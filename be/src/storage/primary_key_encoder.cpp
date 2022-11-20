@@ -230,15 +230,15 @@ bool PrimaryKeyEncoder::is_supported(const vectorized::Field& f) {
         return false;
     }
     switch (f.type()->type()) {
-    case LOGICAL_TYPE_BOOL:
+    case LOGICAL_TYPE_BOOLEAN:
     case LOGICAL_TYPE_TINYINT:
     case LOGICAL_TYPE_SMALLINT:
     case LOGICAL_TYPE_INT:
     case LOGICAL_TYPE_BIGINT:
     case LOGICAL_TYPE_LARGEINT:
     case LOGICAL_TYPE_VARCHAR:
-    case LOGICAL_TYPE_DATE_V2:
-    case LOGICAL_TYPE_TIMESTAMP:
+    case LOGICAL_TYPE_DATE:
+    case LOGICAL_TYPE_DATETIME:
         return true;
     default:
         return false;
@@ -301,7 +301,7 @@ Status PrimaryKeyEncoder::create_column(const vectorized::Schema& schema, std::u
         // varchar use binary
         auto type = schema.field(key_idxes[0])->type()->type();
         switch (type) {
-        case LOGICAL_TYPE_BOOL:
+        case LOGICAL_TYPE_BOOLEAN:
             *pcolumn = vectorized::BooleanColumn::create_mutable();
             break;
         case LOGICAL_TYPE_TINYINT:
@@ -322,10 +322,10 @@ Status PrimaryKeyEncoder::create_column(const vectorized::Schema& schema, std::u
         case LOGICAL_TYPE_VARCHAR:
             *pcolumn = std::make_unique<vectorized::BinaryColumn>();
             break;
-        case LOGICAL_TYPE_DATE_V2:
+        case LOGICAL_TYPE_DATE:
             *pcolumn = vectorized::DateColumn::create_mutable();
             break;
-        case LOGICAL_TYPE_TIMESTAMP:
+        case LOGICAL_TYPE_DATETIME:
             *pcolumn = vectorized::TimestampColumn::create_mutable();
             break;
         default:
@@ -351,7 +351,7 @@ static void prepare_ops_datas(const vectorized::Schema& schema, const vectorized
     for (int j = 0; j < ncol; j++) {
         datas[j] = chunk.get_column_by_index(j)->raw_data();
         switch (schema.field(j)->type()->type()) {
-        case LOGICAL_TYPE_BOOL:
+        case LOGICAL_TYPE_BOOLEAN:
             ops[j] = [](const void* data, int idx, std::string* buff) {
                 encode_integral(((const uint8_t*)data)[idx], buff);
             };
@@ -392,12 +392,12 @@ static void prepare_ops_datas(const vectorized::Schema& schema, const vectorized
                 };
             }
             break;
-        case LOGICAL_TYPE_DATE_V2:
+        case LOGICAL_TYPE_DATE:
             ops[j] = [](const void* data, int idx, std::string* buff) {
                 encode_integral(((const int32_t*)data)[idx], buff);
             };
             break;
-        case LOGICAL_TYPE_TIMESTAMP:
+        case LOGICAL_TYPE_DATETIME:
             ops[j] = [](const void* data, int idx, std::string* buff) {
                 encode_integral(((const int64_t*)data)[idx], buff);
             };
@@ -524,7 +524,7 @@ Status PrimaryKeyEncoder::decode(const vectorized::Schema& schema, const vectori
             for (int j = 0; j < ncol; j++) {
                 auto& column = *(dest->get_column_by_index(j));
                 switch (schema.field(j)->type()->type()) {
-                case LOGICAL_TYPE_BOOL: {
+                case LOGICAL_TYPE_BOOLEAN: {
                     auto& tc = down_cast<vectorized::UInt8Column&>(column);
                     uint8_t v;
                     decode_integral(&s, &v);
@@ -566,13 +566,13 @@ Status PrimaryKeyEncoder::decode(const vectorized::Schema& schema, const vectori
                     RETURN_IF_ERROR(decode_slice(&s, &v, j + 1 == ncol));
                     tc.append(v);
                 } break;
-                case LOGICAL_TYPE_DATE_V2: {
+                case LOGICAL_TYPE_DATE: {
                     auto& tc = down_cast<vectorized::DateColumn&>(column);
                     vectorized::DateValue v;
                     decode_integral(&s, &v._julian);
                     tc.append(v);
                 } break;
-                case LOGICAL_TYPE_DATETIME: {
+                case LOGICAL_TYPE_DATETIME_V1: {
                     auto& tc = down_cast<vectorized::TimestampColumn&>(column);
                     vectorized::TimestampValue v;
                     decode_integral(&s, &v._timestamp);

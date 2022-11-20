@@ -348,16 +348,16 @@ TEST_F(PlainPageTest, TestBoolPlainPageSeekValue) {
     bools.get()[0] = false;
     bools.get()[1] = true;
 
-    test_seek_at_or_after_value_template<LOGICAL_TYPE_BOOL, PlainPageBuilder<LOGICAL_TYPE_BOOL>,
-                                         PlainPageDecoder<LOGICAL_TYPE_BOOL>>(bools.get(), 2, nullptr, nullptr);
+    test_seek_at_or_after_value_template<LOGICAL_TYPE_BOOLEAN, PlainPageBuilder<LOGICAL_TYPE_BOOLEAN>,
+                                         PlainPageDecoder<LOGICAL_TYPE_BOOLEAN>>(bools.get(), 2, nullptr, nullptr);
 
     bool t = true;
-    test_seek_at_or_after_value_template<LOGICAL_TYPE_BOOL, PlainPageBuilder<LOGICAL_TYPE_BOOL>,
-                                         PlainPageDecoder<LOGICAL_TYPE_BOOL>>(bools.get(), 1, nullptr, &t);
+    test_seek_at_or_after_value_template<LOGICAL_TYPE_BOOLEAN, PlainPageBuilder<LOGICAL_TYPE_BOOLEAN>,
+                                         PlainPageDecoder<LOGICAL_TYPE_BOOLEAN>>(bools.get(), 1, nullptr, &t);
 
     t = false;
-    test_seek_at_or_after_value_template<LOGICAL_TYPE_BOOL, PlainPageBuilder<LOGICAL_TYPE_BOOL>,
-                                         PlainPageDecoder<LOGICAL_TYPE_BOOL>>(&bools.get()[1], 1, &t, nullptr);
+    test_seek_at_or_after_value_template<LOGICAL_TYPE_BOOLEAN, PlainPageBuilder<LOGICAL_TYPE_BOOLEAN>,
+                                         PlainPageDecoder<LOGICAL_TYPE_BOOLEAN>>(&bools.get()[1], 1, &t, nullptr);
 }
 
 TEST_F(PlainPageTest, TestBoolMultiplePages) {
@@ -368,7 +368,7 @@ TEST_F(PlainPageTest, TestBoolMultiplePages) {
         bools.get()[i] = i % 2;
     }
 
-    test_multi_pages<LOGICAL_TYPE_BOOL, PlainPageBuilder<LOGICAL_TYPE_BOOL>>(bools.get(), size);
+    test_multi_pages<LOGICAL_TYPE_BOOLEAN, PlainPageBuilder<LOGICAL_TYPE_BOOLEAN>>(bools.get(), size);
 }
 
 TEST_F(PlainPageTest, TestInt32MultiplePages) {

@@ -55,7 +55,7 @@ static std::unique_ptr<Converter> get_converter(const TypeDescriptor& t) {
     case TYPE_JSON:
         return std::make_unique<JsonConverter>();
     case TYPE_DECIMAL:
-    case INVALID_TYPE:
+    case TYPE_UNKNOWN:
     case TYPE_NULL:
     case TYPE_BINARY:
     case TYPE_VARBINARY:

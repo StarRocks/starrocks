@@ -52,16 +52,16 @@ private:
         add_mapping<LOGICAL_TYPE_BIGINT>();
         add_mapping<LOGICAL_TYPE_UNSIGNED_BIGINT>();
         add_mapping<LOGICAL_TYPE_LARGEINT>();
+        add_mapping<LOGICAL_TYPE_DATETIME_V1>();
         add_mapping<LOGICAL_TYPE_DATETIME>();
-        add_mapping<LOGICAL_TYPE_TIMESTAMP>();
 
+        add_mapping<LOGICAL_TYPE_DATE_V1>();
         add_mapping<LOGICAL_TYPE_DATE>();
-        add_mapping<LOGICAL_TYPE_DATE_V2>();
         add_mapping<LOGICAL_TYPE_DECIMAL>();
-        add_mapping<LOGICAL_TYPE_DECIMAL_V2>();
+        add_mapping<LOGICAL_TYPE_DECIMALV2>();
         add_mapping<LOGICAL_TYPE_CHAR>();
         add_mapping<LOGICAL_TYPE_VARCHAR>();
-        add_mapping<LOGICAL_TYPE_BOOL>();
+        add_mapping<LOGICAL_TYPE_BOOLEAN>();
     }
 
     template <LogicalType field_type>

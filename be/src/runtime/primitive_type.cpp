@@ -43,7 +43,7 @@ PrimitiveType thrift_to_type(TPrimitiveType::type ttype) {
     switch (ttype) {
     // TODO(mofei) rename these two type
     case TPrimitiveType::INVALID_TYPE:
-        return INVALID_TYPE;
+        return TYPE_UNKNOWN;
     case TPrimitiveType::NULL_TYPE:
         return TYPE_NULL;
 #define M(ttype)                \
@@ -53,13 +53,13 @@ PrimitiveType thrift_to_type(TPrimitiveType::type ttype) {
 #undef M
     }
 
-    return INVALID_TYPE;
+    return TYPE_UNKNOWN;
 }
 
 TPrimitiveType::type to_thrift(PrimitiveType ptype) {
     switch (ptype) {
     // TODO(mofei) rename these two type
-    case INVALID_TYPE:
+    case TYPE_UNKNOWN:
         return TPrimitiveType::INVALID_TYPE;
     case TYPE_NULL:
         return TPrimitiveType::NULL_TYPE;
@@ -80,7 +80,7 @@ TPrimitiveType::type to_thrift(PrimitiveType ptype) {
 
 std::string type_to_string(PrimitiveType t) {
     switch (t) {
-    case INVALID_TYPE:
+    case TYPE_UNKNOWN:
         return "INVALID";
     case TYPE_NULL:
         return "NULL";
@@ -103,7 +103,7 @@ std::string type_to_string_v2(PrimitiveType t) {
 std::string type_to_odbc_string(PrimitiveType t) {
     // ODBC driver requires types in lower case
     switch (t) {
-    case INVALID_TYPE:
+    case TYPE_UNKNOWN:
         return "invalid";
 
 #define M(ttype)       \
@@ -177,9 +177,9 @@ class ScalarFieldTypeToPrimitiveTypeMapping {
 public:
     ScalarFieldTypeToPrimitiveTypeMapping() {
         for (auto& i : _data) {
-            i = INVALID_TYPE;
+            i = TYPE_UNKNOWN;
         }
-        _data[LOGICAL_TYPE_BOOL] = TYPE_BOOLEAN;
+        _data[LOGICAL_TYPE_BOOLEAN] = TYPE_BOOLEAN;
         _data[LOGICAL_TYPE_TINYINT] = TYPE_TINYINT;
         _data[LOGICAL_TYPE_SMALLINT] = TYPE_SMALLINT;
         _data[LOGICAL_TYPE_INT] = TYPE_INT;
@@ -189,12 +189,12 @@ public:
         _data[LOGICAL_TYPE_DOUBLE] = TYPE_DOUBLE;
         _data[LOGICAL_TYPE_CHAR] = TYPE_CHAR;
         _data[LOGICAL_TYPE_VARCHAR] = TYPE_VARCHAR;
+        _data[LOGICAL_TYPE_DATE_V1] = TYPE_DATE;
         _data[LOGICAL_TYPE_DATE] = TYPE_DATE;
-        _data[LOGICAL_TYPE_DATE_V2] = TYPE_DATE;
-        _data[LOGICAL_TYPE_TIMESTAMP] = TYPE_DATETIME;
         _data[LOGICAL_TYPE_DATETIME] = TYPE_DATETIME;
+        _data[LOGICAL_TYPE_DATETIME_V1] = TYPE_DATETIME;
         _data[LOGICAL_TYPE_DECIMAL] = TYPE_DECIMAL;
-        _data[LOGICAL_TYPE_DECIMAL_V2] = TYPE_DECIMALV2;
+        _data[LOGICAL_TYPE_DECIMALV2] = TYPE_DECIMALV2;
         _data[LOGICAL_TYPE_DECIMAL32] = TYPE_DECIMAL32;
         _data[LOGICAL_TYPE_DECIMAL64] = TYPE_DECIMAL64;
         _data[LOGICAL_TYPE_DECIMAL128] = TYPE_DECIMAL128;
@@ -211,7 +211,7 @@ static ScalarFieldTypeToPrimitiveTypeMapping g_scalar_ftype_to_ptype;
 
 PrimitiveType scalar_field_type_to_primitive_type(LogicalType field_type) {
     PrimitiveType ptype = g_scalar_ftype_to_ptype.get_primitive_type(field_type);
-    DCHECK(ptype != INVALID_TYPE);
+    DCHECK(ptype != TYPE_UNKNOWN);
     return ptype;
 }
 

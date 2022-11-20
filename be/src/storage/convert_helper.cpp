@@ -721,11 +721,11 @@ public:
 
 const TypeConverter* get_date_converter(LogicalType from_type, LogicalType to_type) {
     switch (from_type) {
-    case LOGICAL_TYPE_DATETIME: {
+    case LOGICAL_TYPE_DATETIME_V1: {
         static DatetimeToDateTypeConverter s_converter;
         return &s_converter;
     }
-    case LOGICAL_TYPE_TIMESTAMP: {
+    case LOGICAL_TYPE_DATETIME: {
         static TimestampToDateTypeConverter s_converter;
         return &s_converter;
     }
@@ -733,7 +733,7 @@ const TypeConverter* get_date_converter(LogicalType from_type, LogicalType to_ty
         static IntToDateTypeConverter s_converter;
         return &s_converter;
     }
-    case LOGICAL_TYPE_DATE_V2: {
+    case LOGICAL_TYPE_DATE: {
         static DateV2ToDateTypeConverter s_converter;
         return &s_converter;
     }
@@ -745,11 +745,11 @@ const TypeConverter* get_date_converter(LogicalType from_type, LogicalType to_ty
 
 const TypeConverter* get_datev2_converter(LogicalType from_type, LogicalType to_type) {
     switch (from_type) {
-    case LOGICAL_TYPE_TIMESTAMP: {
+    case LOGICAL_TYPE_DATETIME: {
         static TimestampToDateV2TypeConverter s_converter;
         return &s_converter;
     }
-    case LOGICAL_TYPE_DATETIME: {
+    case LOGICAL_TYPE_DATETIME_V1: {
         static DatetimeToDateV2TypeConverter s_converter;
         return &s_converter;
     }
@@ -757,7 +757,7 @@ const TypeConverter* get_datev2_converter(LogicalType from_type, LogicalType to_
         static IntegerToDateV2TypeConverter<LOGICAL_TYPE_INT> s_converter;
         return &s_converter;
     }
-    case LOGICAL_TYPE_DATE: {
+    case LOGICAL_TYPE_DATE_V1: {
         static DateToDateV2TypeConverter s_converter;
         return &s_converter;
     }
@@ -768,15 +768,15 @@ const TypeConverter* get_datev2_converter(LogicalType from_type, LogicalType to_
 
 const TypeConverter* get_datetime_converter(LogicalType from_type, LogicalType to_type) {
     switch (from_type) {
-    case LOGICAL_TYPE_DATE: {
+    case LOGICAL_TYPE_DATE_V1: {
         static DateToDatetimeFieldConveter s_converter;
         return &s_converter;
     }
-    case LOGICAL_TYPE_DATE_V2: {
+    case LOGICAL_TYPE_DATE: {
         static DateV2ToDatetimeFieldConveter s_converter;
         return &s_converter;
     }
-    case LOGICAL_TYPE_TIMESTAMP: {
+    case LOGICAL_TYPE_DATETIME: {
         static TimestampToDatetimeTypeConverter s_converter;
         return &s_converter;
     }
@@ -787,15 +787,15 @@ const TypeConverter* get_datetime_converter(LogicalType from_type, LogicalType t
 
 const TypeConverter* get_timestamp_converter(LogicalType from_type, LogicalType to_type) {
     switch (from_type) {
-    case LOGICAL_TYPE_DATE: {
+    case LOGICAL_TYPE_DATE_V1: {
         static DateToTimestampTypeConverter s_converter;
         return &s_converter;
     }
-    case LOGICAL_TYPE_DATE_V2: {
+    case LOGICAL_TYPE_DATE: {
         static DateV2ToTimestampTypeConverter s_converter;
         return &s_converter;
     }
-    case LOGICAL_TYPE_DATETIME: {
+    case LOGICAL_TYPE_DATETIME_V1: {
         static DatetimeToTimestampTypeConverter s_converter;
         return &s_converter;
     }
@@ -806,7 +806,7 @@ const TypeConverter* get_timestamp_converter(LogicalType from_type, LogicalType 
 
 const TypeConverter* get_decimal_converter(LogicalType from_type, LogicalType to_type) {
     switch (from_type) {
-    case LOGICAL_TYPE_DECIMAL_V2: {
+    case LOGICAL_TYPE_DECIMALV2: {
         static DecimalToDecimal12TypeConverter s_converter;
         return &s_converter;
     }
@@ -826,7 +826,7 @@ const TypeConverter* get_decimalv2_converter(LogicalType from_type, LogicalType 
         return &s_converter;
     }
     case LOGICAL_TYPE_DECIMAL128: {
-        static DecimalTypeConverter<LOGICAL_TYPE_DECIMAL128, LOGICAL_TYPE_DECIMAL_V2> s_converter;
+        static DecimalTypeConverter<LOGICAL_TYPE_DECIMAL128, LOGICAL_TYPE_DECIMALV2> s_converter;
         return &s_converter;
     }
     default:
@@ -846,8 +846,8 @@ const TypeConverter* get_decimal128_converter(LogicalType from_type, LogicalType
         static DecimalTypeConverter<LOGICAL_TYPE_DECIMAL, LOGICAL_TYPE_DECIMAL128> s_converter;
         return &s_converter;
     }
-    case LOGICAL_TYPE_DECIMAL_V2: {
-        static DecimalTypeConverter<LOGICAL_TYPE_DECIMAL_V2, LOGICAL_TYPE_DECIMAL128> s_converter;
+    case LOGICAL_TYPE_DECIMALV2: {
+        static DecimalTypeConverter<LOGICAL_TYPE_DECIMALV2, LOGICAL_TYPE_DECIMAL128> s_converter;
         return &s_converter;
     }
         DECIMALV3_TYPE_CONVERTER(LOGICAL_TYPE_DECIMAL32, LOGICAL_TYPE_DECIMAL128);
@@ -907,7 +907,7 @@ const TypeConverter* get_from_varchar_converter(LogicalType from_type, LogicalTy
 
 const TypeConverter* get_to_varchar_converter(LogicalType from_type, LogicalType to_type) {
     switch (from_type) {
-    case LOGICAL_TYPE_BOOL: {
+    case LOGICAL_TYPE_BOOLEAN: {
         static OtherToStringTypeConverter<LOGICAL_TYPE_TINYINT> s_converter;
         return &s_converter;
     }
@@ -938,22 +938,22 @@ const TypeConverter* get_type_converter(LogicalType from_type, LogicalType to_ty
     }
 
     switch (to_type) {
-    case LOGICAL_TYPE_DATE: {
+    case LOGICAL_TYPE_DATE_V1: {
         return get_date_converter(from_type, to_type);
     }
-    case LOGICAL_TYPE_DATE_V2: {
+    case LOGICAL_TYPE_DATE: {
         return get_datev2_converter(from_type, to_type);
     }
-    case LOGICAL_TYPE_DATETIME: {
+    case LOGICAL_TYPE_DATETIME_V1: {
         return get_datetime_converter(from_type, to_type);
     }
-    case LOGICAL_TYPE_TIMESTAMP: {
+    case LOGICAL_TYPE_DATETIME: {
         return get_timestamp_converter(from_type, to_type);
     }
     case LOGICAL_TYPE_DECIMAL: {
         return get_decimal_converter(from_type, to_type);
     }
-    case LOGICAL_TYPE_DECIMAL_V2: {
+    case LOGICAL_TYPE_DECIMALV2: {
         return get_decimalv2_converter(from_type, to_type);
     }
     case LOGICAL_TYPE_DECIMAL128: {
@@ -1155,7 +1155,7 @@ const MaterializeTypeConverter* get_perentile_converter(LogicalType from_type, M
         GET_PERENTILE_CONVERTER(float);
     case LOGICAL_TYPE_DOUBLE:
         GET_PERENTILE_CONVERTER(double);
-    case LOGICAL_TYPE_DECIMAL_V2:
+    case LOGICAL_TYPE_DECIMALV2:
         GET_PERENTILE_CONVERTER(DecimalV2Value);
     case LOGICAL_TYPE_DECIMAL32:
         GET_DECIMAL_PERENTILE_CONVERTER(LOGICAL_TYPE_DECIMAL32);
@@ -1175,7 +1175,7 @@ const MaterializeTypeConverter* get_hll_converter(LogicalType from_type, Materia
     case LOGICAL_TYPE_CHAR:
     case LOGICAL_TYPE_VARCHAR:
         GET_HLL_CONVERTER(Slice);
-    case LOGICAL_TYPE_BOOL:
+    case LOGICAL_TYPE_BOOLEAN:
     case LOGICAL_TYPE_TINYINT:
         GET_HLL_CONVERTER(int8_t);
     case LOGICAL_TYPE_UNSIGNED_TINYINT:
@@ -1184,13 +1184,13 @@ const MaterializeTypeConverter* get_hll_converter(LogicalType from_type, Materia
         GET_HLL_CONVERTER(int16_t);
     case LOGICAL_TYPE_UNSIGNED_SMALLINT:
         GET_HLL_CONVERTER(uint16_t);
-    case LOGICAL_TYPE_DATE_V2:
+    case LOGICAL_TYPE_DATE:
     case LOGICAL_TYPE_INT:
         GET_HLL_CONVERTER(int32_t);
     case LOGICAL_TYPE_UNSIGNED_INT:
         GET_HLL_CONVERTER(uint32_t);
-    case LOGICAL_TYPE_TIMESTAMP:
     case LOGICAL_TYPE_DATETIME:
+    case LOGICAL_TYPE_DATETIME_V1:
     case LOGICAL_TYPE_BIGINT:
         GET_HLL_CONVERTER(int64_t);
     case LOGICAL_TYPE_UNSIGNED_BIGINT:
@@ -1201,7 +1201,7 @@ const MaterializeTypeConverter* get_hll_converter(LogicalType from_type, Materia
         GET_HLL_CONVERTER(float);
     case LOGICAL_TYPE_DOUBLE:
         GET_HLL_CONVERTER(double);
-    case LOGICAL_TYPE_DATE:
+    case LOGICAL_TYPE_DATE_V1:
         GET_HLL_CONVERTER(uint24_t);
     default:
         LOG(WARNING) << "fail to hll hash type : " << from_type;
@@ -1310,7 +1310,7 @@ public:
 
     ColumnPtr copy_convert(const Column& src) const override {
         auto nullable = src.is_nullable();
-        auto dst = ChunkHelper::column_from_field_type(LOGICAL_TYPE_DATE_V2, nullable);
+        auto dst = ChunkHelper::column_from_field_type(LOGICAL_TYPE_DATE, nullable);
         int num_items = static_cast<int>(src.size());
         dst->reserve(num_items);
         for (int i = 0; i < num_items; ++i) {
@@ -1370,7 +1370,7 @@ public:
 
     ColumnPtr copy_convert(const Column& src) const override {
         auto nullable = src.is_nullable();
-        auto dst = ChunkHelper::column_from_field_type(LOGICAL_TYPE_DATE, nullable);
+        auto dst = ChunkHelper::column_from_field_type(LOGICAL_TYPE_DATE_V1, nullable);
         int num_items = static_cast<int>(src.size());
         dst->reserve(num_items);
         for (int i = 0; i < num_items; ++i) {
@@ -1434,7 +1434,7 @@ public:
 
     ColumnPtr copy_convert(const Column& src) const override {
         auto nullable = src.is_nullable();
-        auto dst = ChunkHelper::column_from_field_type(LOGICAL_TYPE_TIMESTAMP, nullable);
+        auto dst = ChunkHelper::column_from_field_type(LOGICAL_TYPE_DATETIME, nullable);
         int num_items = static_cast<int>(src.size());
         dst->reserve(num_items);
         for (int i = 0; i < num_items; ++i) {
@@ -1494,7 +1494,7 @@ public:
 
     ColumnPtr copy_convert(const Column& src) const override {
         auto nullable = src.is_nullable();
-        auto dst = ChunkHelper::column_from_field_type(LOGICAL_TYPE_DATETIME, nullable);
+        auto dst = ChunkHelper::column_from_field_type(LOGICAL_TYPE_DATETIME_V1, nullable);
         int num_items = static_cast<int>(src.size());
         dst->reserve(num_items);
         for (int i = 0; i < num_items; ++i) {
@@ -1559,7 +1559,7 @@ public:
 
     ColumnPtr copy_convert(const Column& src) const override {
         auto nullable = src.is_nullable();
-        auto dst = ChunkHelper::column_from_field_type(LOGICAL_TYPE_DECIMAL_V2, nullable);
+        auto dst = ChunkHelper::column_from_field_type(LOGICAL_TYPE_DECIMALV2, nullable);
         int num_items = static_cast<int>(src.size());
         dst->reserve(num_items);
         for (int i = 0; i < num_items; ++i) {
@@ -1794,7 +1794,7 @@ const FieldConverter* get_field_converter(LogicalType from_type, LogicalType to_
 
     if (from_type == to_type) {
         switch (from_type) {
-            TYPE_CASE_CLAUSE(LOGICAL_TYPE_BOOL)
+            TYPE_CASE_CLAUSE(LOGICAL_TYPE_BOOLEAN)
             TYPE_CASE_CLAUSE(LOGICAL_TYPE_TINYINT)
             TYPE_CASE_CLAUSE(LOGICAL_TYPE_SMALLINT)
             TYPE_CASE_CLAUSE(LOGICAL_TYPE_INT)
@@ -1803,13 +1803,13 @@ const FieldConverter* get_field_converter(LogicalType from_type, LogicalType to_
             TYPE_CASE_CLAUSE(LOGICAL_TYPE_FLOAT)
             TYPE_CASE_CLAUSE(LOGICAL_TYPE_DOUBLE)
             TYPE_CASE_CLAUSE(LOGICAL_TYPE_DECIMAL)
-            TYPE_CASE_CLAUSE(LOGICAL_TYPE_DECIMAL_V2)
+            TYPE_CASE_CLAUSE(LOGICAL_TYPE_DECIMALV2)
             TYPE_CASE_CLAUSE(LOGICAL_TYPE_CHAR)
             TYPE_CASE_CLAUSE(LOGICAL_TYPE_VARCHAR)
+            TYPE_CASE_CLAUSE(LOGICAL_TYPE_DATE_V1)
             TYPE_CASE_CLAUSE(LOGICAL_TYPE_DATE)
-            TYPE_CASE_CLAUSE(LOGICAL_TYPE_DATE_V2)
+            TYPE_CASE_CLAUSE(LOGICAL_TYPE_DATETIME_V1)
             TYPE_CASE_CLAUSE(LOGICAL_TYPE_DATETIME)
-            TYPE_CASE_CLAUSE(LOGICAL_TYPE_TIMESTAMP)
             TYPE_CASE_CLAUSE(LOGICAL_TYPE_HLL)
             TYPE_CASE_CLAUSE(LOGICAL_TYPE_OBJECT)
             TYPE_CASE_CLAUSE(LOGICAL_TYPE_PERCENTILE)
@@ -1840,22 +1840,22 @@ const FieldConverter* get_field_converter(LogicalType from_type, LogicalType to_
     }
 #undef TYPE_CASE_CLAUSE
 
-    if (to_type == LOGICAL_TYPE_DATE_V2 && from_type == LOGICAL_TYPE_DATE) {
+    if (to_type == LOGICAL_TYPE_DATE && from_type == LOGICAL_TYPE_DATE_V1) {
         static DateToDateV2FieldConverter s_converter;
         return &s_converter;
-    } else if (to_type == LOGICAL_TYPE_DATE && from_type == LOGICAL_TYPE_DATE_V2) {
+    } else if (to_type == LOGICAL_TYPE_DATE_V1 && from_type == LOGICAL_TYPE_DATE) {
         static DateV2ToDateFieldConverter s_converter;
         return &s_converter;
-    } else if (to_type == LOGICAL_TYPE_TIMESTAMP && from_type == LOGICAL_TYPE_DATETIME) {
+    } else if (to_type == LOGICAL_TYPE_DATETIME && from_type == LOGICAL_TYPE_DATETIME_V1) {
         static DatetimeToTimestampFieldConverter s_converter;
         return &s_converter;
-    } else if (to_type == LOGICAL_TYPE_DATETIME && from_type == LOGICAL_TYPE_TIMESTAMP) {
+    } else if (to_type == LOGICAL_TYPE_DATETIME_V1 && from_type == LOGICAL_TYPE_DATETIME) {
         static TimestampToDatetimeFieldConverter s_converter;
         return &s_converter;
-    } else if (to_type == LOGICAL_TYPE_DECIMAL_V2 && from_type == LOGICAL_TYPE_DECIMAL) {
+    } else if (to_type == LOGICAL_TYPE_DECIMALV2 && from_type == LOGICAL_TYPE_DECIMAL) {
         static Decimal12ToDecimalFieldConverter s_converter;
         return &s_converter;
-    } else if (to_type == LOGICAL_TYPE_DECIMAL && from_type == LOGICAL_TYPE_DECIMAL_V2) {
+    } else if (to_type == LOGICAL_TYPE_DECIMAL && from_type == LOGICAL_TYPE_DECIMALV2) {
         static DecimalToDecimal12FieldConverter s_converter;
         return &s_converter;
     } else if (to_type == LOGICAL_TYPE_DECIMAL128 && from_type == LOGICAL_TYPE_DECIMAL) {
@@ -1864,10 +1864,10 @@ const FieldConverter* get_field_converter(LogicalType from_type, LogicalType to_
     } else if (to_type == LOGICAL_TYPE_DECIMAL && from_type == LOGICAL_TYPE_DECIMAL128) {
         static DecimalFieldConverter<int128_t, decimal12_t> s_converter;
         return &s_converter;
-    } else if (to_type == LOGICAL_TYPE_DECIMAL128 && from_type == LOGICAL_TYPE_DECIMAL_V2) {
+    } else if (to_type == LOGICAL_TYPE_DECIMAL128 && from_type == LOGICAL_TYPE_DECIMALV2) {
         static DecimalFieldConverter<DecimalV2Value, int128_t> s_converter;
         return &s_converter;
-    } else if (to_type == LOGICAL_TYPE_DECIMAL_V2 && from_type == LOGICAL_TYPE_DECIMAL128) {
+    } else if (to_type == LOGICAL_TYPE_DECIMALV2 && from_type == LOGICAL_TYPE_DECIMAL128) {
         static DecimalFieldConverter<int128_t, DecimalV2Value> s_converter;
         return &s_converter;
     }
