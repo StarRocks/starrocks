@@ -244,6 +244,10 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         for (FieldSchema fieldSchema : allHiveColumns) {
             Type srType = convertColumnType(fieldSchema.getType());
             Column column = new Column(fieldSchema.getName(), srType, true);
+            Column baseColumn = nameToColumn.get(column.getName());
+            if (baseColumn != null) {
+                column.setComment(baseColumn.getComment());
+            }
             fullSchemaTemp.add(column);
             nameToColumnTemp.put(column.getName(), column);
         }
