@@ -101,6 +101,17 @@ public class ExpressionMapping {
             scope.tryResolveField((SlotRef) expression)
                     .ifPresent(field -> fieldMappings[field.getRelationFieldIndex()] = columnRefOperator);
         }
+
+        expressionToColumns.put(expression, columnRefOperator);
+    }
+
+    public void putWithSymbol(Expr expression, Expr resolveExpr, ColumnRefOperator columnRefOperator) {
+        if (resolveExpr instanceof SlotRef) {
+            SlotRef s = (SlotRef) resolveExpr;
+            scope.tryResolveField(s)
+                    .ifPresent(field -> fieldMappings[field.getRelationFieldIndex()] = columnRefOperator);
+        }
+
         expressionToColumns.put(expression, columnRefOperator);
     }
 
