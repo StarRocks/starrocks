@@ -3,7 +3,9 @@ package com.starrocks.sql.optimizer.operator.scalar;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import org.apache.commons.collections.CollectionUtils;
 
+import java.util.List;
 import java.util.Objects;
 
 public class CompoundPredicateOperator extends PredicateOperator {
@@ -13,6 +15,12 @@ public class CompoundPredicateOperator extends PredicateOperator {
         super(OperatorType.COMPOUND, arguments);
         this.type = compoundType;
         Preconditions.checkState(arguments.length >= 1);
+    }
+
+    public CompoundPredicateOperator(CompoundType compoundType, List<ScalarOperator> arguments) {
+        super(OperatorType.COMPOUND, arguments);
+        this.type = compoundType;
+        Preconditions.checkState(!CollectionUtils.isEmpty(arguments));
     }
 
     public CompoundType getCompoundType() {
