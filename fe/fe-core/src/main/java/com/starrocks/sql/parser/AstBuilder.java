@@ -3499,6 +3499,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             Identifier identifier = (Identifier) visit(context.alias);
             tableRelation.setAlias(new TableName(null, identifier.getValue()));
         }
+
+        if (context.temporalClause() != null) {
+            StringBuilder sb = new StringBuilder();
+            for (ParseTree child : context.temporalClause().children) {
+                sb.append(child.getText());
+                sb.append(" ");
+            }
+            tableRelation.setTemporalClause(sb.toString());
+        }
+
         return tableRelation;
     }
 

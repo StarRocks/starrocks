@@ -250,6 +250,13 @@ public class QueryAnalyzer {
                     viewRelation.setAlias(tableRelation.getAlias());
                     return viewRelation;
                 } else {
+                    if (tableRelation.getTemporalClause() != null) {
+                        if (table.getType() != Table.TableType.MYSQL) {
+                            throw unsupportedException("unsupported table type for temporal clauses: " + table.getType() +
+                                    "; only external MYSQL tables support temporal clauses");
+                        }
+                    }
+
                     if (table.isSupported()) {
                         tableRelation.setTable(table);
                         return tableRelation;

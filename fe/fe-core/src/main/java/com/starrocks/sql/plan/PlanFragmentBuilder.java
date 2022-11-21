@@ -1046,6 +1046,10 @@ public class PlanFragmentBuilder {
             MysqlScanNode scanNode = new MysqlScanNode(context.getNextNodeId(), tupleDescriptor,
                     (MysqlTable) node.getTable());
 
+            if (node.getTemporalClause() != null) {
+                scanNode.setTemporalClause(node.getTemporalClause());
+            }
+
             // set predicate
             List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
             ScalarOperatorToExpr.FormatterContext formatterContext =

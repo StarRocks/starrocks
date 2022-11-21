@@ -15,6 +15,9 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import java.util.Map;
 
 public class LogicalMysqlScanOperator extends LogicalScanOperator {
+
+    private String temporalClause;
+
     public LogicalMysqlScanOperator(Table table,
                                     Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
                                     Map<Column, ColumnRefOperator> columnMetaToColRefMap,
@@ -24,6 +27,14 @@ public class LogicalMysqlScanOperator extends LogicalScanOperator {
         super(OperatorType.LOGICAL_MYSQL_SCAN, table,
                 colRefToColumnMetaMap, columnMetaToColRefMap, limit, predicate, projection);
         Preconditions.checkState(table instanceof MysqlTable);
+    }
+
+    public String getTemporalClause() {
+        return this.temporalClause;
+    }
+
+    public void setTemporalClause(String temporalClause) {
+        this.temporalClause = temporalClause;
     }
 
     private LogicalMysqlScanOperator(LogicalMysqlScanOperator.Builder builder) {
