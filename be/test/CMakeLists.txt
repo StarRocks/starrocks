@@ -277,6 +277,7 @@ set(EXEC_FILES
         ./util/countdown_latch_test.cpp
         ./util/crc32c_test.cpp
         ./util/dynamic_cache_test.cpp
+        ./util/exception_stack_test.cpp
         ./util/faststring_test.cpp
         ./util/filesystem_util_test.cpp
         ./util/frame_of_reference_coding_test.cpp
