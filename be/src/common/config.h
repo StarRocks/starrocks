@@ -880,4 +880,5 @@ CONF_mInt64(l0_max_file_size, "209715200"); // 200MB
 
 // Used by query cache, cache entries are evicted when it exceeds its capacity(500MB in default)
 CONF_Int64(query_cache_capacity, "536870912");
+
 } // namespace starrocks::config
