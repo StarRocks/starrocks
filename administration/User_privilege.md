@@ -44,7 +44,7 @@ CREATE USER 'jack'@['example_domain'] IDENTIFIED BY '12345';
 ```
 
 > 说明
-> 您可以通过 `PASSWORD()` 方法获得暗文密码。
+> 您可以通过 `PASSWORD()` 方法获得密文密码。
 
 ## 修改用户密码
 
@@ -109,7 +109,7 @@ GRANT privilege_list ON RESOURCE resource_name TO user_identity [ROLE role_name]
 参数：
 
 * `privilege_list`：需要赋予的权限列表，以逗号分隔。
-  * NODE_PRIV：节点变更权限。包括 FE、BE、BROKER 节点的添加、删除、下线等操作。目前该权限只能授予 Root 用户。
+  * NODE_PRIV：节点变更权限。包括 FE、BE、BROKER 节点的添加、删除、下线等操作。目前该权限只能授予 root 用户。
   * GRANT_PRIV：权限变更权限。允许执行包括授权、撤权、添加/删除/变更 用户/角色等操作。
   * SELECT_PRIV：对数据库、表的只读权限。
   * LOAD_PRIV：对数据库、表的写权限。包括 LOAD、INSERT、DELETE 等。
