@@ -82,7 +82,7 @@ private:
     Status append_text_to_column(const char* data, const int& len, const SlotDescriptor* slot_desc,
                                  vectorized::Column* column);
 
-    template <PrimitiveType PT, typename CppType = vectorized::RunTimeCppType<PT>>
+    template <LogicalType PT, typename CppType = vectorized::RunTimeCppType<PT>>
     void append_value_to_column(vectorized::Column* column, CppType& value);
 };
 

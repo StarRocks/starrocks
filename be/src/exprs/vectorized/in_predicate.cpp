@@ -10,7 +10,7 @@
 namespace starrocks::vectorized {
 
 struct InConstPredicateBuilder {
-    template <PrimitiveType ptype>
+    template <LogicalType ptype>
     Expr* operator()(const TExprNode& node) {
         return new VectorizedInConstPredicate<ptype>(node);
     }
@@ -18,7 +18,7 @@ struct InConstPredicateBuilder {
 
 Expr* VectorizedInPredicateFactory::from_thrift(const TExprNode& node) {
     // children type
-    PrimitiveType child_type = thrift_to_type(node.child_type);
+    LogicalType child_type = thrift_to_type(node.child_type);
 
     if (child_type == TYPE_CHAR) {
         child_type = TYPE_VARCHAR;

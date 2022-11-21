@@ -310,7 +310,7 @@ public:
             if (!desc->has_consumer()) continue;
             // skip if ht.size() > limit, and it's only for local.
             if (!desc->has_remote_targets() && row_count > _limit) continue;
-            PrimitiveType build_type = desc->build_expr_type();
+            LogicalType build_type = desc->build_expr_type();
             vectorized::JoinRuntimeFilter* filter =
                     vectorized::RuntimeFilterHelper::create_runtime_bloom_filter(_pool, build_type);
             if (filter == nullptr) continue;

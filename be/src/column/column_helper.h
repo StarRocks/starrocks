@@ -60,7 +60,7 @@ public:
      */
     static size_t count_false_with_notnull(const ColumnPtr& col);
 
-    template <PrimitiveType Type>
+    template <LogicalType Type>
     static inline ColumnPtr create_const_column(const RunTimeCppType<Type>& value, size_t chunk_size) {
         static_assert(!pt_is_decimal<Type>,
                       "Decimal column can not created by this function because of missing "
@@ -75,7 +75,7 @@ public:
         return ConstColumn::create(ptr, chunk_size);
     }
 
-    template <PrimitiveType PT>
+    template <LogicalType PT>
     static inline ColumnPtr create_const_decimal_column(RunTimeCppType<PT> value, int precision, int scale,
                                                         size_t size) {
         static_assert(pt_is_decimal<PT>);
@@ -198,7 +198,7 @@ public:
      * Cast columnPtr to special type ColumnPtr
      * Plz sure actual column type by yourself
      */
-    template <PrimitiveType Type>
+    template <LogicalType Type>
     static inline typename RunTimeColumnType<Type>::Ptr cast_to(const ColumnPtr& value) {
         down_cast<RunTimeColumnType<Type>*>(value.get());
         return std::static_pointer_cast<RunTimeColumnType<Type>>(value);
@@ -208,12 +208,12 @@ public:
      * Cast columnPtr to special type Column*
      * Plz sure actual column type by yourself
      */
-    template <PrimitiveType Type>
+    template <LogicalType Type>
     static inline RunTimeColumnType<Type>* cast_to_raw(const ColumnPtr& value) {
         return down_cast<RunTimeColumnType<Type>*>(value.get());
     }
 
-    template <PrimitiveType Type>
+    template <LogicalType Type>
     static inline RunTimeColumnType<Type>* cast_to_raw(const Column* value) {
         return down_cast<RunTimeColumnType<Type>*>(value);
     }
@@ -240,12 +240,12 @@ public:
         return down_cast<Type*>(value.get());
     }
 
-    template <PrimitiveType Type>
+    template <LogicalType Type>
     static inline RunTimeCppType<Type>* get_cpp_data(const ColumnPtr& value) {
         return cast_to_raw<Type>(value)->get_data().data();
     }
 
-    template <PrimitiveType Type>
+    template <LogicalType Type>
     static inline const RunTimeCppType<Type>* unpack_cpp_data_one_value(const Column* input_column) {
         using ColumnType = RunTimeColumnType<Type>;
         DCHECK(input_column->size() == 1);
@@ -261,13 +261,13 @@ public:
         }
     }
 
-    template <PrimitiveType Type>
+    template <LogicalType Type>
     static inline RunTimeCppType<Type> get_const_value(const Column* col) {
         const ColumnPtr& c = as_raw_column<ConstColumn>(col)->data_column();
         return cast_to_raw<Type>(c)->get_data()[0];
     }
 
-    template <PrimitiveType Type>
+    template <LogicalType Type>
     static inline RunTimeCppType<Type> get_const_value(const ColumnPtr& col) {
         const ColumnPtr& c = as_raw_column<ConstColumn>(col)->data_column();
         return cast_to_raw<Type>(c)->get_data()[0];

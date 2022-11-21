@@ -57,7 +57,7 @@ Status DataStreamRecvr::SenderQueue::_build_chunk_meta(const ChunkPB& pb_chunk) 
         }
     }
     for (const auto& kv : _chunk_meta.tuple_id_to_index) {
-        _chunk_meta.types[kv.second] = TypeDescriptor(PrimitiveType::TYPE_BOOLEAN);
+        _chunk_meta.types[kv.second] = TypeDescriptor(LogicalType::TYPE_BOOLEAN);
         ++column_index;
     }
 

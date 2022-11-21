@@ -67,8 +67,8 @@ PARALLEL_TEST(ProtobufChunkSerde, test_serde) {
     meta.is_nulls.resize(2, false);
     meta.is_consts.resize(2, false);
     meta.types.resize(2);
-    meta.types[0] = TypeDescriptor(PrimitiveType::TYPE_INT);
-    meta.types[1] = TypeDescriptor(PrimitiveType::TYPE_INT);
+    meta.types[0] = TypeDescriptor(LogicalType::TYPE_INT);
+    meta.types[1] = TypeDescriptor(LogicalType::TYPE_INT);
 
     ProtobufChunkDeserializer deserializer(meta);
     auto chunk_or = deserializer.deserialize(serialized_data);

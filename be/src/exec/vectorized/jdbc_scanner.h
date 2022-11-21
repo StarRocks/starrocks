@@ -53,7 +53,7 @@ public:
 private:
     void _init_profile();
 
-    StatusOr<PrimitiveType> _precheck_data_type(const std::string& java_class, SlotDescriptor* slot_desc);
+    StatusOr<LogicalType> _precheck_data_type(const std::string& java_class, SlotDescriptor* slot_desc);
 
     Status _init_jdbc_bridge();
 
@@ -78,7 +78,7 @@ private:
     std::vector<SlotDescriptor*> _slot_descs;
     // java class name for each result column
     std::vector<std::string> _column_class_names;
-    std::vector<PrimitiveType> _result_column_types;
+    std::vector<LogicalType> _result_column_types;
     std::vector<ExprContext*> _cast_exprs;
     ChunkPtr _result_chunk;
 

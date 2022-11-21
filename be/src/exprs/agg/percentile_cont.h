@@ -15,13 +15,13 @@
 namespace starrocks::vectorized {
 
 // AvgResultPT for final result
-template <PrimitiveType PT, typename = guard::Guard>
-inline constexpr PrimitiveType PercentileResultPT = PT;
+template <LogicalType PT, typename = guard::Guard>
+inline constexpr LogicalType PercentileResultPT = PT;
 
-template <PrimitiveType PT>
-inline constexpr PrimitiveType PercentileResultPT<PT, ArithmeticPTGuard<PT>> = TYPE_DOUBLE;
+template <LogicalType PT>
+inline constexpr LogicalType PercentileResultPT<PT, ArithmeticPTGuard<PT>> = TYPE_DOUBLE;
 
-template <PrimitiveType PT, typename = guard::Guard>
+template <LogicalType PT, typename = guard::Guard>
 struct PercentileContState {
     using CppType = RunTimeCppType<PT>;
     void update(CppType item) { items.emplace_back(item); }
@@ -30,7 +30,7 @@ struct PercentileContState {
     double rate = 0.0;
 };
 
-template <PrimitiveType PT>
+template <LogicalType PT>
 class PercentileContAggregateFunction final
         : public AggregateFunctionBatchHelper<PercentileContState<PT>, PercentileContAggregateFunction<PT>> {
 public:

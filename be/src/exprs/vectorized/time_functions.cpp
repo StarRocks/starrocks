@@ -49,7 +49,7 @@ const static int DEFAULT_DATE_FORMAT_LIMIT = 100;
         return VectorizedStrictUnaryFunction<NAME##Impl>::evaluate<TYPE, RESULT_TYPE>(VECTORIZED_FN_ARGS(IDX)); \
     }
 
-template <PrimitiveType Type>
+template <LogicalType Type>
 ColumnPtr date_valid(const ColumnPtr& v1) {
     if (v1->only_null()) {
         return v1;
@@ -675,7 +675,7 @@ Status TimeFunctions::time_slice_prepare(starrocks_udf::FunctionContext* context
 
     ScalarFunction function;
     const FunctionContext::TypeDesc* boundary = context->get_arg_type(0);
-    if (boundary->type == PrimitiveType::TYPE_DATETIME) {
+    if (boundary->type == LogicalType::TYPE_DATETIME) {
         // floor specify START as the result time.
         if (time_base == "floor") {
             if (period_unit == "second") {
@@ -723,7 +723,7 @@ Status TimeFunctions::time_slice_prepare(starrocks_udf::FunctionContext* context
             }
         }
     } else {
-        DCHECK_EQ(boundary->type, PrimitiveType::TYPE_DATE);
+        DCHECK_EQ(boundary->type, LogicalType::TYPE_DATE);
         if (time_base == "floor") {
             if (period_unit == "second" || period_unit == "minute" || period_unit == "hour") {
                 return Status::InvalidArgument("can't use time_slice for date with time(hour/minute/second)");
@@ -1568,7 +1568,7 @@ Status TimeFunctions::format_close(starrocks_udf::FunctionContext* context,
     return Status::OK();
 }
 
-template <typename OP, PrimitiveType Type>
+template <typename OP, LogicalType Type>
 ColumnPtr date_format_func(const Columns& cols, size_t patten_size) {
     ColumnViewer<Type> viewer(cols[0]);
 
@@ -1698,7 +1698,7 @@ bool standard_format_one_row(const TimestampValue& timestamp_value, char* buf, c
     return b;
 }
 
-template <PrimitiveType Type>
+template <LogicalType Type>
 ColumnPtr standard_format(const std::string& fmt, int len, const starrocks::vectorized::Columns& columns) {
     if (fmt.size() <= 0) {
         return ColumnHelper::create_const_null_column(columns[0]->size());
@@ -1722,7 +1722,7 @@ ColumnPtr standard_format(const std::string& fmt, int len, const starrocks::vect
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-template <PrimitiveType Type>
+template <LogicalType Type>
 ColumnPtr do_format(const TimeFunctions::FormatCtx* ctx, const Columns& cols) {
     if (ctx->fmt_type == TimeFunctions::yyyyMMdd) {
         return date_format_func<yyyyMMddImpl, Type>(cols, 8);
@@ -1741,7 +1741,7 @@ ColumnPtr do_format(const TimeFunctions::FormatCtx* ctx, const Columns& cols) {
     }
 }
 
-template <PrimitiveType Type>
+template <LogicalType Type>
 void common_format_process(ColumnViewer<Type>* viewer_date, ColumnViewer<TYPE_VARCHAR>* viewer_format,
                            ColumnBuilder<TYPE_VARCHAR>* builder, int i) {
     if (viewer_format->is_null(i) || viewer_format->value(i).empty()) {

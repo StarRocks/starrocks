@@ -68,10 +68,10 @@ private:
 // NOLINTNEXTLINE
 TEST_F(ArrayElementExprTest, test_one_dim_array) {
     TypeDescriptor type_array_int;
-    type_array_int.type = PrimitiveType::TYPE_ARRAY;
-    type_array_int.children.emplace_back(TypeDescriptor(PrimitiveType::TYPE_INT));
+    type_array_int.type = LogicalType::TYPE_ARRAY;
+    type_array_int.children.emplace_back(TypeDescriptor(LogicalType::TYPE_INT));
 
-    TypeDescriptor type_int(PrimitiveType::TYPE_INT);
+    TypeDescriptor type_int(LogicalType::TYPE_INT);
 
     auto array = ColumnHelper::create_column(type_array_int, true);
     array->append_datum(DatumArray{Datum((int32_t)1)});                    // [1]
@@ -304,13 +304,13 @@ TEST_F(ArrayElementExprTest, test_one_dim_array) {
 // NOLINTNEXTLINE
 TEST_F(ArrayElementExprTest, test_two_dim_array) {
     TypeDescriptor type_desc;
-    type_desc.type = PrimitiveType::TYPE_ARRAY;
+    type_desc.type = LogicalType::TYPE_ARRAY;
     type_desc.children.emplace_back();
-    type_desc.children.back().type = PrimitiveType::TYPE_ARRAY;
+    type_desc.children.back().type = LogicalType::TYPE_ARRAY;
     type_desc.children.back().children.emplace_back();
-    type_desc.children.back().children.back().type = PrimitiveType::TYPE_INT;
+    type_desc.children.back().children.back().type = LogicalType::TYPE_INT;
 
-    TypeDescriptor type_int(PrimitiveType::TYPE_INT);
+    TypeDescriptor type_int(LogicalType::TYPE_INT);
 
     //
     //  array:

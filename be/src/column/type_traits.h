@@ -71,7 +71,7 @@ template <typename T>
 using is_sum_bigint = std::integral_constant<bool, std::is_integral_v<T> && !IsInt128<T>>;
 
 // If isArithmeticPT is true, means this type support +,-,*,/
-template <PrimitiveType primitive_type>
+template <LogicalType primitive_type>
 constexpr bool isArithmeticPT = true;
 
 template <>
@@ -93,7 +93,7 @@ inline constexpr bool isArithmeticPT<TYPE_JSON> = false;
 template <>
 inline constexpr bool isArithmeticPT<TYPE_VARBINARY> = false;
 
-template <PrimitiveType primitive_type>
+template <LogicalType primitive_type>
 constexpr bool isSlicePT = false;
 
 template <>
@@ -105,7 +105,7 @@ inline constexpr bool isSlicePT<TYPE_VARCHAR> = true;
 template <>
 inline constexpr bool isSlicePT<TYPE_VARBINARY> = true;
 
-template <PrimitiveType primitive_type>
+template <LogicalType primitive_type>
 struct RunTimeTypeTraits {};
 
 template <>
@@ -246,14 +246,14 @@ struct RunTimeTypeTraits<TYPE_VARBINARY> {
     using ColumnType = BinaryColumn;
 };
 
-template <PrimitiveType Type>
+template <LogicalType Type>
 using RunTimeCppType = typename RunTimeTypeTraits<Type>::CppType;
 
-template <PrimitiveType Type>
+template <LogicalType Type>
 using RunTimeColumnType = typename RunTimeTypeTraits<Type>::ColumnType;
 
 // Movable: rvalue reference type
-template <PrimitiveType Type>
+template <LogicalType Type>
 using RunTimeCppMovableType = std::add_rvalue_reference_t<std::remove_pointer_t<RunTimeCppType<Type>>>;
 
 template <typename T>
@@ -320,20 +320,20 @@ struct ColumnTraits<TimestampValue> {
 };
 
 // Length of fixed-length type, 0 for dynamic-length type
-template <PrimitiveType ptype, typename = guard::Guard>
+template <LogicalType ptype, typename = guard::Guard>
 struct RunTimeFixedTypeLength {
     static constexpr size_t value = 0;
 };
 
-template <PrimitiveType ptype>
+template <LogicalType ptype>
 struct RunTimeFixedTypeLength<ptype, FixedLengthPTGuard<ptype>> {
     static constexpr size_t value = sizeof(RunTimeCppType<ptype>);
 };
 
-template <PrimitiveType ptype, typename = guard::Guard>
+template <LogicalType ptype, typename = guard::Guard>
 struct RunTimeTypeLimits {};
 
-template <PrimitiveType ptype>
+template <LogicalType ptype>
 struct RunTimeTypeLimits<ptype, ArithmeticPTGuard<ptype>> {
     // Cpp type of this primitive type
     using value_type = RunTimeCppType<ptype>;
@@ -350,7 +350,7 @@ struct RunTimeTypeLimits<TYPE_LARGEINT> {
     static constexpr value_type max_value() { return MAX_INT128; }
 };
 
-template <PrimitiveType ptype>
+template <LogicalType ptype>
 struct RunTimeTypeLimits<ptype, StringPTGuard<ptype>> {
     using value_type = RunTimeCppType<ptype>;
 
@@ -386,7 +386,7 @@ struct RunTimeTypeLimits<TYPE_DECIMALV2> {
     static value_type max_value() { return DecimalV2Value::get_max_decimal(); }
 };
 
-template <PrimitiveType ptype>
+template <LogicalType ptype>
 struct RunTimeTypeLimits<ptype, DecimalPTGuard<ptype>> {
     using value_type = RunTimeCppType<ptype>;
 

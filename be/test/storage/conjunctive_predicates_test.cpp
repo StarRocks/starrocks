@@ -236,7 +236,7 @@ TEST(ConjunctivePredicatesTest, test_evaluate_or) {
 }
 
 struct MockConstExprBuilder {
-    template <PrimitiveType ptype>
+    template <LogicalType ptype>
     Expr* operator()(ObjectPool* pool) {
         if constexpr (pt_is_decimal<ptype>) {
             CHECK(false) << "not supported";
@@ -265,19 +265,19 @@ struct MockConstExprBuilder {
     }
 };
 
-class ConjunctiveTestFixture : public testing::TestWithParam<std::tuple<TExprOpcode::type, PrimitiveType>> {
+class ConjunctiveTestFixture : public testing::TestWithParam<std::tuple<TExprOpcode::type, LogicalType>> {
 public:
-    TSlotDescriptor _create_slot_desc(PrimitiveType type, const std::string& col_name, int col_pos) {
+    TSlotDescriptor _create_slot_desc(LogicalType type, const std::string& col_name, int col_pos) {
         TSlotDescriptorBuilder builder;
 
-        if (type == PrimitiveType::TYPE_VARCHAR || type == PrimitiveType::TYPE_CHAR) {
+        if (type == LogicalType::TYPE_VARCHAR || type == LogicalType::TYPE_CHAR) {
             return builder.string_type(1024).column_name(col_name).column_pos(col_pos).nullable(false).build();
         } else {
             return builder.type(type).column_name(col_name).column_pos(col_pos).nullable(false).build();
         }
     }
 
-    TupleDescriptor* _create_tuple_desc(PrimitiveType ptype) {
+    TupleDescriptor* _create_tuple_desc(LogicalType ptype) {
         TDescriptorTableBuilder table_builder;
         TTupleDescriptorBuilder tuple_builder;
 
@@ -295,7 +295,7 @@ public:
         return tuple_desc;
     }
 
-    TabletSchemaPB create_tablet_schema(PrimitiveType ptype) {
+    TabletSchemaPB create_tablet_schema(LogicalType ptype) {
         TabletSchemaPB tablet_schema;
 
         ColumnPB* col = tablet_schema.add_column();
@@ -307,7 +307,7 @@ public:
     }
 
     // Build an expression: col < literal
-    Expr* build_predicate(PrimitiveType ptype, TExprOpcode::type op, SlotDescriptor* slot) {
+    Expr* build_predicate(LogicalType ptype, TExprOpcode::type op, SlotDescriptor* slot) {
         TExprNode expr_node;
         expr_node.opcode = op;
         expr_node.child_type = to_thrift(ptype);
@@ -380,9 +380,9 @@ TEST_P(ConjunctiveTestFixture, test_parse_conjuncts) {
 INSTANTIATE_TEST_SUITE_P(ConjunctiveTest, ConjunctiveTestFixture,
                          testing::Combine(testing::Values(TExprOpcode::LT, TExprOpcode::LE, TExprOpcode::GT,
                                                           TExprOpcode::GE, TExprOpcode::EQ, TExprOpcode::NE),
-                                          testing::Values(PrimitiveType::TYPE_TINYINT, PrimitiveType::TYPE_SMALLINT,
-                                                          PrimitiveType::TYPE_INT, PrimitiveType::TYPE_BIGINT,
-                                                          PrimitiveType::TYPE_LARGEINT, PrimitiveType::TYPE_VARCHAR,
-                                                          PrimitiveType::TYPE_CHAR, PrimitiveType::TYPE_BOOLEAN)));
+                                          testing::Values(LogicalType::TYPE_TINYINT, LogicalType::TYPE_SMALLINT,
+                                                          LogicalType::TYPE_INT, LogicalType::TYPE_BIGINT,
+                                                          LogicalType::TYPE_LARGEINT, LogicalType::TYPE_VARCHAR,
+                                                          LogicalType::TYPE_CHAR, LogicalType::TYPE_BOOLEAN)));
 
 } // namespace starrocks::vectorized

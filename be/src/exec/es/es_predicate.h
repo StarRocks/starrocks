@@ -49,7 +49,7 @@ public:
 // for vectorized call
 class VExtLiteral : public ExtLiteral {
 public:
-    VExtLiteral(PrimitiveType type, vectorized::ColumnPtr column,
+    VExtLiteral(LogicalType type, vectorized::ColumnPtr column,
                 const std::string& timezone = TimezoneUtils::default_time_zone);
 
     VExtLiteral() = default;

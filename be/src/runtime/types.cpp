@@ -286,7 +286,7 @@ TypeDescriptor TypeDescriptor::from_storage_type_info(TypeInfo* type_info) {
         ftype = type_info->type();
     }
 
-    PrimitiveType ptype = scalar_field_type_to_primitive_type(ftype);
+    LogicalType ptype = scalar_field_type_to_primitive_type(ftype);
     DCHECK(ptype != TYPE_UNKNOWN);
     int len = TypeDescriptor::MAX_VARCHAR_LENGTH;
     int precision = type_info->precision();

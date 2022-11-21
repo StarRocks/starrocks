@@ -11,7 +11,7 @@
 
 namespace starrocks::vectorized {
 
-template <PrimitiveType Type>
+template <LogicalType Type>
 class ColumnBuilder {
 public:
     using DataColumnPtr = typename RunTimeColumnType<Type>::Ptr;

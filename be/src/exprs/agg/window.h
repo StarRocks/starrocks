@@ -94,7 +94,7 @@ protected:
     }
 };
 
-template <PrimitiveType PT, typename State, typename T = RunTimeCppType<PT>>
+template <LogicalType PT, typename State, typename T = RunTimeCppType<PT>>
 class ValueWindowFunction : public WindowFunction<State> {
 public:
     using InputColumnType = RunTimeColumnType<PT>;
@@ -279,7 +279,7 @@ class NtileWindowFunction final : public WindowFunction<NtileState> {
     std::string get_name() const override { return "ntile"; }
 };
 
-template <PrimitiveType PT, typename = guard::Guard>
+template <LogicalType PT, typename = guard::Guard>
 struct FirstValueState {
     using T = RunTimeCppType<PT>;
     T value;
@@ -287,7 +287,7 @@ struct FirstValueState {
     bool is_null = false;
 };
 
-template <PrimitiveType PT, typename T = RunTimeCppType<PT>, typename = guard::Guard>
+template <LogicalType PT, typename T = RunTimeCppType<PT>, typename = guard::Guard>
 class FirstValueWindowFunction final : public ValueWindowFunction<PT, FirstValueState<PT>, T> {
     using InputColumnType = typename ValueWindowFunction<PT, FirstValueState<PT>, T>::InputColumnType;
 
@@ -332,14 +332,14 @@ class FirstValueWindowFunction final : public ValueWindowFunction<PT, FirstValue
     std::string get_name() const override { return "nullable_first_value"; }
 };
 
-template <PrimitiveType PT, typename = guard::Guard>
+template <LogicalType PT, typename = guard::Guard>
 struct LastValueState {
     using T = RunTimeCppType<PT>;
     T value;
     bool is_null = false;
 };
 
-template <PrimitiveType PT, typename T = RunTimeCppType<PT>, typename = guard::Guard>
+template <LogicalType PT, typename T = RunTimeCppType<PT>, typename = guard::Guard>
 class LastValueWindowFunction final : public ValueWindowFunction<PT, LastValueState<PT>, T> {
     using InputColumnType = typename ValueWindowFunction<PT, FirstValueState<PT>, T>::InputColumnType;
 
@@ -378,7 +378,7 @@ class LastValueWindowFunction final : public ValueWindowFunction<PT, LastValueSt
     std::string get_name() const override { return "nullable_last_value"; }
 };
 
-template <PrimitiveType PT, typename = guard::Guard>
+template <LogicalType PT, typename = guard::Guard>
 struct LeadLagState {
     using T = RunTimeCppType<PT>;
     T value;
@@ -387,7 +387,7 @@ struct LeadLagState {
     bool defualt_is_null = false;
 };
 
-template <PrimitiveType PT, typename T = RunTimeCppType<PT>, typename = guard::Guard>
+template <LogicalType PT, typename T = RunTimeCppType<PT>, typename = guard::Guard>
 class LeadLagWindowFunction final : public ValueWindowFunction<PT, LeadLagState<PT>, T> {
     using InputColumnType = typename ValueWindowFunction<PT, FirstValueState<PT>, T>::InputColumnType;
 
@@ -437,7 +437,7 @@ class LeadLagWindowFunction final : public ValueWindowFunction<PT, LeadLagState<
     std::string get_name() const override { return "lead-lag"; }
 };
 
-template <PrimitiveType PT>
+template <LogicalType PT>
 struct FirstValueState<PT, StringPTGuard<PT>> {
     Buffer<uint8_t> buffer;
     bool has_value = false;
@@ -446,7 +446,7 @@ struct FirstValueState<PT, StringPTGuard<PT>> {
     Slice slice() const { return {buffer.data(), buffer.size()}; }
 };
 
-template <PrimitiveType PT>
+template <LogicalType PT>
 class FirstValueWindowFunction<PT, Slice, StringPTGuard<PT>> final : public WindowFunction<FirstValueState<PT>> {
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
         this->data(state).buffer.clear();
@@ -483,7 +483,7 @@ class FirstValueWindowFunction<PT, Slice, StringPTGuard<PT>> final : public Wind
     std::string get_name() const override { return "nullable_first_value"; }
 };
 
-template <PrimitiveType PT>
+template <LogicalType PT>
 struct LastValueState<PT, StringPTGuard<PT>> {
     Buffer<uint8_t> buffer;
     bool is_null = false;
@@ -491,7 +491,7 @@ struct LastValueState<PT, StringPTGuard<PT>> {
     Slice slice() const { return {buffer.data(), buffer.size()}; }
 };
 
-template <PrimitiveType PT>
+template <LogicalType PT>
 class LastValueWindowFunction<PT, Slice, StringPTGuard<PT>> final : public WindowFunction<LastValueState<PT>> {
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
         this->data(state).buffer.clear();
@@ -523,7 +523,7 @@ class LastValueWindowFunction<PT, Slice, StringPTGuard<PT>> final : public Windo
     std::string get_name() const override { return "nullable_last_value"; }
 };
 
-template <PrimitiveType PT>
+template <LogicalType PT>
 struct LeadLagState<PT, StringPTGuard<PT>> {
     Buffer<uint8_t> value;
     Buffer<uint8_t> default_value;
@@ -533,7 +533,7 @@ struct LeadLagState<PT, StringPTGuard<PT>> {
     Slice slice() const { return {value.data(), value.size()}; }
 };
 
-template <PrimitiveType PT>
+template <LogicalType PT>
 class LeadLagWindowFunction<PT, Slice, StringPTGuard<PT>> final : public WindowFunction<LeadLagState<PT>> {
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
         this->data(state).value.clear();

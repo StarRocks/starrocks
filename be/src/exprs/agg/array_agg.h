@@ -11,7 +11,7 @@
 
 namespace starrocks::vectorized {
 
-template <PrimitiveType PT>
+template <LogicalType PT>
 struct ArrayAggAggregateState {
     using ColumnType = RunTimeColumnType<PT>;
 
@@ -24,7 +24,7 @@ struct ArrayAggAggregateState {
     size_t null_count = 0;
 };
 
-template <PrimitiveType PT>
+template <LogicalType PT>
 class ArrayAggAggregateFunction
         : public AggregateFunctionBatchHelper<ArrayAggAggregateState<PT>, ArrayAggAggregateFunction<PT>> {
 public:

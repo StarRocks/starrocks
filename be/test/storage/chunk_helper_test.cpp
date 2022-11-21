@@ -33,12 +33,12 @@ private:
                             TYPE_BIGINT,  TYPE_LARGEINT, TYPE_FLOAT,
                             TYPE_DOUBLE,  TYPE_VARCHAR,  TYPE_CHAR};
 
-    PrimitiveType _primitive_type[9] = {
-            PrimitiveType::TYPE_TINYINT, PrimitiveType::TYPE_SMALLINT, PrimitiveType::TYPE_INT,
-            PrimitiveType::TYPE_BIGINT,  PrimitiveType::TYPE_LARGEINT, PrimitiveType::TYPE_FLOAT,
-            PrimitiveType::TYPE_DOUBLE,  PrimitiveType::TYPE_VARCHAR,  PrimitiveType::TYPE_CHAR};
+    LogicalType _primitive_type[9] = {
+            LogicalType::TYPE_TINYINT, LogicalType::TYPE_SMALLINT, LogicalType::TYPE_INT,
+            LogicalType::TYPE_BIGINT,  LogicalType::TYPE_LARGEINT, LogicalType::TYPE_FLOAT,
+            LogicalType::TYPE_DOUBLE,  LogicalType::TYPE_VARCHAR,  LogicalType::TYPE_CHAR};
 
-    TSlotDescriptor _create_slot_desc(PrimitiveType type, const std::string& col_name, int col_pos);
+    TSlotDescriptor _create_slot_desc(LogicalType type, const std::string& col_name, int col_pos);
     TupleDescriptor* _create_tuple_desc();
 
     // A tuple with one column
@@ -46,7 +46,7 @@ private:
         TDescriptorTableBuilder table_builder;
         TTupleDescriptorBuilder tuple_builder;
 
-        tuple_builder.add_slot(_create_slot_desc(PrimitiveType::TYPE_INT, "c0", 0));
+        tuple_builder.add_slot(_create_slot_desc(LogicalType::TYPE_INT, "c0", 0));
         tuple_builder.build(&table_builder);
 
         std::vector<TTupleId> row_tuples{0};
@@ -64,10 +64,10 @@ private:
     ObjectPool _pool;
 };
 
-TSlotDescriptor ChunkHelperTest::_create_slot_desc(PrimitiveType type, const std::string& col_name, int col_pos) {
+TSlotDescriptor ChunkHelperTest::_create_slot_desc(LogicalType type, const std::string& col_name, int col_pos) {
     TSlotDescriptorBuilder builder;
 
-    if (type == PrimitiveType::TYPE_VARCHAR || type == PrimitiveType::TYPE_CHAR) {
+    if (type == LogicalType::TYPE_VARCHAR || type == LogicalType::TYPE_CHAR) {
         return builder.string_type(1024).column_name(col_name).column_pos(col_pos).nullable(false).build();
     } else {
         return builder.type(type).column_name(col_name).column_pos(col_pos).nullable(false).build();

@@ -61,7 +61,7 @@ public:
     static ColumnPtr NAME(starrocks_udf::FunctionContext* context, const Columns& columns)
 
 #define DEFINE_VECTORIZED_FN_TEMPLATE(NAME) \
-    template <PrimitiveType Type>           \
+    template <LogicalType Type>           \
     static ColumnPtr NAME(starrocks_udf::FunctionContext* context, const Columns& columns)
 
 #define VECTORIZED_FN_CTX() context

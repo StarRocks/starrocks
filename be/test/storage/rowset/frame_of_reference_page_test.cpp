@@ -45,7 +45,7 @@ class FrameOfReferencePageTest : public testing::Test {
 public:
     template <LogicalType type, class PageDecoderType>
     void copy_one(PageDecoderType* decoder, typename TypeTraits<type>::CppType* ret) {
-        PrimitiveType ptype = scalar_field_type_to_primitive_type(type);
+        LogicalType ptype = scalar_field_type_to_primitive_type(type);
         TypeDescriptor index_type(ptype);
         // TODO(alvinz): To reuse this colum
         auto column = vectorized::ColumnHelper::create_column(index_type, false);

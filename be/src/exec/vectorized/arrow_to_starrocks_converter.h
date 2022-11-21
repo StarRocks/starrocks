@@ -63,7 +63,7 @@ Status illegal_converting_error(const std::string& arrow_type_name, const std::s
 
 // A triple [at, pt, is_nullable] can determine a optimized converter from converting at -> pt,
 // is_nullable means original data has null slots.
-ConvertFunc get_arrow_converter(ArrowTypeId at, PrimitiveType pt, bool is_nullable, bool is_strict);
+ConvertFunc get_arrow_converter(ArrowTypeId at, LogicalType pt, bool is_nullable, bool is_strict);
 
 // get list converter, it is used to convert a ListArray in arrow to ArrayColumn in StarRocks.
 ListConvertFunc get_arrow_list_converter();
@@ -72,6 +72,6 @@ ListConvertFunc get_arrow_list_converter();
 // strict pt0, and converting is decomposed into two phases:
 // phase1: convert at->pt0 by converter determined by the triple [at, pt0, is_nullable]
 // phase2: convert pt0->pt by VectorCastExpr.
-PrimitiveType get_strict_type(ArrowTypeId at);
+LogicalType get_strict_type(ArrowTypeId at);
 
 } // namespace starrocks::vectorized

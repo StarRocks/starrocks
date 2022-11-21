@@ -115,7 +115,7 @@ static const std::vector<SlotDescriptor*>* create_tuple_desc_slots(RuntimeState*
         if (fs.size() < 2) {
             CHECK(false) << "create_tuple_desc_slots bad desc";
         }
-        PrimitiveType type = TYPE_UNKNOWN;
+        LogicalType type = TYPE_UNKNOWN;
         if (fs[1] == "boolean") {
             type = TYPE_BOOLEAN;
         } else if (fs[1] == "tinyint") {

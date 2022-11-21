@@ -169,7 +169,7 @@ struct SortParameters {
     }
 };
 
-static void do_bench(benchmark::State& state, SortAlgorithm sorter_algo, PrimitiveType data_type, int num_chunks,
+static void do_bench(benchmark::State& state, SortAlgorithm sorter_algo, LogicalType data_type, int num_chunks,
                      int num_columns, SortParameters params = SortParameters()) {
     // state.PauseTiming();
     ChunkSorterBase suite;

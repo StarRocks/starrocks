@@ -288,7 +288,7 @@ public:
     ObjectPool* pool() { return _pool; }
 
 private:
-    template <PrimitiveType PT>
+    template <LogicalType PT>
     void _validate_decimal(RuntimeState* state, vectorized::Column* column, const SlotDescriptor* desc,
                            std::vector<uint8_t>* validate_selection);
     // This method will change _validate_selection

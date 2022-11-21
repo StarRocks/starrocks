@@ -12,7 +12,7 @@
 
 namespace starrocks::vectorized {
 
-template <PrimitiveType ptype>
+template <LogicalType ptype>
 struct PredicateCmpType {
     using CmpType = RunTimeCppType<ptype>;
 };
@@ -22,18 +22,18 @@ struct PredicateCmpType<TYPE_JSON> {
     using CmpType = JsonValue;
 };
 
-// The evaluator for PrimitiveType
-template <PrimitiveType ptype>
+// The evaluator for LogicalType
+template <LogicalType ptype>
 using EvalEq = std::equal_to<typename PredicateCmpType<ptype>::CmpType>;
-template <PrimitiveType ptype>
+template <LogicalType ptype>
 using EvalNe = std::not_equal_to<typename PredicateCmpType<ptype>::CmpType>;
-template <PrimitiveType ptype>
+template <LogicalType ptype>
 using EvalLt = std::less<typename PredicateCmpType<ptype>::CmpType>;
-template <PrimitiveType ptype>
+template <LogicalType ptype>
 using EvalLe = std::less_equal<typename PredicateCmpType<ptype>::CmpType>;
-template <PrimitiveType ptype>
+template <LogicalType ptype>
 using EvalGt = std::greater<typename PredicateCmpType<ptype>::CmpType>;
-template <PrimitiveType ptype>
+template <LogicalType ptype>
 using EvalGe = std::greater_equal<typename PredicateCmpType<ptype>::CmpType>;
 
 // A wrapper for evaluator, to fit in the Expression framework
@@ -45,7 +45,7 @@ struct BinaryPredFunc {
     }
 };
 
-template <PrimitiveType Type, typename OP>
+template <LogicalType Type, typename OP>
 class VectorizedBinaryPredicate final : public Predicate {
 public:
     explicit VectorizedBinaryPredicate(const TExprNode& node) : Predicate(node) {}
@@ -60,7 +60,7 @@ public:
     }
 };
 
-template <PrimitiveType Type, typename OP>
+template <LogicalType Type, typename OP>
 class VectorizedNullSafeEqPredicate final : public Predicate {
 public:
     explicit VectorizedNullSafeEqPredicate(const TExprNode& node) : Predicate(node) {}
@@ -104,7 +104,7 @@ public:
 };
 
 struct BinaryPredicateBuilder {
-    template <PrimitiveType data_type>
+    template <LogicalType data_type>
     Expr* operator()(const TExprNode& node) {
         switch (node.opcode) {
         case TExprOpcode::EQ:
@@ -129,7 +129,7 @@ struct BinaryPredicateBuilder {
 };
 
 Expr* VectorizedBinaryPredicateFactory::from_thrift(const TExprNode& node) {
-    PrimitiveType type = thrift_to_type(node.child_type);
+    LogicalType type = thrift_to_type(node.child_type);
 
     return type_dispatch_predicate<Expr*>(type, true, BinaryPredicateBuilder(), node);
 }

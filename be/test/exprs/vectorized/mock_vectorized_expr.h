@@ -65,7 +65,7 @@ protected:
     int64_t _ms = 0;
 };
 
-template <PrimitiveType Type>
+template <LogicalType Type>
 class MockVectorizedExpr : public MockCostExpr {
 public:
     MockVectorizedExpr(const TExprNode& t, size_t size, RunTimeCppType<Type> value)
@@ -93,7 +93,7 @@ private:
     RunTimeCppType<Type> value;
 };
 
-template <PrimitiveType Type>
+template <LogicalType Type>
 class MockMultiVectorizedExpr : public MockCostExpr {
 public:
     MockMultiVectorizedExpr(const TExprNode& t, size_t size, RunTimeCppType<Type> num1, RunTimeCppType<Type> num2)
@@ -120,7 +120,7 @@ private:
     RunTimeCppType<Type> num2;
 };
 
-template <PrimitiveType Type>
+template <LogicalType Type>
 class MockNullVectorizedExpr : public MockCostExpr {
 public:
     MockNullVectorizedExpr(const TExprNode& t, size_t size, RunTimeCppType<Type> value)
@@ -168,7 +168,7 @@ public:
     RunTimeCppType<Type> value;
 };
 
-template <PrimitiveType Type>
+template <LogicalType Type>
 class MockConstVectorizedExpr : public MockCostExpr {
 public:
     MockConstVectorizedExpr(const TExprNode& t, RunTimeCppType<Type> value) : MockCostExpr(t), value(value) {

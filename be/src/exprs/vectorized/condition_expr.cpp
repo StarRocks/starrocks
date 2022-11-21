@@ -20,7 +20,7 @@
 
 namespace starrocks::vectorized {
 
-template <bool isConstC0, bool isConst1, PrimitiveType Type>
+template <bool isConstC0, bool isConst1, LogicalType Type>
 struct SelectIfOP {
     static ColumnPtr eval(ColumnPtr& value0, ColumnPtr& value1, ColumnPtr& selector, const TypeDescriptor& type_desc) {
         [[maybe_unused]] Column::Filter& select_vec = ColumnHelper::merge_nullable_filter(selector.get());
@@ -59,7 +59,7 @@ struct SelectIfOP {
                                                 \
     virtual Expr* clone(ObjectPool* pool) const override { return pool->add(new NAME(*this)); }
 
-template <PrimitiveType Type>
+template <LogicalType Type>
 class VectorizedIfNullExpr : public Expr {
 public:
     DEFINE_CLASS_CONSTRUCT_FN(VectorizedIfNullExpr);
@@ -101,7 +101,7 @@ private:
     }
 };
 
-template <PrimitiveType Type>
+template <LogicalType Type>
 class VectorizedNullIfExpr : public Expr {
 public:
     DEFINE_CLASS_CONSTRUCT_FN(VectorizedNullIfExpr);
@@ -147,7 +147,7 @@ private:
     }
 };
 
-template <PrimitiveType Type>
+template <LogicalType Type>
 class VectorizedIfExpr : public Expr {
 public:
     DEFINE_CLASS_CONSTRUCT_FN(VectorizedIfExpr);
@@ -269,7 +269,7 @@ private:
     }
 };
 
-template <PrimitiveType Type>
+template <LogicalType Type>
 class VectorizedCoalesceExpr : public Expr {
 public:
     DEFINE_CLASS_CONSTRUCT_FN(VectorizedCoalesceExpr);
@@ -371,7 +371,7 @@ public:
     CASE_TYPE(TYPE_DECIMAL128, CLASS);
 
 Expr* VectorizedConditionExprFactory::create_if_null_expr(const starrocks::TExprNode& node) {
-    PrimitiveType resultType = TypeDescriptor::from_thrift(node.type).type;
+    LogicalType resultType = TypeDescriptor::from_thrift(node.type).type;
     switch (resultType) {
         CASE_ALL_TYPE(VectorizedIfNullExpr);
     default:
@@ -381,7 +381,7 @@ Expr* VectorizedConditionExprFactory::create_if_null_expr(const starrocks::TExpr
 }
 
 Expr* VectorizedConditionExprFactory::create_null_if_expr(const TExprNode& node) {
-    PrimitiveType resultType = TypeDescriptor::from_thrift(node.type).type;
+    LogicalType resultType = TypeDescriptor::from_thrift(node.type).type;
     switch (resultType) {
         CASE_ALL_TYPE(VectorizedNullIfExpr);
     default:
@@ -391,7 +391,7 @@ Expr* VectorizedConditionExprFactory::create_null_if_expr(const TExprNode& node)
 }
 
 Expr* VectorizedConditionExprFactory::create_if_expr(const TExprNode& node) {
-    PrimitiveType resultType = TypeDescriptor::from_thrift(node.type).type;
+    LogicalType resultType = TypeDescriptor::from_thrift(node.type).type;
 
     switch (resultType) {
         CASE_ALL_TYPE(VectorizedIfExpr);
@@ -402,7 +402,7 @@ Expr* VectorizedConditionExprFactory::create_if_expr(const TExprNode& node) {
 }
 
 Expr* VectorizedConditionExprFactory::create_coalesce_expr(const TExprNode& node) {
-    PrimitiveType resultType = TypeDescriptor::from_thrift(node.type).type;
+    LogicalType resultType = TypeDescriptor::from_thrift(node.type).type;
     switch (resultType) {
         CASE_ALL_TYPE(VectorizedCoalesceExpr);
     default:

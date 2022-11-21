@@ -409,8 +409,8 @@ ColumnPtr JsonFunctions::json_query(FunctionContext* context, const Columns& col
     return _json_query_impl<TYPE_JSON>(context, columns);
 }
 
-// Convert the JSON Slice to a PrimitiveType through ColumnBuilder
-template <PrimitiveType ResultType>
+// Convert the JSON Slice to a LogicalType through ColumnBuilder
+template <LogicalType ResultType>
 static Status _convert_json_slice(const vpack::Slice& slice, vectorized::ColumnBuilder<ResultType>& result) {
     try {
         if (slice.isNone()) {
@@ -445,7 +445,7 @@ static Status _convert_json_slice(const vpack::Slice& slice, vectorized::ColumnB
     return Status::OK();
 }
 
-template <PrimitiveType ResultType>
+template <LogicalType ResultType>
 ColumnPtr JsonFunctions::_json_query_impl(FunctionContext* context, const Columns& columns) {
     auto num_rows = columns[0]->size();
     auto json_viewer = ColumnViewer<TYPE_JSON>(columns[0]);

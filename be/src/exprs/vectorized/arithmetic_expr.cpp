@@ -21,7 +21,7 @@ namespace starrocks::vectorized {
                                                       \
     virtual Expr* clone(ObjectPool* pool) const override { return pool->add(new CLASS_NAME(*this)); }
 
-static std::optional<PrimitiveType> eliminate_trivial_cast_for_decimal_mul(const Expr* e) {
+static std::optional<LogicalType> eliminate_trivial_cast_for_decimal_mul(const Expr* e) {
     DIAGNOSTIC_PUSH
 #if defined(__GNUC__) && !defined(__clang__)
     DIAGNOSTIC_IGNORE("-Wmaybe-uninitialized")
@@ -40,7 +40,7 @@ static std::optional<PrimitiveType> eliminate_trivial_cast_for_decimal_mul(const
     DIAGNOSTIC_POP
 }
 
-template <PrimitiveType Type, typename OP>
+template <LogicalType Type, typename OP>
 class VectorizedArithmeticExpr final : public Expr {
 public:
     DEFINE_CLASS_CONSTRUCTOR(VectorizedArithmeticExpr);
@@ -109,7 +109,7 @@ public:
     }
 };
 
-template <PrimitiveType Type, typename Op>
+template <LogicalType Type, typename Op>
 class VectorizedDivArithmeticExpr final : public Expr {
 public:
     DEFINE_CLASS_CONSTRUCTOR(VectorizedDivArithmeticExpr);
@@ -119,15 +119,15 @@ public:
             switch (_children[0]->type().type) {
             case TYPE_DECIMAL32: {
                 auto column = evaluate_internal<TYPE_DECIMAL32>(context, ptr);
-                return CastFunction::evaluate<TYPE_DECIMAL32, PrimitiveType::TYPE_BIGINT>(column);
+                return CastFunction::evaluate<TYPE_DECIMAL32, LogicalType::TYPE_BIGINT>(column);
             }
             case TYPE_DECIMAL64: {
                 auto column = evaluate_internal<TYPE_DECIMAL64>(context, ptr);
-                return CastFunction::evaluate<TYPE_DECIMAL64, PrimitiveType::TYPE_BIGINT>(column);
+                return CastFunction::evaluate<TYPE_DECIMAL64, LogicalType::TYPE_BIGINT>(column);
             }
             case TYPE_DECIMAL128: {
                 auto column = evaluate_internal<TYPE_DECIMAL128>(context, ptr);
-                return CastFunction::evaluate<TYPE_DECIMAL128, PrimitiveType::TYPE_BIGINT>(column);
+                return CastFunction::evaluate<TYPE_DECIMAL128, LogicalType::TYPE_BIGINT>(column);
             }
             default:
                 return evaluate_internal<Type>(context, ptr);
@@ -138,7 +138,7 @@ public:
     }
 
 private:
-    template <PrimitiveType LType>
+    template <LogicalType LType>
     ColumnPtr evaluate_internal(ExprContext* context, vectorized::Chunk* ptr) {
         auto l = _children[0]->evaluate(context, ptr);
         auto r = _children[1]->evaluate(context, ptr);
@@ -154,7 +154,7 @@ private:
     }
 };
 
-template <PrimitiveType Type>
+template <LogicalType Type>
 class VectorizedModArithmeticExpr final : public Expr {
 public:
     DEFINE_CLASS_CONSTRUCTOR(VectorizedModArithmeticExpr);
@@ -174,7 +174,7 @@ public:
     }
 };
 
-template <PrimitiveType Type>
+template <LogicalType Type>
 class VectorizedBitNotArithmeticExpr final : public Expr {
 public:
     DEFINE_CLASS_CONSTRUCTOR(VectorizedBitNotArithmeticExpr);
@@ -239,7 +239,7 @@ public:
     }
 
 Expr* VectorizedArithmeticExprFactory::from_thrift(const starrocks::TExprNode& node) {
-    PrimitiveType resultType = TypeDescriptor::from_thrift(node.type).type;
+    LogicalType resultType = TypeDescriptor::from_thrift(node.type).type;
     switch (node.opcode) {
 #define CASE_FN(TYPE, OP) return new VectorizedArithmeticExpr<TYPE, OP>(node);
     case TExprOpcode::ADD:

@@ -319,7 +319,7 @@ public:
      * @param: [TypeColumn, TypeColumn]
      * @return: TypeColumn
      */
-    template <PrimitiveType Type>
+    template <LogicalType Type>
     DEFINE_VECTORIZED_FN(pmod) {
         auto l = VECTORIZED_FN_ARGS(0);
         auto r = VECTORIZED_FN_ARGS(1);
@@ -336,7 +336,7 @@ public:
      * @param: [TypeColumn, TypeColumn]
      * @return: TypeColumn
      */
-    template <PrimitiveType Type>
+    template <LogicalType Type>
     DEFINE_VECTORIZED_FN(fmod) {
         auto l = VECTORIZED_FN_ARGS(0);
         auto r = VECTORIZED_FN_ARGS(1);
@@ -351,7 +351,7 @@ public:
      * @param: [TypeColumn, TypeColumn]
      * @return: TypeColumn
      */
-    template <PrimitiveType Type>
+    template <LogicalType Type>
     DEFINE_VECTORIZED_FN(mod) {
         auto l = VECTORIZED_FN_ARGS(0);
         auto r = VECTORIZED_FN_ARGS(1);
@@ -375,7 +375,7 @@ public:
      * @param: [TypeColumn]
      * @return: TypeColumn
      */
-    template <PrimitiveType Type>
+    template <LogicalType Type>
     DEFINE_VECTORIZED_FN(positive) {
         return VECTORIZED_FN_ARGS(0);
     }
@@ -386,7 +386,7 @@ public:
      * @param: [TypeColumn]
      * @return: TypeColumn
      */
-    template <PrimitiveType Type>
+    template <LogicalType Type>
     DEFINE_VECTORIZED_FN(negative) {
         if constexpr (pt_is_decimal<Type>) {
             const auto& type = context->get_return_type();
@@ -403,7 +403,7 @@ public:
     * @param: [TypeColumn, ...]
     * @return: TypeColumn
     */
-    template <PrimitiveType Type>
+    template <LogicalType Type>
     static ColumnPtr least(FunctionContext* context, const Columns& columns) {
         if (columns.size() == 1) {
             return columns[0];
@@ -444,7 +444,7 @@ public:
      * @param: [TypeColumn, ...]
      * @return: TypeColumn
      */
-    template <PrimitiveType Type>
+    template <LogicalType Type>
     static ColumnPtr greatest(FunctionContext* context, const Columns& columns) {
         if (columns.size() == 1) {
             return columns[0];

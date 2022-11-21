@@ -13,10 +13,10 @@
 
 namespace starrocks::vectorized {
 
-template <PrimitiveType PT, typename = guard::Guard>
+template <LogicalType PT, typename = guard::Guard>
 struct AnyValueAggregateData {};
 
-template <PrimitiveType PT>
+template <LogicalType PT>
 struct AnyValueAggregateData<PT, IntegralPTGuard<PT>> {
     using T = RunTimeCppType<PT>;
     T result = std::numeric_limits<T>::max();
@@ -28,7 +28,7 @@ struct AnyValueAggregateData<PT, IntegralPTGuard<PT>> {
     }
 };
 
-template <PrimitiveType PT>
+template <LogicalType PT>
 struct AnyValueAggregateData<PT, FloatPTGuard<PT>> {
     using T = RunTimeCppType<PT>;
     T result = std::numeric_limits<T>::max();
@@ -51,7 +51,7 @@ struct AnyValueAggregateData<TYPE_DECIMALV2, guard::Guard> {
     }
 };
 
-template <PrimitiveType PT>
+template <LogicalType PT>
 struct AnyValueAggregateData<PT, DecimalPTGuard<PT>> {
     bool has_value = false;
     using T = RunTimeCppType<PT>;
@@ -84,7 +84,7 @@ struct AnyValueAggregateData<TYPE_DATE, guard::Guard> {
     }
 };
 
-template <PrimitiveType PT>
+template <LogicalType PT>
 struct AnyValueAggregateData<PT, StringPTGuard<PT>> {
     int32_t size = -1;
     Buffer<uint8_t> buffer;
@@ -99,7 +99,7 @@ struct AnyValueAggregateData<PT, StringPTGuard<PT>> {
     }
 };
 
-template <PrimitiveType PT>
+template <LogicalType PT>
 struct AnyValueAggregateData<PT, JsonGuard<PT>> {
     bool has_value = false;
     JsonValue value;
@@ -112,7 +112,7 @@ struct AnyValueAggregateData<PT, JsonGuard<PT>> {
     }
 };
 
-template <PrimitiveType PT, typename State, typename = guard::Guard>
+template <LogicalType PT, typename State, typename = guard::Guard>
 struct AnyValueElement {
     using T = RunTimeCppType<PT>;
     void operator()(State& state, const T& right) const {
@@ -123,7 +123,7 @@ struct AnyValueElement {
     }
 };
 
-template <PrimitiveType PT>
+template <LogicalType PT>
 struct AnyValueElement<PT, AnyValueAggregateData<PT>, StringPTGuard<PT>> {
     void operator()(AnyValueAggregateData<PT>& state, const Slice& right) const {
         if (UNLIKELY(!state.has_value())) {
@@ -134,7 +134,7 @@ struct AnyValueElement<PT, AnyValueAggregateData<PT>, StringPTGuard<PT>> {
     }
 };
 
-template <PrimitiveType PT>
+template <LogicalType PT>
 struct AnyValueElement<PT, AnyValueAggregateData<PT>, JsonGuard<PT>> {
     void operator()(AnyValueAggregateData<PT>& state, const JsonValue* right) const {
         if (UNLIKELY(!state.has_value)) {
@@ -144,7 +144,7 @@ struct AnyValueElement<PT, AnyValueAggregateData<PT>, JsonGuard<PT>> {
     }
 };
 
-template <PrimitiveType PT, typename State, class OP, typename T = RunTimeCppType<PT>, typename = guard::Guard>
+template <LogicalType PT, typename State, class OP, typename T = RunTimeCppType<PT>, typename = guard::Guard>
 class AnyValueAggregateFunction final
         : public AggregateFunctionBatchHelper<State, AnyValueAggregateFunction<PT, State, OP, T>> {
 public:
@@ -201,7 +201,7 @@ public:
     std::string get_name() const override { return "any_value"; }
 };
 
-template <PrimitiveType PT, typename State, class OP>
+template <LogicalType PT, typename State, class OP>
 class AnyValueAggregateFunction<PT, State, OP, RunTimeCppType<PT>, StringPTGuard<PT>> final
         : public AggregateFunctionBatchHelper<State, AnyValueAggregateFunction<PT, State, OP, RunTimeCppType<PT>>> {
 public:
@@ -257,7 +257,7 @@ public:
 };
 
 // Specialized for JSON type
-template <PrimitiveType PT, typename State, class OP>
+template <LogicalType PT, typename State, class OP>
 class AnyValueAggregateFunction<PT, State, OP, RunTimeCppType<PT>, JsonGuard<PT>> final
         : public AggregateFunctionBatchHelper<State, AnyValueAggregateFunction<PT, State, OP, RunTimeCppType<PT>>> {
 public:

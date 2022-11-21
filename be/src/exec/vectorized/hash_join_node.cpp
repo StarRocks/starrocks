@@ -898,7 +898,7 @@ Status HashJoinNode::_do_publish_runtime_filters(RuntimeState* state, int64_t li
         if (!rf_desc->has_consumer()) continue;
         // skip if ht.size() > limit and it's only for local.
         if (!rf_desc->has_remote_targets() && _ht.get_row_count() > limit) continue;
-        PrimitiveType build_type = rf_desc->build_expr_type();
+        LogicalType build_type = rf_desc->build_expr_type();
         JoinRuntimeFilter* filter = RuntimeFilterHelper::create_runtime_bloom_filter(_pool, build_type);
         if (filter == nullptr) continue;
         filter->set_join_mode(rf_desc->join_mode());

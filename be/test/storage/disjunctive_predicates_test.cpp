@@ -29,8 +29,8 @@ struct SegDataGeneratorWithRange {
 TEST(DisjunctivePredicatesTest, TwoPredicateTest) {
     // schema int, int
     constexpr const int chunk_size = 4096;
-    constexpr PrimitiveType TYPE0 = TYPE_INT;
-    constexpr PrimitiveType TYPE1 = TYPE_INT;
+    constexpr LogicalType TYPE0 = TYPE_INT;
+    constexpr LogicalType TYPE1 = TYPE_INT;
 
     auto column0 = RunTimeColumnType<TYPE0>::create(chunk_size);
     auto column1 = RunTimeColumnType<TYPE1>::create(chunk_size);

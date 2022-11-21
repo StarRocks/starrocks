@@ -1,23 +1,4 @@
-// This file is made available under Elastic License 2.0.
-// This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/be/src/runtime/primitive_type.cpp
-
-// Licensed to the Apache Software Foundation (ASF) under one
-// or more contributor license agreements.  See the NOTICE file
-// distributed with this work for additional information
-// regarding copyright ownership.  The ASF licenses this file
-// to you under the Apache License, Version 2.0 (the
-// "License"); you may not use this file except in compliance
-// with the License.  You may obtain a copy of the License at
-//
-//   http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing,
-// software distributed under the License is distributed on an
-// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-// KIND, either express or implied.  See the License for the
-// specific language governing permissions and limitations
-// under the License.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "runtime/primitive_type.h"
 
@@ -35,11 +16,11 @@ TColumnType to_tcolumn_type_thrift(TPrimitiveType::type ttype) {
     return t;
 }
 
-TExprOpcode::type to_in_opcode(PrimitiveType t) {
+TExprOpcode::type to_in_opcode(LogicalType t) {
     return TExprOpcode::FILTER_IN;
 }
 
-PrimitiveType thrift_to_type(TPrimitiveType::type ttype) {
+LogicalType thrift_to_type(TPrimitiveType::type ttype) {
     switch (ttype) {
     // TODO(mofei) rename these two type
     case TPrimitiveType::INVALID_TYPE:
@@ -56,7 +37,7 @@ PrimitiveType thrift_to_type(TPrimitiveType::type ttype) {
     return TYPE_UNKNOWN;
 }
 
-TPrimitiveType::type to_thrift(PrimitiveType ptype) {
+TPrimitiveType::type to_thrift(LogicalType ptype) {
     switch (ptype) {
     // TODO(mofei) rename these two type
     case TYPE_UNSIGNED_TINYINT:
@@ -87,7 +68,7 @@ TPrimitiveType::type to_thrift(PrimitiveType ptype) {
     return TPrimitiveType::INVALID_TYPE;
 }
 
-std::string type_to_string(PrimitiveType t) {
+std::string type_to_string(LogicalType t) {
     switch (t) {
     case TYPE_UNSIGNED_TINYINT:
     case TYPE_UNSIGNED_SMALLINT:
@@ -112,13 +93,13 @@ std::string type_to_string(PrimitiveType t) {
     return "";
 }
 
-std::string type_to_string_v2(PrimitiveType t) {
+std::string type_to_string_v2(LogicalType t) {
     // change OBJECT to BITMAP for better display
     std::string raw_str = type_to_string(t);
     return raw_str == "OBJECT" ? "BITMAP" : raw_str;
 }
 
-std::string type_to_odbc_string(PrimitiveType t) {
+std::string type_to_odbc_string(LogicalType t) {
     // ODBC driver requires types in lower case
     switch (t) {
     case TYPE_UNKNOWN:
@@ -219,28 +200,28 @@ public:
         _data[TYPE_JSON] = TYPE_JSON;
         _data[TYPE_VARBINARY] = TYPE_VARBINARY;
     }
-    PrimitiveType get_primitive_type(LogicalType field_type) { return _data[field_type]; }
+    LogicalType get_primitive_type(LogicalType field_type) { return _data[field_type]; }
 
 private:
-    PrimitiveType _data[TYPE_MAX_VALUE];
+    LogicalType _data[TYPE_MAX_VALUE];
 };
 
 static ScalarFieldTypeToPrimitiveTypeMapping g_scalar_ftype_to_ptype;
 
-PrimitiveType scalar_field_type_to_primitive_type(LogicalType field_type) {
-    PrimitiveType ptype = g_scalar_ftype_to_ptype.get_primitive_type(field_type);
+LogicalType scalar_field_type_to_primitive_type(LogicalType field_type) {
+    LogicalType ptype = g_scalar_ftype_to_ptype.get_primitive_type(field_type);
     DCHECK(ptype != TYPE_UNKNOWN);
     return ptype;
 }
 
 struct FixedLengthTypeGetter {
-    template <PrimitiveType ptype>
+    template <LogicalType ptype>
     size_t operator()() {
         return vectorized::RunTimeFixedTypeLength<ptype>::value;
     }
 };
 
-size_t get_size_of_fixed_length_type(PrimitiveType ptype) {
+size_t get_size_of_fixed_length_type(LogicalType ptype) {
     return type_dispatch_all(ptype, FixedLengthTypeGetter());
 }
 

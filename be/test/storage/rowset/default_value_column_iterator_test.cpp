@@ -30,7 +30,7 @@ TEST_F(DefaultValueColumnIteratorTest, delete_after_column) {
     st = iter.get_row_ranges_by_zone_map(preds, del_pred.get(), &row_ranges);
     ASSERT_TRUE(st.ok());
 
-    TypeDescriptor type_desc(PrimitiveType::TYPE_INT);
+    TypeDescriptor type_desc(LogicalType::TYPE_INT);
     ColumnPtr column = ColumnHelper::create_column(type_desc, true);
 
     size_t num_rows = 10;
