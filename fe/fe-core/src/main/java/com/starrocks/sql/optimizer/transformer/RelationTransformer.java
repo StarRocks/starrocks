@@ -478,6 +478,9 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                     new LogicalMysqlScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
                             columnMetaToColRefMap, Operator.DEFAULT_LIMIT,
                             null, null);
+            if (node.getTemporalClause() != null) {
+                ((LogicalMysqlScanOperator) scanOperator).setTemporalClause(node.getTemporalClause());
+            }
         } else if (Table.TableType.ELASTICSEARCH.equals(node.getTable().getType())) {
             scanOperator =
                     new LogicalEsScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),

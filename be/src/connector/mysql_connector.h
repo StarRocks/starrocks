@@ -70,6 +70,8 @@ private:
     std::vector<std::string> _columns;
     // where clause
     std::vector<std::string> _filters;
+    // temporal clause
+    std::string _temporal_clause;
 
     // Tuple index in tuple row.
     size_t _slot_num = 0;
