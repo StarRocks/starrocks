@@ -44,7 +44,7 @@ public:
 
     ~MysqlTableSink() override;
 
-    Status init(const TDataSink& thrift_sink) override;
+    Status init(const TDataSink& thrift_sink, RuntimeState* state) override;
 
     Status prepare(RuntimeState* state) override;
 

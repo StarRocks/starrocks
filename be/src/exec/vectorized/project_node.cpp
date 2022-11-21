@@ -54,7 +54,7 @@ Status ProjectNode::init(const TPlanNode& tnode, RuntimeState* state) {
     for (auto const& [key, val] : tnode.project_node.slot_map) {
         _slot_ids.emplace_back(key);
         ExprContext* context;
-        RETURN_IF_ERROR(Expr::create_expr_tree(_pool, val, &context));
+        RETURN_IF_ERROR(Expr::create_expr_tree(_pool, val, &context, state));
         _expr_ctxs.emplace_back(context);
         _type_is_nullable.emplace_back(slot_null_mapping[key]);
     }
@@ -65,7 +65,7 @@ Status ProjectNode::init(const TPlanNode& tnode, RuntimeState* state) {
 
     for (auto const& [key, val] : tnode.project_node.common_slot_map) {
         ExprContext* context;
-        RETURN_IF_ERROR(Expr::create_expr_tree(_pool, val, &context));
+        RETURN_IF_ERROR(Expr::create_expr_tree(_pool, val, &context, state));
         _common_sub_slot_ids.emplace_back(key);
         _common_sub_expr_ctxs.emplace_back(context);
     }

@@ -37,8 +37,8 @@ MysqlTableSink::MysqlTableSink(ObjectPool* pool, const RowDescriptor& row_desc, 
 
 MysqlTableSink::~MysqlTableSink() = default;
 
-Status MysqlTableSink::init(const TDataSink& t_sink) {
-    RETURN_IF_ERROR(DataSink::init(t_sink));
+Status MysqlTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
+    RETURN_IF_ERROR(DataSink::init(t_sink, state));
     const TMysqlTableSink& t_mysql_sink = t_sink.mysql_table_sink;
 
     _conn_info.host = t_mysql_sink.host;
@@ -50,7 +50,7 @@ Status MysqlTableSink::init(const TDataSink& t_sink) {
     _chunk_size = MYSQL_SINK_BATCH_SIZE;
 
     // From the thrift expressions create the real exprs.
-    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, _t_output_expr, &_output_expr_ctxs));
+    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, _t_output_expr, &_output_expr_ctxs, state));
     return Status::OK();
 }
 

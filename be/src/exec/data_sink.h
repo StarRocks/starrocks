@@ -44,7 +44,7 @@ public:
     DataSink() = default;
     virtual ~DataSink() = default;
 
-    virtual Status init(const TDataSink& thrift_sink);
+    virtual Status init(const TDataSink& thrift_sink, RuntimeState* state);
 
     // Setup. Call before send(), Open(), or Close().
     // Subclasses must call DataSink::Prepare().

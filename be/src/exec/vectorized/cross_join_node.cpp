@@ -61,7 +61,7 @@ Status CrossJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
         }
 
         if (tnode.nestloop_join_node.__isset.join_conjuncts) {
-            RETURN_IF_ERROR(Expr::create_expr_trees(_pool, tnode.nestloop_join_node.join_conjuncts, &_join_conjuncts));
+            RETURN_IF_ERROR(Expr::create_expr_trees(_pool, tnode.nestloop_join_node.join_conjuncts, &_join_conjuncts, state));
         }
         if (tnode.nestloop_join_node.__isset.sql_join_conjuncts) {
             _sql_join_conjuncts = tnode.nestloop_join_node.sql_join_conjuncts;
@@ -69,7 +69,7 @@ Status CrossJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
         if (tnode.nestloop_join_node.__isset.build_runtime_filters) {
             for (const auto& desc : tnode.nestloop_join_node.build_runtime_filters) {
                 auto* rf_desc = _pool->add(new RuntimeFilterBuildDescriptor());
-                RETURN_IF_ERROR(rf_desc->init(_pool, desc));
+                RETURN_IF_ERROR(rf_desc->init(_pool, desc, state));
                 _build_runtime_filters.emplace_back(rf_desc);
             }
         }
@@ -78,7 +78,7 @@ Status CrossJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
 
     for (const auto& desc : tnode.cross_join_node.build_runtime_filters) {
         auto* rf_desc = _pool->add(new RuntimeFilterBuildDescriptor());
-        RETURN_IF_ERROR(rf_desc->init(_pool, desc));
+        RETURN_IF_ERROR(rf_desc->init(_pool, desc, state));
         _build_runtime_filters.emplace_back(rf_desc);
     }
     DCHECK_LE(_build_runtime_filters.size(), _conjunct_ctxs.size());

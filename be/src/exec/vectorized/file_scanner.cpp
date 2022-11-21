@@ -85,7 +85,7 @@ Status FileScanner::init_expr_ctx() {
         }
 
         ExprContext* ctx = nullptr;
-        RETURN_IF_ERROR(Expr::create_expr_tree(_state->obj_pool(), it->second, &ctx));
+        RETURN_IF_ERROR(Expr::create_expr_tree(_state->obj_pool(), it->second, &ctx, _state));
         RETURN_IF_ERROR(ctx->prepare(_state));
         RETURN_IF_ERROR(ctx->open(_state));
 

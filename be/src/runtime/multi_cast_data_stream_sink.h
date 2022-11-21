@@ -10,7 +10,7 @@ public:
     void add_data_stream_sink(std::unique_ptr<DataStreamSender> data_stream_sink);
     ~MultiCastDataStreamSink() override = default;
 
-    Status init(const TDataSink& thrift_sink) override;
+    Status init(const TDataSink& thrift_sink, RuntimeState* state) override;
     Status prepare(RuntimeState* state) override;
     Status open(RuntimeState* state) override;
     Status close(RuntimeState* state, Status exec_status) override;

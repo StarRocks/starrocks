@@ -139,13 +139,13 @@ public:
     /// Create expression tree from the list of nodes contained in texpr within 'pool'.
     /// Returns the root of expression tree in 'expr' and the corresponding ExprContext in
     /// 'ctx'.
-    static Status create_expr_tree(ObjectPool* pool, const TExpr& texpr, ExprContext** ctx);
+    static Status create_expr_tree(ObjectPool* pool, const TExpr& texpr, ExprContext** ctx, RuntimeState* state);
 
     /// Creates vector of ExprContexts containing exprs from the given vector of
     /// TExprs within 'pool'.  Returns an error if any of the individual conversions caused
     /// an error, otherwise OK.
-    static Status create_expr_trees(ObjectPool* pool, const std::vector<TExpr>& texprs,
-                                    std::vector<ExprContext*>* ctxs);
+    static Status create_expr_trees(ObjectPool* pool, const std::vector<TExpr>& texprs, std::vector<ExprContext*>* ctxs,
+                                    RuntimeState* state);
 
     /// Creates an expr tree for the node rooted at 'node_idx' via depth-first traversal.
     /// parameters
@@ -160,7 +160,7 @@ public:
     ///   status.ok() if successful
     ///   !status.ok() if tree is inconsistent or corrupt
     static Status create_tree_from_thrift(ObjectPool* pool, const std::vector<TExprNode>& nodes, Expr* parent,
-                                          int* node_idx, Expr** root_expr, ExprContext** ctx);
+                                          int* node_idx, Expr** root_expr, ExprContext** ctx, RuntimeState* state);
 
     /// Convenience function for preparing multiple expr trees.
     static Status prepare(const std::vector<ExprContext*>& ctxs, RuntimeState* state);
@@ -291,7 +291,11 @@ protected:
 
 private:
     // Create a new vectorized expr
-    static Status create_vectorized_expr(ObjectPool* pool, const TExprNode& texpr_node, Expr** expr);
+    static Status create_vectorized_expr(ObjectPool* pool, const TExprNode& texpr_node, Expr** expr,
+                                         RuntimeState* state);
+
+    // Alloc throw exceptions when failed.
+    static const long MODE_ALLOC_EXCEPTION = 1L << 8;
 };
 
 } // namespace starrocks

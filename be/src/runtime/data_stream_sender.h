@@ -72,7 +72,7 @@ public:
                      bool enable_exchange_perf);
     ~DataStreamSender() override;
 
-    Status init(const TDataSink& thrift_sink) override;
+    Status init(const TDataSink& thrift_sink, RuntimeState* state) override;
 
     // Must be called before other API calls, and before the codegen'd IR module is
     // compiled (i.e. in an ExecNode's Prepare() function).

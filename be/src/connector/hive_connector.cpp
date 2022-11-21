@@ -80,11 +80,13 @@ Status HiveDataSource::open(RuntimeState* state) {
 Status HiveDataSource::_init_conjunct_ctxs(RuntimeState* state) {
     const auto& hdfs_scan_node = _provider->_hdfs_scan_node;
     if (hdfs_scan_node.__isset.min_max_conjuncts) {
-        RETURN_IF_ERROR(Expr::create_expr_trees(&_pool, hdfs_scan_node.min_max_conjuncts, &_min_max_conjunct_ctxs));
+        RETURN_IF_ERROR(
+                Expr::create_expr_trees(&_pool, hdfs_scan_node.min_max_conjuncts, &_min_max_conjunct_ctxs, state));
     }
 
     if (hdfs_scan_node.__isset.partition_conjuncts) {
-        RETURN_IF_ERROR(Expr::create_expr_trees(&_pool, hdfs_scan_node.partition_conjuncts, &_partition_conjunct_ctxs));
+        RETURN_IF_ERROR(
+                Expr::create_expr_trees(&_pool, hdfs_scan_node.partition_conjuncts, &_partition_conjunct_ctxs, state));
         _has_partition_conjuncts = true;
     }
 
