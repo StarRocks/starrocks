@@ -172,136 +172,123 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ### 配置 FE 静态参数
 
-以下 FE 配置项为静态参数，不支持在线修改，您需要在 **fe.conf** 中修改并重启 FE 服务。
+以下 FE 配置项为静态参数，不支持在线修改，您需要在 `fe.conf` 中修改并重启 FE。
 
 #### LOG 相关静态参数
 
-|配置项|默认值|描述|
-|---|---|---|
-|log_roll_size_mb|1024|日志拆分的大小，每 1 GB 拆分为一个日志文件。单位：MB。|
-|sys_log_dir|StarRocksFE.STARROCKS_HOME_DIR + "/log"|系统日志文件的保留目录。|
-|sys_log_level|INFO|系统日志的级别，从低到高依次为 `INFO`、`WARN`、`ERROR`、`FATAL`。|
-|sys_log_verbose_modules|空字符串|系统日志打印的模块，写 `org.apache.starrocks.catalog` 就只打印 Catalog 模块下的日志。|
-|sys_log_roll_interval|DAY|系统日志拆分的时间间隔。取值范围： `DAY` 和 `HOUR`。<ul><li>取值为 `DAY` 时，日志文件名的后缀为 `yyyyMMdd`。</li><li>取值为 `HOUR` 时，日志文件名的后缀为 `yyyyMMddHH`。</li></ul>|
-|sys_log_delete_age|7d|系统日志删除的间隔。|
-|sys_log_roll_num|10|每个 `sys_log_roll_interval` 时间段内，保留的系统日志文件的数目。|
-|audit_log_dir|StarRocksFE.STARROCKS_HOME_DIR + "/log"|审计日志文件的保留目录。|
-|audit_log_roll_num|90|审计日志保留的数目。|
-|audit_log_modules|slow_query, query|审计日志打印的模块。默认打印 `slow_query` 和 `query` 模块的日志。可以指定多个模块，模块名称之间用英文逗号加一个空格分隔。|
-|audit_log_roll_interval|DAY|审计日志拆分的时间间隔。取值范围： `DAY` 和 `HOUR`。<ul><li>取值为 `DAY` 时，日志文件名的后缀为 `yyyyMMdd`。</li><li>取值为 `HOUR` 时，日志文件名的后缀为 `yyyyMMddHH`。</li></ul>|
-|audit_log_delete_age|30d|审计日志删除的间隔。|
-|dump_log_dir|StarRocksFE.STARROCKS_HOME_DIR + "/log"|Dump 日志文件的保留目录。|
-|dump_log_modules|query|Dump 日志打印的模块。默认打印 query 模块的日志。可以指定多个模块，模块名称之间用英文逗号加一个空格分隔。|
-|dump_log_roll_interval|DAY|Dump 日志拆分的时间间隔。取值范围： `DAY` 和 `HOUR`。<ul><li>取值为 `DAY` 时，日志文件名的后缀为 `yyyyMMdd`。</li><li>取值为 `HOUR` 时，日志文件名的后缀为 `yyyyMMddHH`。</li></ul>|
-|dump_log_roll_num|10|每个 `dump_log_roll_interval` 时间内，保留的 Dump 日志文件的数目。|
-|dump_log_delete_age|7d|Dump 日志保留的时间长度。|
+| 配置项                  | 默认值                                  | 描述                                                         |
+| ----------------------- | --------------------------------------- | ------------------------------------------------------------ |
+| log_roll_size_mb        | 1024                                    | 日志文件的大小。单位：MB。默认值 `1024` 表示每个日志文件的大小为 1 GB。 |
+| sys_log_dir             | StarRocksFE.STARROCKS_HOME_DIR + "/log" | 系统日志文件的保存目录。                                     |
+| sys_log_level           | INFO                                    | 系统日志的级别，从低到高依次为 `INFO`、`WARN`、`ERROR`、`FATAL`。 |
+| sys_log_verbose_modules | 空字符串                                | 打印系统日志的模块。如果设置参数取值为 `org.apache.starrocks.catalog`，则表示只打印 Catalog 模块下的日志。 |
+| sys_log_roll_interval   | DAY                                     | 系统日志滚动的时间间隔。取值范围：`DAY` 和 `HOUR`。取值为 `DAY` 时，日志文件名的后缀为 `yyyyMMdd`。取值为 `HOUR` 时，日志文件名的后缀为 `yyyyMMddHH`。 |
+| sys_log_delete_age      | 7d                                      | 系统日志文件的保留时长。默认值 `7d` 表示系统日志文件可以保留 7 天，保留时长超过 7 天的系统日志文件会被删除。 |
+| sys_log_roll_num        | 10                                      | 每个 `sys_log_roll_interval` 时间段内，允许保留的系统日志文件的最大数目。 |
+| audit_log_dir           | StarRocksFE.STARROCKS_HOME_DIR + "/log" | 审计日志文件的保存目录。                                     |
+| audit_log_roll_num      | 90                                      | 每个 `audit_log_roll_interval` 时间段内，允许保留的审计日志文件的最大数目。 |
+| audit_log_modules       | slow_query, query                       | 打印审计日志的模块。默认打印 slow_query 和 query 模块的日志。可以指定多个模块，模块名称之间用英文逗号加一个空格分隔。 |
+| audit_log_roll_interval | DAY                                     | 审计日志滚动的时间间隔。取值范围：`DAY` 和 `HOUR`。取值为 `DAY` 时，日志文件名的后缀为 `yyyyMMdd`。取值为 `HOUR` 时，日志文件名的后缀为 `yyyyMMddHH`。 |
+| audit_log_delete_age    | 30d                                     | 审计日志文件的保留时长。默认值 `30d` 表示审计日志文件可以保留 30 天，保留时长超过 30 天的审计日志文件会被删除。 |
+| dump_log_dir            | StarRocksFE.STARROCKS_HOME_DIR + "/log" | Dump 日志文件的保存目录。                                    |
+| dump_log_modules        | query                                   | 打印 Dump 日志的模块。默认打印 query 模块的日志。可以指定多个模块，模块名称之间用英文逗号加一个空格分隔。 |
+| dump_log_roll_interval  | DAY                                     | Dump 日志滚动的时间间隔。取值范围：`DAY` 和 `HOUR`。取值为 `DAY` 时，日志文件名的后缀为 `yyyyMMdd`。取值为 `HOUR` 时，日志文件名的后缀为 `yyyyMMddHH`。 |
+| dump_log_roll_num       | 10                                      | 每个 `dump_log_roll_interval` 时间内，允许保留的 Dump 日志文件的最大数目。 |
+| dump_log_delete_age     | 7d                                      | Dump 日志文件的保留时长。默认值 `7d` 表示 Dump 日志文件可以保留 7 天，保留时长超过 7 天的 Dump 日志文件会被删除。 |
 
 #### Server 相关静态参数
 
-|配置项|默认值|描述|
-|---|---|---|
-|frontend_address|0.0.0.0|FE 节点的 IP 地址。|
-|priority_networks|空字符串|以 CIDR 形式 `10.10.10.0/24` 指定 FE 节点的 IP 地址，适用于机器有多个 IP 地址，需要特殊指定的形式。|
-|http_port|8030|Http Server 的端口。|
-|http_backlog_num|1024|HTTP Server 的 Backlog 队列长度。|
-|cluster_name|StarRocks Cluster|Web 页面中 Title 显示的集群名称。|
-|rpc_port|9020|FE 节点上的 Thrift Server 端口。|
-|thrift_backlog_num|1024|Thrift Server 的 Backlog 队列长度。|
-|thrift_server_type|THREAD_POOL|FE 节点上的 Thrift Server 使用的服务模型。取值范围：`SIMPLE`、`THREADED`、`THREAD_POOL`。|
-|thrift_server_max_worker_threads|4096|Thrift Server 的最大工作线程数。|
-|thrift_client_timeout_ms|0|Client 超时时间。单位：ms。设置为 `0` 时永远不会超时。|
-|brpc_number_of_concurrent_requests_processed|4096|并发处理 BRPC 请求数目。|
-|brpc_idle_wait_max_time|10000|BRPC 的空闲等待时间。单位：ms。|
-|enable_brpc_share_channel|TRUE|指定是否在 BRPC Client 之间共享 Channel。|
-|query_port|9030|FE 节点上的 Mysql Server 端口。|
-|mysql_service_nio_enabled|TRUE|指定 FE 连接服务的异步 I/O 是否开启。|
-|mysql_service_io_threads_num|4|FE 连接服务的最大线程数。|
-|mysql_nio_backlog_num|1024|MySQL Server 的 Backlog 队列长度。|
-|max_mysql_service_task_threads_num|4096|MySQL Server 处理任务的最大线程数。|
-|max_connection_scheduler_threads_num|4096|连接定时器的线程池的最大线程数。|
-|qe_max_connection|1024|FE 上最多接收的连接数，适用于所有用户。|
-|check_java_version|TRUE|检查执行时的版本与编译的 Java 版本是否兼容。|
+| 配置项                               | 默认值            | 描述                                                         |
+| ------------------------------------ | ----------------- | ------------------------------------------------------------ |
+| frontend_address                     | 0.0.0.0           | FE 节点的 IP 地址。                                          |
+| priority_networks                    | 空字符串          | 为那些有多个 IP 地址的服务器声明一个选择策略。 请注意，最多应该有一个 IP 地址与此列表匹配。这是一个以分号分隔格式的列表，用 CIDR 表示法，例如 `10.10.10.0/24`。 如果没有匹配这条规则的ip，会随机选择一个。 |
+| http_port                            | 8030              | FE 节点上 HTTP 服务器的端口。                                |
+| http_backlog_num                     | 1024              | HTTP 服务器支持的 Backlog 队列长度。                         |
+| cluster_name                         | StarRocks Cluster | FE 所在 StarRocks 集群的名称，显示为网页标题。               |
+| rpc_port                             | 9020              | FE 节点上 Thrift 服务器的端口。                              |
+| thrift_backlog_num                   | 1024              | Thrift 服务器支持的 Backlog 队列长度。                       |
+| thrift_server_type                   | THREAD_POOL       | Thrift 服务器的服务模型。取值范围：`SIMPLE`、`THREADED`、`THREAD_POOL`。 |
+| thrift_server_max_worker_threads     | 4096              | Thrift 服务器支持的最大工作线程数。                          |
+| thrift_client_timeout_ms             | 0                 | Thrift 客户端建立连接的超时时间。单位：ms。默认值 `0` 表示永远不会超时。 |
+| brpc_idle_wait_max_time              | 10000             | BRPC 的空闲等待时间。单位：ms。                              |
+| query_port                           | 9030              | FE 节点上 MySQL 服务器的端口。                               |
+| mysql_service_nio_enabled            | TRUE              | 是否开启 MySQL 服务器的异步 I/O 选项。                       |
+| mysql_service_io_threads_num         | 4                 | MySQL 服务器中用于处理 I/O 事件的最大线程数。                |
+| mysql_nio_backlog_num                | 1024              | MySQL 服务器支持的 Backlog 队列长度。                        |
+| max_mysql_service_task_threads_num   | 4096              | MySQL 服务器中用于处理任务的最大线程数。                     |
+| max_connection_scheduler_threads_num | 4096              | 连接调度器支持的最大线程数。                                 |
+| qe_max_connection                    | 1024              | FE 支持的最大连接数，包括所有用户发起的连接。                |
+| check_java_version                   | TRUE              | 检查已编译的 Java 版本与运行的 Java 版本是否兼容。如果不兼容，则上报 Java 版本不匹配的异常信息，并终止启动。 |
 
 #### 元数据与集群管理相关静态参数
 
-|配置项|默认值|描述|
-|---|---|---|
-|meta_dir|StarRocksFE.STARROCKS_HOME_DIR + "/meta"|元数据保留目录。|
-|heartbeat_mgr_threads_num|8|Heartbeat Manager 中发送心跳任务的线程数。|
-|heartbeat_mgr_blocking_queue_size|1024|Heartbeat Manager 中发送心跳任务的线程池的队列长度。|
-|metadata_failure_recovery|FALSE|强制重置 FE 的元数据，请谨慎使用该配置项。|
-|edit_log_port|9010|FE Group(Master, Follower, Observer)之间通信用的端口。|
-|edit_log_type|BDB|Edit log 的类型，只能为 BDB。|
-|bdbje_heartbeat_timeout_second|30|BDBJE 心跳超时的间隔，单位为秒。|
-|bdbje_lock_timeout_second|1|BDBJE 锁超时的间隔，单位为秒。|
-|max_bdbje_clock_delta_ms|5000|Master 与 Non-master 最大容忍的时钟偏移，单位为 ms。|
-|txn_rollback_limit|100|事务回滚的上限。|
-|bdbje_replica_ack_timeout_second|10|BDBJE Master 等待足够多的 FOLLOWER ACK 的最长时间，单位为秒。|
-|master_sync_policy|SYNC|Leader FE 上的日志刷盘方式。该参数仅在当前 FE 为 Leader 时有效。取值范围：<br/><ul><li>`SYNC`：事务提交时同步写日志并刷盘。</li><li>`NO_SYNC`：事务提交时不同步写日志。</li><li>W`RITE_NO_SYNC`：事务提交时同步写日志，但是不刷盘。</li></ul>|
-|replica_sync_policy|SYNC|Follower FE 上的日志刷盘方式。该参数仅在当前 FE 为 Follower 时有效。取值范围：<br/><ul><li>`SYNC`：事务提交时同步写日志并刷盘。</li><li>`NO_SYNC`：事务提交时不同步写日志。</li><li>W`RITE_NO_SYNC`：事务提交时同步写日志，但是不刷盘。</li></ul>|
-|replica_ack_policy|SIMPLE_MAJORITY|日志被认为有效的形式，默认是多数 FE 返回确认消息，就认为生效。|
-|meta_delay_toleration_second|300|非 leader 节点容忍的最大元数据落后的时间，单位为秒。|
-|cluster_id|-1|相同 cluster_id 的 FE/BE 节点属于同一个集群。设置为于-1 则在 leader FE 第一次启动时随机生成一个。|
+| 配置项                            | 默认值                                   | 描述                                                         |
+| --------------------------------- | ---------------------------------------- | ------------------------------------------------------------ |
+| meta_dir                          | StarRocksFE.STARROCKS_HOME_DIR + "/meta" | 元数据的保存目录。                                           |
+| heartbeat_mgr_threads_num         | 8                                        | Heartbeat Manager 中用于发送心跳任务的最大线程数。           |
+| heartbeat_mgr_blocking_queue_size | 1024                                     | Heartbeat Manager 中存储心跳任务的阻塞队列大小。             |
+| metadata_failure_recovery         | FALSE                                    | 是否强制重置 FE 的元数据。请谨慎使用该配置项。               |
+| edit_log_port                     | 9010                                     | FE 所在 StarRocks 集群中各 Leader FE、Follower FE、Observer FE 之间通信用的端口。 |
+| edit_log_type                     | BDB                                      | 编辑日志的类型。取值只能为 `BDB`。                           |
+| bdbje_heartbeat_timeout_second    | 30                                       | FE 所在 StarRocks 集群中 Leader FE 和 Follower FE 之间的 BDB JE 心跳超时时间。单位：秒。 |
+| bdbje_lock_timeout_second         | 1                                        | BDB JE 操作的锁超时时间。单位：秒。                          |
+| max_bdbje_clock_delta_ms          | 5000                                     | FE 所在 StarRocks 集群中 Leader FE 与非 Leader FE 之间能够容忍的最大时钟偏移。单位：ms。 |
+| txn_rollback_limit                | 100                                      | 允许回滚的最大事务数。                                       |
+| bdbje_replica_ack_timeout_second  | 10                                       | FE 所在 StarRocks 集群中，元数据从 Leader FE 写入到多个 Follower FE 时，Leader FE 等待足够多的 Follower FE 发送 ACK 消息的超时时间。单位：秒。当写入的元数据较多时，可能返回 ACK 的时间较长，进而导致等待超时。如果超时，会导致写元数据失败，FE 进程退出，此时可以适当地调大该参数取值。 |
+| master_sync_policy                | SYNC                                     | FE 所在 StarRocks 集群中，Leader FE 上的日志刷盘方式。该参数仅在当前 FE 为 Leader 时有效。取值范围： <ul><li>`SYNC`：事务提交时同步写日志并刷盘。</li><li> `NO_SYNC`：事务提交时不同步写日志。</li><li> `WRITE_NO_SYNC`：事务提交时同步写日志，但是不刷盘。 </li></ul>如果您只部署了一个 Follower FE，建议将其设置为 `SYNC`。 如果您部署了 3 个及以上 Follower FE，建议将其与下面的 `replica_sync_policy` 均设置为 `WRITE_NO_SYNC`。 |
+| replica_sync_policy               | SYNC                                     | FE 所在 StarRocks 集群中，Follower FE 上的日志刷盘方式。取值范围： <ul><li>`SYNC`：事务提交时同步写日志并刷盘。</li><li> `NO_SYNC`：事务提交时不同步写日志。</li><li> `WRITE_NO_SYNC`：事务提交时同步写日志，但是不刷盘。</li></ul> |
+| replica_ack_policy                | SIMPLE_MAJORITY                          | 判定日志是否有效的策略，默认是多数 Follower FE 返回确认消息，就认为生效。 |
+| cluster_id                        | -1                                       | FE 所在 StarRocks 集群的 ID。具有相同集群 ID 的 FE 或 BE 属于同一个 StarRocks 集群。取值范围：正整数。默认值 `-1` 表示在 Leader FE 首次启动时随机生成一个。 |
 
 #### Query Engine 相关静态参数
 
-|配置项|默认值|描述|
-|---|---|---|
-|disable_colocate_join|FALSE|是否禁用 Colocate Join。|
-|enable_udf|FALSE|是否开启 UDF。|
-|publish_version_interval_ms|10|发送版本生效任务的时间间隔，单位为 ms。|
-|statistic_cache_columns|100000|缓存统计信息表的行数。|
+| 配置项                      | 默认值 | 描述                                       |
+| --------------------------- | ------ | ------------------------------------------ |
+| publish_version_interval_ms | 10     | 两个版本发布操作之间的时间间隔。单位：ms。 |
+| statistic_cache_columns     | 100000 | 缓存统计信息表的最大行数。                 |
 
 #### 导入和导出相关静态参数
 
-|配置项|默认值|描述|
-|---|---|---|
-|async_load_task_pool_size|10|导入任务执行的线程池大小。本参数仅适用于 Broker Load。|
-|load_checker_interval_second|5|导入轮询的间隔，单位为秒。|
-|transaction_clean_interval_second|30|清理已结束事务的周期，单位为秒。|
-|label_clean_interval_second|14400|label 清理的间隔，单位为秒。|
-|spark_dpp_version|1.0.0|Spark dpp 版本。|
-|spark_resource_path|空字符串|Spark 依赖包的根目录。|
-|spark_launcher_log_dir|sys_log_dir + "/spark_launcher_log"|Spark 日志目录。|
-|yarn_client_path|StarRocksFE.STARROCKS_HOME_DIR + "/lib/yarn-client/hadoop/bin/yarn"|Yarn 客户端根目录。|
-|yarn_config_dir|StarRocksFE.STARROCKS_HOME_DIR + "/lib/yarn-config"|Yarn 配置文件目录。|
-|export_checker_interval_second|5|导出作业调度器的调度周期。|
-|export_task_pool_size|5|导出任务线程池大小。|
+| 配置项                            | 默认值                                                       | 描述                                                         |
+| --------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
+| async_load_task_pool_size         | 10                                                           | 导入任务线程池的大小。本参数仅适用于 Broker Load。           |
+| load_checker_interval_second      | 5                                                            | 导入作业的轮询间隔。单位：秒。                               |
+| transaction_clean_interval_second | 30                                                           | 已结束事务的清理间隔。单位：秒。建议清理间隔尽量短，从而确保已完成的事务能够及时清理掉。 |
+| label_clean_interval_second       | 14400                                                        | 作业标签的清理间隔。单位：秒。建议清理间隔尽量短，从而确保历史作业的标签能够及时清理掉。 |
+| spark_dpp_version                 | 1.0.0                                                        | Spark DPP 特性的版本。                                       |
+| spark_resource_path               | 空字符串                                                     | Spark 依赖包的根目录。                                       |
+| spark_launcher_log_dir            | sys_log_dir + "/spark_launcher_log"                          | Spark 日志的保存目录。                                       |
+| yarn_client_path                  | StarRocksFE.STARROCKS_HOME_DIR + "/lib/yarn-client/hadoop/bin/yarn" | Yarn 客户端的根目录。                                        |
+| yarn_config_dir                   | StarRocksFE.STARROCKS_HOME_DIR + "/lib/yarn-config"          | Yarn 配置文件的保存目录。                                    |
+| export_checker_interval_second    | 5                                                            | 导出作业调度器的调度间隔。                                   |
+| export_task_pool_size             | 5                                                            | 导出任务线程池的大小。                                       |
 
 #### 存储相关相关静态参数
 
-|配置项|默认值|描述|
-|---|---|---|
-|default_storage_medium|HDD|默认的存储介质，值为 HDD/SSD。在创建表/分区时，如果没有指定存储介质，那么会使用该值。|
-|tablet_sched_balancer_strategy|disk_and_tablet|Tablet 均衡策略，值为 disk_and_tablet 或 be_load_score。|
-|tablet_sched_storage_cooldown_second|-1|从 Table 创建时间点开始计算，自动降冷（从 SSD 介质迁移到 HDD 介质）的时延。单位为秒。默认为 `-1` 表示不进行自动降冷，如需启用该功能请显式设置大于 0 的值。|
-|tablet_stat_update_interval_second |300 |FE 向每个 BE 请求收集 tablet 信息的时间间隔，单位为秒。|
+| 配置项                               | 默认值          | 描述                                                         |
+| ------------------------------------ | --------------- | ------------------------------------------------------------ |
+| default_storage_medium               | HDD             | 创建表或分区时默认使用的存储介质。取值范围：`HDD` 和 `SSD`。在创建表/分区时，如果没有指定存储介质，则会使用通过该参数指定的默认存储介质。 |
+| tablet_sched_balancer_strategy       | disk_and_tablet | Tablet 均衡策略。参数别名为 `tablet_balancer_strategy`。取值范围：`disk_and_tablet` 和 `be_load_score`。 |
+| tablet_sched_storage_cooldown_second | -1              | 从 Table 创建时间点开始计算，自动降冷的时延。降冷是指从 SSD 介质迁移到 HDD 介质。参数别名为 `storage_cooldown_second`。单位：秒。默认值 `-1` 表示不进行自动降冷。如需启用自动降冷功能，请显式设置参数取值大于 0。 |
+| tablet_stat_update_interval_second   | 300             | FE 向每个 BE 请求收集 Tablet 统计信息的时间间隔。单位：秒。  |
 
 #### 其他静态参数
 
-|配置项|默认值|描述|
-|---|---|---|
-|plugin_dir|STARROCKS_HOME_DIR/plugins|插件安装的目录。|
-|small_file_dir|StarRocksFE.STARROCKS_HOME_DIR + "/small_files"|小文件的根目录。|
-|max_agent_task_threads_num|4096|代理任务的线程池的最大线程数。|
-|authentication_ldap_simple_bind_base_dn|空字符串|用户的 base DN，指定用户的检索范围。|
-|authentication_ldap_simple_bind_root_dn|空字符串|检索用户时，使用的管理员账号 DN。|
-|authentication_ldap_simple_bind_root_pwd|空字符串|检索用户时，使用的管理员账号密码。|
-|authentication_ldap_simple_server_host|空字符串|LDAP 服务的 host 地址。|
-|authentication_ldap_simple_server_port|389|LDAP 服务的端口。|
-|authentication_ldap_simple_user_search_attr|uid|LDAP 对象中标识用户的属性名称。|
-|auth_token|空字符串|Token 是否自动开启。为空则在 Leader FE 第一次启动时随机生成一个。|
-|tmp_dir|StarRocksFE.STARROCKS_HOME_DIR + "/temp_dir"|临时文件保存目录，例如 backup/restore 等进程保留的目录。|
-|locale|zh_CN.UTF-8|字符集。|
-|hive_meta_load_concurrency|4|Hive 元数据并发线程数。|
-|hive_meta_cache_refresh_interval_s|7200|定时刷新 Hive 外表元数据缓存的周期，单位为秒。|
-|hive_meta_cache_ttl_s|86400|HIve 外表元数据缓存失效时间，单位为秒。|
-|hive_meta_store_timeout_s|10|连接 Hive Metastore 的超时时间。|
-|es_state_sync_interval_second|10|FE 周期性获取 Elasticsearch Index ，以及 StarRocks 外部表元信息周期性同步的时间间隔，单位为秒。|
-|enable_auth_check|TRUE|是否开启鉴权。|
-|auth_token|空字符串|为空则在 Leader FE 第一次启动时随机生成一个。|
-|enable_metric_calculator|TRUE|是否开启定期收集 metrics。|
-|backup_plugin_path|/tools/trans_file_tool/trans_files.sh|Deprecated。Backup 和 Restore 的插件路径。|
+| 配置项                             | 默认值                                          | 描述                                                         |
+| ---------------------------------- | ----------------------------------------------- | ------------------------------------------------------------ |
+| plugin_dir                         | STARROCKS_HOME_DIR/plugins                      | 插件的安装目录。                                             |
+| small_file_dir                     | StarRocksFE.STARROCKS_HOME_DIR + "/small_files" | 小文件的根目录。                                             |
+| max_agent_task_threads_num         | 4096                                            | 代理任务线程池中用于处理代理任务的最大线程数。               |
+| auth_token                         | 空字符串                                        | 用于内部身份验证的集群令牌。为空则在 Leader FE 第一次启动时随机生成一个。 |
+| tmp_dir                            | StarRocksFE.STARROCKS_HOME_DIR + "/temp_dir"    | 临时文件的保存目录，例如备份和恢复过程中产生的临时文件。这些过程完成以后，所产生的临时文件会被清除掉。 |
+| locale                             | zh_CN.UTF-8                                     | FE 所使用的字符集。                                          |
+| hive_meta_load_concurrency         | 4                                               | Hive 元数据支持的最大并发线程数。                            |
+| hive_meta_cache_refresh_interval_s | 7200                                            | 刷新 Hive 外表元数据缓存的时间间隔。单位：秒。               |
+| hive_meta_cache_ttl_s              | 86400                                           | Hive 外表元数据缓存的失效时间。单位：秒。                    |
+| hive_meta_store_timeout_s          | 10                                              | 连接 Hive Metastore 的超时时间。单位：秒。                   |
+| es_state_sync_interval_second      | 10                                              | FE 获取 Elasticsearch Index 和同步 StarRocks 外部表元数据的时间间隔。单位：秒。 |
+| enable_auth_check                  | TRUE                                            | 是否开启鉴权。                                               |
+| enable_metric_calculator           | TRUE                                            | 是否开启定期收集指标 (Metrics) 的功能。                      |
 
 ## BE 配置项
 
