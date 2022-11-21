@@ -782,4 +782,7 @@ CONF_Int32(internal_service_async_thread_num, "10");
 CONF_Int64(max_length_for_to_base64, "200000");
 // Used by bitmap functions
 CONF_Int64(max_length_for_bitmap_function, "1000000");
+
+// Used to limit buffer size of tablet send channel.
+CONF_mInt64(send_channel_buffer_limit, "67108864");
 } // namespace starrocks::config
