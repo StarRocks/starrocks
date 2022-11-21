@@ -106,8 +106,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String SQL_SAFE_UPDATES = "sql_safe_updates";
     public static final String NET_BUFFER_LENGTH = "net_buffer_length";
     public static final String CODEGEN_LEVEL = "codegen_level";
-    // mem limit can't smaller than bufferpool's default page size
-    public static final int MIN_EXEC_MEM_LIMIT = 2097152;
     public static final String BATCH_SIZE = "batch_size";
     public static final String CHUNK_SIZE = "chunk_size";
     public static final String DISABLE_STREAMING_PREAGGREGATIONS = "disable_streaming_preaggregations";
@@ -231,6 +229,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String JOIN_IMPLEMENTATION_MODE = "join_implementation_mode";
 
     public static final String STATISTIC_COLLECT_PARALLEL = "statistic_collect_parallel";
+
+    // Limitations
+    // mem limit can't smaller than bufferpool's default page size
+    public static final int MIN_EXEC_MEM_LIMIT = 2097152;
+    // query timeout cannot greater than one month
+    public static final int MAX_QUERY_TIMEOUT = 259200;
 
     @VariableMgr.VarAttr(name = ENABLE_PIPELINE, alias = ENABLE_PIPELINE_ENGINE, show = ENABLE_PIPELINE_ENGINE)
     private boolean enablePipelineEngine = true;
@@ -657,16 +661,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public long getSqlSelectLimit() {
-        if (sqlSelectLimit < 0) {
-            return DEFAULT_SELECT_LIMIT;
-        }
         return sqlSelectLimit;
     }
 
     public void setSqlSelectLimit(long limit) {
-        if (limit < 0) {
-            return;
-        }
         this.sqlSelectLimit = limit;
     }
 
@@ -679,11 +677,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public void setMaxExecMemByte(long maxExecMemByte) {
-        if (maxExecMemByte < MIN_EXEC_MEM_LIMIT) {
-            this.maxExecMemByte = MIN_EXEC_MEM_LIMIT;
-        } else {
-            this.maxExecMemByte = maxExecMemByte;
-        }
+        this.maxExecMemByte = maxExecMemByte;
     }
 
     public void setLoadMemLimit(long loadMemLimit) {
