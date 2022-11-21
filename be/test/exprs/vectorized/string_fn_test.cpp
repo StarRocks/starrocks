@@ -928,7 +928,7 @@ PARALLEL_TEST(VecStringFunctionsTest, appendTrailingCharIfAbsentTest) {
 
     ASSERT_EQ("qwer", v->get_data()[0].to_string());
     ASSERT_EQ("qwer", v->get_data()[1].to_string());
-    ASSERT_EQ("r", v->get_data()[2].to_string());
+    ASSERT_EQ("", v->get_data()[2].to_string());
 }
 
 PARALLEL_TEST(VecStringFunctionsTest, appendTrailingCharIfAbsentNullTest) {
