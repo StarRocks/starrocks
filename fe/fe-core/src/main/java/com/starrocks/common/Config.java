@@ -1097,6 +1097,12 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, aliases = {"disable_colocate_balance"})
     public static boolean tablet_sched_disable_colocate_balance = false;
 
+    /**
+     * If BE is down beyond this time, tablets on that BE of colcoate table will be migrated to other available BEs
+     */
+    @ConfField(mutable = true)
+    public static int tablet_sched_colocate_be_down_tolerate_time_s = 12 * 3600;
+
     @ConfField(aliases = {"tablet_balancer_strategy"})
     public static String tablet_sched_balancer_strategy = "disk_and_tablet";
 
