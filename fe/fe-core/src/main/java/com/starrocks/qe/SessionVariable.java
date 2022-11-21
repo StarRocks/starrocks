@@ -661,10 +661,16 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public long getSqlSelectLimit() {
+        if (sqlSelectLimit < 0) {
+            return DEFAULT_SELECT_LIMIT;
+        }
         return sqlSelectLimit;
     }
 
     public void setSqlSelectLimit(long limit) {
+        if (limit < 0) {
+            return;
+        }
         this.sqlSelectLimit = limit;
     }
 
@@ -677,7 +683,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public void setMaxExecMemByte(long maxExecMemByte) {
-        this.maxExecMemByte = maxExecMemByte;
+        if (maxExecMemByte < MIN_EXEC_MEM_LIMIT) {
+            this.maxExecMemByte = MIN_EXEC_MEM_LIMIT;
+        } else {
+            this.maxExecMemByte = maxExecMemByte;
+        }
     }
 
     public void setLoadMemLimit(long loadMemLimit) {
