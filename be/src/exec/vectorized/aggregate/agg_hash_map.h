@@ -102,7 +102,7 @@ struct AggHashMapWithKey {
 // ==============================================================
 // TODO(kks): Remove redundant code for compute_agg_states method
 // handle one number hash key
-template <PrimitiveType primitive_type, typename HashMap>
+template <LogicalType primitive_type, typename HashMap>
 struct AggHashMapWithOneNumberKey : public AggHashMapWithKey<HashMap> {
     using Base = AggHashMapWithKey<HashMap>;
     using KeyType = typename HashMap::key_type;
@@ -190,7 +190,7 @@ struct AggHashMapWithOneNumberKey : public AggHashMapWithKey<HashMap> {
     ResultVector results;
 };
 
-template <PrimitiveType primitive_type, typename HashMap>
+template <LogicalType primitive_type, typename HashMap>
 struct AggHashMapWithOneNullableNumberKey : public AggHashMapWithOneNumberKey<primitive_type, HashMap> {
     using Base = AggHashMapWithOneNumberKey<primitive_type, HashMap>;
     using KeyType = typename HashMap::key_type;

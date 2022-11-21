@@ -20,17 +20,17 @@ class ExprContext;
 namespace vectorized {
 
 namespace in_const_pred_detail {
-template <PrimitiveType Type, typename Enable = void>
+template <LogicalType Type, typename Enable = void>
 struct PHashSet {
     using PType = HashSet<RunTimeCppType<Type>>;
 };
 
-template <PrimitiveType Type>
+template <LogicalType Type>
 struct PHashSet<Type, std::enable_if_t<isSlicePT<Type>>> {
     using PType = SliceHashSet;
 };
 
-template <PrimitiveType Type>
+template <LogicalType Type>
 using PHashSetType = typename PHashSet<Type>::PType;
 
 } // namespace in_const_pred_detail
@@ -44,7 +44,7 @@ using PHashSetType = typename PHashSet<Type>::PType;
  *  a in (column1, 'a', column3), a in (select * from ....)...
  */
 
-template <PrimitiveType Type>
+template <LogicalType Type>
 class VectorizedInConstPredicate final : public Predicate {
 public:
     using ValueType = typename RunTimeTypeTraits<Type>::CppType;
@@ -126,7 +126,7 @@ public:
         for (int i = 1; i < _children.size(); ++i) {
             if ((_children[0]->type().is_string_type() && _children[i]->type().is_string_type()) ||
                 (_children[0]->type().type == _children[i]->type().type) ||
-                (PrimitiveType::TYPE_NULL == _children[i]->type().type)) {
+                (LogicalType::TYPE_NULL == _children[i]->type().type)) {
                 // pass
             } else {
                 return Status::InternalError("VectorizedInPredicate type not same");

@@ -562,7 +562,7 @@ ColumnPtr MathFunctions::round_decimal128(FunctionContext* context, const Column
     DCHECK_EQ(columns.size(), 1);
     Columns new_columns;
     new_columns.push_back(columns[0]);
-    new_columns.push_back(ColumnHelper::create_const_column<PrimitiveType::TYPE_INT>(0, columns[0]->size()));
+    new_columns.push_back(ColumnHelper::create_const_column<LogicalType::TYPE_INT>(0, columns[0]->size()));
     return decimal_round<DecimalRoundRule::ROUND_HALF_UP>(context, new_columns);
 }
 

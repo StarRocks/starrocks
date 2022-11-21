@@ -208,7 +208,7 @@ inline void avx2_select_if_common_implement(uint8_t*& selector, T*& dst, const T
 
 // SIMD selector
 // only support PrimaryType Arithmetic and DATE
-template <PrimitiveType TYPE>
+template <LogicalType TYPE>
 class SIMD_selector {
 public:
     using Container = typename RunTimeColumnType<TYPE>::Container;

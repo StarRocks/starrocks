@@ -123,7 +123,7 @@ TEST_F(VectorizedConditionExprTest, ifNullNull) {
     }
 }
 
-template <PrimitiveType Type>
+template <LogicalType Type>
 class RandomValueExpr final : public Expr {
 public:
     RandomValueExpr(const TExprNode& t, size_t size, std::default_random_engine& re) : Expr(t), _re(re) { _init(size); }
@@ -156,7 +156,7 @@ private:
     std::default_random_engine& _re;
 };
 
-template <PrimitiveType Type>
+template <LogicalType Type>
 class MakeNullableExpr final : public Expr {
 public:
     MakeNullableExpr(const TExprNode& t, size_t size, Expr* inner) : Expr(t), _inner(inner) { init(); }

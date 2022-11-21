@@ -106,7 +106,7 @@ public:
     }
 
     static void full_encode_ascending_datum(const Datum& value, std::string* buf) {
-        static_assert(field_type != LOGICAL_TYPE_DECIMAL && field_type != LOGICAL_TYPE_DATE_V1);
+        static_assert(field_type != TYPE_DECIMAL && field_type != TYPE_DATE_V1);
         CppType raw = value.get<CppType>();
         full_encode_ascending(&raw, buf);
     }
@@ -140,9 +140,9 @@ public:
 };
 
 template <>
-class KeyCoderTraits<LOGICAL_TYPE_BOOLEAN> {
+class KeyCoderTraits<TYPE_BOOLEAN> {
 public:
-    using CppType = typename CppTypeTraits<LOGICAL_TYPE_BOOLEAN>::CppType;
+    using CppType = typename CppTypeTraits<TYPE_BOOLEAN>::CppType;
     using Datum = vectorized::Datum;
 
 public:
@@ -181,10 +181,10 @@ public:
 };
 
 template <>
-class KeyCoderTraits<LOGICAL_TYPE_DATE_V1> {
+class KeyCoderTraits<TYPE_DATE_V1> {
 public:
-    using CppType = typename CppTypeTraits<LOGICAL_TYPE_DATE_V1>::CppType;
-    using UnsignedCppType = typename CppTypeTraits<LOGICAL_TYPE_DATE_V1>::UnsignedCppType;
+    using CppType = typename CppTypeTraits<TYPE_DATE_V1>::CppType;
+    using UnsignedCppType = typename CppTypeTraits<TYPE_DATE_V1>::UnsignedCppType;
     using Datum = vectorized::Datum;
 
 public:
@@ -225,15 +225,15 @@ public:
 };
 
 template <>
-class KeyCoderTraits<LOGICAL_TYPE_DECIMAL> {
+class KeyCoderTraits<TYPE_DECIMAL> {
     using Datum = vectorized::Datum;
 
 public:
     static void full_encode_ascending(const void* value, std::string* buf) {
         decimal12_t decimal_val;
         memcpy((void*)&decimal_val, value, sizeof(decimal12_t));
-        KeyCoderTraits<LOGICAL_TYPE_BIGINT>::full_encode_ascending(&decimal_val.integer, buf);
-        KeyCoderTraits<LOGICAL_TYPE_INT>::full_encode_ascending(&decimal_val.fraction, buf);
+        KeyCoderTraits<TYPE_BIGINT>::full_encode_ascending(&decimal_val.integer, buf);
+        KeyCoderTraits<TYPE_INT>::full_encode_ascending(&decimal_val.fraction, buf);
     }
 
     static void full_encode_ascending_datum(const Datum& datum, std::string* buf) {
@@ -253,28 +253,28 @@ public:
     static Status decode_ascending(Slice* encoded_key, size_t index_size __attribute__((unused)), uint8_t* cell_ptr,
                                    MemPool* pool) {
         decimal12_t decimal_val;
-        RETURN_IF_ERROR(KeyCoderTraits<LOGICAL_TYPE_BIGINT>::decode_ascending(encoded_key, sizeof(decimal_val.integer),
-                                                                              (uint8_t*)&decimal_val.integer, pool));
-        RETURN_IF_ERROR(KeyCoderTraits<LOGICAL_TYPE_INT>::decode_ascending(encoded_key, sizeof(decimal_val.fraction),
-                                                                           (uint8_t*)&decimal_val.fraction, pool));
+        RETURN_IF_ERROR(KeyCoderTraits<TYPE_BIGINT>::decode_ascending(encoded_key, sizeof(decimal_val.integer),
+                                                                      (uint8_t*)&decimal_val.integer, pool));
+        RETURN_IF_ERROR(KeyCoderTraits<TYPE_INT>::decode_ascending(encoded_key, sizeof(decimal_val.fraction),
+                                                                   (uint8_t*)&decimal_val.fraction, pool));
         memcpy(cell_ptr, &decimal_val, sizeof(decimal12_t));
         return Status::OK();
     }
 };
 
 template <>
-class KeyCoderTraits<LOGICAL_TYPE_DECIMALV2> {
+class KeyCoderTraits<TYPE_DECIMALV2> {
     using Datum = vectorized::Datum;
 
 public:
     static void full_encode_ascending(const void* value, std::string* buf) {
-        KeyCoderTraits<LOGICAL_TYPE_LARGEINT>::full_encode_ascending(value, buf);
+        KeyCoderTraits<TYPE_LARGEINT>::full_encode_ascending(value, buf);
     }
 
     static void full_encode_ascending_datum(const Datum& value, std::string* buf) {
         // NOTE: datum store `DECIMAL` as DecimalV2Value but the CppType is decimal12_t.
         const DecimalV2Value& v2 = value.get_decimal();
-        KeyCoderTraits<LOGICAL_TYPE_LARGEINT>::full_encode_ascending(&v2, buf);
+        KeyCoderTraits<TYPE_LARGEINT>::full_encode_ascending(&v2, buf);
     }
 
     static void encode_ascending(const void* value, size_t index_size __attribute__((unused)), std::string* buf) {
@@ -288,23 +288,22 @@ public:
 
     static Status decode_ascending(Slice* encoded_key, size_t index_size __attribute__((unused)), uint8_t* cell_ptr,
                                    MemPool* pool) {
-        RETURN_IF_ERROR(
-                KeyCoderTraits<LOGICAL_TYPE_LARGEINT>::decode_ascending(encoded_key, index_size, cell_ptr, pool));
+        RETURN_IF_ERROR(KeyCoderTraits<TYPE_LARGEINT>::decode_ascending(encoded_key, index_size, cell_ptr, pool));
         return Status::OK();
     }
 };
 
 template <>
-class KeyCoderTraits<LOGICAL_TYPE_DECIMAL32> : KeyCoderTraits<LOGICAL_TYPE_INT> {};
+class KeyCoderTraits<TYPE_DECIMAL32> : KeyCoderTraits<TYPE_INT> {};
 
 template <>
-class KeyCoderTraits<LOGICAL_TYPE_DECIMAL64> : KeyCoderTraits<LOGICAL_TYPE_BIGINT> {};
+class KeyCoderTraits<TYPE_DECIMAL64> : KeyCoderTraits<TYPE_BIGINT> {};
 
 template <>
-class KeyCoderTraits<LOGICAL_TYPE_DECIMAL128> : KeyCoderTraits<LOGICAL_TYPE_LARGEINT> {};
+class KeyCoderTraits<TYPE_DECIMAL128> : KeyCoderTraits<TYPE_LARGEINT> {};
 
 template <>
-class KeyCoderTraits<LOGICAL_TYPE_CHAR> {
+class KeyCoderTraits<TYPE_CHAR> {
     using Datum = vectorized::Datum;
 
 public:
@@ -347,7 +346,7 @@ public:
 };
 
 template <>
-class KeyCoderTraits<LOGICAL_TYPE_VARCHAR> {
+class KeyCoderTraits<TYPE_VARCHAR> {
     using Datum = vectorized::Datum;
 
 public:

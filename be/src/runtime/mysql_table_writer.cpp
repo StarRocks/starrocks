@@ -88,9 +88,9 @@ Status MysqlTableWriter::open(const MysqlConnInfo& conn_info, const std::string&
 }
 
 struct ViewerBuilder {
-    template <PrimitiveType ptype>
+    template <LogicalType ptype>
     void operator()(std::vector<MysqlTableWriter::VariantViewer>* _viewers, vectorized::ColumnPtr* column) {
-        if constexpr (ptype == PrimitiveType::TYPE_TIME) {
+        if constexpr (ptype == LogicalType::TYPE_TIME) {
             *column = vectorized::ColumnHelper::convert_time_column_from_double_to_str(*column);
         } else {
             _viewers->emplace_back(vectorized::ColumnViewer<ptype>(*column));
@@ -131,7 +131,7 @@ Status MysqlTableWriter::_build_insert_sql(int from, int to, std::string_view* s
             std::visit(
                     [&](auto&& viewer) {
                         using ViewerType = std::decay_t<decltype(viewer)>;
-                        constexpr PrimitiveType type = ViewerType::TYPE;
+                        constexpr LogicalType type = ViewerType::TYPE;
 
                         if (viewer.is_null(i)) {
                             fmt::format_to(_stmt_buffer, "NULL");

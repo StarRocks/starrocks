@@ -10,7 +10,7 @@
 namespace starrocks::vectorized {
 
 struct SumDispatcher {
-    template <PrimitiveType pt>
+    template <LogicalType pt>
     void operator()(AggregateFuncResolver* resolver) {
         if constexpr (pt_is_decimal<pt>) {
             resolver->add_decimal_mapping<pt, TYPE_DECIMAL128, true>("decimal_sum");
@@ -23,7 +23,7 @@ struct SumDispatcher {
 };
 
 struct DistinctDispatcher {
-    template <PrimitiveType pt>
+    template <LogicalType pt>
     void operator()(AggregateFuncResolver* resolver) {
         if constexpr (pt_is_aggregate<pt> || pt_is_string<pt>) {
             using DistinctState = DistinctAggregateState<pt, SumResultPT<pt>>;

@@ -33,9 +33,9 @@ protected:
     static ChunkPtr create_binary_probe_chunk(uint32_t count, uint32_t start_value, bool nullable, MemPool* mem_pool);
     static ChunkPtr create_int32_build_chunk(uint32_t count, bool nullable);
     static ChunkPtr create_binary_build_chunk(uint32_t count, bool nullable, MemPool* mem_pool);
-    static TSlotDescriptor create_slot_descriptor(const std::string& column_name, PrimitiveType column_type,
+    static TSlotDescriptor create_slot_descriptor(const std::string& column_name, LogicalType column_type,
                                                   int32_t column_pos, bool nullable);
-    static void add_tuple_descriptor(TDescriptorTableBuilder* table_desc_builder, PrimitiveType column_type,
+    static void add_tuple_descriptor(TDescriptorTableBuilder* table_desc_builder, LogicalType column_type,
                                      bool nullable, size_t column_count = 3);
     static std::shared_ptr<RuntimeProfile> create_runtime_profile();
     static std::shared_ptr<RowDescriptor> create_row_desc(RuntimeState* state,
@@ -82,10 +82,10 @@ protected:
     // flag: 0(all 0), 1(all 1), 2(half 0), 3(one third 0)
     static Buffer<uint8_t> create_bools(uint32_t count, int32_t flag);
     static ColumnPtr create_tuple_column(const Buffer<uint8_t>& data);
-    static ColumnPtr create_column(PrimitiveType PT);
-    static ColumnPtr create_column(PrimitiveType PT, uint32_t start, uint32_t count);
-    static ColumnPtr create_nullable_column(PrimitiveType PT);
-    static ColumnPtr create_nullable_column(PrimitiveType PT, const Buffer<uint8_t>& nulls, uint32_t start,
+    static ColumnPtr create_column(LogicalType PT);
+    static ColumnPtr create_column(LogicalType PT, uint32_t start, uint32_t count);
+    static ColumnPtr create_nullable_column(LogicalType PT);
+    static ColumnPtr create_nullable_column(LogicalType PT, const Buffer<uint8_t>& nulls, uint32_t start,
                                             uint32_t count);
     void check_empty_hash_map(TJoinOp::type join_type, int num_probe_rows, int32_t expect_num_rows,
                               int32_t expect_num_colums);
@@ -150,20 +150,20 @@ Buffer<uint8_t> JoinHashMapTest::create_bools(uint32_t count, int32_t flag) {
     return nulls;
 }
 
-ColumnPtr JoinHashMapTest::create_column(PrimitiveType PT) {
-    if (PT == PrimitiveType::TYPE_INT) {
+ColumnPtr JoinHashMapTest::create_column(LogicalType PT) {
+    if (PT == LogicalType::TYPE_INT) {
         return FixedLengthColumn<int32_t>::create();
     }
 
-    if (PT == PrimitiveType::TYPE_VARCHAR) {
+    if (PT == LogicalType::TYPE_VARCHAR) {
         return BinaryColumn::create();
     }
 
     return nullptr;
 }
 
-ColumnPtr JoinHashMapTest::create_column(PrimitiveType PT, uint32_t start, uint32_t count) {
-    if (PT == PrimitiveType::TYPE_INT) {
+ColumnPtr JoinHashMapTest::create_column(LogicalType PT, uint32_t start, uint32_t count) {
+    if (PT == LogicalType::TYPE_INT) {
         auto column = FixedLengthColumn<int32_t>::create();
         for (auto i = 0; i < count; i++) {
             column->append_datum(Datum(static_cast<int32_t>(start + i)));
@@ -171,7 +171,7 @@ ColumnPtr JoinHashMapTest::create_column(PrimitiveType PT, uint32_t start, uint3
         return column;
     }
 
-    if (PT == PrimitiveType::TYPE_VARCHAR) {
+    if (PT == LogicalType::TYPE_VARCHAR) {
         auto column = BinaryColumn::create();
         for (auto i = 0; i < count; i++) {
             column->append_string(std::to_string(start + i));
@@ -182,15 +182,15 @@ ColumnPtr JoinHashMapTest::create_column(PrimitiveType PT, uint32_t start, uint3
     return nullptr;
 }
 
-ColumnPtr JoinHashMapTest::create_nullable_column(PrimitiveType PT) {
+ColumnPtr JoinHashMapTest::create_nullable_column(LogicalType PT) {
     auto null_column = FixedLengthColumn<uint8_t>::create();
 
-    if (PT == PrimitiveType::TYPE_INT) {
+    if (PT == LogicalType::TYPE_INT) {
         auto data_column = FixedLengthColumn<int32_t>::create();
         return NullableColumn::create(data_column, null_column);
     }
 
-    if (PT == PrimitiveType::TYPE_VARCHAR) {
+    if (PT == LogicalType::TYPE_VARCHAR) {
         auto data_column = BinaryColumn::create();
         return NullableColumn::create(data_column, null_column);
     }
@@ -198,11 +198,11 @@ ColumnPtr JoinHashMapTest::create_nullable_column(PrimitiveType PT) {
     return nullptr;
 }
 
-ColumnPtr JoinHashMapTest::create_nullable_column(PrimitiveType PT, const Buffer<uint8_t>& nulls, uint32_t start,
+ColumnPtr JoinHashMapTest::create_nullable_column(LogicalType PT, const Buffer<uint8_t>& nulls, uint32_t start,
                                                   uint32_t count) {
     auto null_column = FixedLengthColumn<uint8_t>::create();
 
-    if (PT == PrimitiveType::TYPE_INT) {
+    if (PT == LogicalType::TYPE_INT) {
         auto data_column = FixedLengthColumn<int32_t>::create();
         for (auto i = 0; i < count; i++) {
             null_column->append_datum(Datum(static_cast<uint8_t>(nulls[i])));
@@ -215,7 +215,7 @@ ColumnPtr JoinHashMapTest::create_nullable_column(PrimitiveType PT, const Buffer
         return NullableColumn::create(data_column, null_column);
     }
 
-    if (PT == PrimitiveType::TYPE_VARCHAR) {
+    if (PT == LogicalType::TYPE_VARCHAR) {
         auto data_column = BinaryColumn::create();
         for (auto i = 0; i < count; i++) {
             null_column->append_datum(Datum(static_cast<uint8_t>(nulls[i])));
@@ -232,7 +232,7 @@ ColumnPtr JoinHashMapTest::create_nullable_column(PrimitiveType PT, const Buffer
 }
 
 ColumnPtr JoinHashMapTest::create_int32_column(uint32_t row_count, uint32_t start_value) {
-    const auto& int_type_desc = TypeDescriptor(PrimitiveType::TYPE_INT);
+    const auto& int_type_desc = TypeDescriptor(LogicalType::TYPE_INT);
     ColumnPtr column = ColumnHelper::create_column(int_type_desc, false);
     for (int32_t i = 0; i < row_count; i++) {
         column->append_datum(Datum(static_cast<int32_t>(start_value) + i));
@@ -487,7 +487,7 @@ void JoinHashMapTest::prepare_table_items(JoinHashTableItems* table_items, TJoin
                                           bool with_other_conjunct, uint32_t batch_count) {
     table_items->join_type = join_type;
     table_items->with_other_conjunct = with_other_conjunct;
-    const auto int_type = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT);
+    const auto int_type = TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT);
     table_items->join_keys.emplace_back(JoinKeyDesc{&int_type, false, nullptr});
     table_items->next.resize(1 + batch_count * config::vector_chunk_size, 0);
     for (size_t i = 0; i < config::vector_chunk_size; i++) {
@@ -538,7 +538,7 @@ void JoinHashMapTest::check_int32_column(const ColumnPtr& column, uint32_t row_c
 }
 
 ColumnPtr JoinHashMapTest::create_int32_nullable_column(uint32_t row_count, uint32_t start_value) {
-    const auto& int_type_desc = TypeDescriptor(PrimitiveType::TYPE_INT);
+    const auto& int_type_desc = TypeDescriptor(LogicalType::TYPE_INT);
     ColumnPtr data_column = ColumnHelper::create_column(int_type_desc, false);
     NullColumnPtr null_column = NullColumn::create();
     for (int32_t i = 0; i < row_count; i++) {
@@ -648,8 +648,8 @@ void JoinHashMapTest::check_empty_hash_map(TJoinOp::type join_type, int num_prob
     config::vector_chunk_size = 4096;
 
     TDescriptorTableBuilder row_desc_builder;
-    add_tuple_descriptor(&row_desc_builder, PrimitiveType::TYPE_INT, false);
-    add_tuple_descriptor(&row_desc_builder, PrimitiveType::TYPE_INT, false);
+    add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false);
+    add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false);
 
     std::shared_ptr<RowDescriptor> row_desc =
             create_row_desc(runtime_state.get(), object_pool, &row_desc_builder, false);
@@ -722,10 +722,10 @@ void JoinHashMapTest::check_empty_hash_map(TJoinOp::type join_type, int num_prob
     }
 }
 
-TSlotDescriptor JoinHashMapTest::create_slot_descriptor(const std::string& column_name, PrimitiveType column_type,
+TSlotDescriptor JoinHashMapTest::create_slot_descriptor(const std::string& column_name, LogicalType column_type,
                                                         int32_t column_pos, bool nullable) {
     TSlotDescriptorBuilder slot_desc_builder;
-    if (column_type == PrimitiveType::TYPE_VARCHAR) {
+    if (column_type == LogicalType::TYPE_VARCHAR) {
         return slot_desc_builder.string_type(255)
                 .column_name(column_name)
                 .column_pos(column_pos)
@@ -739,7 +739,7 @@ TSlotDescriptor JoinHashMapTest::create_slot_descriptor(const std::string& colum
             .build();
 }
 
-void JoinHashMapTest::add_tuple_descriptor(TDescriptorTableBuilder* table_desc_builder, PrimitiveType column_type,
+void JoinHashMapTest::add_tuple_descriptor(TDescriptorTableBuilder* table_desc_builder, LogicalType column_type,
                                            bool nullable, size_t column_count) {
     TTupleDescriptorBuilder tuple_desc_builder;
     for (size_t i = 0; i < column_count; i++) {
@@ -848,7 +848,7 @@ TEST_F(JoinHashMapTest, GetHashKey) {
 
 // NOLINTNEXTLINE
 TEST_F(JoinHashMapTest, CompileFixedSizeKeyColumn) {
-    auto type = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BIGINT);
+    auto type = TypeDescriptor::from_primtive_type(LogicalType::TYPE_BIGINT);
     auto data_column = ColumnHelper::create_column(type, false);
     data_column->resize(2);
 
@@ -856,7 +856,7 @@ TEST_F(JoinHashMapTest, CompileFixedSizeKeyColumn) {
     auto c2 = JoinHashMapTest::create_int32_column(2, 2);
     Columns columns{c1, c2};
 
-    JoinHashMapHelper::serialize_fixed_size_key_column<PrimitiveType::TYPE_BIGINT>(columns, data_column.get(), 0, 2);
+    JoinHashMapHelper::serialize_fixed_size_key_column<LogicalType::TYPE_BIGINT>(columns, data_column.get(), 0, 2);
 
     auto* c3 = ColumnHelper::as_raw_column<Int64Column>(data_column);
     ASSERT_EQ(c3->get_data()[0], 8589934592l);
@@ -872,8 +872,8 @@ TEST_F(JoinHashMapTest, ProbeNullOutput) {
 
     auto object_pool = std::make_shared<ObjectPool>();
     TDescriptorTableBuilder row_desc_builder;
-    add_tuple_descriptor(&row_desc_builder, PrimitiveType::TYPE_INT, false);
-    add_tuple_descriptor(&row_desc_builder, PrimitiveType::TYPE_INT, false);
+    add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false);
+    add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false);
     auto row_desc = create_row_desc(runtime_state.get(), object_pool, &row_desc_builder, false);
     vector<HashTableSlotDescriptor> hash_table_slot_vec;
     for (auto& slot : row_desc->tuple_descriptors()[0]->slots()) {
@@ -908,8 +908,8 @@ TEST_F(JoinHashMapTest, BuildDefaultOutput) {
 
     auto object_pool = std::make_shared<ObjectPool>();
     TDescriptorTableBuilder row_desc_builder;
-    add_tuple_descriptor(&row_desc_builder, PrimitiveType::TYPE_INT, false);
-    add_tuple_descriptor(&row_desc_builder, PrimitiveType::TYPE_INT, false);
+    add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false);
+    add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false);
     auto row_desc = create_row_desc(runtime_state.get(), object_pool, &row_desc_builder, false);
 
     vector<HashTableSlotDescriptor> hash_table_slot_vec;
@@ -942,7 +942,7 @@ TEST_F(JoinHashMapTest, JoinBuildProbeFunc) {
     auto runtime_state = create_runtime_state();
     runtime_state->init_instance_mem_tracker();
 
-    auto type = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT);
+    auto type = TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT);
     auto build_column = ColumnHelper::create_column(type, false);
     build_column->append_default();
     build_column->append(*JoinHashMapTest::create_int32_column(10, 0), 0, 10);
@@ -958,10 +958,10 @@ TEST_F(JoinHashMapTest, JoinBuildProbeFunc) {
     Columns probe_columns{probe_column};
     probe_state.key_columns = &probe_columns;
 
-    JoinBuildFunc<PrimitiveType::TYPE_INT>::prepare(nullptr, &table_items);
-    JoinProbeFunc<PrimitiveType::TYPE_INT>::prepare(runtime_state.get(), &probe_state);
-    JoinBuildFunc<PrimitiveType::TYPE_INT>::construct_hash_table(runtime_state.get(), &table_items, &probe_state);
-    JoinProbeFunc<PrimitiveType::TYPE_INT>::lookup_init(table_items, &probe_state);
+    JoinBuildFunc<LogicalType::TYPE_INT>::prepare(nullptr, &table_items);
+    JoinProbeFunc<LogicalType::TYPE_INT>::prepare(runtime_state.get(), &probe_state);
+    JoinBuildFunc<LogicalType::TYPE_INT>::construct_hash_table(runtime_state.get(), &table_items, &probe_state);
+    JoinProbeFunc<LogicalType::TYPE_INT>::lookup_init(table_items, &probe_state);
 
     for (size_t i = 0; i < 10; i++) {
         size_t found_count = 0;
@@ -984,7 +984,7 @@ TEST_F(JoinHashMapTest, JoinBuildProbeFuncNullable) {
     auto runtime_state = create_runtime_state();
     runtime_state->init_instance_mem_tracker();
 
-    auto type = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT);
+    auto type = TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT);
     auto build_column = ColumnHelper::create_column(type, true);
     build_column->append_default();
     build_column->append(*JoinHashMapTest::create_int32_nullable_column(10, 0), 0, 10);
@@ -1028,8 +1028,8 @@ TEST_F(JoinHashMapTest, JoinBuildProbeFuncNullable) {
 TEST_F(JoinHashMapTest, DirectMappingJoinBuildProbeFunc) {
     auto runtime_state = create_runtime_state();
     TDescriptorTableBuilder row_desc_builder;
-    add_tuple_descriptor(&row_desc_builder, PrimitiveType::TYPE_TINYINT, false, 1);
-    add_tuple_descriptor(&row_desc_builder, PrimitiveType::TYPE_TINYINT, false, 1);
+    add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_TINYINT, false, 1);
+    add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_TINYINT, false, 1);
 
     auto row_desc = create_row_desc(runtime_state.get(), _object_pool, &row_desc_builder, false);
     auto probe_row_desc = create_probe_desc(runtime_state.get(), _object_pool, &row_desc_builder, false);
@@ -1087,8 +1087,8 @@ TEST_F(JoinHashMapTest, DirectMappingJoinBuildProbeFunc) {
 TEST_F(JoinHashMapTest, DirectMappingJoinBuildProbeFuncNullable) {
     auto runtime_state = create_runtime_state();
     TDescriptorTableBuilder row_desc_builder;
-    add_tuple_descriptor(&row_desc_builder, PrimitiveType::TYPE_TINYINT, true, 1);
-    add_tuple_descriptor(&row_desc_builder, PrimitiveType::TYPE_TINYINT, true, 1);
+    add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_TINYINT, true, 1);
+    add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_TINYINT, true, 1);
 
     auto row_desc = create_row_desc(runtime_state.get(), _object_pool, &row_desc_builder, true);
     auto probe_row_desc = create_probe_desc(runtime_state.get(), _object_pool, &row_desc_builder, true);
@@ -1736,8 +1736,8 @@ TEST_F(JoinHashMapTest, OneKeyJoinHashTable) {
     config::vector_chunk_size = 4096;
 
     TDescriptorTableBuilder row_desc_builder;
-    add_tuple_descriptor(&row_desc_builder, PrimitiveType::TYPE_INT, false);
-    add_tuple_descriptor(&row_desc_builder, PrimitiveType::TYPE_INT, false);
+    add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false);
+    add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false);
 
     std::shared_ptr<RowDescriptor> row_desc =
             create_row_desc(runtime_state.get(), object_pool, &row_desc_builder, false);
@@ -1801,8 +1801,8 @@ TEST_F(JoinHashMapTest, OneNullableKeyJoinHashTable) {
     config::vector_chunk_size = 4096;
 
     TDescriptorTableBuilder row_desc_builder;
-    add_tuple_descriptor(&row_desc_builder, PrimitiveType::TYPE_INT, true);
-    add_tuple_descriptor(&row_desc_builder, PrimitiveType::TYPE_INT, true);
+    add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, true);
+    add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, true);
 
     std::shared_ptr<RowDescriptor> row_desc =
             create_row_desc(runtime_state.get(), object_pool, &row_desc_builder, true);
@@ -1868,8 +1868,8 @@ TEST_F(JoinHashMapTest, FixedSizeJoinHashTable) {
     config::vector_chunk_size = 4096;
 
     TDescriptorTableBuilder row_desc_builder;
-    add_tuple_descriptor(&row_desc_builder, PrimitiveType::TYPE_INT, false);
-    add_tuple_descriptor(&row_desc_builder, PrimitiveType::TYPE_INT, false);
+    add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false);
+    add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_INT, false);
 
     std::shared_ptr<RowDescriptor> row_desc =
             create_row_desc(runtime_state.get(), object_pool, &row_desc_builder, false);
@@ -1933,8 +1933,8 @@ TEST_F(JoinHashMapTest, SerializeJoinHashTable) {
     auto runtime_state = create_runtime_state();
 
     TDescriptorTableBuilder row_desc_builder;
-    add_tuple_descriptor(&row_desc_builder, PrimitiveType::TYPE_VARCHAR, false);
-    add_tuple_descriptor(&row_desc_builder, PrimitiveType::TYPE_VARCHAR, false);
+    add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_VARCHAR, false);
+    add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_VARCHAR, false);
 
     std::shared_ptr<RowDescriptor> row_desc =
             create_row_desc(runtime_state.get(), _object_pool, &row_desc_builder, false);

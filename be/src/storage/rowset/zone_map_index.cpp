@@ -174,11 +174,11 @@ Status ZoneMapIndexWriterImpl<type>::finish(WritableFile* wfile, ColumnIndexMeta
     _segment_zone_map.to_proto(meta->mutable_segment_zone_map(), _field);
 
     // write out zone map for each data pages
-    TypeInfoPtr typeinfo = get_type_info(LOGICAL_TYPE_OBJECT);
+    TypeInfoPtr typeinfo = get_type_info(TYPE_OBJECT);
     IndexedColumnWriterOptions options;
     options.write_ordinal_index = true;
     options.write_value_index = false;
-    options.encoding = EncodingInfo::get_default_encoding(LOGICAL_TYPE_OBJECT, false);
+    options.encoding = EncodingInfo::get_default_encoding(TYPE_OBJECT, false);
     options.compression = NO_COMPRESSION; // currently not compressed
 
     IndexedColumnWriter writer(options, typeinfo, wfile);
@@ -222,7 +222,7 @@ Status ZoneMapIndexReader::_do_load(FileSystem* fs, const std::string& filename,
 
     _page_zone_maps.resize(reader.num_values());
 
-    auto column = ChunkHelper::column_from_field_type(LOGICAL_TYPE_VARCHAR, false);
+    auto column = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
     // read and cache all page zone maps
     for (int i = 0; i < reader.num_values(); ++i) {
         RETURN_IF_ERROR(iter->seek_to_ordinal(i));

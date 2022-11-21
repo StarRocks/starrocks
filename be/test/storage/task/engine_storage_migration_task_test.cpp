@@ -134,10 +134,10 @@ public:
         ASSERT_TRUE(st.ok()) << st.to_string() << ", version:" << writer->version();
     }
 
-    TSlotDescriptor _create_slot_desc(PrimitiveType type, const std::string& col_name, int col_pos) {
+    TSlotDescriptor _create_slot_desc(LogicalType type, const std::string& col_name, int col_pos) {
         TSlotDescriptorBuilder builder;
 
-        if (type == PrimitiveType::TYPE_VARCHAR || type == PrimitiveType::TYPE_CHAR) {
+        if (type == LogicalType::TYPE_VARCHAR || type == LogicalType::TYPE_CHAR) {
             return builder.string_type(1024).column_name(col_name).column_pos(col_pos).nullable(false).build();
         } else {
             return builder.type(type).column_name(col_name).column_pos(col_pos).nullable(false).build();
@@ -209,7 +209,7 @@ public:
     }
 
 private:
-    PrimitiveType _primitive_type[3] = {PrimitiveType::TYPE_INT, PrimitiveType::TYPE_VARCHAR, PrimitiveType::TYPE_INT};
+    LogicalType _primitive_type[3] = {LogicalType::TYPE_INT, LogicalType::TYPE_VARCHAR, LogicalType::TYPE_INT};
 
     std::string _names[3] = {"k1", "k2", "v1"};
     RuntimeState _runtime_state;

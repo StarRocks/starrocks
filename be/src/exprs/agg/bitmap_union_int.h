@@ -11,7 +11,7 @@
 
 namespace starrocks::vectorized {
 
-template <PrimitiveType PT, typename T = RunTimeCppType<PT>>
+template <LogicalType PT, typename T = RunTimeCppType<PT>>
 class BitmapUnionIntAggregateFunction final
         : public AggregateFunctionBatchHelper<BitmapValue, BitmapUnionIntAggregateFunction<PT, T>> {
 public:

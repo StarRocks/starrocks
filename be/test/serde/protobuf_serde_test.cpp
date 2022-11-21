@@ -20,7 +20,7 @@ std::string make_string(size_t i) {
 }
 
 vectorized::FieldPtr make_field(size_t i) {
-    return std::make_shared<vectorized::Field>(i, make_string(i), get_type_info(LOGICAL_TYPE_INT), false);
+    return std::make_shared<vectorized::Field>(i, make_string(i), get_type_info(TYPE_INT), false);
 }
 
 vectorized::Fields make_fields(size_t size) {
@@ -67,8 +67,8 @@ PARALLEL_TEST(ProtobufChunkSerde, test_serde) {
     meta.is_nulls.resize(2, false);
     meta.is_consts.resize(2, false);
     meta.types.resize(2);
-    meta.types[0] = TypeDescriptor(PrimitiveType::TYPE_INT);
-    meta.types[1] = TypeDescriptor(PrimitiveType::TYPE_INT);
+    meta.types[0] = TypeDescriptor(LogicalType::TYPE_INT);
+    meta.types[1] = TypeDescriptor(LogicalType::TYPE_INT);
 
     ProtobufChunkDeserializer deserializer(meta);
     auto chunk_or = deserializer.deserialize(serialized_data);

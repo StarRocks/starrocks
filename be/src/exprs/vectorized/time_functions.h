@@ -664,7 +664,7 @@ private:
         ScalarFunction function;
     };
 
-    template <PrimitiveType Type>
+    template <LogicalType Type>
     friend ColumnPtr do_format(const FormatCtx* ctx, const Columns& cols);
 };
 

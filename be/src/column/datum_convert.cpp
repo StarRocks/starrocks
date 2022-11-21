@@ -28,18 +28,18 @@ Status datum_from_string(TypeInfo* type_info, Datum* dst, const std::string& str
         APPLY_FOR_TYPE_INTEGER(M)
         APPLY_FOR_TYPE_TIME(M)
         APPLY_FOR_TYPE_DECIMAL(M)
-        M(LOGICAL_TYPE_FLOAT)
-        M(LOGICAL_TYPE_DOUBLE)
+        M(TYPE_FLOAT)
+        M(TYPE_DOUBLE)
 #undef M
-    case LOGICAL_TYPE_BOOLEAN: {
+    case TYPE_BOOLEAN: {
         bool v;
         RETURN_IF_ERROR(type_info->from_string(&v, str));
         dst->set_int8(v);
         return Status::OK();
     }
         /* Type need memory allocated */
-    case LOGICAL_TYPE_CHAR:
-    case LOGICAL_TYPE_VARCHAR: {
+    case TYPE_CHAR:
+    case TYPE_VARCHAR: {
         /* Type need memory allocated */
         Slice slice;
         slice.size = str.size();
@@ -50,8 +50,8 @@ Status datum_from_string(TypeInfo* type_info, Datum* dst, const std::string& str
             RETURN_IF_UNLIKELY_NULL(slice.data, Status::MemoryAllocFailed("alloc mem for varchar field failed"));
             memcpy(slice.data, str.data(), slice.size);
         }
-        // If type is LOGICAL_TYPE_CHAR, strip its tailing '\0'
-        if (type == LOGICAL_TYPE_CHAR) {
+        // If type is TYPE_CHAR, strip its tailing '\0'
+        if (type == TYPE_CHAR) {
             slice.size = strnlen(slice.data, slice.size);
         }
         dst->set_slice(slice);
@@ -77,11 +77,11 @@ std::string datum_to_string(TypeInfo* type_info, const Datum& datum) {
     }
     const auto type = type_info->type();
     switch (type) {
-    case LOGICAL_TYPE_BOOLEAN:
-        return datum_to_string<LOGICAL_TYPE_TINYINT>(type_info, datum);
-    case LOGICAL_TYPE_CHAR:
-    case LOGICAL_TYPE_VARCHAR:
-        return datum_to_string<LOGICAL_TYPE_VARCHAR>(type_info, datum);
+    case TYPE_BOOLEAN:
+        return datum_to_string<TYPE_TINYINT>(type_info, datum);
+    case TYPE_CHAR:
+    case TYPE_VARCHAR:
+        return datum_to_string<TYPE_VARCHAR>(type_info, datum);
 #define M(type) \
     case type:  \
         return datum_to_string<type>(type_info, datum);

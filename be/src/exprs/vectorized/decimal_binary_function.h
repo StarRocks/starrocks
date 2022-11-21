@@ -86,8 +86,7 @@ struct DecimalBinaryFunction {
         return false;
     }
 
-    template <bool lhs_is_const, bool rhs_is_const, PrimitiveType LhsType, PrimitiveType RhsType,
-              PrimitiveType ResultType>
+    template <bool lhs_is_const, bool rhs_is_const, LogicalType LhsType, LogicalType RhsType, LogicalType ResultType>
     static inline ColumnPtr evaluate(const ColumnPtr& lhs, const ColumnPtr& rhs) {
         using ResultCppType = RunTimeCppType<ResultType>;
         using ResultColumnType = RunTimeColumnType<ResultType>;
@@ -178,19 +177,19 @@ struct DecimalBinaryFunction {
             return result_column;
         }
     }
-    template <PrimitiveType LhsType, PrimitiveType RhsType, PrimitiveType ResultType>
+    template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType>
     static inline ColumnPtr const_const(const ColumnPtr& lhs, const ColumnPtr& rhs) {
         return evaluate<true, true, LhsType, RhsType, ResultType>(lhs, rhs);
     }
-    template <PrimitiveType LhsType, PrimitiveType RhsType, PrimitiveType ResultType>
+    template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType>
     static inline ColumnPtr const_vector(const ColumnPtr& lhs, const ColumnPtr& rhs) {
         return evaluate<true, false, LhsType, RhsType, ResultType>(lhs, rhs);
     }
-    template <PrimitiveType LhsType, PrimitiveType RhsType, PrimitiveType ResultType>
+    template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType>
     static inline ColumnPtr vector_const(const ColumnPtr& lhs, const ColumnPtr& rhs) {
         return evaluate<false, true, LhsType, RhsType, ResultType>(lhs, rhs);
     }
-    template <PrimitiveType LhsType, PrimitiveType RhsType, PrimitiveType ResultType>
+    template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType>
     static inline ColumnPtr vector_vector(const ColumnPtr& lhs, const ColumnPtr& rhs) {
         return evaluate<false, false, LhsType, RhsType, ResultType>(lhs, rhs);
     }
@@ -199,7 +198,7 @@ struct DecimalBinaryFunction {
 template <typename OP, bool check_overflow>
 class UnpackConstColumnDecimalBinaryFunction {
 public:
-    template <PrimitiveType LType, PrimitiveType RType, PrimitiveType ResultType>
+    template <LogicalType LType, LogicalType RType, LogicalType ResultType>
     static ColumnPtr evaluate(const ColumnPtr& v1, const ColumnPtr& v2) {
         using Function = DecimalBinaryFunction<check_overflow, OP>;
         if (!v1->is_constant() && !v2->is_constant()) {
@@ -222,7 +221,7 @@ template <typename OP, bool check_overflow = false>
 using VectorizedStrictDecimalBinaryFunction =
         UnionNullableColumnBinaryFunction<UnpackConstColumnDecimalBinaryFunction<OP, check_overflow>>;
 
-template <PrimitiveType Type, typename OP, bool check_overflow = false>
+template <LogicalType Type, typename OP, bool check_overflow = false>
 using VectorizedUnstrictDecimalBinaryFunction =
         ProduceNullableColumnBinaryFunction<UnpackConstColumnBinaryFunction<ArithmeticRightZeroCheck<Type>>,
                                             UnpackConstColumnDecimalBinaryFunction<OP, check_overflow>>;

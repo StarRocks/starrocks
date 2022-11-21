@@ -109,7 +109,7 @@ Status MySQLDataSource::open(RuntimeState* state) {
         SlotId slot_id = slot_ids[0];
         auto iter = slot_by_id.find(slot_id);
         if (iter != slot_by_id.end()) {
-            PrimitiveType type = iter->second->type().type;
+            LogicalType type = iter->second->type().type;
             // dipatch to process,
             // we support numerical type, char type and date type.
             switch (type) {
@@ -173,6 +173,15 @@ Status MySQLDataSource::open(RuntimeState* state) {
             case TYPE_JSON:
             case TYPE_FUNCTION:
             case TYPE_VARBINARY:
+            case TYPE_UNSIGNED_TINYINT:
+            case TYPE_UNSIGNED_SMALLINT:
+            case TYPE_UNSIGNED_INT:
+            case TYPE_UNSIGNED_BIGINT:
+            case TYPE_DISCRETE_DOUBLE:
+            case TYPE_DATE_V1:
+            case TYPE_DATETIME_V1:
+            case TYPE_NONE:
+            case TYPE_MAX_VALUE:
                 break;
             }
         }
@@ -465,7 +474,7 @@ Status MySQLDataSource::append_text_to_column(const char* data, const int& len, 
     return Status::OK();
 }
 
-template <PrimitiveType PT, typename CppType>
+template <LogicalType PT, typename CppType>
 void MySQLDataSource::append_value_to_column(Column* column, CppType& value) {
     using ColumnType = typename vectorized::RunTimeColumnType<PT>;
 

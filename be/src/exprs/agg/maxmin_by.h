@@ -12,10 +12,10 @@
 #include "util/raw_container.h"
 namespace starrocks::vectorized {
 
-template <PrimitiveType PT, typename = guard::Guard>
+template <LogicalType PT, typename = guard::Guard>
 struct MaxByAggregateData {};
 
-template <PrimitiveType PT>
+template <LogicalType PT>
 struct MaxByAggregateData<PT, IntegralPTGuard<PT>> {
     using T = RunTimeCppType<PT>;
     raw::RawVector<uint8_t> buffer_result;
@@ -26,7 +26,7 @@ struct MaxByAggregateData<PT, IntegralPTGuard<PT>> {
     }
 };
 
-template <PrimitiveType PT>
+template <LogicalType PT>
 struct MaxByAggregateData<PT, FloatPTGuard<PT>> {
     using T = RunTimeCppType<PT>;
     raw::RawVector<uint8_t> buffer_result;
@@ -47,7 +47,7 @@ struct MaxByAggregateData<TYPE_DECIMALV2, guard::Guard> {
     }
 };
 
-template <PrimitiveType PT>
+template <LogicalType PT>
 struct MaxByAggregateData<PT, DecimalPTGuard<PT>> {
     using T = RunTimeCppType<PT>;
     raw::RawVector<uint8_t> buffer_result;
@@ -78,7 +78,7 @@ struct MaxByAggregateData<TYPE_DATE, guard::Guard> {
     }
 };
 
-template <PrimitiveType PT, typename State, typename = guard::Guard>
+template <LogicalType PT, typename State, typename = guard::Guard>
 struct MaxByElement {
     using T = RunTimeCppType<PT>;
     void operator()(State& state, Column* col, size_t row_num, const T& right) const {
@@ -97,7 +97,7 @@ struct MaxByElement {
     }
 };
 
-template <PrimitiveType PT>
+template <LogicalType PT>
 struct MaxByAggregateData<PT, StringPTGuard<PT>> {
     raw::RawVector<uint8_t> buffer_result;
     raw::RawVector<uint8_t> buffer_max;
@@ -111,7 +111,7 @@ struct MaxByAggregateData<PT, StringPTGuard<PT>> {
     }
 };
 
-template <PrimitiveType PT>
+template <LogicalType PT>
 struct MaxByElement<PT, MaxByAggregateData<PT>, StringPTGuard<PT>> {
     void operator()(MaxByAggregateData<PT>& state, Column* col, size_t row_num, const Slice& right) const {
         if (!state.has_value() || state.slice_max().compare(right) < 0) {
@@ -134,7 +134,7 @@ struct MaxByElement<PT, MaxByAggregateData<PT>, StringPTGuard<PT>> {
     }
 };
 
-template <PrimitiveType PT, typename State, class OP, typename T = RunTimeCppType<PT>, typename = guard::Guard>
+template <LogicalType PT, typename State, class OP, typename T = RunTimeCppType<PT>, typename = guard::Guard>
 class MaxByAggregateFunction final
         : public AggregateFunctionBatchHelper<State, MaxByAggregateFunction<PT, State, OP, T>> {
 public:
@@ -262,7 +262,7 @@ public:
     std::string get_name() const override { return "max_by"; }
 };
 
-template <PrimitiveType PT, typename State, class OP>
+template <LogicalType PT, typename State, class OP>
 class MaxByAggregateFunction<PT, State, OP, RunTimeCppType<PT>, StringPTGuard<PT>> final
         : public AggregateFunctionBatchHelper<State, MaxByAggregateFunction<PT, State, OP, RunTimeCppType<PT>>> {
 public:

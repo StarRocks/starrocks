@@ -68,7 +68,7 @@ ColumnPtr CastStringToArray::evaluate(ExprContext* context, vectorized::Chunk* i
         return ColumnHelper::create_const_null_column(column->size());
     }
 
-    PrimitiveType element_type = _cast_elements_expr->type().type;
+    LogicalType element_type = _cast_elements_expr->type().type;
     ColumnViewer<TYPE_VARCHAR> src(column);
     UInt32Column::Ptr offsets = UInt32Column::create();
     NullColumn::Ptr null_column = NullColumn::create();
@@ -149,7 +149,7 @@ ColumnPtr CastJsonToArray::evaluate(ExprContext* context, vectorized::Chunk* inp
         return ColumnHelper::create_const_null_column(column->size());
     }
 
-    PrimitiveType element_type = _cast_elements_expr->type().type;
+    LogicalType element_type = _cast_elements_expr->type().type;
     ColumnViewer<TYPE_JSON> src(column);
     UInt32Column::Ptr offsets = UInt32Column::create();
     NullColumn::Ptr null_column = NullColumn::create();

@@ -44,16 +44,16 @@ public:
     void register_approx();
     void register_others();
 
-    const std::vector<PrimitiveType>& aggregate_types() const {
-        const static std::vector<PrimitiveType> kTypes{
+    const std::vector<LogicalType>& aggregate_types() const {
+        const static std::vector<LogicalType> kTypes{
                 TYPE_BOOLEAN,   TYPE_TINYINT,   TYPE_SMALLINT,  TYPE_INT,        TYPE_BIGINT, TYPE_LARGEINT,
                 TYPE_FLOAT,     TYPE_DOUBLE,    TYPE_VARCHAR,   TYPE_CHAR,       TYPE_DATE,   TYPE_DATETIME,
                 TYPE_DECIMALV2, TYPE_DECIMAL32, TYPE_DECIMAL64, TYPE_DECIMAL128, TYPE_HLL,    TYPE_OBJECT};
         return kTypes;
     }
 
-    const AggregateFunction* get_aggregate_info(const std::string& name, const PrimitiveType arg_type,
-                                                const PrimitiveType return_type, const bool is_window_function,
+    const AggregateFunction* get_aggregate_info(const std::string& name, const LogicalType arg_type,
+                                                const LogicalType return_type, const bool is_window_function,
                                                 const bool is_null) const {
         auto pair = _infos_mapping.find(std::make_tuple(name, arg_type, return_type, is_window_function, is_null));
         if (pair == _infos_mapping.end()) {
@@ -62,7 +62,7 @@ public:
         return pair->second.get();
     }
 
-    template <PrimitiveType ArgType, PrimitiveType RetType, typename SpecificAggFunctionPtr = AggregateFunctionPtr>
+    template <LogicalType ArgType, LogicalType RetType, typename SpecificAggFunctionPtr = AggregateFunctionPtr>
     void add_aggregate_mapping_notnull(const std::string& name, bool is_window, SpecificAggFunctionPtr fun) {
         _infos_mapping.emplace(std::make_tuple(name, ArgType, RetType, false, false), fun);
         _infos_mapping.emplace(std::make_tuple(name, ArgType, RetType, false, true), fun);
@@ -72,7 +72,7 @@ public:
         }
     }
 
-    template <PrimitiveType ArgType, PrimitiveType RetType, class StateType,
+    template <LogicalType ArgType, LogicalType RetType, class StateType,
               typename SpecificAggFunctionPtr = AggregateFunctionPtr, bool IgnoreNull = true>
     void add_aggregate_mapping(const std::string& name, bool is_window, SpecificAggFunctionPtr fun) {
         _infos_mapping.emplace(std::make_tuple(name, ArgType, RetType, false, false), fun);
@@ -86,7 +86,7 @@ public:
         }
     }
 
-    template <PrimitiveType ArgType, PrimitiveType RetType, class StateType,
+    template <LogicalType ArgType, LogicalType RetType, class StateType,
               typename SpecificAggFunctionPtr = AggregateFunctionPtr>
     void add_aggregate_mapping_variadic(const std::string& name, bool is_window, SpecificAggFunctionPtr fun) {
         _infos_mapping.emplace(std::make_tuple(name, ArgType, RetType, false, false), fun);
@@ -100,7 +100,7 @@ public:
         }
     }
 
-    template <PrimitiveType ArgPT, PrimitiveType ResultPT>
+    template <LogicalType ArgPT, LogicalType ResultPT>
     void add_array_mapping(std::string name) {
         _infos_mapping.emplace(std::make_tuple(name, ArgPT, ResultPT, false, false),
                                create_array_function<ArgPT, ResultPT, false>(name));
@@ -108,7 +108,7 @@ public:
                                create_array_function<ArgPT, ResultPT, true>(name));
     }
 
-    template <PrimitiveType ArgPT, PrimitiveType ResultPT, bool AddWindowVersion = false>
+    template <LogicalType ArgPT, LogicalType ResultPT, bool AddWindowVersion = false>
     void add_decimal_mapping(std::string name) {
         _infos_mapping.emplace(std::make_tuple(name, ArgPT, ResultPT, false, false),
                                create_decimal_function<ArgPT, ResultPT, false, false>(name));
@@ -122,7 +122,7 @@ public:
         }
     }
 
-    template <PrimitiveType ArgPT, PrimitiveType ResultPT, bool IsNull>
+    template <LogicalType ArgPT, LogicalType ResultPT, bool IsNull>
     AggregateFunctionPtr create_array_function(std::string& name) {
         if constexpr (IsNull) {
             if (name == "dict_merge") {
@@ -155,7 +155,7 @@ public:
         return nullptr;
     }
 
-    template <PrimitiveType ArgPT, PrimitiveType ResultPT, bool IsWindowFunc, bool IsNull>
+    template <LogicalType ArgPT, LogicalType ResultPT, bool IsWindowFunc, bool IsNull>
     std::enable_if_t<isArithmeticPT<ArgPT>, AggregateFunctionPtr> create_decimal_function(std::string& name) {
         static_assert(pt_is_decimal128<ResultPT>);
         if constexpr (IsNull) {

@@ -104,7 +104,7 @@ public:
             return Status::OK();
         }
 
-        if (to_type == LOGICAL_TYPE_DECIMAL128) {
+        if (to_type == TYPE_DECIMAL128) {
             std::vector<std::string> strs;
             const auto type_info = this->type_info();
             for (ValueType value : _values) {
@@ -113,7 +113,7 @@ public:
             *output = obj_pool->add(new_column_not_in_predicate(target_type_info, _column_id, strs));
             return Status::OK();
         }
-        if constexpr (field_type == LOGICAL_TYPE_DECIMAL128) {
+        if constexpr (field_type == TYPE_DECIMAL128) {
             std::vector<std::string> strs;
             for (ValueType value : _values) {
                 strs.emplace_back(DecimalV3Cast::to_string<ValueType>(value, 27, 9));
@@ -267,76 +267,76 @@ ColumnPredicate* new_column_not_in_predicate(const TypeInfoPtr& type_info, Colum
                                              const std::vector<std::string>& strs) {
     auto type = type_info->type();
     switch (type) {
-    case LOGICAL_TYPE_BOOLEAN:
-        return new ColumnNotInPredicate<LOGICAL_TYPE_BOOLEAN>(type_info, id, strs);
-    case LOGICAL_TYPE_TINYINT:
-        return new ColumnNotInPredicate<LOGICAL_TYPE_TINYINT>(type_info, id, strs);
-    case LOGICAL_TYPE_SMALLINT:
-        return new ColumnNotInPredicate<LOGICAL_TYPE_SMALLINT>(type_info, id, strs);
-    case LOGICAL_TYPE_INT:
-        return new ColumnNotInPredicate<LOGICAL_TYPE_INT>(type_info, id, strs);
-    case LOGICAL_TYPE_BIGINT:
-        return new ColumnNotInPredicate<LOGICAL_TYPE_BIGINT>(type_info, id, strs);
-    case LOGICAL_TYPE_LARGEINT:
-        return new ColumnNotInPredicate<LOGICAL_TYPE_LARGEINT>(type_info, id, strs);
-    case LOGICAL_TYPE_DECIMAL:
-        return new ColumnNotInPredicate<LOGICAL_TYPE_DECIMAL>(type_info, id, strs);
-    case LOGICAL_TYPE_DECIMALV2:
-        return new ColumnNotInPredicate<LOGICAL_TYPE_DECIMALV2>(type_info, id, strs);
-    case LOGICAL_TYPE_DECIMAL32: {
+    case TYPE_BOOLEAN:
+        return new ColumnNotInPredicate<TYPE_BOOLEAN>(type_info, id, strs);
+    case TYPE_TINYINT:
+        return new ColumnNotInPredicate<TYPE_TINYINT>(type_info, id, strs);
+    case TYPE_SMALLINT:
+        return new ColumnNotInPredicate<TYPE_SMALLINT>(type_info, id, strs);
+    case TYPE_INT:
+        return new ColumnNotInPredicate<TYPE_INT>(type_info, id, strs);
+    case TYPE_BIGINT:
+        return new ColumnNotInPredicate<TYPE_BIGINT>(type_info, id, strs);
+    case TYPE_LARGEINT:
+        return new ColumnNotInPredicate<TYPE_LARGEINT>(type_info, id, strs);
+    case TYPE_DECIMAL:
+        return new ColumnNotInPredicate<TYPE_DECIMAL>(type_info, id, strs);
+    case TYPE_DECIMALV2:
+        return new ColumnNotInPredicate<TYPE_DECIMALV2>(type_info, id, strs);
+    case TYPE_DECIMAL32: {
         const auto scale = type_info->scale();
-        using SetType = ItemHashSet<CppTypeTraits<LOGICAL_TYPE_DECIMAL32>::CppType>;
-        SetType values = predicate_internal::strings_to_decimal_set<LOGICAL_TYPE_DECIMAL32>(scale, strs);
-        return new ColumnNotInPredicate<LOGICAL_TYPE_DECIMAL32>(type_info, id, std::move(values));
+        using SetType = ItemHashSet<CppTypeTraits<TYPE_DECIMAL32>::CppType>;
+        SetType values = predicate_internal::strings_to_decimal_set<TYPE_DECIMAL32>(scale, strs);
+        return new ColumnNotInPredicate<TYPE_DECIMAL32>(type_info, id, std::move(values));
     }
-    case LOGICAL_TYPE_DECIMAL64: {
+    case TYPE_DECIMAL64: {
         const auto scale = type_info->scale();
-        using SetType = ItemHashSet<CppTypeTraits<LOGICAL_TYPE_DECIMAL64>::CppType>;
-        SetType values = predicate_internal::strings_to_decimal_set<LOGICAL_TYPE_DECIMAL64>(scale, strs);
-        return new ColumnNotInPredicate<LOGICAL_TYPE_DECIMAL64>(type_info, id, std::move(values));
+        using SetType = ItemHashSet<CppTypeTraits<TYPE_DECIMAL64>::CppType>;
+        SetType values = predicate_internal::strings_to_decimal_set<TYPE_DECIMAL64>(scale, strs);
+        return new ColumnNotInPredicate<TYPE_DECIMAL64>(type_info, id, std::move(values));
     }
-    case LOGICAL_TYPE_DECIMAL128: {
+    case TYPE_DECIMAL128: {
         const auto scale = type_info->scale();
-        using SetType = ItemHashSet<CppTypeTraits<LOGICAL_TYPE_DECIMAL128>::CppType>;
-        SetType values = predicate_internal::strings_to_decimal_set<LOGICAL_TYPE_DECIMAL128>(scale, strs);
-        return new ColumnNotInPredicate<LOGICAL_TYPE_DECIMAL128>(type_info, id, std::move(values));
+        using SetType = ItemHashSet<CppTypeTraits<TYPE_DECIMAL128>::CppType>;
+        SetType values = predicate_internal::strings_to_decimal_set<TYPE_DECIMAL128>(scale, strs);
+        return new ColumnNotInPredicate<TYPE_DECIMAL128>(type_info, id, std::move(values));
     }
-    case LOGICAL_TYPE_CHAR:
-        return new BinaryColumnNotInPredicate<LOGICAL_TYPE_CHAR>(type_info, id, strs);
-    case LOGICAL_TYPE_VARCHAR:
-        return new BinaryColumnNotInPredicate<LOGICAL_TYPE_VARCHAR>(type_info, id, strs);
-    case LOGICAL_TYPE_DATE_V1:
-        return new ColumnNotInPredicate<LOGICAL_TYPE_DATE_V1>(type_info, id, strs);
-    case LOGICAL_TYPE_DATE:
-        return new ColumnNotInPredicate<LOGICAL_TYPE_DATE>(type_info, id, strs);
-    case LOGICAL_TYPE_DATETIME_V1:
-        return new ColumnNotInPredicate<LOGICAL_TYPE_DATETIME_V1>(type_info, id, strs);
-    case LOGICAL_TYPE_DATETIME:
-        return new ColumnNotInPredicate<LOGICAL_TYPE_DATETIME>(type_info, id, strs);
-    case LOGICAL_TYPE_FLOAT:
-        return new ColumnNotInPredicate<LOGICAL_TYPE_FLOAT>(type_info, id, strs);
-    case LOGICAL_TYPE_DOUBLE:
-        return new ColumnNotInPredicate<LOGICAL_TYPE_DOUBLE>(type_info, id, strs);
-    case LOGICAL_TYPE_UNSIGNED_TINYINT:
-    case LOGICAL_TYPE_UNSIGNED_SMALLINT:
-    case LOGICAL_TYPE_UNSIGNED_INT:
-    case LOGICAL_TYPE_UNSIGNED_BIGINT:
-    case LOGICAL_TYPE_DISCRETE_DOUBLE:
-    case LOGICAL_TYPE_STRUCT:
-    case LOGICAL_TYPE_ARRAY:
-    case LOGICAL_TYPE_MAP:
-    case LOGICAL_TYPE_UNKNOWN:
-    case LOGICAL_TYPE_NONE:
-    case LOGICAL_TYPE_HLL:
-    case LOGICAL_TYPE_OBJECT:
-    case LOGICAL_TYPE_PERCENTILE:
-    case LOGICAL_TYPE_JSON:
-    case LOGICAL_TYPE_NULL:
-    case LOGICAL_TYPE_FUNCTION:
-    case LOGICAL_TYPE_TIME:
-    case LOGICAL_TYPE_BINARY:
-    case LOGICAL_TYPE_MAX_VALUE:
-    case LOGICAL_TYPE_VARBINARY:
+    case TYPE_CHAR:
+        return new BinaryColumnNotInPredicate<TYPE_CHAR>(type_info, id, strs);
+    case TYPE_VARCHAR:
+        return new BinaryColumnNotInPredicate<TYPE_VARCHAR>(type_info, id, strs);
+    case TYPE_DATE_V1:
+        return new ColumnNotInPredicate<TYPE_DATE_V1>(type_info, id, strs);
+    case TYPE_DATE:
+        return new ColumnNotInPredicate<TYPE_DATE>(type_info, id, strs);
+    case TYPE_DATETIME_V1:
+        return new ColumnNotInPredicate<TYPE_DATETIME_V1>(type_info, id, strs);
+    case TYPE_DATETIME:
+        return new ColumnNotInPredicate<TYPE_DATETIME>(type_info, id, strs);
+    case TYPE_FLOAT:
+        return new ColumnNotInPredicate<TYPE_FLOAT>(type_info, id, strs);
+    case TYPE_DOUBLE:
+        return new ColumnNotInPredicate<TYPE_DOUBLE>(type_info, id, strs);
+    case TYPE_UNSIGNED_TINYINT:
+    case TYPE_UNSIGNED_SMALLINT:
+    case TYPE_UNSIGNED_INT:
+    case TYPE_UNSIGNED_BIGINT:
+    case TYPE_DISCRETE_DOUBLE:
+    case TYPE_STRUCT:
+    case TYPE_ARRAY:
+    case TYPE_MAP:
+    case TYPE_UNKNOWN:
+    case TYPE_NONE:
+    case TYPE_HLL:
+    case TYPE_OBJECT:
+    case TYPE_PERCENTILE:
+    case TYPE_JSON:
+    case TYPE_NULL:
+    case TYPE_FUNCTION:
+    case TYPE_TIME:
+    case TYPE_BINARY:
+    case TYPE_MAX_VALUE:
+    case TYPE_VARBINARY:
         return nullptr;
         // No default to ensure newly added enumerator will be handled.
     }

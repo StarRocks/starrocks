@@ -282,8 +282,8 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
         if (texpr_node.__isset.child_type || texpr_node.__isset.child_type_desc) {
             *expr = pool->add(vectorized::VectorizedCastExprFactory::from_thrift(pool, texpr_node));
             if (*expr == nullptr) {
-                PrimitiveType to_type = TypeDescriptor::from_thrift(texpr_node.type).type;
-                PrimitiveType from_type = thrift_to_type(texpr_node.child_type);
+                LogicalType to_type = TypeDescriptor::from_thrift(texpr_node.type).type;
+                LogicalType from_type = thrift_to_type(texpr_node.child_type);
                 std::string err_msg = fmt::format(
                         "Vectorized engine does not support the operator, cast from {} to {} failed, maybe use switch "
                         "function",

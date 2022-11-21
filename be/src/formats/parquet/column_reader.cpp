@@ -332,13 +332,13 @@ private:
 
 Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField* field, const TypeDescriptor& col_type,
                             std::unique_ptr<ColumnReader>* output) {
-    if (field->type.type == PrimitiveType::TYPE_ARRAY) {
+    if (field->type.type == LogicalType::TYPE_ARRAY) {
         std::unique_ptr<ColumnReader> child_reader;
         RETURN_IF_ERROR(ColumnReader::create(opts, &field->children[0], col_type.children[0], &child_reader));
         std::unique_ptr<ListColumnReader> reader(new ListColumnReader(opts));
         RETURN_IF_ERROR(reader->init(field, std::move(child_reader)));
         *output = std::move(reader);
-    } else if (field->type.type == PrimitiveType::TYPE_MAP) {
+    } else if (field->type.type == LogicalType::TYPE_MAP) {
         std::unique_ptr<ColumnReader> key_reader;
         // ParquetFiled Map -> Map<Struct<key,value>>
         DCHECK(field->children[0].type.type == TYPE_STRUCT);
@@ -355,7 +355,7 @@ Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField*
         std::unique_ptr<MapColumnReader> reader(new MapColumnReader(opts));
         RETURN_IF_ERROR(reader->init(field, std::move(key_reader), std::move(value_reader)));
         *output = std::move(reader);
-    } else if (field->type.type == PrimitiveType::TYPE_STRUCT) {
+    } else if (field->type.type == LogicalType::TYPE_STRUCT) {
         // build tmp mapping for ParquetField
         std::unordered_map<std::string, size_t> field_name_2_pos;
         for (size_t i = 0; i < field->children.size(); i++) {

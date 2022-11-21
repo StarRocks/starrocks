@@ -71,23 +71,23 @@ static unique_ptr<Schema> create_schema(const string& desc, int nkey) {
         }
         ColumnId cid = i;
         string name = fs[0];
-        LogicalType type = LOGICAL_TYPE_UNKNOWN;
+        LogicalType type = TYPE_UNKNOWN;
         if (fs[1] == "boolean") {
-            type = LOGICAL_TYPE_BOOLEAN;
+            type = TYPE_BOOLEAN;
         } else if (fs[1] == "tinyint") {
-            type = LOGICAL_TYPE_TINYINT;
+            type = TYPE_TINYINT;
         } else if (fs[1] == "smallint") {
-            type = LOGICAL_TYPE_SMALLINT;
+            type = TYPE_SMALLINT;
         } else if (fs[1] == "int") {
-            type = LOGICAL_TYPE_INT;
+            type = TYPE_INT;
         } else if (fs[1] == "bigint") {
-            type = LOGICAL_TYPE_BIGINT;
+            type = TYPE_BIGINT;
         } else if (fs[1] == "float") {
-            type = LOGICAL_TYPE_FLOAT;
+            type = TYPE_FLOAT;
         } else if (fs[1] == "double") {
-            type = LOGICAL_TYPE_DOUBLE;
+            type = TYPE_DOUBLE;
         } else if (fs[1] == "varchar") {
-            type = LOGICAL_TYPE_VARCHAR;
+            type = TYPE_VARCHAR;
         } else {
             CHECK(false) << "create_tuple_desc_slots type not support";
         }
@@ -114,7 +114,7 @@ static const std::vector<SlotDescriptor*>* create_tuple_desc_slots(RuntimeState*
         if (fs.size() < 2) {
             CHECK(false) << "create_tuple_desc_slots bad desc";
         }
-        PrimitiveType type = TYPE_UNKNOWN;
+        LogicalType type = TYPE_UNKNOWN;
         if (fs[1] == "boolean") {
             type = TYPE_BOOLEAN;
         } else if (fs[1] == "tinyint") {

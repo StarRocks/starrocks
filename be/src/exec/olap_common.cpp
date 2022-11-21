@@ -95,7 +95,7 @@ inline std::string cast_to_string<vectorized::TimestampValue>(vectorized::Timest
 // for decimal32/64/128, their underlying type is int32/64/128, so the decimal point
 // depends on precision and scale when they are casted into strings
 template <class T>
-inline std::string cast_to_string(T value, [[maybe_unused]] PrimitiveType pt, [[maybe_unused]] int precision,
+inline std::string cast_to_string(T value, [[maybe_unused]] LogicalType pt, [[maybe_unused]] int precision,
                                   [[maybe_unused]] int scale) {
     switch (pt) {
     case TYPE_DECIMAL32: {
@@ -597,7 +597,7 @@ template <class T>
 ColumnValueRange<T>::ColumnValueRange() = default;
 
 template <class T>
-ColumnValueRange<T>::ColumnValueRange(std::string col_name, PrimitiveType type, T min, T max)
+ColumnValueRange<T>::ColumnValueRange(std::string col_name, LogicalType type, T min, T max)
         : _column_name(std::move(col_name)),
           _column_type(type),
           _type_min(min),

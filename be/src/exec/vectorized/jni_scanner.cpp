@@ -140,7 +140,7 @@ Status JniScanner::_get_next_chunk(JNIEnv* _jni_env, long* chunk_meta) {
     return Status::OK();
 }
 
-template <PrimitiveType type, typename CppType>
+template <LogicalType type, typename CppType>
 void JniScanner::_append_data(Column* column, CppType& value) {
     auto appender = [](auto* column, CppType& value) {
         using ColumnType = typename vectorized::RunTimeColumnType<type>;
@@ -159,7 +159,7 @@ void JniScanner::_append_data(Column* column, CppType& value) {
     }
 }
 
-template <PrimitiveType type, typename CppType>
+template <LogicalType type, typename CppType>
 Status JniScanner::_append_primitive_data(long num_rows, long* chunk_meta_ptr, int& chunk_meta_index,
                                           ColumnPtr& column) {
     bool* null_column_ptr = reinterpret_cast<bool*>(chunk_meta_ptr[chunk_meta_index++]);
@@ -180,7 +180,7 @@ Status JniScanner::_append_primitive_data(long num_rows, long* chunk_meta_ptr, i
     return Status::OK();
 }
 
-template <PrimitiveType type, typename CppType>
+template <LogicalType type, typename CppType>
 Status JniScanner::_append_decimal_data(long num_rows, long* chunk_meta_ptr, int& chunk_meta_index, ColumnPtr& column,
                                         SlotDescriptor* slot_desc) {
     bool* null_column_ptr = reinterpret_cast<bool*>(chunk_meta_ptr[chunk_meta_index++]);
@@ -206,7 +206,7 @@ Status JniScanner::_append_decimal_data(long num_rows, long* chunk_meta_ptr, int
     return Status::OK();
 }
 
-template <PrimitiveType type>
+template <LogicalType type>
 Status JniScanner::_append_string_data(long num_rows, long* chunk_meta_ptr, int& chunk_meta_index, ColumnPtr& column) {
     bool* null_column_ptr = reinterpret_cast<bool*>(chunk_meta_ptr[chunk_meta_index++]);
     int* offset_ptr = reinterpret_cast<int*>(chunk_meta_ptr[chunk_meta_index++]);
@@ -246,34 +246,34 @@ Status JniScanner::_fill_chunk(JNIEnv* _jni_env, long chunk_meta, ChunkPtr* chun
     for (size_t col_idx = 0; col_idx < slot_desc_list.size(); col_idx++) {
         SlotDescriptor* slot_desc = slot_desc_list[col_idx];
         ColumnPtr& column = (*chunk)->get_column_by_slot_id(slot_desc->id());
-        PrimitiveType column_type = slot_desc->type().type;
+        LogicalType column_type = slot_desc->type().type;
         if (!column->is_nullable()) {
             return Status::DataQualityError(
                     fmt::format("NOT NULL column[{}] is not supported.", slot_desc->col_name()));
         }
-        if (column_type == PrimitiveType::TYPE_BOOLEAN) {
+        if (column_type == LogicalType::TYPE_BOOLEAN) {
             RETURN_IF_ERROR((
                     _append_primitive_data<TYPE_BOOLEAN, uint8_t>(num_rows, chunk_meta_ptr, chunk_meta_index, column)));
-        } else if (column_type == PrimitiveType::TYPE_SMALLINT) {
+        } else if (column_type == LogicalType::TYPE_SMALLINT) {
             RETURN_IF_ERROR((_append_primitive_data<TYPE_SMALLINT, int16_t>(num_rows, chunk_meta_ptr, chunk_meta_index,
                                                                             column)));
-        } else if (column_type == PrimitiveType::TYPE_INT) {
+        } else if (column_type == LogicalType::TYPE_INT) {
             RETURN_IF_ERROR(
                     (_append_primitive_data<TYPE_INT, int32_t>(num_rows, chunk_meta_ptr, chunk_meta_index, column)));
-        } else if (column_type == PrimitiveType::TYPE_FLOAT) {
+        } else if (column_type == LogicalType::TYPE_FLOAT) {
             RETURN_IF_ERROR(
                     (_append_primitive_data<TYPE_FLOAT, float>(num_rows, chunk_meta_ptr, chunk_meta_index, column)));
-        } else if (column_type == PrimitiveType::TYPE_BIGINT) {
+        } else if (column_type == LogicalType::TYPE_BIGINT) {
             RETURN_IF_ERROR(
                     (_append_primitive_data<TYPE_BIGINT, int64_t>(num_rows, chunk_meta_ptr, chunk_meta_index, column)));
-        } else if (column_type == PrimitiveType::TYPE_DOUBLE) {
+        } else if (column_type == LogicalType::TYPE_DOUBLE) {
             RETURN_IF_ERROR(
                     (_append_primitive_data<TYPE_DOUBLE, double>(num_rows, chunk_meta_ptr, chunk_meta_index, column)));
-        } else if (column_type == PrimitiveType::TYPE_VARCHAR) {
+        } else if (column_type == LogicalType::TYPE_VARCHAR) {
             RETURN_IF_ERROR((_append_string_data<TYPE_VARCHAR>(num_rows, chunk_meta_ptr, chunk_meta_index, column)));
-        } else if (column_type == PrimitiveType::TYPE_CHAR) {
+        } else if (column_type == LogicalType::TYPE_CHAR) {
             RETURN_IF_ERROR((_append_string_data<TYPE_CHAR>(num_rows, chunk_meta_ptr, chunk_meta_index, column)));
-        } else if (column_type == PrimitiveType::TYPE_DATE) {
+        } else if (column_type == LogicalType::TYPE_DATE) {
             bool* null_column_ptr = reinterpret_cast<bool*>(chunk_meta_ptr[chunk_meta_index++]);
             int* offset_ptr = reinterpret_cast<int*>(chunk_meta_ptr[chunk_meta_index++]);
             char* column_ptr = reinterpret_cast<char*>(chunk_meta_ptr[chunk_meta_index++]);
@@ -291,7 +291,7 @@ Status JniScanner::_fill_chunk(JNIEnv* _jni_env, long chunk_meta, ChunkPtr* chun
                     _append_data<TYPE_DATE, DateValue>(column.get(), dv);
                 }
             }
-        } else if (column_type == PrimitiveType::TYPE_DATETIME) {
+        } else if (column_type == LogicalType::TYPE_DATETIME) {
             bool* null_column_ptr = reinterpret_cast<bool*>(chunk_meta_ptr[chunk_meta_index++]);
             int* offset_ptr = reinterpret_cast<int*>(chunk_meta_ptr[chunk_meta_index++]);
             char* column_ptr = reinterpret_cast<char*>(chunk_meta_ptr[chunk_meta_index++]);
@@ -310,13 +310,13 @@ Status JniScanner::_fill_chunk(JNIEnv* _jni_env, long chunk_meta, ChunkPtr* chun
                     _append_data<TYPE_DATETIME, TimestampValue>(column.get(), tsv);
                 }
             }
-        } else if (column_type == PrimitiveType::TYPE_DECIMAL32) {
+        } else if (column_type == LogicalType::TYPE_DECIMAL32) {
             RETURN_IF_ERROR((_append_decimal_data<TYPE_DECIMAL32, int32_t>(num_rows, chunk_meta_ptr, chunk_meta_index,
                                                                            column, slot_desc)));
-        } else if (column_type == PrimitiveType::TYPE_DECIMAL64) {
+        } else if (column_type == LogicalType::TYPE_DECIMAL64) {
             RETURN_IF_ERROR((_append_decimal_data<TYPE_DECIMAL64, int64_t>(num_rows, chunk_meta_ptr, chunk_meta_index,
                                                                            column, slot_desc)));
-        } else if (column_type == PrimitiveType::TYPE_DECIMAL128) {
+        } else if (column_type == LogicalType::TYPE_DECIMAL128) {
             RETURN_IF_ERROR((_append_decimal_data<TYPE_DECIMAL128, int128_t>(num_rows, chunk_meta_ptr, chunk_meta_index,
                                                                              column, slot_desc)));
         } else {

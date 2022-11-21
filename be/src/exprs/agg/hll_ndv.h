@@ -17,7 +17,7 @@ namespace starrocks::vectorized {
  * ARGS_TYPE: ALL TYPE
  * SERIALIZED_TYPE: TYPE_VARCHAR
  */
-template <PrimitiveType PT, bool IsOutputHLL, typename T = RunTimeCppType<PT>>
+template <LogicalType PT, bool IsOutputHLL, typename T = RunTimeCppType<PT>>
 class HllNdvAggregateFunction final
         : public AggregateFunctionBatchHelper<HyperLogLog, HllNdvAggregateFunction<PT, IsOutputHLL, T>> {
 public:

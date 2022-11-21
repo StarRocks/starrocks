@@ -28,7 +28,7 @@ Schema MemTable::convert_schema(const TabletSchema* tablet_schema, const std::ve
         slot_descs->back()->col_name() == LOAD_OP_COLUMN) {
         // load slots have __op field, so add to _vectorized_schema
         auto op_column = std::make_shared<starrocks::vectorized::Field>((ColumnId)-1, LOAD_OP_COLUMN,
-                                                                        LogicalType::LOGICAL_TYPE_TINYINT, false);
+                                                                        LogicalType::TYPE_TINYINT, false);
         op_column->set_aggregate_method(OLAP_FIELD_AGGREGATION_REPLACE);
         schema.append(op_column);
     }

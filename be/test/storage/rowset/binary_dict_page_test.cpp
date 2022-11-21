@@ -69,8 +69,8 @@ public:
         // construct dict page
         OwnedSlice dict_slice = page_builder.get_dictionary_page()->build();
         PageDecoderOptions dict_decoder_options;
-        auto dict_page_decoder = std::make_unique<BinaryPlainPageDecoder<LOGICAL_TYPE_VARCHAR>>(dict_slice.slice(),
-                                                                                                dict_decoder_options);
+        auto dict_page_decoder =
+                std::make_unique<BinaryPlainPageDecoder<TYPE_VARCHAR>>(dict_slice.slice(), dict_decoder_options);
         status = dict_page_decoder->init();
         ASSERT_TRUE(status.ok());
         // because every slice is unique
@@ -88,7 +88,7 @@ public:
         ASSERT_TRUE(st.ok());
 
         PageDecoderOptions decoder_options;
-        BinaryDictPageDecoder<LOGICAL_TYPE_VARCHAR> page_decoder(encoded_data, decoder_options);
+        BinaryDictPageDecoder<TYPE_VARCHAR> page_decoder(encoded_data, decoder_options);
         page_decoder.set_dict_decoder(dict_page_decoder.get());
 
         status = page_decoder.init();
@@ -97,7 +97,7 @@ public:
 
         //check values
 
-        auto column = ChunkHelper::column_from_field_type(LOGICAL_TYPE_VARCHAR, false);
+        auto column = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
         size_t size = slices.size();
         status = page_decoder.next_batch(&size, column.get());
         auto* values = reinterpret_cast<const Slice*>(column->raw_data());
@@ -126,7 +126,7 @@ public:
 
         page_decoder.seek_to_position_in_page(0);
         ASSERT_EQ(0, page_decoder.current_index());
-        column = ChunkHelper::column_from_field_type(LOGICAL_TYPE_VARCHAR, false);
+        column = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
         vectorized::SparseRange read_range;
         read_range.add(vectorized::Range(0, 2));
         read_range.add(vectorized::Range(4, 7));
@@ -186,8 +186,8 @@ public:
             int slice_index = random() % results.size();
             //int slice_index = 1;
             PageDecoderOptions dict_decoder_options;
-            auto dict_page_decoder = std::make_unique<BinaryPlainPageDecoder<LOGICAL_TYPE_VARCHAR>>(
-                    dict_slice.slice(), dict_decoder_options);
+            auto dict_page_decoder =
+                    std::make_unique<BinaryPlainPageDecoder<TYPE_VARCHAR>>(dict_slice.slice(), dict_decoder_options);
             status = dict_page_decoder->init();
             ASSERT_TRUE(status.ok());
 
@@ -203,13 +203,13 @@ public:
             ASSERT_TRUE(st.ok());
 
             PageDecoderOptions decoder_options;
-            BinaryDictPageDecoder<LOGICAL_TYPE_VARCHAR> page_decoder(encoded_data, decoder_options);
+            BinaryDictPageDecoder<TYPE_VARCHAR> page_decoder(encoded_data, decoder_options);
             status = page_decoder.init();
             page_decoder.set_dict_decoder(dict_page_decoder.get());
             ASSERT_TRUE(status.ok());
 
             //check values
-            auto column = ChunkHelper::column_from_field_type(LOGICAL_TYPE_VARCHAR, false);
+            auto column = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
 
             size_t num = 1;
             size_t pos = random() % (page_start_ids[slice_index + 1] - page_start_ids[slice_index]);
@@ -229,7 +229,7 @@ public:
             status = page_decoder.seek_to_position_in_page(0);
             ASSERT_TRUE(status.ok());
             size_t slice_num = page_start_ids[slice_index + 1] - page_start_ids[slice_index];
-            auto dst = ChunkHelper::column_from_field_type(LOGICAL_TYPE_VARCHAR, false);
+            auto dst = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
             vectorized::SparseRange read_range;
             read_range.add(vectorized::Range(0, slice_num / 3));
             read_range.add(vectorized::Range(slice_num / 2, (slice_num * 2 / 3)));

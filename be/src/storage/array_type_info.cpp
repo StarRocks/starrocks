@@ -174,7 +174,7 @@ public:
 
     size_t size() const override { return sizeof(Collection); }
 
-    LogicalType type() const override { return LOGICAL_TYPE_ARRAY; }
+    LogicalType type() const override { return TYPE_ARRAY; }
 
     const TypeInfoPtr& item_type_info() const { return _item_type_info; }
 

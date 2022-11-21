@@ -51,10 +51,10 @@ public:
         V2_0,
     };
 
-    // keep the order with PrimitiveType
+    // keep the order with LogicalType
 
     struct TypeDesc {
-        ::starrocks::PrimitiveType type = ::starrocks::TYPE_NULL;
+        ::starrocks::LogicalType type = ::starrocks::TYPE_NULL;
 
         /// Only valid if type == TYPE_DECIMAL
         int precision = 0;

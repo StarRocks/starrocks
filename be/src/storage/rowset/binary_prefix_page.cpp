@@ -288,7 +288,7 @@ Status BinaryPrefixPageDecoder<Type>::next_batch(const vectorized::SparseRange& 
     size_t to_read = std::min(static_cast<size_t>(range.span_size()), static_cast<size_t>(_num_values - _cur_pos));
 
     vectorized::SparseRangeIterator iter = range.new_iterator();
-    if constexpr (Type == LOGICAL_TYPE_CHAR) {
+    if constexpr (Type == TYPE_CHAR) {
         while (to_read > 0) {
             seek_to_position_in_page(iter.begin());
             bool ok = dst->append_strings({_current_value});
@@ -317,7 +317,7 @@ Status BinaryPrefixPageDecoder<Type>::next_batch(const vectorized::SparseRange& 
     return Status::OK();
 }
 
-template class BinaryPrefixPageDecoder<LOGICAL_TYPE_CHAR>;
-template class BinaryPrefixPageDecoder<LOGICAL_TYPE_VARCHAR>;
+template class BinaryPrefixPageDecoder<TYPE_CHAR>;
+template class BinaryPrefixPageDecoder<TYPE_VARCHAR>;
 
 } // namespace starrocks

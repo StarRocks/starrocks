@@ -57,7 +57,7 @@ StatusOr<bool> BloomFilterIndexReader::load(FileSystem* fs, const std::string& f
 
 Status BloomFilterIndexReader::_do_load(FileSystem* fs, const std::string& filename, const BloomFilterIndexPB& meta,
                                         bool use_page_cache, bool kept_in_memory) {
-    _typeinfo = get_type_info(LOGICAL_TYPE_VARCHAR);
+    _typeinfo = get_type_info(TYPE_VARCHAR);
     _algorithm = meta.algorithm();
     _hash_strategy = meta.hash_strategy();
     const IndexedColumnMetaPB& bf_index_meta = meta.bloom_filter();
@@ -81,7 +81,7 @@ Status BloomFilterIndexReader::new_iterator(std::unique_ptr<BloomFilterIndexIter
 }
 
 Status BloomFilterIndexIterator::read_bloom_filter(rowid_t ordinal, std::unique_ptr<BloomFilter>* bf) {
-    auto column = ChunkHelper::column_from_field_type(LOGICAL_TYPE_VARCHAR, false);
+    auto column = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
     RETURN_IF_ERROR(_bloom_filter_iter->seek_to_ordinal(ordinal));
     size_t num_to_read = 1;
     size_t num_read = num_to_read;

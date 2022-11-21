@@ -811,7 +811,7 @@ bool is_group_columns_fixed_size(std::vector<ExprContext*>& group_by_expr_ctxs, 
             *has_null = true;
             size += 1; // 1 bytes for  null flag.
         }
-        PrimitiveType ptype = ctx->root()->type().type;
+        LogicalType ptype = ctx->root()->type().type;
         size_t byte_size = get_size_of_fixed_length_type(ptype);
         if (byte_size == 0) return false;
         size += byte_size;

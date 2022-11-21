@@ -45,7 +45,7 @@ class FrameOfReferencePageTest : public testing::Test {
 public:
     template <LogicalType type, class PageDecoderType>
     void copy_one(PageDecoderType* decoder, typename TypeTraits<type>::CppType* ret) {
-        PrimitiveType ptype = scalar_field_type_to_primitive_type(type);
+        LogicalType ptype = scalar_field_type_to_primitive_type(type);
         TypeDescriptor index_type(ptype);
         // TODO(alvinz): To reuse this colum
         auto column = vectorized::ColumnHelper::create_column(index_type, false);
@@ -164,8 +164,8 @@ TEST_F(FrameOfReferencePageTest, TestInt32BlockEncoderRandom) {
         ints.get()[i] = random();
     }
 
-    test_encode_decode_page_template<LOGICAL_TYPE_INT>(ints.get(), size);
-    test_encode_decode_page_vectorize<LOGICAL_TYPE_INT>(ints.get(), size);
+    test_encode_decode_page_template<TYPE_INT>(ints.get(), size);
+    test_encode_decode_page_vectorize<TYPE_INT>(ints.get(), size);
 }
 
 TEST_F(FrameOfReferencePageTest, TestInt32BlockEncoderEqual) {
@@ -176,8 +176,8 @@ TEST_F(FrameOfReferencePageTest, TestInt32BlockEncoderEqual) {
         ints.get()[i] = 12345;
     }
 
-    test_encode_decode_page_template<LOGICAL_TYPE_INT>(ints.get(), size);
-    test_encode_decode_page_vectorize<LOGICAL_TYPE_INT>(ints.get(), size);
+    test_encode_decode_page_template<TYPE_INT>(ints.get(), size);
+    test_encode_decode_page_vectorize<TYPE_INT>(ints.get(), size);
 }
 
 TEST_F(FrameOfReferencePageTest, TestInt32BlockEncoderSequence) {
@@ -188,8 +188,8 @@ TEST_F(FrameOfReferencePageTest, TestInt32BlockEncoderSequence) {
         ints.get()[i] = 12345 + i;
     }
 
-    test_encode_decode_page_template<LOGICAL_TYPE_INT>(ints.get(), size);
-    test_encode_decode_page_vectorize<LOGICAL_TYPE_INT>(ints.get(), size);
+    test_encode_decode_page_template<TYPE_INT>(ints.get(), size);
+    test_encode_decode_page_vectorize<TYPE_INT>(ints.get(), size);
 }
 
 TEST_F(FrameOfReferencePageTest, TestInt64BlockEncoderSequence) {
@@ -200,12 +200,12 @@ TEST_F(FrameOfReferencePageTest, TestInt64BlockEncoderSequence) {
         ints.get()[i] = 21474836478 + i;
     }
 
-    test_encode_decode_page_template<LOGICAL_TYPE_BIGINT>(ints.get(), size);
-    test_encode_decode_page_vectorize<LOGICAL_TYPE_BIGINT>(ints.get(), size);
+    test_encode_decode_page_template<TYPE_BIGINT>(ints.get(), size);
+    test_encode_decode_page_vectorize<TYPE_BIGINT>(ints.get(), size);
 
-    test_encode_decode_page_template<LOGICAL_TYPE_DATETIME_V1>(ints.get(), size);
+    test_encode_decode_page_template<TYPE_DATETIME_V1>(ints.get(), size);
     // TODO(zhuming): uncomment this line after Column for DATETIME is implemented.
-    // test_encode_decode_page_vectorize<LOGICAL_TYPE_DATETIME_V1>(ints.get(), size);
+    // test_encode_decode_page_vectorize<TYPE_DATETIME_V1>(ints.get(), size);
 }
 
 TEST_F(FrameOfReferencePageTest, TestInt24BlockEncoderSequence) {
@@ -218,9 +218,9 @@ TEST_F(FrameOfReferencePageTest, TestInt24BlockEncoderSequence) {
         ints.get()[i] = first_value + i;
     }
 
-    test_encode_decode_page_template<LOGICAL_TYPE_DATE_V1>(ints.get(), size);
+    test_encode_decode_page_template<TYPE_DATE_V1>(ints.get(), size);
     // TODO(zhuming): uncomment this line after Column for DATE is implemented.
-    // test_encode_decode_page_vectorize<LOGICAL_TYPE_DATE_V1>(ints.get(), size);
+    // test_encode_decode_page_vectorize<TYPE_DATE_V1>(ints.get(), size);
 }
 
 TEST_F(FrameOfReferencePageTest, TestInt128BlockEncoderSequence) {
@@ -233,8 +233,8 @@ TEST_F(FrameOfReferencePageTest, TestInt128BlockEncoderSequence) {
         ints.get()[i] = first_value + i;
     }
 
-    test_encode_decode_page_template<LOGICAL_TYPE_LARGEINT>(ints.get(), size);
-    test_encode_decode_page_vectorize<LOGICAL_TYPE_LARGEINT>(ints.get(), size);
+    test_encode_decode_page_template<TYPE_LARGEINT>(ints.get(), size);
+    test_encode_decode_page_vectorize<TYPE_LARGEINT>(ints.get(), size);
 }
 
 TEST_F(FrameOfReferencePageTest, TestInt24BlockEncoderMinMax) {
@@ -242,9 +242,9 @@ TEST_F(FrameOfReferencePageTest, TestInt24BlockEncoderMinMax) {
     ints.get()[0] = 0;
     ints.get()[1] = 0xFFFFFF;
 
-    test_encode_decode_page_template<LOGICAL_TYPE_DATE_V1>(ints.get(), 2);
+    test_encode_decode_page_template<TYPE_DATE_V1>(ints.get(), 2);
     // TODO(zhuming): uncomment this line after Column for DATE is implemented.
-    // test_encode_decode_page_vectorize<LOGICAL_TYPE_DATE_V1>(ints.get(), 2);
+    // test_encode_decode_page_vectorize<TYPE_DATE_V1>(ints.get(), 2);
 }
 
 TEST_F(FrameOfReferencePageTest, TestInt128BlockEncoderMinMax) {
@@ -252,8 +252,8 @@ TEST_F(FrameOfReferencePageTest, TestInt128BlockEncoderMinMax) {
     ints.get()[0] = numeric_limits<int128_t>::lowest();
     ints.get()[1] = numeric_limits<int128_t>::max();
 
-    test_encode_decode_page_template<LOGICAL_TYPE_LARGEINT>(ints.get(), 2);
-    test_encode_decode_page_vectorize<LOGICAL_TYPE_LARGEINT>(ints.get(), 2);
+    test_encode_decode_page_template<TYPE_LARGEINT>(ints.get(), 2);
+    test_encode_decode_page_vectorize<TYPE_LARGEINT>(ints.get(), 2);
 }
 
 TEST_F(FrameOfReferencePageTest, TestInt32SequenceBlockEncoderSize) {
@@ -264,7 +264,7 @@ TEST_F(FrameOfReferencePageTest, TestInt32SequenceBlockEncoderSize) {
     }
     PageBuilderOptions builder_options;
     builder_options.data_page_size = 256 * 1024;
-    FrameOfReferencePageBuilder<LOGICAL_TYPE_INT> page_builder(builder_options);
+    FrameOfReferencePageBuilder<TYPE_INT> page_builder(builder_options);
     size = page_builder.add(reinterpret_cast<const uint8_t*>(ints.get()), size);
     OwnedSlice s = page_builder.finish()->build();
     // body: 4 bytes min value + 128 * 1 /8 packing value = 20
@@ -280,7 +280,7 @@ TEST_F(FrameOfReferencePageTest, TestFirstLastValue) {
     }
     PageBuilderOptions builder_options;
     builder_options.data_page_size = 256 * 1024;
-    FrameOfReferencePageBuilder<LOGICAL_TYPE_INT> page_builder(builder_options);
+    FrameOfReferencePageBuilder<TYPE_INT> page_builder(builder_options);
     size = page_builder.add(reinterpret_cast<const uint8_t*>(ints.get()), size);
     OwnedSlice s = page_builder.finish()->build();
     int32_t first_value = -1;
@@ -299,7 +299,7 @@ TEST_F(FrameOfReferencePageTest, TestInt32NormalBlockEncoderSize) {
     }
     PageBuilderOptions builder_options;
     builder_options.data_page_size = 256 * 1024;
-    FrameOfReferencePageBuilder<LOGICAL_TYPE_INT> page_builder(builder_options);
+    FrameOfReferencePageBuilder<TYPE_INT> page_builder(builder_options);
     size = page_builder.add(reinterpret_cast<const uint8_t*>(ints.get()), size);
     OwnedSlice s = page_builder.finish()->build();
     // body: 4 bytes min value + 128 * 7 /8 packing value = 116
