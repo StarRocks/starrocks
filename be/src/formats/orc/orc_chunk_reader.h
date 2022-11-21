@@ -145,7 +145,9 @@ private:
 
     // Access ORC columns by name. By default,
     // columns in ORC files are accessed by their ordinal position in the Hive table definition.
+    // Only affect first level behavior, about struct subfield, we still accessed by subfield name rather than position.
     // This value now is fixed, in future, it can be passed from FE.
+    // NOTICE: In broker mode, this value will be set true.
     // We make the same behavior as Trino & Presto.
     // https://trino.io/docs/current/connector/hive.html?highlight=hive#orc-format-configuration-properties
     bool _use_orc_column_names = false;

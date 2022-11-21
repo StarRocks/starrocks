@@ -161,6 +161,7 @@ Status OrcMappingFactory::_init_orc_mapping(std::unique_ptr<OrcMapping>& mapping
     // build mapping for [SlotDescriptor's name -> SlotDescriptor' pos]
     std::unordered_map<std::string, size_t> slot_descriptor_name_2_slot_descriptor_pos;
     for (size_t i = 0; i < slot_descs.size(); i++) {
+        if (slot_descs[i] == nullptr) continue;
         slot_descriptor_name_2_slot_descriptor_pos.emplace(format_column_name(slot_descs[i]->col_name(), case_sensitve),
                                                            i);
     }
