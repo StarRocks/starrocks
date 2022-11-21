@@ -712,4 +712,6 @@ CONF_String(dependency_librdkafka_debug, "all");
 // The default value is set as the THREAD_POOL_SIZE of RoutineLoadTaskScheduler of FE.
 CONF_Int32(internal_service_async_thread_num, "10");
 
+// Used to limit buffer size of tablet send channel.
+CONF_mInt64(send_channel_buffer_limit, "67108864");
 } // namespace starrocks::config
