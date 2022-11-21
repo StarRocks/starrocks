@@ -32,6 +32,7 @@
 #include <utility>
 
 #include "column/chunk.h"
+#include "column/vectorized_fwd.h"
 #include "exec/sort_exec_exprs.h"
 #include "gen_cpp/data.pb.h"
 #include "runtime/chunk_cursor.h"
@@ -184,7 +185,10 @@ Status DataStreamRecvr::get_next(vectorized::ChunkPtr* chunk, bool* eos) {
 
 Status DataStreamRecvr::get_next_for_pipeline(vectorized::ChunkPtr* chunk, std::atomic<bool>* eos, bool* should_exit) {
     DCHECK(_cascade_merger);
-    return _cascade_merger->get_next(chunk, eos, should_exit);
+    ChunkUniquePtr chunk_ptr;
+    RETURN_IF_ERROR(_cascade_merger->get_next(&chunk_ptr, eos, should_exit));
+    *chunk = std::move(chunk_ptr);
+    return Status::OK();
 }
 
 bool DataStreamRecvr::is_data_ready() {

@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
-#include "chunks_sorter_full_sort.h"
+#include "exec/vectorized/chunks_sorter_full_sort.h"
 
 #include "exec/vectorized/sorting/merge.h"
 #include "exec/vectorized/sorting/sort_permute.h"
@@ -19,8 +19,8 @@ ChunksSorterFullSort::ChunksSorterFullSort(RuntimeState* state, const std::vecto
 ChunksSorterFullSort::~ChunksSorterFullSort() = default;
 
 Status ChunksSorterFullSort::update(RuntimeState* state, const ChunkPtr& chunk) {
-    _merge_unsorted(state, chunk);
-    _partial_sort(state, false);
+    RETURN_IF_ERROR(_merge_unsorted(state, chunk));
+    RETURN_IF_ERROR(_partial_sort(state, false));
 
     return Status::OK();
 }
@@ -78,6 +78,7 @@ Status ChunksSorterFullSort::_merge_sorted(RuntimeState* state) {
 Status ChunksSorterFullSort::do_done(RuntimeState* state) {
     RETURN_IF_ERROR(_partial_sort(state, true));
     RETURN_IF_ERROR(_merge_sorted(state));
+
     return Status::OK();
 }
 

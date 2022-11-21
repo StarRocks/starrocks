@@ -452,10 +452,6 @@ CONF_Int32(num_cores, "0");
 
 // CONF_Bool(thread_creation_fault_injection, "false");
 
-// Set this to encrypt and perform an integrity
-// check on all data spilled to disk during a query
-// CONF_Bool(disk_spill_encryption, "false");
-
 // When BE start, If there is a broken disk, BE process will exit by default.
 // Otherwise, we will ignore the broken disk,
 CONF_Bool(ignore_broken_disk, "false");
@@ -848,6 +844,17 @@ CONF_Int16(jdbc_minimum_idle_connections, "1");
 // this setting only applies when jdbc_minimum_idle_connections is less than jdbc_connection_pool_size.
 // The minimum allowed value is 10000(10 seconds).
 CONF_Int32(jdbc_connection_idle_timeout_ms, "600000");
+
+// spill file size (memory table size). default size: 100M
+CONF_Int32(spill_file_size, "104857600");
+// spill mem table pool size
+CONF_Int32(spill_mem_table_pool_size, "2");
+// spill dirs
+CONF_String(spill_local_storage_dir, "spill");
+
+CONF_Double(spill_query_limit_threhold, "0.7");
+// 10M
+CONF_Int64(spill_operator_min_bytes, "104857600");
 
 // Now, only get_info is processed by _async_thread_pool, and only needs a small number of threads.
 // The default value is set as the THREAD_POOL_SIZE of RoutineLoadTaskScheduler of FE.

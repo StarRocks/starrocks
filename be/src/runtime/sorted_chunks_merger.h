@@ -90,10 +90,12 @@ public:
     ~CascadeChunkMerger() = default;
 
     Status init(const std::vector<ChunkProvider>& has_suppliers, const std::vector<ExprContext*>* sort_exprs,
+                const SortDescs& _sort_desc);
+    Status init(const std::vector<ChunkProvider>& has_suppliers, const std::vector<ExprContext*>* sort_exprs,
                 const std::vector<bool>* sort_orders, const std::vector<bool>* null_firsts);
 
     bool is_data_ready();
-    Status get_next(ChunkPtr* chunk, std::atomic<bool>* eos, bool* should_exit);
+    Status get_next(ChunkUniquePtr* chunk, std::atomic<bool>* eos, bool* should_exit);
 
 private:
     RuntimeState* _state;
@@ -104,7 +106,7 @@ private:
     std::vector<std::unique_ptr<SimpleChunkSortCursor>> _cursors;
 
     std::unique_ptr<MergeCursorsCascade> _merger;
-    ChunkSlice _current_chunk;
+    ChunkSlice<> _current_chunk;
 };
 
 } // namespace vectorized

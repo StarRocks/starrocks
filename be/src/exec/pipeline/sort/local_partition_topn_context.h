@@ -8,6 +8,10 @@
 #include "exec/vectorized/partition/chunks_partitioner.h"
 #include "runtime/runtime_state.h"
 
+namespace starrocks {
+class RuntimeFilterBuildDescriptor;
+}
+
 namespace starrocks::pipeline {
 
 class LocalPartitionTopnContext;
@@ -85,14 +89,11 @@ using LocalPartitionTopnContextPtr = std::shared_ptr<LocalPartitionTopnContext>;
 
 class LocalPartitionTopnContextFactory {
 public:
-    LocalPartitionTopnContextFactory(const int32_t degree_of_parallelism, const std::vector<TExpr>& t_partition_exprs,
-                                     const std::vector<ExprContext*>& sort_exprs, std::vector<bool> is_asc_order,
-                                     std::vector<bool> is_null_first, std::string sort_keys, int64_t offset,
-                                     int64_t partition_limit, const TTopNType::type topn_type,
-                                     const std::vector<OrderByType>& order_by_types,
-                                     TupleDescriptor* materialized_tuple_desc,
-                                     const RowDescriptor& parent_node_row_desc,
-                                     const RowDescriptor& parent_node_child_row_desc);
+    LocalPartitionTopnContextFactory(RuntimeState* state, const TTopNType::type topn_type, bool is_merging,
+                                     size_t num_right_sinkers, const std::vector<ExprContext*>& sort_exprs,
+                                     std::vector<bool> is_asc_order, std::vector<bool> is_null_first,
+                                     const std::vector<TExpr>& t_partition_exprs, int64_t offset, int64_t limit,
+                                     std::string sort_keys, const std::vector<OrderByType>& order_by_types);
 
     Status prepare(RuntimeState* state);
     LocalPartitionTopnContext* create(int32_t driver_sequence);
@@ -100,15 +101,15 @@ public:
 private:
     std::vector<LocalPartitionTopnContextPtr> _ctxs;
 
-    const std::vector<TExpr>& _t_partition_exprs;
+    const TTopNType::type _topn_type;
 
     vectorized::ChunksSorters _chunks_sorters;
     const std::vector<ExprContext*>& _sort_exprs;
     std::vector<bool> _is_asc_order;
     std::vector<bool> _is_null_first;
-    const std::string _sort_keys;
+    const std::vector<TExpr>& _t_partition_exprs;
     int64_t _offset;
     int64_t _partition_limit;
-    const TTopNType::type _topn_type;
+    const std::string _sort_keys;
 };
 } // namespace starrocks::pipeline

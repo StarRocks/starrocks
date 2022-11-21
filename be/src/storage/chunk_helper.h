@@ -5,6 +5,7 @@
 #include <memory>
 #include <queue>
 
+#include "column/chunk.h"
 #include "column/vectorized_fwd.h"
 #include "storage/field.h"
 #include "storage/olap_type_infra.h"
@@ -50,10 +51,12 @@ public:
     static std::shared_ptr<vectorized::Chunk> new_chunk(const vectorized::Schema& schema, size_t n);
 
     // Create an empty chunk according to the |tuple_desc| and reserve it of size |n|.
-    static std::shared_ptr<vectorized::Chunk> new_chunk(const TupleDescriptor& tuple_desc, size_t n);
+    static vectorized::ChunkUniquePtr new_chunk(const TupleDescriptor& tuple_desc, size_t n);
 
     // Create an empty chunk according to the |slots| and reserve it of size |n|.
-    static std::shared_ptr<vectorized::Chunk> new_chunk(const std::vector<SlotDescriptor*>& slots, size_t n);
+    static vectorized::ChunkUniquePtr new_chunk(const std::vector<SlotDescriptor*>& slots, size_t n);
+
+    static void materialize_nullable(vectorized::ChunkPtr& chunk, const TupleDescriptor& tuple_desc);
 
     static vectorized::Chunk* new_chunk_pooled(const vectorized::Schema& schema, size_t n, bool force = true);
 
