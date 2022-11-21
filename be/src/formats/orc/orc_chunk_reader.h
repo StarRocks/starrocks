@@ -151,8 +151,6 @@ private:
     bool _use_orc_column_names = false;
     std::unique_ptr<OrcMapping> _root_selected_mapping;
     std::vector<TypeDescriptor> _src_types;
-    // _src_slot index to position in orc
-    std::vector<int> _position_in_orc;
     // slot id to position in orc.
     std::unordered_map<SlotId, int> _slot_id_to_position;
     std::vector<Expr*> _cast_exprs;

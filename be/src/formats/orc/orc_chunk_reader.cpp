@@ -1348,8 +1348,9 @@ Status OrcChunkReader::init(std::unique_ptr<orc::Reader> reader) {
 
 Status OrcChunkReader::_init_position_in_orc() {
     int column_size = _src_slot_descriptors.size();
-    _position_in_orc.clear();
-    _position_in_orc.resize(column_size);
+    std::vector<int> position_in_orc;
+    position_in_orc.clear();
+    position_in_orc.resize(column_size);
     _slot_id_to_position.clear();
 
     std::unordered_map<int, int> column_id_to_pos;
@@ -1381,7 +1382,7 @@ Status OrcChunkReader::_init_position_in_orc() {
             return Status::NotFound(s);
         }
         int pos = it2->second;
-        _position_in_orc[i] = pos;
+        position_in_orc[i] = pos;
         SlotId id = slot_desc->id();
         _slot_id_to_position[id] = pos;
     }
@@ -1389,12 +1390,12 @@ Status OrcChunkReader::_init_position_in_orc() {
     if (_lazy_load_ctx != nullptr) {
         for (int i = 0; i < _lazy_load_ctx->active_load_slots.size(); i++) {
             int src_index = _lazy_load_ctx->active_load_indices[i];
-            int pos = _position_in_orc[src_index];
+            int pos = position_in_orc[src_index];
             _lazy_load_ctx->active_load_orc_positions[i] = pos;
         }
         for (int i = 0; i < _lazy_load_ctx->lazy_load_slots.size(); i++) {
             int src_index = _lazy_load_ctx->lazy_load_indices[i];
-            int pos = _position_in_orc[src_index];
+            int pos = position_in_orc[src_index];
             _lazy_load_ctx->lazy_load_orc_positions[i] = pos;
         }
     }
@@ -1514,7 +1515,6 @@ Status OrcChunkReader::_init_src_types(const std::unique_ptr<OrcMapping>& mappin
         if (slot_desc == nullptr) {
             continue;
         }
-        //        int pos_of_orc = _position_in_orc[i];
         const orc::Type* orc_type =
                 _reader->getType().getSubtypeByColumnId(mapping->get_column_id_or_child_mapping(i).orc_column_id);
         RETURN_IF_ERROR(_create_type_descriptor_by_orc(
@@ -1586,7 +1586,6 @@ OrcChunkReader::~OrcChunkReader() {
     _src_types.clear();
     _slot_id_to_desc.clear();
     _slot_id_to_position.clear();
-    _position_in_orc.clear();
     _cast_exprs.clear();
     _fill_functions.clear();
 }
@@ -1616,7 +1615,7 @@ Status OrcChunkReader::_fill_chunk(ChunkPtr* chunk, const std::vector<SlotDescri
                                    const std::vector<int>* indices) {
     int column_size = src_slot_descriptors.size();
     DCHECK_GT(_batch->numElements, 0);
-    const auto& batch_vec = down_cast<orc::StructVectorBatch*>(_batch.get())->fields;
+    const auto& batch_vec = down_cast<orc::StructVectorBatch*>(_batch.get());
     if (_broker_load_mode) {
         // always allocate load filter. it's much easier to use in fill chunk function.
         if (_broker_load_filter == nullptr) {
@@ -1634,7 +1633,9 @@ Status OrcChunkReader::_fill_chunk(ChunkPtr* chunk, const std::vector<SlotDescri
             src_index = (*indices)[src_index];
         }
         set_current_slot(slot_desc);
-        orc::ColumnVectorBatch* cvb = batch_vec[_position_in_orc[src_index]];
+        orc::ColumnVectorBatch* cvb =
+                batch_vec->fieldsColumnIdMap[_root_selected_mapping->get_column_id_or_child_mapping(src_index)
+                                                     .orc_column_id];
         if (!slot_desc->is_nullable() && cvb->hasNulls) {
             if (_broker_load_mode) {
                 std::string error_msg =

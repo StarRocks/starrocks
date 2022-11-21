@@ -158,13 +158,6 @@ Status OrcMappingFactory::_init_orc_mapping(std::unique_ptr<OrcMapping>& mapping
     DCHECK(!use_orc_column_names);
     DCHECK(hive_column_names != nullptr);
 
-    // build mapping for orc [orc field name -> pos in orc]
-    std::unordered_map<std::string, size_t> orc_fieldname_2_pos;
-    for (size_t i = 0; i < orc_root_type.getSubtypeCount(); i++) {
-        std::string col_name = format_column_name(orc_root_type.getFieldName(i), case_sensitve);
-        orc_fieldname_2_pos.emplace(col_name, i);
-    }
-
     // build mapping for [SlotDescriptor's name -> SlotDescriptor' pos]
     std::unordered_map<std::string, size_t> slot_descriptor_name_2_slot_descriptor_pos;
     for (size_t i = 0; i < slot_descs.size(); i++) {
@@ -185,7 +178,7 @@ Status OrcMappingFactory::_init_orc_mapping(std::unique_ptr<OrcMapping>& mapping
         auto it = slot_descriptor_name_2_slot_descriptor_pos.find(find_column_name);
         if (it == slot_descriptor_name_2_slot_descriptor_pos.end()) {
             // The column name in hive_column_names has no corresponding column name in slot_description
-            // TODO(SmithCruise) This situtaion only happended in UT, I'm not sure this situtaion will happend in production.
+            // TODO(SmithCruise) This situtaion only happended in UT now, I'm not sure this situtaion will happend in production.
             continue;
             //  auto s = strings::Substitute("OrcMappingFactory::_init_orc_mapping not found column name $0", find_column_name);
             //  return Status::NotFound(s);
