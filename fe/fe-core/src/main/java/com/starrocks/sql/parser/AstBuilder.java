@@ -1308,8 +1308,25 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
         TableName targetTableName = qualifiedNameToTableName(qualifiedName);
         List<ColumnAssignment> assignments = visit(context.assignmentList().assignment(), ColumnAssignment.class);
+        List<Relation> fromRelations = null;
+        if (context.fromClause() instanceof StarRocksParser.DualContext) {
+            ArrayList<Expr> row = new ArrayList<>();
+            List<String> columnNames = new ArrayList<>();
+            row.add(NullLiteral.create(Type.NULL));
+            columnNames.add("");
+            List<ArrayList<Expr>> rows = new ArrayList<>();
+            rows.add(row);
+            ValuesRelation valuesRelation = new ValuesRelation(rows, columnNames);
+            valuesRelation.setNullValues(true);
+            fromRelations = Lists.newArrayList(valuesRelation);
+        } else {
+            StarRocksParser.FromContext fromContext = (StarRocksParser.FromContext) context.fromClause();
+            if (fromContext.relations() != null) {
+                fromRelations = visit(fromContext.relations().relation(), Relation.class);
+            }
+        }
         Expr where = context.where != null ? (Expr) visit(context.where) : null;
-        UpdateStmt ret = new UpdateStmt(targetTableName, assignments, where);
+        UpdateStmt ret = new UpdateStmt(targetTableName, assignments, fromRelations, where);
         if (context.explainDesc() != null) {
             ret.setIsExplain(true, getExplainType(context.explainDesc()));
         }
@@ -2461,7 +2478,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     .stream().map(Identifier::getValue).collect(toList());
         }
 
-
         StringLiteral stringLiteral = (StringLiteral) visit(context.string());
         // properties
         Map<String, String> properties = null;
@@ -2546,7 +2562,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         Map<String, String> properties = getProperties(context.properties());
 
-
         return new CreateFileStmt(fileName, catalog, properties);
     }
 
@@ -2560,7 +2575,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             catalog = dbName.toString();
         }
         Map<String, String> properties = getProperties(context.properties());
-
 
         return new DropFileStmt(fileName, catalog, properties);
     }
@@ -3222,7 +3236,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             SlotRef leftSlotRef = new SlotRef(qualifyTableName, "__QUALIFY__VALUE");
 
             BinaryPredicate.Operator op = getComparisonOperator(((TerminalNode) context.comparisonOperator()
-                            .getChild(0)).getSymbol());
+                    .getChild(0)).getSymbol());
             return new SelectRelation(selectListOuter, subqueryRelation,
                     new BinaryPredicate(op, leftSlotRef, rightValue), null, null);
         } else {
@@ -4928,7 +4942,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new PartitionRangeDesc(((StringLiteral) visit(context.string(0))).getStringValue(),
                 ((StringLiteral) visit(context.string(1))).getStringValue());
     }
-
 
     @Override
     public ParseNode visitSingleItemListPartitionDesc(StarRocksParser.SingleItemListPartitionDescContext context) {

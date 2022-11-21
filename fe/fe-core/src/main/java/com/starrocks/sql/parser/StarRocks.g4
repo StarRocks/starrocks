@@ -751,7 +751,7 @@ insertStatement
     ;
 
 updateStatement
-    : explainDesc? UPDATE qualifiedName SET assignmentList (WHERE where=expression)?
+    : explainDesc? UPDATE qualifiedName SET assignmentList fromClause (WHERE where=expression)?
     ;
 
 deleteStatement
