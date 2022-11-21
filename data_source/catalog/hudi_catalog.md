@@ -28,7 +28,7 @@ PROPERTIES ("key"="value", ...);
 参数说明：
 
 - `catalog_name`：Hudi catalog 的名称，必选参数。<br>命名要求如下：
-  - 必须由字母（a-z 或 A-Z）、数字（0-9）或下划线（_）组成，且只能以字母开头。
+  - 必须由字母 (a-z 或 A-Z)、数字 (0-9) 或下划线 (_) 组成，且只能以字母开头。
   - 总长度不能超过 64 个字符。
 
 - `PROPERTIES`：Hudi catalog 的属性，必选参数。<br>支持配置如下：
