@@ -90,8 +90,9 @@ public class IcebergScanNode extends ScanNode {
     }
 
     private void getAliveBackends() throws UserException {
-        ImmutableCollection<ComputeNode> computeNodes =
-                ImmutableList.copyOf(GlobalStateMgr.getCurrentSystemInfo().getComputeNodes());
+        String label = ConnectContext.get().getSessionVariable().getComputeNodeSelector();
+        ImmutableCollection<ComputeNode> computeNodes = ImmutableList.copyOf(
+                GlobalStateMgr.getCurrentSystemInfo().getIdComputeNode(label).values());
 
         for (ComputeNode computeNode : computeNodes) {
             if (computeNode.isAlive()) {

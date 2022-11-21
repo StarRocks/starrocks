@@ -25,6 +25,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class ComputeNode implements IComputable, Writable {
     private static final Logger LOG = LogManager.getLogger(ComputeNode.class);
 
+    @SerializedName("label")
+    private String label;
     @SerializedName("id")
     private long id;
     @SerializedName("host")
@@ -282,6 +284,14 @@ public class ComputeNode implements IComputable, Writable {
 
     public boolean isAvailable() {
         return this.isAlive.get() && !this.isDecommissioned.get();
+    }
+
+    public String getLabel() {
+        return label;
+    }
+
+    public void setLabel(String label) {
+        this.label = label;
     }
 
     public int getNumRunningQueries() {
