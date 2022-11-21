@@ -1566,8 +1566,7 @@ TEST(ColumnPredicateTest, test_in) {
         ASSERT_EQ("1,1,1,1,1", to_string(buff));
     }
     {
-        std::unique_ptr<ColumnPredicate> p(
-                new_column_in_predicate(get_type_info(TYPE_CHAR), 0, {"xyz", "yyy"}));
+        std::unique_ptr<ColumnPredicate> p(new_column_in_predicate(get_type_info(TYPE_CHAR), 0, {"xyz", "yyy"}));
         auto c = ChunkHelper::column_from_field_type(TYPE_CHAR, true);
         c->append_datum(Datum("abc"));
         c->append_datum(Datum("def"));
@@ -1691,8 +1690,7 @@ TEST(ColumnPredicateTest, test_no_in) {
         ASSERT_EQ("1,1,1,1,1", to_string(buff));
     }
     {
-        std::unique_ptr<ColumnPredicate> p(
-                new_column_not_in_predicate(get_type_info(TYPE_CHAR), 0, {"xyz", "yyy"}));
+        std::unique_ptr<ColumnPredicate> p(new_column_not_in_predicate(get_type_info(TYPE_CHAR), 0, {"xyz", "yyy"}));
         auto c = ChunkHelper::column_from_field_type(TYPE_CHAR, true);
         c->append_datum(Datum("abc"));
         c->append_datum(Datum("def"));
@@ -1956,8 +1954,7 @@ TEST(ColumnPredicateTest, zone_map_filter) {
     std::unique_ptr<ColumnPredicate> le_100(new_column_le_predicate(get_type_info(TYPE_INT), 0, "100"));
     std::unique_ptr<ColumnPredicate> is_null(new_column_null_predicate(get_type_info(TYPE_INT), 0, true));
     std::unique_ptr<ColumnPredicate> not_null(new_column_null_predicate(get_type_info(TYPE_INT), 0, false));
-    std::unique_ptr<ColumnPredicate> in_90_100(
-            new_column_in_predicate(get_type_info(TYPE_INT), 0, {"90", "100"}));
+    std::unique_ptr<ColumnPredicate> in_90_100(new_column_in_predicate(get_type_info(TYPE_INT), 0, {"90", "100"}));
     std::unique_ptr<ColumnPredicate> not_in_90_100(
             new_column_not_in_predicate(get_type_info(TYPE_INT), 0, {"90", "100"}));
 
@@ -2094,8 +2091,7 @@ TEST(ColumnPredicateTest, zone_map_filter_varchar) {
     std::unique_ptr<ColumnPredicate> le_xx(new_column_le_predicate(get_type_info(TYPE_VARCHAR), 0, "xx"));
     std::unique_ptr<ColumnPredicate> is_null(new_column_null_predicate(get_type_info(TYPE_VARCHAR), 0, true));
     std::unique_ptr<ColumnPredicate> not_null(new_column_null_predicate(get_type_info(TYPE_VARCHAR), 0, false));
-    std::unique_ptr<ColumnPredicate> in_xx_yy(
-            new_column_in_predicate(get_type_info(TYPE_VARCHAR), 0, {"xx", "yy"}));
+    std::unique_ptr<ColumnPredicate> in_xx_yy(new_column_in_predicate(get_type_info(TYPE_VARCHAR), 0, {"xx", "yy"}));
     std::unique_ptr<ColumnPredicate> not_in_xx_yy(
             new_column_not_in_predicate(get_type_info(TYPE_VARCHAR), 0, {"xx", "yy"}));
 
@@ -2167,8 +2163,7 @@ TEST(ColumnPredicateTest, test_convert_cmp_predicate) {
     // clang-format on
 
     for (auto predicate : testcases) {
-        std::unique_ptr<ColumnPredicate> p(
-                new_column_cmp_predicate(predicate, get_type_info(TYPE_BOOLEAN), 0, "1"));
+        std::unique_ptr<ColumnPredicate> p(new_column_cmp_predicate(predicate, get_type_info(TYPE_BOOLEAN), 0, "1"));
         const ColumnPredicate* new_p;
         ObjectPool op;
 
@@ -2202,8 +2197,7 @@ TEST(ColumnPredicateTest, test_convert_cmp_binary_predicate) {
     // clang-format on
 
     for (auto predicate : testcases) {
-        std::unique_ptr<ColumnPredicate> p(
-                new_column_cmp_predicate(predicate, get_type_info(TYPE_VARCHAR), 0, "1"));
+        std::unique_ptr<ColumnPredicate> p(new_column_cmp_predicate(predicate, get_type_info(TYPE_VARCHAR), 0, "1"));
 
         const ColumnPredicate* new_p;
         TypeInfoPtr new_type = get_type_info(TYPE_VARCHAR);

@@ -51,11 +51,11 @@ Status ChunksSorterHeapSort::update(RuntimeState* state, const ChunkPtr& chunk) 
         // Special optimization for single columns
         if (_sort_exprs->size() == 1) {
             switch ((*_sort_exprs)[0]->root()->type().type) {
-#define M(NAME)                                                                                                 \
+#define M(NAME)                                                                                               \
     case LogicalType::NAME: {                                                                                 \
         _do_filter_data = std::bind(&ChunksSorterHeapSort::_do_filter_data_for_type<LogicalType::NAME>, this, \
-                                    std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);       \
-        break;                                                                                                  \
+                                    std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);     \
+        break;                                                                                                \
     }
                 APPLY_FOR_ALL_SCALAR_TYPE(M)
 #undef M

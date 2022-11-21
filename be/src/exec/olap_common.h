@@ -117,12 +117,12 @@ public:
 private:
     std::string _column_name;
     LogicalType _column_type{TYPE_UNKNOWN}; // Column type (eg: TINYINT,SMALLINT,INT,BIGINT)
-    int _precision;                           // casting a decimalv3-typed value into string need precision
-    int _scale;                               // casting a decimalv3-typed value into string need scale
-    T _type_min;                              // Column type's min value
-    T _type_max;                              // Column type's max value
-    T _low_value;                             // Column's low value, closed interval at left
-    T _high_value;                            // Column's high value, open interval at right
+    int _precision;                         // casting a decimalv3-typed value into string need precision
+    int _scale;                             // casting a decimalv3-typed value into string need scale
+    T _type_min;                            // Column type's min value
+    T _type_max;                            // Column type's max value
+    T _low_value;                           // Column's low value, closed interval at left
+    T _high_value;                          // Column's high value, open interval at right
     SQLFilterOp _low_op;
     SQLFilterOp _high_op;
     std::set<T> _fixed_values; // Column's fixed values

@@ -75,10 +75,10 @@ template <template <LogicalType, typename... Args> typename Function, typename..
 void dispatch_function(LogicalType type, Args&&... args) {
     bool result = false;
     switch (type) {
-#define M(NAME)                                                                      \
+#define M(NAME)                                                                    \
     case LogicalType::NAME: {                                                      \
         result = Function<LogicalType::NAME>::append(std::forward<Args>(args)...); \
-        break;                                                                       \
+        break;                                                                     \
     }
         APPLY_FOR_ALL_NUMBER_TYPE(M)
 #undef M

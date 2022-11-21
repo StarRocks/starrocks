@@ -29,14 +29,12 @@ public:
     void check_column(Column* column, LogicalType type, size_t row_size);
 
 private:
-    LogicalType _type[9] = {TYPE_TINYINT, TYPE_SMALLINT, TYPE_INT,
-                            TYPE_BIGINT,  TYPE_LARGEINT, TYPE_FLOAT,
-                            TYPE_DOUBLE,  TYPE_VARCHAR,  TYPE_CHAR};
+    LogicalType _type[9] = {TYPE_TINYINT, TYPE_SMALLINT, TYPE_INT,     TYPE_BIGINT, TYPE_LARGEINT,
+                            TYPE_FLOAT,   TYPE_DOUBLE,   TYPE_VARCHAR, TYPE_CHAR};
 
-    LogicalType _primitive_type[9] = {
-            LogicalType::TYPE_TINYINT, LogicalType::TYPE_SMALLINT, LogicalType::TYPE_INT,
-            LogicalType::TYPE_BIGINT,  LogicalType::TYPE_LARGEINT, LogicalType::TYPE_FLOAT,
-            LogicalType::TYPE_DOUBLE,  LogicalType::TYPE_VARCHAR,  LogicalType::TYPE_CHAR};
+    LogicalType _primitive_type[9] = {LogicalType::TYPE_TINYINT, LogicalType::TYPE_SMALLINT, LogicalType::TYPE_INT,
+                                      LogicalType::TYPE_BIGINT,  LogicalType::TYPE_LARGEINT, LogicalType::TYPE_FLOAT,
+                                      LogicalType::TYPE_DOUBLE,  LogicalType::TYPE_VARCHAR,  LogicalType::TYPE_CHAR};
 
     TSlotDescriptor _create_slot_desc(LogicalType type, const std::string& col_name, int col_pos);
     TupleDescriptor* _create_tuple_desc();

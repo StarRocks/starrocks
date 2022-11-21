@@ -55,8 +55,7 @@ TEST(DisjunctivePredicatesTest, TwoPredicateTest) {
     dict_mapping.resize(4);
     dict_mapping[2] = 1;
     dict_mapping[3] = 1;
-    auto dict =
-            pool.add(new_column_dict_conjuct_predicate(get_type_info(TYPE_INT), 1, std::move(dict_mapping)));
+    auto dict = pool.add(new_column_dict_conjuct_predicate(get_type_info(TYPE_INT), 1, std::move(dict_mapping)));
     conjuncts1.non_vec_preds().push_back(dict);
 
     DisjunctivePredicates predicates;

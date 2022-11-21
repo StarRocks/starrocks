@@ -51,8 +51,8 @@ public:
     }
 
 private:
-    std::unordered_map<std::tuple<std::string, std::vector<LogicalType>, std::vector<LogicalType>>,
-                       TableFunctionPtr, TableFunctionMapHash>
+    std::unordered_map<std::tuple<std::string, std::vector<LogicalType>, std::vector<LogicalType>>, TableFunctionPtr,
+                       TableFunctionMapHash>
             _infos_mapping;
     TableFunctionResolver(const TableFunctionResolver&) = delete;
     const TableFunctionResolver& operator=(const TableFunctionResolver&) = delete;

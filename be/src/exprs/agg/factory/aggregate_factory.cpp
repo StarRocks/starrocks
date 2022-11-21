@@ -115,9 +115,8 @@ static const AggregateFunction* get_function(const std::string& name, LogicalTyp
     return nullptr;
 }
 
-const AggregateFunction* get_aggregate_function(const std::string& name, LogicalType arg_type,
-                                                LogicalType return_type, bool is_null,
-                                                TFunctionBinaryType::type binary_type, int func_version) {
+const AggregateFunction* get_aggregate_function(const std::string& name, LogicalType arg_type, LogicalType return_type,
+                                                bool is_null, TFunctionBinaryType::type binary_type, int func_version) {
     return get_function(name, arg_type, return_type, false, is_null, binary_type, func_version);
 }
 

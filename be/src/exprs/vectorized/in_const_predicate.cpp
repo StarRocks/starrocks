@@ -33,13 +33,13 @@ ExprContext* VectorizedInConstPredicateBuilder::_create() {
     // and fill actual IN values later.
     switch (probe_type) {
 #define M(NAME)                                                                                                      \
-    case LogicalType::NAME: {                                                                                      \
-        if (_array_size != 0 && !VectorizedInConstPredicate<LogicalType::NAME>::can_use_array()) {                 \
+    case LogicalType::NAME: {                                                                                        \
+        if (_array_size != 0 && !VectorizedInConstPredicate<LogicalType::NAME>::can_use_array()) {                   \
             _st = Status::NotSupported(                                                                              \
                     strings::Substitute("Can not create in-const-predicate with array set on type $0", probe_type)); \
             return nullptr;                                                                                          \
         }                                                                                                            \
-        auto* in_pred = _pool->add(new VectorizedInConstPredicate<LogicalType::NAME>(node));                       \
+        auto* in_pred = _pool->add(new VectorizedInConstPredicate<LogicalType::NAME>(node));                         \
         in_pred->set_null_in_set(_null_in_set);                                                                      \
         in_pred->set_array_size(_array_size);                                                                        \
         _st = in_pred->prepare(_state);                                                                              \
@@ -71,7 +71,7 @@ Status VectorizedInConstPredicateBuilder::add_values(const ColumnPtr& column, si
     if (!column->is_nullable()) {
         switch (type) {
 #define M(FIELD_TYPE)                                                                 \
-    case LogicalType::FIELD_TYPE: {                                                 \
+    case LogicalType::FIELD_TYPE: {                                                   \
         using ColumnType = typename RunTimeTypeTraits<FIELD_TYPE>::ColumnType;        \
         auto* in_pred = (VectorizedInConstPredicate<FIELD_TYPE>*)(expr);              \
         auto& data_ptr = ColumnHelper::as_raw_column<ColumnType>(column)->get_data(); \
@@ -93,7 +93,7 @@ Status VectorizedInConstPredicateBuilder::add_values(const ColumnPtr& column, si
     } else {
         switch (type) {
 #define M(FIELD_TYPE)                                                                                           \
-    case LogicalType::FIELD_TYPE: {                                                                           \
+    case LogicalType::FIELD_TYPE: {                                                                             \
         using ColumnType = typename RunTimeTypeTraits<FIELD_TYPE>::ColumnType;                                  \
         auto* in_pred = (VectorizedInConstPredicate<FIELD_TYPE>*)(expr);                                        \
         auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(column);                            \

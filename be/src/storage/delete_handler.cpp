@@ -136,15 +136,14 @@ bool DeleteConditionHandler::is_condition_value_valid(const TabletColumn& column
         valid_condition = valid_unsigned_number<uint32_t>(value_str);
     } else if (field_type == TYPE_UNSIGNED_BIGINT) {
         valid_condition = valid_unsigned_number<uint64_t>(value_str);
-    } else if (field_type == TYPE_DECIMAL || field_type == TYPE_DECIMALV2 ||
-               is_decimalv3_field_type(field_type)) {
+    } else if (field_type == TYPE_DECIMAL || field_type == TYPE_DECIMALV2 || is_decimalv3_field_type(field_type)) {
         valid_condition = valid_decimal(value_str, column.precision(), column.scale());
     } else if (field_type == TYPE_CHAR || field_type == TYPE_VARCHAR) {
         if (value_str.size() <= column.length()) {
             valid_condition = true;
         }
-    } else if (field_type == TYPE_DATE_V1 || field_type == TYPE_DATE ||
-               field_type == TYPE_DATETIME_V1 || field_type == TYPE_DATETIME) {
+    } else if (field_type == TYPE_DATE_V1 || field_type == TYPE_DATE || field_type == TYPE_DATETIME_V1 ||
+               field_type == TYPE_DATETIME) {
         valid_condition = valid_datetime(value_str);
     } else if (field_type == TYPE_BOOLEAN) {
         valid_condition = valid_bool(value_str);

@@ -55,12 +55,12 @@ const static std::set<orc::TypeKind> g_orc_int_type = {
 
 // NOLINTNEXTLINE
 const static std::set<LogicalType> g_starrocks_int_type = {TYPE_BOOLEAN, TYPE_TINYINT,  TYPE_SMALLINT, TYPE_INT,
-                                                             TYPE_BIGINT,  TYPE_LARGEINT, TYPE_FLOAT,    TYPE_DOUBLE};
+                                                           TYPE_BIGINT,  TYPE_LARGEINT, TYPE_FLOAT,    TYPE_DOUBLE};
 
 const static std::set<orc::TypeKind> g_orc_decimal_type = {orc::DECIMAL};
 
 const static std::set<LogicalType> g_starrocks_decimal_type = {TYPE_DECIMAL32, TYPE_DECIMAL64, TYPE_DECIMAL128,
-                                                                 TYPE_DECIMALV2, TYPE_DECIMAL};
+                                                               TYPE_DECIMALV2, TYPE_DECIMAL};
 
 const static cctz::time_point<cctz::sys_seconds> CCTZ_UNIX_EPOCH =
         std::chrono::time_point_cast<cctz::sys_seconds>(std::chrono::system_clock::from_time_t(0));

@@ -69,8 +69,8 @@ public:
         // construct dict page
         OwnedSlice dict_slice = page_builder.get_dictionary_page()->build();
         PageDecoderOptions dict_decoder_options;
-        auto dict_page_decoder = std::make_unique<BinaryPlainPageDecoder<TYPE_VARCHAR>>(dict_slice.slice(),
-                                                                                                dict_decoder_options);
+        auto dict_page_decoder =
+                std::make_unique<BinaryPlainPageDecoder<TYPE_VARCHAR>>(dict_slice.slice(), dict_decoder_options);
         status = dict_page_decoder->init();
         ASSERT_TRUE(status.ok());
         // because every slice is unique
@@ -186,8 +186,8 @@ public:
             int slice_index = random() % results.size();
             //int slice_index = 1;
             PageDecoderOptions dict_decoder_options;
-            auto dict_page_decoder = std::make_unique<BinaryPlainPageDecoder<TYPE_VARCHAR>>(
-                    dict_slice.slice(), dict_decoder_options);
+            auto dict_page_decoder =
+                    std::make_unique<BinaryPlainPageDecoder<TYPE_VARCHAR>>(dict_slice.slice(), dict_decoder_options);
             status = dict_page_decoder->init();
             ASSERT_TRUE(status.ok());
 

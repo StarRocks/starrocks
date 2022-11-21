@@ -105,8 +105,7 @@ starrocks::vectorized::Field ChunkHelper::convert_field_to_format_v2(ColumnId id
     LogicalType type = TypeUtils::to_storage_format_v2(c.type());
 
     TypeInfoPtr type_info = nullptr;
-    if (type == TYPE_ARRAY || type == TYPE_DECIMAL32 || type == TYPE_DECIMAL64 ||
-        type == TYPE_DECIMAL128) {
+    if (type == TYPE_ARRAY || type == TYPE_DECIMAL32 || type == TYPE_DECIMAL64 || type == TYPE_DECIMAL128) {
         // ARRAY and DECIMAL should be handled specially
         // Array is nested type, the message is stored in TabletColumn
         // Decimal has precision and scale, the message is stored in TabletColumn

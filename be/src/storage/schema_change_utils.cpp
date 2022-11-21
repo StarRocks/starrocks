@@ -48,25 +48,25 @@ ColumnMapping* ChunkChanger::get_mutable_column_mapping(size_t column_index) {
 #define CONVERT_FROM_TYPE(from_type)                                                \
     {                                                                               \
         switch (new_type) {                                                         \
-        case TYPE_TINYINT:                                                  \
+        case TYPE_TINYINT:                                                          \
             TYPE_REINTERPRET_CAST(from_type, int8_t);                               \
-        case TYPE_UNSIGNED_TINYINT:                                         \
+        case TYPE_UNSIGNED_TINYINT:                                                 \
             TYPE_REINTERPRET_CAST(from_type, uint8_t);                              \
-        case TYPE_SMALLINT:                                                 \
+        case TYPE_SMALLINT:                                                         \
             TYPE_REINTERPRET_CAST(from_type, int16_t);                              \
-        case TYPE_UNSIGNED_SMALLINT:                                        \
+        case TYPE_UNSIGNED_SMALLINT:                                                \
             TYPE_REINTERPRET_CAST(from_type, uint16_t);                             \
-        case TYPE_INT:                                                      \
+        case TYPE_INT:                                                              \
             TYPE_REINTERPRET_CAST(from_type, int32_t);                              \
-        case TYPE_UNSIGNED_INT:                                             \
+        case TYPE_UNSIGNED_INT:                                                     \
             TYPE_REINTERPRET_CAST(from_type, uint32_t);                             \
-        case TYPE_BIGINT:                                                   \
+        case TYPE_BIGINT:                                                           \
             TYPE_REINTERPRET_CAST(from_type, int64_t);                              \
-        case TYPE_UNSIGNED_BIGINT:                                          \
+        case TYPE_UNSIGNED_BIGINT:                                                  \
             TYPE_REINTERPRET_CAST(from_type, uint64_t);                             \
-        case TYPE_LARGEINT:                                                 \
+        case TYPE_LARGEINT:                                                         \
             TYPE_REINTERPRET_CAST(from_type, int128_t);                             \
-        case TYPE_DOUBLE:                                                   \
+        case TYPE_DOUBLE:                                                           \
             TYPE_REINTERPRET_CAST(from_type, double);                               \
         default:                                                                    \
             LOG(WARNING) << "the column type which was altered to was unsupported." \

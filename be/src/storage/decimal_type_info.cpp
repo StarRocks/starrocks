@@ -11,8 +11,7 @@
 
 namespace starrocks {
 
-VALUE_GUARD(LogicalType, DecimalFTGuard, ft_is_decimal, TYPE_DECIMAL32, TYPE_DECIMAL64,
-            TYPE_DECIMAL128)
+VALUE_GUARD(LogicalType, DecimalFTGuard, ft_is_decimal, TYPE_DECIMAL32, TYPE_DECIMAL64, TYPE_DECIMAL128)
 
 VALUE_GUARD(LogicalType, InvalidFTGuard, ft_is_invalid, TYPE_MAX_VALUE);
 
@@ -65,7 +64,7 @@ public:
                                     int src_precision, int src_scale, int dst_precision, int dst_scale) {
 #define TO_DECIMAL_MACRO(n, m)                                                                               \
                                                                                                              \
-    if (src_type == TYPE_DECIMAL##n && dst_type == TYPE_DECIMAL##m) {                        \
+    if (src_type == TYPE_DECIMAL##n && dst_type == TYPE_DECIMAL##m) {                                        \
         int##n##_t src_datum = 0;                                                                            \
         int##m##_t dst_datum = 0;                                                                            \
         src_datum = unaligned_load<typeof(src_datum)>(src);                                                  \
@@ -99,7 +98,7 @@ public:
                                     int dst_scale) {
 #define TO_DECIMAL_MACRO(n, m)                                                                           \
                                                                                                          \
-    if (src_type == TYPE_DECIMAL##n && dst_type == TYPE_DECIMAL##m) {                    \
+    if (src_type == TYPE_DECIMAL##n && dst_type == TYPE_DECIMAL##m) {                                    \
         int##m##_t dst_val = 0;                                                                          \
         int##n##_t src_val = src_datum.get_int##n();                                                     \
         auto overflow = to_decimal<int##n##_t, int##m##_t>(&src_val, &dst_val, src_precision, src_scale, \

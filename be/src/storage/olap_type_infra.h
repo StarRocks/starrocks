@@ -11,36 +11,36 @@
 namespace starrocks {
 
 #define APPLY_FOR_TYPE_INTEGER(M) \
-    M(TYPE_TINYINT)       \
-    M(TYPE_SMALLINT)      \
-    M(TYPE_BIGINT)        \
-    M(TYPE_LARGEINT)      \
+    M(TYPE_TINYINT)               \
+    M(TYPE_SMALLINT)              \
+    M(TYPE_BIGINT)                \
+    M(TYPE_LARGEINT)              \
     M(TYPE_INT)
 
 #define APPLY_FOR_TYPE_DECIMAL(M) \
-    M(TYPE_DECIMAL)       \
-    M(TYPE_DECIMALV2)     \
-    M(TYPE_DECIMAL32)     \
-    M(TYPE_DECIMAL64)     \
+    M(TYPE_DECIMAL)               \
+    M(TYPE_DECIMALV2)             \
+    M(TYPE_DECIMAL32)             \
+    M(TYPE_DECIMAL64)             \
     M(TYPE_DECIMAL128)
 
-#define APPLY_FOR_TYPE_TIME(M)  \
-    M(TYPE_DATE_V1)     \
-    M(TYPE_DATE)        \
-    M(TYPE_DATETIME_V1) \
+#define APPLY_FOR_TYPE_TIME(M) \
+    M(TYPE_DATE_V1)            \
+    M(TYPE_DATE)               \
+    M(TYPE_DATETIME_V1)        \
     M(TYPE_DATETIME)
 
 // Types that support bitmap index
 #define APPLY_FOR_BITMAP_INDEX_TYPE(M) \
     APPLY_FOR_TYPE_INTEGER(M)          \
     APPLY_FOR_TYPE_TIME(M)             \
-    M(TYPE_UNSIGNED_INT)       \
-    M(TYPE_FLOAT)              \
-    M(TYPE_DOUBLE)             \
-    M(TYPE_CHAR)               \
-    M(TYPE_VARCHAR)            \
-    M(TYPE_BOOLEAN)            \
-    M(TYPE_DECIMAL)            \
+    M(TYPE_UNSIGNED_INT)               \
+    M(TYPE_FLOAT)                      \
+    M(TYPE_DOUBLE)                     \
+    M(TYPE_CHAR)                       \
+    M(TYPE_VARCHAR)                    \
+    M(TYPE_BOOLEAN)                    \
+    M(TYPE_DECIMAL)                    \
     M(TYPE_DECIMALV2)
 
 // Types that support bloomfilter(exclude tinyint/float/double)
@@ -48,66 +48,66 @@ namespace starrocks {
     APPLY_FOR_TYPE_INTEGER(M)         \
     APPLY_FOR_TYPE_DECIMAL(M)         \
     APPLY_FOR_TYPE_TIME(M)            \
-    M(TYPE_UNSIGNED_INT)      \
-    M(TYPE_CHAR)              \
+    M(TYPE_UNSIGNED_INT)              \
+    M(TYPE_CHAR)                      \
     M(TYPE_VARCHAR)
 
 // These types should be synced with LogicalType in olap_common.h
 #define APPLY_FOR_BASIC_LOGICAL_TYPE(M) \
     APPLY_FOR_BITMAP_INDEX_TYPE(M)      \
-    M(TYPE_JSON)                \
-    M(TYPE_DECIMAL32)           \
-    M(TYPE_DECIMAL64)           \
+    M(TYPE_JSON)                        \
+    M(TYPE_DECIMAL32)                   \
+    M(TYPE_DECIMAL64)                   \
     M(TYPE_DECIMAL128)
 
 #define APPLY_FOR_UNSIGNED_LOGICAL_TYPE(M) \
-    M(TYPE_UNSIGNED_INT)           \
-    M(TYPE_UNSIGNED_TINYINT)       \
-    M(TYPE_UNSIGNED_SMALLINT)      \
+    M(TYPE_UNSIGNED_INT)                   \
+    M(TYPE_UNSIGNED_TINYINT)               \
+    M(TYPE_UNSIGNED_SMALLINT)              \
     M(TYPE_UNSIGNED_BIGINT)
 
 #define APPLY_FOR_COMPLEX_LOGICAL_TYPE(M) \
-    M(TYPE_HLL)                   \
-    M(TYPE_STRUCT)                \
-    M(TYPE_MAP)                   \
-    M(TYPE_OBJECT)                \
+    M(TYPE_HLL)                           \
+    M(TYPE_STRUCT)                        \
+    M(TYPE_MAP)                           \
+    M(TYPE_OBJECT)                        \
     M(TYPE_PERCENTILE)
 
 #define APPLY_FOR_METRIC_FIELD_TYPE(M) \
-    M(TYPE_HLL)                \
-    M(TYPE_OBJECT)             \
+    M(TYPE_HLL)                        \
+    M(TYPE_OBJECT)                     \
     M(TYPE_PERCENTILE)
 
 #define APPLY_FOR_SUPPORTED_FIELD_TYPE(M) \
     APPLY_FOR_BASIC_LOGICAL_TYPE(M)       \
-    M(TYPE_UNSIGNED_TINYINT)      \
-    M(TYPE_UNSIGNED_SMALLINT)     \
-    M(TYPE_UNSIGNED_BIGINT)       \
-    M(TYPE_HLL)                   \
-    M(TYPE_OBJECT)                \
+    M(TYPE_UNSIGNED_TINYINT)              \
+    M(TYPE_UNSIGNED_SMALLINT)             \
+    M(TYPE_UNSIGNED_BIGINT)               \
+    M(TYPE_HLL)                           \
+    M(TYPE_OBJECT)                        \
     M(TYPE_PERCENTILE)
 
 #define APPLY_FOR_EXTRA_LOGICAL_TYPE(M) \
     APPLY_FOR_UNSIGNED_LOGICAL_TYPE(M)  \
     APPLY_FOR_COMPLEX_LOGICAL_TYPE(M)   \
-    M(TYPE_DISCRETE_DOUBLE)     \
+    M(TYPE_DISCRETE_DOUBLE)             \
     M(TYPE_ARRAY)
 
 #define APPLY_FOR_TYPE_CONVERT_FROM_VARCHAR(M) \
     APPLY_FOR_TYPE_INTEGER(M)                  \
     APPLY_FOR_TYPE_TIME(M)                     \
     APPLY_FOR_TYPE_DECIMAL(M)                  \
-    M(TYPE_FLOAT)                      \
-    M(TYPE_DOUBLE)                     \
-    M(TYPE_JSON)                       \
+    M(TYPE_FLOAT)                              \
+    M(TYPE_DOUBLE)                             \
+    M(TYPE_JSON)                               \
     M(TYPE_BOOLEAN)
 
 #define APPLY_FOR_TYPE_CONVERT_TO_VARCHAR(M) \
     APPLY_FOR_TYPE_INTEGER(M)                \
     APPLY_FOR_TYPE_TIME(M)                   \
     APPLY_FOR_TYPE_DECIMAL(M)                \
-    M(TYPE_FLOAT)                    \
-    M(TYPE_JSON)                     \
+    M(TYPE_FLOAT)                            \
+    M(TYPE_JSON)                             \
     M(TYPE_DOUBLE)
 
 #define _TYPE_DISPATCH_CASE(type) \

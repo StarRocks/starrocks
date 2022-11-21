@@ -119,8 +119,7 @@ TEST(PrimaryKeyEncoderTest, testEncodeComposite) {
 
 TEST(PrimaryKeyEncoderTest, testEncodeCompositeLimit) {
     {
-        auto sc = create_key_schema(
-                {TYPE_INT, TYPE_VARCHAR, TYPE_SMALLINT, TYPE_BOOLEAN});
+        auto sc = create_key_schema({TYPE_INT, TYPE_VARCHAR, TYPE_SMALLINT, TYPE_BOOLEAN});
         const int n = 1;
         auto pchunk = ChunkHelper::new_chunk(*sc, n);
         vectorized::Datum tmp;
@@ -139,8 +138,7 @@ TEST(PrimaryKeyEncoderTest, testEncodeCompositeLimit) {
     }
 
     {
-        auto sc = create_key_schema(
-                {TYPE_INT, TYPE_VARCHAR, TYPE_SMALLINT, TYPE_BOOLEAN});
+        auto sc = create_key_schema({TYPE_INT, TYPE_VARCHAR, TYPE_SMALLINT, TYPE_BOOLEAN});
         const int n = 1;
         auto pchunk = ChunkHelper::new_chunk(*sc, n);
         vectorized::Datum tmp;

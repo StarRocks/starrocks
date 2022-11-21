@@ -970,8 +970,8 @@ class ArrayArithmeticImpl {
 public:
     using ArithmeticType = typename ArrayFunctions::ArithmeticType;
 
-    template <ArithmeticType type, LogicalType value_type, LogicalType sum_result_type,
-              LogicalType avg_result_type, bool has_null, typename ElementColumn>
+    template <ArithmeticType type, LogicalType value_type, LogicalType sum_result_type, LogicalType avg_result_type,
+              bool has_null, typename ElementColumn>
     static ColumnPtr _sum_and_avg(const ElementColumn& elements, const UInt32Column& offsets,
                                   const NullColumn::Container* null_elements, std::vector<uint8_t>* null_ptr) {
         const size_t num_array = offsets.size() - 1;

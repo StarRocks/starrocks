@@ -254,9 +254,9 @@ public:
                                    MemPool* pool) {
         decimal12_t decimal_val;
         RETURN_IF_ERROR(KeyCoderTraits<TYPE_BIGINT>::decode_ascending(encoded_key, sizeof(decimal_val.integer),
-                                                                              (uint8_t*)&decimal_val.integer, pool));
+                                                                      (uint8_t*)&decimal_val.integer, pool));
         RETURN_IF_ERROR(KeyCoderTraits<TYPE_INT>::decode_ascending(encoded_key, sizeof(decimal_val.fraction),
-                                                                           (uint8_t*)&decimal_val.fraction, pool));
+                                                                   (uint8_t*)&decimal_val.fraction, pool));
         memcpy(cell_ptr, &decimal_val, sizeof(decimal12_t));
         return Status::OK();
     }
@@ -288,8 +288,7 @@ public:
 
     static Status decode_ascending(Slice* encoded_key, size_t index_size __attribute__((unused)), uint8_t* cell_ptr,
                                    MemPool* pool) {
-        RETURN_IF_ERROR(
-                KeyCoderTraits<TYPE_LARGEINT>::decode_ascending(encoded_key, index_size, cell_ptr, pool));
+        RETURN_IF_ERROR(KeyCoderTraits<TYPE_LARGEINT>::decode_ascending(encoded_key, index_size, cell_ptr, pool));
         return Status::OK();
     }
 };

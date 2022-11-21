@@ -50,8 +50,7 @@ public:
               _index_size(column.index_length()),
               _length(column.length()),
               _is_nullable(column.is_nullable()) {
-        DCHECK(column.type() != TYPE_DECIMAL32 && column.type() != TYPE_DECIMAL64 &&
-               column.type() != TYPE_DECIMAL128);
+        DCHECK(column.type() != TYPE_DECIMAL32 && column.type() != TYPE_DECIMAL64 && column.type() != TYPE_DECIMAL128);
     }
 
     Field(const TabletColumn& column, std::shared_ptr<TypeInfo>&& type_info)

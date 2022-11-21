@@ -271,8 +271,7 @@ protected:
                     if (type == TYPE_CHAR) {
                         ASSERT_EQ(*(string*)result, reinterpret_cast<const Slice*>(column->raw_data())[j].to_string())
                                 << "j:" << j;
-                    } else if (type == TYPE_VARCHAR || type == TYPE_HLL ||
-                               type == TYPE_OBJECT) {
+                    } else if (type == TYPE_VARCHAR || type == TYPE_HLL || type == TYPE_OBJECT) {
                         ASSERT_EQ(value, reinterpret_cast<const Slice*>(column->raw_data())[j].to_string())
                                 << "j:" << j;
                     } else {
@@ -298,8 +297,7 @@ protected:
                             ASSERT_EQ(*(string*)result,
                                       reinterpret_cast<const Slice*>(column->raw_data())[j].to_string())
                                     << "j:" << j;
-                        } else if (type == TYPE_VARCHAR || type == TYPE_HLL ||
-                                   type == TYPE_OBJECT) {
+                        } else if (type == TYPE_VARCHAR || type == TYPE_HLL || type == TYPE_OBJECT) {
                             ASSERT_EQ(value, reinterpret_cast<const Slice*>(column->raw_data())[j].to_string());
                         } else {
                             ASSERT_EQ(*(Type*)result, reinterpret_cast<const Type*>(column->raw_data())[j]);

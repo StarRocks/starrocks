@@ -86,8 +86,7 @@ struct DecimalBinaryFunction {
         return false;
     }
 
-    template <bool lhs_is_const, bool rhs_is_const, LogicalType LhsType, LogicalType RhsType,
-              LogicalType ResultType>
+    template <bool lhs_is_const, bool rhs_is_const, LogicalType LhsType, LogicalType RhsType, LogicalType ResultType>
     static inline ColumnPtr evaluate(const ColumnPtr& lhs, const ColumnPtr& rhs) {
         using ResultCppType = RunTimeCppType<ResultType>;
         using ResultColumnType = RunTimeColumnType<ResultType>;

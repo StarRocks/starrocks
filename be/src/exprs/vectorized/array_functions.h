@@ -19,7 +19,7 @@ public:
     DEFINE_VECTORIZED_FN(array_contains);
     DEFINE_VECTORIZED_FN(array_position);
 
-#define APPLY_COMMONE_TYPES_FOR_ARRAY(M)        \
+#define APPLY_COMMONE_TYPES_FOR_ARRAY(M)      \
     M(boolean, LogicalType::TYPE_BOOLEAN)     \
     M(tinyint, LogicalType::TYPE_TINYINT)     \
     M(smallint, LogicalType::TYPE_SMALLINT)   \
