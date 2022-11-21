@@ -142,7 +142,7 @@ public class CurrentQueryInfoProvider {
         Map<String, QueryStatistics> statisticsMap = Maps.newHashMap();
         for (Pair<Request, Future<PCollectFragmentStatisticsResult>> pair : futures) {
             try {
-                final PCollectFragmentStatisticsResult result = pair.second.get(2, TimeUnit.SECONDS);
+                final PCollectFragmentStatisticsResult result = pair.second.get(10, TimeUnit.SECONDS);
                 for (PCollectFragmentStatistcs fragmentStatistics : result.fragmentStatistics) {
                     String instanceIdStr = DebugUtil.printId(fragmentStatistics.fragmentInstanceId);
                     QueryStatistics statistics = new QueryStatistics();
@@ -214,7 +214,7 @@ public class CurrentQueryInfoProvider {
         Map<String, QueryStatistics> statisticsMap = Maps.newHashMap();
         for (Pair<Request, Future<PCollectQueryStatisticsResult>> pair : futures) {
             try {
-                final PCollectQueryStatisticsResult result = pair.second.get(2, TimeUnit.SECONDS);
+                final PCollectQueryStatisticsResult result = pair.second.get(10, TimeUnit.SECONDS);
                 for (PCollectQueryStatistics queryStatistics : result.queryStatistics) {
                     final String queryIdStr = DebugUtil.printId(queryStatistics.queryId);
                     QueryStatistics statistics = statisticsMap.get(queryIdStr);
