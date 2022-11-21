@@ -416,7 +416,7 @@ public class LimitTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("limit: 8888"));
         connectContext.getSessionVariable().setSqlSelectLimit(SessionVariable.DEFAULT_SELECT_LIMIT);
 
-        connectContext.getSessionVariable().setSqlSelectLimit(0);
+        connectContext.getSessionVariable().setSqlSelectLimit(-100);
         sql = "select * from test_all_type";
         plan = getFragmentPlan(sql);
         Assert.assertFalse(plan.contains("limit"));
