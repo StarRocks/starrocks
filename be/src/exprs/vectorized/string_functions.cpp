@@ -1526,12 +1526,7 @@ ColumnPtr StringFunctions::append_trailing_char_if_absent(FunctionContext* conte
             auto str = src_viewer.value(row);
             auto tailing_char = tailing_viewer.value(row);
 
-            if (str.size == 0) {
-                dst_builder.append(tailing_char);
-                continue;
-            }
-
-            if (str.data[str.size - 1] == tailing_char.data[0]) {
+            if (str.size == 0 || str.data[str.size - 1] == tailing_char.data[0]) {
                 dst_builder.append(str);
                 continue;
             }
