@@ -418,7 +418,6 @@ void PInternalServiceImplBase<T>::collect_fragment_statistics(google::protobuf::
                                                               PCollectFragmentStatisticsResult* result,
                                                               google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
-    LOG(INFO) << "collect fragment statistics";
     _exec_env->query_context_mgr()->collect_fragment_statistics(request, result);
 }
 
