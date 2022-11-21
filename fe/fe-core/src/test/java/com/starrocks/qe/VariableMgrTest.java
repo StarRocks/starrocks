@@ -108,9 +108,9 @@ public class VariableMgrTest {
         SetVar setVar = new SetVar(SetType.GLOBAL, "exec_mem_limit", new IntLiteral(1234L));
         setVar.analyze(null);
         VariableMgr.setVar(var, setVar, false);
-        Assert.assertEquals(12999934L, var.getMaxExecMemByte());
+        Assert.assertEquals(1234L, var.getMaxExecMemByte());
         var = VariableMgr.newSessionVariable();
-        Assert.assertEquals(12999934L, var.getMaxExecMemByte());
+        Assert.assertEquals(1234L, var.getMaxExecMemByte());
 
         SetVar setVar2 = new SetVar(SetType.GLOBAL, "parallel_fragment_exec_instance_num", new IntLiteral(5L));
         setVar2.analyze(null);
@@ -137,15 +137,15 @@ public class VariableMgrTest {
         setVar = new SetVar(SetType.GLOBAL, "exec_mem_limit", new IntLiteral(1234L));
         setVar.analyze(null);
         VariableMgr.setVar(var, setVar, false);
-        Assert.assertEquals(12999934L, var.getMaxExecMemByte());
+        Assert.assertEquals(1234L, var.getMaxExecMemByte());
 
         // onlySessionVar
         setVar = new SetVar(SetType.GLOBAL, "exec_mem_limit", new IntLiteral(4321L));
         setVar.analyze(null);
         VariableMgr.setVar(var, setVar, true);
-        Assert.assertEquals(12999935L, var.getMaxExecMemByte());
+        Assert.assertEquals(4321L, var.getMaxExecMemByte());
         var = VariableMgr.newSessionVariable();
-        Assert.assertEquals(12999934L, var.getMaxExecMemByte());
+        Assert.assertEquals(1234L, var.getMaxExecMemByte());
 
         setVar3 = new SetVar(SetType.SESSION, "time_zone", new StringLiteral("Asia/Jakarta"));
         setVar3.analyze(null);
