@@ -27,7 +27,8 @@ Status LocalMergeSortSourceOperator::set_finished(RuntimeState* state) {
 }
 
 bool LocalMergeSortSourceOperator::has_output() const {
-    return _sort_context->is_partition_sort_finished() && !_sort_context->is_output_finished();
+    return _sort_context->is_partition_sort_finished() && !_sort_context->is_output_finished() &&
+           _sort_context->is_partition_ready();
 }
 
 bool LocalMergeSortSourceOperator::is_finished() const {

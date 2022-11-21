@@ -5,6 +5,7 @@
 #include "column/vectorized_fwd.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/sort/sort_context.h"
+#include "exec/pipeline/spill_process_channel.h"
 #include "exec/sort_exec_exprs.h"
 #include "exec/vectorized/chunks_sorter.h"
 
@@ -26,13 +27,13 @@ using namespace vectorized;
  * except that it is used to sort for partial data, 
  * thus through multiple instances to provide data parallelism.
  */
-class PartitionSortSinkOperator final : public Operator {
+class PartitionSortSinkOperator : public Operator {
 public:
     PartitionSortSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                               std::shared_ptr<vectorized::ChunksSorter> chunks_sorter, SortExecExprs& sort_exec_exprs,
                               const std::vector<OrderByType>& order_by_types, TupleDescriptor* materialized_tuple_desc,
-                              SortContext* sort_context)
-            : Operator(factory, id, "local_sort_sink", plan_node_id, driver_sequence),
+                              SortContext* sort_context, const char* name = "local_sort_sink")
+            : Operator(factory, id, name, plan_node_id, driver_sequence),
               _chunks_sorter(std::move(chunks_sorter)),
               _sort_exec_exprs(sort_exec_exprs),
               _order_by_types(order_by_types),
@@ -59,7 +60,7 @@ public:
 
     Status set_finishing(RuntimeState* state) override;
 
-private:
+protected:
     bool _is_finished = false;
 
     std::shared_ptr<vectorized::ChunksSorter> _chunks_sorter;
@@ -75,7 +76,7 @@ private:
     SortContext* _sort_context;
 };
 
-class PartitionSortSinkOperatorFactory final : public OperatorFactory {
+class PartitionSortSinkOperatorFactory : public OperatorFactory {
 public:
     PartitionSortSinkOperatorFactory(
             int32_t id, int32_t plan_node_id, std::shared_ptr<SortContextFactory> sort_context_factory,
@@ -83,9 +84,10 @@ public:
             const std::string& sort_keys, int64_t offset, int64_t limit, const TTopNType::type topn_type,
             const std::vector<OrderByType>& order_by_types, TupleDescriptor* materialized_tuple_desc,
             const RowDescriptor& parent_node_row_desc, const RowDescriptor& parent_node_child_row_desc,
-            const std::vector<ExprContext*>& analytic_partition_exprs)
-            : OperatorFactory(id, "local_sort_sink", plan_node_id),
-              _sort_context_factory(sort_context_factory),
+            std::vector<ExprContext*> analytic_partition_exprs, SpillProcessChannelFactoryPtr spill_channel_factory,
+            const char* name = "local_sort_sink")
+            : OperatorFactory(id, name, plan_node_id),
+              _sort_context_factory(std::move(std::move(sort_context_factory))),
               _sort_exec_exprs(sort_exec_exprs),
               _is_asc_order(is_asc_order),
               _is_null_first(is_null_first),
@@ -97,7 +99,8 @@ public:
               _materialized_tuple_desc(materialized_tuple_desc),
               _parent_node_row_desc(parent_node_row_desc),
               _parent_node_child_row_desc(parent_node_child_row_desc),
-              _analytic_partition_exprs(analytic_partition_exprs) {}
+              _analytic_partition_exprs(std::move(analytic_partition_exprs)),
+              _spill_channel_factory(std::move(spill_channel_factory)) {}
 
     ~PartitionSortSinkOperatorFactory() override = default;
 
@@ -106,7 +109,7 @@ public:
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
-private:
+protected:
     std::shared_ptr<SortContextFactory> _sort_context_factory;
     // _sort_exec_exprs contains the ordering expressions
     SortExecExprs& _sort_exec_exprs;
@@ -125,6 +128,7 @@ private:
     const RowDescriptor& _parent_node_row_desc;
     const RowDescriptor& _parent_node_child_row_desc;
     std::vector<ExprContext*> _analytic_partition_exprs;
+    SpillProcessChannelFactoryPtr _spill_channel_factory;
 };
 
 } // namespace pipeline
