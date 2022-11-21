@@ -225,7 +225,8 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
             int node_idx = 0;
             Expr* expr = nullptr;
             ExprContext* ctx = nullptr;
-            RETURN_IF_ERROR(Expr::create_tree_from_thrift(_pool, aggr_exprs[i].nodes, nullptr, &node_idx, &expr, &ctx, state));
+            RETURN_IF_ERROR(
+                    Expr::create_tree_from_thrift(_pool, aggr_exprs[i].nodes, nullptr, &node_idx, &expr, &ctx, state));
             _intermediate_agg_expr_ctxs[i].emplace_back(ctx);
         }
     }

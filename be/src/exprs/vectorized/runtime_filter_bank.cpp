@@ -167,7 +167,8 @@ bool RuntimeFilterHelper::filter_zonemap_with_min_max(LogicalType type, const Jo
     return type_dispatch_filter(type, false, FilterZoneMapWithMinMaxOp(), filter, min_column, max_column);
 }
 
-Status RuntimeFilterBuildDescriptor::init(ObjectPool* pool, const TRuntimeFilterDescription& desc, RuntimeState* state) {
+Status RuntimeFilterBuildDescriptor::init(ObjectPool* pool, const TRuntimeFilterDescription& desc,
+                                          RuntimeState* state) {
     _filter_id = desc.filter_id;
     _build_expr_order = desc.expr_order;
     _has_remote_targets = desc.has_remote_targets;
@@ -197,8 +198,8 @@ Status RuntimeFilterBuildDescriptor::init(ObjectPool* pool, const TRuntimeFilter
     return Status::OK();
 }
 
-Status RuntimeFilterProbeDescriptor::init(ObjectPool* pool, const TRuntimeFilterDescription& desc,
-                                          TPlanNodeId node_id, RuntimeState* state) {
+Status RuntimeFilterProbeDescriptor::init(ObjectPool* pool, const TRuntimeFilterDescription& desc, TPlanNodeId node_id,
+                                          RuntimeState* state) {
     _filter_id = desc.filter_id;
     _is_local = !desc.has_remote_targets;
     _build_plan_node_id = desc.build_plan_node_id;
