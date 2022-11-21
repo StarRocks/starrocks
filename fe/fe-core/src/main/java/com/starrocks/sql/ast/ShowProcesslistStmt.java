@@ -22,11 +22,17 @@ public class ShowProcesslistStmt extends ShowStmt {
                     .addColumn(new Column("State", ScalarType.createVarchar(64)))
                     .addColumn(new Column("Info", ScalarType.createVarchar(32 * 1024)))
                     .addColumn(new Column("IsPending", ScalarType.createVarchar(16)))
+                    .addColumn(new Column("FeHost", ScalarType.createVarchar(16)))
                     .build();
     private final boolean isShowFull;
+    private final boolean isShowAll;
 
-    public ShowProcesslistStmt(boolean isShowFull) {
+    private final String feHost;
+
+    public ShowProcesslistStmt(boolean isShowFull, boolean isShowAll, String feHost) {
         this.isShowFull = isShowFull;
+        this.isShowAll = isShowAll;
+        this.feHost = feHost;
     }
 
     @Override
@@ -39,7 +45,15 @@ public class ShowProcesslistStmt extends ShowStmt {
         return META_DATA;
     }
 
-    public boolean showFull() {
+    public boolean isShowFull() {
         return isShowFull;
+    }
+
+    public boolean isShowAll() {
+        return isShowAll;
+    }
+
+    public String getFeHost() {
+        return feHost;
     }
 }

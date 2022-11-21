@@ -1082,7 +1082,7 @@ showProcStatement
     ;
 
 showProcesslistStatement
-    : SHOW FULL? PROCESSLIST
+    : SHOW FULL? PROCESSLIST ((FROM | IN) (ALL | pattern=string))?
     ;
 
 showStatusStatement

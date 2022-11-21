@@ -28,6 +28,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.Predicate;
+import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
@@ -90,6 +91,7 @@ import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.service.ExecuteEnv;
 import com.starrocks.sql.analyzer.PrivilegeChecker;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
@@ -152,6 +154,7 @@ import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.HistogramStatsMeta;
+import com.starrocks.system.Frontend;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -400,13 +403,34 @@ public class ShowExecutor {
     private void handleShowProcesslist() {
         ShowProcesslistStmt showStmt = (ShowProcesslistStmt) stmt;
         List<List<String>> rowSet = Lists.newArrayList();
-
-        List<ConnectContext.ThreadInfo> threadInfos = ctx.getConnectScheduler().listConnection(ctx.getQualifiedUser());
-        long nowMs = System.currentTimeMillis();
-        for (ConnectContext.ThreadInfo info : threadInfos) {
-            rowSet.add(info.toRow(nowMs, showStmt.showFull()));
+        if (showStmt.getFeHost() != null &&
+                !showStmt.getFeHost().equals(GlobalStateMgr.getCurrentState().getSelfNode().first)) {
+            List<Frontend> frontends = GlobalStateMgr.getCurrentState().getFrontends(null);
+            for (Frontend frontend : frontends) {
+                if (!(frontend.getHost().equals(showStmt.getFeHost()))) {
+                    continue;
+                }
+                showProcessList(frontend, showStmt.isShowFull(), rowSet);
+                break;
+            }
+        } else {
+            List<ConnectContext.ThreadInfo> threadInfos =  ctx.getConnectScheduler() == null ?
+                    ExecuteEnv.getInstance().getScheduler().listConnection(ctx.getQualifiedUser()) :
+                    ctx.getConnectScheduler().listConnection(ctx.getQualifiedUser());
+            long nowMs = System.currentTimeMillis();
+            for (ConnectContext.ThreadInfo info : threadInfos) {
+                rowSet.add(info.toRow(nowMs, showStmt.isShowFull()));
+            }
+            if (showStmt.isShowAll()) {
+                List<Frontend> frontends = GlobalStateMgr.getCurrentState().getFrontends(null);
+                for (Frontend frontend : frontends) {
+                    if (frontend.getHost().equals(GlobalStateMgr.getCurrentState().getSelfNode().first)) {
+                        continue;
+                    }
+                    showProcessList(frontend, showStmt.isShowFull(), rowSet);
+                }
+            }
         }
-
         resultSet = new ShowResultSet(showStmt.getMetaData(), rowSet);
     }
 
@@ -1774,5 +1798,22 @@ public class ShowExecutor {
         }
 
         return returnRows;
+    }
+
+    private void showProcessList(Frontend frontend, boolean isShowFull, List<List<String>> rowSet) {
+        String showProcStmt = isShowFull ? "SHOW FULL PROCESSLIST" : "SHOW PROCESSLIST";
+        // ConnectContext build in RestBaseAction
+        ConnectContext context = ConnectContext.get();
+        FrontendOpExecutor frontendOpExecutor = new FrontendOpExecutor(frontend.getHost(), frontend.getRpcPort(),
+                new OriginStatement(showProcStmt, 0), context, RedirectStatus.FORWARD_NO_SYNC);
+        LOG.debug("send request to frontend: {}:{}. stmt: {}",
+                frontend.getHost(), frontend.getRpcPort(), context.getStmtId());
+
+        try {
+            frontendOpExecutor.execute();
+            rowSet.addAll(frontendOpExecutor.getProxyResultSet().getResultRows());
+        } catch (Exception e) {
+            LOG.warn("failed to forward stmt", e);
+        }
     }
 }
