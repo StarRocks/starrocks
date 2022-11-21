@@ -221,7 +221,9 @@ static inline int multi3(const int128_t& x, const int128_t& y, int128_t& res) {
 // udiv128by64to64 and udivmodti4 come from llvm-project/compiler-rt/lib/builtins/udivmodti4.c
 static inline uint64_t udiv128by64to64(uint64_t u1, uint64_t u0, uint64_t v, uint64_t* r) {
     uint64_t result;
+    // clang-format off
     __asm__("divq %[v]" : "=a"(result), "=d"(*r) : [v] "r"(v), "a"(u0), "d"(u1));
+    // clang-format on
     return result;
 }
 
