@@ -59,4 +59,13 @@ public class AnalyzeDeleteTest {
         analyzeFail("delete from tprimary",
                 "Delete must specify where clause to prevent full table delete");
     }
+
+    @Test
+    public void testUsing() {
+        analyzeSuccess("delete from tprimary using tprimary2 tp2 where tprimary.pk = tp2.pk");
+
+        analyzeSuccess(
+                "delete from tprimary using tprimary2 tp2 join t0 where tprimary.pk = tp2.pk " +
+                        "and tp2.pk = t0.v1 and t0.v2 > 0");
+    }
 }

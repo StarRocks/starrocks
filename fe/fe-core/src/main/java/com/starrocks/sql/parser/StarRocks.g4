@@ -755,7 +755,7 @@ updateStatement
     ;
 
 deleteStatement
-    : explainDesc? DELETE FROM qualifiedName partitionNames? (WHERE where=expression)?
+    : explainDesc? DELETE FROM qualifiedName partitionNames? (USING using=relations)? (WHERE where=expression)?
     ;
 
 // ------------------------------------------- Routine Statement -----------------------------------------------------------

@@ -14,7 +14,9 @@ import com.starrocks.catalog.Type;
 import com.starrocks.load.Load;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.DeleteStmt;
+import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
@@ -73,9 +75,14 @@ public class DeleteAnalyzer {
             throw new SemanticException("analyze delete failed", e);
         }
 
-        TableRelation tableRelation = new TableRelation(tableName);
+        Relation relation = new TableRelation(tableName);
+        if (deleteStatement.getUsingRelations() != null) {
+            for (Relation r : deleteStatement.getUsingRelations()) {
+                relation = new JoinRelation(null, relation, r, null, false);
+            }
+        }
         SelectRelation selectRelation =
-                new SelectRelation(selectList, tableRelation, deleteStatement.getWherePredicate(), null, null);
+                new SelectRelation(selectList, relation, deleteStatement.getWherePredicate(), null, null);
         QueryStatement queryStatement = new QueryStatement(selectRelation);
         queryStatement.setIsExplain(deleteStatement.isExplain(), deleteStatement.getExplainLevel());
         new QueryAnalyzer(session).analyze(queryStatement);

@@ -44,6 +44,7 @@ import java.util.List;
 public class DeleteStmt extends DmlStmt {
     private final TableName tblName;
     private final PartitionNames partitionNames;
+    private final List<Relation> usingRelations;
     private final Expr wherePredicate;
 
     // fields for new planer, primary key table
@@ -57,8 +58,13 @@ public class DeleteStmt extends DmlStmt {
     private long jobId = -1;
 
     public DeleteStmt(TableName tableName, PartitionNames partitionNames, Expr wherePredicate) {
+        this(tableName, partitionNames, null, wherePredicate);
+    }
+
+    public DeleteStmt(TableName tableName, PartitionNames partitionNames, List<Relation> usingRelations, Expr wherePredicate) {
         this.tblName = tableName;
         this.partitionNames = partitionNames;
+        this.usingRelations = usingRelations;
         this.wherePredicate = wherePredicate;
         this.deleteConditions = Lists.newLinkedList();
     }
@@ -82,6 +88,10 @@ public class DeleteStmt extends DmlStmt {
 
     public List<String> getPartitionNames() {
         return partitionNames == null ? Lists.newArrayList() : partitionNames.getPartitionNames();
+    }
+
+    public List<Relation> getUsingRelations() {
+        return usingRelations;
     }
 
     public List<Predicate> getDeleteConditions() {
