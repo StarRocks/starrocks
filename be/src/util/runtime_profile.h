@@ -51,9 +51,11 @@ namespace starrocks {
 
 #if ENABLE_COUNTERS
 #define ADD_COUNTER(profile, name, type) (profile)->add_counter(name, type)
+#define ADD_COUNTER_SKIP_MERGE(profile, name, type) (profile)->add_counter(name, type, true)
 #define ADD_TIMER(profile, name) (profile)->add_counter(name, TUnit::TIME_NS)
-#define ADD_CHILD_COUNTER(profile, name, type, parent) (profile)->add_counter(name, type, parent)
-#define ADD_CHILD_TIMER(profile, name, parent) (profile)->add_counter(name, TUnit::TIME_NS, parent)
+#define ADD_CHILD_COUNTER(profile, name, type, parent) (profile)->add_child_counter(name, type, parent)
+#define ADD_CHILD_COUNTER_SKIP_MERGE(profile, name, type, parent) (profile)->add_child_counter(name, type, parent, true)
+#define ADD_CHILD_TIMER(profile, name, parent) (profile)->add_child_counter(name, TUnit::TIME_NS, parent)
 #define SCOPED_TIMER(c) ScopedTimer<MonotonicStopWatch> MACRO_CONCAT(SCOPED_TIMER, __COUNTER__)(c)
 #define CANCEL_SAFE_SCOPED_TIMER(c, is_cancelled) \
     ScopedTimer<MonotonicStopWatch> MACRO_CONCAT(SCOPED_TIMER, __COUNTER__)(c, is_cancelled)
@@ -89,7 +91,8 @@ class RuntimeProfile {
 public:
     class Counter {
     public:
-        explicit Counter(TUnit::type type, int64_t value = 0) : _value(value), _type(type){};
+        explicit Counter(TUnit::type type, int64_t value = 0, bool skip_merge = false)
+                : _value(value), _type(type), _skip_merge(skip_merge){};
 
         virtual ~Counter() = default;
 
@@ -116,14 +119,17 @@ public:
 
         bool skip_merge() const { return _skip_merge; }
 
-        void enable_skip_merge() { _skip_merge = true; }
-
     private:
         friend class RuntimeProfile;
 
         std::atomic<int64_t> _value;
-        TUnit::type _type;
-        bool _skip_merge = false;
+        const TUnit::type _type;
+
+        // For non-time metrics, the default behavior of profile merge mechanism is sum up all the
+        // isomorphic counters, but for some special counters, like dop, tabletCount etc., which require
+        // its original value after merge. We can set the flag _skip_merge to true to skip the merge process
+        // of the counter.
+        const bool _skip_merge;
     };
 
     class ConcurrentTimerCounter;
@@ -138,7 +144,8 @@ public:
     /// as value()) and the current value.
     class HighWaterMarkCounter : public Counter {
     public:
-        explicit HighWaterMarkCounter(TUnit::type unit) : Counter(unit) {}
+        explicit HighWaterMarkCounter(TUnit::type type, int64_t value = 0, bool skip_merge = false)
+                : Counter(type, value, skip_merge) {}
 
         virtual void add(int64_t delta) {
             int64_t new_val = current_value_.fetch_add(delta, std::memory_order_relaxed) + delta;
@@ -313,8 +320,11 @@ public:
     // If parent_name is a non-empty string, the counter is added as a child of
     // parent_name.
     // If the counter already exists, the existing counter object is returned.
-    Counter* add_counter(const std::string& name, TUnit::type type, const std::string& parent_name);
-    Counter* add_counter(const std::string& name, TUnit::type type) { return add_counter(name, type, ROOT_COUNTER); }
+    Counter* add_child_counter(const std::string& name, TUnit::type type, const std::string& parent_name,
+                               bool skip_merge = false);
+    Counter* add_counter(const std::string& name, TUnit::type type, bool skip_merge = false) {
+        return add_child_counter(name, type, ROOT_COUNTER, skip_merge);
+    }
 
     // Add a derived counter with 'name'/'type'. The counter is owned by the
     // RuntimeProfile object.
@@ -420,7 +430,7 @@ public:
     /// Adds a high water mark counter to the runtime profile. Otherwise, same behavior
     /// as AddCounter().
     HighWaterMarkCounter* AddHighWaterMarkCounter(const std::string& name, TUnit::type unit,
-                                                  const std::string& parent_name = "");
+                                                  const std::string& parent_name = "", bool skip_merge = false);
 
     // Recursively compute the fraction of the 'total_time' spent in this profile and
     // its children.
@@ -436,7 +446,8 @@ private:
     typedef std::vector<std::pair<RuntimeProfile*, bool>> ChildVector;
 
     void add_child_unlock(RuntimeProfile* child, bool indent, ChildVector::iterator pos);
-    Counter* add_counter_unlock(const std::string& name, TUnit::type type, const std::string& parent_name);
+    Counter* add_counter_unlock(const std::string& name, TUnit::type type, const std::string& parent_name,
+                                bool skip_merge);
 
     RuntimeProfile* _parent;
 
