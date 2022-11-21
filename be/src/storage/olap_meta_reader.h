@@ -18,7 +18,7 @@ class Tablet;
 // Params for MetaReader
 // mainly include tablet
 struct OlapMetaReaderParams : MetaReaderParams {
-    OlapMetaReaderParams(){};
+    OlapMetaReaderParams() = default;;
     TabletSharedPtr tablet;
     void check_validation() const {
         if (UNLIKELY(version.first == -1)) {

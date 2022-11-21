@@ -7,8 +7,7 @@
 #include "gen_cpp/Types_types.h"
 #include "storage/olap_common.h"
 
-namespace starrocks {
-namespace pipeline {
+namespace starrocks::pipeline {
 
 LakeMetaScanPrepareOperator::LakeMetaScanPrepareOperator(OperatorFactory* factory,
                                                          int32_t id, 
@@ -43,5 +42,4 @@ OperatorPtr LakeMetaScanPrepareOperatorFactory::create(int32_t degree_of_paralle
                                                          _scan_ctx_factory->get_or_create(driver_sequence));
 }
 
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline

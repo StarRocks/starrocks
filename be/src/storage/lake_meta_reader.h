@@ -17,7 +17,7 @@ namespace starrocks::vectorized {
 // Params for MetaReader
 // mainly include tablet
 struct LakeMetaReaderParams : MetaReaderParams {
-    LakeMetaReaderParams(){};
+    LakeMetaReaderParams() = default;
     StatusOr<lake::Tablet> tablet;
     std::shared_ptr<const TabletSchema> tablet_schema;
 };
@@ -28,7 +28,7 @@ struct LakeMetaReaderParams : MetaReaderParams {
 class LakeMetaReader final : public MetaReader {
 public:
     LakeMetaReader();
-    ~LakeMetaReader();
+    ~LakeMetaReader() = default;
 
     Status init(const LakeMetaReaderParams& read_params);
 

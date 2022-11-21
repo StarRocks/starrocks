@@ -52,7 +52,7 @@ struct SegmentMetaCollecterParams {
 class MetaReader {
 public:
     MetaReader();
-    ~MetaReader();
+    virtual ~MetaReader();
 
     Status open();
 

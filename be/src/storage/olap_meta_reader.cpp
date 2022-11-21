@@ -51,7 +51,7 @@ Status OlapMetaReader::init(const OlapMetaReaderParams& read_params) {
 
 Status OlapMetaReader::_build_collect_context(const OlapMetaReaderParams& read_params) {
     _collect_context.seg_collecter_params.max_cid = 0;
-    for (auto it : *(read_params.id_to_names)) {
+    for (const auto& it : *(read_params.id_to_names)) {
         std::string col_name = "";
         std::string collect_field = "";
         RETURN_IF_ERROR(SegmentMetaCollecter::parse_field_and_colname(it.second, &collect_field, &col_name));
@@ -65,7 +65,7 @@ Status OlapMetaReader::_build_collect_context(const OlapMetaReaderParams& read_p
         }
 
         // get column type
-        FieldType type = _tablet->tablet_schema().column(index).type();
+        LogicalType type = _tablet->tablet_schema().column(index).type();
         _collect_context.seg_collecter_params.field_type.emplace_back(type);
 
         // get collect field

@@ -10,12 +10,11 @@
 
 namespace starrocks::pipeline {
 
-
 class OlapMetaScanPrepareOperator final : public MetaScanPrepareOperator {
 public:
     OlapMetaScanPrepareOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                                 vectorized::OlapMetaScanNode* const scan_node, MetaScanContextPtr scan_ctx);
-    ~OlapMetaScanPrepareOperator() = default;
+    ~OlapMetaScanPrepareOperator() override = default;
 
 private:
     Status _prepare_scan_context(RuntimeState* state) override;

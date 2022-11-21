@@ -18,7 +18,7 @@ struct MetaScannerParams {
 
 class MetaScanner {
 public:
-    MetaScanner() : _runtime_state(nullptr) {};
+    MetaScanner() = default;
     virtual ~MetaScanner() = default;
 
     MetaScanner(const MetaScanner&) = delete;
@@ -42,7 +42,7 @@ protected:
     virtual Status _get_tablet(const TInternalScanRange* scan_range) = 0;
     virtual Status _init_meta_reader_params() = 0;
 
-    RuntimeState* _runtime_state;
+    RuntimeState* _runtime_state{nullptr};
 
     bool _is_open = false;
     bool _is_closed = false;

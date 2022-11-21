@@ -60,9 +60,6 @@ void LakeMetaScanner::close(RuntimeState* state) {
     if (_is_closed) {
         return;
     }
-    if (_reader) {
-        _reader.reset();
-    }
     _reader.reset();
     _is_closed = true;
 }

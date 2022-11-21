@@ -34,7 +34,7 @@ public:
     MetaScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, int32_t dop,
                          ScanNode* scan_node, MetaScanContextPtr scan_ctx);
 
-    ~MetaScanOperator() = default;
+    ~MetaScanOperator() override = default;
 
     bool has_output() const override;
     bool is_finished() const override;
@@ -46,7 +46,7 @@ public:
 private:
     void attach_chunk_source(int32_t source_index) override {}
     void detach_chunk_source(int32_t source_index) override {}
-    bool has_shared_chunk_source() const { return false; }
+    bool has_shared_chunk_source() const override { return false; }
     ChunkPtr get_chunk_from_buffer() override;
     size_t num_buffered_chunks() const override;
     size_t buffer_size() const override;
