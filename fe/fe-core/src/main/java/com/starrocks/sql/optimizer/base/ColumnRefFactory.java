@@ -47,7 +47,7 @@ public class ColumnRefFactory {
         } else if (expression instanceof CastExpr) {
             nameHint = "cast";
         }
-        return create(nextId++, nameHint, type, nullable);
+        return create(nextId++, nameHint, type, nullable, false);
     }
 
     public ColumnRefOperator create(ScalarOperator operator, Type type, boolean nullable) {
@@ -63,15 +63,19 @@ public class ColumnRefFactory {
                 nameHint = ((CallOperator) operator).getFnName();
             }
         }
-        return create(nextId++, nameHint, type, nullable);
+        return create(nextId++, nameHint, type, nullable, false);
     }
 
     public ColumnRefOperator create(String name, Type type, boolean nullable) {
-        return create(nextId++, name, type, nullable);
+        return create(nextId++, name, type, nullable, false);
     }
 
-    private ColumnRefOperator create(int id, String name, Type type, boolean nullable) {
-        ColumnRefOperator columnRef = new ColumnRefOperator(id, type, name, nullable);
+    public ColumnRefOperator create(String name, Type type, boolean nullable, boolean isLambdaArg) {
+        return create(nextId++, name, type, nullable, isLambdaArg);
+    }
+
+    private ColumnRefOperator create(int id, String name, Type type, boolean nullable, boolean isLambdaArg) {
+        ColumnRefOperator columnRef = new ColumnRefOperator(id, type, name, nullable, isLambdaArg);
         columnRefs.add(columnRef);
         return columnRef;
     }

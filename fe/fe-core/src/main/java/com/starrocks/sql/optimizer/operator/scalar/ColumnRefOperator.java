@@ -21,8 +21,6 @@ public final class ColumnRefOperator extends ScalarOperator {
     private final String name;
     private boolean nullable;
 
-    private boolean isLambdaArgument;
-
     // TODO(SmithCruise) Ugly code, remove it in future.
     // Empty list for default
     // If it's empty, means select all
@@ -34,7 +32,6 @@ public final class ColumnRefOperator extends ScalarOperator {
         this.id = id;
         this.name = requireNonNull(name, "name is null");
         this.nullable = nullable;
-        this.isLambdaArgument = false;
     }
 
     public void addUsedSubfieldPos(ImmutableList<Integer> usedNestFieldPos) {
@@ -46,11 +43,11 @@ public final class ColumnRefOperator extends ScalarOperator {
     }
 
     public ColumnRefOperator(int id, Type type, String name, boolean nullable, boolean isLambdaArgument) {
-        super(OperatorType.VARIABLE, type);
+        // lambda arguments cannot be seen by outer scopes, so set it a different operator type.
+        super(isLambdaArgument ? OperatorType.LAMBDA_ARGUMENT : OperatorType.VARIABLE, type);
         this.id = id;
         this.name = requireNonNull(name, "name is null");
         this.nullable = nullable;
-        this.isLambdaArgument = isLambdaArgument;
     }
 
     public int getId() {
@@ -96,7 +93,7 @@ public final class ColumnRefOperator extends ScalarOperator {
     }
 
     public ColumnRefSet getUsedColumns() {
-        if (isLambdaArgument) {
+        if (getOpType().equals(OperatorType.LAMBDA_ARGUMENT)) {
             return new ColumnRefSet();
         }
         return new ColumnRefSet(id);
