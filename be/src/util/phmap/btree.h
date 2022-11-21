@@ -972,9 +972,9 @@ private:
     // padding.
     constexpr static size_type NodeTargetValues(const int begin, const int end) {
         return begin == end ? begin
-                            : SizeWithNValues((begin + end) / 2 + 1) > params_type::kTargetNodeSize
-                       ? (NodeTargetValues(begin, (begin + end) / 2)
-                          : NodeTargetValues((begin + end) / 2 + 1, end));
+                            : (SizeWithNValues((begin + end) / 2 + 1) > params_type::kTargetNodeSize
+                                       ? NodeTargetValues(begin, (begin + end) / 2)
+                                       : NodeTargetValues((begin + end) / 2 + 1, end));
     }
 
     enum {
