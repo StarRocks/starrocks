@@ -33,7 +33,7 @@ namespace starrocks {
 // Mock part
 const char* s_expect_response = nullptr;
 
-void HttpChannel::send_reply(HttpRequest* request, HttpStatus status, const std::string& content) {
+void mock_send_reply(const std::string& content) {
     ASSERT_STREQ(s_expect_response, content.c_str());
 }
 
@@ -67,7 +67,7 @@ TEST_F(MetricsActionTest, prometheus_output) {
             "# TYPE test_requests_total counter\n"
             "test_requests_total{path=\"/sports\",type=\"put\"} 2345\n";
     HttpRequest request(_evhttp_req);
-    MetricsAction action(&registry);
+    MetricsAction action(&registry, &mock_send_reply);
     action.handle(&request);
 }
 
@@ -80,7 +80,7 @@ TEST_F(MetricsActionTest, prometheus_no_prefix) {
             "# TYPE cpu_idle gauge\n"
             "cpu_idle 50\n";
     HttpRequest request(_evhttp_req);
-    MetricsAction action(&registry);
+    MetricsAction action(&registry, &mock_send_reply);
     action.handle(&request);
 }
 
@@ -91,7 +91,7 @@ TEST_F(MetricsActionTest, prometheus_no_name) {
     registry.register_metric("", &cpu_idle);
     s_expect_response = "";
     HttpRequest request(_evhttp_req);
-    MetricsAction action(&registry);
+    MetricsAction action(&registry, &mock_send_reply);
     action.handle(&request);
 }
 
