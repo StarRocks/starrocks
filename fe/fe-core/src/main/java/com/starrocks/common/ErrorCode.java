@@ -280,7 +280,13 @@ public enum ErrorCode {
     ERR_PRIVILEGE_ACCESS_TABLE_DENIED(5088, new byte[] {'4', '2', '0', '0', '0'},
             "Access denied for user '%s' to table '%s' when checking privilege"),
     ERR_PRIVILEGE_ROUTINELODE_JOB_NOT_FOUND(5089, new byte[] {'4', '2', '0', '0', '0'},
-            "Routine load job [%s] not found when checking privilege");
+            "Routine load job [%s] not found when checking privilege"),
+
+    ERR_PLAN_VALIDATE_ERROR(6000, new byte[] {'0', '7', '0', '0', '0'},
+            "Incorrect logical plan found in operator: %s. Invalid reason: %s"),
+    ERR_INVALID_DATE_ERROR(6001, new byte[] {'2', '2', '0', '0', '0'}, "Incorrect %s value %s");
+
+
 
     ErrorCode(int code, byte[] sqlState, String errorMsg) {
         this.code = code;

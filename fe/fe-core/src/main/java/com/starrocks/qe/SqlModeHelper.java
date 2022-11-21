@@ -53,6 +53,8 @@ public class SqlModeHelper {
     public static final long MODE_ONLY_FULL_GROUP_BY = 1L << 5;
     public static final long MODE_NO_UNSIGNED_SUBTRACTION = 1L << 6;
     public static final long MODE_NO_DIR_IN_CREATE = 1L << 7;
+
+    public static final long MODE_FORBID_INVALID_DATE = 1L << 8;
     public static final long MODE_ALLOW_THROW_EXCEPTION = 1L << 9;
     public static final long MODE_DOUBLE_LITERAL = 1L << 17;
     public static final long MODE_ANSI = 1L << 18;
@@ -80,7 +82,8 @@ public class SqlModeHelper {
     public static final long MODE_ALLOWED_MASK =
             (MODE_REAL_AS_FLOAT | MODE_PIPES_AS_CONCAT | MODE_ANSI_QUOTES |
                     MODE_IGNORE_SPACE | MODE_NOT_USED | MODE_ONLY_FULL_GROUP_BY |
-                    MODE_NO_UNSIGNED_SUBTRACTION | MODE_NO_DIR_IN_CREATE | MODE_ALLOW_THROW_EXCEPTION | MODE_DOUBLE_LITERAL |
+                    MODE_NO_UNSIGNED_SUBTRACTION | MODE_NO_DIR_IN_CREATE | MODE_DOUBLE_LITERAL |
+                    MODE_FORBID_INVALID_DATE | MODE_ALLOW_THROW_EXCEPTION |
                     MODE_NO_AUTO_VALUE_ON_ZERO | MODE_NO_BACKSLASH_ESCAPES |
                     MODE_STRICT_TRANS_TABLES | MODE_STRICT_ALL_TABLES | MODE_NO_ZERO_IN_DATE |
                     MODE_NO_ZERO_DATE | MODE_INVALID_DATES | MODE_ERROR_FOR_DIVISION_BY_ZERO |
@@ -102,6 +105,7 @@ public class SqlModeHelper {
         SQL_MODE_SET.put("NO_UNSIGNED_SUBTRACTION", MODE_NO_UNSIGNED_SUBTRACTION);
         SQL_MODE_SET.put("NO_DIR_IN_CREATE", MODE_NO_DIR_IN_CREATE);
         SQL_MODE_SET.put("ALLOW_THROW_EXCEPTION", MODE_ALLOW_THROW_EXCEPTION);
+        SQL_MODE_SET.put("FORBID_INVALID_DATE", MODE_FORBID_INVALID_DATE);
         SQL_MODE_SET.put("MODE_DOUBLE_LITERAL", MODE_DOUBLE_LITERAL);
         SQL_MODE_SET.put("ANSI", MODE_ANSI);
         SQL_MODE_SET.put("NO_AUTO_VALUE_ON_ZERO", MODE_NO_AUTO_VALUE_ON_ZERO);

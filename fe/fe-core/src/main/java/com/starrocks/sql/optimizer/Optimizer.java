@@ -47,6 +47,7 @@ import com.starrocks.sql.optimizer.rule.tree.UseSortAggregateRule;
 import com.starrocks.sql.optimizer.task.OptimizeGroupTask;
 import com.starrocks.sql.optimizer.task.RewriteTreeTask;
 import com.starrocks.sql.optimizer.task.TaskContext;
+import com.starrocks.sql.optimizer.validate.OptExpressionValidator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -100,7 +101,7 @@ public class Optimizer {
         OptimizerTraceUtil.logOptExpression(connectContext, "origin logicOperatorTree:\n%s", logicOperatorTree);
         TaskContext rootTaskContext =
                 new TaskContext(context, requiredProperty, requiredColumns.clone(), Double.MAX_VALUE);
-        logicOperatorTree = logicalRuleRewrite(logicOperatorTree, rootTaskContext);
+        logicOperatorTree = rewriteAndValidatePlan(logicOperatorTree, rootTaskContext);
         OptimizerTraceUtil.log(connectContext, "after logical rewrite, new logicOperatorTree:\n%s", logicOperatorTree);
         return logicOperatorTree;
     }
@@ -126,7 +127,7 @@ public class Optimizer {
         TaskContext rootTaskContext =
                 new TaskContext(context, requiredProperty, requiredColumns.clone(), Double.MAX_VALUE);
         try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.RuleBaseOptimize")) {
-            logicOperatorTree = logicalRuleRewrite(logicOperatorTree, rootTaskContext);
+            logicOperatorTree = rewriteAndValidatePlan(logicOperatorTree, rootTaskContext);
         }
 
         memo.init(logicOperatorTree);
@@ -302,6 +303,13 @@ public class Optimizer {
             ruleRewriteIterative(tree, rootTaskContext, RuleSetType.SINGLE_TABLE_MV_REWRITE);
         }
         return tree.getInputs().get(0);
+    }
+
+    private OptExpression rewriteAndValidatePlan(OptExpression tree, TaskContext rootTaskContext) {
+        OptExpression result = logicalRuleRewrite(tree, rootTaskContext);
+        OptExpressionValidator validator = new OptExpressionValidator();
+        validator.visit(tree, null);
+        return result;
     }
 
     private OptExpression pushDownAggregation(OptExpression tree, TaskContext rootTaskContext,
