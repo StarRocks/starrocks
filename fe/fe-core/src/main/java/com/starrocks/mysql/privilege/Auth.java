@@ -1449,7 +1449,7 @@ public class Auth implements Writable {
             throws DdlException {
         writeLock();
         try {
-            propertyMgr.updateUserProperty(user, properties);
+            propertyMgr.updateUserProperty(user, properties, isReplay);
             if (!isReplay) {
                 UserPropertyInfo propertyInfo = new UserPropertyInfo(user, properties);
                 GlobalStateMgr.getCurrentState().getEditLog().logUpdateUserProperty(propertyInfo);

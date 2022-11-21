@@ -31,7 +31,6 @@ import org.junit.Test;
 import java.util.List;
 
 public class UserPropertyTest {
-    private FakeGlobalStateMgr fakeGlobalStateMgr;
 
     @Test
     public void testUpdate() throws DdlException {
@@ -39,7 +38,7 @@ public class UserPropertyTest {
         properties.add(Pair.create("MAX_USER_CONNECTIONS", "100"));
 
         UserProperty userProperty = new UserProperty();
-        userProperty.update(properties);
+        userProperty.update(properties, false);
         Assert.assertEquals(100, userProperty.getMaxConn());
 
         // fetch property
@@ -52,5 +51,9 @@ public class UserPropertyTest {
                 Assert.assertEquals("100", value);
             }
         }
+
+        properties.get(0).second = "1025";
+        Assert.assertThrows("max_user_connections is not valid, must less than qe_max_connection 1024",
+                DdlException.class, () -> userProperty.update(properties, false));
     }
 }
