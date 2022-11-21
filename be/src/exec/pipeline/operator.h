@@ -219,7 +219,14 @@ public:
     // Called when the new Epoch starts at first to reset operator's internal state.
     virtual Status reset_epoch(RuntimeState* state) { return Status::OK(); }
 
+    virtual void mark_need_spill() { _need_spill = true; }
+    bool need_spill() { return _need_spill; }
+
+    size_t revocable_mem_bytes() { return _revocable_mem_bytes; }
+
 protected:
+    void _set_revocable_mem_bytes(size_t bytes) { _revocable_mem_bytes = bytes; }
+
     OperatorFactory* _factory;
     const int32_t _id;
     const std::string _name;
@@ -239,6 +246,9 @@ protected:
     std::vector<ExprContext*> _cached_conjuncts_and_in_filters;
 
     RuntimeBloomFilterEvalContext _bloom_filter_eval_context;
+
+    bool _need_spill = false;
+    size_t _revocable_mem_bytes = 0;
 
     // Common metrics
     RuntimeProfile::Counter* _total_timer = nullptr;

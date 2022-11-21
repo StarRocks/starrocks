@@ -14,7 +14,8 @@
 
 #pragma once
 
-#include "column/vectorized_fwd.h"
+#include <memory>
+
 #include "exec/chunks_sorter.h"
 #include "exec/sorting/merge.h"
 #include "gtest/gtest_prod.h"
@@ -45,7 +46,8 @@ public:
 
     int64_t mem_usage() const override;
 
-private:
+protected:
+    Status _init(RuntimeState* state);
     // Three stages of sorting procedure:
     // 1. Accumulate input chunks into a big chunk(but not exceed the kMaxBufferedChunkSize), to reduce the memory copy during merge
     // 2. Sort the accumulated big chunk partially

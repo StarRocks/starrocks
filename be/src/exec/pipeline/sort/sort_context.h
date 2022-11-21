@@ -57,6 +57,8 @@ public:
     void finish_partition(uint64_t partition_rows);
     bool is_partition_sort_finished() const;
     bool is_output_finished() const;
+    bool is_partition_ready() const;
+    void cancel();
 
     StatusOr<ChunkPtr> pull_chunk();
 
@@ -80,7 +82,7 @@ private:
     std::vector<std::shared_ptr<ChunksSorter>> _chunks_sorter_partitions; // Partial sorters
     std::vector<std::unique_ptr<SimpleChunkSortCursor>> _partial_cursors;
     MergeCursorsCascade _merger;
-    ChunkSlice _current_chunk;
+    ChunkSlice<> _current_chunk;
     int64_t _required_rows = 0;
     bool _merger_inited = false;
     const std::vector<RuntimeFilterBuildDescriptor*>& _build_runtime_filters;
@@ -90,9 +92,11 @@ private:
 
 class SortContextFactory {
 public:
-    SortContextFactory(RuntimeState* state, const TTopNType::type topn_type, bool is_merging, int64_t offset,
-                       int64_t limit, std::vector<ExprContext*> sort_exprs, const std::vector<bool>& _is_asc_order,
-                       const std::vector<bool>& is_null_first,
+    SortContextFactory(RuntimeState* state, const TTopNType::type topn_type, bool is_merging,
+                       std::vector<ExprContext*> sort_exprs, const std::vector<bool>& is_asc_order,
+                       const std::vector<bool>& is_null_first, const std::vector<TExpr>& partition_exprs,
+                       int64_t offset, int64_t limit, const std::string& sort_keys,
+                       const std::vector<OrderByType>& order_by_types,
                        const std::vector<RuntimeFilterBuildDescriptor*>& build_runtime_filters);
 
     SortContextPtr create(int32_t idx);

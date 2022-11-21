@@ -68,6 +68,7 @@ set(EXEC_FILES
     chunks_sorter_heap_sort.cpp
     chunks_sorter_topn.cpp
     chunks_sorter_full_sort.cpp
+    chunks_sorter_spillable_full_sort.cpp
     cross_join_node.cpp
     union_node.cpp
     except_hash_set.cpp
@@ -116,6 +117,12 @@ set(EXEC_FILES
     schema_scanner/schema_table_privileges_scanner.cpp
     schema_scanner/schema_tables_config_scanner.cpp
     schema_scanner/schema_helper.cpp
+    spill/query_spill_manager.cpp
+    spill/spiller.cpp
+    spill/spiller_path_provider.cpp
+    spill/spiller_factory.cpp
+    spill/spilled_stream.cpp
+    spill/mem_table.cpp
     jdbc_scanner.cpp
     sorting/compare_column.cpp
     sorting/merge_column.cpp
@@ -140,6 +147,8 @@ set(EXEC_FILES
     pipeline/dict_decode_operator.cpp
     pipeline/result_sink_operator.cpp
     pipeline/olap_table_sink_operator.cpp
+    pipeline/spill_process_operator.cpp
+    pipeline/spill_process_channel.cpp
     pipeline/scan/balanced_chunk_buffer.cpp
     pipeline/scan/chunk_source.cpp
     pipeline/scan/morsel.cpp
@@ -169,6 +178,7 @@ set(EXEC_FILES
     pipeline/nljoin/nljoin_build_operator.cpp
     pipeline/nljoin/nljoin_probe_operator.cpp
     pipeline/sort/partition_sort_sink_operator.cpp
+    pipeline/sort/spillable_partition_sort_sink_operator.cpp
     pipeline/sort/local_partition_topn_sink.cpp
     pipeline/sort/local_partition_topn_source.cpp
     pipeline/sort/local_partition_topn_context.cpp

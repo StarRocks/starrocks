@@ -138,19 +138,18 @@ StatusOr<ChunkPtr> LocalPartitionTopnContext::pull_one_chunk_from_sorters() {
 }
 
 LocalPartitionTopnContextFactory::LocalPartitionTopnContextFactory(
-        const std::vector<TExpr>& t_partition_exprs, const std::vector<ExprContext*>& sort_exprs,
-        std::vector<bool> is_asc_order, std::vector<bool> is_null_first, std::string sort_keys, int64_t offset,
-        int64_t partition_limit, const TTopNType::type topn_type, const std::vector<OrderByType>& order_by_types,
-        TupleDescriptor* materialized_tuple_desc, const RowDescriptor& parent_node_row_desc,
-        const RowDescriptor& parent_node_child_row_desc)
-        : _t_partition_exprs(t_partition_exprs),
+        RuntimeState*, const TTopNType::type topn_type, bool is_merging, const std::vector<ExprContext*>& sort_exprs,
+        std::vector<bool> is_asc_order, std::vector<bool> is_null_first, const std::vector<TExpr>& t_partition_exprs,
+        int64_t offset, int64_t limit, std::string sort_keys, const std::vector<OrderByType>& order_by_types,
+        const std::vector<RuntimeFilterBuildDescriptor*>&)
+        : _topn_type(topn_type),
           _sort_exprs(sort_exprs),
           _is_asc_order(std::move(is_asc_order)),
           _is_null_first(std::move(is_null_first)),
-          _sort_keys(std::move(sort_keys)),
+          _t_partition_exprs(t_partition_exprs),
           _offset(offset),
-          _partition_limit(partition_limit),
-          _topn_type(topn_type) {}
+          _partition_limit(limit),
+          _sort_keys(std::move(sort_keys)) {}
 
 LocalPartitionTopnContext* LocalPartitionTopnContextFactory::create(int32_t driver_sequence) {
     if (auto it = _ctxs.find(driver_sequence); it != _ctxs.end()) {

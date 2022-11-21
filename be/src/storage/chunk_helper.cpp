@@ -14,6 +14,8 @@
 
 #include "storage/chunk_helper.h"
 
+#include <memory>
+
 #include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
@@ -406,18 +408,27 @@ ChunkPtr ChunkHelper::new_chunk(const Schema& schema, size_t n) {
     return std::make_shared<Chunk>(std::move(columns), std::make_shared<Schema>(schema));
 }
 
-std::shared_ptr<Chunk> ChunkHelper::new_chunk(const TupleDescriptor& tuple_desc, size_t n) {
+ChunkUniquePtr ChunkHelper::new_chunk(const TupleDescriptor& tuple_desc, size_t n) {
     return new_chunk(tuple_desc.slots(), n);
 }
 
-std::shared_ptr<Chunk> ChunkHelper::new_chunk(const std::vector<SlotDescriptor*>& slots, size_t n) {
-    auto chunk = std::make_shared<Chunk>();
+ChunkUniquePtr ChunkHelper::new_chunk(const std::vector<SlotDescriptor*>& slots, size_t n) {
+    auto chunk = std::make_unique<Chunk>();
     for (const auto slot : slots) {
         auto column = ColumnHelper::create_column(slot->type(), slot->is_nullable());
         column->reserve(n);
         chunk->append_column(column, slot->id());
     }
     return chunk;
+}
+
+void ChunkHelper::materialize_nullable(ChunkPtr& chunk, const TupleDescriptor& tuple_desc) {
+    size_t num_rows = chunk->num_rows();
+    const auto& slots = tuple_desc.slots();
+    for (size_t i = 0; i < chunk->columns().size(); ++i) {
+        chunk->columns()[i] = ColumnHelper::align_return_type(chunk->columns()[i], slots[i]->type(), num_rows,
+                                                              slots[i]->is_nullable());
+    }
 }
 
 void ChunkHelper::reorder_chunk(const TupleDescriptor& tuple_desc, Chunk* chunk) {

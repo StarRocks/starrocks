@@ -63,7 +63,7 @@ public:
     }
     OperatorFactory* sink_operator_factory() {
         DCHECK(!_op_factories.empty());
-        return down_cast<SourceOperatorFactory*>(_op_factories[_op_factories.size() - 1].get());
+        return down_cast<OperatorFactory*>(_op_factories[_op_factories.size() - 1].get());
     }
     size_t degree_of_parallelism() const;
 

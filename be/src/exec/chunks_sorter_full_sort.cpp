@@ -14,6 +14,10 @@
 
 #include "chunks_sorter_full_sort.h"
 
+#include <memory>
+#include <utility>
+
+#include "common/status.h"
 #include "exec/sorting/merge.h"
 #include "exec/sorting/sort_permute.h"
 #include "exec/sorting/sorting.h"
@@ -31,8 +35,8 @@ ChunksSorterFullSort::ChunksSorterFullSort(RuntimeState* state, const std::vecto
 ChunksSorterFullSort::~ChunksSorterFullSort() = default;
 
 Status ChunksSorterFullSort::update(RuntimeState* state, const ChunkPtr& chunk) {
-    _merge_unsorted(state, chunk);
-    _partial_sort(state, false);
+    RETURN_IF_ERROR(_merge_unsorted(state, chunk));
+    RETURN_IF_ERROR(_partial_sort(state, false));
 
     return Status::OK();
 }
@@ -90,6 +94,7 @@ Status ChunksSorterFullSort::_merge_sorted(RuntimeState* state) {
 Status ChunksSorterFullSort::done(RuntimeState* state) {
     RETURN_IF_ERROR(_partial_sort(state, true));
     RETURN_IF_ERROR(_merge_sorted(state));
+
     return Status::OK();
 }
 
