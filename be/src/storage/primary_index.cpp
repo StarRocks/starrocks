@@ -855,7 +855,7 @@ public:
 };
 
 static std::unique_ptr<HashIndex> create_hash_index(LogicalType key_type, size_t fix_size) {
-    if (key_type == LOGICAL_TYPE_VARCHAR && fix_size > 0) {
+    if (key_type == TYPE_VARCHAR && fix_size > 0) {
         if (fix_size <= 8) {
             return std::make_unique<FixSliceHashIndex<2>>();
         } else if (fix_size <= 12) {
@@ -882,19 +882,19 @@ static std::unique_ptr<HashIndex> create_hash_index(LogicalType key_type, size_t
         return std::make_unique<HashIndexImpl<typename CppTypeTraits<type>::CppType>>()
 
     switch (key_type) {
-        CASE_TYPE(LOGICAL_TYPE_BOOLEAN);
-        CASE_TYPE(LOGICAL_TYPE_TINYINT);
-        CASE_TYPE(LOGICAL_TYPE_SMALLINT);
-        CASE_TYPE(LOGICAL_TYPE_INT);
-        CASE_TYPE(LOGICAL_TYPE_BIGINT);
-        CASE_TYPE(LOGICAL_TYPE_LARGEINT);
-    case LOGICAL_TYPE_CHAR:
+        CASE_TYPE(TYPE_BOOLEAN);
+        CASE_TYPE(TYPE_TINYINT);
+        CASE_TYPE(TYPE_SMALLINT);
+        CASE_TYPE(TYPE_INT);
+        CASE_TYPE(TYPE_BIGINT);
+        CASE_TYPE(TYPE_LARGEINT);
+    case TYPE_CHAR:
         return std::make_unique<ShardByLengthSliceHashIndex>();
-    case LOGICAL_TYPE_VARCHAR:
+    case TYPE_VARCHAR:
         return std::make_unique<ShardByLengthSliceHashIndex>();
-    case LOGICAL_TYPE_DATE:
+    case TYPE_DATE:
         return std::make_unique<HashIndexImpl<int32_t>>();
-    case LOGICAL_TYPE_DATETIME:
+    case TYPE_DATETIME:
         return std::make_unique<HashIndexImpl<int64_t>>();
     default:
         return nullptr;

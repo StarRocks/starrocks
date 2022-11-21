@@ -44,7 +44,7 @@ struct PredicateCmpTypeForField {
 };
 
 template <>
-struct PredicateCmpTypeForField<LOGICAL_TYPE_JSON> {
+struct PredicateCmpTypeForField<TYPE_JSON> {
     using ValueType = JsonValue;
 };
 

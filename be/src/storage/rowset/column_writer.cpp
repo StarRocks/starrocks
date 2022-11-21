@@ -262,7 +262,7 @@ StatusOr<std::unique_ptr<ColumnWriter>> ColumnWriter::create(const ColumnWriterO
         return std::make_unique<ScalarColumnWriter>(opts, std::move(field), wfile);
     } else {
         switch (column->type()) {
-        case LogicalType::LOGICAL_TYPE_ARRAY: {
+        case LogicalType::TYPE_ARRAY: {
             DCHECK(column->subcolumn_count() == 1);
             const TabletColumn& element_column = column->subcolumn(0);
             ColumnWriterOptions element_options;
@@ -270,7 +270,7 @@ StatusOr<std::unique_ptr<ColumnWriter>> ColumnWriter::create(const ColumnWriterO
             element_options.need_zone_map = false;
             element_options.need_bloom_filter = element_column.is_bf_column();
             element_options.need_bitmap_index = element_column.has_bitmap_index();
-            if (element_column.type() == LogicalType::LOGICAL_TYPE_ARRAY) {
+            if (element_column.type() == LogicalType::TYPE_ARRAY) {
                 if (element_options.need_bloom_filter) {
                     return Status::NotSupported("Do not support bloom filter for array type");
                 }
@@ -287,12 +287,12 @@ StatusOr<std::unique_ptr<ColumnWriter>> ColumnWriter::create(const ColumnWriterO
                 null_options.meta = opts.meta->add_children_columns();
                 null_options.meta->set_column_id(opts.meta->column_id());
                 null_options.meta->set_unique_id(opts.meta->unique_id());
-                null_options.meta->set_type(LOGICAL_TYPE_BOOLEAN);
+                null_options.meta->set_type(TYPE_BOOLEAN);
                 null_options.meta->set_length(1);
                 null_options.meta->set_encoding(DEFAULT_ENCODING);
                 null_options.meta->set_compression(opts.meta->compression());
                 null_options.meta->set_is_nullable(false);
-                std::unique_ptr<Field> bool_field(FieldFactory::create_by_type(LogicalType::LOGICAL_TYPE_BOOLEAN));
+                std::unique_ptr<Field> bool_field(FieldFactory::create_by_type(LogicalType::TYPE_BOOLEAN));
                 null_writer = std::make_unique<ScalarColumnWriter>(null_options, std::move(bool_field), wfile);
             }
 
@@ -300,7 +300,7 @@ StatusOr<std::unique_ptr<ColumnWriter>> ColumnWriter::create(const ColumnWriterO
             array_size_options.meta = opts.meta->add_children_columns();
             array_size_options.meta->set_column_id(opts.meta->column_id());
             array_size_options.meta->set_unique_id(opts.meta->unique_id());
-            array_size_options.meta->set_type(LOGICAL_TYPE_INT);
+            array_size_options.meta->set_type(TYPE_INT);
             array_size_options.meta->set_length(4);
             array_size_options.meta->set_encoding(DEFAULT_ENCODING);
             array_size_options.meta->set_compression(opts.meta->compression());
@@ -308,7 +308,7 @@ StatusOr<std::unique_ptr<ColumnWriter>> ColumnWriter::create(const ColumnWriterO
             array_size_options.need_zone_map = false;
             array_size_options.need_bloom_filter = false;
             array_size_options.need_bitmap_index = false;
-            std::unique_ptr<Field> bigint_field(FieldFactory::create_by_type(LogicalType::LOGICAL_TYPE_INT));
+            std::unique_ptr<Field> bigint_field(FieldFactory::create_by_type(LogicalType::TYPE_INT));
             std::unique_ptr<ScalarColumnWriter> offset_writer =
                     std::make_unique<ScalarColumnWriter>(array_size_options, std::move(bigint_field), wfile);
             return std::make_unique<ArrayColumnWriter>(opts, std::move(field), std::move(null_writer),

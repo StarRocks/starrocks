@@ -84,54 +84,54 @@ static LogicalType t_primitive_type_to_field_type(TPrimitiveType::type primitive
     case TPrimitiveType::NULL_TYPE:
     case TPrimitiveType::BINARY:
     case TPrimitiveType::TIME:
-        return LOGICAL_TYPE_UNKNOWN;
+        return TYPE_UNKNOWN;
     case TPrimitiveType::BOOLEAN:
-        return LOGICAL_TYPE_BOOLEAN;
+        return TYPE_BOOLEAN;
     case TPrimitiveType::TINYINT:
-        return LOGICAL_TYPE_TINYINT;
+        return TYPE_TINYINT;
     case TPrimitiveType::SMALLINT:
-        return LOGICAL_TYPE_SMALLINT;
+        return TYPE_SMALLINT;
     case TPrimitiveType::INT:
-        return LOGICAL_TYPE_INT;
+        return TYPE_INT;
     case TPrimitiveType::BIGINT:
-        return LOGICAL_TYPE_BIGINT;
+        return TYPE_BIGINT;
     case TPrimitiveType::FLOAT:
-        return LOGICAL_TYPE_FLOAT;
+        return TYPE_FLOAT;
     case TPrimitiveType::DOUBLE:
-        return LOGICAL_TYPE_DOUBLE;
+        return TYPE_DOUBLE;
     case TPrimitiveType::DATE:
-        return v == FieldTypeVersion::kV1 ? LOGICAL_TYPE_DATE_V1 : LOGICAL_TYPE_DATE;
+        return v == FieldTypeVersion::kV1 ? TYPE_DATE_V1 : TYPE_DATE;
     case TPrimitiveType::DATETIME:
-        return v == FieldTypeVersion::kV1 ? LOGICAL_TYPE_DATETIME_V1 : LOGICAL_TYPE_DATETIME;
+        return v == FieldTypeVersion::kV1 ? TYPE_DATETIME_V1 : TYPE_DATETIME;
     case TPrimitiveType::CHAR:
-        return LOGICAL_TYPE_CHAR;
+        return TYPE_CHAR;
     case TPrimitiveType::LARGEINT:
-        return LOGICAL_TYPE_LARGEINT;
+        return TYPE_LARGEINT;
     case TPrimitiveType::VARCHAR:
-        return LOGICAL_TYPE_VARCHAR;
+        return TYPE_VARCHAR;
     case TPrimitiveType::HLL:
-        return LOGICAL_TYPE_HLL;
+        return TYPE_HLL;
     case TPrimitiveType::DECIMAL:
     case TPrimitiveType::DECIMALV2:
-        return v == FieldTypeVersion::kV1 ? LOGICAL_TYPE_DECIMAL : LOGICAL_TYPE_DECIMALV2;
+        return v == FieldTypeVersion::kV1 ? TYPE_DECIMAL : TYPE_DECIMALV2;
     case TPrimitiveType::DECIMAL32:
-        return LOGICAL_TYPE_DECIMAL32;
+        return TYPE_DECIMAL32;
     case TPrimitiveType::DECIMAL64:
-        return LOGICAL_TYPE_DECIMAL64;
+        return TYPE_DECIMAL64;
     case TPrimitiveType::DECIMAL128:
-        return LOGICAL_TYPE_DECIMAL128;
+        return TYPE_DECIMAL128;
     case TPrimitiveType::OBJECT:
-        return LOGICAL_TYPE_OBJECT;
+        return TYPE_OBJECT;
     case TPrimitiveType::PERCENTILE:
-        return LOGICAL_TYPE_PERCENTILE;
+        return TYPE_PERCENTILE;
     case TPrimitiveType::JSON:
-        return LOGICAL_TYPE_JSON;
+        return TYPE_JSON;
     case TPrimitiveType::VARBINARY:
-        return LOGICAL_TYPE_VARCHAR;
+        return TYPE_VARCHAR;
     case TPrimitiveType::FUNCTION:
-        return LOGICAL_TYPE_UNKNOWN;
+        return TYPE_UNKNOWN;
     }
-    return LOGICAL_TYPE_UNKNOWN;
+    return TYPE_UNKNOWN;
 }
 
 static Status t_column_to_pb_column(int32_t unique_id, const TColumn& t_column, FieldTypeVersion v, ColumnPB* column_pb,
@@ -176,7 +176,7 @@ static Status t_column_to_pb_column(int32_t unique_id, const TColumn& t_column, 
         column_pb->set_index_length(column_pb->length());
         column_pb->set_frac(curr_type_node.scalar_type.scale);
         column_pb->set_precision(curr_type_node.scalar_type.precision);
-        if (field_type == LOGICAL_TYPE_VARCHAR) {
+        if (field_type == TYPE_VARCHAR) {
             int32_t index_len = depth == 0 && t_column.__isset.index_len ? t_column.index_len : 10;
             column_pb->set_index_length(index_len);
         }
@@ -189,8 +189,8 @@ static Status t_column_to_pb_column(int32_t unique_id, const TColumn& t_column, 
         return Status::OK();
     }
     case TTypeNodeType::ARRAY:
-        column_pb->set_type(logical_type_to_string(LOGICAL_TYPE_ARRAY));
-        column_pb->set_length(TabletColumn::get_field_length_by_type(LOGICAL_TYPE_ARRAY, sizeof(Collection)));
+        column_pb->set_type(logical_type_to_string(TYPE_ARRAY));
+        column_pb->set_length(TabletColumn::get_field_length_by_type(TYPE_ARRAY, sizeof(Collection)));
         column_pb->set_index_length(column_pb->length());
         return t_column_to_pb_column(kFakeUniqueId, t_column, v, column_pb->add_children_columns(), depth + 1);
     case TTypeNodeType::STRUCT:

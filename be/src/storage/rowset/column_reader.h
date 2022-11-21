@@ -178,7 +178,7 @@ private:
     // ColumnReader will be resident in memory. When there are many columns in the table,
     // the meta in ColumnReader takes up a lot of memory,
     // and now the content that is not needed in Meta is not saved to ColumnReader
-    LogicalType _column_type = LOGICAL_TYPE_UNKNOWN;
+    LogicalType _column_type = TYPE_UNKNOWN;
     PagePointer _dict_page_pointer;
     uint64_t _total_mem_footprint = 0;
 

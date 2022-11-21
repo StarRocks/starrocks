@@ -173,6 +173,15 @@ Status MySQLDataSource::open(RuntimeState* state) {
             case TYPE_JSON:
             case TYPE_FUNCTION:
             case TYPE_VARBINARY:
+            case TYPE_UNSIGNED_TINYINT:
+            case TYPE_UNSIGNED_SMALLINT:
+            case TYPE_UNSIGNED_INT:
+            case TYPE_UNSIGNED_BIGINT:
+            case TYPE_DISCRETE_DOUBLE:
+            case TYPE_DATE_V1:
+            case TYPE_DATETIME_V1:
+            case TYPE_NONE:
+            case TYPE_MAX_VALUE:
                 break;
             }
         }

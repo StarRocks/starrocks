@@ -69,105 +69,105 @@ template <template <LogicalType> typename Predicate, template <LogicalType> type
 static ColumnPredicate* new_column_predicate(const TypeInfoPtr& type_info, ColumnId id, const Slice& operand) {
     auto type = type_info->type();
     switch (type) {
-    case LOGICAL_TYPE_BOOLEAN:
-        return new Predicate<LOGICAL_TYPE_BOOLEAN>(type_info, id, string_to_int<int>(operand) != 0);
-    case LOGICAL_TYPE_TINYINT:
-        return new Predicate<LOGICAL_TYPE_TINYINT>(type_info, id, string_to_int<int8_t>(operand));
-    case LOGICAL_TYPE_UNSIGNED_TINYINT:
+    case TYPE_BOOLEAN:
+        return new Predicate<TYPE_BOOLEAN>(type_info, id, string_to_int<int>(operand) != 0);
+    case TYPE_TINYINT:
+        return new Predicate<TYPE_TINYINT>(type_info, id, string_to_int<int8_t>(operand));
+    case TYPE_UNSIGNED_TINYINT:
         return nullptr;
-    case LOGICAL_TYPE_SMALLINT:
-        return new Predicate<LOGICAL_TYPE_SMALLINT>(type_info, id, string_to_int<int16_t>(operand));
-    case LOGICAL_TYPE_UNSIGNED_SMALLINT:
+    case TYPE_SMALLINT:
+        return new Predicate<TYPE_SMALLINT>(type_info, id, string_to_int<int16_t>(operand));
+    case TYPE_UNSIGNED_SMALLINT:
         return nullptr;
-    case LOGICAL_TYPE_INT:
-        return new Predicate<LOGICAL_TYPE_INT>(type_info, id, string_to_int<int32_t>(operand));
-    case LOGICAL_TYPE_UNSIGNED_INT:
+    case TYPE_INT:
+        return new Predicate<TYPE_INT>(type_info, id, string_to_int<int32_t>(operand));
+    case TYPE_UNSIGNED_INT:
         return nullptr;
-    case LOGICAL_TYPE_BIGINT:
-        return new Predicate<LOGICAL_TYPE_BIGINT>(type_info, id, string_to_int<int64_t>(operand));
-    case LOGICAL_TYPE_UNSIGNED_BIGINT:
+    case TYPE_BIGINT:
+        return new Predicate<TYPE_BIGINT>(type_info, id, string_to_int<int64_t>(operand));
+    case TYPE_UNSIGNED_BIGINT:
         return nullptr;
-    case LOGICAL_TYPE_LARGEINT:
-        return new Predicate<LOGICAL_TYPE_LARGEINT>(type_info, id, string_to_int<int128_t>(operand));
-    case LOGICAL_TYPE_FLOAT:
-        return new Predicate<LOGICAL_TYPE_FLOAT>(type_info, id, string_to_float<float>(operand));
-    case LOGICAL_TYPE_DOUBLE:
-        return new Predicate<LOGICAL_TYPE_DOUBLE>(type_info, id, string_to_float<double>(operand));
-    case LOGICAL_TYPE_DISCRETE_DOUBLE:
+    case TYPE_LARGEINT:
+        return new Predicate<TYPE_LARGEINT>(type_info, id, string_to_int<int128_t>(operand));
+    case TYPE_FLOAT:
+        return new Predicate<TYPE_FLOAT>(type_info, id, string_to_float<float>(operand));
+    case TYPE_DOUBLE:
+        return new Predicate<TYPE_DOUBLE>(type_info, id, string_to_float<double>(operand));
+    case TYPE_DISCRETE_DOUBLE:
         return nullptr;
-    case LOGICAL_TYPE_DECIMAL: {
+    case TYPE_DECIMAL: {
         decimal12_t value;
         auto st = type_info->from_string(&value, operand.to_string());
         DCHECK(st.ok());
-        return new Predicate<LOGICAL_TYPE_DECIMAL>(type_info, id, value);
+        return new Predicate<TYPE_DECIMAL>(type_info, id, value);
     }
-    case LOGICAL_TYPE_DECIMALV2: {
+    case TYPE_DECIMALV2: {
         DecimalV2Value value;
         auto st = type_info->from_string(&value, operand.to_string());
         DCHECK(st.ok());
-        return new Predicate<LOGICAL_TYPE_DECIMALV2>(type_info, id, value);
+        return new Predicate<TYPE_DECIMALV2>(type_info, id, value);
     }
-    case LOGICAL_TYPE_DECIMAL32: {
+    case TYPE_DECIMAL32: {
         int32_t value;
         auto st = type_info->from_string(&value, operand.to_string());
         DCHECK(st.ok());
-        return new Predicate<LOGICAL_TYPE_DECIMAL32>(type_info, id, value);
+        return new Predicate<TYPE_DECIMAL32>(type_info, id, value);
     }
-    case LOGICAL_TYPE_DECIMAL64: {
+    case TYPE_DECIMAL64: {
         int64_t value;
         auto st = type_info->from_string(&value, operand.to_string());
         DCHECK(st.ok());
-        return new Predicate<LOGICAL_TYPE_DECIMAL64>(type_info, id, value);
+        return new Predicate<TYPE_DECIMAL64>(type_info, id, value);
     }
-    case LOGICAL_TYPE_DECIMAL128: {
+    case TYPE_DECIMAL128: {
         int128_t value;
         auto st = type_info->from_string(&value, operand.to_string());
         DCHECK(st.ok());
-        return new Predicate<LOGICAL_TYPE_DECIMAL128>(type_info, id, value);
+        return new Predicate<TYPE_DECIMAL128>(type_info, id, value);
     }
-    case LOGICAL_TYPE_DATE_V1: {
+    case TYPE_DATE_V1: {
         uint24_t value = 0;
         auto st = type_info->from_string(&value, operand.to_string());
         DCHECK(st.ok());
-        return new Predicate<LOGICAL_TYPE_DATE_V1>(type_info, id, value);
+        return new Predicate<TYPE_DATE_V1>(type_info, id, value);
     }
-    case LOGICAL_TYPE_DATE: {
+    case TYPE_DATE: {
         int32_t value = 0;
         auto st = type_info->from_string(&value, operand.to_string());
         DCHECK(st.ok());
-        return new Predicate<LOGICAL_TYPE_DATE>(type_info, id, value);
+        return new Predicate<TYPE_DATE>(type_info, id, value);
     }
-    case LOGICAL_TYPE_DATETIME_V1: {
+    case TYPE_DATETIME_V1: {
         uint64_t value = 0;
         auto st = type_info->from_string(&value, operand.to_string());
         DCHECK(st.ok());
-        return new Predicate<LOGICAL_TYPE_DATETIME_V1>(type_info, id, value);
+        return new Predicate<TYPE_DATETIME_V1>(type_info, id, value);
     }
-    case LOGICAL_TYPE_DATETIME: {
+    case TYPE_DATETIME: {
         int64_t value = 0;
         auto st = type_info->from_string(&value, operand.to_string());
         DCHECK(st.ok());
-        return new Predicate<LOGICAL_TYPE_DATETIME>(type_info, id, value);
+        return new Predicate<TYPE_DATETIME>(type_info, id, value);
     }
-    case LOGICAL_TYPE_CHAR:
-        return new BinaryPredicate<LOGICAL_TYPE_CHAR>(type_info, id, operand);
-    case LOGICAL_TYPE_VARCHAR:
-        return new BinaryPredicate<LOGICAL_TYPE_VARCHAR>(type_info, id, operand);
-    case LOGICAL_TYPE_STRUCT:
-    case LOGICAL_TYPE_ARRAY:
-    case LOGICAL_TYPE_MAP:
-    case LOGICAL_TYPE_UNKNOWN:
-    case LOGICAL_TYPE_NONE:
-    case LOGICAL_TYPE_HLL:
-    case LOGICAL_TYPE_OBJECT:
-    case LOGICAL_TYPE_PERCENTILE:
-    case LOGICAL_TYPE_JSON:
-    case LOGICAL_TYPE_NULL:
-    case LOGICAL_TYPE_FUNCTION:
-    case LOGICAL_TYPE_TIME:
-    case LOGICAL_TYPE_BINARY:
-    case LOGICAL_TYPE_VARBINARY:
-    case LOGICAL_TYPE_MAX_VALUE:
+    case TYPE_CHAR:
+        return new BinaryPredicate<TYPE_CHAR>(type_info, id, operand);
+    case TYPE_VARCHAR:
+        return new BinaryPredicate<TYPE_VARCHAR>(type_info, id, operand);
+    case TYPE_STRUCT:
+    case TYPE_ARRAY:
+    case TYPE_MAP:
+    case TYPE_UNKNOWN:
+    case TYPE_NONE:
+    case TYPE_HLL:
+    case TYPE_OBJECT:
+    case TYPE_PERCENTILE:
+    case TYPE_JSON:
+    case TYPE_NULL:
+    case TYPE_FUNCTION:
+    case TYPE_TIME:
+    case TYPE_BINARY:
+    case TYPE_VARBINARY:
+    case TYPE_MAX_VALUE:
         return nullptr;
         // No default to ensure newly added enumerator will be handled.
     }
@@ -413,10 +413,10 @@ public:
     bool support_bloom_filter() const override { return true; }
 
     bool bloom_filter(const BloomFilter* bf) const override {
-        static_assert(field_type != LOGICAL_TYPE_JSON, "TODO");
-        static_assert(field_type != LOGICAL_TYPE_HLL, "TODO");
-        static_assert(field_type != LOGICAL_TYPE_OBJECT, "TODO");
-        static_assert(field_type != LOGICAL_TYPE_PERCENTILE, "TODO");
+        static_assert(field_type != TYPE_JSON, "TODO");
+        static_assert(field_type != TYPE_HLL, "TODO");
+        static_assert(field_type != TYPE_OBJECT, "TODO");
+        static_assert(field_type != TYPE_PERCENTILE, "TODO");
         return bf->test_bytes(reinterpret_cast<const char*>(&this->_value), sizeof(this->_value));
     }
 

@@ -43,7 +43,7 @@ BinaryDictPageBuilder::BinaryDictPageBuilder(const PageBuilderOptions& options)
           _dict_builder(nullptr),
           _encoding_type(DICT_ENCODING) {
     // initially use DICT_ENCODING
-    _data_page_builder = std::make_unique<BitshufflePageBuilder<LOGICAL_TYPE_INT>>(options);
+    _data_page_builder = std::make_unique<BitshufflePageBuilder<TYPE_INT>>(options);
     _data_page_builder->reserve_head(BINARY_DICT_PAGE_HEADER_SIZE);
     PageBuilderOptions dict_builder_options;
     dict_builder_options.data_page_size = _options.dict_page_size;
@@ -65,7 +65,7 @@ uint32_t BinaryDictPageBuilder::add(const uint8_t* vals, uint32_t count) {
         const auto* src = reinterpret_cast<const Slice*>(vals);
         uint32_t value_code = -1;
         // Manually devirtualization.
-        auto* code_page = down_cast<BitshufflePageBuilder<LOGICAL_TYPE_INT>*>(_data_page_builder.get());
+        auto* code_page = down_cast<BitshufflePageBuilder<TYPE_INT>*>(_data_page_builder.get());
 
         if (_data_page_builder->count() == 0) {
             auto s = unaligned_load<Slice>(src);
@@ -183,10 +183,10 @@ Status BinaryDictPageDecoder<Type>::init() {
     if (_encoding_type == DICT_ENCODING) {
         // copy the codewords into a temporary buffer first
         // And then copy the strings corresponding to the codewords to the destination buffer
-        const TypeInfoPtr& type_info = get_type_info(LOGICAL_TYPE_INT);
+        const TypeInfoPtr& type_info = get_type_info(TYPE_INT);
 
         RETURN_IF_ERROR(ColumnVectorBatch::create(0, false, type_info, nullptr, &_batch));
-        _data_page_decoder = std::make_unique<BitShufflePageDecoder<LOGICAL_TYPE_INT>>(_data, _options);
+        _data_page_decoder = std::make_unique<BitShufflePageDecoder<TYPE_INT>>(_data, _options);
     } else if (_encoding_type == PLAIN_ENCODING) {
         DCHECK_EQ(_encoding_type, PLAIN_ENCODING);
         _data_page_decoder.reset(new BinaryPlainPageDecoder<Type>(_data, _options));
@@ -230,18 +230,18 @@ Status BinaryDictPageDecoder<Type>::next_batch(const vectorized::SparseRange& ra
     DCHECK(_parsed);
     DCHECK(_dict_decoder != nullptr) << "dict decoder pointer is nullptr";
     if (_vec_code_buf == nullptr) {
-        _vec_code_buf = ChunkHelper::column_from_field_type(LOGICAL_TYPE_INT, false);
+        _vec_code_buf = ChunkHelper::column_from_field_type(TYPE_INT, false);
     }
     _vec_code_buf->resize(0);
     _vec_code_buf->reserve(range.span_size());
 
     RETURN_IF_ERROR(_data_page_decoder->next_batch(range, _vec_code_buf.get()));
     size_t nread = _vec_code_buf->size();
-    using cast_type = CppTypeTraits<LOGICAL_TYPE_INT>::CppType;
+    using cast_type = CppTypeTraits<TYPE_INT>::CppType;
     const auto* codewords = reinterpret_cast<const cast_type*>(_vec_code_buf->raw_data());
     std::vector<Slice> slices;
     slices.reserve(nread);
-    if constexpr (Type == LOGICAL_TYPE_CHAR) {
+    if constexpr (Type == TYPE_CHAR) {
         for (int i = 0; i < nread; ++i) {
             Slice element = _dict_decoder->string_at_index(codewords[i]);
             // Strip trailing '\x00'
@@ -272,7 +272,7 @@ Status BinaryDictPageDecoder<Type>::next_dict_codes(const vectorized::SparseRang
     return _data_page_decoder->next_batch(range, dst);
 }
 
-template class BinaryDictPageDecoder<LOGICAL_TYPE_CHAR>;
-template class BinaryDictPageDecoder<LOGICAL_TYPE_VARCHAR>;
+template class BinaryDictPageDecoder<TYPE_CHAR>;
+template class BinaryDictPageDecoder<TYPE_VARCHAR>;
 
 } // namespace starrocks

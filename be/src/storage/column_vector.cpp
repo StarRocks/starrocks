@@ -46,8 +46,8 @@ struct BatchT {
     using value = ScalarColumnVectorBatch<typename CppTypeTraits<ftype>::CppType>;
 };
 template <>
-struct BatchT<LOGICAL_TYPE_BOOLEAN> {
-    using value = ScalarColumnVectorBatch<typename CppTypeTraits<LOGICAL_TYPE_TINYINT>::CppType>;
+struct BatchT<TYPE_BOOLEAN> {
+    using value = ScalarColumnVectorBatch<typename CppTypeTraits<TYPE_TINYINT>::CppType>;
 };
 
 struct BatchBuilder {
@@ -55,7 +55,7 @@ struct BatchBuilder {
     StatusOr<std::unique_ptr<ColumnVectorBatch>> operator()(const TypeInfoPtr& type_info, bool nullable, Field* field,
                                                             size_t capacity) {
         switch (ftype) {
-        case LOGICAL_TYPE_ARRAY: {
+        case TYPE_ARRAY: {
             if (field == nullptr) {
                 return Status::InvalidArgument("`Field` cannot be NULL when create ArrayColumnVectorBatch");
             }

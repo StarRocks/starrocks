@@ -59,6 +59,15 @@ PrimitiveType thrift_to_type(TPrimitiveType::type ttype) {
 TPrimitiveType::type to_thrift(PrimitiveType ptype) {
     switch (ptype) {
     // TODO(mofei) rename these two type
+    case TYPE_UNSIGNED_TINYINT:
+    case TYPE_UNSIGNED_SMALLINT:
+    case TYPE_UNSIGNED_INT:
+    case TYPE_UNSIGNED_BIGINT:
+    case TYPE_DISCRETE_DOUBLE:
+    case TYPE_DATE_V1:
+    case TYPE_DATETIME_V1:
+    case TYPE_NONE:
+    case TYPE_MAX_VALUE:
     case TYPE_UNKNOWN:
         return TPrimitiveType::INVALID_TYPE;
     case TYPE_NULL:
@@ -80,6 +89,15 @@ TPrimitiveType::type to_thrift(PrimitiveType ptype) {
 
 std::string type_to_string(PrimitiveType t) {
     switch (t) {
+    case TYPE_UNSIGNED_TINYINT:
+    case TYPE_UNSIGNED_SMALLINT:
+    case TYPE_UNSIGNED_INT:
+    case TYPE_UNSIGNED_BIGINT:
+    case TYPE_DISCRETE_DOUBLE:
+    case TYPE_DATE_V1:
+    case TYPE_DATETIME_V1:
+    case TYPE_NONE:
+    case TYPE_MAX_VALUE:
     case TYPE_UNKNOWN:
         return "INVALID";
     case TYPE_NULL:
@@ -179,32 +197,32 @@ public:
         for (auto& i : _data) {
             i = TYPE_UNKNOWN;
         }
-        _data[LOGICAL_TYPE_BOOLEAN] = TYPE_BOOLEAN;
-        _data[LOGICAL_TYPE_TINYINT] = TYPE_TINYINT;
-        _data[LOGICAL_TYPE_SMALLINT] = TYPE_SMALLINT;
-        _data[LOGICAL_TYPE_INT] = TYPE_INT;
-        _data[LOGICAL_TYPE_BIGINT] = TYPE_BIGINT;
-        _data[LOGICAL_TYPE_LARGEINT] = TYPE_LARGEINT;
-        _data[LOGICAL_TYPE_FLOAT] = TYPE_FLOAT;
-        _data[LOGICAL_TYPE_DOUBLE] = TYPE_DOUBLE;
-        _data[LOGICAL_TYPE_CHAR] = TYPE_CHAR;
-        _data[LOGICAL_TYPE_VARCHAR] = TYPE_VARCHAR;
-        _data[LOGICAL_TYPE_DATE_V1] = TYPE_DATE;
-        _data[LOGICAL_TYPE_DATE] = TYPE_DATE;
-        _data[LOGICAL_TYPE_DATETIME] = TYPE_DATETIME;
-        _data[LOGICAL_TYPE_DATETIME_V1] = TYPE_DATETIME;
-        _data[LOGICAL_TYPE_DECIMAL] = TYPE_DECIMAL;
-        _data[LOGICAL_TYPE_DECIMALV2] = TYPE_DECIMALV2;
-        _data[LOGICAL_TYPE_DECIMAL32] = TYPE_DECIMAL32;
-        _data[LOGICAL_TYPE_DECIMAL64] = TYPE_DECIMAL64;
-        _data[LOGICAL_TYPE_DECIMAL128] = TYPE_DECIMAL128;
-        _data[LOGICAL_TYPE_JSON] = TYPE_JSON;
-        _data[LOGICAL_TYPE_VARBINARY] = TYPE_VARBINARY;
+        _data[TYPE_BOOLEAN] = TYPE_BOOLEAN;
+        _data[TYPE_TINYINT] = TYPE_TINYINT;
+        _data[TYPE_SMALLINT] = TYPE_SMALLINT;
+        _data[TYPE_INT] = TYPE_INT;
+        _data[TYPE_BIGINT] = TYPE_BIGINT;
+        _data[TYPE_LARGEINT] = TYPE_LARGEINT;
+        _data[TYPE_FLOAT] = TYPE_FLOAT;
+        _data[TYPE_DOUBLE] = TYPE_DOUBLE;
+        _data[TYPE_CHAR] = TYPE_CHAR;
+        _data[TYPE_VARCHAR] = TYPE_VARCHAR;
+        _data[TYPE_DATE_V1] = TYPE_DATE;
+        _data[TYPE_DATE] = TYPE_DATE;
+        _data[TYPE_DATETIME] = TYPE_DATETIME;
+        _data[TYPE_DATETIME_V1] = TYPE_DATETIME;
+        _data[TYPE_DECIMAL] = TYPE_DECIMAL;
+        _data[TYPE_DECIMALV2] = TYPE_DECIMALV2;
+        _data[TYPE_DECIMAL32] = TYPE_DECIMAL32;
+        _data[TYPE_DECIMAL64] = TYPE_DECIMAL64;
+        _data[TYPE_DECIMAL128] = TYPE_DECIMAL128;
+        _data[TYPE_JSON] = TYPE_JSON;
+        _data[TYPE_VARBINARY] = TYPE_VARBINARY;
     }
     PrimitiveType get_primitive_type(LogicalType field_type) { return _data[field_type]; }
 
 private:
-    PrimitiveType _data[LOGICAL_TYPE_MAX_VALUE];
+    PrimitiveType _data[TYPE_MAX_VALUE];
 };
 
 static ScalarFieldTypeToPrimitiveTypeMapping g_scalar_ftype_to_ptype;

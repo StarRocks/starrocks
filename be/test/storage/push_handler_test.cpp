@@ -32,10 +32,10 @@ private:
 
 Schema PushHandlerTest::_create_schema() {
     Fields fields;
-    fields.emplace_back(std::make_shared<Field>(0, "k1_int", get_type_info(LOGICAL_TYPE_INT), true));
-    fields.emplace_back(std::make_shared<Field>(1, "k2_smallint", get_type_info(LOGICAL_TYPE_SMALLINT), true));
-    fields.emplace_back(std::make_shared<Field>(2, "k3_varchar", get_type_info(LOGICAL_TYPE_VARCHAR), true));
-    fields.emplace_back(std::make_shared<Field>(3, "k4_bigint", get_type_info(LOGICAL_TYPE_BIGINT), true));
+    fields.emplace_back(std::make_shared<Field>(0, "k1_int", get_type_info(TYPE_INT), true));
+    fields.emplace_back(std::make_shared<Field>(1, "k2_smallint", get_type_info(TYPE_SMALLINT), true));
+    fields.emplace_back(std::make_shared<Field>(2, "k3_varchar", get_type_info(TYPE_VARCHAR), true));
+    fields.emplace_back(std::make_shared<Field>(3, "k4_bigint", get_type_info(TYPE_BIGINT), true));
     fields.back()->set_aggregate_method(OLAP_FIELD_AGGREGATION_SUM);
     return Schema(fields);
 }

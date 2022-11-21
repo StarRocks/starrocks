@@ -53,7 +53,7 @@ static const std::vector<std::string> DATE_FORMATS{
 
 template <typename T>
 static Status convert_int_from_varchar(void* dest, const void* src) {
-    using SrcType = typename CppTypeTraits<LOGICAL_TYPE_VARCHAR>::CppType;
+    using SrcType = typename CppTypeTraits<TYPE_VARCHAR>::CppType;
     auto src_value = unaligned_load<SrcType>(src);
     StringParser::ParseResult parse_res;
     T result = StringParser::string_to_int<T>(src_value.get_data(), src_value.get_size(), &parse_res);
@@ -67,7 +67,7 @@ static Status convert_int_from_varchar(void* dest, const void* src) {
 
 template <typename T>
 static Status convert_float_from_varchar(void* dest, const void* src) {
-    using SrcType = typename CppTypeTraits<LOGICAL_TYPE_VARCHAR>::CppType;
+    using SrcType = typename CppTypeTraits<TYPE_VARCHAR>::CppType;
     auto src_value = unaligned_load<SrcType>(src);
     StringParser::ParseResult parse_res;
     T result = StringParser::string_to_float<T>(src_value.get_data(), src_value.get_size(), &parse_res);
@@ -228,7 +228,7 @@ class ScalarTypeInfoResolver {
 public:
     const TypeInfoPtr get_type_info(const LogicalType t) {
         if (this->_mapping.find(t) == this->_mapping.end()) {
-            return std::make_shared<ScalarTypeInfo>(*this->_mapping[LOGICAL_TYPE_NONE].get());
+            return std::make_shared<ScalarTypeInfo>(*this->_mapping[TYPE_NONE].get());
         }
         return std::make_shared<ScalarTypeInfo>(*this->_mapping[t].get());
     }
@@ -273,19 +273,19 @@ ScalarTypeInfoResolver::ScalarTypeInfoResolver() {
 #define M(ftype) add_mapping<ftype>();
     APPLY_FOR_SUPPORTED_FIELD_TYPE(M)
 #undef M
-    add_mapping<LOGICAL_TYPE_NONE>();
+    add_mapping<TYPE_NONE>();
 }
 
 ScalarTypeInfoResolver::~ScalarTypeInfoResolver() = default;
 
 bool is_scalar_field_type(LogicalType field_type) {
     switch (field_type) {
-    case LOGICAL_TYPE_STRUCT:
-    case LOGICAL_TYPE_ARRAY:
-    case LOGICAL_TYPE_MAP:
-    case LOGICAL_TYPE_DECIMAL32:
-    case LOGICAL_TYPE_DECIMAL64:
-    case LOGICAL_TYPE_DECIMAL128:
+    case TYPE_STRUCT:
+    case TYPE_ARRAY:
+    case TYPE_MAP:
+    case TYPE_DECIMAL32:
+    case TYPE_DECIMAL64:
+    case TYPE_DECIMAL128:
         return false;
     default:
         return true;
@@ -294,9 +294,9 @@ bool is_scalar_field_type(LogicalType field_type) {
 
 bool is_complex_metric_type(LogicalType field_type) {
     switch (field_type) {
-    case LOGICAL_TYPE_OBJECT:
-    case LOGICAL_TYPE_PERCENTILE:
-    case LOGICAL_TYPE_HLL:
+    case TYPE_OBJECT:
+    case TYPE_PERCENTILE:
+    case TYPE_HLL:
         return true;
     default:
         return false;
@@ -310,7 +310,7 @@ TypeInfoPtr get_type_info(LogicalType field_type) {
 TypeInfoPtr get_type_info(const ColumnMetaPB& column_meta_pb) {
     auto type = static_cast<LogicalType>(column_meta_pb.type());
     TypeInfoPtr type_info;
-    if (type == LOGICAL_TYPE_ARRAY) {
+    if (type == TYPE_ARRAY) {
         const ColumnMetaPB& child = column_meta_pb.children_columns(0);
         TypeInfoPtr child_type_info = get_type_info(child);
         type_info = get_array_type_info(child_type_info);
@@ -322,7 +322,7 @@ TypeInfoPtr get_type_info(const ColumnMetaPB& column_meta_pb) {
 
 TypeInfoPtr get_type_info(const TabletColumn& col) {
     TypeInfoPtr type_info;
-    if (col.type() == LOGICAL_TYPE_ARRAY) {
+    if (col.type() == TYPE_ARRAY) {
         const TabletColumn& child = col.subcolumn(0);
         TypeInfoPtr child_type_info = get_type_info(child);
         type_info = get_array_type_info(child_type_info);
@@ -335,8 +335,8 @@ TypeInfoPtr get_type_info(const TabletColumn& col) {
 TypeInfoPtr get_type_info(LogicalType field_type, [[maybe_unused]] int precision, [[maybe_unused]] int scale) {
     if (is_scalar_field_type(field_type)) {
         return get_type_info(field_type);
-    } else if (field_type == LOGICAL_TYPE_DECIMAL32 || field_type == LOGICAL_TYPE_DECIMAL64 ||
-               field_type == LOGICAL_TYPE_DECIMAL128) {
+    } else if (field_type == TYPE_DECIMAL32 || field_type == TYPE_DECIMAL64 ||
+               field_type == TYPE_DECIMAL128) {
         return get_decimal_type_info(field_type, precision, scale);
     } else {
         return nullptr;
@@ -353,7 +353,7 @@ const TypeInfo* get_scalar_type_info(LogicalType type) {
 }
 
 template <>
-struct ScalarTypeInfoImpl<LOGICAL_TYPE_BOOLEAN> : public ScalarTypeInfoImplBase<LOGICAL_TYPE_BOOLEAN> {
+struct ScalarTypeInfoImpl<TYPE_BOOLEAN> : public ScalarTypeInfoImplBase<TYPE_BOOLEAN> {
     static std::string to_string(const void* src) {
         char buf[1024] = {'\0'};
         snprintf(buf, sizeof(buf), "%d", *reinterpret_cast<const bool*>(src));
@@ -371,10 +371,10 @@ struct ScalarTypeInfoImpl<LOGICAL_TYPE_BOOLEAN> : public ScalarTypeInfoImplBase<
 };
 
 template <>
-struct ScalarTypeInfoImpl<LOGICAL_TYPE_NONE> : public ScalarTypeInfoImplBase<LOGICAL_TYPE_NONE> {};
+struct ScalarTypeInfoImpl<TYPE_NONE> : public ScalarTypeInfoImplBase<TYPE_NONE> {};
 
 template <>
-struct ScalarTypeInfoImpl<LOGICAL_TYPE_TINYINT> : public ScalarTypeInfoImplBase<LOGICAL_TYPE_TINYINT> {
+struct ScalarTypeInfoImpl<TYPE_TINYINT> : public ScalarTypeInfoImplBase<TYPE_TINYINT> {
     static std::string to_string(const void* src) {
         char buf[1024] = {'\0'};
         snprintf(buf, sizeof(buf), "%d", *reinterpret_cast<const int8_t*>(src));
@@ -383,7 +383,7 @@ struct ScalarTypeInfoImpl<LOGICAL_TYPE_TINYINT> : public ScalarTypeInfoImplBase<
 
     static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
                                MemPool* mem_pool __attribute__((unused))) {
-        if (src_type->type() == LOGICAL_TYPE_VARCHAR) {
+        if (src_type->type() == TYPE_VARCHAR) {
             return convert_int_from_varchar<CppType>(dest, src);
         }
         return Status::InternalError("Fail to cast to tinyint.");
@@ -391,7 +391,7 @@ struct ScalarTypeInfoImpl<LOGICAL_TYPE_TINYINT> : public ScalarTypeInfoImplBase<
 };
 
 template <>
-struct ScalarTypeInfoImpl<LOGICAL_TYPE_SMALLINT> : public ScalarTypeInfoImplBase<LOGICAL_TYPE_SMALLINT> {
+struct ScalarTypeInfoImpl<TYPE_SMALLINT> : public ScalarTypeInfoImplBase<TYPE_SMALLINT> {
     static std::string to_string(const void* src) {
         char buf[1024] = {'\0'};
         snprintf(buf, sizeof(buf), "%d", unaligned_load<int16_t>(src));
@@ -399,7 +399,7 @@ struct ScalarTypeInfoImpl<LOGICAL_TYPE_SMALLINT> : public ScalarTypeInfoImplBase
     }
     static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
                                MemPool* mem_pool __attribute__((unused))) {
-        if (src_type->type() == LOGICAL_TYPE_VARCHAR) {
+        if (src_type->type() == TYPE_VARCHAR) {
             return convert_int_from_varchar<CppType>(dest, src);
         }
         return Status::InternalError("Fail to cast to smallint.");
@@ -407,7 +407,7 @@ struct ScalarTypeInfoImpl<LOGICAL_TYPE_SMALLINT> : public ScalarTypeInfoImplBase
 };
 
 template <>
-struct ScalarTypeInfoImpl<LOGICAL_TYPE_INT> : public ScalarTypeInfoImplBase<LOGICAL_TYPE_INT> {
+struct ScalarTypeInfoImpl<TYPE_INT> : public ScalarTypeInfoImplBase<TYPE_INT> {
     static std::string to_string(const void* src) {
         char buf[1024] = {'\0'};
         snprintf(buf, sizeof(buf), "%d", unaligned_load<int32_t>(src));
@@ -415,7 +415,7 @@ struct ScalarTypeInfoImpl<LOGICAL_TYPE_INT> : public ScalarTypeInfoImplBase<LOGI
     }
     static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
                                MemPool* mem_pool __attribute__((unused))) {
-        if (src_type->type() == LOGICAL_TYPE_VARCHAR) {
+        if (src_type->type() == TYPE_VARCHAR) {
             return convert_int_from_varchar<CppType>(dest, src);
         }
         return Status::InternalError("Fail to cast to int.");
@@ -423,7 +423,7 @@ struct ScalarTypeInfoImpl<LOGICAL_TYPE_INT> : public ScalarTypeInfoImplBase<LOGI
 };
 
 template <>
-struct ScalarTypeInfoImpl<LOGICAL_TYPE_BIGINT> : public ScalarTypeInfoImplBase<LOGICAL_TYPE_BIGINT> {
+struct ScalarTypeInfoImpl<TYPE_BIGINT> : public ScalarTypeInfoImplBase<TYPE_BIGINT> {
     static std::string to_string(const void* src) {
         char buf[1024] = {'\0'};
         snprintf(buf, sizeof(buf), "%" PRId64, unaligned_load<int64_t>(src));
@@ -431,7 +431,7 @@ struct ScalarTypeInfoImpl<LOGICAL_TYPE_BIGINT> : public ScalarTypeInfoImplBase<L
     }
     static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
                                MemPool* mem_pool __attribute__((unused))) {
-        if (src_type->type() == LOGICAL_TYPE_VARCHAR) {
+        if (src_type->type() == TYPE_VARCHAR) {
             return convert_int_from_varchar<CppType>(dest, src);
         }
         return Status::InternalError("Fail to cast to bigint.");
@@ -439,7 +439,7 @@ struct ScalarTypeInfoImpl<LOGICAL_TYPE_BIGINT> : public ScalarTypeInfoImplBase<L
 };
 
 template <>
-struct ScalarTypeInfoImpl<LOGICAL_TYPE_LARGEINT> : public ScalarTypeInfoImplBase<LOGICAL_TYPE_LARGEINT> {
+struct ScalarTypeInfoImpl<TYPE_LARGEINT> : public ScalarTypeInfoImplBase<TYPE_LARGEINT> {
     static Status from_string(void* buf, const std::string& scan_key) {
         int128_t value;
 
@@ -532,7 +532,7 @@ struct ScalarTypeInfoImpl<LOGICAL_TYPE_LARGEINT> : public ScalarTypeInfoImplBase
     static void set_to_min(void* buf) { unaligned_store<int128_t>(buf, (int128_t)(1) << 127); }
     static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
                                MemPool* mem_pool __attribute__((unused))) {
-        if (src_type->type() == LOGICAL_TYPE_VARCHAR) {
+        if (src_type->type() == TYPE_VARCHAR) {
             return convert_int_from_varchar<CppType>(dest, src);
         }
         return Status::InternalError("Fail to cast to largeint.");
@@ -546,7 +546,7 @@ struct ScalarTypeInfoImpl<LOGICAL_TYPE_LARGEINT> : public ScalarTypeInfoImplBase
 };
 
 template <>
-struct ScalarTypeInfoImpl<LOGICAL_TYPE_FLOAT> : public ScalarTypeInfoImplBase<LOGICAL_TYPE_FLOAT> {
+struct ScalarTypeInfoImpl<TYPE_FLOAT> : public ScalarTypeInfoImplBase<TYPE_FLOAT> {
     static Status from_string(void* buf, const std::string& scan_key) {
         CppType value = 0.0f;
         if (scan_key.length() > 0) {
@@ -563,7 +563,7 @@ struct ScalarTypeInfoImpl<LOGICAL_TYPE_FLOAT> : public ScalarTypeInfoImplBase<LO
     }
     static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
                                MemPool* mem_pool __attribute__((unused))) {
-        if (src_type->type() == LOGICAL_TYPE_VARCHAR) {
+        if (src_type->type() == TYPE_VARCHAR) {
             return convert_float_from_varchar<CppType>(dest, src);
         }
         return Status::InternalError("Fail to cast to float.");
@@ -571,7 +571,7 @@ struct ScalarTypeInfoImpl<LOGICAL_TYPE_FLOAT> : public ScalarTypeInfoImplBase<LO
 };
 
 template <>
-struct ScalarTypeInfoImpl<LOGICAL_TYPE_DOUBLE> : public ScalarTypeInfoImplBase<LOGICAL_TYPE_DOUBLE> {
+struct ScalarTypeInfoImpl<TYPE_DOUBLE> : public ScalarTypeInfoImplBase<TYPE_DOUBLE> {
     static Status from_string(void* buf, const std::string& scan_key) {
         CppType value = 0.0;
         if (scan_key.length() > 0) {
@@ -589,8 +589,8 @@ struct ScalarTypeInfoImpl<LOGICAL_TYPE_DOUBLE> : public ScalarTypeInfoImplBase<L
     static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
                                MemPool* mem_pool __attribute__((unused))) {
         //only support float now
-        if (src_type->type() == LOGICAL_TYPE_FLOAT) {
-            using SrcType = typename CppTypeTraits<LOGICAL_TYPE_FLOAT>::CppType;
+        if (src_type->type() == TYPE_FLOAT) {
+            using SrcType = typename CppTypeTraits<TYPE_FLOAT>::CppType;
             //http://www.softelectro.ru/ieee754_en.html
             //According to the definition of IEEE754, the effect of converting a float binary to a double binary
             //is the same as that of static_cast . Data precision cannot be guaranteed, but the progress of
@@ -607,7 +607,7 @@ struct ScalarTypeInfoImpl<LOGICAL_TYPE_DOUBLE> : public ScalarTypeInfoImplBase<L
             unaligned_store<CppType>(dest, strtod(buf, &tg));
             return Status::OK();
         }
-        if (src_type->type() == LOGICAL_TYPE_VARCHAR) {
+        if (src_type->type() == TYPE_VARCHAR) {
             return convert_float_from_varchar<CppType>(dest, src);
         }
         return Status::InternalError("Fail to cast to double.");
@@ -615,7 +615,7 @@ struct ScalarTypeInfoImpl<LOGICAL_TYPE_DOUBLE> : public ScalarTypeInfoImplBase<L
 };
 
 template <>
-struct ScalarTypeInfoImpl<LOGICAL_TYPE_DECIMAL> : public ScalarTypeInfoImplBase<LOGICAL_TYPE_DECIMAL> {
+struct ScalarTypeInfoImpl<TYPE_DECIMAL> : public ScalarTypeInfoImplBase<TYPE_DECIMAL> {
     static Status from_string(void* buf, const std::string& scan_key) {
         CppType t;
         RETURN_IF_ERROR(t.from_string(scan_key));
@@ -641,7 +641,7 @@ struct ScalarTypeInfoImpl<LOGICAL_TYPE_DECIMAL> : public ScalarTypeInfoImplBase<
 };
 
 template <>
-struct ScalarTypeInfoImpl<LOGICAL_TYPE_DECIMALV2> : public ScalarTypeInfoImplBase<LOGICAL_TYPE_DECIMALV2> {
+struct ScalarTypeInfoImpl<TYPE_DECIMALV2> : public ScalarTypeInfoImplBase<TYPE_DECIMALV2> {
     static Status from_string(void* buf, const std::string& scan_key) {
         CppType val;
         if (val.parse_from_str(scan_key.c_str(), scan_key.size()) != E_DEC_OK) {
@@ -682,7 +682,7 @@ struct ScalarTypeInfoImpl<LOGICAL_TYPE_DECIMALV2> : public ScalarTypeInfoImplBas
 };
 
 template <>
-struct ScalarTypeInfoImpl<LOGICAL_TYPE_DATE_V1> : public ScalarTypeInfoImplBase<LOGICAL_TYPE_DATE_V1> {
+struct ScalarTypeInfoImpl<TYPE_DATE_V1> : public ScalarTypeInfoImplBase<TYPE_DATE_V1> {
     static Status from_string(void* buf, const std::string& scan_key) {
         tm time_tm;
         char* res = strptime(scan_key.c_str(), "%Y-%m-%d", &time_tm);
@@ -704,8 +704,8 @@ struct ScalarTypeInfoImpl<LOGICAL_TYPE_DATE_V1> : public ScalarTypeInfoImplBase<
 
     static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
                                MemPool* mem_pool __attribute__((unused))) {
-        if (src_type->type() == LogicalType::LOGICAL_TYPE_DATETIME_V1) {
-            using SrcType = typename CppTypeTraits<LOGICAL_TYPE_DATETIME_V1>::CppType;
+        if (src_type->type() == LogicalType::TYPE_DATETIME_V1) {
+            using SrcType = typename CppTypeTraits<TYPE_DATETIME_V1>::CppType;
             auto src_value = unaligned_load<SrcType>(src);
             //only need part one
             SrcType part1 = (src_value / 1000000L);
@@ -716,7 +716,7 @@ struct ScalarTypeInfoImpl<LOGICAL_TYPE_DATE_V1> : public ScalarTypeInfoImplBase<
             return Status::OK();
         }
 
-        if (src_type->type() == LogicalType::LOGICAL_TYPE_DATETIME) {
+        if (src_type->type() == LogicalType::TYPE_DATETIME) {
             int year, month, day, hour, minute, second, usec;
             auto src_value = unaligned_load<vectorized::TimestampValue>(src);
             src_value.to_timestamp(&year, &month, &day, &hour, &minute, &second, &usec);
@@ -724,8 +724,8 @@ struct ScalarTypeInfoImpl<LOGICAL_TYPE_DATE_V1> : public ScalarTypeInfoImplBase<
             return Status::OK();
         }
 
-        if (src_type->type() == LogicalType::LOGICAL_TYPE_INT) {
-            using SrcType = typename CppTypeTraits<LOGICAL_TYPE_INT>::CppType;
+        if (src_type->type() == LogicalType::TYPE_INT) {
+            using SrcType = typename CppTypeTraits<TYPE_INT>::CppType;
             auto src_value = unaligned_load<SrcType>(src);
             DateTimeValue dt;
             if (!dt.from_date_int64(src_value)) {
@@ -738,8 +738,8 @@ struct ScalarTypeInfoImpl<LOGICAL_TYPE_DATE_V1> : public ScalarTypeInfoImplBase<
             return Status::OK();
         }
 
-        if (src_type->type() == LogicalType::LOGICAL_TYPE_VARCHAR) {
-            using SrcType = typename CppTypeTraits<LOGICAL_TYPE_VARCHAR>::CppType;
+        if (src_type->type() == LogicalType::TYPE_VARCHAR) {
+            using SrcType = typename CppTypeTraits<TYPE_VARCHAR>::CppType;
             auto src_value = unaligned_load<SrcType>(src);
             DateTimeValue dt;
             for (const auto& format : DATE_FORMATS) {
@@ -765,11 +765,11 @@ struct ScalarTypeInfoImpl<LOGICAL_TYPE_DATE_V1> : public ScalarTypeInfoImplBase<
 };
 
 template <>
-struct ScalarTypeInfoImpl<LOGICAL_TYPE_DATE> : public ScalarTypeInfoImplBase<LOGICAL_TYPE_DATE> {
+struct ScalarTypeInfoImpl<TYPE_DATE> : public ScalarTypeInfoImplBase<TYPE_DATE> {
     static Status from_string(void* buf, const std::string& scan_key) {
         vectorized::DateValue date;
         if (!date.from_string(scan_key.data(), scan_key.size())) {
-            // Compatible with LOGICAL_TYPE_DATE_V1
+            // Compatible with TYPE_DATE_V1
             date.from_string("1400-01-01", sizeof("1400-01-01") - 1);
         }
         unaligned_store<vectorized::DateValue>(buf, date);
@@ -783,7 +783,7 @@ struct ScalarTypeInfoImpl<LOGICAL_TYPE_DATE> : public ScalarTypeInfoImplBase<LOG
 
     static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
                                MemPool* mem_pool __attribute__((unused))) {
-        auto converter = vectorized::get_type_converter(src_type->type(), LOGICAL_TYPE_DATE);
+        auto converter = vectorized::get_type_converter(src_type->type(), TYPE_DATE);
         RETURN_IF_ERROR(converter->convert(dest, src, mem_pool));
         return Status::OK();
     }
@@ -798,7 +798,7 @@ struct ScalarTypeInfoImpl<LOGICAL_TYPE_DATE> : public ScalarTypeInfoImplBase<LOG
 };
 
 template <>
-struct ScalarTypeInfoImpl<LOGICAL_TYPE_DATETIME_V1> : public ScalarTypeInfoImplBase<LOGICAL_TYPE_DATETIME_V1> {
+struct ScalarTypeInfoImpl<TYPE_DATETIME_V1> : public ScalarTypeInfoImplBase<TYPE_DATETIME_V1> {
     static Status from_string(void* buf, const std::string& scan_key) {
         tm time_tm;
         char* res = strptime(scan_key.c_str(), "%Y-%m-%d %H:%M:%S", &time_tm);
@@ -837,8 +837,8 @@ struct ScalarTypeInfoImpl<LOGICAL_TYPE_DATETIME_V1> : public ScalarTypeInfoImplB
     static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type,
                                MemPool* memPool __attribute__((unused))) {
         // when convert date to datetime, automatic padding zero
-        if (src_type->type() == LogicalType::LOGICAL_TYPE_DATE_V1) {
-            using SrcType = typename CppTypeTraits<LOGICAL_TYPE_DATE_V1>::CppType;
+        if (src_type->type() == LogicalType::TYPE_DATE_V1) {
+            using SrcType = typename CppTypeTraits<TYPE_DATE_V1>::CppType;
             auto value = unaligned_load<SrcType>(src);
             int day = static_cast<int>(value & 31);
             int mon = static_cast<int>(value >> 5 & 15);
@@ -848,7 +848,7 @@ struct ScalarTypeInfoImpl<LOGICAL_TYPE_DATETIME_V1> : public ScalarTypeInfoImplB
         }
 
         // when convert date to datetime, automatic padding zero
-        if (src_type->type() == LogicalType::LOGICAL_TYPE_DATE) {
+        if (src_type->type() == LogicalType::TYPE_DATE) {
             auto src_value = unaligned_load<vectorized::DateValue>(src);
             int year, month, day;
             src_value.to_date(&year, &month, &day);
@@ -863,11 +863,11 @@ struct ScalarTypeInfoImpl<LOGICAL_TYPE_DATETIME_V1> : public ScalarTypeInfoImplB
 };
 
 template <>
-struct ScalarTypeInfoImpl<LOGICAL_TYPE_DATETIME> : public ScalarTypeInfoImplBase<LOGICAL_TYPE_DATETIME> {
+struct ScalarTypeInfoImpl<TYPE_DATETIME> : public ScalarTypeInfoImplBase<TYPE_DATETIME> {
     static Status from_string(void* buf, const std::string& scan_key) {
         auto timestamp = unaligned_load<vectorized::TimestampValue>(buf);
         if (!timestamp.from_string(scan_key.data(), scan_key.size())) {
-            // Compatible with LOGICAL_TYPE_DATETIME_V1
+            // Compatible with TYPE_DATETIME_V1
             timestamp.from_string("1400-01-01 00:00:00", sizeof("1400-01-01 00:00:00") - 1);
         }
         unaligned_store<vectorized::TimestampValue>(buf, timestamp);
@@ -881,7 +881,7 @@ struct ScalarTypeInfoImpl<LOGICAL_TYPE_DATETIME> : public ScalarTypeInfoImplBase
 
     static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type, MemPool* mem_pool) {
         vectorized::TimestampValue value;
-        auto converter = vectorized::get_type_converter(src_type->type(), LOGICAL_TYPE_DATETIME);
+        auto converter = vectorized::get_type_converter(src_type->type(), TYPE_DATETIME);
         auto st = converter->convert(&value, src, mem_pool);
         unaligned_store<vectorized::TimestampValue>(dest, value);
         RETURN_IF_ERROR(st);
@@ -892,7 +892,7 @@ struct ScalarTypeInfoImpl<LOGICAL_TYPE_DATETIME> : public ScalarTypeInfoImplBase
 };
 
 template <>
-struct ScalarTypeInfoImpl<LOGICAL_TYPE_CHAR> : public ScalarTypeInfoImplBase<LOGICAL_TYPE_CHAR> {
+struct ScalarTypeInfoImpl<TYPE_CHAR> : public ScalarTypeInfoImplBase<TYPE_CHAR> {
     static bool equal(const void* left, const void* right) {
         auto l_slice = unaligned_load<Slice>(left);
         auto r_slice = unaligned_load<Slice>(right);
@@ -968,9 +968,9 @@ struct ScalarTypeInfoImpl<LOGICAL_TYPE_CHAR> : public ScalarTypeInfoImplBase<LOG
 };
 
 template <>
-struct ScalarTypeInfoImpl<LOGICAL_TYPE_VARCHAR> : public ScalarTypeInfoImpl<LOGICAL_TYPE_CHAR> {
-    static const LogicalType type = LOGICAL_TYPE_VARCHAR;
-    static const int32_t size = TypeTraits<LOGICAL_TYPE_VARCHAR>::size;
+struct ScalarTypeInfoImpl<TYPE_VARCHAR> : public ScalarTypeInfoImpl<TYPE_CHAR> {
+    static const LogicalType type = TYPE_VARCHAR;
+    static const int32_t size = TypeTraits<TYPE_VARCHAR>::size;
 
     static Status from_string(void* buf, const std::string& scan_key) {
         size_t value_len = scan_key.length();
@@ -989,12 +989,12 @@ struct ScalarTypeInfoImpl<LOGICAL_TYPE_VARCHAR> : public ScalarTypeInfoImpl<LOGI
     }
 
     static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type, MemPool* mem_pool) {
-        if (src_type->type() == LOGICAL_TYPE_TINYINT || src_type->type() == LOGICAL_TYPE_SMALLINT ||
-            src_type->type() == LOGICAL_TYPE_INT || src_type->type() == LOGICAL_TYPE_BIGINT ||
-            src_type->type() == LOGICAL_TYPE_LARGEINT || src_type->type() == LOGICAL_TYPE_FLOAT ||
-            src_type->type() == LOGICAL_TYPE_DOUBLE || src_type->type() == LOGICAL_TYPE_DECIMAL ||
-            src_type->type() == LOGICAL_TYPE_DECIMALV2 || src_type->type() == LOGICAL_TYPE_DECIMAL32 ||
-            src_type->type() == LOGICAL_TYPE_DECIMAL64 || src_type->type() == LOGICAL_TYPE_DECIMAL128) {
+        if (src_type->type() == TYPE_TINYINT || src_type->type() == TYPE_SMALLINT ||
+            src_type->type() == TYPE_INT || src_type->type() == TYPE_BIGINT ||
+            src_type->type() == TYPE_LARGEINT || src_type->type() == TYPE_FLOAT ||
+            src_type->type() == TYPE_DOUBLE || src_type->type() == TYPE_DECIMAL ||
+            src_type->type() == TYPE_DECIMALV2 || src_type->type() == TYPE_DECIMAL32 ||
+            src_type->type() == TYPE_DECIMAL64 || src_type->type() == TYPE_DECIMAL128) {
             auto result = src_type->to_string(src);
             auto slice = reinterpret_cast<Slice*>(dest);
             slice->data = reinterpret_cast<char*>(mem_pool->allocate(result.size()));
@@ -1021,27 +1021,27 @@ struct ScalarTypeInfoImpl<LOGICAL_TYPE_VARCHAR> : public ScalarTypeInfoImpl<LOGI
 };
 
 template <>
-struct ScalarTypeInfoImpl<LOGICAL_TYPE_HLL> : public ScalarTypeInfoImpl<LOGICAL_TYPE_VARCHAR> {
-    static const LogicalType type = LOGICAL_TYPE_HLL;
-    static const int32_t size = TypeTraits<LOGICAL_TYPE_HLL>::size;
+struct ScalarTypeInfoImpl<TYPE_HLL> : public ScalarTypeInfoImpl<TYPE_VARCHAR> {
+    static const LogicalType type = TYPE_HLL;
+    static const int32_t size = TypeTraits<TYPE_HLL>::size;
 };
 
 template <>
-struct ScalarTypeInfoImpl<LOGICAL_TYPE_OBJECT> : public ScalarTypeInfoImpl<LOGICAL_TYPE_VARCHAR> {
-    static const LogicalType type = LOGICAL_TYPE_OBJECT;
-    static const int32_t size = TypeTraits<LOGICAL_TYPE_OBJECT>::size;
+struct ScalarTypeInfoImpl<TYPE_OBJECT> : public ScalarTypeInfoImpl<TYPE_VARCHAR> {
+    static const LogicalType type = TYPE_OBJECT;
+    static const int32_t size = TypeTraits<TYPE_OBJECT>::size;
 };
 
 template <>
-struct ScalarTypeInfoImpl<LOGICAL_TYPE_PERCENTILE> : public ScalarTypeInfoImpl<LOGICAL_TYPE_VARCHAR> {
-    static const LogicalType type = LOGICAL_TYPE_PERCENTILE;
-    static const int32_t size = TypeTraits<LOGICAL_TYPE_PERCENTILE>::size;
+struct ScalarTypeInfoImpl<TYPE_PERCENTILE> : public ScalarTypeInfoImpl<TYPE_VARCHAR> {
+    static const LogicalType type = TYPE_PERCENTILE;
+    static const int32_t size = TypeTraits<TYPE_PERCENTILE>::size;
 };
 
 template <>
-struct ScalarTypeInfoImpl<LOGICAL_TYPE_JSON> : public ScalarTypeInfoImpl<LOGICAL_TYPE_OBJECT> {
-    static const LogicalType type = LOGICAL_TYPE_JSON;
-    static const int32_t size = TypeTraits<LOGICAL_TYPE_JSON>::size;
+struct ScalarTypeInfoImpl<TYPE_JSON> : public ScalarTypeInfoImpl<TYPE_OBJECT> {
+    static const LogicalType type = TYPE_JSON;
+    static const int32_t size = TypeTraits<TYPE_JSON>::size;
 
     static Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type, MemPool* mem_pool) {
         // TODO(mofei)
@@ -1050,12 +1050,12 @@ struct ScalarTypeInfoImpl<LOGICAL_TYPE_JSON> : public ScalarTypeInfoImpl<LOGICAL
 };
 
 template <>
-struct ScalarTypeInfoImpl<LOGICAL_TYPE_VARBINARY> : public ScalarTypeInfoImpl<LOGICAL_TYPE_VARCHAR> {
-    static const LogicalType type = LOGICAL_TYPE_VARBINARY;
-    static const int32_t size = TypeTraits<LOGICAL_TYPE_VARBINARY>::size;
+struct ScalarTypeInfoImpl<TYPE_VARBINARY> : public ScalarTypeInfoImpl<TYPE_VARCHAR> {
+    static const LogicalType type = TYPE_VARBINARY;
+    static const int32_t size = TypeTraits<TYPE_VARBINARY>::size;
 };
 
-void (*ScalarTypeInfoImpl<LOGICAL_TYPE_CHAR>::set_to_max)(void*) = nullptr;
+void (*ScalarTypeInfoImpl<TYPE_CHAR>::set_to_max)(void*) = nullptr;
 
 // NOTE
 // These code could not be moved proceeding ScalarTypeInfoImpl specialization, otherwise

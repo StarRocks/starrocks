@@ -66,7 +66,7 @@ ColumnPredicate* PredicateParser::parse_thrift_cond(const TCondition& condition)
         return pred;
     }
 
-    if (type == LOGICAL_TYPE_CHAR) {
+    if (type == TYPE_CHAR) {
         pred->padding_zeros(col.length());
     }
     return pred;

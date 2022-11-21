@@ -280,7 +280,7 @@ TypeDescriptor TypeDescriptor::from_storage_type_info(TypeInfo* type_info) {
     LogicalType ftype = type_info->type();
 
     bool is_array = false;
-    if (ftype == LOGICAL_TYPE_ARRAY) {
+    if (ftype == TYPE_ARRAY) {
         is_array = true;
         type_info = get_item_type_info(type_info).get();
         ftype = type_info->type();
@@ -358,6 +358,15 @@ int TypeDescriptor::get_slot_size() const {
     case TYPE_UNKNOWN:
     case TYPE_BINARY:
     case TYPE_FUNCTION:
+    case TYPE_UNSIGNED_TINYINT:
+    case TYPE_UNSIGNED_SMALLINT:
+    case TYPE_UNSIGNED_INT:
+    case TYPE_UNSIGNED_BIGINT:
+    case TYPE_DISCRETE_DOUBLE:
+    case TYPE_DATE_V1:
+    case TYPE_DATETIME_V1:
+    case TYPE_NONE:
+    case TYPE_MAX_VALUE:
         DCHECK(false);
         break;
     }

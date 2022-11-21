@@ -25,7 +25,7 @@ Status BinaryPlainPageDecoder<Type>::next_batch(const vectorized::SparseRange& r
     std::vector<Slice> strs;
     strs.reserve(to_read);
     vectorized::SparseRangeIterator iter = range.new_iterator();
-    if constexpr (Type == LOGICAL_TYPE_CHAR) {
+    if constexpr (Type == TYPE_CHAR) {
         while (to_read > 0) {
             _cur_idx = iter.begin();
             vectorized::Range r = iter.next(to_read);
@@ -61,11 +61,11 @@ Status BinaryPlainPageDecoder<Type>::next_batch(const vectorized::SparseRange& r
     return Status::InvalidArgument("Column::append_strings() not supported");
 }
 
-template class BinaryPlainPageDecoder<LOGICAL_TYPE_CHAR>;
-template class BinaryPlainPageDecoder<LOGICAL_TYPE_VARCHAR>;
-template class BinaryPlainPageDecoder<LOGICAL_TYPE_HLL>;
-template class BinaryPlainPageDecoder<LOGICAL_TYPE_OBJECT>;
-template class BinaryPlainPageDecoder<LOGICAL_TYPE_PERCENTILE>;
-template class BinaryPlainPageDecoder<LOGICAL_TYPE_JSON>;
+template class BinaryPlainPageDecoder<TYPE_CHAR>;
+template class BinaryPlainPageDecoder<TYPE_VARCHAR>;
+template class BinaryPlainPageDecoder<TYPE_HLL>;
+template class BinaryPlainPageDecoder<TYPE_OBJECT>;
+template class BinaryPlainPageDecoder<TYPE_PERCENTILE>;
+template class BinaryPlainPageDecoder<TYPE_JSON>;
 
 } // namespace starrocks

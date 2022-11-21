@@ -29,9 +29,9 @@ public:
     void check_column(Column* column, LogicalType type, size_t row_size);
 
 private:
-    LogicalType _type[9] = {LOGICAL_TYPE_TINYINT, LOGICAL_TYPE_SMALLINT, LOGICAL_TYPE_INT,
-                            LOGICAL_TYPE_BIGINT,  LOGICAL_TYPE_LARGEINT, LOGICAL_TYPE_FLOAT,
-                            LOGICAL_TYPE_DOUBLE,  LOGICAL_TYPE_VARCHAR,  LOGICAL_TYPE_CHAR};
+    LogicalType _type[9] = {TYPE_TINYINT, TYPE_SMALLINT, TYPE_INT,
+                            TYPE_BIGINT,  TYPE_LARGEINT, TYPE_FLOAT,
+                            TYPE_DOUBLE,  TYPE_VARCHAR,  TYPE_CHAR};
 
     PrimitiveType _primitive_type[9] = {
             PrimitiveType::TYPE_TINYINT, PrimitiveType::TYPE_SMALLINT, PrimitiveType::TYPE_INT,
@@ -109,15 +109,15 @@ void ChunkHelperTest::add_tablet_column(TabletSchemaPB& tablet_schema_pb, int32_
 
 vectorized::SchemaPtr ChunkHelperTest::gen_v_schema(bool is_nullable) {
     vectorized::Fields fields;
-    fields.emplace_back(std::make_shared<Field>(0, "c0", get_type_info(LOGICAL_TYPE_TINYINT), is_nullable));
-    fields.emplace_back(std::make_shared<Field>(1, "c1", get_type_info(LOGICAL_TYPE_SMALLINT), is_nullable));
-    fields.emplace_back(std::make_shared<Field>(2, "c2", get_type_info(LOGICAL_TYPE_INT), is_nullable));
-    fields.emplace_back(std::make_shared<Field>(3, "c3", get_type_info(LOGICAL_TYPE_BIGINT), is_nullable));
-    fields.emplace_back(std::make_shared<Field>(4, "c4", get_type_info(LOGICAL_TYPE_LARGEINT), is_nullable));
-    fields.emplace_back(std::make_shared<Field>(5, "c5", get_type_info(LOGICAL_TYPE_FLOAT), is_nullable));
-    fields.emplace_back(std::make_shared<Field>(6, "c6", get_type_info(LOGICAL_TYPE_DOUBLE), is_nullable));
-    fields.emplace_back(std::make_shared<Field>(7, "c7", get_type_info(LOGICAL_TYPE_VARCHAR), is_nullable));
-    fields.emplace_back(std::make_shared<Field>(8, "c8", get_type_info(LOGICAL_TYPE_CHAR), is_nullable));
+    fields.emplace_back(std::make_shared<Field>(0, "c0", get_type_info(TYPE_TINYINT), is_nullable));
+    fields.emplace_back(std::make_shared<Field>(1, "c1", get_type_info(TYPE_SMALLINT), is_nullable));
+    fields.emplace_back(std::make_shared<Field>(2, "c2", get_type_info(TYPE_INT), is_nullable));
+    fields.emplace_back(std::make_shared<Field>(3, "c3", get_type_info(TYPE_BIGINT), is_nullable));
+    fields.emplace_back(std::make_shared<Field>(4, "c4", get_type_info(TYPE_LARGEINT), is_nullable));
+    fields.emplace_back(std::make_shared<Field>(5, "c5", get_type_info(TYPE_FLOAT), is_nullable));
+    fields.emplace_back(std::make_shared<Field>(6, "c6", get_type_info(TYPE_DOUBLE), is_nullable));
+    fields.emplace_back(std::make_shared<Field>(7, "c7", get_type_info(TYPE_VARCHAR), is_nullable));
+    fields.emplace_back(std::make_shared<Field>(8, "c8", get_type_info(TYPE_CHAR), is_nullable));
     return std::make_shared<Schema>(fields);
 }
 
@@ -141,56 +141,56 @@ void ChunkHelperTest::check_column(Column* column, LogicalType type, size_t row_
     ASSERT_EQ(column->size(), row_size);
 
     switch (type) {
-    case LOGICAL_TYPE_TINYINT: {
+    case TYPE_TINYINT: {
         const auto* data = reinterpret_cast<const int8_t*>(static_cast<Int8Column*>(column)->raw_data());
         for (int i = 0; i < row_size; i++) {
             ASSERT_EQ(*(data + i), static_cast<int8_t>(i * 2));
         }
         break;
     }
-    case LOGICAL_TYPE_SMALLINT: {
+    case TYPE_SMALLINT: {
         const auto* data = reinterpret_cast<const int16_t*>(static_cast<Int16Column*>(column)->raw_data());
         for (int i = 0; i < row_size; i++) {
             ASSERT_EQ(*(data + i), static_cast<int16_t>(i * 2 * 10));
         }
         break;
     }
-    case LOGICAL_TYPE_INT: {
+    case TYPE_INT: {
         const auto* data = reinterpret_cast<const int32_t*>(static_cast<Int32Column*>(column)->raw_data());
         for (int i = 0; i < row_size; i++) {
             ASSERT_EQ(*(data + i), static_cast<int32_t>(i * 2 * 100));
         }
         break;
     }
-    case LOGICAL_TYPE_BIGINT: {
+    case TYPE_BIGINT: {
         const auto* data = reinterpret_cast<const int64_t*>(static_cast<Int64Column*>(column)->raw_data());
         for (int i = 0; i < row_size; i++) {
             ASSERT_EQ(*(data + i), static_cast<int64_t>(i * 2 * 1000));
         }
         break;
     }
-    case LOGICAL_TYPE_LARGEINT: {
+    case TYPE_LARGEINT: {
         const auto* data = reinterpret_cast<const int128_t*>(static_cast<Int128Column*>(column)->raw_data());
         for (int i = 0; i < row_size; i++) {
             ASSERT_EQ(*(data + i), static_cast<int128_t>(i * 2 * 10000));
         }
         break;
     }
-    case LOGICAL_TYPE_FLOAT: {
+    case TYPE_FLOAT: {
         const auto* data = reinterpret_cast<const float*>(static_cast<FloatColumn*>(column)->raw_data());
         for (int i = 0; i < row_size; i++) {
             ASSERT_EQ(*(data + i), static_cast<float>(i * 2 * 100000));
         }
         break;
     }
-    case LOGICAL_TYPE_DOUBLE: {
+    case TYPE_DOUBLE: {
         const auto* data = reinterpret_cast<const double*>(static_cast<DoubleColumn*>(column)->raw_data());
         for (int i = 0; i < row_size; i++) {
             ASSERT_EQ(*(data + i), static_cast<double>(i * 2 * 1000000));
         }
         break;
     }
-    case LOGICAL_TYPE_VARCHAR: {
+    case TYPE_VARCHAR: {
         const auto* data = reinterpret_cast<const BinaryColumn*>(column);
         for (int i = 0; i < row_size; i++) {
             Slice l = data->get_slice(i);
@@ -199,7 +199,7 @@ void ChunkHelperTest::check_column(Column* column, LogicalType type, size_t row_
         }
         break;
     }
-    case LOGICAL_TYPE_CHAR: {
+    case TYPE_CHAR: {
         const auto* data = reinterpret_cast<const BinaryColumn*>(column);
         for (int i = 0; i < row_size; i++) {
             Slice l = data->get_slice(i);

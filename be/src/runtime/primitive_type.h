@@ -34,38 +34,7 @@ namespace starrocks {
 // NOTE: This type will be merged with LogicalType in the future.
 // Because this type is not persisted in any format, so we keep the value
 // for each type equals with the type in LogicalType.
-enum PrimitiveType {
-    TYPE_UNKNOWN = 0,
-    TYPE_TINYINT = 1,
-    TYPE_SMALLINT = 3,
-    TYPE_INT = 5,
-    TYPE_BIGINT = 7,
-    TYPE_LARGEINT = 9,
-    TYPE_FLOAT = 10,
-    TYPE_DOUBLE = 11,
-    TYPE_CHAR = 13,
-    TYPE_DECIMAL = 16,
-    TYPE_VARCHAR = 17,
-    TYPE_STRUCT = 18,
-    TYPE_ARRAY = 19,
-    TYPE_MAP = 20,
-    TYPE_HLL = 23,
-    TYPE_BOOLEAN = 24,
-    TYPE_OBJECT = 25,
-    TYPE_NULL = 42,
-    TYPE_FUNCTION = 43,
-    TYPE_TIME = 44,
-    TYPE_BINARY = 45,
-    TYPE_VARBINARY = 46,
-    TYPE_DECIMAL32 = 47,
-    TYPE_DECIMAL64 = 48,
-    TYPE_DECIMAL128 = 49,
-    TYPE_DATE = 50,
-    TYPE_DATETIME = 51,
-    TYPE_DECIMALV2 = 52,
-    TYPE_PERCENTILE = 53,
-    TYPE_JSON = 54,
-};
+using PrimitiveType = LogicalType;
 
 inline bool is_binary_type(PrimitiveType type) {
     switch (type) {

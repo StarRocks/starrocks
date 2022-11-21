@@ -162,19 +162,19 @@ public:
         }
 
         // clang-format off
-        static_assert(Type == LOGICAL_TYPE_TINYINT ||
-                      Type == LOGICAL_TYPE_SMALLINT ||
-                      Type == LOGICAL_TYPE_INT ||
-                      Type == LOGICAL_TYPE_BIGINT ||
-                      Type == LOGICAL_TYPE_LARGEINT ||
-                      Type == LOGICAL_TYPE_DATE_V1 ||
-                      Type == LOGICAL_TYPE_DATE ||
-                      Type == LOGICAL_TYPE_DATETIME_V1 ||
-                      Type == LOGICAL_TYPE_DATETIME ||
-                      Type == LOGICAL_TYPE_DECIMALV2 ||
-                      Type == LOGICAL_TYPE_DECIMAL32 ||
-                      Type == LOGICAL_TYPE_DECIMAL64 ||
-                      Type == LOGICAL_TYPE_DECIMAL128,
+        static_assert(Type == TYPE_TINYINT ||
+                      Type == TYPE_SMALLINT ||
+                      Type == TYPE_INT ||
+                      Type == TYPE_BIGINT ||
+                      Type == TYPE_LARGEINT ||
+                      Type == TYPE_DATE_V1 ||
+                      Type == TYPE_DATE ||
+                      Type == TYPE_DATETIME_V1 ||
+                      Type == TYPE_DATETIME ||
+                      Type == TYPE_DECIMALV2 ||
+                      Type == TYPE_DECIMAL32 ||
+                      Type == TYPE_DECIMAL64 ||
+                      Type == TYPE_DECIMAL128,
                       "unexpected field type");
         // clang-format on
         size_t to_read =

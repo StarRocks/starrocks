@@ -26,7 +26,7 @@
 #include "storage/vectorized_column_predicate.h"
 
 namespace starrocks::vectorized {
-constexpr static const LogicalType kDictCodeType = LOGICAL_TYPE_INT;
+constexpr static const LogicalType kDictCodeType = TYPE_INT;
 
 Status ColumnPredicateRewriter::rewrite_predicate(ObjectPool* pool) {
     // because schema has reordered
