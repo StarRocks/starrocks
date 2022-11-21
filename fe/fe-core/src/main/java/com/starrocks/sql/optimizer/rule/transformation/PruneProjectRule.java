@@ -52,7 +52,7 @@ public class PruneProjectRule extends TransformationRule {
             LogicalOperator logicalOperator = (LogicalOperator) child.getOp();
 
             ColumnRefOperator smallestColumn =
-                    logicalOperator.getSmallestColumns(context.getColumnRefFactory(), child);
+                    logicalOperator.getSmallestColumn(context.getColumnRefFactory(), child);
             if (smallestColumn != null) {
                 projectMap.put(smallestColumn, smallestColumn);
             }

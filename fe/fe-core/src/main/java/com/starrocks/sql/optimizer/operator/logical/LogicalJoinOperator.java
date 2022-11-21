@@ -114,7 +114,7 @@ public class LogicalJoinOperator extends LogicalOperator {
     }
 
     @Override
-    public ColumnRefOperator getSmallestColumns(ColumnRefFactory columnRefFactory, OptExpression expr) {
+    public ColumnRefOperator getSmallestColumn(ColumnRefFactory columnRefFactory, OptExpression expr) {
         ColumnRefSet candidate;
         if (joinType.isLeftSemiAntiJoin()) {
             candidate = expr.getChildOutputColumns(0);

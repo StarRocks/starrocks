@@ -34,7 +34,7 @@ public abstract class LogicalOperator extends Operator {
 
     public abstract ColumnRefSet getOutputColumns(ExpressionContext expressionContext);
 
-    public ColumnRefOperator getSmallestColumns(ColumnRefFactory columnRefFactory, OptExpression opt) {
+    public ColumnRefOperator getSmallestColumn(ColumnRefFactory columnRefFactory, OptExpression opt) {
         return Utils.findSmallestColumnRef(
                 getOutputColumns(new ExpressionContext(opt)).getStream().
                         mapToObj(columnRefFactory::getColumnRef).collect(Collectors.toList()));
