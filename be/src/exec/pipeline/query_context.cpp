@@ -372,8 +372,9 @@ void QueryContextManager::report_fragments_with_same_host(
     }
 }
 
-void QueryContextManager::collect_query_statistics(const PCollectQueryStatisticsRequest* request, PCollectQueryStatisticsResult* response) {
-    for (int i = 0;i < request->query_ids_size();i ++) {
+void QueryContextManager::collect_query_statistics(const PCollectQueryStatisticsRequest* request,
+                                                   PCollectQueryStatisticsResult* response) {
+    for (int i = 0; i < request->query_ids_size(); i++) {
         const PUniqueId& p_query_id = request->query_ids(i);
         TUniqueId id;
         id.__set_hi(p_query_id.hi());
@@ -393,14 +394,15 @@ void QueryContextManager::collect_query_statistics(const PCollectQueryStatistics
     }
 }
 
-void QueryContextManager::collect_fragment_statistics(const PCollectFragmentStatisticsRequest* request, PCollectFragmentStatisticsResult* response) {
+void QueryContextManager::collect_fragment_statistics(const PCollectFragmentStatisticsRequest* request,
+                                                      PCollectFragmentStatisticsResult* response) {
     const PUniqueId& p_query_id = request->query_id();
     TUniqueId id;
     id.__set_hi(p_query_id.hi());
     id.__set_lo(p_query_id.lo());
     if (auto query_ctx = get(id); query_ctx != nullptr) {
         auto fragment_ctx_mgr = query_ctx->fragment_mgr();
-        for (int i = 0;i < request->fragment_instance_id_size();i++){
+        for (int i = 0; i < request->fragment_instance_id_size(); i++) {
             const PUniqueId& p_fragment_instance_id = request->fragment_instance_id(i);
             TUniqueId t_fragment_instance_id;
             t_fragment_instance_id.__set_hi(p_fragment_instance_id.hi());

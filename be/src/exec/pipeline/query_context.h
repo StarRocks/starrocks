@@ -194,9 +194,11 @@ public:
             std::vector<bool>& reported, const TNetworkAddress& last_coord_addr,
             std::vector<TReportExecStatusParams>& report_exec_status_params_vector,
             std::vector<int32_t>& cur_batch_report_indexes);
-    
-    void collect_query_statistics(const PCollectQueryStatisticsRequest* request, PCollectQueryStatisticsResult* response);
-    void collect_fragment_statistics(const PCollectFragmentStatisticsRequest* request, PCollectFragmentStatisticsResult* response);
+
+    void collect_query_statistics(const PCollectQueryStatisticsRequest* request,
+                                  PCollectQueryStatisticsResult* response);
+    void collect_fragment_statistics(const PCollectFragmentStatisticsRequest* request,
+                                     PCollectFragmentStatisticsResult* response);
 
 private:
     static void _clean_func(QueryContextManager* manager);
