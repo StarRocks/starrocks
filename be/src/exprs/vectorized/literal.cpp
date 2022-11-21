@@ -20,7 +20,7 @@ namespace starrocks::vectorized {
         break;                                                                              \
     }
 
-template <PrimitiveType PT>
+template <LogicalType PT>
 static RunTimeCppType<PT> unpack_decimal(const std::string& s) {
     static_assert(pt_is_decimal<PT>);
     RunTimeCppType<PT> value;
@@ -32,7 +32,7 @@ static RunTimeCppType<PT> unpack_decimal(const std::string& s) {
     return value;
 }
 
-template <PrimitiveType DecimalType, typename = DecimalPTGuard<DecimalType>>
+template <LogicalType DecimalType, typename = DecimalPTGuard<DecimalType>>
 static ColumnPtr const_column_from_literal(const TExprNode& node, int precision, int scale) {
     using CppType = RunTimeCppType<DecimalType>;
     using ColumnType = RunTimeColumnType<DecimalType>;

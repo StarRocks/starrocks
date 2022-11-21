@@ -34,7 +34,7 @@ namespace starrocks::vectorized {
  *  ELSE is not necessary.
  */
 
-template <PrimitiveType WhenType, PrimitiveType ResultType>
+template <LogicalType WhenType, LogicalType ResultType>
 class VectorizedCaseExpr final : public Expr {
 public:
     explicit VectorizedCaseExpr(const TExprNode& node)
@@ -384,8 +384,8 @@ private:
     }
 
 Expr* VectorizedCaseExprFactory::from_thrift(const starrocks::TExprNode& node) {
-    PrimitiveType resultType = TypeDescriptor::from_thrift(node.type).type;
-    PrimitiveType whenType = thrift_to_type(node.child_type);
+    LogicalType resultType = TypeDescriptor::from_thrift(node.type).type;
+    LogicalType whenType = thrift_to_type(node.child_type);
 
     if (resultType == TYPE_NULL) {
         resultType = TYPE_BOOLEAN;

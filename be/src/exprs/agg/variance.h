@@ -10,14 +10,14 @@
 
 namespace starrocks::vectorized {
 
-template <PrimitiveType PT, typename = guard::Guard>
-inline constexpr PrimitiveType DevFromAveResultPT = TYPE_DOUBLE;
+template <LogicalType PT, typename = guard::Guard>
+inline constexpr LogicalType DevFromAveResultPT = TYPE_DOUBLE;
 
 template <>
-inline constexpr PrimitiveType DevFromAveResultPT<TYPE_DECIMALV2, guard::Guard> = TYPE_DECIMALV2;
+inline constexpr LogicalType DevFromAveResultPT<TYPE_DECIMALV2, guard::Guard> = TYPE_DECIMALV2;
 
-template <PrimitiveType PT>
-inline constexpr PrimitiveType DevFromAveResultPT<PT, DecimalPTGuard<PT>> = TYPE_DECIMAL128;
+template <LogicalType PT>
+inline constexpr LogicalType DevFromAveResultPT<PT, DecimalPTGuard<PT>> = TYPE_DECIMAL128;
 
 template <typename T>
 struct DevFromAveAggregateState {
@@ -31,8 +31,8 @@ struct DevFromAveAggregateState {
     int64_t count = 0;
 };
 
-template <PrimitiveType PT, bool is_sample, typename T = RunTimeCppType<PT>,
-          PrimitiveType ResultPT = DevFromAveResultPT<PT>, typename TResult = RunTimeCppType<ResultPT>>
+template <LogicalType PT, bool is_sample, typename T = RunTimeCppType<PT>,
+          LogicalType ResultPT = DevFromAveResultPT<PT>, typename TResult = RunTimeCppType<ResultPT>>
 class DevFromAveAggregateFunction
         : public AggregateFunctionBatchHelper<DevFromAveAggregateState<TResult>,
                                               DevFromAveAggregateFunction<PT, is_sample, T, ResultPT, TResult>> {
@@ -177,8 +177,8 @@ public:
     std::string get_name() const override { return "deviation from average"; }
 };
 
-template <PrimitiveType PT, bool is_sample, typename T = RunTimeCppType<PT>,
-          PrimitiveType ResultPT = DevFromAveResultPT<PT>, typename TResult = RunTimeCppType<ResultPT>>
+template <LogicalType PT, bool is_sample, typename T = RunTimeCppType<PT>,
+          LogicalType ResultPT = DevFromAveResultPT<PT>, typename TResult = RunTimeCppType<ResultPT>>
 class VarianceAggregateFunction final : public DevFromAveAggregateFunction<PT, is_sample, T, ResultPT, TResult> {
 public:
     using ResultColumnType =
@@ -294,8 +294,8 @@ public:
     std::string get_name() const override { return "variance"; }
 };
 
-template <PrimitiveType PT, bool is_sample, typename T = RunTimeCppType<PT>,
-          PrimitiveType ResultPT = DevFromAveResultPT<PT>, typename TResult = RunTimeCppType<ResultPT>>
+template <LogicalType PT, bool is_sample, typename T = RunTimeCppType<PT>,
+          LogicalType ResultPT = DevFromAveResultPT<PT>, typename TResult = RunTimeCppType<ResultPT>>
 class StddevAggregateFunction final : public DevFromAveAggregateFunction<PT, is_sample, T, ResultPT, TResult> {
 public:
     using ResultColumnType =

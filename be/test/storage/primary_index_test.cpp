@@ -122,23 +122,23 @@ void test_integral_pk() {
 }
 
 PARALLEL_TEST(PrimaryIndexTest, test_tinyint) {
-    test_integral_pk<LOGICAL_TYPE_TINYINT, int8_t>();
+    test_integral_pk<TYPE_TINYINT, int8_t>();
 }
 
 PARALLEL_TEST(PrimaryIndexTest, test_smallint) {
-    test_integral_pk<LOGICAL_TYPE_SMALLINT, int16_t>();
+    test_integral_pk<TYPE_SMALLINT, int16_t>();
 }
 
 PARALLEL_TEST(PrimaryIndexTest, test_int) {
-    test_integral_pk<LOGICAL_TYPE_INT, int32_t>();
+    test_integral_pk<TYPE_INT, int32_t>();
 }
 
 PARALLEL_TEST(PrimaryIndexTest, test_bigint) {
-    test_integral_pk<LOGICAL_TYPE_BIGINT, int64_t>();
+    test_integral_pk<TYPE_BIGINT, int64_t>();
 }
 
 PARALLEL_TEST(PrimaryIndexTest, test_largeint) {
-    test_integral_pk<LOGICAL_TYPE_LARGEINT, __int128>();
+    test_integral_pk<TYPE_LARGEINT, __int128>();
 }
 
 template <LogicalType field_type>
@@ -252,13 +252,13 @@ void test_binary_pk() {
 }
 
 PARALLEL_TEST(PrimaryIndexTest, test_varchar) {
-    test_binary_pk<LOGICAL_TYPE_VARCHAR>();
+    test_binary_pk<TYPE_VARCHAR>();
 }
 
 PARALLEL_TEST(PrimaryIndexTest, test_composite_key) {
-    auto f1 = std::make_shared<vectorized::Field>(0, "c0", LOGICAL_TYPE_TINYINT, false);
+    auto f1 = std::make_shared<vectorized::Field>(0, "c0", TYPE_TINYINT, false);
     f1->set_is_key(true);
-    auto f2 = std::make_shared<vectorized::Field>(1, "c1", LOGICAL_TYPE_SMALLINT, false);
+    auto f2 = std::make_shared<vectorized::Field>(1, "c1", TYPE_SMALLINT, false);
     f2->set_is_key(true);
     auto schema = std::make_shared<vectorized::Schema>(Fields{f1, f2}, PRIMARY_KEYS, std::vector<ColumnId>{0, 1});
     auto pk_index = TEST_create_primary_index(*schema);

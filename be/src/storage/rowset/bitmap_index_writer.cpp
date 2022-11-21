@@ -203,7 +203,7 @@ public:
                 bitmap_sizes.push_back(bitmap_size);
             }
 
-            TypeInfoPtr bitmap_typeinfo = get_type_info(LOGICAL_TYPE_OBJECT);
+            TypeInfoPtr bitmap_typeinfo = get_type_info(TYPE_OBJECT);
 
             IndexedColumnWriterOptions options;
             options.write_ordinal_index = true;

@@ -11,7 +11,7 @@
 
 namespace starrocks::vectorized {
 
-template <PrimitiveType TYPE, int CASE_SIZE, int TEST_SIZE>
+template <LogicalType TYPE, int CASE_SIZE, int TEST_SIZE>
 void test_simd_multi_select_if() {
     static_assert(isArithmeticPT<TYPE>, "Now Select IF only support Arithmetic TYPE");
 
@@ -55,13 +55,13 @@ void test_simd_multi_select_if() {
     }
 }
 
-template <PrimitiveType TYPE, int CASE_SIZE, int TEST_SIZE>
+template <LogicalType TYPE, int CASE_SIZE, int TEST_SIZE>
 bool test_function_wrapper() {
     test_simd_multi_select_if<TYPE, CASE_SIZE, TEST_SIZE>();
     return true;
 }
 
-template <PrimitiveType... TYPE>
+template <LogicalType... TYPE>
 bool test_all() {
     constexpr int chunk_size = 4095;
 

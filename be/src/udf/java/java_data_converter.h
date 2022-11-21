@@ -61,7 +61,7 @@ public:
 };
 
 template <bool handle_null>
-jvalue cast_to_jvalue(PrimitiveType type, bool is_boxed, const Column* col, int row_num);
+jvalue cast_to_jvalue(LogicalType type, bool is_boxed, const Column* col, int row_num);
 void release_jvalue(bool is_boxed, jvalue val);
 void append_jvalue(MethodTypeDescriptor method_type_desc, Column* col, jvalue val);
 } // namespace starrocks::vectorized

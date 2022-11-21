@@ -82,54 +82,54 @@ size_t TabletColumn::estimate_field_size(size_t variable_length) const {
 
 uint32_t TabletColumn::get_field_length_by_type(LogicalType type, uint32_t string_length) {
     switch (type) {
-    case LOGICAL_TYPE_UNKNOWN:
-    case LOGICAL_TYPE_DISCRETE_DOUBLE:
-    case LOGICAL_TYPE_STRUCT:
-    case LOGICAL_TYPE_MAP:
-    case LOGICAL_TYPE_NONE:
-    case LOGICAL_TYPE_NULL:
-    case LOGICAL_TYPE_FUNCTION:
-    case LOGICAL_TYPE_TIME:
-    case LOGICAL_TYPE_BINARY:
-    case LOGICAL_TYPE_MAX_VALUE:
-    case LOGICAL_TYPE_BOOLEAN:
-    case LOGICAL_TYPE_TINYINT:
-    case LOGICAL_TYPE_UNSIGNED_TINYINT:
+    case TYPE_UNKNOWN:
+    case TYPE_DISCRETE_DOUBLE:
+    case TYPE_STRUCT:
+    case TYPE_MAP:
+    case TYPE_NONE:
+    case TYPE_NULL:
+    case TYPE_FUNCTION:
+    case TYPE_TIME:
+    case TYPE_BINARY:
+    case TYPE_MAX_VALUE:
+    case TYPE_BOOLEAN:
+    case TYPE_TINYINT:
+    case TYPE_UNSIGNED_TINYINT:
         return 1;
-    case LOGICAL_TYPE_SMALLINT:
-    case LOGICAL_TYPE_UNSIGNED_SMALLINT:
+    case TYPE_SMALLINT:
+    case TYPE_UNSIGNED_SMALLINT:
         return 2;
-    case LOGICAL_TYPE_DATE_V1:
+    case TYPE_DATE_V1:
         return 3;
-    case LOGICAL_TYPE_INT:
-    case LOGICAL_TYPE_UNSIGNED_INT:
-    case LOGICAL_TYPE_FLOAT:
-    case LOGICAL_TYPE_DATE:
-    case LOGICAL_TYPE_DECIMAL32:
+    case TYPE_INT:
+    case TYPE_UNSIGNED_INT:
+    case TYPE_FLOAT:
+    case TYPE_DATE:
+    case TYPE_DECIMAL32:
         return 4;
-    case LOGICAL_TYPE_BIGINT:
-    case LOGICAL_TYPE_UNSIGNED_BIGINT:
-    case LOGICAL_TYPE_DOUBLE:
-    case LOGICAL_TYPE_DATETIME_V1:
-    case LOGICAL_TYPE_DATETIME:
-    case LOGICAL_TYPE_DECIMAL64:
+    case TYPE_BIGINT:
+    case TYPE_UNSIGNED_BIGINT:
+    case TYPE_DOUBLE:
+    case TYPE_DATETIME_V1:
+    case TYPE_DATETIME:
+    case TYPE_DECIMAL64:
         return 8;
-    case LOGICAL_TYPE_DECIMAL:
+    case TYPE_DECIMAL:
         return 12;
-    case LOGICAL_TYPE_LARGEINT:
-    case LOGICAL_TYPE_OBJECT:
-    case LOGICAL_TYPE_DECIMALV2:
-    case LOGICAL_TYPE_DECIMAL128:
+    case TYPE_LARGEINT:
+    case TYPE_OBJECT:
+    case TYPE_DECIMALV2:
+    case TYPE_DECIMAL128:
         return 16;
-    case LOGICAL_TYPE_CHAR:
+    case TYPE_CHAR:
         return string_length;
-    case LOGICAL_TYPE_VARCHAR:
-    case LOGICAL_TYPE_HLL:
-    case LOGICAL_TYPE_PERCENTILE:
-    case LOGICAL_TYPE_JSON:
-    case LOGICAL_TYPE_VARBINARY:
+    case TYPE_VARCHAR:
+    case TYPE_HLL:
+    case TYPE_PERCENTILE:
+    case TYPE_JSON:
+    case TYPE_VARBINARY:
         return string_length + sizeof(OLAP_STRING_MAX_LENGTH);
-    case LOGICAL_TYPE_ARRAY:
+    case TYPE_ARRAY:
         return string_length;
     }
     return 0;
@@ -424,7 +424,7 @@ std::unique_ptr<TabletSchema> TabletSchema::convert_to_format(DataFormatVersion 
         auto* col_pb = schema_pb.mutable_column(i);
         auto t1 = column(i).type();
         auto t2 = TypeUtils::convert_to_format(t1, format);
-        if (UNLIKELY(t2 == LOGICAL_TYPE_UNKNOWN)) {
+        if (UNLIKELY(t2 == TYPE_UNKNOWN)) {
             return nullptr;
         }
         if (t1 != t2) {

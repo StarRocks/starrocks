@@ -18,9 +18,7 @@ public:
 
     std::string make_string(size_t i) { return std::string("c").append(std::to_string(static_cast<int32_t>(i))); }
 
-    FieldPtr make_field(size_t i) {
-        return std::make_shared<Field>(i, make_string(i), get_type_info(LOGICAL_TYPE_INT), false);
-    }
+    FieldPtr make_field(size_t i) { return std::make_shared<Field>(i, make_string(i), get_type_info(TYPE_INT), false); }
 
     Fields make_fields(size_t size) {
         Fields fields;

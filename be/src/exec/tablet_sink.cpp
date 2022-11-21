@@ -1468,7 +1468,7 @@ void OlapTableSink::_print_decimal_error_msg(RuntimeState* state, const DecimalV
 #endif
 }
 
-template <PrimitiveType PT, typename CppType = vectorized::RunTimeCppType<PT>>
+template <LogicalType PT, typename CppType = vectorized::RunTimeCppType<PT>>
 void _print_decimalv3_error_msg(RuntimeState* state, const CppType& decimal, const SlotDescriptor* desc) {
     if (state->has_reached_max_error_msg_num()) {
         return;
@@ -1483,7 +1483,7 @@ void _print_decimalv3_error_msg(RuntimeState* state, const CppType& decimal, con
 #endif
 }
 
-template <PrimitiveType PT>
+template <LogicalType PT>
 void OlapTableSink::_validate_decimal(RuntimeState* state, vectorized::Column* column, const SlotDescriptor* desc,
                                       std::vector<uint8_t>* validate_selection) {
     using CppType = vectorized::RunTimeCppType<PT>;

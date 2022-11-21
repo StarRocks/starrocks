@@ -85,7 +85,7 @@ public:
     // return: jobject int[]
     jobject int_batch_call(FunctionContext* ctx, jobject callers, jobject method, int rows);
 
-    // type: PrimitiveType
+    // type: LogicalType
     // col: result column
     // jcolumn: Integer[]/String[]
     void get_result_from_boxed_array(FunctionContext* ctx, int type, Column* col, jobject jcolumn, int rows);
@@ -401,7 +401,7 @@ private:
 };
 
 struct MethodTypeDescriptor {
-    PrimitiveType type;
+    LogicalType type;
     bool is_box;
     bool is_array;
 };

@@ -103,7 +103,7 @@ std::string json_value_to_string(const rapidjson::Value& value) {
     } while (false)
 
 template <typename T>
-static Status get_int_value(const rapidjson::Value& col, PrimitiveType type, void* slot, bool pure_doc_value) {
+static Status get_int_value(const rapidjson::Value& col, LogicalType type, void* slot, bool pure_doc_value) {
     return Status::OK();
 }
 
@@ -212,7 +212,7 @@ Status ScrollParser::fill_chunk(RuntimeState* state, ChunkPtr* chunk, bool* line
                 if (pure_doc_value) {
                     return Status::RuntimeError("obtain `_id` is not supported in doc_values mode");
                 }
-                PrimitiveType type = slot_desc->type().type;
+                LogicalType type = slot_desc->type().type;
                 DCHECK(type == TYPE_CHAR || type == TYPE_VARCHAR);
 
                 const auto& _id = obj[FIELD_ID];
@@ -268,7 +268,7 @@ bool ScrollParser::_is_pure_doc_value(const rapidjson::Value& obj) {
     return false;
 }
 
-template <PrimitiveType type, typename CppType>
+template <LogicalType type, typename CppType>
 void ScrollParser::_append_data(Column* column, CppType& value) {
     auto appender = [](auto* column, CppType& value) {
         using ColumnType = typename vectorized::RunTimeColumnType<type>;
@@ -293,7 +293,7 @@ void ScrollParser::_append_null(Column* column) {
 
 Status ScrollParser::_append_value_from_json_val(Column* column, const TypeDescriptor& type_desc,
                                                  const rapidjson::Value& col, bool pure_doc_value) {
-    PrimitiveType type = type_desc.type;
+    LogicalType type = type_desc.type;
     switch (type) {
     case TYPE_CHAR:
     case TYPE_VARCHAR: {
@@ -375,7 +375,7 @@ Slice ScrollParser::_json_val_to_slice(const rapidjson::Value& val) {
     return {_scratch_buffer.GetString(), _scratch_buffer.GetSize()};
 }
 
-template <PrimitiveType type, typename T>
+template <LogicalType type, typename T>
 Status ScrollParser::_append_int_val(const rapidjson::Value& col, Column* column, bool pure_doc_value) {
     T value;
     if (col.IsNumber()) {
@@ -419,7 +419,7 @@ Status ScrollParser::_append_int_val(const rapidjson::Value& col, Column* column
     return Status::OK();
 }
 
-template <PrimitiveType type, typename T>
+template <LogicalType type, typename T>
 Status ScrollParser::_append_float_val(const rapidjson::Value& col, Column* column, bool pure_doc_value) {
     static_assert(std::is_same_v<T, float> || std::is_same_v<T, double>);
     T value;
@@ -460,7 +460,7 @@ Status ScrollParser::_append_float_val(const rapidjson::Value& col, Column* colu
 }
 
 Status ScrollParser::_append_bool_val(const rapidjson::Value& col, Column* column, bool pure_doc_value) {
-    PrimitiveType type = TYPE_BOOLEAN;
+    LogicalType type = TYPE_BOOLEAN;
     uint8_t value;
     if (col.IsBool()) {
         value = col.GetBool();
@@ -574,7 +574,7 @@ Status ScrollParser::_append_array_val_from_source(const rapidjson::Value& val, 
 }
 
 // TODO: test here
-template <PrimitiveType type, typename T>
+template <LogicalType type, typename T>
 Status ScrollParser::_append_date_val(const rapidjson::Value& col, Column* column, bool pure_doc_value) {
     auto append_timestamp = [](auto& col, Column* column) {
         TimestampValue value;

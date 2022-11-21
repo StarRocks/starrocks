@@ -56,7 +56,7 @@ public:
         jvalue val = ctx->impl()->udaf_ctxs()->_func->finalize(this->data(state).handle);
         // insert values to column
         JNIEnv* env = helper.getEnv();
-        MethodTypeDescriptor desc = {(PrimitiveType)ctx->get_return_type().type, true};
+        MethodTypeDescriptor desc = {(LogicalType)ctx->get_return_type().type, true};
         int sz = end - start;
         for (int i = 0; i < sz; ++i) {
             assign_jvalue(desc, dst, start + i, val);

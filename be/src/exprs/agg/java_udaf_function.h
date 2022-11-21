@@ -360,7 +360,7 @@ public:
         auto res = helper.batch_call(ctx, udf_ctxs->handle.handle(), udf_ctxs->finalize->method.handle(), &state_array,
                                      1, batch_size);
         LOCAL_REF_GUARD_ENV(env, res);
-        PrimitiveType type = udf_ctxs->finalize->method_desc[0].type;
+        LogicalType type = udf_ctxs->finalize->method_desc[0].type;
         if (!to->is_nullable()) {
             ColumnPtr wrapper(const_cast<Column*>(to), [](auto p) {});
             auto output = NullableColumn::create(wrapper, NullColumn::create());

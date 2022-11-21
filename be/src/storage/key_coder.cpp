@@ -45,32 +45,32 @@ public:
 
 private:
     KeyCoderResolver() {
-        add_mapping<LOGICAL_TYPE_TINYINT>();
-        add_mapping<LOGICAL_TYPE_SMALLINT>();
-        add_mapping<LOGICAL_TYPE_INT>();
-        add_mapping<LOGICAL_TYPE_UNSIGNED_INT>();
-        add_mapping<LOGICAL_TYPE_BIGINT>();
-        add_mapping<LOGICAL_TYPE_UNSIGNED_BIGINT>();
-        add_mapping<LOGICAL_TYPE_LARGEINT>();
-        add_mapping<LOGICAL_TYPE_DATETIME_V1>();
-        add_mapping<LOGICAL_TYPE_DATETIME>();
+        add_mapping<TYPE_TINYINT>();
+        add_mapping<TYPE_SMALLINT>();
+        add_mapping<TYPE_INT>();
+        add_mapping<TYPE_UNSIGNED_INT>();
+        add_mapping<TYPE_BIGINT>();
+        add_mapping<TYPE_UNSIGNED_BIGINT>();
+        add_mapping<TYPE_LARGEINT>();
+        add_mapping<TYPE_DATETIME_V1>();
+        add_mapping<TYPE_DATETIME>();
 
-        add_mapping<LOGICAL_TYPE_DATE_V1>();
-        add_mapping<LOGICAL_TYPE_DATE>();
-        add_mapping<LOGICAL_TYPE_DECIMAL>();
-        add_mapping<LOGICAL_TYPE_DECIMALV2>();
-        add_mapping<LOGICAL_TYPE_CHAR>();
-        add_mapping<LOGICAL_TYPE_VARCHAR>();
-        add_mapping<LOGICAL_TYPE_BOOLEAN>();
+        add_mapping<TYPE_DATE_V1>();
+        add_mapping<TYPE_DATE>();
+        add_mapping<TYPE_DECIMAL>();
+        add_mapping<TYPE_DECIMALV2>();
+        add_mapping<TYPE_CHAR>();
+        add_mapping<TYPE_VARCHAR>();
+        add_mapping<TYPE_BOOLEAN>();
     }
 
     template <LogicalType field_type>
     void add_mapping() {
-        static_assert(field_type < LOGICAL_TYPE_MAX_VALUE);
+        static_assert(field_type < TYPE_MAX_VALUE);
         _coder_map[field_type] = new KeyCoder(KeyCoderTraits<field_type>());
     }
 
-    KeyCoder* _coder_map[LOGICAL_TYPE_MAX_VALUE] = {nullptr};
+    KeyCoder* _coder_map[TYPE_MAX_VALUE] = {nullptr};
 };
 
 const KeyCoder* get_key_coder(LogicalType type) {

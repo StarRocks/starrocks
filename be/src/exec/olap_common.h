@@ -58,7 +58,7 @@ class ColumnValueRange {
 public:
     typedef typename std::set<T>::iterator iterator_type;
     ColumnValueRange();
-    ColumnValueRange(std::string col_name, PrimitiveType type, T min, T max);
+    ColumnValueRange(std::string col_name, LogicalType type, T min, T max);
 
     Status add_fixed_values(SQLFilterOp op, const std::set<T>& values);
 
@@ -104,7 +104,7 @@ public:
 
     bool is_end_include() const { return _high_op == FILTER_LESS_OR_EQUAL; }
 
-    PrimitiveType type() const { return _column_type; }
+    LogicalType type() const { return _column_type; }
 
     size_t get_fixed_value_size() const { return _fixed_values.size(); }
 
@@ -116,13 +116,13 @@ public:
 
 private:
     std::string _column_name;
-    PrimitiveType _column_type{TYPE_UNKNOWN}; // Column type (eg: TINYINT,SMALLINT,INT,BIGINT)
-    int _precision;                           // casting a decimalv3-typed value into string need precision
-    int _scale;                               // casting a decimalv3-typed value into string need scale
-    T _type_min;                              // Column type's min value
-    T _type_max;                              // Column type's max value
-    T _low_value;                             // Column's low value, closed interval at left
-    T _high_value;                            // Column's high value, open interval at right
+    LogicalType _column_type{TYPE_UNKNOWN}; // Column type (eg: TINYINT,SMALLINT,INT,BIGINT)
+    int _precision;                         // casting a decimalv3-typed value into string need precision
+    int _scale;                             // casting a decimalv3-typed value into string need scale
+    T _type_min;                            // Column type's min value
+    T _type_max;                            // Column type's max value
+    T _low_value;                           // Column's low value, closed interval at left
+    T _high_value;                          // Column's high value, open interval at right
     SQLFilterOp _low_op;
     SQLFilterOp _high_op;
     std::set<T> _fixed_values; // Column's fixed values

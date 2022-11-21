@@ -24,7 +24,7 @@ enum JsonFunctionType {
     JSON_FUN_UNKOWN //The last
 };
 
-template <PrimitiveType primitive_type>
+template <LogicalType primitive_type>
 struct JsonTypeTraits {};
 
 template <>
@@ -213,7 +213,7 @@ public:
     }
 
 private:
-    template <PrimitiveType ResultType>
+    template <LogicalType ResultType>
     static ColumnPtr _json_query_impl(starrocks_udf::FunctionContext* context, const Columns& columns);
 
     /**

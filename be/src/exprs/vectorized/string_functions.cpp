@@ -811,7 +811,7 @@ ColumnPtr StringFunctions::ends_with(FunctionContext* context, const Columns& co
 
 struct SpaceFunction {
 public:
-    template <PrimitiveType Type, PrimitiveType ResultType>
+    template <LogicalType Type, LogicalType ResultType>
     static ColumnPtr evaluate(const ColumnPtr& v1) {
         auto len_column = down_cast<Int32Column*>(v1.get());
         auto& len_array = len_column->get_data();
@@ -1612,7 +1612,7 @@ static inline void vectorized_toggle_case(const Bytes* src, Bytes* dst) {
 template <bool to_upper>
 struct StringCaseToggleFunction {
 public:
-    template <PrimitiveType Type, PrimitiveType ResultType>
+    template <LogicalType Type, LogicalType ResultType>
     static ColumnPtr evaluate(const ColumnPtr& v1) {
         auto* src = down_cast<BinaryColumn*>(v1.get());
         Bytes& src_bytes = src->get_bytes();
@@ -1701,7 +1701,7 @@ static inline void reverse(BinaryColumn* src, Bytes* dst_bytes) {
 }
 
 struct ReverseFunction {
-    template <PrimitiveType Type, PrimitiveType ResultType>
+    template <LogicalType Type, LogicalType ResultType>
     static inline ColumnPtr evaluate(const ColumnPtr& column) {
         auto* src = down_cast<BinaryColumn*>(column.get());
         auto& src_bytes = src->get_bytes();
@@ -1824,7 +1824,7 @@ static inline void trim_per_slice(const BinaryColumn* src, const size_t i, Bytes
 
 template <size_t simd_threshold>
 struct AdaptiveLTrimFunction {
-    template <PrimitiveType Type, PrimitiveType ResultType>
+    template <LogicalType Type, LogicalType ResultType>
     static inline ColumnPtr evaluate(const ColumnPtr& column) {
         auto* src = down_cast<BinaryColumn*>(column.get());
 
@@ -1861,7 +1861,7 @@ struct AdaptiveLTrimFunction {
 
 template <size_t simd_threshold>
 struct AdaptiveRTrimFunction {
-    template <PrimitiveType Type, PrimitiveType ResultType>
+    template <LogicalType Type, LogicalType ResultType>
     static inline ColumnPtr evaluate(const ColumnPtr& column) {
         auto* src = down_cast<BinaryColumn*>(column.get());
 
@@ -1898,7 +1898,7 @@ struct AdaptiveRTrimFunction {
 
 template <size_t simd_threshold>
 struct AdaptiveTrimFunction {
-    template <PrimitiveType Type, PrimitiveType ResultType>
+    template <LogicalType Type, LogicalType ResultType>
     static inline ColumnPtr evaluate(const ColumnPtr& column) {
         auto* src = down_cast<BinaryColumn*>(column.get());
 

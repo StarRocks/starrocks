@@ -34,7 +34,7 @@ struct HistogramState {
     std::vector<T> data;
 };
 
-template <PrimitiveType PT, typename T = RunTimeCppType<PT>>
+template <LogicalType PT, typename T = RunTimeCppType<PT>>
 class HistogramAggregationFunction final
         : public AggregateFunctionBatchHelper<HistogramState<T>, HistogramAggregationFunction<PT, T>> {
 public:

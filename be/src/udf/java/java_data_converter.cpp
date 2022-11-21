@@ -19,7 +19,7 @@
 
 namespace starrocks::vectorized {
 
-template <PrimitiveType TYPE>
+template <LogicalType TYPE>
 jvalue cast_to_jvalue(RunTimeCppType<TYPE> data_value, JVMFunctionHelper& helper);
 
 #define DEFINE_CAST_TO_JVALUE(TYPE, APPLY_FUNC)                                                \
@@ -46,7 +46,7 @@ void release_jvalue(bool is_box, jvalue val) {
 
 // Used For UDAF
 template <bool handle_null>
-jvalue cast_to_jvalue(PrimitiveType type, bool is_boxed, const Column* col, int row_num) {
+jvalue cast_to_jvalue(LogicalType type, bool is_boxed, const Column* col, int row_num) {
     DCHECK(handle_null || !col->is_nullable());
     DCHECK(!col->is_constant());
 
@@ -112,16 +112,16 @@ jvalue cast_to_jvalue(PrimitiveType type, bool is_boxed, const Column* col, int 
     return v;
 }
 
-template jvalue cast_to_jvalue<true>(PrimitiveType type, bool is_boxed, const Column* col, int row_num);
+template jvalue cast_to_jvalue<true>(LogicalType type, bool is_boxed, const Column* col, int row_num);
 
-template jvalue cast_to_jvalue<false>(PrimitiveType type, bool is_boxed, const Column* col, int row_num);
+template jvalue cast_to_jvalue<false>(LogicalType type, bool is_boxed, const Column* col, int row_num);
 
 void assign_jvalue(MethodTypeDescriptor method_type_desc, Column* col, int row_num, jvalue val) {
     DCHECK(method_type_desc.is_box);
     auto& helper = JVMFunctionHelper::getInstance();
     Column* data_col = col;
-    if (col->is_nullable() && method_type_desc.type != PrimitiveType::TYPE_VARCHAR &&
-        method_type_desc.type != PrimitiveType::TYPE_CHAR) {
+    if (col->is_nullable() && method_type_desc.type != LogicalType::TYPE_VARCHAR &&
+        method_type_desc.type != LogicalType::TYPE_CHAR) {
         auto* nullable_column = down_cast<NullableColumn*>(col);
         if (val.l == nullptr) {
             nullable_column->set_null(row_num);
@@ -255,7 +255,7 @@ void JavaDataTypeConverter::convert_to_boxed_array(FunctionContext* ctx, std::ve
     auto& helper = JVMFunctionHelper::getInstance();
     JNIEnv* env = helper.getEnv();
     ConvertDirectBufferVistor vistor(*buffers);
-    PrimitiveType types[num_cols];
+    LogicalType types[num_cols];
     for (int i = 0; i < num_cols; ++i) {
         types[i] = ctx->get_arg_type(i)->type;
         jobject arg = nullptr;

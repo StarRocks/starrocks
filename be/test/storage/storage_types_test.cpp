@@ -115,35 +115,35 @@ void test_char(Slice src_val) {
 }
 
 template <>
-void common_test<LOGICAL_TYPE_CHAR>(Slice src_val) {
-    test_char<LOGICAL_TYPE_VARCHAR>(src_val);
+void common_test<TYPE_CHAR>(Slice src_val) {
+    test_char<TYPE_VARCHAR>(src_val);
 }
 
 template <>
-void common_test<LOGICAL_TYPE_VARCHAR>(Slice src_val) {
-    test_char<LOGICAL_TYPE_VARCHAR>(src_val);
+void common_test<TYPE_VARCHAR>(Slice src_val) {
+    test_char<TYPE_VARCHAR>(src_val);
 }
 
 TEST(StorageLayerTypesTest, copy_and_equal) {
-    common_test<LOGICAL_TYPE_BOOLEAN>(true);
-    common_test<LOGICAL_TYPE_TINYINT>(112);
-    common_test<LOGICAL_TYPE_SMALLINT>(54321);
-    common_test<LOGICAL_TYPE_INT>(-123454321);
-    common_test<LOGICAL_TYPE_UNSIGNED_INT>(1234543212L);
-    common_test<LOGICAL_TYPE_BIGINT>(123454321123456789L);
+    common_test<TYPE_BOOLEAN>(true);
+    common_test<TYPE_TINYINT>(112);
+    common_test<TYPE_SMALLINT>(54321);
+    common_test<TYPE_INT>(-123454321);
+    common_test<TYPE_UNSIGNED_INT>(1234543212L);
+    common_test<TYPE_BIGINT>(123454321123456789L);
     __int128 int128_val = 1234567899L;
-    common_test<LOGICAL_TYPE_LARGEINT>(int128_val);
-    common_test<LOGICAL_TYPE_FLOAT>(1.11);
-    common_test<LOGICAL_TYPE_DOUBLE>(12221.11);
+    common_test<TYPE_LARGEINT>(int128_val);
+    common_test<TYPE_FLOAT>(1.11);
+    common_test<TYPE_DOUBLE>(12221.11);
     decimal12_t decimal_val(123, 2345);
-    common_test<LOGICAL_TYPE_DECIMAL>(decimal_val);
+    common_test<TYPE_DECIMAL>(decimal_val);
 
-    common_test<LOGICAL_TYPE_DATE_V1>((1988 << 9) | (2 << 5) | 1);
-    common_test<LOGICAL_TYPE_DATETIME_V1>(19880201010203L);
+    common_test<TYPE_DATE_V1>((1988 << 9) | (2 << 5) | 1);
+    common_test<TYPE_DATETIME_V1>(19880201010203L);
 
     Slice slice("12345abcde");
-    common_test<LOGICAL_TYPE_CHAR>(slice);
-    common_test<LOGICAL_TYPE_VARCHAR>(slice);
+    common_test<TYPE_CHAR>(slice);
+    common_test<TYPE_VARCHAR>(slice);
 }
 
 } // namespace starrocks

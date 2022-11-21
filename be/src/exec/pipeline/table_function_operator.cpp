@@ -54,13 +54,13 @@ Status TableFunctionOperator::prepare(RuntimeState* state) {
     // Get table function from TableFunctionResolver
     TFunction table_fn = _tnode.table_function_node.table_function.nodes[0].fn;
     std::string table_function_name = table_fn.name.function_name;
-    std::vector<PrimitiveType> arg_types;
+    std::vector<LogicalType> arg_types;
     for (const TTypeDesc& ttype_desc : table_fn.arg_types) {
         TypeDescriptor arg_type = TypeDescriptor::from_thrift(ttype_desc);
         arg_types.emplace_back(arg_type.type);
     }
 
-    std::vector<PrimitiveType> return_types;
+    std::vector<LogicalType> return_types;
     for (const TTypeDesc& ttype_desc : table_fn.table_fn.ret_types) {
         TypeDescriptor return_type = TypeDescriptor::from_thrift(ttype_desc);
         return_types.emplace_back(return_type.type);

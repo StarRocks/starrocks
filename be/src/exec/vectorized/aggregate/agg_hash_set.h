@@ -56,7 +56,7 @@ using SliceAggTwoLevelHashSet =
 
 // ==============================================================
 // handle one number hash key
-template <PrimitiveType primitive_type, typename HashSet>
+template <LogicalType primitive_type, typename HashSet>
 struct AggHashSetOfOneNumberKey {
     using KeyType = typename HashSet::key_type;
     using Iterator = typename HashSet::iterator;
@@ -99,7 +99,7 @@ struct AggHashSetOfOneNumberKey {
     ResultVector results;
 };
 
-template <PrimitiveType primitive_type, typename HashSet>
+template <LogicalType primitive_type, typename HashSet>
 struct AggHashSetOfOneNullableNumberKey {
     using KeyType = typename HashSet::key_type;
     using Iterator = typename HashSet::iterator;

@@ -334,7 +334,7 @@ public:
      */
     static ColumnPtr money_format_decimalv2val(FunctionContext* context, const starrocks::vectorized::Columns& columns);
 
-    template <PrimitiveType Type>
+    template <LogicalType Type>
     static ColumnPtr money_format_decimal(FunctionContext* context, const starrocks::vectorized::Columns& columns);
 
     // parse's auxiliary method
@@ -450,13 +450,13 @@ private:
     static ColumnPtr parse_url_const(UrlParser::UrlPart* url_part, FunctionContext* context,
                                      const starrocks::vectorized::Columns& columns);
 
-    template <PrimitiveType Type, bool scale_up, bool check_overflow>
+    template <LogicalType Type, bool scale_up, bool check_overflow>
     static inline void money_format_decimal_impl(FunctionContext* context, ColumnViewer<Type> const& money_viewer,
                                                  size_t num_rows, int adjust_scale,
                                                  ColumnBuilder<TYPE_VARCHAR>* result);
 };
 
-template <PrimitiveType Type, bool scale_up, bool check_overflow>
+template <LogicalType Type, bool scale_up, bool check_overflow>
 void StringFunctions::money_format_decimal_impl(FunctionContext* context, ColumnViewer<Type> const& money_viewer,
                                                 size_t num_rows, int adjust_scale,
                                                 ColumnBuilder<TYPE_VARCHAR>* result) {
@@ -491,7 +491,7 @@ void StringFunctions::money_format_decimal_impl(FunctionContext* context, Column
     }
 }
 
-template <PrimitiveType Type>
+template <LogicalType Type>
 ColumnPtr StringFunctions::money_format_decimal(FunctionContext* context,
                                                 const starrocks::vectorized::Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);

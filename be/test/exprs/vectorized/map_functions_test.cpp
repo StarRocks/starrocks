@@ -12,9 +12,9 @@ namespace starrocks::vectorized {
 
 PARALLEL_TEST(MapFunctionsTest, test_map_function) {
     TypeDescriptor type_map_int_int;
-    type_map_int_int.type = PrimitiveType::TYPE_MAP;
-    type_map_int_int.children.emplace_back(TypeDescriptor(PrimitiveType::TYPE_INT));
-    type_map_int_int.children.emplace_back(TypeDescriptor(PrimitiveType::TYPE_INT));
+    type_map_int_int.type = LogicalType::TYPE_MAP;
+    type_map_int_int.children.emplace_back(TypeDescriptor(LogicalType::TYPE_INT));
+    type_map_int_int.children.emplace_back(TypeDescriptor(LogicalType::TYPE_INT));
 
     auto column = ColumnHelper::create_column(type_map_int_int, true);
 

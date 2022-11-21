@@ -13,7 +13,7 @@
 namespace starrocks::vectorized {
 namespace detail {
 struct RuntimeColumnPredicateBuilder {
-    template <PrimitiveType ptype>
+    template <LogicalType ptype>
     StatusOr<std::vector<std::unique_ptr<ColumnPredicate>>> operator()(PredicateParser* parser,
                                                                        const RuntimeFilterProbeDescriptor* desc,
                                                                        const SlotDescriptor* slot) {
@@ -26,9 +26,9 @@ struct RuntimeColumnPredicateBuilder {
             std::vector<std::unique_ptr<ColumnPredicate>> preds;
 
             // Treat tinyint and boolean as int
-            constexpr PrimitiveType limit_type = ptype == TYPE_TINYINT || ptype == TYPE_BOOLEAN ? TYPE_INT : ptype;
+            constexpr LogicalType limit_type = ptype == TYPE_TINYINT || ptype == TYPE_BOOLEAN ? TYPE_INT : ptype;
             // Map TYPE_CHAR to TYPE_VARCHAR
-            constexpr PrimitiveType mapping_type = ptype == TYPE_CHAR ? TYPE_VARCHAR : ptype;
+            constexpr LogicalType mapping_type = ptype == TYPE_CHAR ? TYPE_VARCHAR : ptype;
 
             using value_type = typename RunTimeTypeLimits<limit_type>::value_type;
             using RangeType = ColumnValueRange<value_type>;

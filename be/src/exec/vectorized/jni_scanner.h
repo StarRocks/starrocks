@@ -44,19 +44,19 @@ private:
 
     Status _get_next_chunk(JNIEnv* _jni_env, long* chunk_meta);
 
-    template <PrimitiveType type, typename CppType>
+    template <LogicalType type, typename CppType>
     Status _append_primitive_data(long num_rows, long* chunk_meta_ptr, int& chunk_meta_index, ColumnPtr& column);
 
-    template <PrimitiveType type, typename CppType>
+    template <LogicalType type, typename CppType>
     Status _append_decimal_data(long num_rows, long* chunk_meta_ptr, int& chunk_meta_index, ColumnPtr& column,
                                 SlotDescriptor* slot_desc);
 
-    template <PrimitiveType type>
+    template <LogicalType type>
     Status _append_string_data(long num_rows, long* chunk_meta_ptr, int& chunk_meta_index, ColumnPtr& column);
 
     Status _fill_chunk(JNIEnv* _jni_env, long chunk_meta, ChunkPtr* chunk);
 
-    template <PrimitiveType type, typename CppType>
+    template <LogicalType type, typename CppType>
     void _append_data(Column* column, CppType& value);
 
     Status _release_off_heap_table(JNIEnv* _jni_env);

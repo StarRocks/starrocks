@@ -243,7 +243,7 @@ private:
     // the elements at the top of the heap, which will significantly improve the sorting performance
     int _filter_data(detail::ChunkHolder* chunk_holder, int row_sz);
 
-    template <PrimitiveType TYPE>
+    template <LogicalType TYPE>
     void _do_filter_data_for_type(detail::ChunkHolder* chunk_holder, Column::Filter* filter, int row_sz);
 
     using CursorContainer = std::vector<detail::ChunkRowCursor>;

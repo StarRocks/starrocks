@@ -65,7 +65,7 @@ public:
               _rle_encoder(nullptr),
               _first_value(0),
               _last_value(0) {
-        _bit_width = (Type == LOGICAL_TYPE_BOOLEAN) ? 1 : SIZE_OF_TYPE * 8;
+        _bit_width = (Type == TYPE_BOOLEAN) ? 1 : SIZE_OF_TYPE * 8;
         _rle_encoder = std::make_unique<RleEncoder<CppType>>(&_buf, _bit_width);
         reset();
     }
@@ -158,7 +158,7 @@ public:
         }
         _num_elements = decode_fixed32_le((const uint8_t*)&_data[0]);
         _parsed = true;
-        _bit_width = (Type == LOGICAL_TYPE_BOOLEAN) ? 1 : SIZE_OF_TYPE * 8;
+        _bit_width = (Type == TYPE_BOOLEAN) ? 1 : SIZE_OF_TYPE * 8;
         _rle_decoder = RleDecoder<CppType>((uint8_t*)_data.data + RLE_PAGE_HEADER_SIZE,
                                            _data.size - RLE_PAGE_HEADER_SIZE, _bit_width);
         seek_to_position_in_page(0);

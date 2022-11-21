@@ -188,7 +188,7 @@ private:
     ColumnUID _unique_id = 0;
     ColumnLength _length = 0;
     FieldAggregationMethod _aggregation = OLAP_FIELD_AGGREGATION_NONE;
-    LogicalType _type = LOGICAL_TYPE_UNKNOWN;
+    LogicalType _type = TYPE_UNKNOWN;
 
     ColumnIndexLength _index_length = 0;
     ColumnPrecision _precision = 0;

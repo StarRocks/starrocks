@@ -13,10 +13,10 @@
 
 namespace starrocks::vectorized {
 
-template <PrimitiveType PT, typename = guard::Guard>
+template <LogicalType PT, typename = guard::Guard>
 struct MaxAggregateData {};
 
-template <PrimitiveType PT>
+template <LogicalType PT>
 struct MaxAggregateData<PT, IntegralPTGuard<PT>> {
     using T = RunTimeCppType<PT>;
     T result = std::numeric_limits<T>::lowest();
@@ -24,7 +24,7 @@ struct MaxAggregateData<PT, IntegralPTGuard<PT>> {
     void reset() { result = std::numeric_limits<T>::lowest(); }
 };
 
-template <PrimitiveType PT>
+template <LogicalType PT>
 struct MaxAggregateData<PT, FloatPTGuard<PT>> {
     using T = RunTimeCppType<PT>;
     T result = std::numeric_limits<T>::lowest();
@@ -38,7 +38,7 @@ struct MaxAggregateData<TYPE_DECIMALV2, guard::Guard> {
     void reset() { result = DecimalV2Value::get_min_decimal(); }
 };
 
-template <PrimitiveType PT>
+template <LogicalType PT>
 struct MaxAggregateData<PT, DecimalPTGuard<PT>> {
     using T = RunTimeCppType<PT>;
     T result = get_min_decimal<T>();
@@ -59,7 +59,7 @@ struct MaxAggregateData<TYPE_DATE, guard::Guard> {
     void reset() { result = DateValue::MIN_DATE_VALUE; }
 };
 
-template <PrimitiveType PT>
+template <LogicalType PT>
 struct MaxAggregateData<PT, StringPTGuard<PT>> {
     int32_t size = -1;
     raw::RawVector<uint8_t> buffer;
@@ -74,10 +74,10 @@ struct MaxAggregateData<PT, StringPTGuard<PT>> {
     }
 };
 
-template <PrimitiveType PT, typename = guard::Guard>
+template <LogicalType PT, typename = guard::Guard>
 struct MinAggregateData {};
 
-template <PrimitiveType PT>
+template <LogicalType PT>
 struct MinAggregateData<PT, IntegralPTGuard<PT>> {
     using T = RunTimeCppType<PT>;
     T result = std::numeric_limits<T>::max();
@@ -85,7 +85,7 @@ struct MinAggregateData<PT, IntegralPTGuard<PT>> {
     void reset() { result = std::numeric_limits<T>::max(); }
 };
 
-template <PrimitiveType PT>
+template <LogicalType PT>
 struct MinAggregateData<PT, FloatPTGuard<PT>> {
     using T = RunTimeCppType<PT>;
     T result = std::numeric_limits<T>::max();
@@ -100,7 +100,7 @@ struct MinAggregateData<TYPE_DECIMALV2, guard::Guard> {
     void reset() { result = DecimalV2Value::get_max_decimal(); }
 };
 
-template <PrimitiveType PT>
+template <LogicalType PT>
 struct MinAggregateData<PT, DecimalPTGuard<PT>> {
     using T = RunTimeCppType<PT>;
     T result = get_max_decimal<T>();
@@ -120,7 +120,7 @@ struct MinAggregateData<TYPE_DATE, guard::Guard> {
     void reset() { result = DateValue::MAX_DATE_VALUE; }
 };
 
-template <PrimitiveType PT>
+template <LogicalType PT>
 struct MinAggregateData<PT, StringPTGuard<PT>> {
     int32_t size = -1;
     Buffer<uint8_t> buffer;
@@ -135,19 +135,19 @@ struct MinAggregateData<PT, StringPTGuard<PT>> {
     }
 };
 
-template <PrimitiveType PT, typename State, typename = guard::Guard>
+template <LogicalType PT, typename State, typename = guard::Guard>
 struct MaxElement {
     using T = RunTimeCppType<PT>;
     void operator()(State& state, const T& right) const { state.result = std::max<T>(state.result, right); }
 };
 
-template <PrimitiveType PT, typename State, typename = guard::Guard>
+template <LogicalType PT, typename State, typename = guard::Guard>
 struct MinElement {
     using T = RunTimeCppType<PT>;
     void operator()(State& state, const T& right) const { state.result = std::min<T>(state.result, right); }
 };
 
-template <PrimitiveType PT>
+template <LogicalType PT>
 struct MaxElement<PT, MaxAggregateData<PT>, StringPTGuard<PT>> {
     void operator()(MaxAggregateData<PT>& state, const Slice& right) const {
         if (!state.has_value() || state.slice().compare(right) < 0) {
@@ -158,7 +158,7 @@ struct MaxElement<PT, MaxAggregateData<PT>, StringPTGuard<PT>> {
     }
 };
 
-template <PrimitiveType PT>
+template <LogicalType PT>
 struct MinElement<PT, MinAggregateData<PT>, StringPTGuard<PT>> {
     void operator()(MinAggregateData<PT>& state, const Slice& right) const {
         if (!state.has_value() || state.slice().compare(right) > 0) {
@@ -169,7 +169,7 @@ struct MinElement<PT, MinAggregateData<PT>, StringPTGuard<PT>> {
     }
 };
 
-template <PrimitiveType PT, typename State, class OP, typename T = RunTimeCppType<PT>, typename = guard::Guard>
+template <LogicalType PT, typename State, class OP, typename T = RunTimeCppType<PT>, typename = guard::Guard>
 class MaxMinAggregateFunction final
         : public AggregateFunctionBatchHelper<State, MaxMinAggregateFunction<PT, State, OP, T>> {
 public:
@@ -229,7 +229,7 @@ public:
     std::string get_name() const override { return "maxmin"; }
 };
 
-template <PrimitiveType PT, typename State, class OP>
+template <LogicalType PT, typename State, class OP>
 class MaxMinAggregateFunction<PT, State, OP, RunTimeCppType<PT>, StringPTGuard<PT>> final
         : public AggregateFunctionBatchHelper<State, MaxMinAggregateFunction<PT, State, OP, RunTimeCppType<PT>>> {
 public:

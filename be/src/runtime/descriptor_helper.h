@@ -48,7 +48,7 @@ class TTupleDescriptorBuilder;
 class TSlotDescriptorBuilder {
 public:
     TSlotDescriptorBuilder() { _slot_desc.isMaterialized = true; }
-    TSlotDescriptorBuilder& type(PrimitiveType type) { return this->type(TypeDescriptor(type)); }
+    TSlotDescriptorBuilder& type(LogicalType type) { return this->type(TypeDescriptor(type)); }
     TSlotDescriptorBuilder& type(const TypeDescriptor& type) {
         _slot_desc.slotType = type.to_thrift();
         return *this;

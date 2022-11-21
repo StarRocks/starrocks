@@ -9,11 +9,11 @@
 
 namespace starrocks::vectorized {
 
-UNION_VALUE_GUARD(PrimitiveType, FixedNonDecimalTypeGuard, pt_is_fixed_non_decimal, pt_is_boolean_struct,
+UNION_VALUE_GUARD(LogicalType, FixedNonDecimalTypeGuard, pt_is_fixed_non_decimal, pt_is_boolean_struct,
                   pt_is_integer_struct, pt_is_float_struct, pt_is_date_struct, pt_is_datetime_struct,
                   pt_is_decimalv2_struct, pt_is_time_struct)
 
-template <bool check_overflow, PrimitiveType Type, PrimitiveType ResultType>
+template <bool check_overflow, LogicalType Type, LogicalType ResultType>
 struct DecimalDecimalCast {
     static inline ColumnPtr evaluate(const ColumnPtr& column, int to_precision, int to_scale) {
         using FromCppType = RunTimeCppType<Type>;
@@ -96,11 +96,11 @@ struct DecimalDecimalCast {
         }
     }
 };
-template <bool check_overflow, PrimitiveType, PrimitiveType, typename = guard::Guard, typename = guard::Guard>
+template <bool check_overflow, LogicalType, LogicalType, typename = guard::Guard, typename = guard::Guard>
 struct DecimalNonDecimalCast {};
 
 // cast: bool,integer,float,datetime,date, time <-> decimal
-template <bool check_overflow, PrimitiveType DecimalType, PrimitiveType NonDecimalType>
+template <bool check_overflow, LogicalType DecimalType, LogicalType NonDecimalType>
 struct DecimalNonDecimalCast<check_overflow, DecimalType, NonDecimalType, DecimalPTGuard<DecimalType>,
                              FixedNonDecimalTypeGuard<NonDecimalType>> {
     using DecimalCppType = RunTimeCppType<DecimalType>;
@@ -288,7 +288,7 @@ struct DecimalNonDecimalCast<check_overflow, DecimalType, NonDecimalType, Decima
 };
 
 // cast: char/varchar <-> decimal
-template <bool check_overflow, PrimitiveType DecimalType, PrimitiveType StringType>
+template <bool check_overflow, LogicalType DecimalType, LogicalType StringType>
 struct DecimalNonDecimalCast<check_overflow, DecimalType, StringType, DecimalPTGuard<DecimalType>,
                              StringPTGuard<StringType>> {
     using DecimalCppType = RunTimeCppType<DecimalType>;
@@ -356,7 +356,7 @@ struct DecimalNonDecimalCast<check_overflow, DecimalType, StringType, DecimalPTG
 
 template <bool check_overflow>
 struct DecimalToDecimal {
-    template <PrimitiveType Type, PrimitiveType ResultType, typename... Args>
+    template <LogicalType Type, LogicalType ResultType, typename... Args>
     static inline ColumnPtr evaluate(const ColumnPtr& column, Args&&... args) {
         return DecimalDecimalCast<check_overflow, Type, ResultType>::evaluate(column, std::forward<Args>(args)...);
     }
@@ -365,7 +365,7 @@ struct DecimalToDecimal {
 // cast: convert to decimal type from other types
 template <bool check_overflow>
 struct DecimalFrom {
-    template <PrimitiveType Type, PrimitiveType ResultType, typename... Args>
+    template <LogicalType Type, LogicalType ResultType, typename... Args>
     static inline ColumnPtr evaluate(const ColumnPtr& column, Args&&... args) {
         return DecimalNonDecimalCast<check_overflow, ResultType, Type>::decimal_from(column,
                                                                                      std::forward<Args>(args)...);
@@ -375,7 +375,7 @@ struct DecimalFrom {
 // cast: convert to other types from decimal type
 template <bool check_overflow>
 struct DecimalTo {
-    template <PrimitiveType Type, PrimitiveType ResultType>
+    template <LogicalType Type, LogicalType ResultType>
     static inline ColumnPtr evaluate(const ColumnPtr& column) {
         return DecimalNonDecimalCast<check_overflow, Type, ResultType>::decimal_to(column);
     }

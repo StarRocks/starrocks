@@ -11,104 +11,104 @@
 namespace starrocks {
 
 #define APPLY_FOR_TYPE_INTEGER(M) \
-    M(LOGICAL_TYPE_TINYINT)       \
-    M(LOGICAL_TYPE_SMALLINT)      \
-    M(LOGICAL_TYPE_BIGINT)        \
-    M(LOGICAL_TYPE_LARGEINT)      \
-    M(LOGICAL_TYPE_INT)
+    M(TYPE_TINYINT)               \
+    M(TYPE_SMALLINT)              \
+    M(TYPE_BIGINT)                \
+    M(TYPE_LARGEINT)              \
+    M(TYPE_INT)
 
 #define APPLY_FOR_TYPE_DECIMAL(M) \
-    M(LOGICAL_TYPE_DECIMAL)       \
-    M(LOGICAL_TYPE_DECIMALV2)     \
-    M(LOGICAL_TYPE_DECIMAL32)     \
-    M(LOGICAL_TYPE_DECIMAL64)     \
-    M(LOGICAL_TYPE_DECIMAL128)
+    M(TYPE_DECIMAL)               \
+    M(TYPE_DECIMALV2)             \
+    M(TYPE_DECIMAL32)             \
+    M(TYPE_DECIMAL64)             \
+    M(TYPE_DECIMAL128)
 
-#define APPLY_FOR_TYPE_TIME(M)  \
-    M(LOGICAL_TYPE_DATE_V1)     \
-    M(LOGICAL_TYPE_DATE)        \
-    M(LOGICAL_TYPE_DATETIME_V1) \
-    M(LOGICAL_TYPE_DATETIME)
+#define APPLY_FOR_TYPE_TIME(M) \
+    M(TYPE_DATE_V1)            \
+    M(TYPE_DATE)               \
+    M(TYPE_DATETIME_V1)        \
+    M(TYPE_DATETIME)
 
 // Types that support bitmap index
 #define APPLY_FOR_BITMAP_INDEX_TYPE(M) \
     APPLY_FOR_TYPE_INTEGER(M)          \
     APPLY_FOR_TYPE_TIME(M)             \
-    M(LOGICAL_TYPE_UNSIGNED_INT)       \
-    M(LOGICAL_TYPE_FLOAT)              \
-    M(LOGICAL_TYPE_DOUBLE)             \
-    M(LOGICAL_TYPE_CHAR)               \
-    M(LOGICAL_TYPE_VARCHAR)            \
-    M(LOGICAL_TYPE_BOOLEAN)            \
-    M(LOGICAL_TYPE_DECIMAL)            \
-    M(LOGICAL_TYPE_DECIMALV2)
+    M(TYPE_UNSIGNED_INT)               \
+    M(TYPE_FLOAT)                      \
+    M(TYPE_DOUBLE)                     \
+    M(TYPE_CHAR)                       \
+    M(TYPE_VARCHAR)                    \
+    M(TYPE_BOOLEAN)                    \
+    M(TYPE_DECIMAL)                    \
+    M(TYPE_DECIMALV2)
 
 // Types that support bloomfilter(exclude tinyint/float/double)
 #define APPLY_FOR_BLOOMFILTER_TYPE(M) \
     APPLY_FOR_TYPE_INTEGER(M)         \
     APPLY_FOR_TYPE_DECIMAL(M)         \
     APPLY_FOR_TYPE_TIME(M)            \
-    M(LOGICAL_TYPE_UNSIGNED_INT)      \
-    M(LOGICAL_TYPE_CHAR)              \
-    M(LOGICAL_TYPE_VARCHAR)
+    M(TYPE_UNSIGNED_INT)              \
+    M(TYPE_CHAR)                      \
+    M(TYPE_VARCHAR)
 
 // These types should be synced with LogicalType in olap_common.h
 #define APPLY_FOR_BASIC_LOGICAL_TYPE(M) \
     APPLY_FOR_BITMAP_INDEX_TYPE(M)      \
-    M(LOGICAL_TYPE_JSON)                \
-    M(LOGICAL_TYPE_DECIMAL32)           \
-    M(LOGICAL_TYPE_DECIMAL64)           \
-    M(LOGICAL_TYPE_DECIMAL128)
+    M(TYPE_JSON)                        \
+    M(TYPE_DECIMAL32)                   \
+    M(TYPE_DECIMAL64)                   \
+    M(TYPE_DECIMAL128)
 
 #define APPLY_FOR_UNSIGNED_LOGICAL_TYPE(M) \
-    M(LOGICAL_TYPE_UNSIGNED_INT)           \
-    M(LOGICAL_TYPE_UNSIGNED_TINYINT)       \
-    M(LOGICAL_TYPE_UNSIGNED_SMALLINT)      \
-    M(LOGICAL_TYPE_UNSIGNED_BIGINT)
+    M(TYPE_UNSIGNED_INT)                   \
+    M(TYPE_UNSIGNED_TINYINT)               \
+    M(TYPE_UNSIGNED_SMALLINT)              \
+    M(TYPE_UNSIGNED_BIGINT)
 
 #define APPLY_FOR_COMPLEX_LOGICAL_TYPE(M) \
-    M(LOGICAL_TYPE_HLL)                   \
-    M(LOGICAL_TYPE_STRUCT)                \
-    M(LOGICAL_TYPE_MAP)                   \
-    M(LOGICAL_TYPE_OBJECT)                \
-    M(LOGICAL_TYPE_PERCENTILE)
+    M(TYPE_HLL)                           \
+    M(TYPE_STRUCT)                        \
+    M(TYPE_MAP)                           \
+    M(TYPE_OBJECT)                        \
+    M(TYPE_PERCENTILE)
 
 #define APPLY_FOR_METRIC_FIELD_TYPE(M) \
-    M(LOGICAL_TYPE_HLL)                \
-    M(LOGICAL_TYPE_OBJECT)             \
-    M(LOGICAL_TYPE_PERCENTILE)
+    M(TYPE_HLL)                        \
+    M(TYPE_OBJECT)                     \
+    M(TYPE_PERCENTILE)
 
 #define APPLY_FOR_SUPPORTED_FIELD_TYPE(M) \
     APPLY_FOR_BASIC_LOGICAL_TYPE(M)       \
-    M(LOGICAL_TYPE_UNSIGNED_TINYINT)      \
-    M(LOGICAL_TYPE_UNSIGNED_SMALLINT)     \
-    M(LOGICAL_TYPE_UNSIGNED_BIGINT)       \
-    M(LOGICAL_TYPE_HLL)                   \
-    M(LOGICAL_TYPE_OBJECT)                \
-    M(LOGICAL_TYPE_PERCENTILE)
+    M(TYPE_UNSIGNED_TINYINT)              \
+    M(TYPE_UNSIGNED_SMALLINT)             \
+    M(TYPE_UNSIGNED_BIGINT)               \
+    M(TYPE_HLL)                           \
+    M(TYPE_OBJECT)                        \
+    M(TYPE_PERCENTILE)
 
 #define APPLY_FOR_EXTRA_LOGICAL_TYPE(M) \
     APPLY_FOR_UNSIGNED_LOGICAL_TYPE(M)  \
     APPLY_FOR_COMPLEX_LOGICAL_TYPE(M)   \
-    M(LOGICAL_TYPE_DISCRETE_DOUBLE)     \
-    M(LOGICAL_TYPE_ARRAY)
+    M(TYPE_DISCRETE_DOUBLE)             \
+    M(TYPE_ARRAY)
 
 #define APPLY_FOR_TYPE_CONVERT_FROM_VARCHAR(M) \
     APPLY_FOR_TYPE_INTEGER(M)                  \
     APPLY_FOR_TYPE_TIME(M)                     \
     APPLY_FOR_TYPE_DECIMAL(M)                  \
-    M(LOGICAL_TYPE_FLOAT)                      \
-    M(LOGICAL_TYPE_DOUBLE)                     \
-    M(LOGICAL_TYPE_JSON)                       \
-    M(LOGICAL_TYPE_BOOLEAN)
+    M(TYPE_FLOAT)                              \
+    M(TYPE_DOUBLE)                             \
+    M(TYPE_JSON)                               \
+    M(TYPE_BOOLEAN)
 
 #define APPLY_FOR_TYPE_CONVERT_TO_VARCHAR(M) \
     APPLY_FOR_TYPE_INTEGER(M)                \
     APPLY_FOR_TYPE_TIME(M)                   \
     APPLY_FOR_TYPE_DECIMAL(M)                \
-    M(LOGICAL_TYPE_FLOAT)                    \
-    M(LOGICAL_TYPE_JSON)                     \
-    M(LOGICAL_TYPE_DOUBLE)
+    M(TYPE_FLOAT)                            \
+    M(TYPE_JSON)                             \
+    M(TYPE_DOUBLE)
 
 #define _TYPE_DISPATCH_CASE(type) \
     case type:                    \
@@ -130,7 +130,7 @@ auto field_type_dispatch_column(LogicalType ftype, Functor fun, Args... args) {
     switch (ftype) {
         APPLY_FOR_BASIC_LOGICAL_TYPE(_TYPE_DISPATCH_CASE)
         APPLY_FOR_METRIC_FIELD_TYPE(_TYPE_DISPATCH_CASE)
-        _TYPE_DISPATCH_CASE(LOGICAL_TYPE_ARRAY)
+        _TYPE_DISPATCH_CASE(TYPE_ARRAY)
     default:
         CHECK(false) << "unknown type " << ftype;
         __builtin_unreachable();
@@ -142,11 +142,11 @@ auto field_type_dispatch_all_extra(LogicalType ftype, Functor fun, Args... args)
     switch (ftype) {
         APPLY_FOR_BASIC_LOGICAL_TYPE(_TYPE_DISPATCH_CASE)
         APPLY_FOR_COMPLEX_LOGICAL_TYPE(_TYPE_DISPATCH_CASE)
-        _TYPE_DISPATCH_CASE(LOGICAL_TYPE_DISCRETE_DOUBLE)
-        _TYPE_DISPATCH_CASE(LOGICAL_TYPE_ARRAY)
-        _TYPE_DISPATCH_CASE(LOGICAL_TYPE_UNSIGNED_TINYINT)
-        _TYPE_DISPATCH_CASE(LOGICAL_TYPE_UNSIGNED_SMALLINT)
-        _TYPE_DISPATCH_CASE(LOGICAL_TYPE_UNSIGNED_BIGINT)
+        _TYPE_DISPATCH_CASE(TYPE_DISCRETE_DOUBLE)
+        _TYPE_DISPATCH_CASE(TYPE_ARRAY)
+        _TYPE_DISPATCH_CASE(TYPE_UNSIGNED_TINYINT)
+        _TYPE_DISPATCH_CASE(TYPE_UNSIGNED_SMALLINT)
+        _TYPE_DISPATCH_CASE(TYPE_UNSIGNED_BIGINT)
     default:
         CHECK(false) << "Unknown type: " << ftype;
         __builtin_unreachable();
@@ -166,7 +166,7 @@ auto field_type_dispatch_bitmap_index(LogicalType ftype, Functor fun, Args... ar
 template <class Functor, class... Args>
 auto field_type_dispatch_bloomfilter(LogicalType ftype, Functor fun, Args... args) {
     // tinyint is not supported specially
-    if (ftype == LOGICAL_TYPE_TINYINT) {
+    if (ftype == TYPE_TINYINT) {
         return Status::NotSupported("unsupported type for bloom filter: " + std::to_string(ftype));
     }
     switch (ftype) {

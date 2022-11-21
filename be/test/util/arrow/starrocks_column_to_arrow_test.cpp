@@ -32,7 +32,7 @@ DIAGNOSTIC_POP
 namespace starrocks::vectorized {
 struct StarRocksColumnToArrowTest : public testing::Test {};
 
-template <PrimitiveType PT, ArrowTypeId AT>
+template <LogicalType PT, ArrowTypeId AT>
 void compare_arrow_value(const RunTimeCppType<PT>& datum, const ArrowTypeIdToArrayType<AT>* data_array, size_t i) {
     using CppType = RunTimeCppType<PT>;
     ASSERT_TRUE(data_array->IsValid(i));
@@ -59,7 +59,7 @@ void compare_arrow_value(const RunTimeCppType<PT>& datum, const ArrowTypeIdToArr
     }
 }
 
-template <PrimitiveType PT, ArrowTypeId AT>
+template <LogicalType PT, ArrowTypeId AT>
 struct NotNullableColumnTester {
     using CppType = RunTimeCppType<PT>;
     using ColumnType = RunTimeColumnType<PT>;
@@ -67,7 +67,7 @@ struct NotNullableColumnTester {
     using ArrowArrayType = ArrowTypeIdToArrayType<AT>;
     static inline void apply(size_t num_rows, const std::vector<CppType>& data, const TypeDescriptor& type_desc) {
         auto chunk = std::make_shared<Chunk>();
-        std::vector<PrimitiveType> primitive_types(1, PT);
+        std::vector<LogicalType> primitive_types(1, PT);
         auto column = ColumnType::create();
         auto data_column = down_cast<ColumnType*>(column.get());
         data_column->reserve(num_rows);
@@ -112,7 +112,7 @@ struct NotNullableColumnTester {
     }
 };
 
-template <PrimitiveType PT, ArrowTypeId AT>
+template <LogicalType PT, ArrowTypeId AT>
 struct NullableColumnTester {
     using CppType = RunTimeCppType<PT>;
     using ColumnType = RunTimeColumnType<PT>;
@@ -121,7 +121,7 @@ struct NullableColumnTester {
     static inline void apply(size_t num_rows, const std::set<size_t>& null_index, const std::vector<CppType>& data,
                              const TypeDescriptor& type_desc) {
         auto chunk = std::make_shared<Chunk>();
-        std::vector<PrimitiveType> primitive_types(1, PT);
+        std::vector<LogicalType> primitive_types(1, PT);
         auto column = ColumnType::create();
         auto data_column = down_cast<ColumnType*>(column.get());
         data_column->reserve(num_rows);
@@ -178,7 +178,7 @@ struct NullableColumnTester {
     }
 };
 
-template <PrimitiveType PT, ArrowTypeId AT>
+template <LogicalType PT, ArrowTypeId AT>
 struct ConstNullColumnTester {
     using CppType = RunTimeCppType<PT>;
     using ColumnType = RunTimeColumnType<PT>;
@@ -186,7 +186,7 @@ struct ConstNullColumnTester {
     using ArrowArrayType = ArrowTypeIdToArrayType<AT>;
     static inline void apply(size_t num_rows, const TypeDescriptor& type_desc) {
         auto chunk = std::make_shared<Chunk>();
-        std::vector<PrimitiveType> primitive_types(1, PT);
+        std::vector<LogicalType> primitive_types(1, PT);
         auto column = vectorized::ColumnHelper::create_const_null_column(num_rows);
         chunk->append_column(column, SlotId(0));
         std::shared_ptr<ArrowType> arrow_type;
@@ -220,7 +220,7 @@ struct ConstNullColumnTester {
     }
 };
 
-template <PrimitiveType PT, ArrowTypeId AT>
+template <LogicalType PT, ArrowTypeId AT>
 struct ConstColumnTester {
     using CppType = RunTimeCppType<PT>;
     using ColumnType = RunTimeColumnType<PT>;
@@ -228,7 +228,7 @@ struct ConstColumnTester {
     using ArrowArrayType = ArrowTypeIdToArrayType<AT>;
     static inline void apply(size_t num_rows, const CppType& datum, const TypeDescriptor& type_desc) {
         auto chunk = std::make_shared<Chunk>();
-        std::vector<PrimitiveType> primitive_types(1, PT);
+        std::vector<LogicalType> primitive_types(1, PT);
         auto data_column = ColumnType::create();
         std::shared_ptr<ArrowType> arrow_type;
         if constexpr (pt_is_decimalv2<PT>) {

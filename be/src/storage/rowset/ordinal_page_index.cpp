@@ -33,7 +33,7 @@ namespace starrocks {
 
 void OrdinalIndexWriter::append_entry(ordinal_t ordinal, const PagePointer& data_pp) {
     std::string key;
-    KeyCoderTraits<LOGICAL_TYPE_UNSIGNED_BIGINT>::full_encode_ascending(&ordinal, &key);
+    KeyCoderTraits<TYPE_UNSIGNED_BIGINT>::full_encode_ascending(&ordinal, &key);
     _page_builder->add(key, data_pp);
     _last_pp = data_pp;
 }
@@ -122,8 +122,8 @@ Status OrdinalIndexReader::_do_load(FileSystem* fs, const std::string& filename,
     for (int i = 0; i < _num_pages; i++) {
         Slice key = reader.get_key(i);
         ordinal_t ordinal = 0;
-        RETURN_IF_ERROR(KeyCoderTraits<LOGICAL_TYPE_UNSIGNED_BIGINT>::decode_ascending(&key, sizeof(ordinal_t),
-                                                                                       (uint8_t*)&ordinal, nullptr));
+        RETURN_IF_ERROR(KeyCoderTraits<TYPE_UNSIGNED_BIGINT>::decode_ascending(&key, sizeof(ordinal_t),
+                                                                               (uint8_t*)&ordinal, nullptr));
 
         _ordinals[i] = ordinal;
         _pages[i] = reader.get_value(i);

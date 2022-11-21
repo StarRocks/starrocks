@@ -48,25 +48,25 @@ ColumnMapping* ChunkChanger::get_mutable_column_mapping(size_t column_index) {
 #define CONVERT_FROM_TYPE(from_type)                                                \
     {                                                                               \
         switch (new_type) {                                                         \
-        case LOGICAL_TYPE_TINYINT:                                                  \
+        case TYPE_TINYINT:                                                          \
             TYPE_REINTERPRET_CAST(from_type, int8_t);                               \
-        case LOGICAL_TYPE_UNSIGNED_TINYINT:                                         \
+        case TYPE_UNSIGNED_TINYINT:                                                 \
             TYPE_REINTERPRET_CAST(from_type, uint8_t);                              \
-        case LOGICAL_TYPE_SMALLINT:                                                 \
+        case TYPE_SMALLINT:                                                         \
             TYPE_REINTERPRET_CAST(from_type, int16_t);                              \
-        case LOGICAL_TYPE_UNSIGNED_SMALLINT:                                        \
+        case TYPE_UNSIGNED_SMALLINT:                                                \
             TYPE_REINTERPRET_CAST(from_type, uint16_t);                             \
-        case LOGICAL_TYPE_INT:                                                      \
+        case TYPE_INT:                                                              \
             TYPE_REINTERPRET_CAST(from_type, int32_t);                              \
-        case LOGICAL_TYPE_UNSIGNED_INT:                                             \
+        case TYPE_UNSIGNED_INT:                                                     \
             TYPE_REINTERPRET_CAST(from_type, uint32_t);                             \
-        case LOGICAL_TYPE_BIGINT:                                                   \
+        case TYPE_BIGINT:                                                           \
             TYPE_REINTERPRET_CAST(from_type, int64_t);                              \
-        case LOGICAL_TYPE_UNSIGNED_BIGINT:                                          \
+        case TYPE_UNSIGNED_BIGINT:                                                  \
             TYPE_REINTERPRET_CAST(from_type, uint64_t);                             \
-        case LOGICAL_TYPE_LARGEINT:                                                 \
+        case TYPE_LARGEINT:                                                         \
             TYPE_REINTERPRET_CAST(from_type, int128_t);                             \
-        case LOGICAL_TYPE_DOUBLE:                                                   \
+        case TYPE_DOUBLE:                                                           \
             TYPE_REINTERPRET_CAST(from_type, double);                               \
         default:                                                                    \
             LOG(WARNING) << "the column type which was altered to was unsupported." \
@@ -108,71 +108,71 @@ private:
 
 ConvertTypeResolver::ConvertTypeResolver() {
     // from varchar type
-    add_convert_type_mapping<LOGICAL_TYPE_VARCHAR, LOGICAL_TYPE_TINYINT>();
-    add_convert_type_mapping<LOGICAL_TYPE_VARCHAR, LOGICAL_TYPE_SMALLINT>();
-    add_convert_type_mapping<LOGICAL_TYPE_VARCHAR, LOGICAL_TYPE_INT>();
-    add_convert_type_mapping<LOGICAL_TYPE_VARCHAR, LOGICAL_TYPE_BIGINT>();
-    add_convert_type_mapping<LOGICAL_TYPE_VARCHAR, LOGICAL_TYPE_LARGEINT>();
-    add_convert_type_mapping<LOGICAL_TYPE_VARCHAR, LOGICAL_TYPE_FLOAT>();
-    add_convert_type_mapping<LOGICAL_TYPE_VARCHAR, LOGICAL_TYPE_DOUBLE>();
-    add_convert_type_mapping<LOGICAL_TYPE_VARCHAR, LOGICAL_TYPE_DATE_V1>();
-    add_convert_type_mapping<LOGICAL_TYPE_VARCHAR, LOGICAL_TYPE_DATE>();
-    add_convert_type_mapping<LOGICAL_TYPE_VARCHAR, LOGICAL_TYPE_DECIMAL32>();
-    add_convert_type_mapping<LOGICAL_TYPE_VARCHAR, LOGICAL_TYPE_DECIMAL64>();
-    add_convert_type_mapping<LOGICAL_TYPE_VARCHAR, LOGICAL_TYPE_DECIMAL128>();
-    add_convert_type_mapping<LOGICAL_TYPE_VARCHAR, LOGICAL_TYPE_JSON>();
+    add_convert_type_mapping<TYPE_VARCHAR, TYPE_TINYINT>();
+    add_convert_type_mapping<TYPE_VARCHAR, TYPE_SMALLINT>();
+    add_convert_type_mapping<TYPE_VARCHAR, TYPE_INT>();
+    add_convert_type_mapping<TYPE_VARCHAR, TYPE_BIGINT>();
+    add_convert_type_mapping<TYPE_VARCHAR, TYPE_LARGEINT>();
+    add_convert_type_mapping<TYPE_VARCHAR, TYPE_FLOAT>();
+    add_convert_type_mapping<TYPE_VARCHAR, TYPE_DOUBLE>();
+    add_convert_type_mapping<TYPE_VARCHAR, TYPE_DATE_V1>();
+    add_convert_type_mapping<TYPE_VARCHAR, TYPE_DATE>();
+    add_convert_type_mapping<TYPE_VARCHAR, TYPE_DECIMAL32>();
+    add_convert_type_mapping<TYPE_VARCHAR, TYPE_DECIMAL64>();
+    add_convert_type_mapping<TYPE_VARCHAR, TYPE_DECIMAL128>();
+    add_convert_type_mapping<TYPE_VARCHAR, TYPE_JSON>();
 
     // to varchar type
-    add_convert_type_mapping<LOGICAL_TYPE_TINYINT, LOGICAL_TYPE_VARCHAR>();
-    add_convert_type_mapping<LOGICAL_TYPE_SMALLINT, LOGICAL_TYPE_VARCHAR>();
-    add_convert_type_mapping<LOGICAL_TYPE_INT, LOGICAL_TYPE_VARCHAR>();
-    add_convert_type_mapping<LOGICAL_TYPE_BIGINT, LOGICAL_TYPE_VARCHAR>();
-    add_convert_type_mapping<LOGICAL_TYPE_LARGEINT, LOGICAL_TYPE_VARCHAR>();
-    add_convert_type_mapping<LOGICAL_TYPE_FLOAT, LOGICAL_TYPE_VARCHAR>();
-    add_convert_type_mapping<LOGICAL_TYPE_DOUBLE, LOGICAL_TYPE_VARCHAR>();
-    add_convert_type_mapping<LOGICAL_TYPE_DECIMAL, LOGICAL_TYPE_VARCHAR>();
-    add_convert_type_mapping<LOGICAL_TYPE_DECIMALV2, LOGICAL_TYPE_VARCHAR>();
-    add_convert_type_mapping<LOGICAL_TYPE_DECIMAL32, LOGICAL_TYPE_VARCHAR>();
-    add_convert_type_mapping<LOGICAL_TYPE_DECIMAL64, LOGICAL_TYPE_VARCHAR>();
-    add_convert_type_mapping<LOGICAL_TYPE_DECIMAL128, LOGICAL_TYPE_VARCHAR>();
-    add_convert_type_mapping<LOGICAL_TYPE_CHAR, LOGICAL_TYPE_VARCHAR>();
-    add_convert_type_mapping<LOGICAL_TYPE_JSON, LOGICAL_TYPE_VARCHAR>();
+    add_convert_type_mapping<TYPE_TINYINT, TYPE_VARCHAR>();
+    add_convert_type_mapping<TYPE_SMALLINT, TYPE_VARCHAR>();
+    add_convert_type_mapping<TYPE_INT, TYPE_VARCHAR>();
+    add_convert_type_mapping<TYPE_BIGINT, TYPE_VARCHAR>();
+    add_convert_type_mapping<TYPE_LARGEINT, TYPE_VARCHAR>();
+    add_convert_type_mapping<TYPE_FLOAT, TYPE_VARCHAR>();
+    add_convert_type_mapping<TYPE_DOUBLE, TYPE_VARCHAR>();
+    add_convert_type_mapping<TYPE_DECIMAL, TYPE_VARCHAR>();
+    add_convert_type_mapping<TYPE_DECIMALV2, TYPE_VARCHAR>();
+    add_convert_type_mapping<TYPE_DECIMAL32, TYPE_VARCHAR>();
+    add_convert_type_mapping<TYPE_DECIMAL64, TYPE_VARCHAR>();
+    add_convert_type_mapping<TYPE_DECIMAL128, TYPE_VARCHAR>();
+    add_convert_type_mapping<TYPE_CHAR, TYPE_VARCHAR>();
+    add_convert_type_mapping<TYPE_JSON, TYPE_VARCHAR>();
 
-    add_convert_type_mapping<LOGICAL_TYPE_DATE_V1, LOGICAL_TYPE_DATETIME_V1>();
-    add_convert_type_mapping<LOGICAL_TYPE_DATE_V1, LOGICAL_TYPE_DATETIME>();
-    add_convert_type_mapping<LOGICAL_TYPE_DATE, LOGICAL_TYPE_DATETIME_V1>();
-    add_convert_type_mapping<LOGICAL_TYPE_DATE, LOGICAL_TYPE_DATETIME>();
+    add_convert_type_mapping<TYPE_DATE_V1, TYPE_DATETIME_V1>();
+    add_convert_type_mapping<TYPE_DATE_V1, TYPE_DATETIME>();
+    add_convert_type_mapping<TYPE_DATE, TYPE_DATETIME_V1>();
+    add_convert_type_mapping<TYPE_DATE, TYPE_DATETIME>();
 
-    add_convert_type_mapping<LOGICAL_TYPE_DATETIME_V1, LOGICAL_TYPE_DATE_V1>();
-    add_convert_type_mapping<LOGICAL_TYPE_DATETIME_V1, LOGICAL_TYPE_DATE>();
-    add_convert_type_mapping<LOGICAL_TYPE_DATETIME, LOGICAL_TYPE_DATE_V1>();
-    add_convert_type_mapping<LOGICAL_TYPE_DATETIME, LOGICAL_TYPE_DATE>();
+    add_convert_type_mapping<TYPE_DATETIME_V1, TYPE_DATE_V1>();
+    add_convert_type_mapping<TYPE_DATETIME_V1, TYPE_DATE>();
+    add_convert_type_mapping<TYPE_DATETIME, TYPE_DATE_V1>();
+    add_convert_type_mapping<TYPE_DATETIME, TYPE_DATE>();
 
-    add_convert_type_mapping<LOGICAL_TYPE_FLOAT, LOGICAL_TYPE_DOUBLE>();
+    add_convert_type_mapping<TYPE_FLOAT, TYPE_DOUBLE>();
 
-    add_convert_type_mapping<LOGICAL_TYPE_INT, LOGICAL_TYPE_DATE_V1>();
-    add_convert_type_mapping<LOGICAL_TYPE_INT, LOGICAL_TYPE_DATE>();
+    add_convert_type_mapping<TYPE_INT, TYPE_DATE_V1>();
+    add_convert_type_mapping<TYPE_INT, TYPE_DATE>();
 
-    add_convert_type_mapping<LOGICAL_TYPE_DATE_V1, LOGICAL_TYPE_DATE>();
-    add_convert_type_mapping<LOGICAL_TYPE_DATE, LOGICAL_TYPE_DATE_V1>();
-    add_convert_type_mapping<LOGICAL_TYPE_DATETIME_V1, LOGICAL_TYPE_DATETIME>();
-    add_convert_type_mapping<LOGICAL_TYPE_DATETIME, LOGICAL_TYPE_DATETIME_V1>();
-    add_convert_type_mapping<LOGICAL_TYPE_DECIMAL, LOGICAL_TYPE_DECIMALV2>();
-    add_convert_type_mapping<LOGICAL_TYPE_DECIMALV2, LOGICAL_TYPE_DECIMAL>();
-    add_convert_type_mapping<LOGICAL_TYPE_DECIMAL, LOGICAL_TYPE_DECIMAL128>();
-    add_convert_type_mapping<LOGICAL_TYPE_DECIMALV2, LOGICAL_TYPE_DECIMAL128>();
+    add_convert_type_mapping<TYPE_DATE_V1, TYPE_DATE>();
+    add_convert_type_mapping<TYPE_DATE, TYPE_DATE_V1>();
+    add_convert_type_mapping<TYPE_DATETIME_V1, TYPE_DATETIME>();
+    add_convert_type_mapping<TYPE_DATETIME, TYPE_DATETIME_V1>();
+    add_convert_type_mapping<TYPE_DECIMAL, TYPE_DECIMALV2>();
+    add_convert_type_mapping<TYPE_DECIMALV2, TYPE_DECIMAL>();
+    add_convert_type_mapping<TYPE_DECIMAL, TYPE_DECIMAL128>();
+    add_convert_type_mapping<TYPE_DECIMALV2, TYPE_DECIMAL128>();
 
-    add_convert_type_mapping<LOGICAL_TYPE_DECIMAL32, LOGICAL_TYPE_DECIMAL32>();
-    add_convert_type_mapping<LOGICAL_TYPE_DECIMAL32, LOGICAL_TYPE_DECIMAL64>();
-    add_convert_type_mapping<LOGICAL_TYPE_DECIMAL32, LOGICAL_TYPE_DECIMAL128>();
+    add_convert_type_mapping<TYPE_DECIMAL32, TYPE_DECIMAL32>();
+    add_convert_type_mapping<TYPE_DECIMAL32, TYPE_DECIMAL64>();
+    add_convert_type_mapping<TYPE_DECIMAL32, TYPE_DECIMAL128>();
 
-    add_convert_type_mapping<LOGICAL_TYPE_DECIMAL64, LOGICAL_TYPE_DECIMAL32>();
-    add_convert_type_mapping<LOGICAL_TYPE_DECIMAL64, LOGICAL_TYPE_DECIMAL64>();
-    add_convert_type_mapping<LOGICAL_TYPE_DECIMAL64, LOGICAL_TYPE_DECIMAL128>();
+    add_convert_type_mapping<TYPE_DECIMAL64, TYPE_DECIMAL32>();
+    add_convert_type_mapping<TYPE_DECIMAL64, TYPE_DECIMAL64>();
+    add_convert_type_mapping<TYPE_DECIMAL64, TYPE_DECIMAL128>();
 
-    add_convert_type_mapping<LOGICAL_TYPE_DECIMAL128, LOGICAL_TYPE_DECIMAL32>();
-    add_convert_type_mapping<LOGICAL_TYPE_DECIMAL128, LOGICAL_TYPE_DECIMAL64>();
-    add_convert_type_mapping<LOGICAL_TYPE_DECIMAL128, LOGICAL_TYPE_DECIMAL128>();
+    add_convert_type_mapping<TYPE_DECIMAL128, TYPE_DECIMAL32>();
+    add_convert_type_mapping<TYPE_DECIMAL128, TYPE_DECIMAL64>();
+    add_convert_type_mapping<TYPE_DECIMAL128, TYPE_DECIMAL128>();
 }
 
 ConvertTypeResolver::~ConvertTypeResolver() = default;
@@ -237,7 +237,7 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const
 
             if (new_type == ref_type && (!is_decimalv3_field_type(new_type) ||
                                          (reftype_precision == newtype_precision && reftype_scale == newtype_scale))) {
-                if (new_type == LOGICAL_TYPE_CHAR) {
+                if (new_type == TYPE_CHAR) {
                     for (size_t row_index = 0; row_index < base_chunk->num_rows(); ++row_index) {
                         Datum base_datum = base_col->get(row_index);
                         Datum new_datum;
@@ -287,21 +287,21 @@ bool ChunkChanger::change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const
             } else {
                 // copy and alter the field
                 switch (ref_type) {
-                case LOGICAL_TYPE_TINYINT:
+                case TYPE_TINYINT:
                     CONVERT_FROM_TYPE(int8_t);
-                case LOGICAL_TYPE_UNSIGNED_TINYINT:
+                case TYPE_UNSIGNED_TINYINT:
                     CONVERT_FROM_TYPE(uint8_t);
-                case LOGICAL_TYPE_SMALLINT:
+                case TYPE_SMALLINT:
                     CONVERT_FROM_TYPE(int16_t);
-                case LOGICAL_TYPE_UNSIGNED_SMALLINT:
+                case TYPE_UNSIGNED_SMALLINT:
                     CONVERT_FROM_TYPE(uint16_t);
-                case LOGICAL_TYPE_INT:
+                case TYPE_INT:
                     CONVERT_FROM_TYPE(int32_t);
-                case LOGICAL_TYPE_UNSIGNED_INT:
+                case TYPE_UNSIGNED_INT:
                     CONVERT_FROM_TYPE(uint32_t);
-                case LOGICAL_TYPE_BIGINT:
+                case TYPE_BIGINT:
                     CONVERT_FROM_TYPE(int64_t);
-                case LOGICAL_TYPE_UNSIGNED_BIGINT:
+                case TYPE_UNSIGNED_BIGINT:
                     CONVERT_FROM_TYPE(uint64_t);
                 default:
                     LOG(WARNING) << "the column type which was altered from was unsupported."
@@ -389,21 +389,21 @@ bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, co
             } else {
                 // copy and alter the field
                 switch (ref_type) {
-                case LOGICAL_TYPE_TINYINT:
+                case TYPE_TINYINT:
                     CONVERT_FROM_TYPE(int8_t);
-                case LOGICAL_TYPE_UNSIGNED_TINYINT:
+                case TYPE_UNSIGNED_TINYINT:
                     CONVERT_FROM_TYPE(uint8_t);
-                case LOGICAL_TYPE_SMALLINT:
+                case TYPE_SMALLINT:
                     CONVERT_FROM_TYPE(int16_t);
-                case LOGICAL_TYPE_UNSIGNED_SMALLINT:
+                case TYPE_UNSIGNED_SMALLINT:
                     CONVERT_FROM_TYPE(uint16_t);
-                case LOGICAL_TYPE_INT:
+                case TYPE_INT:
                     CONVERT_FROM_TYPE(int32_t);
-                case LOGICAL_TYPE_UNSIGNED_INT:
+                case TYPE_UNSIGNED_INT:
                     CONVERT_FROM_TYPE(uint32_t);
-                case LOGICAL_TYPE_BIGINT:
+                case TYPE_BIGINT:
                     CONVERT_FROM_TYPE(int64_t);
-                case LOGICAL_TYPE_UNSIGNED_BIGINT:
+                case TYPE_UNSIGNED_BIGINT:
                     CONVERT_FROM_TYPE(uint64_t);
                 default:
                     LOG(WARNING) << "the column type which was altered from was unsupported."
@@ -627,22 +627,22 @@ Status SchemaChangeUtils::init_column_mapping(ColumnMapping* column_mapping, con
         auto type_info = get_type_info(column_schema);
 
         switch (field_type) {
-        case LOGICAL_TYPE_HLL: {
+        case TYPE_HLL: {
             column_mapping->default_hll = std::make_unique<HyperLogLog>(value);
             column_mapping->default_value_datum.set_hyperloglog(column_mapping->default_hll.get());
             break;
         }
-        case LOGICAL_TYPE_OBJECT: {
+        case TYPE_OBJECT: {
             column_mapping->default_bitmap = std::make_unique<BitmapValue>(value);
             column_mapping->default_value_datum.set_bitmap(column_mapping->default_bitmap.get());
             break;
         }
-        case LOGICAL_TYPE_PERCENTILE: {
+        case TYPE_PERCENTILE: {
             column_mapping->default_percentile = std::make_unique<PercentileValue>(value);
             column_mapping->default_value_datum.set_percentile(column_mapping->default_percentile.get());
             break;
         }
-        case LOGICAL_TYPE_JSON: {
+        case TYPE_JSON: {
             column_mapping->default_json = std::make_unique<JsonValue>(value);
             column_mapping->default_value_datum.set_json(column_mapping->default_json.get());
             break;

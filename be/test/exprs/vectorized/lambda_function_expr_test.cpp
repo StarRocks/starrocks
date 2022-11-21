@@ -141,9 +141,9 @@ public:
 
     void create_array_expr() {
         TypeDescriptor type_arr_int;
-        type_arr_int.type = PrimitiveType::TYPE_ARRAY;
+        type_arr_int.type = LogicalType::TYPE_ARRAY;
         type_arr_int.children.emplace_back();
-        type_arr_int.children.back().type = PrimitiveType::TYPE_INT;
+        type_arr_int.children.back().type = LogicalType::TYPE_INT;
 
         // [1,4]
         // [null,null]
@@ -221,7 +221,7 @@ public:
         return e;
     }
 
-    MockExpr* new_mock_expr(ColumnPtr value, const PrimitiveType& type) {
+    MockExpr* new_mock_expr(ColumnPtr value, const LogicalType& type) {
         return new_mock_expr(std::move(value), TypeDescriptor(type));
     }
 
@@ -266,7 +266,7 @@ private:
     ObjectPool _objpool;
 };
 
-TypeDescriptor array_type(const PrimitiveType& child_type) {
+TypeDescriptor array_type(const LogicalType& child_type) {
     TypeDescriptor t;
     t.type = TYPE_ARRAY;
     t.children.resize(1);

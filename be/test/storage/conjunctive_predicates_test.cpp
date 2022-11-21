@@ -59,11 +59,11 @@ using PredicatePtr = std::unique_ptr<ColumnPredicate>;
 // NOLINTNEXTLINE
 TEST(ConjunctivePredicatesTest, test_evaluate) {
     SchemaPtr schema(new Schema());
-    auto c0_field = std::make_shared<Field>(0, "c0", LOGICAL_TYPE_INT, true);
-    auto c1_field = std::make_shared<Field>(1, "c1", LOGICAL_TYPE_CHAR, true);
-    auto c2_field = std::make_shared<Field>(2, "c2", LOGICAL_TYPE_DATE, true);
-    auto c3_field = std::make_shared<Field>(3, "c3", LOGICAL_TYPE_DATETIME, true);
-    auto c4_field = std::make_shared<Field>(4, "c4", LOGICAL_TYPE_DECIMALV2, true);
+    auto c0_field = std::make_shared<Field>(0, "c0", TYPE_INT, true);
+    auto c1_field = std::make_shared<Field>(1, "c1", TYPE_CHAR, true);
+    auto c2_field = std::make_shared<Field>(2, "c2", TYPE_DATE, true);
+    auto c3_field = std::make_shared<Field>(3, "c3", TYPE_DATETIME, true);
+    auto c4_field = std::make_shared<Field>(4, "c4", TYPE_DECIMALV2, true);
 
     schema->append(c0_field);
     schema->append(c1_field);
@@ -116,7 +116,7 @@ TEST(ConjunctivePredicatesTest, test_evaluate) {
 
     // c3 > '1991-01-01 00:00:00'
     {
-        PredicatePtr p0(new_column_gt_predicate(get_type_info(LOGICAL_TYPE_DATETIME), 3, "1991-01-01 00:00:00"));
+        PredicatePtr p0(new_column_gt_predicate(get_type_info(TYPE_DATETIME), 3, "1991-01-01 00:00:00"));
 
         ConjunctivePredicates conjuncts({p0.get()});
 
@@ -125,8 +125,8 @@ TEST(ConjunctivePredicatesTest, test_evaluate) {
     }
     // c3 > '1991-01-01 00:00:00' and c3 <= '1992-02-10 00:00:00'
     {
-        PredicatePtr p0(new_column_gt_predicate(get_type_info(LOGICAL_TYPE_DATETIME), 3, "1991-01-01 00:00:00"));
-        PredicatePtr p1(new_column_le_predicate(get_type_info(LOGICAL_TYPE_DATETIME), 3, "1992-02-10 00:00:00"));
+        PredicatePtr p0(new_column_gt_predicate(get_type_info(TYPE_DATETIME), 3, "1991-01-01 00:00:00"));
+        PredicatePtr p1(new_column_le_predicate(get_type_info(TYPE_DATETIME), 3, "1992-02-10 00:00:00"));
 
         ConjunctivePredicates conjuncts({p0.get(), p1.get()});
 
@@ -135,8 +135,8 @@ TEST(ConjunctivePredicatesTest, test_evaluate) {
     }
     // c2 < '2020-01-01' and c0 is not null
     {
-        PredicatePtr p0(new_column_lt_predicate(get_type_info(LOGICAL_TYPE_DATE), 2, "2020-01-01"));
-        PredicatePtr p1(new_column_null_predicate(get_type_info(LOGICAL_TYPE_INT), 0, false));
+        PredicatePtr p0(new_column_lt_predicate(get_type_info(TYPE_DATE), 2, "2020-01-01"));
+        PredicatePtr p1(new_column_null_predicate(get_type_info(TYPE_INT), 0, false));
 
         ConjunctivePredicates conjuncts({p0.get(), p1.get()});
 
@@ -145,9 +145,9 @@ TEST(ConjunctivePredicatesTest, test_evaluate) {
     }
     // c0 is not null and c1 >= 'aaa' and c4 in ('0.000001', '0.000003')
     {
-        PredicatePtr p0(new_column_null_predicate(get_type_info(LOGICAL_TYPE_INT), 0, false));
-        PredicatePtr p1(new_column_ge_predicate(get_type_info(LOGICAL_TYPE_CHAR), 1, "aaa"));
-        PredicatePtr p2(new_column_in_predicate(get_type_info(LOGICAL_TYPE_DECIMALV2), 4, {"0.000001", "0.000003"}));
+        PredicatePtr p0(new_column_null_predicate(get_type_info(TYPE_INT), 0, false));
+        PredicatePtr p1(new_column_ge_predicate(get_type_info(TYPE_CHAR), 1, "aaa"));
+        PredicatePtr p2(new_column_in_predicate(get_type_info(TYPE_DECIMALV2), 4, {"0.000001", "0.000003"}));
 
         ConjunctivePredicates conjuncts({p0.get(), p1.get(), p2.get()});
 
@@ -159,9 +159,9 @@ TEST(ConjunctivePredicatesTest, test_evaluate) {
 // NOLINTNEXTLINE
 TEST(ConjunctivePredicatesTest, test_evaluate_and) {
     SchemaPtr schema(new Schema());
-    schema->append(std::make_shared<Field>(0, "c0", LOGICAL_TYPE_INT, true));
+    schema->append(std::make_shared<Field>(0, "c0", TYPE_INT, true));
 
-    auto c0 = ChunkHelper::column_from_field_type(LOGICAL_TYPE_INT, true);
+    auto c0 = ChunkHelper::column_from_field_type(TYPE_INT, true);
 
     // +------+
     // | c0   |
@@ -182,7 +182,7 @@ TEST(ConjunctivePredicatesTest, test_evaluate_and) {
         std::vector<uint8_t> selection(chunk->num_rows(), 0);
 
         // c0 is not null
-        PredicatePtr p0(new_column_null_predicate(get_type_info(LOGICAL_TYPE_INT), 0, false));
+        PredicatePtr p0(new_column_null_predicate(get_type_info(TYPE_INT), 0, false));
 
         ConjunctivePredicates conjuncts({p0.get()});
 
@@ -198,9 +198,9 @@ TEST(ConjunctivePredicatesTest, test_evaluate_and) {
 // NOLINTNEXTLINE
 TEST(ConjunctivePredicatesTest, test_evaluate_or) {
     SchemaPtr schema(new Schema());
-    schema->append(std::make_shared<Field>(0, "c0", LOGICAL_TYPE_INT, true));
+    schema->append(std::make_shared<Field>(0, "c0", TYPE_INT, true));
 
-    auto c0 = ChunkHelper::column_from_field_type(LOGICAL_TYPE_INT, true);
+    auto c0 = ChunkHelper::column_from_field_type(TYPE_INT, true);
 
     // +------+
     // | c0   |
@@ -221,7 +221,7 @@ TEST(ConjunctivePredicatesTest, test_evaluate_or) {
         std::vector<uint8_t> selection(chunk->num_rows(), 0);
 
         // c0 is not null
-        PredicatePtr p0(new_column_null_predicate(get_type_info(LOGICAL_TYPE_INT), 0, false));
+        PredicatePtr p0(new_column_null_predicate(get_type_info(TYPE_INT), 0, false));
 
         ConjunctivePredicates conjuncts({p0.get()});
 
@@ -236,7 +236,7 @@ TEST(ConjunctivePredicatesTest, test_evaluate_or) {
 }
 
 struct MockConstExprBuilder {
-    template <PrimitiveType ptype>
+    template <LogicalType ptype>
     Expr* operator()(ObjectPool* pool) {
         if constexpr (pt_is_decimal<ptype>) {
             CHECK(false) << "not supported";
@@ -265,19 +265,19 @@ struct MockConstExprBuilder {
     }
 };
 
-class ConjunctiveTestFixture : public testing::TestWithParam<std::tuple<TExprOpcode::type, PrimitiveType>> {
+class ConjunctiveTestFixture : public testing::TestWithParam<std::tuple<TExprOpcode::type, LogicalType>> {
 public:
-    TSlotDescriptor _create_slot_desc(PrimitiveType type, const std::string& col_name, int col_pos) {
+    TSlotDescriptor _create_slot_desc(LogicalType type, const std::string& col_name, int col_pos) {
         TSlotDescriptorBuilder builder;
 
-        if (type == PrimitiveType::TYPE_VARCHAR || type == PrimitiveType::TYPE_CHAR) {
+        if (type == LogicalType::TYPE_VARCHAR || type == LogicalType::TYPE_CHAR) {
             return builder.string_type(1024).column_name(col_name).column_pos(col_pos).nullable(false).build();
         } else {
             return builder.type(type).column_name(col_name).column_pos(col_pos).nullable(false).build();
         }
     }
 
-    TupleDescriptor* _create_tuple_desc(PrimitiveType ptype) {
+    TupleDescriptor* _create_tuple_desc(LogicalType ptype) {
         TDescriptorTableBuilder table_builder;
         TTupleDescriptorBuilder tuple_builder;
 
@@ -295,7 +295,7 @@ public:
         return tuple_desc;
     }
 
-    TabletSchemaPB create_tablet_schema(PrimitiveType ptype) {
+    TabletSchemaPB create_tablet_schema(LogicalType ptype) {
         TabletSchemaPB tablet_schema;
 
         ColumnPB* col = tablet_schema.add_column();
@@ -307,7 +307,7 @@ public:
     }
 
     // Build an expression: col < literal
-    Expr* build_predicate(PrimitiveType ptype, TExprOpcode::type op, SlotDescriptor* slot) {
+    Expr* build_predicate(LogicalType ptype, TExprOpcode::type op, SlotDescriptor* slot) {
         TExprNode expr_node;
         expr_node.opcode = op;
         expr_node.child_type = to_thrift(ptype);
@@ -380,9 +380,9 @@ TEST_P(ConjunctiveTestFixture, test_parse_conjuncts) {
 INSTANTIATE_TEST_SUITE_P(ConjunctiveTest, ConjunctiveTestFixture,
                          testing::Combine(testing::Values(TExprOpcode::LT, TExprOpcode::LE, TExprOpcode::GT,
                                                           TExprOpcode::GE, TExprOpcode::EQ, TExprOpcode::NE),
-                                          testing::Values(PrimitiveType::TYPE_TINYINT, PrimitiveType::TYPE_SMALLINT,
-                                                          PrimitiveType::TYPE_INT, PrimitiveType::TYPE_BIGINT,
-                                                          PrimitiveType::TYPE_LARGEINT, PrimitiveType::TYPE_VARCHAR,
-                                                          PrimitiveType::TYPE_CHAR, PrimitiveType::TYPE_BOOLEAN)));
+                                          testing::Values(LogicalType::TYPE_TINYINT, LogicalType::TYPE_SMALLINT,
+                                                          LogicalType::TYPE_INT, LogicalType::TYPE_BIGINT,
+                                                          LogicalType::TYPE_LARGEINT, LogicalType::TYPE_VARCHAR,
+                                                          LogicalType::TYPE_CHAR, LogicalType::TYPE_BOOLEAN)));
 
 } // namespace starrocks::vectorized
