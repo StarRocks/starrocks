@@ -52,6 +52,9 @@ private:
 
     bool _is_finished = false;
     vectorized::ChunkPtr _cur_chunk = nullptr;
+
+    RuntimeProfile::Counter* _expr_compute_timer = nullptr;
+    RuntimeProfile::Counter* _common_sub_expr_compute_timer = nullptr;
 };
 
 class ProjectOperatorFactory final : public OperatorFactory {
