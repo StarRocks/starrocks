@@ -236,7 +236,7 @@ Status CSVScanner::_parse_csv_v2(Chunk* chunk) {
     const int capacity = _state->chunk_size();
     DCHECK_EQ(0, chunk->num_rows());
     Status status;
-    CSVReader::FieldOffsets fields;
+    CSVLine line;
 
     int num_columns = chunk->num_columns();
     _column_raw_ptrs.resize(num_columns);
@@ -246,31 +246,29 @@ Status CSVScanner::_parse_csv_v2(Chunk* chunk) {
 
     csv::Converter::Options options{.invalid_field_as_null = !_strict_mode};
     for (size_t num_rows = chunk->num_rows(); num_rows < capacity; /**/) {
-        size_t parsed_start;
-        size_t parsed_end;
-        status = _curr_reader->next_record(&fields, parsed_start, parsed_end);
+        status = _curr_reader->next_record(line);
         if (!status.ok() && !status.is_end_of_file()) {
             return status;
         }
 
         // skip empty line
-        if (fields.size() == 0) {
+        if (line.fields.size() == 0) {
             if (status.is_end_of_file()) {
                 break;
             }
             continue;
         }
 
-        const char* data = _curr_reader->buffBasePtr() + parsed_start;
-        CSVReader::Record record(data, parsed_end - parsed_start);
-        if (fields.size() != _num_fields_in_csv) {
+        const char* data = _curr_reader->buffBasePtr() + line.parsed_start;
+        CSVReader::Record record(data, line.parsed_end - line.parsed_start);
+        if (line.fields.size() != _num_fields_in_csv) {
             if (status.is_end_of_file()) {
                 break;
             }
             if (_counter->num_rows_filtered++ < 50) {
                 std::stringstream error_msg;
                 error_msg << "Value count does not match column count. "
-                          << "Expect " << _num_fields_in_csv << ", but got " << fields.size();
+                          << "Expect " << _num_fields_in_csv << ", but got " << line.fields.size();
 
                 _report_error(record.to_string(), error_msg.str());
             }
@@ -290,21 +288,21 @@ Status CSVScanner::_parse_csv_v2(Chunk* chunk) {
             if (slot == nullptr) {
                 continue;
             }
-            std::tuple<size_t, size_t, bool> field_offset = fields[j];
+            const CSVField& field = line.fields[j];
             char* basePtr = nullptr;
-            if (std::get<2>(field_offset)) {
+            if (field.isEscapeField) {
                 basePtr = _curr_reader->escapeDataPtr();
             } else {
                 basePtr = _curr_reader->buffBasePtr();
             }
 
-            const Slice field(basePtr + std::get<0>(field_offset), std::get<1>(field_offset));
+            const Slice data(basePtr + field.start_pos, field.length);
             options.type_desc = &(slot->type());
-            if (!_converters[k]->read_string(_column_raw_ptrs[k], field, options)) {
+            if (!_converters[k]->read_string(_column_raw_ptrs[k], data, options)) {
                 chunk->set_num_rows(num_rows);
                 if (_counter->num_rows_filtered++ < 50) {
                     std::stringstream error_msg;
-                    error_msg << "Value '" << field.to_string() << "' is out of range. "
+                    error_msg << "Value '" << data.to_string() << "' is out of range. "
                               << "The type of '" << slot->col_name() << "' is " << slot->type().debug_string();
                     _report_error(record.to_string(), error_msg.str());
                 }

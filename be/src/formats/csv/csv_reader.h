@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <queue>
+
 #include "formats/csv/converter.h"
 
 namespace starrocks::vectorized {
@@ -88,6 +90,33 @@ private:
 
 enum ParseState { START = 0, ORDINARY = 1, DELIMITER = 2, NEWLINE = 3, ESCAPE = 4, ENCLOSE = 5, ENCLOSE_ESCAPE = 6 };
 
+struct CSVField {
+    size_t start_pos;
+    size_t length;
+    bool isEscapeField;
+    CSVField(size_t pos, size_t len, bool isEscape) : start_pos(pos), length(len), isEscapeField(isEscape) {}
+};
+
+struct CSVLine {
+    std::vector<CSVField> fields;
+    size_t parsed_start;
+    size_t parsed_end;
+
+    std::string debug_string(const char* buffBasePtr, const char* escapeDataPtr) {
+        std::stringstream ss;
+        for (int i = 0; i < fields.size(); i++) {
+            auto& field = fields[i];
+            const char* basePtr = field.isEscapeField ? escapeDataPtr : buffBasePtr;
+            if (i != fields.size() - 1) {
+                ss << std::string(basePtr + field.start_pos, field.length) << "|";
+            } else {
+                ss << std::string(basePtr + field.start_pos, field.length) << std::endl;
+            }
+        }
+        return ss.str();
+    }
+};
+
 class CSVReader {
 #ifndef BE_TEST
     constexpr static size_t kMinBufferSize = 8 * 1024 * 1024L;
@@ -101,9 +130,6 @@ public:
     using Record = Slice;
     using Field = Slice;
     using Fields = std::vector<Field>;
-    // start_pos, length, isEscapeField
-    using FieldOffset = std::tuple<size_t, size_t, bool>;
-    using FieldOffsets = std::vector<FieldOffset>;
 
     CSVReader(const string& row_delimiter, const string& column_separator, bool trim_space, char escape, char enclose)
             : _row_delimiter(row_delimiter),
@@ -121,17 +147,21 @@ public:
 
     Status next_record(Record* record);
 
-    Status next_record(FieldOffsets* fields, size_t& parsed_start, size_t& parsed_end);
+    Status next_record(CSVLine& line);
+
+    Status more_lines();
 
     void set_limit(size_t limit) { _limit = limit; }
 
     void split_record(const Record& record, Fields* fields) const;
 
-    bool isRowDelimiter(CSVBuffer& buff);
+    bool isRowDelimiter(bool expandBuffer);
 
-    bool isColumnSeparator(CSVBuffer& buff);
+    bool isColumnSeparator(bool expandBuffer);
 
-    Status readMore(CSVBuffer& buff);
+    Status readMore(bool expandBuffer);
+
+    Status buffInit();
 
     char* buffBasePtr();
 
@@ -149,6 +179,7 @@ protected:
     CSVBuffer _buff;
     raw::RawVector<char> _escape_data;
     virtual Status _fill_buffer() { return Status::InternalError("unsupported csv reader!"); }
+    std::queue<CSVLine> _csv_buff;
 
 private:
     Status _expand_buffer();

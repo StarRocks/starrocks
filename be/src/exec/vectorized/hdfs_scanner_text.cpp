@@ -50,7 +50,7 @@ public:
 
     Status next_record(Record* record);
 
-    Status next_record(FieldOffsets* fields, size_t& parsed_start, size_t& parsed_end);
+    Status next_record(CSVLine& line);
 
 protected:
     Status _fill_buffer() override;
@@ -71,6 +71,9 @@ Status HdfsScannerCSVReader::reset(size_t offset, size_t remain_length) {
     _should_stop_scan = false;
     _should_stop_next = false;
     _buff.skip(_buff.limit() - _buff.position());
+    while (!_csv_buff.empty()) {
+        _csv_buff.pop();
+    }
     return Status::OK();
 }
 
@@ -91,16 +94,16 @@ Status HdfsScannerCSVReader::next_record(Record* record) {
     return Status::OK();
 }
 
-Status HdfsScannerCSVReader::next_record(FieldOffsets* fields, size_t& parsed_start, size_t& parsed_end) {
-    fields->clear();
+Status HdfsScannerCSVReader::next_record(CSVLine& line) {
+    line.fields.clear();
     if (_should_stop_next) {
         return Status::EndOfFile("");
     }
-    Status status = CSVReader::next_record(fields, parsed_start, parsed_end);
+    Status status = CSVReader::next_record(line);
     // We should still read if remain_length is zero(we stop right at row delimiter)
     // because next scan range will skip a record till row delimiter.
     // so it's current reader's responsibility to consume this record.
-    size_t consume = parsed_end - parsed_start;
+    size_t consume = line.parsed_end - line.parsed_start;
     if (_remain_length <= consume) {
         _should_stop_next = true;
     } else {
@@ -262,7 +265,7 @@ Status HdfsTextScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk
 Status HdfsTextScanner::parse_csv_v2(int chunk_size, ChunkPtr* chunk) {
     DCHECK_EQ(0, chunk->get()->num_rows());
     Status status;
-    CSVReader::FieldOffsets fields;
+    CSVLine line;
 
     int num_columns = chunk->get()->num_columns();
     _column_raw_ptrs.resize(num_columns);
@@ -278,15 +281,13 @@ Status HdfsTextScanner::parse_csv_v2(int chunk_size, ChunkPtr* chunk) {
     options.array_hive_nested_level = 1;
 
     for (size_t num_rows = chunk->get()->num_rows(); num_rows < chunk_size; /**/) {
-        size_t parsed_start;
-        size_t parsed_end;
-        status = down_cast<HdfsScannerCSVReader*>(_reader.get())->next_record(&fields, parsed_start, parsed_end);
+        status = down_cast<HdfsScannerCSVReader*>(_reader.get())->next_record(line);
         if (!status.ok() && !status.is_end_of_file()) {
             LOG(WARNING) << "Status is not ok " << status.get_error_msg();
             return status;
         }
 
-        if (fields.size() == 0) {
+        if (line.fields.size() == 0) {
             if (status.is_end_of_file()) {
                 if (_current_range_index == _scanner_params.scan_ranges.size() - 1) {
                     break;
@@ -298,8 +299,8 @@ Status HdfsTextScanner::parse_csv_v2(int chunk_size, ChunkPtr* chunk) {
             continue;
         }
 
-        const char* data = _reader->buffBasePtr() + parsed_start;
-        CSVReader::Record record(data, parsed_end - parsed_start);
+        const char* data = _reader->buffBasePtr() + line.parsed_start;
+        CSVReader::Record record(data, line.parsed_end - line.parsed_start);
 
         if (!validate_utf8(record.data, record.size)) {
             if (status.is_end_of_file()) {
@@ -315,10 +316,10 @@ Status HdfsTextScanner::parse_csv_v2(int chunk_size, ChunkPtr* chunk) {
 
         bool has_error = false;
         int num_materialize_columns = _scanner_params.materialize_slots.size();
-        int field_size = fields.size();
+        int field_size = line.fields.size();
         if (_scanner_params.hive_column_names->size() != field_size) {
             VLOG(7) << strings::Substitute("Size mismatch between hive column $0 names and fields $1!",
-                                           _scanner_params.hive_column_names->size(), fields.size());
+                                           _scanner_params.hive_column_names->size(), line.fields.size());
         }
         for (int j = 0; j < num_materialize_columns; j++) {
             // TODO slot maybe null?
@@ -329,17 +330,17 @@ Status HdfsTextScanner::parse_csv_v2(int chunk_size, ChunkPtr* chunk) {
             int column_field_index = _columns_index[_scanner_params.materialize_slots[j]->col_name()];
             Column* column = _column_raw_ptrs[index];
             if (column_field_index < field_size) {
-                std::tuple<size_t, size_t, bool> field_offset = fields[column_field_index];
+                const CSVField& field = line.fields[column_field_index];
                 char* basePtr = nullptr;
-                if (std::get<2>(field_offset)) {
+                if (field.isEscapeField) {
                     basePtr = _reader->escapeDataPtr();
                 } else {
                     basePtr = _reader->buffBasePtr();
                 }
-                const Slice field(basePtr + std::get<0>(field_offset), std::get<1>(field_offset));
+                const Slice data(basePtr + field.start_pos, field.length);
                 options.type_desc = &(_scanner_params.materialize_slots[j]->type());
-                if (!_converters[j]->read_string(column, field, options)) {
-                    LOG(WARNING) << "Converter encountered an error for field " << field.to_string() << ", index "
+                if (!_converters[j]->read_string(column, data, options)) {
+                    LOG(WARNING) << "Converter encountered an error for field " << data.to_string() << ", index "
                                  << index << ", column " << _scanner_params.materialize_slots[j]->debug_string();
                     chunk->get()->set_num_rows(num_rows);
                     has_error = true;
