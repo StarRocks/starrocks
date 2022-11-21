@@ -129,7 +129,6 @@ Status JavaFunctionCallExpr::prepare(RuntimeState* state, ExprContext* context) 
     context->fn_context(_fn_context_index)->set_is_udf(true);
 
     _func_desc = std::make_shared<JavaUDFContext>();
-
     // TODO:
     _is_returning_random_value = false;
     return Status::OK();
@@ -222,7 +221,9 @@ Status JavaFunctionCallExpr::open(RuntimeState* state, ExprContext* context,
         }
         return Status::OK();
     };
-    RETURN_IF_ERROR(call_function_in_pthread(state, open_state)->get_future().get());
+    if (scope == FunctionContext::FRAGMENT_LOCAL) {
+        RETURN_IF_ERROR(call_function_in_pthread(state, open_state)->get_future().get());
+    }
     return Status::OK();
 }
 
