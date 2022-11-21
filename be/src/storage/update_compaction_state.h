@@ -25,11 +25,15 @@ public:
 
     Status load(Rowset* rowset);
 
+    Status load_segments(Rowset* rowset, uint32_t segment_id);
+    void release_segments(Rowset* rowset, uint32_t segment_id);
+
     size_t memory_usage() const { return _memory_usage; }
 
     std::vector<ColumnPtr> pk_cols;
 
 private:
+    Status _load_segments(Rowset* rowset, uint32_t segment_id);
     Status _do_load(Rowset* rowset);
 
     std::once_flag _load_once_flag;

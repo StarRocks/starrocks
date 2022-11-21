@@ -835,6 +835,7 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
     st = get_latest_applied_version(&latest_applied_version);
     if (st.ok()) {
         st = state.apply(&_tablet, rowset.get(), rowset_id, latest_applied_version, index);
+        manager->update_state_cache().update_object_size(state_entry, state.memory_usage());
     }
     if (!st.ok()) {
         manager->update_state_cache().remove(state_entry);
@@ -874,17 +875,23 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
     for (uint32_t i = 0; i < rowset->num_segments(); i++) {
         new_deletes[rowset_id + i] = {};
     }
-    auto& upserts = state.upserts();
-    for (uint32_t i = 0; i < upserts.size(); i++) {
+
+    for (uint32_t i = 0; i < rowset->num_segments(); i++) {
+        state.load_upserts(rowset.get(), i);
+        auto& upserts = state.upserts();
         if (upserts[i] != nullptr) {
             _do_update(rowset_id, i, conditional_column, upserts, index, tablet_id, &new_deletes);
             manager->index_cache().update_object_size(index_entry, index.memory_usage());
         }
+        state.release_upserts(i);
     }
 
-    for (const auto& one_delete : state.deletes()) {
-        delete_op += one_delete->size();
-        index.erase(*one_delete, &new_deletes);
+    for (uint32_t i = 0; i < rowset->num_delete_files(); i++) {
+        state.load_deletes(rowset.get(), i);
+        auto& deletes = state.deletes();
+        delete_op += deletes[i]->size();
+        index.erase(*deletes[i], &new_deletes);
+        state.release_deletes(i);
     }
 
     PersistentIndexMetaPB index_meta;
@@ -1435,6 +1442,15 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
     uint32_t max_src_rssid = max_rowset_id + rowset->num_segments() - 1;
 
     for (size_t i = 0; i < _compaction_state->pk_cols.size(); i++) {
+        if (st = _compaction_state->load_segments(rowset, i); !st.ok()) {
+            manager->index_cache().release(index_entry);
+            _compaction_state.reset();
+            std::string msg = Substitute("_apply_compaction_commit error: load compaction state failed: $0 $1",
+                                         st.to_string(), debug_string());
+            LOG(ERROR) << msg;
+            _set_error(msg);
+            return;
+        }
         auto& pk_col = _compaction_state->pk_cols[i];
         total_rows += pk_col->size();
         uint32_t rssid = rowset_id + i;
@@ -1449,8 +1465,7 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
             total_deletes += tmp_deletes.size();
         }
         delvecs.emplace_back(rssid, dv);
-        // release memory early
-        pk_col.reset();
+        _compaction_state->release_segments(rowset, i);
     }
     // release memory
     _compaction_state.reset();
