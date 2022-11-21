@@ -75,10 +75,10 @@ public class CurrentQueryFragmentProcNode implements ProcNodeInterface {
 
     private ProcResult requestFragmentExecInfos() throws AnalysisException {
         final CurrentQueryInfoProvider provider = new CurrentQueryInfoProvider();
-        final Collection<CurrentQueryInfoProvider.InstanceStatisticsV2> instanceStatisticsCollection
-                = provider.getInstanceStatisticsV2(item);
+        final Collection<CurrentQueryInfoProvider.InstanceStatistics> instanceStatisticsCollection
+                = provider.getInstanceStatistics(item);
         final List<List<String>> sortedRowDatas = Lists.newArrayList();
-        for (CurrentQueryInfoProvider.InstanceStatisticsV2 instanceStatistics :
+        for (CurrentQueryInfoProvider.InstanceStatistics instanceStatistics :
                 instanceStatisticsCollection) {
             final List<String> rowData = Lists.newArrayList();
             rowData.add(instanceStatistics.getFragmentId());

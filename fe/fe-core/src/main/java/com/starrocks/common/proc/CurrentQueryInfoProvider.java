@@ -21,30 +21,24 @@
 
 package com.starrocks.common.proc;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.util.Counter;
 import com.starrocks.common.util.DebugUtil;
-import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.proto.PCollectFragmentStatistcs;
 import com.starrocks.proto.PCollectFragmentStatisticsResult;
 import com.starrocks.proto.PCollectQueryStatistics;
 import com.starrocks.proto.PCollectQueryStatisticsResult;
-import com.starrocks.proto.PTriggerProfileReportResult;
 import com.starrocks.proto.PUniqueId;
 import com.starrocks.qe.QueryStatisticsItem;
 import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.rpc.PCollectFragmentStatisticsRequest;
 import com.starrocks.rpc.PCollectQueryStatisticsRequest;
-import com.starrocks.rpc.PTriggerProfileReportRequest;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TNetworkAddress;
-import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TUniqueId;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -68,177 +62,16 @@ public class CurrentQueryInfoProvider {
     public CurrentQueryInfoProvider() {
     }
 
-    /**
-     * Firstly send request to trigger profile to report for specified query and wait a while,
-     * Secondly get Counters from Coordinator's RuntimeProfile and return query's statistics.
-     *
-     * @param item
-     * @return
-     * @throws AnalysisException
-     */
-    public QueryStatistics getQueryStatistics(QueryStatisticsItem item) throws AnalysisException {
-        triggerReportAndWait(item, getWaitingTimeForSingleQuery(), false);
-        return new QueryStatistics(item.getQueryProfile());
-    }
-
-    /**
-     * Same as above, but this will cause BE to report all queries profile.
-     *
-     * @param items
-     * @return
-     * @throws AnalysisException
-     */
     public Map<String, QueryStatistics> getQueryStatistics(Collection<QueryStatisticsItem> items)
-            throws AnalysisException {
-        triggerReportAndWait(items, getWaitingTime(items.size()), true);
-        final Map<String, QueryStatistics> queryStatisticsMap = Maps.newHashMap();
-        for (QueryStatisticsItem item : items) {
-            queryStatisticsMap.put(item.getQueryId(), new QueryStatistics(item.getQueryProfile()));
-        }
-        return queryStatisticsMap;
-    }
-
-    public Map<String, QueryStatisticsV2> getQueryStatisticsV2(Collection<QueryStatisticsItem> items)
         throws AnalysisException {
-        return collectQueryStatistics(items, true);
+        return collectQueryStatistics(items);
     }
 
-    /**
-     * Return query's instances statistics.
-     *
-     * @param item
-     * @return
-     * @throws AnalysisException
-     */
     public Collection<InstanceStatistics> getInstanceStatistics(QueryStatisticsItem item) throws AnalysisException {
-        triggerReportAndWait(item, getWaitingTimeForSingleQuery(), false);
-        final Map<String, RuntimeProfile> instanceProfiles = collectInstanceProfile(item.getQueryProfile());
-        final List<InstanceStatistics> instanceStatisticsList = Lists.newArrayList();
-        for (QueryStatisticsItem.FragmentInstanceInfo instanceInfo : item.getFragmentInstanceInfos()) {
-            final RuntimeProfile instanceProfile =
-                    instanceProfiles.get(DebugUtil.printId(instanceInfo.getInstanceId()));
-            Preconditions.checkNotNull(instanceProfile);
-            final InstanceStatistics Statistics =
-                    new InstanceStatistics(
-                            instanceInfo.getFragmentId(),
-                            instanceInfo.getInstanceId(),
-                            instanceInfo.getAddress(),
-                            instanceProfile);
-            instanceStatisticsList.add(Statistics);
-        }
-        return instanceStatisticsList;
-    }
-
-    public Collection<InstanceStatisticsV2> getInstanceStatisticsV2(QueryStatisticsItem item) throws AnalysisException {
         return collectFragmentStatistics(item);
     }
 
-    /**
-     * Profile trees is query profile -> fragment profile -> instance profile ....
-     *
-     * @param queryProfile
-     * @return instanceProfiles
-     */
-    private Map<String, RuntimeProfile> collectInstanceProfile(RuntimeProfile queryProfile) {
-        final Map<String, RuntimeProfile> instanceProfiles = Maps.newHashMap();
-        for (RuntimeProfile fragmentProfile : queryProfile.getChildMap().values()) {
-            for (Map.Entry<String, RuntimeProfile> entry : fragmentProfile.getChildMap().entrySet()) {
-                Preconditions
-                        .checkState(instanceProfiles.put(parseInstanceId(entry.getKey()), entry.getValue()) == null);
-            }
-        }
-        return instanceProfiles;
-    }
-
-    /**
-     * Instance profile key is "Instance ${instance_id} (host=$host $port)"
-     *
-     * @param str
-     * @return
-     */
-    private String parseInstanceId(String str) {
-        final String[] elements = str.split(" ");
-        if (elements.length == 4) {
-            return elements[1];
-        } else {
-            Preconditions.checkState(false);
-            return "";
-        }
-    }
-
-    private long getWaitingTimeForSingleQuery() {
-        return getWaitingTime(1);
-    }
-
-    /**
-     * @param numOfQuery
-     * @return unit(ms)
-     */
-    private long getWaitingTime(int numOfQuery) {
-        final int oneQueryWaitingTime = 100;
-        final int allQueryMaxWaitingTime = 2000;
-        final int waitingTime = numOfQuery * oneQueryWaitingTime;
-        return waitingTime > allQueryMaxWaitingTime ? allQueryMaxWaitingTime : waitingTime;
-    }
-
-    private void triggerReportAndWait(QueryStatisticsItem item, long waitingTime, boolean allQuery)
-            throws AnalysisException {
-        final List<QueryStatisticsItem> items = Lists.newArrayList(item);
-        triggerReportAndWait(items, waitingTime, allQuery);
-    }
-
-    private void triggerReportAndWait(Collection<QueryStatisticsItem> items, long waitingTime, boolean allQuery)
-            throws AnalysisException {
-        triggerProfileReport(items, allQuery);
-        try {
-            Thread.currentThread().sleep(waitingTime);
-        } catch (InterruptedException e) {
-        }
-    }
-
-    /**
-     * send report profile request.
-     *
-     * @param items
-     * @param allQuery true:all queries profile will be reported, false:specified queries profile will be reported.
-     * @throws AnalysisException
-     */
-    private void triggerProfileReport(Collection<QueryStatisticsItem> items, boolean allQuery)
-            throws AnalysisException {
-        final Map<TNetworkAddress, Request> requests = Maps.newHashMap();
-        final Map<TNetworkAddress, TNetworkAddress> brpcAddresses = Maps.newHashMap();
-        for (QueryStatisticsItem item : items) {
-            for (QueryStatisticsItem.FragmentInstanceInfo instanceInfo : item.getFragmentInstanceInfos()) {
-                // use brpc address
-                TNetworkAddress brpcNetAddress = brpcAddresses.get(instanceInfo.getAddress());
-                if (brpcNetAddress == null) {
-                    try {
-                        brpcNetAddress = toBrpcHost(instanceInfo.getAddress());
-                        brpcAddresses.put(instanceInfo.getAddress(), brpcNetAddress);
-                    } catch (Exception e) {
-                        LOG.warn(e.getMessage());
-                        throw new AnalysisException(e.getMessage());
-                    }
-                }
-                // merge different requests
-                Request request = requests.get(brpcNetAddress);
-                if (request == null) {
-                    request = new Request(brpcNetAddress);
-                    requests.put(brpcNetAddress, request);
-                }
-                // specified query instance which will report.
-                if (!allQuery) {
-                    final PUniqueId pUId = new PUniqueId();
-                    pUId.hi = instanceInfo.getInstanceId().hi;
-                    pUId.lo = instanceInfo.getInstanceId().lo;
-                    request.addInstanceId(pUId);
-                }
-            }
-        }
-        recvResponse(sendRequest(requests));
-    }
-
-    private Collection<InstanceStatisticsV2> collectFragmentStatistics(
+    private Collection<InstanceStatistics> collectFragmentStatistics(
             QueryStatisticsItem item) throws AnalysisException {
         final Map<TNetworkAddress, Request> requests = Maps.newHashMap();
         final Map<TNetworkAddress, TNetworkAddress> brpcAddresses = Maps.newHashMap();
@@ -265,19 +98,19 @@ public class CurrentQueryInfoProvider {
             instanceId.lo = instanceInfo.getInstanceId().lo;
             request.addInstanceId(instanceId);
         }
-        Map<String, QueryStatisticsV2> statisticsV2Map
+        Map<String, QueryStatistics> statisticsV2Map
                 = handleCollectFragmentResponse(sendCollectFragmentRequest(requests));
-        List<InstanceStatisticsV2> instanceStatisticsList = Lists.newArrayList();
+        List<InstanceStatistics> instanceStatisticsList = Lists.newArrayList();
         for (QueryStatisticsItem.FragmentInstanceInfo fragmentInstanceInfo : item.getFragmentInstanceInfos()) {
             TUniqueId instanceId = fragmentInstanceInfo.getInstanceId();
-            QueryStatisticsV2 queryStatisticsV2 = statisticsV2Map.get(DebugUtil.printId(instanceId));
+            QueryStatistics queryStatisticsV2 = statisticsV2Map.get(DebugUtil.printId(instanceId));
             if (queryStatisticsV2 == null) {
                 continue;
             }
             String fragmentId = fragmentInstanceInfo.getFragmentId();
             TNetworkAddress address = fragmentInstanceInfo.getAddress();
-            InstanceStatisticsV2 instanceStatisticsV2 =
-                    new InstanceStatisticsV2(fragmentId, instanceId, address, queryStatisticsV2);
+            InstanceStatistics instanceStatisticsV2 =
+                    new InstanceStatistics(fragmentId, instanceId, address, queryStatisticsV2);
             instanceStatisticsList.add(instanceStatisticsV2);
         }
         return instanceStatisticsList;
@@ -304,32 +137,29 @@ public class CurrentQueryInfoProvider {
         return futures;
     }
 
-    private Map<String, QueryStatisticsV2> handleCollectFragmentResponse(
+    private Map<String, QueryStatistics> handleCollectFragmentResponse(
             List<Pair<Request, Future<PCollectFragmentStatisticsResult>>> futures) throws AnalysisException {
-        Map<String, QueryStatisticsV2> statisticsV2Map = Maps.newHashMap();
+        Map<String, QueryStatistics> statisticsMap = Maps.newHashMap();
         for (Pair<Request, Future<PCollectFragmentStatisticsResult>> pair : futures) {
             try {
                 final PCollectFragmentStatisticsResult result = pair.second.get(2, TimeUnit.SECONDS);
                 for (PCollectFragmentStatistcs fragmentStatistics : result.fragmentStatistics) {
-                    LOG.info("instance {} cpu {}, scan bytes {}, scan rows {}",
-                            DebugUtil.printId(fragmentStatistics.fragmentInstanceId),
-                            fragmentStatistics.cpuCostNs, fragmentStatistics.scanBytes, fragmentStatistics.scanRows);
                     String instanceIdStr = DebugUtil.printId(fragmentStatistics.fragmentInstanceId);
-                    QueryStatisticsV2 statisticsV2 = new QueryStatisticsV2();
-                    statisticsV2.updateCpuCostNs(fragmentStatistics.cpuCostNs);
-                    statisticsV2.updateScanBytes(fragmentStatistics.scanBytes);
-                    statisticsV2.updateScanRows(fragmentStatistics.scanRows);
-                    statisticsV2Map.put(instanceIdStr, statisticsV2);
+                    QueryStatistics statistics = new QueryStatistics();
+                    statistics.updateCpuCostNs(fragmentStatistics.cpuCostNs);
+                    statistics.updateScanBytes(fragmentStatistics.scanBytes);
+                    statistics.updateScanRows(fragmentStatistics.scanRows);
+                    statisticsMap.put(instanceIdStr, statistics);
                 }
             } catch (InterruptedException | ExecutionException | TimeoutException e) {
                 LOG.warn("fail to receive result" + e.getCause());
                 throw new AnalysisException(e.getMessage());
             }
         }
-        return statisticsV2Map;
+        return statisticsMap;
     }
 
-    private Map<String, QueryStatisticsV2> collectQueryStatistics(Collection<QueryStatisticsItem> items, boolean allQuery)
+    private Map<String, QueryStatistics> collectQueryStatistics(Collection<QueryStatisticsItem> items)
             throws AnalysisException {
         final Map<TNetworkAddress, Request> requests = Maps.newHashMap();
         final Map<TNetworkAddress, TNetworkAddress> brpcAddresses = Maps.newHashMap();
@@ -349,21 +179,18 @@ public class CurrentQueryInfoProvider {
                 if (request == null) {
                     request = new Request(brpcNetAddress);
                     requests.put(brpcNetAddress, request);
-                    LOG.info("new request to addr {}:{}", brpcNetAddress.hostname, brpcNetAddress.port);
                 }
                 request.addQueryId(item.getExecutionId());
             }
         }
-        return handleCollectResponse(sendCollectRequest(requests));
+        return handleCollectQueryResponse(sendCollectQueryRequest(requests));
     }
 
-    private List<Pair<Request, Future<PCollectQueryStatisticsResult>>> sendCollectRequest(
+    private List<Pair<Request, Future<PCollectQueryStatisticsResult>>> sendCollectQueryRequest(
             Map<TNetworkAddress, Request> requests) throws AnalysisException {
         final List<Pair<Request, Future<PCollectQueryStatisticsResult>>> futures = Lists.newArrayList();
         for (TNetworkAddress address : requests.keySet()) {
             final Request request = requests.get(address);
-            LOG.info("send request to addr {}: {}, query num: {}",
-                    address.hostname, address.port, request.getQueryIds().size());
             List<PUniqueId> queryIds = Lists.newArrayList();
             for (TUniqueId tQueryId : request.getQueryIds()) {
                 PUniqueId queryId = new PUniqueId();
@@ -382,73 +209,29 @@ public class CurrentQueryInfoProvider {
         return futures;
     }
 
-    private List<Pair<Request, Future<PTriggerProfileReportResult>>> sendRequest(
-            Map<TNetworkAddress, Request> requests) throws AnalysisException {
-        final List<Pair<Request, Future<PTriggerProfileReportResult>>> futures = Lists.newArrayList();
-        for (TNetworkAddress address : requests.keySet()) {
-            final Request request = requests.get(address);
-            final PTriggerProfileReportRequest pbRequest =
-                    new PTriggerProfileReportRequest(request.getInstanceIds());
-            try {
-                futures.add(Pair.create(request, BackendServiceClient.getInstance().
-                        triggerProfileReportAsync(address, pbRequest)));
-            } catch (RpcException e) {
-                throw new AnalysisException("Sending request fails for query's execution informations.");
-            }
-        }
-        return futures;
-    }
-
-    private Map<String, QueryStatisticsV2> handleCollectResponse(
+    private Map<String, QueryStatistics> handleCollectQueryResponse(
             List<Pair<Request, Future<PCollectQueryStatisticsResult>>> futures) throws AnalysisException {
-        Map<String, QueryStatisticsV2> statisticsV2Map = Maps.newHashMap();
+        Map<String, QueryStatistics> statisticsMap = Maps.newHashMap();
         for (Pair<Request, Future<PCollectQueryStatisticsResult>> pair : futures) {
             try {
                 final PCollectQueryStatisticsResult result = pair.second.get(2, TimeUnit.SECONDS);
                 for (PCollectQueryStatistics queryStatistics : result.queryStatistics) {
-                    LOG.info(" cpu {}, scan bytes {}, scan rows {}",
-                            queryStatistics.cpuCostNs, queryStatistics.scanBytes, queryStatistics.scanRows);
                     final String queryIdStr = DebugUtil.printId(queryStatistics.queryId);
-                    QueryStatisticsV2 statisticsV2 = statisticsV2Map.get(queryIdStr);
-                    if (statisticsV2 == null) {
-                        statisticsV2 = new QueryStatisticsV2();
-                        statisticsV2Map.put(queryIdStr, statisticsV2);
+                    QueryStatistics statistics = statisticsMap.get(queryIdStr);
+                    if (statistics == null) {
+                        statistics = new QueryStatistics();
+                        statisticsMap.put(queryIdStr, statistics);
                     }
-                    statisticsV2.updateCpuCostNs(queryStatistics.cpuCostNs);
-                    statisticsV2.updateScanBytes(queryStatistics.scanBytes);
-                    statisticsV2.updateScanRows(queryStatistics.scanRows);
+                    statistics.updateCpuCostNs(queryStatistics.cpuCostNs);
+                    statistics.updateScanBytes(queryStatistics.scanBytes);
+                    statistics.updateScanRows(queryStatistics.scanRows);
                 }
-                LOG.info("receive response");
             } catch (InterruptedException | ExecutionException | TimeoutException e) {
                 LOG.warn("fail to receive result" + e.getCause());
                 throw new AnalysisException(e.getMessage());
             }
         }
-        return statisticsV2Map;
-    }
-
-    private void recvResponse(List<Pair<Request, Future<PTriggerProfileReportResult>>> futures)
-            throws AnalysisException {
-        final String reasonPrefix = "Fail to receive result.";
-        for (Pair<Request, Future<PTriggerProfileReportResult>> pair : futures) {
-            try {
-                final PTriggerProfileReportResult result
-                        = pair.second.get(2, TimeUnit.SECONDS);
-                final TStatusCode code = TStatusCode.findByValue(result.status.statusCode);
-                if (code != TStatusCode.OK) {
-                    String errMsg = "";
-                    if (result.status.errorMsgs != null && !result.status.errorMsgs.isEmpty()) {
-                        errMsg = result.status.errorMsgs.get(0);
-                    }
-                    throw new AnalysisException(reasonPrefix + " backend:" + pair.first.getAddress()
-                            + " reason:" + errMsg);
-                }
-            } catch (InterruptedException | ExecutionException | TimeoutException e) {
-                LOG.warn(reasonPrefix + " reason:" + e.getCause());
-                throw new AnalysisException(reasonPrefix);
-            }
-
-        }
+        return statisticsMap;
     }
 
     private TNetworkAddress toBrpcHost(TNetworkAddress host) throws AnalysisException {
@@ -468,12 +251,12 @@ public class CurrentQueryInfoProvider {
         return new TNetworkAddress(backend.getHost(), backend.getBrpcPort());
     }
 
-    public static class QueryStatisticsV2 {
+    public static class QueryStatistics {
         long cpuCostNs = 0;
         long scanBytes = 0;
         long scanRows = 0;
 
-        public QueryStatisticsV2() {
+        public QueryStatistics() {
 
         }
 
@@ -502,95 +285,18 @@ public class CurrentQueryInfoProvider {
         }
     }
 
-    public static class QueryStatistics {
-        final List<Map<String, Counter>> counterMaps;
-
-        public QueryStatistics(RuntimeProfile profile) {
-            counterMaps = Lists.newArrayList();
-            collectCounters(profile, counterMaps);
-        }
-
-        private void collectCounters(RuntimeProfile profile,
-                                     List<Map<String, Counter>> counterMaps) {
-            for (Map.Entry<String, RuntimeProfile> entry : profile.getChildMap().entrySet()) {
-                counterMaps.add(entry.getValue().getCounterMap());
-                collectCounters(entry.getValue(), counterMaps);
-            }
-        }
-
-        public long getScanBytes() {
-            long scanBytes = 0;
-            for (Map<String, Counter> counters : counterMaps) {
-                final Counter counter = counters.get("CompressedBytesRead");
-                scanBytes += counter == null ? 0 : counter.getValue();
-            }
-            return scanBytes;
-        }
-
-        public long getRowsReturned() {
-            long rowsReturned = 0;
-            for (Map<String, Counter> counters : counterMaps) {
-                final Counter counter = counters.get("RowsReturned");
-                rowsReturned += counter == null ? 0 : counter.getValue();
-            }
-            return rowsReturned;
-        }
-    }
-
-    public static class InstanceStatisticsV2 {
-        private final String fragmentId;
-        private final TUniqueId instanceId;
-        private final TNetworkAddress address;
-        private final QueryStatisticsV2 statisticsV2;
-
-        public InstanceStatisticsV2(String fragmentId,
-                                    TUniqueId instanceId, TNetworkAddress address, QueryStatisticsV2 statisticsV2) {
-            this.fragmentId = fragmentId;
-            this.instanceId = instanceId;
-            this.address = address;
-            this.statisticsV2 = statisticsV2;
-        }
-
-        public String getFragmentId() {
-            return fragmentId;
-        }
-
-        public TUniqueId getInstanceId() {
-            return instanceId;
-        }
-
-        public TNetworkAddress getAddress() {
-            return address;
-        }
-
-        public long getScanBytes() {
-            return statisticsV2.getScanBytes();
-        }
-
-        public long getScanRows() {
-            return statisticsV2.getScanRows();
-        }
-
-        public long getCPUCostNs() {
-            return statisticsV2.getCpuCostNs();
-        }
-    }
-
     public static class InstanceStatistics {
         private final String fragmentId;
         private final TUniqueId instanceId;
         private final TNetworkAddress address;
         private final QueryStatistics statistics;
 
-        public InstanceStatistics(
-                String fragmentId,
-                TUniqueId instanceId,
-                TNetworkAddress address,
-                RuntimeProfile profile) {
+        public InstanceStatistics(String fragmentId,
+                                    TUniqueId instanceId, TNetworkAddress address, QueryStatistics statistics) {
             this.fragmentId = fragmentId;
             this.instanceId = instanceId;
             this.address = address;
-            this.statistics = new QueryStatistics(profile);
+            this.statistics = statistics;
         }
 
         public String getFragmentId() {
@@ -605,12 +311,16 @@ public class CurrentQueryInfoProvider {
             return address;
         }
 
-        public long getRowsReturned() {
-            return statistics.getRowsReturned();
-        }
-
         public long getScanBytes() {
             return statistics.getScanBytes();
+        }
+
+        public long getScanRows() {
+            return statistics.getScanRows();
+        }
+
+        public long getCPUCostNs() {
+            return statistics.getCpuCostNs();
         }
     }
 

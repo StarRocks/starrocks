@@ -74,10 +74,10 @@ public class CurrentQueryStatisticsProcDir implements ProcDirInterface {
         final List<List<String>> sortedRowData = Lists.newArrayList();
 
         final CurrentQueryInfoProvider provider = new CurrentQueryInfoProvider();
-        final Map<String, CurrentQueryInfoProvider.QueryStatisticsV2> statisticsMap
-                = provider.getQueryStatisticsV2(statistic.values());
+        final Map<String, CurrentQueryInfoProvider.QueryStatistics> statisticsMap
+                = provider.getQueryStatistics(statistic.values());
         for (QueryStatisticsItem item : statistic.values()) {
-            final CurrentQueryInfoProvider.QueryStatisticsV2 statistics = statisticsMap.get(item.getQueryId());
+            final CurrentQueryInfoProvider.QueryStatistics statistics = statisticsMap.get(item.getQueryId());
             if (statistics == null) {
                 continue;
             }
