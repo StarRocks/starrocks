@@ -77,10 +77,12 @@ public:
     const cctz::time_zone& tzinfo() { return _tzinfo; }
     void drop_nanoseconds_in_datetime() { _drop_nanoseconds_in_datetime = true; }
     bool use_nanoseconds_in_datetime() { return !_drop_nanoseconds_in_datetime; }
+    void set_use_orc_column_names(bool use_orc_column_names) { _use_orc_column_names = use_orc_column_names; }
     // methods related to broker load.
     void set_broker_load_mode(bool strict_mode) {
         _broker_load_mode = true;
         _strict_mode = strict_mode;
+        set_use_orc_column_names(true);
     }
     void disable_broker_load_mode() { _broker_load_mode = false; }
     size_t get_num_rows_filtered() const { return _num_rows_filtered; }
@@ -140,6 +142,13 @@ private:
     orc::RowReaderOptions _row_reader_options;
     std::vector<SlotDescriptor*> _src_slot_descriptors;
     std::unordered_map<SlotId, SlotDescriptor*> _slot_id_to_desc;
+
+    // Access ORC columns by name. By default,
+    // columns in ORC files are accessed by their ordinal position in the Hive table definition.
+    // This value now is fixed, in future, it can be passed from FE.
+    // We make the same behavior as Trino & Presto.
+    // https://trino.io/docs/current/connector/hive.html?highlight=hive#orc-format-configuration-properties
+    bool _use_orc_column_names = false;
     std::unique_ptr<OrcMapping> _root_selected_mapping;
     std::vector<TypeDescriptor> _src_types;
     // _src_slot index to position in orc
@@ -153,7 +162,7 @@ private:
                                     std::string* orc_column_name);
     Status _init_include_columns(const std::unique_ptr<OrcMapping>& mapping);
     Status _init_position_in_orc();
-    Status _init_src_types();
+    Status _init_src_types(const std::unique_ptr<OrcMapping>& mapping);
     Status _init_cast_exprs();
     Status _init_fill_functions();
     // holding Expr* in cast_exprs;
@@ -162,6 +171,11 @@ private:
     cctz::time_zone _tzinfo;
     int64_t _tzoffset_in_seconds;
     bool _drop_nanoseconds_in_datetime;
+
+    // Only used for UT, used after init reader
+    const std::vector<bool>& _get_selected_column_id();
+    // Only used for UT, used after init reader
+    const std::vector<bool>& _get_lazyload_column_id();
 
     // fields related to broker load.
     bool _broker_load_mode;
