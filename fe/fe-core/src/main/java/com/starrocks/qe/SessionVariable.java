@@ -258,6 +258,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_QUERY_DEBUG_TRACE = "enable_query_debug_trace";
 
+    public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
+            .add(CODEGEN_LEVEL)
             .add(ENABLE_SPILLING)
             .add(MAX_EXECUTION_TIME)
             .add(PROFILING)
