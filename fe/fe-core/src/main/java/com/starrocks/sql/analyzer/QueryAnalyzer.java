@@ -437,7 +437,7 @@ public class QueryAnalyzer {
             for (int i = 0; i < view.getBaseSchema().size(); ++i) {
                 Column column = view.getBaseSchema().get(i);
                 Field originField = queryOutputScope.getRelationFields().getFieldByIndex(i);
-                Field field = new Field(column.getName(), column.getType(), node.getResolveTableName(),
+                Field field = new Field(column.getName(), originField.getType(), node.getResolveTableName(),
                         originField.getOriginExpression());
                 fields.add(field);
             }
