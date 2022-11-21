@@ -99,7 +99,8 @@ int main(int argc, char** argv) {
     }
 
     if (getenv("TCMALLOC_HEAP_LIMIT_MB") == nullptr) {
-        fprintf(stderr, "Environment variable TCMALLOC_HEAP_LIMIT_MB is not set,"
+        fprintf(stderr,
+                "Environment variable TCMALLOC_HEAP_LIMIT_MB is not set,"
                 " maybe you forgot to replace bin directory\n");
         exit(-1);
     }
