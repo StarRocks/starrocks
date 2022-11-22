@@ -52,21 +52,27 @@ public:
         if (lhs_pt_opt.has_value() && rhs_pt_opt.has_value()) {
             auto lhs_pt = lhs_pt_opt.value();
             auto rhs_pt = rhs_pt_opt.value();
-            ASSIGN_OR_RETURN(auto l, _children[0]->get_child(0)->evaluate_checked(context, chunk));
-            ASSIGN_OR_RETURN(auto r, _children[1]->get_child(0)->evaluate_checked(context, chunk));
             if (lhs_pt == TYPE_DECIMAL64 && rhs_pt == TYPE_DECIMAL64 && Type == TYPE_DECIMAL128) {
+                ASSIGN_OR_RETURN(auto l, _children[0]->get_child(0)->evaluate_checked(context, chunk));
+                ASSIGN_OR_RETURN(auto r, _children[1]->get_child(0)->evaluate_checked(context, chunk));
                 return VectorizedStrictDecimalBinaryFunction<MulOp64x64_128, false>::template evaluate<
                         TYPE_DECIMAL64, TYPE_DECIMAL64, Type>(l, r);
             }
             if (lhs_pt == TYPE_DECIMAL32 && rhs_pt == TYPE_DECIMAL64 && Type == TYPE_DECIMAL128) {
+                ASSIGN_OR_RETURN(auto l, _children[0]->get_child(0)->evaluate_checked(context, chunk));
+                ASSIGN_OR_RETURN(auto r, _children[1]->get_child(0)->evaluate_checked(context, chunk));
                 return VectorizedStrictDecimalBinaryFunction<MulOp32x64_128, false>::template evaluate<
                         TYPE_DECIMAL32, TYPE_DECIMAL64, Type>(l, r);
             }
             if (lhs_pt == TYPE_DECIMAL64 && rhs_pt == TYPE_DECIMAL32 && Type == TYPE_DECIMAL128) {
+                ASSIGN_OR_RETURN(auto l, _children[0]->get_child(0)->evaluate_checked(context, chunk));
+                ASSIGN_OR_RETURN(auto r, _children[1]->get_child(0)->evaluate_checked(context, chunk));
                 return VectorizedStrictDecimalBinaryFunction<MulOp32x64_128, false>::template evaluate<
                         TYPE_DECIMAL32, TYPE_DECIMAL64, Type>(r, l);
             }
             if (lhs_pt == TYPE_DECIMAL32 && rhs_pt == TYPE_DECIMAL32 && Type == TYPE_DECIMAL128) {
+                ASSIGN_OR_RETURN(auto l, _children[0]->get_child(0)->evaluate_checked(context, chunk));
+                ASSIGN_OR_RETURN(auto r, _children[1]->get_child(0)->evaluate_checked(context, chunk));
                 return VectorizedStrictDecimalBinaryFunction<MulOp32x32_128, false>::template evaluate<
                         TYPE_DECIMAL32, TYPE_DECIMAL32, Type>(r, l);
             }

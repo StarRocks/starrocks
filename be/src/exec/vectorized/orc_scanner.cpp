@@ -126,7 +126,7 @@ StatusOr<ChunkPtr> ORCScanner::_next_orc_chunk() {
 
 StatusOr<ChunkPtr> ORCScanner::_transfer_chunk(starrocks::vectorized::ChunkPtr& src) {
     SCOPED_RAW_TIMER(&_counter->cast_chunk_ns);
-    ASSIGN_OR_RETURN(ChunkPtr cast_chunk, _orc_reader->cast_chunk(&src));
+    ASSIGN_OR_RETURN(ChunkPtr cast_chunk, _orc_reader->cast_chunk_checked(&src));
     auto range = _scan_range.ranges.at(_next_range - 1);
     if (range.__isset.num_of_columns_from_file) {
         for (int i = 0; i < range.columns_from_path.size(); ++i) {

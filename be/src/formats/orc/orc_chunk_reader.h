@@ -56,13 +56,14 @@ public:
     // copy from cvb to chunk
     Status fill_chunk(ChunkPtr* chunk);
     // some type cast & conversion.
-    StatusOr<ChunkPtr> cast_chunk(ChunkPtr* chunk);
+    StatusOr<ChunkPtr> cast_chunk_checked(ChunkPtr* chunk);
+    ChunkPtr cast_chunk(ChunkPtr* chunk) { return cast_chunk_checked(chunk).value(); }
     // call them before calling init.
     void set_read_chunk_size(uint64_t v) { _read_chunk_size = v; }
     void set_row_reader_filter(std::shared_ptr<orc::RowReaderFilter> filter);
-    void set_conjuncts(const std::vector<Expr*>& conjuncts);
-    void set_conjuncts_and_runtime_filters(const std::vector<Expr*>& conjuncts,
-                                           const RuntimeFilterProbeCollector* rf_collector);
+    Status set_conjuncts(const std::vector<Expr*>& conjuncts);
+    Status set_conjuncts_and_runtime_filters(const std::vector<Expr*>& conjuncts,
+                                             const RuntimeFilterProbeCollector* rf_collector);
     Status set_timezone(const std::string& tz);
     size_t num_columns() const { return _src_slot_descriptors.size(); }
 
@@ -128,7 +129,7 @@ private:
                                    const std::vector<int>* indices);
 
     bool _ok_to_add_conjunct(const Expr* conjunct);
-    void _add_conjunct(const Expr* conjunct, std::unique_ptr<orc::SearchArgumentBuilder>& builder);
+    Status _add_conjunct(const Expr* conjunct, std::unique_ptr<orc::SearchArgumentBuilder>& builder);
     bool _add_runtime_filter(const SlotDescriptor* slot_desc, const JoinRuntimeFilter* rf,
                              std::unique_ptr<orc::SearchArgumentBuilder>& builder);
 
