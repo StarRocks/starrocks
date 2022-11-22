@@ -8,7 +8,21 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
+<<<<<<< HEAD
 import com.starrocks.sql.analyzer.Analyzer;
+=======
+import com.starrocks.qe.ShowExecutor;
+import com.starrocks.qe.ShowResultSet;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.DescribeStmt;
+import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.ShowResourceGroupStmt;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.statistic.StatsConstants;
+import com.starrocks.system.BackendCoreStat;
+>>>>>>> 3358b81f0 ([BugFix] Wrong schema results from view directly upon SetOperator whose leftmost child has const NULLs as output columns (#13792))
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
@@ -18,6 +32,8 @@ import org.junit.Test;
 
 import java.util.List;
 import java.util.UUID;
+
+import static com.starrocks.sql.optimizer.statistics.CachedStatisticStorageTest.DEFAULT_CREATE_TABLE_TEMPLATE;
 
 public class ShowCreateViewStmtTest {
 
@@ -37,6 +53,10 @@ public class ShowCreateViewStmtTest {
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
+
+        starRocksAssert.withDatabase(StatsConstants.STATISTICS_DB_NAME)
+                .useDatabase(StatsConstants.STATISTICS_DB_NAME)
+                .withTable(DEFAULT_CREATE_TABLE_TEMPLATE);
 
         starRocksAssert.withDatabase("test").useDatabase("test")
                 .withTable("CREATE TABLE test.tbl1\n" +
@@ -127,27 +147,51 @@ public class ShowCreateViewStmtTest {
                 "\tt0.c4 as d\n" +
                 "from t0";
         CreateViewStmt createViewStmt = (CreateViewStmt) UtFrameUtils.parseStmtWithNewParser(createViewSql, ctx);
+<<<<<<< HEAD
         Catalog.getCurrentCatalog().createView(createViewStmt);
+=======
+        GlobalStateMgr.getCurrentState().createView(createViewStmt);
+>>>>>>> 3358b81f0 ([BugFix] Wrong schema results from view directly upon SetOperator whose leftmost child has const NULLs as output columns (#13792))
 
         String descViewSql = "describe v2";
 
         StatementBase statement =
+<<<<<<< HEAD
                 com.starrocks.sql.parser.SqlParser.parse(descViewSql, ctx.getSessionVariable().getSqlMode()).get(0);
         Analyzer.analyze(statement, ctx);
+=======
+                com.starrocks.sql.parser.SqlParser.parse(descViewSql, ctx.getSessionVariable()).get(0);
+        Analyzer.analyze(statement, ctx);
+        Assert.assertTrue(statement instanceof DescribeStmt);
+        ShowExecutor showExecutor = new ShowExecutor(ctx, (DescribeStmt) statement);
+        ShowResultSet rs = showExecutor.execute();
+        Assert.assertTrue(rs.getResultRows().stream().allMatch(r -> r.get(1).toUpperCase().startsWith("VARCHAR")));
+>>>>>>> 3358b81f0 ([BugFix] Wrong schema results from view directly upon SetOperator whose leftmost child has const NULLs as output columns (#13792))
         String query = "select * from v2 union all select c1 as a, c2 as b, NULL as c, c4 as d from t0";
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, query);
         plan = plan.replaceAll("\\[\\d+,\\s*", "")
                 .replaceAll("VARCHAR\\(\\d+\\)", "VARCHAR")
                 .replaceAll(",\\s*(true|false)]", "");
         String snippet = "  0:UNION\n" +
+<<<<<<< HEAD
+=======
+                "  |  output exprs:\n" +
+                "  |      VARCHAR | VARCHAR | VARCHAR | VARCHAR\n" +
+>>>>>>> 3358b81f0 ([BugFix] Wrong schema results from view directly upon SetOperator whose leftmost child has const NULLs as output columns (#13792))
                 "  |  child exprs:\n" +
                 "  |      VARCHAR | VARCHAR | VARCHAR | VARCHAR\n" +
                 "  |      VARCHAR | VARCHAR | VARCHAR | VARCHAR\n" +
                 "  |  pass-through-operands: all";
         Assert.assertTrue(plan.contains(snippet));
 
+<<<<<<< HEAD
         DropTableStmt dropViewStmt = new DropTableStmt(
                 false, new TableName("default_cluster:test", "v2"), true, true);
         Catalog.getCurrentCatalog().dropTable(dropViewStmt);
+=======
+        String dropViewSql = "drop view if exists v2";
+        DropTableStmt dropViewStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropViewSql, ctx);
+        GlobalStateMgr.getCurrentState().dropTable(dropViewStmt);
+>>>>>>> 3358b81f0 ([BugFix] Wrong schema results from view directly upon SetOperator whose leftmost child has const NULLs as output columns (#13792))
     }
 }

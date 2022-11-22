@@ -1,8 +1,11 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer;
 
+<<<<<<< HEAD
 import com.starrocks.analysis.BaseViewStmt;
 import com.starrocks.analysis.ColWithComment;
+=======
+>>>>>>> 3358b81f0 ([BugFix] Wrong schema results from view directly upon SetOperator whose leftmost child has const NULLs as output columns (#13792))
 import com.starrocks.catalog.Column;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
