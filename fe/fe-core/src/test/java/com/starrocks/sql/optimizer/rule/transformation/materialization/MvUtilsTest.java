@@ -2,8 +2,10 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.FeConstants;
@@ -15,6 +17,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -146,6 +149,7 @@ public class MvUtilsTest {
                 BinaryPredicateOperator.BinaryType.GE, columnRef1, ConstantOperator.createInt(2));
         ScalarOperator canonizedPredicate = MvUtils.canonizePredicateForRewrite(binaryPredicate);
         Assert.assertEquals(binaryPredicate2, canonizedPredicate);
+        Assert.assertEquals("col1 > 1", MvUtils.scalarOperatorToSql(binaryPredicate));
         BinaryPredicateOperator binaryPredicate3 = new BinaryPredicateOperator(
                 BinaryPredicateOperator.BinaryType.LT, columnRef2, ConstantOperator.createInt(1));
         ScalarOperator canonizedPredicate2 = MvUtils.canonizePredicateForRewrite(binaryPredicate3);
@@ -158,6 +162,8 @@ public class MvUtilsTest {
         CompoundPredicateOperator compound2 = new CompoundPredicateOperator(
                 CompoundPredicateOperator.CompoundType.AND, binaryPredicate2, binaryPredicate4);
         ScalarOperator canonizedPredicate3 = MvUtils.canonizePredicateForRewrite(compound1);
+
+        Assert.assertEquals("col1 >= 2 AND col2 <= 0", MvUtils.scalarOperatorToSql(canonizedPredicate3));
         Assert.assertEquals(compound2, canonizedPredicate3);
 
         CompoundPredicateOperator compound3 = new CompoundPredicateOperator(
@@ -165,6 +171,7 @@ public class MvUtilsTest {
         CompoundPredicateOperator compound4 = new CompoundPredicateOperator(
                 CompoundPredicateOperator.CompoundType.OR, binaryPredicate2, binaryPredicate4);
         ScalarOperator canonizedPredicate4 = MvUtils.canonizePredicateForRewrite(compound3);
+        Assert.assertEquals("col1 >= 2 OR col2 <= 0", MvUtils.scalarOperatorToSql(canonizedPredicate4));
         Assert.assertEquals(compound4, canonizedPredicate4);
 
         CompoundPredicateOperator compound5 = new CompoundPredicateOperator(
@@ -173,5 +180,11 @@ public class MvUtilsTest {
         BinaryPredicateOperator binaryPredicate5 = new BinaryPredicateOperator(
                 BinaryPredicateOperator.BinaryType.LE, columnRef1, ConstantOperator.createInt(1));
         Assert.assertEquals(binaryPredicate5, canonizedPredicate5);
+
+        ColumnRefOperator columnRef3 = columnRefFactory.create("col3", Type.DATE, false);
+        ConstantOperator month = ConstantOperator.createChar("month", Type.VARCHAR);
+        CallOperator callOperator = new CallOperator(FunctionSet.DATE_TRUNC, Type.DATE, Lists.newArrayList(month, columnRef3));
+        Assert.assertEquals("date_trunc('month', col3)", MvUtils.scalarOperatorToSql(callOperator));
     }
+
 }

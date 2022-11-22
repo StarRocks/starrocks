@@ -23,6 +23,7 @@ import com.starrocks.sql.optimizer.cost.CostEstimate;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.join.ReorderJoinRule;
@@ -240,7 +241,14 @@ public class Optimizer {
             // generate scan mv plan
             Database db = context.getCatalog().getDb(mv.getDbId());
             TableName tableName = new TableName(db.getFullName(), mv.getName());
-            String selectMvSql = "select * from " + tableName.toSql();
+            StringBuilder selectMvSb = new StringBuilder("select * from " + tableName.toSql());
+
+            ScalarOperator predicate = mvOptimizer.getPartialPartitionPredicate(mv);
+            if (predicate != null) {
+                selectMvSb.append(" where ");
+                selectMvSb.append(MvUtils.scalarOperatorToSql(predicate));
+            }
+            String selectMvSql = selectMvSb.toString();
             Pair<OptExpression, LogicalPlan> scanMvPlans =
                     MvUtils.getRuleOptimizedLogicalPlan(selectMvSql, context.getColumnRefFactory(), connectContext);
             OptExpression scanMvPlan = scanMvPlans.first;
@@ -338,7 +346,6 @@ public class Optimizer {
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.MULTI_DISTINCT_REWRITE);
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PUSH_DOWN_PREDICATE);
 
-        ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PARTITION_PRUNE);
         ruleRewriteOnlyOnce(tree, rootTaskContext, LimitPruneTabletsRule.getInstance());
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PRUNE_PROJECT);
 
@@ -364,6 +371,7 @@ public class Optimizer {
             // now add single table materialized view rewrite rules in rule based rewrite phase to boost optimization
             ruleRewriteIterative(tree, rootTaskContext, RuleSetType.SINGLE_TABLE_MV_REWRITE);
         }
+        ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PARTITION_PRUNE);
         return tree.getInputs().get(0);
     }
 

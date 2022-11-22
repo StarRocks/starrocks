@@ -35,6 +35,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -371,5 +372,60 @@ public class MvUtils {
         };
         optExpression.getOp().accept(visitor, optExpression, null);
         return columnRefOperators;
+    }
+
+    public static String scalarOperatorToSql(ScalarOperator predicate) {
+        ScalarOperatorVisitor<String, Void> converter = new ScalarOperatorVisitor<String, Void>() {
+            @Override
+            public String visit(ScalarOperator scalarOperator, Void context) {
+                return null;
+            }
+
+            @Override
+            public String visitVariableReference(ColumnRefOperator columnRefOperator, Void context) {
+                return columnRefOperator.getName();
+            }
+
+            public String visitBinaryPredicate(BinaryPredicateOperator predicate, Void context) {
+                return predicate.getChild(0).accept(this, null) + " "
+                        + predicate.getBinaryType().toString() + " " + predicate.getChild(1).accept(this, null);
+            }
+
+            public String visitCompoundPredicate(CompoundPredicateOperator predicate, Void context) {
+                if (predicate.isNot()) {
+                    return predicate.getCompoundType().name() + " " + predicate.getChild(0).accept(this, null);
+                } else {
+                    return predicate.getChild(0).accept(this, null) + " "
+                            + predicate.getCompoundType().name() + " " + predicate.getChild(1).accept(this, null);
+                }
+            }
+
+            public String visitCall(CallOperator call, Void context) {
+                StringBuilder sb = new StringBuilder();
+                sb.append(call.getFnName()).append("(");
+                int childSize = call.getChildren().size();
+                for (int i = 0; i < childSize; i++) {
+                    sb.append(call.getChild(i).accept(this, null));
+                    if (i != childSize - 1) {
+                        sb.append(", ");
+                    }
+                }
+                sb.append(")");
+                return sb.toString();
+            }
+
+            public String visitConstant(ConstantOperator constantOperator, Void context) {
+                StringBuilder sb = new StringBuilder();
+                if (constantOperator.getType().isStringType() || constantOperator.getType().isDateType()) {
+                    sb.append("'");
+                }
+                sb.append(constantOperator);
+                if (constantOperator.getType().isStringType() || constantOperator.getType().isDateType()) {
+                    sb.append("'");
+                }
+                return sb.toString();
+            }
+        };
+        return predicate.accept(converter, null);
     }
 }

@@ -11,9 +11,11 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
@@ -33,10 +35,13 @@ import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 public class MaterializedViewOptimizer {
     private List<ColumnRefOperator> outputExpressions;
+    private Set<String> partitionNamesToRefresh;
+    private List<Range<PartitionKey>> mvRanges;
 
     public OptExpression optimize(MaterializedView mv, ColumnRefFactory columnRefFactory, ConnectContext connectContext) {
         String mvSql = mv.getViewDefineSql();
@@ -46,9 +51,12 @@ public class MaterializedViewOptimizer {
         }
         outputExpressions = plans.second.getOutputColumn();
         OptExpression mvPlan = plans.first;
-        Set<String> partitionNamesToRefresh = mv.getPartitionNamesToRefreshForMv();
+        partitionNamesToRefresh = mv.getPartitionNamesToRefreshForMv();
         if (mv.getPartitionInfo() instanceof ExpressionRangePartitionInfo && !partitionNamesToRefresh.isEmpty()) {
-            getPartialPartitionPredicate(mv, columnRefFactory, partitionNamesToRefresh, mvPlan);
+            boolean ret = updatePartitionByScanPredicate(mv, mvPlan);
+            if (!ret) {
+                return null;
+            }
         }
         return mvPlan;
     }
@@ -57,42 +65,103 @@ public class MaterializedViewOptimizer {
         return outputExpressions;
     }
 
-    // try to get partitial partition predicate of partitioned mv.
+    // return partial partition predicate for scan mv expression
+    public ScalarOperator getPartialPartitionPredicate(MaterializedView mv) {
+        if (partitionNamesToRefresh == null || partitionNamesToRefresh.isEmpty()) {
+            // all partitions are uptodate, do not add filter
+            return null;
+        }
+        PartitionInfo partitionInfo = mv.getPartitionInfo();
+        if (!(partitionInfo instanceof ExpressionRangePartitionInfo)) {
+            return null;
+        }
+        ExpressionRangePartitionInfo exprPartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
+        Pair<Table, Column> partitionTableAndColumns = mv.getPartitionTableAndColumn();
+        if (partitionTableAndColumns == null) {
+            return null;
+        }
+
+        Column partitionColumn = partitionTableAndColumns.second;
+        Expr partitionExpr = exprPartitionInfo.getPartitionExprs().get(0);
+        List<SlotRef> partitionSlotRefs = Lists.newArrayList();
+        partitionExpr.collect(SlotRef.class, partitionSlotRefs);
+        Preconditions.checkState(partitionSlotRefs.size() == 1);
+        ColumnRefFactory refFactory = new ColumnRefFactory();
+        ColumnRefOperator partitionColumnRef = refFactory.create(
+                partitionSlotRefs.get(0).getColumnName(), partitionColumn.getType(), partitionColumn.isAllowNull());
+        ExpressionMapping expressionMapping =
+                new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields()),
+                        Lists.newArrayList());
+        expressionMapping.put(partitionSlotRefs.get(0), partitionColumnRef);
+        ScalarOperator partitionScalarForScan =
+                SqlToScalarOperatorTranslator.translate(partitionExpr, expressionMapping, refFactory);
+        List<ScalarOperator> partitionPredicatesForScan = convertRanges(partitionScalarForScan, mvRanges);
+        return Utils.compoundOr(partitionPredicatesForScan);
+    }
+
+    // try to get partial partition predicate of partitioned mv.
     // for example, mv1 has two partition: p1:[2022-01-01, 2022-01-02), p2:[2022-01-02, 2022-01-03).
     // p1 is updated, p2 is outdated.
     // mv1's base partition table is t1, partition column is k1.
     // then this function will add predicate: k1 >= "2022-01-01" and k1 < "2022-01-02" to scan node of t1
-    public void getPartialPartitionPredicate(MaterializedView mv, ColumnRefFactory columnRefFactory,
-                                             Set<String> partitionsToRefresh, OptExpression mvPlan) {
-        // to support partial partition rewrite
-        PartitionInfo partitionInfo = mv.getPartitionInfo();
-        if (!(partitionInfo instanceof ExpressionRangePartitionInfo)) {
-            return;
+    private boolean updatePartitionByScanPredicate(MaterializedView mv, OptExpression mvPlan) {
+        // convert finalRanges into ScalarOperator
+        Pair<Table, Column> partitionTableAndColumns = mv.getPartitionTableAndColumn();
+        if (partitionTableAndColumns == null) {
+            return false;
         }
-        ExpressionRangePartitionInfo exprPartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
-        if (partitionsToRefresh.isEmpty()) {
-            // all partitions are uptodate, do not add filter
-            return;
-        }
-
-        Set<Long> outdatePartitionIds = Sets.newHashSet();
-        for (Partition partition : mv.getPartitions()) {
-            if (partitionsToRefresh.contains(partition.getName())) {
-                outdatePartitionIds.add(partition.getId());
+        OlapTable partitionByTable = (OlapTable) partitionTableAndColumns.first;
+        Set<String> modifiedPartitionNames = mv.getUpdatedPartitionNamesOfTable(partitionByTable);
+        List<Range<PartitionKey>> baseTableRanges = getUptodatedPartitionRange(partitionByTable, modifiedPartitionNames);
+        mvRanges = getUptodatedPartitionRange(mv, partitionNamesToRefresh);
+        List<Range<PartitionKey>> finalRanges = Lists.newArrayList();
+        for (Range<PartitionKey> range : baseTableRanges) {
+            if (mvRanges.stream().anyMatch(mvRange -> mvRange.encloses(range))) {
+                finalRanges.add(range);
             }
         }
-        if (outdatePartitionIds.size() == mv.getPartitions().size()) {
-            // all partitions are out of date
-            // should not reach here, it will be filtered when registering mv
-            return;
+        if (finalRanges.isEmpty()) {
+            return false;
         }
-        // now only one column is supported
-        Column partitionColumn = exprPartitionInfo.getPartitionColumns().get(0);
-        List<Range<PartitionKey>> uptodatePartitionRanges = exprPartitionInfo.getRangeList(outdatePartitionIds, false);
-        if (uptodatePartitionRanges.isEmpty()) {
-            return;
+
+        Column partitionColumn = partitionTableAndColumns.second;
+        List<OptExpression> scanExprs = MvUtils.collectScanExprs(mvPlan);
+        for (OptExpression scanExpr : scanExprs) {
+            LogicalScanOperator scanOperator = (LogicalScanOperator) scanExpr.getOp();
+            Table scanTable = scanOperator.getTable();
+            if ((scanTable.isLocalTable() && !scanTable.equals(partitionTableAndColumns.first))
+                    || (!scanTable.isLocalTable()) && !scanTable.getTableIdentifier().equals(
+                    partitionTableAndColumns.first.getTableIdentifier())) {
+                continue;
+            }
+            Optional<Column> columnOptional = scanOperator.getColumnMetaToColRefMap()
+                    .keySet().stream().filter(col -> col.getName().equals(partitionColumn.getName())).findFirst();
+            Preconditions.checkState(columnOptional.isPresent());
+            ColumnRefOperator columnRef = scanOperator.getColumnReference(columnOptional.get());
+            List<ScalarOperator> partitionPredicates = convertRanges(columnRef, finalRanges);
+            ScalarOperator partialPartitionPredicate = Utils.compoundOr(partitionPredicates);
+            ScalarOperator originalPredicate = scanOperator.getPredicate();
+            ScalarOperator newPredicate = Utils.compoundAnd(originalPredicate, partialPartitionPredicate);
+            scanOperator.setPredicate(newPredicate);
         }
+        return true;
+    }
+
+    private List<Range<PartitionKey>> getUptodatedPartitionRange(OlapTable table, Set<String> modifiedPartitionNames) {
         List<Range<PartitionKey>> finalRanges = Lists.newArrayList();
+        // partitions that will be excluded
+        Set<Long> modifiedIds = Sets.newHashSet();
+        for (Partition p : table.getPartitions()) {
+            if (modifiedPartitionNames.contains(p.getName())) {
+                modifiedIds.add(p.getId());
+            }
+        }
+        RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) table.getPartitionInfo();
+        List<Range<PartitionKey>> uptodatePartitionRanges = rangePartitionInfo.getRangeList(modifiedIds, false);
+        if (uptodatePartitionRanges.isEmpty()) {
+            return finalRanges;
+        }
+
         for (int i = 0; i < uptodatePartitionRanges.size(); i++) {
             Range<PartitionKey> currentRange = uptodatePartitionRanges.get(i);
             boolean merged = false;
@@ -108,39 +177,7 @@ public class MaterializedViewOptimizer {
                 finalRanges.add(currentRange);
             }
         }
-        // convert finalRanges into ScalarOperator
-        Expr partitionExpr = exprPartitionInfo.getPartitionExprs().get(0);
-        Pair<Table, Column> partitionTableAndColumns = mv.getPartitionTableAndColumn();
-        if (partitionTableAndColumns == null) {
-            return;
-        }
-        List<OptExpression> scanExprs = MvUtils.collectScanExprs(mvPlan);
-        for (OptExpression scanExpr : scanExprs) {
-            LogicalScanOperator scanOperator = (LogicalScanOperator) scanExpr.getOp();
-            Table scanTable = scanOperator.getTable();
-            if ((scanTable.isLocalTable() && !scanTable.equals(partitionTableAndColumns.first))
-                    || (!scanTable.isLocalTable()) && !scanTable.getTableIdentifier().equals(
-                    partitionTableAndColumns.first.getTableIdentifier())) {
-                continue;
-            }
-            ColumnRefOperator columnRef = scanOperator.getColumnReference(partitionColumn);
-            ExpressionMapping expressionMapping =
-                    new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields()),
-                            Lists.newArrayList());
-            List<SlotRef> partitionSlotRefs = Lists.newArrayList();
-            partitionExpr.collect(SlotRef.class, partitionSlotRefs);
-            Preconditions.checkState(partitionSlotRefs.size() == 1);
-            expressionMapping.put(partitionSlotRefs.get(0), columnRef);
-            // convert partition expr into partition scalar operator
-            ScalarOperator partitionScalar = SqlToScalarOperatorTranslator.translate(partitionExpr,
-                    expressionMapping, columnRefFactory);
-            List<ScalarOperator> partitionPredicates = convertRanges(partitionScalar, finalRanges);
-            ScalarOperator partitionPredicate = Utils.compoundOr(partitionPredicates);
-            // here can directly change the plan of mv
-            ScalarOperator originalPredicate = scanOperator.getPredicate();
-            ScalarOperator newPredicate = Utils.compoundAnd(originalPredicate, partitionPredicate);
-            scanOperator.setPredicate(newPredicate);
-        }
+        return finalRanges;
     }
 
     private List<ScalarOperator> convertRanges(ScalarOperator partitionScalar, List<Range<PartitionKey>> partitionRanges) {
