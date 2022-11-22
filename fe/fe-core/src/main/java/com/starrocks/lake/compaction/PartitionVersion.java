@@ -17,11 +17,11 @@ public class PartitionVersion {
         this.createTime = createTime;
     }
 
-    long getVersion() {
+    public long getVersion() {
         return version;
     }
 
-    long getCreateTime() {
+    public long getCreateTime() {
         return createTime;
     }
 
