@@ -460,6 +460,7 @@ void ChunkAccumulator::finalize() {
 }
 
 void ChunkPipelineAccumulator::push(const vectorized::ChunkPtr& chunk) {
+    chunk->check_or_die();
     DCHECK(_out_chunk == nullptr);
     if (_in_chunk == nullptr) {
         _in_chunk = chunk;
