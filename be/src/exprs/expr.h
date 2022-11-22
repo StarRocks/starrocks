@@ -293,7 +293,6 @@ private:
     // Create a new vectorized expr
     static Status create_vectorized_expr(ObjectPool* pool, const TExprNode& texpr_node, Expr** expr,
                                          RuntimeState* state);
-
 };
 
 } // namespace starrocks
