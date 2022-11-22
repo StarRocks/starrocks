@@ -231,7 +231,7 @@ public:
         bool has_null = false;
 
         // ParquetFiled Map -> Map<Struct<key,value>>
-        def_rep_to_offset(_field->children[0].level_info, def_levels, rep_levels, num_levels, &offsets[0], &is_nulls[0],
+        def_rep_to_offset(_field->level_info, def_levels, rep_levels, num_levels, &offsets[0], &is_nulls[0],
                           &num_offsets, &has_null);
         offsets.resize(num_offsets + 1);
         is_nulls.resize(num_offsets);
