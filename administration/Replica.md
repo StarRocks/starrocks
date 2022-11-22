@@ -2,6 +2,10 @@
 
 本文介绍如何管理 StarRocks 中的数据副本 (replica)。
 
+> **注意**
+>
+> 为保证元数据一致，您需要在 Leader FE 节点进行副本管理操作。
+
 ## 修复副本
 
 TabletChecker 作为常驻的后台进程，会定期检查所有分片的状态。对于非健康状态的分片，将会交给 TabletScheduler 进行调度和修复。修复的实际操作，都由 BE 节点上的 Clone 任务完成。FE 节点只负责生成这些 Clone 任务。
