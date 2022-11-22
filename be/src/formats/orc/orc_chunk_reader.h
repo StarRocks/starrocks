@@ -84,7 +84,10 @@ public:
         _strict_mode = strict_mode;
         set_use_orc_column_names(true);
     }
-    void disable_broker_load_mode() { _broker_load_mode = false; }
+    void disable_broker_load_mode() {
+        _broker_load_mode = false;
+        set_use_orc_column_names(false);
+    }
     size_t get_num_rows_filtered() const { return _num_rows_filtered; }
     bool get_broker_load_mode() const { return _broker_load_mode; }
     bool get_strict_mode() const { return _strict_mode; }
@@ -173,9 +176,9 @@ private:
     bool _drop_nanoseconds_in_datetime;
 
     // Only used for UT, used after init reader
-    const std::vector<bool>& _get_selected_column_id();
+    const std::vector<bool>& TEST_get_selected_column_id_list();
     // Only used for UT, used after init reader
-    const std::vector<bool>& _get_lazyload_column_id();
+    const std::vector<bool>& TEST_get_lazyload_column_id_list();
 
     // fields related to broker load.
     bool _broker_load_mode;

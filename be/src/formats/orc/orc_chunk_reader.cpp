@@ -1309,6 +1309,11 @@ Status OrcChunkReader::init(std::unique_ptr<orc::Reader> reader) {
         return Status::EndOfFile("number of rows is 0");
     }
 
+    if (_hive_column_names == nullptr) {
+        // If hive_column_names is nullptr, we have to use orc's column name.
+        set_use_orc_column_names(true);
+    }
+
     // ensure search argument is not null.
     // we are going to put row reader filter into search argument applier
     // and search argument applier only be constructed when search argument is not null.
