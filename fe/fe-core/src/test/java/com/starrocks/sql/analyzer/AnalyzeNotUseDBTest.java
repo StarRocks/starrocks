@@ -85,4 +85,14 @@ public class AnalyzeNotUseDBTest {
         analyzeSuccess("select default_catalog.db1.t.v1 from default_catalog.db1.t0 t " +
                 "inner join default_catalog.db2.t0 t on db1.t.v1 = db2.t.v1");
     }
+
+    @Test
+    public void testDupTableName() {
+        analyzeFail("select * from t0 t join unnest([1,2,3]) t", "Not unique table/alias: 't'");
+        analyzeFail("select * from t0 join unnest([1,2,3]) t0", "Not unique table/alias: 't0'");
+        analyzeFail("select * from t0 t join (select * from t0) t", "Not unique table/alias: 't'");
+        analyzeFail("select * from t0 join (select * from t0) t0", "Not unique table/alias: 't0'");
+        analyzeFail("select * from t0 t join (values(1,2,3)) t", "Not unique table/alias: 't'");
+        analyzeFail("select * from t0 join (values(1,2,3)) t0", "Not unique table/alias: 't0'");
+    }
 }

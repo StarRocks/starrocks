@@ -259,7 +259,8 @@ public class QueryAnalyzer {
                 }
             } else {
                 if (relation.getResolveTableName() != null) {
-                    if (aliasSet.contains(relation.getResolveTableName().getTbl())) {
+                    MetaUtils.normalizationTableName(session, relation.getResolveTableName());
+                    if (aliasSet.contains(relation.getResolveTableName())) {
                         ErrorReport.reportSemanticException(ErrorCode.ERR_NONUNIQ_TABLE,
                                 relation.getResolveTableName().getTbl());
                     } else {
