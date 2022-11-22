@@ -174,10 +174,12 @@
       + [RESTORE](./sql-reference/sql-statements/data-definition/RESTORE.md)
       + [SHOW ANALYZE JOB](./sql-reference/sql-statements/data-definition/SHOW%20ANALYZE%20JOB.md)
       + [SHOW ANALYZE STATUS](./sql-reference/sql-statements/data-definition/SHOW%20ANALYZE%20STATUS.md)
+      + [SHOW AUTHENTICATION](./sql-reference/sql-statements/data-definition/SHOW%20AUTHENTICATION.md)
       + [SHOW META](./sql-reference/sql-statements/data-definition/SHOW%20META.md)
       + [SHOW RESOURCES](./sql-reference/sql-statements/data-definition/SHOW%20RESOURCES.md)
       + [SHOW FUNCTION](./sql-reference/sql-statements/data-definition/show-functions.md)
       + [TRUNCATE TABLE](./sql-reference/sql-statements/data-definition/TRUNCATE%20TABLE.md)
+      + [USE](./sql-reference/sql-statements/data-definition/USE.md)
     + DML
       + [ALTER ROUTINE LOAD](./sql-reference/sql-statements/data-manipulation/alter-routine-load.md)
       + [BROKER LOAD](./sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md)
@@ -460,6 +462,13 @@
 + Benchmark
   + [SSB Benchmark](./benchmarking/SSB_Benchmarking.md)
   + [TPC-H Benchmark](./benchmarking/TPC-H_Benchmarking.md)
++ Developers
+  + [Contribute to StarRocks](./developers/How_to_Contribute.md)
+  + Development Environment
+    + [IDEA](./developers/development-environment/IDEA.md)
+    + [Build_StarRocks_on_Ubuntu](./developers/build-starrocks/build_starrocks_on_ubuntu.md)
+  + Trace Tools
+    + [Trace](./developers/trace-tools/Trace.md)
 + Release Notes
   + [v2.4](./release_notes/release-2.4.md)
   + [v2.3](./release_notes/release-2.3.md)

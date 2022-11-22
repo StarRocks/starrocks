@@ -14,7 +14,7 @@ Release date: November 15, 2022
 
 The following bugs are fixed:
 
-- The DECOMMISION operation is stuck if an error occurs during metadata synchronization for external tables. [#12369](https://github.com/StarRocks/starrocks/pull/12368)
+- The DECOMMISSION operation is stuck if an error occurs during metadata synchronization for external tables. [#12369](https://github.com/StarRocks/starrocks/pull/12368)
 
 - Compaction crashes if a column that is newly added is deleted. [#12907](https://github.com/StarRocks/starrocks/pull/12907)
 
@@ -22,7 +22,7 @@ The following bugs are fixed:
 
 - Memory leak in Java UDF may cause OOM. [#12418](https://github.com/StarRocks/starrocks/pull/12418)
 
-### Behavior Changes
+### Behavior Change
 
 Extended the length of Hive STRING columns that can be queried by StarRocks from 64 KB to 1 MB. If a STRING column exceeds 1 MB, it will be processed as a null column during queries. [#12986](https://github.com/StarRocks/starrocks/pull/12986)
 

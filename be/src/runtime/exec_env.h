@@ -53,7 +53,6 @@ class PriorityThreadPool;
 class ResultBufferMgr;
 class ResultQueueMgr;
 class LoadChannelMgr;
-class ThreadResourceMgr;
 class WebPageHandler;
 class StreamLoadExecutor;
 class RoutineLoadTaskExecutor;
@@ -146,7 +145,6 @@ public:
     MemTracker* clone_mem_tracker() { return _clone_mem_tracker; }
     MemTracker* consistency_mem_tracker() { return _consistency_mem_tracker; }
 
-    ThreadResourceMgr* thread_mgr() { return _thread_mgr; }
     PriorityThreadPool* thread_pool() { return _thread_pool; }
     workgroup::ScanExecutor* scan_executor_without_workgroup() { return _scan_executor_without_workgroup; }
     workgroup::ScanExecutor* scan_executor_with_workgroup() { return _scan_executor_with_workgroup; }
@@ -268,7 +266,6 @@ private:
 
     MemTracker* _consistency_mem_tracker = nullptr;
 
-    ThreadResourceMgr* _thread_mgr = nullptr;
     PriorityThreadPool* _thread_pool = nullptr;
 
     workgroup::ScanExecutor* _scan_executor_without_workgroup = nullptr;

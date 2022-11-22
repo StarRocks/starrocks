@@ -56,6 +56,8 @@ public:
     int64_t get_last_scan_rows_num() { return _last_scan_rows_num.exchange(0); }
     int64_t get_last_scan_bytes() { return _last_scan_bytes.exchange(0); }
 
+    void set_query_ctx(const QueryContextPtr& query_ctx);
+
 protected:
     static constexpr size_t kIOTaskBatchSize = 64;
 

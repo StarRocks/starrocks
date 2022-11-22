@@ -25,13 +25,13 @@ using std::chrono::milliseconds;
 using std::chrono::steady_clock;
 using std::chrono::duration_cast;
 // The context for all fragment of one query in one BE
-class QueryContext {
+class QueryContext : public std::enable_shared_from_this<QueryContext> {
 public:
     QueryContext();
     ~QueryContext();
     void set_exec_env(ExecEnv* exec_env) { _exec_env = exec_env; }
     void set_query_id(const TUniqueId& query_id) { _query_id = query_id; }
-    TUniqueId query_id() { return _query_id; }
+    TUniqueId query_id() const { return _query_id; }
     void set_total_fragments(size_t total_fragments) { _total_fragments = total_fragments; }
 
     void increment_num_fragments() {
@@ -70,6 +70,10 @@ public:
         _query_deadline =
                 duration_cast<milliseconds>(steady_clock::now().time_since_epoch() + _query_expire_seconds).count();
     }
+    void set_report_profile() { _is_report_profile = true; }
+    bool is_report_profile() { return _is_report_profile; }
+    void set_profile_level(const TPipelineProfileLevel::type& profile_level) { _profile_level = profile_level; }
+    const TPipelineProfileLevel::type& profile_level() { return _profile_level; }
 
     FragmentContextManager* fragment_mgr();
 
@@ -136,6 +140,8 @@ public:
     bool is_result_sink() const { return _is_result_sink; }
     void set_result_sink(bool value) { _is_result_sink = value; }
 
+    QueryContextPtr get_shared_ptr() { return shared_from_this(); }
+
 public:
     static constexpr int DEFAULT_EXPIRE_SECONDS = 300;
 
@@ -153,6 +159,8 @@ private:
     bool _is_runtime_filter_coordinator = false;
     std::once_flag _init_mem_tracker_once;
     std::shared_ptr<RuntimeProfile> _profile;
+    bool _is_report_profile = false;
+    TPipelineProfileLevel::type _profile_level;
     std::shared_ptr<MemTracker> _mem_tracker;
     ObjectPool _object_pool;
     DescriptorTbl* _desc_tbl = nullptr;
