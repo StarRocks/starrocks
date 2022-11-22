@@ -10,7 +10,7 @@ import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 
-import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 
 public abstract class SingleTableRewriteBaseRule extends BaseMaterializedViewRewriteRule {
@@ -33,10 +33,7 @@ public abstract class SingleTableRewriteBaseRule extends BaseMaterializedViewRew
                 calculateStatistics(expression, context);
             }
             // sort expressions based on statistics output row count
-            Collections.sort(expressions,
-                    (expression1, expression2) ->
-                    Double.valueOf(expression1.getStatistics().getOutputRowCount())
-                            .compareTo(expression2.getStatistics().getOutputRowCount()));
+            expressions.sort(Comparator.comparingDouble(expression -> expression.getStatistics().getOutputRowCount()));
             return expressions.subList(0, 1);
         }
     }
