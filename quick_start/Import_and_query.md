@@ -4,11 +4,7 @@
 
 ## 导入数据
 
-为适配不同的数据导入需求，StarRocks 系统提供了五种不同的导入方式，以支持从不同的数据源（如 HDFS、Kafka、本地文件等）或者方式（异步或同步）导入数据。
-
-StarRocks 数据导入整体生态图如下。
-
-![starrocks_ecology](../assets/screenshot_1615530614737.png)
+为适配不同的数据导入需求，StarRocks 系统提供了五种不同的导入方式，以支持不同的数据源或者导入方式。
 
 ### Broker Load
 
@@ -63,7 +59,7 @@ http://127.0.0.1:8030/api/example_db/detailDemo/_stream_load
 
 ## 查询
 
-StarRocks 兼容 MySQL 协议，其查询语句基本符合 SQL92 标准。
+StarRocks 兼容 MySQL 协议，其查询语句基本符合 SQL-92 标准。
 
 ### 简单查询
 
