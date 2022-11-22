@@ -147,12 +147,21 @@ Order by 语法定义如下：
 
 ```sql
 ORDER BY col [ASC | DESC]
+[ NULLS FIRST | NULLS LAST ]
 ```
 
 默认排序顺序是 ASC（升序）。示例：
 
 ```sql
 select * from big_table order by tiny_column, short_column desc;
+```
+
+StarRocks 支持在 ORDER BY 后声明 null 值排在最前面还是最后面，语法为 `order by <> [ NULLS FIRST | NULLS LAST ]`。`NULLS FIRST` 表示 null 值的记录将排在最前面，`NULLS LAST` 表示 null 值的记录将排在最后面。
+
+示例：将 null 值始终排在最前面。
+
+```sql
+select  *  from  sales_record  order by  employee_id  nulls first;
 ```
 
 ### Group by
