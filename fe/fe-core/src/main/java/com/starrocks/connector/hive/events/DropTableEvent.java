@@ -69,7 +69,7 @@ public class DropTableEvent extends MetastoreTableEvent {
 
         try {
             LOG.info("Start to process DROP_TABLE event on {}.{}.{}", catalogName, dbName, tblName);
-            cache.invalidateTable(dbName, tableName);
+            cache.invalidateTable(dbName, tableName, null);
         } catch (Exception e) {
             LOG.error("Failed to process {} event, event detail msg: {}",
                     getEventType(), metastoreNotificationEvent, e);

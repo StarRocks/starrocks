@@ -395,7 +395,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         }
 
         if (isResourceMappingCatalog(getCatalogName())) {
-            GlobalStateMgr.getCurrentState().getMetadataMgr().dropTable(getCatalogName(), hiveDbName, hiveTableName);
+            GlobalStateMgr.getCurrentState().getMetadataMgr().dropTable(getCatalogName(), db.getFullName(), name);
         }
     }
 
