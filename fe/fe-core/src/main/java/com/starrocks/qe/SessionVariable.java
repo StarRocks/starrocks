@@ -323,7 +323,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     // Limitations
     // mem limit can't smaller than bufferpool's default page size
-    public static final int MIN_EXEC_MEM_LIMIT = 2097152;
+    public static final long MIN_EXEC_MEM_LIMIT = 2097152;
     // query timeout cannot greater than one month
     public static final int MAX_QUERY_TIMEOUT = 259200;
 
