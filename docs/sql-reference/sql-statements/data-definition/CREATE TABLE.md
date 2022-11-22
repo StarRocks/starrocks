@@ -118,10 +118,10 @@ Fixed length string. Range：1 ~ 255. Default value: 1.
 
 * VARCHAR[(length)]
 
-A variable-length string. The default value is 1. Unit: bytes.
+A variable-length string. The default value is `1`. Unit: bytes.
 
 - In versions earlier than StarRocks 2.1, the value range of `length` is 1–65533.
-- [Preview] From StarRocks 2.1 and later versions, the value range of `length` is 1–1048576.
+- [Preview] In StarRocks 2.1 and later versions, the value range of `length` is 1–1048576.
 
 
 
