@@ -6,10 +6,9 @@
 #include "exec/pipeline/scan/meta_scan_context.h"
 #include "exec/vectorized/meta_scanner.h"
 
-
 namespace starrocks::pipeline {
 MetaScanOperatorFactory::MetaScanOperatorFactory(int32_t id, ScanNode* meta_scan_node, size_t dop,
-                                                         std::shared_ptr<MetaScanContextFactory> ctx_factory)
+                                                 std::shared_ptr<MetaScanContextFactory> ctx_factory)
         : ScanOperatorFactory(id, meta_scan_node), _ctx_factory(ctx_factory) {}
 
 Status MetaScanOperatorFactory::do_prepare(RuntimeState* state) {
@@ -20,11 +19,11 @@ void MetaScanOperatorFactory::do_close(RuntimeState* state) {}
 
 OperatorPtr MetaScanOperatorFactory::do_create(int32_t dop, int32_t driver_sequence) {
     return std::make_shared<MetaScanOperator>(this, _id, driver_sequence, dop, _scan_node,
-                                                  _ctx_factory->get_or_create(driver_sequence));
+                                              _ctx_factory->get_or_create(driver_sequence));
 }
 
 MetaScanOperator::MetaScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, int32_t dop,
-                                           ScanNode* meta_scan_node, MetaScanContextPtr ctx)
+                                   ScanNode* meta_scan_node, MetaScanContextPtr ctx)
         : ScanOperator(factory, id, driver_sequence, dop, meta_scan_node), _ctx(ctx) {}
 
 bool MetaScanOperator::has_output() const {
@@ -86,6 +85,5 @@ bool MetaScanOperator::is_buffer_full() const {
 void MetaScanOperator::set_buffer_finished() {
     _ctx->get_chunk_buffer().set_finished(_driver_sequence);
 }
-
 
 } // namespace starrocks::pipeline

@@ -9,14 +9,13 @@
 
 namespace starrocks::pipeline {
 
-OlapMetaScanPrepareOperator::OlapMetaScanPrepareOperator(OperatorFactory* factory,
-                                                         int32_t id, 
-                                                         int32_t plan_node_id,
+OlapMetaScanPrepareOperator::OlapMetaScanPrepareOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
                                                          int32_t driver_sequence,
                                                          vectorized::OlapMetaScanNode* const scan_node,
-                                                         MetaScanContextPtr scan_ctx):
-        MetaScanPrepareOperator(factory, id, plan_node_id, driver_sequence, std::string("olap_meta_scan_prepare"), scan_ctx),
-        _scan_node(scan_node){}
+                                                         MetaScanContextPtr scan_ctx)
+        : MetaScanPrepareOperator(factory, id, plan_node_id, driver_sequence, std::string("olap_meta_scan_prepare"),
+                                  scan_ctx),
+          _scan_node(scan_node) {}
 
 Status OlapMetaScanPrepareOperator::_prepare_scan_context(RuntimeState* state) {
     auto meta_scan_ranges = _morsel_queue->olap_scan_ranges();
@@ -35,7 +34,7 @@ OlapMetaScanPrepareOperatorFactory::OlapMetaScanPrepareOperatorFactory(
         int32_t id, int32_t plan_node_id, vectorized::OlapMetaScanNode* const scan_node,
         std::shared_ptr<MetaScanContextFactory> scan_ctx_factory)
         : MetaScanPrepareOperatorFactory(id, plan_node_id, "olap_meta_scan_prepare", scan_ctx_factory),
-        _scan_node(scan_node){}
+          _scan_node(scan_node) {}
 
 OperatorPtr OlapMetaScanPrepareOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
     return std::make_shared<OlapMetaScanPrepareOperator>(this, _id, _plan_node_id, driver_sequence, _scan_node,

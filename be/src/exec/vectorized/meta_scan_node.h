@@ -18,7 +18,8 @@ public:
     ~MetaScanNode() override;
 
     Status init(const TPlanNode& tnode, RuntimeState* state) override;
-    Status prepare(RuntimeState* state) override;;
+    Status prepare(RuntimeState* state) override;
+    ;
     Status close(RuntimeState* state) override;
     Status set_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) override;
 
@@ -44,7 +45,6 @@ private:
     RuntimeProfile::Counter* _io_timer = nullptr;
     RuntimeProfile::Counter* _tablet_counter = nullptr;
 };
-
 
 } // namespace vectorized
 } // namespace starrocks

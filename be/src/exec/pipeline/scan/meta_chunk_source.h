@@ -13,7 +13,7 @@ namespace starrocks::pipeline {
 class MetaChunkSource final : public ChunkSource {
 public:
     MetaChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
-                        MetaScanContextPtr scan_ctx);
+                    MetaScanContextPtr scan_ctx);
 
     ~MetaChunkSource() override;
 

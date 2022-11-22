@@ -6,19 +6,19 @@
 
 #include "column/vectorized_fwd.h"
 #include "runtime/descriptors.h"
+#include "storage/meta_reader.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/segment.h"
 #include "storage/tablet.h"
-#include "storage/meta_reader.h"
-
 
 namespace starrocks::vectorized {
 class Tablet;
 // Params for MetaReader
 // mainly include tablet
 struct OlapMetaReaderParams : MetaReaderParams {
-    OlapMetaReaderParams() = default;;
+    OlapMetaReaderParams() = default;
+    ;
     TabletSharedPtr tablet;
     void check_validation() const {
         if (UNLIKELY(version.first == -1)) {
@@ -30,7 +30,7 @@ struct OlapMetaReaderParams : MetaReaderParams {
 class OlapMetaReader final : public MetaReader {
 public:
     OlapMetaReader();
-    ~OlapMetaReader();
+    ~OlapMetaReader() override;
 
     Status init(const OlapMetaReaderParams& read_params);
 
@@ -57,5 +57,3 @@ private:
 };
 
 } // namespace starrocks::vectorized
-
-

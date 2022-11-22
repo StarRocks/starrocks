@@ -2,7 +2,6 @@
 
 #include "storage/lake_meta_reader.h"
 
-
 #include <vector>
 
 #include "column/array_column.h"
@@ -18,7 +17,6 @@
 namespace starrocks::vectorized {
 
 LakeMetaReader::LakeMetaReader() : MetaReader() {}
-
 
 Status LakeMetaReader::init(const LakeMetaReaderParams& read_params) {
     RETURN_IF_ERROR(_init_params(read_params));
@@ -52,7 +50,7 @@ Status LakeMetaReader::_build_collect_context(const LakeMetaReaderParams& read_p
         std::string col_name = "";
         std::string collect_field = "";
         RETURN_IF_ERROR(SegmentMetaCollecter::parse_field_and_colname(it.second, &collect_field, &col_name));
-        
+
         int32_t index = _tablet_schema->field_index(col_name);
         if (index < 0) {
             std::stringstream ss;
@@ -101,16 +99,16 @@ Status LakeMetaReader::_init_seg_meta_collecters(const LakeMetaReaderParams& par
 }
 
 Status LakeMetaReader::_get_segments(lake::Tablet tablet, const Version& version,
-                                 std::vector<SegmentSharedPtr>* segments) {
+                                     std::vector<SegmentSharedPtr>* segments) {
     size_t footer_size_hint = 16 * 1024;
-    uint32_t seg_id = 0;                                
+    uint32_t seg_id = 0;
     ASSIGN_OR_RETURN(auto rowsets, tablet.get_rowsets(version.second));
     for (const auto& rowset : rowsets) {
         auto rowset_metadata = rowset->metadata();
         segments->reserve(rowset_metadata.segments().size());
         for (const auto& seg_name : rowset_metadata.segments()) {
             ASSIGN_OR_RETURN(auto segment, _tablet->load_segment(seg_name, seg_id++, &footer_size_hint, false));
-            segments->emplace_back(std::move(segment));  
+            segments->emplace_back(std::move(segment));
         }
     }
 
@@ -157,6 +155,5 @@ Status LakeMetaReader::_fill_result_chunk(Chunk* chunk) {
     }
     return Status::OK();
 }
-
 
 } // namespace starrocks::vectorized

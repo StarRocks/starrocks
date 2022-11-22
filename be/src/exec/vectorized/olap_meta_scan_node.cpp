@@ -10,9 +10,7 @@
 namespace starrocks::vectorized {
 
 OlapMetaScanNode::OlapMetaScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
-        : MetaScanNode(pool, tnode, descs){
-}
-
+        : MetaScanNode(pool, tnode, descs) {}
 
 Status OlapMetaScanNode::open(RuntimeState* state) {
     if (!_is_init) {
@@ -70,7 +68,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> OlapMetaScanNode::decomp
             buffer_capacity, buffer_capacity, mem_limit, runtime_state()->chunk_size());
 
     auto scan_ctx_factory = std::make_shared<pipeline::MetaScanContextFactory>(this, dop, shared_morsel_queue,
-                                                                                   std::move(buffer_limiter));
+                                                                               std::move(buffer_limiter));
 
     auto scan_prepare_op = std::make_shared<pipeline::OlapMetaScanPrepareOperatorFactory>(context->next_operator_id(),
                                                                                           id(), this, scan_ctx_factory);
@@ -83,9 +81,8 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> OlapMetaScanNode::decomp
     context->add_pipeline(scan_prepare_pipeline);
 
     auto scan_op = std::make_shared<pipeline::MetaScanOperatorFactory>(context->next_operator_id(), this, dop,
-                                                                           scan_ctx_factory);
+                                                                       scan_ctx_factory);
     return pipeline::decompose_scan_node_to_pipeline(scan_op, this, context);
 }
 
 } // namespace starrocks::vectorized
-

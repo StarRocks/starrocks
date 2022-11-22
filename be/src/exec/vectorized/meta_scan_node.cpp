@@ -2,7 +2,6 @@
 
 #include "exec/vectorized/meta_scan_node.h"
 
-
 namespace starrocks::vectorized {
 
 MetaScanNode::MetaScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
@@ -10,7 +9,7 @@ MetaScanNode::MetaScanNode(ObjectPool* pool, const TPlanNode& tnode, const Descr
           _is_init(false),
           _desc_tbl(descs),
           _meta_scan_node(tnode.meta_scan_node),
-          _tuple_id(tnode.olap_scan_node.tuple_id){}
+          _tuple_id(tnode.olap_scan_node.tuple_id) {}
 
 MetaScanNode::~MetaScanNode() {
     if (runtime_state() != nullptr) {

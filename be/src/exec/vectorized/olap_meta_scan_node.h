@@ -15,7 +15,8 @@ namespace vectorized {
 class OlapMetaScanNode final : public MetaScanNode {
 public:
     OlapMetaScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
-    ~OlapMetaScanNode() override = default;;
+    ~OlapMetaScanNode() override = default;
+    ;
 
     Status open(RuntimeState* state) override;
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
@@ -25,7 +26,7 @@ public:
     }
 
     std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
-        pipeline::PipelineBuilderContext* context) override;
+            pipeline::PipelineBuilderContext* context) override;
 
 private:
     friend class OlapMetaScanner;

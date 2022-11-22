@@ -5,10 +5,9 @@
 #include <unordered_map>
 
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
-#include "gen_cpp/Types_types.h"
-#include "exec/vectorized/meta_scanner.h"
 #include "exec/vectorized/meta_scan_node.h"
-
+#include "exec/vectorized/meta_scanner.h"
+#include "gen_cpp/Types_types.h"
 
 namespace starrocks {
 namespace vectorized {
@@ -19,7 +18,7 @@ class MetaScanNode;
 namespace pipeline {
 class MetaScanContext;
 using MetaScanContextPtr = std::shared_ptr<MetaScanContext>;
-using MetaScannerPtr = std::shared_ptr<vectorized::MetaScanner>; 
+using MetaScannerPtr = std::shared_ptr<vectorized::MetaScanner>;
 
 class MetaScanContext {
 public:
@@ -53,7 +52,7 @@ private:
 class MetaScanContextFactory {
 public:
     MetaScanContextFactory(vectorized::MetaScanNode* const scan_node, int32_t dop, bool shared_morsel_queue,
-                               ChunkBufferLimiterPtr chunk_buffer_limiter)
+                           ChunkBufferLimiterPtr chunk_buffer_limiter)
             : _dop(dop),
               _shared_morsel_queue(shared_morsel_queue),
               _chunk_buffer(BalanceStrategy::kDirect, dop, std::move(chunk_buffer_limiter)),
@@ -76,7 +75,6 @@ private:
 
     std::vector<MetaScanContextPtr> _contexts;
 };
-
 
 } // namespace pipeline
 } // namespace starrocks

@@ -2,9 +2,8 @@
 
 #pragma once
 
-#include "exec/pipeline/scan/meta_scan_prepare_operator.h"
-
 #include "exec/pipeline/scan/meta_scan_context.h"
+#include "exec/pipeline/scan/meta_scan_prepare_operator.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/vectorized/lake_meta_scan_node.h"
 
@@ -20,7 +19,7 @@ private:
     Status _prepare_scan_context(RuntimeState* state) override;
 
     vectorized::LakeMetaScanNode* const _scan_node;
-}; 
+};
 
 class LakeMetaScanPrepareOperatorFactory final : public MetaScanPrepareOperatorFactory {
 public:

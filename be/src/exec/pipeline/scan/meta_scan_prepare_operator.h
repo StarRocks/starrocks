@@ -9,8 +9,8 @@
 namespace starrocks::pipeline {
 class MetaScanPrepareOperator : public SourceOperator {
 public:
-    MetaScanPrepareOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence, 
-        const std::string& operator_name, MetaScanContextPtr scan_ctx);
+    MetaScanPrepareOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
+                            const std::string& operator_name, MetaScanContextPtr scan_ctx);
     ~MetaScanPrepareOperator() override = default;
 
     Status prepare(RuntimeState* state) override;
@@ -24,12 +24,12 @@ public:
 protected:
     virtual Status _prepare_scan_context(RuntimeState* state) = 0;
     MetaScanContextPtr _scan_ctx;
-}; 
+};
 
 class MetaScanPrepareOperatorFactory : public SourceOperatorFactory {
 public:
-    MetaScanPrepareOperatorFactory(int32_t id, int32_t plan_node_id, const std::string& operator_name, 
-                                       std::shared_ptr<MetaScanContextFactory> scan_ctx_factory);
+    MetaScanPrepareOperatorFactory(int32_t id, int32_t plan_node_id, const std::string& operator_name,
+                                   std::shared_ptr<MetaScanContextFactory> scan_ctx_factory);
 
     ~MetaScanPrepareOperatorFactory() override = default;
 

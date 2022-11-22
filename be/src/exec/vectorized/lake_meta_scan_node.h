@@ -4,8 +4,8 @@
 
 #include <gen_cpp/Descriptors_types.h>
 
-#include "exec/vectorized/meta_scan_node.h"
 #include "exec/vectorized/lake_meta_scanner.h"
+#include "exec/vectorized/meta_scan_node.h"
 
 namespace starrocks::vectorized {
 class LakeMetaScanNode final : public MetaScanNode {
@@ -21,10 +21,10 @@ public:
     }
 
     std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
-        pipeline::PipelineBuilderContext* context) override;
+            pipeline::PipelineBuilderContext* context) override;
 
 private:
-    friend class LakeMetaScanner; 
+    friend class LakeMetaScanner;
     std::vector<LakeMetaScanner*> _scanners;
 };
 

@@ -103,9 +103,8 @@ Status OlapMetaReader::_init_seg_meta_collecters(const OlapMetaReaderParams& par
     return Status::OK();
 }
 
-
 Status OlapMetaReader::_get_segments(const TabletSharedPtr& tablet, const Version& version,
-                                 std::vector<SegmentSharedPtr>* segments) {
+                                     std::vector<SegmentSharedPtr>* segments) {
     if (tablet->updates() != nullptr) {
         LOG(INFO) << "Skipped Update tablet";
         return Status::OK();
@@ -176,6 +175,5 @@ Status OlapMetaReader::_fill_result_chunk(Chunk* chunk) {
     }
     return Status::OK();
 }
-
 
 } // namespace starrocks::vectorized

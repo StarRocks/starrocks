@@ -4,14 +4,14 @@
 
 #include "exec/pipeline/noop_sink_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "exec/pipeline/scan/lake_meta_scan_prepare_operator.h"
 #include "exec/pipeline/scan/meta_scan_context.h"
 #include "exec/pipeline/scan/meta_scan_operator.h"
-#include "exec/pipeline/scan/lake_meta_scan_prepare_operator.h"
 
 namespace starrocks::vectorized {
 
 LakeMetaScanNode::LakeMetaScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
-        : MetaScanNode(pool, tnode, descs){}
+        : MetaScanNode(pool, tnode, descs) {}
 
 Status LakeMetaScanNode::open(RuntimeState* state) {
     if (!_is_init) {
@@ -69,7 +69,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> LakeMetaScanNode::decomp
             buffer_capacity, buffer_capacity, mem_limit, runtime_state()->chunk_size());
 
     auto scan_ctx_factory = std::make_shared<pipeline::MetaScanContextFactory>(this, dop, shared_morsel_queue,
-                                                                                   std::move(buffer_limiter));
+                                                                               std::move(buffer_limiter));
 
     auto scan_prepare_op = std::make_shared<pipeline::LakeMetaScanPrepareOperatorFactory>(context->next_operator_id(),
                                                                                           id(), this, scan_ctx_factory);
@@ -82,9 +82,8 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> LakeMetaScanNode::decomp
     context->add_pipeline(scan_prepare_pipeline);
 
     auto scan_op = std::make_shared<pipeline::MetaScanOperatorFactory>(context->next_operator_id(), this, dop,
-                                                                           scan_ctx_factory);
+                                                                       scan_ctx_factory);
     return pipeline::decompose_scan_node_to_pipeline(scan_op, this, context);
 }
-
 
 } // namespace starrocks::vectorized

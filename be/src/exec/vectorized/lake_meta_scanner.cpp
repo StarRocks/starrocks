@@ -6,9 +6,7 @@
 
 namespace starrocks::vectorized {
 
-LakeMetaScanner::LakeMetaScanner(LakeMetaScanNode* parent)
-        : _parent(parent){}
-  
+LakeMetaScanner::LakeMetaScanner(LakeMetaScanNode* parent) : _parent(parent) {}
 
 Status LakeMetaScanner::init(RuntimeState* runtime_state, const MetaScannerParams& params) {
     _runtime_state = runtime_state;

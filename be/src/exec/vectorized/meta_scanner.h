@@ -6,9 +6,9 @@
 
 #include "common/status.h"
 #include "exec/olap_utils.h"
+#include "exec/vectorized/meta_scan_node.h"
 #include "runtime/runtime_state.h"
 #include "storage/meta_reader.h"
-#include "exec/vectorized/meta_scan_node.h"
 
 namespace starrocks::vectorized {
 
@@ -50,5 +50,3 @@ protected:
 };
 
 } // namespace starrocks::vectorized
-
-

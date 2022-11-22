@@ -9,13 +9,12 @@
 #include "exec/vectorized/meta_scan_node.h"
 #include "gen_cpp/Types_types.h"
 
-
 namespace starrocks::pipeline {
 
 class MetaScanOperatorFactory final : public ScanOperatorFactory {
 public:
     MetaScanOperatorFactory(int32_t id, ScanNode* meta_scan_node, size_t dop,
-                                std::shared_ptr<MetaScanContextFactory> ctx_factory);
+                            std::shared_ptr<MetaScanContextFactory> ctx_factory);
 
     ~MetaScanOperatorFactory() override = default;
 
@@ -31,8 +30,8 @@ private:
 
 class MetaScanOperator final : public ScanOperator {
 public:
-    MetaScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, int32_t dop,
-                         ScanNode* scan_node, MetaScanContextPtr scan_ctx);
+    MetaScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, int32_t dop, ScanNode* scan_node,
+                     MetaScanContextPtr scan_ctx);
 
     ~MetaScanOperator() override = default;
 

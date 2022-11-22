@@ -37,9 +37,6 @@ Status SegmentMetaCollecter::parse_field_and_colname(const std::string& item, st
 
 MetaReader::MetaReader() : _is_init(false), _has_more(false) {}
 
-MetaReader::~MetaReader() {
-}
-
 Status MetaReader::open() {
     return Status::OK();
 }
