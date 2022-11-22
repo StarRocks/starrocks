@@ -155,7 +155,7 @@ template <typename T>
 void PInternalServiceImplBase<T>::exec_plan_fragment(google::protobuf::RpcController* cntl_base,
                                                      const PExecPlanFragmentRequest* request,
                                                      PExecPlanFragmentResult* response,
-                                                     google::protobuf::Closure* done) {                                              
+                                                     google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
     auto* cntl = static_cast<brpc::Controller*>(cntl_base);
     if (k_starrocks_exit.load(std::memory_order_relaxed)) {
@@ -175,7 +175,7 @@ template <typename T>
 void PInternalServiceImplBase<T>::exec_batch_plan_fragments(google::protobuf::RpcController* cntl_base,
                                                             const PExecBatchPlanFragmentsRequest* request,
                                                             PExecBatchPlanFragmentsResult* response,
-                                                            google::protobuf::Closure* done) {                                                           
+                                                            google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
     auto* cntl = static_cast<brpc::Controller*>(cntl_base);
     if (k_starrocks_exit.load(std::memory_order_relaxed)) {
@@ -302,7 +302,6 @@ Status PInternalServiceImplBase<T>::_exec_batch_plan_fragments(brpc::Controller*
 template <typename T>
 Status PInternalServiceImplBase<T>::_exec_plan_fragment_by_pipeline(const TExecPlanFragmentParams& t_common_param,
                                                                     const TExecPlanFragmentParams& t_unique_request) {
-
     pipeline::FragmentExecutor fragment_executor;
     auto status = fragment_executor.prepare(_exec_env, t_common_param, t_unique_request);
     if (status.ok()) {
