@@ -16,6 +16,7 @@ import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.ShowResourceGroupStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.BackendCoreStat;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -25,6 +26,8 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.util.List;
+
+import static com.starrocks.sql.optimizer.statistics.CachedStatisticStorageTest.DEFAULT_CREATE_TABLE_TEMPLATE;
 
 public class ShowCreateViewStmtTest {
 
@@ -42,6 +45,10 @@ public class ShowCreateViewStmtTest {
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
+
+        starRocksAssert.withDatabase(StatsConstants.STATISTICS_DB_NAME)
+                .useDatabase(StatsConstants.STATISTICS_DB_NAME)
+                .withTable(DEFAULT_CREATE_TABLE_TEMPLATE);
 
         starRocksAssert.withDatabase("test").useDatabase("test")
                 .withTable("CREATE TABLE test.tbl1\n" +
@@ -147,9 +154,12 @@ public class ShowCreateViewStmtTest {
                 .replaceAll("VARCHAR\\(\\d+\\)", "VARCHAR")
                 .replaceAll(",\\s*(true|false)]", "");
         String snippet = "  0:UNION\n" +
+                "  |  output exprs:\n" +
+                "  |      VARCHAR | VARCHAR | VARCHAR | VARCHAR\n" +
                 "  |  child exprs:\n" +
                 "  |      VARCHAR | VARCHAR | VARCHAR | VARCHAR\n" +
-                "  |      VARCHAR | VARCHAR | VARCHAR | VARCHAR";
+                "  |      VARCHAR | VARCHAR | VARCHAR | VARCHAR\n" +
+                "  |  pass-through-operands: all";
         Assert.assertTrue(plan.contains(snippet));
 
         String dropViewSql = "drop view if exists v2";
