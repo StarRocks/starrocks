@@ -302,6 +302,11 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
 }
 
 void ScanOperator::_merge_chunk_source_profiles() {
+    auto query_ctx = _query_ctx.lock();
+    DCHECK(query_ctx != nullptr);
+    if (!query_ctx->is_report_profile()) {
+        return;
+    }
     std::vector<RuntimeProfile*> profiles(_chunk_source_profiles.size());
     for (auto i = 0; i < _chunk_source_profiles.size(); i++) {
         profiles[i] = _chunk_source_profiles[i].get();

@@ -214,6 +214,9 @@ public:
         return _get_latest_applied_version(latest_applied_version);
     }
 
+    void to_rowset_meta_pb(const std::vector<RowsetMetaSharedPtr>& rowset_metas,
+                           std::vector<RowsetMetaPB>& rowset_metas_pb);
+
 private:
     friend class Tablet;
     friend class PrimaryIndex;

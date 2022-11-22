@@ -41,7 +41,7 @@ static void setup_profile_hierarchy(RuntimeState* runtime_state, const PipelineP
 
 static void setup_profile_hierarchy(const PipelinePtr& pipeline, const DriverPtr& driver) {
     pipeline->runtime_profile()->add_child(driver->runtime_profile(), true, nullptr);
-    auto* dop_counter = ADD_COUNTER(pipeline->runtime_profile(), "DegreeOfParallelism", TUnit::UNIT);
+    auto* dop_counter = ADD_COUNTER_SKIP_MERGE(pipeline->runtime_profile(), "DegreeOfParallelism", TUnit::UNIT);
     COUNTER_SET(dop_counter, static_cast<int64_t>(pipeline->source_operator_factory()->degree_of_parallelism()));
     auto* total_dop_counter = ADD_COUNTER(pipeline->runtime_profile(), "TotalDegreeOfParallelism", TUnit::UNIT);
     COUNTER_SET(total_dop_counter, dop_counter->value());
@@ -110,19 +110,18 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     // initialize query's deadline
     _query_ctx->extend_delivery_lifetime();
     _query_ctx->extend_query_lifetime();
+    if (query_options.__isset.is_report_success && query_options.is_report_success) {
+        _query_ctx->set_report_profile();
+    }
+    if (query_options.__isset.pipeline_profile_level) {
+        _query_ctx->set_profile_level(query_options.pipeline_profile_level);
+    }
 
     auto fragment_ctx = std::make_unique<FragmentContext>();
 
     fragment_ctx->set_query_id(query_id);
     fragment_ctx->set_fragment_instance_id(fragment_instance_id);
     fragment_ctx->set_fe_addr(coord);
-
-    if (query_options.__isset.is_report_success && query_options.is_report_success) {
-        fragment_ctx->set_report_profile();
-    }
-    if (query_options.__isset.pipeline_profile_level) {
-        fragment_ctx->set_profile_level(query_options.pipeline_profile_level);
-    }
 
     LOG(INFO) << "Prepare(): query_id=" << print_id(query_id)
               << " fragment_instance_id=" << print_id(params.fragment_instance_id) << " backend_num=" << backend_num;

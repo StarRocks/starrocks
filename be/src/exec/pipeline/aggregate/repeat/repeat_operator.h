@@ -7,6 +7,7 @@
 #include "common/global_types.h"
 #include "exec/pipeline/operator.h"
 #include "exprs/expr_context.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks {
 class TupleDescriptor;
@@ -144,6 +145,8 @@ public:
                                                 _repeat_times_last, _column_null, _grouping_columns, _grouping_list,
                                                 _output_tuple_id, _tuple_desc, _conjunct_ctxs);
     }
+
+    Status prepare(RuntimeState* state) override;
 
 private:
     // Fields moved from RepeatNode.
