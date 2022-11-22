@@ -32,8 +32,9 @@ class Column;
 // And that task is almost impossible.
 class ColumnExprPredicate : public ColumnPredicate {
 public:
-    ColumnExprPredicate(TypeInfoPtr type_info, ColumnId column_id, RuntimeState* state, ExprContext* expr_ctx,
-                        const SlotDescriptor* slot_desc);
+    static StatusOr<ColumnExprPredicate*> make_column_expr_predicate(TypeInfoPtr type_info, ColumnId column_id,
+                                                                     RuntimeState* state, ExprContext* expr_ctx,
+                                                                     const SlotDescriptor* slot_desc);
 
     ~ColumnExprPredicate() override;
 
@@ -60,13 +61,16 @@ public:
                                               std::vector<const ColumnExprPredicate*>* output) const;
 
 private:
-    void _add_expr_ctxs(std::vector<ExprContext*> expr_ctxs);
+    ColumnExprPredicate(TypeInfoPtr type_info, ColumnId column_id, RuntimeState* state,
+                        const SlotDescriptor* slot_desc);
+
+    Status _add_expr_ctxs(const std::vector<ExprContext*>& expr_ctxs);
 
     // Take ownership of this expression, not necessary to clone
-    void _add_expr_ctx(std::unique_ptr<ExprContext> expr_ctx);
+    Status _add_expr_ctx(std::unique_ptr<ExprContext> expr_ctx);
 
     // Share the ownership, is necessary to clone it
-    void _add_expr_ctx(ExprContext* expr_ctx);
+    Status _add_expr_ctx(ExprContext* expr_ctx);
 
     ObjectPool _pool;
     RuntimeState* _state;
