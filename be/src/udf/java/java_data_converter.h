@@ -51,13 +51,12 @@ private:
 
 class JavaDataTypeConverter {
 public:
-    static jobject convert_to_states(uint8_t** data, size_t offset, int num_rows);
-    static jobject convert_to_states_with_filter(uint8_t** data, size_t offset, const uint8_t* filter, int num_rows);
+    static jobject convert_to_states(FunctionContext* ctx, uint8_t** data, size_t offset, int num_rows);
+    static jobject convert_to_states_with_filter(FunctionContext* ctx, uint8_t** data, size_t offset,
+                                                 const uint8_t* filter, int num_rows);
 
-    static void convert_to_boxed_array(FunctionContext* ctx, std::vector<DirectByteBuffer>* buffers,
-                                       const Column** columns, int num_cols, int num_rows, std::vector<jobject>* res);
-    static void convert_to_native_array(FunctionContext* ctx, std::vector<DirectByteBuffer>* buffers,
-                                        const Column** columns, int num_cols, int num_rows, std::vector<jobject>* res);
+    static Status convert_to_boxed_array(FunctionContext* ctx, std::vector<DirectByteBuffer>* buffers,
+                                         const Column** columns, int num_cols, int num_rows, std::vector<jobject>* res);
 };
 
 template <bool handle_null>
