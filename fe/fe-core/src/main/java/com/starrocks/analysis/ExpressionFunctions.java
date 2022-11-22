@@ -92,11 +92,22 @@ public enum ExpressionFunctions {
             }
 
             List<ScalarType> argTypes = new ArrayList<>();
+            ScalarType returnType = (ScalarType) fn.getReturnType();
             for (Type type : fn.getArgs()) {
-                argTypes.add((ScalarType) type);
+                if (type.isIntegerType()) {
+                    // Because branch 2.3 introduced a more refined four arithmetic type deduction in #4691,
+                    // but there are some non-Query Statements that also require constant expression calculation.
+                    // For example, SetStatement still uses the old Analyzer and the old version of constant calculation
+                    // in 2.3, and the old version of the constant calculation does not support low-precision INT,
+                    // so the old version of the constant calculation is adapted here.
+                    argTypes.add(Type.BIGINT);
+                    returnType = Type.BIGINT;
+                } else {
+                    argTypes.add((ScalarType) type);
+                }
             }
             FEFunctionSignature signature = new FEFunctionSignature(fn.functionName(),
-                    argTypes.toArray(new ScalarType[argTypes.size()]), (ScalarType) fn.getReturnType());
+                    argTypes.toArray(new ScalarType[argTypes.size()]), returnType);
             FEFunctionInvoker invoker = getFunction(signature);
             if (invoker != null) {
                 try {
