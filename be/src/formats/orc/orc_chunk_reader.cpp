@@ -1293,11 +1293,11 @@ Status OrcChunkReader::_init_include_columns(const std::unique_ptr<OrcMapping>& 
     return Status::OK();
 }
 
-const std::vector<bool>& OrcChunkReader::_get_selected_column_id() {
+const std::vector<bool>& OrcChunkReader::TEST_get_selected_column_id_list() {
     return _row_reader->getSelectedColumns();
 }
 
-const std::vector<bool>& OrcChunkReader::_get_lazyload_column_id() {
+const std::vector<bool>& OrcChunkReader::TEST_get_lazyload_column_id_list() {
     return _row_reader->getLazyLoadColumns();
 }
 
