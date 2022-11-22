@@ -96,12 +96,20 @@ StatusOr<std::unique_ptr<OrcMapping>> OrcMappingFactory::build_mapping(
         const bool use_orc_column_names, const std::vector<std::string>* hive_column_names) {
     std::unique_ptr<OrcMapping> orc_mapping = std::make_unique<OrcMapping>();
     Status res;
+    // All mapping relation will only affect the first level,
+    // Struct subfields still mapping according to subfield name.
     if (use_orc_column_names) {
-        // Only used for broker load and UT test now
-        res = _init_orc_mapping(orc_mapping, slot_descs, root_orc_type, case_sensitve, use_orc_column_names);
+        // If enable use_orc_column_names[Default is false], in first level, we will use column name to
+        // build mapping relation.
+        // This function is used for UT and Broker Load now.
+        res = _init_orc_mapping_with_orc_column_names(orc_mapping, slot_descs, root_orc_type, case_sensitve);
     } else {
-        res = _init_orc_mapping(orc_mapping, slot_descs, root_orc_type, case_sensitve, use_orc_column_names,
-                                hive_column_names);
+        // Use the column names in hive_column_names to establish a mapping,
+        // the first column name in hive_column_names is mapped to the first column in orc, and so on.
+        // NOTICE: The column order in SlotDescriptor[] is different from hive_column_names, so we need build
+        // two mapping in below function.
+        res = _init_orc_mapping_with_hive_column_names(orc_mapping, slot_descs, root_orc_type, case_sensitve,
+                                                       hive_column_names);
     }
     if (!res.ok()) {
         return res;
@@ -109,12 +117,10 @@ StatusOr<std::unique_ptr<OrcMapping>> OrcMappingFactory::build_mapping(
     return orc_mapping;
 }
 
-Status OrcMappingFactory::_init_orc_mapping(std::unique_ptr<OrcMapping>& mapping,
-                                            const std::vector<SlotDescriptor*>& slot_descs,
-                                            const orc::Type& orc_root_type, const bool case_sensitve,
-                                            const bool use_orc_column_names) {
-    DCHECK(use_orc_column_names);
-
+Status OrcMappingFactory::_init_orc_mapping_with_orc_column_names(std::unique_ptr<OrcMapping>& mapping,
+                                                                  const std::vector<SlotDescriptor*>& slot_descs,
+                                                                  const orc::Type& orc_root_type,
+                                                                  const bool case_sensitve) {
     // build mapping for orc [orc field name -> pos in orc]
     std::unordered_map<std::string, size_t> orc_fieldname_2_pos;
     for (size_t i = 0; i < orc_root_type.getSubtypeCount(); i++) {
@@ -150,12 +156,11 @@ Status OrcMappingFactory::_init_orc_mapping(std::unique_ptr<OrcMapping>& mapping
     return Status::OK();
 }
 
-Status OrcMappingFactory::_init_orc_mapping(std::unique_ptr<OrcMapping>& mapping,
-                                            const std::vector<SlotDescriptor*>& slot_descs,
-                                            const orc::Type& orc_root_type, const bool case_sensitve,
-                                            const bool use_orc_column_names,
-                                            const std::vector<std::string>* hive_column_names) {
-    DCHECK(!use_orc_column_names);
+Status OrcMappingFactory::_init_orc_mapping_with_hive_column_names(std::unique_ptr<OrcMapping>& mapping,
+                                                                   const std::vector<SlotDescriptor*>& slot_descs,
+                                                                   const orc::Type& orc_root_type,
+                                                                   const bool case_sensitve,
+                                                                   const std::vector<std::string>* hive_column_names) {
     DCHECK(hive_column_names != nullptr);
 
     // build mapping for [SlotDescriptor's name -> SlotDescriptor' pos]
@@ -180,6 +185,7 @@ Status OrcMappingFactory::_init_orc_mapping(std::unique_ptr<OrcMapping>& mapping
         if (it == slot_descriptor_name_2_slot_descriptor_pos.end()) {
             // The column name in hive_column_names has no corresponding column name in slot_description
             // TODO(SmithCruise) This situtaion only happended in UT now, I'm not sure this situtaion will happend in production.
+            // So here we don't report an error but skip it directly, just in case.
             continue;
             //  auto s = strings::Substitute("OrcMappingFactory::_init_orc_mapping not found column name $0", find_column_name);
             //  return Status::NotFound(s);
