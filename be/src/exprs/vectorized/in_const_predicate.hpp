@@ -132,7 +132,7 @@ public:
                 return Status::InternalError("VectorizedInPredicate type not same");
             }
 
-            ColumnPtr value = _children[i]->evaluate(context, nullptr);
+            ASSIGN_OR_RETURN(ColumnPtr value, _children[i]->evaluate_checked(context, nullptr));
             if (!value->is_constant() && !value->only_null()) {
                 return Status::InternalError("VectorizedInPredicate value not const");
             }
@@ -271,8 +271,8 @@ public:
         return result;
     }
 
-    ColumnPtr evaluate_with_filter(ExprContext* context, vectorized::Chunk* ptr, uint8_t* filter) override {
-        ColumnPtr lhs = _children[0]->evaluate(context, ptr);
+    StatusOr<ColumnPtr> evaluate_with_filter(ExprContext* context, vectorized::Chunk* ptr, uint8_t* filter) override {
+        ASSIGN_OR_RETURN(ColumnPtr lhs, _children[0]->evaluate_checked(context, ptr));
         if (!_eq_null && ColumnHelper::count_nulls(lhs) == lhs->size()) {
             return ColumnHelper::create_const_null_column(lhs->size());
         }
@@ -307,7 +307,7 @@ public:
         }
     }
 
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {
         return evaluate_with_filter(context, ptr, nullptr);
     }
 

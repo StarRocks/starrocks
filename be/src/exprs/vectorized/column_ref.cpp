@@ -35,7 +35,7 @@ std::string ColumnRef::debug_string() const {
     return out.str();
 }
 
-ColumnPtr ColumnRef::evaluate(ExprContext* context, Chunk* ptr) {
+StatusOr<ColumnPtr> ColumnRef::evaluate_checked(ExprContext* context, Chunk* ptr) {
     return get_column(this, ptr);
 }
 
