@@ -56,59 +56,6 @@ constexpr uint8_t KEY_NULL_LAST_MARKER = 0xFE;
 // Used to represent maximal value for that field
 constexpr uint8_t KEY_MAXIMAL_MARKER = 0xFF;
 
-// Encode one row into binary according given num_keys.
-// A cell will be encoded in the format of a marker and encoded content.
-// When function encoding row, if any cell isn't found in row, this function will
-// fill a marker and return. If padding_minimal is true, KEY_MINIMAL_MARKER will
-// be added, if padding_minimal is false, KEY_MAXIMAL_MARKER will be added.
-// If all num_keys are found in row, no marker will be added.
-template <typename RowType, bool null_first = true>
-void encode_key_with_padding(std::string* buf, const RowType& row, size_t num_keys, bool padding_minimal) {
-    for (auto cid = 0; cid < num_keys; cid++) {
-        auto field = row.schema()->column(cid);
-        if (field == nullptr) {
-            if (padding_minimal) {
-                buf->push_back(KEY_MINIMAL_MARKER);
-            } else {
-                buf->push_back(KEY_MAXIMAL_MARKER);
-            }
-            break;
-        }
-
-        auto cell = row.cell(cid);
-        if (cell.is_null()) {
-            if (null_first) {
-                buf->push_back(KEY_NULL_FIRST_MARKER);
-            } else {
-                buf->push_back(KEY_NULL_LAST_MARKER);
-            }
-            continue;
-        }
-        buf->push_back(KEY_NORMAL_MARKER);
-        field->encode_ascending(cell.cell_ptr(), buf);
-    }
-}
-
-// Encode one row into binary according given num_keys.
-// Client call this function must assure that row contains the first
-// num_keys columns.
-template <typename RowType, bool null_first = true>
-void encode_key(std::string* buf, const RowType& row, size_t num_keys) {
-    for (auto cid = 0; cid < num_keys; cid++) {
-        auto cell = row.cell(cid);
-        if (cell.is_null()) {
-            if (null_first) {
-                buf->push_back(KEY_NULL_FIRST_MARKER);
-            } else {
-                buf->push_back(KEY_NULL_LAST_MARKER);
-            }
-            continue;
-        }
-        buf->push_back(KEY_NORMAL_MARKER);
-        row.schema()->column(cid)->encode_ascending(cell.cell_ptr(), buf);
-    }
-}
-
 // Encode a segment short key indices to one ShortKeyPage. This version
 // only accepts binary key, client should assure that input key is sorted,
 // otherwise error could happens. This builder would arrange the page body in the

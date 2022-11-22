@@ -93,35 +93,9 @@ public:
     // It's a critical function, used by ZoneMapIndexWriter to serialize max and min value
     std::string to_string(const char* src) const { return _type_info->to_string(src); }
 
-    template <typename CellType>
-    std::string debug_string(const CellType& cell) const {
-        std::stringstream ss;
-        if (cell.is_null()) {
-            ss << "(null)";
-        } else {
-            ss << _type_info->to_string(cell.cell_ptr());
-        }
-        return ss.str();
-    }
-
     LogicalType type() const { return _type_info->type(); }
     const TypeInfoPtr& type_info() const { return _type_info; }
     bool is_nullable() const { return _is_nullable; }
-
-    // similar to `full_encode_ascending`, but only encode part (the first `index_size` bytes) of the value.
-    // only applicable to string type
-    void encode_ascending(const void* value, std::string* buf) const {
-        _key_coder->encode_ascending(value, _index_size, buf);
-    }
-
-    // encode the provided `value` into `buf`.
-    void full_encode_ascending(const void* value, std::string* buf) const {
-        _key_coder->full_encode_ascending(value, buf);
-    }
-
-    Status decode_ascending(Slice* encoded_key, uint8_t* cell_ptr, MemPool* pool) const {
-        return _key_coder->decode_ascending(encoded_key, _index_size, cell_ptr, pool);
-    }
 
     std::string to_zone_map_string(const char* value) const {
         switch (type()) {
