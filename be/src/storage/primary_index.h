@@ -131,9 +131,10 @@ public:
 
     size_t key_size() { return _key_size; }
 
-private:
+protected:
     void _set_schema(const VectorizedSchema& pk_schema);
 
+private:
     Status _do_load(Tablet* tablet);
 
     Status _build_persistent_values(uint32_t rssid, uint32_t rowid_start, uint32_t idx_begin, uint32_t idx_end,
@@ -160,12 +161,15 @@ private:
     void _replace_persistent_index(uint32_t rssid, uint32_t rowid_start, const Column& pks,
                                    const uint32_t max_src_rssid, vector<uint32_t>* deletes);
 
+protected:
     std::mutex _lock;
     std::atomic<bool> _loaded{false};
     Status _status;
+    int64_t _tablet_id = 0;
+
+private:
     size_t _key_size = 0;
     int64_t _table_id = 0;
-    int64_t _tablet_id = 0;
     VectorizedSchema _pk_schema;
     LogicalType _enc_pk_type = TYPE_UNKNOWN;
     std::unique_ptr<HashIndex> _pkey_to_rssid_rowid;

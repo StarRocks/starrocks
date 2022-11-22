@@ -60,6 +60,9 @@ public:
     int64_t version = 0;
     KVStore* meta = nullptr;
 
+    // used for lake table
+    bool is_lake_table = false;
+
     // REQUIRED (null is not allowed)
     OlapReaderStatistics* stats = nullptr;
 

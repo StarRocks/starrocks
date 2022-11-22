@@ -17,6 +17,7 @@
 #include "common/statusor.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "storage/lake/types_fwd.h"
+#include "storage/olap_common.h"
 
 namespace starrocks::lake {
 class Rowset {
@@ -26,6 +27,12 @@ public:
     ~Rowset();
 
     [[nodiscard]] StatusOr<ChunkIteratorPtr> read(const VectorizedSchema& schema, const RowsetReadOptions& options);
+
+    [[nodiscard]] StatusOr<std::vector<ChunkIteratorPtr>> get_each_segment_iterator(
+            const vectorized::VectorizedSchema& schema, OlapReaderStatistics* stats);
+
+    [[nodiscard]] StatusOr<std::vector<ChunkIteratorPtr>> get_each_segment_iterator_with_delvec(
+            const vectorized::VectorizedSchema& schema, const int64_t version, OlapReaderStatistics* stats);
 
     [[nodiscard]] bool is_overlapped() const { return metadata().overlapped(); }
 

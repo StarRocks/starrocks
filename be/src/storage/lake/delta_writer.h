@@ -27,7 +27,7 @@ class SlotDescriptor;
 
 namespace starrocks {
 class Chunk;
-}
+} // namespace starrocks::vectorized
 
 namespace starrocks::lake {
 

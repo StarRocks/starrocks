@@ -38,6 +38,7 @@
 #include "storage/column_predicate.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/del_vector.h"
+#include "storage/lake/update_manager.h"
 #include "storage/olap_runtime_range_pruner.hpp"
 #include "storage/projection_iterator.h"
 #include "storage/range.h"
@@ -320,8 +321,14 @@ SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, VectorizedSch
         TabletSegmentId tsid;
         tsid.tablet_id = _opts.tablet_id;
         tsid.segment_id = _opts.rowset_id + segment_id();
-        _get_del_vec_st =
-                StorageEngine::instance()->update_manager()->get_del_vec(_opts.meta, tsid, _opts.version, &_del_vec);
+        if (_opts.is_lake_table) {
+            // load delvec from meta file
+            _get_del_vec_st =
+                    ExecEnv::GetInstance()->lake_update_manager()->get_del_vec(tsid, _opts.version, &_del_vec);
+        } else {
+            _get_del_vec_st = StorageEngine::instance()->update_manager()->get_del_vec(_opts.meta, tsid, _opts.version,
+                                                                                       &_del_vec);
+        }
         if (_get_del_vec_st.ok()) {
             if (_del_vec && _del_vec->empty()) {
                 _del_vec.reset();

@@ -75,6 +75,7 @@
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/starlet_location_provider.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/lake/update_manager.h"
 #include "storage/page_cache.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_schema_map.h"
@@ -302,10 +303,14 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
         }
 #if defined(USE_STAROS) && !defined(BE_TEST)
         _lake_location_provider = new lake::StarletLocationProvider();
-        _lake_tablet_manager = new lake::TabletManager(_lake_location_provider, config::lake_metadata_cache_limit);
+        _lake_update_manager = new lake::UpdateManager();
+        _lake_tablet_manager = new lake::TabletManager(_lake_location_provider, _lake_update_manager,
+                                                       config::lake_metadata_cache_limit);
 #elif defined(BE_TEST)
         _lake_location_provider = new lake::FixedLocationProvider(_store_paths.front().path);
-        _lake_tablet_manager = new lake::TabletManager(_lake_location_provider, config::lake_metadata_cache_limit);
+        _lake_update_manager = new lake::UpdateManager();
+        _lake_tablet_manager = new lake::TabletManager(_lake_location_provider, _lake_update_manager,
+                                                       config::lake_metadata_cache_limit);
 #endif
 
         // agent_server is not needed for cn
@@ -497,6 +502,7 @@ void ExecEnv::_destroy() {
     SAFE_DELETE(_external_scan_context_mgr);
     SAFE_DELETE(_lake_tablet_manager);
     SAFE_DELETE(_lake_location_provider);
+    SAFE_DELETE(_lake_update_manager);
     SAFE_DELETE(_cache_mgr);
     _metrics = nullptr;
 

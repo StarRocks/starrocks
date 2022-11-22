@@ -21,9 +21,9 @@
 
 namespace starrocks {
 class Chunk;
-} // namespace starrocks
+class Column;
 
-namespace starrocks::lake {
+namespace lake {
 
 class Tablet;
 
@@ -44,6 +44,9 @@ public:
     // order, and the elements among all chunks written before `flush()` are also
     // arranged in ascending order.
     virtual Status write(const starrocks::Chunk& data) = 0;
+
+    // Write del file to this rowset. PK table only
+    virtual Status flush_del_file(const vectorized::Column& deletes) = 0;
 
     // Flushes this writer and forces any buffered bytes to be written out to segment files.
     // There is no order guarantee between the data written before a `flush()`
@@ -71,4 +74,5 @@ public:
     virtual int64_t num_rows() const = 0;
 };
 
-} // namespace starrocks::lake
+} // namespace lake
+} // namespace starrocks

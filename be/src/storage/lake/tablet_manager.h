@@ -36,6 +36,7 @@ namespace starrocks::lake {
 
 template <typename T>
 class MetadataIterator;
+class UpdateManager;
 using TabletMetadataIter = MetadataIterator<TabletMetadataPtr>;
 using TxnLogIter = MetadataIterator<TxnLogPtr>;
 
@@ -47,7 +48,7 @@ public:
     // this TabletManager.
     // |cache_capacity| is the max number of bytes can be used by the
     // metadata cache.
-    explicit TabletManager(LocationProvider* location_provider, int64_t cache_capacity);
+    explicit TabletManager(LocationProvider* location_provider, UpdateManager* update_mgr, int64_t cache_capacity);
 
     ~TabletManager();
 
@@ -104,6 +105,10 @@ public:
 
     Status delete_tablet_metadata_lock(int64_t tablet_id, int64_t version, int64_t expire_time);
 
+    // put tablet_metadata and delvec to meta file. Only in PK table
+    Status put_tablet_metadata_delvec(const TabletMetadata& metadata,
+                                      const std::vector<std::pair<std::string, DelVectorPtr>>& del_vecs);
+
     void prune_metacache();
 
     // TODO: remove this method
@@ -123,6 +128,8 @@ public:
 
     std::string segment_location(int64_t tablet_id, std::string_view segment_name) const;
 
+    std::string del_location(int64_t tablet_id, std::string_view del_name) const;
+
     std::string tablet_metadata_lock_location(int64_t tablet_id, int64_t version, int64_t expire_time) const;
 
     const LocationProvider* location_provider() const { return _location_provider; }
@@ -131,6 +138,8 @@ public:
 
     // Return a set of tablet that owned by this TabletManager.
     std::set<int64_t> owned_tablets();
+
+    UpdateManager* update_mgr();
 
 private:
     using CacheValue = std::variant<TabletMetadataPtr, TxnLogPtr, TabletSchemaPtr, SegmentPtr>;
@@ -155,6 +164,7 @@ private:
 
     LocationProvider* _location_provider;
     std::unique_ptr<Cache> _metacache;
+    UpdateManager* _update_mgr;
 
     bthread_t _gc_checker_tid;
 };
