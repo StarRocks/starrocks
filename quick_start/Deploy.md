@@ -20,7 +20,8 @@
 |软件要求|<ul><li>所有节点需安装 Java Development Kit（1.8 或以上，推荐使用1.8）。</li> <li>客户端节点需安装 MySQL 客户端（5.5 或以上）。</li> </ul>|  |
 |系统环境|<ul><li>集群时钟需保持同步。 </li> <li> 用户需要有设置 <code>ulimit -n</code> 权限。 </li> </ul> | |
 
-> 说明
+> **说明**
+>
 > 依据不同的工作负载复杂性，StarRocks 每个 CPU 线程每秒可以处理 10M 至 100M 数据。您可以据此估计集群中需要多少 CPU 线程能够满足您的要求。而 StarRocks 在存储数据时利用列存储和压缩，可以达到 4-10 倍的压缩比，您可以使用该数据来估计集群所需的存储量。
 
 其他系统参数配置：
@@ -37,11 +38,7 @@ echo 0 | sudo tee /proc/sys/vm/swappiness
 echo 1 | sudo tee /proc/sys/vm/overcommit_memory
 ```
 
-## 部署 FE 节点
-
-本小节介绍如何配置部署 Frontend (FE) 节点。FE 是 StarRocks 的前端节点，负责管理元数据，管理客户端连接，进行查询规划，查询调度等工作。
-
-### 下载并解压安装包
+## 下载并解压安装包
 
 [下载](https://www.starrocks.com/zh-CN/download/community) StarRocks 并解压二进制安装包。
 
@@ -49,9 +46,15 @@ echo 1 | sudo tee /proc/sys/vm/overcommit_memory
 tar -xzvf StarRocks-x.x.x.tar.gz
 ```
 
-> 注意
+> **注意**
 >
 > 将以上文件名修改为下载的二进制安装包名。
+
+下载完成后，将安装包分发至各节点。
+
+## 部署 FE 节点
+
+本小节介绍如何配置部署 Frontend (FE) 节点。FE 是 StarRocks 的前端节点，负责管理元数据，管理客户端连接，进行查询规划，查询调度等工作。
 
 ### 配置 FE 节点
 
@@ -67,7 +70,7 @@ cd StarRocks-x.x.x/fe
 
 修改 FE 配置文件 **conf/fe.conf**。以下示例仅添加元数据目录和 Java 目录，以保证部署成功。如需在生产环境中对集群进行详细优化配置，参考 [FE 参数配置](../administration/Configuration.md#FE-配置项)。
 
-> 注意
+> **注意**
 >
 > 当一台机器拥有多个 IP 地址时，需要在 FE 配置文件 **conf/fe.conf** 中设置 `priority_networks`，为该节点设定唯一 IP。
 
@@ -83,7 +86,9 @@ meta_dir = ${STARROCKS_HOME}/meta
 JAVA_HOME = /path/to/your/java
 ```
 
-> 注意：将以上路径修改为 Java 所在的本地路径。
+> **注意**
+>
+> 将以上路径修改为 Java 所在的本地路径。
 
 ### 创建元数据路径
 
@@ -93,7 +98,9 @@ JAVA_HOME = /path/to/your/java
 mkdir -p meta
 ```
 
-> 注意：该路径需要与 **conf/fe.conf** 文件中配置路径保持一致。
+> **注意**
+>
+> 该路径需要与 **conf/fe.conf** 文件中配置路径保持一致。
 
 ### 启动 FE 节点
 
@@ -120,7 +127,8 @@ bin/start_fe.sh --daemon
 * 通过运行 `jps` 命令查看 Java 进程，确认 **StarRocksFE** 进程是否存在。
 * 通过在浏览器访问 `FE ip:http_port`（默认 `http_port` 为 `8030`），进入 StarRocks 的 WebUI，用户名为 `root`，密码为空。
 
-> 说明
+> **说明**
+>
 > 如果由于端口被占用导致 FE 启动失败，可修改配置文件 **conf/fe.conf** 中的端口号 `http_port`。
 
 ### 添加 FE 节点
@@ -133,7 +141,8 @@ bin/start_fe.sh --daemon
 mysql -h 127.0.0.1 -P9030 -uroot
 ```
 
-> 说明
+> **说明**
+>
 > `root` 为 StarRocks 默认内置 user，密码为空，端口为 **fe/conf/fe.conf** 中的 `query_port` 配置项，默认值为 `9030`。
 
 查看 FE 状态。
@@ -188,23 +197,9 @@ StarRocks 的 FE 节点支持 HA 模型部署，以保证集群的高可用。�
 ./bin/stop_fe.sh --daemon
 ```
 
-<br/>
-
 ## 部署 BE 节点
 
 本小节介绍如何配置部署 Backend (BE) 节点。BE 是 StarRocks 的后端节点，负责数据存储以及 SQL 执行等工作。以下例子仅部署一个 BE 节点。您可以通过重复以下步骤添加多个 BE 节点。
-
-### 下载并解压安装包
-
-[下载](https://www.starrocks.com/zh-CN/download/community) StarRocks 并解压二进制安装包。
-
-```bash
-tar -xzvf StarRocks-x.x.x.tar.gz
-```
-
-> 注意
->
-> 将以上文件名修改为下载的二进制安装包名。
 
 ### 配置 BE 节点
 
@@ -214,13 +209,13 @@ tar -xzvf StarRocks-x.x.x.tar.gz
 cd StarRocks-x.x.x/be
 ```
 
-> 注意
+> **注意**
 >
 > 将以上路径名修改为解压后的路径名。
 
 修改 BE 节点配置文件 **conf/be.conf**。因默认配置即可启动集群，以下示例并未修改 BE 节点配置。如需在生产环境中对集群进行详细优化配置，参考 [BE 参数配置](../administration/Configuration.md#BE-参数配置)。
 
-> 注意
+> **注意**
 >
 > 当一台机器拥有多个 IP 地址时，需要在 BE 配置文件 **conf/be.conf** 中设置 `priority_networks`，为该节点设定唯一 IP。
 
@@ -232,7 +227,7 @@ cd StarRocks-x.x.x/be
 mkdir -p storage
 ```
 
-> 注意
+> **注意**
 >
 > 该路径需要与 **be.conf** 文件中配置路径保持一致。
 
@@ -244,7 +239,7 @@ mkdir -p storage
 mysql> ALTER SYSTEM ADD BACKEND "host:port";
 ```
 
-> 注意
+> **注意**
 >
 > `host` 需要与 `priority_networks` 相匹配，`port` 需要与 **be.conf** 文件中的设置的 `heartbeat_service_port` 相同，默认为 `9050`。
 
@@ -254,7 +249,8 @@ mysql> ALTER SYSTEM ADD BACKEND "host:port";
 mysql> ALTER SYSTEM decommission BACKEND "host:port";
 ```
 
-> 说明
+> **说明**
+>
 > `host` 和 `port` 与添加的 BE 节点一致。
 
 ### 启动 BE 节点
@@ -331,8 +327,6 @@ ALTER SYSTEM DROP BACKEND "172.16.xxx.xx:9050";
 ```bash
 ./bin/stop_be.sh --daemon
 ```
-
-<br/>
 
 ## 下一步
 
