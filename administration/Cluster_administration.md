@@ -149,7 +149,7 @@ admin set frontend config ("disable_colocate_balance"="false");
 1. 选择任意一个 BE 节点，停止该节点。
 2. 替换改节点路径下的 **bin** 和 **lib** 文件夹。
 3. 启动该 BE 节点，通过 BE 日志 **be.INFO** 查看是否启动成功。
-4. 如果该 BE 节点启动失败，您可以可以先排查失败原因。如果错误不可恢复，您可以直接通过 `DROP BACKEND` 删除该 BE、清理数据后，使用上一个版本的 **starrocks_be** 重新启动该 BE 节点。然后通过 `ADD BACKEND` 重新添加 BE 节点。
+4. 如果该 BE 节点启动失败，您可以先排查失败原因。如果错误不可恢复，您可以直接通过 `DROP BACKEND` 删除该 BE、清理数据后，使用上一个版本的 **starrocks_be** 重新启动该 BE 节点。然后通过 `ADD BACKEND` 重新添加 BE 节点。
 
 > **警告**
 >
@@ -370,7 +370,7 @@ mysql> set global batch_size = 4096;
     ps aux | grep StarRocksFE
     ```
 
-5. 重复以上步骤，回滚其他 Follower FE 节点，并最后升级 Leader FE 节点。
+5. 重复以上步骤，回滚其他 Follower FE 节点，并最后回滚 Leader FE 节点。
 
 ### 回滚 BE 节点前的准备
 
