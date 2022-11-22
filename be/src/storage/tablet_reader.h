@@ -20,8 +20,8 @@ class ColumnPredicate;
 
 class TabletReader final : public ChunkIterator {
 public:
-    TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema);
-    TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema, bool is_key,
+    TabletReader(TabletSharedPtr tablet, const Version& version, VectorizedSchema schema);
+    TabletReader(TabletSharedPtr tablet, const Version& version, VectorizedSchema schema, bool is_key,
                  RowSourceMaskBuffer* mask_buffer);
     ~TabletReader() override { close(); }
 

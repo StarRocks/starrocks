@@ -32,7 +32,7 @@ class TTabletInfo;
 namespace vectorized {
 class ChunkIterator;
 class CompactionState;
-class Schema;
+class VectorizedSchema;
 class TabletReader;
 class ChunkChanger;
 class SegmentIterator;

@@ -5,9 +5,9 @@
 #include <gtest/gtest.h>
 
 #include "column/chunk.h"
-#include "column/field.h"
 #include "column/fixed_length_column.h"
-#include "column/schema.h"
+#include "column/vectorized_field.h"
+#include "column/vectorized_schema.h"
 #include "runtime/types.h"
 #include "testutil/parallel_test.h"
 
@@ -19,21 +19,21 @@ std::string make_string(size_t i) {
     return std::string("c").append(std::to_string(static_cast<int32_t>(i)));
 }
 
-vectorized::FieldPtr make_field(size_t i) {
-    return std::make_shared<vectorized::Field>(i, make_string(i), get_type_info(TYPE_INT), false);
+vectorized::VectorizedFieldPtr make_field(size_t i) {
+    return std::make_shared<vectorized::VectorizedField>(i, make_string(i), get_type_info(TYPE_INT), false);
 }
 
-vectorized::Fields make_fields(size_t size) {
-    vectorized::Fields fields;
+vectorized::VectorizedFields make_fields(size_t size) {
+    vectorized::VectorizedFields fields;
     for (size_t i = 0; i < size; i++) {
         fields.emplace_back(make_field(i));
     }
     return fields;
 }
 
-vectorized::SchemaPtr make_schema(size_t i) {
-    vectorized::Fields fields = make_fields(i);
-    return std::make_shared<vectorized::Schema>(fields);
+vectorized::VectorizedSchemaPtr make_schema(size_t i) {
+    vectorized::VectorizedFields fields = make_fields(i);
+    return std::make_shared<vectorized::VectorizedSchema>(fields);
 }
 
 vectorized::ColumnPtr make_column(size_t start) {
