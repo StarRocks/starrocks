@@ -114,6 +114,8 @@ import com.starrocks.persist.SwapTableOperationLog;
 import com.starrocks.persist.TableInfo;
 import com.starrocks.persist.TablePropertyInfo;
 import com.starrocks.persist.TruncateTableInfo;
+import com.starrocks.persist.UpdateBinlogAvailableVersionInfo;
+import com.starrocks.persist.UpdateBinlogConfigInfo;
 import com.starrocks.persist.UserPrivilegeCollectionInfo;
 import com.starrocks.plugin.PluginInfo;
 import com.starrocks.qe.SessionVariable;
@@ -564,7 +566,7 @@ public class JournalEntity implements Writable {
                 data = TaskRunStatusChange.read(in);
                 isRead = true;
                 break;
-                // only update the progress of task run
+            // only update the progress of task run
             case OperationType.OP_UPDATE_TASK_RUN_STATE:
                 data = TaskRunPeriodStatusChange.read(in);
                 isRead = true;
@@ -610,6 +612,14 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
+            case OperationType.OP_MODIFY_BINLOG_CONFIG:
+                data = UpdateBinlogConfigInfo.read(in);
+                isRead = true;
+                break;
+            case OperationType.OP_MODIFY_BINLOG_AVAILABLE_VERSION:
+                data = UpdateBinlogAvailableVersionInfo.read(in);
+                isRead = true;
+                break;
             case OperationType.OP_REPLACE_TEMP_PARTITION: {
                 data = ReplacePartitionOperationLog.read(in);
                 isRead = true;
@@ -783,4 +793,3 @@ public class JournalEntity implements Writable {
         Preconditions.checkState(isRead);
     }
 }
-

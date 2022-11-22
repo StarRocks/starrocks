@@ -46,6 +46,7 @@ import com.starrocks.alter.OlapTableAlterJobV2Builder;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.backup.Status;
 import com.starrocks.backup.Status.ErrCode;
+import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.catalog.LocalTablet.TabletStatus;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
@@ -191,6 +192,9 @@ public class OlapTable extends Table implements GsonPostProcessable {
     @SerializedName(value = "tableProperty")
     protected TableProperty tableProperty;
 
+    protected BinlogConfig curBinlogConfig;
+
+
     public OlapTable() {
         this(TableType.OLAP);
     }
@@ -252,6 +256,17 @@ public class OlapTable extends Table implements GsonPostProcessable {
         this.tableProperty = null;
     }
 
+    public BinlogConfig getCurBinlogConfig() {
+        return curBinlogConfig;
+    }
+
+    public void setCurBinlogConfig(BinlogConfig curBinlogConfig) {
+        this.curBinlogConfig = curBinlogConfig;
+    }
+
+    public boolean isBinlogConfigNull() {
+        return curBinlogConfig == null;
+    }
     public void setTableProperty(TableProperty tableProperty) {
         this.tableProperty = tableProperty;
     }
@@ -1222,7 +1237,6 @@ public class OlapTable extends Table implements GsonPostProcessable {
             out.writeBoolean(true);
             tableProperty.write(out);
         }
-
         tempPartitions.write(out);
     }
 
@@ -1349,7 +1363,6 @@ public class OlapTable extends Table implements GsonPostProcessable {
                 tableProperty = TableProperty.read(in);
             }
         }
-
         // temp partitions
         if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_74) {
             tempPartitions = TempPartitions.read(in);
@@ -1657,6 +1670,20 @@ public class OlapTable extends Table implements GsonPostProcessable {
         return false;
     }
 
+    public Boolean enableBinlog() {
+        if (curBinlogConfig == null) {
+            return false;
+        }
+        return curBinlogConfig.getBinlogEnable();
+    }
+
+    public void incBinlogVersion() {
+        curBinlogConfig.incVersion();
+    }
+    public Long getBinlogVersion() {
+        return curBinlogConfig.getVersion();
+    }
+
     public void setEnablePersistentIndex(boolean enablePersistentIndex) {
         if (tableProperty == null) {
             tableProperty = new TableProperty(new HashMap<>());
@@ -1920,6 +1947,16 @@ public class OlapTable extends Table implements GsonPostProcessable {
             return TCompressionType.LZ4_FRAME;
         }
         return tableProperty.getCompressionType();
+    }
+
+    public Map<Long, Long> setBinlogAvailableVersin() {
+        Map<Long, Long> result = new HashMap<>();
+        Collection<Partition> partitions =  getPartitions();
+        for (Partition partition : partitions) {
+            partition.setBinlogAvailableVersion(partition.getVisibleVersion() + 1);
+            result.put(partition.getId(), partition.getBinlogAvailableVersion());
+        }
+        return result;
     }
 
 

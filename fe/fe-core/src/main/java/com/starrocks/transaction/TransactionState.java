@@ -40,6 +40,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -55,6 +56,7 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.task.PublishVersionTask;
+import com.starrocks.thrift.TBinlogConfig;
 import com.starrocks.thrift.TPartitionVersionInfo;
 import com.starrocks.thrift.TUniqueId;
 import io.opentelemetry.api.trace.Span;
@@ -68,6 +70,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -441,7 +444,7 @@ public class TransactionState implements Writable {
     }
 
     public void notifyVisible() {
-        // To avoid the method not having to be called repeatedly or in advance, 
+        // To avoid the method not having to be called repeatedly or in advance,
         // the following trigger conditions have been added
         // 1. the transactionStatus status must be VISIBLE
         // 2. this.latch.countDown(); has not been called before
@@ -901,13 +904,34 @@ public class TransactionState implements Writable {
 
         List<PartitionCommitInfo> partitionCommitInfos = new ArrayList<>();
         for (TableCommitInfo tableCommitInfo : this.getIdToTableCommitInfos().values()) {
-            partitionCommitInfos.addAll(tableCommitInfo.getIdToPartitionCommitInfo().values());
+            // add binlog config to partition commit info
+            long tableId = tableCommitInfo.getTableId();
+            OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getDb(dbId).getTable(tableId);
+            Collection<PartitionCommitInfo> tempPartitionCommitInfos = tableCommitInfo.getIdToPartitionCommitInfo().values();
+            //when binlog is enable, bring binlogCofnig to BE to ensure that BE can generate binlog
+            //when binlog is disable, the reportHandler will ensure final consistency
+            if (table.enableBinlog()) {
+                tempPartitionCommitInfos.stream().
+                        forEach(partitionCommitInfo -> {
+                            partitionCommitInfo.setBinlogConfig(table.getCurBinlogConfig());
+                        });
+            }
+            partitionCommitInfos.addAll(tempPartitionCommitInfos);
         }
 
         List<TPartitionVersionInfo> partitionVersions = new ArrayList<>(partitionCommitInfos.size());
         for (PartitionCommitInfo commitInfo : partitionCommitInfos) {
             TPartitionVersionInfo version = new TPartitionVersionInfo(commitInfo.getPartitionId(),
                     commitInfo.getVersion(), 0);
+            BinlogConfig binlogConfig = commitInfo.getBinlogConfig();
+            if (commitInfo.getBinlogConfig() != null) {
+                TBinlogConfig tBinlogConfig = new TBinlogConfig();
+                tBinlogConfig.setBinlog_enable(binlogConfig.getBinlogEnable());
+                tBinlogConfig.setVersion(binlogConfig.getVersion());
+                tBinlogConfig.setBinlog_ttl_second(binlogConfig.getBinlogTtlSecond());
+                tBinlogConfig.setBinlog_max_size(commitInfo.getBinlogConfig().getBinlogMaxSize());
+                version.setBinlog_config(tBinlogConfig);
+            }
             partitionVersions.add(version);
         }
 

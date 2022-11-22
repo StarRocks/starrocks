@@ -36,6 +36,7 @@ package com.starrocks.transaction;
 
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -78,6 +79,8 @@ public class PartitionCommitInfo implements Writable {
     // compaction score quantiles of lake table
     @SerializedName(value = "compactionScore")
     private Quantiles compactionScore;
+
+    private BinlogConfig binlogConfig;
 
     public PartitionCommitInfo() {
 
@@ -145,6 +148,14 @@ public class PartitionCommitInfo implements Writable {
 
     public List<String> getValidDictCacheColumns() {
         return validDictCacheColumns;
+    }
+
+    public void setBinlogConfig(BinlogConfig binlogConfig) {
+        this.binlogConfig = binlogConfig;
+    }
+
+    public BinlogConfig getBinlogConfig() {
+        return binlogConfig;
     }
 
     public void setCompactionScore(Quantiles compactionScore) {

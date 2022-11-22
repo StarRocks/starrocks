@@ -41,6 +41,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Queues;
 import com.google.common.collect.Sets;
+import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
@@ -418,6 +419,9 @@ public class ReportHandler extends Daemon {
 
         // 11. send set tablet enable persistent index to be
         handleSetTabletEnablePersistentIndex(backendId, backendTablets);
+
+        // 12. send set table binlog config to be
+        handleSetTabletBinlogConfig(backendId, backendTablets);
 
         final SystemInfoService currentSystemInfo = GlobalStateMgr.getCurrentSystemInfo();
         Backend reportBackend = currentSystemInfo.getBackend(backendId);
@@ -1185,6 +1189,10 @@ public class ReportHandler extends Daemon {
         handleSetTabletEnablePersistentIndex(backendId, backendTablets);
     }
 
+    public static void testHandleSetTabletBinlogConfig(long backendId, Map<Long, TTablet> backendTablets) {
+        handleSetTabletBinlogConfig(backendId, backendTablets);
+    }
+
     private static void handleSetTabletEnablePersistentIndex(long backendId, Map<Long, TTablet> backendTablets) {
         List<Triple<Long, Integer, Boolean>> tabletToEnablePersistentIndex = Lists.newArrayList();
 
@@ -1234,6 +1242,56 @@ public class ReportHandler extends Daemon {
         }
     }
 
+    private static void handleSetTabletBinlogConfig(long backendId, Map<Long, TTablet> backendTablets) {
+        List<Triple<Long, Integer, BinlogConfig>> tabletToBinlogConfig = Lists.newArrayList();
+
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        for (TTablet backendTablet : backendTablets.values()) {
+            for (TTabletInfo tabletInfo : backendTablet.tablet_infos) {
+                if (!tabletInfo.isSetBinlog_config_version()) {
+                    continue;
+                }
+                long tabletId = tabletInfo.getTablet_id();
+                long beBinlogConfigVersion = tabletInfo.binlog_config_version;
+                TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);
+                long dbId = tabletMeta != null ? tabletMeta.getDbId() : TabletInvertedIndex.NOT_EXIST_VALUE;
+                long tableId = tabletMeta != null ? tabletMeta.getTableId() : TabletInvertedIndex.NOT_EXIST_VALUE;
+
+                Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+                if (db == null) {
+                    continue;
+                }
+                db.readLock();
+                try {
+                    OlapTable olapTable = (OlapTable) db.getTable(tableId);
+                    if (olapTable == null) {
+                        continue;
+                    }
+
+                    BinlogConfig binlogConfig = olapTable.getCurBinlogConfig();
+                    // backward compatible
+                    if (binlogConfig == null) {
+                        continue;
+                    }
+                    Long feBinlogConfigVersion = binlogConfig.getVersion();
+                    if (beBinlogConfigVersion < feBinlogConfigVersion) {
+                        tabletToBinlogConfig.add(new ImmutableTriple<>(tabletId, tabletInfo.schema_hash,
+                                olapTable.getCurBinlogConfig()));
+                    }
+                } finally {
+                    db.readUnlock();
+                }
+            }
+        }
+
+        LOG.info("find [{}] tablets need set binlog config ", tabletToBinlogConfig.size());
+        if (!tabletToBinlogConfig.isEmpty()) {
+            AgentBatchTask batchTask = new AgentBatchTask();
+            UpdateTabletMetaInfoTask task = new UpdateTabletMetaInfoTask(backendId, tabletToBinlogConfig);
+            batchTask.addTask(task);
+            AgentTaskExecutor.submit(batchTask);
+        }
+    }
     private static void handleClearTransactions(ListMultimap<Long, Long> transactionsToClear, long backendId) {
         AgentBatchTask batchTask = new AgentBatchTask();
         for (Long transactionId : transactionsToClear.keySet()) {

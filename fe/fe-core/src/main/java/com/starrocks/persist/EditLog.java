@@ -1634,11 +1634,19 @@ public class EditLog {
         logEdit(OperationType.OP_AUTH_UPGRDE_V2, new AuthUpgradeInfo(roleNameToId));
     }
 
+    public void logModifyBinlogConfig(UpdateBinlogConfigInfo info) {
+        logEdit(OperationType.OP_MODIFY_BINLOG_CONFIG, info);
+    }
+
     public void logMVJobState(MVMaintenanceJob job) {
         logEdit(OperationType.OP_MV_JOB_STATE, job);
     }
 
     public void logMVEpochChange(MVEpoch epoch) {
         logEdit(OperationType.OP_MV_EPOCH_UPDATE, epoch);
+    }
+
+    public void logModifyBinlogAvailableVersion(UpdateBinlogAvailableVersionInfo info) {
+        logEdit(OperationType.OP_MODIFY_BINLOG_AVAILABLE_VERSION, info);
     }
 }

@@ -213,6 +213,8 @@ public class OperationType {
     public static final short OP_MODIFY_ENABLE_PERSISTENT_INDEX = 10005;
     public static final short OP_MODIFY_WRITE_QUORUM = 10006;
     public static final short OP_MODIFY_REPLICATED_STORAGE = 10007;
+    public static final short OP_MODIFY_BINLOG_CONFIG = 10008;
+    public static final short OP_MODIFY_BINLOG_AVAILABLE_VERSION = 10009;
 
     // statistic 10010 ~ 10020
     public static final short OP_ADD_ANALYZER_JOB = 10010;

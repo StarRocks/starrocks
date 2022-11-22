@@ -265,6 +265,7 @@ struct TPartitionVersionInfo {
     1: required Types.TPartitionId partition_id
     2: required Types.TVersion version
     3: required Types.TVersionHash version_hash // Deprecated
+    4: optional TBinlogConfig binlog_config
 }
 
 struct TMoveDirReq {
@@ -310,7 +311,9 @@ enum TTabletMetaType {
     INMEMORY,
     ENABLE_PERSISTENT_INDEX,
     WRITE_QUORUM,
-    REPLICATED_STORAGE
+    REPLICATED_STORAGE,
+    DISABLE_BINLOG,
+    BINLOG_CONFIG
 }
 
 struct TTabletMetaInfo {
@@ -320,6 +323,7 @@ struct TTabletMetaInfo {
     4: optional TTabletMetaType meta_type
     5: optional bool is_in_memory
     6: optional bool enable_persistent_index
+    7: optional TBinlogConfig binlog_config
 }
 
 struct TUpdateTabletMetaInfoReq {

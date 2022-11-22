@@ -51,6 +51,8 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.backup.BackupHandler;
+import com.starrocks.binlog.BinlogConfig;
+import com.starrocks.binlog.BinlogManager;
 import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.BrokerTable;
 import com.starrocks.catalog.CatalogIdGenerator;
@@ -195,6 +197,8 @@ import com.starrocks.persist.Storage;
 import com.starrocks.persist.TableInfo;
 import com.starrocks.persist.TablePropertyInfo;
 import com.starrocks.persist.TruncateTableInfo;
+import com.starrocks.persist.UpdateBinlogAvailableVersionInfo;
+import com.starrocks.persist.UpdateBinlogConfigInfo;
 import com.starrocks.plugin.PluginInfo;
 import com.starrocks.plugin.PluginMgr;
 import com.starrocks.privilege.PrivilegeManager;
@@ -470,6 +474,8 @@ public class GlobalStateMgr {
 
     private TaskRunStateSynchronizer taskRunStateSynchronizer;
 
+    private BinlogManager binlogManager;
+
     // For LakeTable
     private CompactionManager compactionManager;
 
@@ -647,6 +653,8 @@ public class GlobalStateMgr {
         this.compactionManager = new CompactionManager();
         this.configRefreshDaemon = new ConfigRefreshDaemon();
         this.shardDeleter = new ShardDeleter();
+
+        this.binlogManager = new BinlogManager();
 
         GlobalStateMgr gsm = this;
         this.execution = new StateChangeExecution() {
@@ -845,6 +853,10 @@ public class GlobalStateMgr {
 
     public TaskManager getTaskManager() {
         return taskManager;
+    }
+
+    public BinlogManager getBinlogManager() {
+        return binlogManager;
     }
 
     public InsertOverwriteJobManager getInsertOverwriteJobManager() {
@@ -1855,6 +1867,8 @@ public class GlobalStateMgr {
         }
 
         streamLoadManager.cancelUnDurableTaskAfterRestart();
+
+        binlogManager.setLeftTableBinlogAvailableVersion();
 
         long replayInterval = System.currentTimeMillis() - replayStartTime;
         LOG.info("finish replay from {} to {} in {} msec", startJournalId, toJournalId, replayInterval);
@@ -3025,6 +3039,9 @@ public class GlobalStateMgr {
                                 TTabletMetaType metaType) {
         localMetastore.modifyTableMeta(db, table, properties, metaType);
     }
+    public void modifyBinlogMeta(Database db, OlapTable table, BinlogConfig binlogConfig) {
+        localMetastore.modifyBinlogMeta(db, table, binlogConfig);
+    }
 
     public void setHasForbitGlobalDict(String dbName, String tableName, boolean isForbit) throws DdlException {
         localMetastore.setHasForbitGlobalDict(dbName, tableName, isForbit);
@@ -3036,6 +3053,14 @@ public class GlobalStateMgr {
 
     public void replayModifyTableProperty(short opCode, ModifyTablePropertyOperationLog info) {
         localMetastore.replayModifyTableProperty(opCode, info);
+    }
+
+    public void replayModifyBinlogConfig(short opCode, UpdateBinlogConfigInfo info) {
+        localMetastore.replayModifyBinlogConfig(opCode, info);
+    }
+
+    public void replayModifyBinlogAvailableVersion(short opCode, UpdateBinlogAvailableVersionInfo info) {
+        localMetastore.replayModifyBinlogAvailableVersion(opCode, info);
     }
 
     /*
@@ -3526,6 +3551,7 @@ public class GlobalStateMgr {
             LOG.warn("task manager clean expire task runs history failed", t);
         }
     }
+
 
     public StateChangeExecution getStateChangeExecution() {
         return execution;

@@ -55,6 +55,8 @@ import com.starrocks.common.util.QueryableReentrantReadWriteLock;
 import com.starrocks.common.util.Util;
 import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.DropInfo;
+import com.starrocks.persist.UpdateBinlogAvailableVersionInfo;
+import com.starrocks.persist.UpdateBinlogConfigInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
@@ -65,7 +67,9 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -436,6 +440,31 @@ public class Database extends MetaObject implements Writable {
                     // Write edit log
                     CreateTableInfo info = new CreateTableInfo(fullQualifiedName, table);
                     GlobalStateMgr.getCurrentState().getEditLog().logCreateTable(info);
+                    if (table.isOlapTable()) {
+                        OlapTable olaptable = (OlapTable) table;
+                        if (!olaptable.isBinlogConfigNull()) {
+                            UpdateBinlogConfigInfo updateBinlogConfigInfo = new UpdateBinlogConfigInfo(id,
+                                    table.getId(), olaptable.getCurBinlogConfig(), null);
+                            GlobalStateMgr.getCurrentState().getEditLog().logModifyBinlogConfig(updateBinlogConfigInfo);
+
+                            // log binlogAvilableVerison when it's valid
+                            // need't log if it's unvalid
+                            // for replay updateBinlogConfigInfo will invalidate binlogAvailableVersion
+                            if (olaptable.enableBinlog()) {
+                                Collection<Partition> allPartitions = olaptable.getAllPartitions();
+                                Map<Long, Long> partitonIdToAvailableVersion = new HashMap<>();
+                                allPartitions.forEach(partition -> partitonIdToAvailableVersion.put(partition.getId(),
+                                        partition.getVisibleVersion() + 1));
+                                UpdateBinlogAvailableVersionInfo availableVersionInfo = new UpdateBinlogAvailableVersionInfo(
+                                        id, olaptable.getId(),
+                                        olaptable.enableBinlog(),
+                                        partitonIdToAvailableVersion);
+                                GlobalStateMgr.getCurrentState().getEditLog().
+                                        logModifyBinlogAvailableVersion(availableVersionInfo);
+                            }
+                        }
+                    }
+
                 }
 
                 table.onCreate();

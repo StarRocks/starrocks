@@ -54,6 +54,8 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.analysis.TypeDef;
+import com.starrocks.binlog.BinlogConfig;
+import com.starrocks.binlog.BinlogManager;
 import com.starrocks.catalog.CatalogRecycleBin;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.ColocateGroupSchema;
@@ -146,6 +148,8 @@ import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.persist.SetReplicaStatusOperationLog;
 import com.starrocks.persist.TableInfo;
 import com.starrocks.persist.TruncateTableInfo;
+import com.starrocks.persist.UpdateBinlogAvailableVersionInfo;
+import com.starrocks.persist.UpdateBinlogConfigInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
@@ -1856,6 +1860,7 @@ public class LocalMetastore implements ConnectorMetadata {
                             table.getIndexes(),
                             table.getPartitionInfo().getIsInMemory(partition.getId()),
                             table.enablePersistentIndex(),
+                            table.getCurBinlogConfig(),
                             table.getPartitionInfo().getTabletType(partition.getId()),
                             table.getCompressionType(), indexMeta.getSortKeyIdxes());
                     tasks.add(task);
@@ -2154,6 +2159,24 @@ public class LocalMetastore implements ConnectorMetadata {
                 PropertyAnalyzer.analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX,
                         false);
         olapTable.setEnablePersistentIndex(enablePersistentIndex);
+
+        boolean enableBinlog = PropertyAnalyzer.analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE, false);
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE) ||
+                properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE) ||
+                        properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_TTL)) {
+            try {
+                Long binlogTtl = PropertyAnalyzer.analyzeLongProp(properties,
+                        PropertyAnalyzer.PROPERTIES_BINLOG_TTL, Config.binlog_ttl_second);
+                Long binlogMaxSize = PropertyAnalyzer.analyzeLongProp(properties,
+                        PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE, Config.binlog_max_size);
+                BinlogConfig binlogConfig = new BinlogConfig(1L, enableBinlog,
+                        binlogTtl, binlogMaxSize);
+                olapTable.setCurBinlogConfig(binlogConfig);
+                LOG.info("create table set binlog config");
+            } catch (AnalysisException e) {
+                throw new DdlException(e.getMessage());
+            }
+        }
 
         // write quorum
         try {
@@ -3971,6 +3994,35 @@ public class LocalMetastore implements ConnectorMetadata {
 
     }
 
+    public void modifyBinlogMeta(Database db, OlapTable table, BinlogConfig binlogConfig) {
+        Preconditions.checkArgument(db.isWriteLockHeldByCurrentThread());
+        binlogConfig.incVersion();
+        table.setCurBinlogConfig(binlogConfig);
+
+        Map<Long, Long> curAllTableIdsInBinlogManager = null;
+        if (table.enableBinlog()) {
+            Long nextTxnId = GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
+            BinlogManager binlogManager = GlobalStateMgr.getCurrentState().getBinlogManager();
+            try {
+                Set<Long> transactionIds = GlobalStateMgr.getCurrentGlobalTransactionMgr().
+                        getDatabaseTransactionMgr(db.getId()).getRunningTransactionsId();
+                binlogManager.recordBinlogTxnId(nextTxnId, db.getId(), table.getId(), transactionIds);
+                curAllTableIdsInBinlogManager = binlogManager.getAllTableIds();
+            } catch (AnalysisException e) {
+                LOG.warn(e.getMessage());
+            }
+
+        } else {
+            for (Partition partition : table.getAllPartitions()) {
+                partition.setBinlogAvailableVersion(-1L);
+            }
+        }
+
+        UpdateBinlogConfigInfo updateBinlogConfigInfo = new UpdateBinlogConfigInfo(db.getId(),
+                table.getId(), table.getCurBinlogConfig(), curAllTableIdsInBinlogManager);
+        editLog.logModifyBinlogConfig(updateBinlogConfigInfo);
+    }
+
     // The caller need to hold the db write lock
     public void modifyTableInMemoryMeta(Database db, OlapTable table, Map<String, String> properties) {
         Preconditions.checkArgument(db.isWriteLockHeldByCurrentThread());
@@ -4144,6 +4196,53 @@ public class LocalMetastore implements ConnectorMetadata {
             }
         } finally {
             db.writeUnlock();
+        }
+    }
+
+
+    public void replayModifyBinlogConfig(short opCode, UpdateBinlogConfigInfo info) {
+        long dbId = info.getDbId();
+        long tableId = info.getTableId();
+        BinlogConfig binlogConfig = info.getBinlogConfig();
+
+        Database db = getDb(dbId);
+        db.writeLock();
+
+        OlapTable olapTable = (OlapTable) db.getTable(tableId);
+
+        if (olapTable != null) {
+            olapTable.setCurBinlogConfig(binlogConfig);
+            if (binlogConfig.getBinlogEnable() == false) {
+                for (Partition partition : olapTable.getAllPartitions()) {
+                    partition.setBinlogAvailableVersion(-1L);
+                }
+            } else {
+                BinlogManager binlogManager = GlobalStateMgr.getCurrentState().getBinlogManager();
+                binlogManager.setAllTableIds(info.getAllTableIds());
+            }
+        }
+    }
+
+    // isEnable only be true so far
+    // for binlogAvailableVersion will be modifid
+    // by UpdateModiyBinlogwhen when binlog is made disable
+    public void replayModifyBinlogAvailableVersion(short opCode, UpdateBinlogAvailableVersionInfo info) {
+        long dbId = info.getDbId();
+        long tableId = info.getTableId();
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getDb(info.getDbId()).getTable(info.getTableId());
+        if (table == null) {
+            return;
+        }
+        if (info.isEnable()) {
+            Map<Long, Long> partitionIdsMap = info.getPartitionIdToBinlogAvailableVersionMap();
+            for (Map.Entry<Long, Long> entry : partitionIdsMap.entrySet()) {
+                Partition partition = table.getPartition(entry.getKey());
+                if (partition != null) {
+                    partition.setBinlogAvailableVersion(entry.getValue());
+                }
+            }
+        } else {
+            table.getAllPartitions().forEach(partition -> partition.setBinlogAvailableVersion(-1));
         }
     }
 
