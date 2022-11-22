@@ -395,15 +395,16 @@ Status SortedStreamingAggregator::_update_states(size_t chunk_size) {
 }
 
 Status SortedStreamingAggregator::_get_agg_result_columns(size_t chunk_size, const std::vector<uint8_t>& selector,
-                                                        vectorized::Columns& agg_result_columns) {
+                                                          vectorized::Columns& agg_result_columns) {
     SCOPED_TIMER(_agg_stat->get_results_timer);
     if (_cmp_vector[0] != 0 && _last_state) {
         TRY_CATCH_BAD_ALLOC(_finalize_to_chunk(_last_state, agg_result_columns));
     }
 
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
-        TRY_CATCH_BAD_ALLOC(_agg_functions[i]->batch_finalize_with_selection(_agg_fn_ctxs[i], chunk_size, _tmp_agg_states,
-                                                         _agg_states_offsets[i], agg_result_columns[i].get(), selector));
+        TRY_CATCH_BAD_ALLOC(_agg_functions[i]->batch_finalize_with_selection(_agg_fn_ctxs[i], chunk_size,
+                                                                             _tmp_agg_states, _agg_states_offsets[i],
+                                                                             agg_result_columns[i].get(), selector));
     }
     return Status::OK();
 }
