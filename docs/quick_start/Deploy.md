@@ -8,6 +8,7 @@ Following these steps, you can deploy a StarRocks instance with only one fronten
 >
 > - To guarantee the high availability and performance **in the production environment**, we recommend that you deploy at least three FE nodes and three BE nodes in your StarRocks cluster.
 > - You can deploy an FE node and a BE node on one machine. However, deploying multiple nodes of the same kind on one machine is not allowed, because the same kinds of nodes cannot share a same IP address.
+> - By default, FE nodes in a new cluster are started via IP address access. To start a new cluster with FQDN access, see [Set up a new cluster with FQDN access](../administration/enable_fqdn.md#set-up-a-new-cluster-with-fqdn-access).
 
 ## Prerequisites
 
