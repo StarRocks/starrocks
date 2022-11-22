@@ -73,7 +73,7 @@ public:
 
     void set_final_status(const Status& status);
 
-    Status final_status() {
+    Status final_status() const {
         auto* status = _final_status.load();
         return status == nullptr ? Status::OK() : *status;
     }
@@ -82,7 +82,7 @@ public:
 
     void finish() { cancel(Status::OK()); }
 
-    bool is_canceled() { return _runtime_state->is_cancelled(); }
+    bool is_canceled() const { return _runtime_state->is_cancelled(); }
 
     MorselQueueFactoryMap& morsel_queue_factories() { return _morsel_queue_factories; }
 
