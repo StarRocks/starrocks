@@ -36,9 +36,14 @@ public class ViewAnalyzer {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_VIEW_WRONG_LIST);
             }
             for (int i = 0; i < stmt.getCols().size(); ++i) {
-                Column col = new Column(columnOutputNames.get(i).getColName(), outputExpression.get(i).getType());
+                String colName = columnOutputNames.get(i).getColName();
+                Column col = new Column(colName, outputExpression.get(i).getType());
                 col.setComment(columnOutputNames.get(i).getComment());
                 viewColumns.add(col);
+
+                if (viewColumns.stream().anyMatch(c -> colName.equals(c.getName()))) {
+                    throw new SemanticException("Duplicate column name '%s'", colName);
+                }
             }
         } else {
             List<String> columnOutputNames = queryRelation.getColumnOutputNames();

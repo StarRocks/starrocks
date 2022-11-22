@@ -204,12 +204,11 @@ public class TableName implements Writable, GsonPreProcessable, GsonPostProcessa
         TableName tableName = (TableName) o;
         return Objects.equals(catalog, tableName.catalog)
                 && Objects.equals(tbl, tableName.tbl)
-                && Objects.equals(db, tableName.db)
-                && Objects.equals(fullDb, tableName.fullDb);
+                && Objects.equals(db, tableName.db);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(catalog, tbl, db, fullDb);
+        return Objects.hash(catalog, tbl, db);
     }
 }

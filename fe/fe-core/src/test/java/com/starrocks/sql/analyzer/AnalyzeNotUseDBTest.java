@@ -7,6 +7,7 @@ import org.junit.Test;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeWithoutTestView;
 
 public class AnalyzeNotUseDBTest {
 
@@ -20,6 +21,9 @@ public class AnalyzeNotUseDBTest {
     public void testNotUseDatabase() {
         AnalyzeTestUtil.getConnectContext().setDatabase("");
         analyzeSuccess("select count(*) from (select v1 from db1.t0) t");
+        analyzeSuccess("select t.* from (select v1 from db1.t0) t");
+        analyzeFail("select db1.t.* from (select v1 from db1.t0) t", "Unknown table 'db1.t'");
+
         analyzeSuccess("with t as (select v4 from db1.t1) select count(*) from (select v1 from db1.t0) a,t");
 
         analyzeSuccess("select * from db1.t0 a join db1.t1 b on a.v1 = b.v4");
@@ -84,5 +88,27 @@ public class AnalyzeNotUseDBTest {
         analyzeSuccess("select default_catalog.db1.t.v1 from db1.t0 t inner join db2.t0 t on db1.t.v1 = db2.t.v1");
         analyzeSuccess("select default_catalog.db1.t.v1 from default_catalog.db1.t0 t " +
                 "inner join default_catalog.db2.t0 t on db1.t.v1 = db2.t.v1");
+
+        analyzeSuccess("select test.t.v1 from t0 t join (select * from t0) t");
+        analyzeFail("select t.v1 from t0 t join (select * from t0) t", "Column 'v1' is ambiguous");
+    }
+
+    @Test
+    public void testDupTableName() {
+        analyzeSuccess("select * from t0 t join unnest([1,2,3]) t");
+        analyzeSuccess("select * from t0 join unnest([1,2,3]) t0");
+        analyzeSuccess("select * from t0 t join (values(1,2,3)) t");
+        analyzeSuccess("select * from t0 join (values(1,2,3)) t0");
+    }
+
+    @Test
+    public void test() {
+        analyzeWithoutTestView("select * from t0 t join (select * from t0) t");
+        analyzeFail("create view v as select * from t0 t join (select * from t0) t",
+                "Duplicate column name 'v1'");
+
+        analyzeWithoutTestView("select * from t0 join (select * from t0) t0");
+        analyzeFail("create view v as select * from t0 join (select * from t0) t0",
+                "Duplicate column name 'v1'");
     }
 }
