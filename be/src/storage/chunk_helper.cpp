@@ -274,4 +274,164 @@ ColumnPtr ChunkHelper::column_from_field(const Field& field) {
     }
 }
 
+<<<<<<< HEAD
 } // namespace starrocks::vectorized
+=======
+vectorized::ChunkPtr ChunkHelper::new_chunk(const vectorized::Schema& schema, size_t n) {
+    size_t fields = schema.num_fields();
+    vectorized::Columns columns;
+    columns.reserve(fields);
+    for (size_t i = 0; i < fields; i++) {
+        const vectorized::FieldPtr& f = schema.field(i);
+        columns.emplace_back(column_from_field(*f));
+        columns.back()->reserve(n);
+    }
+    return std::make_shared<vectorized::Chunk>(std::move(columns), std::make_shared<vectorized::Schema>(schema));
+}
+
+std::shared_ptr<vectorized::Chunk> ChunkHelper::new_chunk(const TupleDescriptor& tuple_desc, size_t n) {
+    return new_chunk(tuple_desc.slots(), n);
+}
+
+std::shared_ptr<vectorized::Chunk> ChunkHelper::new_chunk(const std::vector<SlotDescriptor*>& slots, size_t n) {
+    auto chunk = std::make_shared<vectorized::Chunk>();
+    for (const auto slot : slots) {
+        auto column = vectorized::ColumnHelper::create_column(slot->type(), slot->is_nullable());
+        column->reserve(n);
+        chunk->append_column(column, slot->id());
+    }
+    return chunk;
+}
+
+void ChunkHelper::reorder_chunk(const TupleDescriptor& tuple_desc, vectorized::Chunk* chunk) {
+    return reorder_chunk(tuple_desc.slots(), chunk);
+}
+
+void ChunkHelper::reorder_chunk(const std::vector<SlotDescriptor*>& slots, vectorized::Chunk* chunk) {
+    DCHECK(chunk->columns().size() == slots.size());
+    auto reordered_chunk = vectorized::Chunk();
+    auto& original_chunk = (*chunk);
+    for (auto slot : slots) {
+        auto slot_id = slot->id();
+        reordered_chunk.append_column(original_chunk.get_column_by_slot_id(slot_id), slot_id);
+    }
+    original_chunk.swap_chunk(reordered_chunk);
+}
+
+void ChunkHelper::build_selective(const std::vector<uint8_t>& filter, std::vector<uint32_t>& selective) {
+    size_t n = SIMD::count_nonzero(filter);
+    if (n == 0) {
+        return;
+    }
+    selective.resize(0);
+    selective.reserve(n);
+    for (int i = 0; i < filter.size(); i++) {
+        if (filter[i]) {
+            selective.push_back(i);
+        }
+    }
+}
+
+ChunkAccumulator::ChunkAccumulator(size_t desired_size) : _desired_size(desired_size) {}
+
+void ChunkAccumulator::set_desired_size(size_t desired_size) {
+    _desired_size = desired_size;
+}
+
+void ChunkAccumulator::reset() {
+    _output.clear();
+    _tmp_chunk.reset();
+}
+
+Status ChunkAccumulator::push(vectorized::ChunkPtr&& chunk) {
+    size_t input_rows = chunk->num_rows();
+    // TODO: optimize for zero-copy scenario
+    // Cut the input chunk into pieces if larger than desired
+    for (size_t start = 0; start < input_rows;) {
+        size_t remain_rows = input_rows - start;
+        size_t need_rows = 0;
+        if (_tmp_chunk) {
+            need_rows = std::min(_desired_size - _tmp_chunk->num_rows(), remain_rows);
+            TRY_CATCH_BAD_ALLOC(_tmp_chunk->append(*chunk, start, need_rows));
+        } else {
+            need_rows = std::min(_desired_size, remain_rows);
+            _tmp_chunk = chunk->clone_empty(_desired_size);
+            TRY_CATCH_BAD_ALLOC(_tmp_chunk->append(*chunk, start, need_rows));
+        }
+
+        if (_tmp_chunk->num_rows() >= _desired_size) {
+            _output.emplace_back(std::move(_tmp_chunk));
+        }
+        start += need_rows;
+    }
+    return Status::OK();
+}
+
+bool ChunkAccumulator::empty() const {
+    return _output.empty();
+}
+
+vectorized::ChunkPtr ChunkAccumulator::pull() {
+    if (!_output.empty()) {
+        auto res = std::move(_output.front());
+        _output.pop_front();
+        return res;
+    }
+    return nullptr;
+}
+
+void ChunkAccumulator::finalize() {
+    if (_tmp_chunk) {
+        _output.emplace_back(std::move(_tmp_chunk));
+    }
+}
+
+void ChunkPipelineAccumulator::push(const vectorized::ChunkPtr& chunk) {
+    chunk->check_or_die();
+    DCHECK(_out_chunk == nullptr);
+    if (_in_chunk == nullptr) {
+        _in_chunk = chunk;
+    } else if (_in_chunk->num_rows() + chunk->num_rows() > _max_size) {
+        _out_chunk = std::move(_in_chunk);
+        _in_chunk = chunk;
+    } else {
+        _in_chunk->append(*chunk);
+    }
+
+    if (_out_chunk == nullptr && (_in_chunk->num_rows() >= _max_size * LOW_WATERMARK_ROWS_RATE ||
+                                  _in_chunk->memory_usage() >= LOW_WATERMARK_BYTES)) {
+        _out_chunk = std::move(_in_chunk);
+    }
+}
+
+void ChunkPipelineAccumulator::reset() {
+    _finalized = false;
+    _in_chunk.reset();
+    _out_chunk.reset();
+}
+
+void ChunkPipelineAccumulator::finalize() {
+    _finalized = true;
+}
+
+vectorized::ChunkPtr& ChunkPipelineAccumulator::pull() {
+    if (_finalized && _out_chunk == nullptr) {
+        return _in_chunk;
+    }
+    return _out_chunk;
+}
+
+bool ChunkPipelineAccumulator::has_output() const {
+    return _out_chunk != nullptr || (_finalized && _in_chunk != nullptr);
+}
+
+bool ChunkPipelineAccumulator::need_input() const {
+    return !_finalized && _out_chunk == nullptr;
+}
+
+bool ChunkPipelineAccumulator::is_finished() const {
+    return _finalized && _out_chunk == nullptr && _in_chunk == nullptr;
+}
+
+} // namespace starrocks
+>>>>>>> 5dba41fcc ([BugFix] fix output column of anti join (#13760))
