@@ -8,16 +8,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.ShowExecutor;
-import com.starrocks.qe.ShowResultSet;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
-import com.starrocks.sql.ast.CreateViewStmt;
-import com.starrocks.sql.ast.DescribeStmt;
-import com.starrocks.sql.ast.DropTableStmt;
-import com.starrocks.sql.ast.ShowResourceGroupStmt;
-import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.system.BackendCoreStat;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
@@ -136,17 +127,13 @@ public class ShowCreateViewStmtTest {
                 "\tt0.c4 as d\n" +
                 "from t0";
         CreateViewStmt createViewStmt = (CreateViewStmt) UtFrameUtils.parseStmtWithNewParser(createViewSql, ctx);
-        GlobalStateMgr.getCurrentState().createView(createViewStmt);
+        Catalog.getCurrentCatalog().createView(createViewStmt);
 
         String descViewSql = "describe v2";
 
         StatementBase statement =
-                com.starrocks.sql.parser.SqlParser.parse(descViewSql, ctx.getSessionVariable()).get(0);
+                com.starrocks.sql.parser.SqlParser.parse(descViewSql, ctx.getSessionVariable().getSqlMode()).get(0);
         Analyzer.analyze(statement, ctx);
-        Assert.assertTrue(statement instanceof DescribeStmt);
-        ShowExecutor showExecutor = new ShowExecutor(ctx, (DescribeStmt) statement);
-        ShowResultSet rs = showExecutor.execute();
-        Assert.assertTrue(rs.getResultRows().stream().allMatch(r -> r.get(1).toUpperCase().startsWith("VARCHAR")));
         String query = "select * from v2 union all select c1 as a, c2 as b, NULL as c, c4 as d from t0";
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, query);
         plan = plan.replaceAll("\\[\\d+,\\s*", "")
@@ -155,11 +142,12 @@ public class ShowCreateViewStmtTest {
         String snippet = "  0:UNION\n" +
                 "  |  child exprs:\n" +
                 "  |      VARCHAR | VARCHAR | VARCHAR | VARCHAR\n" +
-                "  |      VARCHAR | VARCHAR | VARCHAR | VARCHAR";
+                "  |      VARCHAR | VARCHAR | VARCHAR | VARCHAR\n" +
+                "  |  pass-through-operands: all";
         Assert.assertTrue(plan.contains(snippet));
 
-        String dropViewSql = "drop view if exists v2";
-        DropTableStmt dropViewStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropViewSql, ctx);
-        GlobalStateMgr.getCurrentState().dropTable(dropViewStmt);
+        DropTableStmt dropViewStmt = new DropTableStmt(
+                false, new TableName("default_cluster:test", "v2"), true, true);
+        Catalog.getCurrentCatalog().dropTable(dropViewStmt);
     }
 }

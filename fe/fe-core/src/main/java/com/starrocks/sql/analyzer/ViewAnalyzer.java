@@ -1,10 +1,8 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.analyzer;
 
-import com.google.common.collect.Lists;
 import com.starrocks.analysis.BaseViewStmt;
 import com.starrocks.analysis.ColWithComment;
-import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Column;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
