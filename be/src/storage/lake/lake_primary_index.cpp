@@ -35,6 +35,8 @@ Status LakePrimaryIndex::lake_load(Tablet* tablet, TabletMetadata* metadata, int
 }
 
 Status LakePrimaryIndex::_do_lake_load(Tablet* tablet, TabletMetadata* metadata, int64_t base_version) {
+    MonotonicStopWatch watch;
+    watch.start();
     // 1. create and set key column schema
     std::unique_ptr<TabletSchema> tablet_schema = std::make_unique<TabletSchema>(metadata->schema());
     vector<ColumnId> pk_columns(tablet_schema->num_key_columns());
@@ -100,6 +102,9 @@ Status LakePrimaryIndex::_do_lake_load(Tablet* tablet, TabletMetadata* metadata,
         }
     }
     _tablet_id = tablet->id();
+    if (watch.elapsed_time() > 10 * 1000 * 1000) {
+        LOG(INFO) << "LakePrimaryIndex load cost(ms): " << watch.elapsed_time() / 1000000;
+    }
     return Status::OK();
 }
 

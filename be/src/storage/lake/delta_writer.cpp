@@ -148,7 +148,7 @@ private:
 };
 
 Status DeltaWriterImpl::build_schema_and_writer() {
-    if (_tablet_schema == nullptr) {
+    if (_mem_table_sink == nullptr) {
         DCHECK(_tablet_writer == nullptr);
         ASSIGN_OR_RETURN(auto tablet, _tablet_manager->get_tablet(_tablet_id));
         ASSIGN_OR_RETURN(_tablet_schema, tablet.get_schema());
@@ -255,7 +255,6 @@ Status DeltaWriterImpl::handle_partial_update() {
             LOG(WARNING) << "table with sort key do not support partial update";
             return Status::NotSupported("table with sort key do not support partial update");
         }
-        LOG(INFO) << "handle_partial_update col num: " << partial_cols_num;
         _tablet_schema = _partial_update_tablet_schema;
     }
     return Status::OK();
@@ -295,6 +294,10 @@ Status DeltaWriterImpl::finish() {
             const auto& tablet_column = _partial_update_tablet_schema->column(i);
             op_write->mutable_txn_meta()->add_partial_update_column_ids(_referenced_column_ids[i]);
             op_write->mutable_txn_meta()->add_partial_update_column_unique_ids(tablet_column.unique_id());
+        }
+        // generate rewrite segment names to avoid gc in rewrite operation
+        for (auto i = 0; i < op_write->rowset().segments_size(); i++) {
+            op_write->add_rewrite_segments(fmt::format("{}.dat", generate_uuid_string()));
         }
     }
     RETURN_IF_ERROR(tablet.put_txn_log(std::move(txn_log)));

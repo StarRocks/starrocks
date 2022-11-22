@@ -226,7 +226,7 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
                 req.__isset.compression_type ? req.compression_type : TCompressionType::LZ4_FRAME));
     }
     MetaFileBuilder builder(tablet_metadata_pb);
-    if (tablet_metadata_pb->schema().keys_type() == KeysType::PRIMARY_KEYS) {
+    if (is_primary_key(tablet_metadata_pb.get())) {
         RETURN_IF_ERROR(builder.finalize(_location_provider, _update_mgr));
     } else {
         RETURN_IF_ERROR(builder.finalize(_location_provider));
@@ -467,10 +467,6 @@ StatusOr<double> TabletManager::publish_version(int64_t tablet_id, int64_t base_
     return publish(_location_provider, &tablet, base_version, new_version, txns, txns_size);
 }
 
-static bool is_primary_key(TabletMetadata* metadata) {
-    return metadata->schema().keys_type() == KeysType::PRIMARY_KEYS;
-}
-
 static Status apply_write_log(const TxnLogPB_OpWrite& op_write, TabletMetadata* metadata) {
     if (op_write.has_rowset() && (op_write.rowset().num_rows() > 0 || op_write.rowset().has_delete_predicate())) {
         auto rowset = metadata->add_rowsets();
@@ -491,10 +487,29 @@ static Status apply_pk_write_log(const TxnLogPB_OpWrite& op_write, Tablet* table
     if (op_write.has_rowset() &&
         (op_write.rowset().num_rows() > 0 || op_write.rowset().has_delete_predicate() || op_write.dels_size() > 0)) {
         // handle primary key table publish
-        RETURN_IF_ERROR(
-                tablet->update_mgr()->publish_primary_key_tablet(op_write, metadata, tablet, builder, base_version));
+        auto st = tablet->update_mgr()->publish_primary_key_tablet(op_write, metadata, tablet, builder, base_version);
+        if (!st.ok()) {
+            LOG(WARNING) << "Fail to apply_pk_write_log: " << tablet->id() << " st: " << st;
+            tablet->update_mgr()->remove_primary_index_cache(tablet->id());
+            return st;
+        }
     }
     return Status::OK();
+}
+
+static Status apply_pk_compaction_log(const TxnLogPB_OpCompaction& op_compaction, Tablet* tablet,
+                                      TabletMetadata* metadata, MetaFileBuilder* builder, int64_t base_version) {
+    if (op_compaction.input_rowsets().empty()) {
+        DCHECK(!op_compaction.has_output_rowset() || op_compaction.output_rowset().num_rows() == 0);
+        return Status::OK();
+    }
+
+    auto st = tablet->update_mgr()->publish_primary_compaction(op_compaction, metadata, tablet, builder, base_version);
+    if (!st.ok()) {
+        LOG(WARNING) << "Fail to apply_pk_compaction_log: " << tablet->id() << " st: " << st;
+        tablet->update_mgr()->remove_primary_index_cache(tablet->id());
+    }
+    return st;
 }
 
 static Status apply_compaction_log(const TxnLogPB_OpCompaction& op_compaction, TabletMetadata* metadata) {
@@ -615,13 +630,21 @@ Status apply_pk_txn_log(const TxnLog& log, Tablet* tablet, TabletMetadata* metad
     if (log.has_op_write()) {
         RETURN_IF_ERROR(apply_pk_write_log(log.op_write(), tablet, metadata, builder, base_version));
     }
+
+    if (log.has_op_compaction()) {
+        RETURN_IF_ERROR(apply_pk_compaction_log(log.op_compaction(), tablet, metadata, builder, base_version));
+    }
     return Status::OK();
 }
 
 StatusOr<double> publish(LocationProvider* location_provider, Tablet* tablet, int64_t base_version, int64_t new_version,
                          const int64_t* txns, int txns_size) {
     auto compaction_score = [](const TabletMetadata& metadata) {
-        return std::max(base_compaction_score(metadata), cumulative_compaction_score(metadata));
+        if (is_primary_key(metadata)) {
+            return primary_compaction_score(metadata);
+        } else {
+            return std::max(base_compaction_score(metadata), cumulative_compaction_score(metadata));
+        }
     };
 
     // Read base version metadata
@@ -718,7 +741,12 @@ StatusOr<double> publish(LocationProvider* location_provider, Tablet* tablet, in
 
     // Save new metadata
     if (is_primary_key(new_metadata.get())) {
-        RETURN_IF_ERROR(builder->finalize(location_provider, tablet->update_mgr()));
+        auto st = builder->finalize(location_provider, tablet->update_mgr());
+        if (!st.ok()) {
+            LOG(WARNING) << "Fail to builder finalize: " << new_metadata->id() << " st: " << st;
+            tablet->update_mgr()->remove_primary_index_cache(tablet->id());
+            return st;
+        }
     } else {
         RETURN_IF_ERROR(builder->finalize(location_provider));
     }

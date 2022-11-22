@@ -19,8 +19,10 @@
 #include "storage/lake/location_provider.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/tablet.h"
+#include "storage/lake/update_compaction_state.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/default_value_column_iterator.h"
+#include "storage/tablet_manager.h"
 
 namespace starrocks {
 
@@ -29,6 +31,9 @@ namespace lake {
 // |metadata| contain last tablet meta info with new version
 Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_write, TabletMetadata* metadata,
                                                  Tablet* tablet, MetaFileBuilder* builder, int64_t base_version) {
+    std::stringstream cost_str;
+    MonotonicStopWatch watch;
+    watch.start();
     // 1. load rowset update data to cache, get upsert and delete list
     const uint32_t rowset_id = metadata->next_rowset_id();
     auto state_entry = _update_state_cache.get_or_create(strings::Substitute("$0_$1", tablet->id(), rowset_id));
@@ -37,8 +42,12 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     DeferOp remove_state_entry([&] { _update_state_cache.remove(state_entry); });
     auto& state = state_entry->value();
     RETURN_IF_ERROR(state.load(op_write, base_version, metadata, tablet));
+    cost_str << " [UpdateStateCache load] " << watch.elapsed_time();
+    watch.reset();
     // 2. rewrite segment file if it is partial update
     RETURN_IF_ERROR(state.rewrite_segment(op_write, tablet, metadata));
+    cost_str << " [UpdateStateCache rewrite segment] " << watch.elapsed_time();
+    watch.reset();
     // 3. update primary index
     auto index_entry = _index_cache.get_or_create(tablet->id());
     index_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
@@ -68,6 +77,8 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     for (const auto& one_delete : state.deletes()) {
         index.erase(*one_delete, &new_deletes);
     }
+    cost_str << " [update primary index] " << watch.elapsed_time();
+    watch.reset();
     // 4. generate delvec
     size_t ndelvec = new_deletes.size();
     vector<std::pair<uint32_t, DelVectorPtr>> new_del_vecs(ndelvec);
@@ -111,18 +122,21 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
         idx++;
     }
     new_deletes.clear();
+    cost_str << " [generate delvecs] " << watch.elapsed_time();
+    watch.reset();
 
     // 5. update TabletMeta and write to meta file
     for (auto&& each : new_del_vecs) {
         builder->append_delvec(each.second, each.first);
     }
     builder->apply_opwrite(op_write);
+    cost_str << " [apply meta] " << watch.elapsed_time();
 
     LOG(INFO) << strings::Substitute(
             "lake publish_primary_key_tablet tablet:$0 rowsetid:$1 upserts:$2 deletes:$3 new_del:$4 total_del:$5 "
-            "base_ver:$6 new_ver:$7",
+            "base_ver:$6 new_ver:$7 cost:$8",
             tablet->id(), rowset_id, upserts.size(), state.deletes().size(), new_del, total_del, base_version,
-            metadata->version());
+            metadata->version(), cost_str.str());
 
     return Status::OK();
 }
@@ -167,6 +181,10 @@ Status UpdateManager::get_column_values(Tablet* tablet, TabletMetadata* metadata
                                         std::vector<uint32_t>& column_ids, bool with_default,
                                         std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
                                         vector<std::unique_ptr<Column>>* columns) {
+    std::stringstream cost_str;
+    MonotonicStopWatch watch;
+    watch.start();
+
     if (with_default) {
         for (auto i = 0; i < column_ids.size(); ++i) {
             const TabletColumn& tablet_column = tablet_schema->column(column_ids[i]);
@@ -184,14 +202,13 @@ Status UpdateManager::get_column_values(Tablet* tablet, TabletMetadata* metadata
             }
         }
     }
+    cost_str << " [with_default] " << watch.elapsed_time();
+    watch.reset();
 
-    // TODO(yixin): cache rssid_to_path
     std::unordered_map<uint32_t, std::string> rssid_to_path;
-    for (auto& rs : metadata->rowsets()) {
-        for (int i = 0; i < rs.segments_size(); i++) {
-            rssid_to_path[rs.id() + i] = tablet->segment_location(rs.segments(i));
-        }
-    }
+    rowset_rssid_to_path(metadata, rssid_to_path);
+    cost_str << " [catch rssid_to_path] " << watch.elapsed_time();
+    watch.reset();
 
     std::shared_ptr<FileSystem> fs;
     for (const auto& [rssid, rowids] : rowids_by_rssid) {
@@ -199,10 +216,10 @@ Status UpdateManager::get_column_values(Tablet* tablet, TabletMetadata* metadata
             auto root_path = tablet->metadata_root_location();
             ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(root_path));
         }
-        auto segment = Segment::open(fs, rssid_to_path[rssid], rssid, tablet_schema);
+        std::string path = tablet->segment_location(rssid_to_path[rssid]);
+        auto segment = Segment::open(fs, path, rssid, tablet_schema);
         if (!segment.ok()) {
-            LOG(WARNING) << "Fail to open rssid: " << rssid << " path: " << rssid_to_path[rssid] << " : "
-                         << segment.status();
+            LOG(WARNING) << "Fail to open rssid: " << rssid << " path: " << path << " : " << segment.status();
             return segment.status();
         }
         if ((*segment)->num_rows() == 0) {
@@ -211,7 +228,7 @@ Status UpdateManager::get_column_values(Tablet* tablet, TabletMetadata* metadata
         ColumnIteratorOptions iter_opts;
         OlapReaderStatistics stats;
         iter_opts.stats = &stats;
-        ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(rssid_to_path[rssid]));
+        ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(path));
         iter_opts.read_file = read_file.get();
         for (auto i = 0; i < column_ids.size(); ++i) {
             ASSIGN_OR_RETURN(auto col_iter, (*segment)->new_column_iterator(column_ids[i]));
@@ -219,6 +236,8 @@ Status UpdateManager::get_column_values(Tablet* tablet, TabletMetadata* metadata
             RETURN_IF_ERROR(col_iter->fetch_values_by_rowid(rowids.data(), rowids.size(), (*columns)[i].get()));
         }
     }
+    cost_str << " [fetch vals by rowid] " << watch.elapsed_time();
+    LOG(INFO) << "UpdateManager get_column_values " << cost_str.str();
     return Status::OK();
 }
 
@@ -326,6 +345,7 @@ void UpdateManager::expire_cache() {
 }
 
 void UpdateManager::clear_cached_del_vec(const std::vector<TabletSegmentId>& tsids) {
+    LOG(INFO) << "clear cached delvec cnt: " << tsids.size();
     std::lock_guard<std::mutex> lg(_del_vec_cache_lock);
     for (const auto& tsid : tsids) {
         auto itr = _del_vec_cache.find(tsid);
@@ -333,6 +353,134 @@ void UpdateManager::clear_cached_del_vec(const std::vector<TabletSegmentId>& tsi
             _del_vec_cache.erase(itr);
         }
     }
+}
+
+void UpdateManager::clear_cached_del_vec(const std::vector<TabletSegmentIdRange>& tsid_ranges) {
+    std::stringstream ss;
+    std::lock_guard<std::mutex> lg(_del_vec_cache_lock);
+    for (const auto& range : tsid_ranges) {
+        if (!range.is_valid()) {
+            LOG(ERROR) << "invalid tsid range can't be clear: " << range;
+        } else {
+            auto from_iter = _del_vec_cache.lower_bound(range.left);
+            auto to_iter = _del_vec_cache.upper_bound(range.right);
+            bool done = false;
+            while (from_iter != to_iter) {
+                from_iter = _del_vec_cache.erase(from_iter);
+                done = true;
+            }
+            ss << range << ":done " << done << ",";
+        }
+    }
+    LOG(INFO) << "clear cached delvec ranges: " << ss.str();
+}
+
+size_t UpdateManager::cached_del_vec_size() {
+    std::lock_guard<std::mutex> lg(_del_vec_cache_lock);
+    return _del_vec_cache.size();
+}
+
+size_t UpdateManager::get_rowset_num_deletes(int64_t tablet_id, int64_t version, const RowsetMetadataPB& rowset_meta) {
+    size_t num_dels = 0;
+    for (int i = 0; i < rowset_meta.segments_size(); i++) {
+        DelVectorPtr delvec;
+        TabletSegmentId tsid;
+        tsid.tablet_id = tablet_id;
+        tsid.segment_id = rowset_meta.id() + i;
+        auto st = get_del_vec(tsid, version, &delvec);
+        if (!st.ok()) {
+            LOG(WARNING) << "get_rowset_num_deletes: error get del vector " << st;
+            continue;
+        }
+        num_dels += delvec->cardinality();
+    }
+    return num_dels;
+}
+
+Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op_compaction, TabletMetadata* metadata,
+                                                 Tablet* tablet, MetaFileBuilder* builder, int64_t base_version) {
+    std::stringstream cost_str;
+    MonotonicStopWatch watch;
+    watch.start();
+    // 1. load primary index
+    auto index_entry = _index_cache.get_or_create(tablet->id());
+    index_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
+    auto& index = index_entry->value();
+    Status st = index.lake_load(tablet, metadata, base_version);
+    if (!st.ok()) {
+        _index_cache.remove(index_entry);
+        std::string msg =
+                strings::Substitute("publish_primary_key_tablet: load primary index failed: $0", st.to_string());
+        LOG(ERROR) << msg;
+        return st;
+    }
+    cost_str << " [primary index load] " << watch.elapsed_time();
+    watch.reset();
+    // release index entry but keep it in cache
+    DeferOp release_index_entry([&] { _index_cache.release(index_entry); });
+    // 2. iterate output rowset, update primary index and generate delvec
+    std::unique_ptr<TabletSchema> tablet_schema = std::make_unique<TabletSchema>(metadata->schema());
+    RowsetPtr output_rowset =
+            std::make_shared<Rowset>(tablet, std::make_shared<RowsetMetadata>(op_compaction.output_rowset()), 0);
+    auto compaction_state = std::make_unique<CompactionState>(output_rowset.get());
+    size_t total_deletes = 0;
+    size_t total_rows = 0;
+    vector<std::pair<uint32_t, DelVectorPtr>> delvecs;
+    vector<uint32_t> tmp_deletes;
+    const uint32_t rowset_id = metadata->next_rowset_id();
+    // get max rowset id in input rowsets
+    uint32_t max_rowset_id =
+            *std::max_element(op_compaction.input_rowsets().begin(), op_compaction.input_rowsets().end());
+    // then get the max src rssid, to solve conflict between write and compaction
+    auto input_rowset = std::find_if(metadata->rowsets().begin(), metadata->rowsets().end(),
+                                     [&](const RowsetMetadata& r) { return r.id() == max_rowset_id; });
+    uint32_t max_src_rssid = max_rowset_id + input_rowset->segments_size() - 1;
+
+    for (size_t i = 0; i < compaction_state->pk_cols.size(); i++) {
+        RETURN_IF_ERROR(compaction_state->load_segments(output_rowset.get(), tablet_schema.get(), i));
+        auto& pk_col = compaction_state->pk_cols[i];
+        total_rows += pk_col->size();
+        uint32_t rssid = rowset_id + i;
+        tmp_deletes.clear();
+        // replace will not grow hashtable, so don't need to check memory limit
+        index.try_replace(rssid, 0, *pk_col, max_src_rssid, &tmp_deletes);
+        DelVectorPtr dv = std::make_shared<DelVector>();
+        if (tmp_deletes.empty()) {
+            dv->init(metadata->version(), nullptr, 0);
+        } else {
+            dv->init(metadata->version(), tmp_deletes.data(), tmp_deletes.size());
+            total_deletes += tmp_deletes.size();
+        }
+        delvecs.emplace_back(rssid, dv);
+        compaction_state->release_segments(i);
+    }
+    cost_str << " [generate delvecs] " << watch.elapsed_time();
+    watch.reset();
+
+    // 3. update TabletMeta and write to meta file
+    for (auto&& each : delvecs) {
+        builder->append_delvec(each.second, each.first);
+    }
+    builder->apply_opcompaction(op_compaction);
+    cost_str << " [apply meta] " << watch.elapsed_time();
+
+    LOG(INFO) << strings::Substitute(
+            "lake publish_primary_compaction: tablet_id:$0 input_rowset_size:$1 max_rowset_id:$2"
+            " total_deletes:$3 total_rows:$4 base_ver:$5 new_ver:$6 cost:$7",
+            tablet->id(), op_compaction.input_rowsets_size(), max_rowset_id, total_deletes, total_rows, base_version,
+            metadata->version(), cost_str.str());
+
+    return Status::OK();
+}
+
+void UpdateManager::remove_primary_index_cache(uint32_t tablet_id) {
+    bool succ = false;
+    auto index_entry = _index_cache.get(tablet_id);
+    if (index_entry != nullptr) {
+        _index_cache.remove(index_entry);
+        succ = true;
+    }
+    LOG(WARNING) << "Lake update manager remove primary index cache, tablet_id: " << tablet_id << " , succ: " << succ;
 }
 
 } // namespace lake

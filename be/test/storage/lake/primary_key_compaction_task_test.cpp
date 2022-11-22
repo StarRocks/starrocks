@@ -12,8 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <fmt/format.h>
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <memory>
 #include <random>
 
 #include "column/chunk.h"
@@ -23,19 +26,19 @@
 #include "column/vectorized_schema.h"
 #include "common/logging.h"
 #include "fs/fs_util.h"
+#include "runtime/exec_env.h"
+#include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
+#include "storage/lake/compaction_policy.h"
 #include "storage/lake/delta_writer.h"
 #include "storage/lake/fixed_location_provider.h"
+#include "storage/lake/gc.h"
+#include "storage/lake/horizontal_compaction_task.h"
 #include "storage/lake/join_path.h"
-#include "storage/lake/location_provider.h"
-#include "storage/lake/meta_file.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
-#include "storage/lake/tablet_writer.h"
-#include "storage/rowset/segment.h"
-#include "storage/rowset/segment_iterator.h"
-#include "storage/rowset/segment_options.h"
+#include "storage/lake/txn_log.h"
 #include "storage/tablet_schema.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
@@ -58,29 +61,26 @@ public:
         return Status::OK();
     }
 
-    void set_failed(bool f) { _set_failed = f; }
-
     std::set<int64_t> _owned_shards;
     std::string _dir;
-    bool _set_failed = false;
 };
 
-class PrimaryKeyTest : public testing::Test {
+class PrimaryKeyHorizontalCompactionTest : public testing::Test {
 public:
-    PrimaryKeyTest() {
+    PrimaryKeyHorizontalCompactionTest() {
         _tablet_manager = ExecEnv::GetInstance()->lake_tablet_manager();
-        _location_provider = std::make_unique<TestLocationProvider>(kTestGroupPath);
-
-        _tablet_metadata = std::make_unique<TabletMetadata>();
-        _tablet_metadata->set_id(next_id());
-        _tablet_metadata->set_version(1);
-        _tablet_metadata->set_next_rowset_id(1);
-        _location_provider->_owned_shards.insert(_tablet_metadata->id());
-
-        _backup_location_provider = _tablet_manager->TEST_set_location_provider(_location_provider.get());
 
         _parent_mem_tracker = std::make_unique<MemTracker>(-1);
         _mem_tracker = std::make_unique<MemTracker>(-1, "", _parent_mem_tracker.get());
+        _location_provider = std::make_unique<TestLocationProvider>(kTestGroupPath);
+        _backup_location_provider = _tablet_manager->TEST_set_location_provider(_location_provider.get());
+
+        _tablet_metadata = std::make_shared<TabletMetadata>();
+        _tablet_metadata->set_id(next_id());
+        _tablet_metadata->set_version(1);
+        _tablet_metadata->set_cumulative_point(0);
+        _tablet_metadata->set_next_rowset_id(1);
+        _location_provider->_owned_shards.insert(_tablet_metadata->id());
         //
         //  | column | type | KEY | NULL |
         //  +--------+------+-----+------+
@@ -113,7 +113,12 @@ public:
         _schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(*_tablet_schema));
     }
 
+protected:
+    constexpr static const char* const kTestGroupPath = "test_lake_pk_compaction_task";
+    constexpr static const int kChunkSize = 12;
+
     void SetUp() override {
+        (void)ExecEnv::GetInstance()->lake_tablet_manager()->TEST_set_location_provider(_location_provider.get());
         (void)fs::remove_all(kTestGroupPath);
         CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kSegmentDirectoryName)));
         CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kMetadataDirectoryName)));
@@ -167,81 +172,21 @@ public:
         return ret;
     }
 
-protected:
-    constexpr static const char* const kTestGroupPath = "test_primary_key";
-    constexpr static const int kChunkSize = 12;
-
-    std::unique_ptr<TestLocationProvider> _location_provider;
-    LocationProvider* _backup_location_provider;
     TabletManager* _tablet_manager;
-    std::unique_ptr<TabletMetadata> _tablet_metadata;
-    std::shared_ptr<TabletSchema> _tablet_schema;
     std::unique_ptr<MemTracker> _parent_mem_tracker;
     std::unique_ptr<MemTracker> _mem_tracker;
+    std::unique_ptr<TestLocationProvider> _location_provider;
+    LocationProvider* _backup_location_provider;
+    std::shared_ptr<TabletMetadata> _tablet_metadata;
+    std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<VSchema> _schema;
-    int64_t _txn_id = 1231;
     int64_t _partition_id = 4561;
+    int64_t _txn_id = 1231;
 };
 
-TEST_F(PrimaryKeyTest, test_write_success) {
-    std::vector<int> k0{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22};
-    std::vector<int> v0{2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 41, 44};
-
-    auto c0 = Int32Column::create();
-    auto c1 = Int32Column::create();
-    c0->append_numbers(k0.data(), k0.size() * sizeof(int));
-    c1->append_numbers(v0.data(), v0.size() * sizeof(int));
-
-    VChunk chunk0({c0, c1}, _schema);
-    auto rowset_txn_meta = std::make_unique<RowsetTxnMetaPB>();
-
-    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(_tablet_metadata->id()));
-    std::shared_ptr<const TabletSchema> const_schema = _tablet_schema;
-    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(rowset_txn_meta.get(), const_schema));
-    ASSERT_OK(writer->open());
-
-    // write segment #1
-    ASSERT_OK(writer->write(chunk0));
-    ASSERT_OK(writer->finish());
-
-    // write txnlog
-    int64_t logs[1];
-    logs[0] = _txn_id;
-    auto txn_log = std::make_shared<TxnLog>();
-    txn_log->set_tablet_id(_tablet_metadata->id());
-    txn_log->set_txn_id(_txn_id++);
-    auto op_write = txn_log->mutable_op_write();
-    for (auto& f : writer->files()) {
-        op_write->mutable_rowset()->add_segments(std::move(f));
-    }
-    op_write->mutable_rowset()->set_num_rows(writer->num_rows());
-    op_write->mutable_rowset()->set_data_size(writer->data_size());
-    op_write->mutable_rowset()->set_overlapped(false);
-
-    ASSERT_OK(_tablet_manager->put_txn_log(txn_log));
-
-    writer->close();
-
-    ASSIGN_OR_ABORT(auto score, _tablet_manager->publish_version(_tablet_metadata->id(), 1, 2, logs, 1));
-    EXPECT_TRUE(score > 0.0);
-
-    // read at version 2
-    ASSIGN_OR_ABORT(auto reader, tablet.new_reader(2, *_schema));
-    ASSERT_OK(reader->prepare());
-    TabletReaderParams params;
-    ASSERT_OK(reader->open(params));
-
-    auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
-    ASSERT_OK(reader->get_next(read_chunk_ptr.get()));
-    ASSERT_EQ(k0.size(), read_chunk_ptr->num_rows());
-
-    for (int i = 0, sz = k0.size(); i < sz; i++) {
-        EXPECT_EQ(k0[i], read_chunk_ptr->get(i)[0].get_int32());
-        EXPECT_EQ(v0[i], read_chunk_ptr->get(i)[1].get_int32());
-    }
-}
-
-TEST_F(PrimaryKeyTest, test_write_multitime) {
+// each time overwrite last rows
+TEST_F(PrimaryKeyHorizontalCompactionTest, test1) {
+    // Prepare data for writing
     auto chunk0 = generate_data(kChunkSize, 0);
     auto indexes = std::vector<uint32_t>(kChunkSize);
     for (int i = 0; i < kChunkSize; i++) {
@@ -262,13 +207,47 @@ TEST_F(PrimaryKeyTest, test_write_multitime) {
         version++;
     }
     ASSERT_EQ(kChunkSize, read(version));
-    ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_manager->get_tablet_metadata(tablet_id, version));
-    EXPECT_EQ(new_tablet_metadata->rowsets_size(), 3);
+    ASSIGN_OR_ABORT(auto new_tablet_metadata1, _tablet_manager->get_tablet_metadata(tablet_id, version));
+    EXPECT_EQ(new_tablet_metadata1->rowsets_size(), 3);
+
+    // make sure delvecs have been generated
+    for (int i = 0; i < 3; i++) {
+        if (i < 2) {
+            EXPECT_TRUE(fs::path_exist(_location_provider->tablet_delvec_location(tablet_id, version - i)));
+        } else {
+            EXPECT_FALSE(fs::path_exist(_location_provider->tablet_delvec_location(tablet_id, version - i)));
+        }
+    }
+    EXPECT_EQ(3, _tablet_manager->update_mgr()->cached_del_vec_size());
+
+    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(tablet_id));
+    _txn_id++;
+
+    ASSIGN_OR_ABORT(auto task, _tablet_manager->compact(_tablet_metadata->id(), version, _txn_id));
+    ASSERT_OK(task->execute(nullptr));
+    ASSERT_OK(_tablet_manager->publish_version(_tablet_metadata->id(), version, version + 1, &_txn_id, 1).status());
+    version++;
+    ASSERT_EQ(kChunkSize, read(version));
+
+    ASSIGN_OR_ABORT(auto new_tablet_metadata2, _tablet_manager->get_tablet_metadata(tablet_id, version));
+    EXPECT_EQ(new_tablet_metadata2->rowsets_size(), 1);
+
+    // make sure delvecs have been gc
+    config::lake_gc_segment_expire_seconds = 0;
+    config::lake_gc_metadata_max_versions = 1;
+    ASSERT_OK(metadata_gc(kTestGroupPath, _tablet_manager, _txn_id + 1));
+    ASSERT_OK(datafile_gc(kTestGroupPath, _tablet_manager));
+    for (int ver = 1; ver <= version; ver++) {
+        EXPECT_FALSE(fs::path_exist(_location_provider->tablet_delvec_location(tablet_id, ver)));
+    }
+    EXPECT_EQ(1, _tablet_manager->update_mgr()->cached_del_vec_size());
 }
 
-TEST_F(PrimaryKeyTest, test_write_fail_retry) {
+// test write 3 diff chunk
+TEST_F(PrimaryKeyHorizontalCompactionTest, test2) {
+    // Prepare data for writing
     std::vector<Chunk> chunks;
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 3; i++) {
         chunks.push_back(generate_data(kChunkSize, i));
     }
     auto indexes = std::vector<uint32_t>(kChunkSize);
@@ -278,7 +257,6 @@ TEST_F(PrimaryKeyTest, test_write_fail_retry) {
 
     auto version = 1;
     auto tablet_id = _tablet_metadata->id();
-    // write success
     for (int i = 0; i < 3; i++) {
         _txn_id++;
         auto delta_writer = DeltaWriter::create(tablet_id, _txn_id, _partition_id, nullptr, _mem_tracker.get());
@@ -290,30 +268,84 @@ TEST_F(PrimaryKeyTest, test_write_fail_retry) {
         ASSERT_OK(_tablet_manager->publish_version(tablet_id, version, version + 1, &_txn_id, 1).status());
         version++;
     }
-    // write failed
-    for (int i = 3; i < 5; i++) {
+    ASSERT_EQ(kChunkSize * 3, read(version));
+
+    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(tablet_id));
+    _txn_id++;
+
+    ASSIGN_OR_ABORT(auto task, _tablet_manager->compact(_tablet_metadata->id(), version, _txn_id));
+    ASSERT_OK(task->execute(nullptr));
+    ASSERT_OK(_tablet_manager->publish_version(_tablet_metadata->id(), version, version + 1, &_txn_id, 1).status());
+    version++;
+    ASSERT_EQ(kChunkSize * 3, read(version));
+
+    ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_manager->get_tablet_metadata(tablet_id, version));
+    EXPECT_EQ(new_tablet_metadata->rowsets_size(), 1);
+}
+
+// test write empty chunk
+TEST_F(PrimaryKeyHorizontalCompactionTest, test3) {
+    // Prepare data for writing
+    std::vector<Chunk> chunks;
+    for (int i = 0; i < 3; i++) {
+        if (i == 1) {
+            chunks.push_back(generate_data(0, 0));
+        } else {
+            chunks.push_back(generate_data(kChunkSize, i));
+        }
+    }
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    auto indexes_empty = std::vector<uint32_t>();
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    for (int i = 0; i < 3; i++) {
         _txn_id++;
         auto delta_writer = DeltaWriter::create(tablet_id, _txn_id, _partition_id, nullptr, _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
-        ASSERT_OK(delta_writer->write(chunks[i], indexes.data(), indexes.size()));
+        if (i == 1) {
+            ASSERT_OK(delta_writer->write(chunks[i], indexes_empty.data(), indexes_empty.size()));
+        } else {
+            ASSERT_OK(delta_writer->write(chunks[i], indexes.data(), indexes.size()));
+        }
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
-        ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(tablet_id));
-        auto txn_log_st = tablet.get_txn_log(_txn_id);
-        EXPECT_TRUE(txn_log_st.ok());
-        auto& txn_log = txn_log_st.value();
-        ASSIGN_OR_ABORT(auto base_metadata, tablet.get_metadata(version));
-        auto new_metadata = std::make_shared<TabletMetadata>(*base_metadata);
-        new_metadata->set_version(version + 1);
-        std::unique_ptr<MetaFileBuilder> builder = std::make_unique<MetaFileBuilder>(new_metadata);
-        // update primary table state, such as primary index
-        ASSERT_OK(tablet.update_mgr()->publish_primary_key_tablet(txn_log->op_write(), new_metadata.get(), &tablet,
-                                                                  builder.get(), version));
-        // if builder.finalize fail, remove primary index cache and retry
-        tablet.update_mgr()->remove_primary_index_cache(tablet_id);
+        // Publish version
+        ASSERT_OK(_tablet_manager->publish_version(tablet_id, version, version + 1, &_txn_id, 1).status());
+        version++;
     }
-    // write success
-    for (int i = 3; i < 5; i++) {
+    ASSERT_EQ(kChunkSize * 2, read(version));
+
+    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(tablet_id));
+    _txn_id++;
+
+    ASSIGN_OR_ABORT(auto task, _tablet_manager->compact(_tablet_metadata->id(), version, _txn_id));
+    ASSERT_OK(task->execute(nullptr));
+    ASSERT_OK(_tablet_manager->publish_version(_tablet_metadata->id(), version, version + 1, &_txn_id, 1).status());
+    version++;
+    ASSERT_EQ(kChunkSize * 2, read(version));
+
+    ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_manager->get_tablet_metadata(tablet_id, version));
+    EXPECT_EQ(new_tablet_metadata->rowsets_size(), 1);
+}
+
+TEST_F(PrimaryKeyHorizontalCompactionTest, test_compaction_policy) {
+    // Prepare data for writing
+    std::vector<Chunk> chunks;
+    for (int i = 0; i < 3; i++) {
+        chunks.push_back(generate_data(kChunkSize, i));
+    }
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    for (int i = 0; i < 3; i++) {
         _txn_id++;
         auto delta_writer = DeltaWriter::create(tablet_id, _txn_id, _partition_id, nullptr, _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
@@ -324,9 +356,21 @@ TEST_F(PrimaryKeyTest, test_write_fail_retry) {
         ASSERT_OK(_tablet_manager->publish_version(tablet_id, version, version + 1, &_txn_id, 1).status());
         version++;
     }
-    ASSERT_EQ(kChunkSize * 5, read(version));
-    ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_manager->get_tablet_metadata(tablet_id, version));
-    EXPECT_EQ(new_tablet_metadata->rowsets_size(), 5);
+    ASSERT_EQ(kChunkSize * 3, read(version));
+    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(tablet_id));
+
+    ASSIGN_OR_ABORT(auto compaction_policy,
+                    CompactionPolicy::create_compaction_policy(std::make_shared<Tablet>(tablet)));
+    ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets(version));
+    EXPECT_EQ(3, input_rowsets.size());
+
+    config::max_update_compaction_num_singleton_deltas = 2;
+    ASSIGN_OR_ABORT(auto input_rowsets2, compaction_policy->pick_rowsets(version));
+    EXPECT_EQ(2, input_rowsets2.size());
+
+    config::max_update_compaction_num_singleton_deltas = 1;
+    ASSIGN_OR_ABORT(auto input_rowsets3, compaction_policy->pick_rowsets(version));
+    EXPECT_EQ(1, input_rowsets3.size());
 }
 
 } // namespace starrocks::lake

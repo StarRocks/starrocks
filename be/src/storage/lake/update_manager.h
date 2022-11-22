@@ -72,8 +72,21 @@ public:
     Status set_cached_del_vec(const std::vector<std::pair<TabletSegmentId, DelVectorPtr>>& cache_delvec_updates,
                               int64_t version);
 
+    // get del nums from rowset, for compaction policy
+    size_t get_rowset_num_deletes(int64_t tablet_id, int64_t version, const RowsetMetadataPB& rowset_meta);
+
+    Status publish_primary_compaction(const TxnLogPB_OpCompaction& op_compaction, TabletMetadata* metadata,
+                                      Tablet* tablet, MetaFileBuilder* builder, int64_t base_version);
+
+    // remove primary index entry from cache, called when publish version error happens.
+    // Because update primary index isn't idempotent, so if primary index update success, but
+    // publish failed later, need to clear primary index.
+    void remove_primary_index_cache(uint32_t tablet_id);
+
     void expire_cache();
     void clear_cached_del_vec(const std::vector<TabletSegmentId>& tsids);
+    void clear_cached_del_vec(const std::vector<TabletSegmentIdRange>& tsid_ranges);
+    size_t cached_del_vec_size();
 
 private:
     Status _do_update(std::uint32_t rowset_id, std::int32_t upsert_idx, const std::vector<ColumnUniquePtr>& upserts,
@@ -90,7 +103,7 @@ private:
 
     // DelVector related states
     std::mutex _del_vec_cache_lock;
-    std::unordered_map<TabletSegmentId, DelVectorPtr> _del_vec_cache;
+    std::map<TabletSegmentId, DelVectorPtr> _del_vec_cache;
     // use _del_vec_cache_ver to indice the valid position
     int64_t _del_vec_cache_ver{0};
 

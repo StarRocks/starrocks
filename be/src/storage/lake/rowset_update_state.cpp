@@ -60,6 +60,10 @@ Status RowsetUpdateState::load(const TxnLogPB_OpWrite& op_write, int64_t base_ve
 }
 
 Status RowsetUpdateState::_do_load(const TxnLogPB_OpWrite& op_write, TabletMetadata* metadata, Tablet* tablet) {
+    std::stringstream cost_str;
+    MonotonicStopWatch watch;
+    watch.start();
+
     std::unique_ptr<TabletSchema> tablet_schema = std::make_unique<TabletSchema>(metadata->schema());
 
     vector<uint32_t> pk_columns;
@@ -86,6 +90,8 @@ Status RowsetUpdateState::_do_load(const TxnLogPB_OpWrite& op_write, TabletMetad
         }
         _deletes.emplace_back(std::move(col));
     }
+    cost_str << " [read deletes] " << watch.elapsed_time();
+    watch.reset();
 
     std::unique_ptr<Rowset> rowset_ptr =
             std::make_unique<Rowset>(tablet, std::make_shared<RowsetMetadataPB>(op_write.rowset()), 0);
@@ -123,6 +129,9 @@ Status RowsetUpdateState::_do_load(const TxnLogPB_OpWrite& op_write, TabletMetad
         }
         dest = std::move(col);
     }
+    cost_str << " [read upserts] " << watch.elapsed_time();
+    LOG(INFO) << "RowsetUpdateState do_load cost: " << cost_str.str();
+
     for (const auto& upsert : _upserts) {
         _memory_usage += upsert != nullptr ? upsert->memory_usage() : 0;
     }
@@ -282,15 +291,19 @@ Status RowsetUpdateState::_prepare_partial_update_states(const TxnLogPB_OpWrite&
 }
 
 Status RowsetUpdateState::rewrite_segment(const TxnLogPB_OpWrite& op_write, Tablet* tablet, TabletMetadata* metadata) {
+    MonotonicStopWatch watch;
+    watch.start();
     // const_cast for paritial update to rewrite segment file in op_write
     RowsetMetadata* rowset_meta = const_cast<TxnLogPB_OpWrite*>(&op_write)->mutable_rowset();
     auto root_path = tablet->metadata_root_location();
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_path));
     std::unique_ptr<TabletSchema> tablet_schema = std::make_unique<TabletSchema>(metadata->schema());
     // get rowset schema
-    if (!op_write.has_txn_meta() || rowset_meta->num_rows() == 0 || op_write.txn_meta().has_merge_condition()) {
+    if (!op_write.has_txn_meta() || op_write.rewrite_segments_size() == 0 || rowset_meta->segments_size() == 0 ||
+        op_write.txn_meta().has_merge_condition()) {
         return Status::OK();
     }
+    CHECK(op_write.rewrite_segments_size() == rowset_meta->segments_size());
     // currently assume it's a partial update
     const auto& txn_meta = op_write.txn_meta();
     // columns supplied in rowset
@@ -305,11 +318,9 @@ Status RowsetUpdateState::rewrite_segment(const TxnLogPB_OpWrite& op_write, Tabl
         }
     }
 
-    std::vector<std::pair<std::string, std::string>> rewrite_files;
     for (int i = 0; i < rowset_meta->segments_size(); i++) {
         auto src_path = rowset_meta->segments(i);
-        auto dest_path = fmt::format("{}.dat", generate_uuid_string());
-        rewrite_files.emplace_back(src_path, dest_path);
+        auto dest_path = op_write.rewrite_segments(i);
 
         int64_t t_rewrite_start = MonotonicMillis();
         FooterPointerPB partial_rowset_footer = txn_meta.partial_rowset_footers(i);
@@ -319,13 +330,18 @@ Status RowsetUpdateState::rewrite_segment(const TxnLogPB_OpWrite& op_write, Tabl
                                                  _partial_update_states[i].write_columns, i, partial_rowset_footer));
         int64_t t_rewrite_end = MonotonicMillis();
         LOG(INFO) << strings::Substitute(
-                "lake apply partial segment tablet:$0 rowset:$1 seg:$2 #column:$3 #rewrite:$4ms", tablet->id(),
-                rowset_meta->id(), i, read_column_ids.size(), t_rewrite_end - t_rewrite_start);
+                "lake apply partial segment tablet:$0 rowset:$1 seg:$2 #column:$3 #rewrite:$4ms [$5 -> $6]",
+                tablet->id(), rowset_meta->id(), i, read_column_ids.size(), t_rewrite_end - t_rewrite_start, src_path,
+                dest_path);
     }
 
     // rename segment file
     for (int i = 0; i < rowset_meta->segments_size(); i++) {
-        rowset_meta->set_segments(i, rewrite_files[i].second);
+        rowset_meta->set_segments(i, op_write.rewrite_segments(i));
+    }
+
+    if (watch.elapsed_time() > 10 * 1000 * 1000) {
+        LOG(INFO) << "RowsetUpdateState rewrite_segment cost(ms): " << watch.elapsed_time() / 1000000;
     }
     return Status::OK();
 }

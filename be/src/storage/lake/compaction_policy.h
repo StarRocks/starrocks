@@ -41,4 +41,6 @@ double cumulative_compaction_score(const TabletMetadataPB& metadata);
 
 double base_compaction_score(const TabletMetadataPB& metadata);
 
+double primary_compaction_score(const TabletMetadataPB& metadata);
+
 } // namespace starrocks::lake
