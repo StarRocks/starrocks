@@ -4,7 +4,7 @@
 
 #include <vector>
 
-#include "column/schema.h"
+#include "column/vectorized_schema.h"
 #include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
 #include "storage/compaction_utils.h"
@@ -104,7 +104,8 @@ Status VerticalCompactionTask::_compact_column_group(bool is_key, int column_gro
                                                      vectorized::RowSourceMaskBuffer* mask_buffer,
                                                      std::vector<vectorized::RowSourceMask>* source_masks,
                                                      Statistics* statistics) {
-    vectorized::Schema schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema(), column_group);
+    vectorized::VectorizedSchema schema =
+            ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema(), column_group);
     vectorized::TabletReader reader(std::static_pointer_cast<Tablet>(_tablet->shared_from_this()),
                                     output_rs_writer->version(), schema, is_key, mask_buffer);
     RETURN_IF_ERROR(reader.prepare());
@@ -168,7 +169,7 @@ StatusOr<int32_t> VerticalCompactionTask::_calculate_chunk_size_for_column_group
 
 StatusOr<size_t> VerticalCompactionTask::_compact_data(bool is_key, int32_t chunk_size,
                                                        const std::vector<uint32_t>& column_group,
-                                                       const vectorized::Schema& schema,
+                                                       const vectorized::VectorizedSchema& schema,
                                                        vectorized::TabletReader* reader, RowsetWriter* output_rs_writer,
                                                        vectorized::RowSourceMaskBuffer* mask_buffer,
                                                        std::vector<vectorized::RowSourceMask>* source_masks) {

@@ -6,7 +6,7 @@
 
 namespace starrocks::vectorized {
 
-ChunkIteratorPtr new_empty_iterator(vectorized::Schema&& schema, int chunk_size);
-ChunkIteratorPtr new_empty_iterator(const vectorized::Schema& schema, int chunk_size);
+ChunkIteratorPtr new_empty_iterator(vectorized::VectorizedSchema&& schema, int chunk_size);
+ChunkIteratorPtr new_empty_iterator(const vectorized::VectorizedSchema& schema, int chunk_size);
 
 } // namespace starrocks::vectorized

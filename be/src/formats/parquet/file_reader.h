@@ -101,7 +101,7 @@ private:
     std::vector<std::shared_ptr<GroupReader>> _row_group_readers;
     size_t _cur_row_group_idx = 0;
     size_t _row_group_size = 0;
-    vectorized::Schema _schema;
+    vectorized::VectorizedSchema _schema;
 
     std::vector<GroupReaderParam::Column> _read_cols;
     size_t _total_row_count = 0;

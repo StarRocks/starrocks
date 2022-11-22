@@ -9,7 +9,7 @@ class TabletSchema;
 
 namespace vectorized {
 class ChunkIterator;
-class Schema;
+class VectorizedSchema;
 } // namespace vectorized
 
 namespace lake {

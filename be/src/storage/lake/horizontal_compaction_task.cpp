@@ -41,7 +41,7 @@ Status HorizontalCompactionTask::execute(Stats* stats) {
     const int32_t chunk_size = CompactionUtils::get_read_chunk_size(
             config::compaction_memory_limit_per_worker, config::vector_chunk_size, num_rows, num_size, max_input_segs);
 
-    vectorized::Schema schema = ChunkHelper::convert_schema_to_format_v2(*tablet_schema);
+    vectorized::VectorizedSchema schema = ChunkHelper::convert_schema_to_format_v2(*tablet_schema);
     TabletReader reader(*_tablet, _version, schema, _input_rowsets);
     RETURN_IF_ERROR(reader.prepare());
     vectorized::TabletReaderParams reader_params;

@@ -13,11 +13,11 @@ class Segment;
 namespace vectorized {
 
 class ColumnPredicate;
-class Schema;
+class VectorizedSchema;
 class SegmentReadOptions;
 
-ChunkIteratorPtr new_segment_iterator(const std::shared_ptr<Segment>& segment, const vectorized::Schema& schema,
-                                      const SegmentReadOptions& options);
+ChunkIteratorPtr new_segment_iterator(const std::shared_ptr<Segment>& segment,
+                                      const vectorized::VectorizedSchema& schema, const SegmentReadOptions& options);
 } // namespace vectorized
 
 } // namespace starrocks

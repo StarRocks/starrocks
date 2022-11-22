@@ -324,15 +324,15 @@ std::shared_ptr<TabletSchema> TabletSchema::create(const TabletSchema& src_table
 }
 
 void TabletSchema::_init_schema() const {
-    starrocks::vectorized::Fields fields;
+    starrocks::vectorized::VectorizedFields fields;
     for (ColumnId cid = 0; cid < num_columns(); ++cid) {
         auto f = ChunkHelper::convert_field_to_format_v2(cid, column(cid));
-        fields.emplace_back(std::make_shared<starrocks::vectorized::Field>(std::move(f)));
+        fields.emplace_back(std::make_shared<starrocks::vectorized::VectorizedField>(std::move(f)));
     }
-    _schema = std::make_unique<vectorized::Schema>(std::move(fields), keys_type(), _sort_key_idxes);
+    _schema = std::make_unique<vectorized::VectorizedSchema>(std::move(fields), keys_type(), _sort_key_idxes);
 }
 
-vectorized::Schema* TabletSchema::schema() const {
+vectorized::VectorizedSchema* TabletSchema::schema() const {
     std::call_once(_init_schema_once_flag, [this] { return _init_schema(); });
     return _schema.get();
 }
