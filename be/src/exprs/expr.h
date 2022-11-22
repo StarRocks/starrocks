@@ -294,8 +294,6 @@ private:
     static Status create_vectorized_expr(ObjectPool* pool, const TExprNode& texpr_node, Expr** expr,
                                          RuntimeState* state);
 
-    // Alloc throw exceptions when failed.
-    static const long MODE_ALLOC_EXCEPTION = 1L << 8;
 };
 
 } // namespace starrocks

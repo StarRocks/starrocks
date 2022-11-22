@@ -200,7 +200,7 @@ struct TQueryOptions {
   
   69: optional bool enable_populate_block_cache;
 
-  70: optional i64 sql_mode;
+  70: optional bool allow_throw_exception = 0;
 }
 
 

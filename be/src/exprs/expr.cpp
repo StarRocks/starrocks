@@ -282,7 +282,7 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
         if (texpr_node.__isset.child_type || texpr_node.__isset.child_type_desc) {
             *expr = pool->add(vectorized::VectorizedCastExprFactory::from_thrift(
                     pool, texpr_node,
-                    (state == nullptr) ? false : state->query_options().sql_mode & MODE_ALLOC_EXCEPTION));
+                    (state == nullptr) ? false : state->query_options().allow_throw_exception));
             if (*expr == nullptr) {
                 LogicalType to_type = TypeDescriptor::from_thrift(texpr_node.type).type;
                 LogicalType from_type = thrift_to_type(texpr_node.child_type);
