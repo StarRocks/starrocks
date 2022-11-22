@@ -5,14 +5,14 @@
 namespace starrocks::vectorized {
 DictMappingExpr::DictMappingExpr(const TExprNode& node) : Expr(node, false) {}
 
-ColumnPtr DictMappingExpr::evaluate(ExprContext* context, Chunk* ptr) {
+StatusOr<ColumnPtr> DictMappingExpr::evaluate_checked(ExprContext* context, Chunk* ptr) {
     // If dict_func_expr is nullptr, then it means that this DictExpr has not been rewritten.
     // But in some cases we need to evaluate the original expression directly
     // (usually column_expr_predicate).
     if (dict_func_expr == nullptr) {
-        return get_child(1)->evaluate(context, ptr);
+        return get_child(1)->evaluate_checked(context, ptr);
     } else {
-        return dict_func_expr->evaluate(context, ptr);
+        return dict_func_expr->evaluate_checked(context, ptr);
     }
 }
 
