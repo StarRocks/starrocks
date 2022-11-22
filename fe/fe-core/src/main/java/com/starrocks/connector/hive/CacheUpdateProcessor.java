@@ -2,6 +2,7 @@
 
 package com.starrocks.connector.hive;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveMetaStoreTable;
@@ -178,15 +179,37 @@ public class CacheUpdateProcessor {
         remoteFileIO.ifPresent(CachingRemoteFileIO::invalidateAll);
     }
 
-    public void invalidateTable(String dbName, String tableName) {
-        String tableLocation = ((HiveMetaStoreTable) metastore.getTable(dbName, tableName)).getTableLocation();
+    public void invalidateTable(String dbName, String tableName, String originLocation) {
+        String tableLocation;
+        try {
+            tableLocation = ((HiveMetaStoreTable) metastore.getTable(dbName, tableName)).getTableLocation();
+        } catch (Exception e) {
+            LOG.warn("Failed to get table {}.{}. Use origin table location:{}", dbName, tableName, originLocation);
+            if (!Strings.isNullOrEmpty(originLocation)) {
+                tableLocation = originLocation;
+            } else {
+                LOG.error("Can't get table location. ignore it");
+                return;
+            }
+        }
+
         metastore.invalidateTable(dbName, tableName);
-        remoteFileIO.ifPresent(ignore -> refreshRemoteFiles(tableLocation, Operator.DROP, Lists.newArrayList()));
+
+        if (remoteFileIO.isPresent()) {
+            refreshRemoteFiles(tableLocation, Operator.DROP, Lists.newArrayList());
+        }
     }
 
     public void invalidatePartition(HivePartitionName partitionName) {
-        Partition partition = metastore.getPartition(
-                partitionName.getDatabaseName(), partitionName.getTableName(), partitionName.getPartitionValues());
+        Partition partition;
+        try {
+            partition = metastore.getPartition(
+                    partitionName.getDatabaseName(), partitionName.getTableName(), partitionName.getPartitionValues());
+        } catch (Exception e) {
+            LOG.warn("Failed to get partition {}. ignore it", partitionName);
+            return;
+        }
+
         metastore.invalidatePartition(partitionName);
         if (remoteFileIO.isPresent()) {
             RemotePathKey pathKey = RemotePathKey.of(partition.getFullPath(), isRecursive);
