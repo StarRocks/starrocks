@@ -1,7 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "formats/csv/csv_reader.h"
-
 namespace starrocks::vectorized {
 
 Status CSVReader::next_record(Record* record) {
@@ -45,12 +44,84 @@ void CSVReader::split_record(const Record& record, Fields* fields) const {
     const char* value = record.data;
     const char* ptr = record.data;
     const size_t size = record.size;
+    const char* end = ptr + size;
+    const size_t quoteLen = 1;
 
     if (_column_separator_length == 1) {
-        for (size_t i = 0; i < size; ++i, ++ptr) {
-            if (*ptr == _column_separator[0]) {
+        for (; ptr < end;) {
+            // consume all leading spaces
+            for (; isspace(*ptr); ptr++, value++)
+                ;
+            // if not started with quote, no quote is expected for this field
+            if (*value != '"') {
+                // move ptr to the next column separator
+                for (; ptr != end && *ptr != _column_separator[0]; ptr++)
+                    ;
+
+                // push the field value
                 fields->emplace_back(value, ptr - value);
-                value = ptr + 1;
+                // move pointers and continue
+                ptr++;
+                value = ptr;
+                continue;
+            } else {
+                // Quoted string field
+
+                // move the pointers pass the quote
+                ptr += quoteLen;
+                value += quoteLen;
+
+                // used to record the starting point of the next field
+                const char* nextFieldStartPtr = value;
+
+                for (;;) {
+                    // find the next quote
+                    int nextQuoteIndex = -1;
+                    for (const char* p = ptr; p != end; p++) {
+                        if (*p == '"') {
+                            nextQuoteIndex = p - ptr;
+                            break;
+                        }
+                    }
+                    // find another quote, determine whether it's closing or escaped
+                    if (nextQuoteIndex > 0) {
+                        const char* ptrAfterNextQuote = ptr + nextQuoteIndex + 1;
+                        if (ptrAfterNextQuote == end) {
+                            // already the last element, missing closing quote, consider the remaining content except
+                            // the quote as the field
+                            nextFieldStartPtr = ptrAfterNextQuote + 1;
+                            ptr = end;
+                            break;
+                        } else {
+                            if (*ptrAfterNextQuote == '"') {
+                                // `""`, so this is an escaped quote. Because Slice is a wrapper for externally
+                                // allocated read-only buffer, we are unable to merge two quotes into one without
+                                // refactoring in a large scale. Thus, we just leave it as double quotes for now.
+                                // TODO: refactor csv reader in a higher level to properly handle escaped quote
+                                ptr = ptrAfterNextQuote + 1;
+                                continue;
+                            } else if (*ptrAfterNextQuote == _column_separator[0]) {
+                                // `",` case, field ended
+                                nextFieldStartPtr = ptrAfterNextQuote + 1;
+                                ptr = value + nextQuoteIndex;
+                                break;
+                            } else {
+                                // invalid `"*` case, but treat `"` as common character and continue to read the
+                                // remaining data and load the data with the best effort.
+                                ptr = ptrAfterNextQuote + 1;
+                                continue;
+                            }
+                        }
+                    } else {
+                        // no quote found and hit end of line, everything belong to the column and break out the loop
+                        ptr = end;
+                        nextFieldStartPtr = end;
+                        break;
+                    }
+                }
+                fields->emplace_back(value, ptr - value);
+                ptr = nextFieldStartPtr;
+                value = nextFieldStartPtr;
             }
         }
     } else {
@@ -66,8 +137,8 @@ void CSVReader::split_record(const Record& record, Fields* fields) const {
         } while (ptr != nullptr);
 
         ptr = record.data + size;
+        fields->emplace_back(value, ptr - value);
     }
-    fields->emplace_back(value, ptr - value);
 }
 
 } // namespace starrocks::vectorized
