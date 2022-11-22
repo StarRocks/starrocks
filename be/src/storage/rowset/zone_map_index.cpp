@@ -41,41 +41,28 @@ struct ZoneMapDatumBase {
     using CppType = typename TypeTraits<type>::CppType;
     CppType value;
 
-    void init([[maybe_unused]] TypeInfo* type_info, [[maybe_unused]] int length) {
-    }
-    void set_to_max(TypeInfo* type_info) {
-        type_info->set_to_max(&value);
-    }
-    void set_to_min(TypeInfo* type_info) {
-        type_info->set_to_min(&value);
-    }
-    std::string to_zone_map_string(TypeInfo* type_info) const {
-        return type_info->to_string(&value);
-    }
+    void init([[maybe_unused]] TypeInfo* type_info, [[maybe_unused]] int length) {}
+    void set_to_max(TypeInfo* type_info) { type_info->set_to_max(&value); }
+    void set_to_min(TypeInfo* type_info) { type_info->set_to_min(&value); }
+    std::string to_zone_map_string(TypeInfo* type_info) const { return type_info->to_string(&value); }
 };
 
 template <LogicalType type>
-struct ZoneMapDatum : public ZoneMapDatumBase<type> { };
+struct ZoneMapDatum : public ZoneMapDatumBase<type> {};
 
 template <>
 struct ZoneMapDatum<TYPE_DECIMAL32> : public ZoneMapDatumBase<TYPE_DECIMAL32> {
-    std::string to_zone_map_string(TypeInfo* type_info) const {
-        return get_decimal_zone_map_string(type_info, &value);
-    }
+    std::string to_zone_map_string(TypeInfo* type_info) const { return get_decimal_zone_map_string(type_info, &value); }
 };
 
 template <>
 struct ZoneMapDatum<TYPE_DECIMAL64> : public ZoneMapDatumBase<TYPE_DECIMAL64> {
-    std::string to_zone_map_string(TypeInfo* type_info) const {
-        return get_decimal_zone_map_string(type_info, &value);
-    }
+    std::string to_zone_map_string(TypeInfo* type_info) const { return get_decimal_zone_map_string(type_info, &value); }
 };
 
 template <>
 struct ZoneMapDatum<TYPE_DECIMAL128> : public ZoneMapDatumBase<TYPE_DECIMAL128> {
-    std::string to_zone_map_string(TypeInfo* type_info) const {
-        return get_decimal_zone_map_string(type_info, &value);
-    }
+    std::string to_zone_map_string(TypeInfo* type_info) const { return get_decimal_zone_map_string(type_info, &value); }
 };
 
 template <>
@@ -90,9 +77,7 @@ struct ZoneMapDatum<TYPE_CHAR> : public ZoneMapDatumBase<TYPE_CHAR> {
         value.size = _length;
         memset(value.data, 0xFF, value.size);
     }
-    void set_to_min([[maybe_unused]] TypeInfo* type_info) {
-        value.size = 0;
-    }
+    void set_to_min([[maybe_unused]] TypeInfo* type_info) { value.size = 0; }
     int _length;
     std::string _value_container;
 };

@@ -49,7 +49,8 @@ protected:
     void test_string(const std::string& testname, Field* field) {
         std::string filename = kTestDir + "/" + testname;
 
-        std::unique_ptr<ZoneMapIndexWriter> builder = ZoneMapIndexWriter::create(field->type_info().get(), field->length());
+        std::unique_ptr<ZoneMapIndexWriter> builder =
+                ZoneMapIndexWriter::create(field->type_info().get(), field->length());
         std::vector<std::string> values1 = {"aaaa", "bbbb", "cccc", "dddd", "eeee", "ffff"};
         for (auto& value : values1) {
             Slice slice(value);
