@@ -56,6 +56,8 @@ tar -xzvf StarRocks-x.x.x.tar.gz
 
 本小节介绍如何配置部署 Frontend (FE) 节点。FE 是 StarRocks 的前端节点，负责管理元数据，管理客户端连接，进行查询规划，查询调度等工作。
 
+新集群中的 FE 节点在启动时默认启用 IP 地址访问。如需为新集群启用 FQDN 访问，请参阅 [为新集群启用 FQDN 访问](../administration/enable_fqdn.md#新集群启用-fqdn-访问)。
+
 ### 配置 FE 节点
 
 进入 **StarRocks-x.x.x/fe** 路径。
