@@ -829,10 +829,6 @@ public class MvRewriteOptimizationTest {
         String plan2 = getFragmentPlan(query2);
         PlanTestBase.assertContains(plan2, "partial_mv");
 
-        String query3 = "select t1a, id_date, t1b from table_with_partition" +
-                " where id_date >= '1991-03-01' and id_date < '1994-01-01'";
-        String plan3 = getFragmentPlan(query3);
-        PlanTestBase.assertContains(plan3, "partial_mv");
         dropMv("test", "partial_mv");
 
         createAndRefreshMv("test", "partial_mv_2",
@@ -863,9 +859,9 @@ public class MvRewriteOptimizationTest {
         cluster.runSql("test", "insert into table_with_day_partition partition(p19910331)" +
                 " values(\"varchar12\", '1991-03-31', 2, 2, 1)");
         String query5 = "select t1a, id_date, t1b from table_with_day_partition" +
-                " where id_date >= '1991-04-01' and id_date < '1991-04-02'";
+                " where id_date >= '1991-04-01' and id_date < '1991-04-03'";
         String plan5 = getFragmentPlan(query5);
-        PlanTestBase.assertContains(plan5, "partial_mv_3");
+        PlanTestBase.assertNotContains(plan5, "partial_mv_3");
         dropMv("test", "partial_mv_3");
 
         cluster.runSql("test", "insert into table_with_day_partition values(\"varchar1\", '1991-03-30', 1, 1, 1)");
@@ -884,7 +880,7 @@ public class MvRewriteOptimizationTest {
         String query6 = "select t1a, date_trunc('month', id_date), t1b from table_with_day_partition" +
                 " where id_date >= '1991-04-01' and id_date < '1991-04-03'";
         String plan6 = getFragmentPlan(query6);
-        PlanTestBase.assertContains(plan6, "partial_mv_3");
+        PlanTestBase.assertNotContains(plan6, "partial_mv_3");
         dropMv("test", "partial_mv_3");
 
         cluster.runSql("test", "insert into table_with_partition values(\"varchar1\", '1991-02-01', 1, 1, 1)");
