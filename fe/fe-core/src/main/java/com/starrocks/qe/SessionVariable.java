@@ -27,7 +27,6 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.qe.VariableMgr.VarAttr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.BackendCoreStat;
