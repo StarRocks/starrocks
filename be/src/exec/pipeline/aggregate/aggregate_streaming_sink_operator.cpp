@@ -41,12 +41,14 @@ Status AggregateStreamingSinkOperator::push_chunk(RuntimeState* state, const vec
     RETURN_IF_ERROR(_aggregator->evaluate_exprs(chunk.get()));
 
     if (_aggregator->streaming_preaggregation_mode() == TStreamingPreaggregationMode::FORCE_STREAMING) {
-        return _push_chunk_by_force_streaming();
+        RETURN_IF_ERROR(_push_chunk_by_force_streaming());
     } else if (_aggregator->streaming_preaggregation_mode() == TStreamingPreaggregationMode::FORCE_PREAGGREGATION) {
-        return _push_chunk_by_force_preaggregation(chunk->num_rows());
+        RETURN_IF_ERROR(_push_chunk_by_force_preaggregation(chunk->num_rows()));
     } else {
-        return _push_chunk_by_auto(chunk->num_rows());
+        RETURN_IF_ERROR(_push_chunk_by_auto(chunk->num_rows()));
     }
+    RETURN_IF_ERROR(_aggregator->check_has_error());
+    return Status::OK();
 }
 
 Status AggregateStreamingSinkOperator::_push_chunk_by_force_streaming() {
@@ -82,7 +84,6 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_force_preaggregation(const
     TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_map());
 
     COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_map_variant().size());
-    RETURN_IF_ERROR(_aggregator->check_has_error());
     return Status::OK();
 }
 
