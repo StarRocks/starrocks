@@ -38,9 +38,8 @@ public:
     // Undocemented rule of bthread that -1(0xFFFFFFFFFFFFFFFF) is an invalid ExecutionQueueId
     constexpr static uint64_t kInvalidQueueId = (uint64_t)-1;
 
-    AsyncDeltaWriterImpl(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id, int64_t partition_id,
-                         const std::vector<SlotDescriptor*>* slots, MemTracker* mem_tracker)
-            : _writer(DeltaWriter::create(tablet_manager, tablet_id, txn_id, partition_id, slots, mem_tracker)),
+    AsyncDeltaWriterImpl(const LakeDeltaWriterOptions& option, TabletManager* tablet_manager, MemTracker* mem_tracker)
+            : _writer(DeltaWriter::create(option, tablet_manager, mem_tracker)),
               _queue_id{kInvalidQueueId},
               _open_mtx(),
               _status(),
@@ -226,11 +225,9 @@ int64_t AsyncDeltaWriter::txn_id() const {
     return _impl->txn_id();
 }
 
-std::unique_ptr<AsyncDeltaWriter> AsyncDeltaWriter::create(TabletManager* tablet_manager, int64_t tablet_id,
-                                                           int64_t txn_id, int64_t partition_id,
-                                                           const std::vector<SlotDescriptor*>* slots,
-                                                           MemTracker* mem_tracker) {
-    auto impl = new AsyncDeltaWriterImpl(tablet_manager, tablet_id, txn_id, partition_id, slots, mem_tracker);
+std::unique_ptr<AsyncDeltaWriter> AsyncDeltaWriter::create(const LakeDeltaWriterOptions& option,
+                                                           TabletManager* tablet_manager, MemTracker* mem_tracker) {
+    auto impl = new AsyncDeltaWriterImpl(option, tablet_manager, mem_tracker);
     return std::make_unique<AsyncDeltaWriter>(impl);
 }
 

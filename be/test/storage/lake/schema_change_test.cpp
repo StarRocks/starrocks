@@ -211,9 +211,13 @@ protected:
 
 TEST_P(SchemaChangeAddColumnTest, test_add_column) {
     int64_t version = 1;
-    int64_t txn_id = 1000;
     auto base_tablet_id = _base_tablet_metadata->id();
+    LakeDeltaWriterOptions option;
+    option.tablet_id = base_tablet_id;
+    option.partition_id = _partition_id;
+    int64_t txn_id = 1000;
     for (int i = 0; i < GetParam().writes_before; i++) {
+        option.txn_id = txn_id;
         auto c0 = Int32Column::create();
         auto c1 = Int32Column::create();
         c0->append_datum(Datum(i * 1));
@@ -222,8 +226,7 @@ TEST_P(SchemaChangeAddColumnTest, test_add_column) {
         VChunk chunk0({c0, c1}, _base_schema);
         uint32_t indexes[1] = {0};
 
-        auto delta_writer = DeltaWriter::create(_tablet_manager.get(), base_tablet_id, txn_id, _partition_id, nullptr,
-                                                _mem_tracker.get());
+        auto delta_writer = DeltaWriter::create(option, _tablet_manager.get(), _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes, sizeof(indexes) / sizeof(indexes[0])));
         ASSERT_OK(delta_writer->finish());
@@ -261,8 +264,9 @@ TEST_P(SchemaChangeAddColumnTest, test_add_column) {
         VChunk chunk1({c0, c1, c2}, _new_schema);
         uint32_t indexes[1] = {0};
 
-        auto delta_writer = DeltaWriter::create(_tablet_manager.get(), new_tablet_id, txn_id, _partition_id, nullptr,
-                                                _mem_tracker.get());
+        option.tablet_id = new_tablet_id;
+        option.txn_id = txn_id;
+        auto delta_writer = DeltaWriter::create(option, _tablet_manager.get(), _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk1, indexes, sizeof(indexes) / sizeof(indexes[0])));
         ASSERT_OK(delta_writer->finish());
@@ -448,6 +452,9 @@ TEST_P(SchemaChangeModifyColumnTypeTest, test_alter_column_type) {
     int64_t version = 1;
     int64_t txn_id = 1000;
     auto base_tablet_id = _base_tablet_metadata->id();
+    LakeDeltaWriterOptions option;
+    option.tablet_id = base_tablet_id;
+    option.partition_id = _partition_id;
     for (int i = 0; i < GetParam().writes_before; i++) {
         auto c0 = Int32Column::create();
         auto c1 = Int32Column::create();
@@ -457,8 +464,8 @@ TEST_P(SchemaChangeModifyColumnTypeTest, test_alter_column_type) {
         VChunk chunk0({c0, c1}, _base_schema);
         uint32_t indexes[1] = {0};
 
-        auto delta_writer = DeltaWriter::create(_tablet_manager.get(), base_tablet_id, txn_id, _partition_id, nullptr,
-                                                _mem_tracker.get());
+        option.txn_id = txn_id;
+        auto delta_writer = DeltaWriter::create(option, _tablet_manager.get(), _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes, sizeof(indexes) / sizeof(indexes[0])));
         ASSERT_OK(delta_writer->finish());
@@ -495,8 +502,9 @@ TEST_P(SchemaChangeModifyColumnTypeTest, test_alter_column_type) {
         VChunk chunk1({c0, c1}, _new_schema);
         uint32_t indexes[1] = {0};
 
-        auto delta_writer = DeltaWriter::create(_tablet_manager.get(), new_tablet_id, txn_id, _partition_id, nullptr,
-                                                _mem_tracker.get());
+        option.txn_id = txn_id;
+        option.tablet_id = new_tablet_id;
+        auto delta_writer = DeltaWriter::create(option, _tablet_manager.get(), _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk1, indexes, sizeof(indexes) / sizeof(indexes[0])));
         ASSERT_OK(delta_writer->finish());
@@ -715,9 +723,12 @@ TEST_P(SchemaChangeModifyColumnOrderTest, test_alter_key_order) {
     int64_t version = 1;
     int64_t txn_id = 1000;
     auto base_tablet_id = _base_tablet_metadata->id();
+    LakeDeltaWriterOptions option;
+    option.tablet_id = base_tablet_id;
+    option.partition_id = _partition_id;
     for (int i = 0; i < GetParam().writes_before; i++) {
-        auto delta_writer = DeltaWriter::create(_tablet_manager.get(), base_tablet_id, txn_id, _partition_id, nullptr,
-                                                _mem_tracker.get());
+        option.txn_id = txn_id;
+        auto delta_writer = DeltaWriter::create(option, _tablet_manager.get(), _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
@@ -744,8 +755,9 @@ TEST_P(SchemaChangeModifyColumnOrderTest, test_alter_key_order) {
     for (int i = 0; i < GetParam().writes_after; i++) {
         VChunk chunk1({ck1, ck0, cv0}, _new_schema);
 
-        auto delta_writer = DeltaWriter::create(_tablet_manager.get(), new_tablet_id, txn_id, _partition_id, nullptr,
-                                                _mem_tracker.get());
+        option.tablet_id = new_tablet_id;
+        option.txn_id = txn_id;
+        auto delta_writer = DeltaWriter::create(option, _tablet_manager.get(), _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());

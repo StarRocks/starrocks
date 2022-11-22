@@ -69,26 +69,17 @@ private:
 
 class DeltaWriterImpl {
 public:
-    explicit DeltaWriterImpl(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id, int64_t partition_id,
-                             const std::vector<SlotDescriptor*>* slots, MemTracker* mem_tracker)
-            : _tablet_manager(tablet_manager),
-              _tablet_id(tablet_id),
-              _txn_id(txn_id),
-              _partition_id(partition_id),
-              _mem_tracker(mem_tracker),
-              _slots(slots),
-              _schema_initialized(false) {}
-
-    explicit DeltaWriterImpl(TabletManager* tablet_manager, int64_t tablet_id, int64_t max_buffer_size,
+    explicit DeltaWriterImpl(const LakeDeltaWriterOptions& option, TabletManager* tablet_manager,
                              MemTracker* mem_tracker)
             : _tablet_manager(tablet_manager),
-              _tablet_id(tablet_id),
-              _txn_id(-1),
-              _partition_id(-1),
+              _tablet_id(option.tablet_id),
+              _txn_id(option.txn_id),
+              _partition_id(option.partition_id),
               _mem_tracker(mem_tracker),
-              _slots(nullptr),
-              _max_buffer_size(max_buffer_size),
-              _schema_initialized(false) {}
+              _slots(option.slots),
+              _max_buffer_size(option.max_buffer_size),
+              _schema_initialized(false),
+              _merge_condition(option.merge_condition) {}
 
     ~DeltaWriterImpl() = default;
 
@@ -153,6 +144,9 @@ private:
     // for partial update
     std::shared_ptr<const TabletSchema> _partial_update_tablet_schema;
     std::vector<int32_t> _referenced_column_ids;
+
+    // for condition update
+    std::string _merge_condition;
 };
 
 void DeltaWriterImpl::TEST_set_partial_update(std::shared_ptr<const TabletSchema> tschema,
@@ -302,6 +296,10 @@ Status DeltaWriterImpl::finish() {
     op_write->mutable_rowset()->set_num_rows(_tablet_writer->num_rows());
     op_write->mutable_rowset()->set_data_size(_tablet_writer->data_size());
     op_write->mutable_rowset()->set_overlapped(op_write->rowset().segments_size() > 1);
+    // not support handle partial update and condition update at the same time
+    if (_partial_update_tablet_schema != nullptr && _merge_condition != "") {
+        return Status::NotSupported("partial update and condition update at the same time");
+    }
     // handle partial update
     RowsetTxnMetaPB* rowset_txn_meta = _tablet_writer->rowset_txn_meta();
     if (rowset_txn_meta != nullptr && _partial_update_tablet_schema != nullptr) {
@@ -315,6 +313,10 @@ Status DeltaWriterImpl::finish() {
         for (auto i = 0; i < op_write->rowset().segments_size(); i++) {
             op_write->add_rewrite_segments(random_segment_filename());
         }
+    }
+    // handle condition update
+    if (_merge_condition != "") {
+        op_write->mutable_txn_meta()->set_merge_condition(_merge_condition);
     }
     RETURN_IF_ERROR(tablet.put_txn_log(std::move(txn_log)));
     return Status::OK();
@@ -419,16 +421,9 @@ void DeltaWriter::TEST_set_partial_update(std::shared_ptr<const TabletSchema> ts
     _impl->TEST_set_partial_update(tschema, referenced_column_ids);
 }
 
-std::unique_ptr<DeltaWriter> DeltaWriter::create(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id,
-                                                 int64_t partition_id, const std::vector<SlotDescriptor*>* slots,
+std::unique_ptr<DeltaWriter> DeltaWriter::create(const LakeDeltaWriterOptions& option, TabletManager* tablet_manager,
                                                  MemTracker* mem_tracker) {
-    return std::make_unique<DeltaWriter>(
-            new DeltaWriterImpl(tablet_manager, tablet_id, txn_id, partition_id, slots, mem_tracker));
-}
-
-std::unique_ptr<DeltaWriter> DeltaWriter::create(TabletManager* tablet_manager, int64_t tablet_id,
-                                                 int64_t max_buffer_size, MemTracker* mem_tracker) {
-    return std::make_unique<DeltaWriter>(new DeltaWriterImpl(tablet_manager, tablet_id, max_buffer_size, mem_tracker));
+    return std::make_unique<DeltaWriter>(new DeltaWriterImpl(option, tablet_manager, mem_tracker));
 }
 
 } // namespace starrocks::lake

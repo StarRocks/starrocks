@@ -35,6 +35,7 @@ namespace starrocks::lake {
 
 class AsyncDeltaWriterImpl;
 class TabletManager;
+class LakeDeltaWriterOptions;
 
 // AsyncDeltaWriter is a wrapper on DeltaWriter to support non-blocking async write.
 // All submitted tasks will be executed in the FIFO order.
@@ -45,9 +46,8 @@ public:
     using Ptr = std::unique_ptr<AsyncDeltaWriter>;
     using Callback = std::function<void(Status st)>;
 
-    // |tablet_manager|、|slots| and |mem_tracker| must outlive the AsyncDeltaWriter
-    static Ptr create(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id, int64_t partition_id,
-                      const std::vector<SlotDescriptor*>* slots, MemTracker* mem_tracker);
+    // |mem_tracker| |tablet_manager| and params in |option| must outlive the AsyncDeltaWriter
+    static Ptr create(const LakeDeltaWriterOptions& option, TabletManager* tablet_manager, MemTracker* mem_tracker);
 
     explicit AsyncDeltaWriter(AsyncDeltaWriterImpl* impl) : _impl(impl) {}
 

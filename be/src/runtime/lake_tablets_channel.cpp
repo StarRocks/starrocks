@@ -37,6 +37,7 @@
 #include "serde/protobuf_serde.h"
 #include "service/backend_options.h"
 #include "storage/lake/async_delta_writer.h"
+#include "storage/lake/delta_writer.h"
 #include "storage/memtable.h"
 #include "storage/storage_engine.h"
 #include "util/compression/block_compression.h"
@@ -374,8 +375,13 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
     std::vector<int64_t> tablet_ids;
     tablet_ids.reserve(params.tablets_size());
     for (const PTabletWithPartition& tablet : params.tablets()) {
-        auto writer = AsyncDeltaWriter::create(_tablet_manager, tablet.tablet_id(), _txn_id, tablet.partition_id(),
-                                               slots, _mem_tracker);
+        lake::LakeDeltaWriterOptions option;
+        option.tablet_id = tablet.tablet_id();
+        option.txn_id = _txn_id;
+        option.partition_id = tablet.partition_id();
+        option.slots = slots;
+        option.merge_condition = params.merge_condition();
+        auto writer = AsyncDeltaWriter::create(option, _tablet_manager, _mem_tracker);
         _delta_writers.emplace(tablet.tablet_id(), std::move(writer));
         tablet_ids.emplace_back(tablet.tablet_id());
     }

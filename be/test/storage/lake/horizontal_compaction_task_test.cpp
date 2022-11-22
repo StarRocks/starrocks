@@ -174,12 +174,15 @@ TEST_F(DuplicateKeyHorizontalCompactionTest, test1) {
         indexes[i] = i;
     }
 
-    auto version = 1;
     auto tablet_id = _tablet_metadata->id();
+    LakeDeltaWriterOptions option;
+    option.tablet_id = tablet_id;
+    option.partition_id = _partition_id;
+    auto version = 1;
     for (int i = 0; i < 3; i++) {
         _txn_id++;
-        auto delta_writer = DeltaWriter::create(_tablet_manager.get(), tablet_id, _txn_id, _partition_id, nullptr,
-                                                _mem_tracker.get());
+        option.txn_id = _txn_id;
+        auto delta_writer = DeltaWriter::create(option, _tablet_manager.get(), _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
@@ -313,12 +316,15 @@ TEST_F(DuplicateKeyOverlapSegmentsHorizontalCompactionTest, test) {
         indexes[i] = i;
     }
 
-    auto version = 1;
     auto tablet_id = _tablet_metadata->id();
+    LakeDeltaWriterOptions option;
+    option.tablet_id = tablet_id;
+    option.partition_id = _partition_id;
+    auto version = 1;
     for (int i = 0; i < 3; i++) {
         _txn_id++;
-        auto delta_writer = DeltaWriter::create(_tablet_manager.get(), tablet_id, _txn_id, _partition_id, nullptr,
-                                                _mem_tracker.get());
+        option.txn_id = _txn_id;
+        auto delta_writer = DeltaWriter::create(option, _tablet_manager.get(), _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         for (int j = 0; j < i + 1; ++j) {
             ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
@@ -473,12 +479,15 @@ TEST_F(UniqueKeyHorizontalCompactionTest, test1) {
         indexes[i] = i;
     }
 
-    auto version = 1;
     auto tablet_id = _tablet_metadata->id();
+    LakeDeltaWriterOptions option;
+    option.tablet_id = tablet_id;
+    option.partition_id = _partition_id;
+    auto version = 1;
     for (int i = 0; i < 3; i++) {
         _txn_id++;
-        auto delta_writer = DeltaWriter::create(_tablet_manager.get(), tablet_id, _txn_id, _partition_id, nullptr,
-                                                _mem_tracker.get());
+        option.txn_id = _txn_id;
+        auto delta_writer = DeltaWriter::create(option, _tablet_manager.get(), _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
@@ -612,12 +621,15 @@ TEST_F(UniqueKeyHorizontalCompactionWithDeleteTest, test_base_compaction_with_de
         indexes[i] = i;
     }
 
-    auto version = 1;
     auto tablet_id = _tablet_metadata->id();
+    LakeDeltaWriterOptions option;
+    option.tablet_id = tablet_id;
+    option.partition_id = _partition_id;
+    auto version = 1;
     for (int i = 0; i < 3; i++) {
         _txn_id++;
-        auto delta_writer = DeltaWriter::create(_tablet_manager.get(), tablet_id, _txn_id, _partition_id, nullptr,
-                                                _mem_tracker.get());
+        option.txn_id = _txn_id;
+        auto delta_writer = DeltaWriter::create(option, _tablet_manager.get(), _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());

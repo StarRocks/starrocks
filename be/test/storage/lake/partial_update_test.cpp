@@ -229,10 +229,13 @@ TEST_F(PartialUpdateTest, test_write) {
     auto version = 1;
     auto tablet_id = _tablet_metadata->id();
     // normal write
+    LakeDeltaWriterOptions option;
+    option.tablet_id = tablet_id;
+    option.partition_id = _partition_id;
     for (int i = 0; i < 3; i++) {
         _txn_id++;
-        auto delta_writer = DeltaWriter::create(_tablet_manager.get(), tablet_id, _txn_id, _partition_id, nullptr,
-                                                _mem_tracker.get());
+        option.txn_id = _txn_id;
+        auto delta_writer = DeltaWriter::create(option, _tablet_manager.get(), _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
@@ -248,8 +251,8 @@ TEST_F(PartialUpdateTest, test_write) {
     // partial update
     for (int i = 0; i < 3; i++) {
         _txn_id++;
-        auto delta_writer = DeltaWriter::create(_tablet_manager.get(), tablet_id, _txn_id, _partition_id, nullptr,
-                                                _mem_tracker.get());
+        option.txn_id = _txn_id;
+        auto delta_writer = DeltaWriter::create(option, _tablet_manager.get(), _mem_tracker.get());
         delta_writer->TEST_set_partial_update(_partial_tablet_schema, _referenced_column_ids);
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
@@ -274,11 +277,14 @@ TEST_F(PartialUpdateTest, test_write_multi_segment) {
 
     auto version = 1;
     auto tablet_id = _tablet_metadata->id();
+    LakeDeltaWriterOptions option;
+    option.tablet_id = tablet_id;
+    option.partition_id = _partition_id;
     // normal write
     for (int i = 0; i < 3; i++) {
         _txn_id++;
-        auto delta_writer = DeltaWriter::create(_tablet_manager.get(), tablet_id, _txn_id, _partition_id, nullptr,
-                                                _mem_tracker.get());
+        option.txn_id = _txn_id;
+        auto delta_writer = DeltaWriter::create(option, _tablet_manager.get(), _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
@@ -292,12 +298,11 @@ TEST_F(PartialUpdateTest, test_write_multi_segment) {
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 3);
 
     // partial update, and make it generate two segment files in one rowset
-    const int64_t old_size = config::write_buffer_size;
-    config::write_buffer_size = 1;
+    option.max_buffer_size = 1;
     for (int i = 0; i < 3; i++) {
         _txn_id++;
-        auto delta_writer = DeltaWriter::create(_tablet_manager.get(), tablet_id, _txn_id, _partition_id, nullptr,
-                                                _mem_tracker.get());
+        option.txn_id = _txn_id;
+        auto delta_writer = DeltaWriter::create(option, _tablet_manager.get(), _mem_tracker.get());
         delta_writer->TEST_set_partial_update(_partial_tablet_schema, _referenced_column_ids);
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
@@ -308,7 +313,6 @@ TEST_F(PartialUpdateTest, test_write_multi_segment) {
         ASSERT_OK(_tablet_manager->publish_version(tablet_id, version, version + 1, &_txn_id, 1).status());
         version++;
     }
-    config::write_buffer_size = old_size;
     ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return (c0 * 3 == c1) && (c0 * 4 == c2); }));
     ASSIGN_OR_ABORT(new_tablet_metadata, _tablet_manager->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 6);
@@ -327,11 +331,14 @@ TEST_F(PartialUpdateTest, test_write_multi_segment_by_diff_val) {
 
     auto version = 1;
     auto tablet_id = _tablet_metadata->id();
+    LakeDeltaWriterOptions option;
+    option.tablet_id = tablet_id;
+    option.partition_id = _partition_id;
     // normal write
     for (int i = 0; i < 3; i++) {
         _txn_id++;
-        auto delta_writer = DeltaWriter::create(_tablet_manager.get(), tablet_id, _txn_id, _partition_id, nullptr,
-                                                _mem_tracker.get());
+        option.txn_id = _txn_id;
+        auto delta_writer = DeltaWriter::create(option, _tablet_manager.get(), _mem_tracker.get());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
@@ -345,12 +352,11 @@ TEST_F(PartialUpdateTest, test_write_multi_segment_by_diff_val) {
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 3);
 
     // partial update, and make it generate two segment files in one rowset
-    const int64_t old_size = config::write_buffer_size;
-    config::write_buffer_size = 1;
+    option.max_buffer_size = 1;
     for (int i = 0; i < 3; i++) {
         _txn_id++;
-        auto delta_writer = DeltaWriter::create(_tablet_manager.get(), tablet_id, _txn_id, _partition_id, nullptr,
-                                                _mem_tracker.get());
+        option.txn_id = _txn_id;
+        auto delta_writer = DeltaWriter::create(option, _tablet_manager.get(), _mem_tracker.get());
         delta_writer->TEST_set_partial_update(_partial_tablet_schema, _referenced_column_ids);
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
@@ -361,7 +367,6 @@ TEST_F(PartialUpdateTest, test_write_multi_segment_by_diff_val) {
         ASSERT_OK(_tablet_manager->publish_version(tablet_id, version, version + 1, &_txn_id, 1).status());
         version++;
     }
-    config::write_buffer_size = old_size;
     ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return (c0 * 6 == c1) && (c0 * 4 == c2); }));
     ASSIGN_OR_ABORT(new_tablet_metadata, _tablet_manager->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 6);

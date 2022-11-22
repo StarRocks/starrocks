@@ -17,6 +17,7 @@
 #include <memory>
 #include <vector>
 
+#include "common/config.h"
 #include "common/statusor.h"
 #include "gutil/macros.h"
 
@@ -33,21 +34,23 @@ class DeltaWriterImpl;
 class TabletManager;
 class TabletWriter;
 
+struct LakeDeltaWriterOptions {
+    int64_t tablet_id = -1;
+    int64_t txn_id = -1;
+    int64_t partition_id = -1;
+    int64_t max_buffer_size = config::write_buffer_size;
+    const std::vector<SlotDescriptor*>* slots = nullptr;
+    std::string merge_condition;
+};
+
 class DeltaWriter {
     using Chunk = starrocks::Chunk;
 
 public:
     using Ptr = std::unique_ptr<DeltaWriter>;
 
-    // for load
-    // Does NOT take the ownership of |tablet_manager|、|slots| and |mem_tracker|
-    static Ptr create(TabletManager* tablet_manager, int64_t tablet_id, int64_t txn_id, int64_t partition_id,
-                      const std::vector<SlotDescriptor*>* slots, MemTracker* mem_tracker);
-
-    // for schema change
-    // Does NOT take the ownership of |tablet_manager| and |mem_tracker|
-    static Ptr create(TabletManager* tablet_manager, int64_t tablet_id, int64_t max_buffer_size,
-                      MemTracker* mem_tracker);
+    // Does NOT take the ownership of |tablet_manager| and |mem_tracker| and params in |option|
+    static Ptr create(const LakeDeltaWriterOptions& option, TabletManager* tablet_manager, MemTracker* mem_tracker);
 
     explicit DeltaWriter(DeltaWriterImpl* impl) : _impl(impl) {}
 
