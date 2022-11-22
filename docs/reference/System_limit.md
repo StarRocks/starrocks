@@ -17,7 +17,11 @@ This topic describes the rules and limits that apply when you use StarRocks.
 
 - When you create a table, the key column cannot be of the FLOAT or DOUBLE type. You can use the DECIMAL type to represent decimals.
 
-- A VARCHAR value can be up to 1,048,576 bytes in length (two bytes less than 1048578 because the first two bytes are used to indicate the length). In versions earlier than 2.1, the range of `M` is 1–65533. From 2.1 onwards, the range of `M` is 1–1048576.
+- The length of a VARCHAR value varies in different versions:
+
+  - In versions earlier than StarRocks 2.1, the length ranges from 1 to 65533 bytes.
+  - [Preview] From StarRocks 2.1 and later versions, the length ranges from 1 to 1048576 bytes. The maximum row size is 1048578 bytes, and the length prefix (indicates the number of bytes in the value) is 2 bytes. Therefore, the maximum length of a VARCHAR value in StarRocks 2.1 and later versions = 1048578 - 2.
+The default value is 1.
 
 - StarRocks supports only UTF-8 encoding, not GBK.
 
