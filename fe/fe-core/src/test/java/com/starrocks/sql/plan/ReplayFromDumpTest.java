@@ -213,6 +213,8 @@ public class ReplayFromDumpTest {
                 "  |       cardinality: 65744\n" +
                 "  |    \n" +
                 "  18:UNION\n" +
+                "  |  output exprs:\n" +
+                "  |      [391, INT, true] | [392, DECIMAL64(7,2), true]\n" +
                 "  |  child exprs:\n" +
                 "  |      [325, INT, true] | [346, DECIMAL64(7,2), true]\n" +
                 "  |      [359, INT, true] | [380, DECIMAL64(7,2), true]"));
