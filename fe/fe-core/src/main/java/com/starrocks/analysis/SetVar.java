@@ -160,10 +160,10 @@ public class SetVar implements ParseNode {
             }
 
             if (getVariable().equalsIgnoreCase(SessionVariable.EXEC_MEM_LIMIT)) {
-                checkRangeLongVariable(SessionVariable.EXEC_MEM_LIMIT, (long) SessionVariable.MIN_EXEC_MEM_LIMIT, null);
                 this.expression = new StringLiteral(
                         Long.toString(ParseUtil.analyzeDataVolumn(getResolvedExpression().getStringValue())));
                 this.resolvedExpression = (LiteralExpr) this.expression;
+                checkRangeLongVariable(SessionVariable.EXEC_MEM_LIMIT, SessionVariable.MIN_EXEC_MEM_LIMIT, null);
             }
         } catch (UserException e) {
             throw new SemanticException(e.getMessage());
