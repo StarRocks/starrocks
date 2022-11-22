@@ -45,12 +45,85 @@ void CSVReader::split_record(const Record& record, Fields* fields) const {
     const char* value = record.data;
     const char* ptr = record.data;
     const size_t size = record.size;
+    const char* end = ptr + size;
+    const size_t quoteLen = 1;
 
     if (_column_separator_length == 1) {
-        for (size_t i = 0; i < size; ++i, ++ptr) {
-            if (*ptr == _column_separator[0]) {
-                fields->emplace_back(value, ptr - value);
-                value = ptr + 1;
+
+
+        for (;ptr < end;) {
+            // consume all leading spaces
+            for (; isspace(*ptr); ptr++, value++);
+
+            // if not started with quote, no quote is expected for this field
+            if (*value != '"') {
+                // move ptr to the next column separator
+                for (; ptr != end && *ptr != _column_separator[0]; ptr++);
+
+                // push the field value
+                fields->emplace_back(value, ptr-value);
+
+                // move pointers and continue
+                ptr++;
+                value = ptr;
+                continue;
+            } else {
+                // Quoted string field
+
+                std::string fieldBuf;
+
+                // move the pointers pass the quote
+                ptr += quoteLen;
+                value += quoteLen;
+
+                for (;;) {
+                    // find the next quote
+                    int nextQuoteIndex = -1;
+                    for (const char *p = ptr; p != end; p++) {
+                        if (*p == '"') {
+                            nextQuoteIndex = p - ptr;
+                            break;
+                        }
+                    }
+
+                    // find another quote, determine whether it's closing or escaped
+                    if (nextQuoteIndex > 0) {
+                        if (ptr + nextQuoteIndex == end) {
+                            // already the last element, missing closing quote, consider the remaining content except
+                            // the quote as the field
+                            fieldBuf.append(value, nextQuoteIndex-1);
+                            break;
+                        } else {
+                            const char *ptrAfterNextQuote = ptr + nextQuoteIndex + 1;
+                            if (*ptrAfterNextQuote == '"') {
+                                // `""`, so this is an escaped quote, add whatever we have now into buffer and move
+                                // the pointers to pass the second quote
+                                fieldBuf.append(value, nextQuoteIndex);
+                                ptr = ptrAfterNextQuote + 1;
+                                value = ptr;
+                                continue;
+                            } else if (*ptrAfterNextQuote == _column_separator[0]) {
+                                // `",` case, field ended
+                                fieldBuf.append(value, nextQuoteIndex);
+                                ptr = ptrAfterNextQuote + 1;
+                                value = ptr;
+                                break;
+                            } else {
+                                // invalid `"*` case, but treat `"` as normal character and continue to read the
+                                // remaining data
+                                fieldBuf.append(value, nextQuoteIndex);
+                                ptr = ptrAfterNextQuote + 1;
+                                value = ptr;
+                                continue;
+                            }
+                        }
+                    } else {
+                        // no quote found and hit end of line, everything belong to the column and break out the loop
+                        fieldBuf.append(value, end-value);
+                        break;
+                    }
+                }
+                fields->emplace_back(fieldBuf.c_str());
             }
         }
     } else {
