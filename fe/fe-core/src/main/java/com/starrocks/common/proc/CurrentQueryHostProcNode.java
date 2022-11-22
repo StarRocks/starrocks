@@ -30,7 +30,7 @@ public class CurrentQueryHostProcNode implements ProcNodeInterface {
         final CurrentQueryInfoProvider provider = new CurrentQueryInfoProvider();
         final Map<String, CurrentQueryInfoProvider.QueryStatistics> statisticsMap
                 = provider.getQueryStatisticsByHost(item);
-        // collect host statistic
+        // collect statistics by host
         final List<List<String>> sortedRowDatas = Lists.newArrayList();
         for (Map.Entry<String, CurrentQueryInfoProvider.QueryStatistics> entry : statisticsMap.entrySet()) {
             String host = entry.getKey();
