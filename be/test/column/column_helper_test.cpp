@@ -38,7 +38,7 @@ TEST_F(ColumnHelperTest, cast_to_nullable_column) {
     ASSERT_FALSE(col->is_constant());
 
     col = ColumnHelper::cast_to_nullable_column(create_const_column());
-    ASSERT_FALSE(col->is_nullable());
+    ASSERT_TRUE(col->is_nullable());
     ASSERT_TRUE(col->is_constant());
 
     col = ColumnHelper::cast_to_nullable_column(create_nullable_column());
