@@ -711,7 +711,7 @@ public class ColocateTableBalancer extends LeaderDaemon {
             // 1. BE is dead for a long time
             // 2. BE is under decommission
             if ((!be.isAlive() &&
-                    (currTime - be.getLastUpdateMs()) > Config.tablet_sched_repair_delay_factor_second * 1000 * 2)
+                    (currTime - be.getLastUpdateMs()) > Config.tablet_sched_colocate_be_down_tolerate_time_s * 1000)
                     || be.isDecommissioned()) {
                 return false;
             }
