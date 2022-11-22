@@ -11,6 +11,7 @@
 #include "column/binary_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
+#include "common/status.h"
 #include "exprs/agg/aggregate.h"
 #include "gutil/casts.h"
 #include "jni.h"
@@ -112,24 +113,52 @@ public:
         auto* udf_ctxs = ctx->impl()->udaf_ctxs();
         // 1 convert input as state
         // 1.1 create state list
+<<<<<<< HEAD
         auto rets = helper.batch_call(ctx, udf_ctxs->handle.handle(), udf_ctxs->create->method.handle(), chunk_size);
+=======
+        auto rets = helper.batch_call(ctx, udf_ctxs->handle.handle(), udf_ctxs->create->method.handle(), batch_size);
+        RETURN_IF_UNLIKELY_NULL(rets, (void)0);
+>>>>>>> 260377ce0 ([BugFix] Fix Java UDF open method may call multi times in predicate (#13788))
         // 1.2 convert input as input array
         int num_cols = ctx->get_num_args();
         std::vector<DirectByteBuffer> buffers;
         std::vector<jobject> args;
+        DeferOp defer = DeferOp([&]() {
+            // clean up arrays
+            for (auto& arg : args) {
+                if (arg) {
+                    env->DeleteLocalRef(arg);
+                }
+            }
+        });
         args.emplace_back(rets);
         std::vector<const Column*> raw_input_ptrs(src.size());
         for (int i = 0; i < src.size(); ++i) {
             raw_input_ptrs[i] = src[i].get();
         }
+<<<<<<< HEAD
         JavaDataTypeConverter::convert_to_boxed_array(ctx, &buffers, raw_input_ptrs.data(), num_cols, chunk_size,
                                                       &args);
+=======
+        auto st = JavaDataTypeConverter::convert_to_boxed_array(ctx, &buffers, raw_input_ptrs.data(), num_cols,
+                                                                batch_size, &args);
+        RETURN_IF_UNLIKELY(!st.ok(), (void)0);
+
+>>>>>>> 260377ce0 ([BugFix] Fix Java UDF open method may call multi times in predicate (#13788))
         // 2 batch call update
         helper.batch_update(ctx, ctx->impl()->udaf_ctxs()->handle.handle(),
                             ctx->impl()->udaf_ctxs()->update->method.handle(), args.data(), args.size());
         // 3 get serialize size
+<<<<<<< HEAD
         jintArray serialize_szs = (jintArray)helper.int_batch_call(
                 ctx, rets, ctx->impl()->udaf_ctxs()->serialize_size->method.handle(), chunk_size);
+=======
+        auto serialize_szs = (jintArray)helper.int_batch_call(
+                ctx, rets, ctx->impl()->udaf_ctxs()->serialize_size->method.handle(), batch_size);
+        RETURN_IF_UNLIKELY_NULL(serialize_szs, (void)0);
+        LOCAL_REF_GUARD_ENV(env, serialize_szs);
+
+>>>>>>> 260377ce0 ([BugFix] Fix Java UDF open method may call multi times in predicate (#13788))
         int length = env->GetArrayLength(serialize_szs);
         std::vector<int> slice_sz(length);
         helper.getEnv()->GetIntArrayRegion(serialize_szs, 0, length, slice_sz.data());
@@ -139,12 +168,23 @@ public:
         udf_ctxs->buffer =
                 std::make_unique<DirectByteBuffer>(udf_ctxs->buffer_data.data(), udf_ctxs->buffer_data.size());
         // chunk size
+<<<<<<< HEAD
         auto buffer_array = helper.create_object_array(udf_ctxs->buffer->handle(), chunk_size);
         jobject state_and_buffer[2] = {rets, buffer_array};
         helper.batch_update(ctx, ctx->impl()->udaf_ctxs()->handle.handle(),
                             ctx->impl()->udaf_ctxs()->serialize->method.handle(), state_and_buffer, 2);
         std::vector<Slice> slices(chunk_size);
+=======
+        auto buffer_array = helper.create_object_array(udf_ctxs->buffer->handle(), batch_size);
+        RETURN_IF_UNLIKELY_NULL(buffer_array, (void)0);
+        LOCAL_REF_GUARD_ENV(env, buffer_array);
+        jobject state_and_buffer[2] = {rets, buffer_array};
+        helper.batch_update_state(ctx, ctx->impl()->udaf_ctxs()->handle.handle(),
+                                  ctx->impl()->udaf_ctxs()->serialize->method.handle(), state_and_buffer, 2);
+
+>>>>>>> 260377ce0 ([BugFix] Fix Java UDF open method may call multi times in predicate (#13788))
         // 5 ready
+        std::vector<Slice> slices(batch_size);
         int offsets = 0;
         for (int i = 0; i < chunk_size; ++i) {
             slices[i] = Slice(udf_ctxs->buffer_data.data() + offsets, slice_sz[i]);
@@ -152,6 +192,7 @@ public:
         }
         // append result to dst column
         CHECK((*dst)->append_strings(slices));
+<<<<<<< HEAD
         // 6 clean up arrays
         env->DeleteLocalRef(buffer_array);
         env->DeleteLocalRef(serialize_szs);
@@ -159,6 +200,8 @@ public:
             env->DeleteLocalRef(args[i]);
         }
         env->DeleteLocalRef(rets);
+=======
+>>>>>>> 260377ce0 ([BugFix] Fix Java UDF open method may call multi times in predicate (#13788))
     }
 
     // State Data
@@ -189,6 +232,7 @@ public:
         std::vector<DirectByteBuffer> buffers;
         std::vector<jobject> args;
         int num_cols = ctx->get_num_args();
+<<<<<<< HEAD
         auto arr = JavaDataTypeConverter::convert_to_object_array(states, state_offset, batch_size);
         args.emplace_back(arr);
         JavaDataTypeConverter::convert_to_boxed_array(ctx, &buffers, columns, num_cols, batch_size, &args);
@@ -196,15 +240,47 @@ public:
                             ctx->impl()->udaf_ctxs()->update->method.handle(), args.data(), args.size());
         for (int i = 0; i < args.size(); ++i) {
             helper.getEnv()->DeleteLocalRef(args[i]);
+=======
+        helper.getEnv()->PushLocalFrame(num_cols * 3 + 1);
+        auto defer = DeferOp([&helper]() { helper.getEnv()->PopLocalFrame(nullptr); });
+
+        {
+            auto states_arr = JavaDataTypeConverter::convert_to_states(ctx, states, state_offset, batch_size);
+            RETURN_IF_UNLIKELY_NULL(states_arr, (void)0);
+            auto st =
+                    JavaDataTypeConverter::convert_to_boxed_array(ctx, &buffers, columns, num_cols, batch_size, &args);
+            RETURN_IF_UNLIKELY(!st.ok(), (void)0);
+            helper.batch_update(ctx, ctx->impl()->udaf_ctxs()->handle.handle(),
+                                ctx->impl()->udaf_ctxs()->update->method.handle(), states_arr, args.data(),
+                                args.size());
+>>>>>>> 260377ce0 ([BugFix] Fix Java UDF open method may call multi times in predicate (#13788))
         }
     }
 
     void update_batch_selectively(FunctionContext* ctx, size_t batch_size, size_t state_offset, const Column** columns,
                                   AggDataPtr* states, const std::vector<uint8_t>& filter) const override {
+<<<<<<< HEAD
         for (size_t i = 0; i < batch_size; i++) {
             if (filter[i] == 0) {
                 this->update(ctx, columns, states[i] + state_offset, i);
             }
+=======
+        auto [env, helper] = JVMFunctionHelper::getInstanceWithEnv();
+        std::vector<DirectByteBuffer> buffers;
+        std::vector<jobject> args;
+        int num_cols = ctx->get_num_args();
+        helper.getEnv()->PushLocalFrame(num_cols * 3 + 1);
+        {
+            auto states_arr = JavaDataTypeConverter::convert_to_states_with_filter(ctx, states, state_offset,
+                                                                                   filter.data(), batch_size);
+            RETURN_IF_UNLIKELY_NULL(states_arr, (void)0);
+            auto st =
+                    JavaDataTypeConverter::convert_to_boxed_array(ctx, &buffers, columns, num_cols, batch_size, &args);
+            RETURN_IF_UNLIKELY(!st.ok(), (void)0);
+            helper.batch_update_if_not_null(ctx, ctx->impl()->udaf_ctxs()->handle.handle(),
+                                            ctx->impl()->udaf_ctxs()->update->method.handle(), states_arr, args.data(),
+                                            args.size());
+>>>>>>> 260377ce0 ([BugFix] Fix Java UDF open method may call multi times in predicate (#13788))
         }
     }
 
@@ -216,6 +292,7 @@ public:
         std::vector<jobject> args;
         ConvertDirectBufferVistor vistor(buffers);
         int num_cols = ctx->get_num_args();
+<<<<<<< HEAD
         JavaDataTypeConverter::convert_to_boxed_array(ctx, &buffers, columns, num_cols, batch_size, &args);
         helper.batch_update_single(ctx, ctx->impl()->udaf_ctxs()->handle.handle(),
                                    ctx->impl()->udaf_ctxs()->update->method.handle(), this->data(state).handle(),
@@ -223,22 +300,98 @@ public:
         for (int i = 0; i < num_cols; ++i) {
             env->DeleteLocalRef(args[i]);
         }
+=======
+        env->PushLocalFrame(num_cols * 3 + 1);
+        {
+            auto st =
+                    JavaDataTypeConverter::convert_to_boxed_array(ctx, &buffers, columns, num_cols, batch_size, &args);
+            RETURN_IF_UNLIKELY(!st.ok(), (void)0);
+
+            auto* stub = ctx->impl()->udaf_ctxs()->update_batch_call_stub.get();
+            auto state_handle = this->data(state).handle;
+            helper.batch_update_single(stub, state_handle, args.data(), num_cols, batch_size);
+        }
+        env->PopLocalFrame(nullptr);
+    }
+
+    template <class StatesProvider, class MergeCaller>
+    void _merge_batch_process(StatesProvider&& states_provider, MergeCaller&& caller, const Column* column,
+                              int batch_size) const {
+        auto& helper = JVMFunctionHelper::getInstance();
+        auto* env = helper.getEnv();
+        // get state lists
+        auto state_array = states_provider();
+        RETURN_IF_UNLIKELY_NULL(state_array, (void)0);
+        LOCAL_REF_GUARD_ENV(env, state_array);
+
+        // prepare buffer
+        DCHECK(column->is_binary());
+        auto serialized_column =
+                ColumnHelper::get_binary_column(const_cast<Column*>(ColumnHelper::get_data_column(column)));
+
+        auto& serialized_bytes = serialized_column->get_bytes();
+        auto buffer = std::make_unique<DirectByteBuffer>(serialized_bytes.data(), serialized_bytes.size());
+        auto buffer_array = helper.create_object_array(buffer->handle(), batch_size);
+        RETURN_IF_UNLIKELY_NULL(buffer_array, (void)0);
+        LOCAL_REF_GUARD_ENV(env, buffer_array);
+
+        // batch call merge
+        caller(state_array, buffer_array);
+>>>>>>> 260377ce0 ([BugFix] Fix Java UDF open method may call multi times in predicate (#13788))
     }
 
     void merge_batch(FunctionContext* ctx, size_t batch_size, size_t state_offset, const Column* column,
                      AggDataPtr* states) const override {
+<<<<<<< HEAD
         for (size_t i = 0; i < batch_size; ++i) {
             this->merge(ctx, column, states[i] + state_offset, i);
         }
+=======
+        // batch merge
+        auto& helper = JVMFunctionHelper::getInstance();
+        auto* env = helper.getEnv();
+
+        auto provider = [&]() {
+            auto state_id_list = JavaDataTypeConverter::convert_to_states(ctx, states, state_offset, batch_size);
+            RETURN_IF_UNLIKELY_NULL(state_id_list, state_id_list);
+            LOCAL_REF_GUARD_ENV(env, state_id_list);
+            auto state_array = helper.convert_handles_to_jobjects(ctx, state_id_list);
+            return state_array;
+        };
+        auto merger = [&](jobject state_array, jobject buffer_array) {
+            jobject state_and_buffer[2] = {state_array, buffer_array};
+            helper.batch_update_state(ctx, ctx->impl()->udaf_ctxs()->handle.handle(),
+                                      ctx->impl()->udaf_ctxs()->merge->method.handle(), state_and_buffer, 2);
+        };
+        _merge_batch_process(std::move(provider), std::move(merger), column, batch_size);
+>>>>>>> 260377ce0 ([BugFix] Fix Java UDF open method may call multi times in predicate (#13788))
     }
 
     void merge_batch_selectively(FunctionContext* ctx, size_t batch_size, size_t state_offset, const Column* column,
                                  AggDataPtr* states, const std::vector<uint8_t>& filter) const override {
+<<<<<<< HEAD
         for (size_t i = 0; i < batch_size; i++) {
             if (filter[i] == 0) {
                 this->merge(ctx, column, states[i] + state_offset, i);
             }
         }
+=======
+        // batch merge
+        auto& helper = JVMFunctionHelper::getInstance();
+
+        auto provider = [&]() {
+            auto state_id_list = JavaDataTypeConverter::convert_to_states_with_filter(ctx, states, state_offset,
+                                                                                      filter.data(), batch_size);
+            return state_id_list;
+        };
+        auto merger = [&](jobject state_array, jobject buffer_array) {
+            jobject state_and_buffer[] = {buffer_array};
+            helper.batch_update_if_not_null(ctx, ctx->impl()->udaf_ctxs()->handle.handle(),
+                                            ctx->impl()->udaf_ctxs()->merge->method.handle(), state_array,
+                                            state_and_buffer, 1);
+        };
+        _merge_batch_process(std::move(provider), std::move(merger), column, batch_size);
+>>>>>>> 260377ce0 ([BugFix] Fix Java UDF open method may call multi times in predicate (#13788))
     }
 
     void merge_batch_single_state(FunctionContext* ctx, size_t batch_size, const Column* column,
@@ -250,15 +403,108 @@ public:
 
     void batch_serialize(FunctionContext* ctx, size_t batch_size, const Buffer<AggDataPtr>& agg_states,
                          size_t state_offset, Column* to) const override {
+<<<<<<< HEAD
         for (size_t i = 0; i < batch_size; i++) {
             this->serialize_to_column(ctx, agg_states[i] + state_offset, to);
+=======
+        auto& helper = JVMFunctionHelper::getInstance();
+        auto* env = helper.getEnv();
+        auto* udf_ctxs = ctx->impl()->udaf_ctxs();
+
+        const size_t origin_chunk_size = to->size();
+        auto defer = DeferOp([&]() {
+            // we must keep column num_rows equals with expected numbers
+            if (to->size() != batch_size + origin_chunk_size) {
+                DCHECK(ctx->has_error());
+                to->append_default(origin_chunk_size + batch_size - to->size());
+            }
+        });
+
+        // step 1 get state lists
+        auto states = const_cast<AggDataPtr*>(agg_states.data());
+        auto state_id_list = JavaDataTypeConverter::convert_to_states(ctx, states, state_offset, batch_size);
+        RETURN_IF_UNLIKELY_NULL(state_id_list, (void)0);
+        LOCAL_REF_GUARD_ENV(env, state_id_list);
+
+        auto state_array = helper.convert_handles_to_jobjects(ctx, state_id_list);
+        RETURN_IF_UNLIKELY_NULL(state_array, (void)0);
+        LOCAL_REF_GUARD_ENV(env, state_array);
+
+        // step 2 serialize size
+        auto serialize_szs = (jintArray)helper.int_batch_call(
+                ctx, state_array, ctx->impl()->udaf_ctxs()->serialize_size->method.handle(), batch_size);
+        RETURN_IF_UNLIKELY_NULL(serialize_szs, (void)0);
+        LOCAL_REF_GUARD_ENV(env, serialize_szs);
+
+        int length = env->GetArrayLength(serialize_szs);
+        std::vector<int> slice_sz(length);
+        helper.getEnv()->GetIntArrayRegion(serialize_szs, 0, length, slice_sz.data());
+        int totalLength = std::accumulate(slice_sz.begin(), slice_sz.end(), 0, [](auto l, auto r) { return l + r; });
+        // step 3 prepare serialize buffer
+        udf_ctxs->buffer_data.resize(totalLength);
+        udf_ctxs->buffer =
+                std::make_unique<DirectByteBuffer>(udf_ctxs->buffer_data.data(), udf_ctxs->buffer_data.size());
+
+        // step 4 call serialize
+        auto buffer_array = helper.create_object_array(udf_ctxs->buffer->handle(), batch_size);
+        LOCAL_REF_GUARD_ENV(env, buffer_array);
+        jobject state_and_buffer[2] = {state_array, buffer_array};
+        helper.batch_update_state(ctx, ctx->impl()->udaf_ctxs()->handle.handle(),
+                                  ctx->impl()->udaf_ctxs()->serialize->method.handle(), state_and_buffer, 2);
+
+        int offsets = 0;
+        std::vector<Slice> slices(batch_size);
+        for (int i = 0; i < batch_size; ++i) {
+            slices[i] = Slice(udf_ctxs->buffer_data.data() + offsets, slice_sz[i]);
+            offsets += slice_sz[i];
+>>>>>>> 260377ce0 ([BugFix] Fix Java UDF open method may call multi times in predicate (#13788))
         }
     }
 
     void batch_finalize(FunctionContext* ctx, size_t batch_size, const Buffer<AggDataPtr>& agg_states,
                         size_t state_offset, Column* to) const override {
+<<<<<<< HEAD
         for (size_t i = 0; i < batch_size; i++) {
             this->finalize_to_column(ctx, agg_states[i] + state_offset, to);
+=======
+        auto& helper = JVMFunctionHelper::getInstance();
+        auto* env = helper.getEnv();
+        auto* udf_ctxs = ctx->impl()->udaf_ctxs();
+
+        const size_t origin_chunk_size = to->size();
+        auto defer = DeferOp([&]() {
+            // we must keep column num_rows equals with expected numbers
+            if (to->size() != batch_size + origin_chunk_size) {
+                DCHECK(ctx->has_error());
+                to->append_default(origin_chunk_size + batch_size - to->size());
+            }
+        });
+
+        // 1. get state list
+        auto states = const_cast<AggDataPtr*>(agg_states.data());
+        auto state_id_list = JavaDataTypeConverter::convert_to_states(ctx, states, state_offset, batch_size);
+        RETURN_IF_UNLIKELY_NULL(state_id_list, (void)0);
+        LOCAL_REF_GUARD_ENV(env, state_id_list);
+
+        auto state_array = helper.convert_handles_to_jobjects(ctx, state_id_list);
+        RETURN_IF_UNLIKELY_NULL(state_array, (void)0);
+        LOCAL_REF_GUARD_ENV(env, state_array);
+        // 2. batch call finalize
+        CHECK(to->empty());
+        // 3. get result from column
+        auto res = helper.batch_call(ctx, udf_ctxs->handle.handle(), udf_ctxs->finalize->method.handle(), &state_array,
+                                     1, batch_size);
+        RETURN_IF_UNLIKELY_NULL(res, (void)0);
+        LOCAL_REF_GUARD_ENV(env, res);
+
+        LogicalType type = udf_ctxs->finalize->method_desc[0].type;
+        if (!to->is_nullable()) {
+            ColumnPtr wrapper(const_cast<Column*>(to), [](auto p) {});
+            auto output = NullableColumn::create(wrapper, NullColumn::create());
+            helper.get_result_from_boxed_array(ctx, type, output.get(), res, batch_size);
+        } else {
+            helper.get_result_from_boxed_array(ctx, type, to, res, batch_size);
+>>>>>>> 260377ce0 ([BugFix] Fix Java UDF open method may call multi times in predicate (#13788))
         }
     }
 
