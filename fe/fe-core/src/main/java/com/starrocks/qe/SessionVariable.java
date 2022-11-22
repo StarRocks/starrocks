@@ -115,8 +115,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String SQL_SAFE_UPDATES = "sql_safe_updates";
     public static final String NET_BUFFER_LENGTH = "net_buffer_length";
     public static final String CODEGEN_LEVEL = "codegen_level";
-    // mem limit can't smaller than bufferpool's default page size
-    public static final int MIN_EXEC_MEM_LIMIT = 2097152;
     public static final String BATCH_SIZE = "batch_size";
     public static final String CHUNK_SIZE = "chunk_size";
     public static final String DISABLE_STREAMING_PREAGGREGATIONS = "disable_streaming_preaggregations";
@@ -292,7 +290,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_SCAN_BLOCK_CACHE = "enable_scan_block_cache";
     public static final String ENABLE_POPULATE_BLOCK_CACHE = "enable_populate_block_cache";
 
-
     public static final String ENABLE_QUERY_CACHE = "enable_query_cache";
     public static final String QUERY_CACHE_FORCE_POPULATE = "query_cache_force_populate";
     public static final String QUERY_CACHE_ENTRY_MAX_BYTES = "query_cache_entry_max_bytes";
@@ -302,7 +299,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String NESTED_MV_REWRITE_MAX_LEVEL = "nested_mv_rewrite_max_level";
     public static final String ENABLE_MATERIALIZED_VIEW_REWRITE = "enable_materialized_view_rewrite";
     public static final String ENABLE_MATERIALIZED_VIEW_UNION_REWRITE = "enable_materialized_view_union_rewrite";
-    public static final String ENABLE_RULE_BASED_MATERIALIZED_VIEW_REWRITE = "enable_rule_based_materialized_view_rewrite";
+    public static final String ENABLE_RULE_BASED_MATERIALIZED_VIEW_REWRITE =
+            "enable_rule_based_materialized_view_rewrite";
+    public static final String ENABLE_COST_BASED_MATERIALIZED_VIEW_REWRITE =
+            "enable_cost_based_materialized_view_rewrite";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -320,6 +320,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             .add("vectorized_insert_enable")
             .add("prefer_join_method")
             .add("rewrite_count_distinct_to_bitmap_hll").build();
+
+    // Limitations
+    // mem limit can't smaller than bufferpool's default page size
+    public static final int MIN_EXEC_MEM_LIMIT = 2097152;
+    // query timeout cannot greater than one month
+    public static final int MAX_QUERY_TIMEOUT = 259200;
 
     @VariableMgr.VarAttr(name = ENABLE_PIPELINE, alias = ENABLE_PIPELINE_ENGINE, show = ENABLE_PIPELINE_ENGINE)
     private boolean enablePipelineEngine = true;
@@ -716,7 +722,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public void setEnableSortAggregate(boolean enableSortAggregate) {
         this.enableSortAggregate = enableSortAggregate;
     }
-    
+
     @VariableMgr.VarAttr(name = ENABLE_SCAN_BLOCK_CACHE)
     private boolean useScanBlockCache = false;
 
@@ -750,6 +756,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_RULE_BASED_MATERIALIZED_VIEW_REWRITE)
     private boolean enableRuleBasedMaterializedViewRewrite = true;
+
+    @VarAttr(name = ENABLE_COST_BASED_MATERIALIZED_VIEW_REWRITE)
+    private boolean enableCostBasedMaterializedViewRewrite = true;
 
     public boolean getEnablePopulateBlockCache() {
         return enablePopulateBlockCache;
@@ -856,16 +865,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public long getSqlSelectLimit() {
-        if (sqlSelectLimit < 0) {
-            return DEFAULT_SELECT_LIMIT;
-        }
         return sqlSelectLimit;
     }
 
     public void setSqlSelectLimit(long limit) {
-        if (limit < 0) {
-            return;
-        }
         this.sqlSelectLimit = limit;
     }
 
@@ -886,11 +889,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public void setMaxExecMemByte(long maxExecMemByte) {
-        if (maxExecMemByte < MIN_EXEC_MEM_LIMIT) {
-            this.maxExecMemByte = MIN_EXEC_MEM_LIMIT;
-        } else {
-            this.maxExecMemByte = maxExecMemByte;
-        }
+        this.maxExecMemByte = maxExecMemByte;
     }
 
     public void setLoadMemLimit(long loadMemLimit) {
@@ -1417,6 +1416,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableRuleBasedMaterializedViewRewrite(boolean enableRuleBasedMaterializedViewRewrite) {
         this.enableRuleBasedMaterializedViewRewrite = enableRuleBasedMaterializedViewRewrite;
+    }
+
+    public boolean isEnableCostBasedMaterializedViewRewrite() {
+        return enableCostBasedMaterializedViewRewrite;
+    }
+
+    public void setEnableCostBasedMaterializedViewRewrite(boolean enableCostBasedMaterializedViewRewrite) {
+        this.enableCostBasedMaterializedViewRewrite = enableCostBasedMaterializedViewRewrite;
     }
 
     // Serialize to thrift object

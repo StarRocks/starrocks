@@ -49,7 +49,7 @@ public class SubfieldOperator extends ScalarOperator {
     private SubfieldOperator(ScalarOperator child, Type type, String fieldName) {
         super(OperatorType.SUBFIELD, type);
         this.children.add(child);
-        this.fieldName = fieldName;
+        this.fieldName = fieldName.toLowerCase();
     }
 
     public String getFieldName() {

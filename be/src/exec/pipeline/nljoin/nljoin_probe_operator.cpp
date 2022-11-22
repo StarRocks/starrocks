@@ -39,7 +39,7 @@ Status NLJoinProbeOperator::prepare(RuntimeState* state) {
     _unique_metrics->add_info_string("JoinConjuncts", _sql_join_conjuncts);
 
     _permute_rows_counter = ADD_COUNTER(_unique_metrics, "PermuteRows", TUnit::UNIT);
-    if (_is_left_join()) {
+    if (_is_left_join() || _is_left_anti_join()) {
         _permute_left_rows_counter = ADD_COUNTER(_unique_metrics, "PermuteLeftJoinRows", TUnit::UNIT);
     }
     return Operator::prepare(state);
@@ -71,8 +71,8 @@ void NLJoinProbeOperator::_advance_join_stage(JoinStage stage) const {
 }
 
 bool NLJoinProbeOperator::_skip_probe() const {
-    // Empty build tbale could skip probe unless it's LEFT JOIN
-    return is_ready() && !_is_left_join() && _cross_join_context->is_build_chunk_empty();
+    // Empty build table could skip probe unless it's LEFT/FULL OUTER JOIN or LEFT ANTI JOIN
+    return is_ready() && !_is_left_join() && !_is_left_anti_join() && _cross_join_context->is_build_chunk_empty();
 }
 
 void NLJoinProbeOperator::_check_post_probe() const {
@@ -215,6 +215,13 @@ void NLJoinProbeOperator::iterate_enumerate_chunk(const ChunkPtr& chunk,
 
 Status NLJoinProbeOperator::_probe(RuntimeState* state, ChunkPtr chunk) {
     vectorized::FilterPtr filter;
+
+    // directly return all probe chunk when it's left anti join and right input is empty
+    if (_is_left_anti_join() && _num_build_chunks() == 0) {
+        _permute_left_join(state, chunk, 0, _probe_chunk->num_rows());
+        return Status::OK();
+    }
+
     bool apply_filter = (!_is_left_semi_join() && !_is_left_anti_join()) || _num_build_chunks() == 0;
     if (!_join_conjuncts.empty() && chunk && !chunk->is_empty()) {
         size_t rows = chunk->num_rows();

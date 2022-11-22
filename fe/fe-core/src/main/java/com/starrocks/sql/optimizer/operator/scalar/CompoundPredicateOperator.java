@@ -120,4 +120,8 @@ public class CompoundPredicateOperator extends PredicateOperator {
     public static ScalarOperator and(ScalarOperator... nodes) {
         return Utils.createCompound(CompoundPredicateOperator.CompoundType.AND, Arrays.asList(nodes));
     }
+
+    public static ScalarOperator not(ScalarOperator node) {
+        return new CompoundPredicateOperator(CompoundType.NOT, node);
+    }
 }

@@ -44,6 +44,7 @@ import com.starrocks.planner.EmptySetNode;
 import com.starrocks.planner.EsScanNode;
 import com.starrocks.planner.ExceptNode;
 import com.starrocks.planner.ExchangeNode;
+import com.starrocks.planner.FileTableScanNode;
 import com.starrocks.planner.FragmentNormalizer;
 import com.starrocks.planner.HashJoinNode;
 import com.starrocks.planner.HdfsScanNode;
@@ -102,6 +103,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalDecodeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDeltaLakeScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalEsScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalFileScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
@@ -808,6 +810,44 @@ public class PlanFragmentBuilder {
         }
 
         @Override
+        public PlanFragment visitPhysicalFileScan(OptExpression optExpression, ExecPlan context) {
+            PhysicalFileScanOperator node = (PhysicalFileScanOperator) optExpression.getOp();
+            ScanOperatorPredicates predicates = node.getScanOperatorPredicates();
+
+            Table referenceTable = node.getTable();
+            context.getDescTbl().addReferencedTable(referenceTable);
+            TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
+            tupleDescriptor.setTable(referenceTable);
+
+            prepareContextSlots(node, context, tupleDescriptor);
+
+            FileTableScanNode fileTableScanNode =
+                    new FileTableScanNode(context.getNextNodeId(), tupleDescriptor, "FileTableScanNode");
+            fileTableScanNode.computeStatistics(optExpression.getStatistics());
+            try {
+                HDFSScanNodePredicates scanNodePredicates = fileTableScanNode.getScanNodePredicates();
+
+                fileTableScanNode.setupScanRangeLocations();
+
+                prepareCommonExpr(scanNodePredicates, predicates, context);
+                prepareMinMaxExpr(scanNodePredicates, predicates, context);
+            } catch (Exception e) {
+                LOG.warn("Hdfs scan node get scan range locations failed : ", e);
+                throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);
+            }
+
+            fileTableScanNode.setLimit(node.getLimit());
+
+            tupleDescriptor.computeMemLayout();
+            context.getScanNodes().add(fileTableScanNode);
+
+            PlanFragment fragment =
+                    new PlanFragment(context.getNextFragmentId(), fileTableScanNode, DataPartition.RANDOM);
+            context.getFragments().add(fragment);
+            return fragment;
+        }
+
+        @Override
         public PlanFragment visitPhysicalDeltaLakeScan(OptExpression optExpression, ExecPlan context) {
             PhysicalDeltaLakeScanOperator node = (PhysicalDeltaLakeScanOperator) optExpression.getOp();
 
@@ -888,6 +928,8 @@ public class PlanFragmentBuilder {
                     icebergScanNode.getConjuncts()
                             .add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
                 }
+
+                icebergScanNode.preProcessIcebergPredicate(predicates);
                 icebergScanNode.getScanRangeLocations();
                 //set slot for equality delete file
                 icebergScanNode.appendEqualityColumns(node, columnRefFactory, context);

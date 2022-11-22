@@ -55,6 +55,7 @@ import com.starrocks.planner.DataStreamSink;
 import com.starrocks.planner.DeltaLakeScanNode;
 import com.starrocks.planner.ExchangeNode;
 import com.starrocks.planner.ExportSink;
+import com.starrocks.planner.FileTableScanNode;
 import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.planner.HudiScanNode;
 import com.starrocks.planner.IcebergScanNode;
@@ -80,6 +81,7 @@ import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.LoadPlanner;
+import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.system.Backend;
@@ -644,8 +646,13 @@ public class Coordinator {
 
     public void exec() throws Exception {
         QueryQueueManager.getInstance().maybeWait(connectContext, this);
-        prepareExec();
-        deliverExecFragments();
+        try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("CoordPrepareExec")) {
+            prepareExec();
+        }
+
+        try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("CoordDeliverExec")) {
+            deliverExecFragments();
+        }
     }
 
     public static ResourceGroup prepareResourceGroup(ConnectContext connect,
@@ -2344,7 +2351,8 @@ public class Coordinator {
             FragmentScanRangeAssignment assignment =
                     fragmentExecParamsMap.get(scanNode.getFragmentId()).scanRangeAssignment;
             if ((scanNode instanceof HdfsScanNode) || (scanNode instanceof IcebergScanNode) ||
-                    scanNode instanceof HudiScanNode || scanNode instanceof DeltaLakeScanNode) {
+                    scanNode instanceof HudiScanNode || scanNode instanceof DeltaLakeScanNode ||
+                    scanNode instanceof FileTableScanNode) {
                 if (connectContext != null) {
                     queryOptions.setUse_scan_block_cache(connectContext.getSessionVariable().getUseScanBlockCache());
                     queryOptions.setEnable_populate_block_cache(

@@ -27,7 +27,6 @@ import org.apache.iceberg.TableScan;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.exceptions.NoSuchTableException;
 import org.apache.iceberg.expressions.Expression;
-import org.apache.iceberg.expressions.Expressions;
 import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -130,21 +129,20 @@ public class IcebergUtil {
      *
      * @param table
      * @param snapshot
-     * @param icebergPredicates
+     * @param icebergPredicate
      * @return
      */
     public static TableScan getTableScan(Table table,
                                          Snapshot snapshot,
-                                         List<Expression> icebergPredicates) {
+                                         Expression icebergPredicate) {
         // TODO: use planWith(executorService) after
         // https://github.com/apache/iceberg/commit/74db81f4dd81360bf3c0ad438d4be937c7a812d9 release
         TableScan tableScan = table.newScan().useSnapshot(snapshot.snapshotId()).includeColumnStats();
-        Expression filterExpressions = Expressions.alwaysTrue();
-        if (!icebergPredicates.isEmpty()) {
-            filterExpressions = icebergPredicates.stream().reduce(Expressions.alwaysTrue(), Expressions::and);
+        if (icebergPredicate != null) {
+            tableScan = tableScan.filter(icebergPredicate);
         }
 
-        return tableScan.filter(filterExpressions);
+        return tableScan;
     }
 
     public static void refreshTable(Table table) {

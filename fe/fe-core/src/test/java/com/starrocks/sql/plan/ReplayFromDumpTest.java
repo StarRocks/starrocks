@@ -185,6 +185,21 @@ public class ReplayFromDumpTest {
     }
 
     @Test
+    public void testReplyOnlineCase_JoinEliminateNulls() throws Exception {
+        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(getDumpInfoFromFile("query_dump/join_eliminate_nulls"));
+        SessionVariable sessionVariable = queryDumpInfo.getSessionVariable();
+        sessionVariable.setNewPlanerAggStage(2);
+        Pair<QueryDumpInfo, String> replayPair =
+                getCostPlanFragment(getDumpInfoFromFile("query_dump/join_eliminate_nulls"), sessionVariable);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  6:NESTLOOP JOIN\n" +
+                "  |  join op: INNER JOIN\n" +
+                "  |  other join predicates: CASE 174: type WHEN '1' THEN concat('ocms_', name) " +
+                "= 'ocms_fengyang56' WHEN '0' THEN TRUE ELSE FALSE END\n" +
+                "  |  cardinality: 2500"));
+    }
+
+
+    @Test
     public void testTPCH20() throws Exception {
         compareDumpWithOriginTest("tpchcost/q20");
     }

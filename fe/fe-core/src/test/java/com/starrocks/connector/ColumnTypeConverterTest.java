@@ -4,18 +4,23 @@ package com.starrocks.connector;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.ArrayType;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
-import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import org.apache.avro.Schema;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.ArrayList;
+import java.util.LinkedList;
+import java.util.List;
+
+import static com.starrocks.connector.ColumnTypeConverter.columnEquals;
 import static com.starrocks.connector.ColumnTypeConverter.fromHiveTypeToArrayType;
 import static com.starrocks.connector.ColumnTypeConverter.fromHiveTypeToMapType;
 import static com.starrocks.connector.ColumnTypeConverter.fromHudiType;
@@ -288,7 +293,7 @@ public class ColumnTypeConverterTest {
     }
 
     @Test
-    public void testArraySchema() {
+    public void testArrayHudiSchema() {
         Schema unionSchema;
         Schema arraySchema;
 
@@ -311,5 +316,73 @@ public class ColumnTypeConverterTest {
         unionSchema = Schema.createUnion(Schema.create(Schema.Type.BYTES));
         arraySchema = Schema.createArray(unionSchema);
         Assert.assertEquals(fromHudiType(arraySchema), new ArrayType(ScalarType.createType(PrimitiveType.VARCHAR)));
+    }
+
+    @Test
+    public void testStructHudiSchema() {
+        Schema.Field field1 = new Schema.Field("field1", Schema.create(Schema.Type.INT), null, null);
+        Schema.Field field2 = new Schema.Field("field2", Schema.create(Schema.Type.STRING), null, null);
+        List<Schema.Field> fields = new LinkedList<>();
+        fields.add(field1);
+        fields.add(field2);
+        Schema structSchema = Schema.createRecord(fields);
+
+        StructField structField1 = new StructField("field1", ScalarType.createType(PrimitiveType.INT));
+        StructField structField2 = new StructField("field2", ScalarType.createDefaultString());
+        ArrayList<StructField> structFields = new ArrayList<>();
+        structFields.add(structField1);
+        structFields.add(structField2);
+        StructType structType = new StructType(structFields);
+        Assert.assertEquals(structType, fromHudiType(structSchema));
+    }
+
+    @Test
+    public void testMapHudiSchema() {
+        Schema.Field field1 = new Schema.Field("field1", Schema.create(Schema.Type.INT), null, null);
+        Schema.Field field2 = new Schema.Field("field2", Schema.create(Schema.Type.STRING), null, null);
+        List<Schema.Field> fields = new LinkedList<>();
+        fields.add(field1);
+        fields.add(field2);
+        Schema structSchema = Schema.createRecord(fields);
+
+        Schema mapSchema = Schema.createMap(structSchema);
+
+        StructField structField1 = new StructField("field1", ScalarType.createType(PrimitiveType.INT));
+        StructField structField2 = new StructField("field2", ScalarType.createDefaultString());
+        ArrayList<StructField> structFields = new ArrayList<>();
+        structFields.add(structField1);
+        structFields.add(structField2);
+        StructType structType = new StructType(structFields);
+
+        MapType mapType = new MapType(ScalarType.createDefaultString(), structType);
+
+        Assert.assertEquals(mapType, fromHudiType(mapSchema));
+    }
+
+    @Test
+    public void testColumnEquals() {
+        Column base = new Column("k1", Type.INT, false);
+        Column other = new Column("k1", Type.INT, false);
+
+        Assert.assertTrue(columnEquals(base, base));
+        Assert.assertTrue(columnEquals(base, other));
+
+        other = new Column("k2", Type.INT, false);
+        Assert.assertFalse(columnEquals(base, other));
+
+        other = new Column("k1", Type.STRING, false);
+        Assert.assertFalse(columnEquals(base, other));
+
+        base = new Column("k1", ScalarType.createCharType(5), false);
+        other = new Column("k1", ScalarType.createCharType(10), false);
+        Assert.assertFalse(columnEquals(base, other));
+
+        base = new Column("k1", ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 5, 5), false);
+        other = new Column("k1", ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 6, 5), false);
+        Assert.assertFalse(columnEquals(base, other));
+
+        base = new Column("k1", ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 5, 5), false);
+        other = new Column("k1", ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 5, 4), false);
+        Assert.assertFalse(columnEquals(base, other));
     }
 }

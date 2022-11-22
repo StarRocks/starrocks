@@ -782,6 +782,9 @@ public class LocalMetastore implements ConnectorMetadata {
         } else if (engineName.equalsIgnoreCase("hive")) {
             createHiveTable(db, stmt);
             return;
+        } else if (engineName.equalsIgnoreCase("file")) {
+            createFileTable(db, stmt);
+            return;
         } else if (engineName.equalsIgnoreCase("iceberg")) {
             createIcebergTable(db, stmt);
             return;
@@ -2472,6 +2475,12 @@ public class LocalMetastore implements ConnectorMetadata {
         Table hiveTable = TableFactory.createTable(stmt, Table.TableType.HIVE);
         registerTable(db, hiveTable, stmt);
         LOG.info("successfully create table[{}-{}]", stmt.getTableName(), hiveTable.getId());
+    }
+
+    private void createFileTable(Database db, CreateTableStmt stmt) throws DdlException {
+        Table fileTable = TableFactory.createTable(stmt, Table.TableType.FILE);
+        registerTable(db, fileTable, stmt);
+        LOG.info("successfully create table[{}-{}]", stmt.getTableName(), fileTable.getId());
     }
 
     private void createIcebergTable(Database db, CreateTableStmt stmt) throws DdlException {

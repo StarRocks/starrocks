@@ -14,6 +14,7 @@ import com.starrocks.sql.optimizer.rule.implementation.CTEProduceImplementationR
 import com.starrocks.sql.optimizer.rule.implementation.DeltaLakeScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.EsScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.ExceptImplementationRule;
+import com.starrocks.sql.optimizer.rule.implementation.FileScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.FilterImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.HashAggImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.HashJoinImplementationRule;
@@ -121,7 +122,9 @@ import com.starrocks.sql.optimizer.rule.transformation.ScalarApply2JoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitAggregateRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitLimitRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitTopNRule;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.FilterScanRule;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.AggregateJoinRule;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.AggregateScanRule;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.OnlyJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.OnlyScanRule;
 
 import java.util.List;
@@ -133,6 +136,7 @@ public class RuleSet {
     private static final List<Rule> ALL_IMPLEMENT_RULES = ImmutableList.of(
             new OlapScanImplementationRule(),
             new HiveScanImplementationRule(),
+            new FileScanImplementationRule(),
             new IcebergScanImplementationRule(),
             new HudiScanImplementationRule(),
             new DeltaLakeScanImplementationRule(),
@@ -183,6 +187,7 @@ public class RuleSet {
                 MergeLimitDirectRule.ICEBERG_SCAN,
                 MergeLimitDirectRule.HUDI_SCAN,
                 MergeLimitDirectRule.DELTALAKE_SCAN,
+                MergeLimitDirectRule.FILE_SCAN,
                 MergeLimitDirectRule.SCHEMA_SCAN,
                 MergeLimitDirectRule.MYSQL_SCAN,
                 MergeLimitDirectRule.ES_SCAN,
@@ -202,10 +207,12 @@ public class RuleSet {
                 RemoteScanPartitionPruneRule.HUDI_SCAN,
                 RemoteScanPartitionPruneRule.ICEBERG_SCAN,
                 RemoteScanPartitionPruneRule.DELTALAKE_SCAN,
+                RemoteScanPartitionPruneRule.FILE_SCAN,
                 PushDownMinMaxConjunctsRule.HIVE_SCAN,
                 PushDownMinMaxConjunctsRule.HUDI_SCAN,
                 PushDownMinMaxConjunctsRule.ICEBERG_SCAN,
                 PushDownMinMaxConjunctsRule.DELTALAKE_SCAN,
+                PushDownMinMaxConjunctsRule.FILE_SCAN,
                 new EsScanPartitionPruneRule(),
                 new PartitionPredicatePrune()
         ));
@@ -218,6 +225,7 @@ public class RuleSet {
                 PruneHDFSScanColumnRule.HIVE_SCAN,
                 PruneHDFSScanColumnRule.ICEBERG_SCAN,
                 PruneHDFSScanColumnRule.DELTALAKE_SCAN,
+                PruneHDFSScanColumnRule.FILE_SCAN,
                 PruneHDFSScanColumnRule.HUDI_SCAN,
                 PruneScanColumnRule.JDBC_SCAN,
                 new PruneProjectColumnsRule(),
@@ -243,6 +251,7 @@ public class RuleSet {
                 PushDownPredicateScanRule.ICEBERG_SCAN,
                 PushDownPredicateScanRule.HUDI_SCAN,
                 PushDownPredicateScanRule.DELTALAKE_SCAN,
+                PushDownPredicateScanRule.FILE_SCAN,
                 PushDownPredicateScanRule.SCHEMA_SCAN,
                 PushDownPredicateScanRule.ES_SCAN,
                 PushDownPredicateScanRule.META_SCAN,
@@ -336,7 +345,12 @@ public class RuleSet {
 
         REWRITE_RULES.put(RuleSetType.SINGLE_TABLE_MV_REWRITE, ImmutableList.of(
                 OnlyScanRule.getInstance(),
-                FilterScanRule.getInstance()
+                AggregateScanRule.getInstance()
+        ));
+
+        REWRITE_RULES.put(RuleSetType.MULTI_TABLE_MV_REWRITE, ImmutableList.of(
+                OnlyJoinRule.getInstance(),
+                AggregateJoinRule.getInstance()
         ));
     }
 
@@ -353,6 +367,10 @@ public class RuleSet {
 
     public void addJoinCommutativityWithOutInnerRule() {
         transformRules.add(JoinCommutativityWithOutInnerRule.getInstance());
+    }
+
+    public void addMultiTableMvRewriteRule() {
+        transformRules.addAll(REWRITE_RULES.get(RuleSetType.MULTI_TABLE_MV_REWRITE));
     }
 
     public List<Rule> getTransformRules() {

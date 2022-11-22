@@ -133,6 +133,12 @@ HdfsTableDescriptor::HdfsTableDescriptor(const TTableDescriptor& tdesc, ObjectPo
     }
 }
 
+FileTableDescriptor::FileTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool)
+        : HiveTableDescriptor(tdesc, pool) {
+    _table_location = tdesc.fileTable.location;
+    _columns = tdesc.fileTable.columns;
+}
+
 IcebergTableDescriptor::IcebergTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool)
         : HiveTableDescriptor(tdesc, pool) {
     _table_location = tdesc.icebergTable.location;
@@ -485,6 +491,10 @@ Status DescriptorTbl::create(RuntimeState* state, ObjectPool* pool, const TDescr
             auto* hdfs_desc = pool->add(new HdfsTableDescriptor(tdesc, pool));
             RETURN_IF_ERROR(hdfs_desc->create_key_exprs(state, pool, chunk_size));
             desc = hdfs_desc;
+            break;
+        }
+        case TTableType::FILE_TABLE: {
+            desc = pool->add(new FileTableDescriptor(tdesc, pool));
             break;
         }
         case TTableType::ICEBERG_TABLE: {
