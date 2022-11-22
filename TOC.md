@@ -33,13 +33,13 @@
   + [使用 CloudCanal 导入](/loading/CloudCanal_loading.md)
 + 导出数据
   + [使用 Broker 导出数据](/unloading/Export.md)
-  + [Spark Connector](/unloading/Spark_connector.md)
-  + [Flink Connector](/unloading/Flink_connector.md)
+  + [使用 Spark 连接器读取数据](/unloading/Spark_connector.md)
+  + [使用 Flink 连接器读取数据](/unloading/Flink_connector.md)
 + 查询数据源
   + [使用 catalog 管理内部和外部数据](/data_source/Manage_data.md)
   + [外部表](/data_source/External_table.md)
 + 查询加速
-  + [CBO 优化器](/using_starrocks/Cost_based_optimizer.md)
+  + [CBO 统计信息](/using_starrocks/Cost_based_optimizer.md)
   + [物化视图](/using_starrocks/Materialized_view.md)
   + [Colocate Join](/using_starrocks/Colocate_join.md)
   + [Lateral Join](/using_starrocks/Lateral_join.md)
