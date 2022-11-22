@@ -25,6 +25,7 @@ import static com.starrocks.catalog.IcebergTable.ICEBERG_METASTORE_URIS;
 import static com.starrocks.connector.iceberg.IcebergUtil.getIcebergCustomCatalog;
 import static com.starrocks.connector.iceberg.IcebergUtil.getIcebergGlueCatalog;
 import static com.starrocks.connector.iceberg.IcebergUtil.getIcebergHiveCatalog;
+import static com.starrocks.connector.iceberg.IcebergUtil.getIcebergRESTCatalog;
 
 public class IcebergMetadata implements ConnectorMetadata {
 
@@ -54,6 +55,9 @@ public class IcebergMetadata implements ConnectorMetadata {
         } else if (IcebergCatalogType.GLUE_CATALOG == IcebergCatalogType.fromString(properties.get(ICEBERG_CATALOG_TYPE))) {
             catalogType = properties.get(ICEBERG_CATALOG_TYPE);
             icebergCatalog = getIcebergGlueCatalog(catalogName, properties);
+        } else if (IcebergCatalogType.REST_CATALOG == IcebergCatalogType.fromString(properties.get(ICEBERG_CATALOG_TYPE))) {
+            catalogType = properties.get(ICEBERG_CATALOG_TYPE);
+            icebergCatalog = getIcebergRESTCatalog(properties);
         } else {
             throw new RuntimeException(String.format("Property %s is missing or not supported now.",
                     ICEBERG_CATALOG_TYPE));
@@ -93,6 +97,8 @@ public class IcebergMetadata implements ConnectorMetadata {
                         tblName, customProperties);
             } else if (IcebergCatalogType.fromString(catalogType).equals(IcebergCatalogType.GLUE_CATALOG)) {
                 return IcebergUtil.convertGlueCatalogToSRTable(icebergTable, catalogName, dbName, tblName);
+            } else if (IcebergCatalogType.fromString(catalogType).equals(IcebergCatalogType.REST_CATALOG)) {
+                return IcebergUtil.convertRESTCatalogToSRTable(icebergTable, catalogName, dbName, tblName);
             } else {
                 return IcebergUtil.convertHiveCatalogToSRTable(icebergTable, metastoreURI, catalogName, dbName, tblName);
             }
@@ -106,7 +112,8 @@ public class IcebergMetadata implements ConnectorMetadata {
     public List<String> listPartitionNames(String dbName, String tblName) {
         org.apache.iceberg.Table icebergTable
                 = icebergCatalog.loadTable(IcebergUtil.getIcebergTableIdentifier(dbName, tblName));
-        if (!IcebergCatalogType.fromString(catalogType).equals(IcebergCatalogType.HIVE_CATALOG)) {
+        if (!IcebergCatalogType.fromString(catalogType).equals(IcebergCatalogType.HIVE_CATALOG)
+                && !IcebergCatalogType.fromString(catalogType).equals(IcebergCatalogType.REST_CATALOG)) {
             throw new StarRocksIcebergException(
                     "Do not support get partitions from catalog type: " + catalogType);
         }

@@ -6,6 +6,7 @@ public enum IcebergCatalogType {
     HIVE_CATALOG,
     CUSTOM_CATALOG,
     GLUE_CATALOG,
+    REST_CATALOG,
     UNKNOWN;
     // TODO: add more iceberg catalog type
 
