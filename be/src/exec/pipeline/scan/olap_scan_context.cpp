@@ -4,6 +4,7 @@
 
 #include "exec/vectorized/olap_scan_node.h"
 #include "exprs/vectorized/runtime_filter_bank.h"
+#include "storage/tablet.h"
 
 namespace starrocks::pipeline {
 
@@ -18,8 +19,37 @@ Status OlapScanContext::prepare(RuntimeState* state) {
 }
 
 void OlapScanContext::close(RuntimeState* state) {
+<<<<<<< HEAD
     const auto& conjunct_ctxs = _scan_node->conjunct_ctxs();
     Expr::close(conjunct_ctxs, state);
+=======
+    _chunk_buffer.close();
+    for (const auto& rowsets_per_tablet : _tablet_rowsets) {
+        Rowset::release_readers(rowsets_per_tablet);
+    }
+}
+
+Status OlapScanContext::capture_tablet_rowsets(const std::vector<TInternalScanRange*>& olap_scan_ranges) {
+    _tablet_rowsets.resize(olap_scan_ranges.size());
+    _tablets.resize(olap_scan_ranges.size());
+    for (int i = 0; i < olap_scan_ranges.size(); ++i) {
+        auto* scan_range = olap_scan_ranges[i];
+
+        int64_t version = strtoul(scan_range->version.c_str(), nullptr, 10);
+        ASSIGN_OR_RETURN(TabletSharedPtr tablet, vectorized::OlapScanNode::get_tablet(scan_range));
+
+        // Capture row sets of this version tablet.
+        {
+            std::shared_lock l(tablet->get_header_lock());
+            RETURN_IF_ERROR(tablet->capture_consistent_rowsets(Version(0, version), &_tablet_rowsets[i]));
+            Rowset::acquire_readers(_tablet_rowsets[i]);
+        }
+
+        _tablets[i] = std::move(tablet);
+    }
+
+    return Status::OK();
+>>>>>>> c0a1b94c8 ([BugFix] Acquire rowsets at querying (#13830))
 }
 
 Status OlapScanContext::parse_conjuncts(RuntimeState* state, const std::vector<ExprContext*>& runtime_in_filters,
