@@ -148,6 +148,17 @@ public class ColumnRefSet implements Cloneable {
         return rhs.bitSet.stream().allMatch(bit -> bitSet.get(bit));
     }
 
+<<<<<<< HEAD
+=======
+    public boolean containsAny(ColumnRefSet rhs) {
+        return rhs.bitSet.stream().anyMatch(bit -> bitSet.get(bit));
+    }
+
+    public boolean containsAll(List<Integer> rhs) {
+        return rhs.stream().allMatch(bit -> bitSet.get(bit));
+    }
+
+>>>>>>> 5dba41fcc ([BugFix] fix output column of anti join (#13760))
     @Override
     public String toString() {
         return bitSet.toString();

@@ -2,7 +2,6 @@
 
 package com.starrocks.sql.optimizer;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Catalog;
@@ -40,6 +39,12 @@ import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+<<<<<<< HEAD
+=======
+import org.apache.commons.collections.CollectionUtils;
+import org.apache.iceberg.expressions.Expression;
+import org.apache.iceberg.types.Types;
+>>>>>>> 5dba41fcc ([BugFix] fix output column of anti join (#13760))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -423,7 +428,9 @@ public class Utils {
     }
 
     public static ColumnRefOperator findSmallestColumnRef(List<ColumnRefOperator> columnRefOperatorList) {
-        Preconditions.checkState(!columnRefOperatorList.isEmpty());
+        if (CollectionUtils.isEmpty(columnRefOperatorList)) {
+            return null;
+        }
         ColumnRefOperator smallestColumnRef = columnRefOperatorList.get(0);
         int smallestColumnLength = Integer.MAX_VALUE;
         for (ColumnRefOperator columnRefOperator : columnRefOperatorList) {

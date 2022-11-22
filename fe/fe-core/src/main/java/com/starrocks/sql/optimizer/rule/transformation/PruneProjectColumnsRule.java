@@ -4,10 +4,15 @@ package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.FunctionSet;
+>>>>>>> 5dba41fcc ([BugFix] fix output column of anti join (#13760))
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -39,6 +44,22 @@ public class PruneProjectColumnsRule extends TransformationRule {
             }
         }));
 
+<<<<<<< HEAD
+=======
+        if (newMap.isEmpty()) {
+            OptExpression child = input.inputAt(0);
+            LogicalOperator childOp = (LogicalOperator) child.getOp();
+            ColumnRefOperator smallestColumn = childOp.getSmallestColumn(context.getColumnRefFactory(), child);
+            if (smallestColumn != null) {
+                ScalarOperator expr = projectOperator.getColumnRefMap().get(smallestColumn);
+                if (expr != null && !smallestColumn.equals(expr) && !expr.isVariable()) {
+                    newMap.put(smallestColumn, expr);
+                    requiredInputColumns.union(smallestColumn);
+                }
+            }
+        }
+
+>>>>>>> 5dba41fcc ([BugFix] fix output column of anti join (#13760))
         // Change the requiredOutputColumns in context
         requiredOutputColumns.union(requiredInputColumns);
 
