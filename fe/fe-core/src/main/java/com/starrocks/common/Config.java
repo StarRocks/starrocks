@@ -1014,8 +1014,27 @@ public class Config extends ConfigBase {
      * NORMAL: delay tablet_repair_delay_factor_second * 2;
      * LOW: delay tablet_repair_delay_factor_second * 3;
      */
+<<<<<<< HEAD
     @ConfField(mutable = true)
     public static long tablet_repair_delay_factor_second = 60;
+=======
+    @ConfField(mutable = true, aliases = {"disable_colocate_balance"})
+    public static boolean tablet_sched_disable_colocate_balance = false;
+
+    /**
+     * If BE is down beyond this time, tablets on that BE of colcoate table will be migrated to other available BEs
+     */
+    @ConfField(mutable = true)
+    public static long tablet_sched_colocate_be_down_tolerate_time_s = 12 * 3600;
+
+    @ConfField(aliases = {"tablet_balancer_strategy"})
+    public static String tablet_sched_balancer_strategy = "disk_and_tablet";
+
+    // if the number of balancing tablets in TabletScheduler exceed max_balancing_tablets,
+    // no more balance check
+    @ConfField(mutable = true, aliases = {"max_balancing_tablets"})
+    public static int tablet_sched_max_balancing_tablets = 100;
+>>>>>>> 803ae6eaf ([Enhancement] Add BE down tolerate time for colcoate balance (#13738))
 
     /**
      * the default slot number per path in tablet scheduler

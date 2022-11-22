@@ -716,7 +716,11 @@ public class ColocateTableBalancer extends MasterDaemon {
             // 1. BE is dead for a long time
             // 2. BE is under decommission
             if ((!be.isAlive() &&
+<<<<<<< HEAD
                     (currTime - be.getLastUpdateMs()) > Config.tablet_repair_delay_factor_second * 1000 * 2)
+=======
+                    (currTime - be.getLastUpdateMs()) > Config.tablet_sched_colocate_be_down_tolerate_time_s * 1000)
+>>>>>>> 803ae6eaf ([Enhancement] Add BE down tolerate time for colcoate balance (#13738))
                     || be.isDecommissioned()) {
                 return false;
             }
