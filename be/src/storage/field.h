@@ -46,7 +46,6 @@ public:
     explicit Field(const TabletColumn& column)
             : _name(column.name()),
               _type_info(get_type_info(column)),
-              _key_coder(get_key_coder(column.type())),
               _index_size(column.index_length()),
               _length(column.length()),
               _is_nullable(column.is_nullable()) {
@@ -56,7 +55,6 @@ public:
     Field(const TabletColumn& column, std::shared_ptr<TypeInfo>&& type_info)
             : _name(column.name()),
               _type_info(type_info),
-              _key_coder(get_key_coder(column.type())),
               _index_size(column.index_length()),
               _length(column.length()),
               _is_nullable(column.is_nullable()) {}
@@ -79,10 +77,6 @@ public:
     virtual void set_to_max(char* buf) const { return _type_info->set_to_max(buf); }
     void set_to_min(char* buf) const { return _type_info->set_to_min(buf); }
 
-    // This function allocate memory from pool, other than allocate_memory
-    // reserve memory from continuous memory.
-    virtual char* allocate_value(MemPool* pool) const { return (char*)pool->allocate(_type_info->size()); }
-
     // Only compare column content, without considering NULL condition.
     // RETURNS:
     //      0 means equal,
@@ -97,17 +91,6 @@ public:
     const TypeInfoPtr& type_info() const { return _type_info; }
     bool is_nullable() const { return _is_nullable; }
 
-    std::string to_zone_map_string(const char* value) const {
-        switch (type()) {
-        case TYPE_DECIMAL32:
-        case TYPE_DECIMAL64:
-        case TYPE_DECIMAL128:
-            return get_decimal_zone_map_string(type_info().get(), value);
-        default:
-            return type_info()->to_string(value);
-        }
-    }
-
     void add_sub_field(std::unique_ptr<Field> sub_field) { _sub_fields.emplace_back(std::move(sub_field)); }
 
     Field* get_sub_field(int i) { return _sub_fields[i].get(); }
@@ -120,19 +103,8 @@ public:
     }
 
 protected:
-    char* allocate_string_value(MemPool* pool) const {
-        char* type_value = (char*)pool->allocate(sizeof(Slice));
-        assert(type_value != nullptr);
-        auto slice = reinterpret_cast<Slice*>(type_value);
-        slice->size = _length;
-        slice->data = (char*)pool->allocate(slice->size);
-        assert(slice->data != nullptr);
-        return type_value;
-    }
-
     std::string _name;
     TypeInfoPtr _type_info;
-    const KeyCoder* _key_coder;
     uint16_t _index_size;
     uint32_t _length;
     bool _is_nullable;
@@ -143,8 +115,6 @@ class CharField : public Field {
 public:
     explicit CharField() = default;
     explicit CharField(const TabletColumn& column) : Field(column) {}
-
-    char* allocate_value(MemPool* pool) const override { return Field::allocate_string_value(pool); }
 
     void set_to_max(char* ch) const override {
         auto slice = reinterpret_cast<Slice*>(ch);
@@ -157,8 +127,6 @@ class VarcharField : public Field {
 public:
     explicit VarcharField() = default;
     explicit VarcharField(const TabletColumn& column) : Field(column) {}
-
-    char* allocate_value(MemPool* pool) const override { return Field::allocate_string_value(pool); }
 
     void set_to_max(char* ch) const override {
         auto slice = reinterpret_cast<Slice*>(ch);

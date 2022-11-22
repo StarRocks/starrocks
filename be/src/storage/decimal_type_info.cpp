@@ -196,7 +196,7 @@ TypeInfoPtr get_decimal_type_info(LogicalType type, int precision, int scale) {
     }
 }
 
-std::string get_decimal_zone_map_string(TypeInfo* type_info, const char* value) {
+std::string get_decimal_zone_map_string(TypeInfo* type_info, const void* value) {
     switch (type_info->type()) {
     case TYPE_DECIMAL32: {
         auto* decimal_type_info = down_cast<DecimalTypeInfo<TYPE_DECIMAL32>*>(type_info);
