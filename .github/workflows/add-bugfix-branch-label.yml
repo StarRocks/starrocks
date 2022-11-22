@@ -1,4 +1,4 @@
-name: cherrypick
+name: label
 
 on:
   pull_request_target:
@@ -13,7 +13,7 @@ on:
       - reopened
 
 jobs:
-  cherrypick-check:
+  add-branch-label:
     runs-on: ubuntu-latest
     if: >
       startsWith(github.event.pull_request.title, '[BugFix]') &&
@@ -28,12 +28,3 @@ jobs:
             2.4
             2.3
             2.2
-
-      - uses: thollander/actions-comment-pull-request@v1
-        with:
-          message: |
-            ## Please check the version labels which this pr will be auto backported to target branch and click the checkbox:
-
-            - [ ] check done.
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN  }}
-          reactions: eyes
