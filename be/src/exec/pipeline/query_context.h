@@ -197,8 +197,6 @@ public:
 
     void collect_query_statistics(const PCollectQueryStatisticsRequest* request,
                                   PCollectQueryStatisticsResult* response);
-    void collect_fragment_statistics(const PCollectFragmentStatisticsRequest* request,
-                                     PCollectFragmentStatisticsResult* response);
 
 private:
     static void _clean_func(QueryContextManager* manager);

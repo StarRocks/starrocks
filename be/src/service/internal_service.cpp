@@ -413,15 +413,6 @@ void PInternalServiceImplBase<T>::collect_query_statistics(google::protobuf::Rpc
 }
 
 template <typename T>
-void PInternalServiceImplBase<T>::collect_fragment_statistics(google::protobuf::RpcController* controller,
-                                                              const PCollectFragmentStatisticsRequest* request,
-                                                              PCollectFragmentStatisticsResult* result,
-                                                              google::protobuf::Closure* done) {
-    ClosureGuard closure_guard(done);
-    _exec_env->query_context_mgr()->collect_fragment_statistics(request, result);
-}
-
-template <typename T>
 void PInternalServiceImplBase<T>::get_info(google::protobuf::RpcController* controller, const PProxyRequest* request,
                                            PProxyResult* response, google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);

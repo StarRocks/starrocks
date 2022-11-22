@@ -125,16 +125,6 @@ public:
 
     void set_stream_load_contexts(const std::vector<StreamLoadContext*>& contexts);
 
-    void incr_cpu_cost(int64_t cost) { _total_cpu_cost_ns += cost; }
-
-    void incr_scan_rows(int64_t rows_num) { _total_scan_rows_num += rows_num; }
-
-    void incr_scan_bytes(int64_t scan_bytes) { _total_scan_bytes += scan_bytes; }
-
-    int64_t cpu_cost() const { return _total_cpu_cost_ns; }
-    int64_t scan_rows() const { return _total_scan_rows_num; }
-    int64_t scan_bytes() const { return _total_scan_bytes; }
-
 private:
     // Id of this query
     TUniqueId _query_id;
@@ -174,10 +164,6 @@ private:
     PerDriverScanRangesMap _scan_ranges_per_driver_seq;
     std::vector<StreamLoadContext*> _stream_load_contexts;
     bool _channel_stream_load = false;
-
-    std::atomic<int64_t> _total_cpu_cost_ns = 0;
-    std::atomic<int64_t> _total_scan_rows_num = 0;
-    std::atomic<int64_t> _total_scan_bytes = 0;
 };
 
 class FragmentContextManager {

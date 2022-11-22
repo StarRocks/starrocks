@@ -100,11 +100,6 @@ public:
                                   const PCollectQueryStatisticsRequest* request, PCollectQueryStatisticsResult* result,
                                   google::protobuf::Closure* done) override;
 
-    void collect_fragment_statistics(google::protobuf::RpcController* controller,
-                                     const PCollectFragmentStatisticsRequest* request,
-                                     PCollectFragmentStatisticsResult* result,
-                                     google::protobuf::Closure* done) override;
-
     void get_info(google::protobuf::RpcController* controller, const PProxyRequest* request, PProxyResult* response,
                   google::protobuf::Closure* done) override;
 

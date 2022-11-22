@@ -306,23 +306,6 @@ message PCollectQueryStatisticsResult {
     repeated PCollectQueryStatistics query_statistics = 1;
 };
 
-message PCollectFragmentStatisticsRequest {
-    optional PUniqueId query_id = 1;
-    repeated PUniqueId fragment_instance_id = 2;
-}
-
-message PCollectFragmentStatistcs {
-    optional PUniqueId query_id = 1;
-    optional PUniqueId fragment_instance_id = 2;
-    optional int64 cpu_cost_ns = 3;
-    optional int64 scan_bytes = 4;
-    optional int64 scan_rows = 5;
-}
-
-message PCollectFragmentStatisticsResult {
-    repeated PCollectFragmentStatistcs fragment_statistics = 1;
-}
-
 message PStringPair {
     required string key = 1;
     required string val = 2;
@@ -436,7 +419,6 @@ service PInternalService {
     rpc tablet_writer_cancel(PTabletWriterCancelRequest) returns (PTabletWriterCancelResult);
     rpc trigger_profile_report(PTriggerProfileReportRequest) returns (PTriggerProfileReportResult);
     rpc collect_query_statistics(PCollectQueryStatisticsRequest) returns (PCollectQueryStatisticsResult);
-    rpc collect_fragment_statistics(PCollectFragmentStatisticsRequest) returns (PCollectFragmentStatisticsResult);
     rpc get_info(PProxyRequest) returns (PProxyResult); 
     rpc get_pulsar_info(PPulsarProxyRequest) returns (PPulsarProxyResult); 
 
