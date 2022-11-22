@@ -28,12 +28,12 @@
   + [使用 CloudCanal 导入](/loading/CloudCanal_loading.md)
 + 导出数据
   + [使用 Broker 导出数据](/unloading/Export.md)
-  + [Spark Connector](/unloading/Spark_connector.md)
-  + [Flink Connector](/unloading/Flink_connector.md)
+  + [使用 Spark 连接器读取数据](/unloading/Spark_connector.md)
+  + [使用 Flink 连接器读取数据](/unloading/Flink_connector.md)
 + 使用StarRocks
   + [CBO 优化器](/using_starrocks/Cost_based_optimizer.md)
   + [物化视图](/using_starrocks/Materialized_view.md)
-  + [Colocation Join](/using_starrocks/Colocation_join.md)
+  + [Colocate Join](/using_starrocks/Colocation_join.md)
   + [外部表](/data_source/External_table.md)
   + [数组](/using_starrocks/Array.md)
   + [Bitmap 索引](/table_design/Bitmap_index.md)

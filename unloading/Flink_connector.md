@@ -1,4 +1,4 @@
-# Flink Connector
+# 使用 Flink 连接器读取数据
 
 本文介绍 Flink 如何通过 flink-connector-starrocks 的 source 功能读取 StarRocks 数据。
 
