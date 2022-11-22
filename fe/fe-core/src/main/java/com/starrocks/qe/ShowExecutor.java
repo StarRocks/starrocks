@@ -1741,13 +1741,18 @@ public class ShowExecutor {
 
     private void handleShowCatalogs() {
         ShowCatalogsStmt showCatalogsStmt = (ShowCatalogsStmt) stmt;
-        List<List<String>> rowSet = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogsInfo();
-        rowSet.sort(new Comparator<List<String>>() {
-            @Override
-            public int compare(List<String> o1, List<String> o2) {
-                return o1.get(0).compareTo(o2.get(0));
-            }
-        });
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        CatalogMgr catalogMgr = globalStateMgr.getCatalogMgr();
+        List<List<String>> rowSet = catalogMgr.getCatalogsInfo().stream()
+                .filter(row -> {
+                            if (globalStateMgr.isUsingNewPrivilege()) {
+                                return PrivilegeManager.checkAnyActionOnCatalog(ctx, row.get(0));
+                            } else {
+                                return true;
+                            }
+                        }
+                )
+                .sorted(Comparator.comparing(o -> o.get(0))).collect(Collectors.toList());
         resultSet = new ShowResultSet(showCatalogsStmt.getMetaData(), rowSet);
     }
 

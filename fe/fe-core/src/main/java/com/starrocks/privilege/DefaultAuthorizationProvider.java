@@ -100,6 +100,9 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
             case VIEW:
                 return ViewPEntryObject.generate(mgr, objectTokens);
 
+            case CATALOG:
+                return CatalogPEntryObject.generate(mgr, objectTokens);
+
             default:
                 throw new PrivilegeException(UNEXPECTED_TYPE + typeStr);
         }
@@ -134,6 +137,9 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
 
             case VIEW:
                 return ViewPEntryObject.generate(mgr, allTypes, restrictType, restrictName);
+
+            case CATALOG:
+                return CatalogPEntryObject.generate(allTypes, restrictType, restrictName);
 
             default:
                 throw new PrivilegeException(UNEXPECTED_TYPE + typeStr);

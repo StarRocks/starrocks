@@ -7,6 +7,7 @@ import com.starrocks.analysis.TablePattern;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationManager;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
@@ -37,6 +38,7 @@ public class AuthUpgrader {
     // constants used when upgrading
     private static final String TABLE_TYPE_STR = PrivilegeType.TABLE.name();
     private static final String DB_TYPE_STR = PrivilegeType.DATABASE.name();
+    private static final String CATALOG_TYPE_STR = PrivilegeType.CATALOG.name();
     private static final String USER_TYPE_STR = PrivilegeType.USER.name();
     private static final String RESOURCE_TYPE_STR = PrivilegeType.RESOURCE.name();
     private static final String STAR = "*";
@@ -691,6 +693,7 @@ public class AuthUpgrader {
             throws PrivilegeException, AuthUpgradeUnrecoverableException {
         // type
         short dbTypeId = privilegeManager.analyzeType(DB_TYPE_STR);
+        short catalogTypeId = privilegeManager.analyzeType(CATALOG_TYPE_STR);
 
         // action
         ActionSet actionSet;
@@ -730,6 +733,16 @@ public class AuthUpgrader {
             // for *.*
             objects = Arrays.asList(privilegeManager.analyzeObject(DB_TYPE_STR,
                     Arrays.asList(PrivilegeType.DATABASE.getPlural()), null, null));
+            if (privilege == Privilege.CREATE_PRIV) {
+                // for CREATE_PRIV on *.*, we also need to grant create_database on default_catalog
+                collection.grant(catalogTypeId,
+                        privilegeManager.analyzeActionSet(catalogTypeId,
+                                Arrays.asList(PrivilegeType.CatalogAction.CREATE_DATABASE.toString())),
+                        Arrays.asList(
+                                privilegeManager.analyzeObject(CATALOG_TYPE_STR,
+                                        Arrays.asList(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME))),
+                        isGrant);
+            }
         } else {
             // for db.*
             objects = Arrays.asList(privilegeManager.analyzeObject(
