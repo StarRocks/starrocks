@@ -21,6 +21,7 @@
 
 package com.starrocks.common.proc;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.AnalysisException;
@@ -69,6 +70,56 @@ public class CurrentQueryInfoProvider {
 
     public Collection<InstanceStatistics> getInstanceStatistics(QueryStatisticsItem item) throws AnalysisException {
         return collectFragmentStatistics(item);
+    }
+
+    public Map<String, QueryStatistics> getQueryStatisticsByHost(QueryStatisticsItem item) throws AnalysisException {
+        final Map<TNetworkAddress, Request> requests = Maps.newHashMap();
+        final Map<TNetworkAddress, TNetworkAddress> brpcAddresses = Maps.newHashMap();
+        for (QueryStatisticsItem.FragmentInstanceInfo instanceInfo : item.getFragmentInstanceInfos()) {
+            TNetworkAddress brpcNetAddress = brpcAddresses.get(instanceInfo.getAddress());
+            if (brpcNetAddress == null) {
+                try {
+                    brpcNetAddress = toBrpcHost(instanceInfo.getAddress());
+                    brpcAddresses.put(instanceInfo.getAddress(), brpcNetAddress);
+                } catch (Exception e) {
+                    LOG.warn(e.getMessage());
+                    throw new AnalysisException(e.getMessage());
+                }
+            }
+            Request request = requests.get(brpcNetAddress);
+            if (request == null) {
+                request = new Request(brpcNetAddress);
+                requests.put(brpcNetAddress, request);
+            }
+            request.addQueryId(item.getExecutionId());
+        }
+        return handleCollectQueryResponseByHost(sendCollectQueryRequest(requests));
+    }
+
+    private Map<String, QueryStatistics> handleCollectQueryResponseByHost(
+            List<Pair<Request, Future<PCollectQueryStatisticsResult>>> futures) throws AnalysisException {
+        Map<String, QueryStatistics> statisticsMap = Maps.newHashMap();
+        for (Pair<Request, Future<PCollectQueryStatisticsResult>> pair : futures) {
+            try {
+                final PCollectQueryStatisticsResult result = pair.second.get(10, TimeUnit.SECONDS);
+                if (result.queryStatistics != null) {
+                    Preconditions.checkState(result.queryStatistics.size() == 1);
+                    PCollectQueryStatistics queryStatistics = result.queryStatistics.get(0);
+                    QueryStatistics statistics = new QueryStatistics();
+                    statistics.updateCpuCostNs(queryStatistics.cpuCostNs);
+                    statistics.updateScanBytes(queryStatistics.scanBytes);
+                    statistics.updateScanRows(queryStatistics.scanRows);
+                    final Request request = pair.first;
+                    String host = String.format("%s:%d",
+                            request.getAddress().getHostname(), request.getAddress().getPort());
+                    statisticsMap.put(host, statistics);
+                }
+            } catch (InterruptedException | ExecutionException | TimeoutException e) {
+                LOG.warn("fail to receive result " + e.getCause());
+                throw new AnalysisException(e.getMessage());
+            }
+        }
+        return statisticsMap;
     }
 
     private Collection<InstanceStatistics> collectFragmentStatistics(
@@ -215,16 +266,18 @@ public class CurrentQueryInfoProvider {
         for (Pair<Request, Future<PCollectQueryStatisticsResult>> pair : futures) {
             try {
                 final PCollectQueryStatisticsResult result = pair.second.get(10, TimeUnit.SECONDS);
-                for (PCollectQueryStatistics queryStatistics : result.queryStatistics) {
-                    final String queryIdStr = DebugUtil.printId(queryStatistics.queryId);
-                    QueryStatistics statistics = statisticsMap.get(queryIdStr);
-                    if (statistics == null) {
-                        statistics = new QueryStatistics();
-                        statisticsMap.put(queryIdStr, statistics);
+                if (result.queryStatistics != null) {
+                    for (PCollectQueryStatistics queryStatistics : result.queryStatistics) {
+                        final String queryIdStr = DebugUtil.printId(queryStatistics.queryId);
+                        QueryStatistics statistics = statisticsMap.get(queryIdStr);
+                        if (statistics == null) {
+                            statistics = new QueryStatistics();
+                            statisticsMap.put(queryIdStr, statistics);
+                        }
+                        statistics.updateCpuCostNs(queryStatistics.cpuCostNs);
+                        statistics.updateScanBytes(queryStatistics.scanBytes);
+                        statistics.updateScanRows(queryStatistics.scanRows);
                     }
-                    statistics.updateCpuCostNs(queryStatistics.cpuCostNs);
-                    statistics.updateScanBytes(queryStatistics.scanBytes);
-                    statistics.updateScanRows(queryStatistics.scanRows);
                 }
             } catch (InterruptedException | ExecutionException | TimeoutException e) {
                 LOG.warn("fail to receive result" + e.getCause());
