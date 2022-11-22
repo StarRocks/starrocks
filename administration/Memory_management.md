@@ -114,7 +114,7 @@ StarRocks BE 中的内存分为以下几类。
 | load_process_max_memory_limit_bytes | 107374182400 | 导入内存上限，取 mem_limit * load_process_max_memory_limit_percent / 100 和 load_process_max_memory_limit_bytes 中较小的值。如导入内存到达限制，则会触发刷盘和反压逻辑。|
 | load_process_max_memory_limit_percent | 30 | 导入内存上限，取 mem_limit * load_process_max_memory_limit_percent / 100 和 load_process_max_memory_limit_bytes 中较小的值，导入内存到达限制，会触发刷盘和反压逻辑。|
 | compaction_max_memory_limit | -1 | Compaction 内存上限，取 mem_limit * compaction_max_memory_limit_percent / 100 和 compaction_max_memory_limit 中较小的值，-1 表示没有限制。当前不建议修改默认配置。Compaction 内存到达限制，会导致 Compaction 任务失败。|
-| compaction_max_memory_limit_percent | 100 | Compaction 内存上限，取 mem_limit * compaction_max_memory_limit_percent / 100 和 compaction_max_memory_limit 中较小的值，-1 表示没有限制。当前不建议修改默认配置。Compaction 内存到达限制，会导致 Compaction 任务失败。|
+| compaction_max_memory_limit_percent | 100 | Compaction 内存百分比上限，取 mem_limit * compaction_max_memory_limit_percent / 100 和 compaction_max_memory_limit 中较小的值，-1 表示没有限制。当前不建议修改默认配置。Compaction 内存到达限制，会导致 Compaction 任务失败。|
 | disable_storage_page_cache | false | 是否禁用 BE 存储层 page 缓存。该配置项与 storage_page_cache_limit 配合使用，在内存资源充足和有大数据量 Scan 的场景中启用能够加速查询性能。 |
 | storage_page_cache_limit | 20% | BE 存储层 page 缓存可以使用的内存上限。|
 | chunk_reserved_bytes_limit | 2147483648 | 用于加速小块内存分配的 Cache，默认上限为 2GB。您可以在内存资源充足的情况下打开。|
