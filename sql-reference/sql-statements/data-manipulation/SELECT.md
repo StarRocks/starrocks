@@ -507,9 +507,9 @@ SELECT name FROM table WHERE salary = abs((SELECT MAX(salary) FROM table));
 ```sql
 -- Define one subquery at the outer level, and another at the inner level as part of the
 -- initial stage of the UNION ALL query.
-with t1 as (select 1) (with t2 as (select 2)
 
-select * from t2) union all select * from t1;
+with t1 as (select 1),t2 as (select 2)
+select * from t1 union all select * from t2;
 ```
 
 ### Where与操作符
