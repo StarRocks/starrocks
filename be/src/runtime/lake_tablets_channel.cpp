@@ -140,8 +140,11 @@ private:
 };
 
 LakeTabletsChannel::LakeTabletsChannel(LoadChannel* load_channel, const TabletsChannelKey& key, MemTracker* mem_tracker)
-        : TabletsChannel(), _load_channel(load_channel), _key(key), _mem_tracker(mem_tracker), 
-        _mem_pool(std::make_unique<MemPool>()) {}
+        : TabletsChannel(),
+          _load_channel(load_channel),
+          _key(key),
+          _mem_tracker(mem_tracker),
+          _mem_pool(std::make_unique<MemPool>()) {}
 
 LakeTabletsChannel::~LakeTabletsChannel() {
     _mem_pool.reset();
@@ -343,8 +346,6 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
             _global_dicts.insert(std::make_pair(slot.col_name(), std::move(global_dict)));
         }
     }
-
-    
 
     std::vector<int64_t> tablet_ids;
     tablet_ids.reserve(params.tablets_size());
