@@ -13,7 +13,6 @@ import java.io.IOException;
 // Storage info for lake table, include object storage info and table default cache info.
 // Currently, storage group is table level.
 public class StorageInfo implements GsonPreProcessable, GsonPostProcessable {
-    // "shardStorageInfoBytes" is used for serialization of "shardStorageInfo".
     @SerializedName(value = "storeInfoBytes")
     private byte[] storeInfoBytes;
     private FilePathInfo storeInfo;
