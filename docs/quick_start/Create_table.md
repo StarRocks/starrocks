@@ -13,7 +13,7 @@ After the StarRocks instance is deployed (see [Deploy StarRocks](../quick_start/
 Log in to StarRocks via your MySQL client. You can log in with the default user `root`, and the password is empty by default.
 
 ```Plain
-mysql -h <fe_ip> -P<fe_http_port> -uroot
+mysql -h <fe_ip> -P<fe_query_port> -uroot
 ```
 
 > **NOTE**

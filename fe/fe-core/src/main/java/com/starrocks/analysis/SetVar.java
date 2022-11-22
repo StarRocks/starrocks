@@ -163,6 +163,22 @@ public class SetVar {
             checkNonNegativeLongVariable(SessionVariable.SQL_SELECT_LIMIT);
         }
 
+        if (getVariable().equalsIgnoreCase(SessionVariable.QUERY_TIMEOUT)) {
+            String value = getValue().getStringValue();
+            try {
+                long queryTimeout = Long.parseLong(value);
+                if (queryTimeout <= 0) {
+                    throw new AnalysisException(SessionVariable.QUERY_TIMEOUT + " must be equal or greater than 0.");
+                }
+                if (queryTimeout > SessionVariable.MAX_QUERY_TIMEOUT) {
+                    throw new AnalysisException(SessionVariable.QUERY_TIMEOUT +
+                            String.format(" must be equal or smaller than %d.", SessionVariable.MAX_QUERY_TIMEOUT));
+                }
+            } catch (NumberFormatException ex) {
+                throw new AnalysisException(SessionVariable.SQL_SELECT_LIMIT + " is not a number");
+            }
+        }
+
         if (getVariable().equalsIgnoreCase(SessionVariable.RESOURCE_GROUP)) {
             String wgName = getValue().getStringValue();
             if (!StringUtils.isEmpty(wgName)) {

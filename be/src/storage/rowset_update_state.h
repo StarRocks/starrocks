@@ -55,8 +55,6 @@ private:
                                        EditVersion latest_applied_version, std::vector<uint32_t>& read_column_ids,
                                        const PrimaryIndex& index);
 
-    Status _update_rowset_meta(Tablet* tablet, Rowset* rowset);
-
     std::once_flag _load_once_flag;
     Status _status;
     // one for each segment file
