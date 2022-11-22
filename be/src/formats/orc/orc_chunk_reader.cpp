@@ -1684,8 +1684,9 @@ ChunkPtr OrcChunkReader::_create_chunk(const std::vector<SlotDescriptor*>& src_s
     return chunk;
 }
 
-ChunkPtr OrcChunkReader::_cast_chunk(ChunkPtr* chunk, const std::vector<SlotDescriptor*>& src_slot_descriptors,
-                                     const std::vector<int>* indices) {
+StatusOr<ChunkPtr> OrcChunkReader::_cast_chunk(ChunkPtr* chunk,
+                                               const std::vector<SlotDescriptor*>& src_slot_descriptors,
+                                               const std::vector<int>* indices) {
     ChunkPtr& src = (*chunk);
     size_t chunk_size = src->num_rows();
     ChunkPtr cast_chunk = std::make_shared<Chunk>();
@@ -1699,7 +1700,8 @@ ChunkPtr OrcChunkReader::_cast_chunk(ChunkPtr* chunk, const std::vector<SlotDesc
         if (indices != nullptr) {
             src_index = (*indices)[src_index];
         }
-        ColumnPtr col = _cast_exprs[src_index]->evaluate(nullptr, src.get());
+        // TODO(murphy) check status
+        ASSIGN_OR_RETURN(ColumnPtr col, _cast_exprs[src_index]->evaluate_checked(nullptr, src.get()));
         col = ColumnHelper::unfold_const_column(slot->type(), chunk_size, col);
         DCHECK_LE(col->size(), chunk_size);
         cast_chunk->append_column(std::move(col), slot->id());
@@ -1714,22 +1716,20 @@ Status OrcChunkReader::fill_chunk(ChunkPtr* chunk) {
     return _fill_chunk(chunk, _src_slot_descriptors, nullptr);
 }
 
-ChunkPtr OrcChunkReader::cast_chunk(ChunkPtr* chunk) {
+StatusOr<ChunkPtr> OrcChunkReader::cast_chunk(ChunkPtr* chunk) {
     return _cast_chunk(chunk, _src_slot_descriptors, nullptr);
 }
 
 StatusOr<ChunkPtr> OrcChunkReader::get_chunk() {
     ChunkPtr ptr = create_chunk();
     RETURN_IF_ERROR(fill_chunk(&ptr));
-    ChunkPtr ret = cast_chunk(&ptr);
-    return ret;
+    return cast_chunk(&ptr);
 }
 
 StatusOr<ChunkPtr> OrcChunkReader::get_active_chunk() {
     ChunkPtr ptr = _create_chunk(_lazy_load_ctx->active_load_slots, &_lazy_load_ctx->active_load_indices);
     RETURN_IF_ERROR(_fill_chunk(&ptr, _lazy_load_ctx->active_load_slots, &_lazy_load_ctx->active_load_indices));
-    ChunkPtr ret = _cast_chunk(&ptr, _lazy_load_ctx->active_load_slots, &_lazy_load_ctx->active_load_indices);
-    return ret;
+    return _cast_chunk(&ptr, _lazy_load_ctx->active_load_slots, &_lazy_load_ctx->active_load_indices);
 }
 
 void OrcChunkReader::lazy_filter_on_cvb(Filter* filter) {
@@ -1743,8 +1743,7 @@ void OrcChunkReader::lazy_filter_on_cvb(Filter* filter) {
 StatusOr<ChunkPtr> OrcChunkReader::get_lazy_chunk() {
     ChunkPtr ptr = _create_chunk(_lazy_load_ctx->lazy_load_slots, &_lazy_load_ctx->lazy_load_indices);
     RETURN_IF_ERROR(_fill_chunk(&ptr, _lazy_load_ctx->lazy_load_slots, &_lazy_load_ctx->lazy_load_indices));
-    ChunkPtr ret = _cast_chunk(&ptr, _lazy_load_ctx->lazy_load_slots, &_lazy_load_ctx->lazy_load_indices);
-    return ret;
+    return _cast_chunk(&ptr, _lazy_load_ctx->lazy_load_slots, &_lazy_load_ctx->lazy_load_indices);
 }
 
 void OrcChunkReader::lazy_read_next(size_t numValues) {
@@ -1896,7 +1895,11 @@ static orc::Literal translate_to_orc_literal(Expr* lit, orc::PredicateDataType p
     }
 
     auto* vlit = down_cast<VectorizedLiteral*>(lit);
-    ColumnPtr ptr = vlit->evaluate(nullptr, nullptr);
+    auto maybe_ptr = vlit->evaluate_checked(nullptr, nullptr);
+    if (!maybe_ptr.ok()) {
+        return {pred_type};
+    }
+    auto ptr = std::move(maybe_ptr.value());
     if (ptr->only_null()) {
         return {pred_type};
     }
@@ -1969,7 +1972,7 @@ void OrcChunkReader::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc::Se
         orc::TruthValue val = orc::TruthValue::NO;
         if (node_type == TExprNodeType::BOOL_LITERAL) {
             Expr* literal = const_cast<Expr*>(conjunct);
-            ColumnPtr ptr = literal->evaluate(nullptr, nullptr);
+            auto ptr = literal->evaluate_checked(nullptr, nullptr).value();
             const Datum& datum = ptr->get(0);
             if (datum.get_int8()) {
                 val = orc::TruthValue::YES;

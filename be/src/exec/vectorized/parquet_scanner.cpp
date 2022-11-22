@@ -120,7 +120,7 @@ Status ParquetScanner::finalize_src_chunk(ChunkPtr* chunk) {
                 continue;
             }
 
-            auto column = _cast_exprs[i]->evaluate(nullptr, (*chunk).get());
+            ASSIGN_OR_RETURN(auto column, _cast_exprs[i]->evaluate_checked(nullptr, (*chunk).get()));
             column = ColumnHelper::unfold_const_column(slot_desc->type(), (*chunk)->num_rows(), column);
             cast_chunk->append_column(column, slot_desc->id());
         }

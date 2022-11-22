@@ -55,7 +55,7 @@ public:
         return _children.size() % 2 == 1 ? Status::OK() : Status::InvalidArgument("case when children is error!");
     }
 
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* chunk) override {
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* chunk) override {
         if (_has_case_expr) {
             return evaluate_case(context, chunk);
         } else {
