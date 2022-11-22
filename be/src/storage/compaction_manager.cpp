@@ -49,12 +49,26 @@ void CompactionManager::update_candidates(std::vector<CompactionCandidate> candi
             }
         }
         for (auto& candidate : candidates) {
-            VLOG(1) << "update candidate " << candidate.tablet->tablet_id() << " type "
-                    << starrocks::to_string(candidate.type) << " score " << candidate.score;
-            _compaction_candidates.emplace(std::move(candidate));
+            if (!candidate.tablet->get_disable_compaction()) {
+                VLOG(1) << "update candidate " << candidate.tablet->tablet_id() << " type "
+                        << starrocks::to_string(candidate.type) << " score " << candidate.score;
+                _compaction_candidates.emplace(std::move(candidate));
+            }
         }
     }
     _notify_schedulers();
+}
+
+void CompactionManager::remove_candidate(int64_t tablet_id) {
+    std::lock_guard lg(_candidates_mutex);
+    for (auto iter = _compaction_candidates.begin(); iter != _compaction_candidates.end();) {
+        if (tablet_id == iter->tablet->tablet_id()) {
+            iter = _compaction_candidates.erase(iter);
+            break;
+        } else {
+            iter++;
+        }
+    }
 }
 
 bool CompactionManager::_check_precondition(const CompactionCandidate& candidate) {
