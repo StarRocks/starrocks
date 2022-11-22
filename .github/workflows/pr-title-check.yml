@@ -3,10 +3,12 @@ on:
   pull_request_target:
     types:
       - opened
+      - reopened
       - edited
       - synchronize
       - labeled
       - unlabeled
+      - synchronize
 
 jobs:
   pr-title-check:
