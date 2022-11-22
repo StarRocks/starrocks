@@ -64,11 +64,11 @@ IDENTIFIED WITH auth_plugin AS 'auth_string'
 3. 修改用户为 LDAP 认证。
 
     ```SQL
-    ALTER USER 'jack' IDENTIFIED WITH authentication_ldap_simple
+    ALTER USER 'jack' IDENTIFIED WITH authentication_ldap_simple;
     ```
 
 4. 修改用户为 LDAP 认证，并指定用户在 LDAP 中的 DN (Distinguished Name)。
 
     ```SQL
-    ALTER USER 'jack' IDENTIFIED WITH authentication_ldap_simple AS 'uid=jack,ou=company,dc=example,dc=com'
+    ALTER USER 'jack' IDENTIFIED WITH authentication_ldap_simple AS 'uid=jack,ou=company,dc=example,dc=com';
     ```
