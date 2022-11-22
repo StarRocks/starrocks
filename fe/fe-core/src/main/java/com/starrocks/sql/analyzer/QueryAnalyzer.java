@@ -437,6 +437,14 @@ public class QueryAnalyzer {
             for (int i = 0; i < view.getBaseSchema().size(); ++i) {
                 Column column = view.getBaseSchema().get(i);
                 Field originField = queryOutputScope.getRelationFields().getFieldByIndex(i);
+                // A view can specify its column names optionally, if column names are absent,
+                // the output names of the queryRelation is used as the names of the view schema,
+                // so column names in view's schema are always correct. Using originField.getName
+                // here will gives wrong names when user-specified view column names are different
+                // from output names of the queryRelation.
+                //
+                // view created in previous use originField.getOriginExpression().type as column
+                // types in its schema, it is incorrect, so use originField.type instead.
                 Field field = new Field(column.getName(), originField.getType(), node.getResolveTableName(),
                         originField.getOriginExpression());
                 fields.add(field);
