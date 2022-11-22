@@ -14,3 +14,15 @@ Fixes #
 
 ## Problem Summary(Required) ：
 <!-- (Please describe the changes you have made. In which scenarios will this bug be triggered and what measures have you taken to fix the bug?) -->
+<<<<<<< HEAD
+=======
+
+## Checklist:
+
+- [ ] I have added test cases for my bug fix or my new feature
+- [ ] This pr will affect users' behaviors
+- [ ] This pr needs user documentation (for new or modified features or behaviors)
+  - [ ] I have added documentation for my new feature or new function
+<!--Checkmate-->
+- [ ] I have checked the version labels which the pr will be auto backported to target branch
+>>>>>>> 48928c925 ([Tool] auto backport pr (#13608))

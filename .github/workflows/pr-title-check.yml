@@ -3,11 +3,16 @@ on:
   pull_request_target:
     types:
       - opened
+      - reopened
       - edited
       - labeled
       - unlabeled
+<<<<<<< HEAD
       - reopened
       - auto_merge_enabled
+=======
+      - synchronize
+>>>>>>> 48928c925 ([Tool] auto backport pr (#13608))
 
 jobs:
   pr-title-check:

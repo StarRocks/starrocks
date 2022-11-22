@@ -1,0 +1,17 @@
+name: checkbox-check
+on:
+  pull_request:
+    types: [edited, opened, reopened]
+
+jobs:
+  bugfix-labels-check-done:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: checkbox - I have checked the version labels which the pr will be auto backported to target branch
+        if: >
+          startsWith(github.event.pull_request.title, '[BugFix]') &&
+          !contains(github.event.pull_request.title, 'cherry-pick') &&
+          !contains(github.event.pull_request.title, 'backport')
+        uses: roryq/checkmate@master
