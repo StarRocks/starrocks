@@ -4,6 +4,8 @@
 
 #include <string>
 
+#include "common/statusor.h"
+
 namespace starrocks {
 
 class TabletSchema;
@@ -29,7 +31,8 @@ public:
     // return nullptr if parse failed.
     ColumnPredicate* parse_thrift_cond(const TCondition& condition) const;
 
-    ColumnPredicate* parse_expr_ctx(const SlotDescriptor& slot_desc, RuntimeState*, ExprContext* expr_ctx) const;
+    StatusOr<ColumnPredicate*> parse_expr_ctx(const SlotDescriptor& slot_desc, RuntimeState*,
+                                              ExprContext* expr_ctx) const;
 
 private:
     const TabletSchema& _schema;

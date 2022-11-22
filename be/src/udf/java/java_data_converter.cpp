@@ -7,6 +7,8 @@
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "column/type_traits.h"
+#include "common/compiler_util.h"
+#include "common/status.h"
 
 #define APPLY_FOR_NUMBERIC_TYPE(M) \
     M(TYPE_BOOLEAN)                \
@@ -220,11 +222,17 @@ Status ConvertDirectBufferVistor::do_visit(const BinaryColumn& column) {
     return Status::OK();
 }
 
-jobject JavaDataTypeConverter::convert_to_states(uint8_t** data, size_t offset, int num_rows) {
+#define RETURN_NULL_WITH_REPORT_ERROR(cond, ctx, msg) \
+    if (UNLIKELY(cond)) {                             \
+        ctx->set_error(msg);                          \
+    }
+
+jobject JavaDataTypeConverter::convert_to_states(FunctionContext* ctx, uint8_t** data, size_t offset, int num_rows) {
     auto& helper = JVMFunctionHelper::getInstance();
     auto* env = helper.getEnv();
     int inputs[num_rows];
     jintArray arr = env->NewIntArray(num_rows);
+    RETURN_NULL_WITH_REPORT_ERROR(arr == nullptr, ctx, "OOM may happened in Java Heap");
     for (int i = 0; i < num_rows; ++i) {
         inputs[i] = reinterpret_cast<JavaUDAFState*>(data[i] + offset)->handle;
     }
@@ -232,12 +240,13 @@ jobject JavaDataTypeConverter::convert_to_states(uint8_t** data, size_t offset, 
     return arr;
 }
 
-jobject JavaDataTypeConverter::convert_to_states_with_filter(uint8_t** data, size_t offset, const uint8_t* filter,
-                                                             int num_rows) {
+jobject JavaDataTypeConverter::convert_to_states_with_filter(FunctionContext* ctx, uint8_t** data, size_t offset,
+                                                             const uint8_t* filter, int num_rows) {
     auto& helper = JVMFunctionHelper::getInstance();
     auto* env = helper.getEnv();
     int inputs[num_rows];
     jintArray arr = env->NewIntArray(num_rows);
+    RETURN_NULL_WITH_REPORT_ERROR(arr == nullptr, ctx, "OOM may happened in Java Heap");
     for (int i = 0; i < num_rows; ++i) {
         if (filter[i] == 0) {
             inputs[i] = reinterpret_cast<JavaUDAFState*>(data[i] + offset)->handle;
@@ -249,9 +258,9 @@ jobject JavaDataTypeConverter::convert_to_states_with_filter(uint8_t** data, siz
     return arr;
 }
 
-void JavaDataTypeConverter::convert_to_boxed_array(FunctionContext* ctx, std::vector<DirectByteBuffer>* buffers,
-                                                   const Column** columns, int num_cols, int num_rows,
-                                                   std::vector<jobject>* res) {
+Status JavaDataTypeConverter::convert_to_boxed_array(FunctionContext* ctx, std::vector<DirectByteBuffer>* buffers,
+                                                     const Column** columns, int num_cols, int num_rows,
+                                                     std::vector<jobject>* res) {
     auto& helper = JVMFunctionHelper::getInstance();
     JNIEnv* env = helper.getEnv();
     ConvertDirectBufferVistor vistor(*buffers);
@@ -275,7 +284,14 @@ void JavaDataTypeConverter::convert_to_boxed_array(FunctionContext* ctx, std::ve
                                             buffers_sz);
         }
 
+        if (arg == nullptr) {
+            std::string err_msg = "OOM may happened in Java Heap";
+            ctx->set_error(err_msg.c_str());
+            return Status::InternalError(err_msg);
+        }
+
         res->emplace_back(arg);
     }
+    return Status::OK();
 }
 } // namespace starrocks::vectorized
