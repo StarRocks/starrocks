@@ -29,7 +29,7 @@ using std::chrono::duration_cast;
 class QueryContext : public std::enable_shared_from_this<QueryContext> {
 public:
     QueryContext();
-    ~QueryContext();
+    ~QueryContext() noexcept;
     void set_exec_env(ExecEnv* exec_env) { _exec_env = exec_env; }
     void set_query_id(const TUniqueId& query_id) { _query_id = query_id; }
     TUniqueId query_id() const { return _query_id; }

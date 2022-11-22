@@ -133,7 +133,7 @@ public:
         start_nanos = MonotonicNanos();
     }
 
-    ~StreamLoadContext() {
+    ~StreamLoadContext() noexcept {
         if (need_rollback) {
             _exec_env->stream_load_executor()->rollback_txn(this);
             need_rollback = false;

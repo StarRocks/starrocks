@@ -96,7 +96,7 @@ private:
 class ScopedTracer {
 public:
     ScopedTracer(std::string name, std::string category);
-    ~ScopedTracer();
+    ~ScopedTracer() noexcept;
 
 private:
     std::string _name;

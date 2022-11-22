@@ -131,7 +131,7 @@ Status AggregateBlockingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
         *eos = true;
         return Status::OK();
     }
-    int32_t chunk_size = runtime_state()->chunk_size();
+    const auto chunk_size = runtime_state()->chunk_size();
 
     if (_aggregator->is_none_group_by_exprs()) {
         _aggregator->convert_to_chunk_no_groupby(chunk);
@@ -139,7 +139,7 @@ Status AggregateBlockingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
         _aggregator->convert_hash_map_to_chunk(chunk_size, chunk);
     }
 
-    size_t old_size = (*chunk)->num_rows();
+    const int64_t old_size = (*chunk)->num_rows();
     eval_join_runtime_filters(chunk->get());
 
     // For having

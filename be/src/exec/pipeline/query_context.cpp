@@ -28,7 +28,7 @@ QueryContext::QueryContext()
     _sub_plan_query_statistics_recvr = std::make_shared<QueryStatisticsRecvr>();
 }
 
-QueryContext::~QueryContext() {
+QueryContext::~QueryContext() noexcept {
     // When destruct FragmentContextManager, we use query-level MemTracker. since when PipelineDriver executor
     // release QueryContext when it finishes the last driver of the query, the current instance-level MemTracker will
     // be freed before it is adopted to account memory usage of MemChunkAllocator. In destructor of FragmentContextManager,

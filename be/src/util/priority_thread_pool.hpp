@@ -68,7 +68,7 @@ public:
 
     // Destructor ensures that all threads are terminated before this object is freed
     // (otherwise they may continue to run and reference member variables)
-    ~PriorityThreadPool() {
+    ~PriorityThreadPool() noexcept {
         shutdown();
         join();
     }

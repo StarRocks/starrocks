@@ -17,7 +17,7 @@ class ColumnOperatorPredicate final : public ColumnPredicate {
 public:
     using SpecColumnOperator = ColumnOperator<field_type>;
     ColumnOperatorPredicate(const ColumnOperatorPredicate&) = delete;
-    ColumnOperatorPredicate(const TypeInfoPtr& type_info, ColumnId id, Args... args)
+    ColumnOperatorPredicate(const TypeInfoPtr& type_info, ColumnId id, Args&&... args)
             : ColumnPredicate(type_info, id), _predicate_operator(std::forward<Args>(args)...) {}
 
     // evaluate

@@ -261,7 +261,7 @@ private:
 class LRUCache {
 public:
     LRUCache();
-    ~LRUCache();
+    ~LRUCache() noexcept;
 
     // Separate from constructor so caller can easily make an array of LRUCache
     void set_capacity(size_t capacity);

@@ -84,8 +84,8 @@ ColumnPtr StringFunctions::split_part(FunctionContext* context, const starrocks:
             }
         } else {
             // if delimiter is a string, use memmem to split
-            int32_t pre_offset = -delimiter.size;
-            int32_t offset = -delimiter.size;
+            int32_t pre_offset = -static_cast<int32_t>(delimiter.size);
+            int32_t offset = -static_cast<int32_t>(delimiter.size);
             int32_t num = 0;
             while (num < part_number) {
                 pre_offset = offset;

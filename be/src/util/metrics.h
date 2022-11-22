@@ -72,7 +72,7 @@ const char* unit_name(MetricUnit unit);
 class Metric {
 public:
     Metric(MetricType type, MetricUnit unit) : _type(type), _unit(unit) {}
-    virtual ~Metric() { hide(); }
+    virtual ~Metric() noexcept { hide(); }
     virtual std::string to_string() const = 0;
     MetricType type() const { return _type; }
     MetricUnit unit() const { return _unit; }
@@ -331,7 +331,7 @@ private:
 class MetricRegistry {
 public:
     MetricRegistry(std::string name) : _name(std::move(name)) {}
-    ~MetricRegistry();
+    ~MetricRegistry() noexcept;
     bool register_metric(const std::string& name, Metric* metric) {
         return register_metric(name, MetricLabels::EmptyLabels, metric);
     }

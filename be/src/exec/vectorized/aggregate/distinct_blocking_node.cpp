@@ -95,11 +95,11 @@ Status DistinctBlockingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool
         *eos = true;
         return Status::OK();
     }
-    int32_t chunk_size = runtime_state()->chunk_size();
+    const auto chunk_size = runtime_state()->chunk_size();
 
     _aggregator->convert_hash_set_to_chunk(chunk_size, chunk);
 
-    size_t old_size = (*chunk)->num_rows();
+    const int64_t old_size = (*chunk)->num_rows();
     eval_join_runtime_filters(chunk->get());
 
     // For having

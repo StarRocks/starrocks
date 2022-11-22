@@ -58,7 +58,7 @@ void RleEncoderV1::writeValues() {
                 writeVulong(literals[0]);
             }
         } else {
-            writeByte(static_cast<char>(-numLiterals));
+            writeByte(static_cast<char>(-static_cast<int64_t>(numLiterals)));
             for (size_t i = 0; i < numLiterals; ++i) {
                 if (isSigned) {
                     writeVslong(literals[i]);

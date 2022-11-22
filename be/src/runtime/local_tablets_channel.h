@@ -77,7 +77,7 @@ private:
                   _row_indexes(),
                   _channel_row_idx_start_points() {}
 
-        ~WriteContext() {
+        ~WriteContext() noexcept {
             if (_latch) _latch->count_down();
         }
 
