@@ -14,9 +14,9 @@ SQL 语句在 StarRocks 中的生命周期可以分为查询解析（Query Parsi
 
 决定 StarRocks 中查询性能的关键就在于查询规划（Query Plan）和查询执行（Query Execution），二者的关系可以描述为 Query Plan 负责组织算子（Join/Order/Aggregation）之间的关系，Query Exectuion 负责执行具体算子。
 
-Query Plan 可以为数据库管理者提供一个宏观的视角，从而获取查询执行的相关信息。优秀的 Query Plan 很大程度上决定了查询的性能，所以数据库管理者需要频繁查看 Query Plan，以确保其是否生成得当。本章以TPC-DS的query96为例，展示如何查看StarRocks的Query Plan。
+Query Plan 可以为数据库管理者提供一个宏观的视角，从而获取查询执行的相关信息。优秀的 Query Plan 很大程度上决定了查询的性能，所以数据库管理者需要频繁查看 Query Plan，以确保其是否生成得当。本章以 TPC-DS 的 query96.sql 为例，展示如何查看StarRocks的Query Plan。
 
-以下示例以 TPCDS 的 query96 为例，展示如何查看分析 StarRocks 的 Query Plan。
+以下示例以 TPC-DS 的 query96.sql 为例，展示如何查看分析 StarRocks 的 Query Plan。
 
 ```SQL
 -- query96.sql
@@ -45,7 +45,7 @@ Query Plan 可以分为逻辑执行计划（Logical Query Plan），和物理执
 EXPLAIN sql_statement;
 ```
 
-TPC-DS query96.sql对应的Query Plan展示如下：
+TPC-DS query96.sql 对应的 Query Plan 展示如下：
 
 ```plain text
 mysql> EXPLAIN select count(*)
@@ -213,17 +213,17 @@ order by count(*) limit 100;
 |partitions|分区。|
 |table|表。|
 
-Query96 的 Query Plan 分为 5 个 Plan Fragment，编号从 0 至 4。您可以通过从下至上的方式查看 Query Plan。
+query96.sql 的 Query Plan 分为 5 个 Plan Fragment，编号从 0 至 4。您可以通过从下至上的方式查看 Query Plan。
 
 以上示例中，最底部的 Plan Fragment 为 Fragment 4，它负责扫描 `time_dim` 表，并提前执行相关查询条件 `time_dim.t_hour = 8 and time_dim.t_minute >= 30`，即谓词下推。对于聚合表（Aggregate Key），StarRocks 会根据不同查询选择是否开启预聚合 PREAGGREGATION。以上示例中 `time_dim` 表的预聚合为关闭状态，此状态之下 StarRocks 会读取 `time_dim` 的全部维度列，如果当前表包含大量维度列，这可能会成为影响性能的一个关键因素。如果 `time_dim` 表被设置为根据 Range Partition 进行数据划分，Query Plan 中的 `partitions` 会表征查询命中的分区，无关分区被自动过滤，从而有效减少扫描数据量。如果当前表有物化视图，StarRocks 会根据查询去自动选择物化视图，如果没有物化视图，那么查询自动命中 base table，也就是以上示例中展示的 `rollup: time_dim`。您暂时无需关注其他字段。
 
 当 `time_dim` 表数据扫描完成之后，Fragment 4 的执行过程也就随之结束，此时它将扫描得到的数据传递给其他 Fragment。以上示例中的 `EXCHANGE ID : 09` 表征了数据传递给了标号为 `9` 的接收节点。
 
-对于 Query96 的 Query Plan 而言，Fragment 2，3，4功能类似，只是负责扫描的表不同。而查询中的 Order/Aggregation/Join 算子，都在 Fragment 1 中进行。
+对于 query96.sql 的 Query Plan 而言，Fragment 2，3，4功能类似，只是负责扫描的表不同。而查询中的 Order/Aggregation/Join 算子，都在 Fragment 1 中进行。
 
 Fragment 1 集成了三个 Join 算子的执行，采用默认的 BROADCAST 方式进行执行，也就是小表向大表广播的方式进行。如果两个 Join 的表都是大表，建议采用 SHUFFLE 的方式进行。目前 StarRocks 只支持 HASH JOIN，也就是采用哈希算法进行 Join。以上示例中的 `colocate` 字段用来表述两张 Join 表采用同样的分区/分桶方式。如果分区/分桶方式相同，Join 的过程可以直接在本地执行，不用进行数据的移动。Join 执行完成之后，Fragment 1 就会执行上层的 Aggregation、Order by 和 TOP-N 算子。
 
-抛开具体的表达式不谈，下图从宏观的角度展示了 Query96 的 Query Plan。
+抛开具体的表达式不谈，下图从宏观的角度展示了 query96.sql 的 Query Plan。
 
 ![8-5](../assets/8-5.png)
 
