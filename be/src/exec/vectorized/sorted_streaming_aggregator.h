@@ -26,7 +26,7 @@ private:
 
     Status _update_states(size_t chunk_size);
 
-    void _get_agg_result_columns(size_t chunk_size, const std::vector<uint8_t>& selector,
+    Status _get_agg_result_columns(size_t chunk_size, const std::vector<uint8_t>& selector,
                                  vectorized::Columns& agg_result_columns);
     void _close_group_by(size_t chunk_size, const std::vector<uint8_t>& selector);
 
