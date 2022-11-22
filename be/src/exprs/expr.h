@@ -194,7 +194,7 @@ public:
     virtual StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) = 0;
     virtual StatusOr<ColumnPtr> evaluate_with_filter(ExprContext* context, vectorized::Chunk* ptr, uint8_t* filter);
 
-    // // TODO:(murphy) remove this unchecked evaluate
+    // TODO:(murphy) remove this unchecked evaluate
     ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) { return evaluate_checked(context, ptr).value(); }
 
     // get the first column ref in expr

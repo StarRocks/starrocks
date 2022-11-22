@@ -108,12 +108,12 @@ public:
 
     // NullIF: return null if lhs == rhs else return lhs
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {
-        auto lhs = _children[0]->evaluate(context, ptr);
+        ASSIGN_OR_RETURN(auto lhs, _children[0]->evaluate_checked(context, ptr));
         if (ColumnHelper::count_nulls(lhs) == lhs->size()) {
             return ColumnHelper::create_const_null_column(lhs->size());
         }
 
-        auto rhs = _children[1]->evaluate(context, ptr);
+        ASSIGN_OR_RETURN(auto rhs, _children[1]->evaluate_checked(context, ptr));
         if (ColumnHelper::count_nulls(rhs) == rhs->size()) {
             return lhs->clone();
         }
@@ -278,7 +278,7 @@ public:
         std::vector<ColumnViewer<Type>> viewers;
         std::vector<ColumnPtr> columns;
         for (int i = 0; i < _children.size(); ++i) {
-            auto value = _children[i]->evaluate(context, ptr);
+            ASSIGN_OR_RETURN(auto value, _children[i]->evaluate_checked(context, ptr));
             auto null_count = ColumnHelper::count_nulls(value);
 
             // 1.return if first column is all not null.
