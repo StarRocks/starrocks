@@ -40,8 +40,7 @@ import java.util.List;
 public class DeleteAnalyzer {
     private static final Logger LOG = LogManager.getLogger(DeleteAnalyzer.class);
 
-    private static List<Predicate> analyzePredicate(Expr predicate) {
-        List<Predicate> deleteConditions = Lists.newLinkedList();
+    private static void analyzePredicate(Expr predicate, List<Predicate> deleteConditions) {
         if (predicate instanceof BinaryPredicate) {
             BinaryPredicate binaryPredicate = (BinaryPredicate) predicate;
             Expr leftExpr = binaryPredicate.getChild(0);
@@ -59,8 +58,8 @@ public class DeleteAnalyzer {
                 throw new SemanticException("Compound predicate's op should be AND");
             }
 
-            analyzePredicate(compoundPredicate.getChild(0));
-            analyzePredicate(compoundPredicate.getChild(1));
+            analyzePredicate(compoundPredicate.getChild(0), deleteConditions);
+            analyzePredicate(compoundPredicate.getChild(1), deleteConditions);
         } else if (predicate instanceof IsNullPredicate) {
             IsNullPredicate isNullPredicate = (IsNullPredicate) predicate;
             Expr leftExpr = isNullPredicate.getChild(0);
@@ -91,7 +90,6 @@ public class DeleteAnalyzer {
             throw new SemanticException("Where clause only supports compound predicate, binary predicate, " +
                     "is_null predicate and in predicate");
         }
-        return deleteConditions;
     }
 
     private static void analyzeNonPrimaryKey(DeleteStmt deleteStatement) {
@@ -118,7 +116,9 @@ public class DeleteAnalyzer {
             throw new SemanticException("Where clause is not set");
         }
 
-        deleteStatement.setDeleteConditions(analyzePredicate(deleteStatement.getWherePredicate()));
+        List<Predicate> deleteConditions = Lists.newLinkedList();
+        analyzePredicate(deleteStatement.getWherePredicate(), deleteConditions);
+        deleteStatement.setDeleteConditions(deleteConditions);
     }
 
     public static void analyze(DeleteStmt deleteStatement, ConnectContext session) {
