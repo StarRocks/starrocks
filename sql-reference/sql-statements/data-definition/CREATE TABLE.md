@@ -78,7 +78,9 @@ col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"]
 定长字符串。长度范围：1 ~ 255。默认为1
 
 * VARCHAR[(length)]
-变长字符串。长度范围：1 ~ 65533
+变长字符串。单位：字节，默认取值为 `1`。
+  * 对于 StarRocks 2.1 之前的版本，`length` 的取值范围为 1~65533。
+  * 【公测中】自 StarRocks 2.1 版本开始，`length` 的取值范围为 1~1048576。
 
 * HLL (1~16385个字节)
 hll列类型，不需要指定长度和默认值，长度根据数据的聚合程度系统内控制，并且HLL列只能通过配套的hll_union_agg、Hll_cardinality、hll_hash进行查询或使用
