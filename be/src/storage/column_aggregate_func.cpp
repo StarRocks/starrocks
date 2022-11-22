@@ -675,7 +675,7 @@ ValueColumnAggregatorPtr create_value_aggregator(LogicalType type, FieldAggregat
 }
 
 ColumnAggregatorPtr ColumnAggregatorFactory::create_key_column_aggregator(
-        const starrocks::vectorized::FieldPtr& field) {
+        const starrocks::vectorized::VectorizedFieldPtr& field) {
     LogicalType type = field->type()->type();
     starrocks::FieldAggregationMethod method = field->aggregate_method();
     if (method != OLAP_FIELD_AGGREGATION_NONE) {
@@ -701,7 +701,7 @@ ColumnAggregatorPtr ColumnAggregatorFactory::create_key_column_aggregator(
 }
 
 ColumnAggregatorPtr ColumnAggregatorFactory::create_value_column_aggregator(
-        const starrocks::vectorized::FieldPtr& field) {
+        const starrocks::vectorized::VectorizedFieldPtr& field) {
     LogicalType type = field->type()->type();
     starrocks::FieldAggregationMethod method = field->aggregate_method();
     if (method == OLAP_FIELD_AGGREGATION_NONE) {

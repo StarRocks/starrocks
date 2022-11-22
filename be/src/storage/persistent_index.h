@@ -17,7 +17,7 @@ namespace starrocks {
 
 class Tablet;
 namespace vectorized {
-class Schema;
+class VectorizedSchema;
 class Column;
 } // namespace vectorized
 
@@ -551,8 +551,9 @@ private:
     Status _build_commit(Tablet* tablet, PersistentIndexMetaPB& index_meta);
 
     // insert rowset data into persistent index
-    Status _insert_rowsets(Tablet* tablet, std::vector<RowsetSharedPtr>& rowsets, const vectorized::Schema& pkey_schema,
-                           int64_t apply_version, std::unique_ptr<vectorized::Column> pk_column);
+    Status _insert_rowsets(Tablet* tablet, std::vector<RowsetSharedPtr>& rowsets,
+                           const vectorized::VectorizedSchema& pkey_schema, int64_t apply_version,
+                           std::unique_ptr<vectorized::Column> pk_column);
 
     // index storage directory
     std::string _path;

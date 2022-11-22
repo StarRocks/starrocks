@@ -31,7 +31,7 @@
 #include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
-#include "column/schema.h"
+#include "column/vectorized_schema.h"
 #include "gutil/endian.h"
 #include "gutil/stringprintf.h"
 #include "storage/tablet_schema.h"
@@ -225,7 +225,7 @@ inline Status decode_slice(Slice* src, std::string* dest, bool is_last) {
     return Status::OK();
 }
 
-bool PrimaryKeyEncoder::is_supported(const vectorized::Field& f) {
+bool PrimaryKeyEncoder::is_supported(const vectorized::VectorizedField& f) {
     if (f.is_nullable()) {
         return false;
     }
@@ -245,7 +245,8 @@ bool PrimaryKeyEncoder::is_supported(const vectorized::Field& f) {
     }
 }
 
-bool PrimaryKeyEncoder::is_supported(const vectorized::Schema& schema, const std::vector<ColumnId>& key_idxes) {
+bool PrimaryKeyEncoder::is_supported(const vectorized::VectorizedSchema& schema,
+                                     const std::vector<ColumnId>& key_idxes) {
     for (const auto key_idx : key_idxes) {
         if (!is_supported(*schema.field(key_idx))) {
             return false;
@@ -254,7 +255,7 @@ bool PrimaryKeyEncoder::is_supported(const vectorized::Schema& schema, const std
     return true;
 }
 
-LogicalType PrimaryKeyEncoder::encoded_primary_key_type(const vectorized::Schema& schema,
+LogicalType PrimaryKeyEncoder::encoded_primary_key_type(const vectorized::VectorizedSchema& schema,
                                                         const std::vector<ColumnId>& key_idxes) {
     if (!is_supported(schema, key_idxes)) {
         return TYPE_NONE;
@@ -265,7 +266,7 @@ LogicalType PrimaryKeyEncoder::encoded_primary_key_type(const vectorized::Schema
     return TYPE_VARCHAR;
 }
 
-size_t PrimaryKeyEncoder::get_encoded_fixed_size(const vectorized::Schema& schema) {
+size_t PrimaryKeyEncoder::get_encoded_fixed_size(const vectorized::VectorizedSchema& schema) {
     size_t ret = 0;
     size_t n = schema.num_key_fields();
     for (size_t i = 0; i < n; i++) {
@@ -278,7 +279,7 @@ size_t PrimaryKeyEncoder::get_encoded_fixed_size(const vectorized::Schema& schem
     return ret;
 }
 
-Status PrimaryKeyEncoder::create_column(const vectorized::Schema& schema,
+Status PrimaryKeyEncoder::create_column(const vectorized::VectorizedSchema& schema,
                                         std::unique_ptr<vectorized::Column>* pcolumn) {
     std::vector<ColumnId> key_idxes(schema.num_key_fields());
     for (ColumnId i = 0; i < schema.num_key_fields(); ++i) {
@@ -287,7 +288,8 @@ Status PrimaryKeyEncoder::create_column(const vectorized::Schema& schema,
     return PrimaryKeyEncoder::create_column(schema, pcolumn, key_idxes);
 }
 
-Status PrimaryKeyEncoder::create_column(const vectorized::Schema& schema, std::unique_ptr<vectorized::Column>* pcolumn,
+Status PrimaryKeyEncoder::create_column(const vectorized::VectorizedSchema& schema,
+                                        std::unique_ptr<vectorized::Column>* pcolumn,
                                         const std::vector<ColumnId>& key_idxes) {
     if (!is_supported(schema, key_idxes)) {
         return Status::NotSupported("type not supported for primary key encoding");
@@ -341,7 +343,7 @@ Status PrimaryKeyEncoder::create_column(const vectorized::Schema& schema, std::u
 
 typedef void (*EncodeOp)(const void*, int, std::string*);
 
-static void prepare_ops_datas(const vectorized::Schema& schema, const vectorized::Chunk& chunk,
+static void prepare_ops_datas(const vectorized::VectorizedSchema& schema, const vectorized::Chunk& chunk,
                               std::vector<EncodeOp>* pops, std::vector<const void*>* pdatas) {
     int ncol = schema.num_key_fields();
     auto& ops = *pops;
@@ -409,8 +411,8 @@ static void prepare_ops_datas(const vectorized::Schema& schema, const vectorized
     }
 }
 
-void PrimaryKeyEncoder::encode(const vectorized::Schema& schema, const vectorized::Chunk& chunk, size_t offset,
-                               size_t len, vectorized::Column* dest) {
+void PrimaryKeyEncoder::encode(const vectorized::VectorizedSchema& schema, const vectorized::Chunk& chunk,
+                               size_t offset, size_t len, vectorized::Column* dest) {
     if (schema.num_key_fields() == 1) {
         // simple encoding, src & dest should have same type
         auto& src = chunk.get_column_by_index(0);
@@ -434,7 +436,7 @@ void PrimaryKeyEncoder::encode(const vectorized::Schema& schema, const vectorize
     }
 }
 
-void PrimaryKeyEncoder::encode_selective(const vectorized::Schema& schema, const vectorized::Chunk& chunk,
+void PrimaryKeyEncoder::encode_selective(const vectorized::VectorizedSchema& schema, const vectorized::Chunk& chunk,
                                          const uint32_t* indexes, size_t len, vectorized::Column* dest) {
     if (schema.num_key_fields() == 1) {
         // simple encoding, src & dest should have same type
@@ -460,7 +462,7 @@ void PrimaryKeyEncoder::encode_selective(const vectorized::Schema& schema, const
     }
 }
 
-bool PrimaryKeyEncoder::encode_exceed_limit(const vectorized::Schema& schema, const vectorized::Chunk& chunk,
+bool PrimaryKeyEncoder::encode_exceed_limit(const vectorized::VectorizedSchema& schema, const vectorized::Chunk& chunk,
                                             size_t offset, size_t len, const size_t limit_size) {
     int ncol = schema.num_key_fields();
     std::vector<const void*> datas(ncol, nullptr);
@@ -510,8 +512,8 @@ bool PrimaryKeyEncoder::encode_exceed_limit(const vectorized::Schema& schema, co
     return false;
 }
 
-Status PrimaryKeyEncoder::decode(const vectorized::Schema& schema, const vectorized::Column& keys, size_t offset,
-                                 size_t len, vectorized::Chunk* dest) {
+Status PrimaryKeyEncoder::decode(const vectorized::VectorizedSchema& schema, const vectorized::Column& keys,
+                                 size_t offset, size_t len, vectorized::Chunk* dest) {
     if (schema.num_key_fields() == 1) {
         // simple decoding, src & dest should have same type
         dest->get_column_by_index(0)->append(keys, offset, len);

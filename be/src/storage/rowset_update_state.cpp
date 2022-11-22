@@ -87,7 +87,7 @@ Status RowsetUpdateState::_load_upserts(Rowset* rowset, uint32_t idx, vectorized
     for (size_t i = 0; i < schema.num_key_columns(); i++) {
         pk_columns.push_back((uint32_t)i);
     }
-    vectorized::Schema pkey_schema = ChunkHelper::convert_schema_to_format_v2(schema, pk_columns);
+    vectorized::VectorizedSchema pkey_schema = ChunkHelper::convert_schema_to_format_v2(schema, pk_columns);
     auto res = rowset->get_segment_iterators2(pkey_schema, nullptr, 0, &stats);
     if (!res.ok()) {
         return res.status();
@@ -139,7 +139,7 @@ Status RowsetUpdateState::_do_load(Tablet* tablet, Rowset* rowset) {
     for (size_t i = 0; i < schema.num_key_columns(); i++) {
         pk_columns.push_back((uint32_t)i);
     }
-    vectorized::Schema pkey_schema = ChunkHelper::convert_schema_to_format_v2(schema, pk_columns);
+    vectorized::VectorizedSchema pkey_schema = ChunkHelper::convert_schema_to_format_v2(schema, pk_columns);
     std::unique_ptr<vectorized::Column> pk_column;
     if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
         CHECK(false) << "create column for primary key encoder failed";
@@ -173,7 +173,7 @@ Status RowsetUpdateState::load_deletes(Rowset* rowset, uint32_t idx) {
     for (size_t i = 0; i < schema.num_key_columns(); i++) {
         pk_columns.push_back((uint32_t)i);
     }
-    vectorized::Schema pkey_schema = ChunkHelper::convert_schema_to_format_v2(schema, pk_columns);
+    vectorized::VectorizedSchema pkey_schema = ChunkHelper::convert_schema_to_format_v2(schema, pk_columns);
     std::unique_ptr<vectorized::Column> pk_column;
     if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
         CHECK(false) << "create column for primary key encoder failed";
@@ -187,7 +187,7 @@ Status RowsetUpdateState::load_upserts(Rowset* rowset, uint32_t upsert_id) {
     for (size_t i = 0; i < schema.num_key_columns(); i++) {
         pk_columns.push_back((uint32_t)i);
     }
-    vectorized::Schema pkey_schema = ChunkHelper::convert_schema_to_format_v2(schema, pk_columns);
+    vectorized::VectorizedSchema pkey_schema = ChunkHelper::convert_schema_to_format_v2(schema, pk_columns);
     std::unique_ptr<vectorized::Column> pk_column;
     if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
         CHECK(false) << "create column for primary key encoder failed";

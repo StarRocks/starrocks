@@ -8,7 +8,7 @@ namespace starrocks::vectorized {
 
 SegmentChunkIteratorAdapter::SegmentChunkIteratorAdapter(const TabletSchema& tablet_schema,
                                                          const std::vector<LogicalType>& new_types,
-                                                         const Schema& out_schema, int chunk_size)
+                                                         const VectorizedSchema& out_schema, int chunk_size)
         : ChunkIterator(out_schema, chunk_size),
           _tablet_schema(tablet_schema),
           _new_types(new_types),

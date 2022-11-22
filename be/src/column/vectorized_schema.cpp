@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
-#include "column/schema.h"
+#include "column/vectorized_schema.h"
 
 #include <algorithm>
 #include <utility>
@@ -9,22 +9,22 @@ namespace starrocks::vectorized {
 
 #ifdef BE_TEST
 
-Schema::Schema(Fields fields) : Schema(fields, KeysType::DUP_KEYS, {}) {}
+VectorizedSchema::VectorizedSchema(VectorizedFields fields) : VectorizedSchema(fields, KeysType::DUP_KEYS, {}) {}
 
 #endif
 
-Schema::Schema(Fields fields, KeysType keys_type, std::vector<ColumnId> sort_key_idxes)
+VectorizedSchema::VectorizedSchema(VectorizedFields fields, KeysType keys_type, std::vector<ColumnId> sort_key_idxes)
         : _fields(std::move(fields)),
           _sort_key_idxes(std::move(sort_key_idxes)),
           _name_to_index_append_buffer(nullptr),
 
           _keys_type(static_cast<uint8_t>(keys_type)) {
-    auto is_key = [](const FieldPtr& f) { return f->is_key(); };
+    auto is_key = [](const VectorizedFieldPtr& f) { return f->is_key(); };
     _num_keys = std::count_if(_fields.begin(), _fields.end(), is_key);
     _build_index_map(_fields);
 }
 
-Schema::Schema(Schema* schema, const std::vector<ColumnId>& cids)
+VectorizedSchema::VectorizedSchema(VectorizedSchema* schema, const std::vector<ColumnId>& cids)
         : _name_to_index_append_buffer(nullptr), _keys_type(schema->_keys_type) {
     _fields.resize(cids.size());
     for (int i = 0; i < cids.size(); i++) {
@@ -32,14 +32,14 @@ Schema::Schema(Schema* schema, const std::vector<ColumnId>& cids)
         _fields[i] = schema->_fields[cids[i]];
     }
     _sort_key_idxes = schema->sort_key_idxes();
-    auto is_key = [](const FieldPtr& f) { return f->is_key(); };
+    auto is_key = [](const VectorizedFieldPtr& f) { return f->is_key(); };
     _num_keys = std::count_if(_fields.begin(), _fields.end(), is_key);
     _build_index_map(_fields);
 }
 
 // if we use this constructor and share the name_to_index with another schema,
 // we must make sure another shema is read only!!!
-Schema::Schema(Schema* schema)
+VectorizedSchema::VectorizedSchema(VectorizedSchema* schema)
         : _num_keys(schema->_num_keys), _name_to_index_append_buffer(nullptr), _keys_type(schema->_keys_type) {
     DCHECK(schema->_name_to_index_append_buffer == nullptr);
     _fields.resize(schema->num_fields());
@@ -60,7 +60,7 @@ Schema::Schema(Schema* schema)
 
 // if we use this constructor and share the name_to_index with another schema,
 // we must make sure another shema is read only!!!
-Schema::Schema(const Schema& schema)
+VectorizedSchema::VectorizedSchema(const VectorizedSchema& schema)
         : _num_keys(schema._num_keys), _name_to_index_append_buffer(nullptr), _keys_type(schema._keys_type) {
     _fields.resize(schema.num_fields());
     for (int i = 0; i < schema._fields.size(); i++) {
@@ -80,7 +80,7 @@ Schema::Schema(const Schema& schema)
 
 // if we use this constructor and share the name_to_index with another schema,
 // we must make sure another shema is read only!!!
-Schema& Schema::operator=(const Schema& other) {
+VectorizedSchema& VectorizedSchema::operator=(const VectorizedSchema& other) {
     this->_num_keys = other._num_keys;
     this->_name_to_index_append_buffer = nullptr;
     this->_keys_type = other._keys_type;
@@ -101,7 +101,7 @@ Schema& Schema::operator=(const Schema& other) {
     return *this;
 }
 
-void Schema::append(const FieldPtr& field) {
+void VectorizedSchema::append(const VectorizedFieldPtr& field) {
     _fields.emplace_back(field);
     _num_keys += field->is_key();
     if (!_share_name_to_index) {
@@ -118,7 +118,7 @@ void Schema::append(const FieldPtr& field) {
 }
 
 // it's not being used, especially in sort key scenario, so do not handle this case
-void Schema::insert(size_t idx, const FieldPtr& field) {
+void VectorizedSchema::insert(size_t idx, const VectorizedFieldPtr& field) {
     DCHECK_LT(idx, _fields.size());
 
     _fields.emplace(_fields.begin() + idx, field);
@@ -135,7 +135,7 @@ void Schema::insert(size_t idx, const FieldPtr& field) {
 }
 
 // it's not being used, especially in sort key scenario, so do not handle this case
-void Schema::remove(size_t idx) {
+void VectorizedSchema::remove(size_t idx) {
     DCHECK_LT(idx, _fields.size());
     _num_keys -= _fields[idx]->is_key();
     if (_share_name_to_index && idx == _fields.size() - 1 && _name_to_index_append_buffer != nullptr &&
@@ -158,13 +158,13 @@ void Schema::remove(size_t idx) {
     }
 }
 
-const FieldPtr& Schema::field(size_t idx) const {
+const VectorizedFieldPtr& VectorizedSchema::field(size_t idx) const {
     DCHECK_GE(idx, 0);
     DCHECK_LT(idx, _fields.size());
     return _fields[idx];
 }
 
-std::vector<std::string> Schema::field_names() const {
+std::vector<std::string> VectorizedSchema::field_names() const {
     std::vector<std::string> names;
     names.reserve(_fields.size());
     for (const auto& field : _fields) {
@@ -173,19 +173,19 @@ std::vector<std::string> Schema::field_names() const {
     return names;
 }
 
-FieldPtr Schema::get_field_by_name(const std::string& name) const {
+VectorizedFieldPtr VectorizedSchema::get_field_by_name(const std::string& name) const {
     size_t idx = get_field_index_by_name(name);
     return idx == -1 ? nullptr : _fields[idx];
 }
 
-void Schema::_build_index_map(const Fields& fields) {
+void VectorizedSchema::_build_index_map(const VectorizedFields& fields) {
     _name_to_index.reset(new std::unordered_map<std::string_view, size_t>());
     for (size_t i = 0; i < fields.size(); i++) {
         _name_to_index->emplace(fields[i]->name(), i);
     }
 }
 
-size_t Schema::get_field_index_by_name(const std::string& name) const {
+size_t VectorizedSchema::get_field_index_by_name(const std::string& name) const {
     DCHECK(_name_to_index != nullptr);
     auto p = _name_to_index->find(name);
     if (p == _name_to_index->end()) {
@@ -204,7 +204,7 @@ size_t Schema::get_field_index_by_name(const std::string& name) const {
     return p->second;
 }
 
-void Schema::convert_to(Schema* new_schema, const std::vector<LogicalType>& new_types) const {
+void VectorizedSchema::convert_to(VectorizedSchema* new_schema, const std::vector<LogicalType>& new_types) const {
     int num_fields = _fields.size();
     new_schema->_fields.resize(num_fields);
     for (int i = 0; i < num_fields; ++i) {
