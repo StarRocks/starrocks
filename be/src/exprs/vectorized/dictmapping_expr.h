@@ -27,7 +27,7 @@ public:
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new DictMappingExpr(*this)); }
 
-    ColumnPtr evaluate(ExprContext* context, Chunk* ptr) override;
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
 
     template <class Rewrite>
     Status rewrite(Rewrite&& rewriter) {

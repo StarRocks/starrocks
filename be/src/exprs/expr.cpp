@@ -597,12 +597,8 @@ StatusOr<ColumnPtr> Expr::evaluate_const(ExprContext* context) {
     return _constant_column;
 }
 
-ColumnPtr Expr::evaluate(ExprContext* context, vectorized::Chunk* ptr) {
-    return nullptr;
-}
-
-ColumnPtr Expr::evaluate_with_filter(ExprContext* context, vectorized::Chunk* ptr, uint8_t* filter) {
-    return evaluate(context, ptr);
+StatusOr<ColumnPtr> Expr::evaluate_with_filter(ExprContext* context, vectorized::Chunk* ptr, uint8_t* filter) {
+    return evaluate_checked(context, ptr);
 }
 
 vectorized::ColumnRef* Expr::get_column_ref() {

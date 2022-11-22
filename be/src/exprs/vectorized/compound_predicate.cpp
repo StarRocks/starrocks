@@ -31,8 +31,8 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(AndImpl, l_value, r_value) {
 class VectorizedAndCompoundPredicate final : public Predicate {
 public:
     DEFINE_COMPOUND_CONSTRUCT(VectorizedAndCompoundPredicate);
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
-        auto l = _children[0]->evaluate(context, ptr);
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {
+        ASSIGN_OR_RETURN(auto l, _children[0]->evaluate_checked(context, ptr));
         int l_falses = ColumnHelper::count_false_with_notnull(l);
 
         // left all false and not null
@@ -40,7 +40,7 @@ public:
             return l->clone();
         }
 
-        auto r = _children[1]->evaluate(context, ptr);
+        ASSIGN_OR_RETURN(auto r, _children[1]->evaluate_checked(context, ptr));
 
         return VectorizedLogicPredicateBinaryFunction<AndNullImpl, AndImpl>::template evaluate<TYPE_BOOLEAN>(l, r);
     }
@@ -63,8 +63,8 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(OrImpl, l_value, r_value) {
 class VectorizedOrCompoundPredicate final : public Predicate {
 public:
     DEFINE_COMPOUND_CONSTRUCT(VectorizedOrCompoundPredicate);
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
-        auto l = _children[0]->evaluate(context, ptr);
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {
+        ASSIGN_OR_RETURN(auto l, _children[0]->evaluate_checked(context, ptr));
 
         int l_trues = ColumnHelper::count_true_with_notnull(l);
         // left all true and not null
@@ -72,7 +72,7 @@ public:
             return l->clone();
         }
 
-        auto r = _children[1]->evaluate(context, ptr);
+        ASSIGN_OR_RETURN(auto r, _children[1]->evaluate_checked(context, ptr));
 
         return VectorizedLogicPredicateBinaryFunction<OrNullImpl, OrImpl>::template evaluate<TYPE_BOOLEAN>(l, r);
     }
@@ -85,8 +85,8 @@ DEFINE_UNARY_FN_WITH_IMPL(CompoundPredNot, l) {
 class VectorizedNotCompoundPredicate final : public Predicate {
 public:
     DEFINE_COMPOUND_CONSTRUCT(VectorizedNotCompoundPredicate);
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
-        auto l = _children[0]->evaluate(context, ptr);
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {
+        ASSIGN_OR_RETURN(auto l, _children[0]->evaluate_checked(context, ptr));
 
         return VectorizedStrictUnaryFunction<CompoundPredNot>::template evaluate<TYPE_BOOLEAN>(l);
     }

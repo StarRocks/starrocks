@@ -349,7 +349,8 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
                 conjuncts.push_back(it2->root());
             }
         }
-        _orc_reader->set_conjuncts_and_runtime_filters(conjuncts, _scanner_params.runtime_filter_collector);
+        RETURN_IF_ERROR(
+                _orc_reader->set_conjuncts_and_runtime_filters(conjuncts, _scanner_params.runtime_filter_collector));
     }
     _orc_reader->set_hive_column_names(_scanner_params.hive_column_names);
     _orc_reader->set_case_sensitive(_scanner_params.case_sensitive);

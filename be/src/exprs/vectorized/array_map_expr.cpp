@@ -34,7 +34,7 @@ inline bool offsets_equal(const UInt32Column::Ptr& array1, const UInt32Column::P
 // The input array column maybe nullable, so first remove the wrap of nullable property.
 // The result of lambda expressions do not change the offsets of the current array and the null map.
 // NOTE the return column must be of the return type.
-ColumnPtr ArrayMapExpr::evaluate(ExprContext* context, Chunk* chunk) {
+StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* chunk) {
     std::vector<ColumnPtr> inputs;
     std::vector<ColumnPtr> input_elements;
     NullColumnPtr input_null_map = nullptr;
