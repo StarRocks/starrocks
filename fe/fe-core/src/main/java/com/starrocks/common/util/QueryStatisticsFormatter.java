@@ -39,8 +39,9 @@ public class QueryStatisticsFormatter {
 
     public static String getCPUCostSeconds(long cpuCostNs) {
         final StringBuilder builder = new StringBuilder();
-        final Formatter fmt = new Formatter();
-        builder.append(fmt.format("%.2f", cpuCostNs * 1.0 / 1000000000)).append(" ").append("Seconds");
+        try (final Formatter fmt = new Formatter()) {
+            builder.append(fmt.format("%.2f", cpuCostNs * 1.0 / 1000000000)).append(" ").append("Seconds");
+        }
         return builder.toString();
     }
 }

@@ -107,7 +107,10 @@ public class CurrentQueryInfoProvider {
                             request.getAddress().getHostname(), request.getAddress().getPort());
                     statisticsMap.put(host, statistics);
                 }
-            } catch (InterruptedException | ExecutionException | TimeoutException e) {
+            } catch (InterruptedException e) {
+                LOG.warn("Thread interrupted! " + e.getCause());
+                Thread.currentThread().interrupt();
+            } catch (ExecutionException | TimeoutException e) {
                 LOG.warn("fail to receive result " + e.getCause());
                 throw new AnalysisException(e.getMessage());
             }
@@ -184,7 +187,10 @@ public class CurrentQueryInfoProvider {
                         statistics.updateScanRows(queryStatistics.scanRows);
                     }
                 }
-            } catch (InterruptedException | ExecutionException | TimeoutException e) {
+            } catch (InterruptedException e) {
+                LOG.warn("Thread interrupt! " + e.getCause());
+                Thread.currentThread().interrupt();
+            } catch (ExecutionException | TimeoutException e) {
                 LOG.warn("fail to receive result" + e.getCause());
                 throw new AnalysisException(e.getMessage());
             }
