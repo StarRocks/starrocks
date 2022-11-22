@@ -56,6 +56,7 @@ public final class ProcService {
         root.register("stream_loads", new StreamLoadsProcDir());
         root.register("colocation_group", new ColocationGroupProcDir());
         root.register("catalog", GlobalStateMgr.getCurrentState().getCatalogMgr().getProcNode());
+        root.register("compactions", new CompactionsProcDir());
     }
 
     // Get the corresponding PROC Node by the specified path
