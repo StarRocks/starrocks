@@ -30,8 +30,8 @@
 #include "common/compiler_util.h"
 #include "common/logging.h"
 #include "gutil/macros.h"
-#include "runtime/memory/chunk.h"
-#include "runtime/memory/chunk_allocator.h"
+#include "runtime/memory/mem_chunk.h"
+#include "runtime/memory/mem_chunk_allocator.h"
 #include "types/constexpr.h"
 #include "util/phmap/phmap.h"
 
@@ -142,8 +142,8 @@ private:
 
     // This field is much space consumming(HLL_REGISTERS_COUNT), we create
     // it only when it is really needed.
-    // Allocate memory by ChunkAllocator in order to reuse memory.
-    Chunk _registers;
+    // Allocate memory by MemChunkAllocator in order to reuse memory.
+    MemChunk _registers;
 
 private:
     void _convert_explicit_to_register();

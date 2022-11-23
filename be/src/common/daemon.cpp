@@ -33,7 +33,7 @@
 #include "common/config.h"
 #include "common/minidump.h"
 #include "exec/workgroup/work_group.h"
-#include "runtime/memory/chunk_allocator.h"
+#include "runtime/memory/mem_chunk_allocator.h"
 #include "runtime/time_types.h"
 #include "runtime/user_function_cache.h"
 #include "storage/options.h"
