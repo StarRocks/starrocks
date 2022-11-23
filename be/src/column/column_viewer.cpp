@@ -17,7 +17,7 @@ static inline size_t null_mask(const ColumnPtr& column) {
     return !column->only_null() && !column->is_constant() && column->is_nullable() ? -1 : 0;
 }
 
-template <PrimitiveType Type>
+template <LogicalType Type>
 ColumnViewer<Type>::ColumnViewer(const ColumnPtr& column)
         : _not_const_mask(not_const_mask(column)), _null_mask(null_mask(column)) {
     if (column->only_null()) {

@@ -118,8 +118,7 @@ private:
 
 class ValueNullableColumnAggregator final : public ValueColumnAggregatorBase {
 public:
-    explicit ValueNullableColumnAggregator(ValueColumnAggregatorPtr child)
-            : _child(std::move(child)), _aggregate_nulls(nullptr), _source_nulls_data(nullptr), _row_is_null(0) {}
+    explicit ValueNullableColumnAggregator(ValueColumnAggregatorPtr child) : _child(std::move(child)) {}
 
     void update_source(const ColumnPtr& src) override {
         _source_column = src;
@@ -265,11 +264,11 @@ private:
 
     ValueColumnAggregatorPtr _child;
 
-    NullColumn* _aggregate_nulls;
+    NullColumn* _aggregate_nulls{nullptr};
 
-    uint8_t* _source_nulls_data;
+    uint8_t* _source_nulls_data{nullptr};
 
-    uint8_t _row_is_null;
+    uint8_t _row_is_null{0};
 };
 
 } // namespace starrocks::vectorized

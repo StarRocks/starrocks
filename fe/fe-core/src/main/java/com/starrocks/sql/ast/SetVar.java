@@ -92,10 +92,11 @@ public class SetVar implements ParseNode {
         }
 
         if (type == SetType.GLOBAL) {
-            if (!GlobalStateMgr.getCurrentState().getAuth()
-                    .checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
-                        "ADMIN");
+            if (!GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                if (!GlobalStateMgr.getCurrentState().getAuth()
+                        .checkGlobalPriv(ConnectContext.get(), PrivPredicate.ADMIN)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ADMIN");
+                }
             }
         }
 
@@ -131,11 +132,11 @@ public class SetVar implements ParseNode {
 
         // Check variable load_mem_limit value is valid
         if (getVariable().equalsIgnoreCase(SessionVariable.LOAD_MEM_LIMIT)) {
-            checkNonNegativeLongVariable(SessionVariable.LOAD_MEM_LIMIT);
+            checkRangeLongVariable(SessionVariable.LOAD_MEM_LIMIT, 0L, null);
         }
 
         if (getVariable().equalsIgnoreCase(SessionVariable.QUERY_MEM_LIMIT)) {
-            checkNonNegativeLongVariable(SessionVariable.QUERY_MEM_LIMIT);
+            checkRangeLongVariable(SessionVariable.QUERY_MEM_LIMIT, 0L, null);
         }
 
         try {
@@ -150,19 +151,29 @@ public class SetVar implements ParseNode {
                 this.expression = new StringLiteral(
                         Long.toString(ParseUtil.analyzeDataVolumn(getResolvedExpression().getStringValue())));
                 this.resolvedExpression = (LiteralExpr) this.expression;
+                checkRangeLongVariable(SessionVariable.EXEC_MEM_LIMIT, SessionVariable.MIN_EXEC_MEM_LIMIT, null);
             }
         } catch (UserException e) {
             throw new SemanticException(e.getMessage());
         }
 
         if (getVariable().equalsIgnoreCase(SessionVariable.SQL_SELECT_LIMIT)) {
-            checkNonNegativeLongVariable(SessionVariable.SQL_SELECT_LIMIT);
+            checkRangeLongVariable(SessionVariable.SQL_SELECT_LIMIT, 0L, null);
+        }
+
+        if (getVariable().equalsIgnoreCase(SessionVariable.QUERY_TIMEOUT)) {
+            checkRangeLongVariable(SessionVariable.QUERY_TIMEOUT, 1L, (long) SessionVariable.MAX_QUERY_TIMEOUT);
+        }
+
+        if (getVariable().equalsIgnoreCase(SessionVariable.NEW_PLANNER_OPTIMIZER_TIMEOUT)) {
+            checkRangeLongVariable(SessionVariable.NEW_PLANNER_OPTIMIZER_TIMEOUT, 1L, null);
         }
 
         if (getVariable().equalsIgnoreCase(SessionVariable.RESOURCE_GROUP)) {
             String wgName = getResolvedExpression().getStringValue();
             if (!StringUtils.isEmpty(wgName)) {
-                ResourceGroup wg = GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroupByName(wgName);
+                ResourceGroup wg =
+                        GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroupByName(wgName);
                 if (wg == null) {
                     throw new SemanticException("resource group not exists: " + wgName);
                 }
@@ -174,12 +185,15 @@ public class SetVar implements ParseNode {
         }
     }
 
-    private void checkNonNegativeLongVariable(String field) {
+    private void checkRangeLongVariable(String field, Long min, Long max) {
         String value = getResolvedExpression().getStringValue();
         try {
             long num = Long.parseLong(value);
-            if (num < 0) {
-                throw new SemanticException(field + " must be equal or greater than 0.");
+            if (min != null && num < min) {
+                throw new SemanticException(String.format("%s must be equal or greater than %d.", field, min));
+            }
+            if (max != null && num > max) {
+                throw new SemanticException(String.format("%s must be equal or smaller than %d.", field, max));
             }
         } catch (NumberFormatException ex) {
             throw new SemanticException(field + " is not a number");

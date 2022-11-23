@@ -61,19 +61,19 @@ private:
     Status build_olap_filters();
     Status build_scan_keys(bool unlimited, int32_t max_scan_key_num);
 
-    template <PrimitiveType SlotType, typename RangeValueType>
+    template <LogicalType SlotType, typename RangeValueType>
     void normalize_predicate(const SlotDescriptor& slot, ColumnValueRange<RangeValueType>* range);
 
-    template <PrimitiveType SlotType, typename RangeValueType>
+    template <LogicalType SlotType, typename RangeValueType>
     void normalize_in_or_equal_predicate(const SlotDescriptor& slot, ColumnValueRange<RangeValueType>* range);
 
-    template <PrimitiveType SlotType, typename RangeValueType>
+    template <LogicalType SlotType, typename RangeValueType>
     void normalize_binary_predicate(const SlotDescriptor& slot, ColumnValueRange<RangeValueType>* range);
 
-    template <PrimitiveType SlotType, typename RangeValueType>
+    template <LogicalType SlotType, typename RangeValueType>
     void normalize_join_runtime_filter(const SlotDescriptor& slot, ColumnValueRange<RangeValueType>* range);
 
-    template <PrimitiveType SlotType, typename RangeValueType>
+    template <LogicalType SlotType, typename RangeValueType>
     void normalize_not_in_or_not_equal_predicate(const SlotDescriptor& slot, ColumnValueRange<RangeValueType>* range);
 
     void normalize_is_null_predicate(const SlotDescriptor& slot);

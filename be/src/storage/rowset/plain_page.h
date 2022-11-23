@@ -36,7 +36,7 @@ namespace starrocks {
 
 static const size_t PLAIN_PAGE_HEADER_SIZE = sizeof(uint32_t);
 
-template <FieldType Type>
+template <LogicalType Type>
 class PlainPageBuilder final : public PageBuilder {
 public:
     PlainPageBuilder(const PageBuilderOptions& options) : _options(options) {
@@ -108,11 +108,10 @@ private:
     faststring _last_value;
 };
 
-template <FieldType Type>
+template <LogicalType Type>
 class PlainPageDecoder : public PageDecoder {
 public:
-    PlainPageDecoder(Slice data, const PageDecoderOptions& options)
-            : _data(data), _options(options), _parsed(false), _num_elems(0), _cur_idx(0) {}
+    PlainPageDecoder(Slice data, const PageDecoderOptions& options) : _data(data), _options(options) {}
 
     Status init() override {
         CHECK(!_parsed);
@@ -236,9 +235,9 @@ public:
 private:
     Slice _data;
     PageDecoderOptions _options;
-    bool _parsed;
-    uint32_t _num_elems;
-    uint32_t _cur_idx;
+    bool _parsed{false};
+    uint32_t _num_elems{0};
+    uint32_t _cur_idx{0};
     typedef typename TypeTraits<Type>::CppType CppType;
     enum { SIZE_OF_TYPE = TypeTraits<Type>::size };
 };

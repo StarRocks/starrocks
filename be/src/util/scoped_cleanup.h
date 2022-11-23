@@ -41,7 +41,7 @@ namespace starrocks {
 template <typename F>
 class ScopedCleanup {
 public:
-    explicit ScopedCleanup(F f) : cancelled_(false), f_(std::move(f)) {}
+    explicit ScopedCleanup(F f) : f_(std::move(f)) {}
     ~ScopedCleanup() {
         if (!cancelled_) {
             f_();
@@ -50,7 +50,7 @@ public:
     void cancel() { cancelled_ = true; }
 
 private:
-    bool cancelled_;
+    bool cancelled_{false};
     F f_;
 };
 

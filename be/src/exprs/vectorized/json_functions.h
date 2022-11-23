@@ -14,8 +14,7 @@
 #include "exprs/vectorized/jsonpath.h"
 #include "udf/udf.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 enum JsonFunctionType {
     JSON_FUN_INT = 0,
@@ -25,7 +24,7 @@ enum JsonFunctionType {
     JSON_FUN_UNKOWN //The last
 };
 
-template <PrimitiveType primitive_type>
+template <LogicalType primitive_type>
 struct JsonTypeTraits {};
 
 template <>
@@ -214,7 +213,7 @@ public:
     }
 
 private:
-    template <PrimitiveType ResultType>
+    template <LogicalType ResultType>
     static ColumnPtr _json_query_impl(starrocks_udf::FunctionContext* context, const Columns& columns);
 
     /**
@@ -259,5 +258,4 @@ private:
                                     std::vector<SimpleJsonPath>* parsed_paths);
 };
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

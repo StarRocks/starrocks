@@ -5,7 +5,7 @@
 #include <fmt/format.h>
 #include <gtest/gtest.h>
 
-#include "column/schema.h"
+#include "column/vectorized_schema.h"
 #include "fs/fs_util.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
@@ -195,6 +195,7 @@ public:
     void SetUp() override {
         config::max_compaction_concurrency = 1;
         Compaction::init(config::max_compaction_concurrency);
+        config::enable_event_based_compaction_framework = false;
 
         config::storage_root_path = std::filesystem::current_path().string() + "/data_test_base_compaction";
         fs::remove_all(config::storage_root_path);

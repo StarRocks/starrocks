@@ -152,6 +152,9 @@ private:
     std::atomic<bool> _is_finishing = false;
     std::atomic<int32_t> _num_sending_rpc = 0;
 
+    std::atomic<int64_t> _rpc_count = 0;
+    std::atomic<int64_t> _rpc_cumulative_time = 0;
+
     // RuntimeProfile counters
     std::atomic_bool _is_profile_updated = false;
     std::atomic<int64_t> _bytes_enqueued = 0;
@@ -167,6 +170,6 @@ private:
     // Non-atomic type is enough because the concurrency inconsistency is acceptable
     int64_t _first_send_time = -1;
     int64_t _last_receive_time = -1;
-}; // namespace starrocks::pipeline
+};
 
 } // namespace starrocks::pipeline

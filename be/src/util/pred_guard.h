@@ -10,20 +10,20 @@
 //
 // step#1: use DEF_PRED_GUARD produces codes as follows:
 // ```code
-// DEF_PRED_GUARD(DirectlyCopyable, is_directly_copyable, ArrowTypeId, AT, PrimitiveType, PT)
+// DEF_PRED_GUARD(DirectlyCopyable, is_directly_copyable, ArrowTypeId, AT, LogicalType, PT)
 // ```
 // produces codes as follows
 //
 // ```code
-// template <ArrowTypeId, AT, PrimitiveType, PT>
+// template <ArrowTypeId, AT, LogicalType, PT>
 // struct is_directly_copyable_struct {
 //     static constexpr bool value = false;
 // };
 //
-// template <ArrowTypeId, AT, PrimitiveType, PT>
+// template <ArrowTypeId, AT, LogicalType, PT>
 // constexpr bool is_directly_copyable = is_directly_copyable_struct<AT, PT>::value;
 //
-// template <ArrowTypeId, AT, PrimitiveType, PT>
+// template <ArrowTypeId, AT, LogicalType, PT>
 // using DirectlyCopyableGuard = std::enable_if_t<is_directly_copyable<AT, PT>, guard::Guard>;
 // ```
 //

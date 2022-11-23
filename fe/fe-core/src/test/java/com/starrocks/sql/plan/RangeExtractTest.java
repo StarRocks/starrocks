@@ -84,7 +84,7 @@ public class RangeExtractTest extends PlanTestBase {
     public void testRangePredicate9() throws Exception {
         String sql = "select * from t0 where v1 > 1 and v1 <= 1";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("PREDICATES: 1: v1 > 1, 1: v1 <= 1\n"));
+        Assert.assertTrue(plan.contains("  0:EMPTYSET\n"));
     }
 
     @Test

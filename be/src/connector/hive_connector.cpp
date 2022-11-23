@@ -52,7 +52,7 @@ Status HiveDataSource::open(RuntimeState* state) {
     _tuple_desc = state->desc_tbl().get_tuple_descriptor(hdfs_scan_node.tuple_id);
     _hive_table = dynamic_cast<const HiveTableDescriptor*>(_tuple_desc->table_desc());
     if (_hive_table == nullptr) {
-        return Status::RuntimeError("Invalid table type. Only hive/iceberg/hudi/delta lake table are supported");
+        return Status::RuntimeError("Invalid table type. Only hive/iceberg/hudi/delta lake/file table are supported");
     }
 
     _use_block_cache = config::block_cache_enable;
@@ -71,7 +71,6 @@ Status HiveDataSource::open(RuntimeState* state) {
         _no_data = true;
         return Status::OK();
     }
-    SCOPED_TIMER(_profile.scan_timer);
     RETURN_IF_ERROR(_init_scanner(state));
     return Status::OK();
 }
@@ -112,8 +111,8 @@ Status HiveDataSource::_init_partition_values() {
             ASSIGN_OR_RETURN(auto partition_value_col, partition_values[partition_col_idx]->evaluate(nullptr));
             assert(partition_value_col->is_constant());
             auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(partition_value_col);
-            ColumnPtr data_column = const_column->data_column();
-            ColumnPtr chunk_part_column = partition_chunk->get_column_by_slot_id(slot_id);
+            const ColumnPtr& data_column = const_column->data_column();
+            ColumnPtr& chunk_part_column = partition_chunk->get_column_by_slot_id(slot_id);
             if (data_column->is_nullable()) {
                 chunk_part_column->append_nulls(1);
             } else {
@@ -211,7 +210,6 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
     _profile.rows_read_counter = ADD_COUNTER(_runtime_profile, "RowsRead", TUnit::UNIT);
     _profile.bytes_read_counter = ADD_COUNTER(_runtime_profile, "BytesRead", TUnit::BYTES);
 
-    _profile.scan_timer = ADD_TIMER(_runtime_profile, "ScanTime");
     _profile.scan_ranges_counter = ADD_COUNTER(_runtime_profile, "ScanRanges", TUnit::UNIT);
 
     _profile.reader_init_timer = ADD_TIMER(_runtime_profile, "ReaderInit");
@@ -390,7 +388,6 @@ Status HiveDataSource::get_next(RuntimeState* state, vectorized::ChunkPtr* chunk
         return Status::EndOfFile("no data");
     }
     _init_chunk(chunk, _runtime_state->chunk_size());
-    SCOPED_TIMER(_profile.scan_timer);
     do {
         RETURN_IF_ERROR(_scanner->get_next(state, chunk));
     } while ((*chunk)->num_rows() == 0);

@@ -60,15 +60,15 @@ public class MapType extends Type {
             selectedFields[pos] = true;
         }
         if (needSetChildren && (pos == 1 || pos == -1) && valueType.isComplexType()) {
-            valueType.selectAll();
+            valueType.selectAllFields();
         }
     }
 
     @Override
-    public void selectAll() {
+    public void selectAllFields() {
         Arrays.fill(selectedFields, true);
         if (valueType.isComplexType()) {
-            valueType.selectAll();
+            valueType.selectAllFields();
         }
     }
 
@@ -98,6 +98,12 @@ public class MapType extends Type {
         }
         return String.format("MAP<%s,%s>",
                 keyType.toSql(depth + 1), valueType.toSql(depth + 1));
+    }
+
+    @Override
+    public String toString() {
+        return String.format("MAP<%s,%s>",
+                keyType.toString(), valueType.toString());
     }
 
     @Override

@@ -17,7 +17,7 @@ namespace vectorized {
 class OlapMetaScanNode final : public starrocks::ScanNode {
 public:
     OlapMetaScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
-    ~OlapMetaScanNode();
+    ~OlapMetaScanNode() override;
 
     Status init(const TPlanNode& tnode, RuntimeState* state) override;
     Status prepare(RuntimeState* state) override;

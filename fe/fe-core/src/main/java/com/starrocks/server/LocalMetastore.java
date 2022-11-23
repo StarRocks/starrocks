@@ -32,7 +32,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
-import com.staros.proto.ShardStorageInfo;
+import com.staros.proto.FilePathInfo;
 import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.KeysDesc;
@@ -781,6 +781,9 @@ public class LocalMetastore implements ConnectorMetadata {
             return;
         } else if (engineName.equalsIgnoreCase("hive")) {
             createHiveTable(db, stmt);
+            return;
+        } else if (engineName.equalsIgnoreCase("file")) {
+            createFileTable(db, stmt);
             return;
         } else if (engineName.equalsIgnoreCase("iceberg")) {
             createIcebergTable(db, stmt);
@@ -2038,18 +2041,19 @@ public class LocalMetastore implements ConnectorMetadata {
                 long storageCacheTtlS = 0;
                 try {
                     storageCacheTtlS = PropertyAnalyzer.analyzeLongProp(properties,
-                            PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL, 0);
+                            PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL, Config.lake_default_storage_cache_ttl_seconds);
                 } catch (AnalysisException e) {
                     throw new DdlException(e.getMessage());
                 }
                 if (storageCacheTtlS < -1) {
                     throw new DdlException("Storage cache ttl should not be less than -1");
                 }
-                if (!enableStorageCache && storageCacheTtlS != 0) {
+                if (!enableStorageCache && storageCacheTtlS != 0 &&
+                        storageCacheTtlS != Config.lake_default_storage_cache_ttl_seconds) {
                     throw new DdlException("Storage cache ttl should be 0 when cache is disabled");
                 }
                 if (enableStorageCache && storageCacheTtlS == 0) {
-                    storageCacheTtlS = Config.tablet_sched_storage_cooldown_second;
+                    throw new DdlException("Storage cache ttl should not be 0 when cache is enabled");
                 }
 
                 // set to false if absent
@@ -2061,8 +2065,8 @@ public class LocalMetastore implements ConnectorMetadata {
                 }
 
                 // get service shard storage info from StarMgr
-                ShardStorageInfo shardStorageInfo = stateMgr.getStarOSAgent().getServiceShardStorageInfo();
-                ((LakeTable) olapTable).setStorageInfo(shardStorageInfo, enableStorageCache,
+                FilePathInfo pathInfo = stateMgr.getStarOSAgent().allocateFilePath(tableId);
+                ((LakeTable) olapTable).setStorageInfo(pathInfo, enableStorageCache,
                         storageCacheTtlS, allowAsyncWriteBack);
 
             } else {
@@ -2474,6 +2478,12 @@ public class LocalMetastore implements ConnectorMetadata {
         LOG.info("successfully create table[{}-{}]", stmt.getTableName(), hiveTable.getId());
     }
 
+    private void createFileTable(Database db, CreateTableStmt stmt) throws DdlException {
+        Table fileTable = TableFactory.createTable(stmt, Table.TableType.FILE);
+        registerTable(db, fileTable, stmt);
+        LOG.info("successfully create table[{}-{}]", stmt.getTableName(), fileTable.getId());
+    }
+
     private void createIcebergTable(Database db, CreateTableStmt stmt) throws DdlException {
         String tableName = stmt.getTableName();
         List<Column> columns = stmt.getColumns();
@@ -2646,7 +2656,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
         int bucketNum = distributionInfo.getBucketNum();
         List<Long> shardIds = stateMgr.getStarOSAgent().createShards(bucketNum,
-                table.getPartitionShardStorageInfo(partitionId), partitionId);
+                table.getPartitionFilePathInfo(partitionId), table.getPartitionFileCacheInfo(partitionId), partitionId);
         for (long shardId : shardIds) {
             Tablet tablet = new LakeTablet(shardId);
             index.addTablet(tablet, tabletMeta);

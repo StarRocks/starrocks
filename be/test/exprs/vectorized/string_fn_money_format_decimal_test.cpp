@@ -13,7 +13,7 @@ class MoneyFormatDecimalTest : public ::testing::Test {};
 using TestCase = std::tuple<std::string, std::string>;
 using TestArray = std::vector<TestCase>;
 
-template <PrimitiveType Type>
+template <LogicalType Type>
 void test_money_format_decimal(TestArray const& test_cases, int precision, int scale) {
     using ColumnType = RunTimeColumnType<Type>;
     using CppType = RunTimeCppType<Type>;

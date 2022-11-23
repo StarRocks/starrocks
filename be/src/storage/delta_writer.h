@@ -16,7 +16,7 @@ namespace starrocks {
 class FlushToken;
 class ReplicateToken;
 class MemTracker;
-class Schema;
+class VectorizedSchema;
 class StorageEngine;
 class TupleDescriptor;
 class SlotDescriptor;
@@ -25,6 +25,14 @@ namespace vectorized {
 
 class MemTable;
 class MemTableSink;
+
+enum ReplicaState {
+    // peer storage engine
+    Peer,
+    // replicated storage engine
+    Primary,
+    Secondary,
+};
 
 struct DeltaWriterOptions {
     int64_t tablet_id;
@@ -38,19 +46,11 @@ struct DeltaWriterOptions {
     Span parent_span;
     int64_t index_id;
     int64_t node_id;
-    bool is_replicated_storage = false;
     std::vector<PNetworkAddress> replicas;
     int64_t timeout_ms;
     WriteQuorumTypePB write_quorum;
     std::string merge_condition;
-};
-
-enum ReplicaState {
-    // peer storage engine
-    Peer,
-    // replicated storage engine
-    Primary,
-    Secondary,
+    ReplicaState replica_state;
 };
 
 enum State {
@@ -156,7 +156,7 @@ private:
     RowsetSharedPtr _cur_rowset;
     std::unique_ptr<RowsetWriter> _rowset_writer;
     bool _schema_initialized;
-    Schema _vectorized_schema;
+    VectorizedSchema _vectorized_schema;
     std::unique_ptr<MemTable> _mem_table;
     std::unique_ptr<MemTableSink> _mem_table_sink;
     const TabletSchema* _tablet_schema;

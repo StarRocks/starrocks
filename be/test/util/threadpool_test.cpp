@@ -68,7 +68,7 @@ static const char* kDefaultPoolName = "test";
 
 class ThreadPoolTest : public ::testing::Test {
 public:
-    virtual void SetUp() override { ASSERT_TRUE(ThreadPoolBuilder(kDefaultPoolName).build(&_pool).ok()); }
+    void SetUp() override { ASSERT_TRUE(ThreadPoolBuilder(kDefaultPoolName).build(&_pool).ok()); }
 
     Status rebuild_pool_with_builder(const ThreadPoolBuilder& builder) { return builder.build(&_pool); }
 
@@ -326,7 +326,7 @@ class SlowDestructorRunnable : public Runnable {
 public:
     void run() override {}
 
-    virtual ~SlowDestructorRunnable() { SleepFor(MonoDelta::FromMilliseconds(100)); }
+    ~SlowDestructorRunnable() override { SleepFor(MonoDelta::FromMilliseconds(100)); }
 };
 
 // Test that if a tasks's destructor is slow, it doesn't cause serialization of the tasks
@@ -363,7 +363,7 @@ TEST_P(ThreadPoolTestTokenTypes, TestTokenSubmitAndWait) {
 
 TEST_F(ThreadPoolTest, TestTokenSubmitsProcessedSerially) {
     std::unique_ptr<ThreadPoolToken> t = _pool->new_token(ThreadPool::ExecutionMode::SERIAL);
-    int32_t seed = static_cast<int32_t>(GetCurrentTimeMicros());
+    auto seed = static_cast<int32_t>(GetCurrentTimeMicros());
     srand(seed);
     Random r(seed);
     string result;
@@ -462,7 +462,7 @@ TEST_P(ThreadPoolTestTokenTypes, TestTokenShutdown) {
 TEST_P(ThreadPoolTestTokenTypes, TestTokenWaitForAll) {
     const int kNumTokens = 3;
     const int kNumSubmissions = 20;
-    int32_t seed = static_cast<int32_t>(GetCurrentTimeMicros());
+    auto seed = static_cast<int32_t>(GetCurrentTimeMicros());
     srand(seed);
     Random r(seed);
     std::vector<std::unique_ptr<ThreadPoolToken>> tokens;
@@ -495,7 +495,7 @@ TEST_P(ThreadPoolTestTokenTypes, TestTokenWaitForAll) {
 
 TEST_F(ThreadPoolTest, TestFuzz) {
     const int kNumOperations = 1000;
-    int32_t seed = static_cast<int32_t>(GetCurrentTimeMicros());
+    auto seed = static_cast<int32_t>(GetCurrentTimeMicros());
     srand(seed);
     Random r(seed);
     std::vector<std::unique_ptr<ThreadPoolToken>> tokens;
@@ -598,7 +598,7 @@ TEST_F(ThreadPoolTest, TestTokenConcurrency) {
     const int kSubmitThreads = 8;
 
     std::vector<shared_ptr<ThreadPoolToken>> tokens;
-    int32_t seed = static_cast<int32_t>(GetCurrentTimeMicros());
+    auto seed = static_cast<int32_t>(GetCurrentTimeMicros());
     srand(seed);
     Random rng(seed);
 

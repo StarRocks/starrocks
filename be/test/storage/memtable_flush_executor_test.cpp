@@ -60,9 +60,9 @@ static shared_ptr<TabletSchema> create_tablet_schema(const string& desc, int nke
     return std::make_shared<TabletSchema>(tspb);
 }
 
-static unique_ptr<Schema> create_schema(const string& desc, int nkey) {
-    unique_ptr<Schema> ret;
-    Fields fields;
+static unique_ptr<VectorizedSchema> create_schema(const string& desc, int nkey) {
+    unique_ptr<VectorizedSchema> ret;
+    VectorizedFields fields;
     std::vector<std::string> cs = strings::Split(desc, ",", strings::SkipWhitespace());
     for (int i = 0; i < cs.size(); i++) {
         auto& c = cs[i];
@@ -72,23 +72,23 @@ static unique_ptr<Schema> create_schema(const string& desc, int nkey) {
         }
         ColumnId cid = i;
         string name = fs[0];
-        FieldType type = OLAP_FIELD_TYPE_UNKNOWN;
+        LogicalType type = TYPE_UNKNOWN;
         if (fs[1] == "boolean") {
-            type = OLAP_FIELD_TYPE_BOOL;
+            type = TYPE_BOOLEAN;
         } else if (fs[1] == "tinyint") {
-            type = OLAP_FIELD_TYPE_TINYINT;
+            type = TYPE_TINYINT;
         } else if (fs[1] == "smallint") {
-            type = OLAP_FIELD_TYPE_SMALLINT;
+            type = TYPE_SMALLINT;
         } else if (fs[1] == "int") {
-            type = OLAP_FIELD_TYPE_INT;
+            type = TYPE_INT;
         } else if (fs[1] == "bigint") {
-            type = OLAP_FIELD_TYPE_BIGINT;
+            type = TYPE_BIGINT;
         } else if (fs[1] == "float") {
-            type = OLAP_FIELD_TYPE_FLOAT;
+            type = TYPE_FLOAT;
         } else if (fs[1] == "double") {
-            type = OLAP_FIELD_TYPE_DOUBLE;
+            type = TYPE_DOUBLE;
         } else if (fs[1] == "varchar") {
-            type = OLAP_FIELD_TYPE_VARCHAR;
+            type = TYPE_VARCHAR;
         } else {
             CHECK(false) << "create_tuple_desc_slots type not support";
         }
@@ -96,12 +96,12 @@ static unique_ptr<Schema> create_schema(const string& desc, int nkey) {
         if (fs.size() == 3 && fs[2] == "null") {
             nullable = true;
         }
-        auto fd = new Field(cid, name, type, nullable);
+        auto fd = new VectorizedField(cid, name, type, nullable);
         fd->set_is_key(i < nkey);
         fd->set_aggregate_method(i < nkey ? OLAP_FIELD_AGGREGATION_NONE : OLAP_FIELD_AGGREGATION_REPLACE);
         fields.emplace_back(fd);
     }
-    ret = std::make_unique<Schema>(std::move(fields));
+    ret = std::make_unique<VectorizedSchema>(std::move(fields));
     return ret;
 }
 
@@ -115,7 +115,7 @@ static const std::vector<SlotDescriptor*>* create_tuple_desc_slots(RuntimeState*
         if (fs.size() < 2) {
             CHECK(false) << "create_tuple_desc_slots bad desc";
         }
-        PrimitiveType type = INVALID_TYPE;
+        LogicalType type = TYPE_UNKNOWN;
         if (fs[1] == "boolean") {
             type = TYPE_BOOLEAN;
         } else if (fs[1] == "tinyint") {
@@ -216,7 +216,7 @@ public:
 
     void checkResult(size_t n) {
         RowsetSharedPtr rowset = *_writer->build();
-        unique_ptr<Schema> read_schema = create_schema("pk int", 1);
+        unique_ptr<VectorizedSchema> read_schema = create_schema("pk int", 1);
         OlapReaderStatistics stats;
         RowsetReadOptions rs_opts;
         rs_opts.sorted = false;
@@ -252,7 +252,7 @@ public:
     shared_ptr<TabletSchema> _schema;
     const std::vector<SlotDescriptor*>* _slots = nullptr;
     unique_ptr<RowsetWriter> _writer;
-    Schema _vectorized_schema;
+    VectorizedSchema _vectorized_schema;
     unique_ptr<MemTableRowsetWriterSink> _mem_table_sink;
 };
 

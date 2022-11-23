@@ -115,8 +115,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String SQL_SAFE_UPDATES = "sql_safe_updates";
     public static final String NET_BUFFER_LENGTH = "net_buffer_length";
     public static final String CODEGEN_LEVEL = "codegen_level";
-    // mem limit can't smaller than bufferpool's default page size
-    public static final int MIN_EXEC_MEM_LIMIT = 2097152;
     public static final String BATCH_SIZE = "batch_size";
     public static final String CHUNK_SIZE = "chunk_size";
     public static final String DISABLE_STREAMING_PREAGGREGATIONS = "disable_streaming_preaggregations";
@@ -229,6 +227,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_CTE_REUSE = "cbo_cte_reuse";
     public static final String CBO_CTE_REUSE_RATE = "cbo_cte_reuse_rate";
     public static final String CBO_CTE_MAX_LIMIT = "cbo_cte_max_limit";
+    public static final String CBO_CTE_REUSE_RATE_V2 = "cbo_cte_reuse_rate_v2";
     public static final String ENABLE_SQL_DIGEST = "enable_sql_digest";
     public static final String CBO_MAX_REORDER_NODE = "cbo_max_reorder_node";
     public static final String CBO_PRUNE_SHUFFLE_COLUMN_RATE = "cbo_prune_shuffle_column_rate";
@@ -292,7 +291,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_SCAN_BLOCK_CACHE = "enable_scan_block_cache";
     public static final String ENABLE_POPULATE_BLOCK_CACHE = "enable_populate_block_cache";
 
-
     public static final String ENABLE_QUERY_CACHE = "enable_query_cache";
     public static final String QUERY_CACHE_FORCE_POPULATE = "query_cache_force_populate";
     public static final String QUERY_CACHE_ENTRY_MAX_BYTES = "query_cache_entry_max_bytes";
@@ -302,7 +300,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String NESTED_MV_REWRITE_MAX_LEVEL = "nested_mv_rewrite_max_level";
     public static final String ENABLE_MATERIALIZED_VIEW_REWRITE = "enable_materialized_view_rewrite";
     public static final String ENABLE_MATERIALIZED_VIEW_UNION_REWRITE = "enable_materialized_view_union_rewrite";
-    public static final String ENABLE_RULE_BASED_MATERIALIZED_VIEW_REWRITE = "enable_rule_based_materialized_view_rewrite";
+    public static final String ENABLE_RULE_BASED_MATERIALIZED_VIEW_REWRITE =
+            "enable_rule_based_materialized_view_rewrite";
+    public static final String ENABLE_COST_BASED_MATERIALIZED_VIEW_REWRITE =
+            "enable_cost_based_materialized_view_rewrite";
+
+    public static final String ENABLE_BIG_QUERY_LOG = "enable_big_query_log";
+    public static final String BIG_QUERY_LOG_CPU_SECOND_THRESHOLD = "big_query_log_cpu_second_threshold";
+    public static final String BIG_QUERY_LOG_SCAN_BYTES_THRESHOLD = "big_query_log_scan_bytes_threshold";
+    public static final String BIG_QUERY_LOG_SCAN_ROWS_THRESHOLD = "big_query_log_scan_rows_threshold";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -320,6 +326,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             .add("vectorized_insert_enable")
             .add("prefer_join_method")
             .add("rewrite_count_distinct_to_bitmap_hll").build();
+
+    // Limitations
+    // mem limit can't smaller than bufferpool's default page size
+    public static final long MIN_EXEC_MEM_LIMIT = 2097152;
+    // query timeout cannot greater than one month
+    public static final int MAX_QUERY_TIMEOUT = 259200;
 
     @VariableMgr.VarAttr(name = ENABLE_PIPELINE, alias = ENABLE_PIPELINE_ENGINE, show = ENABLE_PIPELINE_ENGINE)
     private boolean enablePipelineEngine = true;
@@ -510,8 +522,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CBO_CTE_REUSE)
     private boolean cboCteReuse = true;
 
-    @VarAttr(name = CBO_CTE_REUSE_RATE, flag = VariableMgr.INVISIBLE)
-    private double cboCTERuseRatio = 1.2;
+    @VarAttr(name = CBO_CTE_REUSE_RATE_V2, flag = VariableMgr.INVISIBLE, alias = CBO_CTE_REUSE_RATE,
+            show = CBO_CTE_REUSE_RATE)
+    private double cboCTERuseRatio = 1.15;
 
     @VarAttr(name = CBO_CTE_MAX_LIMIT, flag = VariableMgr.INVISIBLE)
     private int cboCTEMaxLimit = 10;
@@ -716,7 +729,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public void setEnableSortAggregate(boolean enableSortAggregate) {
         this.enableSortAggregate = enableSortAggregate;
     }
-    
+
     @VariableMgr.VarAttr(name = ENABLE_SCAN_BLOCK_CACHE)
     private boolean useScanBlockCache = false;
 
@@ -750,6 +763,29 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_RULE_BASED_MATERIALIZED_VIEW_REWRITE)
     private boolean enableRuleBasedMaterializedViewRewrite = true;
+
+    // if enable_big_query_log = true and cpu/io cost of a query exceeds the related threshold,
+    // the information will be written to the big query log
+    @VarAttr(name = ENABLE_BIG_QUERY_LOG)
+    private boolean enableBigQueryLog = true;
+    // the value is set for testing,
+    // if a query needs to perform 10s for computing tasks at full load on three 16-core machines,
+    // we treat it as a big query, so set this value to 480(10 * 16 * 3).
+    // Users need to set up according to their own scenario.
+    @VarAttr(name = BIG_QUERY_LOG_CPU_SECOND_THRESHOLD)
+    private long bigQueryLogCPUSecondThreshold = 480;
+    // the value is set for testing, if a query needs to scan more than 10GB of data, we treat it as a big query.
+    // Users need to set up according to their own scenario.
+    @VarAttr(name = BIG_QUERY_LOG_SCAN_BYTES_THRESHOLD)
+    private long bigQueryLogScanBytesThreshold = 1024L * 1024 * 1024 * 10;
+    // the value is set for testing, if a query need to scan more than 1 billion rows of data,
+    // we treat it as a big query.
+    // Users need to set up according to their own scenario.
+    @VarAttr(name = BIG_QUERY_LOG_SCAN_ROWS_THRESHOLD)
+    private long bigQueryLogScanRowsThreshold = 1000000000L;
+
+    @VarAttr(name = ENABLE_COST_BASED_MATERIALIZED_VIEW_REWRITE)
+    private boolean enableCostBasedMaterializedViewRewrite = true;
 
     public boolean getEnablePopulateBlockCache() {
         return enablePopulateBlockCache;
@@ -856,16 +892,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public long getSqlSelectLimit() {
-        if (sqlSelectLimit < 0) {
-            return DEFAULT_SELECT_LIMIT;
-        }
         return sqlSelectLimit;
     }
 
     public void setSqlSelectLimit(long limit) {
-        if (limit < 0) {
-            return;
-        }
         this.sqlSelectLimit = limit;
     }
 
@@ -886,11 +916,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public void setMaxExecMemByte(long maxExecMemByte) {
-        if (maxExecMemByte < MIN_EXEC_MEM_LIMIT) {
-            this.maxExecMemByte = MIN_EXEC_MEM_LIMIT;
-        } else {
-            this.maxExecMemByte = maxExecMemByte;
-        }
+        this.maxExecMemByte = maxExecMemByte;
     }
 
     public void setLoadMemLimit(long loadMemLimit) {
@@ -1417,6 +1443,46 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableRuleBasedMaterializedViewRewrite(boolean enableRuleBasedMaterializedViewRewrite) {
         this.enableRuleBasedMaterializedViewRewrite = enableRuleBasedMaterializedViewRewrite;
+    }
+
+    public boolean isEnableBigQueryLog() {
+        return enableBigQueryLog;
+    }
+
+    public void setEnableBigQueryLog(boolean enableBigQueryLog) {
+        this.enableBigQueryLog = enableBigQueryLog;
+    }
+
+    public long getBigQueryLogCPUSecondThreshold() {
+        return this.bigQueryLogCPUSecondThreshold;
+    }
+
+    public void setBigQueryLogCpuSecondThreshold(long bigQueryLogCPUSecondThreshold) {
+        this.bigQueryLogCPUSecondThreshold = bigQueryLogCPUSecondThreshold;
+    }
+
+    public long getBigQueryLogScanBytesThreshold() {
+        return bigQueryLogScanBytesThreshold;
+    }
+
+    public void setBigQueryLogScanBytesThreshold(long bigQueryLogScanBytesThreshold) {
+        this.bigQueryLogScanBytesThreshold = bigQueryLogScanBytesThreshold;
+    }
+
+    public long getBigQueryLogScanRowsThreshold() {
+        return bigQueryLogScanRowsThreshold;
+    }
+
+    public void setBigQueryLogScanRowsThreshold(long bigQueryLogScanRowsThreshold) {
+        this.bigQueryLogScanRowsThreshold = bigQueryLogScanRowsThreshold;
+    }
+
+    public boolean isEnableCostBasedMaterializedViewRewrite() {
+        return enableCostBasedMaterializedViewRewrite;
+    }
+
+    public void setEnableCostBasedMaterializedViewRewrite(boolean enableCostBasedMaterializedViewRewrite) {
+        this.enableCostBasedMaterializedViewRewrite = enableCostBasedMaterializedViewRewrite;
     }
 
     // Serialize to thrift object

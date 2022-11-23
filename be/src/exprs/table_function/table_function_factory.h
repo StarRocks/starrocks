@@ -11,8 +11,8 @@ class TableFunctionFactory {
 public:
 };
 
-extern const TableFunction* get_table_function(const std::string& name, const std::vector<PrimitiveType>& arg_type,
-                                               const std::vector<PrimitiveType>& return_type,
+extern const TableFunction* get_table_function(const std::string& name, const std::vector<LogicalType>& arg_type,
+                                               const std::vector<LogicalType>& return_type,
                                                TFunctionBinaryType::type binary_type = TFunctionBinaryType::BUILTIN);
 
 } // namespace starrocks::vectorized

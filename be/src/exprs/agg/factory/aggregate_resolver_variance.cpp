@@ -9,7 +9,7 @@
 namespace starrocks::vectorized {
 
 struct StdDispatcher {
-    template <PrimitiveType pt>
+    template <LogicalType pt>
     void operator()(AggregateFuncResolver* resolver) {
         if constexpr (pt_is_numeric<pt>) {
             using VarState = DevFromAveAggregateState<RunTimeCppType<DevFromAveResultPT<pt>>>;

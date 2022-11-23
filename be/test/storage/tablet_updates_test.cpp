@@ -507,7 +507,7 @@ static TabletSharedPtr load_same_tablet_from_store(const TabletSharedPtr& tablet
 }
 
 static vectorized::ChunkIteratorPtr create_tablet_iterator(vectorized::TabletReader& reader,
-                                                           vectorized::Schema& schema) {
+                                                           vectorized::VectorizedSchema& schema) {
     vectorized::TabletReaderParams params;
     if (!reader.prepare().ok()) {
         LOG(ERROR) << "reader prepare failed";
@@ -570,7 +570,7 @@ static ssize_t read_until_eof(const vectorized::ChunkIteratorPtr& iter) {
 }
 
 static ssize_t read_tablet(const TabletSharedPtr& tablet, int64_t version) {
-    vectorized::Schema schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
+    vectorized::VectorizedSchema schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
     vectorized::TabletReader reader(tablet, Version(0, version), schema);
     auto iter = create_tablet_iterator(reader, schema);
     if (iter == nullptr) {
@@ -580,7 +580,7 @@ static ssize_t read_tablet(const TabletSharedPtr& tablet, int64_t version) {
 }
 
 static ssize_t read_tablet_and_compare(const TabletSharedPtr& tablet, int64_t version, const vector<int64_t>& keys) {
-    vectorized::Schema schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
+    vectorized::VectorizedSchema schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
     vectorized::TabletReader reader(tablet, Version(0, version), schema);
     auto iter = create_tablet_iterator(reader, schema);
     if (iter == nullptr) {
@@ -591,7 +591,7 @@ static ssize_t read_tablet_and_compare(const TabletSharedPtr& tablet, int64_t ve
 
 static ssize_t read_tablet_and_compare_schema_changed(const TabletSharedPtr& tablet, int64_t version,
                                                       const vector<int64_t>& keys) {
-    vectorized::Schema schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
+    vectorized::VectorizedSchema schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
     vectorized::TabletReader reader(tablet, Version(0, version), schema);
     auto iter = create_tablet_iterator(reader, schema);
     if (iter == nullptr) {
@@ -937,7 +937,7 @@ void TabletUpdatesTest::test_remove_expired_versions(bool enable_persistent_inde
     ASSERT_EQ(0, read_tablet(_tablet, 1));
 
     // Create iterators before remove expired version, but read them after removal.
-    vectorized::Schema schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
+    vectorized::VectorizedSchema schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
     vectorized::TabletReader reader1(_tablet, Version(0, 1), schema);
     vectorized::TabletReader reader2(_tablet, Version(0, 2), schema);
     vectorized::TabletReader reader3(_tablet, Version(0, 3), schema);
@@ -956,9 +956,10 @@ void TabletUpdatesTest::test_remove_expired_versions(bool enable_persistent_inde
     EXPECT_EQ(N, read_until_eof(iter_v4));
     EXPECT_EQ(0, read_until_eof(iter_v1)); // iter_v1 is empty iterator
 
+    // read already opened iterator/reader should succeed
+    EXPECT_EQ(N, read_until_eof(iter_v3));
+    EXPECT_EQ(N, read_until_eof(iter_v2));
     // Read expired versions should fail.
-    EXPECT_EQ(-1, read_until_eof(iter_v3));
-    EXPECT_EQ(-1, read_until_eof(iter_v2));
     EXPECT_EQ(-1, read_tablet(_tablet, 3));
     EXPECT_EQ(-1, read_tablet(_tablet, 2));
     EXPECT_EQ(-1, read_tablet(_tablet, 1));

@@ -11,7 +11,7 @@
 namespace starrocks::vectorized {
 
 struct AvgDispatcher {
-    template <PrimitiveType pt>
+    template <LogicalType pt>
     void operator()(AggregateFuncResolver* resolver) {
         if constexpr (pt_is_aggregate<pt>) {
             auto func = AggregateFactory::MakeAvgAggregateFunction<pt>();
@@ -22,7 +22,7 @@ struct AvgDispatcher {
 };
 
 struct ArrayAggDispatcher {
-    template <PrimitiveType pt>
+    template <LogicalType pt>
     void operator()(AggregateFuncResolver* resolver) {
         if constexpr (pt_is_aggregate<pt> || pt_is_string<pt> || pt_is_json<pt>) {
             auto func = std::make_shared<ArrayAggAggregateFunction<pt>>();

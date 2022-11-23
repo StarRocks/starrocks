@@ -11,7 +11,7 @@ class StructColumn final : public ColumnFactory<Column, StructColumn> {
     friend class ColumnFactory<Column, StructColumn>;
 
 public:
-    using Container = Buffer<string>;
+    using Container = Buffer<std::string>;
 
     StructColumn(Columns fields, BinaryColumn::Ptr field_names) {
         // Struct must have at least one field.

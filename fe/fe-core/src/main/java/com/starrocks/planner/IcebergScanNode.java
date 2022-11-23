@@ -19,13 +19,14 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
 import com.starrocks.connector.PredicateUtils;
-import com.starrocks.connector.iceberg.ExpressionConverter;
 import com.starrocks.connector.iceberg.IcebergUtil;
+import com.starrocks.connector.iceberg.ScalarOperatorToIcebergExpr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.system.ComputeNode;
@@ -45,9 +46,8 @@ import org.apache.iceberg.DataFile;
 import org.apache.iceberg.FileContent;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.Snapshot;
-import org.apache.iceberg.exceptions.ValidationException;
-import org.apache.iceberg.expressions.Binder;
 import org.apache.iceberg.expressions.Expression;
+import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -68,8 +68,8 @@ public class IcebergScanNode extends ScanNode {
 
     private List<TScanRangeLocations> result = new ArrayList<>();
 
-    // Exprs in icebergConjuncts converted to Iceberg Expression.
-    private List<Expression> icebergPredicates = null;
+    // Scalar operators converted to Iceberg Expression.
+    private Expression icebergPredicate = null;
 
     private Set<String> equalityDeleteColumns = new HashSet<>();
 
@@ -87,7 +87,6 @@ public class IcebergScanNode extends ScanNode {
     public void init(Analyzer analyzer) throws UserException {
         super.init(analyzer);
         getAliveBackends();
-        preProcessConjuncts();
     }
 
     private void getAliveBackends() throws UserException {
@@ -118,24 +117,10 @@ public class IcebergScanNode extends ScanNode {
      * predicates in the scan to keep consistency. More details about Iceberg scanning,
      * please refer: https://iceberg.apache.org/spec/#scan-planning
      */
-    private void preProcessConjuncts() {
-        List<Expression> expressions = new ArrayList<>(conjuncts.size());
-        ExpressionConverter convertor = new ExpressionConverter();
-        for (Expr expr : conjuncts) {
-            Expression filterExpr = convertor.convert(expr);
-            if (filterExpr != null) {
-                try {
-                    Binder.bind(srIcebergTable.getIcebergTable().schema().asStruct(), filterExpr, false);
-                    expressions.add(filterExpr);
-                } catch (ValidationException e) {
-                    LOG.debug("binding to the table schema failed, cannot be pushed down expression: {}",
-                            expr.toSql());
-                }
-            }
-        }
-        LOG.debug("Number of predicates pushed down / Total number of predicates: {}/{}",
-                expressions.size(), conjuncts.size());
-        icebergPredicates = expressions;
+    public void preProcessIcebergPredicate(List<ScalarOperator> operators) {
+        Types.StructType schema = srIcebergTable.getIcebergTable().schema().asStruct();
+        ScalarOperatorToIcebergExpr.IcebergContext icebergContext = new ScalarOperatorToIcebergExpr.IcebergContext(schema);
+        icebergPredicate = new ScalarOperatorToIcebergExpr().convert(operators, icebergContext);
     }
 
     /**
@@ -207,10 +192,9 @@ public class IcebergScanNode extends ScanNode {
             LOG.info(String.format("Table %s has no snapshot!", srIcebergTable.getTable()));
             return;
         }
-        preProcessConjuncts();
+
         for (CombinedScanTask combinedScanTask : IcebergUtil.getTableScan(
-                srIcebergTable.getIcebergTable(), snapshot.get(),
-                icebergPredicates).planTasks()) {
+                srIcebergTable.getIcebergTable(), snapshot.get(), icebergPredicate).planTasks()) {
             for (FileScanTask task : combinedScanTask.files()) {
                 DataFile file = task.file();
                 LOG.debug("Scan with file " + file.path() + ", file record count " + file.recordCount());

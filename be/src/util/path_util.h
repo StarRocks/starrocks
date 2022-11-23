@@ -21,8 +21,7 @@
 #include <string>
 #include <vector>
 
-namespace starrocks {
-namespace path_util {
+namespace starrocks::path_util {
 
 // NOTE: The methods here are only related to path processing, do not involve
 // any file and IO operations.
@@ -63,5 +62,4 @@ std::string base_name(const std::string& path);
 // NOTE: path can be either one file's full path or only file name
 std::string file_extension(const std::string& path);
 
-} // namespace path_util
-} // namespace starrocks
+} // namespace starrocks::path_util

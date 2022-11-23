@@ -4,7 +4,7 @@
 
 namespace starrocks::vectorized {
 
-Status SegmentReadOptions::convert_to(SegmentReadOptions* dst, const std::vector<FieldType>& new_types,
+Status SegmentReadOptions::convert_to(SegmentReadOptions* dst, const std::vector<LogicalType>& new_types,
                                       ObjectPool* obj_pool) const {
     // ranges
     int num_ranges = ranges.size();

@@ -27,7 +27,6 @@ import org.apache.iceberg.TableScan;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.exceptions.NoSuchTableException;
 import org.apache.iceberg.expressions.Expression;
-import org.apache.iceberg.expressions.Expressions;
 import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -66,6 +65,8 @@ public class IcebergUtil {
         switch (catalogType) {
             case HIVE_CATALOG:
                 return getIcebergHiveCatalog(table.getIcebergHiveMetastoreUris(), table.getIcebergProperties());
+            case REST_CATALOG:
+                return getIcebergRESTCatalog(table.getIcebergProperties());
             case CUSTOM_CATALOG:
                 return getIcebergCustomCatalog(table.getCatalogImpl(), table.getIcebergProperties());
             default:
@@ -91,8 +92,18 @@ public class IcebergUtil {
                 new Configuration(), icebergProperties, catalogImpl).loadCatalog();
     }
 
+    /**
+     * Returns the corresponding glue catalog implementation.
+     */
     public static IcebergCatalog getIcebergGlueCatalog(String catalogName, Map<String, String> icebergProperties) {
         return IcebergGlueCatalog.getInstance(catalogName, icebergProperties);
+    }
+
+    /**
+     * Returns the corresponding rest catalog implementation.
+     */
+    public static IcebergCatalog getIcebergRESTCatalog(Map<String, String> icebergProperties) {
+        return IcebergRESTCatalog.getInstance(icebergProperties);
     }
 
     /**
@@ -130,21 +141,20 @@ public class IcebergUtil {
      *
      * @param table
      * @param snapshot
-     * @param icebergPredicates
+     * @param icebergPredicate
      * @return
      */
     public static TableScan getTableScan(Table table,
                                          Snapshot snapshot,
-                                         List<Expression> icebergPredicates) {
+                                         Expression icebergPredicate) {
         // TODO: use planWith(executorService) after
         // https://github.com/apache/iceberg/commit/74db81f4dd81360bf3c0ad438d4be937c7a812d9 release
         TableScan tableScan = table.newScan().useSnapshot(snapshot.snapshotId()).includeColumnStats();
-        Expression filterExpressions = Expressions.alwaysTrue();
-        if (!icebergPredicates.isEmpty()) {
-            filterExpressions = icebergPredicates.stream().reduce(Expressions.alwaysTrue(), Expressions::and);
+        if (icebergPredicate != null) {
+            tableScan = tableScan.filter(icebergPredicate);
         }
 
-        return tableScan.filter(filterExpressions);
+        return tableScan;
     }
 
     public static void refreshTable(Table table) {
@@ -259,6 +269,17 @@ public class IcebergUtil {
         properties.put(IcebergTable.ICEBERG_DB, dbName);
         properties.put(IcebergTable.ICEBERG_TABLE, tblName);
         properties.put(IcebergTable.ICEBERG_CATALOG_TYPE, "GLUE_CATALOG");
+        return convertToSRTable(icebergTable, properties);
+    }
+
+    public static IcebergTable convertRESTCatalogToSRTable(org.apache.iceberg.Table icebergTable,
+                                                           String catalogName, String dbName,
+                                                           String tblName) throws DdlException {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(IcebergTable.ICEBERG_CATALOG, catalogName);
+        properties.put(IcebergTable.ICEBERG_DB, dbName);
+        properties.put(IcebergTable.ICEBERG_TABLE, tblName);
+        properties.put(IcebergTable.ICEBERG_CATALOG_TYPE, "REST_CATALOG");
         return convertToSRTable(icebergTable, properties);
     }
 

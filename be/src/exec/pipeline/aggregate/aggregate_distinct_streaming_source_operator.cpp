@@ -58,9 +58,7 @@ void AggregateDistinctStreamingSourceOperator::_output_chunk_from_hash_set(vecto
         COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_set_variant().size());
     }
 
-    _aggregator->hash_set_variant().visit([&](auto& hash_set_with_key) {
-        _aggregator->convert_hash_set_to_chunk(*hash_set_with_key, state->chunk_size(), chunk);
-    });
+    _aggregator->convert_hash_set_to_chunk(state->chunk_size(), chunk);
 }
 
 } // namespace starrocks::pipeline

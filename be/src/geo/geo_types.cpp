@@ -30,6 +30,7 @@
 #include <s2/util/coding/coder.h>
 #include <s2/util/units/length-units.h>
 
+#include <cmath>
 #include <cstdio>
 #include <iomanip>
 #include <memory>
@@ -46,7 +47,7 @@ void print_s2point(std::ostream& os, const S2Point& point) {
 }
 
 static inline bool is_valid_lng_lat(double lng, double lat) {
-    return abs(lng) <= 180 && abs(lat) <= 90;
+    return std::abs(lng) <= 180 && std::abs(lat) <= 90;
 }
 
 // Return GEO_PARSE_OK, if and only if this can be converted to a valid S2Point

@@ -103,7 +103,7 @@ private:
     std::vector<T> _elements;
 };
 
-template <FieldType field_type>
+template <LogicalType field_type>
 inline Converter<typename CppTypeTraits<field_type>::CppType> strings_to_set(const std::vector<std::string>& strings) {
     using CppType = typename CppTypeTraits<field_type>::CppType;
 
@@ -118,7 +118,7 @@ inline Converter<typename CppTypeTraits<field_type>::CppType> strings_to_set(con
     return result;
 }
 
-template <FieldType field_type>
+template <LogicalType field_type>
 inline Converter<typename CppTypeTraits<field_type>::CppType> strings_to_decimal_set(
         int scale, const std::vector<std::string>& strings) {
     using CppType = typename CppTypeTraits<field_type>::CppType;
@@ -132,7 +132,7 @@ inline Converter<typename CppTypeTraits<field_type>::CppType> strings_to_decimal
     return result;
 }
 
-template <FieldType field_type>
+template <LogicalType field_type>
 inline ItemHashSet<typename CppTypeTraits<field_type>::CppType> strings_to_hashset(
         const std::vector<std::string>& strings) {
     using CppType = typename CppTypeTraits<field_type>::CppType;

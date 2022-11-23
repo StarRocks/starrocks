@@ -97,6 +97,11 @@ FunctionContext::TypeDesc AnyValUtil::column_type_to_type_desc(const TypeDescrip
         // here we can return any value.
         out.type = TYPE_NULL;
         break;
+    case TYPE_MAP:
+        // reaching here means we are executing a vectorized built-in function and the return type is unused,
+        // so here we can return any value.
+        out.type = TYPE_NULL;
+        break;
     case TYPE_DECIMAL32:
         out.type = TYPE_DECIMAL32;
         out.precision = type.precision;
@@ -117,6 +122,10 @@ FunctionContext::TypeDesc AnyValUtil::column_type_to_type_desc(const TypeDescrip
         break;
     case TYPE_FUNCTION:
         out.type = TYPE_FUNCTION;
+    case TYPE_VARBINARY:
+        out.type = TYPE_VARBINARY;
+        out.len = type.len;
+        break;
     default:
         DCHECK(false) << "Unknown type: " << type;
     }

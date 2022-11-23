@@ -320,7 +320,7 @@ CONF_mInt32(compaction_trace_threshold, "60");
 // the columns will be divided into groups for vertical compaction.
 CONF_Int64(vertical_compaction_max_columns_per_group, "5");
 
-CONF_Bool(enable_event_based_compaction_framework, "false");
+CONF_Bool(enable_event_based_compaction_framework, "true");
 
 CONF_Bool(enable_check_string_lengths, "true");
 // 5GB
@@ -664,7 +664,8 @@ CONF_mInt32(sys_minidump_limit, "20480");
 // Interval(seconds) for cleaning old minidumps.
 CONF_mInt32(sys_minidump_interval, "600");
 #endif
-
+// dump trace info such as query-id and some runtime state
+CONF_Bool(dump_trace_info, "true");
 // The maximum number of version per tablet. If the
 // number of version exceeds this value, new write
 // requests will fail.
@@ -879,4 +880,7 @@ CONF_mInt64(l0_max_file_size, "209715200"); // 200MB
 
 // Used by query cache, cache entries are evicted when it exceeds its capacity(500MB in default)
 CONF_Int64(query_cache_capacity, "536870912");
+
+// Used to limit buffer size of tablet send channel.
+CONF_mInt64(send_channel_buffer_limit, "67108864");
 } // namespace starrocks::config

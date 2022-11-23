@@ -78,7 +78,8 @@ public class Table extends MetaObject implements Writable {
         JDBC,
         MATERIALIZED_VIEW,
         LAKE,
-        DELTALAKE
+        DELTALAKE,
+        FILE
     }
 
     @SerializedName(value = "id")
@@ -90,7 +91,7 @@ public class Table extends MetaObject implements Writable {
     @SerializedName(value = "createTime")
     protected long createTime;
     /*
-     *  fullSchema and nameToColumn should contains all columns, both visible and shadow.
+     *  fullSchema and nameToColumn should contain all columns, both visible and shadow.
      *  eg. for OlapTable, when doing schema change, there will be some shadow columns which are not visible
      *      to query but visible to load process.
      *  If you want to get all visible columns, you should call getBaseSchema() method, which is override in
@@ -268,6 +269,8 @@ public class Table extends MetaObject implements Writable {
             table = new EsTable();
         } else if (type == TableType.HIVE) {
             table = new HiveTable();
+        } else if (type == TableType.FILE) {
+            table = new FileTable();
         } else if (type == TableType.HUDI) {
             table = new HudiTable();
         } else if (type == TableType.OLAP_EXTERNAL) {
@@ -398,7 +401,7 @@ public class Table extends MetaObject implements Writable {
             return "VIEW";
         }
         if (this instanceof MaterializedView) {
-            return "MATERIALIZED VIEW";
+            return "VIEW";
         }
         return "BASE TABLE";
     }
@@ -520,4 +523,11 @@ public class Table extends MetaObject implements Writable {
         return relatedMaterializedViews;
     }
 
+    public boolean isUnPartitioned() {
+        return true;
+    }
+
+    public List<String> getPartitionColumnNames() {
+        return Lists.newArrayList();
+    }
 }

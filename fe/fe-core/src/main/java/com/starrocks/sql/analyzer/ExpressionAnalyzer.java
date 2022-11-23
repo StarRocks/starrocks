@@ -206,7 +206,11 @@ public class ExpressionAnalyzer {
         @Override
         public Void visitSubfieldExpr(SubfieldExpr node, Scope scope) {
             Expr child = node.getChild(0);
-            Preconditions.checkArgument(child.getType().isStructType());
+            // User enter an invalid sql, like SELECT 'col'.b FROM tbl;
+            // 'col' will be parsed as StringLiteral, it's invalid.
+            // TODO(SmithCruise) We should handle this problem in parser in the future.
+            Preconditions.checkArgument(child.getType().isStructType(),
+                    String.format("%s must be a struct type, check if you are using `'`", child.toSql()));
             StructType structType = (StructType) child.getType();
             StructField structField = structType.getField(node.getFieldName());
 

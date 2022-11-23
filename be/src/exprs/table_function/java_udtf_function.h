@@ -11,7 +11,7 @@ namespace starrocks::vectorized {
 class JavaUDTFFunction final : public TableFunction {
 public:
     JavaUDTFFunction() = default;
-    ~JavaUDTFFunction() = default;
+    ~JavaUDTFFunction() override = default;
 
     Status init(const TFunction& fn, TableFunctionState** state) const override;
     Status prepare(TableFunctionState* state) const override;

@@ -184,6 +184,14 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         ImmutableMap.Builder<String, Column> nameToColumnTemp = ImmutableMap.builder();
         ImmutableList.Builder<String> dataColumnNamesTemp = ImmutableList.builder();
 
+
+        updatedTable.nameToColumn.forEach((colName, column) -> {
+            Column baseColumn = nameToColumn.get(colName);
+            if (baseColumn != null) {
+                column.setComment(baseColumn.getComment());
+            }
+        });
+
         fullSchemaTemp.addAll(updatedTable.fullSchema);
         nameToColumnTemp.putAll(updatedTable.nameToColumn);
         dataColumnNamesTemp.addAll(updatedTable.dataColumnNames);
@@ -384,6 +392,10 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         if (Config.enable_hms_events_incremental_sync && isResourceMappingCatalog(getCatalogName())) {
             GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor().unRegisterTableFromResource(
                     String.join(".", getCatalogName(), hiveDbName, hiveTableName));
+        }
+
+        if (isResourceMappingCatalog(getCatalogName())) {
+            GlobalStateMgr.getCurrentState().getMetadataMgr().dropTable(getCatalogName(), db.getFullName(), name);
         }
     }
 

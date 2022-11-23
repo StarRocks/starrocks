@@ -7,7 +7,7 @@
 
 namespace starrocks::vectorized {
 TEST(NormalizeRangeTest, RangeTest) {
-    const constexpr PrimitiveType Type = TYPE_INT;
+    const constexpr LogicalType Type = TYPE_INT;
     using CppType = RunTimeCppType<Type>;
     {
         // where range in (1,2,3,4) and range not in (1, 2)
@@ -121,7 +121,7 @@ TEST(NormalizeRangeTest, BoolRangeTest) {
 }
 
 TEST(NormalizeRangeTest, ExtendScanKeyTest) {
-    const constexpr PrimitiveType Type = TYPE_BIGINT;
+    const constexpr LogicalType Type = TYPE_BIGINT;
     using CppType = RunTimeCppType<Type>;
     // Test OverFlow
     {

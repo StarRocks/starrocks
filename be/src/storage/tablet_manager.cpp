@@ -597,9 +597,9 @@ TabletSharedPtr TabletManager::find_best_tablet_to_compaction(CompactionType com
     }
 
     if (best_tablet != nullptr) {
-        LOG(INFO) << "Found the best tablet to compact. "
-                  << "compaction_type=" << compaction_type_str << " tablet_id=" << best_tablet->tablet_id()
-                  << " highest_score=" << highest_score;
+        VLOG(1) << "Found the best tablet to compact. "
+                << "compaction_type=" << compaction_type_str << " tablet_id=" << best_tablet->tablet_id()
+                << " highest_score=" << highest_score;
         // TODO(lingbin): Remove 'max' from metric name, it would be misunderstood as the
         // biggest in history(like peak), but it is really just the value at current moment.
         if (compaction_type == CompactionType::BASE_COMPACTION) {
@@ -724,7 +724,7 @@ Status TabletManager::load_tablet_from_meta(DataDir* data_dir, TTabletId tablet_
     LOG_IF(WARNING, !st.ok()) << "Fail to add tablet " << tablet->full_name();
     // no concurrent access here
     if (config::enable_event_based_compaction_framework) {
-        StorageEngine::instance()->compaction_manager()->update_tablet_async(tablet, true, false);
+        StorageEngine::instance()->compaction_manager()->update_tablet_async(tablet);
     }
 
     return st;

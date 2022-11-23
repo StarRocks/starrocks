@@ -46,7 +46,7 @@ public:
     };
 
     // src slot descriptors should exactly matches columns in row readers.
-    explicit OrcChunkReader(RuntimeState* state, const std::vector<SlotDescriptor*>& src_slot_descriptors);
+    explicit OrcChunkReader(RuntimeState* state, std::vector<SlotDescriptor*> src_slot_descriptors);
     ~OrcChunkReader();
     Status init(std::unique_ptr<orc::InputStream> input_stream);
     Status init(std::unique_ptr<orc::Reader> reader);
@@ -56,13 +56,14 @@ public:
     // copy from cvb to chunk
     Status fill_chunk(ChunkPtr* chunk);
     // some type cast & conversion.
-    ChunkPtr cast_chunk(ChunkPtr* chunk);
+    StatusOr<ChunkPtr> cast_chunk_checked(ChunkPtr* chunk);
+    ChunkPtr cast_chunk(ChunkPtr* chunk) { return cast_chunk_checked(chunk).value(); }
     // call them before calling init.
     void set_read_chunk_size(uint64_t v) { _read_chunk_size = v; }
     void set_row_reader_filter(std::shared_ptr<orc::RowReaderFilter> filter);
-    void set_conjuncts(const std::vector<Expr*>& conjuncts);
-    void set_conjuncts_and_runtime_filters(const std::vector<Expr*>& conjuncts,
-                                           const RuntimeFilterProbeCollector* rf_collector);
+    Status set_conjuncts(const std::vector<Expr*>& conjuncts);
+    Status set_conjuncts_and_runtime_filters(const std::vector<Expr*>& conjuncts,
+                                             const RuntimeFilterProbeCollector* rf_collector);
     Status set_timezone(const std::string& tz);
     size_t num_columns() const { return _src_slot_descriptors.size(); }
 
@@ -124,10 +125,11 @@ public:
 private:
     ChunkPtr _create_chunk(const std::vector<SlotDescriptor*>& slots, const std::vector<int>* indices);
     Status _fill_chunk(ChunkPtr* chunk, const std::vector<SlotDescriptor*>& slots, const std::vector<int>* indices);
-    ChunkPtr _cast_chunk(ChunkPtr* chunk, const std::vector<SlotDescriptor*>& slots, const std::vector<int>* indices);
+    StatusOr<ChunkPtr> _cast_chunk(ChunkPtr* chunk, const std::vector<SlotDescriptor*>& slots,
+                                   const std::vector<int>* indices);
 
     bool _ok_to_add_conjunct(const Expr* conjunct);
-    void _add_conjunct(const Expr* conjunct, std::unique_ptr<orc::SearchArgumentBuilder>& builder);
+    Status _add_conjunct(const Expr* conjunct, std::unique_ptr<orc::SearchArgumentBuilder>& builder);
     bool _add_runtime_filter(const SlotDescriptor* slot_desc, const JoinRuntimeFilter* rf,
                              std::unique_ptr<orc::SearchArgumentBuilder>& builder);
 
@@ -136,7 +138,7 @@ private:
     std::unique_ptr<orc::RowReader> _row_reader;
     orc::ReaderOptions _reader_options;
     orc::RowReaderOptions _row_reader_options;
-    const std::vector<SlotDescriptor*>& _src_slot_descriptors;
+    std::vector<SlotDescriptor*> _src_slot_descriptors;
     std::unordered_map<SlotId, SlotDescriptor*> _slot_id_to_desc;
     std::unique_ptr<OrcMapping> _root_selected_mapping;
     std::vector<TypeDescriptor> _src_types;

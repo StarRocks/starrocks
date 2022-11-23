@@ -11,7 +11,7 @@
 
 namespace starrocks::vectorized {
 
-template <PrimitiveType PT, typename T = RunTimeCppType<PT>>
+template <LogicalType PT, typename T = RunTimeCppType<PT>>
 class BitmapUnionIntAggregateFunction final
         : public AggregateFunctionBatchHelper<BitmapValue, BitmapUnionIntAggregateFunction<PT, T>> {
 public:
@@ -26,12 +26,12 @@ public:
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         DCHECK(column->is_object());
-        const BitmapColumn* col = down_cast<const BitmapColumn*>(column);
+        const auto* col = down_cast<const BitmapColumn*>(column);
         this->data(state) |= *(col->get_object(row_num));
     }
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
-        BitmapColumn* col = down_cast<BitmapColumn*>(to);
+        auto* col = down_cast<BitmapColumn*>(to);
         auto& value = const_cast<BitmapValue&>(this->data(state));
         col->append(std::move(value));
     }
@@ -39,7 +39,7 @@ public:
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
                                      ColumnPtr* dst) const override {
         if constexpr (std::is_integral_v<T>) {
-            BitmapColumn* dst_column = down_cast<BitmapColumn*>((*dst).get());
+            auto* dst_column = down_cast<BitmapColumn*>((*dst).get());
             const auto* src_column = static_cast<const InputColumnType*>(src[0].get());
             for (size_t i = 0; i < chunk_size; ++i) {
                 BitmapValue bitmap(src_column->get_data()[i]);

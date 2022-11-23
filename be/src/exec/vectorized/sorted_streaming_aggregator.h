@@ -13,7 +13,7 @@ struct StateAllocator;
 class SortedStreamingAggregator final : public Aggregator {
 public:
     SortedStreamingAggregator(const TPlanNode& tnode);
-    ~SortedStreamingAggregator();
+    ~SortedStreamingAggregator() override;
 
     Status prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile,
                    MemTracker* mem_tracker) override;

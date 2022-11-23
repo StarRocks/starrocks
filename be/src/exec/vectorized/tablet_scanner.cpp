@@ -39,12 +39,12 @@ Status TabletScanner::init(RuntimeState* runtime_state, const TabletScannerParam
     RETURN_IF_ERROR(_init_global_dicts());
     RETURN_IF_ERROR(_init_reader_params(params.key_ranges));
     const TabletSchema& tablet_schema = _tablet->tablet_schema();
-    Schema child_schema = ChunkHelper::convert_schema_to_format_v2(tablet_schema, _reader_columns);
+    VectorizedSchema child_schema = ChunkHelper::convert_schema_to_format_v2(tablet_schema, _reader_columns);
     _reader = std::make_shared<TabletReader>(_tablet, Version(0, _version), std::move(child_schema));
     if (_reader_columns.size() == _scanner_columns.size()) {
         _prj_iter = _reader;
     } else {
-        Schema output_schema = ChunkHelper::convert_schema_to_format_v2(tablet_schema, _scanner_columns);
+        VectorizedSchema output_schema = ChunkHelper::convert_schema_to_format_v2(tablet_schema, _scanner_columns);
         _prj_iter = new_projection_iterator(output_schema, _reader);
     }
 
@@ -323,6 +323,8 @@ void TabletScanner::update_counter() {
     _raw_rows_read += _reader->mutable_stats()->raw_rows_read;
     COUNTER_UPDATE(_parent->_chunk_copy_timer, _reader->stats().vec_cond_chunk_copy_ns);
 
+    COUNTER_UPDATE(_parent->_get_rowsets_timer, _reader->stats().get_rowsets_ns);
+    COUNTER_UPDATE(_parent->_get_delvec_timer, _reader->stats().get_delvec_ns);
     COUNTER_UPDATE(_parent->_seg_init_timer, _reader->stats().segment_init_ns);
 
     int64_t cond_evaluate_ns = 0;

@@ -69,7 +69,8 @@ Status ReplicateChannel::_init() {
 }
 
 Status ReplicateChannel::sync_segment(SegmentPB* segment, butil::IOBuf& data, bool eos,
-                                      std::vector<std::unique_ptr<PTabletInfo>>* replicate_tablet_infos) {
+                                      std::vector<std::unique_ptr<PTabletInfo>>* replicate_tablet_infos,
+                                      std::vector<std::unique_ptr<PTabletInfo>>* failed_tablet_infos) {
     RETURN_IF_ERROR(_st);
 
     // 1. init sync channel
@@ -80,7 +81,7 @@ Status ReplicateChannel::sync_segment(SegmentPB* segment, butil::IOBuf& data, bo
     _send_request(segment, data, eos);
 
     // 3. wait result
-    RETURN_IF_ERROR(_wait_response(replicate_tablet_infos));
+    RETURN_IF_ERROR(_wait_response(replicate_tablet_infos, failed_tablet_infos));
 
     VLOG(1) << "Sync tablet " << _opt->tablet_id << " segment id " << (segment == nullptr ? -1 : segment->segment_id())
             << " eos " << eos << " to [" << _host << ":" << _port << "] res " << _closure->result.DebugString();
@@ -89,7 +90,8 @@ Status ReplicateChannel::sync_segment(SegmentPB* segment, butil::IOBuf& data, bo
 }
 
 Status ReplicateChannel::async_segment(SegmentPB* segment, butil::IOBuf& data, bool eos,
-                                       std::vector<std::unique_ptr<PTabletInfo>>* replicate_tablet_infos) {
+                                       std::vector<std::unique_ptr<PTabletInfo>>* replicate_tablet_infos,
+                                       std::vector<std::unique_ptr<PTabletInfo>>* failed_tablet_infos) {
     RETURN_IF_ERROR(_st);
 
     // 1. init sync channel
@@ -97,14 +99,14 @@ Status ReplicateChannel::async_segment(SegmentPB* segment, butil::IOBuf& data, b
     RETURN_IF_ERROR(_st);
 
     // 2. wait pre request's result
-    RETURN_IF_ERROR(_wait_response(replicate_tablet_infos));
+    RETURN_IF_ERROR(_wait_response(replicate_tablet_infos, failed_tablet_infos));
 
     // 3. send segment sync request
     _send_request(segment, data, eos);
 
     // 4. wait if eos=true
     if (eos) {
-        RETURN_IF_ERROR(_wait_response(replicate_tablet_infos));
+        RETURN_IF_ERROR(_wait_response(replicate_tablet_infos, failed_tablet_infos));
     }
 
     VLOG(1) << "Async tablet " << _opt->tablet_id << " segment id " << (segment == nullptr ? -1 : segment->segment_id())
@@ -138,7 +140,8 @@ void ReplicateChannel::_send_request(SegmentPB* segment, butil::IOBuf& data, boo
     }
 }
 
-Status ReplicateChannel::_wait_response(std::vector<std::unique_ptr<PTabletInfo>>* replicate_tablet_infos) {
+Status ReplicateChannel::_wait_response(std::vector<std::unique_ptr<PTabletInfo>>* replicate_tablet_infos,
+                                        std::vector<std::unique_ptr<PTabletInfo>>* failed_tablet_infos) {
     if (_closure->join()) {
         if (_closure->cntl.Failed()) {
             _st = Status::InternalError(_closure->cntl.ErrorText());
@@ -154,6 +157,11 @@ Status ReplicateChannel::_wait_response(std::vector<std::unique_ptr<PTabletInfo>
         for (size_t i = 0; i < _closure->result.tablet_vec_size(); ++i) {
             replicate_tablet_infos->emplace_back(std::make_unique<PTabletInfo>());
             replicate_tablet_infos->back()->Swap(_closure->result.mutable_tablet_vec(i));
+        }
+
+        for (size_t i = 0; i < _closure->result.failed_tablet_vec_size(); ++i) {
+            failed_tablet_infos->emplace_back(std::make_unique<PTabletInfo>());
+            failed_tablet_infos->back()->Swap(_closure->result.mutable_failed_tablet_vec(i));
         }
     }
 
@@ -276,7 +284,7 @@ void ReplicateToken::_sync_segment(std::unique_ptr<SegmentPB> segment, bool eos)
     for (auto& channel : _replicate_channels) {
         auto st = Status::OK();
         if (_failed_node_id.count(channel->node_id()) == 0) {
-            st = channel->async_segment(segment.get(), data, eos, &_replicated_tablet_infos);
+            st = channel->async_segment(segment.get(), data, eos, &_replicated_tablet_infos, &_failed_tablet_infos);
             if (!st.ok()) {
                 LOG(WARNING) << "Failed to sync segment " << channel->debug_string() << " err " << st;
                 channel->cancel();

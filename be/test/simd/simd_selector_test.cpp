@@ -12,7 +12,7 @@
 
 namespace starrocks::vectorized {
 
-template <PrimitiveType TYPE, template <typename T> class Gen1, template <typename T> class Gen2,
+template <LogicalType TYPE, template <typename T> class Gen1, template <typename T> class Gen2,
           template <typename T> class Gen3, int TEST_SIZE>
 void test_simd_select_if() {
     static_assert(isArithmeticPT<TYPE>, "Now Select IF only support Arithmetic TYPE");
@@ -115,7 +115,7 @@ using SelectorRandomGen = RandomGenerator<T, 2>;
 template <class T>
 using ValueRandomGen = RandomGenerator<T, 65535>;
 
-template <PrimitiveType TYPE, int TEST_SIZE>
+template <LogicalType TYPE, int TEST_SIZE>
 bool test_simd_select_if_wrapper() {
     test_simd_select_if<TYPE, AlwaysZeroGenerator, AlwaysOneGenerator, AlwaysZeroGenerator, TEST_SIZE>();
     test_simd_select_if<TYPE, AlwaysOneGenerator, AlwaysOneGenerator, AlwaysZeroGenerator, TEST_SIZE>();
@@ -123,7 +123,7 @@ bool test_simd_select_if_wrapper() {
     return true;
 }
 
-template <PrimitiveType... TYPE>
+template <LogicalType... TYPE>
 bool test_simd_select_if_all() {
     constexpr int chunk_size = 4095;
     return (... && test_simd_select_if_wrapper<TYPE, chunk_size>());

@@ -5,7 +5,7 @@
 #include <memory>
 
 #include "column/chunk.h"
-#include "column/schema.h"
+#include "column/vectorized_schema.h"
 #include "runtime/global_dict/types.h"
 #include "storage/row_source_mask.h"
 #include "util/runtime_profile.h"
@@ -21,9 +21,10 @@ class Chunk;
 class ChunkIterator {
 public:
     // |schema| is the output fields.
-    explicit ChunkIterator(vectorized::Schema schema) : _schema(std::move(schema)) {}
+    explicit ChunkIterator(vectorized::VectorizedSchema schema) : _schema(std::move(schema)) {}
 
-    ChunkIterator(vectorized::Schema schema, int chunk_size) : _schema(std::move(schema)), _chunk_size(chunk_size) {}
+    ChunkIterator(vectorized::VectorizedSchema schema, int chunk_size)
+            : _schema(std::move(schema)), _chunk_size(chunk_size) {}
 
     virtual ~ChunkIterator() = default;
 
@@ -43,7 +44,7 @@ public:
     }
 
     // like get_next(Chunk* chunk), but also returns each row's rowid(ordinal id)
-    Status get_next(Chunk* chunk, vector<uint32_t>* rowid) {
+    Status get_next(Chunk* chunk, std::vector<uint32_t>* rowid) {
         Status st = do_get_next(chunk, rowid);
         DCHECK_CHUNK(chunk);
         return st;
@@ -63,18 +64,20 @@ public:
 
     virtual std::size_t merged_rows() const { return 0; }
 
-    const Schema& schema() const { return _schema; }
+    const VectorizedSchema& schema() const { return _schema; }
 
-    // Returns the Schema of the result.
+    // Returns the VectorizedSchema of the result.
     // If a Field uses the global dictionary strategy, the field will be rewritten as INT
-    const Schema& encoded_schema() const { return _encoded_schema.num_fields() == 0 ? _schema : _encoded_schema; }
+    const VectorizedSchema& encoded_schema() const {
+        return _encoded_schema.num_fields() == 0 ? _schema : _encoded_schema;
+    }
 
     virtual Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) {
         _encoded_schema.reserve(schema().num_fields());
         for (const auto& field : schema().fields()) {
             const auto cid = field->id();
             if (dict_maps.count(cid)) {
-                _encoded_schema.append(Field::convert_to_dict_field(*field));
+                _encoded_schema.append(VectorizedField::convert_to_dict_field(*field));
             } else {
                 _encoded_schema.append(field);
             }
@@ -97,7 +100,7 @@ public:
         return Status::OK();
     }
 
-    const Schema& output_schema() const {
+    const VectorizedSchema& output_schema() const {
         if (_is_init_output_schema) {
             return _output_schema;
         } else {
@@ -109,7 +112,7 @@ public:
 
 protected:
     virtual Status do_get_next(Chunk* chunk) = 0;
-    virtual Status do_get_next(Chunk* chunk, vector<uint32_t>* rowid) {
+    virtual Status do_get_next(Chunk* chunk, std::vector<uint32_t>* rowid) {
         return Status::NotSupported("Chunk* chunk, vector<uint32_t>* rowid) not supported");
     }
     virtual Status do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks) {
@@ -120,9 +123,9 @@ protected:
         }
     }
 
-    vectorized::Schema _schema;
-    vectorized::Schema _encoded_schema;
-    vectorized::Schema _output_schema;
+    vectorized::VectorizedSchema _schema;
+    vectorized::VectorizedSchema _encoded_schema;
+    vectorized::VectorizedSchema _output_schema;
     bool _is_init_output_schema = false;
 
     int _chunk_size = DEFAULT_CHUNK_SIZE;

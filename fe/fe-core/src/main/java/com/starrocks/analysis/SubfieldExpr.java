@@ -3,6 +3,7 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
@@ -17,17 +18,18 @@ public class SubfieldExpr extends Expr {
 
     // Only used in parser, in parser, we can't determine column's type
     public SubfieldExpr(Expr child, String fieldName) {
-        children.add(child);
-        this.fieldName = fieldName;
+        this(child, null, fieldName);
     }
 
     // In this constructor, we can determine column's type
     // child must be an StructType
     public SubfieldExpr(Expr child, Type type, String fieldName) {
-        Preconditions.checkArgument(child.getType().isStructType());
+        if (type != null) {
+            Preconditions.checkArgument(child.getType().isStructType());
+        }
         children.add(child);
         this.type = type;
-        this.fieldName = fieldName;
+        this.fieldName = fieldName.toLowerCase();
     }
 
     public SubfieldExpr(SubfieldExpr other) {
@@ -37,6 +39,10 @@ public class SubfieldExpr extends Expr {
 
     public String getFieldName() {
         return fieldName;
+    }
+
+    public int getFieldPos(String fieldName) {
+        return ((StructType) (children.get(0).getType())).getFieldPos(fieldName);
     }
 
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {

@@ -854,8 +854,8 @@ public:
     }
 };
 
-static std::unique_ptr<HashIndex> create_hash_index(FieldType key_type, size_t fix_size) {
-    if (key_type == OLAP_FIELD_TYPE_VARCHAR && fix_size > 0) {
+static std::unique_ptr<HashIndex> create_hash_index(LogicalType key_type, size_t fix_size) {
+    if (key_type == TYPE_VARCHAR && fix_size > 0) {
         if (fix_size <= 8) {
             return std::make_unique<FixSliceHashIndex<2>>();
         } else if (fix_size <= 12) {
@@ -882,19 +882,19 @@ static std::unique_ptr<HashIndex> create_hash_index(FieldType key_type, size_t f
         return std::make_unique<HashIndexImpl<typename CppTypeTraits<type>::CppType>>()
 
     switch (key_type) {
-        CASE_TYPE(OLAP_FIELD_TYPE_BOOL);
-        CASE_TYPE(OLAP_FIELD_TYPE_TINYINT);
-        CASE_TYPE(OLAP_FIELD_TYPE_SMALLINT);
-        CASE_TYPE(OLAP_FIELD_TYPE_INT);
-        CASE_TYPE(OLAP_FIELD_TYPE_BIGINT);
-        CASE_TYPE(OLAP_FIELD_TYPE_LARGEINT);
-    case OLAP_FIELD_TYPE_CHAR:
+        CASE_TYPE(TYPE_BOOLEAN);
+        CASE_TYPE(TYPE_TINYINT);
+        CASE_TYPE(TYPE_SMALLINT);
+        CASE_TYPE(TYPE_INT);
+        CASE_TYPE(TYPE_BIGINT);
+        CASE_TYPE(TYPE_LARGEINT);
+    case TYPE_CHAR:
         return std::make_unique<ShardByLengthSliceHashIndex>();
-    case OLAP_FIELD_TYPE_VARCHAR:
+    case TYPE_VARCHAR:
         return std::make_unique<ShardByLengthSliceHashIndex>();
-    case OLAP_FIELD_TYPE_DATE_V2:
+    case TYPE_DATE:
         return std::make_unique<HashIndexImpl<int32_t>>();
-    case OLAP_FIELD_TYPE_TIMESTAMP:
+    case TYPE_DATETIME:
         return std::make_unique<HashIndexImpl<int64_t>>();
     default:
         return nullptr;
@@ -916,11 +916,11 @@ PrimaryIndex::~PrimaryIndex() {
     }
 }
 
-PrimaryIndex::PrimaryIndex(const vectorized::Schema& pk_schema) {
+PrimaryIndex::PrimaryIndex(const vectorized::VectorizedSchema& pk_schema) {
     _set_schema(pk_schema);
 }
 
-void PrimaryIndex::_set_schema(const vectorized::Schema& pk_schema) {
+void PrimaryIndex::_set_schema(const vectorized::VectorizedSchema& pk_schema) {
     _pk_schema = pk_schema;
     std::vector<ColumnId> sort_key_idxes(pk_schema.num_fields());
     for (ColumnId i = 0; i < pk_schema.num_fields(); ++i) {
@@ -1353,7 +1353,7 @@ std::string PrimaryIndex::to_string() const {
     return Substitute("PrimaryIndex tablet:$0", _tablet_id);
 }
 
-std::unique_ptr<PrimaryIndex> TEST_create_primary_index(const vectorized::Schema& pk_schema) {
+std::unique_ptr<PrimaryIndex> TEST_create_primary_index(const vectorized::VectorizedSchema& pk_schema) {
     return std::make_unique<PrimaryIndex>(pk_schema);
 }
 

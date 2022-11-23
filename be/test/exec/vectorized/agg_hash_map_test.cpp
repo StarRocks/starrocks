@@ -104,7 +104,7 @@ TEST(HashMapTest, Insert) {
         // chunk size
         // key columns
         const int num_rows = 32;
-        std::vector<std::pair<PrimitiveType, bool>> types = {{TYPE_INT, true}, {TYPE_INT, false}};
+        std::vector<std::pair<LogicalType, bool>> types = {{TYPE_INT, true}, {TYPE_INT, false}};
         Columns key_columns;
         Buffer<AggDataPtr> agg_states(chunk_size);
         for (auto type : types) {

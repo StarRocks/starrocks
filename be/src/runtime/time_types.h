@@ -7,8 +7,7 @@
 
 #pragma once
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 // Date: Julian Date -2000-01-01 ~ 9999-01-01
 // MAX USE 22 bits
@@ -418,5 +417,4 @@ inline void date::to_date_with_cache(JulianDate julian, int* year, int* month, i
 
     return to_date(julian, year, month, day);
 }
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

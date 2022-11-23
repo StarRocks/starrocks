@@ -87,6 +87,7 @@ import com.starrocks.load.loadv2.SparkLoadJob.SparkLoadJobStateUpdateInfo;
 import com.starrocks.persist.ListPartitionPersistInfo;
 import com.starrocks.persist.PartitionPersistInfoV2;
 import com.starrocks.persist.RangePartitionPersistInfo;
+import com.starrocks.privilege.CatalogPEntryObject;
 import com.starrocks.privilege.DbPEntryObject;
 import com.starrocks.privilege.PEntryObject;
 import com.starrocks.privilege.ResourcePEntryObject;
@@ -220,7 +221,9 @@ public class GsonUtils {
                     .registerSubtype(TablePEntryObject.class, TablePEntryObject.class.getSimpleName())
                     .registerSubtype(UserPEntryObject.class, UserPEntryObject.class.getSimpleName())
                     .registerSubtype(ResourcePEntryObject.class, ResourcePEntryObject.class.getSimpleName())
-                    .registerSubtype(ViewPEntryObject.class, ViewPEntryObject.class.getSimpleName());
+                    .registerSubtype(ViewPEntryObject.class, ViewPEntryObject.class.getSimpleName())
+                    .registerSubtype(CatalogPEntryObject.class,
+                            CatalogPEntryObject.class.getSimpleName());
 
     private static final JsonSerializer<LocalDateTime> LOCAL_DATE_TIME_TYPE_SERIALIZER =
             (dateTime, type, jsonSerializationContext) -> new JsonPrimitive(dateTime.toEpochSecond(ZoneOffset.UTC));

@@ -4,6 +4,7 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.UserIdentity;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.privilege.PrivilegeManager;
@@ -11,15 +12,26 @@ import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.sql.ast.AddSqlBlackListStmt;
+import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
+import com.starrocks.sql.ast.AdminCheckTabletsStmt;
+import com.starrocks.sql.ast.AdminRepairTableStmt;
+import com.starrocks.sql.ast.AdminSetConfigStmt;
+import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
+import com.starrocks.sql.ast.AdminShowConfigStmt;
+import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
+import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
 import com.starrocks.sql.ast.AlterResourceStmt;
+import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.CTERelation;
+import com.starrocks.sql.ast.CancelAlterSystemStmt;
+import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateFileStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateRoleStmt;
@@ -27,6 +39,7 @@ import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DelSqlBlackListStmt;
 import com.starrocks.sql.ast.DeleteStmt;
+import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.sql.ast.DropFileStmt;
 import com.starrocks.sql.ast.DropResourceStmt;
@@ -37,25 +50,42 @@ import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.InstallPluginStmt;
 import com.starrocks.sql.ast.JoinRelation;
+import com.starrocks.sql.ast.KillStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RecoverDbStmt;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
+import com.starrocks.sql.ast.SetPassVar;
+import com.starrocks.sql.ast.SetStmt;
+import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SetUserPropertyStmt;
+import com.starrocks.sql.ast.SetVar;
 import com.starrocks.sql.ast.ShowAuthenticationStmt;
+import com.starrocks.sql.ast.ShowBackendsStmt;
+import com.starrocks.sql.ast.ShowBrokerStmt;
+import com.starrocks.sql.ast.ShowCatalogsStmt;
+import com.starrocks.sql.ast.ShowComputeNodesStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
+import com.starrocks.sql.ast.ShowFrontendsStmt;
 import com.starrocks.sql.ast.ShowGrantsStmt;
 import com.starrocks.sql.ast.ShowPluginsStmt;
+import com.starrocks.sql.ast.ShowProcStmt;
 import com.starrocks.sql.ast.ShowRolesStmt;
 import com.starrocks.sql.ast.ShowSmallFilesStmt;
 import com.starrocks.sql.ast.ShowSqlBlackListStmt;
+import com.starrocks.sql.ast.ShowTabletStmt;
+import com.starrocks.sql.ast.ShowTransactionStmt;
 import com.starrocks.sql.ast.ShowUserPropertyStmt;
+import com.starrocks.sql.ast.ShowVariablesStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UninstallPluginStmt;
+import com.starrocks.sql.ast.UseCatalogStmt;
 import com.starrocks.sql.ast.UseDbStmt;
 import com.starrocks.sql.ast.ViewRelation;
+
+import java.util.List;
 
 public class PrivilegeCheckerV2 {
     private static final String EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG = "external catalog is not supported for now!";
@@ -87,7 +117,21 @@ public class PrivilegeCheckerV2 {
         }
         if (!PrivilegeManager.checkDbAction(context, dbName, action)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED,
-                    context.getQualifiedUser(), dbName, action.name());
+                    context.getQualifiedUser(), dbName);
+        }
+    }
+
+    static void checkCatalogAction(ConnectContext context, String catalogName, PrivilegeType.CatalogAction action) {
+        if (!PrivilegeManager.checkCatalogAction(context, catalogName, action)) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_CATALOG_ACCESS_DENIED,
+                    context.getQualifiedUser(), catalogName);
+        }
+    }
+
+    static void checkAnyActionOnCatalog(ConnectContext context, String catalogName) {
+        if (!PrivilegeManager.checkAnyActionOnCatalog(context, catalogName)) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_CATALOG_ACCESS_DENIED,
+                    context.getQualifiedUser(), catalogName);
         }
     }
 
@@ -115,12 +159,24 @@ public class PrivilegeCheckerV2 {
 
     static void checkViewAction(ConnectContext context, TableName tableName, PrivilegeType.ViewAction action) {
         if (!CatalogMgr.isInternalCatalog(tableName.getCatalog())) {
-            throw new SemanticException("external catalog is not supported for now!");
+            throw new SemanticException(EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG);
         }
         String actionStr = action.toString();
         if (!PrivilegeManager.checkViewAction(context, tableName.getDb(), tableName.getTbl(), action)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR,
                     actionStr, context.getQualifiedUser(), context.getRemoteIP(), tableName);
+        }
+    }
+
+    static void checkStmtOperatePrivilege(ConnectContext context) {
+        if (!PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.OPERATE)) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "OPERATE");
+        }
+    }
+
+    static void checkStmtNodePrivilege(ConnectContext context) {
+        if (!PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.OPERATE)) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "NODE");
         }
     }
 
@@ -231,7 +287,8 @@ public class PrivilegeCheckerV2 {
         @Override
         public Void visitRecoverDbStatement(RecoverDbStmt statement, ConnectContext context) {
             checkDbAction(context, statement.getCatalogName(), statement.getDbName(), PrivilegeType.DbAction.DROP);
-            // TODO(yiming): check the `CREATE_DATABASE` action on internal catalog after catalog object is added
+            // Also need to check the `CREATE_DATABASE` action on corresponding catalog
+            checkCatalogAction(context, statement.getCatalogName(), PrivilegeType.CatalogAction.CREATE_DATABASE);
             return null;
         }
 
@@ -253,11 +310,11 @@ public class PrivilegeCheckerV2 {
             return null;
         }
 
-        // --------------------------------- External Resource Statement ---------------------------------
+        // --------------------------------- External Resource Statement ----------------------------------
 
         @Override
         public Void visitCreateResourceStatement(CreateResourceStmt statement, ConnectContext context) {
-            if (! PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.CREATE_RESOURCE)) {
+            if (!PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.CREATE_RESOURCE)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "CREATE_RESOURCE");
             }
             return null;
@@ -281,12 +338,81 @@ public class PrivilegeCheckerV2 {
             return null;
         }
 
-        // --------------------------------------- Plugin Statement --------------------------------------------------------
+        // --------------------------------- Catalog Statement --------------------------------------------
+
+        @Override
+        public Void visitUseCatalogStatement(UseCatalogStmt statement, ConnectContext context) {
+            // No authorization check for using default_catalog
+            if (CatalogMgr.isInternalCatalog(statement.getCatalogName())) {
+                return null;
+            }
+            if (!PrivilegeManager.checkAnyActionOnCatalog(context, statement.getCatalogName())) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_CATALOG_ACCESS_DENIED,
+                        context.getQualifiedUser(), statement.getCatalogName());
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitCreateCatalogStatement(CreateCatalogStmt statement, ConnectContext context) {
+            if (!PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.CREATE_EXTERNAL_CATALOG)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_CATALOG_ACCESS_DENIED,
+                        context.getQualifiedUser(), statement.getCatalogName());
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitDropCatalogStatement(DropCatalogStmt statement, ConnectContext context) {
+            if (!PrivilegeManager.checkCatalogAction(context, statement.getName(), PrivilegeType.CatalogAction.DROP)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_CATALOG_ACCESS_DENIED,
+                        context.getQualifiedUser(), statement.getName());
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowCatalogsStatement(ShowCatalogsStmt statement, ConnectContext context) {
+            // `show catalogs` only show catalog that user has any privilege on, we will check it in
+            // the execution logic, not here, see `handleShowCatalogs()` for details.
+            return null;
+        }
+
+        // --------------------------------------- Plugin Statement ---------------------------------------
 
         @Override
         public Void visitInstallPluginStatement(InstallPluginStmt statement, ConnectContext context) {
             if (! PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.PLUGIN)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "PLUGIN");
+            }
+            return null;
+        }
+
+        // ---------------------------------------- Show Node Info Statement-------------------------------
+        @Override
+        public Void visitShowBackendsStatement(ShowBackendsStmt statement, ConnectContext context) {
+            return checkShowNodePrivilege(context);
+        }
+
+        @Override
+        public Void visitShowFrontendsStatement(ShowFrontendsStmt statement, ConnectContext context) {
+            return checkShowNodePrivilege(context);
+        }
+
+        @Override
+        public Void visitShowBrokerStatement(ShowBrokerStmt statement, ConnectContext context) {
+            return checkShowNodePrivilege(context);
+        }
+
+        @Override
+        public Void visitShowComputeNodes(ShowComputeNodesStmt statement, ConnectContext context) {
+            return checkShowNodePrivilege(context);
+        }
+
+        private Void checkShowNodePrivilege(ConnectContext context) {
+            if (!PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.OPERATE)
+                    && !PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.NODE)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "OPERATE/NODE");
             }
             return null;
         }
@@ -307,7 +433,7 @@ public class PrivilegeCheckerV2 {
             return null;
         }
 
-        // --------------------------------------- File Statement ----------------------------------------------------------
+        // --------------------------------------- File Statement ----------------------------------------
 
         @Override
         public Void visitCreateFileStatement(CreateFileStmt statement, ConnectContext context) {
@@ -333,7 +459,7 @@ public class PrivilegeCheckerV2 {
             return null;
         }
 
-        // --------------------------------------- Sql BlackList And WhiteList Statement -----------------------------------
+        // --------------------------------------- Sql BlackList And WhiteList Statement ------------------
 
         @Override
         public Void visitAddSqlBlackListStatement(AddSqlBlackListStmt statement, ConnectContext context) {
@@ -359,7 +485,7 @@ public class PrivilegeCheckerV2 {
             return null;
         }
 
-        // ---------------------------------------- Privilege Statement ----------------------------------------------------
+        // ---------------------------------------- Privilege Statement -----------------------------------
 
         @Override
         public Void visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt stmt, ConnectContext session) {
@@ -467,7 +593,7 @@ public class PrivilegeCheckerV2 {
             return null;
         }
 
-        // ---------------------------------------- View Statement ---------------------------------------------------------
+        // ---------------------------------------- View Statement ---------------------------------------
 
         @Override
         public Void visitCreateViewStatement(CreateViewStmt statement, ConnectContext context) {
@@ -483,6 +609,13 @@ public class PrivilegeCheckerV2 {
             return null;
         }
 
+        // ---------------------------------------- Show Transaction Statement ---------------------------
+        @Override
+        public Void visitShowTransactionStatement(ShowTransactionStmt statement, ConnectContext context) {
+            // No authentication required
+            return null;
+        }
+
         @Override
         public Void visitAlterViewStatement(AlterViewStmt statement, ConnectContext context) {
             // 1. check if user can alter view in this db
@@ -492,7 +625,7 @@ public class PrivilegeCheckerV2 {
             return null;
         }
 
-        // ---------------------------------------- Table Statement --------------------------------------------------------
+        // ---------------------------------------- Table Statement ---------------------------------------
 
         @Override
         public Void visitCreateTableStatement(CreateTableStmt statement, ConnectContext session) {
@@ -512,6 +645,120 @@ public class PrivilegeCheckerV2 {
             } else {
                 checkTableAction(session, statement.getTbl(), PrivilegeType.TableAction.DROP);
             }
+            return null;
+        }
+
+        // ---------------------------------------- Show Variables Statement ------------------------------
+        @Override
+        public Void visitShowVariablesStatement(ShowVariablesStmt statement, ConnectContext context) {
+            // No authentication required
+            return null;
+        }
+
+        // ---------------------------------------- Show tablet Statement ---------------------------------
+        @Override
+        public Void visitShowTabletStatement(ShowTabletStmt statement, ConnectContext context) {
+            checkStmtOperatePrivilege(context);
+            return null;
+        }
+
+        // ---------------------------------------- Admin operate Statement --------------------------------
+
+        @Override
+        public Void visitAdminSetConfigStatement(AdminSetConfigStmt statement, ConnectContext context) {
+            checkStmtOperatePrivilege(context);
+            return null;
+        }
+
+        @Override
+        public Void visitAdminSetReplicaStatusStatement(AdminSetReplicaStatusStmt statement, ConnectContext context) {
+            checkStmtOperatePrivilege(context);
+            return null;
+        }
+
+        @Override
+        public Void visitAdminShowConfigStatement(AdminShowConfigStmt statement, ConnectContext context) {
+            checkStmtOperatePrivilege(context);
+            return null;
+        }
+
+        @Override
+        public Void visitAdminShowReplicaDistributionStatement(AdminShowReplicaDistributionStmt statement,
+                                                                ConnectContext context) {
+            checkStmtOperatePrivilege(context);
+            return null;
+        }
+
+        @Override
+        public Void visitAdminShowReplicaStatusStatement(AdminShowReplicaStatusStmt statement, ConnectContext context) {
+            checkStmtOperatePrivilege(context);
+            return null;
+        }
+
+        @Override
+        public Void visitAdminRepairTableStatement(AdminRepairTableStmt statement, ConnectContext context) {
+            checkStmtOperatePrivilege(context);
+            return null;
+        }
+
+        @Override
+        public Void visitAdminCancelRepairTableStatement(AdminCancelRepairTableStmt statement, ConnectContext context) {
+            checkStmtOperatePrivilege(context);
+            return null;
+        }
+
+        @Override
+        public Void visitAdminCheckTabletsStatement(AdminCheckTabletsStmt statement, ConnectContext context) {
+            checkStmtOperatePrivilege(context);
+            return null;
+        }
+
+        @Override
+        public Void visitKillStatement(KillStmt statement, ConnectContext context) {
+            checkStmtOperatePrivilege(context);
+            return null;
+        }
+
+        @Override
+        public Void visitAlterSystemStatement(AlterSystemStmt statement, ConnectContext context) {
+            checkStmtNodePrivilege(context);
+            return null;
+        }
+
+        @Override
+        public Void visitCancelAlterSystemStatement(CancelAlterSystemStmt statement, ConnectContext context) {
+            checkStmtNodePrivilege(context);
+            return null;
+        }
+
+        @Override
+        public Void visitShowProcStmt(ShowProcStmt statement, ConnectContext context) {
+            checkStmtOperatePrivilege(context);
+            return null;
+        }
+
+        @Override
+        public Void visitSetStatement(SetStmt statement, ConnectContext context) {
+            List<SetVar> varList = statement.getSetVars();
+            varList.forEach(setVer -> {
+                if ((setVer instanceof SetPassVar)) {
+                    UserIdentity prepareChangeUser = ((SetPassVar) setVer).getUserIdent();
+                    try {
+                        prepareChangeUser.analyze();
+                    } catch (AnalysisException e) {
+                        ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_ERROR, "ANALYZE ERROR");
+                    }
+                    if (!context.getUserIdentity().equals(prepareChangeUser)) {
+                        if (!PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.GRANT)) {
+                            ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+                        }
+                    }
+                    return;
+                }
+                if (setVer.getType().equals(SetType.GLOBAL)) {
+                    checkStmtOperatePrivilege(context);
+                }
+            });
             return null;
         }
     }

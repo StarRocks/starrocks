@@ -1,0 +1,30 @@
+name: label
+
+on:
+  pull_request_target:
+    branches:
+      - main
+      - branch-2.2
+      - branch-2.3
+      - branch-2.4
+      - branch-2.5
+    types:
+      - opened
+      - reopened
+
+jobs:
+  add-branch-label:
+    runs-on: ubuntu-latest
+    if: >
+      startsWith(github.event.pull_request.title, '[BugFix]') &&
+      !contains(github.event.pull_request.title, 'cherry-pick') &&
+      !contains(github.event.pull_request.title, 'backport')
+    steps:
+      - uses: actions-ecosystem/action-add-labels@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          labels: |
+            2.5
+            2.4
+            2.3
+            2.2

@@ -117,6 +117,8 @@ public class StarMgrServer {
         com.staros.util.Config.S3_AK = Config.starmgr_s3_ak;
         com.staros.util.Config.S3_SK = Config.starmgr_s3_sk;
 
+        com.staros.util.Config.HDFS_URL = Config.hdfs_url;
+
         // start rpc server
         starMgrServer = new StarManagerServer(journalSystem);
         starMgrServer.start(com.staros.util.Config.STARMGR_RPC_PORT);

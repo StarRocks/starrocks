@@ -21,7 +21,7 @@ import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
-import com.starrocks.connector.iceberg.cost.IcebergTableStatisticCalculator;
+import com.starrocks.connector.iceberg.ScalarOperatorToIcebergExpr;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.ErrorType;
@@ -45,6 +45,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalDeltaLakeScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalExceptOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalFileScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHudiScanOperator;
@@ -73,6 +74,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDeltaLakeScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalExceptOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalFileScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
@@ -103,6 +105,8 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import org.apache.iceberg.expressions.Expression;
+import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -120,6 +124,7 @@ import java.util.Queue;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static com.starrocks.connector.iceberg.cost.IcebergTableStatisticCalculator.getTableStatistics;
 import static com.starrocks.sql.optimizer.statistics.ColumnStatistic.buildFrom;
 import static java.lang.Math.max;
 import static java.lang.Math.min;
@@ -218,7 +223,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         OlapTable olapTable = (OlapTable) table;
         ColumnStatistic partitionStatistic = adjustPartitionStatistic(selectedPartitionIds, olapTable);
         if (partitionStatistic != null) {
-            String partitionColumnName = Lists.newArrayList(olapTable.getPartitionColumnNames()).get(0);
+            String partitionColumnName = olapTable.getPartitionColumnNames().get(0);
             Optional<Map.Entry<ColumnRefOperator, Column>> partitionColumnEntry =
                     colRefToColumnMetaMap.entrySet().stream().
                             filter(column -> column.getValue().getName().equalsIgnoreCase(partitionColumnName))
@@ -246,12 +251,15 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     private Void computeIcebergScanNode(Operator node, ExpressionContext context, Table table,
                                         Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
         if (context.getStatistics() == null) {
-            Statistics stats = IcebergTableStatisticCalculator.getTableStatistics(
-                    // TODO: pass predicate to get table statistics
-                    new ArrayList<>(),
-                    ((IcebergTable) table).getIcebergTable(), colRefToColumnMetaMap);
+            List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
+            org.apache.iceberg.Table icebergTbl = ((IcebergTable) table).getIcebergTable();
+            Types.StructType schema = icebergTbl.schema().asStruct();
+            ScalarOperatorToIcebergExpr.IcebergContext icebergContext = new ScalarOperatorToIcebergExpr.IcebergContext(schema);
+            Expression icebergPredicate = new ScalarOperatorToIcebergExpr().convert(predicates, icebergContext);
+            Statistics stats = getTableStatistics(icebergPredicate, icebergTbl, colRefToColumnMetaMap);
             context.setStatistics(stats);
         }
+
         return visitOperator(node, context);
     }
 
@@ -272,6 +280,30 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         for (ColumnRefOperator columnRefOperator : columnRefOperatorColumnMap.keySet()) {
             builder.addColumnStatistic(columnRefOperator, ColumnStatistic.unknown());
         }
+        builder.setOutputRowCount(1);
+        context.setStatistics(builder.build());
+
+        return visitOperator(node, context);
+    }
+
+    @Override
+    public Void visitLogicalFileScan(LogicalFileScanOperator node, ExpressionContext context) {
+        return computeFileScanNode(node, context, node.getColRefToColumnMetaMap());
+    }
+
+    @Override
+    public Void visitPhysicalFileScan(PhysicalFileScanOperator node, ExpressionContext context) {
+        return computeFileScanNode(node, context, node.getColRefToColumnMetaMap());
+    }
+
+    private Void computeFileScanNode(Operator node, ExpressionContext context,
+                                     Map<ColumnRefOperator, Column> columnRefOperatorColumnMap) {
+        // Use default statistics for now.
+        Statistics.Builder builder = Statistics.builder();
+        for (ColumnRefOperator columnRefOperator : columnRefOperatorColumnMap.keySet()) {
+            builder.addColumnStatistic(columnRefOperator, ColumnStatistic.unknown());
+        }
+        // cause we don't know the real schema in file，just use the default Row Count now
         builder.setOutputRowCount(1);
         context.setStatistics(builder.build());
 
@@ -456,7 +488,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             if (olapTable.getPartitionColumnNames().size() != 1) {
                 return null;
             }
-            String partitionColumn = Lists.newArrayList(olapTable.getPartitionColumnNames()).get(0);
+            String partitionColumn = olapTable.getPartitionColumnNames().get(0);
             ColumnStatistic partitionColumnStatistic =
                     GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistic(olapTable, partitionColumn);
             optimizerContext.getDumpInfo().addTableStatistics(olapTable, partitionColumn, partitionColumnStatistic);

@@ -415,10 +415,10 @@ public class ExpressionTest extends PlanTestBase {
     public void testDateTypeReduceCast() throws Exception {
         String sql = "select * from test_all_type_distributed_by_datetime " +
                 "where cast(cast(id_datetime as date) as datetime) >= '1970-01-01 12:00:00' " +
-                        "and cast(cast(id_datetime as date) as datetime) <= '1970-01-01 18:00:00'";
+                        "and cast(cast(id_datetime as date) as datetime) <= '1970-01-02 18:00:00'";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(
-                plan.contains("8: id_datetime >= '1970-01-02 00:00:00', 8: id_datetime < '1970-01-02 00:00:00'"));
+                plan.contains("8: id_datetime >= '1970-01-02 00:00:00', 8: id_datetime < '1970-01-03 00:00:00'"));
     }
 
     @Test
@@ -496,6 +496,17 @@ public class ExpressionTest extends PlanTestBase {
     public void testPlanContains(String sql, String content) throws Exception {
         String plan = getFragmentPlan(sql);
         Assert.assertTrue("plan is " + plan, plan.contains(content));
+    }
+
+    @Test
+    public void testLambdaPredicateOnScan() throws Exception {
+        starRocksAssert.withTable("create table test_lambda_on_scan" +
+                "(c0 INT, c2 array<int>) " +
+                " duplicate key(c0) distributed by hash(c0) buckets 1 " +
+                "properties('replication_num'='1');");
+        String sql = "select * from test_lambda_on_scan where array_map(x -> x, c2) is not null";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("array_map"));
     }
 
     @Test

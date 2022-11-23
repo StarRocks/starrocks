@@ -304,8 +304,12 @@ public class ResourceMgr implements Writable {
                 // Since `nameToResource.entrySet` may change after it is called, resource
                 // may be dropped during `show resources`.So that we should do a null pointer
                 // check here. If resource is not null then we should check resource privs.
-                if (resource == null || !GlobalStateMgr.getCurrentState().getAuth().checkResourcePriv(
-                        ConnectContext.get(), resource.getName(), PrivPredicate.SHOW)) {
+                if (resource == null) {
+                    continue;
+                }
+                if (!GlobalStateMgr.getCurrentState().isUsingNewPrivilege() &&
+                        !GlobalStateMgr.getCurrentState().getAuth().checkResourcePriv(
+                            ConnectContext.get(), resource.getName(), PrivPredicate.SHOW)) {
                     continue;
                 }
                 resource.getProcNodeData(result);

@@ -4,6 +4,7 @@
 
 #include "common/logging.h"
 #include "common/statusor.h"
+#include "gutil/strings/fastmem.h"
 #include "util/filesystem_util.h"
 
 namespace starrocks {
@@ -60,7 +61,8 @@ Status FbCacheLib::write_cache(const std::string& key, const char* value, size_t
     if (!handle) {
         return Status::InternalError("allocate cachelib item failed");
     }
-    std::memcpy(handle->getMemory(), value, size);
+    // std::memcpy(handle->getMemory(), value, size);
+    strings::memcpy_inlined(handle->getMemory(), value, size);
     _cache->insertOrReplace(handle);
     return Status::OK();
 }
@@ -74,7 +76,9 @@ StatusOr<size_t> FbCacheLib::read_cache(const std::string& key, char* value, siz
         return Status::NotFound("not found cachelib item");
     }
     DCHECK((off + size) <= handle->getSize());
-    std::memcpy(value, (char*)handle->getMemory() + off, size);
+    // std::memcpy(value, (char*)handle->getMemory() + off, size);
+    strings::memcpy_inlined(value, (char*)handle->getMemory() + off, size);
+
     if (handle->hasChainedItem()) {
     }
     return size;

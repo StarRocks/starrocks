@@ -27,7 +27,7 @@ public:
     const SeekTuple& lower() const { return _lower; }
     const SeekTuple& upper() const { return _upper; }
 
-    void convert_to(SeekRange* dst, const std::vector<FieldType>& new_types) const {
+    void convert_to(SeekRange* dst, const std::vector<LogicalType>& new_types) const {
         dst->_inc_lower = _inc_lower;
         dst->_inc_upper = _inc_upper;
         _lower.convert_to(&dst->_lower, new_types);

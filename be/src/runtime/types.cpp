@@ -25,7 +25,6 @@
 
 #include "gutil/strings/substitute.h"
 #include "runtime/datetime_value.h"
-#include "runtime/decimal_value.h"
 #include "runtime/primitive_type.h"
 #include "runtime/string_value.h"
 #include "storage/array_type_info.h"
@@ -221,6 +220,8 @@ std::string TypeDescriptor::debug_string() const {
         return strings::Substitute("CHAR($0)", len);
     case TYPE_VARCHAR:
         return strings::Substitute("VARCHAR($0)", len);
+    case TYPE_VARBINARY:
+        return strings::Substitute("VARBINARY($0)", len);
     case TYPE_DECIMAL:
         return strings::Substitute("DECIMAL($0, $1)", precision, scale);
     case TYPE_DECIMALV2:
@@ -276,17 +277,17 @@ bool TypeDescriptor::support_groupby() const {
 }
 
 TypeDescriptor TypeDescriptor::from_storage_type_info(TypeInfo* type_info) {
-    FieldType ftype = type_info->type();
+    LogicalType ftype = type_info->type();
 
     bool is_array = false;
-    if (ftype == OLAP_FIELD_TYPE_ARRAY) {
+    if (ftype == TYPE_ARRAY) {
         is_array = true;
         type_info = get_item_type_info(type_info).get();
         ftype = type_info->type();
     }
 
-    PrimitiveType ptype = scalar_field_type_to_primitive_type(ftype);
-    DCHECK(ptype != INVALID_TYPE);
+    LogicalType ptype = scalar_field_type_to_primitive_type(ftype);
+    DCHECK(ptype != TYPE_UNKNOWN);
     int len = TypeDescriptor::MAX_VARCHAR_LENGTH;
     int precision = type_info->precision();
     int scale = type_info->scale();
@@ -310,6 +311,7 @@ int TypeDescriptor::get_slot_size() const {
     case TYPE_OBJECT:
     case TYPE_PERCENTILE:
     case TYPE_JSON:
+    case TYPE_VARBINARY:
         return sizeof(StringValue);
 
     case TYPE_NULL:
@@ -337,7 +339,7 @@ int TypeDescriptor::get_slot_size() const {
         return sizeof(DateTimeValue);
 
     case TYPE_DECIMAL:
-        return sizeof(DecimalValue);
+        return 40;
 
     case TYPE_LARGEINT:
     case TYPE_DECIMALV2:
@@ -353,9 +355,18 @@ int TypeDescriptor::get_slot_size() const {
         }
         return struct_size;
     }
-    case INVALID_TYPE:
+    case TYPE_UNKNOWN:
     case TYPE_BINARY:
     case TYPE_FUNCTION:
+    case TYPE_UNSIGNED_TINYINT:
+    case TYPE_UNSIGNED_SMALLINT:
+    case TYPE_UNSIGNED_INT:
+    case TYPE_UNSIGNED_BIGINT:
+    case TYPE_DISCRETE_DOUBLE:
+    case TYPE_DATE_V1:
+    case TYPE_DATETIME_V1:
+    case TYPE_NONE:
+    case TYPE_MAX_VALUE:
         DCHECK(false);
         break;
     }

@@ -29,22 +29,24 @@ int AsyncDeltaWriter::_execute(void* meta, bthread::TaskIterator<AsyncDeltaWrite
         if (iter->chunk != nullptr && iter->indexes_size > 0) {
             st = writer->write(*iter->chunk, iter->indexes, 0, iter->indexes_size);
         }
+        FailedRowsetInfo failed_info{.tablet_id = writer->tablet()->tablet_id(),
+                                     .replicate_token = writer->replicate_token()};
         if (st.ok() && iter->commit_after_write) {
             if (st = writer->close(); !st.ok()) {
-                iter->write_cb->run(st, nullptr);
+                iter->write_cb->run(st, nullptr, &failed_info);
                 continue;
             }
             if (st = writer->commit(); !st.ok()) {
-                iter->write_cb->run(st, nullptr);
+                iter->write_cb->run(st, nullptr, &failed_info);
                 continue;
             }
             CommittedRowsetInfo info{.tablet = writer->tablet(),
                                      .rowset = writer->committed_rowset(),
                                      .rowset_writer = writer->committed_rowset_writer(),
                                      .replicate_token = writer->replicate_token()};
-            iter->write_cb->run(st, &info);
+            iter->write_cb->run(st, &info, nullptr);
         } else {
-            iter->write_cb->run(st, nullptr);
+            iter->write_cb->run(st, nullptr, &failed_info);
         }
         // Do NOT touch |iter->commit_cb| since here, it may have been deleted.
         LOG_IF(ERROR, !st.ok()) << "Fail to write or commit. txn_id=" << writer->txn_id()
@@ -94,7 +96,8 @@ void AsyncDeltaWriter::write(const AsyncDeltaWriterRequest& req, AsyncDeltaWrite
     int r = bthread::execution_queue_execute(_queue_id, task);
     if (r != 0) {
         LOG(WARNING) << "Fail to execution_queue_execute: " << r;
-        task.write_cb->run(Status::InternalError("fail to call execution_queue_execute"), nullptr);
+        FailedRowsetInfo failed_info{.tablet_id = _writer->tablet()->tablet_id(), .replicate_token = nullptr};
+        task.write_cb->run(Status::InternalError("fail to call execution_queue_execute"), nullptr, &failed_info);
     }
 }
 
@@ -116,7 +119,8 @@ void AsyncDeltaWriter::commit(AsyncDeltaWriterCallback* cb) {
     int r = bthread::execution_queue_execute(_queue_id, task);
     if (r != 0) {
         LOG(WARNING) << "Fail to execution_queue_execute: " << r;
-        task.write_cb->run(Status::InternalError("fail to call execution_queue_execute"), nullptr);
+        FailedRowsetInfo failed_info{.tablet_id = _writer->tablet()->tablet_id(), .replicate_token = nullptr};
+        task.write_cb->run(Status::InternalError("fail to call execution_queue_execute"), nullptr, &failed_info);
     }
 }
 

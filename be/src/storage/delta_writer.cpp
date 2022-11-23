@@ -6,6 +6,7 @@
 
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
+#include "storage/compaction_manager.h"
 #include "storage/memtable.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/memtable_rowset_writer_sink.h"
@@ -83,15 +84,7 @@ void DeltaWriter::_garbage_collection() {
 Status DeltaWriter::_init() {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
 
-    if (_opt.is_replicated_storage) {
-        if (_opt.replicas.size() > 0 && _opt.replicas[0].node_id() == _opt.node_id) {
-            _replica_state = Primary;
-        } else {
-            _replica_state = Secondary;
-        }
-    } else {
-        _replica_state = Peer;
-    }
+    _replica_state = _opt.replica_state;
 
     TabletManager* tablet_mgr = _storage_engine->tablet_manager();
     _tablet = tablet_mgr->get_tablet(_opt.tablet_id, false);
@@ -125,8 +118,11 @@ Status DeltaWriter::_init() {
         }
     }
     if (_tablet->version_count() > config::tablet_max_versions) {
-        auto msg = fmt::format("Too many versions. tablet_id: {}, version_count: {}, limit: {}", _opt.tablet_id,
-                               _tablet->version_count(), config::tablet_max_versions);
+        if (config::enable_event_based_compaction_framework) {
+            StorageEngine::instance()->compaction_manager()->update_tablet_async(_tablet);
+        }
+        auto msg = fmt::format("Too many versions. tablet_id: {}, version_count: {}, limit: {}, replica_state: {}",
+                               _opt.tablet_id, _tablet->version_count(), config::tablet_max_versions, _replica_state);
         LOG(ERROR) << msg;
         Status st = Status::ServiceUnavailable(msg);
         _set_state(kUninitialized, st);

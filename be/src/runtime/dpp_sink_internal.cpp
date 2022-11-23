@@ -120,7 +120,7 @@ Status PartRangeKey::from_thrift(ObjectPool* pool, const TPartitionKey& t_key, P
     return Status::OK();
 }
 
-Status PartRangeKey::from_value(PrimitiveType type, void* value, PartRangeKey* key) {
+Status PartRangeKey::from_value(LogicalType type, void* value, PartRangeKey* key) {
     key->_sign = 0;
     key->_type = type;
     key->_key = value;

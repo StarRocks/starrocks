@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.optimizer.operator.scalar;
 
+import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -20,34 +21,33 @@ public final class ColumnRefOperator extends ScalarOperator {
     private final String name;
     private boolean nullable;
 
-    private boolean isLambdaArgument;
-
+    // TODO(SmithCruise) Ugly code, remove it in future.
     // Empty list for default
     // If it's empty, means select all
-    private final List<List<Integer>> usedSubfieldPosGroup = new ArrayList<>();
+    // Only used for map and struct type
+    private final List<ImmutableList<Integer>> usedSubfieldPosGroup = new ArrayList<>();
 
     public ColumnRefOperator(int id, Type type, String name, boolean nullable) {
         super(OperatorType.VARIABLE, type);
         this.id = id;
         this.name = requireNonNull(name, "name is null");
         this.nullable = nullable;
-        this.isLambdaArgument = false;
     }
 
-    public void addUsedSubfieldPos(List<Integer> usedNestFieldPos) {
+    public void addUsedSubfieldPos(ImmutableList<Integer> usedNestFieldPos) {
         this.usedSubfieldPosGroup.add(usedNestFieldPos);
     }
 
-    public List<List<Integer>> getUsedSubfieldPosGroup() {
+    public List<ImmutableList<Integer>> getUsedSubfieldPosGroup() {
         return this.usedSubfieldPosGroup;
     }
 
     public ColumnRefOperator(int id, Type type, String name, boolean nullable, boolean isLambdaArgument) {
-        super(OperatorType.VARIABLE, type);
+        // lambda arguments cannot be seen by outer scopes, so set it a different operator type.
+        super(isLambdaArgument ? OperatorType.LAMBDA_ARGUMENT : OperatorType.VARIABLE, type);
         this.id = id;
         this.name = requireNonNull(name, "name is null");
         this.nullable = nullable;
-        this.isLambdaArgument = isLambdaArgument;
     }
 
     public int getId() {
@@ -93,7 +93,7 @@ public final class ColumnRefOperator extends ScalarOperator {
     }
 
     public ColumnRefSet getUsedColumns() {
-        if (isLambdaArgument) {
+        if (getOpType().equals(OperatorType.LAMBDA_ARGUMENT)) {
             return new ColumnRefSet();
         }
         return new ColumnRefSet(id);

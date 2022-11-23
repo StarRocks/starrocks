@@ -15,9 +15,11 @@
 #include "gutil/macros.h"
 #include "runtime/exec_env.h"
 #include "runtime/lake_snapshot_loader.h"
+#include "storage/lake/compaction_policy.h"
 #include "storage/lake/compaction_task.h"
 #include "storage/lake/tablet.h"
 #include "util/countdown_latch.h"
+#include "util/defer_op.h"
 #include "util/threadpool.h"
 
 namespace starrocks {
@@ -74,11 +76,14 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
             auto new_version = request->new_version();
             auto txns = request->txn_ids().data();
             auto txns_size = request->txn_ids().size();
+            auto tablet_manager = _env->lake_tablet_manager();
 
-            auto st =
-                    _env->lake_tablet_manager()->publish_version(tablet_id, base_version, new_version, txns, txns_size);
-            if (!st.ok()) {
-                LOG(WARNING) << "Fail to publish version for tablet " << tablet_id << ": " << st;
+            auto res = tablet_manager->publish_version(tablet_id, base_version, new_version, txns, txns_size);
+            if (res.ok()) {
+                std::lock_guard l(response_mtx);
+                response->mutable_compaction_scores()->insert({tablet_id, *res});
+            } else {
+                LOG(WARNING) << "Fail to publish version for tablet " << tablet_id << ": " << res.status();
                 std::lock_guard l(response_mtx);
                 response->add_failed_tablets(tablet_id);
             }
@@ -237,13 +242,13 @@ void LakeServiceImpl::compact(::google::protobuf::RpcController* controller,
 
     for (auto tablet_id : request->tablet_ids()) {
         auto task = [&, tablet_id]() {
+            DeferOp defer([&]() { latch.count_down(); });
             auto t1 = butil::gettimeofday_ms();
             auto res = _env->lake_tablet_manager()->compact(tablet_id, request->version(), request->txn_id());
             if (!res.ok()) {
                 LOG(ERROR) << "Fail to create compaction task for tablet " << tablet_id << ": " << res.status();
                 std::lock_guard l(response_mtx);
                 response->add_failed_tablets(tablet_id);
-                latch.count_down();
                 return;
             }
 
@@ -261,7 +266,6 @@ void LakeServiceImpl::compact(::google::protobuf::RpcController* controller,
                 VLOG(3) << "Compacted tablet " << tablet_id << ". version=" << request->version()
                         << " txn_id=" << request->txn_id() << " cost=" << (t2 - t1) << " stats=" << stats;
             }
-            latch.count_down();
         };
 
         auto task_wrapper = [&, f = std::move(task)]() {
@@ -591,4 +595,5 @@ void LakeServiceImpl::restore_snapshots(::google::protobuf::RpcController* contr
         cntl->SetFailed(st.to_string());
     }
 }
+
 } // namespace starrocks

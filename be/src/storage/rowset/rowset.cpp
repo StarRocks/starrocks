@@ -315,7 +315,7 @@ private:
     vectorized::ChunkIteratorPtr _iter;
 };
 
-StatusOr<vectorized::ChunkIteratorPtr> Rowset::new_iterator(const vectorized::Schema& schema,
+StatusOr<vectorized::ChunkIteratorPtr> Rowset::new_iterator(const vectorized::VectorizedSchema& schema,
                                                             const RowsetReadOptions& options) {
     std::vector<vectorized::ChunkIteratorPtr> seg_iters;
     RETURN_IF_ERROR(get_segment_iterators(schema, options, &seg_iters));
@@ -328,7 +328,7 @@ StatusOr<vectorized::ChunkIteratorPtr> Rowset::new_iterator(const vectorized::Sc
     }
 }
 
-Status Rowset::get_segment_iterators(const vectorized::Schema& schema, const RowsetReadOptions& options,
+Status Rowset::get_segment_iterators(const vectorized::VectorizedSchema& schema, const RowsetReadOptions& options,
                                      std::vector<vectorized::ChunkIteratorPtr>* segment_iterators) {
     RowsetReleaseGuard guard(shared_from_this());
 
@@ -368,7 +368,7 @@ Status Rowset::get_segment_iterators(const vectorized::Schema& schema, const Row
         const TabletColumn& col = options.tablet_schema->column(cid);
         if (segment_schema.get_field_by_name(std::string(col.name())) == nullptr) {
             auto f = ChunkHelper::convert_field_to_format_v2(cid, col);
-            segment_schema.append(std::make_shared<vectorized::Field>(std::move(f)));
+            segment_schema.append(std::make_shared<vectorized::VectorizedField>(std::move(f)));
         }
     }
 
@@ -416,9 +416,8 @@ Status Rowset::get_segment_iterators(const vectorized::Schema& schema, const Row
     return Status::OK();
 }
 
-StatusOr<std::vector<vectorized::ChunkIteratorPtr>> Rowset::get_segment_iterators2(const vectorized::Schema& schema,
-                                                                                   KVStore* meta, int64_t version,
-                                                                                   OlapReaderStatistics* stats) {
+StatusOr<std::vector<vectorized::ChunkIteratorPtr>> Rowset::get_segment_iterators2(
+        const vectorized::VectorizedSchema& schema, KVStore* meta, int64_t version, OlapReaderStatistics* stats) {
     RETURN_IF_ERROR(load());
 
     vectorized::SegmentReadOptions seg_options;
@@ -436,10 +435,12 @@ StatusOr<std::vector<vectorized::ChunkIteratorPtr>> Rowset::get_segment_iterator
     for (int64_t i = 0; i < num_segments(); i++) {
         auto& seg_ptr = segments()[i];
         if (seg_ptr->num_rows() == 0) {
+            seg_iterators[i] = new_empty_iterator(schema, config::vector_chunk_size);
             continue;
         }
         auto res = seg_ptr->new_iterator(schema, seg_options);
         if (res.status().is_end_of_file()) {
+            seg_iterators[i] = new_empty_iterator(schema, config::vector_chunk_size);
             continue;
         }
         if (!res.ok()) {

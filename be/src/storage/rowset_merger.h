@@ -6,9 +6,7 @@
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_factory.h"
 
-namespace starrocks {
-
-namespace vectorized {
+namespace starrocks::vectorized {
 
 struct MergeConfig {
     size_t chunk_size;
@@ -20,6 +18,4 @@ struct MergeConfig {
 Status compaction_merge_rowsets(Tablet& tablet, int64_t version, const vector<RowsetSharedPtr>& rowsets,
                                 RowsetWriter* writer, const MergeConfig& cfg);
 
-} // namespace vectorized
-
-} // namespace starrocks
+} // namespace starrocks::vectorized

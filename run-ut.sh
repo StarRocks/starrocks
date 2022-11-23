@@ -78,7 +78,6 @@ RUN=0
 TEST_FILTER=*
 HELP=0
 WITH_AWS=OFF
-WITH_BENCH=OFF
 USE_STAROS=OFF
 WITH_BLOCK_CACHE=OFF
 WITH_GCOV=OFF
@@ -89,7 +88,6 @@ while true; do
         --gtest_filter) TEST_FILTER=$2 ; shift 2;; 
         --help) HELP=1 ; shift ;; 
         --with-aws) WITH_AWS=ON; shift ;;
-        --with-bench) WITH_BENCH=ON; shift ;;
         --with-gcov) WITH_GCOV=ON; shift ;;
         --use-staros) USE_STAROS=ON; shift ;;
         -j) PARALLEL=$2; shift 2 ;;
@@ -136,7 +134,7 @@ if [ "${USE_STAROS}" == "ON"  ]; then
               -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
               -DMAKE_TEST=ON -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
               -DUSE_AVX2=$USE_AVX2 -DUSE_SSE4_2=$USE_SSE4_2 \
-              -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DWITH_BENCH=${WITH_BENCH}  \
+              -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
               -DUSE_STAROS=${USE_STAROS} -DWITH_GCOV=${WITH_GCOV} \
               -DWITH_BLOCK_CACHE=${WITH_BLOCK_CACHE} \
               -Dprotobuf_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/protobuf \
@@ -153,7 +151,7 @@ else
               -DUSE_AVX2=$USE_AVX2 -DUSE_SSE4_2=$USE_SSE4_2 \
               -DWITH_GCOV=${WITH_GCOV} \
               -DWITH_BLOCK_CACHE=${WITH_BLOCK_CACHE} \
-              -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DWITH_BENCH=${WITH_BENCH} ../
+              -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ../
 fi
 time ${BUILD_SYSTEM} -j${PARALLEL}
 

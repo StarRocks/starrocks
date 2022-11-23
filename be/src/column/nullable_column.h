@@ -217,7 +217,7 @@ public:
 
     Datum get(size_t n) const override {
         if (_has_null && _null_column->get_data()[n]) {
-            return Datum();
+            return {};
         } else {
             return _data_column->get(n);
         }

@@ -26,13 +26,13 @@
 
 namespace starrocks::vectorized {
 
-TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema)
+TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, VectorizedSchema schema)
         : ChunkIterator(std::move(schema)),
           _tablet(std::move(tablet)),
           _version(version),
           _delete_predicates_version(version) {}
 
-TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema, bool is_key,
+TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, VectorizedSchema schema, bool is_key,
                            RowSourceMaskBuffer* mask_buffer)
         : ChunkIterator(std::move(schema)),
           _tablet(std::move(tablet)),
@@ -56,6 +56,7 @@ void TabletReader::close() {
 }
 
 Status TabletReader::prepare() {
+    SCOPED_RAW_TIMER(&_stats.get_rowsets_ns);
     std::shared_lock l(_tablet->get_header_lock());
     auto st = _tablet->capture_consistent_rowsets(_version, &_rowsets);
     if (!st.ok()) {
@@ -371,11 +372,11 @@ Status TabletReader::_init_delete_predicates(const TabletReaderParams& params, D
 // convert an OlapTuple to SeekTuple.
 Status TabletReader::_to_seek_tuple(const TabletSchema& tablet_schema, const OlapTuple& input, SeekTuple* tuple,
                                     MemPool* mempool) {
-    Schema schema;
+    VectorizedSchema schema;
     std::vector<Datum> values;
     values.reserve(input.size());
     for (size_t i = 0; i < input.size(); i++) {
-        auto f = std::make_shared<Field>(ChunkHelper::convert_field_to_format_v2(i, tablet_schema.column(i)));
+        auto f = std::make_shared<VectorizedField>(ChunkHelper::convert_field_to_format_v2(i, tablet_schema.column(i)));
         schema.append(f);
         values.emplace_back(Datum());
         if (input.is_null(i)) {
@@ -384,9 +385,9 @@ Status TabletReader::_to_seek_tuple(const TabletSchema& tablet_schema, const Ola
         // If the type of the storage level is CHAR,
         // we treat it as VARCHAR, because the execution level CHAR is VARCHAR
         // CHAR type strings are truncated at the storage level after '\0'.
-        if (f->type()->type() == OLAP_FIELD_TYPE_CHAR) {
-            RETURN_IF_ERROR(datum_from_string(get_type_info(OLAP_FIELD_TYPE_VARCHAR).get(), &values.back(),
-                                              input.get_value(i), mempool));
+        if (f->type()->type() == TYPE_CHAR) {
+            RETURN_IF_ERROR(
+                    datum_from_string(get_type_info(TYPE_VARCHAR).get(), &values.back(), input.get_value(i), mempool));
         } else {
             RETURN_IF_ERROR(datum_from_string(f->type().get(), &values.back(), input.get_value(i), mempool));
         }

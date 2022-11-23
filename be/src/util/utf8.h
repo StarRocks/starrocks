@@ -6,8 +6,7 @@
 
 #include "util/slice.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 // SIZE: 256 * uint8_t
 static const uint8_t UTF8_BYTE_LENGTH_TABLE[256] = {
@@ -141,5 +140,4 @@ static int utf8_len(const char* begin, const char* end) {
     return len;
 }
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

@@ -140,10 +140,10 @@ TupleDescriptor* HdfsScannerTest::_create_tuple_desc(SlotDesc* descs) {
 // ========================= PARQUET SCANNER ============================
 
 static SlotDesc default_parquet_descs[] = {
-        {"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
-        {"c2", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BIGINT)},
-        {"c3", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR, 22)},
-        {"col_varchar", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_DATETIME)},
+        {"c1", TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT)},
+        {"c2", TypeDescriptor::from_primtive_type(LogicalType::TYPE_BIGINT)},
+        {"c3", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR, 22)},
+        {"col_varchar", TypeDescriptor::from_primtive_type(LogicalType::TYPE_DATETIME)},
         {""}};
 
 std::string default_parquet_file = "./be/test/exec/test_data/parquet_scanner/file_reader_test.parquet1";
@@ -327,38 +327,37 @@ static void extend_partition_values(ObjectPool* pool, HdfsScannerParams* params,
 
 // ====================================================================================================
 
-static SlotDesc mtypes_orc_descs[] = {
-        {"id", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BIGINT)},
-        {"col_float", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_FLOAT)},
-        {"col_double", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_DOUBLE)},
-        {"col_varchar", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
-        {"col_char", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
-        {"col_tinyint", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_TINYINT)},
-        {"col_smallint", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_SMALLINT)},
-        {"col_int", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
-        {"col_bigint", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BIGINT)},
-        {"col_largeint", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BIGINT)},
-        {"col0_i32p7s2", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
-        {"col1_i32p7s2", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
-        {"col0_i32p6s3", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
-        {"col1_i32p6s3", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
-        {"col0_i64p7s2", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
-        {"col1_i64p7s2", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
-        {"col0_i64p9s5", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
-        {"col1_i64p9s5", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
-        {"col0_i128p7s2", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
-        {"col1_i128p7s2", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
-        {"col0_i128p18s9", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
-        {"col1_i128p18s9", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
-        {"col0_i128p30s9", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
-        {"col1_i128p30s9", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
-        {"PART_x", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
-        {"PART_y", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
-        {""}};
+static SlotDesc mtypes_orc_descs[] = {{"id", TypeDescriptor::from_primtive_type(LogicalType::TYPE_BIGINT)},
+                                      {"col_float", TypeDescriptor::from_primtive_type(LogicalType::TYPE_FLOAT)},
+                                      {"col_double", TypeDescriptor::from_primtive_type(LogicalType::TYPE_DOUBLE)},
+                                      {"col_varchar", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR)},
+                                      {"col_char", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR)},
+                                      {"col_tinyint", TypeDescriptor::from_primtive_type(LogicalType::TYPE_TINYINT)},
+                                      {"col_smallint", TypeDescriptor::from_primtive_type(LogicalType::TYPE_SMALLINT)},
+                                      {"col_int", TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT)},
+                                      {"col_bigint", TypeDescriptor::from_primtive_type(LogicalType::TYPE_BIGINT)},
+                                      {"col_largeint", TypeDescriptor::from_primtive_type(LogicalType::TYPE_BIGINT)},
+                                      {"col0_i32p7s2", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR)},
+                                      {"col1_i32p7s2", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR)},
+                                      {"col0_i32p6s3", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR)},
+                                      {"col1_i32p6s3", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR)},
+                                      {"col0_i64p7s2", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR)},
+                                      {"col1_i64p7s2", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR)},
+                                      {"col0_i64p9s5", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR)},
+                                      {"col1_i64p9s5", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR)},
+                                      {"col0_i128p7s2", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR)},
+                                      {"col1_i128p7s2", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR)},
+                                      {"col0_i128p18s9", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR)},
+                                      {"col1_i128p18s9", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR)},
+                                      {"col0_i128p30s9", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR)},
+                                      {"col1_i128p30s9", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR)},
+                                      {"PART_x", TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT)},
+                                      {"PART_y", TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT)},
+                                      {""}};
 std::string mtypes_orc_file = "./be/test/exec/test_data/orc_scanner/mtypes_100.orc.zlib";
 
-static SlotDesc mtypes_orc_min_max_descs[] = {{"id", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BIGINT)},
-                                              {"PART_y", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
+static SlotDesc mtypes_orc_min_max_descs[] = {{"id", TypeDescriptor::from_primtive_type(LogicalType::TYPE_BIGINT)},
+                                              {"PART_y", TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT)},
                                               {""}};
 
 TEST_F(HdfsScannerTest, TestOrcGetNext) {
@@ -555,8 +554,8 @@ Total length: 48800
  */
 
 TEST_F(HdfsScannerTest, TestOrcGetNextWithDictFilter) {
-    SlotDesc string_key_value_orc_desc[] = {{"key", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
-                                            {"value", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+    SlotDesc string_key_value_orc_desc[] = {{"key", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR)},
+                                            {"value", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR)},
                                             {""}};
     const std::string string_key_value_orc_file = "./be/test/exec/test_data/orc_scanner/string_key_value_10k.orc.zstd";
 
@@ -656,7 +655,7 @@ Stripes:
 */
 
 TEST_F(HdfsScannerTest, TestOrcGetNextWithDatetimeMinMaxFilter) {
-    SlotDesc datetime_orc_descs[] = {{"c0", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_DATETIME)}, {""}};
+    SlotDesc datetime_orc_descs[] = {{"c0", TypeDescriptor::from_primtive_type(LogicalType::TYPE_DATETIME)}, {""}};
     const std::string datetime_orc_file = "./be/test/exec/test_data/orc_scanner/datetime_20k.orc.zlib";
 
     _create_runtime_state("GMT");
@@ -754,8 +753,8 @@ Padding ratio: 0%
  */
 
 TEST_F(HdfsScannerTest, TestOrcGetNextWithPaddingCharDictFilter) {
-    SlotDesc padding_char_varchar_desc[] = {{"c0", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_CHAR)},
-                                            {"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+    SlotDesc padding_char_varchar_desc[] = {{"c0", TypeDescriptor::from_primtive_type(LogicalType::TYPE_CHAR)},
+                                            {"c1", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR)},
                                             {""}};
     const std::string padding_char_varchar_orc_file =
             "./be/test/exec/test_data/orc_scanner/padding_char_varchar_10k.orc";
@@ -858,8 +857,8 @@ Stripes:
 */
 
 TEST_F(HdfsScannerTest, DecodeMinMaxDateTime) {
-    SlotDesc timezone_datetime_slot_descs[] = {{"c0", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_DATETIME)},
-                                               {"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_DATE)},
+    SlotDesc timezone_datetime_slot_descs[] = {{"c0", TypeDescriptor::from_primtive_type(LogicalType::TYPE_DATETIME)},
+                                               {"c1", TypeDescriptor::from_primtive_type(LogicalType::TYPE_DATE)},
                                                {""}};
 
     const std::string timzone_datetime_shanghai_orc_file =
@@ -983,15 +982,15 @@ Stripes:
     Stream: column 16 section DATA start: 401 length 0
  */
 TEST_F(HdfsScannerTest, TestZeroSizeStream) {
-    SlotDesc slot_descs[] = {{"col_boolean", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BOOLEAN)},
-                             {"col_int", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
-                             {"col_long", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BIGINT)},
-                             {"col_float", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_FLOAT)},
-                             {"col_double", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_DOUBLE)},
-                             {"col_date", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_DATE)},
-                             {"col_timestamp", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_DATETIME)},
-                             {"col_string", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
-                             {"col_binary", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+    SlotDesc slot_descs[] = {{"col_boolean", TypeDescriptor::from_primtive_type(LogicalType::TYPE_BOOLEAN)},
+                             {"col_int", TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT)},
+                             {"col_long", TypeDescriptor::from_primtive_type(LogicalType::TYPE_BIGINT)},
+                             {"col_float", TypeDescriptor::from_primtive_type(LogicalType::TYPE_FLOAT)},
+                             {"col_double", TypeDescriptor::from_primtive_type(LogicalType::TYPE_DOUBLE)},
+                             {"col_date", TypeDescriptor::from_primtive_type(LogicalType::TYPE_DATE)},
+                             {"col_timestamp", TypeDescriptor::from_primtive_type(LogicalType::TYPE_DATETIME)},
+                             {"col_string", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR)},
+                             {"col_binary", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR)},
                              {""}};
 
     const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/orc_zero_size_stream.orc";
@@ -1023,10 +1022,10 @@ TEST_F(HdfsScannerTest, TestZeroSizeStream) {
 TEST_F(HdfsScannerTest, TestOrcLazyLoad) {
     static const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/orc_test_struct_basic.orc";
 
-    SlotDesc c0{"c0", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)};
-    SlotDesc c1{"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_STRUCT)};
-    c1.type.children.push_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR));
-    c1.type.field_names.push_back("Cc1");
+    SlotDesc c0{"c0", TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT)};
+    SlotDesc c1{"c1", TypeDescriptor::from_primtive_type(LogicalType::TYPE_STRUCT)};
+    c1.type.children.push_back(TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR));
+    c1.type.field_names.emplace_back("Cc1");
     c1.type.selected_fields.reserve(1);
     c1.type.selected_fields.clear();
     c1.type.selected_fields.push_back(true);
@@ -1106,9 +1105,9 @@ c3:            BINARY SNAPPY DO:2764882 FPO:2803392 SZ:43059/586643/13.62 VC:272
  */
 
 TEST_F(HdfsScannerTest, TestParquetCoalesceReadAcrossRowGroup) {
-    SlotDesc parquet_descs[] = {{"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BIGINT)},
-                                {"c2", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BIGINT)},
-                                {"c3", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR, 22)},
+    SlotDesc parquet_descs[] = {{"c1", TypeDescriptor::from_primtive_type(LogicalType::TYPE_BIGINT)},
+                                {"c2", TypeDescriptor::from_primtive_type(LogicalType::TYPE_BIGINT)},
+                                {"c3", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR, 22)},
                                 {""}};
 
     const std::string parquet_file = "./be/test/exec/test_data/parquet_scanner/small_row_group_data.parquet";
@@ -1131,9 +1130,9 @@ TEST_F(HdfsScannerTest, TestParquetCoalesceReadAcrossRowGroup) {
 }
 
 TEST_F(HdfsScannerTest, TestParquetRuntimeFilter) {
-    SlotDesc parquet_descs[] = {{"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BIGINT)},
-                                {"c2", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BIGINT)},
-                                {"c3", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR, 22)},
+    SlotDesc parquet_descs[] = {{"c1", TypeDescriptor::from_primtive_type(LogicalType::TYPE_BIGINT)},
+                                {"c2", TypeDescriptor::from_primtive_type(LogicalType::TYPE_BIGINT)},
+                                {"c3", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR, 22)},
                                 {""}};
 
     const std::string parquet_file = "./be/test/exec/test_data/parquet_scanner/small_row_group_data.parquet";
@@ -1168,13 +1167,13 @@ TEST_F(HdfsScannerTest, TestParquetRuntimeFilter) {
         ASSERT_TRUE(status.ok()) << status.get_error_msg();
 
         // build runtime filter.
-        JoinRuntimeFilter* f = RuntimeFilterHelper::create_join_runtime_filter(&_pool, PrimitiveType::TYPE_BIGINT);
+        JoinRuntimeFilter* f = RuntimeFilterHelper::create_join_runtime_filter(&_pool, LogicalType::TYPE_BIGINT);
         f->init(10);
         ColumnPtr column = ColumnHelper::create_column(tuple_desc->slots()[0]->type(), false);
-        auto c = ColumnHelper::cast_to_raw<PrimitiveType::TYPE_BIGINT>(column);
+        auto c = ColumnHelper::cast_to_raw<LogicalType::TYPE_BIGINT>(column);
         c->append(tc.max_value);
         c->append(tc.min_value);
-        RuntimeFilterHelper::fill_runtime_bloom_filter(column, PrimitiveType::TYPE_BIGINT, f, 0, false);
+        RuntimeFilterHelper::fill_runtime_bloom_filter(column, LogicalType::TYPE_BIGINT, f, 0, false);
 
         rf_probe_desc.init(0, &probe_expr_ctx);
         rf_probe_desc.set_runtime_filter(f);
@@ -1224,11 +1223,11 @@ is_original:           REQUIRED INT32 R:0 D:0
 */
 
 TEST_F(HdfsScannerTest, TestParqueTypeMismatchDecodeMinMax) {
-    SlotDesc parquet_descs[] = {{"vin", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR, 22)},
-                                {"is_cloud", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+    SlotDesc parquet_descs[] = {{"vin", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR, 22)},
+                                {"is_cloud", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR)},
                                 {""}};
 
-    SlotDesc min_max_descs[] = {{"vin", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR, 22)}, {""}};
+    SlotDesc min_max_descs[] = {{"vin", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR, 22)}, {""}};
 
     const std::string parquet_file = "./be/test/exec/test_data/parquet_scanner/type_mismatch_decode_min_max.parquet";
 
@@ -1278,8 +1277,8 @@ UID99,ACTION99
 */
 
 TEST_F(HdfsScannerTest, TestCSVCompressed) {
-    SlotDesc csv_descs[] = {{"user_id", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR, 22)},
-                            {"action", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR, 22)},
+    SlotDesc csv_descs[] = {{"user_id", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR, 22)},
+                            {"action", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR, 22)},
                             {""}};
 
     const std::string uncompressed_file = "./be/test/exec/test_data/csv_scanner/compressed.csv";
@@ -1348,8 +1347,8 @@ UID1,ACTION1
 // there is no newline at EOF.
 
 TEST_F(HdfsScannerTest, TestCSVSmall) {
-    SlotDesc csv_descs[] = {{"user_id", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR, 22)},
-                            {"action", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR, 22)},
+    SlotDesc csv_descs[] = {{"user_id", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR, 22)},
+                            {"action", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR, 22)},
                             {""}};
 
     const std::string small_file = "./be/test/exec/test_data/csv_scanner/small.csv";
@@ -1419,10 +1418,9 @@ is_original:            INT64 SNAPPY DO:11263 FPO:11287 SZ:99/95/0.96 VC:100 ENC
 */
 
 TEST_F(HdfsScannerTest, TestParqueTypeMismatchInt96String) {
-    SlotDesc parquet_descs[] = {
-            {"vin", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR, 22)},
-            {"collection_time", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR, 22)},
-            {""}};
+    SlotDesc parquet_descs[] = {{"vin", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR, 22)},
+                                {"collection_time", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR, 22)},
+                                {""}};
 
     const std::string parquet_file = "./be/test/exec/test_data/parquet_scanner/type_mismatch_int96_string.parquet";
 
@@ -1449,7 +1447,7 @@ abc
 // there is no newline at EOF.
 
 TEST_F(HdfsScannerTest, TestCSVSingleColumnNullAndEmpty) {
-    SlotDesc csv_descs[] = {{"user_id", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR, 22)}, {""}};
+    SlotDesc csv_descs[] = {{"user_id", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR, 22)}, {""}};
 
     const std::string small_file = "./be/test/exec/test_data/csv_scanner/single_column_null_and_empty.csv";
     Status status;

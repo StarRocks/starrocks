@@ -8,7 +8,10 @@ import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
+import com.starrocks.qe.ShowExecutor;
+import com.starrocks.qe.ShowResultSet;
 import com.starrocks.sql.ast.CreateUserStmt;
+import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -16,6 +19,7 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.Arrays;
 import java.util.List;
 
 public class PrivilegeCheckerV2Test {
@@ -73,7 +77,7 @@ public class PrivilegeCheckerV2Test {
     private static void verifyGrantRevoke(String sql, String grantSql, String revokeSql,
                                           String expectError) throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
-        StatementBase statement = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        StatementBase statement = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
 
         // 1. before grant: access denied
         ctxToTestUser();
@@ -102,6 +106,127 @@ public class PrivilegeCheckerV2Test {
             System.out.println(e.getMessage() + ", sql: " + sql);
             Assert.assertTrue(e.getMessage().contains(expectError));
         }
+    }
+
+    private static void verifyMultiGrantRevoke(String sql, List<String> grantSqls, List<String> revokeSqls,
+                                               String expectError) throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        StatementBase statement = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+
+        // 1. before grant: access denied
+        ctxToTestUser();
+        try {
+            PrivilegeCheckerV2.check(statement, ctx);
+            Assert.fail();
+        } catch (SemanticException e) {
+            System.out.println(e.getMessage() + ", sql: " + sql);
+            Assert.assertTrue(e.getMessage().contains(expectError));
+        }
+
+        // 2. grant privileges
+        ctxToRoot();
+        grantSqls.forEach(grantSql -> {
+            try {
+                DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(grantSql, ctx), ctx);
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        });
+
+        // 3. check privileges after grant
+        ctxToTestUser();
+        PrivilegeCheckerV2.check(statement, ctx);
+
+        // 4. revoke privileges
+        ctxToRoot();
+        revokeSqls.forEach(revokeSql -> {
+            try {
+                DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(revokeSql, ctx), ctx);
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        });
+
+        // 5. check privileges after revoke
+        ctxToTestUser();
+        try {
+            PrivilegeCheckerV2.check(statement, starRocksAssert.getCtx());
+            Assert.fail();
+        } catch (SemanticException e) {
+            System.out.println(e.getMessage() + ", sql: " + sql);
+            Assert.assertTrue(e.getMessage().contains(expectError));
+        }
+    }
+
+    private static void verifyNODEAndGRANT(String sql, String expectError) throws Exception {
+        ctxToRoot();
+        ConnectContext ctx = starRocksAssert.getCtx();
+        StatementBase statement = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        // user 'root' has GRANT/NODE privilege
+        PrivilegeCheckerV2.check(statement, starRocksAssert.getCtx());
+
+        try {
+            ctxToTestUser();
+            // user 'test' not has GRANT/NODE privilege
+            PrivilegeCheckerV2.check(statement, starRocksAssert.getCtx());
+            Assert.fail();
+        } catch (SemanticException e) {
+            System.out.println(e.getMessage());
+            Assert.assertTrue(e.getMessage().contains(expectError));
+        }
+    }
+
+    @Test
+    public void testCatalogStatement() throws Exception {
+        starRocksAssert.withCatalog("create external catalog test_ex_catalog properties (\"type\"=\"iceberg\")");
+        ConnectContext ctx = starRocksAssert.getCtx();
+
+        // Anyone can use default_catalog, but can't use other external catalog without any action on it
+        ctxToTestUser();
+        PrivilegeCheckerV2.check(
+                UtFrameUtils.parseStmtWithNewParser("use catalog default_catalog", ctx), ctx);
+        try {
+            PrivilegeCheckerV2.check(
+                    UtFrameUtils.parseStmtWithNewParser("use catalog test_ex_catalog", ctx), ctx);
+        } catch (SemanticException e) {
+            Assert.assertTrue(e.getMessage().contains(
+                    "Access denied for user 'test' to catalog"));
+        }
+        verifyGrantRevoke(
+                "use catalog test_ex_catalog",
+                "grant USAGE on catalog test_ex_catalog to test",
+                "revoke USAGE on catalog test_ex_catalog from test",
+                "Access denied for user 'test' to catalog");
+        verifyGrantRevoke(
+                "use catalog test_ex_catalog",
+                "grant DROP on catalog test_ex_catalog to test",
+                "revoke DROP on catalog test_ex_catalog from test",
+                "Access denied for user 'test' to catalog");
+
+        // check create external catalog: CREATE_EXTERNAL_CATALOG on system object
+        verifyGrantRevoke(
+                "create external catalog test_ex_catalog2 properties (\"type\"=\"iceberg\")",
+                "grant CREATE_EXTERNAL_CATALOG on system to test",
+                "revoke CREATE_EXTERNAL_CATALOG on system from test",
+                "Access denied for user 'test' to catalog");
+
+        // check drop external catalog: DROP on catalog
+        verifyGrantRevoke(
+                "drop catalog test_ex_catalog",
+                "grant DROP on catalog test_ex_catalog to test",
+                "revoke DROP on catalog test_ex_catalog from test",
+                "Access denied for user 'test' to catalog");
+
+        // check show catalogs only show catalog where the user has any privilege on
+        starRocksAssert.withCatalog("create external catalog test_ex_catalog3 properties (\"type\"=\"iceberg\")");
+        ctxToRoot();
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "grant DROP on catalog test_ex_catalog3 to test", ctx), ctx);
+        ctxToTestUser();
+        ShowResultSet res = new ShowExecutor(ctx,
+                (ShowStmt) UtFrameUtils.parseStmtWithNewParser("SHOW catalogs", ctx)).execute();
+        Assert.assertEquals(1, res.getResultRows().size());
+        Assert.assertEquals("test_ex_catalog3", res.getResultRows().get(0).get(0));
     }
 
     @Test
@@ -414,6 +539,14 @@ public class PrivilegeCheckerV2Test {
                 "Access denied; you need (at least one of) the IMPERSONATE privilege(s) for this operation");
     }
 
+    // Temporarily switch to root and grant privileges to a user, then switch to normal user context
+    private void grantRevokeSqlAsRoot(String grantSql) throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        ctxToRoot();
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(grantSql, ctx), ctx);
+        ctxToTestUser();
+    }
+
     @Test
     public void testDatabaseStmt() throws Exception {
         final String testDbName = "db_for_db_stmt_test";
@@ -453,12 +586,31 @@ public class PrivilegeCheckerV2Test {
                 "Access denied for user 'test' to database '" + testDbName + "'");
 
         // Test `recover database xxx`: check DROP on db and CREATE_DATABASE on internal catalog
-        // TODO(yiming): check for CREATE_DATABASE on internal catalog after catalog is added
-        verifyGrantRevoke(
+        verifyMultiGrantRevoke(
                 "recover database " + testDbName + ";",
-                "grant DROP on database " + testDbName + " to test",
-                "revoke DROP on database " + testDbName + " from test",
+                Arrays.asList(
+                        "grant DROP on database " + testDbName + " to test",
+                        "grant CREATE_DATABASE on catalog default_catalog to test"),
+                Arrays.asList(
+                        "revoke DROP on database " + testDbName + " from test",
+                        "revoke CREATE_DATABASE on catalog default_catalog from test;"
+                ),
                 "Access denied for user 'test' to database '" + testDbName + "'");
+        grantRevokeSqlAsRoot("grant DROP on database " + testDbName + " to test");
+        try {
+            verifyMultiGrantRevoke(
+                    "recover database " + testDbName + ";",
+                    Arrays.asList(
+                            "grant DROP on database " + testDbName + " to test"),
+                    Arrays.asList(
+                            "revoke DROP on database " + testDbName + " from test",
+                            "revoke CREATE_DATABASE on catalog default_catalog from test;"),
+                    "Access denied for user 'test' to catalog 'default_catalog'");
+        } catch (SemanticException e) {
+            Assert.assertTrue(e.getMessage().contains("Access denied for user 'test' to catalog 'default_catalog'"));
+        } finally {
+            grantRevokeSqlAsRoot("revoke DROP on database " + testDbName + " from test");
+        }
 
         // Test `alter database xxx set...`: check ALTER on db
         verifyGrantRevoke(
@@ -490,5 +642,173 @@ public class PrivilegeCheckerV2Test {
                 "grant ALTER on database " + testDbName + " to test",
                 "revoke ALTER on database " + testDbName + " from test",
                 "Access denied for user 'test' to database '" + testDbName + "'");
+    }
+    
+    @Test
+    public void testShowNodeStmt() throws Exception {
+
+        verifyGrantRevoke(
+                "show backends",
+                "grant OPERATE on system to test",
+                "revoke OPERATE on system from test",
+                "Access denied; you need (at least one of) the OPERATE/NODE privilege(s) for this operation");
+
+        verifyNODEAndGRANT(
+                "show backends",
+                "Access denied; you need (at least one of) the OPERATE/NODE privilege(s) for this operation");
+
+        verifyGrantRevoke(
+                "show frontends",
+                "grant OPERATE on system to test",
+                "revoke OPERATE on system from test",
+                "Access denied; you need (at least one of) the OPERATE/NODE privilege(s) for this operation");
+
+        verifyNODEAndGRANT(
+                "show frontends",
+                "Access denied; you need (at least one of) the OPERATE/NODE privilege(s) for this operation");
+
+        verifyGrantRevoke(
+                "show broker",
+                "grant OPERATE on system to test",
+                "revoke OPERATE on system from test",
+                "Access denied; you need (at least one of) the OPERATE/NODE privilege(s) for this operation");
+
+        verifyNODEAndGRANT(
+                "show broker",
+                "Access denied; you need (at least one of) the OPERATE/NODE privilege(s) for this operation");
+
+        verifyGrantRevoke(
+                "show compute nodes",
+                "grant OPERATE on system to test",
+                "revoke OPERATE on system from test",
+                "Access denied; you need (at least one of) the OPERATE/NODE privilege(s) for this operation");
+
+        verifyNODEAndGRANT(
+                "show compute nodes",
+                "Access denied; you need (at least one of) the OPERATE/NODE privilege(s) for this operation");
+
+    }
+
+    @Test
+    public void testShowTabletStmt() throws Exception {
+
+        verifyGrantRevoke(
+                "show tablet from example_db.example_table",
+                "grant OPERATE on system to test",
+                "revoke OPERATE on system from test",
+                "Access denied; you need (at least one of) the OPERATE privilege(s) for this operation");
+    }
+
+    @Test
+    public void testShowTransactionStmt() throws Exception {
+
+        ctxToTestUser();
+        ConnectContext ctx = starRocksAssert.getCtx();
+        StatementBase statement = UtFrameUtils.parseStmtWithNewParser("SHOW TRANSACTION FROM db WHERE ID=4005;", ctx);
+        PrivilegeCheckerV2.check(statement, starRocksAssert.getCtx());
+    }
+
+
+    @Test
+    public void testAdminOperateStmt() throws Exception {
+
+        // AdminSetConfigStmt
+        verifyGrantRevoke(
+                "admin set frontend config (\"key\" = \"value\");",
+                "grant OPERATE on system to test",
+                "revoke OPERATE on system from test",
+                "Access denied; you need (at least one of) the OPERATE privilege(s) for this operation");
+
+        // AdminSetReplicaStatusStmt
+        verifyGrantRevoke(
+                "ADMIN SET REPLICA STATUS PROPERTIES(\"tablet_id\" = \"10003\", " +
+                    "\"backend_id\" = \"10001\", \"status\" = \"bad\");",
+                "grant OPERATE on system to test",
+                "revoke OPERATE on system from test",
+                "Access denied; you need (at least one of) the OPERATE privilege(s) for this operation");
+
+        // AdminShowConfigStmt
+        verifyGrantRevoke(
+                "ADMIN SHOW FRONTEND CONFIG;",
+                "grant OPERATE on system to test",
+                "revoke OPERATE on system from test",
+                "Access denied; you need (at least one of) the OPERATE privilege(s) for this operation");
+
+        // AdminShowReplicaDistributionStatement
+        verifyGrantRevoke(
+                "ADMIN SHOW REPLICA DISTRIBUTION FROM example_db.example_table PARTITION(p1, p2);",
+                "grant OPERATE on system to test",
+                "revoke OPERATE on system from test",
+                "Access denied; you need (at least one of) the OPERATE privilege(s) for this operation");
+
+        // AdminShowReplicaStatusStatement
+        verifyGrantRevoke(
+                "ADMIN SHOW REPLICA STATUS FROM example_db.example_table;",
+                "grant OPERATE on system to test",
+                "revoke OPERATE on system from test",
+                "Access denied; you need (at least one of) the OPERATE privilege(s) for this operation");
+
+        // AdminRepairTableStatement
+        verifyGrantRevoke(
+                "ADMIN REPAIR TABLE example_db.example_table PARTITION(p1);",
+                "grant OPERATE on system to test",
+                "revoke OPERATE on system from test",
+                "Access denied; you need (at least one of) the OPERATE privilege(s) for this operation");
+
+        // AdminCancelRepairTableStatement
+        verifyGrantRevoke(
+                "ADMIN CANCEL REPAIR TABLE example_db.example_table PARTITION(p1);",
+                "grant OPERATE on system to test",
+                "revoke OPERATE on system from test",
+                "Access denied; you need (at least one of) the OPERATE privilege(s) for this operation");
+
+        // AdminCheckTabletsStatement
+        verifyGrantRevoke(
+                "ADMIN CHECK TABLET (1, 2) PROPERTIES (\"type\" = \"CONSISTENCY\");",
+                "grant OPERATE on system to test",
+                "revoke OPERATE on system from test",
+                "Access denied; you need (at least one of) the OPERATE privilege(s) for this operation");
+    }
+
+
+    @Test
+    public void testAlterSystemStmt() throws Exception {
+
+        // AlterSystemStmt
+        verifyNODEAndGRANT("ALTER SYSTEM ADD FOLLOWER \"127.0.0.1:9010\";",
+                           "Access denied; you need (at least one of) the NODE privilege(s) for this operation");
+
+        // CancelAlterSystemStmt
+        verifyNODEAndGRANT("CANCEL DECOMMISSION BACKEND \"host1:port\", \"host2:port\";",
+                           "Access denied; you need (at least one of) the NODE privilege(s) for this operation");
+    }
+
+    @Test
+    public void testKillStmt() throws Exception {
+        // KillStmt
+        verifyGrantRevoke(
+                "kill query 1",
+                "grant OPERATE on system to test",
+                "revoke OPERATE on system from test",
+                "Access denied; you need (at least one of) the OPERATE privilege(s) for this operation");
+    }
+
+    @Test
+    public void testShowProcStmt() throws Exception {
+        // ShowProcStmt
+        verifyGrantRevoke(
+                "show proc '/backends'",
+                "grant OPERATE on system to test",
+                "revoke OPERATE on system from test",
+                "Access denied; you need (at least one of) the OPERATE privilege(s) for this operation");
+    }
+
+
+    @Test
+    public void testSetStmt() throws Exception {
+
+        String sql = "SET PASSWORD FOR 'jack'@'192.%' = PASSWORD('123456');";
+        String expectError = "Access denied; you need (at least one of) the GRANT privilege(s) for this operation";
+        verifyNODEAndGRANT(sql, expectError);
     }
 }

@@ -176,6 +176,7 @@ private:
     std::map<int64_t, std::vector<PTabletWithPartition>> _index_tablets_map;
 
     std::vector<TTabletCommitInfo> _tablet_commit_infos;
+    std::vector<TTabletFailInfo> _tablet_fail_infos;
 
     AddBatchCounter _add_batch_counter;
     int64_t _serialize_batch_ns = 0;
@@ -287,7 +288,7 @@ public:
     ObjectPool* pool() { return _pool; }
 
 private:
-    template <PrimitiveType PT>
+    template <LogicalType PT>
     void _validate_decimal(RuntimeState* state, vectorized::Column* column, const SlotDescriptor* desc,
                            std::vector<uint8_t>* validate_selection);
     // This method will change _validate_selection
@@ -372,9 +373,6 @@ private:
 
     // index_channel
     std::vector<std::unique_ptr<IndexChannel>> _channels;
-
-    std::vector<DecimalValue> _max_decimal_val;
-    std::vector<DecimalValue> _min_decimal_val;
 
     std::vector<DecimalV2Value> _max_decimalv2_val;
     std::vector<DecimalV2Value> _min_decimalv2_val;

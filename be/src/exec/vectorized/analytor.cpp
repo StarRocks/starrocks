@@ -432,8 +432,8 @@ void Analytor::create_agg_result_columns(int64_t chunk_size) {
                                                                                 _agg_fn_types[i].has_nullable_child);
             // binary column cound't call resize method like Numeric Column,
             // so we only reserve it.
-            if (_agg_fn_types[i].result_type.type == PrimitiveType::TYPE_CHAR ||
-                _agg_fn_types[i].result_type.type == PrimitiveType::TYPE_VARCHAR) {
+            if (_agg_fn_types[i].result_type.type == LogicalType::TYPE_CHAR ||
+                _agg_fn_types[i].result_type.type == LogicalType::TYPE_VARCHAR) {
                 _result_window_columns[i]->reserve(chunk_size);
             } else {
                 _result_window_columns[i]->resize(chunk_size);
