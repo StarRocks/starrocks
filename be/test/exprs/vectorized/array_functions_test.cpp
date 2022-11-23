@@ -4650,7 +4650,6 @@ TEST_F(ArrayFunctionsTest, array_filter_with_onlynull) {
     ArrayFilter filter;
     auto dest_column = filter.process(nullptr, {src_column, src_column2});
     ASSERT_TRUE(dest_column->get(0).get_array().empty());
-
     // array is null
     dest_column = filter.process(nullptr, {src_column2, src_column});
     ASSERT_TRUE(dest_column->only_null());
