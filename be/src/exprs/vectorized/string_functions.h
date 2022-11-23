@@ -339,8 +339,8 @@ public:
                                                          const starrocks::vectorized::Columns& columns);
 
     template <LogicalType Type>
-    static StatusOr<StatusOr<ColumnPtr>> money_format_decimal(FunctionContext* context,
-                                                              const starrocks::vectorized::Columns& columns);
+    static StatusOr<ColumnPtr> money_format_decimal(FunctionContext* context,
+                                                    const starrocks::vectorized::Columns& columns);
 
     // parse's auxiliary method
     static Status parse_url_prepare(starrocks_udf::FunctionContext* context,
@@ -498,8 +498,8 @@ void StringFunctions::money_format_decimal_impl(FunctionContext* context, Column
 }
 
 template <LogicalType Type>
-StatusOr<StatusOr<ColumnPtr>> StringFunctions::money_format_decimal(FunctionContext* context,
-                                                                    const starrocks::vectorized::Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::money_format_decimal(FunctionContext* context,
+                                                          const starrocks::vectorized::Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
     using CppType = RunTimeCppType<Type>;
     static_assert(pt_is_decimal<Type>, "Invalid decimal type");
