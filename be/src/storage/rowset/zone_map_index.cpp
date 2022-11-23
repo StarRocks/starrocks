@@ -179,7 +179,7 @@ Status ZoneMapIndexWriterImpl<type>::flush() {
     if (_page_zone_map.min_value.value < _segment_zone_map.min_value.value) {
         _type_info->direct_copy(&_segment_zone_map.min_value.value, &_page_zone_map.min_value.value, nullptr);
     }
-    if (_page_zone_map.min_value.value > _segment_zone_map.min_value.value) {
+    if (_page_zone_map.max_value.value > _segment_zone_map.max_value.value) {
         _type_info->direct_copy(&_segment_zone_map.max_value.value, &_page_zone_map.max_value.value, nullptr);
     }
     if (_page_zone_map.has_null) {
