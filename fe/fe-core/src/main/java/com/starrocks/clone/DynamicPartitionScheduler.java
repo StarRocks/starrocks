@@ -55,6 +55,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -97,6 +98,12 @@ public class DynamicPartitionScheduler extends LeaderDaemon {
     public DynamicPartitionScheduler(String name, long intervalMs) {
         super(name, intervalMs);
         this.initialize = false;
+    }
+
+    public void executeDynamicPartitionWhenCreateTable(Long dbId, Long tableId) {
+        List<Pair<Long, Long>> tempDynamicPartitionTableInfo = new ArrayList();
+        tempDynamicPartitionTableInfo.add(new Pair<>(dbId, tableId));
+        executeDynamicPartition(tempDynamicPartitionTableInfo);
     }
 
     public void registerDynamicPartitionTable(Long dbId, Long tableId) {
@@ -300,9 +307,10 @@ public class DynamicPartitionScheduler extends LeaderDaemon {
         return dropPartitionClauses;
     }
 
-    private void executeDynamicPartition() {
-        Iterator<Pair<Long, Long>> iterator = dynamicPartitionTableInfo.iterator();
-        OUTER: while (iterator.hasNext()) {
+    private void executeDynamicPartition(Collection<Pair<Long, Long>> dynamicPartitionTableInfoCol) {
+        Iterator<Pair<Long, Long>> iterator = dynamicPartitionTableInfoCol.iterator();
+        OUTER:
+        while (iterator.hasNext()) {
             Pair<Long, Long> tableInfo = iterator.next();
             Long dbId = tableInfo.first;
             Long tableId = tableInfo.second;
@@ -530,7 +538,7 @@ public class DynamicPartitionScheduler extends LeaderDaemon {
         }
         setInterval(Config.dynamic_partition_check_interval_seconds * 1000L);
         if (Config.dynamic_partition_enable) {
-            executeDynamicPartition();
+            executeDynamicPartition(dynamicPartitionTableInfo);
         }
         executePartitionTimeToLive();
     }

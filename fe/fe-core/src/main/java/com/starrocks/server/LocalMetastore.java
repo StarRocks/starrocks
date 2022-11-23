@@ -2372,7 +2372,7 @@ public class LocalMetastore implements ConnectorMetadata {
             }
             LOG.info("Successfully create table[{};{}]", tableName, tableId);
             // register or remove table from DynamicPartition after table created
-            DynamicPartitionUtil.registerOrRemoveDynamicPartitionTable(db.getId(), olapTable);
+            DynamicPartitionUtil.registerOrRemoveDynamicPartitionTable(db.getId(), olapTable, false);
             stateMgr.getDynamicPartitionScheduler().createOrUpdateRuntimeInfo(
                     tableName, DynamicPartitionScheduler.LAST_UPDATE_TIME, TimeUtils.getCurrentFormatTime());
         } finally {
@@ -2605,7 +2605,7 @@ public class LocalMetastore implements ConnectorMetadata {
                         }
                     }
                 } // end for partitions
-                DynamicPartitionUtil.registerOrRemoveDynamicPartitionTable(dbId, olapTable);
+                DynamicPartitionUtil.registerOrRemoveDynamicPartitionTable(dbId, olapTable, true);
             }
         }
     }
@@ -3784,7 +3784,7 @@ public class LocalMetastore implements ConnectorMetadata {
             tableProperty.buildDynamicProperty();
         }
 
-        DynamicPartitionUtil.registerOrRemoveDynamicPartitionTable(db.getId(), table);
+        DynamicPartitionUtil.registerOrRemoveDynamicPartitionTable(db.getId(), table, false);
         stateMgr.getDynamicPartitionScheduler().createOrUpdateRuntimeInfo(
                 table.getName(), DynamicPartitionScheduler.LAST_UPDATE_TIME, TimeUtils.getCurrentFormatTime());
         ModifyTablePropertyOperationLog info =

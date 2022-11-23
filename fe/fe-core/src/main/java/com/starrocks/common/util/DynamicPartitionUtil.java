@@ -224,10 +224,16 @@ public class DynamicPartitionUtil {
         return true;
     }
 
-    public static void registerOrRemoveDynamicPartitionTable(long dbId, OlapTable olapTable) {
+    public static void registerOrRemoveDynamicPartitionTable(long dbId, OlapTable olapTable, boolean isReplay) {
         if (olapTable.getTableProperty() != null
                 && olapTable.getTableProperty().getDynamicPartitionProperty() != null) {
             if (olapTable.getTableProperty().getDynamicPartitionProperty().getEnable()) {
+                if (!isReplay) {
+                    /// Create dynamic partitions when create table
+                    GlobalStateMgr.getCurrentState()
+                            .getDynamicPartitionScheduler()
+                            .executeDynamicPartitionWhenCreateTable(dbId, olapTable.getId());
+                }
                 GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler()
                         .registerDynamicPartitionTable(dbId, olapTable.getId());
             } else {
