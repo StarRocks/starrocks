@@ -29,4 +29,48 @@ std::string get_stack_trace() {
     return s;
 }
 
+<<<<<<< HEAD
+=======
+// as exception' name is not large, so we can think there are no exceptions.
+std::string get_exception_name(const void* info) {
+    auto* exception_info = (std::type_info*)info;
+    int demangle_status;
+    char* demangled_exception_name;
+    std::string exception_name = "unknown";
+    if (exception_info != nullptr) {
+        // Demangle the name of the exception using the GNU C++ ABI:
+        demangled_exception_name = abi::__cxa_demangle(exception_info->name(), nullptr, nullptr, &demangle_status);
+        if (demangled_exception_name != nullptr) {
+            exception_name = std::string(demangled_exception_name);
+            // Free the memory from __cxa_demangle():
+            free(demangled_exception_name);
+        } else {
+            // NOTE: if the demangle fails, we do nothing, so the
+            // non-demangled name will be printed. That's ok.
+            exception_name = std::string(exception_info->name());
+        }
+    }
+    return exception_name;
+}
+
+#if defined(__GNUC__)
+// wrap libc's _cxa_throw that must not throw exceptions again, otherwise causing crash.
+void __wrap___cxa_throw(void* thrown_exception, void* info, void (*dest)(void*)) {
+    auto query_id = CurrentThread::current().query_id();
+    auto fragment_instance_id = CurrentThread::current().fragment_instance_id();
+    auto stack = fmt::format("{}, query_id={}, fragment_instance_id={} throws exception: {}, trace:\n {} \n",
+                             ToStringFromUnixMicros(GetCurrentTimeMicros()).c_str(), print_id(query_id).c_str(),
+                             print_id(fragment_instance_id).c_str(), get_exception_name(info).c_str(),
+                             get_stack_trace().c_str());
+#ifdef BE_TEST
+    // tests check message from stderr.
+    std::cerr << stack << std::endl;
+#endif
+    LOG(WARNING) << stack;
+
+    // call the real __cxa_throw():
+    __real___cxa_throw(thrown_exception, info, dest);
+}
+#endif
+>>>>>>> dc68a3f31 ([Enhancement] change print throw stack trace into LOG(WARNING) rather than cerr (#13907))
 } // namespace starrocks
