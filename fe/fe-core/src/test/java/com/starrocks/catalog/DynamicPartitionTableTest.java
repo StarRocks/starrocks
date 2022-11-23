@@ -425,7 +425,8 @@ public class DynamicPartitionTableTest {
 
     @Test
     public void testCreateDynamicPartitionImmediately() throws Exception {
-        String createOlapTblStmt = "CREATE TABLE test.`empty_dynamic_partition` (\n" +
+        String tableName = "dynamic_partition_replication_num";
+        String createOlapTblStmt = "CREATE TABLE test.`" + tableName + "` (\n" +
                 "  `k1` date NULL COMMENT \"\",\n" +
                 "  `k2` int NULL COMMENT \"\",\n" +
                 "  `k3` smallint NULL COMMENT \"\",\n" +
@@ -446,9 +447,8 @@ public class DynamicPartitionTableTest {
                 "\"dynamic_partition.prefix\" = \"p\",\n" +
                 "\"dynamic_partition.buckets\" = \"1\"\n" +
                 ");";
-        createTable(createOlapTblStmt);
-        OlapTable emptyDynamicTable = (OlapTable) GlobalStateMgr.getCurrentState().
-                getDb("default_cluster:test").getTable("empty_dynamic_partition");
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        OlapTable emptyDynamicTable = (OlapTable) db.getTable(tableName);
         Assert.assertTrue(emptyDynamicTable.getAllPartitions().size() == 7);
     }
 }
