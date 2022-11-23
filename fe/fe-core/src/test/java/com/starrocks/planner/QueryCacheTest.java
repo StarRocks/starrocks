@@ -13,6 +13,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.statistic.StatsConstants;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -31,10 +32,10 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static com.starrocks.sql.optimizer.statistics.CachedStatisticStorageTest.DEFAULT_CREATE_TABLE_TEMPLATE;
+
 public class QueryCacheTest {
     private static ConnectContext ctx;
-    @Rule
-    public ExpectedException expectedEx = ExpectedException.none();
 
     @BeforeClass
     public static void setUp() throws Exception {
@@ -369,6 +370,9 @@ public class QueryCacheTest {
         ctx.getSessionVariable().setEnableQueryCache(true);
         FeConstants.runningUnitTest = true;
         StarRocksAssert starRocksAssert = new StarRocksAssert(ctx);
+        starRocksAssert.withDatabase(StatsConstants.STATISTICS_DB_NAME)
+                .useDatabase(StatsConstants.STATISTICS_DB_NAME)
+                .withTable(DEFAULT_CREATE_TABLE_TEMPLATE);
         starRocksAssert.withDatabase("qc_db").useDatabase("qc_db");
         starRocksAssert.withTable(createTbl0StmtStr);
         starRocksAssert.withTable(createTbl1StmtStr);

@@ -292,13 +292,13 @@ void CacheOperator::_handle_stale_cache_value_for_pk(int64_t tablet_id, starrock
     }
     auto& [tablet, rowsets] = status.value();
     const auto snapshot_version = cache_value.version;
-    bool has_compacted_delta_rowsets = false;
+    bool can_pickup_delta_rowsets = false;
     bool exists_non_empty_delta_rowsets = false;
     for (auto& rs : rowsets) {
-        has_compacted_delta_rowsets |= rs->start_version() == snapshot_version + 1;
+        can_pickup_delta_rowsets |= rs->start_version() == snapshot_version + 1;
         exists_non_empty_delta_rowsets |= rs->start_version() > snapshot_version && rs->has_data_files();
     }
-    if (exists_non_empty_delta_rowsets && has_compacted_delta_rowsets) {
+    if (exists_non_empty_delta_rowsets || !can_pickup_delta_rowsets) {
         buffer->state = PLBS_MISS;
         buffer->cached_version = 0;
         return;
