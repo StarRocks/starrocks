@@ -97,20 +97,6 @@ SELECT * FROM t1 RIGHT OUTER JOIN t2 ON t1.id = t2.id;
 SELECT * FROM t1 FULL OUTER JOIN t2 ON t1.id = t2.id;
 ```
 
-#### Equivalent and unequal join
-
-Usually, users use the most equal join, which requires the operator of the join condition to be an equal sign.
-
-Unequal join can be used on join conditions!=, Equal sign. Unequal joins produce a large number of results and may exceed the memory limit during calculation.
-
-Use with caution. Unequal join only supports inner join. Example:
-
-```sql
-SELECT t1.id, c1, c2 FROM t1 INNER JOIN t2 ON t1.id = t2.id;
-
-SELECT t1.id, c1, c2 FROM t1 INNER JOIN t2 ON t1.id > t2.id;
-```
-
 #### Semi Join
 
 Left semi join returns only the rows in the left table that match the data in the right table, regardless of how many rows match the data in the right table.
