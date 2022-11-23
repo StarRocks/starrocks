@@ -13,7 +13,6 @@
 #include "runtime/datetime_value.h"
 #include "runtime/decimalv2_value.h"
 #include "storage/chunk_helper.h"
-#include "storage/column_vector.h"
 #include "storage/olap_type_infra.h"
 #include "storage/tablet_schema.h"
 #include "types/bitmap_value.h"
@@ -1279,11 +1278,6 @@ public:
         return ret;
     }
 
-    void convert(ColumnVectorBatch* dst, ColumnVectorBatch* src, const uint16_t* selection,
-                 uint16_t selected_size) const override {
-        src->swap(dst);
-    }
-
 private:
     TypeInfoPtr _type_info;
 };
@@ -1322,32 +1316,6 @@ public:
         return dst;
     }
 
-    void convert(ColumnVectorBatch* dst, ColumnVectorBatch* src, const uint16_t* selection,
-                 uint16_t selected_size) const override {
-        static const size_t SRC_FIELD_SIZE = sizeof(uint24_t);
-        static const size_t DST_FIELD_SIZE = sizeof(int32_t);
-
-        const uint8_t* src_data = src->data();
-        uint8_t* dst_data = dst->data();
-        if (!src->is_nullable()) {
-            for (uint16_t i = 0; i < selected_size; ++i) {
-                uint16_t row_id = selection[i];
-                convert(dst_data + DST_FIELD_SIZE * row_id, src_data + SRC_FIELD_SIZE * row_id);
-            }
-        } else {
-            const uint8_t* src_null_map = src->null_signs();
-            uint8_t* dst_null_map = dst->null_signs();
-            for (uint16_t i = 0; i < selected_size; ++i) {
-                uint16_t row_id = selection[i];
-                dst_null_map[row_id] = src_null_map[row_id];
-                if (src_null_map[row_id]) {
-                    continue;
-                }
-                convert(dst_data + DST_FIELD_SIZE * row_id, src_data + SRC_FIELD_SIZE * row_id);
-            }
-        }
-    }
-
 private:
 };
 
@@ -1380,32 +1348,6 @@ public:
             dst->append_datum(dst_datum);
         }
         return dst;
-    }
-
-    void convert(ColumnVectorBatch* dst, ColumnVectorBatch* src, const uint16_t* selection,
-                 uint16_t selected_size) const override {
-        static const size_t SRC_FIELD_SIZE = sizeof(int32_t);
-        static const size_t DST_FIELD_SIZE = sizeof(uint24_t);
-
-        const uint8_t* src_data = src->data();
-        uint8_t* dst_data = dst->data();
-        if (!src->is_nullable()) {
-            for (uint16_t i = 0; i < selected_size; ++i) {
-                uint16_t row_id = selection[i];
-                convert(dst_data + DST_FIELD_SIZE * row_id, src_data + SRC_FIELD_SIZE * row_id);
-            }
-        } else {
-            const uint8_t* src_null_map = src->null_signs();
-            uint8_t* dst_null_map = dst->null_signs();
-            for (uint16_t i = 0; i < selected_size; ++i) {
-                uint16_t row_id = selection[i];
-                dst_null_map[row_id] = src_null_map[row_id];
-                if (src_null_map[row_id]) {
-                    continue;
-                }
-                convert(dst_data + DST_FIELD_SIZE * row_id, src_data + SRC_FIELD_SIZE * row_id);
-            }
-        }
     }
 
 private:
@@ -1446,31 +1388,6 @@ public:
         return dst;
     }
 
-    void convert(ColumnVectorBatch* dst, ColumnVectorBatch* src, const uint16_t* selection,
-                 uint16_t selected_size) const override {
-        static const size_t SRC_FIELD_SIZE = sizeof(int64_t);
-        static const size_t DST_FIELD_SIZE = sizeof(int64_t);
-        uint8_t* dst_data = dst->data();
-        const uint8_t* src_data = src->data();
-        if (src->is_nullable()) {
-            const uint8_t* src_null_map = src->null_signs();
-            uint8_t* dst_null_map = dst->null_signs();
-            for (uint16_t i = 0; i < selected_size; ++i) {
-                uint16_t row_id = selection[i];
-                dst_null_map[row_id] = src_null_map[row_id];
-                if (src_null_map[row_id]) {
-                    continue;
-                }
-                convert(dst_data + DST_FIELD_SIZE * row_id, src_data + SRC_FIELD_SIZE * row_id);
-            }
-        } else {
-            for (uint16_t i = 0; i < selected_size; ++i) {
-                uint16_t row_id = selection[i];
-                convert(dst_data + DST_FIELD_SIZE * row_id, src_data + SRC_FIELD_SIZE * row_id);
-            }
-        }
-    }
-
 private:
 };
 
@@ -1504,32 +1421,6 @@ public:
             dst->append_datum(dst_datum);
         }
         return dst;
-    }
-
-    void convert(ColumnVectorBatch* dst, ColumnVectorBatch* src, const uint16_t* selection,
-                 uint16_t selected_size) const override {
-        static const size_t SRC_FIELD_SIZE = sizeof(int64_t);
-        static const size_t DST_FIELD_SIZE = sizeof(int64_t);
-
-        const uint8_t* src_data = src->data();
-        uint8_t* dst_data = dst->data();
-        if (!src->is_nullable()) {
-            for (uint16_t i = 0; i < selected_size; ++i) {
-                uint16_t row_id = selection[i];
-                convert(dst_data + DST_FIELD_SIZE * row_id, src_data + SRC_FIELD_SIZE * row_id);
-            }
-        } else {
-            const uint8_t* src_null_map = src->null_signs();
-            uint8_t* dst_null_map = dst->null_signs();
-            for (uint16_t i = 0; i < selected_size; ++i) {
-                uint16_t row_id = selection[i];
-                dst_null_map[row_id] = src_null_map[row_id];
-                if (src_null_map[row_id]) {
-                    continue;
-                }
-                convert(dst_data + DST_FIELD_SIZE * row_id, src_data + SRC_FIELD_SIZE * row_id);
-            }
-        }
     }
 
 private:
@@ -1571,33 +1462,6 @@ public:
         return dst;
     }
 
-    // NOTE: This function should not be used.
-    void convert(ColumnVectorBatch* dst, ColumnVectorBatch* src, const uint16_t* selection,
-                 uint16_t selected_size) const override {
-        static const size_t SRC_FIELD_SIZE = sizeof(decimal12_t);
-        static const size_t DST_FIELD_SIZE = sizeof(DecimalV2Value);
-
-        const uint8_t* src_data = src->data();
-        uint8_t* dst_data = dst->data();
-        if (!src->is_nullable()) {
-            for (uint16_t i = 0; i < selected_size; ++i) {
-                uint16_t row_id = selection[i];
-                convert(dst_data + DST_FIELD_SIZE * row_id, src_data + SRC_FIELD_SIZE * row_id);
-            }
-        } else {
-            const uint8_t* src_null_map = src->null_signs();
-            uint8_t* dst_null_map = dst->null_signs();
-            for (uint16_t i = 0; i < selected_size; ++i) {
-                uint16_t row_id = selection[i];
-                dst_null_map[row_id] = src_null_map[row_id];
-                if (src_null_map[row_id]) {
-                    continue;
-                }
-                convert(dst_data + DST_FIELD_SIZE * row_id, src_data + SRC_FIELD_SIZE * row_id);
-            }
-        }
-    }
-
 private:
 };
 
@@ -1635,32 +1499,6 @@ public:
             dst->append_datum(dst_datum);
         }
         return dst;
-    }
-
-    void convert(ColumnVectorBatch* dst, ColumnVectorBatch* src, const uint16_t* selection,
-                 uint16_t selected_size) const override {
-        static const size_t SRC_FIELD_SIZE = sizeof(DecimalV2Value);
-        static const size_t DST_FIELD_SIZE = sizeof(decimal12_t);
-
-        const uint8_t* src_data = src->data();
-        uint8_t* dst_data = dst->data();
-        if (!src->is_nullable()) {
-            for (uint16_t i = 0; i < selected_size; ++i) {
-                uint16_t row_id = selection[i];
-                convert(dst_data + DST_FIELD_SIZE * row_id, src_data + SRC_FIELD_SIZE * row_id);
-            }
-        } else {
-            const uint8_t* src_null_map = src->null_signs();
-            uint8_t* dst_null_map = dst->null_signs();
-            for (uint16_t i = 0; i < selected_size; ++i) {
-                uint16_t row_id = selection[i];
-                dst_null_map[row_id] = src_null_map[row_id];
-                if (src_null_map[row_id]) {
-                    continue;
-                }
-                convert(dst_data + DST_FIELD_SIZE * row_id, src_data + SRC_FIELD_SIZE * row_id);
-            }
-        }
     }
 
 private:
@@ -1754,32 +1592,6 @@ public:
             dst->append_datum(dst_datum);
         }
         return dst;
-    }
-
-    void convert(ColumnVectorBatch* dst, ColumnVectorBatch* src, const uint16_t* selection,
-                 uint16_t selected_size) const override {
-        static const size_t SRC_FIELD_SIZE = sizeof(SrcType);
-        static const size_t DST_FIELD_SIZE = sizeof(DstType);
-
-        const uint8_t* src_data = src->data();
-        uint8_t* dst_data = dst->data();
-        if (!src->is_nullable()) {
-            for (uint16_t i = 0; i < selected_size; ++i) {
-                uint16_t row_id = selection[i];
-                convert(dst_data + DST_FIELD_SIZE * row_id, src_data + SRC_FIELD_SIZE * row_id);
-            }
-        } else {
-            const uint8_t* src_null_map = src->null_signs();
-            uint8_t* dst_null_map = dst->null_signs();
-            for (uint16_t i = 0; i < selected_size; ++i) {
-                uint16_t row_id = selection[i];
-                dst_null_map[row_id] = src_null_map[row_id];
-                if (src_null_map[row_id]) {
-                    continue;
-                }
-                convert(dst_data + DST_FIELD_SIZE * row_id, src_data + SRC_FIELD_SIZE * row_id);
-            }
-        }
     }
 
 private:
