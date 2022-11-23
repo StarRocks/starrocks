@@ -15,6 +15,7 @@
 #include "rowset_update_state.h"
 
 #include "common/tracer.h"
+#include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
 #include "serde/column_array_serde.h"
 #include "storage/chunk_helper.h"
@@ -366,6 +367,7 @@ Status RowsetUpdateState::_prepare_partial_update_states(Tablet* tablet, Rowset*
         _memory_usage += _partial_update_states[idx].write_columns[col_idx]->memory_usage();
     }
     int64_t t_end = MonotonicMillis();
+    _partial_update_states[idx].inited = true;
 
     LOG(INFO) << Substitute(
             "prepare PartialUpdateState tablet:$0 segment:$1 #row:$2(#non-default:$3) #column:$4 "
@@ -392,11 +394,14 @@ Status RowsetUpdateState::_check_and_resolve_conflict(Tablet* tablet, Rowset* ro
         std::string msg = Substitute(
                 "_check_and_reslove_conflict tablet:$0 rowset:$1 segment:$2 failed, partial_update_states size:$3",
                 tablet->tablet_id(), rowset_id, segment_id, _partial_update_states.size());
+        LOG(WARNING) << msg;
         return Status::InternalError(msg);
     }
 
     // _read_version is equal to latest_applied_version which means there is no other rowset is applied
     // the data of write_columns can be write to segment file directly
+    LOG(INFO) << "latest_applied_version is " << latest_applied_version.to_string() << " read version is "
+              << _partial_update_states[segment_id].read_version.to_string();
     if (latest_applied_version == _partial_update_states[segment_id].read_version) {
         return Status::OK();
     }
@@ -503,9 +508,13 @@ Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_
 
     // Assume all segment is rewrite
     // TODO create a new function, finish_apply
+    /*
+    FileSystem::Default()->rename_file(dest_path, src_path);
     if (segment_id == rowset->num_segments() - 1) {
+        LOG(INFO) << "reload rowset: " << rowset_id << " segment_id: " << segment_id << " num_segment: " << rowset->num_segments();
         RETURN_IF_ERROR(rowset->reload());
     }
+    */
 
     for (size_t col_idx = 0; col_idx < _partial_update_states[segment_id].write_columns.size(); col_idx++) {
         if (_partial_update_states[segment_id].write_columns[col_idx] != nullptr) {
@@ -514,6 +523,31 @@ Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_
     }
     _partial_update_states[segment_id].release();
     return Status::OK();
+}
+
+Status RowsetUpdateState::finish_apply(Tablet* tablet, Rowset* rowset) {
+    const auto& rowset_meta_pb = rowset->rowset_meta()->get_meta_pb();
+    if (!rowset_meta_pb.has_txn_meta() || rowset->num_segments() == 0 ||
+        rowset_meta_pb.txn_meta().has_merge_condition()) {
+        return Status::OK();
+    }
+    vector<std::pair<string, string>> rewrite_files;
+    DeferOp clean_temp_files([&] {
+        for (auto& e : rewrite_files) {
+            FileSystem::Default()->delete_file(e.second);
+        }
+    });
+    for (size_t i = 0; i < rowset->num_segments(); i++) {
+        auto src_path = Rowset::segment_file_path(tablet->schema_hash_path(), rowset->rowset_id(), i);
+        auto dest_path = Rowset::segment_temp_file_path(tablet->schema_hash_path(), rowset->rowset_id(), i);
+        if (!fs::path_exist(dest_path) || !fs::path_exist(src_path)) {
+            LOG(WARNING) << "file not exist " << dest_path;
+            return Status::InternalError("file not exist");
+        } else {
+            FileSystem::Default()->rename_file(dest_path, src_path);
+        }
+    }
+    return rowset->reload();
 }
 
 std::string RowsetUpdateState::to_string() const {

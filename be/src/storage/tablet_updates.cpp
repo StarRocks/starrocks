@@ -910,6 +910,15 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
         }
         state.release_upserts(i);
     }
+    st = state.finish_apply(&_tablet, rowset.get());
+    if (!st.ok()) {
+        manager->update_state_cache().remove(state_entry);
+        std::string msg = Substitute("_apply_rowset_commit error: apply rowset update state failed: $0 $1",
+                                     st.to_string(), debug_string());
+        LOG(ERROR) << msg;
+        _set_error(msg);
+        return;
+    }
 
     for (uint32_t i = 0; i < rowset->num_delete_files(); i++) {
         state.load_deletes(rowset.get(), i);
