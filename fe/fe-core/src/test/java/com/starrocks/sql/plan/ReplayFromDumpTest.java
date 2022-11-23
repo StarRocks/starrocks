@@ -198,7 +198,6 @@ public class ReplayFromDumpTest {
                 "  |  cardinality: 2500"));
     }
 
-
     @Test
     public void testTPCH20() throws Exception {
         compareDumpWithOriginTest("tpchcost/q20");
@@ -659,5 +658,17 @@ public class ReplayFromDumpTest {
                 "  |  - filter_id = 0, build_expr = (58: r_regionkey), remote = false\n" +
                 "  |  output columns: 50\n" +
                 "  |  cardinality: 5"));
+    }
+
+    @Test
+    public void testGatherWindowCTE2() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/gather_window_cte"), null, TExplainLevel.COSTS);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  0:UNION\n" +
+                "  |  output exprs:\n" +
+                "  |      [16, DATE, false] | [17, BIGINT, true] | [18, DECIMAL128(27,19), true]\n" +
+                "  |  child exprs:\n" +
+                "  |      [2, DATE, false] | [7, BIGINT, true] | [8, DECIMAL128(27,19), true]\n" +
+                "  |      [9, DATE, false] | [14, BIGINT, true] | [15, DECIMAL128(27,19), true]"));
     }
 }
