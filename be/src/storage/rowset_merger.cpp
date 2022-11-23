@@ -257,10 +257,8 @@ private:
                                   OlapReaderStatistics* stats, RowSourceMaskBuffer* mask_buffer = nullptr,
                                   std::vector<std::unique_ptr<RowSourceMaskBuffer>>* rowsets_mask_buffer = nullptr) {
         std::unique_ptr<vectorized::Column> sort_column;
-        std::vector<ColumnId> sort_key_idxes;
         if (schema.sort_key_idxes().size() > 1) {
-            sort_key_idxes = schema.sort_key_idxes();
-            if (!PrimaryKeyEncoder::create_column(schema, &sort_column, sort_key_idxes).ok()) {
+            if (!PrimaryKeyEncoder::create_column(schema, &sort_column, schema.sort_key_idxes()).ok()) {
                 LOG(FATAL) << "create column for primary key encoder failed";
             }
         } else if (schema.num_key_fields() > 1) {
@@ -413,8 +411,7 @@ private:
             rowsets_mask_buffer.emplace_back(std::move(rowset_mask_buffer));
         }
         {
-            VectorizedSchema schema =
-                    ChunkHelper::convert_schema_to_format_v2(tablet.tablet_schema(), column_groups[0]);
+            VectorizedSchema schema = ChunkHelper::get_sort_key_schema_with_format_v2(tablet.tablet_schema());
             RETURN_IF_ERROR(_do_merge_horizontally(tablet, version, schema, rowsets, writer, cfg, total_input_size,
                                                    total_rows, total_chunk, stats, mask_buffer.get(),
                                                    &rowsets_mask_buffer));

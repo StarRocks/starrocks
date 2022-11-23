@@ -37,6 +37,9 @@ public:
     // Get schema with format v2 type containing short key columns from TabletSchema.
     static vectorized::VectorizedSchema get_short_key_schema_with_format_v2(const TabletSchema& tablet_schema);
 
+    // Get schema with format v2 type containing sort key columns from TabletSchema.
+    static vectorized::VectorizedSchema get_sort_key_schema_with_format_v2(const TabletSchema& tablet_schema);
+
     static ColumnId max_column_id(const vectorized::VectorizedSchema& schema);
 
     // Create an empty chunk according to the |schema| and reserve it of size |n|.
