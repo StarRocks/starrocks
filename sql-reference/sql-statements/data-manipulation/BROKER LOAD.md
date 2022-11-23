@@ -548,7 +548,7 @@ WITH BROKER "mybroker"
 
 > **说明**
 >
-> 上述示例中，因为 `example8.csv` 和 `table8` 所包含的列不能按顺序依次对应，因此需要通过 `columns` 参数来设置 `example8.csv` 和 `table8` 之间的列映射关系。
+> 上述示例中，因为 `example8.csv` 和 `table8` 所包含的列不能按顺序依次对应，因此需要通过 `column_list` 参数来设置 `example8.csv` 和 `table8` 之间的列映射关系。
 
 #### 设置筛选条件
 
@@ -575,7 +575,7 @@ WITH BROKER "mybroker"
 
 > **说明**
 >
-> 上述示例中，虽然 `example9.csv` 和 `table9` 所包含的列数目相同、并且按顺序一一对应，但是因为需要通过 WHERE 子句指定基于列的过滤条件，因此需要通过 `columns` 参数对 `example9.csv` 中的列进行临时命名。
+> 上述示例中，虽然 `example9.csv` 和 `table9` 所包含的列数目相同、并且按顺序一一对应，但是因为需要通过 WHERE 子句指定基于列的过滤条件，因此需要通过 `column_list` 参数对 `example9.csv` 中的列进行临时命名。
 
 #### 导入数据到含有 HLL 类型列的表
 
