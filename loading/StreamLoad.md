@@ -229,10 +229,6 @@ Stream Load 支持通过程序导入数据流，具体操作方法，请参见�
 
   Stream Load 还提供 `timeout` 参数来设置当前导入作业的超时时间。具体请参见 [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md)。
 
-## 使用说明
-
-如果待导入数据文件中某行数据的某个字段缺失、并且 StarRocks 表中跟该字段对应的列定义为 `NOT NULL`，StarRocks 会在导入该行数据时自动往 StarRocks 表中对应的列补充 `NULL`。您也可以通过 [`ifnull()`](../sql-reference/sql-functions/condition-functions/ifnull.md) 函数指定要补充的默认值。
-
 ## 常见问题
 
 请参见 [Stream Load 常见问题](../faq/loading/Stream_load_faq.md)。

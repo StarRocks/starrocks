@@ -132,7 +132,7 @@ StarRocks 提供 [Stream Load](../loading/StreamLoad.md)、[Broker Load](../load
   >
   > 如果该列在建表时定义该列为 `NOT NULL`，则导入会报错，作业失败。
 
-  在创建 [Stream Load](../loading/StreamLoad.md)、[Broker Loa](../loading/BrokerLoad.md)、[Routine Load](../loading/RoutineLoad.md)、或 [Spark Load](../loading/SparkLoad.md) 导入作业时，您还可以在指定待导入的列的参数里通过函数来给该列指定要填充的默认值。例如，如果指定不导入数据文件中代表城市 ID 的字段，您希望 StarRocks 在使用 Stream Load 导入数据时往该字段对应的列中填充 `x`，则可以指定 `"columns: city, tmp_id, id = ifnull(tmp_id, 'x')"`。
+  对于 [Stream Load](../loading/StreamLoad.md)、[Broker Loa](../loading/BrokerLoad.md)、[Routine Load](../loading/RoutineLoad.md) 和 [Spark Load](../loading/SparkLoad.md)，您还可以在指定待导入列的参数里通过函数来给该列指定要填充的值。
 
 有关 `NOT NULL` 和 `DEFAULT` 的用法，请参见 [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md)。
 
