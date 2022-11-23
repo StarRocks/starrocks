@@ -258,7 +258,7 @@ StatusOr<std::unique_ptr<ColumnWriter>> ColumnWriter::create(const ColumnWriterO
         auto column_writer = std::make_unique<ScalarColumnWriter>(str_opts, type_info, wfile);
         return std::make_unique<StringColumnWriter>(str_opts, std::move(type_info), std::move(column_writer));
     } else if (is_scalar_field_type(delegate_type(column->type()))) {
-        return std::make_unique<ScalarColumnWriter>(opts, type_info, wfile);
+        return std::make_unique<ScalarColumnWriter>(opts, std::move(type_info), wfile);
     } else {
         switch (column->type()) {
         case LogicalType::TYPE_ARRAY: {
@@ -293,7 +293,7 @@ StatusOr<std::unique_ptr<ColumnWriter>> ColumnWriter::create(const ColumnWriterO
                 null_options.meta->set_is_nullable(false);
 
                 TypeInfoPtr bool_type_info = get_type_info(TYPE_BOOLEAN);
-                null_writer = std::make_unique<ScalarColumnWriter>(null_options, bool_type_info, wfile);
+                null_writer = std::make_unique<ScalarColumnWriter>(null_options, std::move(bool_type_info), wfile);
             }
 
             ColumnWriterOptions array_size_options;
@@ -310,7 +310,7 @@ StatusOr<std::unique_ptr<ColumnWriter>> ColumnWriter::create(const ColumnWriterO
             array_size_options.need_bitmap_index = false;
             TypeInfoPtr int_type_info = get_type_info(TYPE_INT);
             std::unique_ptr<ScalarColumnWriter> offset_writer =
-                    std::make_unique<ScalarColumnWriter>(array_size_options, int_type_info, wfile);
+                    std::make_unique<ScalarColumnWriter>(array_size_options, std::move(int_type_info), wfile);
             return std::make_unique<ArrayColumnWriter>(opts, type_info, std::move(null_writer),
                                                        std::move(offset_writer), std::move(element_writer));
         }
