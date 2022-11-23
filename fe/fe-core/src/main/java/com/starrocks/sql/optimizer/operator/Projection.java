@@ -39,6 +39,10 @@ public class Projection {
         return new ArrayList<>(columnRefMap.keySet());
     }
 
+    public ColumnRefSet getOutputColumnRefSet() {
+        return new ColumnRefSet(columnRefMap.keySet());
+    }
+
     public Map<ColumnRefOperator, ScalarOperator> getColumnRefMap() {
         return columnRefMap;
     }

@@ -18,7 +18,7 @@ public class Statistics {
     // This flag set true if get table row count from GlobalStateMgr LE 1
     // Table row count in FE depends on BE reporting，but FE may not get report from BE which just started，
     // this causes the table row count stored in FE to be inaccurate.
-    private boolean tableRowCountMayInaccurate;
+    private final boolean tableRowCountMayInaccurate;
 
     private Statistics(Builder builder) {
         this.outputRowCount = builder.outputRowCount;
@@ -53,7 +53,8 @@ public class Statistics {
 
     public ColumnStatistic getColumnStatistic(ColumnRefOperator column) {
         ColumnStatistic result = columnStatistics.get(column);
-        Preconditions.checkState(result != null);
+        Preconditions.checkNotNull(result,
+                String.format("miss column statistic for %s, all columns are %s", column, columnStatistics.keySet()));
         return result;
     }
 
@@ -121,6 +122,7 @@ public class Statistics {
         }
 
         public Builder addColumnStatistic(ColumnRefOperator column, ColumnStatistic statistic) {
+            Preconditions.checkNotNull(statistic);
             this.columnStatistics.put(column, statistic);
             return this;
         }

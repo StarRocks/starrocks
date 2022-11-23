@@ -17,6 +17,7 @@ import com.starrocks.connector.iceberg.ScalarOperatorToIcebergExpr;
 import com.starrocks.connector.iceberg.cost.IcebergTableStatisticCalculator;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
@@ -24,6 +25,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalHudiScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
@@ -394,6 +396,18 @@ public class Utils {
             gid = gid * 2 + (bitSet.get(b) ? 1 : 0);
         }
         return gid;
+    }
+
+    /**
+     * Find the cheapest column from output columns of operator/expression, for whose required output is empty
+     */
+    public static ColumnRefOperator findSmallestColumnRef(OptExpression optExpr, ColumnRefFactory columnFactory) {
+        return findSmallestColumnRef(
+                ((LogicalOperator) optExpr.getOp())
+                        .getOutputColumns(new ExpressionContext(optExpr))
+                        .getStream()
+                        .mapToObj(columnFactory::getColumnRef)
+                        .collect(Collectors.toList()));
     }
 
     public static ColumnRefOperator findSmallestColumnRef(List<ColumnRefOperator> columnRefOperatorList) {

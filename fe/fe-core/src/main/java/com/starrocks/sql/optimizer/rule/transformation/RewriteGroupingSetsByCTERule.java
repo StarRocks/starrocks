@@ -4,7 +4,6 @@ package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
@@ -165,10 +164,7 @@ public class RewriteGroupingSetsByCTERule extends TransformationRule {
         }
         // If there is no requiredColumns, we need to add least one column which is smallest
         if (consumeOutputMap.isEmpty()) {
-            List<ColumnRefOperator> outputColumns =
-                    produceOperator.getOutputColumns(new ExpressionContext(cteProduce)).getStream().
-                            mapToObj(factory::getColumnRef).collect(Collectors.toList());
-            ColumnRefOperator smallestColumn = Utils.findSmallestColumnRef(outputColumns);
+            ColumnRefOperator smallestColumn = Utils.findSmallestColumnRef(cteProduce, factory);
             ColumnRefOperator consumeOutput =
                     factory.create(smallestColumn, smallestColumn.getType(), smallestColumn.isNullable());
             consumeOutputMap.put(consumeOutput, smallestColumn);

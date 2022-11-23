@@ -127,9 +127,10 @@ public class NestLoopJoinTest extends PlanTestBase {
                 "left anti join " +
                 " (select * from t3 where cast(v10 as string) like 'ss%' ) sub2" +
                 " on substr(cast(sub1.v7 as string), 1) = substr(cast(sub2.v10 as string), 1)";
-        assertPlanContains(sql, " 11:Project\n" +
-                "  |  <slot 14> : 14: substr\n" +
-                "  |  \n" +
+        assertPlanContains(sql, "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 11\n" +
+                "    UNPARTITIONED\n" +
+                "\n" +
                 "  10:HASH JOIN\n" +
                 "  |  join op: LEFT ANTI JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
@@ -140,9 +141,8 @@ public class NestLoopJoinTest extends PlanTestBase {
                 "from test_all_type_nullable t1 " +
                 "right anti join test_all_type_nullable2 t2 " +
                 "on t1.id_char = 0) as a;";
-        assertVerbosePlanContains(sql, "  4:Project\n" +
-                "  |  output columns:\n" +
-                "  |  28 <-> [28: id_tinyint, TINYINT, false]\n" +
+        assertVerbosePlanContains(sql, "  4:AGGREGATE (update serialize)\n" +
+                "  |  aggregate: count[(*); args: ; result: BIGINT; args nullable: false; result nullable: false]\n" +
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  3:NESTLOOP JOIN\n" +
@@ -156,9 +156,9 @@ public class NestLoopJoinTest extends PlanTestBase {
                 "from test_all_type_nullable t1 " +
                 "right anti join test_all_type_nullable2 t2 " +
                 "on t1.id_char = 0) as a;";
-        assertVerbosePlanContains(sql, "  4:Project\n" +
-                "  |  output columns:\n" +
-                "  |  34 <-> [34: id_char, CHAR, false]\n" +
+        assertVerbosePlanContains(sql, "  4:AGGREGATE (update serialize)\n" +
+                "  |  aggregate: count[([34: id_char, CHAR, false]); args: VARCHAR; " +
+                "result: BIGINT; args nullable: false; result nullable: false]\n" +
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  3:NESTLOOP JOIN\n" +
@@ -172,9 +172,8 @@ public class NestLoopJoinTest extends PlanTestBase {
                 "from test_all_type_nullable t1 " +
                 "left anti join test_all_type_nullable2 t2 " +
                 "on t1.id_char = 0) as a;";
-        assertVerbosePlanContains(sql, "  4:Project\n" +
-                "  |  output columns:\n" +
-                "  |  8 <-> [8: id_char, CHAR, false]\n" +
+        assertVerbosePlanContains(sql, "  4:AGGREGATE (update serialize)\n" +
+                "  |  aggregate: count[(*); args: ; result: BIGINT; args nullable: false; result nullable: false]\n" +
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  3:NESTLOOP JOIN\n" +

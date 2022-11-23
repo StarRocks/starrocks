@@ -5,6 +5,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.JoinOperator;
+import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
@@ -81,6 +82,10 @@ public class SemiReorderRule extends TransformationRule {
                 .setProjection(topJoin.getProjection())
                 .setLimit(topJoin.getLimit())
                 .build();
+        ColumnRefSet newTopJoinOutput = new ColumnRefSet();
+        newTopJoinOutput.union(input.inputAt(0).inputAt(0).getOutputColumns());
+        newTopJoinOutput.union(input.inputAt(0).inputAt(1).getOutputColumns());
+        newTopJoinOutput.union(input.inputAt(1).getOutputColumns());
 
         ColumnRefSet leftChildInputColumns = new ColumnRefSet();
         leftChildInputColumns.union(input.inputAt(0).inputAt(0).getOutputColumns());
@@ -88,8 +93,14 @@ public class SemiReorderRule extends TransformationRule {
 
         ColumnRefSet newSemiOutputColumns = new ColumnRefSet();
         for (int id : leftChildInputColumns.getColumnIds()) {
-            if (newTopJoin.getProjection().getOutputColumns().stream().anyMatch(c -> c.getId() == id)) {
-                newSemiOutputColumns.union(id);
+            if (newTopJoin.getProjection() != null) {
+                if (newTopJoin.getProjection().getOutputColumnRefSet().contains(id)) {
+                    newSemiOutputColumns.union(id);
+                }
+            } else {
+                if (newTopJoinOutput.contains(id)) {
+                    newSemiOutputColumns.union(id);
+                }
             }
 
             if (newTopJoin.getRequiredChildInputColumns().contains(id)) {
@@ -101,6 +112,13 @@ public class SemiReorderRule extends TransformationRule {
         OptExpression leftChildJoinRightChild = input.inputAt(0).inputAt(1);
         ColumnRefSet leftChildJoinRightChildOutputColumns = leftChildJoinRightChild.getOutputColumns();
 
+        if (leftChildJoin.getProjection() == null) {
+            Map<ColumnRefOperator, ScalarOperator> leftChildProjects =
+                    leftChildJoin.getOutputColumnRefs(new ExpressionContext(input.inputAt(0)),
+                                    context.getColumnRefFactory())
+                            .stream().collect(Collectors.toMap(Function.identity(), Function.identity()));
+            leftChildJoin.setProjection(new Projection(leftChildProjects));
+        }
         Projection leftChildJoinProjection = leftChildJoin.getProjection();
         HashMap<ColumnRefOperator, ScalarOperator> rightExpression = new HashMap<>();
         HashMap<ColumnRefOperator, ScalarOperator> semiExpression = new HashMap<>();
@@ -154,6 +172,7 @@ public class SemiReorderRule extends TransformationRule {
         }
 
         // build new right child projection
+        Map<ColumnRefOperator, ScalarOperator> newTopProjectMap = Maps.newHashMap(semiExpression);
         OptExpression newRightChild = leftChildJoinRightChild;
         if (!rightExpression.isEmpty()) {
             Map<ColumnRefOperator, ScalarOperator> expressionProject;
@@ -171,12 +190,18 @@ public class SemiReorderRule extends TransformationRule {
             for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : rightExpression.entrySet()) {
                 rewriteMap.put(entry.getKey(), rewriter.rewrite(entry.getValue()));
             }
+            newTopProjectMap.putAll(rewriteMap);
 
             Operator.Builder builder = OperatorBuilderFactory.build(leftChildJoinRightChild.getOp());
             Operator newRightChildOperator =
                     builder.withOperator(leftChildJoinRightChild.getOp()).setProjection(new Projection(rewriteMap))
                             .build();
             newRightChild = OptExpression.create(newRightChildOperator, leftChildJoinRightChild.getInputs());
+        }
+
+        // build new top join projection
+        if (newTopJoin.getProjection() == null) {
+            newTopJoin.setProjection(new Projection(newTopProjectMap));
         }
 
         OptExpression semiOpt = OptExpression.create(newSemiJoin, input.inputAt(0).inputAt(0), input.inputAt(1));

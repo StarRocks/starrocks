@@ -190,7 +190,16 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 statisticsBuilder.addColumnStatistic(columnRefOperator,
                         ExpressionStatisticCalculator.calculate(mapOperator, statisticsBuilder.build()));
             }
-
+        } else {
+            if (node instanceof LogicalOperator) {
+                LogicalOperator logical = (LogicalOperator) node;
+                Statistics input = statisticsBuilder.build();
+                for (ColumnRefOperator ref : logical.getOutputColumnRefs(context, columnRefFactory)) {
+                    statisticsBuilder.addColumnStatistic(ref, ExpressionStatisticCalculator.calculate(ref, input));
+                }
+            } else {
+                Preconditions.checkState(false, "TODO");
+            }
         }
         context.setStatistics(statisticsBuilder.build());
         return null;

@@ -300,9 +300,13 @@ public class ReorderJoinRule extends Rule {
             }
 
             if (childInputColumns.equals(outputColumns)) {
+                Map<ColumnRefOperator, ScalarOperator> columnMap =
+                        outputColumns.getStream().mapToObj(optimizerContext.getColumnRefFactory()::getColumnRef)
+                                .collect(Collectors.toMap(x -> x, x -> x));
+                Projection projection = new Projection(columnMap);
                 LogicalJoinOperator joinOperator = new LogicalJoinOperator.Builder().withOperator(
                                 (LogicalJoinOperator) optExpression.getOp())
-                        .setProjection(null).build();
+                        .setProjection(projection).build();
                 OptExpression joinOpt = OptExpression.create(joinOperator, Lists.newArrayList(left, right));
                 joinOpt.deriveLogicalPropertyItself();
 

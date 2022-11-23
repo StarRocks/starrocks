@@ -6,6 +6,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
@@ -48,14 +49,11 @@ public class PruneProjectRule extends TransformationRule {
         if (((LogicalProjectOperator) input.getOp()).getColumnRefMap().isEmpty()) {
             Map<ColumnRefOperator, ScalarOperator> projectMap = Maps.newHashMap();
 
-            OptExpression child = input.inputAt(0);
-            LogicalOperator logicalOperator = (LogicalOperator) child.getOp();
+            LogicalOperator logicalOperator = (LogicalOperator) input.inputAt(0).getOp();
 
             ColumnRefOperator smallestColumn =
-                    logicalOperator.getSmallestColumn(context.getColumnRefFactory(), child);
-            if (smallestColumn != null) {
-                projectMap.put(smallestColumn, smallestColumn);
-            }
+                    Utils.findSmallestColumnRef(input.inputAt(0), context.getColumnRefFactory());
+            projectMap.put(smallestColumn, smallestColumn);
             return Lists.newArrayList(OptExpression
                     .create(new LogicalProjectOperator(projectMap, logicalOperator.getLimit()), input.getInputs()));
         }

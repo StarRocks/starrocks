@@ -7,19 +7,15 @@ import com.starrocks.analysis.JoinOperator;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
-import com.starrocks.sql.optimizer.Utils;
-import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
-import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.ArrayList;
 import java.util.Objects;
-import java.util.stream.Collectors;
 
 public class LogicalJoinOperator extends LogicalOperator {
     private final JoinOperator joinType;
@@ -114,27 +110,19 @@ public class LogicalJoinOperator extends LogicalOperator {
     }
 
     @Override
-    public ColumnRefOperator getSmallestColumn(ColumnRefFactory columnRefFactory, OptExpression expr) {
-        ColumnRefSet candidate;
-        if (joinType.isLeftSemiAntiJoin()) {
-            candidate = expr.getChildOutputColumns(0);
-        } else if (joinType.isRightSemiAntiJoin()) {
-            candidate = expr.getChildOutputColumns(1);
-        } else {
-            candidate = getOutputColumns(new ExpressionContext(expr));
-        }
-        return Utils.findSmallestColumnRef(
-                candidate.getStream().mapToObj(columnRefFactory::getColumnRef).collect(Collectors.toList()));
-    }
-
-    @Override
     public ColumnRefSet getOutputColumns(ExpressionContext expressionContext) {
         if (projection != null) {
             return new ColumnRefSet(projection.getOutputColumns());
         } else {
             ColumnRefSet columns = new ColumnRefSet();
-            for (int i = 0; i < expressionContext.arity(); ++i) {
-                columns.union(expressionContext.getChildLogicalProperty(i).getOutputColumns());
+            if (joinType.isLeftSemiAntiJoin()) {
+                columns.union(expressionContext.getChildLogicalProperty(0).getOutputColumns());
+            } else if (joinType.isRightSemiAntiJoin()) {
+                columns.union(expressionContext.getChildLogicalProperty(1).getOutputColumns());
+            } else {
+                for (int i = 0; i < expressionContext.arity(); ++i) {
+                    columns.union(expressionContext.getChildLogicalProperty(i).getOutputColumns());
+                }
             }
             return columns;
         }

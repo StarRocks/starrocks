@@ -11,7 +11,6 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
-import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
@@ -404,10 +403,7 @@ public class RewriteMultiDistinctByCTERule extends TransformationRule {
         }
         // If there is no requiredColumns, we need to add least one column which is smallest
         if (consumeOutputMap.isEmpty()) {
-            List<ColumnRefOperator> outputColumns =
-                    produceOperator.getOutputColumns(new ExpressionContext(cteProduce)).getStream().
-                            mapToObj(factory::getColumnRef).collect(Collectors.toList());
-            ColumnRefOperator smallestColumn = Utils.findSmallestColumnRef(outputColumns);
+            ColumnRefOperator smallestColumn = Utils.findSmallestColumnRef(cteProduce, factory);
             ColumnRefOperator consumeOutput =
                     factory.create(smallestColumn, smallestColumn.getType(), smallestColumn.isNullable());
             consumeOutputMap.put(consumeOutput, smallestColumn);
