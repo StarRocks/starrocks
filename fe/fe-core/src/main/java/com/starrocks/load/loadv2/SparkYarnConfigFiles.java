@@ -37,6 +37,7 @@ import java.io.File;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import javax.xml.XMLConstants;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.transform.OutputKeys;
@@ -224,6 +225,9 @@ public class SparkYarnConfigFiles {
                 }
 
                 TransformerFactory tff = TransformerFactory.newInstance();
+                // For sonar issue: XML parsers should not be vulnerable to XXE attacks
+                tff.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "");
+                tff.setAttribute(XMLConstants.ACCESS_EXTERNAL_STYLESHEET, "");
                 Transformer tf = tff.newTransformer();
 
                 tf.setOutputProperty(OutputKeys.INDENT, "yes");
