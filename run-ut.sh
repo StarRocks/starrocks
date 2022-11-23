@@ -222,6 +222,7 @@ if [ "${WITH_BLOCK_CACHE}" == "ON"  ]; then
 fi
 
 echo "GTEST_OPTIONS:${GTEST_OPTIONS}"
+echo "TEST_MODULE:${TEST_MODULE}"
 
 # HADOOP_CLASSPATH defined in $STARROCKS_HOME/conf/hadoop_env.sh
 # put $STARROCKS_HOME/conf ahead of $HADOOP_CLASSPATH so that custom config can replace the config in $HADOOP_CLASSPATH
@@ -241,22 +242,21 @@ if [ -d ${STARROCKS_TEST_BINARY_DIR}/util/test_data ]; then
 fi
 cp -r ${STARROCKS_HOME}/be/test/util/test_data ${STARROCKS_TEST_BINARY_DIR}/util/
 
-test_files=`find ${STARROCKS_TEST_BINARY_DIR} -type f -perm -111 -name "*test" \
-    | grep -v starrocks_test \
-    | grep -v bench_test \
-    | grep -e "$TEST_MODULE" `
-
 # run cases in starrocks_test in parallel if has gtest-parallel script.
 # reference: https://github.com/google/gtest-parallel
-if [ $TEST_MODULE == '.*'  || $TEST_MODULE == 'starrocks_test' ]; then
+if [ "${TEST_MODULE}" == ".*" ] || [ "${TEST_MODULE}" == "starrocks_test" ]; then
   echo "Run test file: starrocks_test"
   if [ -x ${GTEST_PARALLEL} ]; then
-      ${GTEST_PARALLEL} ${STARROCKS_TEST_BINARY_DIR}/starrocks_test --gtest_catch_exceptions=0 --gtest_filter=${TEST_FILTER} --serialize_test_cases ${GTEST_PARALLEL_OPTIONS}
+      ${GTEST_PARALLEL} ${STARROCKS_TEST_BINARY_DIR}/starrocks_test --gtest_filter=${TEST_FILTER} --serialize_test_cases ${GTEST_PARALLEL_OPTIONS}
   else
       ${STARROCKS_TEST_BINARY_DIR}/starrocks_test $GTEST_OPTIONS --gtest_filter=${TEST_FILTER}
   fi
 fi
 
+test_files=`find ${STARROCKS_TEST_BINARY_DIR} -type f -perm -111 -name "*test" \
+    | grep -v starrocks_test \
+    | grep -v bench_test \
+    | grep -e "$TEST_MODULE" `
 for test in ${test_files[@]}
 do
     echo "Run test file: $test"
