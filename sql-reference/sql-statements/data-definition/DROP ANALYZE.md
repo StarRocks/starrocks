@@ -22,9 +22,9 @@ DROP ANALYZE 266030;
 
 ## 相关文档
 
-[CREATE ANALYZE](../data-definition/SHOW%20ANALYZE%20JOB.md)：创建自定义自动采集任务。
+[CREATE ANALYZE](../data-definition/CREATE%20ANALYZE.md)：创建自定义自动采集任务。
 
-[SHOW ANALYZE JOB](../data-definition/DROP%20ANALYZE.md)：查看自定义自动采集任务。
+[SHOW ANALYZE JOB](../data-definition/SHOW%20ANALYZE%20JOB.md)：查看自定义自动采集任务。
 
 [KILL ANALYZE](../data-definition/KILL%20ANALYZE.md)：取消正在运行中（Running）的统计信息收集任务。
 

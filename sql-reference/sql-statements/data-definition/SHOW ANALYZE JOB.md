@@ -39,7 +39,7 @@ SHOW ANALYZE JOB where `database` = 'test';
 
 ## 相关文档
 
-[CREATE ANALYZE](../data-definition/SHOW%20ANALYZE%20JOB.md)：创建自定义自动采集任务。
+[CREATE ANALYZE](../data-definition/CREATE%20ANALYZE.md)：创建自定义自动采集任务。
 
 [DROP ANALYZE](../data-definition/DROP%20ANALYZE.md)：删除自动采集任务。
 
