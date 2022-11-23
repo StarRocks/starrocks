@@ -755,7 +755,7 @@ public:
         return dest_column;
     }
 
-private:
+protected:
     static void _sort_column(std::vector<uint32_t>* sort_index, const Column& src_column, size_t offset, size_t count) {
         const auto& data = down_cast<const ColumnType&>(src_column).get_data();
 
@@ -1106,7 +1106,6 @@ private:
         return dest_column;
     }
 
-private:
     static void _filter_array_items(const ArrayColumn* src_column, const ColumnPtr raw_filter, ArrayColumn* dest_column,
                                     NullColumn* dest_null_map) {
         ArrayColumn* filter;
@@ -1146,6 +1145,138 @@ private:
             }
         }
         dest_column->elements_column()->append_selective(src_column->elements(), indexes);
+    }
+};
+
+template <PrimitiveType PT>
+class ArraySortBy : public ArraySort<PT> {
+    using ColumnType = RunTimeColumnType<PT>;
+
+public:
+    static ColumnPtr process(FunctionContext* ctx, const Columns& columns) {
+        DCHECK_EQ(columns.size(), 2);
+        RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+        if (columns[0]->is_constant() || columns[1]->is_constant()) {
+            return columns[0];
+        }
+
+        size_t chunk_size = columns[0]->size();
+
+        // TODO: For fixed-length types, you can operate directly on the original column without using sort index,
+        //  which will be optimized later
+        std::vector<uint32_t> sort_index;
+        ColumnPtr src_column =  columns[0];
+        ColumnPtr dest_column = src_column->clone_empty();
+        ColumnPtr key_column = columns[1];
+
+        if(key_column->size() != src_column->size()) {
+            throw std::runtime_error("Input array size is not equal in array_sortby.");
+        }
+        // src_array: Nullable(array(Nullable(element),offsets))
+        // key_array: Nullable(array(Nullable(element),offsets))
+
+        if (src_column->is_nullable()) {
+            const auto* src_nullable_column = down_cast<const NullableColumn*>(src_column.get());
+            const auto& src_data_column = src_nullable_column->data_column_ref();
+            const auto& src_null_column = src_nullable_column->null_column_ref();
+
+            auto* dest_nullable_column = down_cast<NullableColumn*>(dest_column.get());
+            auto* dest_data_column = dest_nullable_column->mutable_data_column();
+            auto* dest_null_column = dest_nullable_column->mutable_null_column();
+
+            if (src_column->has_null()) {
+                dest_null_column->get_data() = src_null_column.get_data();
+            } else {
+                dest_null_column->get_data().resize(chunk_size, 0);
+            }
+            dest_nullable_column->set_has_null(src_nullable_column->has_null());
+
+            _sort_array_column(dest_data_column, &sort_index, src_data_column,key_column);
+        } else {
+            _sort_array_column(dest_column.get(), &sort_index, *src_column, key_column);
+        }
+        return dest_column;
+    }
+
+private:
+
+    // src array, key array
+    //  null        null
+    //  []          []
+    //  [null]      [x]
+    // [xxx]        [xxx]
+    static void _sort_array_column(Column* dest_array_column, std::vector<uint32_t>* sort_index,
+                                   const Column& src_array_column, const ColumnPtr key_array_ptr) {
+        NullColumnPtr key_null_map = nullptr;
+        ColumnPtr key_data = nullptr;
+        if (key_array_ptr->is_nullable()) { // Nullable(array(Nullable(element), offsets), null_map)
+            const auto* key_nullable_column = down_cast<const NullableColumn*>(key_array_ptr.get());
+            key_data = key_nullable_column->data_column();
+            key_null_map = key_nullable_column->null_column();
+        } else { // array(Nullable(element, offsets)
+            key_data = key_array_ptr;
+        }
+        // key_array_data = array(Nullable(element), offsets)
+
+        const auto& key_element_column = down_cast<const ArrayColumn&>(key_data).elements();
+        const auto& key_offsets_column = down_cast<const ArrayColumn&>(key_data).offsets();
+
+        const auto& src_elements_column = down_cast<const ArrayColumn&>(src_array_column).elements();
+        const auto& src_offsets_column = down_cast<const ArrayColumn&>(src_array_column).offsets();
+
+        auto* dest_elements_column = down_cast<ArrayColumn*>(dest_array_column)->elements_column().get();
+        auto* dest_offsets_column = down_cast<ArrayColumn*>(dest_array_column)->offsets_column().get();
+        dest_offsets_column->get_data() = src_offsets_column.get_data();
+
+        size_t chunk_size = src_array_column.size();
+        ArraySort<PT>::_init_sort_index(sort_index, src_elements_column.size());
+
+        if (src_offsets_column.size() != key_offsets_column.size() ||
+            !std::equal(src_offsets_column.get_data().begin(), src_offsets_column.get_data().end(),
+                        key_offsets_column.get_data().begin())) {
+            throw std::runtime_error("Input arrays' offsets are not equal in array_sortby.");
+        }
+        if (key_element_column.is_nullable()) { // [1, null, 2], null
+            if (key_element_column.has_null()) {
+                const auto& key_data_column = down_cast<const NullableColumn&>(key_element_column).data_column_ref();
+                const auto& null_column = down_cast<const NullableColumn&>(key_element_column).null_column_ref();
+
+                for (size_t i = 0; i < chunk_size; i++) {
+                    if (key_null_map == nullptr || !key_null_map->is_null(i)) {
+                        if (src_offsets_column.get_data()[i + 1] - src_offsets_column.get_data()[i] !=
+                            key_offsets_column.get_data()[i + 1] - key_offsets_column.get_data()[i]) {
+                            throw std::runtime_error("Input arrays' size are not equal in array_sortby.");
+                        }
+                        ArraySort<PT>::_sort_nullable_item(sort_index, key_data_column, null_column, src_offsets_column, i);
+                    }
+                }
+            } else {
+                const auto& key_data_column = down_cast<const NullableColumn&>(key_element_column).data_column_ref();
+
+                for (size_t i = 0; i < chunk_size; i++) {
+                    if (key_null_map == nullptr || !key_null_map->is_null(i)) {
+                        if (src_offsets_column.get_data()[i + 1] - src_offsets_column.get_data()[i] !=
+                            key_offsets_column.get_data()[i + 1] - key_offsets_column.get_data()[i]) {
+                            throw std::runtime_error("Input arrays' size are not equal in array_sortby.");
+                        }
+                        ArraySort<PT>::_sort_item(sort_index, key_data_column, src_offsets_column, i);
+                    }
+                }
+            }
+        } else {
+            for (size_t i = 0; i < chunk_size; i++) {
+                if (key_null_map == nullptr || !key_null_map->is_null(i)) {
+                    if (src_offsets_column.get_data()[i + 1] - src_offsets_column.get_data()[i] !=
+                        key_offsets_column.get_data()[i + 1] - key_offsets_column.get_data()[i]) {
+                        throw std::runtime_error("Input arrays' size are not equal in array_sortby.");
+                    }
+                    ArraySort<PT>::_sort_item(sort_index, key_element_column, src_offsets_column, i);
+                }
+            }
+        }
+
+        dest_elements_column->append_selective(src_elements_column, *sort_index);
     }
 };
 
