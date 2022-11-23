@@ -68,9 +68,11 @@ void __wrap___cxa_throw(void* thrown_exception, void* info, void (*dest)(void*))
                              ToStringFromUnixMicros(GetCurrentTimeMicros()).c_str(), print_id(query_id).c_str(),
                              print_id(fragment_instance_id).c_str(), get_exception_name(info).c_str(),
                              get_stack_trace().c_str());
-
+#ifdef BE_TEST
+    // tests check message from stderr.
     std::cerr << stack << std::endl;
-    LOG(ERROR) << stack;
+#endif
+    LOG(WARNING) << stack;
 
     // call the real __cxa_throw():
     __real___cxa_throw(thrown_exception, info, dest);
