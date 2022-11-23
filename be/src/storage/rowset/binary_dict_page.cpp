@@ -183,9 +183,6 @@ Status BinaryDictPageDecoder<Type>::init() {
     if (_encoding_type == DICT_ENCODING) {
         // copy the codewords into a temporary buffer first
         // And then copy the strings corresponding to the codewords to the destination buffer
-        const TypeInfoPtr& type_info = get_type_info(TYPE_INT);
-
-        RETURN_IF_ERROR(ColumnVectorBatch::create(0, false, type_info, nullptr, &_batch));
         _data_page_decoder = std::make_unique<BitShufflePageDecoder<TYPE_INT>>(_data, _options);
     } else if (_encoding_type == PLAIN_ENCODING) {
         DCHECK_EQ(_encoding_type, PLAIN_ENCODING);

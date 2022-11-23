@@ -110,7 +110,6 @@ add_library(Storage STATIC
     task/engine_clone_task.cpp
     task/engine_storage_migration_task.cpp
     task/engine_alter_tablet_task.cpp
-    column_vector.cpp
     aggregate_iterator.cpp
     async_delta_writer.cpp
     chunk_helper.cpp
