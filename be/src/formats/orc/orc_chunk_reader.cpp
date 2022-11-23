@@ -1354,7 +1354,6 @@ Status OrcChunkReader::init(std::unique_ptr<orc::Reader> reader) {
 Status OrcChunkReader::_init_position_in_orc() {
     int column_size = _src_slot_descriptors.size();
     std::vector<int> position_in_orc;
-    position_in_orc.clear();
     position_in_orc.resize(column_size);
     _slot_id_to_position.clear();
 
