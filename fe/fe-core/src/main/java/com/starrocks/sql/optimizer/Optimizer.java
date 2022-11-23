@@ -3,23 +3,31 @@ package com.starrocks.sql.optimizer;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.TableName;
-import com.starrocks.catalog.Database;
+import com.google.common.collect.Maps;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.DistributionInfo;
+import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
-import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.Explain;
 import com.starrocks.sql.PlannerProfile;
+import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.base.DistributionSpec;
+import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.cost.CostEstimate;
+import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -56,13 +64,15 @@ import com.starrocks.sql.optimizer.rule.tree.UseSortAggregateRule;
 import com.starrocks.sql.optimizer.task.OptimizeGroupTask;
 import com.starrocks.sql.optimizer.task.RewriteTreeTask;
 import com.starrocks.sql.optimizer.task.TaskContext;
-import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Optimizer's entrance class
@@ -197,12 +207,14 @@ public class Optimizer {
                 && connectContext.getSessionVariable().isEnableMaterializedViewRewrite()
                 && !optimizerConfig.isRuleBased()) {
             try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.registerMvs")) {
-                registerMaterializedViews(logicOperatorTree, connectContext);
+                registerMaterializedViews(logicOperatorTree, connectContext, columnRefFactory);
             }
         }
     }
 
-    private void registerMaterializedViews(OptExpression logicOperatorTree, ConnectContext connectContext) {
+    private void registerMaterializedViews(OptExpression logicOperatorTree,
+                                           ConnectContext connectContext,
+                                           ColumnRefFactory queryColumnRefFactory) {
         List<Table> tables = MvUtils.getAllTables(logicOperatorTree);
 
         // get all related materialized views, include nested mvs
@@ -226,34 +238,98 @@ public class Optimizer {
             }
 
             // 1. build mv query logical plan
-            ColumnRefFactory columnRefFactory = new ColumnRefFactory();
+            ColumnRefFactory mvColumnRefFactory = new ColumnRefFactory();
             MaterializedViewOptimizer mvOptimizer = new MaterializedViewOptimizer();
-            OptExpression mvPlan = mvOptimizer.optimize(mv, columnRefFactory, connectContext);
+            OptExpression mvPlan = mvOptimizer.optimize(mv, mvColumnRefFactory, connectContext);
             if (!MvUtils.isValidMVPlan(mvPlan)) {
                 continue;
             }
 
-            List<ColumnRefOperator> outputExpressions = mvOptimizer.getOutputExpressions();
-            MaterializationContext materializationContext = new MaterializationContext(
-                    mv, mvPlan, columnRefFactory, outputExpressions);
+            List<ColumnRefOperator> mvOutputColumns = mvOptimizer.getOutputExpressions();
+            MaterializationContext materializationContext =
+                    new MaterializationContext(mv, mvPlan, queryColumnRefFactory, mvColumnRefFactory);
+            // generate scan mv plan here to reuse it in rule applications
+            LogicalOlapScanOperator scanMvOp = createScanMvExpression(materializationContext);
+            materializationContext.setScanMvOperator(scanMvOp);
+            String dbName = connectContext.getGlobalStateMgr().getDb(mv.getDbId()).getFullName();
+            connectContext.getDumpInfo().addTable(dbName, mv);
+            // should keep the sequence of schema
+            List<ColumnRefOperator> scanMvOutputColumns = Lists.newArrayList();
+            for (Column column : mv.getFullSchema()) {
+                scanMvOutputColumns.add(scanMvOp.getColumnReference(column));
+            }
+            Preconditions.checkState(mvOutputColumns.size() == scanMvOutputColumns.size());
 
-            // generate scan mv plan
-            Database db = context.getCatalog().getDb(mv.getDbId());
-            TableName tableName = new TableName(db.getFullName(), mv.getName());
-            String selectMvSql = "select * from " + tableName.toSql();
-            Pair<OptExpression, LogicalPlan> scanMvPlans =
-                    MvUtils.getRuleOptimizedLogicalPlan(selectMvSql, context.getColumnRefFactory(), connectContext);
-            OptExpression scanMvPlan = scanMvPlans.first;
-            if (!MvUtils.isLogicalSPJ(scanMvPlan)) {
-                continue;
+            // construct output column mapping from mv sql to mv scan operator
+            // eg: for mv1 sql define: select a, (b + 1) as c2, (a * b) as c3 from table;
+            // select sql plan output columns:    a, b + 1, a * b
+            //                                    |    |      |
+            //                                    v    v      V
+            // mv scan operator output columns:  a,   c2,    c3
+            Map<ColumnRefOperator, ColumnRefOperator> outputMapping = Maps.newHashMap();
+            for (int i = 0; i < mvOutputColumns.size(); i++) {
+                outputMapping.put(mvOutputColumns.get(i), scanMvOutputColumns.get(i));
             }
-            if (!(scanMvPlan.getOp() instanceof LogicalOlapScanOperator)) {
-                continue;
-            }
-            materializationContext.setScanMvOperator(scanMvPlan.getOp());
-            materializationContext.setScanMvOutputExpressions(scanMvPlans.second.getOutputColumn());
+            materializationContext.setOutputMapping(outputMapping);
             context.addCandidateMvs(materializationContext);
         }
+    }
+
+    private LogicalOlapScanOperator createScanMvExpression(MaterializationContext materializationContext) {
+        MaterializedView mv = materializationContext.getMv();
+
+        ImmutableMap.Builder<ColumnRefOperator, Column> colRefToColumnMetaMapBuilder = ImmutableMap.builder();
+        ImmutableMap.Builder<Column, ColumnRefOperator> columnMetaToColRefMapBuilder = ImmutableMap.builder();
+        ImmutableList.Builder<ColumnRefOperator> outputVariablesBuilder = ImmutableList.builder();
+
+        ColumnRefFactory columnRefFactory = materializationContext.getQueryRefFactory();
+        int relationId = columnRefFactory.getNextRelationId();
+        for (Column column : mv.getFullSchema()) {
+            ColumnRefOperator columnRef = columnRefFactory.create(column.getName(),
+                    column.getType(),
+                    column.isAllowNull());
+            columnRefFactory.updateColumnToRelationIds(columnRef.getId(), relationId);
+            columnRefFactory.updateColumnRefToColumns(columnRef, column, mv);
+            outputVariablesBuilder.add(columnRef);
+            colRefToColumnMetaMapBuilder.put(columnRef, column);
+            columnMetaToColRefMapBuilder.put(column, columnRef);
+        }
+
+        Map<Column, ColumnRefOperator> columnMetaToColRefMap = columnMetaToColRefMapBuilder.build();
+        DistributionInfo distributionInfo = mv.getDefaultDistributionInfo();
+        Preconditions.checkState(distributionInfo instanceof HashDistributionInfo);
+        HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
+        List<Column> distributedColumns = hashDistributionInfo.getDistributionColumns();
+        List<Integer> hashDistributeColumns = new ArrayList<>();
+        for (Column distributedColumn : distributedColumns) {
+            hashDistributeColumns.add(columnMetaToColRefMap.get(distributedColumn).getId());
+        }
+
+        HashDistributionDesc hashDistributionDesc =
+                new HashDistributionDesc(hashDistributeColumns, HashDistributionDesc.SourceType.LOCAL);
+
+        List<Long> selectPartitionIds = Lists.newArrayList();
+        Set<String> excludedPartitions = mv.getPartitionNamesToRefreshForMv();
+        List<String> selectedPartitionNames = mv.getPartitionNames()
+                .stream().filter(name -> !excludedPartitions.contains(name)).collect(Collectors.toList());
+        for (Partition p : mv.getPartitions()) {
+            if (selectedPartitionNames.contains(p.getName())) {
+                selectPartitionIds.add(p.getId());
+            }
+        }
+        PartitionNames partitionNames = new PartitionNames(false, selectedPartitionNames);
+        LogicalOlapScanOperator scanOperator = new LogicalOlapScanOperator(mv,
+                colRefToColumnMetaMapBuilder.build(),
+                columnMetaToColRefMap,
+                DistributionSpec.createHashDistributionSpec(hashDistributionDesc),
+                Operator.DEFAULT_LIMIT,
+                null,
+                mv.getBaseIndexId(),
+                selectPartitionIds,
+                partitionNames,
+                Lists.newArrayList(),
+                Lists.newArrayList());
+        return scanOperator;
     }
 
     private OptExpression logicalRuleRewrite(OptExpression tree, TaskContext rootTaskContext) {
