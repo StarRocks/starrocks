@@ -32,6 +32,14 @@ TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, Vecto
           _version(version),
           _delete_predicates_version(version) {}
 
+TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, VectorizedSchema schema,
+                           const std::vector<RowsetSharedPtr>& captured_rowsets)
+        : ChunkIterator(std::move(schema)),
+          _tablet(std::move(tablet)),
+          _version(version),
+          _delete_predicates_version(version),
+          _rowsets(captured_rowsets) {}
+
 TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, VectorizedSchema schema, bool is_key,
                            RowSourceMaskBuffer* mask_buffer)
         : ChunkIterator(std::move(schema)),
@@ -57,14 +65,17 @@ void TabletReader::close() {
 
 Status TabletReader::prepare() {
     SCOPED_RAW_TIMER(&_stats.get_rowsets_ns);
-    std::shared_lock l(_tablet->get_header_lock());
-    auto st = _tablet->capture_consistent_rowsets(_version, &_rowsets);
-    if (!st.ok()) {
-        _rowsets.clear();
-        std::stringstream ss;
-        ss << "fail to init reader. tablet=" << _tablet->full_name() << "res=" << st;
-        LOG(WARNING) << ss.str();
-        return Status::InternalError(ss.str().c_str());
+    Status st = Status::OK();
+    if (_rowsets.empty()) {
+        std::shared_lock l(_tablet->get_header_lock());
+        st = _tablet->capture_consistent_rowsets(_version, &_rowsets);
+        if (!st.ok()) {
+            _rowsets.clear();
+            std::stringstream ss;
+            ss << "fail to init reader. tablet=" << _tablet->full_name() << "res=" << st;
+            LOG(WARNING) << ss.str();
+            return Status::InternalError(ss.str().c_str());
+        }
     }
     _stats.rowsets_read_count += _rowsets.size();
     Rowset::acquire_readers(_rowsets);
