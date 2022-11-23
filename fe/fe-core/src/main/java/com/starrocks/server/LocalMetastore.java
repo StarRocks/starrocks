@@ -3537,7 +3537,7 @@ public class LocalMetastore implements ConnectorMetadata {
             LiteralExpr startExpr = sortedRange.get(partitionNum - limit).lowerEndpoint().getKeys().get(0);
             LiteralExpr endExpr = sortedRange.get(partitionNum - 1).upperEndpoint().getKeys().get(0);
             String partitionStart = AnalyzerUtils.parseLiteralExprToDateString(startExpr, 0);
-            String partitionEnd = AnalyzerUtils.parseLiteralExprToDateString(endExpr, 1);;
+            String partitionEnd = AnalyzerUtils.parseLiteralExprToDateString(endExpr, 1);
             HashMap<String, String> taskRunProperties = new HashMap<>();
             taskRunProperties.put(TaskRun.PARTITION_START, partitionStart);
             taskRunProperties.put(TaskRun.PARTITION_END, partitionEnd);
