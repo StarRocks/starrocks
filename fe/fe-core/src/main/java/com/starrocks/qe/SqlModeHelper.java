@@ -53,7 +53,7 @@ public class SqlModeHelper {
     public static final long MODE_ONLY_FULL_GROUP_BY = 1L << 5;
     public static final long MODE_NO_UNSIGNED_SUBTRACTION = 1L << 6;
     public static final long MODE_NO_DIR_IN_CREATE = 1L << 7;
-    public static final long MODE_ALLOW_THROW_EXCEPTION = 1L << 8;
+    public static final long MODE_ALLOW_THROW_EXCEPTION = 1L << 9;
     public static final long MODE_DOUBLE_LITERAL = 1L << 17;
     public static final long MODE_ANSI = 1L << 18;
     public static final long MODE_NO_AUTO_VALUE_ON_ZERO = 1L << 19;
