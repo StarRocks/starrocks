@@ -635,7 +635,7 @@ public class ColocateTableBalancerTest {
                 result = false;
                 minTimes = 0;
                 myBackend3.getLastUpdateMs();
-                result = System.currentTimeMillis() - Config.tablet_sched_colocate_be_down_tolerate_time_s * 1000;
+                result = System.currentTimeMillis() - Config.tablet_sched_colocate_be_down_tolerate_time_s * 1000 * 2;
                 minTimes = 0;
 
                 // backend4 available, not alive but dead for a short time
