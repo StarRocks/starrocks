@@ -184,7 +184,10 @@ Status DeltaWriter::_init() {
     // maybe partial update, change to partial tablet schema
     if (_tablet->tablet_schema().keys_type() == KeysType::PRIMARY_KEYS &&
         partial_cols_num < _tablet->tablet_schema().num_columns()) {
+        const TabletSchema& tablet_schema = _tablet->tablet_schema();
         writer_context.referenced_column_ids.reserve(partial_cols_num);
+        int64_t partial_cols_size = 0;
+        int64_t cols_size = 0;
         for (auto i = 0; i < partial_cols_num; ++i) {
             const auto& slot_col_name = (*_opt.slots)[i]->col_name();
             int32_t index = _tablet->field_index(slot_col_name);
@@ -195,8 +198,19 @@ Status DeltaWriter::_init() {
                 _set_state(kAborted, st);
                 return st;
             }
+            const TabletColumn& tablet_column = tablet_schema.column(static_cast<size_t>(index));
+            partial_cols_size += tablet_column.length();
             writer_context.referenced_column_ids.push_back(index);
         }
+        for (auto i = 0; i < tablet_schema.num_columns(); ++i) {
+            const TabletColumn& tablet_column = tablet_schema.column(i);
+            cols_size += tablet_column.length();
+        }
+
+        if (partial_cols_size != 0 && cols_size != 0) {
+            _memtable_buffer_size = config::write_buffer_size * partial_cols_size / cols_size;
+        }
+
         writer_context.partial_update_tablet_schema =
                 TabletSchema::create(_tablet->tablet_schema(), writer_context.referenced_column_ids);
         auto sort_key_idxes = _tablet->tablet_schema().sort_key_idxes();
@@ -400,6 +414,7 @@ void DeltaWriter::_reset_mem_table() {
         _mem_table = std::make_unique<MemTable>(_tablet->tablet_id(), &_vectorized_schema, _opt.slots,
                                                 _mem_table_sink.get(), "", _mem_tracker);
     }
+    _mem_table->set_write_buffer_size(_memtable_buffer_size);
 }
 
 Status DeltaWriter::commit() {

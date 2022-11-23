@@ -848,6 +848,8 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
         return;
     }
 
+    int64_t t_load = MonotonicMillis();
+    /*
     span->AddEvent("reslove_conflict");
     int64_t t_load = MonotonicMillis();
     EditVersion latest_applied_version;
@@ -864,6 +866,7 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
         _set_error(msg);
         return;
     }
+    */
     int64_t t_apply = MonotonicMillis();
 
     std::int32_t conditional_column = -1;
@@ -885,6 +888,8 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
     for (uint32_t i = 0; i < rowset->num_segments(); i++) {
         new_deletes[rowset_id + i] = {};
     }
+    EditVersion latest_applied_version;
+    st = get_latest_applied_version(&latest_applied_version);
 
     for (uint32_t i = 0; i < rowset->num_segments(); i++) {
         state.load_upserts(rowset.get(), i);
@@ -892,6 +897,16 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
         if (upserts[i] != nullptr) {
             _do_update(rowset_id, i, conditional_column, upserts, index, tablet_id, &new_deletes);
             manager->index_cache().update_object_size(index_entry, index.memory_usage());
+            // apply partial rowset segment
+            st = state.apply(&_tablet, rowset.get(), rowset_id, i, latest_applied_version, index);
+            if (!st.ok()) {
+                manager->update_state_cache().remove(state_entry);
+                std::string msg = Substitute("_apply_rowset_commit error: apply rowset update state failed: $0 $1",
+                                             st.to_string(), debug_string());
+                LOG(ERROR) << msg;
+                _set_error(msg);
+                return;
+            }
         }
         state.release_upserts(i);
     }
@@ -3342,6 +3357,13 @@ Status TabletUpdates::get_column_values(std::vector<uint32_t>& column_ids, bool 
     return Status::OK();
 }
 
+Status TabletUpdates::prepare_partial_update_states(Tablet* tablet, const ColumnUniquePtr& upsert,
+                                                    EditVersion* read_version, std::vector<uint64_t>* rss_rowids) {
+    std::lock_guard lg(_index_lock);
+    return prepare_partial_update_states_unlock(tablet, upsert, read_version, rss_rowids);
+}
+
+/*
 Status TabletUpdates::prepare_partial_update_states(Tablet* tablet, const std::vector<ColumnUniquePtr>& upserts,
                                                     EditVersion* read_version, uint32_t* next_rowset_id,
                                                     std::vector<std::vector<uint64_t>*>* rss_rowids) {
@@ -3381,6 +3403,50 @@ Status TabletUpdates::prepare_partial_update_states(Tablet* tablet, const std::v
         auto& pks = *upserts[i];
         index.get(pks, (*rss_rowids)[i]);
     }
+
+    // if `enable_persistent_index` of tablet is change(maybe changed by alter table)
+    // we should try to remove the index_entry from cache
+    // Otherwise index may be used for later commits, keep in cache
+    if (enable_persistent_index ^ tablet->get_enable_persistent_index()) {
+        manager->index_cache().remove(index_entry);
+    } else {
+        manager->index_cache().release(index_entry);
+    }
+    return Status::OK();
+
+} // namespace starrocks
+*/
+
+Status TabletUpdates::prepare_partial_update_states_unlock(Tablet* tablet, const ColumnUniquePtr& upsert,
+                                                           EditVersion* read_version,
+                                                           std::vector<uint64_t>* rss_rowids) {
+    {
+        // get next_rowset_id and read_version to identify conflict
+        std::lock_guard wl(_lock);
+        if (_edit_version_infos.empty()) {
+            string msg = Substitute("tablet deleted when prepare_partial_update_states tablet:$0", _tablet.tablet_id());
+            LOG(WARNING) << msg;
+            return Status::InternalError(msg);
+        }
+        *read_version = _edit_version_infos[_apply_version_idx]->version;
+    }
+    auto manager = StorageEngine::instance()->update_manager();
+    auto index_entry = manager->index_cache().get_or_create(tablet->tablet_id());
+    index_entry->update_expire_time(MonotonicMillis() + manager->get_cache_expire_ms());
+    bool enable_persistent_index = tablet->get_enable_persistent_index();
+    auto& index = index_entry->value();
+    auto st = index.load(tablet);
+    manager->index_cache().update_object_size(index_entry, index.memory_usage());
+    if (!st.ok()) {
+        manager->index_cache().remove(index_entry);
+        std::string msg = Substitute("prepare_partial_update_states error: load primary index failed: $0 $1",
+                                     st.to_string(), debug_string());
+        LOG(ERROR) << msg;
+        _set_error(msg);
+        return Status::InternalError(msg);
+    }
+
+    index.get(*upsert, rss_rowids);
 
     // if `enable_persistent_index` of tablet is change(maybe changed by alter table)
     // we should try to remove the index_entry from cache

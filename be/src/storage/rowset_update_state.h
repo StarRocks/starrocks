@@ -28,6 +28,19 @@ class Tablet;
 struct PartialUpdateState {
     std::vector<uint64_t> src_rss_rowids;
     std::vector<std::unique_ptr<Column>> write_columns;
+    bool inited = false;
+    EditVersion read_version;
+
+    void release() {
+        src_rss_rowids.clear();
+        for (size_t i = 0; i < write_columns.size(); i++) {
+            if (write_columns[i] != nullptr) {
+                write_columns[i].reset();
+            }
+        }
+        write_columns.clear();
+        inited = false;
+    }
 };
 
 class RowsetUpdateState {
@@ -39,8 +52,10 @@ public:
 
     Status load(Tablet* tablet, Rowset* rowset);
 
-    Status apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_id, EditVersion latest_applied_version,
-                 const PrimaryIndex& index);
+    //Status apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_id, EditVersion latest_applied_version,
+    //             const PrimaryIndex& index);
+    Status apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_id, uint32_t segment_id,
+                 EditVersion latest_applied_version, const PrimaryIndex& index);
 
     const std::vector<ColumnUniquePtr>& upserts() const { return _upserts; }
     const std::vector<ColumnUniquePtr>& deletes() const { return _deletes; }
@@ -53,9 +68,11 @@ public:
 
     // call check conflict directly
     // only use for ut of partial update
-    Status test_check_conflict(Tablet* tablet, Rowset* rowset, uint32_t rowset_id, EditVersion latest_applied_version,
-                               std::vector<uint32_t>& read_column_ids, const PrimaryIndex& index) {
-        return _check_and_resolve_conflict(tablet, rowset, rowset_id, latest_applied_version, read_column_ids, index);
+    Status test_check_conflict(Tablet* tablet, Rowset* rowset, uint32_t rowset_id, uint32_t segment_id,
+                               EditVersion latest_applied_version, std::vector<uint32_t>& read_column_ids,
+                               const PrimaryIndex& index) {
+        return _check_and_resolve_conflict(tablet, rowset, rowset_id, segment_id, latest_applied_version,
+                                           read_column_ids, index);
     }
 
     static void plan_read_by_rssid(const vector<uint64_t>& rowids, size_t* num_default,
@@ -72,9 +89,13 @@ private:
 
     Status _do_load(Tablet* tablet, Rowset* rowset);
 
-    Status _prepare_partial_update_states(Tablet* tablet, Rowset* rowset);
+    //Status _prepare_partial_update_states(Tablet* tablet, Rowset* rowset);
+    Status _prepare_partial_update_states(Tablet* tablet, Rowset* rowset, uint32_t idx, bool need_lock);
 
-    Status _check_and_resolve_conflict(Tablet* tablet, Rowset* rowset, uint32_t rowset_id,
+    //Status _check_and_resolve_conflict(Tablet* tablet, Rowset* rowset, uint32_t rowset_id,
+    //                                   EditVersion latest_applied_version, std::vector<uint32_t>& read_column_ids,
+    //                                   const PrimaryIndex& index);
+    Status _check_and_resolve_conflict(Tablet* tablet, Rowset* rowset, uint32_t rowset_id, uint32_t segment_id,
                                        EditVersion latest_applied_version, std::vector<uint32_t>& read_column_ids,
                                        const PrimaryIndex& index);
 
@@ -90,8 +111,8 @@ private:
     int64_t _tablet_id = 0;
 
     // states for partial update
-    EditVersion _read_version;
-    uint32_t _next_rowset_id = 0;
+    // EditVersion _read_version;
+    // uint32_t _next_rowset_id = 0;
 
     // TODO: dump to disk if memory usage is too large
     std::vector<PartialUpdateState> _partial_update_states;
