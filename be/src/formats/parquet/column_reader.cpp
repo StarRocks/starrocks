@@ -185,8 +185,7 @@ public:
     Status prepare_batch(size_t* num_records, ColumnContentType content_type, vectorized::Column* dst) override {
         vectorized::NullableColumn* nullable_column = nullptr;
         vectorized::MapColumn* map_column = nullptr;
-        if (_field->is_nullable) {
-            DCHECK(dst->is_nullable());
+        if (dst->is_nullable()) {
             nullable_column = down_cast<vectorized::NullableColumn*>(dst);
             DCHECK(nullable_column->mutable_data_column()->is_map());
             map_column = down_cast<vectorized::MapColumn*>(nullable_column->mutable_data_column());
@@ -232,7 +231,7 @@ public:
         bool has_null = false;
 
         // ParquetFiled Map -> Map<Struct<key,value>>
-        def_rep_to_offset(_field->children[0].level_info, def_levels, rep_levels, num_levels, &offsets[0], &is_nulls[0],
+        def_rep_to_offset(_field->level_info, def_levels, rep_levels, num_levels, &offsets[0], &is_nulls[0],
                           &num_offsets, &has_null);
         offsets.resize(num_offsets + 1);
         is_nulls.resize(num_offsets);
@@ -245,8 +244,7 @@ public:
             value_column->append_default(offsets.back());
         }
 
-        if (_field->is_nullable) {
-            DCHECK(dst->is_nullable());
+        if (dst->is_nullable()) {
             DCHECK(nullable_column != nullptr);
             nullable_column->mutable_null_column()->swap_column(null_column);
             nullable_column->set_has_null(has_null);
@@ -286,8 +284,7 @@ public:
     Status prepare_batch(size_t* num_records, ColumnContentType content_type, vectorized::Column* dst) override {
         vectorized::NullableColumn* nullable_column = nullptr;
         vectorized::StructColumn* struct_column = nullptr;
-        if (_field->is_nullable) {
-            DCHECK(dst->is_nullable());
+        if (dst->is_nullable()) {
             nullable_column = down_cast<vectorized::NullableColumn*>(dst);
             DCHECK(nullable_column->mutable_data_column()->is_struct());
             struct_column = down_cast<vectorized::StructColumn*>(nullable_column->mutable_data_column());
@@ -305,8 +302,7 @@ public:
             RETURN_IF_ERROR(_child_readers[i]->prepare_batch(num_records, content_type, child_column));
         }
 
-        if (_field->is_nullable) {
-            DCHECK(dst->is_nullable());
+        if (dst->is_nullable()) {
             DCHECK(nullable_column != nullptr);
             // Assume all rows are not null in struct level.
             // Use subfield's NullableColumn instead.
