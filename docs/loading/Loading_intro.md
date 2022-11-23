@@ -136,7 +136,7 @@ When you load data, you can choose not to load the data from a specific field of
   >
   > If the destination column is defined as `NOT NULL`, the load fails.
 
-  When you create a [Stream Load](../loading/StreamLoad.md), [Broker Load](../loading/BrokerLoad.md), [Routine Load](../loading/RoutineLoad.md), or [Spark Load](../loading/SparkLoad.md) job, you can also specify a default value for the destination column by using the parameter that is used to specify column mapping. For example, if you choose not to load the field that represents city ID from your data file and want to fill the value `x` into the destination StarRocks table when you run a Stream Load job, you can specify `"columns: city, tmp_id, id = ifnull(tmp_id, 'x')"`.
+  For [Stream Load](../loading/StreamLoad.md), [Broker Load](../loading/BrokerLoad.md), [Routine Load](../loading/RoutineLoad.md), and [Spark Load](../loading/SparkLoad.md), you can also specify the value you want to fill in the destination column by using the parameter that is used to specify column mapping.
 
 For information about the usage of `NOT NULL` and `DEFAULT`, see [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md).
 
