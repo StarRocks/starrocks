@@ -4,7 +4,8 @@ package com.starrocks.alter;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
-import com.staros.proto.ShardStorageInfo;
+import com.staros.proto.FileCacheInfo;
+import com.staros.proto.FilePathInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.Partition;
@@ -52,8 +53,9 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
             for (Partition partition : table.getPartitions()) {
                 long partitionId = partition.getId();
                 List<Tablet> originTablets = partition.getIndex(originIndexId).getTablets();
-                List<Long> shadowTabletIds = createShards(originTablets.size(),
-                                table.getPartitionShardStorageInfo(partitionId), partitionId);
+                List<Long> shadowTabletIds =
+                        createShards(originTablets.size(), table.getPartitionFilePathInfo(partitionId),
+                                     table.getPartitionFileCacheInfo(partitionId), partitionId);
                 Preconditions.checkState(originTablets.size() == shadowTabletIds.size());
 
                 TStorageMedium medium = table.getPartitionInfo().getDataProperty(partitionId).getStorageMedium();
@@ -77,8 +79,9 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
     }
 
     @VisibleForTesting
-    public static List<Long> createShards(int shardCount, ShardStorageInfo storageInfo, long groupId) throws DdlException {
-        return GlobalStateMgr.getCurrentStarOSAgent().createShards(shardCount, storageInfo, groupId);
+    public static List<Long> createShards(int shardCount, FilePathInfo pathInfo, FileCacheInfo cacheInfo, long groupId)
+        throws DdlException {
+        return GlobalStateMgr.getCurrentStarOSAgent().createShards(shardCount, pathInfo, cacheInfo, groupId);
     }
 
 }

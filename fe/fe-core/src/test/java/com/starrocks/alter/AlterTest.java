@@ -23,8 +23,11 @@ package com.starrocks.alter;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
-import com.staros.proto.ObjectStorageInfo;
-import com.staros.proto.ShardStorageInfo;
+import com.staros.proto.FileCacheInfo;
+import com.staros.proto.FilePathInfo;
+import com.staros.proto.FileStoreInfo;
+import com.staros.proto.FileStoreType;
+import com.staros.proto.S3FileStoreInfo;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.UserIdentity;
@@ -190,8 +193,8 @@ public class AlterTest {
     public static void tearDown() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String dropSQL = "drop table test_partition_exception";
-        DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         try {
+            DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
             GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
         } catch (Exception ex) {
 
@@ -882,17 +885,29 @@ public class AlterTest {
     public void testAddPartitionForLakeTable(@Mocked StarOSAgent agent) throws Exception {
         Config.use_staros = true;
 
-        ObjectStorageInfo objectStorageInfo = ObjectStorageInfo.newBuilder().setObjectUri("s3://bucket/1/").build();
-        ShardStorageInfo shardStorageInfo =
-                ShardStorageInfo.newBuilder().setObjectStorageInfo(objectStorageInfo).build();
+        FilePathInfo.Builder builder = FilePathInfo.newBuilder();
+        FileStoreInfo.Builder fsBuilder = builder.getFsInfoBuilder();
+
+        S3FileStoreInfo.Builder s3FsBuilder = fsBuilder.getS3FsInfoBuilder();
+        s3FsBuilder.setBucket("test-bucket");
+        s3FsBuilder.setRegion("test-region");
+        S3FileStoreInfo s3FsInfo = s3FsBuilder.build();
+
+        fsBuilder.setFsType(FileStoreType.S3);
+        fsBuilder.setFsKey("test-bucket");
+        fsBuilder.setS3FsInfo(s3FsInfo);
+        FileStoreInfo fsInfo = fsBuilder.build();
+
+        builder.setFsInfo(fsInfo);
+        builder.setFullPath("s3://test-bucket/1/");
+        FilePathInfo pathInfo = builder.build();
 
         new Expectations() {
             {
-                agent.getServiceShardStorageInfo();
-                result = shardStorageInfo;
+                agent.allocateFilePath(anyLong);
+                result = pathInfo;
                 agent.createShardGroup(anyLong);
-                result = null;
-                agent.createShards(anyInt, (ShardStorageInfo) any, anyLong);
+                agent.createShards(anyInt, (FilePathInfo) any, (FileCacheInfo) any, anyLong);
                 returns(Lists.newArrayList(20001L, 20002L, 20003L),
                         Lists.newArrayList(20004L, 20005L, 20006L),
                         Lists.newArrayList(20007L, 20008L, 20009L));
@@ -953,17 +968,30 @@ public class AlterTest {
     public void testMultiRangePartitionForLakeTable(@Mocked StarOSAgent agent) throws Exception {
         Config.use_staros = true;
 
-        ObjectStorageInfo objectStorageInfo = ObjectStorageInfo.newBuilder().setObjectUri("s3://bucket/1/").build();
-        ShardStorageInfo shardStorageInfo =
-                ShardStorageInfo.newBuilder().setObjectStorageInfo(objectStorageInfo).build();
+        FilePathInfo.Builder builder = FilePathInfo.newBuilder();
+        FileStoreInfo.Builder fsBuilder = builder.getFsInfoBuilder();
+
+        S3FileStoreInfo.Builder s3FsBuilder = fsBuilder.getS3FsInfoBuilder();
+        s3FsBuilder.setBucket("test-bucket");
+        s3FsBuilder.setRegion("test-region");
+        S3FileStoreInfo s3FsInfo = s3FsBuilder.build();
+
+        fsBuilder.setFsType(FileStoreType.S3);
+        fsBuilder.setFsKey("test-bucket");
+        fsBuilder.setS3FsInfo(s3FsInfo);
+        FileStoreInfo fsInfo = fsBuilder.build();
+
+        builder.setFsInfo(fsInfo);
+        builder.setFullPath("s3://test-bucket/1/");
+        FilePathInfo pathInfo = builder.build();
 
         new Expectations() {
             {
-                agent.getServiceShardStorageInfo();
-                result = shardStorageInfo;
+                agent.allocateFilePath(anyLong);
+                result = pathInfo;
                 agent.createShardGroup(anyLong);
-                result = null;
-                agent.createShards(anyInt, (ShardStorageInfo) any, anyLong);
+                agent.createShards(anyInt, (FilePathInfo) any, (FileCacheInfo) any, anyLong);
+
                 returns(Lists.newArrayList(30001L, 30002L, 30003L),
                         Lists.newArrayList(30004L, 30005L, 30006L),
                         Lists.newArrayList(30007L, 30008L, 30009L),
@@ -1022,7 +1050,6 @@ public class AlterTest {
         dropSQL = "drop table site_access";
         dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
-
         Config.use_staros = false;
     }
 
@@ -1844,17 +1871,30 @@ public class AlterTest {
     public void testSingleRangePartitionPersistInfo(@Mocked StarOSAgent agent) throws Exception {
         Config.use_staros = true;
 
-        ObjectStorageInfo objectStorageInfo = ObjectStorageInfo.newBuilder().setObjectUri("s3://bucket/1/").build();
-        ShardStorageInfo shardStorageInfo =
-                ShardStorageInfo.newBuilder().setObjectStorageInfo(objectStorageInfo).build();
+        FilePathInfo.Builder builder = FilePathInfo.newBuilder();
+        FileStoreInfo.Builder fsBuilder = builder.getFsInfoBuilder();
+
+        S3FileStoreInfo.Builder s3FsBuilder = fsBuilder.getS3FsInfoBuilder();
+        s3FsBuilder.setBucket("test-bucket");
+        s3FsBuilder.setRegion("test-region");
+        S3FileStoreInfo s3FsInfo = s3FsBuilder.build();
+
+        fsBuilder.setFsType(FileStoreType.S3);
+        fsBuilder.setFsKey("test-bucket");
+        fsBuilder.setS3FsInfo(s3FsInfo);
+        FileStoreInfo fsInfo = fsBuilder.build();
+
+        builder.setFsInfo(fsInfo);
+        builder.setFullPath("s3://test-bucket/1/");
+        FilePathInfo pathInfo = builder.build();
 
         new Expectations() {
             {
-                agent.getServiceShardStorageInfo();
-                result = shardStorageInfo;
+                agent.allocateFilePath(anyLong);
+                result = pathInfo;
                 agent.createShardGroup(anyLong);
-                result = null;
-                agent.createShards(anyInt, (ShardStorageInfo) any, anyLong);
+                agent.createShards(anyInt, (FilePathInfo) any, (FileCacheInfo) any, anyLong);
+
                 returns(Lists.newArrayList(30001L, 30002L, 30003L),
                         Lists.newArrayList(30004L, 30005L, 30006L));
                 agent.getPrimaryBackendIdByShard(anyLong);

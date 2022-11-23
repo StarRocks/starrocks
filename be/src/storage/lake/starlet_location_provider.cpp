@@ -29,10 +29,12 @@ Status StarletLocationProvider::list_root_locations(std::set<std::string>* roots
     auto shards = g_worker->shards();
     std::unordered_map<std::string, staros::starlet::ShardId> root_ids;
     for (const auto& shard : shards) {
-        if (shard.obj_store_info.scheme != staros::starlet::ObjectStoreType::S3) {
-            return Status::NotSupported(fmt::format("Unsupported object store type: {}", shard.obj_store_info.scheme));
+        if (shard.path_info.fs_info().fs_type() != staros::FileStoreType::S3 &&
+            shard.path_info.fs_info().fs_type() != staros::FileStoreType::HDFS) {
+            return Status::NotSupported(
+                    fmt::format("Unsupported object store type: {}", shard.path_info.fs_info().fs_type()));
         }
-        root_ids[shard.obj_store_info.s3_obj_store.uri] = shard.id;
+        root_ids[shard.path_info.full_path()] = shard.id;
     }
     for (const auto& [uri, id] : root_ids) {
         (void)uri;
