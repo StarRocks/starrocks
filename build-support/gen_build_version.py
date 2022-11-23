@@ -58,16 +58,7 @@ def get_java_version():
         return out.decode('utf-8').replace("\"", "\\\"").strip()
     return "unknown jdk"
 
-def skip_write_if_commit_unchanged(file_name, file_content, commit_hash):
-    if os.path.exists(file_name):
-        with open(file_name) as fh:
-            data = fh.read()
-            import re
-            m = re.search("COMMIT_HASH: (?P<commit_hash>\w+)", data)
-            old_commit_hash = m.group('commit_hash') if m else None
-            print('gen_build_version.py {}: old commit = {}, new commit = {}'.format(file_name, old_commit_hash, commit_hash))
-            if old_commit_hash == commit_hash:
-                return
+def write_file(file_name, file_content, commit_hash):
     with open(file_name, 'w') as fh:
         fh.write(file_content)
 
