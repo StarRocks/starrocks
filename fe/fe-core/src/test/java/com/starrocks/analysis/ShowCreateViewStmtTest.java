@@ -154,8 +154,6 @@ public class ShowCreateViewStmtTest {
                 .replaceAll("VARCHAR\\(\\d+\\)", "VARCHAR")
                 .replaceAll(",\\s*(true|false)]", "");
         String snippet = "  0:UNION\n" +
-                "  |  output exprs:\n" +
-                "  |      VARCHAR | VARCHAR | VARCHAR | VARCHAR\n" +
                 "  |  child exprs:\n" +
                 "  |      VARCHAR | VARCHAR | VARCHAR | VARCHAR\n" +
                 "  |      VARCHAR | VARCHAR | VARCHAR | VARCHAR\n" +
