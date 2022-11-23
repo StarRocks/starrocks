@@ -21,7 +21,6 @@
 
 package com.starrocks.catalog;
 
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
