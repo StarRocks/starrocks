@@ -641,6 +641,6 @@ DROP MATERIALIZED VIEW order_mv;
 
 - You can build a multi-table materialized view under async or manual refresh strategies.
 
-- Partition keys and bucket keys of the async or manual refresh materialized view must be in the query statement; if there is an aggregate function in the query statement, the partition keys and bucket keys must be in the GROUP BY clause.
+- Partition keys and bucket keys of the async or manual refresh materialized view must be in the query statement.
 
 - The query statement does not support random functions, including rand((), random(), uuid()), and sleep().
