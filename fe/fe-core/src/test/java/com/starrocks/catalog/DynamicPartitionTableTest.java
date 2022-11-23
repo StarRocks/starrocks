@@ -422,4 +422,33 @@ public class DynamicPartitionTableTest {
         OlapTable table = (OlapTable) db.getTable(tableName);
         Assert.assertEquals(table.getTableProperty().getDynamicPartitionProperty().getReplicationNum(), 2);
     }
+
+    @Test
+    public void testCreateDynamicPartitionImmediately() throws Exception {
+        String createOlapTblStmt = "CREATE TABLE test.`empty_dynamic_partition` (\n" +
+                "  `k1` date NULL COMMENT \"\",\n" +
+                "  `k2` int NULL COMMENT \"\",\n" +
+                "  `k3` smallint NULL COMMENT \"\",\n" +
+                "  `v1` varchar(2048) NULL COMMENT \"\",\n" +
+                "  `v2` datetime NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`k1`, `k2`, `k3`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "PARTITION BY RANGE(`k1`)\n" +
+                "()\n" +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 32\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"dynamic_partition.enable\" = \"true\",\n" +
+                "\"dynamic_partition.start\" = \"-3\",\n" +
+                "\"dynamic_partition.end\" = \"3\",\n" +
+                "\"dynamic_partition.time_unit\" = \"day\",\n" +
+                "\"dynamic_partition.prefix\" = \"p\",\n" +
+                "\"dynamic_partition.buckets\" = \"1\"\n" +
+                ");";
+        createTable(createOlapTblStmt);
+        OlapTable emptyDynamicTable = (OlapTable) GlobalStateMgr.getCurrentState().
+                getDb("default_cluster:test").getTable("empty_dynamic_partition");
+        Assert.assertTrue(emptyDynamicTable.getAllPartitions().size() == 7);
+    }
 }
