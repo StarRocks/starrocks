@@ -2,7 +2,9 @@
 
 #pragma once
 
-#include "storage/olap_common.h"
+#include "common/logging.h"
+#include "common/status.h"
+#include "types/logical_type.h"
 
 // Infra to build the type system:
 // 1. Macro `APPLY_FOR*` to build generic codes

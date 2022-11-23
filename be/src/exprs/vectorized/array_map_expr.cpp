@@ -88,7 +88,7 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
         // construct a new chunk to evaluate the lambda expression.
         auto cur_chunk = std::make_shared<vectorized::Chunk>();
         // put all arguments into the new chunk
-        vector<SlotId> arguments_ids;
+        std::vector<SlotId> arguments_ids;
         auto lambda_func = dynamic_cast<LambdaFunction*>(_children[0]);
         int argument_num = lambda_func->get_lambda_arguments_ids(&arguments_ids);
         DCHECK(argument_num == inputs.size());
@@ -96,7 +96,7 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
             cur_chunk->append_column(inputs[i], arguments_ids[i]); // column ref
         }
         // put captured columns into the new chunk aligning with the first array's offsets
-        vector<SlotId> slot_ids;
+        std::vector<SlotId> slot_ids;
         _children[0]->get_slot_ids(&slot_ids);
         for (auto id : slot_ids) {
             DCHECK(id > 0);

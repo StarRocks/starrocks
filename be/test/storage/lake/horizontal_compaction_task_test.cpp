@@ -26,6 +26,7 @@
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/txn_log.h"
+#include "storage/tablet_schema.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
 

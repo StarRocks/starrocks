@@ -6,6 +6,7 @@
 #include <mutex>
 
 #include "common/tracer.h"
+#include "gutil/strings/substitute.h"
 #include "runtime/large_int_value.h"
 #include "storage/chunk_helper.h"
 #include "storage/primary_key_encoder.h"
@@ -1119,8 +1120,8 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
     _table_id = tablet->belonged_table_id();
     _tablet_id = tablet->tablet_id();
     if (size() != total_rows - total_dels) {
-        LOG(WARNING) << Substitute("load primary index row count not match tablet:$0 index:$1 != stats:$2", _tablet_id,
-                                   size(), total_rows - total_dels);
+        LOG(WARNING) << strings::Substitute("load primary index row count not match tablet:$0 index:$1 != stats:$2",
+                                            _tablet_id, size(), total_rows - total_dels);
     }
     LOG(INFO) << "load primary index finish table:" << tablet->belonged_table_id() << " tablet:" << tablet->tablet_id()
               << " version:" << apply_version << " #rowset:" << rowsets.size() << " #segment:" << total_segments
@@ -1350,7 +1351,7 @@ void PrimaryIndex::reserve(size_t s) {
 }
 
 std::string PrimaryIndex::to_string() const {
-    return Substitute("PrimaryIndex tablet:$0", _tablet_id);
+    return strings::Substitute("PrimaryIndex tablet:$0", _tablet_id);
 }
 
 std::unique_ptr<PrimaryIndex> TEST_create_primary_index(const vectorized::VectorizedSchema& pk_schema) {
