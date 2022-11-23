@@ -70,6 +70,57 @@ void common_test(typename TypeTraits<field_type>::CppType src_val) {
     }
 }
 
+template <LogicalType fieldType>
+void test_char(Slice src_val) {
+    TypeInfoPtr type = get_type_info(TYPE_VARCHAR);
+
+    ASSERT_EQ(type->type(), fieldType);
+    ASSERT_EQ(sizeof(src_val), type->size());
+    {
+        char buf[64];
+        Slice dst_val(buf, sizeof(buf));
+        MemPool pool;
+        type->deep_copy((char*)&dst_val, (char*)&src_val, &pool);
+        ASSERT_TRUE(type->equal((char*)&src_val, (char*)&dst_val));
+        ASSERT_EQ(0, type->cmp((char*)&src_val, (char*)&dst_val));
+    }
+    {
+        char buf[64];
+        Slice dst_val(buf, sizeof(buf));
+        type->direct_copy((char*)&dst_val, (char*)&src_val, nullptr);
+        ASSERT_TRUE(type->equal((char*)&src_val, (char*)&dst_val));
+        ASSERT_EQ(0, type->cmp((char*)&src_val, (char*)&dst_val));
+    }
+    // test min
+    {
+        char buf[64];
+        Slice dst_val(buf, sizeof(buf));
+        dst_val.size = 0;
+
+        ASSERT_FALSE(type->equal((char*)&src_val, (char*)&dst_val));
+        ASSERT_TRUE(type->cmp((char*)&src_val, (char*)&dst_val) > 0);
+    }
+    // test max
+    {
+        char buf[64];
+        Slice dst_val(buf, sizeof(buf));
+        memset(buf, 0xFF, 64);
+
+        ASSERT_FALSE(type->equal((char*)&src_val, (char*)&dst_val));
+        ASSERT_TRUE(type->cmp((char*)&src_val, (char*)&dst_val) < 0);
+    }
+}
+
+template <>
+void common_test<TYPE_CHAR>(Slice src_val) {
+    test_char<TYPE_VARCHAR>(src_val);
+}
+
+template <>
+void common_test<TYPE_VARCHAR>(Slice src_val) {
+    test_char<TYPE_VARCHAR>(src_val);
+}
+
 TEST(StorageLayerTypesTest, copy_and_equal) {
     common_test<TYPE_BOOLEAN>(true);
     common_test<TYPE_TINYINT>(112);
