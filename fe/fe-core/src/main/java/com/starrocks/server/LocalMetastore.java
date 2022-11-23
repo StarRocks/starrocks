@@ -3784,7 +3784,7 @@ public class LocalMetastore implements ConnectorMetadata {
             tableProperty.buildDynamicProperty();
         }
 
-        DynamicPartitionUtil.registerOrRemoveDynamicPartitionTable(db.getId(), table, true);
+        DynamicPartitionUtil.registerOrRemoveDynamicPartitionTable(db.getId(), table, false);
         stateMgr.getDynamicPartitionScheduler().createOrUpdateRuntimeInfo(
                 table.getName(), DynamicPartitionScheduler.LAST_UPDATE_TIME, TimeUtils.getCurrentFormatTime());
         ModifyTablePropertyOperationLog info =
