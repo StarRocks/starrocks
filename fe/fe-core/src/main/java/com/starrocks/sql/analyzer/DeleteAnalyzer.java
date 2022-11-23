@@ -116,6 +116,10 @@ public class DeleteAnalyzer {
             throw new SemanticException("Where clause is not set");
         }
 
+        if (deleteStatement.getCommonTableExpressions() != null) {
+            throw new SemanticException("Do not support `with` clause in non-primary table");
+        }
+
         List<Predicate> deleteConditions = Lists.newLinkedList();
         analyzePredicate(deleteStatement.getWherePredicate(), deleteConditions);
         deleteStatement.setDeleteConditions(deleteConditions);
@@ -143,7 +147,7 @@ public class DeleteAnalyzer {
         if (deleteStatement.getWherePredicate() == null) {
             throw new SemanticException("Delete must specify where clause to prevent full table delete");
         }
-        if (deleteStatement.getPartitionNamesList() != null && deleteStatement.getPartitionNamesList().size() > 0) {
+        if (deleteStatement.getPartitionNames() != null) {
             throw new SemanticException("Delete for primary key table do not support specifying partitions");
         }
 
@@ -171,6 +175,9 @@ public class DeleteAnalyzer {
         }
         SelectRelation selectRelation =
                 new SelectRelation(selectList, relation, deleteStatement.getWherePredicate(), null, null);
+        if (deleteStatement.getCommonTableExpressions() != null) {
+            deleteStatement.getCommonTableExpressions().forEach(selectRelation::addCTERelation);
+        }
         QueryStatement queryStatement = new QueryStatement(selectRelation);
         queryStatement.setIsExplain(deleteStatement.isExplain(), deleteStatement.getExplainLevel());
         new QueryAnalyzer(session).analyze(queryStatement);

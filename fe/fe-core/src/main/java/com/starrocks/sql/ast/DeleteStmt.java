@@ -34,6 +34,7 @@ public class DeleteStmt extends DmlStmt {
     private final PartitionNames partitionNames;
     private final List<Relation> usingRelations;
     private final Expr wherePredicate;
+    private final List<CTERelation> commonTableExpressions;
 
     // fields for new planer, primary key table
     private Table table;
@@ -46,14 +47,16 @@ public class DeleteStmt extends DmlStmt {
     private long jobId = -1;
 
     public DeleteStmt(TableName tableName, PartitionNames partitionNames, Expr wherePredicate) {
-        this(tableName, partitionNames, null, wherePredicate);
+        this(tableName, partitionNames, null, wherePredicate, null);
     }
 
-    public DeleteStmt(TableName tableName, PartitionNames partitionNames, List<Relation> usingRelations, Expr wherePredicate) {
+    public DeleteStmt(TableName tableName, PartitionNames partitionNames, List<Relation> usingRelations, Expr wherePredicate,
+                      List<CTERelation> commonTableExpressions) {
         this.tblName = tableName;
         this.partitionNames = partitionNames;
         this.usingRelations = usingRelations;
         this.wherePredicate = wherePredicate;
+        this.commonTableExpressions = commonTableExpressions;
         this.deleteConditions = Lists.newLinkedList();
     }
 
@@ -72,6 +75,10 @@ public class DeleteStmt extends DmlStmt {
 
     public Expr getWherePredicate() {
         return wherePredicate;
+    }
+
+    public List<CTERelation> getCommonTableExpressions() {
+        return commonTableExpressions;
     }
 
     public List<String> getPartitionNamesList() {
