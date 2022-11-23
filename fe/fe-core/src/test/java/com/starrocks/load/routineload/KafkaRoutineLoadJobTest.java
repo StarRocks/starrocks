@@ -213,7 +213,7 @@ public class KafkaRoutineLoadJobTest {
             {
                 List<RoutineLoadTaskInfo> idToRoutineLoadTask =
                         Deencapsulation.getField(routineLoadJob, "routineLoadTaskInfoList");
-                Assert.assertNotEquals("1", idToRoutineLoadTask.get(0).getId());
+                Assert.assertNotEquals("1", idToRoutineLoadTask.get(0).getId().toString());
                 Assert.assertEquals(1, idToRoutineLoadTask.size());
             }
         };

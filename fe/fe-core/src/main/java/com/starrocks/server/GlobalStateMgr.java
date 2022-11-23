@@ -935,7 +935,8 @@ public class GlobalStateMgr {
     }
 
     protected void initJournal() throws JournalException, InterruptedException {
-        BlockingQueue<JournalTask> journalQueue = new ArrayBlockingQueue<JournalTask>(Config.metadata_journal_queue_size);
+        BlockingQueue<JournalTask> journalQueue =
+                new ArrayBlockingQueue<JournalTask>(Config.metadata_journal_queue_size);
         journal = JournalFactory.create(nodeMgr.getNodeName());
         journalWriter = new JournalWriter(journal, journalQueue);
 
@@ -1280,7 +1281,8 @@ public class GlobalStateMgr {
         Preconditions.checkState(remoteChecksum == checksum, remoteChecksum + " vs. " + checksum);
 
         if (isUsingNewPrivilege() && needUpgradedToNewPrivilege() && !isLeader() && !isCheckpointThread()) {
-            LOG.warn("follower has to wait for leader to upgrade the privileges, set usingNewPrivilege = false for now");
+            LOG.warn(
+                    "follower has to wait for leader to upgrade the privileges, set usingNewPrivilege = false for now");
             usingNewPrivilege.set(false);
             domainResolver = new DomainResolver(auth);
         }
@@ -1473,14 +1475,18 @@ public class GlobalStateMgr {
         // Move image.ckpt to image.dataVersion
         LOG.info("Move " + ckpt.getAbsolutePath() + " to " + curFile.getAbsolutePath());
         if (!ckpt.renameTo(curFile)) {
-            curFile.delete();
+            if (!curFile.delete()) {
+                LOG.warn("Failed to delete file, filepath={}", curFile.getAbsolutePath());
+            }
             throw new IOException();
         }
     }
 
     public void saveImage(File curFile, long replayedJournalId) throws IOException {
         if (!curFile.exists()) {
-            curFile.createNewFile();
+            if (!curFile.createNewFile()) {
+                LOG.warn("Failed to create file, filepath={}", curFile.getAbsolutePath());
+            }
         }
 
         // save image does not need any lock. because only checkpoint thread will call this method.
@@ -1639,7 +1645,6 @@ public class GlobalStateMgr {
         };
     }
 
-
     public void createReplayer() {
         replayer = new Daemon("replayer", REPLAY_INTERVAL_MS) {
             private JournalCursor cursor = null;
@@ -1762,7 +1767,6 @@ public class GlobalStateMgr {
             // TODO exit gracefully
             Util.stdoutWithTime(e.getMessage());
             System.exit(-1);
-
 
         } finally {
             if (cursor != null) {
@@ -2161,7 +2165,8 @@ public class GlobalStateMgr {
             if (table.isLakeTable()) {
                 Map<String, String> storageProperties = ((LakeTable) olapTable).getProperties();
 
-                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE)
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                        .append(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE)
                         .append("\" = \"");
                 sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE)).append("\"");
 
@@ -2169,7 +2174,8 @@ public class GlobalStateMgr {
                         .append("\" = \"");
                 sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL)).append("\"");
 
-                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_ALLOW_ASYNC_WRITE_BACK)
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                        .append(PropertyAnalyzer.PROPERTIES_ALLOW_ASYNC_WRITE_BACK)
                         .append("\" = \"");
                 sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_ALLOW_ASYNC_WRITE_BACK)).append("\"");
             }
@@ -2180,7 +2186,8 @@ public class GlobalStateMgr {
             sb.append(olapTable.getStorageFormat()).append("\"");
 
             // enable_persistent_index
-            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                    .append(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)
                     .append("\" = \"");
             sb.append(olapTable.enablePersistentIndex()).append("\"");
 
@@ -2695,7 +2702,6 @@ public class GlobalStateMgr {
         return this.icebergRepository;
     }
 
-
     public MetastoreEventsProcessor getMetastoreEventsProcessor() {
         return this.metastoreEventsProcessor;
     }
@@ -2750,7 +2756,7 @@ public class GlobalStateMgr {
     }
 
     public static short calcShortKeyColumnCount(List<Column> indexColumns, Map<String, String> properties,
-            List<Integer> sortKeyIdxes)
+                                                List<Integer> sortKeyIdxes)
             throws DdlException {
         LOG.debug("sort key size: {}", sortKeyIdxes.size());
         Preconditions.checkArgument(sortKeyIdxes.size() > 0);
@@ -2860,6 +2866,7 @@ public class GlobalStateMgr {
     public void replayAlterMaterializedViewProperties(short opCode, ModifyTablePropertyOperationLog log) {
         this.alter.replayAlterMaterializedViewProperties(opCode, log);
     }
+
     /*
      * used for handling CancelAlterStmt (for client is the CANCEL ALTER
      * command). including SchemaChangeHandler and RollupHandler
@@ -3152,7 +3159,8 @@ public class GlobalStateMgr {
         try {
             table = metadataMgr.getTable(catalogName, dbName, tblName);
             if (!(table instanceof HiveMetaStoreTable)) {
-                throw new StarRocksConnectorException("table : " + tableName + " not exists, or is not hive/hudi external table");
+                throw new StarRocksConnectorException(
+                        "table : " + tableName + " not exists, or is not hive/hudi external table");
             }
             hmsTable = (HiveMetaStoreTable) table;
         } finally {
@@ -3217,7 +3225,8 @@ public class GlobalStateMgr {
     public List<Partition> createTempPartitionsFromPartitions(Database db, Table table,
                                                               String namePostfix, List<Long> sourcePartitionIds,
                                                               List<Long> tmpPartitionIds) {
-        return localMetastore.createTempPartitionsFromPartitions(db, table, namePostfix, sourcePartitionIds, tmpPartitionIds);
+        return localMetastore.createTempPartitionsFromPartitions(db, table, namePostfix, sourcePartitionIds,
+                tmpPartitionIds);
     }
 
     public void truncateTable(TruncateTableStmt truncateTableStmt) throws DdlException {
