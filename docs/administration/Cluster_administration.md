@@ -95,8 +95,8 @@ StarRocks can perform a rolling upgrade, which allows you to first upgrade the B
 
 - Distribute the BE and FE binary files for new versions of BE and FE to the deployment directory of BE and FE.
 
-    - For a minor version update (for example, from 2.0.x to 2.0.y), you only need to replace `starrocks_be` for the BEs and `starrocks-fe.jar` for the FEs.
-    - For a major version upgrade (for example, from 2.0.x to 2.x.x), you need to replace the bin and lib folders of the FEs and BEs.
+  - For a minor version update (for example, from 2.0.x to 2.0.y), you only need to replace `starrocks_be` for the BEs and `starrocks-fe.jar` for the FEs.
+  - For a major version upgrade (for example, from 2.0.x to 2.x.x), you need to replace the bin and lib folders of the FEs and BEs.
 
 ### Upgrade BE
 
@@ -204,8 +204,8 @@ All StarRocks versions support rollbacks. You need to first roll back the FEs, t
 
 - Distribute the BE and FE binary files for old versions of BE and FE to the deployment directory of BE and FE.
 
-    - For a minor version update (for example, from 2.0.x to 2.0.y), you only need to replace `starrocks_be` for the BEs and `starrocks-fe.jar` for the FEs.
-    - For a major version upgrade (for example, from 2.0.x to 2.x.x), you need to replace the bin and lib folders of the FEs and BEs.
+  - For a minor version update (for example, from 2.0.x to 2.0.y), you only need to replace `starrocks_be` for the BEs and `starrocks-fe.jar` for the FEs.
+  - For a major version upgrade (for example, from 2.0.x to 2.x.x), you need to replace the bin and lib folders of the FEs and BEs.
 
 ### Roll back FE
 
