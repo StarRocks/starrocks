@@ -434,7 +434,7 @@ public class Optimizer {
         }
 
         if (!context.getCandidateMvs().isEmpty()
-                && connectContext.getSessionVariable().isEnableCostBasedMaterializedViewRewrite()) {
+                && connectContext.getSessionVariable().isEnableMaterializedViewRewrite()) {
             context.getRuleSet().addMultiTableMvRewriteRule();
         }
 
