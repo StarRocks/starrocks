@@ -16,21 +16,17 @@ To enable FQDN access for a StarRocks cluster, make sure the following requireme
 
 ## Set up a new cluster with FQDN access
 
-To set up a new cluster with FQDN access, you must first install StarRocks version 2.4.0 or later. See [Deploy StarRocks](../quick_start/Deploy.md) for detailed instructions on how to install StarRocks.
-
-By default, FE nodes in a new cluster are started via IP addresses.
-
-Each BE node identifies itself with `BE Address` defined in the FE metadata. For example, if the `BE Address` defines a BE node with an FQDN, the BE node identifies itself with this FQDN.
-
-Therefore, to start the nodes via FQDNs, you DO NOT need to specify the property `priority_networks` in the FE and BE configuration files **fe.conf** and **be.conf**. You can start each node as demonstrated in [Deploy StarRocks](../quick_start/Deploy.md) after requirements in [Prerequisites](#prerequisites) are met.
-
-Alternatively, if you want to start the cluster with IP address access, you still have to specify the property `priority_networks` in the corresponding FE and BE configuration files before starting the nodes. Besides, because IP address access is not adopted by default, you must start the FE nodes by running the following commands:
+By default, FE nodes in a new cluster are started via IP address access. To start a new cluster with FQDN access, you must start the FE nodes by running the following commands **when you start the cluster for the first time**:
 
 ```Shell
-./bin/start_fe.sh --host_type IP --daemon
+./bin/start_fe.sh --host_type FQDN --daemon
 ```
 
 The property `--host_type` specifies the access method that is used to start the node. Valid values include `FQDN` and `IP`. You only need to specify this property ONCE when you start the node for the first time.
+
+See [Deploy StarRocks](../quick_start/Deploy.md) for detailed instructions on how to install StarRocks.
+
+Each BE node identifies itself with `BE Address` defined in the FE metadata. Therefore, you DO NOT need to specify `--host_type` when you start BE nodes. If the `BE Address` defines a BE node with an FQDN, the BE node identifies itself with this FQDN.
 
 ## Enable FQDN access in an existing cluster
 
