@@ -34,7 +34,6 @@
 #include "common/status.h"
 #include "fs/fs_util.h"
 #include "storage/data_dir.h"
-#include "storage/field.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
 #include "storage/snapshot_meta.h"

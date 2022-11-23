@@ -22,7 +22,7 @@
 #include <gtest/gtest.h>
 
 #include "runtime/mem_pool.h"
-#include "storage/field.h"
+#include "storage/type_traits.h"
 #include "storage/types.h"
 #include "util/slice.h"
 
@@ -72,11 +72,9 @@ void common_test(typename TypeTraits<field_type>::CppType src_val) {
 
 template <LogicalType fieldType>
 void test_char(Slice src_val) {
-    Field* field = FieldFactory::create_by_type(fieldType);
-    field->_length = src_val.size;
-    TypeInfoPtr type = field->type_info();
+    TypeInfoPtr type = get_type_info(TYPE_VARCHAR);
 
-    ASSERT_EQ(field->type(), fieldType);
+    ASSERT_EQ(type->type(), fieldType);
     ASSERT_EQ(sizeof(src_val), type->size());
     {
         char buf[64];
@@ -97,7 +95,7 @@ void test_char(Slice src_val) {
     {
         char buf[64];
         Slice dst_val(buf, sizeof(buf));
-        field->set_to_min((char*)&dst_val);
+        dst_val.size = 0;
 
         ASSERT_FALSE(type->equal((char*)&src_val, (char*)&dst_val));
         ASSERT_TRUE(type->cmp((char*)&src_val, (char*)&dst_val) > 0);
@@ -106,12 +104,11 @@ void test_char(Slice src_val) {
     {
         char buf[64];
         Slice dst_val(buf, sizeof(buf));
-        field->set_to_max((char*)&dst_val);
+        memset(buf, 0xFF, 64);
 
         ASSERT_FALSE(type->equal((char*)&src_val, (char*)&dst_val));
         ASSERT_TRUE(type->cmp((char*)&src_val, (char*)&dst_val) < 0);
     }
-    delete field;
 }
 
 template <>

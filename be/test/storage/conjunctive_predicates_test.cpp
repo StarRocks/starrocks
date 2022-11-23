@@ -20,6 +20,7 @@
 #include "runtime/primitive_type.h"
 #include "storage/chunk_helper.h"
 #include "storage/predicate_parser.h"
+#include "storage/tablet_schema.h"
 #include "storage/vectorized_column_predicate.h"
 #include "testutil/assert.h"
 

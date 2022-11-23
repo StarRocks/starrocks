@@ -27,6 +27,7 @@
 #include <vector>
 
 #include "exec/vectorized/sorting/sorting.h"
+#include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_pool.h"
@@ -332,13 +333,13 @@ bool SchemaChangeDirectly::process(TabletReader* reader, RowsetWriter* new_rowse
         }
         if (!_chunk_changer->change_chunk(base_chunk, new_chunk, base_tablet->tablet_meta(), new_tablet->tablet_meta(),
                                           mem_pool.get())) {
-            std::string err_msg = Substitute("failed to convert chunk data. base tablet:$0, new tablet:$1",
-                                             base_tablet->tablet_id(), new_tablet->tablet_id());
+            std::string err_msg = strings::Substitute("failed to convert chunk data. base tablet:$0, new tablet:$1",
+                                                      base_tablet->tablet_id(), new_tablet->tablet_id());
             LOG(WARNING) << err_msg;
             return false;
         }
         if (auto st = new_rowset_writer->add_chunk(*new_chunk); !st.ok()) {
-            std::string err_msg = Substitute(
+            std::string err_msg = strings::Substitute(
                     "failed to execute schema change. base tablet:$0, new_tablet:$1. err msg: failed to add chunk to "
                     "rowset writer: $2",
                     base_tablet->tablet_id(), new_tablet->tablet_id(), st.get_error_msg());
@@ -353,8 +354,8 @@ bool SchemaChangeDirectly::process(TabletReader* reader, RowsetWriter* new_rowse
     if (base_chunk->num_rows() != 0) {
         if (!_chunk_changer->change_chunk(base_chunk, new_chunk, base_tablet->tablet_meta(), new_tablet->tablet_meta(),
                                           mem_pool.get())) {
-            std::string err_msg = Substitute("failed to convert chunk data. base tablet:$0, new tablet:$1",
-                                             base_tablet->tablet_id(), new_tablet->tablet_id());
+            std::string err_msg = strings::Substitute("failed to convert chunk data. base tablet:$0, new tablet:$1",
+                                                      base_tablet->tablet_id(), new_tablet->tablet_id());
             LOG(WARNING) << err_msg;
             return false;
         }
@@ -407,8 +408,8 @@ Status SchemaChangeDirectly::process_v2(TabletReader* reader, RowsetWriter* new_
             }
         }
         if (!_chunk_changer->change_chunk_v2(base_chunk, new_chunk, base_schema, new_schema, mem_pool.get())) {
-            std::string err_msg = Substitute("failed to convert chunk data. base tablet:$0, new tablet:$1",
-                                             base_tablet->tablet_id(), new_tablet->tablet_id());
+            std::string err_msg = strings::Substitute("failed to convert chunk data. base tablet:$0, new tablet:$1",
+                                                      base_tablet->tablet_id(), new_tablet->tablet_id());
             LOG(WARNING) << err_msg;
             return Status::InternalError(err_msg);
         }
@@ -416,7 +417,7 @@ Status SchemaChangeDirectly::process_v2(TabletReader* reader, RowsetWriter* new_
         ChunkHelper::padding_char_columns(char_field_indexes, new_schema, new_tablet->tablet_schema(), new_chunk.get());
 
         if (auto st = new_rowset_writer->add_chunk(*new_chunk); !st.ok()) {
-            std::string err_msg = Substitute(
+            std::string err_msg = strings::Substitute(
                     "failed to execute schema change. base tablet:$0, new_tablet:$1. err msg: failed to add chunk to "
                     "rowset writer: $2",
                     base_tablet->tablet_id(), new_tablet->tablet_id(), st.get_error_msg());
@@ -430,8 +431,8 @@ Status SchemaChangeDirectly::process_v2(TabletReader* reader, RowsetWriter* new_
 
     if (base_chunk->num_rows() != 0) {
         if (!_chunk_changer->change_chunk_v2(base_chunk, new_chunk, base_schema, new_schema, mem_pool.get())) {
-            std::string err_msg = Substitute("failed to convert chunk data. base tablet:$0, new tablet:$1",
-                                             base_tablet->tablet_id(), new_tablet->tablet_id());
+            std::string err_msg = strings::Substitute("failed to convert chunk data. base tablet:$0, new tablet:$1",
+                                                      base_tablet->tablet_id(), new_tablet->tablet_id());
             LOG(WARNING) << err_msg;
             return Status::InternalError(err_msg);
         }
@@ -520,8 +521,8 @@ bool SchemaChangeWithSorting::process(TabletReader* reader, RowsetWriter* new_ro
 
         if (!_chunk_changer->change_chunk(base_chunk, new_chunk, base_tablet->tablet_meta(), new_tablet->tablet_meta(),
                                           mem_pool.get())) {
-            std::string err_msg = Substitute("failed to convert chunk data. base tablet:$0, new tablet:$1",
-                                             base_tablet->tablet_id(), new_tablet->tablet_id());
+            std::string err_msg = strings::Substitute("failed to convert chunk data. base tablet:$0, new tablet:$1",
+                                                      base_tablet->tablet_id(), new_tablet->tablet_id());
             LOG(WARNING) << err_msg;
             return false;
         }
@@ -615,8 +616,8 @@ Status SchemaChangeWithSorting::process_v2(TabletReader* reader, RowsetWriter* n
         ChunkPtr new_chunk = ChunkHelper::new_chunk(new_schema, base_chunk->num_rows());
 
         if (!_chunk_changer->change_chunk_v2(base_chunk, new_chunk, base_schema, new_schema, mem_pool.get())) {
-            std::string err_msg = Substitute("failed to convert chunk data. base tablet:$0, new tablet:$1",
-                                             base_tablet->tablet_id(), new_tablet->tablet_id());
+            std::string err_msg = strings::Substitute("failed to convert chunk data. base tablet:$0, new tablet:$1",
+                                                      base_tablet->tablet_id(), new_tablet->tablet_id());
             LOG(WARNING) << err_msg;
             return Status::InternalError(err_msg);
         }
@@ -733,14 +734,14 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
         return Status::InternalError("base tablet get migration r_lock failed");
     }
     if (Tablet::check_migrate(base_tablet)) {
-        return Status::InternalError(Substitute("tablet $0 is doing disk balance", base_tablet->tablet_id()));
+        return Status::InternalError(strings::Substitute("tablet $0 is doing disk balance", base_tablet->tablet_id()));
     }
     std::shared_lock new_migration_rlock(new_tablet->get_migration_lock(), std::try_to_lock);
     if (!new_migration_rlock.owns_lock()) {
         return Status::InternalError("new tablet get migration r_lock failed");
     }
     if (Tablet::check_migrate(new_tablet)) {
-        return Status::InternalError(Substitute("tablet $0 is doing disk balance", new_tablet->tablet_id()));
+        return Status::InternalError(strings::Substitute("tablet $0 is doing disk balance", new_tablet->tablet_id()));
     }
 
     SchemaChangeParams sc_params;

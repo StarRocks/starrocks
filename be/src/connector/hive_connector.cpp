@@ -2,6 +2,8 @@
 
 #include "connector/hive_connector.h"
 
+#include <filesystem>
+
 #include "exec/exec_node.h"
 #include "exec/vectorized/hdfs_scanner_orc.h"
 #include "exec/vectorized/hdfs_scanner_parquet.h"

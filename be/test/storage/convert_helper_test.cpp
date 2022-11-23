@@ -9,6 +9,7 @@
 
 #include "runtime/decimalv3.h"
 #include "storage/chunk_helper.h"
+#include "storage/type_traits.h"
 #include "storage/types.h"
 #include "testutil/parallel_test.h"
 

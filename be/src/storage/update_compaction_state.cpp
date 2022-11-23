@@ -2,6 +2,7 @@
 
 #include "storage/update_compaction_state.h"
 
+#include "gutil/strings/substitute.h"
 #include "storage/chunk_helper.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/rowset/rowset.h"
@@ -40,7 +41,7 @@ Status CompactionState::load(Rowset* rowset) {
 
 Status CompactionState::load_segments(Rowset* rowset, uint32_t segment_id) {
     if (segment_id >= pk_cols.size() && pk_cols.size() != 0) {
-        std::string msg = Substitute("Error segment id: $0 vs $1", segment_id, pk_cols.size());
+        std::string msg = strings::Substitute("Error segment id: $0 vs $1", segment_id, pk_cols.size());
         LOG(WARNING) << msg;
         return Status::InternalError(msg);
     }
