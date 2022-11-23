@@ -3,13 +3,13 @@
 #pragma once
 
 #include <ctime>
+#include <utility>
 
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/source_operator.h"
 #include "gutil/strings/substitute.h"
-namespace starrocks {
-namespace pipeline {
+namespace starrocks::pipeline {
 
 class Pipeline;
 using PipelinePtr = std::shared_ptr<Pipeline>;
@@ -17,7 +17,7 @@ using Pipelines = std::vector<PipelinePtr>;
 class Pipeline {
 public:
     Pipeline() = delete;
-    Pipeline(uint32_t id, const OpFactories& op_factories) : _id(id), _op_factories(op_factories) {
+    Pipeline(uint32_t id, OpFactories op_factories) : _id(id), _op_factories(std::move(op_factories)) {
         _runtime_profile = std::make_shared<RuntimeProfile>(strings::Substitute("Pipeline (id=$0)", _id));
     }
 
@@ -75,5 +75,4 @@ private:
     OpFactories _op_factories;
 };
 
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline

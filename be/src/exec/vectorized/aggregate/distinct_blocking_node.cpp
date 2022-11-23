@@ -54,9 +54,7 @@ Status DistinctBlockingNode::open(RuntimeState* state) {
 
         {
             SCOPED_TIMER(_aggregator->agg_compute_timer());
-            TRY_CATCH_BAD_ALLOC(_aggregator->hash_set_variant().visit([&](auto& hash_set_with_key) {
-                _aggregator->build_hash_set(*hash_set_with_key, chunk->num_rows());
-            }));
+            TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_set(chunk->num_rows()));
             _mem_tracker->set(_aggregator->hash_set_variant().reserved_memory_usage(_aggregator->mem_pool()));
             TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_set());
 
@@ -99,9 +97,7 @@ Status DistinctBlockingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool
     }
     int32_t chunk_size = runtime_state()->chunk_size();
 
-    _aggregator->hash_set_variant().visit([&](auto& hash_set_with_key) {
-        _aggregator->convert_hash_set_to_chunk(*hash_set_with_key, chunk_size, chunk);
-    });
+    _aggregator->convert_hash_set_to_chunk(chunk_size, chunk);
 
     size_t old_size = (*chunk)->num_rows();
     eval_join_runtime_filters(chunk->get());

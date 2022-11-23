@@ -16,10 +16,10 @@ struct IntersectSliceFlagEqual;
 
 class IntersectSliceFlag {
 public:
-    IntersectSliceFlag(const uint8_t* d, size_t n) : slice(d, n), hit_times(0) {}
+    IntersectSliceFlag(const uint8_t* d, size_t n) : slice(d, n) {}
 
     Slice slice;
-    mutable uint16_t hit_times;
+    mutable uint16_t hit_times{0};
 };
 
 struct IntersectSliceFlagEqual {

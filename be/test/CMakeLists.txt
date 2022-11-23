@@ -10,7 +10,7 @@ set(EXEC_FILES
         ./column/const_column_test.cpp
         ./column/date_value_test.cpp
         ./column/decimalv3_column_test.cpp
-        ./column/field_test.cpp
+        ./column/vectorized_field_test.cpp
         ./column/fixed_length_column_test.cpp
         ./column/json_column_test.cpp
         ./column/map_column_test.cpp
@@ -234,7 +234,6 @@ set(EXEC_FILES
         ./runtime/datetime_value_test.cpp
         ./runtime/decimalv2_value_test.cpp
         ./runtime/decimalv3_test.cpp
-        ./runtime/decimal_value_test.cpp
         ./runtime/external_scan_context_mgr_test.cpp
         ./runtime/fragment_mgr_test.cpp
         ./runtime/free_list_test.cpp
@@ -252,7 +251,6 @@ set(EXEC_FILES
         ./runtime/stream_load_pipe_test.cpp
         ./runtime/string_value_test.cpp
         ./runtime/type_descriptor_test.cpp
-        ./runtime/thread_resource_mgr_test.cpp
         ./runtime/type_descriptor_test.cpp
         ./runtime/vectorized/sorted_chunks_merger_test.cpp
         ./runtime/memory_scratch_sink_test_issue_8676.cpp
@@ -278,6 +276,7 @@ set(EXEC_FILES
         ./util/countdown_latch_test.cpp
         ./util/crc32c_test.cpp
         ./util/dynamic_cache_test.cpp
+        ./util/exception_stack_test.cpp
         ./util/faststring_test.cpp
         ./util/filesystem_util_test.cpp
         ./util/frame_of_reference_coding_test.cpp

@@ -67,6 +67,7 @@ enum TExprNodeType {
   SUBFIELD_EXPR,
   RUNTIME_FILTER_MIN_MAX_EXPR,
   MAP_ELEMENT_EXPR,
+  BINARY_LITERAL,
 }
 
 //enum TAggregationOp {
@@ -118,6 +119,10 @@ struct TIntLiteral {
 
 struct TLargeIntLiteral {
   1: required string value
+}
+
+struct TBinaryLiteral {
+  1: required binary value
 }
 
 struct TInPredicate {
@@ -209,6 +214,7 @@ struct TExprNode {
 
   // Used for SubfieldExpr
   30: optional string used_subfield_name;
+  31: optional TBinaryLiteral binary_literal;
 
   // For vector query engine
   50: optional bool use_vectorized

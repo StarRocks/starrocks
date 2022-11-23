@@ -2974,6 +2974,10 @@ public class GlobalStateMgr {
         if (!catalogMgr.catalogExists(newCatalogName)) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_CATALOG_ERROR, newCatalogName);
         }
+        if (isUsingNewPrivilege() && !CatalogMgr.isInternalCatalog(newCatalogName) &&
+                !PrivilegeManager.checkAnyActionOnCatalog(ctx, newCatalogName)) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USE CATALOG");
+        }
         ctx.setCurrentCatalog(newCatalogName);
     }
 
@@ -2994,12 +2998,17 @@ public class GlobalStateMgr {
             } else {
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_AND_DB_ERROR, identifier);
             }
+            if (isUsingNewPrivilege() && !CatalogMgr.isInternalCatalog(newCatalogName) &&
+                    !PrivilegeManager.checkAnyActionOnCatalog(ctx, newCatalogName)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USE CATALOG");
+            }
             ctx.setCurrentCatalog(newCatalogName);
         }
 
         // Check auth for internal catalog.
         // Here we check the request permission that sent by the mysql client or jdbc.
         // So we didn't check UseDbStmt permission in PrivilegeChecker.
+        // TODO: external catalog should also check any action on or under db when change db on context
         if (CatalogMgr.isInternalCatalog(ctx.getCurrentCatalog())) {
             if (isUsingNewPrivilege()) {
                 if (!PrivilegeManager.checkAnyActionOnOrUnderDb(ctx, dbName)) {

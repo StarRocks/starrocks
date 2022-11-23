@@ -134,6 +134,7 @@ StatusOr<ChunkPB> ProtobufChunkSerde::serialize_without_meta(const vectorized::C
     encode_fixed32_le(buff + 4, chunk.num_rows());
     buff = buff + 8;
 
+    int padding_size = 0; // as streamvbyte may read up to 16 extra bytes from the input.
     if (context == nullptr) {
         for (const auto& column : chunk.columns()) {
             buff = ColumnArraySerde::serialize(*column, buff);
@@ -145,10 +146,13 @@ StatusOr<ChunkPB> ProtobufChunkSerde::serialize_without_meta(const vectorized::C
             buff = ColumnArraySerde::serialize(*chunk.columns()[i], buff, false, context->get_encode_level(i));
             if (UNLIKELY(buff == nullptr)) return Status::InternalError("has unsupported column");
             context->update(i, chunk.columns()[i]->byte_size(), buff - buff_begin);
+            if (EncodeContext::enable_encode_integer(context->get_encode_level(i))) { // may be use streamvbyte
+                padding_size = context->STREAMVBYTE_PADDING_SIZE;
+            }
         }
     }
     chunk_pb.set_serialized_size(buff - reinterpret_cast<const uint8_t*>(serialized_data->data()));
-    serialized_data->resize(chunk_pb.serialized_size());
+    serialized_data->resize(chunk_pb.serialized_size() + padding_size);
     chunk_pb.set_uncompressed_size(serialized_data->size());
     if (context) {
         VLOG_ROW << "pb serialize data, memory bytes = " << chunk.bytes_usage()

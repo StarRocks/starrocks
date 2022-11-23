@@ -20,7 +20,7 @@ class BitmapIntersectAggregateFunction final
         : public AggregateFunctionBatchHelper<BitmapValuePacked, BitmapIntersectAggregateFunction> {
 public:
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
-        const BitmapColumn* col = down_cast<const BitmapColumn*>(columns[0]);
+        const auto* col = down_cast<const BitmapColumn*>(columns[0]);
         if (!this->data(state).initial) {
             this->data(state).bitmap |= *(col->get_object(row_num));
             this->data(state).initial = true;
@@ -30,7 +30,7 @@ public:
     }
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
-        const BitmapColumn* col = down_cast<const BitmapColumn*>(column);
+        const auto* col = down_cast<const BitmapColumn*>(column);
         DCHECK(col->is_object());
         if (!this->data(state).initial) {
             this->data(state).bitmap |= *(col->get_object(row_num));
@@ -41,8 +41,8 @@ public:
     }
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
-        BitmapColumn* col = down_cast<BitmapColumn*>(to);
-        BitmapValue& bitmap = const_cast<BitmapValue&>(this->data(state).bitmap);
+        auto* col = down_cast<BitmapColumn*>(to);
+        auto& bitmap = const_cast<BitmapValue&>(this->data(state).bitmap);
         col->append(std::move(bitmap));
     }
 
@@ -52,8 +52,8 @@ public:
     }
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
-        BitmapValue& bitmap = const_cast<BitmapValue&>(this->data(state).bitmap);
-        BitmapColumn* col = down_cast<BitmapColumn*>(to);
+        auto& bitmap = const_cast<BitmapValue&>(this->data(state).bitmap);
+        auto* col = down_cast<BitmapColumn*>(to);
         col->append(std::move(bitmap));
     }
 

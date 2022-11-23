@@ -8,7 +8,7 @@
 
 namespace starrocks::vectorized {
 
-class Schema;
+class VectorizedSchema;
 
 class DatumTuple {
 public:
@@ -29,7 +29,7 @@ public:
 
     Datum& get(size_t n) { return _datums.at(n); }
 
-    int compare(const Schema& schema, const DatumTuple& rhs) const;
+    int compare(const VectorizedSchema& schema, const DatumTuple& rhs) const;
 
     const std::vector<Datum>& datums() const { return _datums; }
 

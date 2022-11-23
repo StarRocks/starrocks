@@ -61,6 +61,7 @@ Usage: $0 <options>
      --use-staros       build Backend with staros
      --with-gcov        build Backend with gcov, has an impact on performance
      --without-gcov     build Backend without gcov(default)
+     --with-bench       build Backend with bench(default without bench)
      -j                 build Backend parallel
 
   Eg.
@@ -83,6 +84,7 @@ OPTS=$(getopt \
   -l 'spark-dpp' \
   -l 'clean' \
   -l 'with-gcov' \
+  -l 'with-bench' \
   -l 'without-gcov' \
   -l 'use-staros' \
   -o 'j:' \
@@ -101,6 +103,7 @@ BUILD_SPARK_DPP=
 CLEAN=
 RUN_UT=
 WITH_GCOV=OFF
+WITH_BENCH=OFF
 USE_STAROS=OFF
 if [[ -z ${USE_AVX2} ]]; then
     USE_AVX2=ON
@@ -118,7 +121,7 @@ if [[ -z $(grep -o 'sse[^ ]*' /proc/cpuinfo) ]]; then
 fi
 
 if [[ -z ${WITH_BLOCK_CACHE} ]]; then
-	WITH_BLOCK_CACHE=ON
+	WITH_BLOCK_CACHE=OFF
 fi
 
 if [[ "${WITH_BLOCK_CACHE}" == "ON" && ! -f ${STARROCKS_THIRDPARTY}/installed/cachelib/lib/libcachelib_allocator.a ]]; then
@@ -166,6 +169,7 @@ else
             --with-gcov) WITH_GCOV=ON; shift ;;
             --without-gcov) WITH_GCOV=OFF; shift ;;
             --use-staros) USE_STAROS=ON; shift ;;
+            --with-bench) WITH_BENCH=ON; shift ;;
             -h) HELP=1; shift ;;
             --help) HELP=1; shift ;;
             -j) PARALLEL=$2; shift 2 ;;
@@ -193,6 +197,7 @@ echo "Get params:
     CLEAN               -- $CLEAN
     RUN_UT              -- $RUN_UT
     WITH_GCOV           -- $WITH_GCOV
+    WITH_BENCH          -- $WITH_BENCH
     USE_STAROS          -- $USE_STAROS
     USE_AVX2            -- $USE_AVX2
     PARALLEL            -- $PARALLEL
@@ -249,6 +254,7 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                     -DUSE_JEMALLOC=$USE_JEMALLOC \
                     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
                     -DUSE_STAROS=${USE_STAROS} \
+                    -DWITH_BENCH=${WITH_BENCH} \
                     -DWITH_BLOCK_CACHE=${WITH_BLOCK_CACHE} \
                     -Dprotobuf_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/protobuf \
                     -Dabsl_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/absl \
@@ -265,6 +271,7 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                     -DUSE_AVX2=$USE_AVX2 -DUSE_SSE4_2=$USE_SSE4_2 \
                     -DENABLE_QUERY_DEBUG_TRACE=$ENABLE_QUERY_DEBUG_TRACE \
                     -DUSE_JEMALLOC=$USE_JEMALLOC \
+                    -DWITH_BENCH=${WITH_BENCH} \
                     -DWITH_BLOCK_CACHE=${WITH_BLOCK_CACHE} \
                     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON  ..
     fi

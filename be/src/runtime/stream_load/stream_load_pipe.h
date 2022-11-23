@@ -29,7 +29,6 @@
 #include "runtime/message_body_sink.h"
 #include "util/bit_util.h"
 #include "util/byte_buffer.h"
-#include "util/stack_util.h"
 
 namespace starrocks {
 

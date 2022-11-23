@@ -71,6 +71,7 @@ import com.starrocks.sql.optimizer.transformer.OptExprBuilder;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.plan.ExecPlan;
 import org.apache.iceberg.PartitionSpec;
+import org.apache.logging.log4j.util.Strings;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -81,6 +82,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
 import static com.starrocks.server.CatalogMgr.isInternalCatalog;
 
 public class MaterializedViewAnalyzer {
@@ -101,6 +103,22 @@ public class MaterializedViewAnalyzer {
         private boolean isSupportBasedOnTable(Table table) {
             return table instanceof OlapTable || table instanceof HiveTable || table instanceof HudiTable ||
                     table instanceof IcebergTable;
+        }
+
+        private boolean isExternalTableFromResource(Table table) {
+            if (table instanceof OlapTable) {
+                return false;
+            } else if (table instanceof HiveTable || table instanceof HudiTable) {
+                HiveMetaStoreTable hiveMetaStoreTable = (HiveMetaStoreTable) table;
+                String catalogName = hiveMetaStoreTable.getCatalogName();
+                return Strings.isBlank(catalogName) || isResourceMappingCatalog(catalogName);
+            } else if (table instanceof IcebergTable) {
+                IcebergTable icebergTable = (IcebergTable) table;
+                String catalogName = icebergTable.getCatalog();
+                return Strings.isBlank(catalogName) || isResourceMappingCatalog(catalogName);
+            } else {
+                return true;
+            }
         }
 
         @Override
@@ -166,6 +184,11 @@ public class MaterializedViewAnalyzer {
                 if (table instanceof MaterializedView && !((MaterializedView) table).isActive()) {
                     throw new SemanticException(
                             "Create materialized view from inactive materialized view: " + table.getName());
+                }
+                if (isExternalTableFromResource(table)) {
+                    throw new SemanticException(
+                            "Only supports creating materialized views based on the external table " +
+                                    "which created by catalog");
                 }
                 Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(tableNameInfo.getCatalog(),
                         tableNameInfo.getDb());
@@ -237,10 +260,9 @@ public class MaterializedViewAnalyzer {
                         requiredPropertySet,
                         new ColumnRefSet(logicalPlan.getOutputColumn()),
                         columnRefFactory);
+                optimizedPlan.deriveMVProperty();
 
                 // TODO: refine rules for mv plan
-                // TODO: infer key property
-                // TODO: infer retraction op
                 // TODO: infer state
                 // TODO: store the plan in create-mv statement and persist it at executor
             } finally {
@@ -719,4 +741,5 @@ public class MaterializedViewAnalyzer {
             }
         }
     }
+
 }

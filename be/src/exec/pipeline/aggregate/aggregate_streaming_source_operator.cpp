@@ -66,9 +66,7 @@ void AggregateStreamingSourceOperator::_output_chunk_from_hash_map(vectorized::C
         COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_map_variant().size());
     }
 
-    _aggregator->hash_map_variant().visit([&](auto& hash_map_with_key) {
-        _aggregator->convert_hash_map_to_chunk(*hash_map_with_key, state->chunk_size(), chunk);
-    });
+    _aggregator->convert_hash_map_to_chunk(state->chunk_size(), chunk);
 }
 
 } // namespace starrocks::pipeline

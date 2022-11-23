@@ -29,6 +29,7 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
+#include "config.h"
 #include "exprs/expr.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/substitute.h"
@@ -55,7 +56,7 @@ namespace starrocks::stream_load {
 
 NodeChannel::NodeChannel(OlapTableSink* parent, int64_t node_id) : _parent(parent), _node_id(node_id) {
     // restrict the chunk memory usage of send queue
-    _mem_tracker = std::make_unique<MemTracker>(64 * 1024 * 1024, "", nullptr);
+    _mem_tracker = std::make_unique<MemTracker>(config::send_channel_buffer_limit, "", nullptr);
 }
 
 NodeChannel::~NodeChannel() noexcept {
@@ -873,19 +874,12 @@ Status OlapTableSink::prepare(RuntimeState* state) {
         }
     }
 
-    _max_decimal_val.resize(_output_tuple_desc->slots().size());
-    _min_decimal_val.resize(_output_tuple_desc->slots().size());
-
     _max_decimalv2_val.resize(_output_tuple_desc->slots().size());
     _min_decimalv2_val.resize(_output_tuple_desc->slots().size());
     // check if need validate batch
     for (int i = 0; i < _output_tuple_desc->slots().size(); ++i) {
         auto* slot = _output_tuple_desc->slots()[i];
         switch (slot->type().type) {
-        case TYPE_DECIMAL:
-            _max_decimal_val[i].to_max_decimal(slot->type().precision, slot->type().scale);
-            _min_decimal_val[i].to_min_decimal(slot->type().precision, slot->type().scale);
-            break;
         case TYPE_DECIMALV2:
             _max_decimalv2_val[i].to_max_decimal(slot->type().precision, slot->type().scale);
             _min_decimalv2_val[i].to_min_decimal(slot->type().precision, slot->type().scale);
@@ -1475,7 +1469,7 @@ void OlapTableSink::_print_decimal_error_msg(RuntimeState* state, const DecimalV
 #endif
 }
 
-template <PrimitiveType PT, typename CppType = vectorized::RunTimeCppType<PT>>
+template <LogicalType PT, typename CppType = vectorized::RunTimeCppType<PT>>
 void _print_decimalv3_error_msg(RuntimeState* state, const CppType& decimal, const SlotDescriptor* desc) {
     if (state->has_reached_max_error_msg_num()) {
         return;
@@ -1490,7 +1484,7 @@ void _print_decimalv3_error_msg(RuntimeState* state, const CppType& decimal, con
 #endif
 }
 
-template <PrimitiveType PT>
+template <LogicalType PT>
 void OlapTableSink::_validate_decimal(RuntimeState* state, vectorized::Column* column, const SlotDescriptor* desc,
                                       std::vector<uint8_t>* validate_selection) {
     using CppType = vectorized::RunTimeCppType<PT>;
@@ -1571,7 +1565,8 @@ void OlapTableSink::_validate_data(RuntimeState* state, vectorized::Chunk* chunk
         vectorized::Column* column = chunk->get_column_by_slot_id(desc->id()).get();
         switch (desc->type().type) {
         case TYPE_CHAR:
-        case TYPE_VARCHAR: {
+        case TYPE_VARCHAR:
+        case TYPE_VARBINARY: {
             uint32_t len = desc->type().len;
             vectorized::Column* data_column = vectorized::ColumnHelper::get_data_column(column);
             auto* binary = down_cast<vectorized::BinaryColumn*>(data_column);
@@ -1633,7 +1628,7 @@ void OlapTableSink::_padding_char_column(vectorized::Chunk* chunk) {
             vectorized::Bytes& bytes = binary->get_bytes();
 
             // Padding 0 to CHAR field, the storage bitmap index and zone map need it.
-            // TODO(kks): we could improve this if there are many null valus
+            // TODO(kks): we could improve this if there are many null values
             auto new_binary = vectorized::BinaryColumn::create();
             vectorized::Offsets& new_offset = new_binary->get_offset();
             vectorized::Bytes& new_bytes = new_binary->get_bytes();

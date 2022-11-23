@@ -2,7 +2,6 @@
 
 #pragma once
 
-#include <algorithm>
 #include <any>
 #include <atomic>
 #include <cstddef>
@@ -348,181 +347,13 @@ protected:
     AggStatistics* _agg_stat;
 
 public:
-    template <typename HashMapWithKey>
-    ATTRIBUTE_NOINLINE void build_hash_map(HashMapWithKey& hash_map_with_key, size_t chunk_size,
-                                           bool agg_group_by_with_limit = false) {
-        if (agg_group_by_with_limit) {
-            if (hash_map_with_key.hash_map.size() >= _limit) {
-                build_hash_map_with_selection(hash_map_with_key, chunk_size);
-                return;
-            } else {
-                _streaming_selection.assign(chunk_size, 0);
-            }
-        }
-        hash_map_with_key.compute_agg_states(chunk_size, _group_by_columns, _mem_pool.get(),
-                                             AllocateState<HashMapWithKey>(this), &_tmp_agg_states);
-    }
+    void build_hash_map(size_t chunk_size, bool agg_group_by_with_limit = false);
+    void build_hash_map_with_selection(size_t chunk_size);
+    void convert_hash_map_to_chunk(int32_t chunk_size, vectorized::ChunkPtr* chunk);
 
-    template <typename HashMapWithKey>
-    ATTRIBUTE_NOINLINE void build_hash_map_with_selection(HashMapWithKey& hash_map_with_key, size_t chunk_size) {
-        hash_map_with_key.compute_agg_states(chunk_size, _group_by_columns, AllocateState<HashMapWithKey>(this),
-                                             &_tmp_agg_states, &_streaming_selection);
-    }
-
-    template <typename HashSetWithKey>
-    ATTRIBUTE_NOINLINE void build_hash_set(HashSetWithKey& hash_set, size_t chunk_size) {
-        hash_set.build_set(chunk_size, _group_by_columns, _mem_pool.get());
-    }
-
-    template <typename HashSetWithKey>
-    ATTRIBUTE_NOINLINE void build_hash_set_with_selection(HashSetWithKey& hash_set, size_t chunk_size) {
-        hash_set.build_set(chunk_size, _group_by_columns, &_streaming_selection);
-    }
-
-    template <typename HashMapWithKey>
-    ATTRIBUTE_NOINLINE void convert_hash_map_to_chunk(HashMapWithKey& hash_map_with_key, int32_t chunk_size,
-                                                      vectorized::ChunkPtr* chunk) {
-        SCOPED_TIMER(_agg_stat->get_results_timer);
-
-        auto it = std::any_cast<RawHashTableIterator>(_it_hash);
-        auto end = _state_allocator.end();
-
-        const auto hash_map_size = _hash_map_variant.size();
-        auto num_rows = std::min<size_t>(hash_map_size - _num_rows_processed, chunk_size);
-        vectorized::Columns group_by_columns = _create_group_by_columns(num_rows);
-        vectorized::Columns agg_result_columns = _create_agg_result_columns(num_rows);
-
-        auto use_intermediate = _use_intermediate_as_output();
-        int32_t read_index = 0;
-        {
-            SCOPED_TIMER(_agg_stat->iter_timer);
-            hash_map_with_key.results.resize(chunk_size);
-            // get key/value from hashtable
-            while ((it != end) & (read_index < chunk_size)) {
-                auto* value = it.value();
-                hash_map_with_key.results[read_index] = *reinterpret_cast<typename HashMapWithKey::KeyType*>(value);
-                _tmp_agg_states[read_index] = value;
-                ++read_index;
-                it.next();
-            }
-        }
-
-        {
-            SCOPED_TIMER(_agg_stat->group_by_append_timer);
-            hash_map_with_key.insert_keys_to_columns(hash_map_with_key.results, group_by_columns, read_index);
-        }
-
-        {
-            SCOPED_TIMER(_agg_stat->agg_append_timer);
-            if (!use_intermediate) {
-                for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
-                    _agg_functions[i]->batch_finalize(_agg_fn_ctxs[i], read_index, _tmp_agg_states,
-                                                      _agg_states_offsets[i], agg_result_columns[i].get());
-                }
-            } else {
-                for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
-                    _agg_functions[i]->batch_serialize(_agg_fn_ctxs[i], read_index, _tmp_agg_states,
-                                                       _agg_states_offsets[i], agg_result_columns[i].get());
-                }
-            }
-        }
-
-        _is_ht_eos = (it == end);
-
-        // If there is null key, output it last
-        if constexpr (HashMapWithKey::has_single_null_key) {
-            if (_is_ht_eos && hash_map_with_key.null_key_data != nullptr) {
-                // The output chunk size couldn't larger than _state->chunk_size()
-                if (read_index < _state->chunk_size()) {
-                    // For multi group by key, we don't need to special handle null key
-                    DCHECK(group_by_columns.size() == 1);
-                    DCHECK(group_by_columns[0]->is_nullable());
-                    group_by_columns[0]->append_default();
-
-                    if (!use_intermediate) {
-                        _finalize_to_chunk(hash_map_with_key.null_key_data, agg_result_columns);
-                    } else {
-                        _serialize_to_chunk(hash_map_with_key.null_key_data, agg_result_columns);
-                    }
-
-                    ++read_index;
-                } else {
-                    // Output null key in next round
-                    _is_ht_eos = false;
-                }
-            }
-        }
-
-        _it_hash = it;
-        auto result_chunk = _build_output_chunk(group_by_columns, agg_result_columns);
-        _num_rows_returned += read_index;
-        _num_rows_processed += read_index;
-        *chunk = std::move(result_chunk);
-    }
-
-    template <typename HashSetWithKey>
-    ATTRIBUTE_NOINLINE void convert_hash_set_to_chunk(HashSetWithKey& hash_set, int32_t chunk_size,
-                                                      vectorized::ChunkPtr* chunk) {
-        SCOPED_TIMER(_agg_stat->get_results_timer);
-        using Iterator = typename HashSetWithKey::Iterator;
-        auto it = std::any_cast<Iterator>(_it_hash);
-        auto end = hash_set.hash_set.end();
-        const auto hash_set_size = _hash_set_variant.size();
-        auto num_rows = std::min<size_t>(hash_set_size - _num_rows_processed, chunk_size);
-        vectorized::Columns group_by_columns = _create_group_by_columns(num_rows);
-
-        // Computer group by columns and aggregate result column
-        int32_t read_index = 0;
-        hash_set.results.resize(chunk_size);
-        while (it != end && read_index < chunk_size) {
-            // hash_set.insert_key_to_columns(*it, group_by_columns);
-            hash_set.results[read_index] = *it;
-            ++read_index;
-            ++it;
-        }
-
-        {
-            SCOPED_TIMER(_agg_stat->group_by_append_timer);
-            hash_set.insert_keys_to_columns(hash_set.results, group_by_columns, read_index);
-        }
-
-        _is_ht_eos = (it == end);
-
-        // IF there is null key, output it last
-        if constexpr (HashSetWithKey::has_single_null_key) {
-            if (_is_ht_eos && hash_set.has_null_key) {
-                // The output chunk size couldn't larger than _state->chunk_size()
-                if (read_index < _state->chunk_size()) {
-                    // For multi group by key, we don't need to special handle null key
-                    DCHECK(group_by_columns.size() == 1);
-                    DCHECK(group_by_columns[0]->is_nullable());
-                    group_by_columns[0]->append_default();
-                    ++read_index;
-                } else {
-                    // Output null key in next round
-                    _is_ht_eos = false;
-                }
-            }
-        }
-
-        _it_hash = it;
-
-        vectorized::ChunkPtr result_chunk = std::make_shared<vectorized::Chunk>();
-        // For different agg phase, we should use different TupleDescriptor
-        auto use_intermediate = _use_intermediate_as_output();
-        if (!use_intermediate) {
-            for (size_t i = 0; i < group_by_columns.size(); i++) {
-                result_chunk->append_column(group_by_columns[i], _output_tuple_desc->slots()[i]->id());
-            }
-        } else {
-            for (size_t i = 0; i < group_by_columns.size(); i++) {
-                result_chunk->append_column(group_by_columns[i], _intermediate_tuple_desc->slots()[i]->id());
-            }
-        }
-        _num_rows_returned += read_index;
-        _num_rows_processed += read_index;
-        *chunk = std::move(result_chunk);
-    }
+    void build_hash_set(size_t chunk_size);
+    void build_hash_set_with_selection(size_t chunk_size);
+    void convert_hash_set_to_chunk(int32_t chunk_size, vectorized::ChunkPtr* chunk);
 
 protected:
     bool _reached_limit() { return _limit != -1 && _num_rows_returned >= _limit; }
@@ -573,31 +404,8 @@ protected:
     template <typename HashVariantType>
     void _init_agg_hash_variant(HashVariantType& hash_variant);
 
-    template <typename HashMapWithKey>
-    ATTRIBUTE_NOINLINE void _release_agg_memory(HashMapWithKey* hash_map_with_key) {
-        // If all function states are of POD type,
-        // then we don't have to traverse the hash table to call destroy method.
-        //
-        bool skip_destroy = std::all_of(_agg_functions.begin(), _agg_functions.end(),
-                                        [](auto* func) { return func->is_pod_state(); });
-        if (hash_map_with_key != nullptr && !skip_destroy) {
-            auto null_data_ptr = hash_map_with_key->get_null_key_data();
-            if (null_data_ptr != nullptr) {
-                for (int i = 0; i < _agg_functions.size(); i++) {
-                    _agg_functions[i]->destroy(_agg_fn_ctxs[i], null_data_ptr + _agg_states_offsets[i]);
-                }
-            }
-            auto it = _state_allocator.begin();
-            auto end = _state_allocator.end();
+    void _release_agg_memory();
 
-            while (it != end) {
-                for (int i = 0; i < _agg_functions.size(); i++) {
-                    _agg_functions[i]->destroy(_agg_fn_ctxs[i], it.value() + _agg_states_offsets[i]);
-                }
-                it.next();
-            }
-        }
-    }
     template <class HashMapWithKey>
     friend struct AllocateState;
 };

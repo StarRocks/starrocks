@@ -212,10 +212,10 @@ ColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool null
 }
 
 struct ColumnBuilder {
-    template <PrimitiveType ptype>
+    template <LogicalType ptype>
     ColumnPtr operator()(const TypeDescriptor& type_desc, size_t size) {
         switch (ptype) {
-        case INVALID_TYPE:
+        case TYPE_UNKNOWN:
         case TYPE_NULL:
         case TYPE_BINARY:
         case TYPE_DECIMAL:
@@ -244,16 +244,16 @@ ColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool null
     }
 
     ColumnPtr p;
-    if (type_desc.type == PrimitiveType::TYPE_ARRAY) {
+    if (type_desc.type == LogicalType::TYPE_ARRAY) {
         auto offsets = UInt32Column::create(size);
         auto data = create_column(type_desc.children[0], true, is_const, size);
         p = ArrayColumn::create(std::move(data), std::move(offsets));
-    } else if (type_desc.type == PrimitiveType::TYPE_MAP) {
+    } else if (type_desc.type == LogicalType::TYPE_MAP) {
         auto offsets = UInt32Column ::create(size);
         auto keys = create_column(type_desc.children[0], true, is_const, size);
         auto values = create_column(type_desc.children[1], true, is_const, size);
         p = MapColumn::create(std::move(keys), std::move(values), std::move(offsets));
-    } else if (type_desc.type == PrimitiveType::TYPE_STRUCT) {
+    } else if (type_desc.type == LogicalType::TYPE_STRUCT) {
         size_t field_size = type_desc.children.size();
         DCHECK_EQ(field_size, type_desc.selected_fields.size());
         Columns columns;

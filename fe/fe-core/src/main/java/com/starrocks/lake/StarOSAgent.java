@@ -6,18 +6,19 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.google.protobuf.Descriptors.EnumDescriptor;
 import com.staros.client.StarClient;
 import com.staros.client.StarClientException;
-import com.staros.proto.AllocateStorageInfo;
 import com.staros.proto.CreateShardGroupInfo;
 import com.staros.proto.CreateShardInfo;
-import com.staros.proto.ObjectStorageType;
+import com.staros.proto.FileCacheInfo;
+import com.staros.proto.FilePathInfo;
+import com.staros.proto.FileStoreType;
 import com.staros.proto.ReplicaInfo;
 import com.staros.proto.ReplicaRole;
 import com.staros.proto.ServiceInfo;
 import com.staros.proto.ShardGroupInfo;
 import com.staros.proto.ShardInfo;
-import com.staros.proto.ShardStorageInfo;
 import com.staros.proto.StatusCode;
 import com.staros.proto.WorkerInfo;
 import com.staros.util.LockCloseable;
@@ -96,16 +97,15 @@ public class StarOSAgent {
         LOG.info("get serviceId {} from starMgr", serviceId);
     }
 
-    public ShardStorageInfo getServiceShardStorageInfo() throws DdlException {
-        // TODO: support other storage type
-        AllocateStorageInfo requestStorageInfo =
-                AllocateStorageInfo.newBuilder().setObjectStorageType(ObjectStorageType.S3).build();
+    public FilePathInfo allocateFilePath(long tableId) throws DdlException {
         try {
-            ShardStorageInfo responseStorageInfo = client.allocateStorage(serviceId, requestStorageInfo);
-            LOG.debug("Get service shard storage info from StarMgr. storage info: {}", responseStorageInfo);
-            return responseStorageInfo;
+            EnumDescriptor enumDescriptor = FileStoreType.getDescriptor();
+            FileStoreType fsType = FileStoreType.valueOf(enumDescriptor.findValueByName(Config.default_fs_type).getNumber());
+            FilePathInfo pathInfo = client.allocateFilePath(serviceId, fsType, Long.toString(tableId));
+            LOG.debug("Allocate file path from starmgr: {}", pathInfo);
+            return pathInfo;
         } catch (StarClientException e) {
-            throw new DdlException("Failed to allocate storage from StarMgr", e);
+            throw new DdlException("Failed to allocate file path from StarMgr", e);
         }
     }
 
@@ -271,7 +271,8 @@ public class StarOSAgent {
         }
     }
 
-    public List<Long> createShards(int numShards, ShardStorageInfo shardStorageInfo, long groupId) throws DdlException {
+    public List<Long> createShards(int numShards, FilePathInfo pathInfo, FileCacheInfo cacheInfo, long groupId)
+        throws DdlException {
         prepare();
         List<ShardInfo> shardInfos = null;
         try {
@@ -281,9 +282,8 @@ public class StarOSAgent {
                 builder.setReplicaCount(1);
                 builder.setShardId(GlobalStateMgr.getCurrentState().getNextId());
                 builder.setGroupId(groupId);
-                if (shardStorageInfo != null) {
-                    builder.setShardStorageInfo(shardStorageInfo);
-                }
+                builder.setPathInfo(pathInfo);
+                builder.setCacheInfo(cacheInfo);
                 createShardInfos.add(builder.build());
             }
             shardInfos = client.createShard(serviceId, createShardInfos);

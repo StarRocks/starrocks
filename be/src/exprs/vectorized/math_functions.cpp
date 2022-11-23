@@ -252,10 +252,13 @@ DEFINE_MATH_UNARY_WITH_ZERO_CHECK_FN(cot, TYPE_DOUBLE, TYPE_DOUBLE);
 
 DEFINE_MATH_UNARY_WITH_OUTPUT_NAN_CHECK_FN_WITH_IMPL(sin, TYPE_DOUBLE, TYPE_DOUBLE, std::sin);
 DEFINE_MATH_UNARY_WITH_OUTPUT_NAN_CHECK_FN_WITH_IMPL(asin, TYPE_DOUBLE, TYPE_DOUBLE, std::asin);
+DEFINE_MATH_UNARY_WITH_OUTPUT_NAN_CHECK_FN_WITH_IMPL(sinh, TYPE_DOUBLE, TYPE_DOUBLE, std::sinh);
 DEFINE_MATH_UNARY_WITH_OUTPUT_NAN_CHECK_FN_WITH_IMPL(cos, TYPE_DOUBLE, TYPE_DOUBLE, std::cos);
 DEFINE_MATH_UNARY_WITH_OUTPUT_NAN_CHECK_FN_WITH_IMPL(acos, TYPE_DOUBLE, TYPE_DOUBLE, std::acos);
+DEFINE_MATH_UNARY_WITH_OUTPUT_NAN_CHECK_FN_WITH_IMPL(cosh, TYPE_DOUBLE, TYPE_DOUBLE, std::cosh);
 DEFINE_MATH_UNARY_WITH_OUTPUT_NAN_CHECK_FN_WITH_IMPL(tan, TYPE_DOUBLE, TYPE_DOUBLE, std::tan);
 DEFINE_MATH_UNARY_WITH_OUTPUT_NAN_CHECK_FN_WITH_IMPL(atan, TYPE_DOUBLE, TYPE_DOUBLE, std::atan);
+DEFINE_MATH_UNARY_WITH_OUTPUT_NAN_CHECK_FN_WITH_IMPL(tanh, TYPE_DOUBLE, TYPE_DOUBLE, std::tanh);
 DEFINE_MATH_UNARY_WITH_OUTPUT_NAN_CHECK_FN_WITH_IMPL(ceil, TYPE_DOUBLE, TYPE_BIGINT, std::ceil);
 DEFINE_MATH_UNARY_WITH_OUTPUT_NAN_CHECK_FN_WITH_IMPL(floor, TYPE_DOUBLE, TYPE_BIGINT, std::floor);
 DEFINE_MATH_UNARY_WITH_OUTPUT_CHECK_FN_WITH_IMPL(exp, TYPE_DOUBLE, TYPE_DOUBLE, std::exp, ExpCheck);
@@ -559,7 +562,7 @@ ColumnPtr MathFunctions::round_decimal128(FunctionContext* context, const Column
     DCHECK_EQ(columns.size(), 1);
     Columns new_columns;
     new_columns.push_back(columns[0]);
-    new_columns.push_back(ColumnHelper::create_const_column<PrimitiveType::TYPE_INT>(0, columns[0]->size()));
+    new_columns.push_back(ColumnHelper::create_const_column<LogicalType::TYPE_INT>(0, columns[0]->size()));
     return decimal_round<DecimalRoundRule::ROUND_HALF_UP>(context, new_columns);
 }
 

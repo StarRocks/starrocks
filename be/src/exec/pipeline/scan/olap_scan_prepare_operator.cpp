@@ -26,8 +26,10 @@ OlapScanPrepareOperator::~OlapScanPrepareOperator() {
 Status OlapScanPrepareOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
 
-    RETURN_IF_ERROR(_capture_tablet_rowsets());
-    return _ctx->prepare(state);
+    RETURN_IF_ERROR(_ctx->prepare(state));
+    RETURN_IF_ERROR(_ctx->capture_tablet_rowsets(_morsel_queue->olap_scan_ranges()));
+
+    return Status::OK();
 }
 
 void OlapScanPrepareOperator::close(RuntimeState* state) {
@@ -46,8 +48,8 @@ StatusOr<vectorized::ChunkPtr> OlapScanPrepareOperator::pull_chunk(RuntimeState*
     Status status = _ctx->parse_conjuncts(state, runtime_in_filters(), runtime_bloom_filters());
 
     _morsel_queue->set_key_ranges(_ctx->key_ranges());
-    _morsel_queue->set_tablets(_tablets);
-    _morsel_queue->set_tablet_rowsets(_tablet_rowsets);
+    _morsel_queue->set_tablets(_ctx->tablets());
+    _morsel_queue->set_tablet_rowsets(_ctx->tablet_rowsets());
 
     _ctx->set_prepare_finished();
     if (!status.ok()) {
@@ -56,28 +58,6 @@ StatusOr<vectorized::ChunkPtr> OlapScanPrepareOperator::pull_chunk(RuntimeState*
     }
 
     return nullptr;
-}
-
-Status OlapScanPrepareOperator::_capture_tablet_rowsets() {
-    auto olap_scan_ranges = _morsel_queue->olap_scan_ranges();
-    _tablet_rowsets.resize(olap_scan_ranges.size());
-    _tablets.resize(olap_scan_ranges.size());
-    for (int i = 0; i < olap_scan_ranges.size(); ++i) {
-        auto* scan_range = olap_scan_ranges[i];
-
-        int64_t version = strtoul(scan_range->version.c_str(), nullptr, 10);
-        ASSIGN_OR_RETURN(TabletSharedPtr tablet, vectorized::OlapScanNode::get_tablet(scan_range));
-
-        // Capture row sets of this version tablet.
-        {
-            std::shared_lock l(tablet->get_header_lock());
-            RETURN_IF_ERROR(tablet->capture_consistent_rowsets(Version(0, version), &_tablet_rowsets[i]));
-        }
-
-        _tablets[i] = std::move(tablet);
-    }
-
-    return Status::OK();
 }
 
 /// OlapScanPrepareOperatorFactory

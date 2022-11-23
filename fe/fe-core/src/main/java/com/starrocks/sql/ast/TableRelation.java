@@ -19,6 +19,9 @@ public class TableRelation extends Relation {
     private final List<Long> tabletIds;
     private boolean isMetaQuery;
 
+    // optional temporal clause for external MySQL tables that support this syntax
+    private String temporalClause;
+
     public TableRelation(TableName name) {
         this.name = name;
         this.partitionNames = null;
@@ -100,5 +103,13 @@ public class TableRelation extends Relation {
     @Override
     public String toString() {
         return name.toString();
+    }
+
+    public void setTemporalClause(String temporalClause) {
+        this.temporalClause = temporalClause;
+    }
+
+    public String getTemporalClause() {
+        return this.temporalClause;
     }
 }

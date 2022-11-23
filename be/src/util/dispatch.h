@@ -5,7 +5,7 @@
 #include "runtime/primitive_type.h"
 
 namespace starrocks::vectorized {
-template <template <bool, bool, PrimitiveType Type, typename... Args> typename Function, PrimitiveType Type,
+template <template <bool, bool, LogicalType Type, typename... Args> typename Function, LogicalType Type,
           typename... Args>
 ColumnPtr dispatch_nonull_template(ColumnPtr& col0, ColumnPtr& col1, Args&&... args) {
     bool a = col0->is_constant();

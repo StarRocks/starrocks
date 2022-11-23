@@ -19,8 +19,6 @@ public:
     StatusOr<std::vector<RowsetPtr>> pick_rowsets(int64_t version) override;
 
 private:
-    double get_cumulative_score();
-    double get_base_score();
     StatusOr<std::vector<RowsetPtr>> pick_cumulative_rowsets();
     StatusOr<std::vector<RowsetPtr>> pick_base_rowsets();
     void debug_rowsets(CompactionType type, const std::vector<uint32_t>& input_rowset_ids);
@@ -29,15 +27,15 @@ private:
     TabletMetadataPtr _tablet_metadata;
 };
 
-double BaseAndCumulativeCompactionPolicy::get_cumulative_score() {
-    if (_tablet_metadata->rowsets_size() == 0) {
+double cumulative_compaction_score(const TabletMetadataPB& metadata) {
+    if (metadata.rowsets_size() == 0) {
         return 0;
     }
 
     uint32_t segment_num_score = 0;
     size_t rowsets_size = 0;
-    for (uint32_t i = _tablet_metadata->cumulative_point(), size = _tablet_metadata->rowsets_size(); i < size; ++i) {
-        const auto& rowset = _tablet_metadata->rowsets(i);
+    for (uint32_t i = metadata.cumulative_point(), size = metadata.rowsets_size(); i < size; ++i) {
+        const auto& rowset = metadata.rowsets(i);
         segment_num_score += rowset.overlapped() ? rowset.segments_size() : 1;
         rowsets_size += rowset.data_size();
     }
@@ -45,22 +43,22 @@ double BaseAndCumulativeCompactionPolicy::get_cumulative_score() {
     double num_score = static_cast<double>(segment_num_score) / config::min_cumulative_compaction_num_singleton_deltas;
     double size_score = static_cast<double>(rowsets_size) / config::min_cumulative_compaction_size;
     double score = std::max(num_score, size_score);
-    VLOG(2) << "tablet: " << _tablet->id() << ", cumulative compaction score: " << score
+    VLOG(2) << "tablet: " << metadata.id() << ", cumulative compaction score: " << score
             << ", size_score: " << size_score << ", num_score: " << num_score << ", rowsets_size: " << rowsets_size
             << ", segment_num_score: " << segment_num_score;
     return score;
 }
 
-double BaseAndCumulativeCompactionPolicy::get_base_score() {
-    uint32_t cumulative_point = _tablet_metadata->cumulative_point();
-    if (cumulative_point == 0 || _tablet_metadata->rowsets_size() == 0) {
+double base_compaction_score(const TabletMetadataPB& metadata) {
+    uint32_t cumulative_point = metadata.cumulative_point();
+    if (cumulative_point == 0 || metadata.rowsets_size() == 0) {
         return 0;
     }
 
     uint32_t segment_num_score = 0;
     size_t rowsets_size = 0;
     for (uint32_t i = 1; i < cumulative_point; ++i) {
-        const auto& rowset = _tablet_metadata->rowsets(i);
+        const auto& rowset = metadata.rowsets(i);
         DCHECK(!rowset.overlapped());
         ++segment_num_score;
         rowsets_size += rowset.data_size();
@@ -69,21 +67,21 @@ double BaseAndCumulativeCompactionPolicy::get_base_score() {
     double num_score = static_cast<double>(segment_num_score) / config::min_base_compaction_num_singleton_deltas;
     double size_score = static_cast<double>(rowsets_size) / config::min_base_compaction_size;
     double score = std::max(num_score, size_score);
-    VLOG(2) << "tablet: " << _tablet->id() << ", base compaction score: " << score << ", size_score: " << size_score
+    VLOG(2) << "tablet: " << metadata.id() << ", base compaction score: " << score << ", size_score: " << size_score
             << ", num_score: " << num_score << ", rowsets_size: " << rowsets_size
             << ", segment_num_score: " << segment_num_score;
     if (score > kCompactionScoreThreshold) {
         return score;
     }
 
-    auto& base_rowset = _tablet_metadata->rowsets(0);
+    auto& base_rowset = metadata.rowsets(0);
     DCHECK(!base_rowset.overlapped());
     int64_t base_data_size = base_rowset.data_size();
     if (base_data_size > 0) {
         double size_ratio = static_cast<double>(rowsets_size) / base_data_size;
         if (size_ratio >= config::base_cumulative_delta_ratio) {
             score = 1.0;
-            VLOG(2) << "satisfy the base compaction size ratio policy. tablet: " << _tablet->id()
+            VLOG(2) << "satisfy the base compaction size ratio policy. tablet: " << metadata.id()
                     << ", base disk size: " << base_data_size << ", size_ratio: " << size_ratio;
             return score;
         }
@@ -168,8 +166,8 @@ void BaseAndCumulativeCompactionPolicy::debug_rowsets(CompactionType type,
 StatusOr<std::vector<RowsetPtr>> BaseAndCumulativeCompactionPolicy::pick_rowsets(int64_t version) {
     ASSIGN_OR_RETURN(_tablet_metadata, _tablet->get_metadata(version));
 
-    double cumulative_score = get_cumulative_score();
-    double base_score = get_base_score();
+    double cumulative_score = cumulative_compaction_score(*_tablet_metadata);
+    double base_score = base_compaction_score(*_tablet_metadata);
     if (base_score > cumulative_score) {
         return pick_base_rowsets();
     } else {

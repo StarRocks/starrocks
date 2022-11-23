@@ -45,7 +45,7 @@ class ShortKeyIndexDecoder;
 
 namespace vectorized {
 class ChunkIterator;
-class Schema;
+class VectorizedSchema;
 class SegmentIterator;
 class SegmentReadOptions;
 } // namespace vectorized
@@ -96,7 +96,7 @@ public:
     ~Segment();
 
     // may return EndOfFile
-    StatusOr<ChunkIteratorPtr> new_iterator(const vectorized::Schema& schema,
+    StatusOr<ChunkIteratorPtr> new_iterator(const vectorized::VectorizedSchema& schema,
                                             const vectorized::SegmentReadOptions& read_options);
 
     uint64_t id() const { return _segment_id; }
@@ -197,7 +197,7 @@ private:
     Status _open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer);
     Status _create_column_readers(SegmentFooterPB* footer);
 
-    StatusOr<ChunkIteratorPtr> _new_iterator(const vectorized::Schema& schema,
+    StatusOr<ChunkIteratorPtr> _new_iterator(const vectorized::VectorizedSchema& schema,
                                              const vectorized::SegmentReadOptions& read_options);
 
     void _prepare_adapter_info();
@@ -224,7 +224,7 @@ private:
     std::unique_ptr<ShortKeyIndexDecoder> _sk_index_decoder;
 
     // Actual storage type for each column, used to rewrite the input readoptions
-    std::unique_ptr<std::vector<FieldType>> _column_storage_types;
+    std::unique_ptr<std::vector<LogicalType>> _column_storage_types;
     // When reading old type format data this will be set to true.
     bool _needs_chunk_adapter = false;
     // When the storage types is different with TabletSchema

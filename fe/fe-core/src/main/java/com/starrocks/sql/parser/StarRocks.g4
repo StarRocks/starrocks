@@ -751,7 +751,7 @@ insertStatement
     ;
 
 updateStatement
-    : explainDesc? UPDATE qualifiedName SET assignmentList (WHERE where=expression)?
+    : explainDesc? UPDATE qualifiedName SET assignmentList fromClause (WHERE where=expression)?
     ;
 
 deleteStatement
@@ -1176,6 +1176,8 @@ privilegeActionReserved
     | SELECT
     | INSERT
     | DELETE
+    | USAGE
+    | CREATE_DATABASE
     | ALL
     ;
 
@@ -1457,6 +1459,14 @@ queryNoWith
     : queryPrimary (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 
+temporalClause
+    : AS OF expression
+    | FOR SYSTEM_TIME AS OF TIMESTAMP string
+    | FOR SYSTEM_TIME BETWEEN expression AND expression
+    | FOR SYSTEM_TIME FROM expression TO expression
+    | FOR SYSTEM_TIME ALL
+    ;
+
 queryPrimary
     : querySpecification                                                                    #queryPrimaryDefault
     | subquery                                                                              #queryWithParentheses
@@ -1530,7 +1540,7 @@ relation
     ;
 
 relationPrimary
-    : qualifiedName partitionNames? tabletList? (
+    : qualifiedName temporalClause? partitionNames? tabletList? (
         AS? alias=identifier columnAliases?)? bracketHint?                              #tableAtom
     | '(' VALUES rowConstructor (',' rowConstructor)* ')'
         (AS? alias=identifier columnAliases?)?                                          #inlineTable
@@ -1702,6 +1712,7 @@ literalExpression
     | string                                                                              #stringLiteral
     | interval                                                                            #intervalLiteral
     | unitBoundary                                                                        #unitBoundaryLiteral
+    | binary                                                                              #binaryLiteral
     ;
 
 functionCall
@@ -1942,6 +1953,11 @@ string
     | DOUBLE_QUOTED_TEXT
     ;
 
+binary
+    : BINARY_SINGLE_QUOTED_TEXT
+    | BINARY_DOUBLE_QUOTED_TEXT
+    ;
+
 comparisonOperator
     : EQ | NEQ | LT | LTE | GT | GTE | EQ_FOR_NULL
     ;
@@ -2013,6 +2029,7 @@ baseType
     | HLL
     | PERCENTILE
     | JSON
+    | VARBINARY typeParameter?
     ;
 
 decimalType
@@ -2079,14 +2096,14 @@ nonReserved
     | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOGICAL
     | MANUAL | MATERIALIZED | MAX | META | MIN | MINUTE | MODE | MODIFY | MONTH | MERGE
     | NAME | NAMES | NEGATIVE | NO | NODE | NULLS
-    | OBSERVER | OFFSET | ONLY | OPEN | OPTION | OVERWRITE
+    | OBSERVER | OF | OFFSET | ONLY | OPEN | OPTION | OVERWRITE
     | PARTITIONS | PASSWORD | PATH | PAUSE | PERCENTILE_UNION | PLUGIN | PLUGINS | PRECEDING | PROC | PROCESSLIST
     | PROPERTIES | PROPERTY
     | QUARTER | QUERY | QUOTA
     | RANDOM | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY | REPOSITORIES
     | RESOURCE | RESOURCES | RESTORE | RESUME | RETURNS | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE
     | SAMPLE | SECOND | SERIALIZABLE | SESSION | SETS | SIGNED | SNAPSHOT | SQLBLACKLIST | START | SUM | STATUS | STOP
-    | STORAGE| STRING | STATS | SUBMIT | SYNC
+    | STORAGE| STRING | STATS | SUBMIT | SYNC | SYSTEM_TIME
     | TABLES | TABLET | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TRANSACTION
     | TRIGGERS | TRUNCATE | TYPE | TYPES
     | UNBOUNDED | UNCOMMITTED | UNINSTALL | USER

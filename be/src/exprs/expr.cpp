@@ -140,8 +140,10 @@ Expr::Expr(TypeDescriptor type, bool is_slotref)
         case TYPE_ARRAY:
             _node_type = (TExprNodeType::ARRAY_EXPR);
             break;
-        case INVALID_TYPE:
-        case TYPE_BINARY:
+        case TYPE_VARBINARY:
+            _node_type = (TExprNodeType::BINARY_LITERAL);
+            break;
+        case TYPE_UNKNOWN:
         case TYPE_STRUCT:
         case TYPE_MAP:
         case TYPE_DECIMAL32:
@@ -254,6 +256,7 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
     case TExprNodeType::DECIMAL_LITERAL:
     case TExprNodeType::DATE_LITERAL:
     case TExprNodeType::STRING_LITERAL:
+    case TExprNodeType::BINARY_LITERAL:
     case TExprNodeType::NULL_LITERAL: {
         *expr = pool->add(new vectorized::VectorizedLiteral(texpr_node));
         break;
@@ -279,8 +282,8 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
         if (texpr_node.__isset.child_type || texpr_node.__isset.child_type_desc) {
             *expr = pool->add(vectorized::VectorizedCastExprFactory::from_thrift(pool, texpr_node));
             if (*expr == nullptr) {
-                PrimitiveType to_type = TypeDescriptor::from_thrift(texpr_node.type).type;
-                PrimitiveType from_type = thrift_to_type(texpr_node.child_type);
+                LogicalType to_type = TypeDescriptor::from_thrift(texpr_node.type).type;
+                LogicalType from_type = thrift_to_type(texpr_node.child_type);
                 std::string err_msg = fmt::format(
                         "Vectorized engine does not support the operator, cast from {} to {} failed, maybe use switch "
                         "function",
@@ -411,7 +414,7 @@ Status Expr::prepare(const std::vector<ExprContext*>& ctxs, RuntimeState* state)
 }
 
 Status Expr::prepare(RuntimeState* state, ExprContext* context) {
-    DCHECK(_type.type != INVALID_TYPE);
+    DCHECK(_type.type != TYPE_UNKNOWN);
     for (auto& i : _children) {
         RETURN_IF_ERROR(i->prepare(state, context));
     }
@@ -426,7 +429,7 @@ Status Expr::open(const std::vector<ExprContext*>& ctxs, RuntimeState* state) {
 }
 
 Status Expr::open(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) {
-    DCHECK(_type.type != INVALID_TYPE);
+    DCHECK(_type.type != TYPE_UNKNOWN);
     for (auto& i : _children) {
         RETURN_IF_ERROR(i->open(state, context, scope));
     }
@@ -597,12 +600,8 @@ StatusOr<ColumnPtr> Expr::evaluate_const(ExprContext* context) {
     return _constant_column;
 }
 
-ColumnPtr Expr::evaluate(ExprContext* context, vectorized::Chunk* ptr) {
-    return nullptr;
-}
-
-ColumnPtr Expr::evaluate_with_filter(ExprContext* context, vectorized::Chunk* ptr, uint8_t* filter) {
-    return evaluate(context, ptr);
+StatusOr<ColumnPtr> Expr::evaluate_with_filter(ExprContext* context, vectorized::Chunk* ptr, uint8_t* filter) {
+    return evaluate_checked(context, ptr);
 }
 
 vectorized::ColumnRef* Expr::get_column_ref() {

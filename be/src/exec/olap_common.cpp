@@ -95,7 +95,7 @@ inline std::string cast_to_string<vectorized::TimestampValue>(vectorized::Timest
 // for decimal32/64/128, their underlying type is int32/64/128, so the decimal point
 // depends on precision and scale when they are casted into strings
 template <class T>
-inline std::string cast_to_string(T value, [[maybe_unused]] PrimitiveType pt, [[maybe_unused]] int precision,
+inline std::string cast_to_string(T value, [[maybe_unused]] LogicalType pt, [[maybe_unused]] int precision,
                                   [[maybe_unused]] int scale) {
     switch (pt) {
     case TYPE_DECIMAL32: {
@@ -127,9 +127,6 @@ void ColumnValueRange<StringValue>::convert_to_fixed_value() {}
 
 template <>
 void ColumnValueRange<Slice>::convert_to_fixed_value() {}
-
-template <>
-void ColumnValueRange<DecimalValue>::convert_to_fixed_value() {}
 
 template <>
 void ColumnValueRange<DecimalV2Value>::convert_to_fixed_value() {}
@@ -224,7 +221,7 @@ void ColumnValueRange<T>::to_olap_filter(std::vector<TCondition>& filters) {
 
 template <class T>
 Status ColumnValueRange<T>::add_fixed_values(SQLFilterOp op, const std::set<T>& values) {
-    if (INVALID_TYPE == _column_type) {
+    if (TYPE_UNKNOWN == _column_type) {
         return Status::InternalError("AddFixedValue failed, Invalid type");
     }
     if (op == FILTER_IN) {
@@ -355,7 +352,7 @@ void ColumnValueRange<T>::convert_to_fixed_value() {
 
 template <class T>
 Status ColumnValueRange<T>::add_range(SQLFilterOp op, T value) {
-    if (INVALID_TYPE == _column_type) {
+    if (TYPE_UNKNOWN == _column_type) {
         return Status::InternalError("AddRange failed, Invalid type");
     }
 
@@ -600,7 +597,7 @@ template <class T>
 ColumnValueRange<T>::ColumnValueRange() = default;
 
 template <class T>
-ColumnValueRange<T>::ColumnValueRange(std::string col_name, PrimitiveType type, T min, T max)
+ColumnValueRange<T>::ColumnValueRange(std::string col_name, LogicalType type, T min, T max)
         : _column_name(std::move(col_name)),
           _column_type(type),
           _type_min(min),
@@ -618,7 +615,7 @@ bool ColumnValueRange<T>::is_fixed_value_range() const {
 
 template <class T>
 bool ColumnValueRange<T>::is_empty_value_range() const {
-    if (INVALID_TYPE == _column_type) {
+    if (TYPE_UNKNOWN == _column_type) {
         return true;
     }
     // TODO(yan): sometimes we don't have Fixed Value Range, but have
@@ -693,7 +690,6 @@ template class ColumnValueRange<__int128>;
 template class ColumnValueRange<StringValue>;
 template class ColumnValueRange<Slice>;
 template class ColumnValueRange<DateTimeValue>;
-template class ColumnValueRange<DecimalValue>;
 template class ColumnValueRange<DecimalV2Value>;
 template class ColumnValueRange<bool>;
 template class ColumnValueRange<vectorized::DateValue>;
@@ -710,8 +706,6 @@ template Status OlapScanKeys::extend_scan_key<StringValue>(ColumnValueRange<Stri
 template Status OlapScanKeys::extend_scan_key<Slice>(ColumnValueRange<Slice>& range, int32_t max_scan_key_num);
 template Status OlapScanKeys::extend_scan_key<DateTimeValue>(ColumnValueRange<DateTimeValue>& range,
                                                              int32_t max_scan_key_num);
-template Status OlapScanKeys::extend_scan_key<DecimalValue>(ColumnValueRange<DecimalValue>& range,
-                                                            int32_t max_scan_key_num);
 template Status OlapScanKeys::extend_scan_key<DecimalV2Value>(ColumnValueRange<DecimalV2Value>& range,
                                                               int32_t max_scan_key_num);
 template Status OlapScanKeys::extend_scan_key<bool>(ColumnValueRange<bool>& range, int32_t max_scan_key_num);

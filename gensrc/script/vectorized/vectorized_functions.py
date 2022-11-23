@@ -36,10 +36,13 @@ vectorized_functions = [
 
     [10050, "sin", "DOUBLE", ["DOUBLE"], "MathFunctions::sin"],
     [10060, "asin", "DOUBLE", ["DOUBLE"], "MathFunctions::asin"],
+    [10061, "sinh", "DOUBLE", ["DOUBLE"], "MathFunctions::sinh"],
     [10070, "cos", "DOUBLE", ["DOUBLE"], "MathFunctions::cos"],
     [10080, "acos", "DOUBLE", ["DOUBLE"], "MathFunctions::acos"],
+    [10081, "cosh", "DOUBLE", ["DOUBLE"], "MathFunctions::cosh"],
     [10090, "tan", "DOUBLE", ["DOUBLE"], "MathFunctions::tan"],
     [10100, "atan", "DOUBLE", ["DOUBLE"], "MathFunctions::atan"],
+    [10101, "tanh", "DOUBLE", ["DOUBLE"], "MathFunctions::tanh"],
 
     [10110, "ceil", "BIGINT", ["DOUBLE"], "MathFunctions::ceil"],
     [10111, "ceiling", "BIGINT", ["DOUBLE"], "MathFunctions::ceil"],
@@ -157,6 +160,7 @@ vectorized_functions = [
 
     [10312, "hex", "VARCHAR", ['BIGINT'], "StringFunctions::hex_int"],
     [10313, "hex", "VARCHAR", ['VARCHAR'], "StringFunctions::hex_string"],
+    [10313, "hex", "VARCHAR", ['VARBINARY'], "StringFunctions::hex_string"],
     [10314, "unhex", "VARCHAR", ['VARCHAR'], "StringFunctions::unhex"],
     [10315, "sm3", "VARCHAR", ['VARCHAR'], "StringFunctions::sm3"],
 
@@ -259,6 +263,7 @@ vectorized_functions = [
 
     [30410, 'parse_url', 'VARCHAR', ['VARCHAR', 'VARCHAR'], 'StringFunctions::parse_url',
      'StringFunctions::parse_url_prepare', 'StringFunctions::parse_url_close'],
+    [30420, 'strcmp', 'INT', ['VARCHAR', 'VARCHAR'], 'StringFunctions::strcmp'],
 
     # 50xxx: timestamp functions
     [50008, 'year', 'SMALLINT', ['DATE'], 'TimeFunctions::yearV3'],

@@ -811,7 +811,7 @@ ColumnPtr StringFunctions::ends_with(FunctionContext* context, const Columns& co
 
 struct SpaceFunction {
 public:
-    template <PrimitiveType Type, PrimitiveType ResultType>
+    template <LogicalType Type, LogicalType ResultType>
     static ColumnPtr evaluate(const ColumnPtr& v1) {
         auto len_column = down_cast<Int32Column*>(v1.get());
         auto& len_array = len_column->get_data();
@@ -1532,12 +1532,7 @@ ColumnPtr StringFunctions::append_trailing_char_if_absent(FunctionContext* conte
             auto str = src_viewer.value(row);
             auto tailing_char = tailing_viewer.value(row);
 
-            if (str.size == 0) {
-                dst_builder.append(tailing_char);
-                continue;
-            }
-
-            if (str.data[str.size - 1] == tailing_char.data[0]) {
+            if (str.size == 0 || str.data[str.size - 1] == tailing_char.data[0]) {
                 dst_builder.append(str);
                 continue;
             }
@@ -1612,7 +1607,7 @@ static inline void vectorized_toggle_case(const Bytes* src, Bytes* dst) {
 template <bool to_upper>
 struct StringCaseToggleFunction {
 public:
-    template <PrimitiveType Type, PrimitiveType ResultType>
+    template <LogicalType Type, LogicalType ResultType>
     static ColumnPtr evaluate(const ColumnPtr& v1) {
         auto* src = down_cast<BinaryColumn*>(v1.get());
         Bytes& src_bytes = src->get_bytes();
@@ -1701,7 +1696,7 @@ static inline void reverse(BinaryColumn* src, Bytes* dst_bytes) {
 }
 
 struct ReverseFunction {
-    template <PrimitiveType Type, PrimitiveType ResultType>
+    template <LogicalType Type, LogicalType ResultType>
     static inline ColumnPtr evaluate(const ColumnPtr& column) {
         auto* src = down_cast<BinaryColumn*>(column.get());
         auto& src_bytes = src->get_bytes();
@@ -1824,7 +1819,7 @@ static inline void trim_per_slice(const BinaryColumn* src, const size_t i, Bytes
 
 template <size_t simd_threshold>
 struct AdaptiveLTrimFunction {
-    template <PrimitiveType Type, PrimitiveType ResultType>
+    template <LogicalType Type, LogicalType ResultType>
     static inline ColumnPtr evaluate(const ColumnPtr& column) {
         auto* src = down_cast<BinaryColumn*>(column.get());
 
@@ -1861,7 +1856,7 @@ struct AdaptiveLTrimFunction {
 
 template <size_t simd_threshold>
 struct AdaptiveRTrimFunction {
-    template <PrimitiveType Type, PrimitiveType ResultType>
+    template <LogicalType Type, LogicalType ResultType>
     static inline ColumnPtr evaluate(const ColumnPtr& column) {
         auto* src = down_cast<BinaryColumn*>(column.get());
 
@@ -1898,7 +1893,7 @@ struct AdaptiveRTrimFunction {
 
 template <size_t simd_threshold>
 struct AdaptiveTrimFunction {
-    template <PrimitiveType Type, PrimitiveType ResultType>
+    template <LogicalType Type, LogicalType ResultType>
     static inline ColumnPtr evaluate(const ColumnPtr& column) {
         auto* src = down_cast<BinaryColumn*>(column.get());
 
@@ -2145,6 +2140,19 @@ DEFINE_UNARY_FN_WITH_IMPL(get_charImpl, value) {
 
 ColumnPtr StringFunctions::get_char(FunctionContext* context, const Columns& columns) {
     return VectorizedStringStrictUnaryFunction<get_charImpl>::evaluate<TYPE_INT, TYPE_CHAR>(columns[0]);
+}
+
+// strcmp
+DEFINE_BINARY_FUNCTION_WITH_IMPL(strcmpImpl, lhs, rhs) {
+    int ret = lhs.compare(rhs);
+    if (ret == 0) {
+        return 0;
+    }
+    return ret > 0 ? 1 : -1;
+}
+
+ColumnPtr StringFunctions::strcmp(FunctionContext* context, const Columns& columns) {
+    return VectorizedStrictBinaryFunction<strcmpImpl>::evaluate<TYPE_VARCHAR, TYPE_INT>(columns[0], columns[1]);
 }
 
 static inline ColumnPtr concat_const_not_null(Columns const& columns, BinaryColumn* src, const ConcatState* state) {

@@ -6,6 +6,7 @@
 #include <utility>
 
 #include "block_cache/block_cache.h"
+#include "gutil/strings/fastmem.h"
 #include "util/hash_util.hpp"
 #include "util/runtime_profile.h"
 #include "util/stack_util.h"
@@ -84,7 +85,8 @@ StatusOr<int64_t> CacheInputStream::read(void* out, int64_t count) {
         }
 
         if (!can_zero_copy) {
-            memcpy(p, src + shift, size);
+            // memcpy(p, src + shift, size);
+            strings::memcpy_inlined(p, src + shift, size);
             _stats.read_cache_bytes += size;
         }
         p += size;

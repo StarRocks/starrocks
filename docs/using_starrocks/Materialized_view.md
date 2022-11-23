@@ -444,7 +444,7 @@ The following examples involve two base tables:
 
 - Table `goods` records the item ID `item_id1`, item name `item_name`, and item price `price`.
 
-- Table `order_list` records the order ID ``, client ID ``, item ID `item_id2`, and order date `order_date`.
+- Table `order_list` records the order ID `order_id`, client ID `client_id`, item ID `item_id2`, and order date `order_date`.
 
 Column `item_id1` is equivalent to column `item_id2`.
 
@@ -641,6 +641,6 @@ DROP MATERIALIZED VIEW order_mv;
 
 - You can build a multi-table materialized view under async or manual refresh strategies.
 
-- Partition keys and bucket keys of the async or manual refresh materialized view must be in the query statement; if there is an aggregate function in the query statement, the partition keys and bucket keys must be in the GROUP BY clause.
+- Partition keys and bucket keys of the async or manual refresh materialized view must be in the query statement.
 
 - The query statement does not support random functions, including rand((), random(), uuid()), and sleep().

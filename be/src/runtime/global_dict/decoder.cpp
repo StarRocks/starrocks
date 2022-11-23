@@ -12,7 +12,7 @@
 
 namespace starrocks::vectorized {
 
-template <PrimitiveType type, typename Dict, PrimitiveType result_type>
+template <LogicalType type, typename Dict, LogicalType result_type>
 class GlobalDictDecoderBase : public GlobalDictDecoder {
 public:
     using FieldType = RunTimeCppType<type>;
@@ -27,7 +27,7 @@ private:
     Dict _dict;
 };
 
-template <PrimitiveType type, typename Dict, PrimitiveType result_type>
+template <LogicalType type, typename Dict, LogicalType result_type>
 Status GlobalDictDecoderBase<type, Dict, result_type>::decode(vectorized::Column* in, vectorized::Column* out) {
     DCHECK(in != nullptr);
     DCHECK(out != nullptr);

@@ -56,7 +56,7 @@ using SliceAggTwoLevelHashSet =
 
 // ==============================================================
 // handle one number hash key
-template <PrimitiveType primitive_type, typename HashSet>
+template <LogicalType primitive_type, typename HashSet>
 struct AggHashSetOfOneNumberKey {
     using KeyType = typename HashSet::key_type;
     using Iterator = typename HashSet::iterator;
@@ -99,7 +99,7 @@ struct AggHashSetOfOneNumberKey {
     ResultVector results;
 };
 
-template <PrimitiveType primitive_type, typename HashSet>
+template <LogicalType primitive_type, typename HashSet>
 struct AggHashSetOfOneNullableNumberKey {
     using KeyType = typename HashSet::key_type;
     using Iterator = typename HashSet::iterator;
@@ -460,7 +460,7 @@ struct AggHashSetOfSerializedKeyFixedSize {
             key_column->serialize_batch(buffer, slice_sizes, chunk_size, max_fixed_size);
         }
 
-        FixedSizeSliceKey* key = reinterpret_cast<FixedSizeSliceKey*>(buffer);
+        auto* key = reinterpret_cast<FixedSizeSliceKey*>(buffer);
 
         if (has_null_column) {
             for (size_t i = 0; i < chunk_size; ++i) {

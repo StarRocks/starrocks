@@ -14,8 +14,7 @@
 #include "exprs/vectorized/builtin_functions.h"
 #include "exprs/vectorized/function_helper.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 class LikePredicate {
 public:
@@ -193,7 +192,7 @@ private:
         // one scratch space per thread, or concurrent caller, is required
         hs_scratch_t* scratch = nullptr;
 
-        LikePredicateState() {}
+        LikePredicateState() = default;
 
         ~LikePredicateState() {
             if (scratch != nullptr) {
@@ -212,5 +211,4 @@ private:
         }
     };
 };
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

@@ -43,7 +43,7 @@ public:
     faststring() : data_(initial_data_) {}
 
     // Construct a string with the given capacity, in bytes.
-    explicit faststring(size_t capacity) : data_(initial_data_), len_(0), capacity_(kInitialCapacity) {
+    explicit faststring(size_t capacity) : data_(initial_data_) {
         if (capacity > capacity_) {
             data_ = new uint8_t[capacity];
             capacity_ = capacity;
@@ -108,7 +108,7 @@ public:
 
     // Append the given data to the string, resizing capacity as necessary.
     void append(const void* src_v, size_t count) {
-        const uint8_t* src = reinterpret_cast<const uint8_t*>(src_v);
+        const auto* src = reinterpret_cast<const uint8_t*>(src_v);
         EnsureRoomForAppend(count);
         ASAN_UNPOISON_MEMORY_REGION(data_ + len_, count);
 

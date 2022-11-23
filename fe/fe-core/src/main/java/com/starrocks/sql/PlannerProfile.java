@@ -218,6 +218,8 @@ public class PlannerProfile {
                 getTime("Optimizer.CostBaseOptimize", times), 2));
         trace.append(print("Optimizer.PhysicalRewrite",
                 getTime("Optimizer.PhysicalRewrite", times), 2));
+        trace.append(print("Optimizer.registerMvs",
+                getTime("Optimizer.registerMvs", times), 2));
         trace.append(print("ExecPlanBuild", getTime("ExecPlanBuild", times), 1));
 
         return trace.toString();

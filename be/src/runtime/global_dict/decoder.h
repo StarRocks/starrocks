@@ -5,8 +5,7 @@
 #include "column/column.h"
 #include "common/status.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 class GlobalDictDecoder {
 public:
@@ -20,5 +19,4 @@ using GlobalDictDecoderPtr = std::unique_ptr<GlobalDictDecoder>;
 template <typename DictType>
 GlobalDictDecoderPtr create_global_dict_decoder(const DictType& dict);
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

@@ -2,22 +2,19 @@
 
 This topic describes how to create an Iceberg catalog, and how to configure your StarRocks cluster for querying data from Apache Iceberg.
 
-An Iceberg catalog is an external catalog, which enables you to query data from Iceberg without loading data into StarRocks or creating external tables. StarRocks interacts with the following two components of Iceberg when you query Iceberg data:
-
-- **Metadata service:** used by the FEs to access Iceberg metadata. The FEs generate a query execution plan based on Iceberg metadata.
-- **Data storage system:** used to store Iceberg data. You can use a distributed file system or object storage system as the data storage system to store the data files of Iceberg in various formats. After the FEs distribute the query execution plan to all BEs, all BE s scan the target Iceberg data in parallel, perform calculations, and then return the query result.
+An Iceberg catalog is an external catalog supported in StarRocks 2.4 and later versions. It enables you to query data from Iceberg without loading data into StarRocks or creating external tables.
 
 ## Usage notes
 
 - StarRocks supports querying data files of Iceberg in the following formats: Parquet and ORC
 - StarRocks supports querying compressed data files of Iceberg in the following formats: gzip, Zstd, LZ4, and Snappy.
-- StarRocks supports querying Iceberg data in the following types: BOOLEAN, INT, LONG, FLOAT, DOUBLE, DECIMAL(P, S), DATE, TIME, TIMESTAMP, STRING, UUID, LIST, FIXED(L), and BINARY. Note that an error occurs when you query Iceberg data in unsupported data types. The following data types are not supported: TIMESTAMPTZ, STRUCT, and MAP.
+- StarRocks supports querying Iceberg data in the following types: BOOLEAN, INTEGER, LONG, FLOAT, DOUBLE, DECIMAL(P, S), DATE, TIME, TIMESTAMP, STRING, UUID, LIST, FIXED(L), and BINARY. Note that an error occurs when you query Iceberg data in unsupported data types. The following data types are not supported: TIMESTAMPTZ, STRUCT, and MAP.
 - StarRocks supports querying Versions 1 tables (Analytic Data Tables). Versions 2 tables (Row-level Deletes) are not supported. For the differences between these two types of tables, see [Iceberg Table Spec](https://iceberg.apache.org/spec/).
 - You can use the [DESC](../../sql-reference/sql-statements/Utility/DESCRIBE.md) statement to view the schema of an Iceberg table in StarRocks 2.4 and later versions.
 
 ## Before you begin
 
-Before you create an Iceberg catalog, configure your StarRocks cluster so that you can access the data storage system and metadata service of your Iceberg cluster. StarRocks supports two data storage systems for Iceberg: HDFS and Amazon S3. StarRocks supports two metadata services for Iceberg: Hive metastore and custom metadata service. The configurations that need to be performed are the same as that before you create a Hive catalog, so for information about the configurations, see [Hive catalog](../catalog/hive_catalog.md).
+Before you create an Iceberg catalog, configure your StarRocks cluster so that StarRocks can access the data storage system and metadata service of your Iceberg cluster. StarRocks supports two data storage systems for Iceberg: HDFS and Amazon S3. StarRocks supports two metadata services for Iceberg: Hive metastore and custom metadata service. The configurations required for an Iceberg catalog are the same as that required for a Hive catalog. Therefore, see [Hive catalog](../catalog/hive_catalog.md) for more information about the configurations.
 
 ## Create an Iceberg catalog
 
@@ -30,10 +27,9 @@ CREATE EXTERNAL CATALOG catalog_name
 PROPERTIES ("key"="value", ...);
 ```
 
-> Note
+> **Note**
 >
-> - The CREATE EXTERNAL CATALOG statement does not require any privileges for execution.
-> - Before querying Iceberg data, you must add the mapping between the domain name and IP address of Hive metastore node to the **/etc/hosts** path. Otherwise, StarRocks may fail to access Hive metastore when you start a query.
+> Before querying Iceberg data, you must add the mapping between the domain name and IP address of Hive metastore node to the **/etc/hosts** path. Otherwise, StarRocks may fail to access Hive metastore when you start a query.
 
 ### Parameters
 
@@ -73,7 +69,7 @@ StarRocks does not cache Iceberg metadata. When you query Iceberg data, Iceberg 
 
 ## What to do next
 
-After you complete the preceding configurations, you can use the Iceberg catalog to query Iceberg data. For more information, see [Query external data](../catalog/query_external_data.md).
+After you complete all the preceding operations, you can use the Iceberg catalog to query Iceberg data. For more information, see [Query external data](../catalog/query_external_data.md).
 
 ## References
 

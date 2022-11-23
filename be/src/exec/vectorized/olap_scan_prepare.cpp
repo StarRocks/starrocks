@@ -157,7 +157,7 @@ static bool get_predicate_value(ObjectPool* obj_pool, const SlotDescriptor& slot
     return true;
 }
 
-template <PrimitiveType SlotType, typename RangeValueType>
+template <LogicalType SlotType, typename RangeValueType>
 void OlapScanConjunctsManager::normalize_in_or_equal_predicate(const SlotDescriptor& slot,
                                                                ColumnValueRange<RangeValueType>* range) {
     Status status;
@@ -236,7 +236,7 @@ void OlapScanConjunctsManager::normalize_in_or_equal_predicate<starrocks::TYPE_D
                 continue;
             }
 
-            PrimitiveType pred_type = l->type().type;
+            LogicalType pred_type = l->type().type;
             // ignore the cast on DATE.
             if (l->op() == TExprOpcode::CAST) {
                 l = l->get_child(0);
@@ -300,7 +300,7 @@ void OlapScanConjunctsManager::normalize_in_or_equal_predicate<starrocks::TYPE_D
     }
 }
 
-template <PrimitiveType SlotType, typename RangeValueType>
+template <LogicalType SlotType, typename RangeValueType>
 void OlapScanConjunctsManager::normalize_binary_predicate(const SlotDescriptor& slot,
                                                           ColumnValueRange<RangeValueType>* range) {
     Status status;
@@ -329,7 +329,7 @@ void OlapScanConjunctsManager::normalize_binary_predicate(const SlotDescriptor& 
     return;
 }
 
-template <PrimitiveType SlotType, typename RangeValueType>
+template <LogicalType SlotType, typename RangeValueType>
 void OlapScanConjunctsManager::normalize_join_runtime_filter(const SlotDescriptor& slot,
                                                              ColumnValueRange<RangeValueType>* range) {
     // in runtime filter
@@ -406,7 +406,7 @@ void OlapScanConjunctsManager::normalize_join_runtime_filter(const SlotDescripto
     }
 }
 
-template <PrimitiveType SlotType, typename RangeValueType>
+template <LogicalType SlotType, typename RangeValueType>
 void OlapScanConjunctsManager::normalize_not_in_or_not_equal_predicate(const SlotDescriptor& slot,
                                                                        ColumnValueRange<RangeValueType>* range) {
     Status status;
@@ -490,7 +490,7 @@ void OlapScanConjunctsManager::normalize_is_null_predicate(const SlotDescriptor&
     }
 }
 
-template <PrimitiveType SlotType, typename RangeValueType>
+template <LogicalType SlotType, typename RangeValueType>
 void OlapScanConjunctsManager::normalize_predicate(const SlotDescriptor& slot,
                                                    ColumnValueRange<RangeValueType>* range) {
     normalize_in_or_equal_predicate<SlotType, RangeValueType>(slot, range);
@@ -502,16 +502,17 @@ void OlapScanConjunctsManager::normalize_predicate(const SlotDescriptor& slot,
 }
 
 struct ColumnRangeBuilder {
-    template <PrimitiveType ptype>
+    template <LogicalType ptype>
     std::nullptr_t operator()(OlapScanConjunctsManager* cm, const SlotDescriptor* slot,
                               std::map<std::string, ColumnValueRangeType>* column_value_ranges) {
-        if constexpr (ptype == TYPE_TIME || ptype == TYPE_NULL || ptype == TYPE_JSON || pt_is_float<ptype>) {
+        if constexpr (ptype == TYPE_TIME || ptype == TYPE_NULL || ptype == TYPE_JSON || pt_is_float<ptype> ||
+                      pt_is_binary<ptype>) {
             return nullptr;
         } else {
             // Treat tinyint and boolean as int
-            constexpr PrimitiveType limit_type = ptype == TYPE_TINYINT || ptype == TYPE_BOOLEAN ? TYPE_INT : ptype;
+            constexpr LogicalType limit_type = ptype == TYPE_TINYINT || ptype == TYPE_BOOLEAN ? TYPE_INT : ptype;
             // Map TYPE_CHAR to TYPE_VARCHAR
-            constexpr PrimitiveType mapping_type = ptype == TYPE_CHAR ? TYPE_VARCHAR : ptype;
+            constexpr LogicalType mapping_type = ptype == TYPE_CHAR ? TYPE_VARCHAR : ptype;
             using value_type = typename RunTimeTypeLimits<limit_type>::value_type;
             using RangeType = ColumnValueRange<value_type>;
 
@@ -642,7 +643,8 @@ Status OlapScanConjunctsManager::get_column_predicates(PredicateParser* parser,
         auto& expr_ctxs = iter.second;
         const SlotDescriptor* slot_desc = slots[slot_index];
         for (ExprContext* ctx : expr_ctxs) {
-            std::unique_ptr<ColumnPredicate> p(parser->parse_expr_ctx(*slot_desc, runtime_state, ctx));
+            ASSIGN_OR_RETURN(auto tmp, parser->parse_expr_ctx(*slot_desc, runtime_state, ctx));
+            std::unique_ptr<ColumnPredicate> p(std::move(tmp));
             if (p == nullptr) {
                 std::stringstream ss;
                 ss << "invalid filter, slot=" << slot_desc->debug_string();
@@ -721,11 +723,11 @@ void OlapScanConjunctsManager::build_column_expr_predicates() {
         // note(yan): we only handles scalar type now to avoid complex type mismatch.
         // otherwise we don't need this limitation.
         const SlotDescriptor* slot_desc = slots[index];
-        PrimitiveType ptype = slot_desc->type().type;
+        LogicalType ptype = slot_desc->type().type;
         if (!is_scalar_primitive_type(ptype)) continue;
         // disable on float/double type because min/max value may lose precision
         // The fix should be on storage layer, and this is just a temporary fix.
-        if (ptype == PrimitiveType::TYPE_FLOAT || ptype == PrimitiveType::TYPE_DOUBLE) continue;
+        if (ptype == LogicalType::TYPE_FLOAT || ptype == LogicalType::TYPE_DOUBLE) continue;
         {
             auto iter = slot_index_to_expr_ctxs.find(index);
             if (iter == slot_index_to_expr_ctxs.end()) {

@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <utility>
+
 #include "gutil/macros.h"
 #include "storage/lake/location_provider.h"
 
@@ -9,7 +11,7 @@ namespace starrocks::lake {
 
 class FixedLocationProvider : public LocationProvider {
 public:
-    explicit FixedLocationProvider(std::string root) : _root(root) {
+    explicit FixedLocationProvider(std::string root) : _root(std::move(std::move(root))) {
         while (!_root.empty() && _root.back() == '/') {
             _root.pop_back();
         }

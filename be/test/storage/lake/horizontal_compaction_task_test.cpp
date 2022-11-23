@@ -12,8 +12,8 @@
 #include "column/chunk.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
-#include "column/schema.h"
 #include "column/vectorized_fwd.h"
+#include "column/vectorized_schema.h"
 #include "common/logging.h"
 #include "fs/fs_util.h"
 #include "runtime/exec_env.h"
@@ -33,7 +33,7 @@ namespace starrocks::lake {
 
 using namespace starrocks::vectorized;
 
-using VSchema = starrocks::vectorized::Schema;
+using VSchema = starrocks::vectorized::VectorizedSchema;
 using VChunk = starrocks::vectorized::Chunk;
 
 class DuplicateKeyHorizontalCompactionTest : public testing::Test {
@@ -170,7 +170,7 @@ TEST_F(DuplicateKeyHorizontalCompactionTest, test1) {
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         // Publish version
-        ASSERT_OK(_tablet_manager->publish_version(tablet_id, version, version + 1, &_txn_id, 1));
+        ASSERT_OK(_tablet_manager->publish_version(tablet_id, version, version + 1, &_txn_id, 1).status());
         version++;
     }
     ASSERT_EQ(kChunkSize * 3, read(version));
@@ -181,7 +181,7 @@ TEST_F(DuplicateKeyHorizontalCompactionTest, test1) {
 
     ASSIGN_OR_ABORT(auto task, _tablet_manager->compact(_tablet_metadata->id(), version, _txn_id));
     ASSERT_OK(task->execute(nullptr));
-    ASSERT_OK(_tablet_manager->publish_version(_tablet_metadata->id(), version, version + 1, &_txn_id, 1));
+    ASSERT_OK(_tablet_manager->publish_version(_tablet_metadata->id(), version, version + 1, &_txn_id, 1).status());
     version++;
     ASSERT_EQ(kChunkSize * 3, read(version));
 
@@ -325,7 +325,7 @@ TEST_F(UniqueKeyHorizontalCompactionTest, test1) {
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         // Publish version
-        ASSERT_OK(_tablet_manager->publish_version(tablet_id, version, version + 1, &_txn_id, 1));
+        ASSERT_OK(_tablet_manager->publish_version(tablet_id, version, version + 1, &_txn_id, 1).status());
         version++;
     }
     ASSERT_EQ(kChunkSize, read(version));
@@ -336,7 +336,7 @@ TEST_F(UniqueKeyHorizontalCompactionTest, test1) {
 
     ASSIGN_OR_ABORT(auto task, _tablet_manager->compact(_tablet_metadata->id(), version, _txn_id));
     ASSERT_OK(task->execute(nullptr));
-    ASSERT_OK(_tablet_manager->publish_version(_tablet_metadata->id(), version, version + 1, &_txn_id, 1));
+    ASSERT_OK(_tablet_manager->publish_version(_tablet_metadata->id(), version, version + 1, &_txn_id, 1).status());
     version++;
     ASSERT_EQ(kChunkSize, read(version));
 
@@ -479,7 +479,7 @@ TEST_F(UniqueKeyHorizontalCompactionWithDeleteTest, test_base_compaction_with_de
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
         // Publish version
-        ASSERT_OK(_tablet_manager->publish_version(tablet_id, version, version + 1, &_txn_id, 1));
+        ASSERT_OK(_tablet_manager->publish_version(tablet_id, version, version + 1, &_txn_id, 1).status());
         version++;
     }
     ASSERT_EQ(kChunkSize, read(version));
@@ -515,7 +515,7 @@ TEST_F(UniqueKeyHorizontalCompactionWithDeleteTest, test_base_compaction_with_de
 
     ASSIGN_OR_ABORT(auto task, _tablet_manager->compact(_tablet_metadata->id(), version, _txn_id));
     ASSERT_OK(task->execute(nullptr));
-    ASSERT_OK(_tablet_manager->publish_version(_tablet_metadata->id(), version, version + 1, &_txn_id, 1));
+    ASSERT_OK(_tablet_manager->publish_version(_tablet_metadata->id(), version, version + 1, &_txn_id, 1).status());
     version++;
     ASSERT_EQ(kChunkSize - 4, read(version));
 

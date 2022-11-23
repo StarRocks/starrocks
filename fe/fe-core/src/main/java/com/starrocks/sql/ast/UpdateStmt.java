@@ -10,14 +10,17 @@ import java.util.List;
 public class UpdateStmt extends DmlStmt {
     private final TableName tableName;
     private final List<ColumnAssignment> assignments;
+    private final List<Relation> fromRelations;
     private final Expr wherePredicate;
 
     private Table table;
     private QueryStatement queryStatement;
 
-    public UpdateStmt(TableName tableName, List<ColumnAssignment> assignments, Expr wherePredicate) {
+    public UpdateStmt(TableName tableName, List<ColumnAssignment> assignments, List<Relation> fromRelations,
+                      Expr wherePredicate) {
         this.tableName = tableName;
         this.assignments = assignments;
+        this.fromRelations = fromRelations;
         this.wherePredicate = wherePredicate;
     }
 
@@ -28,6 +31,10 @@ public class UpdateStmt extends DmlStmt {
 
     public List<ColumnAssignment> getAssignments() {
         return assignments;
+    }
+
+    public List<Relation> getFromRelations() {
+        return fromRelations;
     }
 
     public Expr getWherePredicate() {

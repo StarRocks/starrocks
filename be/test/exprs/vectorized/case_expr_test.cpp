@@ -19,7 +19,7 @@
 
 namespace starrocks::vectorized {
 
-template <PrimitiveType child_type>
+template <LogicalType child_type>
 struct VectorizedCaseExprTestBuilder {
     VectorizedCaseExprTestBuilder(bool has_else, bool has_case) {
         _has_else = has_else;
@@ -27,14 +27,14 @@ struct VectorizedCaseExprTestBuilder {
         _expr.reset(VectorizedCaseExprFactory::from_thrift(case_when_node()));
     }
 
-    template <template <PrimitiveType Type> typename T, typename... Args>
+    template <template <LogicalType Type> typename T, typename... Args>
     VectorizedCaseExprTestBuilder& add_then(Args&&... args) {
         _then_expr_sz++;
         _expr->add_child(_obj_pool.add(new T<child_type>(mock_node(child_type), std::forward<Args>(args)...)));
         return *this;
     }
 
-    template <template <PrimitiveType Type> typename T, typename... Args>
+    template <template <LogicalType Type> typename T, typename... Args>
     VectorizedCaseExprTestBuilder& add_when(Args&&... args) {
         _when_expr_sz++;
         _expr->add_child(_obj_pool.add(new T<TYPE_BOOLEAN>(mock_node(TYPE_BOOLEAN), std::forward<Args>(args)...)));
@@ -63,7 +63,7 @@ private:
         return expr_node;
     }
 
-    TExprNode mock_node(PrimitiveType type) {
+    TExprNode mock_node(LogicalType type) {
         TExprNode expr_node;
         expr_node.opcode = TExprOpcode::ADD;
         expr_node.child_type = to_thrift(type);

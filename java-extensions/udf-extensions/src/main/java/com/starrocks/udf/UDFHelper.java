@@ -24,16 +24,16 @@ import static com.starrocks.utils.NativeMethodHelper.getAddrs;
 import static com.starrocks.utils.NativeMethodHelper.resizeStringData;
 
 public class UDFHelper {
-    public static final int TYPE_BOOLEAN = 2;
-    public static final int TYPE_TINYINT = 3;
-    public static final int TYPE_SMALLINT = 4;
+    public static final int TYPE_TINYINT = 1;
+    public static final int TYPE_SMALLINT = 3;
     public static final int TYPE_INT = 5;
-    public static final int TYPE_BIGINT = 6;
-    public static final int TYPE_FLOAT = 8;
-    public static final int TYPE_DOUBLE = 9;
-    public static final int TYPE_VARCHAR = 10;
-    public static final int TYPE_DATETIME = 12;
-    public static final int TYPE_ARRAY = 15;
+    public static final int TYPE_BIGINT = 7;
+    public static final int TYPE_FLOAT = 10;
+    public static final int TYPE_DOUBLE = 11;
+    public static final int TYPE_VARCHAR = 17;
+    public static final int TYPE_ARRAY = 19;
+    public static final int TYPE_BOOLEAN = 24;
+    public static final int TYPE_DATETIME = 51;
 
     private static final byte[] emptyBytes = new byte[0];
 

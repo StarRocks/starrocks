@@ -102,6 +102,12 @@ public class AuditEvent {
     public double planMemCosts = 0.0;
     @AuditField(value = "PendingTimeMs")
     public long pendingTimeMs = 0;
+    @AuditField(value = "BigQueryLogCPUSecondThreshold")
+    public long bigQueryLogCPUSecondThreshold = -1;
+    @AuditField(value = "BigQueryLogScanBytesThreshold")
+    public long bigQueryLogScanBytesThreshold = -1;
+    @AuditField(value = "BigQueryLogScanRowsThreshold")
+    public long bigQueryLogScanRowsThreshold = -1;
 
     public static class AuditEventBuilder {
 
@@ -239,6 +245,21 @@ public class AuditEvent {
 
         public AuditEventBuilder setPendingTimeMs(long pendingTimeMs) {
             auditEvent.pendingTimeMs = pendingTimeMs;
+            return this;
+        }
+
+        public AuditEventBuilder setBigQueryLogCPUSecondThreshold(long bigQueryLogCPUSecondThreshold) {
+            auditEvent.bigQueryLogCPUSecondThreshold = bigQueryLogCPUSecondThreshold;
+            return this;
+        }
+
+        public AuditEventBuilder setBigQueryLogScanBytesThreshold(long bigQueryLogScanBytesThreshold) {
+            auditEvent.bigQueryLogScanBytesThreshold = bigQueryLogScanBytesThreshold;
+            return this;
+        }
+
+        public AuditEventBuilder setBigQueryLogScanRowsThreshold(long bigQueryLogScanRowsThreshold) {
+            auditEvent.bigQueryLogScanRowsThreshold = bigQueryLogScanRowsThreshold;
             return this;
         }
 

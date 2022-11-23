@@ -41,39 +41,39 @@ public:
         return &s_instance;
     }
 
-    KeyCoder* get_coder(FieldType field_type) const { return _coder_map[field_type]; }
+    KeyCoder* get_coder(LogicalType field_type) const { return _coder_map[field_type]; }
 
 private:
     KeyCoderResolver() {
-        add_mapping<OLAP_FIELD_TYPE_TINYINT>();
-        add_mapping<OLAP_FIELD_TYPE_SMALLINT>();
-        add_mapping<OLAP_FIELD_TYPE_INT>();
-        add_mapping<OLAP_FIELD_TYPE_UNSIGNED_INT>();
-        add_mapping<OLAP_FIELD_TYPE_BIGINT>();
-        add_mapping<OLAP_FIELD_TYPE_UNSIGNED_BIGINT>();
-        add_mapping<OLAP_FIELD_TYPE_LARGEINT>();
-        add_mapping<OLAP_FIELD_TYPE_DATETIME>();
-        add_mapping<OLAP_FIELD_TYPE_TIMESTAMP>();
+        add_mapping<TYPE_TINYINT>();
+        add_mapping<TYPE_SMALLINT>();
+        add_mapping<TYPE_INT>();
+        add_mapping<TYPE_UNSIGNED_INT>();
+        add_mapping<TYPE_BIGINT>();
+        add_mapping<TYPE_UNSIGNED_BIGINT>();
+        add_mapping<TYPE_LARGEINT>();
+        add_mapping<TYPE_DATETIME_V1>();
+        add_mapping<TYPE_DATETIME>();
 
-        add_mapping<OLAP_FIELD_TYPE_DATE>();
-        add_mapping<OLAP_FIELD_TYPE_DATE_V2>();
-        add_mapping<OLAP_FIELD_TYPE_DECIMAL>();
-        add_mapping<OLAP_FIELD_TYPE_DECIMAL_V2>();
-        add_mapping<OLAP_FIELD_TYPE_CHAR>();
-        add_mapping<OLAP_FIELD_TYPE_VARCHAR>();
-        add_mapping<OLAP_FIELD_TYPE_BOOL>();
+        add_mapping<TYPE_DATE_V1>();
+        add_mapping<TYPE_DATE>();
+        add_mapping<TYPE_DECIMAL>();
+        add_mapping<TYPE_DECIMALV2>();
+        add_mapping<TYPE_CHAR>();
+        add_mapping<TYPE_VARCHAR>();
+        add_mapping<TYPE_BOOLEAN>();
     }
 
-    template <FieldType field_type>
+    template <LogicalType field_type>
     void add_mapping() {
-        static_assert(field_type < OLAP_FIELD_TYPE_MAX_VALUE);
+        static_assert(field_type < TYPE_MAX_VALUE);
         _coder_map[field_type] = new KeyCoder(KeyCoderTraits<field_type>());
     }
 
-    KeyCoder* _coder_map[OLAP_FIELD_TYPE_MAX_VALUE] = {nullptr};
+    KeyCoder* _coder_map[TYPE_MAX_VALUE] = {nullptr};
 };
 
-const KeyCoder* get_key_coder(FieldType type) {
+const KeyCoder* get_key_coder(LogicalType type) {
     return KeyCoderResolver::instance()->get_coder(delegate_type(type));
 }
 

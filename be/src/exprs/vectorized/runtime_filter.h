@@ -11,8 +11,7 @@
 #include "common/object_pool.h"
 #include "gen_cpp/PlanNodes_types.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 // Modify from https://github.com/FastFilter/fastfilter_cpp/blob/master/src/bloom/simd-block.h
 // This is avx2 simd implementation for paper <<Cache-, Hash- and Space-Efficient Bloom Filters>>
@@ -72,7 +71,7 @@ public:
         if (n == 0) return;
         const uint32_t bucket_idx = hash_values[0] & _directory_mask;
 #ifdef __AVX2__
-        __m256i* addr = reinterpret_cast<__m256i*>(_directory + bucket_idx);
+        auto* addr = reinterpret_cast<__m256i*>(_directory + bucket_idx);
         __m256i now = _mm256_load_si256(addr);
         for (size_t i = 0; i < n; i++) {
             const __m256i mask = make_mask(hash_values[i] >> _log_num_buckets);
@@ -245,7 +244,7 @@ protected:
 };
 
 // The join runtime filter implement by bloom filter
-template <PrimitiveType Type>
+template <LogicalType Type>
 class RuntimeBloomFilter final : public JoinRuntimeFilter {
 public:
     using CppType = RunTimeCppType<Type>;
@@ -527,7 +526,7 @@ public:
     }
 
     std::string debug_string() const override {
-        PrimitiveType ptype = Type;
+        LogicalType ptype = Type;
         std::stringstream ss;
         ss << "RuntimeBF(type = " << ptype << ", bfsize = " << _size << ", has_null = " << _has_null;
         if constexpr (std::is_integral_v<CppType> || std::is_floating_point_v<CppType>) {
@@ -562,7 +561,7 @@ public:
     }
 
     size_t serialize(uint8_t* data) const override {
-        PrimitiveType ptype = Type;
+        LogicalType ptype = Type;
         size_t offset = 0;
         memcpy(data + offset, &ptype, sizeof(ptype));
         offset += sizeof(ptype);
@@ -595,7 +594,7 @@ public:
     }
 
     size_t deserialize(const uint8_t* data) override {
-        PrimitiveType ptype = Type;
+        LogicalType ptype = Type;
         size_t offset = 0;
         memcpy(&ptype, data + offset, sizeof(ptype));
         offset += sizeof(ptype);
@@ -668,5 +667,4 @@ private:
     bool _has_min_max = true;
 };
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

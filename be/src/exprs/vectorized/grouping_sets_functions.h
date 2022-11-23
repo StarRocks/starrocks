@@ -7,8 +7,7 @@
 #include "geo/geo_common.h"
 #include "udf/udf.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 class GroupingSetsFunctions {
 public:
@@ -25,5 +24,4 @@ public:
     static ColumnPtr grouping(FunctionContext* context, const Columns& columns);
 };
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

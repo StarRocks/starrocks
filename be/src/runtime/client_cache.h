@@ -93,10 +93,9 @@ private:
     template <class T>
     friend class ClientCache;
     // Private constructor so that only ClientCache can instantiate this class.
-    ClientCacheHelper() {}
+    ClientCacheHelper() = default;
 
-    explicit ClientCacheHelper(int max_cache_size_per_host)
-            : _metrics_enabled(false), _max_cache_size_per_host(max_cache_size_per_host) {}
+    explicit ClientCacheHelper(int max_cache_size_per_host) : _max_cache_size_per_host(max_cache_size_per_host) {}
 
     // Protects all member variables
     // TODO: have more fine-grained locks or use lock-free data structures,
@@ -254,7 +253,7 @@ private:
 
     // Factory method to produce a new ThriftClient<T> for the wrapped cache
     ThriftClientImpl* make_client(const TNetworkAddress& hostport, void** client_key) {
-        Client* client = new Client(hostport.hostname, hostport.port);
+        auto* client = new Client(hostport.hostname, hostport.port);
         *client_key = reinterpret_cast<void*>(client->iface());
         return client;
     }

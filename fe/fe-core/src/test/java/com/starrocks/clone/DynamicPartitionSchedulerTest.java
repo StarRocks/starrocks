@@ -7,6 +7,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -68,6 +69,42 @@ public class DynamicPartitionSchedulerTest {
 
 
         Assert.assertEquals(3, tbl.getPartitions().size());
+    }
+
+    @Test
+    public void testPartitionTTLPropertiesZero() throws Exception {
+        starRocksAssert.withDatabase("test").useDatabase("test")
+                .withTable("CREATE TABLE test.base\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p1 values less than('2020-02-01'),\n" +
+                        "    PARTITION p2 values less than('2020-03-01')\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');");
+        String sql = "create materialized view mv1 " +
+                "partition by k1 " +
+                "distributed by hash(k2) " +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"partition_ttl_number\" = \"0\"\n" +
+                ") " +
+                "as select k1, k2 from test.base;";
+        Config.enable_experimental_mv = true;
+        CreateMaterializedViewStatement createMaterializedViewStatement =
+                (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        try {
+            GlobalStateMgr.getCurrentState().createMaterializedView(createMaterializedViewStatement);
+            Assert.fail();
+        } catch (Exception ex) {
+            Assert.assertTrue(ex.getMessage().contains("Illegal Partition TTL Number"));
+        }
     }
 
 }

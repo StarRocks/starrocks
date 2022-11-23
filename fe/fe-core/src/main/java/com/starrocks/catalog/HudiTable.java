@@ -44,6 +44,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.getResourceMappingCatalogName;
+import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
 
 
 /**
@@ -342,6 +343,9 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
 
     @Override
     public void onDrop(Database db, boolean force, boolean replay) {
+        if (isResourceMappingCatalog(getCatalogName())) {
+            GlobalStateMgr.getCurrentState().getMetadataMgr().dropTable(getCatalogName(), db.getFullName(), name);
+        }
     }
 
     @Override

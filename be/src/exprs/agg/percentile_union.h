@@ -19,7 +19,7 @@ public:
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                               int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                               int64_t frame_end) const override {
-        const PercentileColumn* column = down_cast<const PercentileColumn*>(columns[0]);
+        const auto* column = down_cast<const PercentileColumn*>(columns[0]);
         for (size_t i = frame_start; i < frame_end; ++i) {
             this->data(state).merge(column->get_object(i));
         }
@@ -28,7 +28,7 @@ public:
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         DCHECK(column->is_object());
 
-        const PercentileColumn* percentile_column = down_cast<const PercentileColumn*>(column);
+        const auto* percentile_column = down_cast<const PercentileColumn*>(column);
         this->data(state).merge(percentile_column->get_object(row_num));
     }
 

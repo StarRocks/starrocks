@@ -365,6 +365,9 @@ public class AuthUpgraderTest {
                 Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.DbAction.CREATE_TABLE));
                 Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db1",
                         PrivilegeType.DbAction.CREATE_MATERIALIZED_VIEW));
+                // should have CREATE_DATABASE privilege on default_catalog
+                Assert.assertTrue(PrivilegeManager.checkCatalogAction(ctx, "default_catalog",
+                        PrivilegeType.CatalogAction.CREATE_DATABASE));
             }
             ctx.setCurrentUserIdentity(createUserByRole("userWithGlobalCreate"));
             Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.DbAction.CREATE_TABLE));
@@ -378,6 +381,8 @@ public class AuthUpgraderTest {
             ctx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp("userWithDbCreate", "%"));
             Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.DbAction.CREATE_TABLE));
             Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.DbAction.CREATE_VIEW));
+            Assert.assertFalse(PrivilegeManager.checkCatalogAction(ctx, "default_catalog",
+                    PrivilegeType.CatalogAction.CREATE_DATABASE));
             Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db0", PrivilegeType.DbAction.CREATE_TABLE));
             Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db0", PrivilegeType.DbAction.CREATE_VIEW));
             ctx.setCurrentUserIdentity(createUserByRole("userWithDbCreate"));
@@ -386,7 +391,7 @@ public class AuthUpgraderTest {
             Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db0", PrivilegeType.DbAction.CREATE_TABLE));
             Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db0", PrivilegeType.DbAction.CREATE_VIEW));
 
-            // can't create view or table any more
+            // can't create view or table anymore
             for (UserIdentity userIdentity : Arrays.asList(
                     UserIdentity.createAnalyzedUserIdentWithIp("tableCreate", "%"),
                     createUserByRole("tableCreate"),

@@ -32,7 +32,7 @@ namespace starrocks {
 class SelectNode : public ExecNode {
 public:
     SelectNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
-    ~SelectNode();
+    ~SelectNode() override;
 
     Status prepare(RuntimeState* state) override;
     Status open(RuntimeState* state) override;

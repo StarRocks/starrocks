@@ -28,7 +28,6 @@
 #include "gen_cpp/segment.pb.h"
 #include "gutil/hash/string_hash.h"
 #include "runtime/mem_pool.h"
-#include "storage/column_vector.h"
 #include "storage/olap_common.h"
 #include "storage/range.h"
 #include "storage/rowset/binary_plain_page.h"
@@ -110,7 +109,7 @@ private:
     faststring _first_value;
 };
 
-template <FieldType Type>
+template <LogicalType Type>
 class BinaryDictPageDecoder final : public PageDecoder {
 public:
     BinaryDictPageDecoder(Slice data, const PageDecoderOptions& options);
@@ -142,7 +141,6 @@ private:
     const BinaryPlainPageDecoder<Type>* _dict_decoder = nullptr;
     bool _parsed;
     EncodingTypePB _encoding_type;
-    std::unique_ptr<ColumnVectorBatch> _batch;
     std::shared_ptr<vectorized::Column> _vec_code_buf;
 
     uint32_t _max_value_legth = 0;

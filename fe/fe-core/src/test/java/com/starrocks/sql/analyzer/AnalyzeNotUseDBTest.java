@@ -1,7 +1,10 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.utframe.UtFrameUtils;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -52,6 +55,8 @@ public class AnalyzeNotUseDBTest {
 
     @Test
     public void testCteWithSameName() {
+        AnalyzeTestUtil.getConnectContext().setDatabase("db1");
+
         analyzeFail("with cte as (select * from db1.t0) select * from db1.cte",
                 "Unknown table 'db1.cte'");
         analyzeSuccess("with cte as (select * from db1.t0) select * from cte");
@@ -83,42 +88,69 @@ public class AnalyzeNotUseDBTest {
 
     @Test
     public void testDifferentDBWithSameTableName() {
+        AnalyzeTestUtil.getConnectContext().setDatabase("db1");
+
         analyzeSuccess("select db1.t0.v1 from db1.t0 inner join db2.t0 on db1.t0.v1 = db2.t0.v1");
         analyzeSuccess("select db1.t.v1 from db1.t0 t inner join db2.t0 t on db1.t.v1 = db2.t.v1");
         analyzeSuccess("select default_catalog.db1.t.v1 from db1.t0 t inner join db2.t0 t on db1.t.v1 = db2.t.v1");
         analyzeSuccess("select default_catalog.db1.t.v1 from default_catalog.db1.t0 t " +
                 "inner join default_catalog.db2.t0 t on db1.t.v1 = db2.t.v1");
 
-        analyzeSuccess("select test.t.v1 from t0 t join (select * from t0) t");
+        analyzeSuccess("select db1.t.v1 from t0 t join (select * from t0) t");
         analyzeFail("select t.v1 from t0 t join (select * from t0) t", "Column 'v1' is ambiguous");
+        analyzeSuccess("select db1.t1.* from t0 t1 join (select * from t0) t2");
+        analyzeFail("select db1.t2.* from t0 t1 join (select * from t0) t2", "Unknown table 'db1.t2'");
     }
 
     @Test
-    public void testDupTableName() {
-        analyzeSuccess("select * from t0 t join unnest([1,2,3]) t");
-        analyzeSuccess("select * from t0 join unnest([1,2,3]) t0");
-        analyzeSuccess("select * from t0 t join (values(1,2,3)) t");
-        analyzeSuccess("select * from t0 join (values(1,2,3)) t0");
-    }
+    public void testUniqueTableName() {
+        AnalyzeTestUtil.getConnectContext().setDatabase("db1");
 
-    @Test
-    public void test() {
-        analyzeWithoutTestView("select * from t0 t join (select * from t0) t");
+        analyzeFail("select * from t0, t0", "Not unique table/alias: 't0'");
+        analyzeFail("select * from t0 t, t0 t", "Not unique table/alias: 't'");
+        analyzeFail("select * from (select * from t0) t, (select * from t0) t",
+                "Not unique table/alias: 't'");
+
+        QueryStatement queryStatement = (QueryStatement) analyzeSuccess("select * from t0 t join unnest([1,2,3]) t");
+        SelectRelation selectRelation = (SelectRelation) queryStatement.getQueryRelation();
+        Assert.assertEquals("[v1, v2, v3, unnest]", selectRelation.getColumnOutputNames().toString());
+
+        queryStatement = (QueryStatement) analyzeSuccess("select * from t0 join unnest([1,2,3]) t0");
+        selectRelation = (SelectRelation) queryStatement.getQueryRelation();
+        Assert.assertEquals("[v1, v2, v3, unnest]", selectRelation.getColumnOutputNames().toString());
+
+        queryStatement = (QueryStatement) analyzeSuccess("select * from t0 t join (values(1,2,3)) t");
+        selectRelation = (SelectRelation) queryStatement.getQueryRelation();
+        Assert.assertEquals("[v1, v2, v3, column_0, column_1, column_2]", selectRelation.getColumnOutputNames().toString());
+
+        queryStatement = (QueryStatement) analyzeSuccess("select * from t0 join (values(1,2,3)) t0");
+        selectRelation = (SelectRelation) queryStatement.getQueryRelation();
+        Assert.assertEquals("[v1, v2, v3, column_0, column_1, column_2]", selectRelation.getColumnOutputNames().toString());
+
+        queryStatement = (QueryStatement) analyzeWithoutTestView("select * from t0 t join (select * from t0) t");
+        selectRelation = (SelectRelation) queryStatement.getQueryRelation();
+        Assert.assertEquals("[v1, v2, v3, v1, v2, v3]", selectRelation.getColumnOutputNames().toString());
         analyzeFail("create view v as select * from t0 t join (select * from t0) t",
                 "Duplicate column name 'v1'");
 
-        analyzeWithoutTestView("select * from t0 join (select * from t0) t0");
+        queryStatement = (QueryStatement) analyzeSuccess("select db1.t.* from t0 t join (select * from t0) t");
+        selectRelation = (SelectRelation) queryStatement.getQueryRelation();
+        Assert.assertEquals("[v1, v2, v3]", selectRelation.getColumnOutputNames().toString());
+
+        queryStatement = (QueryStatement) analyzeWithoutTestView("select t.* from t0 t join (select * from t0) t");
+        selectRelation = (SelectRelation) queryStatement.getQueryRelation();
+        Assert.assertEquals("[v1, v2, v3, v1, v2, v3]", selectRelation.getColumnOutputNames().toString());
+        analyzeFail("create view v as select * from t0 t join (select * from t0) t",
+                "Duplicate column name 'v1'");
+
+        queryStatement = (QueryStatement) analyzeWithoutTestView("select t0.* from t0 join (select * from t0) t0");
+        selectRelation = (SelectRelation) queryStatement.getQueryRelation();
+        Assert.assertEquals("[v1, v2, v3, v1, v2, v3]", selectRelation.getColumnOutputNames().toString());
         analyzeFail("create view v as select * from t0 join (select * from t0) t0",
                 "Duplicate column name 'v1'");
-    }
 
-    @Test
-    public void testDupTableName() {
-        analyzeFail("select * from t0 t join unnest([1,2,3]) t", "Not unique table/alias: 't'");
-        analyzeFail("select * from t0 join unnest([1,2,3]) t0", "Not unique table/alias: 't0'");
-        analyzeFail("select * from t0 t join (select * from t0) t", "Not unique table/alias: 't'");
-        analyzeFail("select * from t0 join (select * from t0) t0", "Not unique table/alias: 't0'");
-        analyzeFail("select * from t0 t join (values(1,2,3)) t", "Not unique table/alias: 't'");
-        analyzeFail("select * from t0 join (values(1,2,3)) t0", "Not unique table/alias: 't0'");
+        queryStatement = (QueryStatement) analyzeSuccess("select db1.t0.* from t0 join (select * from t0) t0");
+        selectRelation = (SelectRelation) queryStatement.getQueryRelation();
+        Assert.assertEquals("[v1, v2, v3]", selectRelation.getColumnOutputNames().toString());
     }
 }

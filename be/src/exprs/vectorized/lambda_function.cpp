@@ -47,8 +47,8 @@ Status LambdaFunction::prepare(starrocks::RuntimeState* state, starrocks::ExprCo
     return Status::OK();
 }
 
-ColumnPtr LambdaFunction::evaluate(ExprContext* context, Chunk* ptr) {
-    return get_child(0)->evaluate(context, ptr);
+StatusOr<ColumnPtr> LambdaFunction::evaluate_checked(ExprContext* context, Chunk* ptr) {
+    return get_child(0)->evaluate_checked(context, ptr);
 }
 
 void LambdaFunction::close(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) {

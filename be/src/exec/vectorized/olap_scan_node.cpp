@@ -204,6 +204,10 @@ Status OlapScanNode::close(RuntimeState* state) {
         release_large_columns<BinaryColumn>(runtime_state()->chunk_size() * 512);
     }
 
+    for (const auto& rowsets_per_tablet : _tablet_rowsets) {
+        Rowset::release_readers(rowsets_per_tablet);
+    }
+
     return ScanNode::close(state);
 }
 
@@ -680,13 +684,14 @@ Status OlapScanNode::_capture_tablet_rowsets() {
         {
             std::shared_lock l(tablet->get_header_lock());
             RETURN_IF_ERROR(tablet->capture_consistent_rowsets(Version(0, version), &_tablet_rowsets[i]));
+            Rowset::acquire_readers(_tablet_rowsets[i]);
         }
     }
 
     return Status::OK();
 }
 
-size_t _estimate_type_bytes(PrimitiveType ptype) {
+size_t _estimate_type_bytes(LogicalType ptype) {
     switch (ptype) {
     case TYPE_VARCHAR:
     case TYPE_CHAR:

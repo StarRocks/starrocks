@@ -55,9 +55,10 @@ static std::unique_ptr<Converter> get_converter(const TypeDescriptor& t) {
     case TYPE_JSON:
         return std::make_unique<JsonConverter>();
     case TYPE_DECIMAL:
-    case INVALID_TYPE:
+    case TYPE_UNKNOWN:
     case TYPE_NULL:
     case TYPE_BINARY:
+    case TYPE_VARBINARY:
     case TYPE_STRUCT:
     case TYPE_MAP:
     case TYPE_HLL:
@@ -65,6 +66,15 @@ static std::unique_ptr<Converter> get_converter(const TypeDescriptor& t) {
     case TYPE_TIME:
     case TYPE_OBJECT:
     case TYPE_FUNCTION:
+    case TYPE_UNSIGNED_TINYINT:
+    case TYPE_UNSIGNED_SMALLINT:
+    case TYPE_UNSIGNED_INT:
+    case TYPE_UNSIGNED_BIGINT:
+    case TYPE_DISCRETE_DOUBLE:
+    case TYPE_DATE_V1:
+    case TYPE_DATETIME_V1:
+    case TYPE_NONE:
+    case TYPE_MAX_VALUE:
         break;
     }
     return nullptr;
