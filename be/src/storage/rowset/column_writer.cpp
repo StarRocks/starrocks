@@ -369,7 +369,7 @@ Status ScalarColumnWriter::init() {
     }
     if (_opts.need_zone_map) {
         _has_index_builder = true;
-        _zone_map_index_builder = ZoneMapIndexWriter::create(get_field());
+        _zone_map_index_builder = ZoneMapIndexWriter::create(get_field()->type_info().get(), get_field()->length());
     }
     if (_opts.need_bitmap_index) {
         _has_index_builder = true;
