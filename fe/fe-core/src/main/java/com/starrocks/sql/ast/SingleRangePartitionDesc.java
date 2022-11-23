@@ -137,18 +137,18 @@ public class SingleRangePartitionDesc extends PartitionDesc {
         boolean enableStorageCache = PropertyAnalyzer.analyzeBooleanProp(
                 properties, PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE, false);
         long storageCacheTtlS = PropertyAnalyzer.analyzeLongProp(
-                properties, PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL, 0);
+                properties, PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL, Config.lake_default_storage_cache_ttl_seconds);
         boolean allowAsyncWriteBack = PropertyAnalyzer.analyzeBooleanProp(
                 properties, PropertyAnalyzer.PROPERTIES_ALLOW_ASYNC_WRITE_BACK, false);
 
         if (storageCacheTtlS < -1) {
             throw new AnalysisException("Storage cache ttl should not be less than -1");
         }
-        if (!enableStorageCache && storageCacheTtlS != 0) {
+        if (!enableStorageCache && storageCacheTtlS != 0 && storageCacheTtlS != Config.lake_default_storage_cache_ttl_seconds) {
             throw new AnalysisException("Storage cache ttl should be 0 when cache is disabled");
         }
         if (enableStorageCache && storageCacheTtlS == 0) {
-            storageCacheTtlS = Config.tablet_sched_storage_cooldown_second;
+            throw new AnalysisException("Storage cache ttl should not be 0 when cache is enabled");
         }
         if (!enableStorageCache && allowAsyncWriteBack) {
             throw new AnalysisException("storage allow_async_write_back can't be enabled when cache is disabled");

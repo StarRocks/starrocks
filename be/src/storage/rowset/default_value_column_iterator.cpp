@@ -22,7 +22,6 @@
 #include "storage/rowset/default_value_column_iterator.h"
 
 #include "column/column.h"
-#include "storage/column_block.h"
 #include "storage/range.h"
 #include "storage/types.h"
 #include "util/mem_util.hpp"
@@ -45,7 +44,7 @@ Status DefaultValueColumnIterator::init(const ColumnIteratorOptions& opts) {
                 return Status::InternalError("Mem usage has exceed the limit of BE");
             }
             Status status = Status::OK();
-            if (_type_info->type() == OLAP_FIELD_TYPE_CHAR) {
+            if (_type_info->type() == TYPE_CHAR) {
                 auto length = static_cast<int32_t>(_schema_length);
                 char* string_buffer = reinterpret_cast<char*>(_pool.allocate(length));
                 if (UNLIKELY(string_buffer == nullptr)) {
@@ -55,9 +54,8 @@ Status DefaultValueColumnIterator::init(const ColumnIteratorOptions& opts) {
                 memory_copy(string_buffer, _default_value.c_str(), _default_value.length());
                 (static_cast<Slice*>(_mem_value))->size = length;
                 (static_cast<Slice*>(_mem_value))->data = string_buffer;
-            } else if (_type_info->type() == OLAP_FIELD_TYPE_VARCHAR || _type_info->type() == OLAP_FIELD_TYPE_HLL ||
-                       _type_info->type() == OLAP_FIELD_TYPE_OBJECT ||
-                       _type_info->type() == OLAP_FIELD_TYPE_PERCENTILE) {
+            } else if (_type_info->type() == TYPE_VARCHAR || _type_info->type() == TYPE_HLL ||
+                       _type_info->type() == TYPE_OBJECT || _type_info->type() == TYPE_PERCENTILE) {
                 auto length = static_cast<int32_t>(_default_value.length());
                 char* string_buffer = reinterpret_cast<char*>(_pool.allocate(length));
                 if (UNLIKELY(string_buffer == nullptr)) {
@@ -66,7 +64,7 @@ Status DefaultValueColumnIterator::init(const ColumnIteratorOptions& opts) {
                 memory_copy(string_buffer, _default_value.c_str(), length);
                 (static_cast<Slice*>(_mem_value))->size = length;
                 (static_cast<Slice*>(_mem_value))->data = string_buffer;
-            } else if (_type_info->type() == OLAP_FIELD_TYPE_ARRAY) {
+            } else if (_type_info->type() == TYPE_ARRAY) {
                 return Status::NotSupported("Array default type is unsupported");
             } else {
                 RETURN_IF_ERROR(_type_info->from_string(_mem_value, _default_value));
@@ -81,36 +79,14 @@ Status DefaultValueColumnIterator::init(const ColumnIteratorOptions& opts) {
     return Status::OK();
 }
 
-Status DefaultValueColumnIterator::next_batch(size_t* n, ColumnBlockView* dst, bool* has_null) {
-    if (dst->is_nullable()) {
-        dst->set_null_bits(*n, _is_default_value_null);
-    }
-
-    if (_is_default_value_null) {
-        *has_null = true;
-        dst->advance(*n);
-    } else {
-        *has_null = false;
-        for (int i = 0; i < *n; ++i) {
-            memcpy(dst->data(), _mem_value, _type_size);
-            dst->advance(1);
-        }
-    }
-    _current_rowid += *n;
-    if (_may_contain_deleted_row) {
-        dst->column_block()->set_delete_state(DEL_PARTIAL_SATISFIED);
-    }
-    return Status::OK();
-}
-
 Status DefaultValueColumnIterator::next_batch(size_t* n, vectorized::Column* dst) {
     if (_is_default_value_null) {
         [[maybe_unused]] bool ok = dst->append_nulls(*n);
         _current_rowid += *n;
         DCHECK(ok) << "cannot append null to non-nullable column";
     } else {
-        if (_type_info->type() == OLAP_FIELD_TYPE_OBJECT || _type_info->type() == OLAP_FIELD_TYPE_HLL ||
-            _type_info->type() == OLAP_FIELD_TYPE_PERCENTILE) {
+        if (_type_info->type() == TYPE_OBJECT || _type_info->type() == TYPE_HLL ||
+            _type_info->type() == TYPE_PERCENTILE) {
             std::vector<Slice> slices;
             slices.reserve(*n);
             for (size_t i = 0; i < *n; i++) {
@@ -135,8 +111,8 @@ Status DefaultValueColumnIterator::next_batch(const vectorized::SparseRange& ran
         _current_rowid = range.end();
         DCHECK(ok) << "cannot append null to non-nullable column";
     } else {
-        if (_type_info->type() == OLAP_FIELD_TYPE_OBJECT || _type_info->type() == OLAP_FIELD_TYPE_HLL ||
-            _type_info->type() == OLAP_FIELD_TYPE_PERCENTILE) {
+        if (_type_info->type() == TYPE_OBJECT || _type_info->type() == TYPE_HLL ||
+            _type_info->type() == TYPE_PERCENTILE) {
             std::vector<Slice> slices;
             slices.reserve(to_read);
             for (size_t i = 0; i < to_read; i++) {

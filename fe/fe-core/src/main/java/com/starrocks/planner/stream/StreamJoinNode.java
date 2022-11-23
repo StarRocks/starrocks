@@ -26,8 +26,13 @@ public class StreamJoinNode extends JoinNode {
     private IMTInfo rightIMT;
 
     public StreamJoinNode(PlanNodeId id, PlanNode outer, PlanNode inner, TableRef innerRef, List<Expr> eqJoinConjuncts,
-            List<Expr> otherJoinConjuncts) {
+                          List<Expr> otherJoinConjuncts) {
         super("StreamJoin", id, outer, inner, JoinOperator.INNER_JOIN, eqJoinConjuncts, otherJoinConjuncts);
+    }
+
+    public StreamJoinNode(PlanNodeId id, PlanNode outer, PlanNode inner, JoinOperator joinOp,
+                          List<Expr> eqJoinConjuncts, List<Expr> otherJoinConjuncts) {
+        super("StreamJoin", id, outer, inner, joinOp, eqJoinConjuncts, otherJoinConjuncts);
     }
 
     @Override

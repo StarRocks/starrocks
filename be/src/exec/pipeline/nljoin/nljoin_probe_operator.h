@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <utility>
+
 #include "column/vectorized_fwd.h"
 #include "exec/pipeline/nljoin/nljoin_context.h"
 #include "exec/pipeline/operator_with_dependency.h"
@@ -110,14 +112,14 @@ class NLJoinProbeOperatorFactory final : public OperatorWithDependencyFactory {
 public:
     NLJoinProbeOperatorFactory(int32_t id, int32_t plan_node_id, const RowDescriptor& row_descriptor,
                                const RowDescriptor& left_row_desc, const RowDescriptor& right_row_desc,
-                               const std::string& sql_join_conjuncts, std::vector<ExprContext*>&& join_conjuncts,
+                               std::string sql_join_conjuncts, std::vector<ExprContext*>&& join_conjuncts,
                                std::vector<ExprContext*>&& conjunct_ctxs,
                                std::shared_ptr<NLJoinContext>&& cross_join_context, TJoinOp::type join_op)
             : OperatorWithDependencyFactory(id, "cross_join_left", plan_node_id),
               _join_op(join_op),
               _left_row_desc(left_row_desc),
               _right_row_desc(right_row_desc),
-              _sql_join_conjuncts(sql_join_conjuncts),
+              _sql_join_conjuncts(std::move(sql_join_conjuncts)),
               _join_conjuncts(std::move(join_conjuncts)),
               _conjunct_ctxs(std::move(conjunct_ctxs)),
               _cross_join_context(std::move(cross_join_context)) {}

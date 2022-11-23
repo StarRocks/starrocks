@@ -24,6 +24,9 @@ class HdfsScannerContext;
 
 namespace starrocks::parquet {
 
+constexpr static const uint64_t FOOTER_BUFFER_SIZE = 16 * 1024;
+constexpr static const char* PARQUET_MAGIC_NUMBER = "PAR1";
+
 class FileMetaData;
 
 class FileReader {
@@ -95,10 +98,10 @@ private:
     uint64_t _file_size = 0;
 
     std::shared_ptr<FileMetaData> _file_metadata;
-    vector<std::shared_ptr<GroupReader>> _row_group_readers;
+    std::vector<std::shared_ptr<GroupReader>> _row_group_readers;
     size_t _cur_row_group_idx = 0;
     size_t _row_group_size = 0;
-    vectorized::Schema _schema;
+    vectorized::VectorizedSchema _schema;
 
     std::vector<GroupReaderParam::Column> _read_cols;
     size_t _total_row_count = 0;

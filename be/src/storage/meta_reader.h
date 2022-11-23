@@ -25,7 +25,8 @@ class SegmentMetaCollecter;
 // Params for MetaReader
 // mainly include tablet
 struct MetaReaderParams {
-    MetaReaderParams(){};
+    MetaReaderParams() = default;
+    ;
     TabletSharedPtr tablet;
     Version version = Version(-1, 0);
     const std::vector<SlotDescriptor*>* slots = nullptr;
@@ -46,7 +47,7 @@ struct SegmentMetaCollecterParams {
     std::vector<std::string> fields;
     std::vector<ColumnId> cids;
     std::vector<bool> read_page;
-    std::vector<FieldType> field_type;
+    std::vector<LogicalType> field_type;
     int32_t max_cid;
 };
 
@@ -114,17 +115,17 @@ public:
     static std::vector<std::string> support_collect_fields;
     static Status parse_field_and_colname(const std::string& item, std::string* field, std::string* col_name);
 
-    using CollectFunc = std::function<Status(ColumnId, vectorized::Column*, FieldType)>;
+    using CollectFunc = std::function<Status(ColumnId, vectorized::Column*, LogicalType)>;
     std::unordered_map<std::string, CollectFunc> support_collect_func;
 
 private:
     Status _init_return_column_iterators();
-    Status _collect(const std::string& name, ColumnId cid, vectorized::Column* column, FieldType type);
-    Status _collect_dict(ColumnId cid, vectorized::Column* column, FieldType type);
-    Status _collect_max(ColumnId cid, vectorized::Column* column, FieldType type);
-    Status _collect_min(ColumnId cid, vectorized::Column* column, FieldType type);
+    Status _collect(const std::string& name, ColumnId cid, vectorized::Column* column, LogicalType type);
+    Status _collect_dict(ColumnId cid, vectorized::Column* column, LogicalType type);
+    Status _collect_max(ColumnId cid, vectorized::Column* column, LogicalType type);
+    Status _collect_min(ColumnId cid, vectorized::Column* column, LogicalType type);
     template <bool is_max>
-    Status __collect_max_or_min(ColumnId cid, vectorized::Column* column, FieldType type);
+    Status __collect_max_or_min(ColumnId cid, vectorized::Column* column, LogicalType type);
     SegmentSharedPtr _segment;
     std::vector<ColumnIterator*> _column_iterators;
     const SegmentMetaCollecterParams* _params = nullptr;

@@ -80,7 +80,8 @@ public class TransactionState implements Writable {
         ROUTINE_LOAD_TASK(4),           // routine load task use this type
         BATCH_LOAD_JOB(5),              // load job v2 for broker load
         DELETE(6),                     // synchronization delete job use this type
-        LAKE_COMPACTION(7);            // compaction of LakeTable
+        LAKE_COMPACTION(7),            // compaction of LakeTable
+        FRONTEND_STREAMING(8);               // FE streaming load use this type
 
         private final int flag;
 
@@ -108,6 +109,8 @@ public class TransactionState implements Writable {
                     return DELETE;
                 case 7:
                     return LAKE_COMPACTION;
+                case 8:
+                    return FRONTEND_STREAMING;
                 default:
                     return null;
             }
@@ -438,6 +441,9 @@ public class TransactionState implements Writable {
                 case COMMITTED:
                     callback.beforeCommitted(this);
                     break;
+                case PREPARED:
+                    callback.beforePrepared(this);
+                    break;
                 default:
                     break;
             }
@@ -483,6 +489,9 @@ public class TransactionState implements Writable {
                 case COMMITTED:
                     callback.afterCommitted(this, txnOperated);
                     break;
+                case PREPARED:
+                    callback.afterPrepared(this, txnOperated);
+                    break;
                 default:
                     break;
             }
@@ -500,6 +509,8 @@ public class TransactionState implements Writable {
                 callback.replayOnCommitted(this);
             } else if (transactionStatus == TransactionStatus.VISIBLE) {
                 callback.replayOnVisible(this);
+            } else if (transactionStatus == TransactionStatus.PREPARED) {
+                callback.replayOnPrepared(this);
             }
         }
     }

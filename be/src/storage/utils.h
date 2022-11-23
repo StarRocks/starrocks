@@ -52,7 +52,7 @@ public:
     uint64_t get_elapse_time_us() {
         struct timeval now;
         gettimeofday(&now, nullptr);
-        return (uint64_t)((now.tv_sec - _begin_time.tv_sec) * 1e6 + (now.tv_usec - _begin_time.tv_usec));
+        return (uint64_t)((now.tv_sec - _begin_time.tv_sec) * 1000000 + (now.tv_usec - _begin_time.tv_usec));
     }
 
     double get_elapse_second() { return get_elapse_time_us() / 1000000.0; }
@@ -90,7 +90,7 @@ private:
     static __thread char _buf[BUF_SIZE];
 };
 
-inline bool is_io_error(Status status) {
+inline bool is_io_error(const Status& status) {
     return status.is_io_error();
 }
 

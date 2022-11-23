@@ -64,7 +64,7 @@ OutPut Exchange Id: 31
 |  * sum-->[1.0, 3.204037490987743E8, 0.0, 16.0, 99864.0] ESTIMATE
 |
 28:NESTLOOP JOIN
-|  join op: CROSS JOIN
+|  join op: INNER JOIN
 |  other join predicates: cast([18: sum, DECIMAL128(38,2), true] as DOUBLE) > cast([37: expr, DECIMAL128(38,12), true] as DOUBLE)
 |  cardinality: 1600000
 |  column statistics:

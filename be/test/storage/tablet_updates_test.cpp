@@ -31,7 +31,6 @@
 #include "storage/tablet_reader.h"
 #include "storage/union_iterator.h"
 #include "storage/update_manager.h"
-#include "storage/wrapper_field.h"
 #include "testutil/assert.h"
 #include "util/defer_op.h"
 #include "util/path_util.h"
@@ -48,7 +47,8 @@ enum PartialUpdateCloneCase {
 class TabletUpdatesTest : public testing::Test {
 public:
     RowsetSharedPtr create_rowset(const TabletSharedPtr& tablet, const vector<int64_t>& keys,
-                                  vectorized::Column* one_delete = nullptr, bool empty = false) {
+                                  vectorized::Column* one_delete = nullptr, bool empty = false,
+                                  bool has_merge_condition = false) {
         RowsetWriterContext writer_context;
         RowsetId rowset_id = StorageEngine::instance()->next_rowset_id();
         writer_context.rowset_id = rowset_id;
@@ -61,6 +61,9 @@ public:
         writer_context.version.first = 0;
         writer_context.version.second = 0;
         writer_context.segments_overlap = NONOVERLAPPING;
+        if (has_merge_condition) {
+            writer_context.merge_condition = "v2";
+        }
         std::unique_ptr<RowsetWriter> writer;
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
         if (empty) {
@@ -429,7 +432,7 @@ public:
     void test_noncontinous_meta_save_load(bool enable_persistent_index);
     void test_save_meta(bool enable_persistent_index);
     void test_remove_expired_versions(bool enable_persistent_index);
-    void test_apply(bool enable_persistent_index);
+    void test_apply(bool enable_persistent_index, bool has_merge_condition);
     void test_concurrent_write_read_and_gc(bool enable_persistent_index);
     void test_compaction_score_not_enough(bool enable_persistent_index);
     void test_compaction_score_enough_duplicate(bool enable_persistent_index);
@@ -504,7 +507,7 @@ static TabletSharedPtr load_same_tablet_from_store(const TabletSharedPtr& tablet
 }
 
 static vectorized::ChunkIteratorPtr create_tablet_iterator(vectorized::TabletReader& reader,
-                                                           vectorized::Schema& schema) {
+                                                           vectorized::VectorizedSchema& schema) {
     vectorized::TabletReaderParams params;
     if (!reader.prepare().ok()) {
         LOG(ERROR) << "reader prepare failed";
@@ -567,7 +570,7 @@ static ssize_t read_until_eof(const vectorized::ChunkIteratorPtr& iter) {
 }
 
 static ssize_t read_tablet(const TabletSharedPtr& tablet, int64_t version) {
-    vectorized::Schema schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
+    vectorized::VectorizedSchema schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
     vectorized::TabletReader reader(tablet, Version(0, version), schema);
     auto iter = create_tablet_iterator(reader, schema);
     if (iter == nullptr) {
@@ -577,7 +580,7 @@ static ssize_t read_tablet(const TabletSharedPtr& tablet, int64_t version) {
 }
 
 static ssize_t read_tablet_and_compare(const TabletSharedPtr& tablet, int64_t version, const vector<int64_t>& keys) {
-    vectorized::Schema schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
+    vectorized::VectorizedSchema schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
     vectorized::TabletReader reader(tablet, Version(0, version), schema);
     auto iter = create_tablet_iterator(reader, schema);
     if (iter == nullptr) {
@@ -588,7 +591,7 @@ static ssize_t read_tablet_and_compare(const TabletSharedPtr& tablet, int64_t ve
 
 static ssize_t read_tablet_and_compare_schema_changed(const TabletSharedPtr& tablet, int64_t version,
                                                       const vector<int64_t>& keys) {
-    vectorized::Schema schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
+    vectorized::VectorizedSchema schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
     vectorized::TabletReader reader(tablet, Version(0, version), schema);
     auto iter = create_tablet_iterator(reader, schema);
     if (iter == nullptr) {
@@ -934,7 +937,7 @@ void TabletUpdatesTest::test_remove_expired_versions(bool enable_persistent_inde
     ASSERT_EQ(0, read_tablet(_tablet, 1));
 
     // Create iterators before remove expired version, but read them after removal.
-    vectorized::Schema schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
+    vectorized::VectorizedSchema schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
     vectorized::TabletReader reader1(_tablet, Version(0, 1), schema);
     vectorized::TabletReader reader2(_tablet, Version(0, 2), schema);
     vectorized::TabletReader reader3(_tablet, Version(0, 3), schema);
@@ -953,9 +956,10 @@ void TabletUpdatesTest::test_remove_expired_versions(bool enable_persistent_inde
     EXPECT_EQ(N, read_until_eof(iter_v4));
     EXPECT_EQ(0, read_until_eof(iter_v1)); // iter_v1 is empty iterator
 
+    // read already opened iterator/reader should succeed
+    EXPECT_EQ(N, read_until_eof(iter_v3));
+    EXPECT_EQ(N, read_until_eof(iter_v2));
     // Read expired versions should fail.
-    EXPECT_EQ(-1, read_until_eof(iter_v3));
-    EXPECT_EQ(-1, read_until_eof(iter_v2));
     EXPECT_EQ(-1, read_tablet(_tablet, 3));
     EXPECT_EQ(-1, read_tablet(_tablet, 2));
     EXPECT_EQ(-1, read_tablet(_tablet, 1));
@@ -978,7 +982,7 @@ TEST_F(TabletUpdatesTest, remove_expired_versions_with_persistent_index) {
 }
 
 // NOLINTNEXTLINE
-void TabletUpdatesTest::test_apply(bool enable_persistent_index) {
+void TabletUpdatesTest::test_apply(bool enable_persistent_index, bool has_merge_condition = false) {
     const int N = 10;
     _tablet = create_tablet(rand(), rand());
     _tablet->set_enable_persistent_index(enable_persistent_index);
@@ -991,7 +995,7 @@ void TabletUpdatesTest::test_apply(bool enable_persistent_index) {
     std::vector<RowsetSharedPtr> rowsets;
     rowsets.reserve(64);
     for (int i = 0; i < 64; i++) {
-        rowsets.emplace_back(create_rowset(_tablet, keys));
+        rowsets.emplace_back(create_rowset(_tablet, keys, nullptr, false, has_merge_condition));
     }
     auto pool = StorageEngine::instance()->update_manager()->apply_thread_pool();
     for (int i = 0; i < rowsets.size(); i++) {
@@ -1024,6 +1028,10 @@ TEST_F(TabletUpdatesTest, apply) {
 
 TEST_F(TabletUpdatesTest, apply_with_persistent_index) {
     test_apply(true);
+}
+
+TEST_F(TabletUpdatesTest, apply_with_merge_condition) {
+    test_apply(false, true);
 }
 
 // NOLINTNEXTLINE
@@ -1450,16 +1458,6 @@ void TabletUpdatesTest::test_convert_from(bool enable_persistent_index) {
         auto column_mapping = chunk_changer->get_mutable_column_mapping(i);
         if (column_index >= 0) {
             column_mapping->ref_column = column_index;
-        } else {
-            column_mapping->default_value = WrapperField::create(new_column);
-
-            ASSERT_FALSE(column_mapping->default_value == nullptr) << "init column mapping failed: malloc error";
-
-            if (new_column.is_nullable() && new_column.default_value().length() == 0) {
-                column_mapping->default_value->set_null();
-            } else {
-                column_mapping->default_value->from_string(new_column.default_value());
-            }
         }
     }
     ASSERT_TRUE(tablet_to_schema_change->updates()->convert_from(_tablet, 4, chunk_changer.get()).ok());
@@ -1494,16 +1492,6 @@ void TabletUpdatesTest::test_convert_from_with_pending(bool enable_persistent_in
         auto column_mapping = chunk_changer->get_mutable_column_mapping(i);
         if (column_index >= 0) {
             column_mapping->ref_column = column_index;
-        } else {
-            column_mapping->default_value = WrapperField::create(new_column);
-
-            ASSERT_FALSE(column_mapping->default_value == nullptr) << "init column mapping failed: malloc error";
-
-            if (new_column.is_nullable() && new_column.default_value().length() == 0) {
-                column_mapping->default_value->set_null();
-            } else {
-                column_mapping->default_value->from_string(new_column.default_value());
-            }
         }
     }
     ASSERT_TRUE(tablet_to_schema_change->rowset_commit(3, create_rowset(tablet_to_schema_change, keys3)).ok());

@@ -9,6 +9,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.CoordinatorMonitor;
+import com.starrocks.qe.GlobalVariable;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -75,6 +76,15 @@ public class ComputeNode implements IComputable, Writable {
     @SerializedName("starletPort")
     private volatile int starletPort;
 
+    @SerializedName("lastWriteFail")
+    private volatile boolean lastWriteFail = false;
+
+    private volatile int numRunningQueries = 0;
+    private volatile long memLimitBytes = 0;
+    private volatile long memUsedBytes = 0;
+    private volatile int cpuUsedPermille = 0;
+    private volatile long lastUpdateResourceUsageMs = 0;
+
     public ComputeNode() {
         this.host = "";
         this.version = "";
@@ -110,6 +120,14 @@ public class ComputeNode implements IComputable, Writable {
         this.ownerClusterName = "";
         this.backendState = Backend.BackendState.free.ordinal();
         this.decommissionType = DecommissionType.SystemDecommission.ordinal();
+    }
+
+    public void setLastWriteFail(boolean lastWriteFail) {
+        this.lastWriteFail = lastWriteFail;
+    }
+
+    public boolean getLastWriteFail() {
+        return this.lastWriteFail;
     }
 
     public int getStarletPort() {
@@ -264,6 +282,38 @@ public class ComputeNode implements IComputable, Writable {
 
     public boolean isAvailable() {
         return this.isAlive.get() && !this.isDecommissioned.get();
+    }
+
+    public int getNumRunningQueries() {
+        return numRunningQueries;
+    }
+
+    public long getMemUsedBytes() {
+        return memUsedBytes;
+    }
+    public long getMemLimitBytes() {
+        return memLimitBytes;
+    }
+
+    public double getMemUsedPct() {
+        if (0 == memLimitBytes) {
+            return 0;
+        }
+        return ((double) memUsedBytes) / memLimitBytes;
+    }
+
+    public int getCpuUsedPermille() {
+        return cpuUsedPermille;
+    }
+
+    public void updateResourceUsage(int numRunningQueries, long memLimitBytes, long memUsedBytes,
+                                       int cpuUsedPermille) {
+
+        this.numRunningQueries = numRunningQueries;
+        this.memLimitBytes = memLimitBytes;
+        this.memUsedBytes = memUsedBytes;
+        this.cpuUsedPermille = cpuUsedPermille;
+        this.lastUpdateResourceUsageMs = System.currentTimeMillis();
     }
 
     @Override
@@ -453,5 +503,30 @@ public class ComputeNode implements IComputable, Writable {
         }
 
         return isChanged;
+    }
+
+    public boolean isResourceOverloaded() {
+        if (!isAvailable()) {
+            return false;
+        }
+
+        long currentMs = System.currentTimeMillis();
+        if (currentMs - lastUpdateResourceUsageMs > GlobalVariable.getQueryQueueResourceUsageIntervalMs()) {
+            // The resource usage is not fresh enough to decide whether it is overloaded.
+            return false;
+        }
+
+        if (GlobalVariable.isQueryQueueConcurrencyLimitEffective() &&
+                numRunningQueries >= GlobalVariable.getQueryQueueConcurrencyLimit()) {
+            return true;
+        }
+
+        if (GlobalVariable.isQueryQueueCpuUsedPermilleLimitEffective() &&
+                cpuUsedPermille >= GlobalVariable.getQueryQueueCpuUsedPermilleLimit()) {
+            return true;
+        }
+
+        return GlobalVariable.isQueryQueueMemUsedPctLimitEffective() &&
+                getMemUsedPct() >= GlobalVariable.getQueryQueueMemUsedPctLimit();
     }
 }

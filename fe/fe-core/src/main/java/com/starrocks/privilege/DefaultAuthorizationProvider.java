@@ -97,6 +97,12 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
             case RESOURCE:
                 return ResourcePEntryObject.generate(mgr, objectTokens);
 
+            case VIEW:
+                return ViewPEntryObject.generate(mgr, objectTokens);
+
+            case CATALOG:
+                return CatalogPEntryObject.generate(mgr, objectTokens);
+
             default:
                 throw new PrivilegeException(UNEXPECTED_TYPE + typeStr);
         }
@@ -129,6 +135,12 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
             case RESOURCE:
                 return ResourcePEntryObject.generate(allTypes, restrictType, restrictName);
 
+            case VIEW:
+                return ViewPEntryObject.generate(mgr, allTypes, restrictType, restrictName);
+
+            case CATALOG:
+                return CatalogPEntryObject.generate(allTypes, restrictType, restrictName);
+
             default:
                 throw new PrivilegeException(UNEXPECTED_TYPE + typeStr);
         }
@@ -152,8 +164,8 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
     }
 
     @Override
-    public boolean checkAnyAction(short type, PEntryObject object, PrivilegeCollection currentPrivilegeCollection) {
-        return currentPrivilegeCollection.checkAnyAction(type, object);
+    public boolean searchObject(short type, PEntryObject object, PrivilegeCollection currentPrivilegeCollection) {
+        return currentPrivilegeCollection.searchObject(type, object);
     }
 
     @Override

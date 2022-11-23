@@ -243,6 +243,11 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         return originType;
     }
 
+    // Used to differ from getOriginType(), return originType directly.
+    public Type getTrueOriginType() {
+        return originType;
+    }
+
     public void setOriginType(Type originType) {
         this.originType = originType;
     }
@@ -1381,5 +1386,4 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
             return expr;
         }
     }
-
 }

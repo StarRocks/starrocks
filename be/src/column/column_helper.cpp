@@ -188,15 +188,34 @@ ColumnPtr ColumnHelper::create_const_null_column(size_t chunk_size) {
     return ConstColumn::create(nullable_column, chunk_size);
 }
 
+// expression trees' return column should align return type when some return columns may be different from
+// the required return type. e.g., concat_ws returns col from create_const_null_column(), it's type is Nullable(int8),
+// but required return type is nullable(string), so col need align return type to nullable(string).
+ColumnPtr ColumnHelper::align_return_type(const ColumnPtr& old_col, const TypeDescriptor& type_desc, size_t num_rows) {
+    ColumnPtr new_column = old_col;
+    if (old_col->only_null()) {
+        new_column = ColumnHelper::create_column(type_desc, true);
+        new_column->append_nulls(num_rows);
+    } else if (old_col->is_constant()) {
+        // Note: we must create a new column every time here,
+        // because result_columns[i] is shared_ptr
+        new_column = ColumnHelper::create_column(type_desc, false);
+        auto* const_column = down_cast<ConstColumn*>(old_col.get());
+        new_column->append(*const_column->data_column(), 0, 1);
+        new_column->assign(num_rows, 0);
+    }
+    return new_column;
+}
+
 ColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool nullable) {
     return create_column(type_desc, nullable, false, 0);
 }
 
 struct ColumnBuilder {
-    template <PrimitiveType ptype>
+    template <LogicalType ptype>
     ColumnPtr operator()(const TypeDescriptor& type_desc, size_t size) {
         switch (ptype) {
-        case INVALID_TYPE:
+        case TYPE_UNKNOWN:
         case TYPE_NULL:
         case TYPE_BINARY:
         case TYPE_DECIMAL:
@@ -225,16 +244,16 @@ ColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool null
     }
 
     ColumnPtr p;
-    if (type_desc.type == PrimitiveType::TYPE_ARRAY) {
+    if (type_desc.type == LogicalType::TYPE_ARRAY) {
         auto offsets = UInt32Column::create(size);
         auto data = create_column(type_desc.children[0], true, is_const, size);
         p = ArrayColumn::create(std::move(data), std::move(offsets));
-    } else if (type_desc.type == PrimitiveType::TYPE_MAP) {
+    } else if (type_desc.type == LogicalType::TYPE_MAP) {
         auto offsets = UInt32Column ::create(size);
         auto keys = create_column(type_desc.children[0], true, is_const, size);
         auto values = create_column(type_desc.children[1], true, is_const, size);
         p = MapColumn::create(std::move(keys), std::move(values), std::move(offsets));
-    } else if (type_desc.type == PrimitiveType::TYPE_STRUCT) {
+    } else if (type_desc.type == LogicalType::TYPE_STRUCT) {
         size_t field_size = type_desc.children.size();
         DCHECK_EQ(field_size, type_desc.selected_fields.size());
         Columns columns;

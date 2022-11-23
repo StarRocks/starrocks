@@ -76,7 +76,7 @@ Status EngineStorageMigrationTask::_storage_migrate(TabletSharedPtr tablet) {
               << ", tablet=" << tablet->full_name() << ", dest_store=" << _dest_store->path();
 
     // 1. lock and check
-    int32_t end_version = -1;
+    int64_t end_version = -1;
     std::vector<RowsetSharedPtr> consistent_rowsets;
     uint64_t shard = 0;
     std::string schema_hash_path;
@@ -231,7 +231,7 @@ Status EngineStorageMigrationTask::_storage_migrate(TabletSharedPtr tablet) {
                 res = Status::NotFound(fmt::format("Not found version in tablet. tablet: {}", tablet->tablet_id()));
                 break;
             }
-            int32_t new_end_version = max_version->end_version();
+            int64_t new_end_version = max_version->end_version();
             if (end_version != new_end_version) {
                 LOG(WARNING) << "Version does not match. src_version: " << end_version
                              << ", dst_version: " << new_end_version;

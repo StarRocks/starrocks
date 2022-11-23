@@ -3,8 +3,7 @@
 #include "util/threadpool.h"
 #include "work_group.h"
 
-namespace starrocks {
-namespace workgroup {
+namespace starrocks::workgroup {
 
 class ScanExecutor;
 class WorkGroupManager;
@@ -31,5 +30,4 @@ private:
     std::atomic<int> _next_id = 0;
 };
 
-} // namespace workgroup
-} // namespace starrocks
+} // namespace starrocks::workgroup

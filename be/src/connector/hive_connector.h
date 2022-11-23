@@ -6,9 +6,7 @@
 #include "connector/connector.h"
 #include "exec/vectorized/hdfs_scanner.h"
 
-namespace starrocks {
-
-namespace connector {
+namespace starrocks::connector {
 
 class HiveConnector final : public Connector {
 public:
@@ -112,5 +110,4 @@ private:
     vectorized::HdfsScanProfile _profile;
 };
 
-} // namespace connector
-} // namespace starrocks
+} // namespace starrocks::connector

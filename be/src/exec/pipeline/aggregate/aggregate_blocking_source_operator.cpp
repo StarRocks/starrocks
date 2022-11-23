@@ -34,9 +34,7 @@ StatusOr<vectorized::ChunkPtr> AggregateBlockingSourceOperator::pull_chunk(Runti
     if (_aggregator->is_none_group_by_exprs()) {
         _aggregator->convert_to_chunk_no_groupby(&chunk);
     } else {
-        _aggregator->hash_map_variant().visit([&](auto& hash_map_with_key) {
-            _aggregator->convert_hash_map_to_chunk(*hash_map_with_key, chunk_size, &chunk);
-        });
+        _aggregator->convert_hash_map_to_chunk(chunk_size, &chunk);
     }
 
     size_t old_size = chunk->num_rows();

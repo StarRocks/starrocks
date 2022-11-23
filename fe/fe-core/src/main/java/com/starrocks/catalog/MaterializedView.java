@@ -4,6 +4,7 @@ package com.starrocks.catalog;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
@@ -51,6 +52,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -451,9 +453,8 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
     @Override
     public TTableDescriptor toThrift(List<ReferencedPartitionInfo> partitions) {
-        TTableDescriptor tTableDescriptor = new TTableDescriptor(id, TTableType.MATERIALIZED_VIEW,
+        return new TTableDescriptor(id, TTableType.MATERIALIZED_VIEW,
                 fullSchema.size(), 0, getName(), "");
-        return tTableDescriptor;
     }
 
     @Override
@@ -554,8 +555,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
     public static MaterializedView read(DataInput in) throws IOException {
         String json = Text.readString(in);
-        MaterializedView mv = GsonUtils.GSON.fromJson(json, MaterializedView.class);
-        return mv;
+        return GsonUtils.GSON.fromJson(json, MaterializedView.class);
     }
 
     /**
@@ -569,6 +569,25 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         AsyncRefreshContext asyncRefreshContext = this.refreshScheme.asyncRefreshContext;
         return this.refreshScheme.getType() == MaterializedView.RefreshType.ASYNC &&
                 asyncRefreshContext.step == 0 && null == asyncRefreshContext.timeUnit;
+    }
+
+    public boolean shouldTriggeredRefreshBy(String dbName, String tableName) {
+        if (!isLoadTriggeredRefresh()) {
+            return false;
+        }
+        List<TableName> excludedTriggerTables = this.getTableProperty().getExcludedTriggerTables();
+        for (TableName tables : excludedTriggerTables) {
+            if (tables.getDb() == null) {
+                if (tables.getTbl().equals(tableName))  {
+                    return false;
+                }
+            } else {
+                if (tables.getDb().equals(dbName) && tables.getTbl().equals(tableName)) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     public String getMaterializedViewDdlStmt(boolean simple) {
@@ -638,11 +657,25 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             sb.append(properties.get(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)).append("\"");
         }
 
+        // auto refresh partitions limit
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT)) {
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT)
+                    .append("\" = \"");
+            sb.append(properties.get(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT)).append("\"");
+        }
+
         // partition refresh number
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)) {
             sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)
                     .append("\" = \"");
             sb.append(properties.get(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)).append("\"");
+        }
+
+        // excluded trigger tables
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)) {
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)
+                    .append("\" = \"");
+            sb.append(properties.get(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)).append("\"");
         }
 
         sb.append("\n)");
@@ -653,6 +686,60 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         sb.append("\nAS ").append(define);
         sb.append(";");
         return sb.toString();
+    }
+
+    private static final ImmutableSet<String> NEED_SHOW_PROPS;
+
+    static {
+        NEED_SHOW_PROPS = new ImmutableSet.Builder<String>()
+        .add(PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME)
+        .add(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)
+        .add(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT)
+        .add(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)
+        .add(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)
+        .build();
+    }
+
+    public Map<String, String> getMaterializedViewPropMap() {
+
+        Map<String, String> propsMap = new HashMap<>();
+        // replicationNum
+        Short replicationNum = this.getDefaultReplicationNum();
+        propsMap.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, String.valueOf(replicationNum));
+
+        // storageMedium
+        String storageMedium = this.getStorageMedium();
+        propsMap.put(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM, storageMedium);
+        Map<String, String> properties = this.getTableProperty().getProperties();
+
+        // NEED_SHOW_PROPS
+        NEED_SHOW_PROPS.forEach(prop -> {
+            if (properties.containsKey(prop)) {
+                if (prop.equals(PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME)) {
+                    propsMap.put(prop, TimeUtils.longToTimeString(
+                            Long.parseLong(properties.get(prop))));
+                } else {
+                    propsMap.put(prop, properties.get(prop));
+                }
+            }
+        });
+        return propsMap;
+    }
+
+    public boolean containsBaseTable(TableName tableName) {
+        for (BaseTableInfo baseTableInfo : baseTableInfos) {
+            if (tableName.getDb() == null) {
+                if (tableName.getTbl().equals(baseTableInfo.getTableName())) {
+                    return true;
+                }
+            } else {
+                if (tableName.getTbl().equals(baseTableInfo.getTableName()) &&
+                        tableName.getDb().equals(baseTableInfo.getDbName())) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     public Set<String> getPartitionNamesToRefreshForMv() {

@@ -54,7 +54,7 @@ struct BuildOptions {
     bool is_nullable_value;
 };
 
-template <PrimitiveType TYPE>
+template <LogicalType TYPE>
 struct ColumnRandomAppender {
     static bool append(ColumnPtr& col, int sz) {
         auto* spec_col = ColumnHelper::cast_to_raw<TYPE>(col);
@@ -71,14 +71,14 @@ struct ColumnRandomAppender {
     }
 };
 
-template <template <PrimitiveType, typename... Args> typename Function, typename... Args>
-void dispatch_function(PrimitiveType type, Args&&... args) {
+template <template <LogicalType, typename... Args> typename Function, typename... Args>
+void dispatch_function(LogicalType type, Args&&... args) {
     bool result = false;
     switch (type) {
-#define M(NAME)                                                                      \
-    case PrimitiveType::NAME: {                                                      \
-        result = Function<PrimitiveType::NAME>::append(std::forward<Args>(args)...); \
-        break;                                                                       \
+#define M(NAME)                                                                    \
+    case LogicalType::NAME: {                                                      \
+        result = Function<LogicalType::NAME>::append(std::forward<Args>(args)...); \
+        break;                                                                     \
     }
         APPLY_FOR_ALL_NUMBER_TYPE(M)
 #undef M

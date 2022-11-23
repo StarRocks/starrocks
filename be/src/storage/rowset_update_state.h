@@ -46,7 +46,18 @@ public:
         return _check_and_resolve_conflict(tablet, rowset, rowset_id, latest_applied_version, read_column_ids, index);
     }
 
+    static void plan_read_by_rssid(const vector<uint64_t>& rowids, size_t* num_default,
+                                   std::map<uint32_t, std::vector<uint32_t>>* rowids_by_rssid, vector<uint32_t>* idxes);
+
+    Status load_deletes(Rowset* rowset, uint32_t delete_id);
+    Status load_upserts(Rowset* rowset, uint32_t upsert_id);
+    void release_upserts(uint32_t idx);
+    void release_deletes(uint32_t idx);
+
 private:
+    Status _load_deletes(Rowset* rowset, uint32_t delete_id, vectorized::Column* pk_column);
+    Status _load_upserts(Rowset* rowset, uint32_t upsert_id, vectorized::Column* pk_column);
+
     Status _do_load(Tablet* tablet, Rowset* rowset);
 
     Status _prepare_partial_update_states(Tablet* tablet, Rowset* rowset);
@@ -54,8 +65,6 @@ private:
     Status _check_and_resolve_conflict(Tablet* tablet, Rowset* rowset, uint32_t rowset_id,
                                        EditVersion latest_applied_version, std::vector<uint32_t>& read_column_ids,
                                        const PrimaryIndex& index);
-
-    Status _update_rowset_meta(Tablet* tablet, Rowset* rowset);
 
     std::once_flag _load_once_flag;
     Status _status;

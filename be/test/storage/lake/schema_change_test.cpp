@@ -22,7 +22,7 @@ namespace starrocks::lake {
 
 using namespace starrocks::vectorized;
 
-using VSchema = starrocks::vectorized::Schema;
+using VSchema = starrocks::vectorized::VectorizedSchema;
 using VChunk = starrocks::vectorized::Chunk;
 
 class LinkedSchemaChangeTest : public testing::Test {
@@ -183,7 +183,7 @@ TEST_F(LinkedSchemaChangeTest, test_add_column) {
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
-        ASSERT_OK(_tablet_manager->publish_version(base_tablet_id, version, version + 1, &txn_id, 1));
+        ASSERT_OK(_tablet_manager->publish_version(base_tablet_id, version, version + 1, &txn_id, 1).status());
         version++;
         txn_id++;
     }
@@ -193,7 +193,7 @@ TEST_F(LinkedSchemaChangeTest, test_add_column) {
         ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
-        ASSERT_OK(_tablet_manager->publish_version(base_tablet_id, version, version + 1, &txn_id, 1));
+        ASSERT_OK(_tablet_manager->publish_version(base_tablet_id, version, version + 1, &txn_id, 1).status());
         version++;
         txn_id++;
     }
@@ -209,7 +209,7 @@ TEST_F(LinkedSchemaChangeTest, test_add_column) {
 
     SchemaChangeHandler handler;
     ASSERT_OK(handler.process_alter_tablet(request));
-    ASSERT_OK(_tablet_manager->publish_version(new_tablet_id, 1, version + 1, &txn_id, 1));
+    ASSERT_OK(_tablet_manager->publish_version(new_tablet_id, 1, version + 1, &txn_id, 1).status());
     version++;
     txn_id++;
 
@@ -389,7 +389,7 @@ TEST_F(DirectSchemaChangeTest, test_alter_column_type) {
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
-        ASSERT_OK(_tablet_manager->publish_version(base_tablet_id, version, version + 1, &txn_id, 1));
+        ASSERT_OK(_tablet_manager->publish_version(base_tablet_id, version, version + 1, &txn_id, 1).status());
         version++;
         txn_id++;
     }
@@ -399,7 +399,7 @@ TEST_F(DirectSchemaChangeTest, test_alter_column_type) {
         ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
-        ASSERT_OK(_tablet_manager->publish_version(base_tablet_id, version, version + 1, &txn_id, 1));
+        ASSERT_OK(_tablet_manager->publish_version(base_tablet_id, version, version + 1, &txn_id, 1).status());
         version++;
         txn_id++;
     }
@@ -415,7 +415,7 @@ TEST_F(DirectSchemaChangeTest, test_alter_column_type) {
 
     SchemaChangeHandler handler;
     ASSERT_OK(handler.process_alter_tablet(request));
-    ASSERT_OK(_tablet_manager->publish_version(new_tablet_id, 1, version + 1, &txn_id, 1));
+    ASSERT_OK(_tablet_manager->publish_version(new_tablet_id, 1, version + 1, &txn_id, 1).status());
     version++;
     txn_id++;
 
@@ -619,7 +619,7 @@ TEST_F(SortedSchemaChangeTest, test_alter_key_order) {
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
-        ASSERT_OK(_tablet_manager->publish_version(base_tablet_id, version, version + 1, &txn_id, 1));
+        ASSERT_OK(_tablet_manager->publish_version(base_tablet_id, version, version + 1, &txn_id, 1).status());
         version++;
         txn_id++;
     }
@@ -629,7 +629,7 @@ TEST_F(SortedSchemaChangeTest, test_alter_key_order) {
         ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
-        ASSERT_OK(_tablet_manager->publish_version(base_tablet_id, version, version + 1, &txn_id, 1));
+        ASSERT_OK(_tablet_manager->publish_version(base_tablet_id, version, version + 1, &txn_id, 1).status());
         version++;
         txn_id++;
     }
@@ -645,7 +645,7 @@ TEST_F(SortedSchemaChangeTest, test_alter_key_order) {
 
     SchemaChangeHandler handler;
     ASSERT_OK(handler.process_alter_tablet(request));
-    ASSERT_OK(_tablet_manager->publish_version(new_tablet_id, 1, version + 1, &txn_id, 1));
+    ASSERT_OK(_tablet_manager->publish_version(new_tablet_id, 1, version + 1, &txn_id, 1).status());
     version++;
     txn_id++;
 

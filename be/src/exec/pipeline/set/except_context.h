@@ -50,7 +50,7 @@ public:
     Status prepare(RuntimeState* state, const std::vector<ExprContext*>& build_exprs);
 
     // Called in the close phase of ExceptOutputSourceOperator.
-    void close(RuntimeState* state);
+    void close(RuntimeState* state) override;
 
     Status append_chunk_to_ht(RuntimeState* state, const ChunkPtr& chunk, const std::vector<ExprContext*>& dst_exprs);
 

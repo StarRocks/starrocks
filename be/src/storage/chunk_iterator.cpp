@@ -37,7 +37,7 @@ private:
         return _iter->get_next(chunk);
     }
 
-    Status do_get_next(Chunk* chunk, vector<uint32_t>* rowid) override {
+    Status do_get_next(Chunk* chunk, std::vector<uint32_t>* rowid) override {
         SCOPED_RAW_TIMER(&_cost);
         return _iter->get_next(chunk, rowid);
     }

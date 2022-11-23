@@ -179,6 +179,11 @@ public:
         _buffer.clear();
     }
 
+    void reset_cache() {
+        _cache_ok = false;
+        _cache.clear();
+    }
+
     Buffer<T>& get_pool() { return _pool; }
 
     const Buffer<T>& get_pool() const { return _pool; }

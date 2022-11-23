@@ -735,7 +735,7 @@ TEST_F(EncryptionFunctionsTest, md5sumNullTest) {
 
 inline int128_t str_to_int128(const std::string& value) {
     StringParser::ParseResult parse_res;
-    int128_t result = StringParser::string_to_int<int128_t>(value.data(), value.size(), 10, &parse_res);
+    auto result = StringParser::string_to_int<int128_t>(value.data(), value.size(), 10, &parse_res);
     return result;
 }
 

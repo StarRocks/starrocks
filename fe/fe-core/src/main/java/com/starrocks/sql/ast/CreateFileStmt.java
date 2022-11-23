@@ -12,7 +12,7 @@ import java.util.Optional;
 
 public class CreateFileStmt extends DdlStmt {
     public static final String PROP_CATALOG_DEFAULT = "DEFAULT";
-    private static final String PROP_CATALOG = "globalStateMgr";
+    private static final String PROP_CATALOG = "catalog";
     private static final String PROP_URL = "url";
     private static final String PROP_MD5 = "md5";
     private static final String PROP_SAVE_CONTENT = "save_content";

@@ -19,7 +19,7 @@ TypeDescriptor array_type(const TypeDescriptor& child_type) {
     return t;
 }
 
-TypeDescriptor array_type(const PrimitiveType& child_type) {
+TypeDescriptor array_type(const LogicalType& child_type) {
     TypeDescriptor t;
     t.type = TYPE_ARRAY;
     t.children.resize(1);
@@ -1922,6 +1922,21 @@ TEST_F(ArrayFunctionsTest, array_remove_nullable_array) {
         EXPECT_TRUE(result->get(1).is_null());
         EXPECT_TRUE(result->get(2).is_null());
     }
+    // array_remove(NULL,1)
+    {
+        auto array = ColumnHelper::create_const_null_column(3);
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_TINYINT), true);
+        target->append_datum(Datum((int8_t)2));
+        target->append_datum(Datum((int8_t)4));
+        target->append_datum(Datum());
+
+        auto result = ArrayFunctions::array_remove(nullptr, {array, target});
+        EXPECT_EQ(3, result->size());
+
+        EXPECT_TRUE(result->get(0).is_null());
+        EXPECT_TRUE(result->get(1).is_null());
+        EXPECT_TRUE(result->get(2).is_null());
+    }
 }
 
 // NOLINTNEXTLINE
@@ -2027,6 +2042,22 @@ TEST_F(ArrayFunctionsTest, array_append) {
         EXPECT_EQ(13, row[1].get_array()[1].get_int32());
         EXPECT_EQ(14, row[2].get_array()[0].get_int32());
         EXPECT_EQ(15, row[2].get_array()[1].get_int32());
+    }
+
+    // array_append(NULL,1)
+    {
+        auto array = ColumnHelper::create_const_null_column(3);
+        auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_TINYINT), true);
+        target->append_datum(Datum((int8_t)2));
+        target->append_datum(Datum((int8_t)4));
+        target->append_datum(Datum());
+
+        auto result = ArrayFunctions::array_append(nullptr, {array, target});
+        EXPECT_EQ(3, result->size());
+
+        EXPECT_TRUE(result->get(0).is_null());
+        EXPECT_TRUE(result->get(1).is_null());
+        EXPECT_TRUE(result->get(2).is_null());
     }
 }
 
@@ -3001,7 +3032,7 @@ TEST_F(ArrayFunctionsTest, array_reverse_int) {
     src_column->append_datum(DatumArray{2, 3, 7, 8});
     src_column->append_datum(DatumArray{4, 3, 2, 1});
 
-    ArrayReverse<PrimitiveType::TYPE_INT> reverse;
+    ArrayReverse<LogicalType::TYPE_INT> reverse;
     auto dest_column = reverse.process(nullptr, {src_column});
 
     ASSERT_EQ(dest_column->size(), 3);
@@ -3016,7 +3047,7 @@ TEST_F(ArrayFunctionsTest, array_reverse_string) {
     src_column->append_datum(DatumArray{"235", "99", "8", "43251"});
     src_column->append_datum(DatumArray{"44", "33", "22", "112"});
 
-    ArrayReverse<PrimitiveType::TYPE_VARCHAR> reverse;
+    ArrayReverse<LogicalType::TYPE_VARCHAR> reverse;
     auto dest_column = reverse.process(nullptr, {src_column});
 
     ASSERT_EQ(dest_column->size(), 3);
@@ -3031,7 +3062,7 @@ TEST_F(ArrayFunctionsTest, array_reverse_nullable_elements) {
     src_column->append_datum(DatumArray{2, 3, Datum(), Datum()});
     src_column->append_datum(DatumArray{Datum(), Datum(), Datum(), Datum()});
 
-    ArrayReverse<PrimitiveType::TYPE_INT> reverse;
+    ArrayReverse<LogicalType::TYPE_INT> reverse;
     auto dest_column = reverse.process(nullptr, {src_column});
 
     ASSERT_EQ(dest_column->size(), 3);
@@ -3046,7 +3077,7 @@ TEST_F(ArrayFunctionsTest, array_reverse_nullable_array) {
     src_column->append_datum(Datum());
     src_column->append_datum(DatumArray{Datum(), Datum(), Datum(), Datum()});
 
-    ArrayReverse<PrimitiveType::TYPE_INT> reverse;
+    ArrayReverse<LogicalType::TYPE_INT> reverse;
     auto dest_column = reverse.process(nullptr, {src_column});
 
     ASSERT_EQ(dest_column->size(), 3);
@@ -3058,7 +3089,7 @@ TEST_F(ArrayFunctionsTest, array_reverse_nullable_array) {
 TEST_F(ArrayFunctionsTest, array_reverse_only_null) {
     auto src_column = ColumnHelper::create_const_null_column(3);
 
-    ArrayReverse<PrimitiveType::TYPE_INT> reverse;
+    ArrayReverse<LogicalType::TYPE_INT> reverse;
     auto dest_column = reverse.process(nullptr, {src_column});
 
     ASSERT_EQ(dest_column->size(), 3);
@@ -3073,7 +3104,7 @@ TEST_F(ArrayFunctionsTest, array_difference_boolean) {
     src_column->append_datum(DatumArray{(uint8_t)2, (uint8_t)3, (uint8_t)7, (uint8_t)8});
     src_column->append_datum(DatumArray{(uint8_t)4, (uint8_t)3, (uint8_t)2, (uint8_t)1});
 
-    ArrayDifference<PrimitiveType::TYPE_BOOLEAN> difference;
+    ArrayDifference<LogicalType::TYPE_BOOLEAN> difference;
     auto dest_column = difference.process(nullptr, {src_column});
 
     ASSERT_EQ(dest_column->size(), 3);
@@ -3089,7 +3120,7 @@ TEST_F(ArrayFunctionsTest, array_difference_boolean_with_entry_null) {
     src_column->append_datum(DatumArray{(uint8_t)4, (uint8_t)3, (uint8_t)2, Datum()});
     src_column->append_datum(Datum());
 
-    ArrayDifference<PrimitiveType::TYPE_BOOLEAN> difference;
+    ArrayDifference<LogicalType::TYPE_BOOLEAN> difference;
     auto dest_column = difference.process(nullptr, {src_column});
 
     ASSERT_EQ(dest_column->size(), 4);
@@ -3116,7 +3147,7 @@ TEST_F(ArrayFunctionsTest, array_difference_int) {
     src_column->append_datum(DatumArray{2, 3, 7, 8});
     src_column->append_datum(DatumArray{4, 3, 2, 1});
 
-    ArrayDifference<PrimitiveType::TYPE_INT> difference;
+    ArrayDifference<LogicalType::TYPE_INT> difference;
     auto dest_column = difference.process(nullptr, {src_column});
 
     ASSERT_EQ(dest_column->size(), 3);
@@ -3132,7 +3163,7 @@ TEST_F(ArrayFunctionsTest, array_difference_int_with_entry_null) {
     src_column->append_datum(DatumArray{4, 3, 2, Datum()});
     src_column->append_datum(Datum());
 
-    ArrayDifference<PrimitiveType::TYPE_INT> difference;
+    ArrayDifference<LogicalType::TYPE_INT> difference;
     auto dest_column = difference.process(nullptr, {src_column});
 
     ASSERT_EQ(dest_column->size(), 4);
@@ -3159,7 +3190,7 @@ TEST_F(ArrayFunctionsTest, array_difference_bigint) {
     src_column->append_datum(DatumArray{(int64_t)2, (int64_t)3, (int64_t)7, (int64_t)8});
     src_column->append_datum(DatumArray{(int64_t)4, (int64_t)3, (int64_t)2, (int64_t)1});
 
-    ArrayDifference<PrimitiveType::TYPE_BIGINT> difference;
+    ArrayDifference<LogicalType::TYPE_BIGINT> difference;
     auto dest_column = difference.process(nullptr, {src_column});
 
     ASSERT_EQ(dest_column->size(), 3);
@@ -3175,7 +3206,7 @@ TEST_F(ArrayFunctionsTest, array_difference_bigint_with_entry_null) {
     src_column->append_datum(DatumArray{(int64_t)4, (int64_t)3, (int64_t)2, Datum()});
     src_column->append_datum(Datum());
 
-    ArrayDifference<PrimitiveType::TYPE_BIGINT> difference;
+    ArrayDifference<LogicalType::TYPE_BIGINT> difference;
     auto dest_column = difference.process(nullptr, {src_column});
 
     ASSERT_EQ(dest_column->size(), 4);
@@ -3202,7 +3233,7 @@ TEST_F(ArrayFunctionsTest, array_difference_double) {
     src_column->append_datum(DatumArray{(double)2, (double)3, (double)7, (double)8});
     src_column->append_datum(DatumArray{(double)4, (double)3, (double)2, (double)1});
 
-    ArrayDifference<PrimitiveType::TYPE_DOUBLE> difference;
+    ArrayDifference<LogicalType::TYPE_DOUBLE> difference;
     auto dest_column = difference.process(nullptr, {src_column});
 
     ASSERT_EQ(dest_column->size(), 3);
@@ -3242,7 +3273,7 @@ TEST_F(ArrayFunctionsTest, array_slice_int) {
     length_column->append(3);
     length_column->append(3);
 
-    ArraySlice<PrimitiveType::TYPE_INT> slice;
+    ArraySlice<LogicalType::TYPE_INT> slice;
     auto dest_column = slice.process(nullptr, {src_column, offset_column, length_column});
 
     ASSERT_EQ(dest_column->size(), 8);
@@ -3279,7 +3310,7 @@ TEST_F(ArrayFunctionsTest, array_slice_bigint) {
     length_column->append(1);
     length_column->append(2);
 
-    ArraySlice<PrimitiveType::TYPE_BIGINT> slice;
+    ArraySlice<LogicalType::TYPE_BIGINT> slice;
     auto dest_column = slice.process(nullptr, {src_column, offset_column, length_column});
 
     ASSERT_EQ(dest_column->size(), 5);
@@ -3313,7 +3344,7 @@ TEST_F(ArrayFunctionsTest, array_slice_float) {
     length_column->append(1);
     length_column->append(2);
 
-    ArraySlice<PrimitiveType::TYPE_FLOAT> slice;
+    ArraySlice<LogicalType::TYPE_FLOAT> slice;
     auto dest_column = slice.process(nullptr, {src_column, offset_column, length_column});
 
     ASSERT_EQ(dest_column->size(), 5);
@@ -3347,7 +3378,7 @@ TEST_F(ArrayFunctionsTest, array_slice_double) {
     length_column->append(1);
     length_column->append(2);
 
-    ArraySlice<PrimitiveType::TYPE_DOUBLE> slice;
+    ArraySlice<LogicalType::TYPE_DOUBLE> slice;
     auto dest_column = slice.process(nullptr, {src_column, offset_column, length_column});
 
     ASSERT_EQ(dest_column->size(), 5);
@@ -3381,7 +3412,7 @@ TEST_F(ArrayFunctionsTest, array_slice_varchar) {
     length_column->append(1);
     length_column->append(2);
 
-    ArraySlice<PrimitiveType::TYPE_VARCHAR> slice;
+    ArraySlice<LogicalType::TYPE_VARCHAR> slice;
     auto dest_column = slice.process(nullptr, {src_column, offset_column, length_column});
 
     ASSERT_EQ(dest_column->size(), 5);
@@ -3408,7 +3439,7 @@ TEST_F(ArrayFunctionsTest, array_slice_bigint_only_offset) {
     offset_column->append(1);
     offset_column->append(2);
 
-    ArraySlice<PrimitiveType::TYPE_BIGINT> slice;
+    ArraySlice<LogicalType::TYPE_BIGINT> slice;
     auto dest_column = slice.process(nullptr, {src_column, offset_column});
 
     ASSERT_EQ(dest_column->size(), 5);
@@ -3436,7 +3467,7 @@ TEST_F(ArrayFunctionsTest, array_slice_double_only_offset) {
     offset_column->append(1);
     offset_column->append(2);
 
-    ArraySlice<PrimitiveType::TYPE_DOUBLE> slice;
+    ArraySlice<LogicalType::TYPE_DOUBLE> slice;
     auto dest_column = slice.process(nullptr, {src_column, offset_column});
 
     ASSERT_EQ(dest_column->size(), 5);
@@ -3464,7 +3495,7 @@ TEST_F(ArrayFunctionsTest, array_slice_varchar_only_offset) {
     offset_column->append(1);
     offset_column->append(2);
 
-    ArraySlice<PrimitiveType::TYPE_VARCHAR> slice;
+    ArraySlice<LogicalType::TYPE_VARCHAR> slice;
     auto dest_column = slice.process(nullptr, {src_column, offset_column});
 
     ASSERT_EQ(dest_column->size(), 5);
@@ -3499,7 +3530,7 @@ TEST_F(ArrayFunctionsTest, array_concat_tinyint) {
     src_column3->append_datum(DatumArray{(int8_t)100});
     src_column3->append_datum(DatumArray{(int8_t)4, Datum(), (int8_t)2, (int8_t)1});
 
-    ArrayConcat<PrimitiveType::TYPE_TINYINT> concat;
+    ArrayConcat<LogicalType::TYPE_TINYINT> concat;
     auto dest_column = concat.process(nullptr, {src_column, src_column2, src_column3});
 
     ASSERT_EQ(dest_column->size(), 5);
@@ -3540,7 +3571,7 @@ TEST_F(ArrayFunctionsTest, array_concat_tinyint_not_nullable) {
     src_column3->append_datum(DatumArray{(int8_t)2, (int8_t)1});
     src_column3->append_datum(DatumArray{(int8_t)4, Datum(), (int8_t)2, (int8_t)1});
 
-    ArrayConcat<PrimitiveType::TYPE_TINYINT> concat;
+    ArrayConcat<LogicalType::TYPE_TINYINT> concat;
     auto dest_column = concat.process(nullptr, {src_column, src_column2, src_column3});
 
     ASSERT_EQ(dest_column->size(), 4);
@@ -3582,7 +3613,7 @@ TEST_F(ArrayFunctionsTest, array_concat_bigint) {
     src_column3->append_datum(DatumArray{(int64_t)100});
     src_column3->append_datum(DatumArray{(int64_t)4, Datum(), (int64_t)2, (int64_t)1});
 
-    ArrayConcat<PrimitiveType::TYPE_BIGINT> concat;
+    ArrayConcat<LogicalType::TYPE_BIGINT> concat;
     auto dest_column = concat.process(nullptr, {src_column, src_column2, src_column3});
 
     ASSERT_EQ(dest_column->size(), 5);
@@ -3623,7 +3654,7 @@ TEST_F(ArrayFunctionsTest, array_concat_bigint_not_nullable) {
     src_column3->append_datum(DatumArray{(int64_t)2, (int64_t)1});
     src_column3->append_datum(DatumArray{(int64_t)4, Datum(), (int64_t)2, (int64_t)1});
 
-    ArrayConcat<PrimitiveType::TYPE_BIGINT> concat;
+    ArrayConcat<LogicalType::TYPE_BIGINT> concat;
     auto dest_column = concat.process(nullptr, {src_column, src_column2, src_column3});
 
     ASSERT_EQ(dest_column->size(), 4);
@@ -3665,7 +3696,7 @@ TEST_F(ArrayFunctionsTest, array_concat_double) {
     src_column3->append_datum(DatumArray{(double)100});
     src_column3->append_datum(DatumArray{(double)4, Datum(), (double)2, (double)1});
 
-    ArrayConcat<PrimitiveType::TYPE_DOUBLE> concat;
+    ArrayConcat<LogicalType::TYPE_DOUBLE> concat;
     auto dest_column = concat.process(nullptr, {src_column, src_column2, src_column3});
 
     ASSERT_EQ(dest_column->size(), 5);
@@ -3706,7 +3737,7 @@ TEST_F(ArrayFunctionsTest, array_concat_double_not_nullable) {
     src_column3->append_datum(DatumArray{(double)2, (double)1});
     src_column3->append_datum(DatumArray{(double)4, Datum(), (double)2, (double)1});
 
-    ArrayConcat<PrimitiveType::TYPE_DOUBLE> concat;
+    ArrayConcat<LogicalType::TYPE_DOUBLE> concat;
     auto dest_column = concat.process(nullptr, {src_column, src_column2, src_column3});
 
     ASSERT_EQ(dest_column->size(), 4);
@@ -3748,7 +3779,7 @@ TEST_F(ArrayFunctionsTest, array_concat_varchar) {
     src_column3->append_datum(DatumArray{Slice("100")});
     src_column3->append_datum(DatumArray{Slice("4"), Datum(), Slice("2"), Slice("1")});
 
-    ArrayConcat<PrimitiveType::TYPE_VARCHAR> concat;
+    ArrayConcat<LogicalType::TYPE_VARCHAR> concat;
     auto dest_column = concat.process(nullptr, {src_column, src_column2, src_column3});
 
     ASSERT_EQ(dest_column->size(), 5);
@@ -3789,7 +3820,7 @@ TEST_F(ArrayFunctionsTest, array_concat_varchar_not_nullable) {
     src_column3->append_datum(DatumArray{Slice("2"), Slice("1")});
     src_column3->append_datum(DatumArray{Slice("4"), Datum(), Slice("2"), Slice("1")});
 
-    ArrayConcat<PrimitiveType::TYPE_VARCHAR> concat;
+    ArrayConcat<LogicalType::TYPE_VARCHAR> concat;
     auto dest_column = concat.process(nullptr, {src_column, src_column2, src_column3});
 
     ASSERT_EQ(dest_column->size(), 4);
@@ -3824,7 +3855,7 @@ TEST_F(ArrayFunctionsTest, array_overlap_tinyint_with_nullable) {
     src_column2->append_datum(DatumArray{(int8_t)4, (int8_t)9});
     src_column2->append_datum(DatumArray{(int8_t)4, Datum()});
 
-    ArrayOverlap<PrimitiveType::TYPE_TINYINT> overlap;
+    ArrayOverlap<LogicalType::TYPE_TINYINT> overlap;
     auto dest_column = overlap.process(nullptr, {src_column, src_column2});
 
     ASSERT_TRUE(dest_column->is_nullable());
@@ -3856,7 +3887,7 @@ TEST_F(ArrayFunctionsTest, array_overlap_tinyint) {
     src_column2->append_datum(DatumArray{(int8_t)4, (int8_t)9});
     src_column2->append_datum(DatumArray{(int8_t)4, Datum()});
 
-    ArrayOverlap<PrimitiveType::TYPE_TINYINT> overlap;
+    ArrayOverlap<LogicalType::TYPE_TINYINT> overlap;
     auto dest_column = overlap.process(nullptr, {src_column, src_column2});
 
     ASSERT_TRUE(!dest_column->is_nullable());
@@ -3886,7 +3917,7 @@ TEST_F(ArrayFunctionsTest, array_overlap_bigint_with_nullable) {
     src_column2->append_datum(DatumArray{(int64_t)4, (int64_t)9});
     src_column2->append_datum(DatumArray{(int64_t)4, Datum()});
 
-    ArrayOverlap<PrimitiveType::TYPE_BIGINT> overlap;
+    ArrayOverlap<LogicalType::TYPE_BIGINT> overlap;
     auto dest_column = overlap.process(nullptr, {src_column, src_column2});
 
     ASSERT_TRUE(dest_column->is_nullable());
@@ -3918,7 +3949,7 @@ TEST_F(ArrayFunctionsTest, array_overlap_bigint) {
     src_column2->append_datum(DatumArray{(int64_t)4, (int64_t)9});
     src_column2->append_datum(DatumArray{(int64_t)4, Datum()});
 
-    ArrayOverlap<PrimitiveType::TYPE_BIGINT> overlap;
+    ArrayOverlap<LogicalType::TYPE_BIGINT> overlap;
     auto dest_column = overlap.process(nullptr, {src_column, src_column2});
 
     ASSERT_TRUE(!dest_column->is_nullable());
@@ -3948,7 +3979,7 @@ TEST_F(ArrayFunctionsTest, array_overlap_double_with_nullable) {
     src_column2->append_datum(DatumArray{(double)4, (double)9});
     src_column2->append_datum(DatumArray{(double)4, Datum()});
 
-    ArrayOverlap<PrimitiveType::TYPE_DOUBLE> overlap;
+    ArrayOverlap<LogicalType::TYPE_DOUBLE> overlap;
     auto dest_column = overlap.process(nullptr, {src_column, src_column2});
 
     ASSERT_TRUE(dest_column->is_nullable());
@@ -3980,7 +4011,7 @@ TEST_F(ArrayFunctionsTest, array_overlap_double) {
     src_column2->append_datum(DatumArray{(double)4, (double)9});
     src_column2->append_datum(DatumArray{(double)4, Datum()});
 
-    ArrayOverlap<PrimitiveType::TYPE_DOUBLE> overlap;
+    ArrayOverlap<LogicalType::TYPE_DOUBLE> overlap;
     auto dest_column = overlap.process(nullptr, {src_column, src_column2});
 
     ASSERT_TRUE(!dest_column->is_nullable());
@@ -4010,7 +4041,7 @@ TEST_F(ArrayFunctionsTest, array_overlap_varchar_with_nullable) {
     src_column2->append_datum(DatumArray{Slice("4"), Slice("9")});
     src_column2->append_datum(DatumArray{Slice("4"), Datum()});
 
-    ArrayOverlap<PrimitiveType::TYPE_VARCHAR> overlap;
+    ArrayOverlap<LogicalType::TYPE_VARCHAR> overlap;
     auto dest_column = overlap.process(nullptr, {src_column, src_column2});
 
     ASSERT_TRUE(dest_column->is_nullable());
@@ -4042,7 +4073,7 @@ TEST_F(ArrayFunctionsTest, array_overlap_varchar) {
     src_column2->append_datum(DatumArray{Slice("4"), Slice("9")});
     src_column2->append_datum(DatumArray{Slice("4"), Datum()});
 
-    ArrayOverlap<PrimitiveType::TYPE_VARCHAR> overlap;
+    ArrayOverlap<LogicalType::TYPE_VARCHAR> overlap;
     auto dest_column = overlap.process(nullptr, {src_column, src_column2});
 
     ASSERT_TRUE(!dest_column->is_nullable());
@@ -4063,7 +4094,7 @@ TEST_F(ArrayFunctionsTest, array_overlap_with_onlynull) {
 
     auto src_column2 = ColumnHelper::create_const_null_column(1);
 
-    ArrayOverlap<PrimitiveType::TYPE_TINYINT> overlap;
+    ArrayOverlap<LogicalType::TYPE_TINYINT> overlap;
     auto dest_column = overlap.process(nullptr, {src_column, src_column2});
 
     ASSERT_TRUE(dest_column->only_null());
@@ -4088,7 +4119,7 @@ TEST_F(ArrayFunctionsTest, array_intersect_int) {
     src_column3->append_datum(DatumArray{(int32_t)(4), (int32_t)(1)});
     src_column3->append_datum(DatumArray{(int32_t)(100)});
 
-    ArrayIntersect<PrimitiveType::TYPE_INT> intersect;
+    ArrayIntersect<LogicalType::TYPE_INT> intersect;
     auto dest_column = intersect.process(nullptr, {src_column, src_column2, src_column3});
 
     ASSERT_EQ(dest_column->size(), 4);
@@ -4117,7 +4148,7 @@ TEST_F(ArrayFunctionsTest, array_intersect_int_with_not_null) {
     src_column3->append_datum(DatumArray{(int32_t)(4), (int32_t)(1)});
     src_column3->append_datum(DatumArray{(int32_t)(4), Datum(), (int32_t)(2), (int32_t)(22), (int32_t)(1)});
 
-    ArrayIntersect<PrimitiveType::TYPE_INT> intersect;
+    ArrayIntersect<LogicalType::TYPE_INT> intersect;
     auto dest_column = intersect.process(nullptr, {src_column, src_column2, src_column3});
 
     ASSERT_EQ(dest_column->size(), 4);
@@ -4170,7 +4201,7 @@ TEST_F(ArrayFunctionsTest, array_intersect_varchar) {
     src_column3->append_datum(DatumArray{Slice("4"), Slice("1")});
     src_column3->append_datum(DatumArray{Slice("100")});
 
-    ArrayIntersect<PrimitiveType::TYPE_VARCHAR> intersect;
+    ArrayIntersect<LogicalType::TYPE_VARCHAR> intersect;
     auto dest_column = intersect.process(nullptr, {src_column, src_column2, src_column3});
 
     ASSERT_EQ(dest_column->size(), 4);
@@ -4199,7 +4230,7 @@ TEST_F(ArrayFunctionsTest, array_intersect_varchar_with_not_null) {
     src_column3->append_datum(DatumArray{Slice("4"), Slice("1")});
     src_column3->append_datum(DatumArray{Slice("4"), Datum(), Slice("2"), Slice("22"), Slice("1")});
 
-    ArrayIntersect<PrimitiveType::TYPE_VARCHAR> intersect;
+    ArrayIntersect<LogicalType::TYPE_VARCHAR> intersect;
     auto dest_column = intersect.process(nullptr, {src_column, src_column2, src_column3});
 
     ASSERT_EQ(dest_column->size(), 4);
@@ -4241,10 +4272,10 @@ TEST_F(ArrayFunctionsTest, array_join_string) {
     src_column->append_datum(DatumArray{"44", "33", "22", "112"});
 
     Slice sep_str("__");
-    auto sep_column = ColumnHelper::create_const_column<PrimitiveType::TYPE_VARCHAR>(sep_str, 3);
+    auto sep_column = ColumnHelper::create_const_column<LogicalType::TYPE_VARCHAR>(sep_str, 3);
 
     Slice null_str("NULL");
-    auto null_column = ColumnHelper::create_const_column<PrimitiveType::TYPE_VARCHAR>(null_str, 3);
+    auto null_column = ColumnHelper::create_const_column<LogicalType::TYPE_VARCHAR>(null_str, 3);
 
     auto dest_column = ArrayJoin::process(nullptr, {src_column, sep_column});
     ASSERT_EQ(dest_column->size(), 3);
@@ -4267,10 +4298,10 @@ TEST_F(ArrayFunctionsTest, array_join_nullable_elements) {
     src_column->append_datum(DatumArray{Datum(), Datum(), Datum(), Datum()});
 
     Slice sep_str("__");
-    auto sep_column = ColumnHelper::create_const_column<PrimitiveType::TYPE_VARCHAR>(sep_str, 3);
+    auto sep_column = ColumnHelper::create_const_column<LogicalType::TYPE_VARCHAR>(sep_str, 3);
 
     Slice null_str("NULL");
-    auto null_column = ColumnHelper::create_const_column<PrimitiveType::TYPE_VARCHAR>(null_str, 3);
+    auto null_column = ColumnHelper::create_const_column<LogicalType::TYPE_VARCHAR>(null_str, 3);
 
     auto dest_column = ArrayJoin::process(nullptr, {src_column, sep_column});
     ASSERT_EQ(dest_column->size(), 3);
@@ -4293,10 +4324,10 @@ TEST_F(ArrayFunctionsTest, array_join_nullable_array) {
     src_column->append_datum(DatumArray{Datum(), Datum(), Datum(), Datum()});
 
     Slice sep_str("__");
-    auto sep_column = ColumnHelper::create_const_column<PrimitiveType::TYPE_VARCHAR>(sep_str, 3);
+    auto sep_column = ColumnHelper::create_const_column<LogicalType::TYPE_VARCHAR>(sep_str, 3);
 
     Slice null_str("NULL");
-    auto null_column = ColumnHelper::create_const_column<PrimitiveType::TYPE_VARCHAR>(null_str, 3);
+    auto null_column = ColumnHelper::create_const_column<LogicalType::TYPE_VARCHAR>(null_str, 3);
 
     auto dest_column = ArrayJoin::process(nullptr, {src_column, sep_column});
     ASSERT_EQ(dest_column->size(), 3);
@@ -4316,10 +4347,10 @@ TEST_F(ArrayFunctionsTest, array_join_only_null) {
     auto src_column = ColumnHelper::create_const_null_column(3);
 
     Slice sep_str("__");
-    auto sep_column = ColumnHelper::create_const_column<PrimitiveType::TYPE_VARCHAR>(sep_str, 3);
+    auto sep_column = ColumnHelper::create_const_column<LogicalType::TYPE_VARCHAR>(sep_str, 3);
 
     Slice null_str("NULL");
-    auto null_column = ColumnHelper::create_const_column<PrimitiveType::TYPE_VARCHAR>(null_str, 3);
+    auto null_column = ColumnHelper::create_const_column<LogicalType::TYPE_VARCHAR>(null_str, 3);
 
     auto dest_column = ArrayJoin::process(nullptr, {src_column, sep_column});
     ASSERT_EQ(dest_column->size(), 3);

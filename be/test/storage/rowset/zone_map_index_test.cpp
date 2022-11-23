@@ -49,7 +49,8 @@ protected:
     void test_string(const std::string& testname, Field* field) {
         std::string filename = kTestDir + "/" + testname;
 
-        std::unique_ptr<ZoneMapIndexWriter> builder = ZoneMapIndexWriter::create(field);
+        std::unique_ptr<ZoneMapIndexWriter> builder =
+                ZoneMapIndexWriter::create(field->type_info().get(), field->length());
         std::vector<std::string> values1 = {"aaaa", "bbbb", "cccc", "dddd", "eeee", "ffff"};
         for (auto& value : values1) {
             Slice slice(value);
@@ -107,7 +108,7 @@ TEST_F(ColumnZoneMapTest, NormalTestIntPage) {
     TabletColumn int_column = create_int_key(0);
     Field* field = FieldFactory::create(int_column);
 
-    std::unique_ptr<ZoneMapIndexWriter> builder = ZoneMapIndexWriter::create(field);
+    std::unique_ptr<ZoneMapIndexWriter> builder = ZoneMapIndexWriter::create(field->type_info().get(), field->length());
     std::vector<int> values1 = {1, 10, 11, 20, 21, 22};
     for (auto value : values1) {
         builder->add_values((const uint8_t*)&value, 1);

@@ -18,6 +18,7 @@
 #include "util/time.h"
 
 #include <chrono>
+#include <cmath>
 #include <cstdlib>
 #include <iomanip>
 #include <sstream>
@@ -53,20 +54,20 @@ static string TimepointToString(const chrono::system_clock::time_point& t, bool 
 // Format the sub-second part of the input time point object 't', at the
 // precision specified by 'p'. The returned string is meant to be appended to
 // the string returned by TimePointToString() above.
-// Note the use of abs(). This is to make sure we correctly format negative times,
+// Note the use of std::abs(). This is to make sure we correctly format negative times,
 // i.e., times before the Unix epoch.
 static string FormatSubSecond(const chrono::system_clock::time_point& t, TimePrecision p) {
     std::stringstream ss;
     auto frac = t.time_since_epoch();
     if (p == TimePrecision::Millisecond) {
         auto subsec = chrono::duration_cast<chrono::milliseconds>(frac) % MILLIS_PER_SEC;
-        ss << "." << std::setfill('0') << std::setw(3) << abs(subsec.count());
+        ss << "." << std::setfill('0') << std::setw(3) << std::abs(subsec.count());
     } else if (p == TimePrecision::Microsecond) {
         auto subsec = chrono::duration_cast<chrono::microseconds>(frac) % MICROS_PER_SEC;
-        ss << "." << std::setfill('0') << std::setw(6) << abs(subsec.count());
+        ss << "." << std::setfill('0') << std::setw(6) << std::abs(subsec.count());
     } else if (p == TimePrecision::Nanosecond) {
         auto subsec = chrono::duration_cast<chrono::nanoseconds>(frac) % NANOS_PER_SEC;
-        ss << "." << std::setfill('0') << std::setw(9) << abs(subsec.count());
+        ss << "." << std::setfill('0') << std::setw(9) << std::abs(subsec.count());
     } else {
         // 1-second precision or unknown unit. Return empty string.
         DCHECK_EQ(TimePrecision::Second, p);

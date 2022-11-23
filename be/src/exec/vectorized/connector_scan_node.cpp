@@ -53,7 +53,8 @@ inline bool atomic_cas(std::atomic_bool* lvalue, std::atomic_bool* rvalue, bool 
 
 class ConnectorScanner {
 public:
-    ConnectorScanner(connector::DataSourcePtr&& data_source) : _data_source(std::move(data_source)) {}
+    ConnectorScanner(connector::DataSourcePtr&& data_source, RuntimeProfile* runtime_profile)
+            : _data_source(std::move(data_source)), _runtime_profile(runtime_profile) {}
 
     Status init(RuntimeState* state) {
         _runtime_state = state;
@@ -61,12 +62,16 @@ public:
     }
     Status open(RuntimeState* state) {
         if (_opened) return Status::OK();
+
+        _scan_timer = ADD_TIMER(_runtime_profile, "ScanTime");
+        SCOPED_TIMER(_scan_timer);
         RETURN_IF_ERROR(_data_source->open(state));
         _opened = true;
         return Status::OK();
     }
     void close(RuntimeState* state) { _data_source->close(state); }
     Status get_next(RuntimeState* state, ChunkPtr* chunk) {
+        SCOPED_TIMER(_scan_timer);
         RETURN_IF_ERROR(_data_source->get_next(state, chunk));
         return Status::OK();
     }
@@ -107,6 +112,8 @@ private:
     bool _keep_priority = false;
     std::atomic_bool _pending_token = false;
     MonotonicStopWatch _pending_queue_sw;
+    RuntimeProfile* _runtime_profile = nullptr;
+    RuntimeProfile::Counter* _scan_timer = nullptr;
 };
 
 // ======================================================
@@ -214,7 +221,7 @@ Status ConnectorScanNode::_create_and_init_scanner(RuntimeState* state, TScanRan
     data_source->set_runtime_filters(&_runtime_filter_collector);
     data_source->set_read_limit(_limit);
     data_source->set_runtime_profile(_runtime_profile.get());
-    ConnectorScanner* scanner = _pool->add(new ConnectorScanner(std::move(data_source)));
+    ConnectorScanner* scanner = _pool->add(new ConnectorScanner(std::move(data_source), _runtime_profile.get()));
     scanner->init(state);
     _push_pending_scanner(scanner);
     return Status::OK();

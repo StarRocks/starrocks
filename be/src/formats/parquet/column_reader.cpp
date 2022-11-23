@@ -185,8 +185,7 @@ public:
     Status prepare_batch(size_t* num_records, ColumnContentType content_type, vectorized::Column* dst) override {
         vectorized::NullableColumn* nullable_column = nullptr;
         vectorized::MapColumn* map_column = nullptr;
-        if (_field->is_nullable) {
-            DCHECK(dst->is_nullable());
+        if (dst->is_nullable()) {
             nullable_column = down_cast<vectorized::NullableColumn*>(dst);
             DCHECK(nullable_column->mutable_data_column()->is_map());
             map_column = down_cast<vectorized::MapColumn*>(nullable_column->mutable_data_column());
@@ -195,23 +194,34 @@ public:
             map_column = down_cast<vectorized::MapColumn*>(dst);
         }
         auto* key_column = map_column->keys_column().get();
-        // read key
-        auto st = _key_reader->prepare_batch(num_records, content_type, key_column);
-        if (!st.ok() && !st.is_end_of_file()) {
-            return st;
+        auto* value_column = map_column->values_column().get();
+        Status st;
+        if (_key_reader != nullptr) {
+            st = _key_reader->prepare_batch(num_records, content_type, key_column);
+            if (!st.ok() && !st.is_end_of_file()) {
+                return st;
+            }
         }
 
-        // read value
-        auto* value_column = map_column->values_column().get();
-        st = _value_reader->prepare_batch(num_records, content_type, value_column);
+        if (_value_reader != nullptr) {
+            st = _value_reader->prepare_batch(num_records, content_type, value_column);
+            if (!st.ok() && !st.is_end_of_file()) {
+                return st;
+            }
+        }
 
-        // check the value_column size is the same with key_column
-        DCHECK(value_column->size() == key_column->size());
+        // if neither key_reader not value_reader is nullptr , check the value_column size is the same with key_column
+        DCHECK((_key_reader == nullptr) || (_value_reader == nullptr) || (value_column->size() == key_column->size()));
 
         level_t* def_levels = nullptr;
         level_t* rep_levels = nullptr;
         size_t num_levels = 0;
-        _key_reader->get_levels(&def_levels, &rep_levels, &num_levels);
+
+        if (_key_reader != nullptr) {
+            _key_reader->get_levels(&def_levels, &rep_levels, &num_levels);
+        } else {
+            _value_reader->get_levels(&def_levels, &rep_levels, &num_levels);
+        }
 
         auto& offsets = map_column->offsets_column()->get_data();
         offsets.resize(num_levels + 1);
@@ -219,15 +229,22 @@ public:
         auto& is_nulls = null_column.get_data();
         size_t num_offsets = 0;
         bool has_null = false;
-        // use key's def_levels, rep_levels, num_level to compute offset and nullable
+
         // ParquetFiled Map -> Map<Struct<key,value>>
-        def_rep_to_offset(_field->children[0].level_info, def_levels, rep_levels, num_levels, &offsets[0], &is_nulls[0],
+        def_rep_to_offset(_field->level_info, def_levels, rep_levels, num_levels, &offsets[0], &is_nulls[0],
                           &num_offsets, &has_null);
         offsets.resize(num_offsets + 1);
         is_nulls.resize(num_offsets);
 
-        if (_field->is_nullable) {
-            DCHECK(dst->is_nullable());
+        // fill with default
+        if (_key_reader == nullptr) {
+            key_column->append_default(offsets.back());
+        }
+        if (_value_reader == nullptr) {
+            value_column->append_default(offsets.back());
+        }
+
+        if (dst->is_nullable()) {
             DCHECK(nullable_column != nullptr);
             nullable_column->mutable_null_column()->swap_column(null_column);
             nullable_column->set_has_null(has_null);
@@ -240,7 +257,11 @@ public:
 
     void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) override {
         // check _value_reader
-        _key_reader->get_levels(def_levels, rep_levels, num_levels);
+        if (_key_reader != nullptr) {
+            _key_reader->get_levels(def_levels, rep_levels, num_levels);
+        } else {
+            _value_reader->get_levels(def_levels, rep_levels, num_levels);
+        }
     }
 
 private:
@@ -263,8 +284,7 @@ public:
     Status prepare_batch(size_t* num_records, ColumnContentType content_type, vectorized::Column* dst) override {
         vectorized::NullableColumn* nullable_column = nullptr;
         vectorized::StructColumn* struct_column = nullptr;
-        if (_field->is_nullable) {
-            DCHECK(dst->is_nullable());
+        if (dst->is_nullable()) {
             nullable_column = down_cast<vectorized::NullableColumn*>(dst);
             DCHECK(nullable_column->mutable_data_column()->is_struct());
             struct_column = down_cast<vectorized::StructColumn*>(nullable_column->mutable_data_column());
@@ -282,8 +302,7 @@ public:
             RETURN_IF_ERROR(_child_readers[i]->prepare_batch(num_records, content_type, child_column));
         }
 
-        if (_field->is_nullable) {
-            DCHECK(dst->is_nullable());
+        if (dst->is_nullable()) {
             DCHECK(nullable_column != nullptr);
             // Assume all rows are not null in struct level.
             // Use subfield's NullableColumn instead.
@@ -309,26 +328,30 @@ private:
 
 Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField* field, const TypeDescriptor& col_type,
                             std::unique_ptr<ColumnReader>* output) {
-    if (field->type.type == PrimitiveType::TYPE_ARRAY) {
+    if (field->type.type == LogicalType::TYPE_ARRAY) {
         std::unique_ptr<ColumnReader> child_reader;
         RETURN_IF_ERROR(ColumnReader::create(opts, &field->children[0], col_type.children[0], &child_reader));
         std::unique_ptr<ListColumnReader> reader(new ListColumnReader(opts));
         RETURN_IF_ERROR(reader->init(field, std::move(child_reader)));
         *output = std::move(reader);
-    } else if (field->type.type == PrimitiveType::TYPE_MAP) {
+    } else if (field->type.type == LogicalType::TYPE_MAP) {
         std::unique_ptr<ColumnReader> key_reader;
         // ParquetFiled Map -> Map<Struct<key,value>>
         DCHECK(field->children[0].type.type == TYPE_STRUCT);
         DCHECK(field->children[0].children.size() == 2);
-        RETURN_IF_ERROR(
-                ColumnReader::create(opts, &(field->children[0].children[0]), col_type.children[0], &key_reader));
+        if (col_type.selected_fields[0]) {
+            RETURN_IF_ERROR(
+                    ColumnReader::create(opts, &(field->children[0].children[0]), col_type.children[0], &key_reader));
+        }
         std::unique_ptr<ColumnReader> value_reader;
-        RETURN_IF_ERROR(
-                ColumnReader::create(opts, &(field->children[0].children[1]), col_type.children[1], &value_reader));
+        if (col_type.selected_fields[1]) {
+            RETURN_IF_ERROR(
+                    ColumnReader::create(opts, &(field->children[0].children[1]), col_type.children[1], &value_reader));
+        }
         std::unique_ptr<MapColumnReader> reader(new MapColumnReader(opts));
         RETURN_IF_ERROR(reader->init(field, std::move(key_reader), std::move(value_reader)));
         *output = std::move(reader);
-    } else if (field->type.type == PrimitiveType::TYPE_STRUCT) {
+    } else if (field->type.type == LogicalType::TYPE_STRUCT) {
         // build tmp mapping for ParquetField
         std::unordered_map<std::string, size_t> field_name_2_pos;
         for (size_t i = 0; i < field->children.size(); i++) {

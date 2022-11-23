@@ -32,7 +32,7 @@ void AggregateFuncResolver::register_bitmap() {
 }
 
 struct MinMaxAnyDispatcher {
-    template <PrimitiveType pt>
+    template <LogicalType pt>
     void operator()(AggregateFuncResolver* resolver) {
         if constexpr (pt_is_aggregate<pt> || pt_is_string<pt>) {
             resolver->add_aggregate_mapping<pt, pt, MinAggregateData<pt>>(
@@ -49,9 +49,9 @@ struct MinMaxAnyDispatcher {
     }
 };
 
-template <PrimitiveType ret_type>
+template <LogicalType ret_type>
 struct MaxByDispatcherInner {
-    template <PrimitiveType arg_type>
+    template <LogicalType arg_type>
     void operator()(AggregateFuncResolver* resolver) {
         if constexpr ((pt_is_aggregate<arg_type> || pt_is_string<arg_type>)&&(pt_is_aggregate<ret_type> ||
                                                                               pt_is_string<ret_type>)) {
@@ -62,8 +62,8 @@ struct MaxByDispatcherInner {
 };
 
 struct MaxByDispatcher {
-    template <PrimitiveType pt>
-    void operator()(AggregateFuncResolver* resolver, PrimitiveType ret_type) {
+    template <LogicalType pt>
+    void operator()(AggregateFuncResolver* resolver, LogicalType ret_type) {
         type_dispatch_all(ret_type, MaxByDispatcherInner<pt>(), resolver);
     }
 };
@@ -78,6 +78,7 @@ void AggregateFuncResolver::register_minmaxany() {
     for (auto type : aggregate_types()) {
         type_dispatch_all(type, MinMaxAnyDispatcher(), this);
     }
+    type_dispatch_all(TYPE_JSON, MinMaxAnyDispatcher(), this);
 }
 
 } // namespace starrocks::vectorized

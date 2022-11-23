@@ -20,7 +20,7 @@ import com.starrocks.sql.ast.AdminRepairTableStmt;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
-import com.starrocks.sql.ast.AlterDatabaseRename;
+import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
 import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterResourceGroupStmt;
@@ -257,8 +257,9 @@ public class DDLStmtExecutor {
         public ShowResultSet visitRefreshMaterializedViewStatement(RefreshMaterializedViewStatement stmt,
                                                                    ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
+                // The priority of manual refresh is higher than that of general refresh
                 context.getGlobalStateMgr().getLocalMetastore()
-                        .refreshMaterializedView(stmt, Constants.TaskRunPriority.NORMAL.value());
+                        .refreshMaterializedView(stmt, Constants.TaskRunPriority.HIGH.value());
             });
             return null;
         }
@@ -504,7 +505,7 @@ public class DDLStmtExecutor {
         }
 
         @Override
-        public ShowResultSet visitAlterDatabaseRename(AlterDatabaseRename stmt, ConnectContext context) {
+        public ShowResultSet visitAlterDatabaseRenameStatement(AlterDatabaseRenameStatement stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().renameDatabase(stmt);
             });

@@ -85,10 +85,11 @@ public class VariableMgrTest {
 
     @Test
     public void testNormal() throws IllegalAccessException, NoSuchFieldException, UserException {
+        GlobalStateMgr.getCurrentState().initAuth(false);
         SessionVariable var = VariableMgr.newSessionVariable();
         Assert.assertEquals(2147483648L, var.getMaxExecMemByte());
         Assert.assertEquals(300, var.getQueryTimeoutS());
-        Assert.assertEquals(false, var.isReportSucc());
+        Assert.assertEquals(false, var.isEnableProfile());
         Assert.assertEquals(32L, var.getSqlMode());
         Assert.assertEquals(true, var.isInnodbReadOnly());
 
@@ -97,7 +98,7 @@ public class VariableMgrTest {
         for (List<String> row : rows) {
             if (row.get(0).equalsIgnoreCase("exec_mem_limit")) {
                 Assert.assertEquals("2147483648", row.get(1));
-            } else if (row.get(0).equalsIgnoreCase("is_report_success")) {
+            } else if (row.get(0).equalsIgnoreCase("enable_profile")) {
                 Assert.assertEquals("false", row.get(1));
             } else if (row.get(0).equalsIgnoreCase("query_timeout")) {
                 Assert.assertEquals("300", row.get(1));
@@ -107,12 +108,12 @@ public class VariableMgrTest {
         }
 
         // Set global variable
-        SetVar setVar = new SetVar(SetType.GLOBAL, "exec_mem_limit", new IntLiteral(1234L));
+        SetVar setVar = new SetVar(SetType.GLOBAL, "exec_mem_limit", new IntLiteral(12999934L));
         setVar.analyze();
         VariableMgr.setVar(var, setVar, false);
-        Assert.assertEquals(1234L, var.getMaxExecMemByte());
+        Assert.assertEquals(12999934L, var.getMaxExecMemByte());
         var = VariableMgr.newSessionVariable();
-        Assert.assertEquals(1234L, var.getMaxExecMemByte());
+        Assert.assertEquals(12999934L, var.getMaxExecMemByte());
 
         SetVar setVar2 = new SetVar(SetType.GLOBAL, "parallel_fragment_exec_instance_num", new IntLiteral(5L));
         setVar2.analyze();
@@ -136,23 +137,31 @@ public class VariableMgrTest {
         Assert.assertEquals("CST", var.getTimeZone());
 
         // Set session variable
-        setVar = new SetVar(SetType.GLOBAL, "exec_mem_limit", new IntLiteral(1234L));
+        setVar = new SetVar(SetType.GLOBAL, "exec_mem_limit", new IntLiteral(12999934L));
         setVar.analyze();
         VariableMgr.setVar(var, setVar, false);
-        Assert.assertEquals(1234L, var.getMaxExecMemByte());
+        Assert.assertEquals(12999934L, var.getMaxExecMemByte());
 
         // onlySessionVar
-        setVar = new SetVar(SetType.GLOBAL, "exec_mem_limit", new IntLiteral(4321L));
+        setVar = new SetVar(SetType.GLOBAL, "exec_mem_limit", new IntLiteral(12999935L));
         setVar.analyze();
         VariableMgr.setVar(var, setVar, true);
-        Assert.assertEquals(4321L, var.getMaxExecMemByte());
-        var = VariableMgr.newSessionVariable();
-        Assert.assertEquals(1234L, var.getMaxExecMemByte());
+        Assert.assertEquals(12999935L, var.getMaxExecMemByte());
 
         setVar3 = new SetVar(SetType.SESSION, "time_zone", new StringLiteral("Asia/Jakarta"));
         setVar3.analyze();
         VariableMgr.setVar(var, setVar3, false);
         Assert.assertEquals("Asia/Jakarta", var.getTimeZone());
+
+        // exec_mem_limit in expr style
+        setVar = new SetVar(SetType.GLOBAL, "exec_mem_limit", new StringLiteral("20G"));
+        setVar.analyze();
+        VariableMgr.setVar(var, setVar, true);
+        Assert.assertEquals(21474836480L, var.getMaxExecMemByte());
+        setVar = new SetVar(SetType.GLOBAL, "exec_mem_limit", new StringLiteral("20m"));
+        setVar.analyze();
+        VariableMgr.setVar(var, setVar, true);
+        Assert.assertEquals(20971520L, var.getMaxExecMemByte());
 
         // Get from name
         VariableExpr desc = new VariableExpr("exec_mem_limit");
@@ -216,6 +225,21 @@ public class VariableMgrTest {
             throw e;
         }
         Assert.fail("No exception throws.");
+    }
+
+    @Test
+    public void testInvalidExecMemLimit() {
+        // Set global variable
+        String[] values = {"2097151", "1k"};
+        for (String value : values) {
+            SetVar setVar = new SetVar(SetType.SESSION, "exec_mem_limit", new StringLiteral(value));
+            try {
+                setVar.analyze();
+                Assert.fail("No exception throws.");
+            } catch (Exception e) {
+                Assert.assertEquals(e.getMessage(), "exec_mem_limit must be equal or greater than 2097152.");
+            }
+        }
     }
 
     @Test(expected = DdlException.class)

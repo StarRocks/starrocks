@@ -72,6 +72,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalDeltaLakeScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalExceptOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalFileScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHudiScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
@@ -402,7 +403,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                     column.getKey().getType(),
                     column.getValue().isAllowNull());
             columnRefFactory.updateColumnToRelationIds(columnRef.getId(), relationId);
-            columnRefFactory.updateColumnRefToColumns(columnRef, column.getValue());
+            columnRefFactory.updateColumnRefToColumns(columnRef, column.getValue(), node.getTable());
             outputVariablesBuilder.add(columnRef);
             colRefToColumnMetaMapBuilder.put(columnRef, column.getValue());
             columnMetaToColRefMapBuilder.put(column.getValue(), columnRef);
@@ -441,6 +442,9 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         } else if (Table.TableType.HIVE.equals(node.getTable().getType())) {
             scanOperator = new LogicalHiveScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
                     columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
+        } else if (Table.TableType.FILE.equals(node.getTable().getType())) {
+            scanOperator = new LogicalFileScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
+                    columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
         } else if (Table.TableType.ICEBERG.equals(node.getTable().getType())) {
             if (!((IcebergTable) node.getTable()).isCatalogTbl()) {
                 ((IcebergTable) node.getTable()).refreshTable();
@@ -464,6 +468,9 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                     new LogicalMysqlScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
                             columnMetaToColRefMap, Operator.DEFAULT_LIMIT,
                             null, null);
+            if (node.getTemporalClause() != null) {
+                ((LogicalMysqlScanOperator) scanOperator).setTemporalClause(node.getTemporalClause());
+            }
         } else if (Table.TableType.ELASTICSEARCH.equals(node.getTable().getType())) {
             scanOperator =
                     new LogicalEsScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),

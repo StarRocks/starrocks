@@ -24,13 +24,13 @@ namespace starrocks::vectorized {
 static const uint8_t RF_VERSION = 0x2;
 
 struct FilterBuilder {
-    template <PrimitiveType ptype>
+    template <LogicalType ptype>
     JoinRuntimeFilter* operator()() {
         return new RuntimeBloomFilter<ptype>();
     }
 };
 
-JoinRuntimeFilter* RuntimeFilterHelper::create_join_runtime_filter(ObjectPool* pool, PrimitiveType type) {
+JoinRuntimeFilter* RuntimeFilterHelper::create_join_runtime_filter(ObjectPool* pool, LogicalType type) {
     JoinRuntimeFilter* filter = type_dispatch_filter(type, (JoinRuntimeFilter*)nullptr, FilterBuilder());
     if (pool != nullptr && filter != nullptr) {
         return pool->add(filter);
@@ -69,7 +69,7 @@ void RuntimeFilterHelper::deserialize_runtime_filter(ObjectPool* pool, JoinRunti
     }
 
     // peek primitive type.
-    PrimitiveType type;
+    LogicalType type;
     memcpy(&type, data + offset, sizeof(type));
     JoinRuntimeFilter* filter = create_join_runtime_filter(pool, type);
     DCHECK(filter != nullptr);
@@ -80,13 +80,13 @@ void RuntimeFilterHelper::deserialize_runtime_filter(ObjectPool* pool, JoinRunti
     }
 }
 
-JoinRuntimeFilter* RuntimeFilterHelper::create_runtime_bloom_filter(ObjectPool* pool, PrimitiveType type) {
+JoinRuntimeFilter* RuntimeFilterHelper::create_runtime_bloom_filter(ObjectPool* pool, LogicalType type) {
     JoinRuntimeFilter* filter = create_join_runtime_filter(pool, type);
     return filter;
 }
 
 struct FilterIniter {
-    template <PrimitiveType ptype>
+    template <LogicalType ptype>
     auto operator()(const ColumnPtr& column, size_t column_offset, JoinRuntimeFilter* expr, bool eq_null) {
         using ColumnType = typename RunTimeTypeTraits<ptype>::ColumnType;
         auto* filter = (RuntimeBloomFilter<ptype>*)(expr);
@@ -114,7 +114,7 @@ struct FilterIniter {
     }
 };
 
-Status RuntimeFilterHelper::fill_runtime_bloom_filter(const ColumnPtr& column, PrimitiveType type,
+Status RuntimeFilterHelper::fill_runtime_bloom_filter(const ColumnPtr& column, LogicalType type,
                                                       JoinRuntimeFilter* filter, size_t column_offset, bool eq_null) {
     type_dispatch_filter(type, nullptr, FilterIniter(), column, column_offset, filter, eq_null);
     return Status::OK();
@@ -152,7 +152,7 @@ StatusOr<ExprContext*> RuntimeFilterHelper::rewrite_runtime_filter_in_cross_join
 }
 
 struct FilterZoneMapWithMinMaxOp {
-    template <PrimitiveType ptype>
+    template <LogicalType ptype>
     bool operator()(const JoinRuntimeFilter* expr, const Column* min_column, const Column* max_column) {
         using CppType = RunTimeCppType<ptype>;
         auto* filter = (RuntimeBloomFilter<ptype>*)(expr);
@@ -162,7 +162,7 @@ struct FilterZoneMapWithMinMaxOp {
     }
 };
 
-bool RuntimeFilterHelper::filter_zonemap_with_min_max(PrimitiveType type, const JoinRuntimeFilter* filter,
+bool RuntimeFilterHelper::filter_zonemap_with_min_max(LogicalType type, const JoinRuntimeFilter* filter,
                                                       const Column* min_column, const Column* max_column) {
     return type_dispatch_filter(type, false, FilterZoneMapWithMinMaxOp(), filter, min_column, max_column);
 }
@@ -615,7 +615,7 @@ void RuntimeFilterProbeDescriptor::set_shared_runtime_filter(const std::shared_p
 }
 
 // ========================================================
-template <PrimitiveType Type>
+template <LogicalType Type>
 class MinMaxPredicate : public Expr {
 public:
     using CppType = RunTimeCppType<Type>;
@@ -631,7 +631,7 @@ public:
     bool is_constant() const override { return false; }
     bool is_bound(const std::vector<TupleId>& tuple_ids) const override { return false; }
 
-    ColumnPtr evaluate_with_filter(ExprContext* context, vectorized::Chunk* ptr, uint8_t* filter) override {
+    StatusOr<ColumnPtr> evaluate_with_filter(ExprContext* context, vectorized::Chunk* ptr, uint8_t* filter) override {
         const vectorized::ColumnPtr col = ptr->get_column_by_slot_id(_slot_id);
         size_t size = col->size();
 
@@ -683,7 +683,7 @@ public:
         return result;
     }
 
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {
         return evaluate_with_filter(context, ptr, nullptr);
     }
 
@@ -703,7 +703,7 @@ public:
     MinMaxPredicateBuilder(ObjectPool* pool, SlotId slot_id, const JoinRuntimeFilter* filter)
             : _pool(pool), _slot_id(slot_id), _filter(filter) {}
 
-    template <PrimitiveType ptype>
+    template <LogicalType ptype>
     Expr* operator()() {
         auto* bloom_filter = (RuntimeBloomFilter<ptype>*)(_filter);
         MinMaxPredicate<ptype>* p =
@@ -717,7 +717,7 @@ private:
     const JoinRuntimeFilter* _filter;
 };
 
-void RuntimeFilterHelper::create_min_max_value_predicate(ObjectPool* pool, SlotId slot_id, PrimitiveType slot_type,
+void RuntimeFilterHelper::create_min_max_value_predicate(ObjectPool* pool, SlotId slot_id, LogicalType slot_type,
                                                          const JoinRuntimeFilter* filter, Expr** min_max_predicate) {
     *min_max_predicate = nullptr;
     if (filter == nullptr || filter->has_null()) return;

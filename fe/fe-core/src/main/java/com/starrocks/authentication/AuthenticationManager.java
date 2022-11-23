@@ -197,7 +197,7 @@ public class AuthenticationManager {
             // init user privilege
             UserPrivilegeCollection collection = privilegeManager.onCreateUser(userIdentity);
             short pluginId = privilegeManager.getProviderPluginId();
-            short pluginVersion = privilegeManager.getProviderPluginVerson();
+            short pluginVersion = privilegeManager.getProviderPluginVersion();
             globalStateMgr.getEditLog().logCreateUser(
                     userIdentity, info, userProperty, collection, pluginId, pluginVersion);
 

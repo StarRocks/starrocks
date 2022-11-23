@@ -19,8 +19,11 @@ class ArrayMapExpr final : public Expr {
 public:
     ArrayMapExpr(const TExprNode& node);
 
+    // for tests
+    explicit ArrayMapExpr(TypeDescriptor type);
+
     Expr* clone(ObjectPool* pool) const override { return pool->add(new ArrayMapExpr(*this)); }
 
-    ColumnPtr evaluate(ExprContext* context, Chunk* ptr) override;
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
 };
 } // namespace starrocks::vectorized

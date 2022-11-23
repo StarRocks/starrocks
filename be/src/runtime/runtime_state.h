@@ -40,7 +40,6 @@
 #include "runtime/global_dict/types.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
-#include "runtime/thread_resource_mgr.h"
 #include "util/logging.h"
 #include "util/runtime_profile.h"
 
@@ -70,7 +69,7 @@ class QueryContext;
 class RuntimeState {
 public:
     // for ut only
-    RuntimeState() {}
+    RuntimeState() = default;
     // for ut only
     RuntimeState(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
                  const TQueryGlobals& query_globals, ExecEnv* exec_env);
@@ -83,10 +82,6 @@ public:
 
     // Empty d'tor to avoid issues with std::unique_ptr.
     ~RuntimeState();
-
-    // Set per-query state.
-    Status init(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
-                const TQueryGlobals& query_globals, ExecEnv* exec_env);
 
     // Set up four-level hierarchy of mem trackers: process, query, fragment instance.
     // The instance tracker is tied to our profile.
@@ -124,7 +119,6 @@ public:
     std::shared_ptr<MemTracker> query_mem_tracker_ptr() { return _query_mem_tracker; }
     const std::shared_ptr<MemTracker>& query_mem_tracker_ptr() const { return _query_mem_tracker; }
     std::shared_ptr<MemTracker> instance_mem_tracker_ptr() { return _instance_mem_tracker; }
-    ThreadResourceMgr::ResourcePool* resource_pool() { return _resource_pool; }
     RuntimeFilterPort* runtime_filter_port() { return _runtime_filter_port; }
     const std::atomic<bool>& cancelled_ref() const { return _is_cancelled; }
 
@@ -287,9 +281,18 @@ public:
     std::vector<TTabletCommitInfo>& tablet_commit_infos() { return _tablet_commit_infos; }
 
     void append_tablet_commit_infos(std::vector<TTabletCommitInfo>& commit_info) {
-        std::lock_guard<std::mutex> l(_tablet_commit_infos_lock);
+        std::lock_guard<std::mutex> l(_tablet_infos_lock);
         _tablet_commit_infos.insert(_tablet_commit_infos.end(), std::make_move_iterator(commit_info.begin()),
                                     std::make_move_iterator(commit_info.end()));
+    }
+
+    const std::vector<TTabletFailInfo>& tablet_fail_infos() const { return _tablet_fail_infos; }
+
+    std::vector<TTabletFailInfo>& tablet_fail_infos() { return _tablet_fail_infos; }
+
+    void append_tablet_fail_infos(const TTabletFailInfo& fail_info) {
+        std::lock_guard<std::mutex> l(_tablet_infos_lock);
+        _tablet_fail_infos.emplace_back(std::move(fail_info));
     }
 
     // get mem limit for load channel
@@ -317,6 +320,10 @@ public:
     std::shared_ptr<QueryStatisticsRecvr> query_recv();
 
 private:
+    // Set per-query state.
+    void _init(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
+               const TQueryGlobals& query_globals, ExecEnv* exec_env);
+
     Status create_error_log_file();
 
     Status _build_global_dict(const GlobalDictLists& global_dict_list, vectorized::GlobalDictMaps* result);
@@ -352,10 +359,6 @@ private:
     TUniqueId _fragment_instance_id;
     TQueryOptions _query_options;
     ExecEnv* _exec_env = nullptr;
-
-    // Thread resource management object for this fragment's execution.  The runtime
-    // state is responsible for returning this pool to the thread mgr.
-    ThreadResourceMgr::ResourcePool* _resource_pool = nullptr;
 
     // MemTracker that is shared by all fragment instances running on this host.
     // The query mem tracker must be released after the _instance_mem_tracker.
@@ -417,8 +420,9 @@ private:
 
     std::string _error_log_file_path;
     std::ofstream* _error_log_file = nullptr; // error file path, absolute path
-    std::mutex _tablet_commit_infos_lock;
+    std::mutex _tablet_infos_lock;
     std::vector<TTabletCommitInfo> _tablet_commit_infos;
+    std::vector<TTabletFailInfo> _tablet_fail_infos;
 
     // prohibit copies
     RuntimeState(const RuntimeState&) = delete;

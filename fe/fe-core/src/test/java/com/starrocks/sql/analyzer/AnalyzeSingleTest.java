@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
@@ -310,6 +311,23 @@ public class AnalyzeSingleTest {
     }
 
     @Test
+    public void testBinaryLiteral() {
+        QueryStatement statement = (QueryStatement) analyzeSuccess("select x'0ABC' ");
+        Assert.assertEquals("\'0ABC\'", AST2SQL.toString(statement.getQueryRelation().getOutputExpression().get(0)));
+        statement = (QueryStatement) analyzeSuccess("select \"0ABC\" ");
+        Assert.assertEquals("\'0ABC\'", AST2SQL.toString(statement.getQueryRelation().getOutputExpression().get(0)));
+        // mysql client will output binary format in the outputs.
+        statement = (QueryStatement) analyzeSuccess("select '0ABC' ");
+        Assert.assertEquals("\'0ABC\'", AST2SQL.toString(statement.getQueryRelation().getOutputExpression().get(0)));
+
+        analyzeFail("select x'0AB' ", "Binary literal must contain an even number of digits");
+        analyzeFail("select x\"0AB\" ", "Binary literal must contain an even number of digits");
+        analyzeFail("select x'0,AB' ", "Binary literal can only contain hexadecimal digits");
+        analyzeFail("select x\"0,AB\" ", "Binary literal can only contain hexadecimal digits");
+        analyzeFail("select x\"0AX\" ", "Binary literal can only contain hexadecimal digits");
+    }
+
+    @Test
     public void testCast() {
         analyzeSuccess("select cast(v1 as varchar) from t0 group by cast(v1 as varchar)");
         analyzeSuccess("select cast(v1 as varchar) + 1 from t0 group by cast(v1 as varchar)");
@@ -391,6 +409,19 @@ public class AnalyzeSingleTest {
     public void testDual() {
         analyzeSuccess("select 1,2,3 from dual");
         analyzeFail("select * from dual", "No tables used");
+    }
+
+    @Test
+    public void testLogicalBinaryPredicate() {
+        QueryStatement queryStatement = (QueryStatement) analyzeSuccess("select * from test.t0 where v1 = 1 && v2 = 2");
+        SelectRelation selectRelation = (SelectRelation) queryStatement.getQueryRelation();
+        Assert.assertTrue(selectRelation.getPredicate() instanceof CompoundPredicate);
+        Assert.assertEquals(((CompoundPredicate) selectRelation.getPredicate()).getOp(), CompoundPredicate.Operator.AND);
+
+        queryStatement = (QueryStatement) analyzeSuccess("select * from test.t0 where v1 = 1 || v2 = 2");
+        selectRelation = (SelectRelation) queryStatement.getQueryRelation();
+        Assert.assertTrue(selectRelation.getPredicate() instanceof CompoundPredicate);
+        Assert.assertEquals(((CompoundPredicate) selectRelation.getPredicate()).getOp(), CompoundPredicate.Operator.OR);
     }
 
     @Test

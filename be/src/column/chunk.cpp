@@ -57,7 +57,7 @@ bool Chunk::has_large_column() const {
     return false;
 }
 
-Chunk::Chunk(Columns columns, SchemaPtr schema) : _columns(std::move(columns)), _schema(std::move(schema)) {
+Chunk::Chunk(Columns columns, VectorizedSchemaPtr schema) : _columns(std::move(columns)), _schema(std::move(schema)) {
     // bucket size cannot be 0.
     _cid_to_index.reserve(std::max<size_t>(1, columns.size() * 2));
     _slot_id_to_index.reserve(std::max<size_t>(1, _columns.size() * 2));
@@ -108,7 +108,7 @@ std::string_view Chunk::get_column_name(size_t idx) const {
     return _schema->field(idx)->name();
 }
 
-void Chunk::append_column(ColumnPtr column, const FieldPtr& field) {
+void Chunk::append_column(ColumnPtr column, const VectorizedFieldPtr& field) {
     DCHECK(!_cid_to_index.contains(field->id()));
     _cid_to_index[field->id()] = _columns.size();
     _columns.emplace_back(std::move(column));
@@ -127,7 +127,7 @@ void Chunk::update_column(ColumnPtr column, SlotId slot_id) {
     check_or_die();
 }
 
-void Chunk::insert_column(size_t idx, ColumnPtr column, const FieldPtr& field) {
+void Chunk::insert_column(size_t idx, ColumnPtr column, const VectorizedFieldPtr& field) {
     DCHECK_LT(idx, _columns.size());
     _columns.emplace(_columns.begin() + idx, std::move(column));
     _schema->insert(idx, field);

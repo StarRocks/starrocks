@@ -54,6 +54,7 @@ import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.RoutineLoadDataSourceProperties;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
@@ -61,6 +62,7 @@ import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.analysis.UserDesc;
 import com.starrocks.analysis.UserIdentity;
+import com.starrocks.analysis.VarBinaryLiteral;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.ArrayType;
@@ -68,6 +70,8 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.StructField;
+import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -98,7 +102,7 @@ import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
-import com.starrocks.sql.ast.AlterDatabaseRename;
+import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
 import com.starrocks.sql.ast.AlterLoadErrorUrlClause;
 import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
@@ -299,6 +303,7 @@ import com.starrocks.sql.ast.ShowSmallFilesStmt;
 import com.starrocks.sql.ast.ShowSnapshotStmt;
 import com.starrocks.sql.ast.ShowSqlBlackListStmt;
 import com.starrocks.sql.ast.ShowStatusStmt;
+import com.starrocks.sql.ast.ShowStreamLoadStmt;
 import com.starrocks.sql.ast.ShowTableStatusStmt;
 import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.ShowTabletStmt;
@@ -421,7 +426,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitAlterDbQuotaStmtatement(StarRocksParser.AlterDbQuotaStmtatementContext context) {
+    public ParseNode visitAlterDbQuotaStatement(StarRocksParser.AlterDbQuotaStatementContext context) {
         String dbName = ((Identifier) visit(context.identifier(0))).getValue();
         if (context.DATA() != null) {
             String quotaValue = ((Identifier) visit(context.identifier(1))).getValue();
@@ -455,10 +460,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitAlterDatabaseRename(StarRocksParser.AlterDatabaseRenameContext context) {
+    public ParseNode visitAlterDatabaseRenameStatement(StarRocksParser.AlterDatabaseRenameStatementContext context) {
         String dbName = ((Identifier) visit(context.identifier(0))).getValue();
         String newName = ((Identifier) visit(context.identifier(1))).getValue();
-        return new AlterDatabaseRename(dbName, newName);
+        return new AlterDatabaseRenameStatement(dbName, newName);
     }
 
     @Override
@@ -1303,8 +1308,25 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
         TableName targetTableName = qualifiedNameToTableName(qualifiedName);
         List<ColumnAssignment> assignments = visit(context.assignmentList().assignment(), ColumnAssignment.class);
+        List<Relation> fromRelations = null;
+        if (context.fromClause() instanceof StarRocksParser.DualContext) {
+            ArrayList<Expr> row = new ArrayList<>();
+            List<String> columnNames = new ArrayList<>();
+            row.add(NullLiteral.create(Type.NULL));
+            columnNames.add("");
+            List<ArrayList<Expr>> rows = new ArrayList<>();
+            rows.add(row);
+            ValuesRelation valuesRelation = new ValuesRelation(rows, columnNames);
+            valuesRelation.setNullValues(true);
+            fromRelations = Lists.newArrayList(valuesRelation);
+        } else {
+            StarRocksParser.FromContext fromContext = (StarRocksParser.FromContext) context.fromClause();
+            if (fromContext.relations() != null) {
+                fromRelations = visit(fromContext.relations().relation(), Relation.class);
+            }
+        }
         Expr where = context.where != null ? (Expr) visit(context.where) : null;
-        UpdateStmt ret = new UpdateStmt(targetTableName, assignments, where);
+        UpdateStmt ret = new UpdateStmt(targetTableName, assignments, fromRelations, where);
         if (context.explainDesc() != null) {
             ret.setIsExplain(true, getExplainType(context.explainDesc()));
         }
@@ -1468,6 +1490,33 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             where = (Expr) visit(context.expression());
         }
         return new ShowRoutineLoadTaskStmt(dbName == null ? null : dbName.toString(), where);
+    }
+
+    @Override
+    public ParseNode visitShowStreamLoadStatement(StarRocksParser.ShowStreamLoadStatementContext context) {
+        boolean isVerbose = context.ALL() != null;
+        String database = null;
+        if (context.db != null) {
+            database = getQualifiedName(context.db).toString();
+        }
+        String name = null;
+        if (context.name != null) {
+            name = getIdentifierName(context.name);
+        }
+        Expr where = null;
+        if (context.expression() != null) {
+            where = (Expr) visit(context.expression());
+        }
+        List<OrderByElement> orderByElements = null;
+        if (context.ORDER() != null) {
+            orderByElements = new ArrayList<>();
+            orderByElements.addAll(visit(context.sortItem(), OrderByElement.class));
+        }
+        LimitElement limitElement = null;
+        if (context.limitElement() != null) {
+            limitElement = (LimitElement) visit(context.limitElement());
+        }
+        return new ShowStreamLoadStmt(new LabelName(database, name), isVerbose, where, orderByElements, limitElement);
     }
 
     // ------------------------------------------- Admin Statement -----------------------------------------------------
@@ -2429,7 +2478,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     .stream().map(Identifier::getValue).collect(toList());
         }
 
-
         StringLiteral stringLiteral = (StringLiteral) visit(context.string());
         // properties
         Map<String, String> properties = null;
@@ -2514,7 +2562,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         Map<String, String> properties = getProperties(context.properties());
 
-
         return new CreateFileStmt(fileName, catalog, properties);
     }
 
@@ -2528,7 +2575,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             catalog = dbName.toString();
         }
         Map<String, String> properties = getProperties(context.properties());
-
 
         return new DropFileStmt(fileName, catalog, properties);
     }
@@ -3140,12 +3186,62 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
             selectList.setOptHints(selectHints);
         }
-        return new SelectRelation(
+
+        SelectRelation resultSelectRelation = new SelectRelation(
                 selectList,
                 from,
                 (Expr) visitIfPresent(context.where),
                 (GroupByClause) visitIfPresent(context.groupingElement()),
                 (Expr) visitIfPresent(context.having));
+
+        // extend Query with QUALIFY to nested queries with filter.
+        if (context.qualifyFunction != null) {
+            resultSelectRelation.setOrderBy(new ArrayList<OrderByElement>());
+
+            // used to indicate nested query, represent thie 'from' part of outer query.
+            SubqueryRelation subqueryRelation = new SubqueryRelation(new QueryStatement(resultSelectRelation));
+
+            // use virtual table name to indicate subquery.
+            TableName qualifyTableName = new TableName(null, "__QUALIFY__TABLE");
+            subqueryRelation.setAlias(qualifyTableName);
+
+            // use virtual item name to indicate column of window function.
+            SelectListItem windowFunction = selectItems.get(selectItems.size() - 1);
+            windowFunction.setAlias("__QUALIFY__VALUE");
+
+            long selectValue = Long.parseLong(context.limit.getText());
+
+            // need delete last item, because It shouldn't appear in result.
+            List<SelectListItem> selectItemsVirtual = new ArrayList<>();
+            selectItemsVirtual.addAll(selectItems);
+            selectItemsVirtual.remove(selectItemsVirtual.size() - 1);
+
+            List<SelectListItem> selectItemsOuter = new ArrayList<>();
+            for (SelectListItem item : selectItemsVirtual) {
+                if (item.getExpr() instanceof SlotRef) {
+                    SlotRef exprRef = (SlotRef) item.getExpr();
+                    String columnName = exprRef.getColumnName();
+                    SlotRef resultSlotRef = new SlotRef(qualifyTableName, columnName);
+                    selectItemsOuter.add(new SelectListItem(resultSlotRef, null));
+                } else {
+                    throw new ParsingException("Can't support result other than column.");
+                }
+            }
+
+            // used to represent result, caused by we use nested query.
+            SelectList selectListOuter = new SelectList(selectItemsOuter, isDistinct);
+
+            // used to construct BinaryPredicate for QUALIFY.
+            IntLiteral rightValue = new IntLiteral(selectValue);
+            SlotRef leftSlotRef = new SlotRef(qualifyTableName, "__QUALIFY__VALUE");
+
+            BinaryPredicate.Operator op = getComparisonOperator(((TerminalNode) context.comparisonOperator()
+                    .getChild(0)).getSymbol());
+            return new SelectRelation(selectListOuter, subqueryRelation,
+                    new BinaryPredicate(op, leftSlotRef, rightValue), null, null);
+        } else {
+            return resultSelectRelation;
+        }
     }
 
     @Override
@@ -3369,6 +3465,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             Identifier identifier = (Identifier) visit(context.alias);
             tableRelation.setAlias(new TableName(null, identifier.getValue()));
         }
+
+        if (context.temporalClause() != null) {
+            StringBuilder sb = new StringBuilder();
+            for (ParseTree child : context.temporalClause().children) {
+                sb.append(child.getText());
+                sb.append(" ");
+            }
+            tableRelation.setTemporalClause(sb.toString());
+        }
+
         return tableRelation;
     }
 
@@ -4003,19 +4109,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitLogicalBinary(StarRocksParser.LogicalBinaryContext context) {
         Expr left = (Expr) visit(context.left);
         Expr right = (Expr) visit(context.right);
-
-        if (context.operator.getType() == StarRocksLexer.LOGICAL_OR) {
-            return new CompoundPredicate(CompoundPredicate.Operator.OR, left, right);
-        } else {
-            return new CompoundPredicate(getLogicalBinaryOperator(context.operator), left, right);
-        }
+        return new CompoundPredicate(getLogicalBinaryOperator(context.operator), left, right);
     }
 
     private static CompoundPredicate.Operator getLogicalBinaryOperator(Token token) {
         switch (token.getType()) {
             case StarRocksLexer.AND:
+            case StarRocksLexer.LOGICAL_AND:
                 return CompoundPredicate.Operator.AND;
             case StarRocksLexer.OR:
+            case StarRocksLexer.LOGICAL_OR:
                 return CompoundPredicate.Operator.OR;
         }
 
@@ -4566,6 +4669,17 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new StringLiteral(escapeBackSlash(quotedString));
     }
 
+    @Override
+    public ParseNode visitBinary(StarRocksParser.BinaryContext context) {
+        String quotedText;
+        if (context.BINARY_SINGLE_QUOTED_TEXT() != null) {
+            quotedText = context.BINARY_SINGLE_QUOTED_TEXT().getText();
+        } else {
+            quotedText = context.BINARY_DOUBLE_QUOTED_TEXT().getText();
+        }
+        return new VarBinaryLiteral(quotedText.substring(2, quotedText.length() - 1));
+    }
+
     private static String escapeBackSlash(String str) {
         StringWriter writer = new StringWriter();
         int strLen = str.length();
@@ -4672,28 +4786,36 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitColumnReference(StarRocksParser.ColumnReferenceContext context) {
-        if (context.identifier() != null) {
-            Identifier identifier = (Identifier) visit(context.identifier());
-            return new SlotRef(null, identifier.getValue(), identifier.getValue());
+    public ParseNode visitDereference(StarRocksParser.DereferenceContext ctx) {
+        Expr base = (Expr) visit(ctx.base);
+        String fieldName = ((Identifier) visit(ctx.fieldName)).getValue();
+
+        // Trick method
+        // If left is SlotRef type, we merge fieldName to SlotRef
+        // The reason do this is to maintain compatibility with the original SlotRef
+        if (base instanceof SlotRef) {
+            // do merge
+            SlotRef tmp = (SlotRef) base;
+            List<String> parts = new ArrayList<>(tmp.getQualifiedName().getParts());
+            parts.add(fieldName);
+            return new SlotRef(QualifiedName.of(parts));
         } else {
-            QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
-            List<String> parts = qualifiedName.getParts();
-            TableName tableName;
-            if (parts.size() == 4) {
-                tableName = new TableName(qualifiedName.getParts().get(0),
-                        qualifiedName.getParts().get(1), qualifiedName.getParts().get(2));
-                return new SlotRef(tableName, parts.get(3), parts.get(3));
-            } else if (parts.size() == 3) {
-                tableName = new TableName(qualifiedName.getParts().get(0), qualifiedName.getParts().get(1));
-                return new SlotRef(tableName, parts.get(2), parts.get(2));
-            } else if (parts.size() == 2) {
-                tableName = new TableName(null, qualifiedName.getParts().get(0));
-                return new SlotRef(tableName, parts.get(1), parts.get(1));
-            } else {
-                throw new ParsingException("Unqualified column reference " + qualifiedName);
-            }
+            // If left is not a SlotRef, we can left must be an StructType,
+            // and fieldName must be StructType's subfield name.
+            return new SubfieldExpr(
+                    (Expr) visit(ctx.base),
+                    ((Identifier) visit(ctx.fieldName)).getValue()
+            );
         }
+    }
+
+    @Override
+    public ParseNode visitColumnReference(StarRocksParser.ColumnReferenceContext context) {
+        Identifier identifier = (Identifier) visit(context.identifier());
+        List<String> parts = new ArrayList<>();
+        parts.add(identifier.getValue());
+        QualifiedName qualifiedName = QualifiedName.of(parts);
+        return new SlotRef(qualifiedName);
     }
 
     @Override
@@ -4830,7 +4952,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new PartitionRangeDesc(((StringLiteral) visit(context.string(0))).getStringValue(),
                 ((StringLiteral) visit(context.string(1))).getStringValue());
     }
-
 
     @Override
     public ParseNode visitSingleItemListPartitionDesc(StarRocksParser.SingleItemListPartitionDescContext context) {
@@ -5114,6 +5235,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return getDecimalType(context.decimalType());
         } else if (context.arrayType() != null) {
             return getArrayType(context.arrayType());
+        } else if (context.structType() != null) {
+            return getStructType(context.structType());
         }
         throw new IllegalArgumentException("Unsupported type specification: " + context.getText());
     }
@@ -5144,6 +5267,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else if (context.HLL() != null) {
             ScalarType type = ScalarType.createHllType();
             type.setAssignedStrLenInColDefinition();
+            return type;
+        } else if (context.VARBINARY() != null) {
+            ScalarType type = ScalarType.createVarbinary(length);
+            if (length != -1) {
+                type.setAssignedStrLenInColDefinition();
+            }
             return type;
         } else {
             return ScalarType.createType(context.getChild(0).getText());
@@ -5200,6 +5329,19 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     public ArrayType getArrayType(StarRocksParser.ArrayTypeContext context) {
         return new ArrayType(getType(context.type()));
+    }
+
+    public StructType getStructType(StarRocksParser.StructTypeContext context) {
+        ArrayList<StructField> fields = new ArrayList<>();
+        List<StarRocksParser.ColumnNameColonTypeContext> typeLists =
+                context.columnNameColonTypeList().columnNameColonType();
+        for (StarRocksParser.ColumnNameColonTypeContext type : typeLists) {
+            String comment = (type.comment() == null) ? null :
+                    ((StringLiteral) visit(type.comment().string())).getStringValue();
+            fields.add(new StructField(type.identifier().getText(), getType(type.type()), comment));
+        }
+
+        return new StructType(fields);
     }
 
     @Override
@@ -5305,3 +5447,4 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return dataSourceProperties;
     }
 }
+

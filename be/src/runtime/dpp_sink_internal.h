@@ -53,7 +53,7 @@ public:
 
     static Status from_thrift(ObjectPool* pool, const TPartitionKey& t_key, PartRangeKey* key);
 
-    static Status from_value(PrimitiveType type, void* value, PartRangeKey* key);
+    static Status from_value(LogicalType type, void* value, PartRangeKey* key);
 
     bool operator==(const PartRangeKey& other) const {
         if (_sign != other._sign) {
@@ -101,7 +101,7 @@ private:
     // When sign is greater than 0, that key represent positive infinite
     // When sign is equal 0, that key represent normal key
     int _sign;
-    PrimitiveType _type;
+    LogicalType _type;
     void* _key;
     std::string _str_key;
 
@@ -188,7 +188,7 @@ private:
 
 class PartitionInfo {
 public:
-    PartitionInfo() {}
+    PartitionInfo() = default;
 
     static Status from_thrift(ObjectPool* pool, const TRangePartition& t_partition, PartitionInfo* partition,
                               int32_t chunk_size);

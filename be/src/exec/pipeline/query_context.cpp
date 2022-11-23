@@ -87,7 +87,7 @@ int64_t QueryContext::compute_query_mem_limit(int64_t parent_mem_limit, int64_t 
 void QueryContext::init_mem_tracker(int64_t bytes_limit, MemTracker* parent) {
     std::call_once(_init_mem_tracker_once, [=]() {
         _profile = std::make_shared<RuntimeProfile>("Query" + print_id(_query_id));
-        auto* mem_tracker_counter = ADD_COUNTER(_profile.get(), "MemoryLimit", TUnit::BYTES);
+        auto* mem_tracker_counter = ADD_COUNTER_SKIP_MERGE(_profile.get(), "MemoryLimit", TUnit::BYTES);
         mem_tracker_counter->set(bytes_limit);
         _mem_tracker = std::make_shared<MemTracker>(MemTracker::QUERY, bytes_limit, _profile->name(), parent);
     });
@@ -186,7 +186,7 @@ void QueryContextManager::_clean_func(QueryContextManager* manager) {
 }
 
 size_t QueryContextManager::_slot_idx(const TUniqueId& query_id) {
-    return std::hash<size_t>()(query_id.lo) & _slot_mask;
+    return HashUtil::hash(&query_id.hi, sizeof(query_id.hi), 0) & _slot_mask;
 }
 
 QueryContextManager::~QueryContextManager() {
@@ -356,6 +356,7 @@ void QueryContextManager::report_fragments_with_same_host(
 
                 if (runtime_state->query_options().query_type == TQueryType::LOAD) {
                     runtime_state->update_report_load_status(&params);
+                    params.__set_load_type(runtime_state->query_options().load_job_type);
                 }
 
                 auto backend_id = get_backend_id();
@@ -440,6 +441,7 @@ void QueryContextManager::report_fragments(
 
             if (runtime_state->query_options().query_type == TQueryType::LOAD) {
                 runtime_state->update_report_load_status(&params);
+                params.__set_load_type(runtime_state->query_options().load_job_type);
             }
 
             auto backend_id = get_backend_id();

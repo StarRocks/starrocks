@@ -1624,7 +1624,7 @@ TEST_F(VectorizedCastExprTest, timeToVarchar) {
     }
 }
 
-template <PrimitiveType toType>
+template <LogicalType toType>
 static typename RunTimeColumnType<toType>::Ptr evaluateCastFromJson(TExprNode& cast_expr, const std::string& json_str) {
     TPrimitiveType::type t_type = to_thrift(toType);
     cast_expr.type = gen_type_desc(t_type);
@@ -1646,7 +1646,7 @@ static typename RunTimeColumnType<toType>::Ptr evaluateCastFromJson(TExprNode& c
     return ColumnHelper::cast_to<toType>(ptr);
 }
 
-template <PrimitiveType toType>
+template <LogicalType toType>
 static ColumnPtr evaluateCastJsonNullable(TExprNode& cast_expr, const std::string& json_str) {
     std::cerr << "evaluate castCast: " << json_str << std::endl;
     TPrimitiveType::type t_type = to_thrift(toType);
@@ -1735,7 +1735,7 @@ TEST_F(VectorizedCastExprTest, jsonToValue) {
     EXPECT_EQ(nullptr, evaluateCastJsonNullable<TYPE_HLL>(cast_expr, "1"));
 }
 
-template <PrimitiveType fromType>
+template <LogicalType fromType>
 static std::string evaluateCastToJson(TExprNode& cast_expr, RunTimeCppType<fromType> value) {
     cast_expr.child_type = to_thrift(fromType);
     cast_expr.type = gen_type_desc(to_thrift(TYPE_JSON));
@@ -1823,7 +1823,7 @@ TEST_F(VectorizedCastExprTest, sqlToJson) {
     }
 }
 
-static std::string cast_string_to_array(TExprNode& cast_expr, PrimitiveType element_type, const std::string& str) {
+static std::string cast_string_to_array(TExprNode& cast_expr, LogicalType element_type, const std::string& str) {
     cast_expr.child_type = to_thrift(TYPE_VARCHAR);
     cast_expr.type = gen_array_type_desc(to_thrift(element_type));
 
@@ -1864,7 +1864,7 @@ TEST_F(VectorizedCastExprTest, string_to_array) {
     EXPECT_EQ(R"(['1', '2'])", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"([1, 2])"));
 }
 
-static std::string cast_json_to_array(TExprNode& cast_expr, PrimitiveType element_type, const std::string& str) {
+static std::string cast_json_to_array(TExprNode& cast_expr, LogicalType element_type, const std::string& str) {
     cast_expr.child_type = to_thrift(TYPE_JSON);
     cast_expr.type = gen_array_type_desc(to_thrift(element_type));
 

@@ -11,7 +11,7 @@
 namespace starrocks::vectorized {
 
 struct HistogramDispatcher {
-    template <PrimitiveType pt>
+    template <LogicalType pt>
     void operator()(AggregateFuncResolver* resolver) {
         if constexpr (pt_is_aggregate<pt>) {
             resolver->add_aggregate_mapping_notnull<pt, TYPE_VARCHAR>(

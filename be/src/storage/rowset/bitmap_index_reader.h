@@ -26,9 +26,6 @@
 #include "common/status.h"
 #include "fs/fs.h"
 #include "gen_cpp/segment.pb.h"
-#include "runtime/mem_pool.h"
-#include "runtime/mem_tracker.h"
-#include "storage/column_block.h"
 #include "storage/rowset/common.h"
 #include "storage/rowset/indexed_column_reader.h"
 #include "util/once.h"
@@ -107,9 +104,7 @@ public:
               _dict_column_iter(std::move(dict_iter)),
               _bitmap_column_iter(std::move(bitmap_iter)),
               _has_null(has_null),
-              _num_bitmap(num_bitmap),
-              _current_rowid(0),
-              _pool(new MemPool()) {}
+              _num_bitmap(num_bitmap) {}
 
     bool has_null_bitmap() const { return _has_null; }
 
@@ -155,8 +150,7 @@ private:
     std::unique_ptr<IndexedColumnIterator> _bitmap_column_iter;
     bool _has_null;
     rowid_t _num_bitmap;
-    rowid_t _current_rowid;
-    std::unique_ptr<MemPool> _pool;
+    rowid_t _current_rowid{0};
 };
 
 } // namespace starrocks

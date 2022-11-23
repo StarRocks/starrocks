@@ -6,25 +6,26 @@ namespace starrocks::vectorized {
 
 class EmptyIterator final : public ChunkIterator {
 public:
-    explicit EmptyIterator(vectorized::Schema schema, int chunk_size) : ChunkIterator(std::move(schema), chunk_size) {}
+    explicit EmptyIterator(vectorized::VectorizedSchema schema, int chunk_size)
+            : ChunkIterator(std::move(schema), chunk_size) {}
 
     void close() override {}
 
 protected:
     Status do_get_next(Chunk* chunk) override { return Status::EndOfFile("end of empty iterator"); }
-    Status do_get_next(Chunk* chunk, vector<uint32_t>* rowid) override {
+    Status do_get_next(Chunk* chunk, std::vector<uint32_t>* rowid) override {
         return Status::EndOfFile("end of empty iterator");
     }
-    Status do_get_next(Chunk* chunk, vector<RowSourceMask>* source_masks) override {
+    Status do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks) override {
         return Status::EndOfFile("end of empty iterator");
     }
 };
 
-ChunkIteratorPtr new_empty_iterator(vectorized::Schema&& schema, int chunk_size) {
+ChunkIteratorPtr new_empty_iterator(vectorized::VectorizedSchema&& schema, int chunk_size) {
     return std::make_shared<EmptyIterator>(std::move(schema), chunk_size);
 }
 
-ChunkIteratorPtr new_empty_iterator(const vectorized::Schema& schema, int chunk_size) {
+ChunkIteratorPtr new_empty_iterator(const vectorized::VectorizedSchema& schema, int chunk_size) {
     return std::make_shared<EmptyIterator>(schema, chunk_size);
 }
 

@@ -35,7 +35,9 @@ import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.Subquery;
+import com.starrocks.analysis.VarBinaryLiteral;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
@@ -60,6 +62,7 @@ import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
+import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
 import com.starrocks.thrift.TExprOpcode;
 import com.starrocks.thrift.TFunctionBinaryType;
@@ -131,6 +134,11 @@ public class ScalarOperatorToExpr {
         }
 
         @Override
+        public Expr visitSubfield(SubfieldOperator node, FormatterContext context) {
+            return new SubfieldExpr(buildExpr.build(node.getChild(0), context), node.getType(), node.getFieldName());
+        }
+
+        @Override
         public Expr visitArray(ArrayOperator node, FormatterContext context) {
             return new ArrayExpr(node.getType(),
                     node.getChildren().stream().map(e -> buildExpr.build(e, context)).collect(Collectors.toList()));
@@ -193,6 +201,8 @@ public class ScalarOperatorToExpr {
                     return d;
                 } else if (type.isVarchar() || type.isChar()) {
                     return new StringLiteral(literal.getVarchar());
+                } else if (type.isBinaryType()) {
+                    return new VarBinaryLiteral(literal.getBinary());
                 } else {
                     throw new UnsupportedOperationException("nonsupport constant type: " + type.toSql());
                 }

@@ -9,7 +9,7 @@
 
 namespace starrocks::vectorized {
 
-template <PrimitiveType TYPE>
+template <LogicalType TYPE>
 ColumnPtr create_nullable_column() {
     return NullableColumn::create(RunTimeColumnType<TYPE>::create(), RunTimeColumnType<TYPE_NULL>::create());
 }

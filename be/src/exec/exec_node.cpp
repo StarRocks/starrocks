@@ -678,7 +678,7 @@ StatusOr<size_t> ExecNode::eval_conjuncts_into_filter(const std::vector<ExprCont
         return 0;
     }
     for (auto* ctx : ctxs) {
-        ASSIGN_OR_RETURN(ColumnPtr column, ctx->evaluate_with_filter(chunk, filter->data()));
+        ASSIGN_OR_RETURN(ColumnPtr column, ctx->evaluate(chunk, filter->data()));
         size_t true_count = vectorized::ColumnHelper::count_true_with_notnull(column);
 
         if (true_count == column->size()) {
@@ -721,6 +721,10 @@ void ExecNode::eval_filter_null_values(vectorized::Chunk* chunk, const std::vect
     for (SlotId slot_id : filter_null_value_columns) {
         const ColumnPtr& c = chunk->get_column_by_slot_id(slot_id);
         if (!c->is_nullable()) continue;
+        if (c->only_null()) {
+            chunk->reset();
+            return;
+        }
         const vectorized::NullableColumn* nullable_column =
                 vectorized::ColumnHelper::as_raw_column<vectorized::NullableColumn>(c);
         if (!nullable_column->has_null()) continue;

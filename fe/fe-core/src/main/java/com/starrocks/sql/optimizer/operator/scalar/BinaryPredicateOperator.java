@@ -108,6 +108,10 @@ public class BinaryPredicateOperator extends PredicateOperator {
                     || type.equals(GT.type)
                     || type.equals(GE.type);
         }
+
+        public boolean isRangeOrNe() {
+            return isRange() || type.equals(NE.type);
+        }
     }
 
     public BinaryPredicateOperator commutative() {

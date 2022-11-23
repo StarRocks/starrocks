@@ -252,10 +252,13 @@ DEFINE_MATH_UNARY_WITH_ZERO_CHECK_FN(cot, TYPE_DOUBLE, TYPE_DOUBLE);
 
 DEFINE_MATH_UNARY_WITH_OUTPUT_NAN_CHECK_FN_WITH_IMPL(sin, TYPE_DOUBLE, TYPE_DOUBLE, std::sin);
 DEFINE_MATH_UNARY_WITH_OUTPUT_NAN_CHECK_FN_WITH_IMPL(asin, TYPE_DOUBLE, TYPE_DOUBLE, std::asin);
+DEFINE_MATH_UNARY_WITH_OUTPUT_NAN_CHECK_FN_WITH_IMPL(sinh, TYPE_DOUBLE, TYPE_DOUBLE, std::sinh);
 DEFINE_MATH_UNARY_WITH_OUTPUT_NAN_CHECK_FN_WITH_IMPL(cos, TYPE_DOUBLE, TYPE_DOUBLE, std::cos);
 DEFINE_MATH_UNARY_WITH_OUTPUT_NAN_CHECK_FN_WITH_IMPL(acos, TYPE_DOUBLE, TYPE_DOUBLE, std::acos);
+DEFINE_MATH_UNARY_WITH_OUTPUT_NAN_CHECK_FN_WITH_IMPL(cosh, TYPE_DOUBLE, TYPE_DOUBLE, std::cosh);
 DEFINE_MATH_UNARY_WITH_OUTPUT_NAN_CHECK_FN_WITH_IMPL(tan, TYPE_DOUBLE, TYPE_DOUBLE, std::tan);
 DEFINE_MATH_UNARY_WITH_OUTPUT_NAN_CHECK_FN_WITH_IMPL(atan, TYPE_DOUBLE, TYPE_DOUBLE, std::atan);
+DEFINE_MATH_UNARY_WITH_OUTPUT_NAN_CHECK_FN_WITH_IMPL(tanh, TYPE_DOUBLE, TYPE_DOUBLE, std::tanh);
 DEFINE_MATH_UNARY_WITH_OUTPUT_NAN_CHECK_FN_WITH_IMPL(ceil, TYPE_DOUBLE, TYPE_BIGINT, std::ceil);
 DEFINE_MATH_UNARY_WITH_OUTPUT_NAN_CHECK_FN_WITH_IMPL(floor, TYPE_DOUBLE, TYPE_BIGINT, std::floor);
 DEFINE_MATH_UNARY_WITH_OUTPUT_CHECK_FN_WITH_IMPL(exp, TYPE_DOUBLE, TYPE_DOUBLE, std::exp, ExpCheck);
@@ -559,7 +562,7 @@ ColumnPtr MathFunctions::round_decimal128(FunctionContext* context, const Column
     DCHECK_EQ(columns.size(), 1);
     Columns new_columns;
     new_columns.push_back(columns[0]);
-    new_columns.push_back(ColumnHelper::create_const_column<PrimitiveType::TYPE_INT>(0, columns[0]->size()));
+    new_columns.push_back(ColumnHelper::create_const_column<LogicalType::TYPE_INT>(0, columns[0]->size()));
     return decimal_round<DecimalRoundRule::ROUND_HALF_UP>(context, new_columns);
 }
 
@@ -668,11 +671,19 @@ ColumnPtr MathFunctions::conv_string(FunctionContext* context, const Columns& co
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
+static uint32_t generate_randoms(ColumnBuilder<TYPE_DOUBLE>* result, int32_t num_rows, uint32_t seed) {
+    for (int i = 0; i < num_rows; ++i) {
+        seed = ::rand_r(&seed);
+        // Normalize to [0,1].
+        result->append(static_cast<double>(seed) / RAND_MAX);
+    }
+    return seed;
+}
+
 Status MathFunctions::rand_prepare(starrocks_udf::FunctionContext* context,
                                    starrocks_udf::FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::THREAD_LOCAL) {
-        auto* seed = reinterpret_cast<uint32_t*>(context->allocate(sizeof(uint32_t)));
-        context->set_function_state(scope, seed);
+        int64_t seed = 0;
         if (context->get_num_args() == 1) {
             // This is a call to RandSeed, initialize the seed
             // TODO: should we support non-constant seed?
@@ -689,30 +700,28 @@ Status MathFunctions::rand_prepare(starrocks_udf::FunctionContext* context,
             }
 
             int64_t seed_value = ColumnHelper::get_const_value<TYPE_BIGINT>(seed_column);
-            *seed = seed_value;
+            seed = seed_value;
         } else {
-            *seed = GetCurrentTimeNanos();
+            seed = GetCurrentTimeNanos();
         }
+        context->set_function_state(scope, reinterpret_cast<void*>(seed));
     }
     return Status::OK();
 }
 
 Status MathFunctions::rand_close(starrocks_udf::FunctionContext* context,
                                  starrocks_udf::FunctionContext::FunctionStateScope scope) {
-    if (scope == FunctionContext::THREAD_LOCAL) {
-        auto* seed = reinterpret_cast<uint8_t*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
-        context->free(seed);
-    }
     return Status::OK();
 }
 
 ColumnPtr MathFunctions::rand(FunctionContext* context, const Columns& columns) {
     int32_t num_rows = ColumnHelper::get_const_value<TYPE_INT>(columns[columns.size() - 1]);
-    auto* seed = reinterpret_cast<uint32_t*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
-    DCHECK(seed != nullptr);
+    void* state = context->get_function_state(FunctionContext::THREAD_LOCAL);
 
     ColumnBuilder<TYPE_DOUBLE> result(num_rows);
-    generate_randoms(&result, num_rows, seed);
+    int64_t res = generate_randoms(&result, num_rows, reinterpret_cast<int64_t>(state));
+    state = reinterpret_cast<void*>(res);
+    context->set_function_state(FunctionContext::THREAD_LOCAL, state);
 
     return result.build(false);
 }

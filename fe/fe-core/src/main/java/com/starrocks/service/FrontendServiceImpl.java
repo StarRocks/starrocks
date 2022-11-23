@@ -56,6 +56,7 @@ import com.starrocks.http.UnauthorizedException;
 import com.starrocks.leader.LeaderImpl;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
+import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.metric.TableMetricsRegistry;
@@ -70,6 +71,7 @@ import com.starrocks.planner.StreamLoadPlanner;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
 import com.starrocks.qe.QeProcessorImpl;
+import com.starrocks.qe.QueryQueueManager;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
@@ -80,7 +82,6 @@ import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
-import com.starrocks.task.StreamLoadTask;
 import com.starrocks.thrift.FrontendService;
 import com.starrocks.thrift.FrontendServiceVersion;
 import com.starrocks.thrift.TAbortRemoteTxnRequest;
@@ -137,6 +138,7 @@ import com.starrocks.thrift.TRefreshTableResponse;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TReportExecStatusResult;
 import com.starrocks.thrift.TReportRequest;
+import com.starrocks.thrift.TResourceUsage;
 import com.starrocks.thrift.TSetConfigRequest;
 import com.starrocks.thrift.TSetConfigResponse;
 import com.starrocks.thrift.TShowVariableRequest;
@@ -152,8 +154,11 @@ import com.starrocks.thrift.TTableType;
 import com.starrocks.thrift.TTaskInfo;
 import com.starrocks.thrift.TTaskRunInfo;
 import com.starrocks.thrift.TUpdateExportTaskStatusRequest;
+import com.starrocks.thrift.TUpdateResourceUsageRequest;
+import com.starrocks.thrift.TUpdateResourceUsageResponse;
 import com.starrocks.thrift.TUserPrivDesc;
 import com.starrocks.transaction.TabletCommitInfo;
+import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionNotFoundException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
@@ -1010,6 +1015,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         boolean ret = GlobalStateMgr.getCurrentGlobalTransactionMgr().commitAndPublishTransaction(
                 db, request.getTxnId(),
                 TabletCommitInfo.fromThrift(request.getCommitInfos()),
+                TabletFailInfo.fromThrift(request.getFailInfos()),
                 timeoutMs, attachment);
         if (!ret) {
             // committed success but not visible
@@ -1118,6 +1124,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         GlobalStateMgr.getCurrentGlobalTransactionMgr().prepareTransaction(
                 db.getId(), request.getTxnId(),
                 TabletCommitInfo.fromThrift(request.getCommitInfos()),
+                TabletFailInfo.fromThrift(request.getFailInfos()),
                 attachment);
     }
 
@@ -1238,9 +1245,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                                 "and the data of materialized view must be consistent with the base table.",
                         table.getName(), table.getName()));
             }
-            StreamLoadTask streamLoadTask = StreamLoadTask.fromTStreamLoadPutRequest(request, db);
-            StreamLoadPlanner planner = new StreamLoadPlanner(db, (OlapTable) table, streamLoadTask);
-            TExecPlanFragmentParams plan = planner.plan(streamLoadTask.getId());
+            StreamLoadInfo streamLoadInfo = StreamLoadInfo.fromTStreamLoadPutRequest(request, db);
+            StreamLoadPlanner planner = new StreamLoadPlanner(db, (OlapTable) table, streamLoadInfo);
+            TExecPlanFragmentParams plan = planner.plan(streamLoadInfo.getId());
             // add table indexes to transaction state
             TransactionState txnState =
                     GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionState(db.getId(), request.getTxnId());
@@ -1409,5 +1416,18 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     public TGetTablesInfoResponse getTablesInfo(TGetTablesInfoRequest request) throws TException {
 
         return InformationSchemaDataSource.generateTablesInfoResponse(request);
+    }
+
+    @Override
+    public TUpdateResourceUsageResponse updateResourceUsage(TUpdateResourceUsageRequest request) throws TException {
+        TResourceUsage usage = request.getResource_usage();
+        QueryQueueManager.getInstance().updateResourceUsage(request.getBackend_id(),
+                usage.getNum_running_queries(), usage.getMem_limit_bytes(), usage.getMem_used_bytes(),
+                usage.getCpu_used_permille());
+
+        TUpdateResourceUsageResponse res = new TUpdateResourceUsageResponse();
+        TStatus status = new TStatus(TStatusCode.OK);
+        res.setStatus(status);
+        return res;
     }
 }

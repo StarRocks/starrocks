@@ -24,19 +24,19 @@ public:
 
     ColumnMapping* get_mutable_column_mapping(size_t column_index);
 
-    SchemaMapping get_schema_mapping() const { return _schema_mapping; }
+    const SchemaMapping& get_schema_mapping() const { return _schema_mapping; }
 
     std::vector<ColumnId>* get_mutable_selected_column_indexs() { return &_selected_column_indexs; }
 
     bool change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const TabletMetaSharedPtr& base_tablet_meta,
                       const TabletMetaSharedPtr& new_tablet_meta, MemPool* mem_pool);
 
-    bool change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const Schema& base_schema, const Schema& new_schema,
-                         MemPool* mem_pool);
+    bool change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const VectorizedSchema& base_schema,
+                         const VectorizedSchema& new_schema, MemPool* mem_pool);
 
 private:
     const MaterializeTypeConverter* get_materialize_type_converter(const std::string& materialized_function,
-                                                                   FieldType type);
+                                                                   LogicalType type);
 
     // @brief column-mapping specification of new schema
     SchemaMapping _schema_mapping;

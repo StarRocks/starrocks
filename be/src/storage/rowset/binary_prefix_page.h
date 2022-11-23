@@ -103,7 +103,7 @@ private:
     static const uint8_t RESTART_POINT_INTERVAL = 16;
 };
 
-template <FieldType Type>
+template <LogicalType Type>
 class BinaryPrefixPageDecoder final : public PageDecoder {
 public:
     BinaryPrefixPageDecoder(Slice data, const PageDecoderOptions& options) : _data(data) {}
@@ -113,8 +113,6 @@ public:
     Status seek_to_position_in_page(uint32_t pos) override;
 
     Status seek_at_or_after_value(const void* value, bool* exact_match) override;
-
-    Status next_batch(size_t* n, ColumnBlockView* dst) override;
 
     Status next_batch(size_t* n, vectorized::Column* dst) override;
 

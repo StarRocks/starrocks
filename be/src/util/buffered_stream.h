@@ -17,7 +17,7 @@ public:
     virtual Status get_bytes(const uint8_t** buffer, size_t offset, size_t* nbytes, bool peek) = 0;
     virtual void seek_to(uint64_t offset) = 0;
     virtual void skip(uint64_t nbytes) = 0;
-    virtual ~IBufferedInputStream() {}
+    virtual ~IBufferedInputStream() = default;
 };
 
 class DefaultBufferedInputStream : public IBufferedInputStream {
@@ -98,7 +98,6 @@ public:
     Status get_bytes(const uint8_t** buffer, size_t offset, size_t* nbytes, bool peek) override;
     void release();
     void set_coalesce_options(const CoalesceOptions& options) { _options = options; }
-    void set_enable_block_cache(bool v) { _enable_block_cache = v; }
 
 private:
     struct SharedBuffer {
@@ -111,7 +110,6 @@ private:
     RandomAccessFile* _file;
     std::map<int64_t, SharedBuffer> _map;
     CoalesceOptions _options;
-    bool _enable_block_cache = false;
 };
 
 } // namespace starrocks

@@ -5,8 +5,7 @@
 
 #include "exec/pipeline/operator.h"
 
-namespace starrocks {
-namespace query_cache {
+namespace starrocks::query_cache {
 class ConjugateOperator;
 using ConjugateOperatorRawPtr = ConjugateOperator*;
 using ConjugateOperatorPtr = std::shared_ptr<ConjugateOperator>;
@@ -30,7 +29,7 @@ class ConjugateOperator : public pipeline::Operator {
 public:
     ConjugateOperator(pipeline::OperatorFactory* factory, int32_t driver_sequence, pipeline::OperatorPtr sink_op,
                       pipeline::OperatorPtr source_op);
-    ~ConjugateOperator() = default;
+    ~ConjugateOperator() override = default;
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
     bool has_output() const override;
@@ -52,7 +51,7 @@ private:
 class ConjugateOperatorFactory : public pipeline::OperatorFactory {
 public:
     ConjugateOperatorFactory(pipeline::OpFactoryPtr sink_op_factory, const pipeline::OpFactoryPtr& source_op_factory);
-    ~ConjugateOperatorFactory() = default;
+    ~ConjugateOperatorFactory() override = default;
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
     pipeline::OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
@@ -61,5 +60,4 @@ private:
     pipeline::OpFactoryPtr _sink_op_factory;
     pipeline::OpFactoryPtr _source_op_factory;
 };
-} // namespace query_cache
-} // namespace starrocks
+} // namespace starrocks::query_cache

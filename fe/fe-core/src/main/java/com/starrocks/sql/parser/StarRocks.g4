@@ -23,11 +23,11 @@ statement
     | useDatabaseStatement
     | useCatalogStatement
     | showDatabasesStatement
-    | alterDbQuotaStmtatement
+    | alterDbQuotaStatement
     | createDbStatement
     | dropDbStatement
     | showCreateDbStatement
-    | alterDatabaseRename
+    | alterDatabaseRenameStatement
     | recoverDbStmt
     | showDataStmt
 
@@ -91,6 +91,9 @@ statement
     | pauseRoutineLoadStatement
     | showRoutineLoadStatement
     | showRoutineLoadTaskStatement
+
+    //StreamLoad Statement
+    | showStreamLoadStatement
 
     // Admin Statement
     | adminSetConfigStatement
@@ -242,7 +245,7 @@ showDatabasesStatement
     | SHOW SCHEMAS ((LIKE pattern=string) | (WHERE expression))?
     ;
 
-alterDbQuotaStmtatement
+alterDbQuotaStatement
     : ALTER DATABASE identifier SET DATA QUOTA identifier
     | ALTER DATABASE identifier SET REPLICA QUOTA INTEGER_VALUE
     ;
@@ -259,7 +262,7 @@ showCreateDbStatement
     : SHOW CREATE (DATABASE | SCHEMA) identifier
     ;
 
-alterDatabaseRename
+alterDatabaseRenameStatement
     : ALTER DATABASE identifier RENAME identifier
     ;
 
@@ -748,7 +751,7 @@ insertStatement
     ;
 
 updateStatement
-    : explainDesc? UPDATE qualifiedName SET assignmentList (WHERE where=expression)?
+    : explainDesc? UPDATE qualifiedName SET assignmentList fromClause (WHERE where=expression)?
     ;
 
 deleteStatement
@@ -831,6 +834,12 @@ showRoutineLoadTaskStatement
     : SHOW ROUTINE LOAD TASK
         (FROM db=qualifiedName)?
         WHERE expression
+    ;
+
+showStreamLoadStatement
+    : SHOW ALL? STREAM LOAD (FOR (db=qualifiedName '.')? name=identifier)?
+        (FROM db=qualifiedName)?
+        (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 // ------------------------------------------- Analyze Statement -------------------------------------------------------
 
@@ -1167,6 +1176,8 @@ privilegeActionReserved
     | SELECT
     | INSERT
     | DELETE
+    | USAGE
+    | CREATE_DATABASE
     | ALL
     ;
 
@@ -1346,7 +1357,7 @@ installPluginStatement
     ;
 
 uninstallPluginStatement
-    : UNINSTALL PLUGIN FROM identifierOrString
+    : UNINSTALL PLUGIN identifierOrString
     ;
 
 // ------------------------------------------- File Statement ----------------------------------------------------------
@@ -1448,6 +1459,14 @@ queryNoWith
     : queryPrimary (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 
+temporalClause
+    : AS OF expression
+    | FOR SYSTEM_TIME AS OF TIMESTAMP string
+    | FOR SYSTEM_TIME BETWEEN expression AND expression
+    | FOR SYSTEM_TIME FROM expression TO expression
+    | FOR SYSTEM_TIME ALL
+    ;
+
 queryPrimary
     : querySpecification                                                                    #queryPrimaryDefault
     | subquery                                                                              #queryWithParentheses
@@ -1476,9 +1495,8 @@ limitElement
 querySpecification
     : SELECT setVarHint* setQuantifier? selectItem (',' selectItem)*
       fromClause
-      (WHERE where=expression)?
-      (GROUP BY groupingElement)?
-      (HAVING having=expression)?
+      ((QUALIFY qualifyFunction=selectItem comparisonOperator limit=INTEGER_VALUE)?
+      | (WHERE where=expression)? (GROUP BY groupingElement)? (HAVING having=expression)?)
     ;
 
 fromClause
@@ -1522,7 +1540,7 @@ relation
     ;
 
 relationPrimary
-    : qualifiedName partitionNames? tabletList? (
+    : qualifiedName temporalClause? partitionNames? tabletList? (
         AS? alias=identifier columnAliases?)? bracketHint?                              #tableAtom
     | '(' VALUES rowConstructor (',' rowConstructor)* ')'
         (AS? alias=identifier columnAliases?)?                                          #inlineTable
@@ -1668,6 +1686,7 @@ primaryExpression
     | primaryExpression COLLATE (identifier | string)                                     #collate
     | literalExpression                                                                   #literal
     | columnReference                                                                     #columnRef
+    | base = primaryExpression '.' fieldName = identifier                                 #dereference
     | left = primaryExpression CONCAT right = primaryExpression                           #concat
     | operator = (MINUS_SYMBOL | PLUS_SYMBOL | BITNOT) primaryExpression                  #arithmeticUnary
     | operator = LOGICAL_NOT primaryExpression                                            #arithmeticUnary
@@ -1693,6 +1712,7 @@ literalExpression
     | string                                                                              #stringLiteral
     | interval                                                                            #intervalLiteral
     | unitBoundary                                                                        #unitBoundaryLiteral
+    | binary                                                                              #binaryLiteral
     ;
 
 functionCall
@@ -1725,7 +1745,6 @@ systemVariable
 
 columnReference
     : identifier
-    | qualifiedName
     ;
 
 informationFunctionExpression
@@ -1934,6 +1953,11 @@ string
     | DOUBLE_QUOTED_TEXT
     ;
 
+binary
+    : BINARY_SINGLE_QUOTED_TEXT
+    | BINARY_DOUBLE_QUOTED_TEXT
+    ;
+
 comparisonOperator
     : EQ | NEQ | LT | LTE | GT | GTE | EQ_FOR_NULL
     ;
@@ -1958,10 +1982,23 @@ type
     : baseType
     | decimalType
     | arrayType
+    | structType
     ;
 
 arrayType
     : ARRAY '<' type '>'
+    ;
+
+columnNameColonType
+    : identifier ':' type comment?
+    ;
+
+columnNameColonTypeList
+    : columnNameColonType (',' columnNameColonType)*
+    ;
+
+structType
+    : STRUCT '<' columnNameColonTypeList '>'
     ;
 
 typeParameter
@@ -1992,6 +2029,7 @@ baseType
     | HLL
     | PERCENTILE
     | JSON
+    | VARBINARY typeParameter?
     ;
 
 decimalType
@@ -2058,14 +2096,14 @@ nonReserved
     | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOGICAL
     | MANUAL | MATERIALIZED | MAX | META | MIN | MINUTE | MODE | MODIFY | MONTH | MERGE
     | NAME | NAMES | NEGATIVE | NO | NODE | NULLS
-    | OBSERVER | OFFSET | ONLY | OPEN | OPTION | OVERWRITE
+    | OBSERVER | OF | OFFSET | ONLY | OPEN | OPTION | OVERWRITE
     | PARTITIONS | PASSWORD | PATH | PAUSE | PERCENTILE_UNION | PLUGIN | PLUGINS | PRECEDING | PROC | PROCESSLIST
     | PROPERTIES | PROPERTY
     | QUARTER | QUERY | QUOTA
     | RANDOM | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY | REPOSITORIES
     | RESOURCE | RESOURCES | RESTORE | RESUME | RETURNS | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE
     | SAMPLE | SECOND | SERIALIZABLE | SESSION | SETS | SIGNED | SNAPSHOT | SQLBLACKLIST | START | SUM | STATUS | STOP
-    | STORAGE| STRING | STATS | SUBMIT | SYNC
+    | STORAGE| STRING | STATS | SUBMIT | SYNC | SYSTEM_TIME
     | TABLES | TABLET | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TRANSACTION
     | TRIGGERS | TRUNCATE | TYPE | TYPES
     | UNBOUNDED | UNCOMMITTED | UNINSTALL | USER

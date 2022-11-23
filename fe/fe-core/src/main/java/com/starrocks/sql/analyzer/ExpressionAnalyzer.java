@@ -35,6 +35,7 @@ import com.starrocks.analysis.PlaceHolderExpr;
 import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.VariableExpr;
@@ -46,6 +47,8 @@ import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.StructField;
+import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Type;
 import com.starrocks.cluster.ClusterNamespace;
@@ -201,10 +204,41 @@ public class ExpressionAnalyzer {
         }
 
         @Override
+        public Void visitSubfieldExpr(SubfieldExpr node, Scope scope) {
+            Expr child = node.getChild(0);
+            // User enter an invalid sql, like SELECT 'col'.b FROM tbl;
+            // 'col' will be parsed as StringLiteral, it's invalid.
+            // TODO(SmithCruise) We should handle this problem in parser in the future.
+            Preconditions.checkArgument(child.getType().isStructType(),
+                    String.format("%s must be a struct type, check if you are using `'`", child.toSql()));
+            StructType structType = (StructType) child.getType();
+            StructField structField = structType.getField(node.getFieldName());
+
+            if (structField == null) {
+                throw new SemanticException("Struct subfield '%s' cannot be resolved", node.getFieldName());
+            }
+
+            node.setType(structField.getType());
+            return null;
+        }
+        @Override
         public Void visitSlot(SlotRef node, Scope scope) {
             ResolvedField resolvedField = scope.resolveField(node);
             node.setType(resolvedField.getField().getType());
             node.setTblName(resolvedField.getField().getRelationAlias());
+
+            if (node.getType().isStructType()) {
+                // If SlotRef is a struct type, it needs special treatment, reset SlotRef's col, label name.
+                node.setCol(resolvedField.getField().getName());
+                node.setLabel(resolvedField.getField().getName());
+
+                if (resolvedField.getField().getTmpUsedStructFieldPos().size() > 0) {
+                    // This SlotRef is accessing subfield
+                    node.setUsedStructFieldPos(resolvedField.getField().getTmpUsedStructFieldPos());
+                    node.resetStructInfo();
+                }
+            }
+
             handleResolvedField(node, resolvedField);
             return null;
         }
@@ -720,6 +754,12 @@ public class ExpressionAnalyzer {
                             fnName + " requires second parameter must be greater than 0");
                 }
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            } else if (fnName.equals(FunctionSet.ARRAY_SLICE)) {
+                // Default type is TINYINT, it would match to a wrong function
+                for (int i = 1; i < argumentTypes.length; i++) {
+                    argumentTypes[i] = Type.BIGINT;
+                }
+                fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_SUPERTYPE_OF);
             } else {
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             }

@@ -111,4 +111,8 @@ Status MemoryScratchSink::close(RuntimeState* state, Status exec_status) {
     return Status::OK();
 }
 
+const RowDescriptor MemoryScratchSink::get_row_desc() {
+    return _row_desc;
+}
+
 } // namespace starrocks

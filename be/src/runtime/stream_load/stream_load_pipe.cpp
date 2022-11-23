@@ -26,6 +26,9 @@ namespace starrocks {
 Status StreamLoadPipe::append(ByteBufferPtr&& buf) {
     if (buf != nullptr && buf->has_remaining()) {
         std::unique_lock<std::mutex> l(_lock);
+        if (_cancelled) {
+            return _err_st;
+        }
         // if _buf_queue is empty, we append this buf without size check
         _put_cond.wait(l, [&]() {
             return _cancelled || _buf_queue.empty() || _buffered_bytes + buf->remaining() <= _max_buffered_bytes;

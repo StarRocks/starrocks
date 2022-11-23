@@ -66,6 +66,10 @@ public class ColumnRefSet implements Cloneable {
         return bitSet.equals(rhs.bitSet);
     }
 
+    public int size() {
+        return bitSet.cardinality();
+    }
+
     // The meaning is same with SQL Union Operation
     public void union(int id) {
         bitSet.set(id);
@@ -146,6 +150,10 @@ public class ColumnRefSet implements Cloneable {
 
     public boolean containsAll(ColumnRefSet rhs) {
         return rhs.bitSet.stream().allMatch(bit -> bitSet.get(bit));
+    }
+
+    public boolean containsAny(ColumnRefSet rhs) {
+        return rhs.bitSet.stream().anyMatch(bit -> bitSet.get(bit));
     }
 
     public boolean containsAll(List<Integer> rhs) {

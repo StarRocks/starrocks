@@ -12,8 +12,7 @@
 #include "pipeline_driver_queue.h"
 #include "util/thread.h"
 
-namespace starrocks {
-namespace pipeline {
+namespace starrocks::pipeline {
 
 class PipelineDriverPoller;
 using PipelineDriverPollerPtr = std::unique_ptr<PipelineDriverPoller>;
@@ -63,5 +62,4 @@ private:
     std::atomic<bool> _is_polling_thread_initialized;
     std::atomic<bool> _is_shutdown;
 };
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline

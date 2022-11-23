@@ -9,8 +9,7 @@
 
 #include "runtime/StringSearcher.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 /** Search for a substring in a string by Volnitsky's algorithm
   * http://volnitsky.com/project/str_search/
@@ -153,6 +152,4 @@ protected:
 
 using VolnitskyUTF8 = VolnitskyBase<StringSearcher>;
 
-} //namespace vectorized
-
-} //namespace starrocks
+} // namespace starrocks::vectorized

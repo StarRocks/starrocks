@@ -38,6 +38,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.Utils;
+import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.server.GlobalStateMgr;
@@ -50,10 +51,10 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
 
 public class PublishVersionDaemon extends LeaderDaemon {
@@ -203,6 +204,8 @@ public class PublishVersionDaemon extends LeaderDaemon {
                     }
                     // clear publish version tasks to reduce memory usage when state changed to visible.
                     transactionState.clearPublishVersionTasks();
+                    // Refresh materialized view when base table update transaction has been visible if necessary
+                    refreshMvIfNecessary(transactionState);
                 }
             } catch (UserException e) {
                 LOG.error("errors while publish version to all backends", e);
@@ -261,6 +264,17 @@ public class PublishVersionDaemon extends LeaderDaemon {
         boolean finished = true;
         long txnId = txnState.getTransactionId();
         for (PartitionCommitInfo partitionCommitInfo : tableCommitInfo.getIdToPartitionCommitInfo().values()) {
+
+            long currentTime = System.currentTimeMillis();
+            long versionTime = partitionCommitInfo.getVersionTime();
+            if (versionTime > 0) {
+                continue;
+            }
+            if (versionTime < 0 && currentTime < Math.abs(versionTime) + RETRY_INTERVAL_MS) {
+                finished = false;
+                continue;
+            }
+
             boolean ok = false;
             try {
                 ok = publishPartition(db, tableCommitInfo, partitionCommitInfo, txnState);
@@ -306,14 +320,6 @@ public class PublishVersionDaemon extends LeaderDaemon {
                 LOG.info("Ignore non-exist partition {} of table {} in txn {}", partitionId, table.getName(), txnLabel);
                 return true;
             }
-            long currentTime = System.currentTimeMillis();
-            long versionTime = partitionCommitInfo.getVersionTime();
-            if (versionTime > 0) {
-                return true;
-            }
-            if (versionTime < 0 && currentTime < Math.abs(versionTime) + RETRY_INTERVAL_MS) {
-                return false;
-            }
             if (partition.getVisibleVersion() + 1 != txnVersion) {
                 LOG.info("Previous transaction has not finished. txn_id={} partition_version={}, txn_version={}",
                         txnId, partition.getVisibleVersion(), txnVersion);
@@ -337,24 +343,16 @@ public class PublishVersionDaemon extends LeaderDaemon {
             db.readUnlock();
         }
 
-        return publishNormalTablets(normalTablets, txnId, txnVersion) && publishShadowTablets(shadowTablets, txnId, txnVersion);
-    }
-
-    private boolean publishNormalTablets(@Nullable List<Tablet> tablets, long txnId, long version)
-            throws RpcException, NoAliveBackendException {
-        if (tablets == null || tablets.isEmpty()) {
-            return true;
+        if (shadowTablets != null && !shadowTablets.isEmpty()) {
+            Utils.publishLogVersion(shadowTablets, txnId, txnVersion);
         }
-        Utils.publishVersion(tablets, txnId, version - 1, version);
-        return true;
-    }
+        if (normalTablets != null && !normalTablets.isEmpty()) {
+            Map<Long, Double> compactionScores = new HashMap<>();
+            Utils.publishVersion(normalTablets, txnId, txnVersion - 1, txnVersion, compactionScores);
 
-    private boolean publishShadowTablets(@Nullable List<Tablet> tablets, long txnId, long version)
-            throws RpcException, NoAliveBackendException {
-        if (tablets == null || tablets.isEmpty()) {
-            return true;
+            Quantiles quantiles = Quantiles.compute(compactionScores.values());
+            partitionCommitInfo.setCompactionScore(quantiles);
         }
-        Utils.publishLogVersion(tablets, txnId, version);
         return true;
     }
 
@@ -370,22 +368,34 @@ public class PublishVersionDaemon extends LeaderDaemon {
         // Refresh materialized view when base table update transaction has been visible
         long dbId = transactionState.getDbId();
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-        db.readLock();
-        try {
-            for (long tableId : transactionState.getTableIdList()) {
-                Table table = db.getTable(tableId);
-                Set<MvId> relatedMvs = table.getRelatedMaterializedViews();
-                for (MvId mvId : relatedMvs) {
-                    MaterializedView materializedView = (MaterializedView) db.getTable(mvId.getId());
-                    if (materializedView.isLoadTriggeredRefresh()) {
+        for (long tableId : transactionState.getTableIdList()) {
+            Table table;
+            db.readLock();
+            try {
+                table = db.getTable(tableId);
+            } finally {
+                db.readUnlock();
+            }
+            if (table == null) {
+                LOG.warn("failed to get transaction tableId {} when pending refresh.", tableId);
+                return;
+            }
+            Set<MvId> relatedMvs = table.getRelatedMaterializedViews();
+            for (MvId mvId : relatedMvs) {
+                Database mvDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mvId.getDbId());
+                mvDb.readLock();
+                try {
+                    MaterializedView materializedView = (MaterializedView) mvDb.getTable(mvId.getId());
+                    if (materializedView.shouldTriggeredRefreshBy(db.getFullName(), table.getName())) {
                         GlobalStateMgr.getCurrentState().getLocalMetastore().refreshMaterializedView(
-                                db.getFullName(), db.getTable(mvId.getId()).getName(),
+                                mvDb.getFullName(), mvDb.getTable(mvId.getId()).getName(),
                                 Constants.TaskRunPriority.NORMAL.value());
                     }
+                } finally {
+                    mvDb.readUnlock();
                 }
             }
-        } finally {
-            db.readUnlock();
         }
+
     }
 }

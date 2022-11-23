@@ -40,7 +40,7 @@ struct ComparePairFirst final {
 enum FunnelMode : int { DEDUPLICATION = 1, FIXED = 2, DEDUPLICATION_FIXED = 3, INCREASE = 4 };
 
 namespace InteralTypeOfFunnel {
-template <PrimitiveType primitive_type>
+template <LogicalType primitive_type>
 struct TypeTraits {};
 
 template <>
@@ -67,7 +67,7 @@ struct TypeTraits<TYPE_DATETIME> {
 
 inline const constexpr int reserve_list_size = 4;
 
-template <PrimitiveType PT>
+template <LogicalType PT>
 struct WindowFunnelState {
     // Use to identify timestamp(datetime/date)
     using TimeType = typename InteralTypeOfFunnel::TypeTraits<PT>::Type;
@@ -396,7 +396,7 @@ struct WindowFunnelState {
     static inline int8_t MODE_FLAGS[] = {1 << 0, 1 << 1};
 };
 
-template <PrimitiveType PT>
+template <LogicalType PT>
 class WindowFunnelAggregateFunction final
         : public AggregateFunctionBatchHelper<WindowFunnelState<PT>, WindowFunnelAggregateFunction<PT>> {
     using TimeTypeColumn = typename WindowFunnelState<PT>::TimeTypeColumn;

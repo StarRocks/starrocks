@@ -33,7 +33,7 @@ public:
 private:
     static bool _is_pure_doc_value(const rapidjson::Value& obj);
 
-    template <PrimitiveType type, class CppType = RunTimeCppType<type>>
+    template <LogicalType type, class CppType = RunTimeCppType<type>>
     static void _append_data(Column* column, CppType& value);
 
     static void _append_null(Column* column);
@@ -43,15 +43,15 @@ private:
 
     Slice _json_val_to_slice(const rapidjson::Value& val);
 
-    template <PrimitiveType type, typename T = RunTimeCppType<type>>
+    template <LogicalType type, typename T = RunTimeCppType<type>>
     static Status _append_int_val(const rapidjson::Value& col, Column* column, bool pure_doc_value);
 
-    template <PrimitiveType type, typename T = RunTimeCppType<type>>
+    template <LogicalType type, typename T = RunTimeCppType<type>>
     static Status _append_float_val(const rapidjson::Value& col, Column* column, bool pure_doc_value);
 
     static Status _append_bool_val(const rapidjson::Value& col, Column* column, bool pure_doc_value);
 
-    template <PrimitiveType type, typename T = RunTimeCppType<type>>
+    template <LogicalType type, typename T = RunTimeCppType<type>>
     static Status _append_date_val(const rapidjson::Value& col, Column* column, bool pure_doc_value);
 
     // The representation of array value in _source and doc_value (column storage) is inconsistent

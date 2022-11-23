@@ -23,7 +23,7 @@ TEST_F(TypeDescriptorTest, test_from_thrift) {
         auto t = TypeDescriptor::from_thrift(ttype_desc);
         ASSERT_FALSE(t.is_complex_type());
         ASSERT_EQ(0, t.children.size());
-        ASSERT_EQ(PrimitiveType::TYPE_INT, t.type);
+        ASSERT_EQ(LogicalType::TYPE_INT, t.type);
 
         ASSERT_EQ(ttype_desc, t.to_thrift());
     }
@@ -39,7 +39,7 @@ TEST_F(TypeDescriptorTest, test_from_thrift) {
         auto t = TypeDescriptor::from_thrift(ttype_desc);
         ASSERT_FALSE(t.is_complex_type());
         ASSERT_EQ(0, t.children.size());
-        ASSERT_EQ(PrimitiveType::TYPE_FLOAT, t.type);
+        ASSERT_EQ(LogicalType::TYPE_FLOAT, t.type);
 
         ASSERT_EQ(ttype_desc, t.to_thrift());
     }
@@ -55,7 +55,7 @@ TEST_F(TypeDescriptorTest, test_from_thrift) {
         auto t = TypeDescriptor::from_thrift(ttype_desc);
         ASSERT_FALSE(t.is_complex_type());
         ASSERT_EQ(0, t.children.size());
-        ASSERT_EQ(PrimitiveType::TYPE_DOUBLE, t.type);
+        ASSERT_EQ(LogicalType::TYPE_DOUBLE, t.type);
 
         ASSERT_EQ(ttype_desc, t.to_thrift());
     }
@@ -73,7 +73,7 @@ TEST_F(TypeDescriptorTest, test_from_thrift) {
         auto t = TypeDescriptor::from_thrift(ttype_desc);
         ASSERT_FALSE(t.is_complex_type());
         ASSERT_EQ(0, t.children.size());
-        ASSERT_EQ(PrimitiveType::TYPE_DECIMALV2, t.type);
+        ASSERT_EQ(LogicalType::TYPE_DECIMALV2, t.type);
         ASSERT_EQ(6, t.scale);
         ASSERT_EQ(4, t.precision);
 
@@ -92,7 +92,7 @@ TEST_F(TypeDescriptorTest, test_from_thrift) {
         auto t = TypeDescriptor::from_thrift(ttype_desc);
         ASSERT_FALSE(t.is_complex_type());
         ASSERT_EQ(0, t.children.size());
-        ASSERT_EQ(PrimitiveType::TYPE_CHAR, t.type);
+        ASSERT_EQ(LogicalType::TYPE_CHAR, t.type);
         ASSERT_EQ(10, t.len);
 
         ASSERT_EQ(ttype_desc, t.to_thrift());
@@ -110,7 +110,7 @@ TEST_F(TypeDescriptorTest, test_from_thrift) {
         auto t = TypeDescriptor::from_thrift(ttype_desc);
         ASSERT_FALSE(t.is_complex_type());
         ASSERT_EQ(0, t.children.size());
-        ASSERT_EQ(PrimitiveType::TYPE_VARCHAR, t.type);
+        ASSERT_EQ(LogicalType::TYPE_VARCHAR, t.type);
         ASSERT_EQ(10, t.len);
 
         ASSERT_EQ(ttype_desc, t.to_thrift());
@@ -131,10 +131,10 @@ TEST_F(TypeDescriptorTest, test_from_thrift) {
         ASSERT_TRUE(t.is_complex_type());
         ASSERT_TRUE(t.is_collection_type());
         ASSERT_EQ(1, t.children.size());
-        ASSERT_EQ(PrimitiveType::TYPE_ARRAY, t.type);
+        ASSERT_EQ(LogicalType::TYPE_ARRAY, t.type);
         ASSERT_FALSE(t.children.at(0).is_complex_type());
         ASSERT_EQ(0, t.children.at(0).children.size());
-        ASSERT_EQ(PrimitiveType::TYPE_VARCHAR, t.children.at(0).type);
+        ASSERT_EQ(LogicalType::TYPE_VARCHAR, t.children.at(0).type);
         ASSERT_EQ(10, t.children.at(0).len);
 
         ASSERT_EQ(ttype_desc, t.to_thrift());
@@ -145,11 +145,13 @@ TEST_F(TypeDescriptorTest, test_from_thrift) {
         ttype_desc.__isset.types = true;
         ttype_desc.types.resize(5);
         ttype_desc.types[0].__set_type(TTypeNodeType::MAP);
+        ttype_desc.types[0].__set_selected_fields({true, true});
         ttype_desc.types[1].__set_type(TTypeNodeType::SCALAR);
         ttype_desc.types[1].__set_scalar_type(TScalarType());
         ttype_desc.types[1].scalar_type.__set_type(TPrimitiveType::VARCHAR);
         ttype_desc.types[1].scalar_type.__set_len(10);
         ttype_desc.types[2].__set_type(TTypeNodeType::MAP);
+        ttype_desc.types[2].__set_selected_fields({true, true});
         ttype_desc.types[3].__set_type(TTypeNodeType::SCALAR);
         ttype_desc.types[3].__set_scalar_type(TScalarType());
         ttype_desc.types[3].scalar_type.__set_type(TPrimitiveType::INT);
@@ -160,14 +162,14 @@ TEST_F(TypeDescriptorTest, test_from_thrift) {
         auto t = TypeDescriptor::from_thrift(ttype_desc);
         ASSERT_TRUE(t.is_complex_type());
         ASSERT_TRUE(t.is_collection_type());
-        ASSERT_EQ(PrimitiveType::TYPE_MAP, t.type);
+        ASSERT_EQ(LogicalType::TYPE_MAP, t.type);
         ASSERT_EQ(2, t.children.size());
-        ASSERT_EQ(PrimitiveType::TYPE_VARCHAR, t.children[0].type);
+        ASSERT_EQ(LogicalType::TYPE_VARCHAR, t.children[0].type);
         ASSERT_EQ(10, t.children[0].len);
-        ASSERT_EQ(PrimitiveType::TYPE_MAP, t.children[1].type);
+        ASSERT_EQ(LogicalType::TYPE_MAP, t.children[1].type);
         ASSERT_EQ(2, t.children[1].children.size());
-        ASSERT_EQ(PrimitiveType::TYPE_INT, t.children[1].children[0].type);
-        ASSERT_EQ(PrimitiveType::TYPE_DOUBLE, t.children[1].children[1].type);
+        ASSERT_EQ(LogicalType::TYPE_INT, t.children[1].children[0].type);
+        ASSERT_EQ(LogicalType::TYPE_DOUBLE, t.children[1].children[1].type);
     }
     // struct{a INT, b ARRAY<int>}
     {
@@ -191,15 +193,15 @@ TEST_F(TypeDescriptorTest, test_from_thrift) {
         auto t = TypeDescriptor::from_thrift(ttype_desc);
         ASSERT_TRUE(t.is_complex_type());
         ASSERT_FALSE(t.is_collection_type());
-        ASSERT_EQ(PrimitiveType::TYPE_STRUCT, t.type);
+        ASSERT_EQ(LogicalType::TYPE_STRUCT, t.type);
         ASSERT_EQ(2, t.field_names.size());
         ASSERT_EQ("a", t.field_names[0]);
         ASSERT_EQ("b", t.field_names[1]);
         ASSERT_EQ(2, t.children.size());
-        ASSERT_EQ(PrimitiveType::TYPE_INT, t.children[0].type);
-        ASSERT_EQ(PrimitiveType::TYPE_ARRAY, t.children[1].type);
+        ASSERT_EQ(LogicalType::TYPE_INT, t.children[0].type);
+        ASSERT_EQ(LogicalType::TYPE_ARRAY, t.children[1].type);
         ASSERT_EQ(1, t.children[1].children.size());
-        ASSERT_EQ(PrimitiveType::TYPE_INT, t.children[1].children[0].type);
+        ASSERT_EQ(LogicalType::TYPE_INT, t.children[1].children[0].type);
     }
 }
 
@@ -208,7 +210,7 @@ TEST_F(TypeDescriptorTest, test_to_thrift) {
     // TINYINT
     {
         TypeDescriptor t;
-        t.type = PrimitiveType::TYPE_TINYINT;
+        t.type = LogicalType::TYPE_TINYINT;
         TTypeDesc ttype_desc = t.to_thrift();
         ASSERT_EQ(1, ttype_desc.types.size());
         ASSERT_EQ(TTypeNodeType::SCALAR, ttype_desc.types[0].type);
@@ -219,7 +221,7 @@ TEST_F(TypeDescriptorTest, test_to_thrift) {
     // VARCHAR(8)
     {
         TypeDescriptor t;
-        t.type = PrimitiveType::TYPE_VARCHAR;
+        t.type = LogicalType::TYPE_VARCHAR;
         t.len = 8;
         TTypeDesc ttype_desc = t.to_thrift();
         ASSERT_EQ(1, ttype_desc.types.size());
@@ -232,7 +234,7 @@ TEST_F(TypeDescriptorTest, test_to_thrift) {
     // DECIMAL(8, 4)
     {
         TypeDescriptor t;
-        t.type = PrimitiveType::TYPE_DECIMALV2;
+        t.type = LogicalType::TYPE_DECIMALV2;
         t.len = 16;
         t.scale = 8;
         t.precision = 4;
@@ -249,9 +251,9 @@ TEST_F(TypeDescriptorTest, test_to_thrift) {
     // ARRAY<INT>
     {
         TypeDescriptor t;
-        t.type = PrimitiveType::TYPE_ARRAY;
+        t.type = LogicalType::TYPE_ARRAY;
         t.children.emplace_back();
-        t.children.back().type = PrimitiveType::TYPE_INT;
+        t.children.back().type = LogicalType::TYPE_INT;
         TTypeDesc ttype_desc = t.to_thrift();
         ASSERT_EQ(2, ttype_desc.types.size());
         ASSERT_EQ(TTypeNodeType::ARRAY, ttype_desc.types[0].type);
@@ -263,10 +265,10 @@ TEST_F(TypeDescriptorTest, test_to_thrift) {
     {
         TypeDescriptor t;
         t.children.resize(1);
-        t.type = PrimitiveType::TYPE_ARRAY;
-        t.children[0].type = PrimitiveType::TYPE_ARRAY;
+        t.type = LogicalType::TYPE_ARRAY;
+        t.children[0].type = LogicalType::TYPE_ARRAY;
         t.children[0].children.resize(1);
-        t.children[0].children[0].type = PrimitiveType::TYPE_INT;
+        t.children[0].children[0].type = LogicalType::TYPE_INT;
         TTypeDesc ttype_desc = t.to_thrift();
         ASSERT_EQ(3, ttype_desc.types.size());
         ASSERT_EQ(TTypeNodeType::ARRAY, ttype_desc.types[0].type);
@@ -279,14 +281,16 @@ TEST_F(TypeDescriptorTest, test_to_thrift) {
     // MAP<int, struct{a tinyint, b bigint}>
     {
         TypeDescriptor t;
-        t.type = PrimitiveType::TYPE_MAP;
+        t.type = LogicalType::TYPE_MAP;
+        t.selected_fields.emplace_back(true);
+        t.selected_fields.emplace_back(true);
         t.children.resize(2);
-        t.children[0].type = PrimitiveType::TYPE_INT;
-        t.children[1].type = PrimitiveType::TYPE_STRUCT;
+        t.children[0].type = LogicalType::TYPE_INT;
+        t.children[1].type = LogicalType::TYPE_STRUCT;
         t.children[1].field_names = {"a", "b"};
         t.children[1].children.resize(2);
-        t.children[1].children[0].type = PrimitiveType::TYPE_TINYINT;
-        t.children[1].children[1].type = PrimitiveType::TYPE_BIGINT;
+        t.children[1].children[0].type = LogicalType::TYPE_TINYINT;
+        t.children[1].children[1].type = LogicalType::TYPE_BIGINT;
         t.children[1].selected_fields.emplace_back(true);
         t.children[1].selected_fields.emplace_back(true);
 
@@ -327,7 +331,7 @@ TEST_F(TypeDescriptorTest, test_from_protobuf) {
         auto t = TypeDescriptor::from_protobuf(t_pb);
         ASSERT_FALSE(t.is_complex_type());
         ASSERT_EQ(0, t.children.size());
-        ASSERT_EQ(PrimitiveType::TYPE_TINYINT, t.type);
+        ASSERT_EQ(LogicalType::TYPE_TINYINT, t.type);
     }
     // SMALLINT
     {
@@ -339,7 +343,7 @@ TEST_F(TypeDescriptorTest, test_from_protobuf) {
         auto t = TypeDescriptor::from_protobuf(t_pb);
         ASSERT_FALSE(t.is_complex_type());
         ASSERT_EQ(0, t.children.size());
-        ASSERT_EQ(PrimitiveType::TYPE_SMALLINT, t.type);
+        ASSERT_EQ(LogicalType::TYPE_SMALLINT, t.type);
     }
     // INT
     {
@@ -351,7 +355,7 @@ TEST_F(TypeDescriptorTest, test_from_protobuf) {
         auto t = TypeDescriptor::from_protobuf(t_pb);
         ASSERT_FALSE(t.is_complex_type());
         ASSERT_EQ(0, t.children.size());
-        ASSERT_EQ(PrimitiveType::TYPE_INT, t.type);
+        ASSERT_EQ(LogicalType::TYPE_INT, t.type);
     }
     // float
     {
@@ -363,7 +367,7 @@ TEST_F(TypeDescriptorTest, test_from_protobuf) {
         auto t = TypeDescriptor::from_protobuf(t_pb);
         ASSERT_FALSE(t.is_complex_type());
         ASSERT_EQ(0, t.children.size());
-        ASSERT_EQ(PrimitiveType::TYPE_FLOAT, t.type);
+        ASSERT_EQ(LogicalType::TYPE_FLOAT, t.type);
     }
     // double
     {
@@ -375,7 +379,7 @@ TEST_F(TypeDescriptorTest, test_from_protobuf) {
         auto t = TypeDescriptor::from_protobuf(t_pb);
         ASSERT_FALSE(t.is_complex_type());
         ASSERT_EQ(0, t.children.size());
-        ASSERT_EQ(PrimitiveType::TYPE_DOUBLE, t.type);
+        ASSERT_EQ(LogicalType::TYPE_DOUBLE, t.type);
     }
     // decimal
     {
@@ -389,7 +393,7 @@ TEST_F(TypeDescriptorTest, test_from_protobuf) {
         auto t = TypeDescriptor::from_protobuf(t_pb);
         ASSERT_FALSE(t.is_complex_type());
         ASSERT_EQ(0, t.children.size());
-        ASSERT_EQ(PrimitiveType::TYPE_DECIMALV2, t.type);
+        ASSERT_EQ(LogicalType::TYPE_DECIMALV2, t.type);
         ASSERT_EQ(6, t.scale);
         ASSERT_EQ(4, t.precision);
     }
@@ -404,7 +408,7 @@ TEST_F(TypeDescriptorTest, test_from_protobuf) {
         auto t = TypeDescriptor::from_protobuf(t_pb);
         ASSERT_FALSE(t.is_complex_type());
         ASSERT_EQ(0, t.children.size());
-        ASSERT_EQ(PrimitiveType::TYPE_CHAR, t.type);
+        ASSERT_EQ(LogicalType::TYPE_CHAR, t.type);
         ASSERT_EQ(10, t.len);
     }
     // VARCHAR(10)
@@ -418,7 +422,7 @@ TEST_F(TypeDescriptorTest, test_from_protobuf) {
         auto t = TypeDescriptor::from_protobuf(t_pb);
         ASSERT_FALSE(t.is_complex_type());
         ASSERT_EQ(0, t.children.size());
-        ASSERT_EQ(PrimitiveType::TYPE_VARCHAR, t.type);
+        ASSERT_EQ(LogicalType::TYPE_VARCHAR, t.type);
         ASSERT_EQ(10, t.len);
     }
     // ARRAY<VARCHAR(10)>
@@ -436,11 +440,11 @@ TEST_F(TypeDescriptorTest, test_from_protobuf) {
         ASSERT_TRUE(t.is_complex_type());
         ASSERT_TRUE(t.is_collection_type());
         ASSERT_EQ(1, t.children.size());
-        ASSERT_EQ(PrimitiveType::TYPE_ARRAY, t.type);
+        ASSERT_EQ(LogicalType::TYPE_ARRAY, t.type);
 
         ASSERT_FALSE(t.children.at(0).is_complex_type());
         ASSERT_EQ(0, t.children.at(0).children.size());
-        ASSERT_EQ(PrimitiveType::TYPE_VARCHAR, t.children.at(0).type);
+        ASSERT_EQ(LogicalType::TYPE_VARCHAR, t.children.at(0).type);
         ASSERT_EQ(10, t.children.at(0).len);
     }
     // struct{a INT, b MAP<INT, DOUBLE>}
@@ -466,16 +470,16 @@ TEST_F(TypeDescriptorTest, test_from_protobuf) {
         auto t = TypeDescriptor::from_protobuf(t_pb);
         ASSERT_TRUE(t.is_complex_type());
         ASSERT_FALSE(t.is_collection_type());
-        ASSERT_EQ(PrimitiveType::TYPE_STRUCT, t.type);
+        ASSERT_EQ(LogicalType::TYPE_STRUCT, t.type);
         ASSERT_EQ(2, t.field_names.size());
         ASSERT_EQ("a", t.field_names[0]);
         ASSERT_EQ("b", t.field_names[1]);
         ASSERT_EQ(2, t.children.size());
-        ASSERT_EQ(PrimitiveType::TYPE_INT, t.children[0].type);
-        ASSERT_EQ(PrimitiveType::TYPE_MAP, t.children[1].type);
+        ASSERT_EQ(LogicalType::TYPE_INT, t.children[0].type);
+        ASSERT_EQ(LogicalType::TYPE_MAP, t.children[1].type);
         ASSERT_EQ(2, t.children[1].children.size());
-        ASSERT_EQ(PrimitiveType::TYPE_INT, t.children[1].children[0].type);
-        ASSERT_EQ(PrimitiveType::TYPE_DOUBLE, t.children[1].children[1].type);
+        ASSERT_EQ(LogicalType::TYPE_INT, t.children[1].children[0].type);
+        ASSERT_EQ(LogicalType::TYPE_DOUBLE, t.children[1].children[1].type);
     }
     // struct{}
     {
@@ -487,7 +491,7 @@ TEST_F(TypeDescriptorTest, test_from_protobuf) {
         auto t = TypeDescriptor::from_protobuf(t_pb);
         ASSERT_TRUE(t.is_complex_type());
         ASSERT_FALSE(t.is_collection_type());
-        ASSERT_EQ(PrimitiveType::TYPE_STRUCT, t.type);
+        ASSERT_EQ(LogicalType::TYPE_STRUCT, t.type);
         ASSERT_EQ(0, t.field_names.size());
     }
 }
@@ -497,7 +501,7 @@ TEST_F(TypeDescriptorTest, test_to_protobuf) {
     // TINYINT
     {
         TypeDescriptor t;
-        t.type = PrimitiveType::TYPE_TINYINT;
+        t.type = LogicalType::TYPE_TINYINT;
         PTypeDesc t_pb = t.to_protobuf();
         ASSERT_EQ(1, t_pb.types().size());
         ASSERT_EQ(TTypeNodeType::SCALAR, t_pb.types(0).type());
@@ -508,7 +512,7 @@ TEST_F(TypeDescriptorTest, test_to_protobuf) {
     // VARCHAR(8)
     {
         TypeDescriptor t;
-        t.type = PrimitiveType::TYPE_VARCHAR;
+        t.type = LogicalType::TYPE_VARCHAR;
         t.len = 8;
         PTypeDesc t_pb = t.to_protobuf();
         ASSERT_EQ(1, t_pb.types().size());
@@ -521,7 +525,7 @@ TEST_F(TypeDescriptorTest, test_to_protobuf) {
     // DECIMAL(8, 4)
     {
         TypeDescriptor t;
-        t.type = PrimitiveType::TYPE_DECIMALV2;
+        t.type = LogicalType::TYPE_DECIMALV2;
         t.len = 16;
         t.scale = 8;
         t.precision = 4;
@@ -538,9 +542,9 @@ TEST_F(TypeDescriptorTest, test_to_protobuf) {
     // ARRAY<INT>
     {
         TypeDescriptor t;
-        t.type = PrimitiveType::TYPE_ARRAY;
+        t.type = LogicalType::TYPE_ARRAY;
         t.children.emplace_back();
-        t.children.back().type = PrimitiveType::TYPE_INT;
+        t.children.back().type = LogicalType::TYPE_INT;
         t.children.back().len = sizeof(int32_t);
         PTypeDesc t_pb = t.to_protobuf();
         ASSERT_EQ(2, t_pb.types().size());
@@ -554,10 +558,10 @@ TEST_F(TypeDescriptorTest, test_to_protobuf) {
     {
         TypeDescriptor t;
         t.children.resize(1);
-        t.type = PrimitiveType::TYPE_ARRAY;
-        t.children[0].type = PrimitiveType::TYPE_ARRAY;
+        t.type = LogicalType::TYPE_ARRAY;
+        t.children[0].type = LogicalType::TYPE_ARRAY;
         t.children[0].children.resize(1);
-        t.children[0].children[0].type = PrimitiveType::TYPE_INT;
+        t.children[0].children[0].type = LogicalType::TYPE_INT;
         PTypeDesc t_pb = t.to_protobuf();
         ASSERT_EQ(3, t_pb.types().size());
         ASSERT_EQ(TTypeNodeType::ARRAY, t_pb.types(0).type());
@@ -571,16 +575,18 @@ TEST_F(TypeDescriptorTest, test_to_protobuf) {
     {
         TypeDescriptor t;
         t.children.resize(2);
-        t.type = PrimitiveType::TYPE_MAP;
-        t.children[0].type = PrimitiveType::TYPE_INT;
-        t.children[1].type = PrimitiveType::TYPE_STRUCT;
+        t.type = LogicalType::TYPE_MAP;
+        t.selected_fields.emplace_back(true);
+        t.selected_fields.emplace_back(true);
+        t.children[0].type = LogicalType::TYPE_INT;
+        t.children[1].type = LogicalType::TYPE_STRUCT;
         t.children[1].field_names = {"a", "b", "c"};
         t.children[1].children.resize(3);
-        t.children[1].children[0].type = PrimitiveType::TYPE_BOOLEAN;
-        t.children[1].children[1].type = PrimitiveType::TYPE_DECIMALV2;
+        t.children[1].children[0].type = LogicalType::TYPE_BOOLEAN;
+        t.children[1].children[1].type = LogicalType::TYPE_DECIMALV2;
         t.children[1].children[1].precision = 10;
         t.children[1].children[1].scale = 2;
-        t.children[1].children[2].type = PrimitiveType::TYPE_VARCHAR;
+        t.children[1].children[2].type = LogicalType::TYPE_VARCHAR;
         t.children[1].children[2].len = 10;
 
         PTypeDesc t_pb = t.to_protobuf();
@@ -619,27 +625,27 @@ TEST_F(TypeDescriptorTest, test_debug_string) {
     // INT
     {
         TypeDescriptor t;
-        t.type = PrimitiveType::TYPE_INT;
+        t.type = LogicalType::TYPE_INT;
         EXPECT_EQ("INT", t.debug_string());
     }
     // CHAR(10)
     {
         TypeDescriptor t;
-        t.type = PrimitiveType::TYPE_CHAR;
+        t.type = LogicalType::TYPE_CHAR;
         t.len = 10;
         EXPECT_EQ("CHAR(10)", t.debug_string());
     }
     // VARCHAR(10)
     {
         TypeDescriptor t;
-        t.type = PrimitiveType::TYPE_VARCHAR;
+        t.type = LogicalType::TYPE_VARCHAR;
         t.len = 10;
         EXPECT_EQ("VARCHAR(10)", t.debug_string());
     }
     // DECIMAL(15, 5)
     {
         TypeDescriptor t;
-        t.type = PrimitiveType::TYPE_DECIMAL;
+        t.type = LogicalType::TYPE_DECIMAL;
         t.precision = 15;
         t.scale = 5;
         EXPECT_EQ("DECIMAL(15, 5)", t.debug_string());
@@ -647,7 +653,7 @@ TEST_F(TypeDescriptorTest, test_debug_string) {
     // DECIMALV2(15, 5)
     {
         TypeDescriptor t;
-        t.type = PrimitiveType::TYPE_DECIMALV2;
+        t.type = LogicalType::TYPE_DECIMALV2;
         t.precision = 15;
         t.scale = 5;
         EXPECT_EQ("DECIMALV2(15, 5)", t.debug_string());
@@ -655,31 +661,33 @@ TEST_F(TypeDescriptorTest, test_debug_string) {
     // ARRAY<VARCHAR(5)>
     {
         TypeDescriptor t;
-        t.type = PrimitiveType::TYPE_ARRAY;
+        t.type = LogicalType::TYPE_ARRAY;
         t.children.emplace_back();
-        t.children.back().type = PrimitiveType::TYPE_VARCHAR;
+        t.children.back().type = LogicalType::TYPE_VARCHAR;
         t.children.back().len = 5;
         EXPECT_EQ("ARRAY<VARCHAR(5)>", t.debug_string());
     }
     // MAP<INT, VARCHAR(10)>
     {
         TypeDescriptor t;
-        t.type = PrimitiveType::TYPE_MAP;
+        t.type = LogicalType::TYPE_MAP;
+        t.selected_fields.emplace_back(true);
+        t.selected_fields.emplace_back(true);
         t.children.resize(2);
-        t.children[0].type = PrimitiveType::TYPE_INT;
-        t.children[1].type = PrimitiveType::TYPE_VARCHAR;
+        t.children[0].type = LogicalType::TYPE_INT;
+        t.children[1].type = LogicalType::TYPE_VARCHAR;
         t.children[1].len = 10;
         EXPECT_EQ("MAP<INT, VARCHAR(10)>", t.debug_string());
     }
     // struct{name VARCHAR(20), age INT}
     {
         TypeDescriptor t;
-        t.type = PrimitiveType::TYPE_STRUCT;
+        t.type = LogicalType::TYPE_STRUCT;
         t.field_names = {"name", "age"};
         t.children.resize(2);
-        t.children[0].type = PrimitiveType::TYPE_VARCHAR;
+        t.children[0].type = LogicalType::TYPE_VARCHAR;
         t.children[0].len = 20;
-        t.children[1].type = PrimitiveType::TYPE_INT;
+        t.children[1].type = LogicalType::TYPE_INT;
         t.selected_fields.push_back(true);
         t.selected_fields.push_back(false);
         EXPECT_EQ("STRUCT{name VARCHAR(20), age INT}, Selected fields: [1, 0]", t.debug_string());

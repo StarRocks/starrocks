@@ -32,15 +32,22 @@ public class UserPEntryObject implements PEntryObject {
         return new UserPEntryObject(null);
     }
 
+    /**
+     * if the current user matches other user, including fuzzy matching.
+     *
+     * this(userx), other(userx) -> true
+     * this(userx), other(ALL) -> true
+     * this(ALL), other(userx) -> false
+     */
     @Override
     public boolean match(Object obj) {
         if (!(obj instanceof UserPEntryObject)) {
             return false;
         }
-        if (userIdentity == null) {
+        UserPEntryObject other = (UserPEntryObject) obj;
+        if (other.userIdentity == null) {
             return true; // this object is all
         }
-        UserPEntryObject other = (UserPEntryObject) obj;
         return userIdentity.equals(other.userIdentity);
     }
 

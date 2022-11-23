@@ -35,8 +35,9 @@ private:
 
 class AnalyticSourceOperatorFactory final : public SourceOperatorFactory {
 public:
-    AnalyticSourceOperatorFactory(int32_t id, int32_t plan_node_id, const AnalytorFactoryPtr& analytor_factory)
-            : SourceOperatorFactory(id, "analytic_source", plan_node_id), _analytor_factory(analytor_factory) {}
+    AnalyticSourceOperatorFactory(int32_t id, int32_t plan_node_id, AnalytorFactoryPtr analytor_factory)
+            : SourceOperatorFactory(id, "analytic_source", plan_node_id),
+              _analytor_factory(std::move(analytor_factory)) {}
 
     ~AnalyticSourceOperatorFactory() override = default;
 

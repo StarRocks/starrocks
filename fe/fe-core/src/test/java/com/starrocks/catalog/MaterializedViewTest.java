@@ -719,4 +719,11 @@ public class MaterializedViewTest {
         // start time must equal 2022-12-31
         Assert.assertEquals(4828164311L, asyncRefreshContext.getStartTime());
     }
+
+    @Test
+    public void testMvMysqlType() {
+        MaterializedView mv = new MaterializedView();
+        String mysqlType = mv.getMysqlType();
+        Assert.assertEquals("VIEW", mysqlType);
+    }
 }

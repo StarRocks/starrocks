@@ -7,9 +7,6 @@
 
 namespace starrocks {
 
-class ColumnBlockView;
-class ColumnVectorBatch;
-
 namespace vectorized {
 class Column;
 } // namespace vectorized
@@ -22,8 +19,6 @@ public:
     ~ArrayColumnIterator() override = default;
 
     Status init(const ColumnIteratorOptions& opts) override;
-
-    Status next_batch(size_t* n, ColumnBlockView* dst, bool* has_null) override;
 
     Status next_batch(size_t* n, vectorized::Column* dst) override;
 
@@ -49,9 +44,6 @@ private:
     std::unique_ptr<ColumnIterator> _null_iterator;
     std::unique_ptr<ColumnIterator> _array_size_iterator;
     std::unique_ptr<ColumnIterator> _element_iterator;
-
-    std::unique_ptr<ColumnVectorBatch> _null_batch;
-    std::unique_ptr<ColumnVectorBatch> _array_size_batch;
 };
 
 } // namespace starrocks

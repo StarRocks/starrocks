@@ -41,6 +41,11 @@ public class LogBuilder {
         entries = Lists.newLinkedList();
     }
 
+    public LogBuilder(LogKey key, Long identifier, char c) {
+        sb = new StringBuilder().append(key.name()).append(c).append(identifier).append(", ");
+        entries = Lists.newLinkedList();
+    }
+
     public LogBuilder(LogKey key, UUID identifier) {
         sb = new StringBuilder().append(key.name()).append("=").append(DebugUtil.printId(identifier)).append(", ");
         entries = Lists.newLinkedList();
@@ -90,6 +95,18 @@ public class LogBuilder {
         while (it.hasNext()) {
             LogEntry logEntry = it.next();
             sb.append(logEntry.key).append("={").append(logEntry.value).append("}");
+            if (it.hasNext()) {
+                sb.append(", ");
+            }
+        }
+        return sb.toString();
+    }
+
+    public String build_http_log() {
+        Iterator<LogEntry> it = entries.iterator();
+        while (it.hasNext()) {
+            LogEntry logEntry = it.next();
+            sb.append(logEntry.key).append("{").append(logEntry.value).append("}");
             if (it.hasNext()) {
                 sb.append(", ");
             }

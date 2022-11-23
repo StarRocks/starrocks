@@ -11,6 +11,7 @@
 #include "storage/compaction_context.h"
 #include "storage/compaction_task.h"
 #include "storage/compaction_utils.h"
+#include "storage/default_compaction_policy.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_updates.h"
@@ -18,7 +19,7 @@
 namespace starrocks {
 
 TEST(CompactionManagerTest, test_candidates) {
-    std::vector<TabletSharedPtr> tablets;
+    std::vector<CompactionCandidate> candidates;
     DataDir data_dir("./data_dir");
     for (int i = 0; i <= 10; i++) {
         TabletSharedPtr tablet = std::make_shared<Tablet>();
@@ -26,49 +27,43 @@ TEST(CompactionManagerTest, test_candidates) {
         tablet_meta->set_tablet_id(i);
         tablet->set_tablet_meta(tablet_meta);
         tablet->set_data_dir(&data_dir);
-        std::unique_ptr<CompactionContext> compaction_context = std::make_unique<CompactionContext>();
-        compaction_context->tablet = tablet;
+        tablet->set_tablet_state(TABLET_RUNNING);
         // for i == 9 and i == 10, compaction scores are equal
+        CompactionCandidate candidate;
+        candidate.tablet = tablet;
         if (i == 10) {
-            compaction_context->cumulative_score = 10;
+            candidate.score = 10;
         } else {
-            compaction_context->cumulative_score = 1 + i;
+            candidate.score = 1 + i;
         }
-        compaction_context->base_score = 1 + 0.5 * i;
-        tablet->set_compaction_context(compaction_context);
-        tablets.push_back(tablet);
+        candidates.push_back(candidate);
     }
 
     std::random_device rd;
     std::mt19937 g(rd());
-    std::shuffle(tablets.begin(), tablets.end(), g);
+    std::shuffle(candidates.begin(), candidates.end(), g);
 
-    for (auto& tablet : tablets) {
-        StorageEngine::instance()->compaction_manager()->update_tablet(tablet, false, false);
-    }
+    StorageEngine::instance()->compaction_manager()->update_candidates(candidates);
 
     {
-        ASSERT_EQ(22, StorageEngine::instance()->compaction_manager()->candidates_size());
-        CompactionCandidate candidate_1 = StorageEngine::instance()->compaction_manager()->pick_candidate();
+        ASSERT_EQ(11, StorageEngine::instance()->compaction_manager()->candidates_size());
+        CompactionCandidate candidate_1;
+        StorageEngine::instance()->compaction_manager()->pick_candidate(&candidate_1);
         ASSERT_EQ(9, candidate_1.tablet->tablet_id());
-        CompactionCandidate candidate_2 = StorageEngine::instance()->compaction_manager()->pick_candidate();
+        CompactionCandidate candidate_2;
+        StorageEngine::instance()->compaction_manager()->pick_candidate(&candidate_2);
         ASSERT_EQ(10, candidate_2.tablet->tablet_id());
-        ASSERT_EQ(candidate_1.tablet->compaction_score(CUMULATIVE_COMPACTION),
-                  candidate_2.tablet->compaction_score(CUMULATIVE_COMPACTION));
-        double last_score = candidate_2.tablet->compaction_score(CUMULATIVE_COMPACTION);
+        ASSERT_EQ(candidate_1.score, candidate_2.score);
+        double last_score = candidate_2.score;
         while (true) {
-            CompactionCandidate candidate = StorageEngine::instance()->compaction_manager()->pick_candidate();
-            if (!candidate.is_valid()) {
+            CompactionCandidate candidate;
+            auto valid = StorageEngine::instance()->compaction_manager()->pick_candidate(&candidate);
+            if (!valid) {
                 break;
             }
-            ASSERT_LE(candidate.tablet->compaction_score(candidate.type), last_score);
-            last_score = candidate.tablet->compaction_score(candidate.type);
+            ASSERT_LE(candidate.score, last_score);
+            last_score = candidate.score;
         }
-    }
-
-    for (auto& tablet : tablets) {
-        std::unique_ptr<CompactionContext> compaction_context;
-        tablet->set_compaction_context(compaction_context);
     }
 }
 
@@ -95,10 +90,7 @@ TEST(CompactionManagerTest, test_compaction_tasks) {
         tablet->set_tablet_meta(tablet_meta);
         tablet->set_data_dir(&data_dir);
         std::unique_ptr<CompactionContext> compaction_context = std::make_unique<CompactionContext>();
-        compaction_context->tablet = tablet;
-        compaction_context->chosen_compaction_type = CUMULATIVE_COMPACTION;
-        compaction_context->cumulative_score = 1 + i;
-        compaction_context->base_score = 1 + 0.5 * i;
+        compaction_context->policy = std::make_unique<vectorized::DefaultCumulativeBaseCompactionPolicy>(tablet.get());
         tablet->set_compaction_context(compaction_context);
         tablets.push_back(tablet);
         std::shared_ptr<MockCompactionTask> task = std::make_shared<MockCompactionTask>();
@@ -126,13 +118,9 @@ TEST(CompactionManagerTest, test_compaction_tasks) {
     config::cumulative_compaction_num_threads_per_disk = 1;
     for (int i = 0; i < config::max_compaction_concurrency; i++) {
         bool ret = StorageEngine::instance()->compaction_manager()->register_task(tasks[i].get());
-        if (i == 0) {
-            ASSERT_TRUE(ret);
-        } else {
-            ASSERT_FALSE(ret);
-        }
+        ASSERT_TRUE(ret);
     }
-    ASSERT_EQ(1, StorageEngine::instance()->compaction_manager()->running_tasks_num());
+    ASSERT_EQ(config::max_compaction_concurrency, StorageEngine::instance()->compaction_manager()->running_tasks_num());
     StorageEngine::instance()->compaction_manager()->clear_tasks();
     ASSERT_EQ(0, StorageEngine::instance()->compaction_manager()->running_tasks_num());
 
@@ -149,10 +137,6 @@ TEST(CompactionManagerTest, test_compaction_tasks) {
         tasks[i]->set_compaction_type(BASE_COMPACTION);
         bool ret = StorageEngine::instance()->compaction_manager()->register_task(tasks[i].get());
         ASSERT_TRUE(ret);
-    }
-    for (auto& tablet : tablets) {
-        std::unique_ptr<CompactionContext> compaction_context;
-        tablet->set_compaction_context(compaction_context);
     }
 }
 

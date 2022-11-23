@@ -19,20 +19,20 @@ public:
     DEFINE_VECTORIZED_FN(array_contains);
     DEFINE_VECTORIZED_FN(array_position);
 
-#define APPLY_COMMONE_TYPES_FOR_ARRAY(M)        \
-    M(boolean, PrimitiveType::TYPE_BOOLEAN)     \
-    M(tinyint, PrimitiveType::TYPE_TINYINT)     \
-    M(smallint, PrimitiveType::TYPE_SMALLINT)   \
-    M(int, PrimitiveType::TYPE_INT)             \
-    M(bigint, PrimitiveType::TYPE_BIGINT)       \
-    M(largeint, PrimitiveType::TYPE_LARGEINT)   \
-    M(float, PrimitiveType::TYPE_FLOAT)         \
-    M(double, PrimitiveType::TYPE_DOUBLE)       \
-    M(varchar, PrimitiveType::TYPE_VARCHAR)     \
-    M(char, PrimitiveType::TYPE_CHAR)           \
-    M(decimalv2, PrimitiveType::TYPE_DECIMALV2) \
-    M(datetime, PrimitiveType::TYPE_DATETIME)   \
-    M(date, PrimitiveType::TYPE_DATE)
+#define APPLY_COMMONE_TYPES_FOR_ARRAY(M)      \
+    M(boolean, LogicalType::TYPE_BOOLEAN)     \
+    M(tinyint, LogicalType::TYPE_TINYINT)     \
+    M(smallint, LogicalType::TYPE_SMALLINT)   \
+    M(int, LogicalType::TYPE_INT)             \
+    M(bigint, LogicalType::TYPE_BIGINT)       \
+    M(largeint, LogicalType::TYPE_LARGEINT)   \
+    M(float, LogicalType::TYPE_FLOAT)         \
+    M(double, LogicalType::TYPE_DOUBLE)       \
+    M(varchar, LogicalType::TYPE_VARCHAR)     \
+    M(char, LogicalType::TYPE_CHAR)           \
+    M(decimalv2, LogicalType::TYPE_DECIMALV2) \
+    M(datetime, LogicalType::TYPE_DATETIME)   \
+    M(date, LogicalType::TYPE_DATE)
 
 #define DEFINE_ARRAY_DISTINCT_FN(NAME, PT)                                                     \
     static ColumnPtr array_distinct_##NAME(FunctionContext* context, const Columns& columns) { \
@@ -46,15 +46,15 @@ public:
         return ArrayDifference<PT>::process(context, columns);                                   \
     }
 
-    DEFINE_ARRAY_DIFFERENCE_FN(boolean, PrimitiveType::TYPE_BOOLEAN)
-    DEFINE_ARRAY_DIFFERENCE_FN(tinyint, PrimitiveType::TYPE_TINYINT)
-    DEFINE_ARRAY_DIFFERENCE_FN(smallint, PrimitiveType::TYPE_SMALLINT)
-    DEFINE_ARRAY_DIFFERENCE_FN(int, PrimitiveType::TYPE_INT)
-    DEFINE_ARRAY_DIFFERENCE_FN(bigint, PrimitiveType::TYPE_BIGINT)
-    DEFINE_ARRAY_DIFFERENCE_FN(largeint, PrimitiveType::TYPE_LARGEINT)
-    DEFINE_ARRAY_DIFFERENCE_FN(float, PrimitiveType::TYPE_FLOAT)
-    DEFINE_ARRAY_DIFFERENCE_FN(double, PrimitiveType::TYPE_DOUBLE)
-    DEFINE_ARRAY_DIFFERENCE_FN(decimalv2, PrimitiveType::TYPE_DECIMALV2)
+    DEFINE_ARRAY_DIFFERENCE_FN(boolean, LogicalType::TYPE_BOOLEAN)
+    DEFINE_ARRAY_DIFFERENCE_FN(tinyint, LogicalType::TYPE_TINYINT)
+    DEFINE_ARRAY_DIFFERENCE_FN(smallint, LogicalType::TYPE_SMALLINT)
+    DEFINE_ARRAY_DIFFERENCE_FN(int, LogicalType::TYPE_INT)
+    DEFINE_ARRAY_DIFFERENCE_FN(bigint, LogicalType::TYPE_BIGINT)
+    DEFINE_ARRAY_DIFFERENCE_FN(largeint, LogicalType::TYPE_LARGEINT)
+    DEFINE_ARRAY_DIFFERENCE_FN(float, LogicalType::TYPE_FLOAT)
+    DEFINE_ARRAY_DIFFERENCE_FN(double, LogicalType::TYPE_DOUBLE)
+    DEFINE_ARRAY_DIFFERENCE_FN(decimalv2, LogicalType::TYPE_DECIMALV2)
 
 #undef DEFINE_ARRAY_DIFFERENCE_FN
 
@@ -63,6 +63,7 @@ public:
         return ArraySlice<PT>::process(context, columns);                                   \
     }
     APPLY_COMMONE_TYPES_FOR_ARRAY(DEFINE_ARRAY_SLICE_FN)
+    DEFINE_ARRAY_SLICE_FN(json, LogicalType::TYPE_JSON)
 #undef DEFINE_ARRAY_SLICE_FN
 
 #define DEFINE_ARRAY_CONCAT_FN(NAME, PT)                                                     \
@@ -70,6 +71,7 @@ public:
         return ArrayConcat<PT>::process(context, columns);                                   \
     }
     APPLY_COMMONE_TYPES_FOR_ARRAY(DEFINE_ARRAY_CONCAT_FN)
+    DEFINE_ARRAY_CONCAT_FN(json, LogicalType::TYPE_JSON)
 #undef DEFINE_ARRAY_CONCAT_FN
 
 #define DEFINE_ARRAY_OVERLAP_FN(NAME, PT)                                                     \
@@ -91,6 +93,7 @@ public:
         return ArraySort<PT>::process(context, columns);                                   \
     }
     APPLY_COMMONE_TYPES_FOR_ARRAY(DEFINE_ARRAY_SORT_FN)
+    DEFINE_ARRAY_SORT_FN(json, LogicalType::TYPE_JSON)
 #undef DEFINE_ARRAY_SORT_FN
 
 #define DEFINE_ARRAY_REVERSE_FN(NAME, PT)                                                     \
@@ -98,6 +101,7 @@ public:
         return ArrayReverse<PT>::process(context, columns);                                   \
     }
     APPLY_COMMONE_TYPES_FOR_ARRAY(DEFINE_ARRAY_REVERSE_FN)
+    DEFINE_ARRAY_REVERSE_FN(json, LogicalType::TYPE_JSON)
 #undef DEFINE_ARRAY_REVERSE_FN
 
 #define DEFINE_ARRAY_JOIN_FN(NAME)                                                         \
@@ -168,27 +172,27 @@ public:
     enum ArithmeticType { SUM, AVG, MIN, MAX };
 
 private:
-    template <PrimitiveType column_type, ArithmeticType type>
+    template <LogicalType column_type, ArithmeticType type>
     static ColumnPtr array_arithmetic(const Columns& columns);
 
-    template <PrimitiveType column_type, ArithmeticType type>
+    template <LogicalType column_type, ArithmeticType type>
     static ColumnPtr _array_process_not_nullable(const Column* array_column, std::vector<uint8_t>* null_ptr);
 
-    template <PrimitiveType column_type, bool has_null, ArithmeticType type>
+    template <LogicalType column_type, bool has_null, ArithmeticType type>
     static ColumnPtr _array_process_not_nullable_types(const Column* elements, const UInt32Column& offsets,
                                                        const NullColumn::Container* null_elements,
                                                        std::vector<uint8_t>* null_ptr);
 
-    template <PrimitiveType type>
+    template <LogicalType type>
     static ColumnPtr array_sum(const Columns& columns);
 
-    template <PrimitiveType type>
+    template <LogicalType type>
     static ColumnPtr array_avg(const Columns& columns);
 
-    template <PrimitiveType type>
+    template <LogicalType type>
     static ColumnPtr array_min(const Columns& columns);
 
-    template <PrimitiveType type>
+    template <LogicalType type>
     static ColumnPtr array_max(const Columns& columns);
 };
 

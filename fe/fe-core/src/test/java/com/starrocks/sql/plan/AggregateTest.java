@@ -707,11 +707,11 @@ public class AggregateTest extends PlanTestBase {
     @Test
     public void testVarianceStddevAnalyze() throws Exception {
         String sql = "select stddev_pop(1222) from (select 1) t;";
-        String plan = getFragmentPlan(sql);
-        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+        assertPlanContains(sql, "  1:AGGREGATE (update finalize)\n" +
                 "  |  output: stddev_pop(1222)\n" +
-                "  |  group by: ");
-        assertContains(plan, "  0:UNION\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  0:UNION\n" +
                 "     constant exprs: \n" +
                 "         NULL");
     }
@@ -1674,7 +1674,7 @@ public class AggregateTest extends PlanTestBase {
                 "from supplier having avg(distinct s_suppkey) > 3 ;";
         String plan = getFragmentPlan(sql);
         assertContains(plan, " 28:NESTLOOP JOIN\n" +
-                "  |  join op: CROSS JOIN\n" +
+                "  |  join op: INNER JOIN\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  other join predicates: CAST(12: sum AS DOUBLE) / CAST(14: count AS DOUBLE) > 3.0");
     }

@@ -1,8 +1,8 @@
-name: Add Label
+name: label
 
 on:
   workflow_run:
-    workflows: ["Label when reviewed"]
+    workflows: ["reviewer"]
     types: ['requested']
 
 permissions:
@@ -12,9 +12,9 @@ permissions:
   pull-requests: write
 
 jobs:
-  Approve:
+  add-approve-label:
     runs-on: ubuntu-latest
-    steps:        
+    steps:
       - name: "Get information about the original trigger of the run"
         uses: potiuk/get-workflow-origin@v1_2
         id: source-run-info

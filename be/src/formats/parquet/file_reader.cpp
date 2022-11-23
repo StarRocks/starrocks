@@ -31,7 +31,7 @@ Status FileReader::init(vectorized::HdfsScannerContext* ctx) {
     RETURN_IF_ERROR(_parse_footer());
 
     std::unordered_set<std::string> names;
-    _file_metadata->schema().get_field_names(&names);
+    _file_metadata->schema().get_field_names(&names, _scanner_ctx->case_sensitive);
     _scanner_ctx->set_columns_from_file(names);
     ASSIGN_OR_RETURN(_is_file_filtered, _scanner_ctx->should_skip_by_evaluating_not_existed_slots());
     if (_is_file_filtered) {
@@ -44,8 +44,7 @@ Status FileReader::init(vectorized::HdfsScannerContext* ctx) {
 
 Status FileReader::_parse_footer() {
     // try with buffer on stack
-    constexpr uint64_t footer_buf_size = 16 * 1024;
-    uint8_t local_buf[footer_buf_size];
+    uint8_t local_buf[FOOTER_BUFFER_SIZE];
     uint8_t* footer_buf = local_buf;
     // we may allocate on heap if local_buf is not large enough.
     DeferOp deferop([&] {
@@ -54,7 +53,7 @@ Status FileReader::_parse_footer() {
         }
     });
 
-    uint64_t to_read = std::min(_file_size, footer_buf_size);
+    uint64_t to_read = std::min(_file_size, FOOTER_BUFFER_SIZE);
     {
         SCOPED_RAW_TIMER(&_scanner_ctx->stats->footer_read_ns);
         RETURN_IF_ERROR(_file->read_at_fully(_file_size - to_read, footer_buf, to_read));
@@ -80,6 +79,8 @@ Status FileReader::_parse_footer() {
         }
     }
 
+    _scanner_ctx->stats->request_bytes_read += footer_size + 8;
+
     tparquet::FileMetaData t_metadata;
     // deserialize footer
     RETURN_IF_ERROR(deserialize_thrift_msg(footer_buf + to_read - 8 - footer_size, &footer_size, TProtocolType::COMPACT,
@@ -91,8 +92,7 @@ Status FileReader::_parse_footer() {
 }
 
 Status FileReader::_check_magic(const uint8_t* file_magic) {
-    static const char* s_magic = "PAR1";
-    if (!memequal(reinterpret_cast<const char*>(file_magic), 4, s_magic, 4)) {
+    if (!memequal(reinterpret_cast<const char*>(file_magic), 4, PARQUET_MAGIC_NUMBER, 4)) {
         return Status::Corruption("Parquet file magic not match");
     }
     return Status::OK();
@@ -453,7 +453,6 @@ Status FileReader::_init_group_readers() {
             r->set_end_offset(end_offset);
         }
         _sb_stream->set_io_ranges(ranges);
-        _sb_stream->set_enable_block_cache(fd_scanner_ctx.enable_block_cache);
         param.shared_buffered_stream = _sb_stream.get();
     }
 

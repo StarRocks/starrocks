@@ -221,7 +221,12 @@ struct TBrokerScanRangeParams {
     // hdfs_read_buffer_size_kb for reading through lib hdfs directly
     15: optional i32 hdfs_read_buffer_size_kb = 0
     // properties from hdfs-site.xml, core-site.xml and load_properties
-    16: THdfsProperties hdfs_properties
+    16: optional THdfsProperties hdfs_properties
+    // used for channel stream load only
+    20: optional string db_name
+    21: optional string table_name
+    22: optional string label
+    23: optional i64 txn_id
 }
 
 // Broker scan range
@@ -229,6 +234,8 @@ struct TBrokerScanRange {
     1: required list<TBrokerRangeDesc> ranges
     2: required TBrokerScanRangeParams params
     3: required list<Types.TNetworkAddress> broker_addresses
+    // used for channel stream load only
+    4: optional i32 channel_id
 }
 
 // Es scan range
@@ -309,6 +316,7 @@ struct TMySQLScanNode {
   3: required list<string> columns
   4: required list<string> filters
   5: optional i64 limit
+  6: optional string temporal_clause
 }
 
 struct TFileScanNode {

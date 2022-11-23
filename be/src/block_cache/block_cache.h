@@ -11,8 +11,6 @@ class BlockCache {
 public:
     typedef std::string CacheKey;
 
-    ~BlockCache();
-
     // Return a singleton block cache instance
     static BlockCache* instance();
 
@@ -33,6 +31,9 @@ public:
 
     // Remove data from cache. The offset and size must be aligned by block size
     Status remove_cache(const CacheKey& cache_key, off_t offset, size_t size);
+
+    // Shutdown the cache instance to save some state meta
+    Status shutdown();
 
     size_t block_size() const { return _block_size; }
 

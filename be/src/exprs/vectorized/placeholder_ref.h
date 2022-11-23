@@ -7,14 +7,13 @@
 #include "exprs/expr.h"
 #include "gen_cpp/Exprs_types.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 // place holder for function call. representing an input column for function call.
 // now it was only used in global dictionary optimization
 class PlaceHolderRef final : public Expr {
 public:
     PlaceHolderRef(const TExprNode& node);
-    vectorized::ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override;
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override;
     bool is_constant() const override { return false; }
     Expr* clone(ObjectPool* pool) const override { return pool->add(new PlaceHolderRef(*this)); }
     int get_slot_ids(std::vector<SlotId>* slot_ids) const override {
@@ -25,5 +24,4 @@ public:
 private:
     SlotId _column_id;
 };
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

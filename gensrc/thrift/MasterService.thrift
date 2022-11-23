@@ -27,6 +27,7 @@ include "InternalService.thrift"
 include "Types.thrift"
 include "Status.thrift"
 include "WorkGroup.thrift"
+include "ResourceUsage.thrift"
 
 struct TTabletInfo {
     1: required Types.TTabletId tablet_id
@@ -93,7 +94,7 @@ struct TPluginInfo {
 
 struct TReportRequest {
     1: required Types.TBackend backend
-    2: optional i64 report_version
+    2: optional i64 report_version // Required
     3: optional map<Types.TTaskType, set<i64>> tasks // string signature
     4: optional map<Types.TTabletId, TTablet> tablets
     5: optional map<string, TDisk> disks // string root_path
@@ -104,6 +105,7 @@ struct TReportRequest {
     8: optional i64 tablet_max_compaction_score
     // active workgroup on this backend
     9: optional list<WorkGroup.TWorkGroup> active_workgroups
+    10: optional ResourceUsage.TResourceUsage resource_usage
 }
 
 struct TMasterResult {

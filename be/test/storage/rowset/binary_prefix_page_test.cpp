@@ -36,96 +36,6 @@ namespace starrocks {
 
 class BinaryPrefixPageTest : public testing::Test {
 public:
-    void test_encode_and_decode() {
-        std::vector<std::string> test_data;
-        for (int i = 1000; i < 1038; ++i) {
-            test_data.emplace_back(std::to_string(i));
-        }
-        std::vector<Slice> slices;
-        for (const auto& data : test_data) {
-            slices.emplace_back(Slice(data));
-        }
-        // encode
-        PageBuilderOptions options;
-        BinaryPrefixPageBuilder page_builder(options);
-
-        size_t count = slices.size();
-        const Slice* ptr = &slices[0];
-        count = page_builder.add(reinterpret_cast<const uint8_t*>(ptr), count);
-
-        OwnedSlice dict_slice = page_builder.finish()->build();
-        ASSERT_EQ(slices.size(), page_builder.count());
-        ASSERT_FALSE(page_builder.is_page_full());
-
-        //check first value and last value
-        Slice first_value;
-        page_builder.get_first_value(&first_value);
-        ASSERT_EQ(slices[0], first_value);
-        Slice last_value;
-        page_builder.get_last_value(&last_value);
-        ASSERT_EQ(slices[count - 1], last_value);
-
-        PageDecoderOptions dict_decoder_options;
-        auto page_decoder = std::make_unique<BinaryPrefixPageDecoder<OLAP_FIELD_TYPE_VARCHAR>>(dict_slice.slice(),
-                                                                                               dict_decoder_options);
-        Status ret = page_decoder->init();
-        ASSERT_TRUE(ret.ok());
-        // because every slice is unique
-        ASSERT_EQ(slices.size(), page_decoder->count());
-
-        //check values
-        MemPool pool;
-        TypeInfoPtr type_info = get_type_info(OLAP_FIELD_TYPE_VARCHAR);
-        size_t size = slices.size();
-        std::unique_ptr<ColumnVectorBatch> cvb;
-        ColumnVectorBatch::create(size, false, type_info, nullptr, &cvb);
-        ColumnBlock column_block(cvb.get(), &pool);
-        ColumnBlockView block_view(&column_block);
-
-        ret = page_decoder->next_batch(&size, &block_view);
-        auto* values = reinterpret_cast<Slice*>(column_block.data());
-        ASSERT_TRUE(ret.ok());
-        ASSERT_EQ(slices.size(), size);
-        for (int i = 1000; i < 1038; ++i) {
-            ASSERT_EQ(std::to_string(i), values[i - 1000].to_string());
-        }
-
-        std::unique_ptr<ColumnVectorBatch> cvb2;
-        ColumnVectorBatch::create(size, false, type_info, nullptr, &cvb2);
-        ColumnBlock column_block2(cvb2.get(), &pool);
-        ColumnBlockView block_view2(&column_block2);
-        ret = page_decoder->seek_to_position_in_page(15);
-        ASSERT_TRUE(ret.ok());
-
-        ret = page_decoder->next_batch(&size, &block_view2);
-        values = reinterpret_cast<Slice*>(column_block2.data());
-        ASSERT_TRUE(ret.ok());
-        ASSERT_EQ(23, size);
-        for (int i = 1015; i < 1038; ++i) {
-            ASSERT_EQ(std::to_string(i), values[i - 1015].to_string());
-        }
-
-        auto v1 = Slice("1039");
-        bool exact_match;
-        ret = page_decoder->seek_at_or_after_value(&v1, &exact_match);
-        ASSERT_TRUE(ret.is_not_found());
-
-        auto v2 = Slice("1000");
-        ret = page_decoder->seek_at_or_after_value(&v2, &exact_match);
-        ASSERT_TRUE(ret.ok());
-        ASSERT_TRUE(exact_match);
-
-        auto v3 = Slice("1037");
-        ret = page_decoder->seek_at_or_after_value(&v3, &exact_match);
-        ASSERT_TRUE(ret.ok());
-        ASSERT_TRUE(exact_match);
-
-        auto v4 = Slice("100");
-        ret = page_decoder->seek_at_or_after_value(&v4, &exact_match);
-        ASSERT_TRUE(ret.ok());
-        ASSERT_TRUE(!exact_match);
-    }
-
     void test_encode_and_decode2() {
         std::vector<std::string> test_data;
         test_data.emplace_back("ab");
@@ -146,8 +56,8 @@ public:
         OwnedSlice dict_slice = page_builder.finish()->build();
 
         PageDecoderOptions dict_decoder_options;
-        auto page_decoder = std::make_unique<BinaryPrefixPageDecoder<OLAP_FIELD_TYPE_VARCHAR>>(dict_slice.slice(),
-                                                                                               dict_decoder_options);
+        auto page_decoder =
+                std::make_unique<BinaryPrefixPageDecoder<TYPE_VARCHAR>>(dict_slice.slice(), dict_decoder_options);
         Status ret = page_decoder->init();
         ASSERT_TRUE(ret.ok());
 
@@ -189,8 +99,8 @@ public:
         ASSERT_EQ(slices[count - 1], last_value);
 
         PageDecoderOptions dict_decoder_options;
-        auto page_decoder = std::make_unique<BinaryPrefixPageDecoder<OLAP_FIELD_TYPE_VARCHAR>>(dict_slice.slice(),
-                                                                                               dict_decoder_options);
+        auto page_decoder =
+                std::make_unique<BinaryPrefixPageDecoder<TYPE_VARCHAR>>(dict_slice.slice(), dict_decoder_options);
         Status ret = page_decoder->init();
         ASSERT_TRUE(ret.ok());
         // because every slice is unique
@@ -261,11 +171,6 @@ public:
         ASSERT_TRUE(!exact_match);
     }
 };
-
-// NOLINTNEXTLINE
-TEST_F(BinaryPrefixPageTest, TestEncodeAndDecode) {
-    test_encode_and_decode();
-}
 
 // NOLINTNEXTLINE
 TEST_F(BinaryPrefixPageTest, TestEncodeAndDecode2) {

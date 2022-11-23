@@ -256,6 +256,14 @@ public class CatalogMgr {
         return procNode.fetchResult().getRows();
     }
 
+    public Catalog getCatalogByName(String name) {
+        return catalogs.get(name);
+    }
+
+    public boolean checkCatalogExistsById(long id) {
+        return catalogs.entrySet().stream().anyMatch(entry -> entry.getValue().getId() == id);
+    }
+
     public CatalogProcNode getProcNode() {
         return procNode;
     }

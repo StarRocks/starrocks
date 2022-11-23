@@ -4,6 +4,9 @@
 
 #include <gtest/gtest.h>
 
+#include <ctime>
+#include <set>
+
 #include "common/config.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
@@ -17,6 +20,24 @@
 #include "util/uid_util.h"
 
 namespace starrocks::lake {
+
+class TestLocationProvider : public LocationProvider {
+public:
+    explicit TestLocationProvider(LocationProvider* lp) : _lp(lp) {}
+
+    std::string root_location(int64_t tablet_id) const override {
+        if (_owned_shards.count(tablet_id) > 0) {
+            return _lp->root_location(tablet_id);
+        } else {
+            return "/path/to/nonexist/directory/";
+        }
+    }
+
+    Status list_root_locations(std::set<std::string>* roots) const override { return _lp->list_root_locations(roots); }
+
+    std::set<int64_t> _owned_shards;
+    LocationProvider* _lp;
+};
 
 class GCTest : public ::testing::Test {
 public:
@@ -43,10 +64,7 @@ TEST_F(GCTest, test_metadata_gc) {
     auto tablet_id = next_id();
     auto version_count = config::lake_gc_metadata_max_versions + 4;
     int64_t txn_id = 1;
-    auto expire_time =
-            std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch())
-                    .count() +
-            100000;
+    auto expire_time = std::time(nullptr) + 100000;
     for (int i = 0; i < version_count; i++) {
         auto metadata = std::make_shared<TabletMetadata>();
         // leave scheme and rowset unsetted.
@@ -184,6 +202,58 @@ TEST_F(GCTest, segment_metadata_gc) {
             auto st = fs->path_exists(location);
             ASSERT_TRUE(st.is_not_found()) << st;
         }
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_F(GCTest, test_delete_metadata_belongs_to_other_worker) {
+    auto fs = FileSystem::Default();
+    auto tablet_id = next_id();
+
+    // LocationProvider and TabletManager of worker A
+    auto location_provider_1 = std::make_unique<TestLocationProvider>(s_location_provider.get());
+    auto tablet_manager_1 = std::make_unique<lake::TabletManager>(location_provider_1.get(), 16384);
+
+    // LocationProvider and TabletManager of worker B
+    auto location_provider_2 = std::make_unique<TestLocationProvider>(s_location_provider.get());
+    auto tablet_manager_2 = std::make_unique<lake::TabletManager>(location_provider_2.get(), 16384);
+
+    // Add tablet to worker A
+    location_provider_1->_owned_shards.insert(tablet_id);
+
+    // Save metadata on woker A
+    auto version_count = config::lake_gc_metadata_max_versions + 4;
+    for (int i = 0; i < version_count; i++) {
+        auto metadata = std::make_shared<TabletMetadata>();
+        metadata->set_id(tablet_id);
+        metadata->set_version(i + 1);
+        metadata->set_next_rowset_id(i + 1);
+        ASSERT_OK(tablet_manager_1->put_tablet_metadata(metadata));
+    }
+    for (int i = 0; i < 5; i++) {
+        auto txn_log = std::make_shared<lake::TxnLog>();
+        txn_log->set_tablet_id(tablet_id);
+        txn_log->set_txn_id(i);
+        ASSERT_OK(tablet_manager_1->put_txn_log(txn_log));
+    }
+
+    // Doing GC on worker B
+    ASSERT_OK(metadata_gc(kTestDir, tablet_manager_2.get(), 1000));
+
+    // Woker B should have deleted expired metadata created on worker A
+    for (int i = 0; i < version_count - config::lake_gc_metadata_max_versions; i++) {
+        auto location = s_tablet_manager->tablet_metadata_location(tablet_id, i + 1);
+        auto st = fs->path_exists(location);
+        if (i < version_count - config::lake_gc_metadata_max_versions) {
+            ASSERT_TRUE(st.is_not_found()) << st;
+        } else {
+            ASSERT_TRUE(st.ok()) << st;
+        }
+    }
+    for (int i = 0; i < 5; i++) {
+        auto txn = s_tablet_manager->txn_log_location(tablet_id, i);
+        auto st = fs->path_exists(txn);
+        ASSERT_TRUE(st.is_not_found()) << st;
     }
 }
 

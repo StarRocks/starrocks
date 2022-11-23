@@ -43,6 +43,7 @@ import com.starrocks.sql.optimizer.rule.transformation.PushLimitAndFilterToCTEPr
 import com.starrocks.sql.optimizer.rule.transformation.RemoveAggregationFromAggTable;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteGroupingSetsByCTERule;
 import com.starrocks.sql.optimizer.rule.transformation.SemiReorderRule;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.rule.tree.AddDecodeNodeForDictStringRule;
 import com.starrocks.sql.optimizer.rule.tree.ExchangeSortToMergeRule;
 import com.starrocks.sql.optimizer.rule.tree.PreAggregateTurnOnRule;
@@ -192,21 +193,21 @@ public class Optimizer {
         context = new OptimizerContext(memo, columnRefFactory, connectContext);
         context.setTraceInfo(new OptimizerTraceInfo(connectContext.getQueryId()));
 
-        // process materialized views
-        // TODO: add session variable
-        if (Config.enable_experimental_mv && !optimizerConfig.isRuleBased()) {
-            // TODO: register materialized views
-            // register materialized views
-            registerMaterializedViews(logicOperatorTree, connectContext);
+        if (Config.enable_experimental_mv
+                && connectContext.getSessionVariable().isEnableMaterializedViewRewrite()
+                && !optimizerConfig.isRuleBased()) {
+            try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.registerMvs")) {
+                registerMaterializedViews(logicOperatorTree, connectContext);
+            }
         }
     }
 
     private void registerMaterializedViews(OptExpression logicOperatorTree, ConnectContext connectContext) {
-        List<Table> tables = Utils.getAllTables(logicOperatorTree);
+        List<Table> tables = MvUtils.getAllTables(logicOperatorTree);
 
         // get all related materialized views, include nested mvs
         Set<MaterializedView> relatedMvs =
-                Utils.getRelatedMvs(connectContext.getSessionVariable().getNestedMvRewriteMaxLevel(), tables);
+                MvUtils.getRelatedMvs(connectContext.getSessionVariable().getNestedMvRewriteMaxLevel(), tables);
 
         for (MaterializedView mv : relatedMvs) {
             if (!mv.isActive()) {
@@ -228,7 +229,7 @@ public class Optimizer {
             ColumnRefFactory columnRefFactory = new ColumnRefFactory();
             MaterializedViewOptimizer mvOptimizer = new MaterializedViewOptimizer();
             OptExpression mvPlan = mvOptimizer.optimize(mv, columnRefFactory, connectContext);
-            if (!Utils.isValidMVPlan(mvPlan)) {
+            if (!MvUtils.isValidMVPlan(mvPlan)) {
                 continue;
             }
 
@@ -241,9 +242,9 @@ public class Optimizer {
             TableName tableName = new TableName(db.getFullName(), mv.getName());
             String selectMvSql = "select * from " + tableName.toSql();
             Pair<OptExpression, LogicalPlan> scanMvPlans =
-                    Utils.getRuleOptimizedLogicalPlan(selectMvSql, context.getColumnRefFactory(), connectContext);
+                    MvUtils.getRuleOptimizedLogicalPlan(selectMvSql, context.getColumnRefFactory(), connectContext);
             OptExpression scanMvPlan = scanMvPlans.first;
-            if (!Utils.isLogicalSPJ(scanMvPlan)) {
+            if (!MvUtils.isLogicalSPJ(scanMvPlan)) {
                 continue;
             }
             if (!(scanMvPlan.getOp() instanceof LogicalOlapScanOperator)) {
@@ -357,6 +358,12 @@ public class Optimizer {
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.INTERSECT_REWRITE);
         ruleRewriteIterative(tree, rootTaskContext, new RemoveAggregationFromAggTable());
 
+        if (!optimizerConfig.isRuleSetTypeDisable(RuleSetType.SINGLE_TABLE_MV_REWRITE)
+                && sessionVariable.isEnableMaterializedViewRewrite()
+                && sessionVariable.isEnableRuleBasedMaterializedViewRewrite()) {
+            // now add single table materialized view rewrite rules in rule based rewrite phase to boost optimization
+            ruleRewriteIterative(tree, rootTaskContext, RuleSetType.SINGLE_TABLE_MV_REWRITE);
+        }
         return tree.getInputs().get(0);
     }
 
@@ -402,21 +409,25 @@ public class Optimizer {
             }
         }
 
-        //add join implementRule
-        String joinImplementationMode = ConnectContext.get().getSessionVariable().getJoinImplementationMode();
-        if ("merge".equalsIgnoreCase(joinImplementationMode)) {
-            context.getRuleSet().addMergeJoinImplementationRule();
-        } else if ("hash".equalsIgnoreCase(joinImplementationMode)) {
-            context.getRuleSet().addHashJoinImplementationRule();
-        } else if ("nestloop".equalsIgnoreCase(joinImplementationMode)) {
-            context.getRuleSet().addNestLoopJoinImplementationRule();
+        if (!sessionVariable.isMVPlanner()) {
+            //add join implementRule
+            String joinImplementationMode = ConnectContext.get().getSessionVariable().getJoinImplementationMode();
+            if ("merge".equalsIgnoreCase(joinImplementationMode)) {
+                context.getRuleSet().addMergeJoinImplementationRule();
+            } else if ("hash".equalsIgnoreCase(joinImplementationMode)) {
+                context.getRuleSet().addHashJoinImplementationRule();
+            } else if ("nestloop".equalsIgnoreCase(joinImplementationMode)) {
+                context.getRuleSet().addNestLoopJoinImplementationRule();
+            } else {
+                context.getRuleSet().addAutoJoinImplementationRule();
+            }
         } else {
-            context.getRuleSet().addAutoJoinImplementationRule();
+            context.getRuleSet().addRealtimeMVRules();
         }
 
-        // add realtime mv rules
-        if (sessionVariable.isMVPlanner() && sessionVariable.isEnableRealtimeRefreshMV()) {
-            context.getRuleSet().addRealtimeMVRules();
+        if (!context.getCandidateMvs().isEmpty()
+                && connectContext.getSessionVariable().isEnableCostBasedMaterializedViewRewrite()) {
+            context.getRuleSet().addMultiTableMvRewriteRule();
         }
 
         context.getTaskScheduler().pushTask(new OptimizeGroupTask(rootTaskContext, memo.getRootGroup()));

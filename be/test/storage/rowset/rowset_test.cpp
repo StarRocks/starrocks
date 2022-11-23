@@ -219,12 +219,14 @@ protected:
         rowset_writer_context->version.second = 0;
     }
 
+    void test_final_merge(bool has_merge_condition);
+
 private:
     std::unique_ptr<MemTracker> _page_cache_mem_tracker = nullptr;
 };
 
 static vectorized::ChunkIteratorPtr create_tablet_iterator(vectorized::TabletReader& reader,
-                                                           vectorized::Schema& schema) {
+                                                           vectorized::VectorizedSchema& schema) {
     vectorized::TabletReaderParams params;
     if (!reader.prepare().ok()) {
         LOG(ERROR) << "reader prepare failed";
@@ -241,7 +243,7 @@ static vectorized::ChunkIteratorPtr create_tablet_iterator(vectorized::TabletRea
     return vectorized::new_union_iterator(seg_iters);
 }
 
-TEST_F(RowsetTest, FinalMergeTest) {
+void RowsetTest::test_final_merge(bool has_merge_condition = false) {
     auto tablet = create_tablet(12421, 53242);
 
     RowsetSharedPtr rowset;
@@ -249,6 +251,9 @@ TEST_F(RowsetTest, FinalMergeTest) {
     RowsetWriterContext writer_context;
     create_rowset_writer_context(12421, &tablet->tablet_schema(), &writer_context);
     writer_context.segments_overlap = OVERLAP_UNKNOWN;
+    if (has_merge_condition) {
+        writer_context.merge_condition = "v1";
+    }
 
     std::unique_ptr<RowsetWriter> rowset_writer;
     ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &rowset_writer).ok());
@@ -390,6 +395,14 @@ TEST_F(RowsetTest, FinalMergeTest) {
         }
         EXPECT_EQ(count, rows_per_segment * 2);
     }
+}
+
+TEST_F(RowsetTest, FinalMergeTest) {
+    test_final_merge(false);
+}
+
+TEST_F(RowsetTest, ConditionUpdateWithMultipleSegmentsTest) {
+    test_final_merge(true);
 }
 
 TEST_F(RowsetTest, FinalMergeVerticalTest) {
@@ -587,7 +600,7 @@ static ssize_t read_and_compare(const vectorized::ChunkIteratorPtr& iter, int64_
 static ssize_t read_tablet_and_compare(const TabletSharedPtr& tablet,
                                        const std::shared_ptr<TabletSchema>& partial_schema, int64_t version,
                                        int64_t nkeys) {
-    vectorized::Schema schema = ChunkHelper::convert_schema_to_format_v2(*partial_schema);
+    vectorized::VectorizedSchema schema = ChunkHelper::convert_schema_to_format_v2(*partial_schema);
     vectorized::TabletReader reader(tablet, Version(0, version), schema);
     auto iter = create_tablet_iterator(reader, schema);
     if (iter == nullptr) {

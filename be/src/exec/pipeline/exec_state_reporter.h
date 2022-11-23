@@ -14,11 +14,11 @@
 #include "service/backend_options.h"
 #include "util/threadpool.h"
 
-namespace starrocks {
-namespace pipeline {
+namespace starrocks::pipeline {
 class ExecStateReporter {
 public:
-    static TReportExecStatusParams create_report_exec_status_params(FragmentContext* fragment_ctx, const Status& status,
+    static TReportExecStatusParams create_report_exec_status_params(QueryContext* query_ctx,
+                                                                    FragmentContext* fragment_ctx, const Status& status,
                                                                     bool done);
     static Status report_exec_status(const TReportExecStatusParams& params, ExecEnv* exec_env,
                                      const TNetworkAddress& fe_addr);
@@ -28,5 +28,4 @@ public:
 private:
     std::unique_ptr<ThreadPool> _thread_pool;
 };
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline

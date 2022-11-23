@@ -408,7 +408,8 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
         }
         _fragment_ctx->finish();
         auto status = _fragment_ctx->final_status();
-        _fragment_ctx->runtime_state()->exec_env()->driver_executor()->report_exec_state(_fragment_ctx, status, true);
+        _fragment_ctx->runtime_state()->exec_env()->driver_executor()->report_exec_state(_query_ctx, _fragment_ctx,
+                                                                                         status, true);
         _fragment_ctx->destroy_pass_through_chunk_buffer();
         auto fragment_id = _fragment_ctx->fragment_instance_id();
         if (_query_ctx->count_down_fragments()) {
@@ -426,10 +427,10 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
             auto query_ctx_ptr = uintptr_t(_query_ctx);
             if (ExecEnv::GetInstance()->query_context_mgr()->remove(query_id)) {
                 if (wg) {
-                    VLOG_ROW << "decrease num running queries in workgroup " << wg->id() << "query_id=" << query_id
-                             << ",fragment_ctx address=" << fragment_ctx_ptr << ",fragment_instance_id=" << frag_id
-                             << ",active_drivers=" << active_drivers << ", active_fragments=" << active_fragments
-                             << ", query_ctx address=" << query_ctx_ptr;
+                    LOG(INFO) << "decrease num running queries in workgroup " << wg->id()
+                              << " query_id=" << print_id(query_id) << ", fragment_ctx address=" << fragment_ctx_ptr
+                              << ", fragment_instance_id=" << print_id(frag_id) << ", active_drivers=" << active_drivers
+                              << ", active_fragments=" << active_fragments << ", query_ctx address=" << query_ctx_ptr;
                     wg->decr_num_queries();
                 }
             }

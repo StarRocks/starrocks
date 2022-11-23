@@ -32,6 +32,7 @@
 #include "runtime/mem_tracker.h"
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_state.h"
+#include "runtime/stream_load/stream_load_executor.h"
 
 namespace starrocks {
 
@@ -107,9 +108,6 @@ public:
     // Initiate cancellation. Must not be called until after prepare() returned.
     void cancel();
 
-    // Releases the thread token for this fragment executor.
-    void release_thread_token();
-
     // call these only after prepare()
     RuntimeState* runtime_state() { return _runtime_state; }
 
@@ -136,6 +134,8 @@ public:
     }
 
 private:
+    Status _prepare_stream_load_pipe(const TExecPlanFragmentParams& request);
+
     ExecEnv* _exec_env;        // not owned
     ExecNode* _plan = nullptr; // lives in _runtime_state->obj_pool()
     TUniqueId _query_id;
@@ -153,12 +153,9 @@ private:
     // true if close() has been called
     bool _closed;
 
-    // true if this fragment has not returned the thread token to the thread resource mgr
-    bool _has_thread_token;
+    bool enable_profile;
 
-    bool _is_report_success;
-
-    // If this is set to false, and '_is_report_success' is false as well,
+    // If this is set to false, and 'enable_profile' is false as well,
     // This executor will not report status to FE on being cancelled.
     bool _is_report_on_cancel;
 
@@ -187,15 +184,6 @@ private:
     // Number of rows returned by this fragment
     RuntimeProfile::Counter* _rows_produced_counter = nullptr;
 
-    // Average number of thread tokens for the duration of the plan fragment execution.
-    // Fragments that do a lot of cpu work (non-coordinator fragment) will have at
-    // least 1 token.  Fragments that contain a hdfs scan node will have 1+ tokens
-    // depending on system load.  Other nodes (e.g. hash join node) can also reserve
-    // additional tokens.
-    // This is a measure of how much CPU resources this fragment used during the course
-    // of the execution.
-    RuntimeProfile::Counter* _average_thread_tokens = nullptr;
-
     // It is shared with BufferControlBlock and will be called in two different
     // threads. But their calls are all at different time, there is no problem of
     // multithreaded access.
@@ -204,6 +192,9 @@ private:
 
     // If this is a runtime filter merge node for some query.
     bool _is_runtime_filter_merge_node;
+
+    std::vector<StreamLoadContext*> _stream_load_contexts;
+    bool _channel_stream_load = false;
 
     ObjectPool* obj_pool() { return _runtime_state->obj_pool(); }
 

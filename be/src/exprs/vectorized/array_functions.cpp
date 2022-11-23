@@ -80,6 +80,9 @@ static ColumnPtr do_array_append(const Column& elements, const UInt32Column& off
 ColumnPtr ArrayFunctions::array_append([[maybe_unused]] FunctionContext* context, const Columns& columns) {
     const Column* arg0 = columns[0].get();
     const Column* arg1 = columns[1].get();
+    if (arg0->only_null()) {
+        return columns[0];
+    }
 
     arg0 = arg0->has_null() || arg0->is_constant() ? arg0 : ColumnHelper::get_data_column(arg0);
     arg1 = arg1->has_null() || arg1->is_constant() ? arg1 : ColumnHelper::get_data_column(arg1);
@@ -113,7 +116,7 @@ ColumnPtr ArrayFunctions::array_append([[maybe_unused]] FunctionContext* context
 
 class ArrayRemoveImpl {
 public:
-    static ColumnPtr evaluate(const Column& array, const Column& element) {
+    static ColumnPtr evaluate(const ColumnPtr array, const ColumnPtr element) {
         return _array_remove_generic(array, element);
     }
 
@@ -318,27 +321,22 @@ private:
         }
     }
 
-    static ColumnPtr _array_remove_generic(const Column& array, const Column& target) {
-        if (array.only_null()) {
-            auto result = ArrayColumn::create(array.clone_empty(), UInt32Column::create());
-            result->append_nulls(array.size());
-            return result;
+    static ColumnPtr _array_remove_generic(const ColumnPtr& array, const ColumnPtr& target) {
+        if (array->only_null()) {
+            return array;
         }
-        if (auto nullable = dynamic_cast<const NullableColumn*>(&array); nullable != nullptr) {
+        if (auto nullable = dynamic_cast<const NullableColumn*>(array.get()); nullable != nullptr) {
             auto array_col = down_cast<const ArrayColumn*>(nullable->data_column().get());
-            auto result = _array_remove_non_nullable(*array_col, target);
+            auto result = _array_remove_non_nullable(*array_col, *target);
             DCHECK_EQ(nullable->size(), result->size());
-            if (!nullable->has_null()) {
-                return result;
-            }
             return NullableColumn::create(std::move(result), nullable->null_column());
         }
 
-        return _array_remove_non_nullable(down_cast<const ArrayColumn&>(array), target);
+        return _array_remove_non_nullable(down_cast<ArrayColumn&>(*array), *target);
     }
 };
 
-template <PrimitiveType TYPE>
+template <LogicalType TYPE>
 struct ArrayCumSumImpl {
 public:
     static ColumnPtr evaluate(const ColumnPtr& col) {
@@ -454,7 +452,7 @@ ColumnPtr ArrayFunctions::array_remove([[maybe_unused]] FunctionContext* context
     const ColumnPtr& arg0 = columns[0]; // array
     const ColumnPtr& arg1 = columns[1]; // element
 
-    return ArrayRemoveImpl::evaluate(*arg0, *arg1);
+    return ArrayRemoveImpl::evaluate(arg0, arg1);
 }
 
 // If PositionEnabled=true and ReturnType=Int32, it is function array_position and it will return index of elemt if the array contain it or 0 if not contain.
@@ -972,8 +970,8 @@ class ArrayArithmeticImpl {
 public:
     using ArithmeticType = typename ArrayFunctions::ArithmeticType;
 
-    template <ArithmeticType type, PrimitiveType value_type, PrimitiveType sum_result_type,
-              PrimitiveType avg_result_type, bool has_null, typename ElementColumn>
+    template <ArithmeticType type, LogicalType value_type, LogicalType sum_result_type, LogicalType avg_result_type,
+              bool has_null, typename ElementColumn>
     static ColumnPtr _sum_and_avg(const ElementColumn& elements, const UInt32Column& offsets,
                                   const NullColumn::Container* null_elements, std::vector<uint8_t>* null_ptr) {
         const size_t num_array = offsets.size() - 1;
@@ -1056,7 +1054,7 @@ public:
         return result_column;
     }
 
-    template <bool is_min, ArithmeticType type, PrimitiveType value_type, bool has_null, typename ElementColumn>
+    template <bool is_min, ArithmeticType type, LogicalType value_type, bool has_null, typename ElementColumn>
     static ColumnPtr _min_and_max(const ElementColumn& elements, const UInt32Column& offsets,
                                   const NullColumn::Container* null_elements, std::vector<uint8_t>* null_ptr) {
         const size_t num_array = offsets.size() - 1;
@@ -1141,7 +1139,7 @@ public:
     }
 };
 
-template <PrimitiveType column_type, bool has_null, ArrayFunctions::ArithmeticType type>
+template <LogicalType column_type, bool has_null, ArrayFunctions::ArithmeticType type>
 ColumnPtr ArrayFunctions::_array_process_not_nullable_types(const Column* elements, const UInt32Column& offsets,
                                                             const NullColumn::Container* null_elements,
                                                             std::vector<uint8_t>* null_ptr) {
@@ -1208,7 +1206,7 @@ ColumnPtr ArrayFunctions::_array_process_not_nullable_types(const Column* elemen
     }
 }
 
-template <PrimitiveType column_type, ArrayFunctions::ArithmeticType type>
+template <LogicalType column_type, ArrayFunctions::ArithmeticType type>
 ColumnPtr ArrayFunctions::_array_process_not_nullable(const Column* raw_array_column, std::vector<uint8_t>* null_ptr) {
     const auto& array_column = down_cast<const ArrayColumn&>(*raw_array_column);
     const UInt32Column& offsets = array_column.offsets();
@@ -1234,7 +1232,7 @@ ColumnPtr ArrayFunctions::_array_process_not_nullable(const Column* raw_array_co
     }
 }
 
-template <PrimitiveType column_type, ArrayFunctions::ArithmeticType type>
+template <LogicalType column_type, ArrayFunctions::ArithmeticType type>
 ColumnPtr ArrayFunctions::array_arithmetic(const Columns& columns) {
     DCHECK_EQ(1, columns.size());
     const ColumnPtr& array_column = columns[0]; // array
@@ -1261,7 +1259,7 @@ ColumnPtr ArrayFunctions::array_arithmetic(const Columns& columns) {
     }
 }
 
-template <PrimitiveType type>
+template <LogicalType type>
 ColumnPtr ArrayFunctions::array_sum(const Columns& columns) {
     return ArrayFunctions::template array_arithmetic<type, ArithmeticType::SUM>(columns);
 }
@@ -1302,7 +1300,7 @@ ColumnPtr ArrayFunctions::array_sum_decimalv2([[maybe_unused]] FunctionContext* 
     return ArrayFunctions::template array_sum<TYPE_DECIMALV2>(columns);
 }
 
-template <PrimitiveType type>
+template <LogicalType type>
 ColumnPtr ArrayFunctions::array_avg(const Columns& columns) {
     return ArrayFunctions::template array_arithmetic<type, ArithmeticType::AVG>(columns);
 }
@@ -1351,7 +1349,7 @@ ColumnPtr ArrayFunctions::array_avg_datetime([[maybe_unused]] FunctionContext* c
     return ArrayFunctions::template array_avg<TYPE_DATETIME>(columns);
 }
 
-template <PrimitiveType type>
+template <LogicalType type>
 ColumnPtr ArrayFunctions::array_min(const Columns& columns) {
     return ArrayFunctions::template array_arithmetic<type, ArithmeticType::MIN>(columns);
 }
@@ -1404,7 +1402,7 @@ ColumnPtr ArrayFunctions::array_min_varchar([[maybe_unused]] FunctionContext* co
     return ArrayFunctions::template array_min<TYPE_VARCHAR>(columns);
 }
 
-template <PrimitiveType type>
+template <LogicalType type>
 ColumnPtr ArrayFunctions::array_max(const Columns& columns) {
     return ArrayFunctions::template array_arithmetic<type, ArithmeticType::MAX>(columns);
 }

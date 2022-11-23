@@ -57,7 +57,7 @@ Status DataSource::parse_runtime_filters(RuntimeState* state) {
         if (filter == nullptr) continue;
         SlotId slot_id;
         if (!probe->is_probe_slot_ref(&slot_id)) continue;
-        PrimitiveType slot_type = probe->probe_expr_type();
+        LogicalType slot_type = probe->probe_expr_type();
         Expr* min_max_predicate = nullptr;
         vectorized::RuntimeFilterHelper::create_min_max_value_predicate(state->obj_pool(), slot_id, slot_type, filter,
                                                                         &min_max_predicate);

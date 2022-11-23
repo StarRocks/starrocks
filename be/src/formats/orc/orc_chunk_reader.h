@@ -10,15 +10,14 @@
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/vectorized/runtime_filter_bank.h"
+#include "formats/orc/orc_mapping.h"
 #include "runtime/descriptors.h"
 #include "runtime/types.h"
 #include "util/buffered_stream.h"
 
-namespace orc {
-namespace proto {
+namespace orc::proto {
 class ColumnStatistics;
-}
-} // namespace orc
+} // namespace orc::proto
 
 namespace starrocks {
 class RandomAccessFile;
@@ -26,8 +25,8 @@ class RuntimeState;
 } // namespace starrocks
 namespace starrocks::vectorized {
 
-using FillColumnFunction = void (*)(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int from, int size,
-                                    const TypeDescriptor& type_desc, void* ctx);
+using FillColumnFunction = void (*)(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size,
+                                    const TypeDescriptor& type_desc, const OrcMappingPtr& mapping, void* ctx);
 
 // OrcChunkReader is a bridge between apache/orc and Column
 // It mainly does 4 things:
@@ -47,7 +46,7 @@ public:
     };
 
     // src slot descriptors should exactly matches columns in row readers.
-    explicit OrcChunkReader(RuntimeState* state, const std::vector<SlotDescriptor*>& src_slot_descriptors);
+    explicit OrcChunkReader(RuntimeState* state, std::vector<SlotDescriptor*> src_slot_descriptors);
     ~OrcChunkReader();
     Status init(std::unique_ptr<orc::InputStream> input_stream);
     Status init(std::unique_ptr<orc::Reader> reader);
@@ -57,13 +56,14 @@ public:
     // copy from cvb to chunk
     Status fill_chunk(ChunkPtr* chunk);
     // some type cast & conversion.
-    ChunkPtr cast_chunk(ChunkPtr* chunk);
+    StatusOr<ChunkPtr> cast_chunk_checked(ChunkPtr* chunk);
+    ChunkPtr cast_chunk(ChunkPtr* chunk) { return cast_chunk_checked(chunk).value(); }
     // call them before calling init.
     void set_read_chunk_size(uint64_t v) { _read_chunk_size = v; }
     void set_row_reader_filter(std::shared_ptr<orc::RowReaderFilter> filter);
-    void set_conjuncts(const std::vector<Expr*>& conjuncts);
-    void set_conjuncts_and_runtime_filters(const std::vector<Expr*>& conjuncts,
-                                           const RuntimeFilterProbeCollector* rf_collector);
+    Status set_conjuncts(const std::vector<Expr*>& conjuncts);
+    Status set_conjuncts_and_runtime_filters(const std::vector<Expr*>& conjuncts,
+                                             const RuntimeFilterProbeCollector* rf_collector);
     Status set_timezone(const std::string& tz);
     size_t num_columns() const { return _src_slot_descriptors.size(); }
 
@@ -125,10 +125,11 @@ public:
 private:
     ChunkPtr _create_chunk(const std::vector<SlotDescriptor*>& slots, const std::vector<int>* indices);
     Status _fill_chunk(ChunkPtr* chunk, const std::vector<SlotDescriptor*>& slots, const std::vector<int>* indices);
-    ChunkPtr _cast_chunk(ChunkPtr* chunk, const std::vector<SlotDescriptor*>& slots, const std::vector<int>* indices);
+    StatusOr<ChunkPtr> _cast_chunk(ChunkPtr* chunk, const std::vector<SlotDescriptor*>& slots,
+                                   const std::vector<int>* indices);
 
     bool _ok_to_add_conjunct(const Expr* conjunct);
-    void _add_conjunct(const Expr* conjunct, std::unique_ptr<orc::SearchArgumentBuilder>& builder);
+    Status _add_conjunct(const Expr* conjunct, std::unique_ptr<orc::SearchArgumentBuilder>& builder);
     bool _add_runtime_filter(const SlotDescriptor* slot_desc, const JoinRuntimeFilter* rf,
                              std::unique_ptr<orc::SearchArgumentBuilder>& builder);
 
@@ -137,8 +138,9 @@ private:
     std::unique_ptr<orc::RowReader> _row_reader;
     orc::ReaderOptions _reader_options;
     orc::RowReaderOptions _row_reader_options;
-    const std::vector<SlotDescriptor*>& _src_slot_descriptors;
+    std::vector<SlotDescriptor*> _src_slot_descriptors;
     std::unordered_map<SlotId, SlotDescriptor*> _slot_id_to_desc;
+    std::unique_ptr<OrcMapping> _root_selected_mapping;
     std::vector<TypeDescriptor> _src_types;
     // _src_slot index to position in orc
     std::vector<int> _position_in_orc;
@@ -149,7 +151,7 @@ private:
     Status _slot_to_orc_column_name(const SlotDescriptor* slot,
                                     const std::unordered_map<int, std::string>& column_id_to_orc_name,
                                     std::string* orc_column_name);
-    Status _init_include_columns();
+    Status _init_include_columns(const std::unique_ptr<OrcMapping>& mapping);
     Status _init_position_in_orc();
     Status _init_src_types();
     Status _init_cast_exprs();
@@ -212,8 +214,6 @@ public:
     bool isIORangesEnabled() const override { return config::orc_coalesce_read_enable; }
     void clearIORanges() override;
     void setIORanges(std::vector<orc::InputStream::IORange>& io_ranges) override;
-
-    void set_enable_block_cache(bool v) { _buffer_stream.set_enable_block_cache(v); }
 
 private:
     void doRead(void* buf, uint64_t length, uint64_t offset, bool direct);

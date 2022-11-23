@@ -3,6 +3,7 @@
 #pragma once
 
 #include <deque>
+#include <utility>
 
 #include "column/chunk.h"
 #include "column/datum.h"
@@ -23,10 +24,11 @@ struct SortedRun {
     SortedRun(const SortedRun& rhs) = default;
     SortedRun& operator=(const SortedRun& rhs) = default;
 
-    SortedRun(ChunkPtr ichunk, const Columns& columns)
-            : chunk(ichunk), orderby(columns), range(0, ichunk->num_rows()) {}
+    SortedRun(const ChunkPtr& ichunk, Columns columns)
+            : chunk(ichunk), orderby(std::move(columns)), range(0, ichunk->num_rows()) {}
 
-    SortedRun(SortedRun rhs, size_t start, size_t end) : chunk(rhs.chunk), orderby(rhs.orderby), range(start, end) {
+    SortedRun(const SortedRun& rhs, size_t start, size_t end)
+            : chunk(rhs.chunk), orderby(rhs.orderby), range(start, end) {
         DCHECK_LE(start, end);
         DCHECK_LT(end, Column::MAX_CAPACITY_LIMIT);
     }
@@ -68,7 +70,7 @@ struct SortedRuns {
 
     SortedRuns() = default;
     ~SortedRuns() = default;
-    SortedRuns(SortedRun run) : chunks{run} {}
+    SortedRuns(const SortedRun& run) : chunks{run} {}
 
     SortedRun& get_run(int i) { return chunks[i]; }
     ChunkPtr get_chunk(int i) const { return chunks[i].chunk; }

@@ -34,8 +34,8 @@ struct ShortKeyRangeOption;
 using ShortKeyRangeOptionPtr = std::shared_ptr<ShortKeyRangeOption>;
 struct ShortKeyOption;
 using ShortKeyOptionPtr = std::unique_ptr<vectorized::ShortKeyOption>;
-class Schema;
-using SchemaPtr = std::shared_ptr<Schema>;
+class VectorizedSchema;
+using VectorizedSchemaPtr = std::shared_ptr<VectorizedSchema>;
 class Range;
 } // namespace vectorized
 
@@ -381,7 +381,7 @@ private:
     std::vector<vectorized::SeekRange> _tablet_seek_ranges;
     Rowset* _largest_rowset = nullptr;
     SegmentGroupPtr _segment_group = nullptr;
-    vectorized::SchemaPtr _short_key_schema = nullptr;
+    vectorized::VectorizedSchemaPtr _short_key_schema = nullptr;
     int64_t _sample_splitted_scan_blocks = 0;
 
     std::vector<std::pair<ShortKeyIndexGroupIterator, ShortKeyIndexGroupIterator>> _block_ranges_per_seek_range;

@@ -15,7 +15,7 @@ namespace vectorized {
 class Chunk;
 class ChunkIterator;
 class ColumnPredicate;
-class RowSourceMask;
+struct RowSourceMask;
 class RowSourceMaskBuffer;
 class SeekRange;
 class SeekTuple;
@@ -33,15 +33,16 @@ class TabletReader final : public vectorized::ChunkIterator {
     using RowsetPtr = std::shared_ptr<Rowset>;
     using RowSourceMask = starrocks::vectorized::RowSourceMask;
     using RowSourceMaskBuffer = starrocks::vectorized::RowSourceMaskBuffer;
-    using Schema = starrocks::vectorized::Schema;
+    using VectorizedSchema = starrocks::vectorized::VectorizedSchema;
     using SeekRange = starrocks::vectorized::SeekRange;
     using SeekTuple = starrocks::vectorized::SeekTuple;
     using TabletReaderParams = starrocks::vectorized::TabletReaderParams;
 
 public:
-    TabletReader(Tablet tablet, int64_t version, Schema schema);
-    TabletReader(Tablet tablet, int64_t version, Schema schema, std::vector<RowsetPtr> rowsets);
-    TabletReader(Tablet tablet, int64_t version, Schema schema, bool is_key, RowSourceMaskBuffer* mask_buffer);
+    TabletReader(Tablet tablet, int64_t version, VectorizedSchema schema);
+    TabletReader(Tablet tablet, int64_t version, VectorizedSchema schema, std::vector<RowsetPtr> rowsets);
+    TabletReader(Tablet tablet, int64_t version, VectorizedSchema schema, bool is_key,
+                 RowSourceMaskBuffer* mask_buffer);
     ~TabletReader() override;
 
     DISALLOW_COPY_AND_MOVE(TabletReader);

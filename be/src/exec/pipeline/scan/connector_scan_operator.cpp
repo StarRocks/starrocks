@@ -208,7 +208,13 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, vectorized::ChunkP
                 break;
             }
         } else if (!_status.is_end_of_file()) {
-            return _status;
+            if (_status.is_time_out()) {
+                Status t = _status;
+                _status = Status::OK();
+                return t;
+            } else {
+                return _status;
+            }
         } else {
             _ck_acc.finalize();
             DCHECK(_status.is_end_of_file());
@@ -218,6 +224,7 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, vectorized::ChunkP
     DCHECK(_status.ok() || _status.is_end_of_file());
     _scan_rows_num = _data_source->raw_rows_read();
     _scan_bytes = _data_source->num_bytes_read();
+    _cpu_time_spent_ns = _data_source->cpu_time_spent();
     if (_ck_acc.has_output()) {
         *chunk = std::move(_ck_acc.pull());
         _rows_read += (*chunk)->num_rows();

@@ -7,8 +7,8 @@
 #include "column/chunk.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
-#include "column/schema.h"
 #include "column/vectorized_fwd.h"
+#include "column/vectorized_schema.h"
 #include "common/logging.h"
 #include "fs/fs_util.h"
 #include "storage/chunk_helper.h"
@@ -28,7 +28,7 @@ namespace starrocks::lake {
 
 using namespace starrocks::vectorized;
 
-using VSchema = starrocks::vectorized::Schema;
+using VSchema = starrocks::vectorized::VectorizedSchema;
 using VChunk = starrocks::vectorized::Chunk;
 
 class DuplicateTabletWriterTest : public testing::Test {

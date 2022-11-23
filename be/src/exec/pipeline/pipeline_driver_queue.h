@@ -8,8 +8,7 @@
 #include "exec/workgroup/work_group_fwd.h"
 #include "util/factory_method.h"
 
-namespace starrocks {
-namespace pipeline {
+namespace starrocks::pipeline {
 
 class DriverQueue;
 using DriverQueuePtr = std::unique_ptr<DriverQueue>;
@@ -219,5 +218,4 @@ private:
     std::atomic<int64_t> _bandwidth_usage_ns = 0;
 };
 
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline

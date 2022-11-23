@@ -103,7 +103,7 @@ HASH_PARTITIONED: 1: C_CUSTKEY
 |  <slot 6> : 6: C_ACCTBAL
 |
 10:NESTLOOP JOIN
-|  join op: CROSS JOIN
+|  join op: INNER JOIN
 |  colocate: false, reason:
 |  other join predicates: 6: C_ACCTBAL > 19: avg
 |

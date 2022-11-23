@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <utility>
+
 #include "io/output_stream.h"
 
 namespace starrocks::io {
@@ -47,7 +49,7 @@ public:
 
     // Call set_sync_directory_on_close() and pass the path of the directory of the file referenced
     // by the file descriptor to flush the directory entries on close.
-    void set_sync_directory_on_close(std::string dir) { _sync_dir = dir; }
+    void set_sync_directory_on_close(std::string dir) { _sync_dir = std::move(dir); }
 
 private:
     Status do_sync_if_needed();

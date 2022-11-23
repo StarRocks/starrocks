@@ -30,7 +30,7 @@ public:
     CacheOperator(pipeline::OperatorFactory* factory, int32_t driver_sequence, CacheManagerRawPtr cache_mgr,
                   const CacheParam& cache_param);
 
-    ~CacheOperator() = default;
+    ~CacheOperator() override = default;
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
     bool probe_cache(int64_t tablet_id, int64_t version);
@@ -94,7 +94,7 @@ using CacheOperatorFactoryPtr = std::shared_ptr<CacheOperatorFactory>;
 class CacheOperatorFactory : public pipeline::OperatorFactory {
 public:
     CacheOperatorFactory(int32_t id, int32_t plan_node_id, CacheManagerRawPtr cache_mgr, const CacheParam& cache_param);
-    ~CacheOperatorFactory() = default;
+    ~CacheOperatorFactory() override = default;
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
     pipeline::OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;

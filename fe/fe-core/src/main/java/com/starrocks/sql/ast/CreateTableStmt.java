@@ -57,6 +57,7 @@ public class CreateTableStmt extends DdlStmt {
         engineNames.add("broker");
         engineNames.add("elasticsearch");
         engineNames.add("hive");
+        engineNames.add("file");
         engineNames.add("iceberg");
         engineNames.add("hudi");
         engineNames.add("jdbc");

@@ -6,6 +6,7 @@
 #include <utility>
 
 #include "block_cache/block_cache.h"
+#include "gutil/strings/fastmem.h"
 #include "util/hash_util.hpp"
 #include "util/runtime_profile.h"
 #include "util/stack_util.h"
@@ -31,6 +32,7 @@ CacheInputStream::CacheInputStream(std::string filename, std::shared_ptr<Seekabl
 #ifdef WITH_BLOCK_CACHE
 StatusOr<int64_t> CacheInputStream::read(void* out, int64_t count) {
     BlockCache* cache = BlockCache::instance();
+    count = std::min(_size - _offset, count);
     const int64_t BLOCK_SIZE = cache->block_size();
     char* p = static_cast<char*>(out);
     char* pe = p + count;
@@ -83,7 +85,8 @@ StatusOr<int64_t> CacheInputStream::read(void* out, int64_t count) {
         }
 
         if (!can_zero_copy) {
-            memcpy(p, src + shift, size);
+            // memcpy(p, src + shift, size);
+            strings::memcpy_inlined(p, src + shift, size);
             _stats.read_cache_bytes += size;
         }
         p += size;
@@ -110,6 +113,7 @@ StatusOr<int64_t> CacheInputStream::read(void* out, int64_t count) {
 StatusOr<int64_t> CacheInputStream::read(void* out, int64_t count) {
     int64_t load_size = std::min(count, _size - _offset);
     RETURN_IF_ERROR(_stream->read_at_fully(_offset, out, load_size));
+    _offset += load_size;
     return load_size;
 }
 #endif

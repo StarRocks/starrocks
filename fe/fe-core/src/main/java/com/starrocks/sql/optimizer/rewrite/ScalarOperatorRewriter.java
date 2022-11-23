@@ -11,6 +11,7 @@ import com.starrocks.sql.optimizer.rewrite.scalar.ArithmeticCommutativeRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.ExtractCommonPredicateRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.FoldConstantsRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.ImplicitCastRule;
+import com.starrocks.sql.optimizer.rewrite.scalar.MvNormalizePredicateRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.NormalizePredicateRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.ReduceCastRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.ScalarOperatorRewriteRule;
@@ -48,6 +49,19 @@ public class ScalarOperatorRewriter {
             new ExtractCommonPredicateRule(),
             new ArithmeticCommutativeRule()
     );
+
+    public static final List<ScalarOperatorRewriteRule> MV_SCALAR_REWRITE_RULES = Lists.newArrayList(
+            // required
+            new ImplicitCastRule(),
+            // optional
+            new ReduceCastRule(),
+            new MvNormalizePredicateRule(),
+            new FoldConstantsRule(),
+            new SimplifiedPredicateRule(),
+            new ExtractCommonPredicateRule(),
+            new ArithmeticCommutativeRule()
+    );
+
     private final ScalarOperatorRewriteContext context;
 
     public ScalarOperatorRewriter() {

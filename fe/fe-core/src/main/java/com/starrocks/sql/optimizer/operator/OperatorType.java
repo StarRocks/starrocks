@@ -10,6 +10,7 @@ public enum OperatorType {
     LOGICAL_PROJECT,
     LOGICAL_OLAP_SCAN,
     LOGICAL_HIVE_SCAN,
+    LOGICAL_FILE_SCAN,
     LOGICAL_ICEBERG_SCAN,
     LOGICAL_HUDI_SCAN,
     LOGICAL_DELTALAKE_SCAN,
@@ -47,6 +48,7 @@ public enum OperatorType {
     PHYSICAL_NESTLOOP_JOIN,
     PHYSICAL_OLAP_SCAN,
     PHYSICAL_HIVE_SCAN,
+    PHYSICAL_FILE_SCAN,
     PHYSICAL_ICEBERG_SCAN,
     PHYSICAL_HUDI_SCAN,
     PHYSICAL_DELTALAKE_SCAN,
@@ -98,7 +100,9 @@ public enum OperatorType {
     DICT_MAPPING,
     CLONE,
     LAMBDA_FUNCTION,
+    LAMBDA_ARGUMENT,
     SUBQUERY,
+    SUBFIELD,
 
     /**
      * PATTERN
@@ -106,4 +110,13 @@ public enum OperatorType {
     PATTERN,
     PATTERN_LEAF,
     PATTERN_MULTI_LEAF,
+    // for all type scan node
+    PATTERN_SCAN,
+    // for extracting pattern like this
+    //     join
+    //    /    \
+    //  join   table
+    //  /  \
+    // table table
+    PATTERN_MULTIJOIN,
 }

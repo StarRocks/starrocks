@@ -50,6 +50,7 @@ import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.DomainResolver;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.ExternalOlapTable;
+import com.starrocks.catalog.FileTable;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HiveMetaStoreTable;
@@ -145,6 +146,7 @@ import com.starrocks.load.loadv2.LoadTimeoutChecker;
 import com.starrocks.load.routineload.RoutineLoadManager;
 import com.starrocks.load.routineload.RoutineLoadScheduler;
 import com.starrocks.load.routineload.RoutineLoadTaskScheduler;
+import com.starrocks.load.streamload.StreamLoadManager;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.privilege.Auth;
@@ -192,7 +194,7 @@ import com.starrocks.sql.ast.AdminSetConfigStmt;
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt.QuotaType;
-import com.starrocks.sql.ast.AlterDatabaseRename;
+import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
@@ -239,6 +241,7 @@ import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TRefreshTableRequest;
 import com.starrocks.thrift.TRefreshTableResponse;
+import com.starrocks.thrift.TResourceUsage;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
@@ -302,6 +305,7 @@ public class GlobalStateMgr {
     private Load load;
     private LoadManager loadManager;
     private RoutineLoadManager routineLoadManager;
+    private StreamLoadManager streamLoadManager;
     private ExportMgr exportMgr;
     private Alter alter;
     private ConsistencyChecker consistencyChecker;
@@ -513,6 +517,7 @@ public class GlobalStateMgr {
     // if isCheckpointCatalog is true, it means that we should not collect thread pool metric
     private GlobalStateMgr(boolean isCheckpointCatalog) {
         this.load = new Load();
+        this.streamLoadManager = new StreamLoadManager();
         this.routineLoadManager = new RoutineLoadManager();
         this.exportMgr = new ExportMgr();
         this.alter = new Alter();
@@ -1263,6 +1268,8 @@ public class GlobalStateMgr {
             remoteChecksum = dis.readLong();
             checksum = loadCompactionManager(dis, checksum);
             remoteChecksum = dis.readLong();
+            checksum = loadStreamLoadManager(dis, checksum);
+            remoteChecksum = dis.readLong();
             loadRBACPrivilege(dis);
         } catch (EOFException exception) {
             LOG.warn("load image eof.", exception);
@@ -1449,6 +1456,12 @@ public class GlobalStateMgr {
         return checksum;
     }
 
+    public long loadStreamLoadManager(DataInputStream in, long checksum) throws IOException {
+        streamLoadManager = StreamLoadManager.loadStreamLoadManager(in);
+        checksum ^= streamLoadManager.getChecksum();
+        return checksum;
+    }
+
     // Only called by checkpoint thread
     public void saveImage() throws IOException {
         // Write image.ckpt
@@ -1514,6 +1527,8 @@ public class GlobalStateMgr {
             checksum = shardManager.saveShardManager(dos, checksum);
             dos.writeLong(checksum);
             checksum = compactionManager.saveCompactionManager(dos, checksum);
+            dos.writeLong(checksum);
+            checksum = streamLoadManager.saveStreamLoadManager(dos, checksum);
             dos.writeLong(checksum);
             saveRBACPrivilege(dos);
         }
@@ -1762,6 +1777,8 @@ public class GlobalStateMgr {
                     toJournalId, replayedJournalId.get()));
         }
 
+        streamLoadManager.cancelUnDurableTaskAfterRestart();
+
         long replayInterval = System.currentTimeMillis() - replayStartTime;
         LOG.info("finish replay from {} to {} in {} msec", startJournalId, toJournalId, replayInterval);
     }
@@ -1918,7 +1935,7 @@ public class GlobalStateMgr {
         localMetastore.replayAlterDatabaseQuota(dbName, quota, quotaType);
     }
 
-    public void renameDatabase(AlterDatabaseRename stmt) throws DdlException {
+    public void renameDatabase(AlterDatabaseRenameStatement stmt) throws DdlException {
         localMetastore.renameDatabase(stmt);
     }
 
@@ -2009,7 +2026,8 @@ public class GlobalStateMgr {
         if (table.getType() == TableType.MYSQL || table.getType() == TableType.ELASTICSEARCH
                 || table.getType() == TableType.BROKER || table.getType() == TableType.HIVE
                 || table.getType() == TableType.HUDI || table.getType() == TableType.ICEBERG
-                || table.getType() == TableType.OLAP_EXTERNAL || table.getType() == TableType.JDBC) {
+                || table.getType() == TableType.OLAP_EXTERNAL || table.getType() == TableType.JDBC
+                || table.getType() == TableType.FILE) {
             sb.append("EXTERNAL ");
         }
         sb.append("TABLE ");
@@ -2305,6 +2323,14 @@ public class GlobalStateMgr {
             }
             sb.append(new PrintableMap<>(hiveTable.getHiveProperties(), " = ", true, true, false).toString());
             sb.append("\n)");
+        } else if (table.getType() == TableType.FILE) {
+            FileTable fileTable = (FileTable) table;
+            if (!Strings.isNullOrEmpty(table.getComment())) {
+                sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
+            }
+            sb.append("\nPROPERTIES (\n");
+            sb.append(new PrintableMap<>(fileTable.getFileProperties(), " = ", true, true, false).toString());
+            sb.append("\n)");
         } else if (table.getType() == TableType.HUDI) {
             HudiTable hudiTable = (HudiTable) table;
             if (!Strings.isNullOrEmpty(table.getComment())) {
@@ -2583,6 +2609,10 @@ public class GlobalStateMgr {
 
     public RoutineLoadManager getRoutineLoadManager() {
         return routineLoadManager;
+    }
+
+    public StreamLoadManager getStreamLoadManager() {
+        return streamLoadManager;
     }
 
     public RoutineLoadTaskScheduler getRoutineLoadTaskScheduler() {
@@ -2944,6 +2974,10 @@ public class GlobalStateMgr {
         if (!catalogMgr.catalogExists(newCatalogName)) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_CATALOG_ERROR, newCatalogName);
         }
+        if (isUsingNewPrivilege() && !CatalogMgr.isInternalCatalog(newCatalogName) &&
+                !PrivilegeManager.checkAnyActionOnCatalog(ctx, newCatalogName)) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USE CATALOG");
+        }
         ctx.setCurrentCatalog(newCatalogName);
     }
 
@@ -2964,15 +2998,20 @@ public class GlobalStateMgr {
             } else {
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_AND_DB_ERROR, identifier);
             }
+            if (isUsingNewPrivilege() && !CatalogMgr.isInternalCatalog(newCatalogName) &&
+                    !PrivilegeManager.checkAnyActionOnCatalog(ctx, newCatalogName)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USE CATALOG");
+            }
             ctx.setCurrentCatalog(newCatalogName);
         }
 
         // Check auth for internal catalog.
         // Here we check the request permission that sent by the mysql client or jdbc.
         // So we didn't check UseDbStmt permission in PrivilegeChecker.
+        // TODO: external catalog should also check any action on or under db when change db on context
         if (CatalogMgr.isInternalCatalog(ctx.getCurrentCatalog())) {
             if (isUsingNewPrivilege()) {
-                if (!PrivilegeManager.checkAnyActionInDb(ctx, dbName)) {
+                if (!PrivilegeManager.checkAnyActionOnOrUnderDb(ctx, dbName)) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_DB_ACCESS_DENIED,
                             ctx.getQualifiedUser(), dbName);
                 }
@@ -3189,6 +3228,10 @@ public class GlobalStateMgr {
         localMetastore.replayTruncateTable(info);
     }
 
+    public void updateResourceUsage(long backendId, TResourceUsage usage) {
+        nodeMgr.updateResourceUsage(backendId, usage);
+    }
+
     public void setConfig(AdminSetConfigStmt stmt) throws DdlException {
         nodeMgr.setConfig(stmt);
     }
@@ -3309,7 +3352,7 @@ public class GlobalStateMgr {
 
     }
 
-    public void replayAuthUpgrade(AuthUpgradeInfo info) throws AuthUpgrader.AuthUpgradeUnrecoveredException {
+    public void replayAuthUpgrade(AuthUpgradeInfo info) throws AuthUpgrader.AuthUpgradeUnrecoverableException {
         AuthUpgrader upgrader = new AuthUpgrader(auth, authenticationManager, privilegeManager, this);
         upgrader.replayUpgrade(info.getRoleNameToId());
         usingNewPrivilege.set(true);
@@ -3379,6 +3422,11 @@ public class GlobalStateMgr {
             backupHandler.removeOldJobs();
         } catch (Throwable t) {
             LOG.warn("backup handler clean old jobs failed", t);
+        }
+        try {
+            streamLoadManager.cleanOldStreamLoadTasks();
+        } catch (Throwable t) {
+            LOG.warn("delete handler remove old delete info failed", t);
         }
     }
 

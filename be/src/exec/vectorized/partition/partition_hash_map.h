@@ -242,7 +242,7 @@ protected:
     }
 };
 
-template <PrimitiveType primitive_type, typename HashMap>
+template <LogicalType primitive_type, typename HashMap>
 struct PartitionHashMapWithOneNumberKey : public PartitionHashMapBase {
     using Iterator = typename HashMap::iterator;
     using ColumnType = RunTimeColumnType<primitive_type>;
@@ -262,7 +262,7 @@ struct PartitionHashMapWithOneNumberKey : public PartitionHashMapBase {
     }
 };
 
-template <PrimitiveType primitive_type, typename HashMap>
+template <LogicalType primitive_type, typename HashMap>
 struct PartitionHashMapWithOneNullableNumberKey : public PartitionHashMapBase {
     using Iterator = typename HashMap::iterator;
     using ColumnType = RunTimeColumnType<primitive_type>;
@@ -338,7 +338,7 @@ struct PartitionHashMapWithSerializedKey {
     HashMap hash_map;
 
     PartitionHashMapWithSerializedKey(int32_t chunk_size) {}
-    bool append_chunk(ChunkPtr chunk, const Columns& key_columns, MemPool* mem_pool, ObjectPool* obj_pool) {
+    bool append_chunk(const ChunkPtr& chunk, const Columns& key_columns, MemPool* mem_pool, ObjectPool* obj_pool) {
         return false;
     }
 };
@@ -352,7 +352,7 @@ struct PartitionHashMapWithSerializedKeyFixedSize {
     int fixed_byte_size = -1; // unset state
 
     PartitionHashMapWithSerializedKeyFixedSize(int32_t chunk_size) {}
-    bool append_chunk(ChunkPtr chunk, const Columns& key_columns, MemPool* mem_pool, ObjectPool* obj_pool) {
+    bool append_chunk(const ChunkPtr& chunk, const Columns& key_columns, MemPool* mem_pool, ObjectPool* obj_pool) {
         return false;
     }
 };

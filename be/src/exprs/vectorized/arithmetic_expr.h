@@ -4,13 +4,11 @@
 
 #include "exprs/expr.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 class VectorizedArithmeticExprFactory {
 public:
     static Expr* from_thrift(const TExprNode& node);
 };
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

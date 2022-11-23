@@ -64,7 +64,7 @@ public abstract class PushDownJoinPredicateBase extends TransformationRule {
         List<ScalarOperator> rightPushDown = Lists.newArrayList();
         ColumnRefSet leftColumns = input.getInputs().get(0).getOutputColumns();
         ColumnRefSet rightColumns = input.getInputs().get(1).getOutputColumns();
-        if (join.getJoinType().isInnerJoin() || join.getJoinType().isCrossJoin()) {
+        if (join.isInnerOrCrossJoin()) {
             for (ScalarOperator predicate : conjunctList) {
                 ColumnRefSet usedColumns = predicate.getUsedColumns();
                 if (usedColumns.isEmpty()) {
@@ -113,28 +113,15 @@ public abstract class PushDownJoinPredicateBase extends TransformationRule {
 
         ScalarOperator joinEqPredicate = Utils.compoundAnd(Lists.newArrayList(eqConjuncts));
         ScalarOperator postJoinPredicate = Utils.compoundAnd(conjunctList);
+        ScalarOperator newJoinOnPredicate = Utils.compoundAnd(joinEqPredicate, postJoinPredicate);
 
         OptExpression root;
-        if (joinEqPredicate == null) {
-            JoinOperator joinType =
-                    (join.getOnPredicate() == null || join.getJoinType().isCrossJoin()) ?
-                            JoinOperator.CROSS_JOIN : join.getJoinType();
-            LogicalJoinOperator nestLoop = new LogicalJoinOperator.Builder().withOperator(join)
-                    .setJoinType(joinType)
-                    .setOnPredicate(postJoinPredicate)
-                    .build();
-            root = OptExpression.create(nestLoop, input.getInputs());
-        } else {
-            JoinOperator joinType = (join.getJoinType().isInnerJoin() || join.getJoinType().isCrossJoin()) ?
-                    JoinOperator.INNER_JOIN : join.getJoinType();
-            LogicalJoinOperator newJoin =
-                    new LogicalJoinOperator.Builder().withOperator(join)
-                            .setJoinType(joinType)
-                            .setOnPredicate(Utils.compoundAnd(joinEqPredicate, postJoinPredicate))
-                            .build();
-            root = OptExpression.create(newJoin, input.getInputs());
-        }
-
+        JoinOperator newJoinType = deriveJoinType(join.getJoinType(), newJoinOnPredicate);
+        LogicalJoinOperator newJoinOperator = new LogicalJoinOperator.Builder().withOperator(join)
+                .setJoinType(newJoinType)
+                .setOnPredicate(newJoinOnPredicate)
+                .build();
+        root = OptExpression.create(newJoinOperator, input.getInputs());
         if (!join.hasDeriveIsNotNullPredicate()) {
             deriveIsNotNullPredicate(eqConjuncts, root, leftPushDown, rightPushDown);
         }
@@ -216,5 +203,18 @@ public abstract class PushDownJoinPredicateBase extends TransformationRule {
             rightEQ.stream().map(c -> new IsNullPredicateOperator(true, c.clone())).forEach(rightPushDown::add);
         }
         joinOp.setHasDeriveIsNotNullPredicate(true);
+    }
+
+    private static JoinOperator deriveJoinType(JoinOperator originalType, ScalarOperator newJoinOnPredicate) {
+        JoinOperator result;
+        switch (originalType) {
+            case INNER_JOIN:
+            case CROSS_JOIN:
+                result = newJoinOnPredicate == null ? JoinOperator.CROSS_JOIN : JoinOperator.INNER_JOIN;
+                break;
+            default:
+                result = originalType;
+        }
+        return result;
     }
 }

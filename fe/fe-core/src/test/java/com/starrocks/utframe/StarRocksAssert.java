@@ -186,10 +186,19 @@ public class StarRocksAssert {
         return this;
     }
 
-    // Add materialized view to the schema
+    // Add materialized view to the schema (use cup)
     public StarRocksAssert withMaterializedView(String sql) throws Exception {
         CreateMaterializedViewStmt createMaterializedViewStmt =
                 (CreateMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        GlobalStateMgr.getCurrentState().createMaterializedView(createMaterializedViewStmt);
+        checkAlterJob();
+        return this;
+    }
+
+    // Add materialized view to the schema (use antlr)
+    public StarRocksAssert withMaterializedStatementView(String sql) throws Exception {
+        CreateMaterializedViewStatement createMaterializedViewStmt =
+                (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         GlobalStateMgr.getCurrentState().createMaterializedView(createMaterializedViewStmt);
         checkAlterJob();
         return this;

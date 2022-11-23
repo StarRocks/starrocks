@@ -14,7 +14,7 @@
 
 namespace starrocks::vectorized {
 
-template <PrimitiveType TYPE>
+template <LogicalType TYPE>
 class SIMD_muti_selector {
 public:
     using Container = typename RunTimeColumnType<TYPE>::Container;

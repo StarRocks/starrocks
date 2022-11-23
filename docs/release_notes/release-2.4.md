@@ -1,8 +1,52 @@
 # StarRocks version 2.4
 
+## 2.4.1
+
+Release date: November 14, 2022
+
+### New Features
+
+- Supports non-equi joins - LEFT SEMI JOIN and ANTI JOIN. Optimized the JOIN function. [#13019](https://github.com/StarRocks/starrocks/pull/13019)
+
+### Improvements
+
+- Supports property `aliveStatus` in `HeartbeatResponse`. `aliveStatus` indicates if a node is alive in the cluster. Mechanisms that judge the `aliveStatus` are further optimized. [#12713](https://github.com/StarRocks/starrocks/pull/12713)
+
+- Optimized the error message of Routine Load. [#12155](https://github.com/StarRocks/starrocks/pull/12155)
+
+### Bug Fixes
+
+- BE crashes after being upgraded from v2.4.0RC to v2.4.0. [#13128](https://github.com/StarRocks/starrocks/pull/13128)
+
+- Late materialization causes incorrect results to queries on data lakes. [#13133](https://github.com/StarRocks/starrocks/pull/13133)
+
+- The get_json_int function throws exceptions. [#12997](https://github.com/StarRocks/starrocks/pull/12997)
+
+- Data may be inconsistent after deletion from a PRIMARY KEY table with a persistent index.[#12719](https://github.com/StarRocks/starrocks/pull/12719)
+
+- BE may crash during compaction on a PRIMARY KEY table. [#12914](https://github.com/StarRocks/starrocks/pull/12914)
+
+- The json_object function returns incorrect results when its input contains an empty string. [#13030](https://github.com/StarRocks/starrocks/issues/13030)
+
+- BE crashes due to `RuntimeFilter`. [#12807](https://github.com/StarRocks/starrocks/pull/12807)
+
+- FE hangs due to excessive recursive computations in CBO. [#12788](https://github.com/StarRocks/starrocks/pull/12788)
+
+- BE may crash or report an error when exiting gracefully. [#12852](https://github.com/StarRocks/starrocks/pull/12852)
+
+- Compaction crashes after data is deleted from a table with new columns added to it. [#12907](https://github.com/StarRocks/starrocks/pull/12907)
+
+- Data may be inconsistent due to incorrect mechanisms in OLAP external table metadata synchronization. [#12368](https://github.com/StarRocks/starrocks/pull/12368)
+
+- When one BE crashes, the other BEs may execute relevant queries till timeout. [#12954](https://github.com/StarRocks/starrocks/pull/12954)
+
+### Behavior Change
+
+- When parsing Hive external table fails, StarRocks throws error messages instead of converting relevant columns into NULL columns. [#12382](https://github.com/StarRocks/starrocks/pull/12382)
+
 ## 2.4.0
 
-Release date: October 20th, 2022
+Release date: October 20, 2022
 
 ### New Features
 
