@@ -7,12 +7,14 @@
 #include "column/json_column.h"
 #include "common/logging.h"
 #include "exec/vectorized/sorting/sorting.h"
+#include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/primitive_type_infra.h"
 #include "storage/chunk_helper.h"
 #include "storage/memtable_sink.h"
 #include "storage/primary_key_encoder.h"
+#include "storage/tablet_schema.h"
 #include "util/starrocks_metrics.h"
 #include "util/time.h"
 
@@ -196,7 +198,7 @@ Status MemTable::finalize() {
                 int64_t t2 = MonotonicMicros();
                 _aggregate(true);
                 int64_t t3 = MonotonicMicros();
-                VLOG(1) << Substitute("memtable final sort:$0 agg:$1 total:$2", t2 - t1, t3 - t2, t3 - t1);
+                VLOG(1) << strings::Substitute("memtable final sort:$0 agg:$1 total:$2", t2 - t1, t3 - t2, t3 - t1);
             } else {
                 // if there is only one data chunk and merge once,
                 // no need to perform an additional merge.
@@ -281,7 +283,7 @@ void MemTable::_merge() {
     int64_t t2 = MonotonicMicros();
     _aggregate(false);
     int64_t t3 = MonotonicMicros();
-    VLOG(1) << Substitute("memtable sort:$0 agg:$1 total:$2", t2 - t1, t3 - t2, t3 - t1);
+    VLOG(1) << strings::Substitute("memtable sort:$0 agg:$1 total:$2", t2 - t1, t3 - t2, t3 - t1);
     ++_merge_count;
 }
 

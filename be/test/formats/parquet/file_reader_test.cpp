@@ -184,11 +184,9 @@ private:
     std::string _file_struct_null_path =
             "./be/test/exec/test_data/parquet_scanner/file_reader_test_struct_null.parquet";
 
-    std::string _file_col_not_null_path =
-            "./be/test/exec/test_data/parquet_scanner/col_not_null.parquet";
+    std::string _file_col_not_null_path = "./be/test/exec/test_data/parquet_scanner/col_not_null.parquet";
 
-    std::string _file_map_null_path =
-            "./be/test/exec/test_data/parquet_scanner/map_null.parquet";
+    std::string _file_map_null_path = "./be/test/exec/test_data/parquet_scanner/map_null.parquet";
 
     std::shared_ptr<RowDescriptor> _row_desc = nullptr;
     RuntimeState* _runtime_state = nullptr;
@@ -1670,7 +1668,6 @@ TEST_F(FileReaderTest, TestReadNotNull) {
     type_map.selected_fields.emplace_back(true);
     type_map.selected_fields.emplace_back(true);
 
-
     TypeDescriptor type_struct = TypeDescriptor::from_primtive_type(LogicalType::TYPE_STRUCT);
     type_struct.children.emplace_back(TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR));
     type_struct.field_names.emplace_back("a");
@@ -1681,7 +1678,10 @@ TEST_F(FileReaderTest, TestReadNotNull) {
     type_struct.selected_fields.emplace_back(true);
 
     SlotDesc slot_descs[] = {
-        {"col_int", type_int}, {"col_map", type_map}, {"col_struct", type_struct}, {""},
+            {"col_int", type_int},
+            {"col_map", type_map},
+            {"col_struct", type_struct},
+            {""},
     };
 
     ctx->tuple_desc = create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
@@ -1699,7 +1699,6 @@ TEST_F(FileReaderTest, TestReadNotNull) {
     chunk->append_column(vectorized::ColumnHelper::create_column(type_map, true), chunk->num_columns());
     chunk->append_column(vectorized::ColumnHelper::create_column(type_struct, true), chunk->num_columns());
 
-
     status = file_reader->get_next(&chunk);
     ASSERT_TRUE(status.ok());
     ASSERT_EQ(3, chunk->num_rows());
@@ -1711,14 +1710,12 @@ TEST_F(FileReaderTest, TestReadNotNull) {
     for (int i = 0; i < 3; ++i) {
         std::cout << "row" << i << ": " << chunk->debug_row(i) << std::endl;
     }
-
 }
-
 
 TEST_F(FileReaderTest, TestReadMapNull) {
     auto file = _create_file(_file_map_null_path);
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
-                                                std::filesystem::file_size(_file_map_null_path));
+                                                    std::filesystem::file_size(_file_map_null_path));
 
     // --------------init context---------------
     auto ctx = _create_scan_context();
@@ -1732,7 +1729,9 @@ TEST_F(FileReaderTest, TestReadMapNull) {
     type_map.selected_fields.emplace_back(true);
 
     SlotDesc slot_descs[] = {
-        {"uuid", type_int}, {"c1", type_map}, {""},
+            {"uuid", type_int},
+            {"c1", type_map},
+            {""},
     };
 
     ctx->tuple_desc = create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
@@ -1760,7 +1759,6 @@ TEST_F(FileReaderTest, TestReadMapNull) {
     for (int i = 0; i < 3; ++i) {
         std::cout << "row" << i << ": " << chunk->debug_row(i) << std::endl;
     }
-
 }
 
 } // namespace starrocks::parquet

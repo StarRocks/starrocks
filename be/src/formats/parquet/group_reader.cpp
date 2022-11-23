@@ -8,6 +8,7 @@
 #include "exec/exec_node.h"
 #include "exec/vectorized/hdfs_scanner.h"
 #include "exprs/expr.h"
+#include "gutil/strings/substitute.h"
 #include "runtime/types.h"
 #include "simd/simd.h"
 #include "storage/chunk_helper.h"

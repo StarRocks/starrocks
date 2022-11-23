@@ -10,6 +10,7 @@
 #include "column/datum_convert.h"
 #include "storage/chunk_helper.h"
 #include "storage/chunk_iterator.h"
+#include "storage/type_traits.h"
 #include "storage/types.h"
 
 namespace starrocks::vectorized {

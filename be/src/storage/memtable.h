@@ -28,7 +28,7 @@ public:
     MemTable(int64_t tablet_id, const VectorizedSchema* schema, MemTableSink* sink, int64_t max_buffer_size,
              MemTracker* mem_tracker);
 
-    MemTable(int64_t tablet_id, const VectorizedSchema* schema, const vector<SlotDescriptor*>* slot_descs,
+    MemTable(int64_t tablet_id, const VectorizedSchema* schema, const std::vector<SlotDescriptor*>* slot_descs,
              MemTableSink* sink, std::string merge_condition, MemTracker* mem_tracker);
 
     ~MemTable();

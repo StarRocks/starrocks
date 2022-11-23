@@ -15,7 +15,7 @@ namespace starrocks::vectorized {
 // VectorizedSchema with 3 columns: INT, VARCHAR, INT.
 class VectorIterator final : public ChunkIterator {
 public:
-    explicit VectorIterator(std::vector<int32_t> c1, std::vector<string> c2, std::vector<int32_t> c3)
+    explicit VectorIterator(std::vector<int32_t> c1, std::vector<std::string> c2, std::vector<int32_t> c3)
             : ChunkIterator(schema()), _c1(std::move(c1)), _c2(std::move(c2)), _c3(std::move(c3)) {}
 
     // 10 elements at most every time.

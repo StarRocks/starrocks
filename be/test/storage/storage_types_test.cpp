@@ -22,7 +22,7 @@
 #include <gtest/gtest.h>
 
 #include "runtime/mem_pool.h"
-#include "storage/field.h"
+#include "storage/type_traits.h"
 #include "storage/types.h"
 #include "util/slice.h"
 
@@ -68,60 +68,6 @@ void common_test(typename TypeTraits<field_type>::CppType src_val) {
         // NOTE: bool input is true, this will return 0
         ASSERT_TRUE(type->cmp((char*)&src_val, (char*)&dst_val) <= 0);
     }
-}
-
-template <LogicalType fieldType>
-void test_char(Slice src_val) {
-    Field* field = FieldFactory::create_by_type(fieldType);
-    field->_length = src_val.size;
-    TypeInfoPtr type = field->type_info();
-
-    ASSERT_EQ(field->type(), fieldType);
-    ASSERT_EQ(sizeof(src_val), type->size());
-    {
-        char buf[64];
-        Slice dst_val(buf, sizeof(buf));
-        MemPool pool;
-        type->deep_copy((char*)&dst_val, (char*)&src_val, &pool);
-        ASSERT_TRUE(type->equal((char*)&src_val, (char*)&dst_val));
-        ASSERT_EQ(0, type->cmp((char*)&src_val, (char*)&dst_val));
-    }
-    {
-        char buf[64];
-        Slice dst_val(buf, sizeof(buf));
-        type->direct_copy((char*)&dst_val, (char*)&src_val, nullptr);
-        ASSERT_TRUE(type->equal((char*)&src_val, (char*)&dst_val));
-        ASSERT_EQ(0, type->cmp((char*)&src_val, (char*)&dst_val));
-    }
-    // test min
-    {
-        char buf[64];
-        Slice dst_val(buf, sizeof(buf));
-        field->set_to_min((char*)&dst_val);
-
-        ASSERT_FALSE(type->equal((char*)&src_val, (char*)&dst_val));
-        ASSERT_TRUE(type->cmp((char*)&src_val, (char*)&dst_val) > 0);
-    }
-    // test max
-    {
-        char buf[64];
-        Slice dst_val(buf, sizeof(buf));
-        field->set_to_max((char*)&dst_val);
-
-        ASSERT_FALSE(type->equal((char*)&src_val, (char*)&dst_val));
-        ASSERT_TRUE(type->cmp((char*)&src_val, (char*)&dst_val) < 0);
-    }
-    delete field;
-}
-
-template <>
-void common_test<TYPE_CHAR>(Slice src_val) {
-    test_char<TYPE_VARCHAR>(src_val);
-}
-
-template <>
-void common_test<TYPE_VARCHAR>(Slice src_val) {
-    test_char<TYPE_VARCHAR>(src_val);
 }
 
 TEST(StorageLayerTypesTest, copy_and_equal) {

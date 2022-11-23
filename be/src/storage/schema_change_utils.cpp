@@ -3,6 +3,7 @@
 #include "storage/schema_change_utils.h"
 
 #include "column/datum_convert.h"
+#include "runtime/mem_pool.h"
 #include "storage/chunk_helper.h"
 #include "types/bitmap_value.h"
 #include "types/hll.h"
