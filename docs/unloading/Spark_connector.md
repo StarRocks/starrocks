@@ -1,4 +1,4 @@
-# Spark StarRocks Connector
+# Use Spark connector to read data from StarRocks
 
 The Spark StarRocks Connector reads data stored in StarRocks via Spark.
 
