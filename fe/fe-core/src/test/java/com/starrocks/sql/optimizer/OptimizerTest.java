@@ -21,9 +21,11 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleSetType;
@@ -171,6 +173,7 @@ public class OptimizerTest {
 
     @Test
     public void testPreprocessMvPartitionMv() throws Exception {
+        starRocksAssert.getCtx().getSessionVariable().setOptimizerExecuteTimeout(300000000);
         Config.enable_experimental_mv = true;
         starRocksAssert.withTable("CREATE TABLE test.tbl_with_mv\n" +
                         "(\n" +
@@ -195,6 +198,7 @@ public class OptimizerTest {
                         "distributed by hash(k2) buckets 3\n" +
                         "refresh manual\n" +
                         "as select k1, k2, v1  from tbl_with_mv;");
+
         cluster.runSql("test", "insert into tbl_with_mv values(\"2020-02-20\", 20, 30)");
         refreshMaterializedView("test", "mv_3");
         refreshMaterializedView("test", "mv_4");
@@ -246,6 +250,7 @@ public class OptimizerTest {
         starRocksAssert.dropMaterializedView("mv_3");
         starRocksAssert.dropMaterializedView("mv_4");
 
+
         starRocksAssert.withNewMaterializedView("create materialized view mv_5\n" +
                 "PARTITION BY date_trunc(\"month\", k1)\n" +
                 "distributed by hash(k2) buckets 3\n" +
@@ -266,8 +271,10 @@ public class OptimizerTest {
         Assert.assertTrue(scalarOperator3 instanceof CompoundPredicateOperator);
         Assert.assertTrue(((CompoundPredicateOperator) scalarOperator3).isAnd());
         Assert.assertTrue(scalarOperator3.getChild(0) instanceof BinaryPredicateOperator);
-        Assert.assertTrue(scalarOperator3.getChild(0).getChild(0) instanceof CallOperator);
-        CallOperator callOperator = (CallOperator) scalarOperator3.getChild(0).getChild(0);
-        Assert.assertEquals(FunctionSet.DATE_TRUNC, callOperator.getFnName());
+        Assert.assertTrue(scalarOperator3.getChild(0).getChild(0) instanceof ColumnRefOperator);
+        ColumnRefOperator columnRef = (ColumnRefOperator) scalarOperator3.getChild(0).getChild(0);
+        Assert.assertEquals("k1", columnRef.getName());
+        LogicalOlapScanOperator scanOperator = (LogicalOlapScanOperator) materializationContext3.getScanMvOperator();
+        Assert.assertEquals(1, scanOperator.getSelectedPartitionId().size());
     }
 }
