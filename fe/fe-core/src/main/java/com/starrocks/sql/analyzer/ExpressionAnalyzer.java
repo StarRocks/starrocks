@@ -388,7 +388,9 @@ public class ExpressionAnalyzer {
                         throw new ParsingException(
                                 funcOpName + " requires second parameter must be greater than 0");
                     }
-                    node.addChild(new StringLiteral(node.getTimeUnitIdent().toLowerCase()));
+                    if (node.getChildren().size() == 2) {
+                        node.addChild(new StringLiteral(node.getTimeUnitIdent().toLowerCase()));
+                    }
                 } else {
                     node.setChild(1, TypeManager.addCastExpr(node.getChild(1), Type.DATETIME));
                     funcOpName = String.format("%sS_%s", node.getTimeUnitIdent(), "diff");
