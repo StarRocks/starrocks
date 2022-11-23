@@ -172,13 +172,23 @@ StatusOr<ChunkPtr> FileScanner::materialize(const starrocks::vectorized::ChunkPt
             column_pointers.emplace(col_pointer);
         }
 
+<<<<<<< HEAD
         // The column builder in ctx->evaluate may build column as non-nullable.
         // See be/src/column/column_builder.h#L79.
         if (!col->is_nullable() && slot->is_nullable()) {
             col = ColumnHelper::cast_to_nullable_column(col);
         }
 
+=======
+>>>>>>> c5d9e626b ([BugFix] Variable chunk's column types (#13629))
         col = ColumnHelper::unfold_const_column(slot->type(), cast->num_rows(), col);
+
+        // The column builder in ctx->evaluate may build column as non-nullable.
+        // See be/src/column/column_builder.h#L79.
+        if (!col->is_nullable() && slot->is_nullable()) {
+            col = ColumnHelper::cast_to_nullable_column(col);
+        }
+
         dest_chunk->append_column(col, slot->id());
 
         if (src != nullptr && col->is_nullable() && col->has_null()) {
