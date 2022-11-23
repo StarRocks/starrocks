@@ -71,7 +71,7 @@ Status StringFunctions::split_close(starrocks_udf::FunctionContext* context,
 * @paramType: [BinaryColumn, BinaryColumn]
 * @return: ArrayColumn
 */
-ColumnPtr StringFunctions::split(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::split(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
     DCHECK_EQ(columns.size(), 2);
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 

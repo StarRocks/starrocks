@@ -467,19 +467,20 @@ public:
     // try to transfer content to date format based on "%Y-%m-%d",
     // if successful, return result TimestampValue
     // else take a uncommon approach to process this content.
-    static ColumnPtr str_to_date_from_date_format(FunctionContext* context,
-                                                  const starrocks::vectorized::Columns& columns,
-                                                  const char* str_format);
+    static StatusOr<ColumnPtr> str_to_date_from_date_format(FunctionContext* context,
+                                                            const starrocks::vectorized::Columns& columns,
+                                                            const char* str_format);
 
     // try to transfer content to date format based on "%Y-%m-%d %H:%i:%s",
     // if successful, return result TimestampValue
     // else take a uncommon approach to process this content.
-    static ColumnPtr str_to_date_from_datetime_format(FunctionContext* context,
-                                                      const starrocks::vectorized::Columns& columns,
-                                                      const char* str_format);
+    static StatusOr<ColumnPtr> str_to_date_from_datetime_format(FunctionContext* context,
+                                                                const starrocks::vectorized::Columns& columns,
+                                                                const char* str_format);
 
     // Try to process string content, based on uncommon string format
-    static ColumnPtr str_to_date_uncommon(FunctionContext* context, const starrocks::vectorized::Columns& columns);
+    static StatusOr<ColumnPtr> str_to_date_uncommon(FunctionContext* context,
+                                                    const starrocks::vectorized::Columns& columns);
     /**
      *
      * cast string to datetime
@@ -606,15 +607,15 @@ private:
 
     static std::string convert_format(const Slice& format);
 
-    static ColumnPtr from_unix_with_format_general(FunctionContext* context,
-                                                   const starrocks::vectorized::Columns& columns);
-    static ColumnPtr from_unix_with_format_const(std::string& format_content, FunctionContext* context,
-                                                 const starrocks::vectorized::Columns& columns);
+    static StatusOr<ColumnPtr> from_unix_with_format_general(FunctionContext* context,
+                                                             const starrocks::vectorized::Columns& columns);
+    static StatusOr<ColumnPtr> from_unix_with_format_const(std::string& format_content, FunctionContext* context,
+                                                           const starrocks::vectorized::Columns& columns);
 
-    static ColumnPtr convert_tz_general(FunctionContext* context, const Columns& columns);
+    static StatusOr<ColumnPtr> convert_tz_general(FunctionContext* context, const Columns& columns);
 
-    static ColumnPtr convert_tz_const(FunctionContext* context, const Columns& columns, const cctz::time_zone& from,
-                                      const cctz::time_zone& to);
+    static StatusOr<ColumnPtr> convert_tz_const(FunctionContext* context, const Columns& columns,
+                                                const cctz::time_zone& from, const cctz::time_zone& to);
 
 public:
     enum FormatType {
@@ -665,7 +666,7 @@ private:
     };
 
     template <LogicalType Type>
-    friend ColumnPtr do_format(const FormatCtx* ctx, const Columns& cols);
+    friend StatusOr<ColumnPtr> do_format(const FormatCtx* ctx, const Columns& cols);
 };
 
 } // namespace starrocks::vectorized

@@ -58,11 +58,11 @@ public:
 };
 
 #define DEFINE_VECTORIZED_FN(NAME) \
-    static ColumnPtr NAME(starrocks_udf::FunctionContext* context, const Columns& columns)
+    static StatusOr<ColumnPtr> NAME(starrocks_udf::FunctionContext* context, const Columns& columns)
 
 #define DEFINE_VECTORIZED_FN_TEMPLATE(NAME) \
     template <LogicalType Type>             \
-    static ColumnPtr NAME(starrocks_udf::FunctionContext* context, const Columns& columns)
+    static StatusOr<ColumnPtr> NAME(starrocks_udf::FunctionContext* context, const Columns& columns)
 
 #define VECTORIZED_FN_CTX() context
 #define VECTORIZED_FN_ARGS(IDX) columns[IDX]

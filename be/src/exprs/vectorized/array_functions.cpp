@@ -9,7 +9,7 @@
 
 namespace starrocks::vectorized {
 
-ColumnPtr ArrayFunctions::array_length([[maybe_unused]] FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> ArrayFunctions::array_length([[maybe_unused]] FunctionContext* context, const Columns& columns) {
     DCHECK_EQ(1, columns.size());
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
@@ -37,7 +37,7 @@ ColumnPtr ArrayFunctions::array_length([[maybe_unused]] FunctionContext* context
     }
 }
 
-ColumnPtr ArrayFunctions::array_ndims([[maybe_unused]] FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> ArrayFunctions::array_ndims([[maybe_unused]] FunctionContext* context, const Columns& columns) {
     return nullptr;
 }
 
@@ -77,7 +77,7 @@ static ColumnPtr do_array_append(const Column& elements, const UInt32Column& off
 }
 
 // FIXME: A proof-of-concept implementation with poor performance.
-ColumnPtr ArrayFunctions::array_append([[maybe_unused]] FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> ArrayFunctions::array_append([[maybe_unused]] FunctionContext* context, const Columns& columns) {
     const Column* arg0 = columns[0].get();
     const Column* arg1 = columns[1].get();
     if (arg0->only_null()) {
@@ -433,14 +433,14 @@ private:
     }
 };
 
-#define DEFINE_ARRAY_CUMSUM_FN(NAME, TYPE)                                                    \
-    ColumnPtr ArrayFunctions::array_cum_sum_##NAME([[maybe_unused]] FunctionContext* context, \
-                                                   const Columns& columns) {                  \
-        DCHECK_EQ(columns.size(), 1);                                                         \
-        RETURN_IF_COLUMNS_ONLY_NULL(columns);                                                 \
-        const ColumnPtr& arg0 = columns[0];                                                   \
-                                                                                              \
-        return ArrayCumSumImpl<TYPE>::evaluate(arg0);                                         \
+#define DEFINE_ARRAY_CUMSUM_FN(NAME, TYPE)                                                              \
+    StatusOr<ColumnPtr> ArrayFunctions::array_cum_sum_##NAME([[maybe_unused]] FunctionContext* context, \
+                                                             const Columns& columns) {                  \
+        DCHECK_EQ(columns.size(), 1);                                                                   \
+        RETURN_IF_COLUMNS_ONLY_NULL(columns);                                                           \
+        const ColumnPtr& arg0 = columns[0];                                                             \
+                                                                                                        \
+        return ArrayCumSumImpl<TYPE>::evaluate(arg0);                                                   \
     }
 
 DEFINE_ARRAY_CUMSUM_FN(bigint, TYPE_BIGINT)
@@ -448,7 +448,7 @@ DEFINE_ARRAY_CUMSUM_FN(double, TYPE_DOUBLE)
 
 #undef DEFINE_ARRAY_CUMSUM_FN
 
-ColumnPtr ArrayFunctions::array_remove([[maybe_unused]] FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> ArrayFunctions::array_remove([[maybe_unused]] FunctionContext* context, const Columns& columns) {
     const ColumnPtr& arg0 = columns[0]; // array
     const ColumnPtr& arg1 = columns[1]; // element
 
@@ -929,28 +929,30 @@ private:
     }
 };
 
-ColumnPtr ArrayFunctions::array_contains([[maybe_unused]] FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> ArrayFunctions::array_contains([[maybe_unused]] FunctionContext* context, const Columns& columns) {
     const ColumnPtr& arg0 = columns[0]; // array
     const ColumnPtr& arg1 = columns[1]; // element
 
     return ArrayContainsImpl<false, UInt8Column>::evaluate(*arg0, *arg1);
 }
 
-ColumnPtr ArrayFunctions::array_position([[maybe_unused]] FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> ArrayFunctions::array_position([[maybe_unused]] FunctionContext* context, const Columns& columns) {
     const ColumnPtr& arg0 = columns[0]; // array
     const ColumnPtr& arg1 = columns[1]; // element
 
     return ArrayContainsImpl<true, Int32Column>::evaluate(*arg0, *arg1);
 }
 
-ColumnPtr ArrayFunctions::array_contains_any([[maybe_unused]] FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> ArrayFunctions::array_contains_any([[maybe_unused]] FunctionContext* context,
+                                                       const Columns& columns) {
     const ColumnPtr& arg0 = columns[0]; // array
     const ColumnPtr& arg1 = columns[1]; // element
 
     return ArrayHasImpl<true>::evaluate(*arg0, *arg1);
 }
 
-ColumnPtr ArrayFunctions::array_contains_all([[maybe_unused]] FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> ArrayFunctions::array_contains_all([[maybe_unused]] FunctionContext* context,
+                                                       const Columns& columns) {
     const ColumnPtr& arg0 = columns[0]; // array
     const ColumnPtr& arg1 = columns[1]; // element
 
@@ -958,11 +960,11 @@ ColumnPtr ArrayFunctions::array_contains_all([[maybe_unused]] FunctionContext* c
 }
 
 // cannot be called anymore
-ColumnPtr ArrayFunctions::array_map([[maybe_unused]] FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> ArrayFunctions::array_map([[maybe_unused]] FunctionContext* context, const Columns& columns) {
     return nullptr;
 }
 
-ColumnPtr ArrayFunctions::array_filter(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> ArrayFunctions::array_filter(FunctionContext* context, const Columns& columns) {
     return ArrayFilter::process(context, columns);
 }
 
@@ -1140,9 +1142,10 @@ public:
 };
 
 template <LogicalType column_type, bool has_null, ArrayFunctions::ArithmeticType type>
-ColumnPtr ArrayFunctions::_array_process_not_nullable_types(const Column* elements, const UInt32Column& offsets,
-                                                            const NullColumn::Container* null_elements,
-                                                            std::vector<uint8_t>* null_ptr) {
+StatusOr<ColumnPtr> ArrayFunctions::_array_process_not_nullable_types(const Column* elements,
+                                                                      const UInt32Column& offsets,
+                                                                      const NullColumn::Container* null_elements,
+                                                                      std::vector<uint8_t>* null_ptr) {
     [[maybe_unused]] auto c = down_cast<const RunTimeColumnType<column_type>*>(elements);
 
     // FOR ARITHEMIC TYPE (BOOLEAN, TINYINT, SMALLINT, INT, BIGINT)
@@ -1207,7 +1210,8 @@ ColumnPtr ArrayFunctions::_array_process_not_nullable_types(const Column* elemen
 }
 
 template <LogicalType column_type, ArrayFunctions::ArithmeticType type>
-ColumnPtr ArrayFunctions::_array_process_not_nullable(const Column* raw_array_column, std::vector<uint8_t>* null_ptr) {
+StatusOr<ColumnPtr> ArrayFunctions::_array_process_not_nullable(const Column* raw_array_column,
+                                                                std::vector<uint8_t>* null_ptr) {
     const auto& array_column = down_cast<const ArrayColumn&>(*raw_array_column);
     const UInt32Column& offsets = array_column.offsets();
     const Column* elements = &array_column.elements();
@@ -1233,7 +1237,7 @@ ColumnPtr ArrayFunctions::_array_process_not_nullable(const Column* raw_array_co
 }
 
 template <LogicalType column_type, ArrayFunctions::ArithmeticType type>
-ColumnPtr ArrayFunctions::array_arithmetic(const Columns& columns) {
+StatusOr<ColumnPtr> ArrayFunctions::array_arithmetic(const Columns& columns) {
     DCHECK_EQ(1, columns.size());
     const ColumnPtr& array_column = columns[0]; // array
     const auto& raw_array_column = *array_column;
@@ -1260,198 +1264,231 @@ ColumnPtr ArrayFunctions::array_arithmetic(const Columns& columns) {
 }
 
 template <LogicalType type>
-ColumnPtr ArrayFunctions::array_sum(const Columns& columns) {
+StatusOr<ColumnPtr> ArrayFunctions::array_sum(const Columns& columns) {
     return ArrayFunctions::template array_arithmetic<type, ArithmeticType::SUM>(columns);
 }
 
-ColumnPtr ArrayFunctions::array_sum_boolean([[maybe_unused]] FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> ArrayFunctions::array_sum_boolean([[maybe_unused]] FunctionContext* context,
+                                                      const Columns& columns) {
     return ArrayFunctions::template array_sum<TYPE_BOOLEAN>(columns);
 }
 
-ColumnPtr ArrayFunctions::array_sum_tinyint([[maybe_unused]] FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> ArrayFunctions::array_sum_tinyint([[maybe_unused]] FunctionContext* context,
+                                                      const Columns& columns) {
     return ArrayFunctions::template array_sum<TYPE_TINYINT>(columns);
 }
 
-ColumnPtr ArrayFunctions::array_sum_smallint([[maybe_unused]] FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> ArrayFunctions::array_sum_smallint([[maybe_unused]] FunctionContext* context,
+                                                       const Columns& columns) {
     return ArrayFunctions::template array_sum<TYPE_SMALLINT>(columns);
 }
 
-ColumnPtr ArrayFunctions::array_sum_int([[maybe_unused]] FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> ArrayFunctions::array_sum_int([[maybe_unused]] FunctionContext* context, const Columns& columns) {
     return ArrayFunctions::template array_sum<TYPE_INT>(columns);
 }
 
-ColumnPtr ArrayFunctions::array_sum_bigint([[maybe_unused]] FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> ArrayFunctions::array_sum_bigint([[maybe_unused]] FunctionContext* context,
+                                                     const Columns& columns) {
     return ArrayFunctions::template array_sum<TYPE_BIGINT>(columns);
 }
 
-ColumnPtr ArrayFunctions::array_sum_largeint([[maybe_unused]] FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> ArrayFunctions::array_sum_largeint([[maybe_unused]] FunctionContext* context,
+                                                       const Columns& columns) {
     return ArrayFunctions::template array_sum<TYPE_LARGEINT>(columns);
 }
 
-ColumnPtr ArrayFunctions::array_sum_float([[maybe_unused]] FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> ArrayFunctions::array_sum_float([[maybe_unused]] FunctionContext* context, const Columns& columns) {
     return ArrayFunctions::template array_sum<TYPE_FLOAT>(columns);
 }
 
-ColumnPtr ArrayFunctions::array_sum_double([[maybe_unused]] FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> ArrayFunctions::array_sum_double([[maybe_unused]] FunctionContext* context,
+                                                     const Columns& columns) {
     return ArrayFunctions::template array_sum<TYPE_DOUBLE>(columns);
 }
 
-ColumnPtr ArrayFunctions::array_sum_decimalv2([[maybe_unused]] FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> ArrayFunctions::array_sum_decimalv2([[maybe_unused]] FunctionContext* context,
+                                                        const Columns& columns) {
     return ArrayFunctions::template array_sum<TYPE_DECIMALV2>(columns);
 }
 
 template <LogicalType type>
-ColumnPtr ArrayFunctions::array_avg(const Columns& columns) {
+StatusOr<ColumnPtr> ArrayFunctions::array_avg(const Columns& columns) {
     return ArrayFunctions::template array_arithmetic<type, ArithmeticType::AVG>(columns);
 }
 
-ColumnPtr ArrayFunctions::array_avg_boolean([[maybe_unused]] FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> ArrayFunctions::array_avg_boolean([[maybe_unused]] FunctionContext* context,
+                                                      const Columns& columns) {
     return ArrayFunctions::template array_avg<TYPE_BOOLEAN>(columns);
 }
 
-ColumnPtr ArrayFunctions::array_avg_tinyint([[maybe_unused]] FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> ArrayFunctions::array_avg_tinyint([[maybe_unused]] FunctionContext* context,
+                                                      const Columns& columns) {
     return ArrayFunctions::template array_avg<TYPE_TINYINT>(columns);
 }
 
-ColumnPtr ArrayFunctions::array_avg_smallint([[maybe_unused]] FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> ArrayFunctions::array_avg_smallint([[maybe_unused]] FunctionContext* context,
+                                                       const Columns& columns) {
     return ArrayFunctions::template array_avg<TYPE_SMALLINT>(columns);
 }
 
-ColumnPtr ArrayFunctions::array_avg_int([[maybe_unused]] FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> ArrayFunctions::array_avg_int([[maybe_unused]] FunctionContext* context, const Columns& columns) {
     return ArrayFunctions::template array_avg<TYPE_INT>(columns);
 }
 
-ColumnPtr ArrayFunctions::array_avg_bigint([[maybe_unused]] FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> ArrayFunctions::array_avg_bigint([[maybe_unused]] FunctionContext* context,
+                                                     const Columns& columns) {
     return ArrayFunctions::template array_avg<TYPE_BIGINT>(columns);
 }
 
-ColumnPtr ArrayFunctions::array_avg_largeint([[maybe_unused]] FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> ArrayFunctions::array_avg_largeint([[maybe_unused]] FunctionContext* context,
+                                                       const Columns& columns) {
     return ArrayFunctions::template array_avg<TYPE_LARGEINT>(columns);
 }
 
-ColumnPtr ArrayFunctions::array_avg_float([[maybe_unused]] FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> ArrayFunctions::array_avg_float([[maybe_unused]] FunctionContext* context, const Columns& columns) {
     return ArrayFunctions::template array_avg<TYPE_FLOAT>(columns);
 }
 
-ColumnPtr ArrayFunctions::array_avg_double([[maybe_unused]] FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> ArrayFunctions::array_avg_double([[maybe_unused]] FunctionContext* context,
+                                                     const Columns& columns) {
     return ArrayFunctions::template array_avg<TYPE_DOUBLE>(columns);
 }
 
-ColumnPtr ArrayFunctions::array_avg_decimalv2([[maybe_unused]] FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> ArrayFunctions::array_avg_decimalv2([[maybe_unused]] FunctionContext* context,
+                                                        const Columns& columns) {
     return ArrayFunctions::template array_avg<TYPE_DECIMALV2>(columns);
 }
 
-ColumnPtr ArrayFunctions::array_avg_date([[maybe_unused]] FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> ArrayFunctions::array_avg_date([[maybe_unused]] FunctionContext* context, const Columns& columns) {
     return ArrayFunctions::template array_avg<TYPE_DATE>(columns);
 }
 
-ColumnPtr ArrayFunctions::array_avg_datetime([[maybe_unused]] FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> ArrayFunctions::array_avg_datetime([[maybe_unused]] FunctionContext* context,
+                                                       const Columns& columns) {
     return ArrayFunctions::template array_avg<TYPE_DATETIME>(columns);
 }
 
 template <LogicalType type>
-ColumnPtr ArrayFunctions::array_min(const Columns& columns) {
+StatusOr<ColumnPtr> ArrayFunctions::array_min(const Columns& columns) {
     return ArrayFunctions::template array_arithmetic<type, ArithmeticType::MIN>(columns);
 }
 
-ColumnPtr ArrayFunctions::array_min_boolean([[maybe_unused]] FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> ArrayFunctions::array_min_boolean([[maybe_unused]] FunctionContext* context,
+                                                      const Columns& columns) {
     return ArrayFunctions::template array_min<TYPE_BOOLEAN>(columns);
 }
 
-ColumnPtr ArrayFunctions::array_min_tinyint([[maybe_unused]] FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> ArrayFunctions::array_min_tinyint([[maybe_unused]] FunctionContext* context,
+                                                      const Columns& columns) {
     return ArrayFunctions::template array_min<TYPE_TINYINT>(columns);
 }
 
-ColumnPtr ArrayFunctions::array_min_smallint([[maybe_unused]] FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> ArrayFunctions::array_min_smallint([[maybe_unused]] FunctionContext* context,
+                                                       const Columns& columns) {
     return ArrayFunctions::template array_min<TYPE_SMALLINT>(columns);
 }
 
-ColumnPtr ArrayFunctions::array_min_int([[maybe_unused]] FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> ArrayFunctions::array_min_int([[maybe_unused]] FunctionContext* context, const Columns& columns) {
     return ArrayFunctions::template array_min<TYPE_INT>(columns);
 }
 
-ColumnPtr ArrayFunctions::array_min_bigint([[maybe_unused]] FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> ArrayFunctions::array_min_bigint([[maybe_unused]] FunctionContext* context,
+                                                     const Columns& columns) {
     return ArrayFunctions::template array_min<TYPE_BIGINT>(columns);
 }
 
-ColumnPtr ArrayFunctions::array_min_largeint([[maybe_unused]] FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> ArrayFunctions::array_min_largeint([[maybe_unused]] FunctionContext* context,
+                                                       const Columns& columns) {
     return ArrayFunctions::template array_min<TYPE_LARGEINT>(columns);
 }
 
-ColumnPtr ArrayFunctions::array_min_float([[maybe_unused]] FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> ArrayFunctions::array_min_float([[maybe_unused]] FunctionContext* context, const Columns& columns) {
     return ArrayFunctions::template array_min<TYPE_FLOAT>(columns);
 }
 
-ColumnPtr ArrayFunctions::array_min_double([[maybe_unused]] FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> ArrayFunctions::array_min_double([[maybe_unused]] FunctionContext* context,
+                                                     const Columns& columns) {
     return ArrayFunctions::template array_min<TYPE_DOUBLE>(columns);
 }
 
-ColumnPtr ArrayFunctions::array_min_decimalv2([[maybe_unused]] FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> ArrayFunctions::array_min_decimalv2([[maybe_unused]] FunctionContext* context,
+                                                        const Columns& columns) {
     return ArrayFunctions::template array_min<TYPE_DECIMALV2>(columns);
 }
 
-ColumnPtr ArrayFunctions::array_min_date([[maybe_unused]] FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> ArrayFunctions::array_min_date([[maybe_unused]] FunctionContext* context, const Columns& columns) {
     return ArrayFunctions::template array_min<TYPE_DATE>(columns);
 }
 
-ColumnPtr ArrayFunctions::array_min_datetime([[maybe_unused]] FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> ArrayFunctions::array_min_datetime([[maybe_unused]] FunctionContext* context,
+                                                       const Columns& columns) {
     return ArrayFunctions::template array_min<TYPE_DATETIME>(columns);
 }
 
-ColumnPtr ArrayFunctions::array_min_varchar([[maybe_unused]] FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> ArrayFunctions::array_min_varchar([[maybe_unused]] FunctionContext* context,
+                                                      const Columns& columns) {
     return ArrayFunctions::template array_min<TYPE_VARCHAR>(columns);
 }
 
 template <LogicalType type>
-ColumnPtr ArrayFunctions::array_max(const Columns& columns) {
+StatusOr<ColumnPtr> ArrayFunctions::array_max(const Columns& columns) {
     return ArrayFunctions::template array_arithmetic<type, ArithmeticType::MAX>(columns);
 }
 
-ColumnPtr ArrayFunctions::array_max_boolean([[maybe_unused]] FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> ArrayFunctions::array_max_boolean([[maybe_unused]] FunctionContext* context,
+                                                      const Columns& columns) {
     return ArrayFunctions::template array_max<TYPE_BOOLEAN>(columns);
 }
 
-ColumnPtr ArrayFunctions::array_max_tinyint([[maybe_unused]] FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> ArrayFunctions::array_max_tinyint([[maybe_unused]] FunctionContext* context,
+                                                      const Columns& columns) {
     return ArrayFunctions::template array_max<TYPE_TINYINT>(columns);
 }
 
-ColumnPtr ArrayFunctions::array_max_smallint([[maybe_unused]] FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> ArrayFunctions::array_max_smallint([[maybe_unused]] FunctionContext* context,
+                                                       const Columns& columns) {
     return ArrayFunctions::template array_max<TYPE_SMALLINT>(columns);
 }
 
-ColumnPtr ArrayFunctions::array_max_int([[maybe_unused]] FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> ArrayFunctions::array_max_int([[maybe_unused]] FunctionContext* context, const Columns& columns) {
     return ArrayFunctions::template array_max<TYPE_INT>(columns);
 }
 
-ColumnPtr ArrayFunctions::array_max_bigint([[maybe_unused]] FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> ArrayFunctions::array_max_bigint([[maybe_unused]] FunctionContext* context,
+                                                     const Columns& columns) {
     return ArrayFunctions::template array_max<TYPE_BIGINT>(columns);
 }
 
-ColumnPtr ArrayFunctions::array_max_largeint([[maybe_unused]] FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> ArrayFunctions::array_max_largeint([[maybe_unused]] FunctionContext* context,
+                                                       const Columns& columns) {
     return ArrayFunctions::template array_max<TYPE_LARGEINT>(columns);
 }
 
-ColumnPtr ArrayFunctions::array_max_float([[maybe_unused]] FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> ArrayFunctions::array_max_float([[maybe_unused]] FunctionContext* context, const Columns& columns) {
     return ArrayFunctions::template array_max<TYPE_FLOAT>(columns);
 }
 
-ColumnPtr ArrayFunctions::array_max_double([[maybe_unused]] FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> ArrayFunctions::array_max_double([[maybe_unused]] FunctionContext* context,
+                                                     const Columns& columns) {
     return ArrayFunctions::template array_max<TYPE_DOUBLE>(columns);
 }
 
-ColumnPtr ArrayFunctions::array_max_decimalv2([[maybe_unused]] FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> ArrayFunctions::array_max_decimalv2([[maybe_unused]] FunctionContext* context,
+                                                        const Columns& columns) {
     return ArrayFunctions::template array_max<TYPE_DECIMALV2>(columns);
 }
 
-ColumnPtr ArrayFunctions::array_max_date([[maybe_unused]] FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> ArrayFunctions::array_max_date([[maybe_unused]] FunctionContext* context, const Columns& columns) {
     return ArrayFunctions::template array_max<TYPE_DATE>(columns);
 }
 
-ColumnPtr ArrayFunctions::array_max_datetime([[maybe_unused]] FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> ArrayFunctions::array_max_datetime([[maybe_unused]] FunctionContext* context,
+                                                       const Columns& columns) {
     return ArrayFunctions::template array_max<TYPE_DATETIME>(columns);
 }
 
-ColumnPtr ArrayFunctions::array_max_varchar([[maybe_unused]] FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> ArrayFunctions::array_max_varchar([[maybe_unused]] FunctionContext* context,
+                                                      const Columns& columns) {
     return ArrayFunctions::template array_max<TYPE_VARCHAR>(columns);
 }
 
