@@ -1741,6 +1741,13 @@ public class Config extends ConfigBase {
     @ConfField
     public static String starmgr_s3_sk = "";
 
+    @ConfField
+    public static String hdfs_url = "";
+
+    /* default file store type used */
+    @ConfField
+    public static String default_fs_type = "S3";
+
     /**
      * default storage cache ttl of lake table
      */
