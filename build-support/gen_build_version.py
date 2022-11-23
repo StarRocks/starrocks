@@ -58,7 +58,7 @@ def get_java_version():
         return out.decode('utf-8').replace("\"", "\\\"").strip()
     return "unknown jdk"
 
-def write_file(file_name, file_content, commit_hash):
+def write_file(file_name, file_content):
     with open(file_name, 'w') as fh:
         fh.write(file_content)
 
@@ -89,7 +89,7 @@ public class Version {{
     d = os.path.dirname(file_name)
     if not os.path.exists(d):
         os.makedirs(d)
-    skip_write_if_commit_unchanged(file_name, file_content, commit_hash)
+    write_file(file_name, file_content)
 
 def generate_cpp_file(cpp_path, version, commit_hash, build_type, build_time, user, host):
     file_format = '''
@@ -116,7 +116,7 @@ const char* STARROCKS_BUILD_HOST = "{BUILD_HOST}";
     d = os.path.dirname(file_name)
     if not os.path.exists(d):
         os.makedirs(d)
-    skip_write_if_commit_unchanged(file_name, file_content, commit_hash)
+    write_file(file_name, file_content)
 
 def main():
     parser = argparse.ArgumentParser()
