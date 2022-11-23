@@ -1377,7 +1377,7 @@ public:
                 lazy_emplace_at(res.first, std::forward<F>(f));
             } catch (std::bad_alloc const& e) {
                 erase(iter);
-                throw e;
+                throw;
             }
         }
         return iter;
@@ -1392,7 +1392,7 @@ public:
                 lazy_emplace_at(res.first, std::forward<F>(f));
             } catch (std::bad_alloc const& e) {
                 erase(iter);
-                throw e;
+                throw;
             }
         }
         return iter;
@@ -1852,7 +1852,7 @@ private:
             initialize_slots();
         } catch (std::bad_alloc const& e) {
             capacity_ = old_capacity;
-            throw e;
+            throw;
         }
 
         for (size_t i = 0; i != old_capacity; ++i) {
