@@ -16,7 +16,6 @@ import com.starrocks.connector.iceberg.IcebergCatalogType;
 import com.starrocks.connector.iceberg.IcebergUtil;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.utframe.StarRocksAssert;
-import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -34,7 +33,6 @@ import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 public class MaterializedViewAnalyzerTest {
     @BeforeClass
     public static void beforeClass() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
     }
 
@@ -78,7 +76,6 @@ public class MaterializedViewAnalyzerTest {
                                                                      @Mocked IcebergResource icebergResource,
                                                                      @Mocked IcebergCatalog icebergCatalog)
             throws Exception {
-        Config.enable_experimental_mv = true;
         String resourceName = "iceberg0";
         String dbName = "iceberg_ssb_1g_parquet_snappy";
         String tblName = "customer";
@@ -99,15 +96,19 @@ public class MaterializedViewAnalyzerTest {
             {
                 globalStateMgr.getResourceMgr();
                 result = resourceMgr;
+                minTimes = 0;
 
                 resourceMgr.getResource(resourceName);
                 result = icebergResource;
+                minTimes = 0;
 
                 icebergResource.getType();
                 result = Resource.ResourceType.ICEBERG;
+                minTimes = 0;
 
                 icebergResource.getCatalogType();
                 result = IcebergCatalogType.HIVE_CATALOG;
+                minTimes = 0;
             }
         };
 
