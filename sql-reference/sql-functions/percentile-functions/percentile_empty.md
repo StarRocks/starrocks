@@ -2,7 +2,7 @@
 
 ## 功能
 
-构造一个 `percentile` 类型数值，主要用于 `insert` 或 `stream load` 时填充默认值。
+构造一个 `percentile` 类型的数值，主要用于 `insert` 或 `stream load` 时填充默认值。
 
 ## 语法
 
@@ -28,7 +28,7 @@ CREATE TABLE `aggregate_tbl` (
   `date` date NOT NULL COMMENT "time of event",
   `city_code` varchar(20) NULL COMMENT "city_code of user",
   `pv` bigint(20) SUM NULL DEFAULT "0" COMMENT "total page views",
-  `precent` PERCENTILE PERCENTILE_UNION COMMENT "others"
+  `percent` PERCENTILE PERCENTILE_UNION COMMENT "others"
 ) ENGINE=OLAP
 AGGREGATE KEY(`site_id`, `date`, `city_code`)
 COMMENT "OLAP"
