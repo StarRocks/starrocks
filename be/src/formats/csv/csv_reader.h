@@ -71,10 +71,11 @@ public:
     using Field = Slice;
     using Fields = std::vector<Field>;
 
-    CSVReader(const std::string& row_delimiter, const std::string& column_separator)
+    CSVReader(const std::string& row_delimiter, const std::string& column_separator,
+              const size_t bufferSize = kMinBufferSize)
             : _row_delimiter(row_delimiter),
               _column_separator(column_separator),
-              _storage(kMinBufferSize),
+              _storage(bufferSize),
               _buff(_storage.data(), _storage.size()) {
         _row_delimiter_length = row_delimiter.size();
         _column_separator_length = column_separator.size();
@@ -87,6 +88,9 @@ public:
     void set_limit(size_t limit) { _limit = limit; }
 
     void split_record(const Record& record, Fields* fields) const;
+
+    // For benchmark, we need to separate io from parsing.
+    Status init_buff() { return _fill_buffer(); }
 
 protected:
     std::string _row_delimiter;
