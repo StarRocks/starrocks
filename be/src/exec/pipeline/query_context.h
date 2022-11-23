@@ -11,6 +11,7 @@
 #include "exec/pipeline/pipeline_fwd.h"
 #include "gen_cpp/InternalService_types.h" // for TQueryOptions
 #include "gen_cpp/Types_types.h"           // for TUniqueId
+#include "gen_cpp/internal_service.pb.h"
 #include "runtime/profile_report_worker.h"
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_state.h"
@@ -200,6 +201,9 @@ public:
             std::vector<bool>& reported, const TNetworkAddress& last_coord_addr,
             std::vector<TReportExecStatusParams>& report_exec_status_params_vector,
             std::vector<int32_t>& cur_batch_report_indexes);
+
+    void collect_query_statistics(const PCollectQueryStatisticsRequest* request,
+                                  PCollectQueryStatisticsResult* response);
 
 private:
     static void _clean_func(QueryContextManager* manager);

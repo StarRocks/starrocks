@@ -372,6 +372,28 @@ void QueryContextManager::report_fragments_with_same_host(
     }
 }
 
+void QueryContextManager::collect_query_statistics(const PCollectQueryStatisticsRequest* request,
+                                                   PCollectQueryStatisticsResult* response) {
+    for (int i = 0; i < request->query_ids_size(); i++) {
+        const PUniqueId& p_query_id = request->query_ids(i);
+        TUniqueId id;
+        id.__set_hi(p_query_id.hi());
+        id.__set_lo(p_query_id.lo());
+        if (auto query_ctx = get(id); query_ctx != nullptr) {
+            int64_t cpu_cost = query_ctx->cpu_cost();
+            int64_t scan_rows = query_ctx->cur_scan_rows_num();
+            int64_t scan_bytes = query_ctx->get_scan_bytes();
+            auto query_statistics = response->add_query_statistics();
+            auto query_id = query_statistics->mutable_query_id();
+            query_id->set_hi(p_query_id.hi());
+            query_id->set_lo(p_query_id.lo());
+            query_statistics->set_cpu_cost_ns(cpu_cost);
+            query_statistics->set_scan_rows(scan_rows);
+            query_statistics->set_scan_bytes(scan_bytes);
+        }
+    }
+}
+
 void QueryContextManager::report_fragments(
         const std::vector<PipeLineReportTaskKey>& pipeline_need_report_query_fragment_ids) {
     std::vector<std::shared_ptr<FragmentContext>> need_report_fragment_context;
