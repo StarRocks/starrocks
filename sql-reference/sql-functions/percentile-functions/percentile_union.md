@@ -33,14 +33,14 @@ CREATE TABLE sales_records(
 properties("replication_num" = "1");
 ```
 
-对`sale_amt`建立PERCENTILE类型物化视图表。
+对`sale_amt`建立 PERCENTILE 类型物化视图表。
 
 ```sql
 create materialized view mv as
 select store_id, percentile_union(percentile_hash(sale_amt)) from sales_records group by store_id;
 ```
 
-创建包含PERCENTILE类型的聚合表。
+创建包含 PERCENTILE 类型的聚合表。
 
 ```sql
 CREATE TABLE sales_records(
