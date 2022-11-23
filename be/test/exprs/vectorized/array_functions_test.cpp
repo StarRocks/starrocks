@@ -4646,10 +4646,18 @@ TEST_F(ArrayFunctionsTest, array_filter_with_onlynull) {
 
     auto src_column2 = ColumnHelper::create_const_null_column(1);
 
+    // bool_array is null
     ArrayFilter filter;
     auto dest_column = filter.process(nullptr, {src_column, src_column2});
-
     ASSERT_TRUE(dest_column->get(0).get_array().empty());
+
+    // array is null
+    dest_column = filter.process(nullptr, {src_column2, src_column});
+    ASSERT_TRUE(dest_column->only_null());
+
+    // all null
+    dest_column = filter.process(nullptr, {src_column2, src_column2});
+    ASSERT_TRUE(dest_column->only_null());
 }
 
 TEST_F(ArrayFunctionsTest, array_distinct_only_null) {
