@@ -47,7 +47,6 @@
 namespace starrocks {
 
 class BlockCompressionCodec;
-class ColumnVectorBatch;
 class MemTracker;
 
 namespace vectorized {

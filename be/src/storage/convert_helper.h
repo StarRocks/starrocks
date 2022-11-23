@@ -12,7 +12,6 @@
 #include "types/logical_type.h"
 
 namespace starrocks {
-class ColumnVectorBatch;
 class TabletSchema;
 class VectorizedSchema;
 class TabletColumn;
@@ -68,9 +67,6 @@ public:
         src->reset_column();
         return ret;
     }
-
-    virtual void convert(ColumnVectorBatch* dst, ColumnVectorBatch* src, const uint16_t* selection,
-                         uint16_t selected_size) const = 0;
 };
 
 const FieldConverter* get_field_converter(LogicalType from_type, LogicalType to_type);

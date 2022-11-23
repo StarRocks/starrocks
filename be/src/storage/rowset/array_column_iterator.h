@@ -7,8 +7,6 @@
 
 namespace starrocks {
 
-class ColumnVectorBatch;
-
 namespace vectorized {
 class Column;
 } // namespace vectorized
@@ -46,9 +44,6 @@ private:
     std::unique_ptr<ColumnIterator> _null_iterator;
     std::unique_ptr<ColumnIterator> _array_size_iterator;
     std::unique_ptr<ColumnIterator> _element_iterator;
-
-    std::unique_ptr<ColumnVectorBatch> _null_batch;
-    std::unique_ptr<ColumnVectorBatch> _array_size_batch;
 };
 
 } // namespace starrocks
