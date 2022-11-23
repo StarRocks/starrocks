@@ -111,4 +111,14 @@ public class AnalyzeNotUseDBTest {
         analyzeFail("create view v as select * from t0 join (select * from t0) t0",
                 "Duplicate column name 'v1'");
     }
+
+    @Test
+    public void testDupTableName() {
+        analyzeFail("select * from t0 t join unnest([1,2,3]) t", "Not unique table/alias: 't'");
+        analyzeFail("select * from t0 join unnest([1,2,3]) t0", "Not unique table/alias: 't0'");
+        analyzeFail("select * from t0 t join (select * from t0) t", "Not unique table/alias: 't'");
+        analyzeFail("select * from t0 join (select * from t0) t0", "Not unique table/alias: 't0'");
+        analyzeFail("select * from t0 t join (values(1,2,3)) t", "Not unique table/alias: 't'");
+        analyzeFail("select * from t0 join (values(1,2,3)) t0", "Not unique table/alias: 't0'");
+    }
 }
