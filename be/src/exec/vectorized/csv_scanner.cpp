@@ -181,7 +181,7 @@ StatusOr<ChunkPtr> CSVScanner::get_next() {
 
         fill_columns_from_path(src_chunk, _num_fields_in_csv, _scan_range.ranges[_curr_file_index].columns_from_path,
                                src_chunk->num_rows());
-        ASSIGN_OR_RETURN(chunk, _materialize(src_chunk));
+        ASSIGN_OR_RETURN(chunk, materialize(nullptr, src_chunk));
     } while ((chunk)->num_rows() == 0);
     return std::move(chunk);
 }
@@ -274,6 +274,7 @@ ChunkPtr CSVScanner::_create_chunk(const std::vector<SlotDescriptor*>& slots) {
     return chunk;
 }
 
+<<<<<<< HEAD
 // TODO(zhuming): move this function to `FileScanner` or `FileScanNode`
 StatusOr<ChunkPtr> CSVScanner::_materialize(ChunkPtr& src_chunk) {
     SCOPED_RAW_TIMER(&_counter->materialize_ns);
@@ -311,6 +312,8 @@ StatusOr<ChunkPtr> CSVScanner::_materialize(ChunkPtr& src_chunk) {
     return dest_chunk;
 }
 
+=======
+>>>>>>> c5d9e626b ([BugFix] Variable chunk's column types (#13629))
 void CSVScanner::_report_error(const std::string& line, const std::string& err_msg) {
     _state->append_error_msg_to_file(line, err_msg);
 }
