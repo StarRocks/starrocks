@@ -10,6 +10,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
+import com.starrocks.thrift.TBinaryLiteral;
 
 import java.io.DataInput;
 import java.io.DataOutput;
