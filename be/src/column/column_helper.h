@@ -163,11 +163,6 @@ public:
         if (src_column->is_nullable()) {
             return src_column;
         }
-
-        // const column should not be casted to nullable column.
-        if (src_column->is_constant()) {
-            return ColumnHelper::create_const_null_column(src_column->size());
-        }
         return NullableColumn::create(src_column, NullColumn::create(src_column->size(), 0));
     }
 
