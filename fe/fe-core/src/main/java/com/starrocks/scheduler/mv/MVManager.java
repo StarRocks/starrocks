@@ -19,6 +19,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
+import java.io.EOFException;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -54,18 +55,21 @@ public class MVManager {
     public long reload(DataInputStream input, long checksum) throws IOException {
         Preconditions.checkState(jobMap.isEmpty());
 
-        String str = Text.readString(input);
-        SerializedJobs data = GsonUtils.GSON.fromJson(str, SerializedJobs.class);
-        if (CollectionUtils.isNotEmpty(data.jobList)) {
-            for (MVMaintenanceJob job : data.jobList) {
-                long viewId = job.getViewId();
-                MaterializedView view;
-                jobMap.put(job.getView().getMvId(), job);
+        try {
+            String str = Text.readString(input);
+            SerializedJobs data = GsonUtils.GSON.fromJson(str, SerializedJobs.class);
+            if (CollectionUtils.isNotEmpty(data.jobList)) {
+                for (MVMaintenanceJob job : data.jobList) {
+                    long viewId = job.getViewId();
+                    MaterializedView view;
+                    jobMap.put(job.getView().getMvId(), job);
+                }
+                LOG.info("reload MV maintenance jobs: {}", data.jobList);
+                LOG.debug("reload MV maintenance job details: {}", str);
             }
-            LOG.info("reload MV maintenance jobs: {}", data.jobList);
-            LOG.debug("reload MV maintenance job details: {}", str);
+            checksum ^= data.jobList.size();
+        } catch (EOFException ignored) {
         }
-        checksum ^= data.jobList.size();
         return checksum;
     }
 
