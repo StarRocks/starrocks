@@ -817,6 +817,10 @@ public final class SparkDpp implements java.io.Serializable {
         if (dstClass.equals(Float.class) || dstClass.equals(Double.class)) {
             return null;
         }
+
+        // PartitionKey is initialized according to the value of Json deserialization,
+        // because the data type is Double after deserialization,
+        // so there will be a conditional judgment of "if (srcValue instanceof Double)"
         if (srcValue instanceof Double) {
             if (dstClass.equals(Short.class)) {
                 return ((Double) srcValue).shortValue();

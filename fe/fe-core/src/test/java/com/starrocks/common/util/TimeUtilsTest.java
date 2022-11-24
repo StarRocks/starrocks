@@ -152,10 +152,10 @@ public class TimeUtilsTest {
         Assert.assertEquals("2015-03-12 10:00:00", TimeUtils.longToTimeString(timestamp));
 
         DateLiteral date = new DateLiteral("2015-03-01", ScalarType.DATE);
-        Assert.assertEquals(1031777L, date.getRealValue());
+        Assert.assertEquals(20150301000000L, date.getLongValue());
 
         DateLiteral datetime = new DateLiteral("2015-03-01 12:00:00", ScalarType.DATETIME);
-        Assert.assertEquals(20150301120000L, datetime.getRealValue());
+        Assert.assertEquals(20150301120000L, datetime.getLongValue());
     }
 
     @Test
