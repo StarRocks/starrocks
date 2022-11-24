@@ -2387,7 +2387,7 @@ public class PlanFragmentBuilder {
                     inputFragment.getPlanRoot(),
                     udtfOutputTuple,
                     physicalTableFunction.getFn(),
-                    Arrays.stream(physicalTableFunction.getParamColumnRefs().getColumnIds()).boxed()
+                    physicalTableFunction.getFnParamColumnRef().stream().map(ColumnRefOperator::getId)
                             .collect(Collectors.toList()),
                     Arrays.stream(physicalTableFunction.getOuterColumnRefSet().getColumnIds()).boxed()
                             .collect(Collectors.toList()),
