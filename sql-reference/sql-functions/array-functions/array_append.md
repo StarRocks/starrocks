@@ -2,7 +2,9 @@
 
 ## description
 
-### Syntax
+在数组末尾添加一个新的元素。返回 ARRAY 类型的值。
+
+## 语法
 
 ```Haskell
 array_append(any_array, any_element)
@@ -23,7 +25,7 @@ mysql> select array_append([1, 2], 3);
 
 ```
 
-可以向数组中添加NULL
+可以向数组中添加 NULL。
 
 ```plain text
 mysql> select array_append([1, 2], NULL);

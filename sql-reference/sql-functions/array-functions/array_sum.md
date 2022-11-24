@@ -1,16 +1,20 @@
 # array_sum
 
-## description
+## 功能
 
-### Syntax
+对一个 ARRAY 中的所有数据求和。
+
+## 语法
 
 ```Haskell
 array_sum(array(type))
 ```
 
-对一个ARRAY中的所有数据做和，返回这个结果。
+## 参数说明
 
-## example
+`array(type)` 中的 `type` 支持如下类型：BOOLEAN、TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、DECIMALV2、DECIMAL32、DECIMAL64、DECIMAL128。
+
+## 示例
 
 ```plain text
 mysql> select array_sum([11, 11, 12]);

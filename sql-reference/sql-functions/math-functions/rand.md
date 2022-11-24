@@ -12,7 +12,7 @@ RAND(x);
 
 ## 参数说明
 
-`x`: 可选。支持的数据类型为 BIGINT。如果指定了`x`, 则返回一个可重复的随机数。如果没有指定 `x`，则返回一个完全随机数。
+`x`: 可选。支持的数据类型为 BIGINT。如果指定了 `x`，则返回一个可重复的随机数。如果没有指定 `x`，则返回一个完全随机数。
 
 ## 返回值说明
 
@@ -40,4 +40,4 @@ mysql> select rand(3);
 
 ## Keyword
 
-RAND, RANDOM
+RAND, RANDOM, rand, random
