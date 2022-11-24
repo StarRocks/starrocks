@@ -81,6 +81,9 @@ StatusOr<MorselPtr> FixedMorselQueue::try_get() {
     }
     idx = _pop_index.fetch_add(1);
     if (idx < _num_morsels) {
+        if (!_tablet_rowsets.empty()) {
+            _morsels[idx]->set_rowsets(std::move(_tablet_rowsets[idx]));
+        }
         return std::move(_morsels[idx]);
     } else {
         return nullptr;
@@ -150,7 +153,12 @@ StatusOr<MorselPtr> PhysicalSplitMorselQueue::try_get() {
             rowset->rowset_id(), rowset->segments()[_segment_idx]->id(), std::move(taken_range));
     MorselPtr morsel = std::make_unique<PhysicalSplitScanMorsel>(
             scan_morsel->get_plan_node_id(), *(scan_morsel->get_scan_range()), std::move(rowid_range));
+<<<<<<< HEAD
 
+=======
+    morsel->set_rowsets(_tablet_rowsets[_tablet_idx]);
+    _inc_num_splits(_is_last_split_of_current_morsel());
+>>>>>>> c5de987e2 ([BugFix] Use forward captured rowsets for query (#13937))
     return morsel;
 }
 
@@ -408,6 +416,11 @@ StatusOr<MorselPtr> LogicalSplitMorselQueue::try_get() {
     auto* scan_morsel = down_cast<ScanMorsel*>(_morsels[_tablet_idx].get());
     auto morsel = std::make_unique<LogicalSplitScanMorsel>(
             scan_morsel->get_plan_node_id(), *(scan_morsel->get_scan_range()), std::move(short_key_ranges));
+<<<<<<< HEAD
+=======
+    morsel->set_rowsets(_tablet_rowsets[_tablet_idx]);
+    _inc_num_splits(_is_last_split_of_current_morsel());
+>>>>>>> c5de987e2 ([BugFix] Use forward captured rowsets for query (#13937))
     return morsel;
 }
 

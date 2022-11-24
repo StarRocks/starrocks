@@ -59,8 +59,30 @@ public:
 
     virtual void init_tablet_reader_params(vectorized::TabletReaderParams* params) {}
 
+<<<<<<< HEAD
 private:
     int32_t _plan_node_id;
+=======
+    virtual std::tuple<int64_t, int64_t> get_lane_owner_and_version() const {
+        return std::tuple<int64_t, int64_t>{0L, 0L};
+    }
+
+    // from_version is used when reading incremental rowsets. in default, from_version = 0 means all of the rowsets
+    // will be read out. In multi-version cache mechanism, when probing the cache and finding that cached result has
+    // stale version, then incremental rowsets in the version range from the cached version till required version
+    // should be read out and merged with the cache result, here from_version is cached version.
+    void set_from_version(int64_t from_version) { _from_version = from_version; }
+    int64_t from_version() { return _from_version; }
+
+    void set_rowsets(std::vector<RowsetSharedPtr> rowsets) { _rowsets = std::move(rowsets); }
+    const std::vector<RowsetSharedPtr>& rowsets() const { return _rowsets; }
+
+private:
+    int32_t _plan_node_id;
+    int64_t _from_version = 0;
+
+    std::vector<RowsetSharedPtr> _rowsets;
+>>>>>>> c5de987e2 ([BugFix] Use forward captured rowsets for query (#13937))
 };
 
 class ScanMorsel : public Morsel {
@@ -184,6 +206,10 @@ public:
 
     std::vector<TInternalScanRange*> olap_scan_ranges() const override;
 
+    void set_tablet_rowsets(const std::vector<std::vector<RowsetSharedPtr>>& tablet_rowsets) override {
+        _tablet_rowsets = tablet_rowsets;
+    }
+
     size_t num_original_morsels() const override { return _num_morsels; }
     size_t max_degree_of_parallelism() const override { return _num_morsels; }
     bool empty() const override { return _pop_index >= _num_morsels; }
@@ -195,6 +221,7 @@ private:
     Morsels _morsels;
     const size_t _num_morsels;
     std::atomic<size_t> _pop_index;
+    std::vector<std::vector<RowsetSharedPtr>> _tablet_rowsets;
 };
 
 class PhysicalSplitMorselQueue final : public MorselQueue {
