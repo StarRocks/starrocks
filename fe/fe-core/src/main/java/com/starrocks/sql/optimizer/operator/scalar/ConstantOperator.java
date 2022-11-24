@@ -86,6 +86,10 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
         this.isNull = false;
     }
 
+    public static ConstantOperator createObject(Object value, Type type) {
+        return new ConstantOperator(value, type);
+    }
+
     public static ConstantOperator createNull(Type type) {
         return new ConstantOperator(type);
     }

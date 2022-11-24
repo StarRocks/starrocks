@@ -54,7 +54,8 @@ public class SetStmtAnalyzer {
                         Expr variableResult = queryStatement.getQueryRelation().getOutputExpression().get(0);
 
                         //can not apply to numeric types or complex type are not supported
-                        if (!variableResult.getType().canApplyToNumeric() || variableResult.getType().isComplexType()) {
+                        if (variableResult.getType().isOnlyMetricType() || variableResult.getType().isFunctionType()
+                                || variableResult.getType().isComplexType()) {
                             throw new SemanticException("Can't set variable with type " + variableResult.getType());
                         }
 
