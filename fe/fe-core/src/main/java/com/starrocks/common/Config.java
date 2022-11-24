@@ -987,6 +987,12 @@ public class Config extends ConfigBase {
     public static long tablet_repair_delay_factor_second = 60;
 
     /**
+     * If BE is down beyond this time, tablets on that BE of colcoate table will be migrated to other available BEs
+     */
+    @ConfField(mutable = true)
+    public static long tablet_sched_colocate_be_down_tolerate_time_s = 12 * 3600;
+
+    /**
      * the default slot number per path in tablet scheduler
      * TODO(cmy): remove this config and dynamically adjust it by clone task statistic
      */
