@@ -1341,8 +1341,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.partitionNames() != null) {
             partitionNames = (PartitionNames) visit(context.partitionNames());
         }
+        List<Relation> usingRelations = context.using != null ? visit(context.using.relation(), Relation.class) : null;
         Expr where = context.where != null ? (Expr) visit(context.where) : null;
-        DeleteStmt ret = new DeleteStmt(targetTableName, partitionNames, where);
+        DeleteStmt ret = new DeleteStmt(targetTableName, partitionNames, usingRelations, where);
         if (context.explainDesc() != null) {
             ret.setIsExplain(true, getExplainType(context.explainDesc()));
         }

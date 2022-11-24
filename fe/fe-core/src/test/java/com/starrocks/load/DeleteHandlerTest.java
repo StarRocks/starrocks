@@ -5,7 +5,6 @@ package com.starrocks.load;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.AccessTestUtil;
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.SlotRef;
@@ -83,8 +82,6 @@ public class DeleteHandlerTest {
     private Database db;
     private Auth auth;
 
-    Analyzer analyzer;
-
     private GlobalTransactionMgr globalTransactionMgr;
     private TabletInvertedIndex invertedIndex = new TabletInvertedIndex();
     private ConnectContext connectContext = new ConnectContext();
@@ -95,9 +92,9 @@ public class DeleteHandlerTest {
 
         globalTransactionMgr = new GlobalTransactionMgr(globalStateMgr);
         globalTransactionMgr.setEditLog(editLog);
+        connectContext.setGlobalStateMgr(globalStateMgr);
         deleteHandler = new DeleteHandler();
         auth = AccessTestUtil.fetchAdminAccess();
-        analyzer = AccessTestUtil.fetchAdminAnalyzer();
         try {
             db = CatalogMocker.mockDb();
         } catch (AnalysisException e) {
@@ -204,8 +201,8 @@ public class DeleteHandlerTest {
             }
         };
         try {
-            deleteStmt.analyze(analyzer);
-        } catch (UserException e) {
+            com.starrocks.sql.analyzer.Analyzer.analyze(deleteStmt, connectContext);
+        } catch (Exception e) {
             Assert.fail();
         }
         deleteHandler.process(deleteStmt);
@@ -250,8 +247,8 @@ public class DeleteHandlerTest {
         };
 
         try {
-            deleteStmt.analyze(analyzer);
-        } catch (UserException e) {
+            com.starrocks.sql.analyzer.Analyzer.analyze(deleteStmt, connectContext);
+        } catch (Exception e) {
             Assert.fail();
         }
         try {
@@ -306,8 +303,8 @@ public class DeleteHandlerTest {
         };
 
         try {
-            deleteStmt.analyze(analyzer);
-        } catch (UserException e) {
+            com.starrocks.sql.analyzer.Analyzer.analyze(deleteStmt, connectContext);
+        } catch (Exception e) {
             Assert.fail();
         }
 
@@ -369,8 +366,8 @@ public class DeleteHandlerTest {
         };
 
         try {
-            deleteStmt.analyze(analyzer);
-        } catch (UserException e) {
+            com.starrocks.sql.analyzer.Analyzer.analyze(deleteStmt, connectContext);
+        } catch (Exception e) {
             Assert.fail();
         }
         try {
@@ -436,8 +433,8 @@ public class DeleteHandlerTest {
         };
 
         try {
-            deleteStmt.analyze(analyzer);
-        } catch (UserException e) {
+            com.starrocks.sql.analyzer.Analyzer.analyze(deleteStmt, connectContext);
+        } catch (Exception e) {
             Assert.fail();
         }
         try {
@@ -490,8 +487,8 @@ public class DeleteHandlerTest {
         };
 
         try {
-            deleteStmt.analyze(analyzer);
-        } catch (UserException e) {
+            com.starrocks.sql.analyzer.Analyzer.analyze(deleteStmt, connectContext);
+        } catch (Exception e) {
             Assert.fail();
         }
         try {
