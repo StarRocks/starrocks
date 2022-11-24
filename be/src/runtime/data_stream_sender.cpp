@@ -37,9 +37,7 @@
 #include "runtime/client_cache.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/descriptors.h"
-#include "runtime/dpp_sink_internal.h"
 #include "runtime/exec_env.h"
-#include "runtime/raw_value.h"
 #include "runtime/runtime_state.h"
 #include "serde/protobuf_serde.h"
 #include "service/backend_options.h"
@@ -362,7 +360,6 @@ DataStreamSender::DataStreamSender(RuntimeState* state, int sender_id, const Row
         : _sender_id(sender_id),
           _state(state),
           _pool(state->obj_pool()),
-          _row_desc(row_desc),
           _current_channel_idx(0),
           _part_type(sink.output_partition.type),
           _profile(nullptr),
@@ -401,12 +398,6 @@ DataStreamSender::DataStreamSender(RuntimeState* state, int sender_id, const Row
     _request_bytes_threshold = config::max_transmit_batched_bytes;
 }
 
-// We use the PartitionRange to compare here. It should not be a member function of PartitionInfo
-// class because there are some other member in it.
-static bool compare_part_use_range(const PartitionInfo* v1, const PartitionInfo* v2) {
-    return v1->range() < v2->range();
-}
-
 Status DataStreamSender::init(const TDataSink& tsink) {
     RETURN_IF_ERROR(DataSink::init(tsink));
     const TDataStreamSink& t_stream_sink = tsink.stream_sink;
@@ -415,23 +406,8 @@ Status DataStreamSender::init(const TDataSink& tsink) {
         RETURN_IF_ERROR(
                 Expr::create_expr_trees(_pool, t_stream_sink.output_partition.partition_exprs, &_partition_expr_ctxs));
     } else if (_part_type == TPartitionType::RANGE_PARTITIONED) {
-        // Range partition
-        // Partition Exprs
-        RETURN_IF_ERROR(
-                Expr::create_expr_trees(_pool, t_stream_sink.output_partition.partition_exprs, &_partition_expr_ctxs));
-        // Partition infos
-        int num_parts = t_stream_sink.output_partition.partition_infos.size();
-        if (num_parts == 0) {
-            return Status::InternalError("Empty partition info.");
-        }
-        for (int i = 0; i < num_parts; ++i) {
-            PartitionInfo* info = _pool->add(new PartitionInfo());
-            RETURN_IF_ERROR(PartitionInfo::from_thrift(_pool, t_stream_sink.output_partition.partition_infos[i], info,
-                                                       _state->chunk_size()));
-            _partition_infos.push_back(info);
-        }
-        // partitions should be in ascending order
-        std::sort(_partition_infos.begin(), _partition_infos.end(), compare_part_use_range);
+        // NOTE: should never go here
+        return Status::NotSupported("Range partition is not supported anymore.");
     } else {
     }
 
@@ -472,11 +448,6 @@ Status DataStreamSender::prepare(RuntimeState* state) {
     if (_part_type == TPartitionType::HASH_PARTITIONED ||
         _part_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
         RETURN_IF_ERROR(Expr::prepare(_partition_expr_ctxs, state));
-    } else {
-        RETURN_IF_ERROR(Expr::prepare(_partition_expr_ctxs, state));
-        for (auto iter : _partition_infos) {
-            RETURN_IF_ERROR(iter->prepare(state, _row_desc));
-        }
     }
 
     // Randomize the order we open/transmit to channels to avoid thundering herd problems.
@@ -523,9 +494,6 @@ Status DataStreamSender::open(RuntimeState* state) {
     // RETURN_IF_ERROR(DataSink::open(state));
     DCHECK(state != nullptr);
     RETURN_IF_ERROR(Expr::open(_partition_expr_ctxs, state));
-    for (auto iter : _partition_infos) {
-        RETURN_IF_ERROR(iter->open(state));
-    }
     return Status::OK();
 }
 
@@ -655,15 +623,6 @@ Status DataStreamSender::close(RuntimeState* state, Status exec_status) {
     // wait all channels to finish
     for (auto& _channel : _channels) {
         _channel->close_wait(state);
-    }
-    for (auto iter : _partition_infos) {
-        auto st = iter->close(state);
-        if (!st.ok()) {
-            LOG(WARNING) << "fail to close sender partition, st=" << st.to_string();
-            if (_close_status.ok()) {
-                _close_status = st;
-            }
-        }
     }
     Expr::close(_partition_expr_ctxs, state);
 

@@ -1,8 +1,8 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "column/column_helper.h"
-#include "column/column_builder.h"
 
+#include "column/column_builder.h"
 #include "gtest/gtest.h"
 
 namespace starrocks::vectorized {
