@@ -12,6 +12,7 @@ public class OptimizerConfig {
         RULE_BASED,
         COST_BASED
     }
+
     private OptimizerAlgorithm optimizerAlgorithm;
 
     private BitSet ruleSetSwitches;

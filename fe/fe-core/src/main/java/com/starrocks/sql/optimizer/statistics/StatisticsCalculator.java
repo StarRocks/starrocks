@@ -330,7 +330,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     }
 
     public Void computeHMSTableScanNode(Operator node, ExpressionContext context, Table table,
-                                         Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
+                                        Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
         Preconditions.checkState(context.arity() == 0);
 
         ScanOperatorPredicates predicates;
