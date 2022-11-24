@@ -83,7 +83,7 @@ void ScanOperator::close(RuntimeState* state) {
     _tablets_counter = ADD_COUNTER_SKIP_MERGE(_unique_metrics, "TabletCount", TUnit::UNIT);
     COUNTER_SET(_tablets_counter, static_cast<int64_t>(_source_factory()->num_total_original_morsels()));
 
-    _merge_chunk_source_profiles();
+    _merge_chunk_source_profiles(state);
 
     do_close(state);
     Operator::close(state);
@@ -441,9 +441,14 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
     return Status::OK();
 }
 
-void ScanOperator::_merge_chunk_source_profiles() {
+void ScanOperator::_merge_chunk_source_profiles(RuntimeState* state) {
     auto query_ctx = _query_ctx.lock();
-    DCHECK(query_ctx != nullptr);
+    // _query_ctx uses lazy initialization, maybe it is not initialized
+    // under certian circumstance
+    if (query_ctx == nullptr) {
+        query_ctx = state->exec_env()->query_context_mgr()->get(state->query_id());
+        DCHECK(query_ctx != nullptr);
+    }
     if (!query_ctx->is_report_profile()) {
         return;
     }
