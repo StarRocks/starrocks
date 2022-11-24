@@ -51,7 +51,7 @@ private:
     Status _pickup_morsel(RuntimeState* state, int chunk_source_index);
     Status _trigger_next_scan(RuntimeState* state, int chunk_source_index);
     Status _try_to_trigger_next_scan(RuntimeState* state);
-    void _merge_chunk_source_profiles();
+    void _merge_chunk_source_profiles(RuntimeState* state);
 
 protected:
     ScanNode* _scan_node = nullptr;
