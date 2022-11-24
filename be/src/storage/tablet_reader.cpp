@@ -36,7 +36,8 @@ TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, Schem
           _tablet(std::move(tablet)),
           _version(version),
           _delete_predicates_version(version),
-          _rowsets(captured_rowsets) {}
+          _rowsets(captured_rowsets),
+          _is_vertical_merge(false) {}
 
 TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema, bool is_key,
                            RowSourceMaskBuffer* mask_buffer)
