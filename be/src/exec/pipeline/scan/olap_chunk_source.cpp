@@ -266,7 +266,12 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     starrocks::vectorized::Schema child_schema =
             ChunkHelper::convert_schema_to_format_v2(tablet_schema, reader_columns);
 
+<<<<<<< HEAD
     _reader = std::make_shared<TabletReader>(_tablet, Version(0, _version), std::move(child_schema));
+=======
+    _reader = std::make_shared<TabletReader>(_tablet, Version(_morsel->from_version(), _version),
+                                             std::move(child_schema), _morsel->rowsets());
+>>>>>>> c5de987e2 ([BugFix] Use forward captured rowsets for query (#13937))
     if (reader_columns.size() == scanner_columns.size()) {
         _prj_iter = _reader;
     } else {
