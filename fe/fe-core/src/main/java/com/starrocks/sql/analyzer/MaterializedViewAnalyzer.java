@@ -502,16 +502,14 @@ public class MaterializedViewAnalyzer {
         private void replaceTableAlias(SlotRef slotRef,
                                        CreateMaterializedViewStatement statement,
                                        Map<TableName, Table> tableNameTableMap) {
-            if (slotRef.getTblNameWithoutAnalyzed().getDb() == null) {
-                TableName tableName = slotRef.getTblNameWithoutAnalyzed();
-                Table table = tableNameTableMap.get(tableName);
-                List<MaterializedView.BaseTableInfo> baseTableInfos = statement.getBaseTableInfos();
-                for (MaterializedView.BaseTableInfo baseTableInfo : baseTableInfos) {
-                    if (baseTableInfo.getTable().equals(table)) {
-                        slotRef.setTblName(new TableName(baseTableInfo.getCatalogName(),
-                                baseTableInfo.getDbName(), table.getName()));
-                        break;
-                    }
+            TableName tableName = slotRef.getTblNameWithoutAnalyzed();
+            Table table = tableNameTableMap.get(tableName);
+            List<MaterializedView.BaseTableInfo> baseTableInfos = statement.getBaseTableInfos();
+            for (MaterializedView.BaseTableInfo baseTableInfo : baseTableInfos) {
+                if (baseTableInfo.getTable().equals(table)) {
+                    slotRef.setTblName(new TableName(baseTableInfo.getCatalogName(),
+                            baseTableInfo.getDbName(), table.getName()));
+                    break;
                 }
             }
         }

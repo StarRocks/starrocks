@@ -9,7 +9,6 @@ import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.KeysType;
@@ -176,7 +175,7 @@ public class InsertPlanner {
             } else {
                 throw new SemanticException("Unknown table type " + insertStmt.getTargetTable().getType());
             }
-            
+
             if (isEnablePipeline && canUsePipeline && insertStmt.getTargetTable() instanceof OlapTable) {
                 PlanFragment sinkFragment = execPlan.getFragments().get(0);
                 if (shuffleServiceEnable) {
@@ -321,7 +320,7 @@ public class InsertPlanner {
                         new Scope(RelationId.anonymous(),
                                 new RelationFields(insertStatement.getTargetTable().getBaseSchema().stream()
                                         .map(col -> new Field(col.getName(), col.getType(),
-                                                new TableName(null, insertStatement.getTargetTable().getName()), null))
+                                                insertStatement.getTableName(), null))
                                         .collect(Collectors.toList()))), session);
 
                 ExpressionMapping expressionMapping =
@@ -437,7 +436,7 @@ public class InsertPlanner {
         DistributionProperty property = new DistributionProperty(spec);
 
         shuffleServiceEnable = true;
-        
+
         return new PhysicalPropertySet(property);
     }
 }
