@@ -45,6 +45,8 @@ public class AuditEvent {
     @Retention(RetentionPolicy.RUNTIME)
     public @interface AuditField {
         String value() default "";
+
+        boolean ignore_zero() default false;
     }
 
     public EventType type;
@@ -80,9 +82,9 @@ public class AuditEvent {
     public long scanRows = -1;
     @AuditField(value = "ReturnRows")
     public long returnRows = -1;
-    @AuditField(value = "CpuCostNs")
+    @AuditField(value = "CpuCostNs", ignore_zero = true)
     public long cpuCostNs = -1;
-    @AuditField(value = "MemCostBytes")
+    @AuditField(value = "MemCostBytes", ignore_zero = true)
     public long memCostBytes = -1;
     @AuditField(value = "StmtId")
     public long stmtId = -1;

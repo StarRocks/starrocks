@@ -21,8 +21,6 @@
 
 package com.starrocks.qe;
 
-import java.lang.reflect.Field;
-
 import com.starrocks.common.AuditLog;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.DigitalVersion;
@@ -36,6 +34,8 @@ import com.starrocks.plugin.PluginInfo.PluginType;
 import com.starrocks.plugin.PluginMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+
+import java.lang.reflect.Field;
 
 // A builtin Audit plugin, registered when FE start.
 // it will receive "AFTER_QUERY" AuditEventy and print it as a log in fe.audit.log
@@ -88,15 +88,26 @@ public class AuditLogBuilder extends Plugin implements AuditPlugin {
                 if (af.value().equals("Time")) {
                     queryTime = (long) f.get(event);
                 }
+
+                // Ignore -1 by default, ignore 0 if annotated with ignore_zero
                 Object value = f.get(event);
-                if ((value instanceof Long) && ((Long) value) == -1) {
-                    continue;
+                if (value instanceof Long) {
+                    long longValue = (Long) value;
+                    if (longValue == -1 || (longValue == 0 && af.ignore_zero())) {
+                        continue;
+                    }
                 }
-                if (value instanceof Integer && ((Integer) value) == -1) {
-                    continue;
+                if (value instanceof Integer) {
+                    int intValue = (Integer) value;
+                    if (intValue == -1 || (intValue == 0 && af.ignore_zero())) {
+                        continue;
+                    }
                 }
-                if (value instanceof Double && ((Double) value) == -1) {
-                    continue;
+                if (value instanceof Double) {
+                    double doubleValue = (Double) value;
+                    if (doubleValue == -1 || (doubleValue == 0 && af.ignore_zero())) {
+                        continue;
+                    }
                 }
                 sb.append("|").append(af.value()).append("=").append(value);
             }
