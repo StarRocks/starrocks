@@ -49,7 +49,7 @@ void CompactionManager::update_candidates(std::vector<CompactionCandidate> candi
             }
         }
         for (auto& candidate : candidates) {
-            if (!candidate.tablet->get_disable_compaction()) {
+            if (candidate.tablet->enable_compaction()) {
                 VLOG(1) << "update candidate " << candidate.tablet->tablet_id() << " type "
                         << starrocks::to_string(candidate.type) << " score " << candidate.score;
                 _compaction_candidates.emplace(std::move(candidate));
