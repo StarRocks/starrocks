@@ -1236,8 +1236,8 @@ private:
                         key_offsets_column.get_data()[i + 1] - key_offsets_column.get_data()[i]) {
                         throw std::runtime_error("Input arrays' size are not equal in array_sortby.");
                     }
-                    ArraySort<PT>::_sort_nullable_item(&key_sort_index, key_data_column, null_column, key_offsets_column,
-                                                       i);
+                    ArraySort<PT>::_sort_nullable_item(&key_sort_index, key_data_column, null_column,
+                                                       key_offsets_column, i);
                     auto delta = key_offsets_column.get_data()[i] - src_offsets_column.get_data()[i];
                     for (auto id = key_offsets_column.get_data()[i]; id < key_offsets_column.get_data()[i + 1]; ++id) {
                         src_sort_index.push_back(key_sort_index[id] - delta);
