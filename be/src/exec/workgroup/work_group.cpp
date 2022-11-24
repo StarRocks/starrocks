@@ -28,8 +28,17 @@ bool WorkGroupSchedEntity<Q>::is_sq_wg() const {
 template class WorkGroupSchedEntity<pipeline::DriverQueue>;
 template class WorkGroupSchedEntity<ScanTaskQueue>;
 
+<<<<<<< HEAD
 ///WorkGroup.
 WorkGroup::WorkGroup(const std::string& name, int64_t id, int64_t version, size_t cpu_limit, double memory_limit,
+=======
+/// WorkGroup.
+RunningQueryToken::~RunningQueryToken() {
+    wg->decr_num_queries();
+}
+
+WorkGroup::WorkGroup(std::string name, int64_t id, int64_t version, size_t cpu_limit, double memory_limit,
+>>>>>>> 4fb90fc20 ([BugFix] decrease num_running_queries when deconstruct QueryContext (#13919))
                      size_t concurrency, WorkGroupType type)
         : _name(name),
           _id(id),
@@ -150,7 +159,7 @@ void WorkGroup::decr_num_running_drivers() {
     }
 }
 
-Status WorkGroup::try_incr_num_queries() {
+StatusOr<RunningQueryTokenPtr> WorkGroup::acquire_running_query_token() {
     int64_t old = _num_running_queries.fetch_add(1);
     if (_concurrency_limit != ABSENT_CONCURRENCY_LIMIT && old >= _concurrency_limit) {
         _num_running_queries.fetch_sub(1);
@@ -158,7 +167,7 @@ Status WorkGroup::try_incr_num_queries() {
         return Status::TooManyTasks(fmt::format("Exceed concurrency limit: {}", _concurrency_limit));
     }
     _num_total_queries++;
-    return Status::OK();
+    return std::make_unique<RunningQueryToken>(shared_from_this());
 }
 
 void WorkGroup::decr_num_queries() {

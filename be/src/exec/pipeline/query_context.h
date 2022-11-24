@@ -23,6 +23,7 @@ using std::chrono::seconds;
 using std::chrono::milliseconds;
 using std::chrono::steady_clock;
 using std::chrono::duration_cast;
+
 // The context for all fragment of one query in one BE
 class QueryContext : public std::enable_shared_from_this<QueryContext> {
 public:
@@ -59,7 +60,7 @@ public:
         return now > _query_deadline;
     }
 
-    bool is_dead() { return _num_active_fragments == 0 && _num_fragments == _total_fragments; }
+    bool is_dead() const { return _num_active_fragments == 0 && _num_fragments == _total_fragments; }
     // add expired seconds to deadline
     void extend_delivery_lifetime() {
         _delivery_deadline =
@@ -98,7 +99,7 @@ public:
     void init_mem_tracker(int64_t bytes_limit, MemTracker* parent);
     std::shared_ptr<MemTracker> mem_tracker() { return _mem_tracker; }
 
-    Status init_query(workgroup::WorkGroup* wg);
+    Status init_query_once(workgroup::WorkGroup* wg);
 
     // Some statistic about the query, including cpu, scan_rows, scan_bytes
     int64_t mem_cost_bytes() const { return _mem_tracker->peak_consumption(); }
@@ -171,6 +172,7 @@ private:
     std::shared_ptr<QueryStatisticsRecvr> _sub_plan_query_statistics_recvr; // For receive
 
     int64_t _scan_limit = 0;
+    workgroup::RunningQueryTokenPtr _wg_running_query_token_ptr;
 };
 
 class QueryContextManager {

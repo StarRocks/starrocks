@@ -345,6 +345,7 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
         if (_query_ctx->count_down_fragments()) {
             auto query_id = _query_ctx->query_id();
             DCHECK(!this->is_still_pending_finish());
+<<<<<<< HEAD
 
             auto frag_id = _fragment_ctx->fragment_instance_id();
             int active_fragments = _query_ctx->num_active_fragments();
@@ -360,6 +361,17 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
                     wg->decr_num_queries();
                 }
             }
+=======
+            // Acquire the pointer to avoid be released when removing query
+            auto query_trace = _query_ctx->shared_query_trace();
+            ExecEnv::GetInstance()->query_context_mgr()->remove(query_id);
+            QUERY_TRACE_END("finalize", _driver_name);
+            // @TODO(silverbullet233): if necessary, remove the dump from the execution thread
+            // considering that this feature is generally used for debugging,
+            // I think it should not have a big impact now
+            query_trace->dump();
+            return;
+>>>>>>> 4fb90fc20 ([BugFix] decrease num_running_queries when deconstruct QueryContext (#13919))
         }
     }
 }
