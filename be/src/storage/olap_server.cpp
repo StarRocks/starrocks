@@ -536,11 +536,11 @@ int32_t GarbageSweepIntervalCalculator::curr_interval() const {
     // when disk usage =90%, ratio is about 0.0057
     double ratio = (1.1 * (M_PI / 2 - std::atan(_disk_usage * 100 / 5 - 14)) - 0.28) / M_PI;
     ratio = std::max(0.0, ratio);
-    ratio = std::min(1.0, ratio);
     int32_t curr_interval = _max_interval * ratio;
     // when usage < 60%,curr_interval is about max_interval,
     // when usage > 80%, curr_interval is close to min_interval
     curr_interval = std::max(curr_interval, _min_interval);
+    curr_interval = std::min(curr_interval, _max_interval);
 
     return curr_interval;
 }
