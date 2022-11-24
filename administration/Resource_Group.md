@@ -221,7 +221,7 @@ ALTER RESOURCE GROUP <group_name> ADD (user='string', role='string', query_type 
 删除指定的分类器。
 
 ```SQL
-ALTER RESOURCE GROUP <group_name> DROP (CLASSIFER_ID_1, CLASSIFIER_ID_2, ...);
+ALTER RESOURCE GROUP <group_name> DROP (CLASSIFIER_ID_1, CLASSIFIER_ID_2, ...);
 ```
 
 删除所有的分类器。
