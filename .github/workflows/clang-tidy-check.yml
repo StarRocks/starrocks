@@ -34,7 +34,7 @@ jobs:
           tar xzf be-build-$PR_NUMBER.tar.gz
           workdir=$(pwd)
           echo $workdir
-          sed -i "s|\/root\/starrocks|$workdir|g" be/build_Release/compile_commands.json
+          sed -i "s|\/root\/starrocks|$workdir|g" be/ut_build_ASAN/compile_commands.json
 
       - uses: ZedThree/clang-tidy-review@v0.10.1
         if: steps.changes.outputs.be == 'true'
