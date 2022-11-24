@@ -20,10 +20,16 @@ class Morsel {
 public:
     Morsel(int32_t plan_node_id) : _plan_node_id(plan_node_id) {}
     virtual ~Morsel() = default;
+
     int32_t get_plan_node_id() const { return _plan_node_id; }
+
+    void set_rowsets(std::vector<RowsetSharedPtr> rowsets) { _rowsets = std::move(rowsets); }
+    const std::vector<RowsetSharedPtr>& rowsets() const { return _rowsets; }
 
 private:
     int32_t _plan_node_id;
+
+    std::vector<RowsetSharedPtr> _rowsets;
 };
 
 class ScanMorsel final : public Morsel {
@@ -56,6 +62,9 @@ public:
         }
         idx = _pop_index.fetch_add(1);
         if (idx < _num_morsels) {
+            if (!_tablet_rowsets.empty()) {
+                _morsels[idx]->set_rowsets(std::move(_tablet_rowsets[idx]));
+            }
             return std::move(_morsels[idx]);
         } else {
             return {};
@@ -63,6 +72,10 @@ public:
     }
 
     bool empty() const { return _pop_index >= _num_morsels; }
+
+    void set_tablet_rowsets(const std::vector<std::vector<RowsetSharedPtr>>& tablet_rowsets) {
+        _tablet_rowsets = tablet_rowsets;
+    }
 
     // Split the morsel queue into `split_size` morsel queues.
     // For example:
