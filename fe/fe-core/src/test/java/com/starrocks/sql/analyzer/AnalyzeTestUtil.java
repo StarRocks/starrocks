@@ -190,6 +190,18 @@ public class AnalyzeTestUtil {
                 "\"in_memory\" = \"false\",\n" +
                 "\"storage_format\" = \"DEFAULT\"\n" +
                 ");");
+        starRocksAssert.withTable("CREATE TABLE db1.`t1` (\n" +
+                "  `v4` bigint NULL COMMENT \"\",\n" +
+                "  `v5` bigint NULL COMMENT \"\",\n" +
+                "  `v6` bigint NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`v4`, `v5`, v6)\n" +
+                "DISTRIBUTED BY HASH(`v4`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ");");
         starRocksAssert.withTable("CREATE TABLE db2.`t0` (\n" +
                 "  `v1` bigint NULL COMMENT \"\",\n" +
                 "  `v2` bigint NULL COMMENT \"\",\n" +
