@@ -474,8 +474,8 @@ public class ShowExecutorTest {
         // Mock variable
         VariableMgr variableMgr = new VariableMgr();
         List<List<String>> rows = Lists.newArrayList();
-        rows.add(Lists.newArrayList("var1", "abc"));
-        rows.add(Lists.newArrayList("var2", "abc"));
+        rows.add(Lists.newArrayList("var1", "abc", "abc", "false"));
+        rows.add(Lists.newArrayList("var2", "abc", "abc", "false"));
         new Expectations(variableMgr) {
             {
                 VariableMgr.dump((SetType) any, (SessionVariable) any, (PatternMatcher) any);
@@ -507,6 +507,28 @@ public class ShowExecutorTest {
         Assert.assertTrue(resultSet.next());
         Assert.assertEquals("var2", resultSet.getString(0));
         Assert.assertFalse(resultSet.next());
+    }
+
+    @Test
+    public void testShowVariable2() throws AnalysisException, DdlException {
+        ShowVariablesStmt stmt = new ShowVariablesStmt(SetType.SESSION, null);
+        ShowExecutor executor = new ShowExecutor(ctx, stmt);
+        ShowResultSet resultSet = executor.execute();
+        Assert.assertEquals(4, resultSet.getMetaData().getColumnCount());
+        Assert.assertEquals("Variable_name", resultSet.getMetaData().getColumn(0).getName());
+        Assert.assertEquals("Value", resultSet.getMetaData().getColumn(1).getName());
+        Assert.assertEquals("Default_value", resultSet.getMetaData().getColumn(2).getName());
+        Assert.assertEquals("Is_changed", resultSet.getMetaData().getColumn(3).getName());
+
+        Assert.assertTrue(resultSet.getResultRows().size() > 0);
+        Assert.assertEquals(4, resultSet.getResultRows().get(0).size());
+
+        ShowVariablesStmt stmt2 = new ShowVariablesStmt(SetType.SESSION, "query_%");
+        ShowExecutor executor2 = new ShowExecutor(ctx, stmt2);
+        ShowResultSet resultSet2 = executor2.execute();
+        Assert.assertEquals(4, resultSet2.getMetaData().getColumnCount());
+        Assert.assertTrue(resultSet2.getResultRows().size() > 0);
+        Assert.assertEquals(4, resultSet2.getResultRows().get(0).size());
     }
 
     @Test

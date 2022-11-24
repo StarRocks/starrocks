@@ -507,14 +507,20 @@ public class VariableMgr {
                     // In this condition, we may retrieve session variables for caller.
                     if (sessionVar != null) {
                         row.add(name);
-                        row.add(getValue(sessionVar, ctx.getField()));
+                        String currentValue = getValue(sessionVar, ctx.getField());
+                        row.add(currentValue);
+                        row.add(ctx.defaultValue);
+                        row.add(String.valueOf(!ctx.defaultValue.equals(currentValue)));
                     } else {
                         LOG.error("sessionVar is null during dumping session variables.");
                         continue;
                     }
                 } else {
                     row.add(name);
-                    row.add(getValue(ctx.getObj(), ctx.getField()));
+                    String currentValue = getValue(ctx.getObj(), ctx.getField());
+                    row.add(currentValue);
+                    row.add(ctx.defaultValue);
+                    row.add(String.valueOf(!ctx.defaultValue.equals(currentValue)));
                 }
 
                 if (row.get(0).equalsIgnoreCase(SessionVariable.SQL_MODE)) {
