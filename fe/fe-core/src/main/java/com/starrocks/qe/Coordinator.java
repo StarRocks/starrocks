@@ -307,7 +307,17 @@ public class Coordinator {
 
     // FIXME(murphy) implement the coordinator for MV Maintenance
     public Coordinator() {
-        throw UnsupportedException.unsupportedException("TODO");
+        descTable = null;
+        nextInstanceId = null;
+        queryOptions = null;
+        connectContext = null;
+        fragments = null;
+        useComputeNodeNumber = 0;
+        needReport = false;
+        scanNodes = null;
+        isBlockQuery = false;
+        usePipeline = false;
+        preferComputeNode = false;
     }
 
     public long getJobId() {
