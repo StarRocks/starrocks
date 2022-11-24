@@ -50,6 +50,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.lake.StorageCacheInfo;
 import com.starrocks.lake.compaction.PartitionIdentifier;
 import com.starrocks.lake.compaction.PartitionStatistics;
 import com.starrocks.lake.compaction.Quantiles;
@@ -91,8 +92,14 @@ public class PartitionsProcDir implements ProcDirInterface {
                     .add("VisibleVersion")
                     .add("NextVersion")
                     .add("State")
+                    .add("PartitionKey")
+                    .add(partitionType == PartitionType.LIST ? "List" : "Range")
+                    .add("DistributionKey")
+                    .add("Buckets")
                     .add("DataSize")
                     .add("RowCount")
+                    .add("CacheTTL")
+                    .add("AsyncWrite")
                     .add("AvgCS") // Average compaction score
                     .add("P50CS") // 50th percentile compaction score
                     .add("MaxCS"); // Maximum compaction score
@@ -309,22 +316,7 @@ public class PartitionsProcDir implements ProcDirInterface {
         return partitionInfos;
     }
 
-    private List<Comparable> getOlapPartitionInfo(PartitionInfo tblPartitionInfo, Partition partition) {
-        List<Comparable> partitionInfo = new ArrayList<Comparable>();
-        partitionInfo.add(partition.getId()); // PartitionId
-        partitionInfo.add(partition.getName()); // PartitionName
-        partitionInfo.add(partition.getVisibleVersion()); // VisibleVersion
-        partitionInfo.add(TimeUtils.longToTimeString(partition.getVisibleVersionTime())); // VisibleVersionTime
-        partitionInfo.add(0); // VisibleVersionHash
-        partitionInfo.add(partition.getState()); // State
-
-        // partition key , range or list value
-        Joiner joiner = Joiner.on(", ");
-        partitionInfo.add(joiner.join(this.findPartitionColNames(tblPartitionInfo)));
-        partitionInfo.add(this.findRangeOrListValues(tblPartitionInfo, partition.getId()));
-
-        // distribution
-        DistributionInfo distributionInfo = partition.getDistributionInfo();
+    private String distributionKeyAsString(DistributionInfo distributionInfo) {
         if (distributionInfo.getType() == DistributionInfoType.HASH) {
             HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
             List<Column> distributionColumns = hashDistributionInfo.getDistributionColumns();
@@ -335,11 +327,26 @@ public class PartitionsProcDir implements ProcDirInterface {
                 }
                 sb.append(distributionColumns.get(i).getName());
             }
-            partitionInfo.add(sb.toString());
+            return sb.toString();
         } else {
-            partitionInfo.add("ALL KEY");
+            return "ALL KEY";
         }
+    }
 
+    private List<Comparable> getOlapPartitionInfo(PartitionInfo tblPartitionInfo, Partition partition) {
+        List<Comparable> partitionInfo = new ArrayList<Comparable>();
+        partitionInfo.add(partition.getId()); // PartitionId
+        partitionInfo.add(partition.getName()); // PartitionName
+        partitionInfo.add(partition.getVisibleVersion()); // VisibleVersion
+        partitionInfo.add(TimeUtils.longToTimeString(partition.getVisibleVersionTime())); // VisibleVersionTime
+        partitionInfo.add(0); // VisibleVersionHash
+        partitionInfo.add(partition.getState()); // State
+
+        // partition key , range or list value
+        partitionInfo.add(Joiner.on(", ").join(this.findPartitionColNames(tblPartitionInfo)));
+        partitionInfo.add(this.findRangeOrListValues(tblPartitionInfo, partition.getId()));
+        DistributionInfo distributionInfo = partition.getDistributionInfo();
+        partitionInfo.add(distributionKeyAsString(distributionInfo));
         partitionInfo.add(distributionInfo.getBucketNum());
 
         short replicationNum = tblPartitionInfo.getReplicationNum(partition.getId());
@@ -362,7 +369,7 @@ public class PartitionsProcDir implements ProcDirInterface {
         PartitionIdentifier identifier = new PartitionIdentifier(db.getId(), table.getId(), partition.getId());
         PartitionStatistics statistics = GlobalStateMgr.getCurrentState().getCompactionManager().getStatistics(identifier);
         Quantiles compactionScore = statistics != null ? statistics.getCompactionScore() : null;
-
+        StorageCacheInfo cacheInfo = tblPartitionInfo.getStorageCacheInfo(partition.getId());
         List<Comparable> partitionInfo = new ArrayList<Comparable>();
 
         partitionInfo.add(partition.getId()); // PartitionId
@@ -371,11 +378,14 @@ public class PartitionsProcDir implements ProcDirInterface {
         partitionInfo.add(partition.getVisibleVersion()); // VisibleVersion
         partitionInfo.add(partition.getNextVersion()); // NextVersion
         partitionInfo.add(partition.getState()); // State
-
-        long dataSize = partition.getDataSize();
-        ByteSizeValue byteSizeValue = new ByteSizeValue(dataSize);
-        partitionInfo.add(byteSizeValue); // DataSize
+        partitionInfo.add(Joiner.on(", ").join(this.findPartitionColNames(tblPartitionInfo))); // PartitionKey
+        partitionInfo.add(this.findRangeOrListValues(tblPartitionInfo, partition.getId())); // List or Range
+        partitionInfo.add(distributionKeyAsString(partition.getDistributionInfo())); // DistributionKey
+        partitionInfo.add(partition.getDistributionInfo().getBucketNum()); // Buckets
+        partitionInfo.add(new ByteSizeValue(partition.getDataSize())); // DataSize
         partitionInfo.add(partition.getRowCount()); // RowCount
+        partitionInfo.add(cacheInfo.isEnableStorageCache() ? cacheInfo.getStorageCacheTtlS() : 0); // CacheTTL
+        partitionInfo.add(cacheInfo.isAllowAsyncWriteBack()); // AsyncWrite
         partitionInfo.add(String.format("%.2f", compactionScore != null ? compactionScore.getAvg() : 0.0)); // AvgCS
         partitionInfo.add(String.format("%.2f", compactionScore != null ? compactionScore.getP50() : 0.0)); // P50CS
         partitionInfo.add(String.format("%.2f", compactionScore != null ? compactionScore.getMax() : 0.0)); // MaxCS
