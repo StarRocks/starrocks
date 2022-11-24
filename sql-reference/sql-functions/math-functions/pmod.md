@@ -12,9 +12,11 @@ PMOD(x,y);
 
 ## 参数说明
 
-`x`: 支持的数据类型为 DOUBLE、INT。
+`x`: 支持的数据类型为 DOUBLE、BIGINT。
 
-`y`: 支持的数据类型为 DOUBLE、INT。
+`y`: 支持的数据类型为 DOUBLE、BIGINT。
+
+> 注：`x` 和 `y` 数据类型必须一致。
 
 ## 返回值说明
 
