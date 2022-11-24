@@ -11,7 +11,6 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.KeysType;
@@ -159,6 +158,29 @@ public class InsertPlanner {
             } else {
                 throw new SemanticException("Unknown table type " + insertStmt.getTargetTable().getType());
             }
+<<<<<<< HEAD
+=======
+
+            if (isEnablePipeline && canUsePipeline && insertStmt.getTargetTable() instanceof OlapTable) {
+                PlanFragment sinkFragment = execPlan.getFragments().get(0);
+                if (shuffleServiceEnable) {
+                    // For shuffle insert into, we only support tablet sink dop = 1
+                    // because for tablet sink dop > 1, local passthourgh exchange will influence the order of sending,
+                    // which may lead to inconsisten replica for primary key.
+                    // If you want to set tablet sink dop > 1, please enable single tablet loading and disable shuffle service
+                    sinkFragment.setPipelineDop(1);
+                } else {
+                    if (ConnectContext.get().getSessionVariable().getPipelineSinkDop() <= 0) {
+                        sinkFragment.setPipelineDop(ConnectContext.get().getSessionVariable().getParallelExecInstanceNum());
+                    } else {
+                        sinkFragment.setPipelineDop(ConnectContext.get().getSessionVariable().getPipelineSinkDop());
+                    }
+                }
+                sinkFragment.setHasOlapTableSink();
+                sinkFragment.setForceSetTableSinkDop();
+                sinkFragment.setForceAssignScanRangesPerDriverSeq();
+            }
+>>>>>>> 1427b8a4b ([BugFix] Fix column name resolved ignore resolve db name (#13504))
             execPlan.getFragments().get(0).setSink(dataSink);
             execPlan.getFragments().get(0).setLoadGlobalDicts(globalDicts);
             return execPlan;
@@ -276,7 +298,7 @@ public class InsertPlanner {
                         new Scope(RelationId.anonymous(),
                                 new RelationFields(insertStatement.getTargetTable().getBaseSchema().stream()
                                         .map(col -> new Field(col.getName(), col.getType(),
-                                                new TableName(null, insertStatement.getTargetTable().getName()), null))
+                                                insertStatement.getTableName(), null))
                                         .collect(Collectors.toList()))), session);
 
                 ExpressionMapping expressionMapping =
@@ -383,6 +405,12 @@ public class InsertPlanner {
                 new HashDistributionDesc(keyColumnIds, HashDistributionDesc.SourceType.SHUFFLE_AGG);
         DistributionSpec spec = DistributionSpec.createHashDistributionSpec(desc);
         DistributionProperty property = new DistributionProperty(spec);
+<<<<<<< HEAD
+=======
+
+        shuffleServiceEnable = true;
+
+>>>>>>> 1427b8a4b ([BugFix] Fix column name resolved ignore resolve db name (#13504))
         return new PhysicalPropertySet(property);
     }
 }

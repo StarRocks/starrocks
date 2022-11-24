@@ -153,7 +153,13 @@ public class QueryAnalyzer {
         @Override
         public Scope visitSelect(SelectRelation selectRelation, Scope scope) {
             AnalyzeState analyzeState = new AnalyzeState();
+<<<<<<< HEAD
             Relation resolvedRelation = resolveTableRef(selectRelation.getRelation(), scope);
+=======
+            //Record aliases at this level to prevent alias conflicts
+            Set<TableName> aliasSet = new HashSet<>();
+            Relation resolvedRelation = resolveTableRef(selectRelation.getRelation(), scope, aliasSet);
+>>>>>>> 1427b8a4b ([BugFix] Fix column name resolved ignore resolve db name (#13504))
             if (resolvedRelation instanceof TableFunctionRelation) {
                 throw unsupportedException("Table function must be used with lateral join");
             }
@@ -177,7 +183,11 @@ public class QueryAnalyzer {
             return analyzeState.getOutputScope();
         }
 
+<<<<<<< HEAD
         private Relation resolveTableRef(Relation relation, Scope scope) {
+=======
+        private Relation resolveTableRef(Relation relation, Scope scope, Set<TableName> aliasSet) {
+>>>>>>> 1427b8a4b ([BugFix] Fix column name resolved ignore resolve db name (#13504))
             if (relation instanceof JoinRelation) {
                 JoinRelation join = (JoinRelation) relation;
                 join.setLeft(resolveTableRef(join.getLeft(), scope));
@@ -209,8 +219,13 @@ public class QueryAnalyzer {
                         // Because the reused cte should not be considered the same relation.
                         // eg: with w as (select * from t0) select v1,sum(v2) from w group by v1 " +
                         //                "having v1 in (select v3 from w where v2 = 2)
+<<<<<<< HEAD
                         // cte used in outer query and subquery can't use same relation-id and field
                         CTERelation newCteRelation = new CTERelation(cteRelation.getCteId(), tableName.getTbl(),
+=======
+                        // cte used in outer query and sub-query can't use same relation-id and field
+                        CTERelation newCteRelation = new CTERelation(cteRelation.getCteMouldId(), tableName.getTbl(),
+>>>>>>> 1427b8a4b ([BugFix] Fix column name resolved ignore resolve db name (#13504))
                                 cteRelation.getColumnOutputNames(),
                                 cteRelation.getCteQueryStatement());
                         newCteRelation.setAlias(tableRelation.getAlias());
@@ -219,6 +234,17 @@ public class QueryAnalyzer {
                                 new Scope(RelationId.of(newCteRelation), new RelationFields(outputFields.build())));
                         return newCteRelation;
                     }
+                }
+
+                TableName resolveTableName = relation.getResolveTableName();
+                MetaUtils.normalizationTableName(session, resolveTableName);
+                if (aliasSet.contains(resolveTableName)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_NONUNIQ_TABLE,
+                            relation.getResolveTableName().getTbl());
+                } else {
+                    aliasSet.add(new TableName(resolveTableName.getCatalog(),
+                            resolveTableName.getDb(),
+                            resolveTableName.getTbl()));
                 }
 
                 Table table = resolveTable(tableRelation.getName());
@@ -237,6 +263,17 @@ public class QueryAnalyzer {
                     }
                 }
             } else {
+<<<<<<< HEAD
+=======
+                if (relation.getResolveTableName() != null) {
+                    if (aliasSet.contains(relation.getResolveTableName())) {
+                        ErrorReport.reportSemanticException(ErrorCode.ERR_NONUNIQ_TABLE,
+                                relation.getResolveTableName().getTbl());
+                    } else {
+                        aliasSet.add(relation.getResolveTableName());
+                    }
+                }
+>>>>>>> 1427b8a4b ([BugFix] Fix column name resolved ignore resolve db name (#13504))
                 return relation;
             }
         }
@@ -647,7 +684,7 @@ public class QueryAnalyzer {
             }
             Table table = database.getTable(tbName);
             if (table == null) {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR, tbName);
+                ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR, dbName + "." + tbName);
             }
 
             if (table.getType() == Table.TableType.OLAP &&

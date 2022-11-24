@@ -142,9 +142,115 @@ public class AnalyzeTestUtil {
                 "\"storage_format\" = \"DEFAULT\"\n" +
                 ");");
 
+<<<<<<< HEAD
         starRocksAssert.withTable("create table tp(c1 int, c2 int, c3 int) DUPLICATE KEY(c1, c2) PARTITION BY RANGE(c1) "
                 + "(PARTITION p1 VALUES [('-2147483648'), ('10')), PARTITION p2 VALUES [('10'), ('20')))"
                 + " DISTRIBUTED BY HASH(`c2`) BUCKETS 2 PROPERTIES('replication_num'='1');");
+=======
+        starRocksAssert.withTable("CREATE TABLE `tprimary` (\n" +
+                "  `pk` bigint NOT NULL COMMENT \"\",\n" +
+                "  `v1` string NOT NULL COMMENT \"\",\n" +
+                "  `v2` int NOT NULL,\n" +
+                "  `v3` array<int> not null" +
+                ") ENGINE=OLAP\n" +
+                "PRIMARY KEY(`pk`)\n" +
+                "DISTRIBUTED BY HASH(`pk`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ");");
+
+        starRocksAssert.withTable("CREATE TABLE `tprimary2` (\n" +
+                "  `pk` bigint NOT NULL COMMENT \"\",\n" +
+                "  `v1` string NOT NULL COMMENT \"\",\n" +
+                "  `v2` int NOT NULL,\n" +
+                "  `v3` array<int> not null" +
+                ") ENGINE=OLAP\n" +
+                "PRIMARY KEY(`pk`)\n" +
+                "DISTRIBUTED BY HASH(`pk`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ");");
+
+        starRocksAssert.withTable(
+                "create table tp(c1 int, c2 int, c3 int) DUPLICATE KEY(c1, c2) PARTITION BY RANGE(c1) "
+                        + "(PARTITION p1 VALUES [('-2147483648'), ('10')), PARTITION p2 VALUES [('10'), ('20')))"
+                        + " DISTRIBUTED BY HASH(`c2`) BUCKETS 2 PROPERTIES('replication_num'='1');");
+        starRocksAssert.withTable("CREATE TABLE test.table_to_drop\n" +
+                "(\n" +
+                "    k1 date,\n" +
+                "    k2 int,\n" +
+                "    v1 int sum\n" +
+                ")\n" +
+                "PARTITION BY RANGE(k1)\n" +
+                "(\n" +
+                "    PARTITION p1 values less than('2020-02-01'),\n" +
+                "    PARTITION p2 values less than('2020-03-01')\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                "PROPERTIES('replication_num' = '1');");
+        starRocksAssert.withView("create view test.view_to_drop as select * from test.table_to_drop;");
+
+        starRocksAssert.withDatabase("db1");
+        starRocksAssert.withDatabase("db2");
+        starRocksAssert.withTable("CREATE TABLE db1.`t0` (\n" +
+                "  `v1` bigint NULL COMMENT \"\",\n" +
+                "  `v2` bigint NULL COMMENT \"\",\n" +
+                "  `v3` bigint NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`v1`, `v2`, v3)\n" +
+                "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ");");
+        starRocksAssert.withTable("CREATE TABLE db1.`t1` (\n" +
+                "  `v4` bigint NULL COMMENT \"\",\n" +
+                "  `v5` bigint NULL COMMENT \"\",\n" +
+                "  `v6` bigint NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`v4`, `v5`, v6)\n" +
+                "DISTRIBUTED BY HASH(`v4`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ");");
+        starRocksAssert.withTable("CREATE TABLE db2.`t0` (\n" +
+                "  `v1` bigint NULL COMMENT \"\",\n" +
+                "  `v2` bigint NULL COMMENT \"\",\n" +
+                "  `v3` bigint NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`v1`, `v2`, v3)\n" +
+                "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ");");
+
+        // varbinary table
+        starRocksAssert.withTable("CREATE TABLE `tbinary` (\n" +
+                "  `v_int`  bigint NULL COMMENT \"\",\n" +
+                "  `v_varbinary4`  varbinary(4) NULL COMMENT \"\",\n" +
+                "  `v_varbinary` varbinary NULL COMMENT \"\" \n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`v_int`)\n" +
+                "DISTRIBUTED BY HASH(`v_int`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ");");
+    }
+
+    public static String getDbName() {
+        return DB_NAME;
+>>>>>>> 1427b8a4b ([BugFix] Fix column name resolved ignore resolve db name (#13504))
     }
 
     public static ConnectContext getConnectContext() {
