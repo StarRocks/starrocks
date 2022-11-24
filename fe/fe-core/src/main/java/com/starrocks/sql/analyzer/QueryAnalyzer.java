@@ -153,7 +153,9 @@ public class QueryAnalyzer {
         @Override
         public Scope visitSelect(SelectRelation selectRelation, Scope scope) {
             AnalyzeState analyzeState = new AnalyzeState();
-            Relation resolvedRelation = resolveTableRef(selectRelation.getRelation(), scope);
+            //Record aliases at this level to prevent alias conflicts
+            Set<TableName> aliasSet = new HashSet<>();
+            Relation resolvedRelation = resolveTableRef(selectRelation.getRelation(), scope, aliasSet);
             if (resolvedRelation instanceof TableFunctionRelation) {
                 throw unsupportedException("Table function must be used with lateral join");
             }
@@ -177,7 +179,7 @@ public class QueryAnalyzer {
             return analyzeState.getOutputScope();
         }
 
-        private Relation resolveTableRef(Relation relation, Scope scope) {
+        private Relation resolveTableRef(Relation relation, Scope scope, Set<TableName> aliasSet) {
             if (relation instanceof JoinRelation) {
                 JoinRelation join = (JoinRelation) relation;
                 join.setLeft(resolveTableRef(join.getLeft(), scope));
@@ -221,6 +223,17 @@ public class QueryAnalyzer {
                     }
                 }
 
+                TableName resolveTableName = relation.getResolveTableName();
+                MetaUtils.normalizationTableName(session, resolveTableName);
+                if (aliasSet.contains(resolveTableName)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_NONUNIQ_TABLE,
+                            relation.getResolveTableName().getTbl());
+                } else {
+                    aliasSet.add(new TableName(resolveTableName.getCatalog(),
+                            resolveTableName.getDb(),
+                            resolveTableName.getTbl()));
+                }
+
                 Table table = resolveTable(tableRelation.getName());
                 if (table instanceof View) {
                     View view = (View) table;
@@ -237,6 +250,14 @@ public class QueryAnalyzer {
                     }
                 }
             } else {
+                if (relation.getResolveTableName() != null) {
+                    if (aliasSet.contains(relation.getResolveTableName())) {
+                        ErrorReport.reportSemanticException(ErrorCode.ERR_NONUNIQ_TABLE,
+                                relation.getResolveTableName().getTbl());
+                    } else {
+                        aliasSet.add(relation.getResolveTableName());
+                    }
+                }
                 return relation;
             }
         }
@@ -647,7 +668,7 @@ public class QueryAnalyzer {
             }
             Table table = database.getTable(tbName);
             if (table == null) {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR, tbName);
+                ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR, dbName + "." + tbName);
             }
 
             if (table.getType() == Table.TableType.OLAP &&

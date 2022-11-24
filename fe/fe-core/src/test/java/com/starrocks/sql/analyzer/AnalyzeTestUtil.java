@@ -145,6 +145,45 @@ public class AnalyzeTestUtil {
         starRocksAssert.withTable("create table tp(c1 int, c2 int, c3 int) DUPLICATE KEY(c1, c2) PARTITION BY RANGE(c1) "
                 + "(PARTITION p1 VALUES [('-2147483648'), ('10')), PARTITION p2 VALUES [('10'), ('20')))"
                 + " DISTRIBUTED BY HASH(`c2`) BUCKETS 2 PROPERTIES('replication_num'='1');");
+
+        starRocksAssert.withDatabase("db1");
+        starRocksAssert.withDatabase("db2");
+        starRocksAssert.withTable("CREATE TABLE db1.`t0` (\n" +
+                "  `v1` bigint NULL COMMENT \"\",\n" +
+                "  `v2` bigint NULL COMMENT \"\",\n" +
+                "  `v3` bigint NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`v1`, `v2`, v3)\n" +
+                "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ");");
+        starRocksAssert.withTable("CREATE TABLE db1.`t1` (\n" +
+                "  `v4` bigint NULL COMMENT \"\",\n" +
+                "  `v5` bigint NULL COMMENT \"\",\n" +
+                "  `v6` bigint NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`v4`, `v5`, v6)\n" +
+                "DISTRIBUTED BY HASH(`v4`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ");");
+        starRocksAssert.withTable("CREATE TABLE db2.`t0` (\n" +
+                "  `v1` bigint NULL COMMENT \"\",\n" +
+                "  `v2` bigint NULL COMMENT \"\",\n" +
+                "  `v3` bigint NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`v1`, `v2`, v3)\n" +
+                "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ");");
     }
 
     public static ConnectContext getConnectContext() {

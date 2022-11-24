@@ -9,7 +9,9 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.QueryRelation;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 public  class ViewAnalyzer {
@@ -28,6 +30,7 @@ public  class ViewAnalyzer {
         // from such views, so we always adopts of field.type instead of field.outputExpression.type
         List<Column> viewColumns = queryRelation.getScope().getRelationFields().getAllFields().stream()
                 .map(f -> new Column(f.getName(), f.getType())).collect(Collectors.toList());
+
         // When user-specified view's columns are present, we set names of comments of viewColumns according
         // to user-specified column information.
         if (stmt.getCols() != null) {
@@ -43,6 +46,15 @@ public  class ViewAnalyzer {
             }
         }
         stmt.setFinalCols(viewColumns);
+
+        Set<String> columnNameSet = new HashSet<>();
+        for (Column column : viewColumns) {
+            if (columnNameSet.contains(column.getName())) {
+                throw new SemanticException("Duplicate column name '%s'", column.getName());
+            } else {
+                columnNameSet.add(column.getName());
+            }
+        }
 
         String viewSql = ViewDefBuilder.build(stmt.getQueryStatement());
         stmt.setInlineViewDef(viewSql);
