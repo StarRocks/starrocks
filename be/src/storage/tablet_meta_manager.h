@@ -200,6 +200,10 @@ public:
     static Status clear_persistent_index(DataDir* store, WriteBatch* batch, TTabletId tablet_id);
 
     static Status remove_tablet_meta(DataDir* store, WriteBatch* batch, TTabletId tablet_id, TSchemaHash schema_hash);
+
+    static Status remove_table_meta(DataDir* store, TTableId table_id);
+
+    static Status remove_table_persistent_index_meta(DataDir* store, TTableId table_id);
 };
 
 } // namespace starrocks
