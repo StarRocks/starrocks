@@ -42,6 +42,13 @@ PARALLEL_TEST(StorageEngineTest, test_garbage_sweep_interval_calculator) {
         ASSERT_EQ(c.expected_min, calculator.curr_interval());
         calculator.mutable_disk_usage() = -1; // Make disk usage small enough to use max_interval as curr_interval.
         ASSERT_EQ(c.expected_max, calculator.curr_interval());
+
+        for (double usage = -1; usage <= 2.0; usage += 0.1) {
+            calculator.mutable_disk_usage() = usage;
+            int32_t curr = calculator.curr_interval();
+            ASSERT_GE(curr, c.expected_min);
+            ASSERT_LE(curr, c.expected_max);
+        }
     }
 }
 
