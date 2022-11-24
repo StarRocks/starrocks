@@ -715,7 +715,7 @@ public class OlapScanNode extends ScanNode {
         return selectedIndexId;
     }
 
-    private Set<Long> getHotPartitionIds(RangePartitionInfo partitionInfo, boolean canUseMultiversion) {
+    private Set<Long> getHotPartitionIds(RangePartitionInfo partitionInfo) {
         KeysType keysType = olapTable.getKeysType();
         ConnectContext connectContext = ConnectContext.get();
         Set<Long> hotIds = Sets.newHashSet();
@@ -725,12 +725,9 @@ public class OlapScanNode extends ScanNode {
         List<Map.Entry<Long, Range<PartitionKey>>> partitions = partitionInfo.getSortedRangeMap(false);
         int numHotIds = 0;
         int numPartitions = partitions.size();
-        if (keysType == KeysType.PRIMARY_KEYS) {
-            int pkHotNum = connectContext.getSessionVariable().getQueryCachePrimaryKeysHotPartitionNum();
+        if (!canUseMultiVersionCache()) {
+            int pkHotNum = connectContext.getSessionVariable().getQueryCacheHotPartitionNum();
             numHotIds = Math.min(numPartitions, Math.max(0, pkHotNum));
-        } else if (keysType == KeysType.UNIQUE_KEYS || (keysType == KeysType.AGG_KEYS && !canUseMultiversion)) {
-            int ukHotNum = connectContext.getSessionVariable().getQueryCacheUniqueKeysHotPartitionNum();
-            numHotIds = Math.min(numPartitions, Math.max(0, ukHotNum));
         }
         return partitions.subList(numPartitions - numHotIds, numPartitions).stream().map(Map.Entry::getKey)
                 .collect(Collectors.toSet());
@@ -751,7 +748,7 @@ public class OlapScanNode extends ScanNode {
             return;
         }
         Set<Long> selectedPartIdSet = new HashSet<>(selectedPartitionIds);
-        selectedPartIdSet.removeAll(getHotPartitionIds(rangePartitionInfo, normalizer.isCanUseMultiVersion()));
+        selectedPartIdSet.removeAll(getHotPartitionIds(rangePartitionInfo));
 
         Column column = partitionColumns.get(0);
         List<SlotDescriptor> slots = normalizer.getExecPlan().getDescTbl().getTupleDesc(tupleIds.get(0)).getSlots();
@@ -797,26 +794,26 @@ public class OlapScanNode extends ScanNode {
     // Only DUP_KEYS and AGG_KEYS without columns carrying REPLACE modifier can support
     // multi-version cache, for other types of data models, we can not get the final result
     // of the tablet from merging the snapshot result in cache and the delta rowsets in disk.
-    private void setIfCanUseMultiVersionCache(FragmentNormalizer normalizer) {
-        normalizer.setKeysType(olapTable.getKeysType());
+    private boolean canUseMultiVersionCache() {
         switch (olapTable.getKeysType()) {
             case DUP_KEYS:
-                normalizer.setCanUseMultiVersion(true);
+                return true;
             case PRIMARY_KEYS:
             case UNIQUE_KEYS:
-                normalizer.setCanUseMultiVersion(false);
+                return false;
             case AGG_KEYS: {
                 List<Column> columns = selectedIndexId == -1 ? olapTable.getBaseSchema() :
                         olapTable.getSchemaByIndexId(selectedIndexId);
-                boolean hasReplaceAgg = columns.stream().anyMatch(
+                return columns.stream().noneMatch(
                         c -> c.isAggregated() && c.getAggregationType().isReplaceFamily());
-                normalizer.setCanUseMultiVersion(!hasReplaceAgg);
             }
         }
+        return false;
     }
 
     protected void toNormalForm(TNormalPlanNode planNode, FragmentNormalizer normalizer) {
-        setIfCanUseMultiVersionCache(normalizer);
+        normalizer.setKeysType(olapTable.getKeysType());
+        normalizer.setCanUseMultiVersion(canUseMultiVersionCache());
         TNormalOlapScanNode scanNode = new TNormalOlapScanNode();
         scanNode.setTablet_id(olapTable.getId());
         scanNode.setIndex_id(selectedIndexId);

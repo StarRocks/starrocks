@@ -1059,8 +1059,7 @@ public class QueryCacheTest {
 
     @Test
     public void testHotPartitions() {
-        ctx.getSessionVariable().setQueryCachePrimaryKeysHotPartitionNum(3);
-        ctx.getSessionVariable().setQueryCacheUniqueKeysHotPartitionNum(3);
+        ctx.getSessionVariable().setQueryCacheHotPartitionNum(3);
         String queriesWithHotPartitions[] = {
                 "/*PRIMARY_KEYS*/ SELECT COUNT(*) FROM t4 where ts between '2022-02-01 00:00:00' and '2022-03-31 00:00:00'",
                 "/*UNIQUE_KEYS*/ SELECT COUNT(*) FROM t5 where ts between '2022-02-01 00:00:00' and '2022-03-31 00:00:00'",
