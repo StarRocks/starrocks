@@ -101,6 +101,9 @@ StatusOr<MorselPtr> FixedMorselQueue::try_get(int driver_seq) {
         }
         idx = _pop_index.fetch_add(1);
         if (idx < _num_morsels) {
+            if (!_tablet_rowsets.empty()) {
+                _morsels[idx]->set_rowsets(std::move(_tablet_rowsets[idx]));
+            }
             return std::move(_morsels[idx]);
         } else {
             return nullptr;
