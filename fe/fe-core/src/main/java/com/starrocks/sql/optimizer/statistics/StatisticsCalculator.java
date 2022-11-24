@@ -1301,11 +1301,12 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
         // The statistics of producer and children are equal theoretically, but statistics of children
         // plan maybe more accurate in actually
-        if (!produceStatisticsOp.isPresent() && context.getChildrenStatistics().isEmpty()) {
+        if (!produceStatisticsOp.isPresent() && (context.getChildrenStatistics().isEmpty() ||
+                context.getChildrenStatistics().stream().anyMatch(Objects::isNull))) {
             Preconditions.checkState(false, "Impossible cte statistics");
         }
 
-        if (!context.getChildrenStatistics().isEmpty()) {
+        if (!context.getChildrenStatistics().isEmpty() && context.getChildStatistics(0) != null) {
             //  use the statistics of children first
             context.setStatistics(context.getChildStatistics(0));
             Projection projection = node.getProjection();
