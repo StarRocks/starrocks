@@ -107,10 +107,12 @@ char* CSVReader::escapeDataPtr() {
 }
 
 Status CSVReader::buffInit() {
+#ifndef CSVBENCHMARK
     _buff.compact();
     if (_buff.free_space() > 0) {
         return _fill_buffer();
     }
+#endif
     return Status::OK();
 }
 
@@ -135,10 +137,10 @@ Status CSVReader::more_lines() {
         return Status::EndOfFile("Reached limit");
     }
     Status status = Status::OK();
-    status = buffInit();
-    if (!status.ok()) {
-        return status;
-    }
+    // status = buffInit();
+    // if (!status.ok()) {
+    //     return status;
+    // }
     _escape_data.clear();
     std::unordered_set<size_t> escape_pos;
     ParseState curState = START;

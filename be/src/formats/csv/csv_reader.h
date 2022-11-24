@@ -131,8 +131,8 @@ public:
     using Field = Slice;
     using Fields = std::vector<Field>;
 
-    CSVReader(const string& row_delimiter, const string& column_separator, bool trim_space, char escape, char enclose,
-              const size_t bufferSize = kMinBufferSize)
+    CSVReader(const std::string& row_delimiter, const std::string& column_separator, bool trim_space, char escape,
+              char enclose, const size_t bufferSize = kMinBufferSize)
             : _row_delimiter(row_delimiter),
               _column_separator(column_separator),
               _trim_space(trim_space),

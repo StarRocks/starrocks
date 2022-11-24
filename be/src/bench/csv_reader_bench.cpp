@@ -12,6 +12,8 @@
 
 namespace starrocks::vectorized {
 
+#define CSVBENCHMARK
+
 static size_t buffer_size = 15 * 1024 * 1024 * 1024UL;
 class BenchCSVReader : public CSVReader {
 public:

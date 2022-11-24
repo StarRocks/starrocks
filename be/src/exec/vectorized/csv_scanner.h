@@ -44,8 +44,8 @@ public:
 private:
     class ScannerCSVReader : public CSVReader {
     public:
-        ScannerCSVReader(std::shared_ptr<SequentialFile> file, const string& record_delimiter,
-                         const string& field_delimiter, bool trim_space, char escape, char enclose)
+        ScannerCSVReader(std::shared_ptr<SequentialFile> file, const std::string& record_delimiter,
+                         const std::string& field_delimiter, bool trim_space, char escape, char enclose)
                 : CSVReader(record_delimiter, field_delimiter, trim_space, escape, enclose) {
             _file = std::move(file);
         }
