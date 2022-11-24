@@ -22,6 +22,7 @@ import com.starrocks.thrift.TMVMaintenanceStartTask;
 import com.starrocks.thrift.TMVMaintenanceTasks;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TUniqueId;
+import lombok.Data;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -31,15 +32,17 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Long-running job responsible for MV incremental maintenance.
  * <p>
  * Each job is event driven and single-thread execution:
- * 1. Event driven: transaction commitment drives the execution of job
+ * 1. Event driven: job state machine and execution is separated, and the state machine is driven by events
  * 2. Execution: the job is executed in JobExecutor, at most one thread could execute the job
  */
+@Data
 public class MVMaintenanceJob implements Writable {
     private static final Logger LOG = LogManager.getLogger(MVMaintenanceJob.class);
 
@@ -53,16 +56,17 @@ public class MVMaintenanceJob implements Writable {
     @SerializedName("epoch")
     private final MVEpoch epoch;
 
-    // TODO(murphy) serialize the plan
+    // TODO(murphy) serialize the plan, current we need to rebuild the plan for job
     private ExecPlan plan;
 
     // Runtime ephemeral state
+    // At most one thread could execute this job, this flag indicates is someone scheduling this job
+    private final AtomicBoolean inSchedule = new AtomicBoolean(false);
     private final MaterializedView view;
     private ConnectContext connectContext;
     // TODO(murphy) implement a real query coordinator
     private Coordinator queryCoordinator;
     private TxnBasedEpochCoordinator epochCoordinator;
-    private List<TExecPlanFragmentParams> planParams;
     private List<MVMaintenanceTask> tasks;
 
     public MVMaintenanceJob(MaterializedView view) {
@@ -71,23 +75,29 @@ public class MVMaintenanceJob implements Writable {
         this.view = view;
         this.epoch = new MVEpoch(view.getId());
         this.state.set(JobState.INIT);
+        this.plan = Preconditions.checkNotNull(view.getMaintenancePlan());
     }
 
     public void startJob() {
         Preconditions.checkState(state.compareAndSet(JobState.INIT, JobState.STARTED));
     }
 
+    // TODO(murphy) make it a thread-safe with JobExecutor, what if it's under scheduling ?
     public void stopJob() {
+        if (!inSchedule.compareAndSet(false, true)) {
+            throw UnsupportedException.unsupportedException("TODO: not support stop job running job");
+        }
         try {
             stopTasks();
         } catch (Exception e) {
             LOG.warn("stop job failed", e);
+        } finally {
+            inSchedule.compareAndSet(true, false);
         }
         Preconditions.checkState(state.compareAndSet(JobState.PAUSED, JobState.STOPPED));
     }
 
     public void pauseJob() {
-        state.set(JobState.PAUSED);
         throw UnsupportedException.unsupportedException("TODO: implement pause action");
     }
 
@@ -96,22 +106,32 @@ public class MVMaintenanceJob implements Writable {
     }
 
     public void onSchedule() throws Exception {
-        switch (state.get()) {
-            case INIT:
-                prepare();
-                break;
-            case PREPARING:
-            case PAUSED:
-            case FAILED:
-                Preconditions.checkState(false, "should not be scheduled");
-                break;
-            case RUN_EPOCH:
-                epoch.onSchedule();
-                epochCoordinator.beginEpoch(epoch);
-                epochCoordinator.commitEpoch(epoch);
-                break;
-            default:
+        if (!inSchedule.compareAndSet(false, true)) {
+            return;
         }
+        try {
+            switch (state.get()) {
+                case INIT:
+                    Preconditions.checkState(false, "has not started");
+                case STARTED:
+                    prepare();
+                    break;
+                case PREPARING:
+                case PAUSED:
+                case FAILED:
+                    Preconditions.checkState(false, "should not be scheduled");
+                    break;
+                case RUN_EPOCH:
+                    epoch.onSchedule();
+                    epochCoordinator.beginEpoch(epoch);
+                    epochCoordinator.commitEpoch(epoch);
+                    break;
+                default:
+            }
+        } finally {
+            inSchedule.compareAndSet(true, false);
+        }
+
     }
 
     /**
@@ -155,10 +175,10 @@ public class MVMaintenanceJob implements Writable {
      * Build physical fragments for the maintenance plan
      */
     private void buildPhysicalTopology() {
-        this.planParams = queryCoordinator.buildExecRequests();
+        List<TExecPlanFragmentParams> planFragmentParams = queryCoordinator.buildExecRequests();
         this.tasks = new ArrayList<>();
-        for (int taskId = 0; taskId < planParams.size(); taskId++) {
-            TExecPlanFragmentParams instance = this.planParams.get(taskId);
+        for (int taskId = 0; taskId < planFragmentParams.size(); taskId++) {
+            TExecPlanFragmentParams instance = planFragmentParams.get(taskId);
             TUniqueId instanceId = instance.params.fragment_instance_id;
             // TODO(murphy) retrieve actual id of plan
             PlanFragmentId fragmentId = new PlanFragmentId(0);
@@ -166,8 +186,6 @@ public class MVMaintenanceJob implements Writable {
             MVMaintenanceTask task = MVMaintenanceTask.build(this, taskId, beId, fragmentId, instanceId, instance);
             this.tasks.add(task);
         }
-
-        throw UnsupportedException.unsupportedException("TODO");
     }
 
     /**
@@ -185,7 +203,7 @@ public class MVMaintenanceJob implements Writable {
             TNetworkAddress address = new TNetworkAddress(backend.getHost(), backend.getBePort());
             // Request information
             String dbName = GlobalStateMgr.getCurrentState().getDb(view.getDbId()).getFullName();
-            TExecPlanFragmentParams planParam = planParams.get(0);
+            TExecPlanFragmentParams planParam = task.getFragmentInstance();
 
             // Build request
             TMVMaintenanceTasks request = new TMVMaintenanceTasks();
@@ -209,6 +227,7 @@ public class MVMaintenanceJob implements Writable {
         }
 
         // Wait for all RPC
+        // TODO(murphy) make it event-driven instead of blocking wait
         Exception ex = null;
         for (Future<PMVMaintenanceTaskResult> future : results) {
             try {
@@ -268,10 +287,10 @@ public class MVMaintenanceJob implements Writable {
     public boolean isRunnable() {
         JobState jobState = state.get();
         switch (jobState) {
-            case INIT:
             case PREPARING:
             case STARTED:
                 return true;
+            case INIT:
             case PAUSED:
             case FAILED:
             case STOPPED:

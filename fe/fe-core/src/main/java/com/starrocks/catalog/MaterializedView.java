@@ -40,6 +40,7 @@ import com.starrocks.sql.common.PartitionDiff;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
@@ -347,6 +348,9 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
     // record expression table column
     @SerializedName(value = "partitionRefTableExprs")
     private List<Expr> partitionRefTableExprs;
+
+    // Maintenance plan for this MV
+    private ExecPlan maintenancePlan;
 
     public MaterializedView() {
         super(TableType.MATERIALIZED_VIEW);
@@ -880,5 +884,13 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             }
         }
         return null;
+    }
+
+    public ExecPlan getMaintenancePlan() {
+        return maintenancePlan;
+    }
+
+    public void setMaintenancePlan(ExecPlan maintenancePlan) {
+        this.maintenancePlan = maintenancePlan;
     }
 }

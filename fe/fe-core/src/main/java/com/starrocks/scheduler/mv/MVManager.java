@@ -3,17 +3,24 @@
 package com.starrocks.scheduler.mv;
 
 import com.google.common.base.Preconditions;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.util.QueryableReentrantLock;
+import com.starrocks.common.io.Text;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.common.UnsupportedException;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -27,8 +34,6 @@ public class MVManager {
     private static final Logger LOG = LogManager.getLogger(LocalMetastore.class);
     private static final MVManager INSTANCE = new MVManager();
 
-    // Protect all access into job states
-    private QueryableReentrantLock lock = new QueryableReentrantLock();
     private final Map<MvId, MVMaintenanceJob> jobMap = new ConcurrentHashMap<>();
 
     private MVManager() {
@@ -41,6 +46,39 @@ public class MVManager {
     public MaterializedView createSinkTable(CreateMaterializedViewStatement stmt, long mvId, long dbId)
             throws DdlException {
         return IMTCreator.createSinkTable(stmt, mvId, dbId);
+    }
+
+    /**
+     * Reload jobs from meta store
+     */
+    public long reload(DataInputStream input, long checksum) throws IOException {
+        Preconditions.checkState(jobMap.isEmpty());
+
+        String str = Text.readString(input);
+        SerializedJobs data = GsonUtils.GSON.fromJson(str, SerializedJobs.class);
+        if (CollectionUtils.isNotEmpty(data.jobList)) {
+            for (MVMaintenanceJob job : data.jobList) {
+                long viewId = job.getViewId();
+                MaterializedView view;
+                jobMap.put(job.getView().getMvId(), job);
+            }
+            LOG.info("reload MV maintenance jobs: {}", data.jobList);
+            LOG.debug("reload MV maintenance job details: {}", str);
+        }
+        checksum ^= data.jobList.size();
+        return checksum;
+    }
+
+    /**
+     * Store jobs in meta store
+     */
+    public long store(DataOutputStream output, long checksum) throws IOException {
+        SerializedJobs data = new SerializedJobs();
+        data.jobList = new ArrayList<>(jobMap.values());
+        String json = GsonUtils.GSON.toJson(data);
+        Text.writeString(output, json);
+        checksum ^= data.jobList.size();
+        return checksum;
     }
 
     /**
@@ -57,21 +95,22 @@ public class MVManager {
         }
 
         try {
-            lock.lock();
             if (jobMap.get(view.getMvId()) != null) {
                 throw new DdlException("MV already existed");
             }
 
-            IMTCreator.createIMT(stmt, view);
-
             // Create the job but not execute it
             MVMaintenanceJob job = new MVMaintenanceJob(view);
-            jobMap.put(view.getMvId(), job);
+            Preconditions.checkState(jobMap.putIfAbsent(view.getMvId(), job) == null, "job already existed");
+
+            IMTCreator.createIMT(stmt, view);
 
             // TODO(murphy) atomic persist the meta of MV (IMT, MaintenancePlan) along with materialized view
             GlobalStateMgr.getCurrentState().getEditLog().logMVJobState(job);
-        } finally {
-            lock.unlock();
+            LOG.info("create the maintenance job for MV: {}", view.getName());
+        } catch (Exception e) {
+            jobMap.remove(view.getMvId());
+            LOG.warn("prepare MV {} failed, ", view.getName(), e);
         }
     }
 
@@ -107,6 +146,8 @@ public class MVManager {
         MVMaintenanceJob job = Preconditions.checkNotNull(getJob(view.getMvId()));
         job.pauseJob();
         job.stopJob();
+        jobMap.remove(view.getMvId());
+        LOG.info("Remove maintenance job for mv: {}", view.getName());
     }
 
     /**
@@ -141,21 +182,16 @@ public class MVManager {
     }
 
     private MVMaintenanceJob getJob(MvId mvId) {
-        try {
-            lock.lock();
-            return jobMap.get(mvId);
-        } finally {
-            lock.unlock();
-        }
+        return jobMap.get(mvId);
     }
 
     public List<MVMaintenanceJob> getRunnableJobs() {
-        try {
-            lock.lock();
-            return this.jobMap.values().stream().filter(MVMaintenanceJob::isRunnable).collect(Collectors.toList());
-        } finally {
-            lock.unlock();
-        }
+        return this.jobMap.values().stream().filter(MVMaintenanceJob::isRunnable).collect(Collectors.toList());
+    }
+
+    static class SerializedJobs {
+        @SerializedName("jobList")
+        List<MVMaintenanceJob> jobList;
     }
 
 }

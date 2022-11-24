@@ -189,6 +189,7 @@ import com.starrocks.qe.VariableMgr;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.mv.MVJobExecutor;
+import com.starrocks.scheduler.mv.MVManager;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
@@ -1275,6 +1276,7 @@ public class GlobalStateMgr {
             checksum = loadStreamLoadManager(dis, checksum);
             remoteChecksum = dis.readLong();
             loadRBACPrivilege(dis);
+            checksum = MVManager.getInstance().reload(dis, checksum);
         } catch (EOFException exception) {
             LOG.warn("load image eof.", exception);
         } finally {
@@ -1540,6 +1542,7 @@ public class GlobalStateMgr {
             checksum = streamLoadManager.saveStreamLoadManager(dos, checksum);
             dos.writeLong(checksum);
             saveRBACPrivilege(dos);
+            checksum = MVManager.getInstance().store(dos, checksum);
         }
 
         long saveImageEndTime = System.currentTimeMillis();

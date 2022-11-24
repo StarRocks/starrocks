@@ -3276,6 +3276,7 @@ public class LocalMetastore implements ConnectorMetadata {
         MaterializedView materializedView;
         if (refreshSchemeDesc.getType().equals(MaterializedView.RefreshType.INCREMENTAL)) {
             materializedView = MVManager.getInstance().createSinkTable(stmt, mvId, db.getId());
+            materializedView.setMaintenancePlan(stmt.getMaintenancePlan());
         } else {
             materializedView =
                     new MaterializedView(mvId, db.getId(), mvName, baseSchema, stmt.getKeysType(), partitionInfo,

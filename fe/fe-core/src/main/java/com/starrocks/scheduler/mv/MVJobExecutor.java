@@ -31,7 +31,7 @@ public class MVJobExecutor extends LeaderDaemon {
         try {
             runImpl();
         } catch (Throwable e) {
-            LOG.error("Failed to run the epoch coordinator: ", e);
+            LOG.error("Failed to run the MVJobExecutor ", e);
         }
     }
 
