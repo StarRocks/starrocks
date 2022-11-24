@@ -248,7 +248,7 @@ test_files=`find ${STARROCKS_TEST_BINARY_DIR} -type f -perm -111 -name "*test" \
 
 # run cases in starrocks_test in parallel if has gtest-parallel script.
 # reference: https://github.com/google/gtest-parallel
-if [ $TEST_MODULE == '.*'  || $TEST_MODULE == 'starrocks_test' ]; then
+if [[ $TEST_MODULE == '.*'  || $TEST_MODULE == 'starrocks_test' ]]; then
   echo "Run test file: starrocks_test"
   if [ -x ${GTEST_PARALLEL} ]; then
       ${GTEST_PARALLEL} ${STARROCKS_TEST_BINARY_DIR}/starrocks_test --gtest_catch_exceptions=0 --gtest_filter=${TEST_FILTER} --serialize_test_cases ${GTEST_PARALLEL_OPTIONS}
