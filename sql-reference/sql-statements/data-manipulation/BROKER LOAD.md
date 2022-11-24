@@ -351,7 +351,7 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 
 本小节以 CSV 格式的数据为例，重点阐述在创建导入作业的时候，如何运用各种参数配置来满足不同业务场景下的各种导入要求。
 
-#### 设置超时时间和错误容忍率
+#### 设置超时时间
 
 StarRocks 数据库 `test_db` 里的表 `table1` 包含三列，按顺序依次为 `col1`、`col2`、`col3`。
 
@@ -535,7 +535,6 @@ LOAD LABEL test_db.label8
 (
     DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/data/input/example8.csv")
     INTO TABLE table8
-    PARTITION (p1, p2)
     COLUMNS TERMINATED BY ","
     (col2, col1, col3)
 )
