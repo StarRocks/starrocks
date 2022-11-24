@@ -29,6 +29,7 @@ import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.analysis.DescriptorTable;
@@ -198,7 +199,8 @@ public class OlapScanNode extends ScanNode {
 
     private final List<String> unUsedOutputStringColumns = new ArrayList<>();
 
-    public void setUnUsedOutputStringColumns(Set<Integer> unUsedOutputColumnIds, Set<String> aggOrPrimaryKeyTableValueColumnNames) {
+    public void setUnUsedOutputStringColumns(Set<Integer> unUsedOutputColumnIds,
+                                             Set<String> aggOrPrimaryKeyTableValueColumnNames) {
         for (SlotDescriptor slot : desc.getSlots()) {
             if (!slot.isMaterialized()) {
                 continue;
@@ -350,7 +352,8 @@ public class OlapScanNode extends ScanNode {
                     }
                 }
                 throw new UserException(
-                        "Failed to get scan range, no queryable replica found in tablet: " + tabletId + " " + replicaInfos);
+                        "Failed to get scan range, no queryable replica found in tablet: " + tabletId + " " +
+                                replicaInfos);
             }
 
             List<Replica> replicas = null;
@@ -509,7 +512,8 @@ public class OlapScanNode extends ScanNode {
             if (isPreAggregation) {
                 output.append(prefix).append("PREAGGREGATION: ON").append("\n");
             } else {
-                output.append(prefix).append("PREAGGREGATION: OFF. Reason: ").append(reasonOfPreAggregation).append("\n");
+                output.append(prefix).append("PREAGGREGATION: OFF. Reason: ").append(reasonOfPreAggregation)
+                        .append("\n");
             }
             if (!conjuncts.isEmpty()) {
                 output.append(prefix).append("PREDICATES: ").append(
@@ -519,14 +523,16 @@ public class OlapScanNode extends ScanNode {
             if (isPreAggregation) {
                 output.append(prefix).append("preAggregation: on").append("\n");
             } else {
-                output.append(prefix).append("preAggregation: off. Reason: ").append(reasonOfPreAggregation).append("\n");
+                output.append(prefix).append("preAggregation: off. Reason: ").append(reasonOfPreAggregation)
+                        .append("\n");
             }
             if (!conjuncts.isEmpty()) {
                 output.append(prefix).append("Predicates: ").append(getVerboseExplain(conjuncts)).append("\n");
             }
             if (!dictStringIdToIntIds.isEmpty()) {
                 List<String> flatDictList = dictStringIdToIntIds.entrySet().stream().limit(5)
-                        .map((entry) -> "(" + entry.getKey() + "," + entry.getValue() + ")").collect(Collectors.toList());
+                        .map((entry) -> "(" + entry.getKey() + "," + entry.getValue() + ")")
+                        .collect(Collectors.toList());
                 String format_template = "dictStringIdToIntIds=%s";
                 if (dictStringIdToIntIds.size() > 5) {
                     format_template = format_template + "...";
@@ -559,7 +565,8 @@ public class OlapScanNode extends ScanNode {
             // We print up to 10 tablet, and we print "..." if the number is more than 10
             if (scanTabletIds.size() > 10) {
                 List<Long> firstTenTabletIds = scanTabletIds.subList(0, 10);
-                output.append(prefix).append(String.format("tabletList=%s ...", Joiner.on(",").join(firstTenTabletIds)));
+                output.append(prefix)
+                        .append(String.format("tabletList=%s ...", Joiner.on(",").join(firstTenTabletIds)));
             } else {
                 output.append(prefix).append(String.format("tabletList=%s", Joiner.on(",").join(scanTabletIds)));
             }
@@ -577,7 +584,8 @@ public class OlapScanNode extends ScanNode {
 
             if (scanTabletIds.size() > 10) {
                 List<Long> firstTenTabletIds = scanTabletIds.subList(0, 10);
-                output.append(prefix).append(String.format("tabletList=%s ...", Joiner.on(",").join(firstTenTabletIds)));
+                output.append(prefix)
+                        .append(String.format("tabletList=%s ...", Joiner.on(",").join(firstTenTabletIds)));
             } else {
                 output.append(prefix).append(String.format("tabletList=%s", Joiner.on(",").join(scanTabletIds)));
             }
@@ -707,6 +715,23 @@ public class OlapScanNode extends ScanNode {
         return selectedIndexId;
     }
 
+    private Set<Long> getHotPartitionIds(RangePartitionInfo partitionInfo) {
+        KeysType keysType = olapTable.getKeysType();
+        ConnectContext connectContext = ConnectContext.get();
+        Set<Long> hotIds = Sets.newHashSet();
+        if (connectContext == null) {
+            return hotIds;
+        }
+        List<Map.Entry<Long, Range<PartitionKey>>> partitions = partitionInfo.getSortedRangeMap(false);
+        int numHotIds = 0;
+        int numPartitions = partitions.size();
+        if (!canUseMultiVersionCache()) {
+            int pkHotNum = connectContext.getSessionVariable().getQueryCacheHotPartitionNum();
+            numHotIds = Math.min(numPartitions, Math.max(0, pkHotNum));
+        }
+        return partitions.subList(numPartitions - numHotIds, numPartitions).stream().map(Map.Entry::getKey)
+                .collect(Collectors.toSet());
+    }
     @Override
     public void normalizeConjuncts(FragmentNormalizer normalizer, TNormalPlanNode planNode, List<Expr> conjuncts) {
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
@@ -722,6 +747,9 @@ public class OlapScanNode extends ScanNode {
             normalizer.setUncacheable(true);
             return;
         }
+        Set<Long> selectedPartIdSet = new HashSet<>(selectedPartitionIds);
+        selectedPartIdSet.removeAll(getHotPartitionIds(rangePartitionInfo));
+
         Column column = partitionColumns.get(0);
         List<SlotDescriptor> slots = normalizer.getExecPlan().getDescTbl().getTupleDesc(tupleIds.get(0)).getSlots();
         List<Pair<SlotId, String>> slotIdToColNames =
@@ -751,36 +779,41 @@ public class OlapScanNode extends ScanNode {
         List<Integer> remappedSlotIds = normalizer.remapSlotIds(slotIds);
 
         planNode.olap_scan_node.setRemapped_slot_ids(remappedSlotIds);
-        planNode.olap_scan_node.setSelected_column(slotIdToColNames.stream().map(c->c.second).collect(Collectors.toList()));
+        planNode.olap_scan_node.setSelected_column(
+                slotIdToColNames.stream().map(c -> c.second).collect(Collectors.toList()));
 
         List<Map.Entry<Long, Range<PartitionKey>>> rangeMap = Lists.newArrayList();
         try {
-            rangeMap = rangePartitionInfo.getSortedRangeMap(new HashSet<>(selectedPartitionIds));
+            rangeMap = rangePartitionInfo.getSortedRangeMap(selectedPartIdSet);
         } catch (AnalysisException ignored) {
         }
         conjuncts = normalizer.getPartitionRangePredicates(conjuncts, rangeMap, rangePartitionInfo, slotId);
         planNode.setConjuncts(normalizer.normalizeExprs(conjuncts));
     }
 
-    private boolean isUnCacheable() {
+    // Only DUP_KEYS and AGG_KEYS without columns carrying REPLACE modifier can support
+    // multi-version cache, for other types of data models, we can not get the final result
+    // of the tablet from merging the snapshot result in cache and the delta rowsets in disk.
+    private boolean canUseMultiVersionCache() {
         switch (olapTable.getKeysType()) {
             case DUP_KEYS:
+                return true;
+            case PRIMARY_KEYS:
+            case UNIQUE_KEYS:
+                return false;
             case AGG_KEYS: {
                 List<Column> columns = selectedIndexId == -1 ? olapTable.getBaseSchema() :
                         olapTable.getSchemaByIndexId(selectedIndexId);
-                return columns.stream().anyMatch(
+                return columns.stream().noneMatch(
                         c -> c.isAggregated() && c.getAggregationType().isReplaceFamily());
             }
-            default:
-                return true;
         }
+        return false;
     }
 
     protected void toNormalForm(TNormalPlanNode planNode, FragmentNormalizer normalizer) {
-        if (isUnCacheable()) {
-            normalizer.setUncacheable(true);
-            return;
-        }
+        normalizer.setKeysType(olapTable.getKeysType());
+        normalizer.setCanUseMultiVersion(canUseMultiVersionCache());
         TNormalOlapScanNode scanNode = new TNormalOlapScanNode();
         scanNode.setTablet_id(olapTable.getId());
         scanNode.setIndex_id(selectedIndexId);
