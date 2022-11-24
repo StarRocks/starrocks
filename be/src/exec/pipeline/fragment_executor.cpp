@@ -163,7 +163,7 @@ Status FragmentExecutor::_prepare_workgroup(const UnifiedExecPlanFragmentParams&
             wg = WorkGroupManager::instance()->get_default_workgroup();
         }
         DCHECK(wg != nullptr);
-        RETURN_IF_ERROR(_query_ctx->init_query(wg.get()));
+        RETURN_IF_ERROR(_query_ctx->init_query_once(wg.get()));
         _wg = wg;
     }
     DCHECK(!_fragment_ctx->enable_resource_group() || _wg != nullptr);
@@ -544,11 +544,7 @@ void FragmentExecutor::_fail_cleanup() {
         }
         if (_query_ctx->count_down_fragments()) {
             auto query_id = _query_ctx->query_id();
-            if (ExecEnv::GetInstance()->query_context_mgr()->remove(query_id)) {
-                if (_wg) {
-                    _wg->decr_num_queries();
-                }
-            }
+            ExecEnv::GetInstance()->query_context_mgr()->remove(query_id);
         }
     }
 }
