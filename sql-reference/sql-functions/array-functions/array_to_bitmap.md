@@ -12,7 +12,7 @@ array_to_bitmap(array)
 
 ## 参数说明
 
-`array`: array内的元素支持的数据类型包括INT，TINYINT，SMALLINT。
+`array`: array 内的元素支持的数据类型包括 INT，TINYINT，SMALLINT。
 
 ## 返回值说明
 

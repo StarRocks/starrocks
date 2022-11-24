@@ -2,13 +2,17 @@
 
 ## 功能
 
-对一个ARRAY中的所有数据做和，返回这个结果。
+对一个 ARRAY 中的所有数据求和。
 
 ## 语法
 
 ```Haskell
 array_sum(array(type))
 ```
+
+## 参数说明
+
+`array(type)` 中的 `type` 支持如下类型：BOOLEAN、TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、DECIMALV2、DECIMAL32、DECIMAL64、DECIMAL128。
 
 ## 示例
 
