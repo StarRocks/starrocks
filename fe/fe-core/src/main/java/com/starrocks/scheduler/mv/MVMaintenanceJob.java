@@ -7,22 +7,27 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
+import com.starrocks.planner.ScanNode;
 import com.starrocks.proto.PMVMaintenanceTaskResult;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.Coordinator;
+import com.starrocks.qe.CoordinatorPreprocessor;
 import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.MVTaskType;
+import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TMVMaintenanceStartTask;
 import com.starrocks.thrift.TMVMaintenanceTasks;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TUniqueId;
 import lombok.Data;
+import lombok.val;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -30,7 +35,10 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -155,12 +163,22 @@ public class MVMaintenanceJob implements Writable {
         this.state.set(JobState.PREPARING);
         try {
             // TODO(murphy) fill connection context
+            // Build conenction context
             this.connectContext = new ConnectContext();
             this.connectContext.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
-            this.queryCoordinator = new Coordinator();
+
+            // Build  query coordinator
+            ExecPlan execPlan = this.view.getMaintenancePlan();
+            List<PlanFragment> fragments = execPlan.getFragments();
+            List<ScanNode> scanNodes = execPlan.getScanNodes();
+            TDescriptorTable descTable = execPlan.getDescTbl().toThrift();
+            this.queryCoordinator = new Coordinator(connectContext, fragments, scanNodes, descTable);
             this.epochCoordinator = new TxnBasedEpochCoordinator(this);
 
+            // Build physical plan instance
             buildPhysicalTopology();
+
+            // Build tasks
             deployTasks();
             this.state.set(JobState.RUN_EPOCH);
             LOG.info("MV maintenance job prepared: {}", this.view.getName());
@@ -171,21 +189,38 @@ public class MVMaintenanceJob implements Writable {
     }
 
     /**
-     * FIXME(murphy) build the real plan fragment params
+     * FIXME(murphy) build the real plan fragment params, this is not a valid plan fragment, since current coordinator
+     * is hard to reuse
      * <p>
      * Build physical fragments for the maintenance plan
      */
-    private void buildPhysicalTopology() {
-        List<TExecPlanFragmentParams> planFragmentParams = queryCoordinator.buildExecRequests();
+    private void buildPhysicalTopology() throws Exception {
+        queryCoordinator.prepareExec();
+
+        List<PlanFragment> fragments = queryCoordinator.getFragments();
+        Map<PlanFragmentId, CoordinatorPreprocessor.FragmentExecParams> fragmentExecParams =
+                queryCoordinator.getFragmentExecParamsMap();
+        // FIXME(murphy) all of these are faked
+        Set<TUniqueId> instanceIds = new HashSet<>();
+        TDescriptorTable descTable = queryCoordinator.getDescTable();
+        Set<Long> dbIds = connectContext.getCurrentSqlDbIds();
+        boolean enablePipeline = true;
+        int tabletSinkDop = 1;
+
         this.tasks = new ArrayList<>();
-        for (int taskId = 0; taskId < planFragmentParams.size(); taskId++) {
-            TExecPlanFragmentParams instance = planFragmentParams.get(taskId);
-            TUniqueId instanceId = instance.params.fragment_instance_id;
-            // TODO(murphy) retrieve actual id of plan
-            PlanFragmentId fragmentId = new PlanFragmentId(0);
-            long beId = 0;
-            MVMaintenanceTask task = MVMaintenanceTask.build(this, taskId, beId, fragmentId, instanceId, instance);
-            this.tasks.add(task);
+        int taskId = 0;
+        for (val kv : fragmentExecParams.entrySet()) {
+            PlanFragmentId fragmentId = kv.getKey();
+            CoordinatorPreprocessor.FragmentExecParams execParams = kv.getValue();
+            List<TExecPlanFragmentParams> tParams =
+                    execParams.toThrift(instanceIds, descTable, dbIds, enablePipeline, tabletSinkDop, tabletSinkDop);
+
+            for (TExecPlanFragmentParams tParam : tParams) {
+                TUniqueId instanceId = tParam.params.fragment_instance_id;
+                long beId = 0;
+                MVMaintenanceTask task = MVMaintenanceTask.build(this, taskId, beId, fragmentId, instanceId, tParam);
+                this.tasks.add(task);
+            }
         }
     }
 

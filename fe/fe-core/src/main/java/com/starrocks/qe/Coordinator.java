@@ -58,7 +58,6 @@ import com.starrocks.sql.LoadPlanner;
 import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
-import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.TCompressionType;
@@ -303,21 +302,6 @@ public class Coordinator {
         this.needReport = true;
         this.coordinatorPreprocessor =
                 new CoordinatorPreprocessor(queryId, context, fragments, scanNodes, queryGlobals, queryOptions);
-    }
-
-    // FIXME(murphy) implement the coordinator for MV Maintenance
-    public Coordinator() {
-        descTable = null;
-        nextInstanceId = null;
-        queryOptions = null;
-        connectContext = null;
-        fragments = null;
-        useComputeNodeNumber = 0;
-        needReport = false;
-        scanNodes = null;
-        isBlockQuery = false;
-        usePipeline = false;
-        preferComputeNode = false;
     }
 
     public long getJobId() {
@@ -810,13 +794,6 @@ public class Coordinator {
         }
 
         return groups;
-    }
-
-    /**
-     * Build query execution parameter for request
-     */
-    public List<TExecPlanFragmentParams> buildExecRequests() {
-        throw UnsupportedException.unsupportedException("TODO");
     }
 
     /**
@@ -1954,6 +1931,5 @@ public class Coordinator {
         public void setInitiated(boolean initiated) {
             this.initiated = initiated;
         }
-
     }
 }
