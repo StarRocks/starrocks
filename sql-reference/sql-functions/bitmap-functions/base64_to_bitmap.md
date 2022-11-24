@@ -9,12 +9,12 @@
 ## 语法
 
 ```Haskell
-BITMAP base64_to_bitmap(STRING bitmap)
+BITMAP base64_to_bitmap(VARCHAR bitmap)
 ```
 
 ## 参数说明
 
-`bitmap`：支持的数据类型为 STRING。导入外部 bitmap 数据时，可使用 Java 或者 C++ 接口先创建 BitmapValue 对象，然后添加元素、序列化、Base64 编码，将得到的 Base64 字符串作为该函数的入参。
+`bitmap`：支持的数据类型为 VARCHAR。导入外部 bitmap 数据时，可使用 Java 或者 C++ 接口先创建 BitmapValue 对象，然后添加元素、序列化、Base64 编码，将得到的 Base64 字符串作为该函数的入参。
 
 ## 返回值说明
 

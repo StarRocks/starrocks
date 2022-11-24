@@ -2,7 +2,7 @@
 
 ## 功能
 
-检查数组中是否包含某个元素，是的话返回1，否则返回0.
+检查数组中是否包含某个元素，是的话返回 1，否则返回 0。
 
 ## 语法
 
@@ -22,7 +22,7 @@ mysql> select array_contains(["apple","orange","pear"], "orange");
 1 row in set (0.01 sec)
 ```
 
-也可以检查数组中是否包含NULL。
+也可以检查数组中是否包含 NULL。
 
 ```plain text
 mysql> select array_contains([1, NULL], NULL);

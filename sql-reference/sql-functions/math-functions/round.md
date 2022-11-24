@@ -12,13 +12,23 @@ ROUND(x [,n]);
 
 ## 参数说明
 
-`x`: 支持的数据类型为 DOUBLE。
+`x`: 支持的数据类型为 DOUBLE 或 DECIMAL128。
 
-`n`: 支持的数据类型为 INT。
+`n`: 可选，支持的数据类型为 INT。
 
 ## 返回值说明
 
-若只存在 `x`，则返回值的数据类型为 BIGINT，否则返回值的数据类型为 DOUBLE。
+若只指定 `x`，则返回值的数据类型为：
+
+["DECIMAL128"] -> "DECIMAL128"
+
+["DOUBLE"] -> "BIGINT"
+
+若 `x` 和 `n` 都指定，则返回值的数据类型为：
+
+["DECIMAL128", "INT"] -> "DECIMAL128"
+
+["DOUBLE", "INT"] -> "DOUBLE"
 
 ## 示例
 
