@@ -82,6 +82,20 @@ if [[ "$JAVA_VERSION" -gt 8 ]]; then
     final_java_opt=$JAVA_OPTS_FOR_JDK_9
 fi
 
+<<<<<<< HEAD
+=======
+if [ ${ENABLE_DEBUGGER} -eq 1 ]; then
+    # Allow attaching debuggers to the FE process:
+    # https://www.jetbrains.com/help/idea/attaching-to-local-process.html
+    if [[ "$JAVA_VERSION" -gt 8 ]]; then
+        final_java_opt="${final_java_opt} -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005"
+    else
+        final_java_opt="${final_java_opt} -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005"
+    fi
+    echo "Start debugger with: $final_java_opt"
+fi
+
+>>>>>>> 773bb6e1c ([Tool] fix fe debugger for jdk 8 (#14065))
 if [ ! -d $LOG_DIR ]; then
     mkdir -p $LOG_DIR
 fi
