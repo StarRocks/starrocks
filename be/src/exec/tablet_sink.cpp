@@ -287,7 +287,8 @@ Status NodeChannel::_serialize_chunk(const vectorized::Chunk* src, ChunkPB* dst)
 
     {
         SCOPED_RAW_TIMER(&_serialize_batch_ns);
-        StatusOr<ChunkPB> res = serde::ProtobufChunkSerde::serialize(*src);
+        StatusOr<ChunkPB> res = Status::OK();
+        TRY_CATCH_BAD_ALLOC(res = serde::ProtobufChunkSerde::serialize(*src));
         if (!res.ok()) {
             _cancelled = true;
             _err_st = res.status();

@@ -637,12 +637,14 @@ Status ExchangeSinkOperator::serialize_chunk(const vectorized::Chunk* src, Chunk
         // We only serialize chunk meta for first chunk
         if (*is_first_chunk) {
             _encode_context = serde::EncodeContext::get_encode_context_shared_ptr(src->columns().size(), _encode_level);
-            StatusOr<ChunkPB> res = serde::ProtobufChunkSerde::serialize(*src, _encode_context);
+            StatusOr<ChunkPB> res = Status::OK();
+            TRY_CATCH_BAD_ALLOC(res = serde::ProtobufChunkSerde::serialize(*src, _encode_context));
             RETURN_IF_ERROR(res);
             res->Swap(dst);
             *is_first_chunk = false;
         } else {
-            StatusOr<ChunkPB> res = serde::ProtobufChunkSerde::serialize_without_meta(*src, _encode_context);
+            StatusOr<ChunkPB> res = Status::OK();
+            TRY_CATCH_BAD_ALLOC(res = serde::ProtobufChunkSerde::serialize_without_meta(*src, _encode_context));
             RETURN_IF_ERROR(res);
             res->Swap(dst);
         }
