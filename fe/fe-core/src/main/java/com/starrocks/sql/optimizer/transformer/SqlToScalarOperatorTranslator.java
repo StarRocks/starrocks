@@ -16,7 +16,6 @@ import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CloneExpr;
 import com.starrocks.analysis.CollectionElementExpr;
 import com.starrocks.analysis.CompoundPredicate;
-import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
@@ -78,9 +77,6 @@ import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 
-import java.math.BigDecimal;
-import java.math.BigInteger;
-import java.time.LocalDateTime;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -225,6 +221,7 @@ public final class SqlToScalarOperatorTranslator {
         // then pop() -> [1,2,3,4]
         // Empty usedSubFieldPos means select all fields
         private final Deque<Integer> usedSubFieldPos = new ArrayDeque<>();
+
         public Visitor(ExpressionMapping expressionMapping, ColumnRefFactory columnRefFactory,
                        List<ColumnRefOperator> correlation, ConnectContext session,
                        CTETransformerContext cteContext, OptExprBuilder builder,
@@ -601,6 +598,7 @@ public final class SqlToScalarOperatorTranslator {
                 return ConstantOperator.createNull(node.getType());
             }
 
+<<<<<<< HEAD
             Object value = node.getRealValue();
             Type type = node.getType();
 
@@ -638,6 +636,9 @@ public final class SqlToScalarOperatorTranslator {
             } else {
                 throw new UnsupportedOperationException("nonsupport constant type");
             }
+=======
+            return ConstantOperator.createObject(node.getRealObjectValue(), node.getType());
+>>>>>>> 3a7c5972d (Unify the Object Value of LiteralExpr and ConstantOperator (#13186))
         }
 
         @Override
