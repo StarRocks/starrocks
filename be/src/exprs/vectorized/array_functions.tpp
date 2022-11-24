@@ -1270,7 +1270,7 @@ private:
                 }
             }
         }
-
+        // the element of src_sort_index should less than the size of src_elements_column
         dest_elements_column->append_selective(src_elements_column, src_sort_index);
     }
 };
