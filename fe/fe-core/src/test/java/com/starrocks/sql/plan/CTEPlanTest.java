@@ -686,4 +686,20 @@ public class CTEPlanTest extends PlanTestBase {
                     "     TABLE: t0");
         }
     }
+
+
+    @Test
+    public void testNestCte() throws Exception {
+        String sql = "select /*+SET_VAR(cbo_max_reorder_node_use_exhaustive=1)*/* " +
+                "from t0 " +
+                "where (t0.v1 in (with c1 as (select 1 as v2) select x1.v2 from c1 x1 join c1 x2 join c1 x3)) is null;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  MultiCastDataSinks\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 15\n" +
+                "    RANDOM\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 21\n" +
+                "    RANDOM");
+    }
 }
