@@ -88,6 +88,10 @@ StatusOr<MorselPtr> FixedMorselQueue::try_get(int driver_seq) {
         if (idx >= morsels.size()) {
             return nullptr;
         }
+
+        if (!_tablet_rowsets.empty()) {
+            _morsels[idx]->set_rowsets(std::move(_tablet_rowsets[idx]));
+        }
         return std::move(morsels[idx]);
     } else {
         auto idx = _pop_index.load();
@@ -167,7 +171,7 @@ StatusOr<MorselPtr> PhysicalSplitMorselQueue::try_get(int driver_seq) {
             rowset->rowset_id(), rowset->segments()[_segment_idx]->id(), std::move(taken_range));
     MorselPtr morsel = std::make_unique<PhysicalSplitScanMorsel>(
             scan_morsel->get_plan_node_id(), *(scan_morsel->get_scan_range()), std::move(rowid_range));
-
+    morsel->set_rowsets(_tablet_rowsets[_tablet_idx]);
     return morsel;
 }
 
