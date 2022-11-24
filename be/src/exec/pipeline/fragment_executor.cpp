@@ -620,6 +620,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     RETURN_IF_ERROR(_prepare_fragment_ctx(request));
     RETURN_IF_ERROR(_prepare_workgroup(request));
     RETURN_IF_ERROR(_prepare_runtime_state(exec_env, request));
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_fragment_ctx->runtime_state()->instance_mem_tracker());
     RETURN_IF_ERROR(_prepare_exec_plan(exec_env, request));
     RETURN_IF_ERROR(_prepare_global_dict(request));
     RETURN_IF_ERROR(_prepare_pipeline_driver(exec_env, request));
