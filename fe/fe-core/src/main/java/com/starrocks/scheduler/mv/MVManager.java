@@ -6,6 +6,7 @@ import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
+import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.persist.gson.GsonUtils;
@@ -44,9 +45,10 @@ public class MVManager {
         return INSTANCE;
     }
 
-    public MaterializedView createSinkTable(CreateMaterializedViewStatement stmt, long mvId, long dbId)
+    public MaterializedView createSinkTable(CreateMaterializedViewStatement stmt, PartitionInfo partitionInfo,
+                                            long mvId, long dbId)
             throws DdlException {
-        return IMTCreator.createSinkTable(stmt, mvId, dbId);
+        return IMTCreator.createSinkTable(stmt, partitionInfo, mvId, dbId);
     }
 
     /**

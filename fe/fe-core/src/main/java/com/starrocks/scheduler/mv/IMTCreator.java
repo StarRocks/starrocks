@@ -14,7 +14,6 @@ import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionInfo;
-import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.common.DdlException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.CreateTableAnalyzer;
@@ -35,7 +34,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -56,7 +54,8 @@ class IMTCreator {
      *
      * Prefer user specified key, otherwise inferred key from plan
      */
-    public static MaterializedView createSinkTable(CreateMaterializedViewStatement stmt, long mvId, long dbId)
+    public static MaterializedView createSinkTable(CreateMaterializedViewStatement stmt, PartitionInfo partitionInfo,
+                                                   long mvId, long dbId)
             throws DdlException {
         ExecPlan plan = Preconditions.checkNotNull(stmt.getMaintenancePlan());
         OptExpression physicalPlan = plan.getPhysicalPlan();
@@ -81,16 +80,6 @@ class IMTCreator {
         }
         if (!property.getModify().isInsertOnly()) {
             stmt.setKeysType(KeysType.PRIMARY_KEYS);
-        }
-
-        // Partition scheme
-        PartitionDesc partitionDesc = stmt.getPartitionExpDesc();
-        PartitionInfo partitionInfo;
-        if (partitionDesc != null) {
-            partitionInfo = partitionDesc.toPartitionInfo(Collections.singletonList(stmt.getPartitionColumn()),
-                    Maps.newHashMap(), false);
-        } else {
-            partitionInfo = new SinglePartitionInfo();
         }
 
         // Distribute Key, already set in MVAnalyzer
