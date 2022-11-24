@@ -43,7 +43,7 @@ public class AuditEvent {
     }
 
     @Retention(RetentionPolicy.RUNTIME)
-    public static @interface AuditField {
+    public @interface AuditField {
         String value() default "";
     }
 
@@ -63,7 +63,7 @@ public class AuditEvent {
     @AuditField(value = "AuthorizedUser")
     public String authorizedUser = "";
     @AuditField(value = "ResourceGroup")
-    public String resourceGroup = "default_wg";
+    public String resourceGroup = "";
     @AuditField(value = "Catalog")
     public String catalog = "";
     @AuditField(value = "Db")
@@ -83,7 +83,7 @@ public class AuditEvent {
     @AuditField(value = "CpuCostNs")
     public long cpuCostNs = -1;
     @AuditField(value = "MemCostBytes")
-    public long memCostBytes = 0;
+    public long memCostBytes = -1;
     @AuditField(value = "StmtId")
     public long stmtId = -1;
     @AuditField(value = "QueryId")
@@ -97,11 +97,11 @@ public class AuditEvent {
     @AuditField(value = "Digest")
     public String digest = "";
     @AuditField(value = "PlanCpuCost")
-    public double planCpuCosts = 0.0;
+    public double planCpuCosts = -1;
     @AuditField(value = "PlanMemCost")
-    public double planMemCosts = 0.0;
+    public double planMemCosts = -1;
     @AuditField(value = "PendingTimeMs")
-    public long pendingTimeMs = 0;
+    public long pendingTimeMs = -1;
     @AuditField(value = "BigQueryLogCPUSecondThreshold")
     public long bigQueryLogCPUSecondThreshold = -1;
     @AuditField(value = "BigQueryLogScanBytesThreshold")

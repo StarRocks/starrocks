@@ -21,6 +21,8 @@
 
 package com.starrocks.qe;
 
+import java.lang.reflect.Field;
+
 import com.starrocks.common.AuditLog;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.DigitalVersion;
@@ -35,14 +37,12 @@ import com.starrocks.plugin.PluginMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.lang.reflect.Field;
-
 // A builtin Audit plugin, registered when FE start.
 // it will receive "AFTER_QUERY" AuditEventy and print it as a log in fe.audit.log
 public class AuditLogBuilder extends Plugin implements AuditPlugin {
     private static final Logger LOG = LogManager.getLogger(AuditLogBuilder.class);
 
-    private PluginInfo pluginInfo;
+    private final PluginInfo pluginInfo;
 
     public AuditLogBuilder() {
         pluginInfo = new PluginInfo(PluginMgr.BUILTIN_PLUGIN_PREFIX + "AuditLogBuilder", PluginType.AUDIT,
@@ -88,7 +88,17 @@ public class AuditLogBuilder extends Plugin implements AuditPlugin {
                 if (af.value().equals("Time")) {
                     queryTime = (long) f.get(event);
                 }
-                sb.append("|").append(af.value()).append("=").append(String.valueOf(f.get(event)));
+                Object value = f.get(event);
+                if ((value instanceof Long) && ((Long) value) == -1) {
+                    continue;
+                }
+                if (value instanceof Integer && ((Integer) value) == -1) {
+                    continue;
+                }
+                if (value instanceof Double && ((Double) value) == -1) {
+                    continue;
+                }
+                sb.append("|").append(af.value()).append("=").append(value);
             }
 
             String auditLog = sb.toString();
@@ -118,9 +128,6 @@ public class AuditLogBuilder extends Plugin implements AuditPlugin {
         if (event.bigQueryLogScanBytesThreshold >= 0 && event.scanBytes > event.bigQueryLogScanBytesThreshold) {
             return true;
         }
-        if (event.bigQueryLogScanRowsThreshold >= 0 && event.scanRows > event.bigQueryLogScanRowsThreshold) {
-            return true;
-        }
-        return false;
+        return event.bigQueryLogScanRowsThreshold >= 0 && event.scanRows > event.bigQueryLogScanRowsThreshold;
     }
 }

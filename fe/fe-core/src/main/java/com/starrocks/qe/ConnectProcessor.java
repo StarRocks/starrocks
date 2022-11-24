@@ -21,6 +21,15 @@
 
 package com.starrocks.qe;
 
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.channels.AsynchronousCloseException;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.List;
+import java.util.Optional;
+
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.starrocks.analysis.UserIdentity;
@@ -59,15 +68,6 @@ import com.starrocks.thrift.TQueryOptions;
 import org.apache.commons.codec.binary.Hex;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-
-import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.nio.channels.AsynchronousCloseException;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.List;
-import java.util.Optional;
 
 /**
  * Process one mysql connection, receive one pakcet, process, send one packet.
@@ -145,10 +145,10 @@ public class ConnectProcessor {
 
         ctx.getAuditEventBuilder().setEventType(EventType.AFTER_QUERY)
                 .setState(ctx.getState().toString()).setErrorCode(ctx.getErrorCode()).setQueryTime(elapseMs)
-                .setScanBytes(statistics == null ? 0 : statistics.scanBytes)
-                .setScanRows(statistics == null ? 0 : statistics.scanRows)
-                .setCpuCostNs(statistics == null || statistics.cpuCostNs == null ? 0 : statistics.cpuCostNs)
-                .setMemCostBytes(statistics == null || statistics.memCostBytes == null ? 0 : statistics.memCostBytes)
+                .setScanBytes(statistics == null ? -1 : statistics.scanBytes)
+                .setScanRows(statistics == null ? -1 : statistics.scanRows)
+                .setCpuCostNs(statistics == null || statistics.cpuCostNs == null ? -1 : statistics.cpuCostNs)
+                .setMemCostBytes(statistics == null || statistics.memCostBytes == null ? -1 : statistics.memCostBytes)
                 .setReturnRows(ctx.getReturnRows())
                 .setStmtId(ctx.getStmtId())
                 .setQueryId(ctx.getQueryId() == null ? "NaN" : ctx.getQueryId().toString());
