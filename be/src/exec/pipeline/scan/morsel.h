@@ -59,6 +59,9 @@ public:
 
     virtual void init_tablet_reader_params(vectorized::TabletReaderParams* params) {}
 
+    void set_rowsets(std::vector<RowsetSharedPtr> rowsets) { _rowsets = std::move(rowsets); }
+    const std::vector<RowsetSharedPtr>& rowsets() const { return _rowsets; }
+
 private:
     int32_t _plan_node_id;
 
