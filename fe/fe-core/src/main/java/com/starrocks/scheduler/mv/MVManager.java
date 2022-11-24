@@ -127,11 +127,12 @@ public class MVManager {
      * 3. Maintain the visibility of MV and job metadata
      */
     public void startMaintainMV(MaterializedView view) {
-        if (view.getRefreshScheme().isIncremental()) {
+        if (!view.getRefreshScheme().isIncremental()) {
             return;
         }
         MVMaintenanceJob job = Preconditions.checkNotNull(getJob(view.getMvId()));
         job.startJob();
+        LOG.info("Start maintenance job for mv {}", view.getName());
     }
 
     public void pauseMaintainMV(MaterializedView view) {
@@ -149,8 +150,11 @@ public class MVManager {
         if (!view.getRefreshScheme().isIncremental()) {
             return;
         }
-        MVMaintenanceJob job = Preconditions.checkNotNull(getJob(view.getMvId()));
-        job.pauseJob();
+        MVMaintenanceJob job = getJob(view.getMvId());
+        if (job == null) {
+            LOG.warn("MV job not exists {}", view.getName());
+            return;
+        }
         job.stopJob();
         jobMap.remove(view.getMvId());
         LOG.info("Remove maintenance job for mv: {}", view.getName());

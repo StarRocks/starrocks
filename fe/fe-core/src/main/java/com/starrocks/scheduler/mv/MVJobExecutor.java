@@ -3,6 +3,7 @@
 package com.starrocks.scheduler.mv;
 
 import com.starrocks.common.util.LeaderDaemon;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -37,6 +38,9 @@ public class MVJobExecutor extends LeaderDaemon {
 
     private void runImpl() {
         List<MVMaintenanceJob> jobs = MVManager.getInstance().getRunnableJobs();
+        if (CollectionUtils.isEmpty(jobs)) {
+            return;
+        }
         long startMillis = System.currentTimeMillis();
 
         for (MVMaintenanceJob job : jobs) {
@@ -47,7 +51,7 @@ public class MVJobExecutor extends LeaderDaemon {
             try {
                 job.onSchedule();
             } catch (Exception e) {
-                LOG.warn("[MVJobExecutor] execute job {} got exception {}", job, e);
+                LOG.warn("[MVJobExecutor] execute job got exception", e);
             }
         }
 

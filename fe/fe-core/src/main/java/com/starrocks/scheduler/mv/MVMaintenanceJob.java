@@ -94,7 +94,7 @@ public class MVMaintenanceJob implements Writable {
         } finally {
             inSchedule.compareAndSet(true, false);
         }
-        Preconditions.checkState(state.compareAndSet(JobState.PAUSED, JobState.STOPPED));
+        state.set(JobState.STOPPED);
     }
 
     public void pauseJob() {
@@ -153,16 +153,17 @@ public class MVMaintenanceJob implements Writable {
      */
     private void prepare() throws Exception {
         this.state.set(JobState.PREPARING);
-        // TODO(murphy) fill connection context
-        this.connectContext = new ConnectContext();
-        this.connectContext.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
-        this.queryCoordinator = new Coordinator();
-        this.epochCoordinator = new TxnBasedEpochCoordinator(this);
-        buildPhysicalTopology();
-
         try {
+            // TODO(murphy) fill connection context
+            this.connectContext = new ConnectContext();
+            this.connectContext.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+            this.queryCoordinator = new Coordinator();
+            this.epochCoordinator = new TxnBasedEpochCoordinator(this);
+
+            buildPhysicalTopology();
             deployTasks();
             this.state.set(JobState.RUN_EPOCH);
+            LOG.info("MV maintenance job prepared: {}", this.view.getName());
         } catch (Exception e) {
             this.state.set(JobState.FAILED);
             throw e;
