@@ -112,6 +112,8 @@ private:
     Morsels _morsels;
     const size_t _num_morsels;
     std::atomic<size_t> _pop_index;
+
+    std::vector<std::vector<RowsetSharedPtr>> _tablet_rowsets;
 };
 
 } // namespace pipeline
