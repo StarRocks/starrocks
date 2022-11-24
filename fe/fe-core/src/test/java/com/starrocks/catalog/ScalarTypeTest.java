@@ -28,8 +28,12 @@ public class ScalarTypeTest {
         Assert.assertEquals(
                 ScalarType.createUnifiedDecimalType(27, 3),
                 ScalarType.createDecimalV2Type(27, 3));
-        Assert.assertThrows(Error.class, () -> ScalarType.createUnifiedDecimalType(28, 9));
-        Assert.assertThrows(Error.class, () -> ScalarType.createUnifiedDecimalType(18, 10));
+        Assert.assertEquals(
+                ScalarType.createUnifiedDecimalType(28, 9),
+                ScalarType.createDecimalV2Type(28, 9));
+        Assert.assertEquals(
+                ScalarType.createUnifiedDecimalType(18, 10),
+                ScalarType.createUnifiedDecimalType(18, 10));
 
         Config.enable_decimal_v3 = true;
         Assert.assertEquals(
@@ -61,7 +65,6 @@ public class ScalarTypeTest {
                 ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 38));
 
         Assert.assertThrows(Throwable.class, () -> ScalarType.createUnifiedDecimalType(39, 38));
-        Assert.assertThrows(Throwable.class, () -> ScalarType.createUnifiedDecimalType(0, 0));
         Assert.assertThrows(Throwable.class, () -> ScalarType.createUnifiedDecimalType(10, 11));
     }
 
