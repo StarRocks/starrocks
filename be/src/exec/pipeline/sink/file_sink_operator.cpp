@@ -10,10 +10,10 @@
 #include "exec/workgroup/scan_task_queue.h"
 #include "exprs/expr.h"
 #include "runtime/buffer_control_block.h"
+#include "runtime/function_caller.h"
 #include "runtime/query_statistics.h"
 #include "runtime/result_buffer_mgr.h"
 #include "runtime/runtime_state.h"
-#include "udf/java/utils.h"
 
 namespace starrocks::pipeline {
 

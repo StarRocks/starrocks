@@ -7,9 +7,9 @@
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/scan_task_queue.h"
 #include "exprs/expr.h"
+#include "runtime/function_caller.h"
 #include "runtime/mysql_table_writer.h"
 #include "runtime/runtime_state.h"
-#include "udf/java/utils.h"
 #include "util/defer_op.h"
 #include "util/spinlock.h"
 

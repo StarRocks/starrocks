@@ -39,6 +39,7 @@ set(RUNTIME_FILES
     datetime_value.cpp
     descriptors.cpp
     exec_env.cpp
+    function_caller.cpp
     user_function_cache.cpp
     jdbc_driver_manager.cpp
     mem_pool.cpp

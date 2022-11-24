@@ -12,9 +12,9 @@
 #include "common/status.h"
 #include "fmt/core.h"
 #include "jni.h"
+#include "runtime/function_caller.h"
 #include "runtime/primitive_type.h"
 #include "udf/java/java_native_method.h"
-#include "udf/java/utils.h"
 #include "udf/udf_internal.h"
 #include "util/defer_op.h"
 

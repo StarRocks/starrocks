@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
-#include "udf/java/utils.h"
+#include "runtime/function_caller.h"
 
 #include <bthread/bthread.h>
 
@@ -18,11 +18,14 @@ namespace starrocks {
 PromiseStatusPtr call_function_in_pthread(RuntimeState* state, const std::function<Status()>& func) {
     PromiseStatusPtr ms = std::make_unique<PromiseStatus>();
     if (bthread_self()) {
-        state->exec_env()->udf_call_pool()->offer([promise = ms.get(), state, func]() {
+        auto res = state->exec_env()->udf_call_pool()->offer([promise = ms.get(), state, func]() {
             MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(state->instance_mem_tracker());
             DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
             promise->set_value(func());
         });
+        if (!res) {
+            ms->set_value(Status::InternalError("submit task error in udf call pool"));
+        }
     } else {
         ms->set_value(func());
     }
@@ -32,8 +35,11 @@ PromiseStatusPtr call_function_in_pthread(RuntimeState* state, const std::functi
 PromiseStatusPtr call_hdfs_scan_function_in_pthread(const std::function<Status()>& func) {
     PromiseStatusPtr ms = std::make_unique<PromiseStatus>();
     if (bthread_self()) {
-        ExecEnv::GetInstance()->connector_scan_executor_without_workgroup()->submit(
+        auto res = ExecEnv::GetInstance()->connector_scan_executor_without_workgroup()->submit(
                 workgroup::ScanTask([promise = ms.get(), func]() { promise->set_value(func()); }));
+        if (!res) {
+            ms->set_value(Status::InternalError("submit task error in connector scan pool"));
+        }
     } else {
         ms->set_value(func());
     }

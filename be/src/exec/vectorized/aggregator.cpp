@@ -14,8 +14,8 @@
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
+#include "runtime/function_caller.h"
 #include "runtime/primitive_type.h"
-#include "udf/java/utils.h"
 
 namespace starrocks {
 namespace vectorized {

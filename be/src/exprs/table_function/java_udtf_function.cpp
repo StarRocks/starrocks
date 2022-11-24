@@ -12,11 +12,11 @@
 #include "exprs/table_function/table_function.h"
 #include "gutil/casts.h"
 #include "jni.h"
+#include "runtime/function_caller.h"
 #include "runtime/types.h"
 #include "runtime/user_function_cache.h"
 #include "udf/java/java_data_converter.h"
 #include "udf/java/java_udf.h"
-#include "udf/java/utils.h"
 
 namespace starrocks::vectorized {
 

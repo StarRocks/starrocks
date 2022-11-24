@@ -28,6 +28,7 @@
 #include "common/status.h"
 #include "gen_cpp/doris_internal_service.pb.h"
 #include "gen_cpp/internal_service.pb.h"
+#include "runtime/function_caller.h"
 #include "util/countdown_latch.h"
 #include "util/priority_thread_pool.hpp"
 
@@ -114,6 +115,8 @@ private:
     Status _exec_batch_plan_fragments(brpc::Controller* cntl);
     Status _exec_plan_fragment_by_pipeline(const TExecPlanFragmentParams& t_common_request,
                                            const TExecPlanFragmentParams& t_unique_request);
+    PromiseStatusPtr _exec_plan_fragment_by_pipeline_with_pthread(const TExecPlanFragmentParams& t_common_request,
+                                                                  const TExecPlanFragmentParams& t_unique_request);
     Status _exec_plan_fragment_by_non_pipeline(const TExecPlanFragmentParams& t_request);
 
 protected:
