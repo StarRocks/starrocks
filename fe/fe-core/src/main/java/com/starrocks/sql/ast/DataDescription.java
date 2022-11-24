@@ -11,11 +11,9 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.BinaryPredicate.Operator;
 import com.starrocks.analysis.ColumnDef;
-import com.starrocks.analysis.ColumnSeparator;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.NullLiteral;
-import com.starrocks.analysis.RowDelimiter;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
@@ -632,14 +630,6 @@ public class DataDescription {
             for (int i = 0; i < filePaths.size(); ++i) {
                 filePaths.set(i, filePaths.get(i).trim());
             }
-        }
-
-        if (columnSeparator != null) {
-            columnSeparator.analyze();
-        }
-
-        if (rowDelimiter != null) {
-            rowDelimiter.analyze();
         }
 
         if (partitionNames != null) {
