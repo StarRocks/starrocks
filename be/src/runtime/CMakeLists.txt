@@ -80,7 +80,7 @@ set(RUNTIME_FILES
     statistic_result_writer.cpp
     variable_result_writer.cpp
     memory/system_allocator.cpp
-    memory/chunk_allocator.cpp
+    memory/mem_chunk_allocator.cpp
     chunk_cursor.cpp
     sorted_chunks_merger.cpp
     time_types.cpp
