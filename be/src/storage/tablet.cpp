@@ -1160,7 +1160,7 @@ void Tablet::set_compaction_context(std::unique_ptr<CompactionContext>& context)
 
 std::shared_ptr<CompactionTask> Tablet::create_compaction_task() {
     std::lock_guard lock(_compaction_task_lock);
-    if (_compaction_task == nullptr && !_disable_compaction) {
+    if (_compaction_task == nullptr && _enable_compaction) {
         if (_compaction_context) {
             _compaction_task = _compaction_context->policy->create_compaction(
                     std::static_pointer_cast<Tablet>(shared_from_this()));
@@ -1176,7 +1176,7 @@ bool Tablet::has_compaction_task() {
 
 bool Tablet::need_compaction() {
     std::lock_guard lock(_compaction_task_lock);
-    if (_compaction_task == nullptr && !_disable_compaction) {
+    if (_compaction_task == nullptr && _enable_compaction) {
         if (_compaction_context != nullptr &&
             _compaction_context->policy->need_compaction(&_compaction_context->score, &_compaction_context->type)) {
             // if there is running task, return false
@@ -1203,7 +1203,7 @@ void Tablet::stop_compaction() {
         _compaction_task->stop();
         _compaction_task.reset();
     }
-    _disable_compaction = true;
+    _enable_compaction = false;
 }
 
 void Tablet::reset_compaction() {
@@ -1211,9 +1211,9 @@ void Tablet::reset_compaction() {
     _compaction_task.reset();
 }
 
-bool Tablet::get_disable_compaction() {
+bool Tablet::enable_compaction() {
     std::lock_guard lock(_compaction_task_lock);
-    return _disable_compaction;
+    return _enable_compaction;
 }
 
 } // namespace starrocks

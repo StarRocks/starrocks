@@ -243,7 +243,7 @@ public:
 
     void reset_compaction();
 
-    bool get_disable_compaction();
+    bool enable_compaction();
 
     bool get_enable_persistent_index() { return _tablet_meta->get_enable_persistent_index(); }
 
@@ -315,7 +315,7 @@ private:
     // compaction related
     std::unique_ptr<CompactionContext> _compaction_context;
     std::shared_ptr<CompactionTask> _compaction_task;
-    bool _disable_compaction = false;
+    bool _enable_compaction = true;
 
     std::mutex _compaction_task_lock;
 
