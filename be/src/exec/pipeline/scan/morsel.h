@@ -61,6 +61,8 @@ public:
 
 private:
     int32_t _plan_node_id;
+
+    std::vector<RowsetSharedPtr> _rowsets;
 };
 
 class ScanMorsel : public Morsel {
@@ -184,6 +186,10 @@ public:
 
     std::vector<TInternalScanRange*> olap_scan_ranges() const override;
 
+    void set_tablet_rowsets(const std::vector<std::vector<RowsetSharedPtr>>& tablet_rowsets) override {
+        _tablet_rowsets = tablet_rowsets;
+    }
+
     size_t num_original_morsels() const override { return _num_morsels; }
     size_t max_degree_of_parallelism() const override { return _num_morsels; }
     bool empty() const override { return _pop_index >= _num_morsels; }
@@ -195,6 +201,7 @@ private:
     Morsels _morsels;
     const size_t _num_morsels;
     std::atomic<size_t> _pop_index;
+    std::vector<std::vector<RowsetSharedPtr>> _tablet_rowsets;
 };
 
 class PhysicalSplitMorselQueue final : public MorselQueue {
