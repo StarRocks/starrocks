@@ -185,7 +185,7 @@ INTO TABLE <table_name>
 
    > **说明**
    >
-   > **/etc/krb5.conf** 文件路径根据实际情况进行修改，Broker 进程需要有权限读取该文件。部署多组 Broker 时，每组 Broker 均需要修改如下信息，重启后生效。
+   > **/etc/krb5.conf** 文件路径根据实际情况进行修改，Broker 进程需要有权限读取该文件。部署多组 Broker 时，每组 Broker 均需要修改如上信息，然后重启各组 Broker 所在的节点使配置生效。
 
 - HA 配置
 
@@ -208,7 +208,7 @@ INTO TABLE <table_name>
   | **参数名称**                         | **参数说明**                                                 |
   | ------------------------------------------------------- | --------------------------- |
   | dfs.nameservices                  | 自定义 HDFS 集群的名称。                                     |
-  | dfs.ha.namenodes.XXX              | 自定义 NameNode 的名称，多个名称以逗号 (,) 分隔，双引号内不允许出现空格。  <br>其中 `xxx` 为 `dfs.nameservices` 中自定义的HDFS 服务的名称。 |
+  | dfs.ha.namenodes.XXX              | 自定义 NameNode 的名称，多个名称以逗号 (,) 分隔。  <br>其中 `xxx` 为 `dfs.nameservices` 中自定义的HDFS 服务的名称。 |
   | dfs.namenode.rpc-address.XXX.NN    | 指定 NameNode 的 RPC 地址信息。  <br>其中 `NN` 表示 `dfs.ha.namenodes.XXX` 中自定义 NameNode 的名称。 |
   | dfs.client.failover.proxy.provider | 指定客户端连接的 NameNode 的提供者，默认为 `org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider`。 |
 
@@ -351,7 +351,7 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 
 本小节以 CSV 格式的数据为例，重点阐述在创建导入作业的时候，如何运用各种参数配置来满足不同业务场景下的各种导入要求。
 
-#### 设置超时时间和错误容忍率
+#### 设置超时时间
 
 StarRocks 数据库 `test_db` 里的表 `table1` 包含三列，按顺序依次为 `col1`、`col2`、`col3`。
 
@@ -535,7 +535,6 @@ LOAD LABEL test_db.label8
 (
     DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/data/input/example8.csv")
     INTO TABLE table8
-    PARTITION (p1, p2)
     COLUMNS TERMINATED BY ","
     (col2, col1, col3)
 )
@@ -575,7 +574,7 @@ WITH BROKER "mybroker"
 
 > **说明**
 >
-> 上述示例中，虽然 `example9.csv` 和 `table9` 所包含的列数目相同、并且按顺序一一对应，但是因为需要通过 WHERE 子句指定基于列的过滤条件，因此需要通过 `column_list` 参数对 `example9.csv` 中的列进行临时命名。
+> 上述示例中，虽然 `example9.csv` 和 `table9` 所包含的列能够按顺序一一对应，但是因为需要通过 WHERE 子句指定基于列的过滤条件，因此需要通过 `column_list` 参数对 `example9.csv` 中的列进行临时命名。
 
 #### 导入数据到含有 HLL 类型列的表
 
