@@ -78,7 +78,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     // This property only applies to materialized views,
     // Indicates which tables do not listen to auto refresh events when load
-    private List<TableName> excludedTriggerTables = null;
+    private List<TableName> excludedTriggerTables;
 
     private boolean isInMemory = false;
 
