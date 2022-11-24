@@ -88,8 +88,12 @@ fi
 if [ ${ENABLE_DEBUGGER} -eq 1 ]; then
     # Allow attaching debuggers to the FE process:
     # https://www.jetbrains.com/help/idea/attaching-to-local-process.html
-    final_java_opt="${final_java_opt} -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005"
-    echo $final_java_opt
+    if [[ "$JAVA_VERSION" -gt 8 ]]; then
+        final_java_opt="${final_java_opt} -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005"
+    else
+        final_java_opt="${final_java_opt} -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005"
+    fi
+    echo "Start debugger with: $final_java_opt"
 fi
 
 if [ ! -d $LOG_DIR ]; then
