@@ -976,7 +976,7 @@ public class GlobalStateMgr {
         FrontendNodeType oldType = feType;
         // stop replayer
         if (replayer != null) {
-            replayer.exit();
+            replayer.setStop();
             try {
                 replayer.join();
             } catch (InterruptedException e) {

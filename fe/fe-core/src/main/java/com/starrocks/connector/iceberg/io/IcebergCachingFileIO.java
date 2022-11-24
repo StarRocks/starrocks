@@ -49,8 +49,8 @@ import java.util.function.Function;
 public class IcebergCachingFileIO implements FileIO {
     private static final Logger LOG = LogManager.getLogger(IcebergCachingFileIO.class);
     private static final int BUFFER_CHUNK_SIZE = 4 * 1024 * 1024; // 4MB
-    private static final long DEFAULT_FILEIO_CACHE_MAX_CONTENT_LENGTH = 8 * 1024 * 1024;
-    private static final long DEFAULT_FILEIO_CACHE_MAX_TOTAL_BYTES = 128 * 1024 * 1024;
+    private static final long DEFAULT_FILEIO_CACHE_MAX_CONTENT_LENGTH = 8L * 1024L * 1024L;
+    private static final long DEFAULT_FILEIO_CACHE_MAX_TOTAL_BYTES = 128L * 1024L * 1024L;
 
     public static final String FILEIO_CACHE_MAX_TOTAL_BYTES = "fileIO.cache.max-total-bytes";
 

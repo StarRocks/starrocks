@@ -80,10 +80,6 @@ public class ErrorReport {
         throw new DdlException(reportCommon(pattern, errorCode, objs));
     }
 
-    public static void reportRuntimeDdlException(ErrorCode errorCode, Object... objs) {
-        throw new RuntimeException(new DdlException(reportCommon(null, errorCode, objs)));
-    }
-
     public interface DdlExecutor {
         void apply() throws UserException;
     }

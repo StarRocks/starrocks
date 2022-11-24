@@ -212,7 +212,7 @@ public class BDBJournalCursor implements JournalCursor {
         for (int i = 0; i < RETRY_TIME; ++ i) {
             try {
                 if (i != 0) {
-                    Thread.sleep(SLEEP_INTERVAL_SEC * 1000);
+                    Thread.sleep(SLEEP_INTERVAL_SEC * 1000L);
                 }
 
                 database = environment.openDatabase(dbName);
@@ -268,7 +268,7 @@ public class BDBJournalCursor implements JournalCursor {
         for (int i = 0; i < RETRY_TIME; i++) {
             // 1. sleep after retry
             if (i != 0) {
-                Thread.sleep(SLEEP_INTERVAL_SEC * 1000);
+                Thread.sleep(SLEEP_INTERVAL_SEC * 1000L);
             }
 
             // 2. read from bdb & error handling

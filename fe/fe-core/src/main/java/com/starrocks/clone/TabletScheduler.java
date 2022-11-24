@@ -97,7 +97,7 @@ public class TabletScheduler extends LeaderDaemon {
     private static final int MIN_BATCH_NUM = 50;
 
     // the minimum interval of updating cluster statistics and priority of tablet info
-    private static final long STAT_UPDATE_INTERVAL_MS = 20 * 1000; // 20s
+    private static final long STAT_UPDATE_INTERVAL_MS = 20L * 1000L; // 20s
 
     private static final long SCHEDULE_INTERVAL_MS = 1000; // 1s
 
