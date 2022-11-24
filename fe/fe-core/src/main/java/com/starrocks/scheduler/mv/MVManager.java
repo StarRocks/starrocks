@@ -19,7 +19,10 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
-// TODO(Murphy) refactor all MV management code into here
+/**
+ * Manage lifetime of MV, including create, build, refresh, destroy
+ * TODO(Murphy) refactor all MV management code into here
+ */
 public class MVManager {
     private static final Logger LOG = LogManager.getLogger(LocalMetastore.class);
     private static final MVManager INSTANCE = new MVManager();
@@ -27,17 +30,12 @@ public class MVManager {
     // Protect all access into job states
     private QueryableReentrantLock lock = new QueryableReentrantLock();
     private final Map<MvId, MVMaintenanceJob> jobMap = new ConcurrentHashMap<>();
-    private LocalMetastore localMetastore;
 
     private MVManager() {
     }
 
     public static MVManager getInstance() {
         return INSTANCE;
-    }
-
-    public void setLocalMetastore(LocalMetastore localMetastore) {
-        this.localMetastore = localMetastore;
     }
 
     public MaterializedView createSinkTable(CreateMaterializedViewStatement stmt, long mvId, long dbId)
@@ -48,8 +46,9 @@ public class MVManager {
     /**
      * Prepare maintenance work for materialized view
      * 1. Create Intermediate Materialized Table(IMT)
-     * 2. Store metadata of MV in metastore
-     * 3. Register the job of MV maintenance
+     * 2. Store metadata of Job in metastore
+     * 3. Create job for MV maintenance
+     * 4. Compute physical topology of MV job
      */
     public void prepareMaintenanceWork(CreateMaterializedViewStatement stmt, MaterializedView view)
             throws DdlException {

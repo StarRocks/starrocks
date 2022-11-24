@@ -2,8 +2,11 @@
 package com.starrocks.scheduler.mv;
 
 import com.google.common.base.Preconditions;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.proto.PMVMaintenanceTaskResult;
 import com.starrocks.qe.ConnectContext;
@@ -35,19 +38,26 @@ import java.util.concurrent.atomic.AtomicReference;
  * <p>
  * Each job is event driven and single-thread execution:
  * 1. Event driven: transaction commitment drives the execution of job
- * 2. Execution: the job is executed in
+ * 2. Execution: the job is executed in JobExecutor, at most one thread could execute the job
  */
 public class MVMaintenanceJob implements Writable {
     private static final Logger LOG = LogManager.getLogger(MVMaintenanceJob.class);
 
     // Persisted state
-    // TODO(murphy) persist these state through edit-log
-    private final MaterializedView view;
-    private ExecPlan plan;
+    @SerializedName("jobId")
+    private final long jobId;
+    @SerializedName("viewId")
+    private final long viewId;
+    @SerializedName("state")
     private final AtomicReference<JobState> state = new AtomicReference<>();
+    @SerializedName("epoch")
     private final MVEpoch epoch;
 
+    // TODO(murphy) serialize the plan
+    private ExecPlan plan;
+
     // Runtime ephemeral state
+    private final MaterializedView view;
     private ConnectContext connectContext;
     // TODO(murphy) implement a real query coordinator
     private Coordinator queryCoordinator;
@@ -56,8 +66,10 @@ public class MVMaintenanceJob implements Writable {
     private List<MVMaintenanceTask> tasks;
 
     public MVMaintenanceJob(MaterializedView view) {
+        this.jobId = view.getId();
+        this.viewId = view.getId();
         this.view = view;
-        this.epoch = new MVEpoch(view.getDbId());
+        this.epoch = new MVEpoch(view.getId());
         this.state.set(JobState.INIT);
     }
 
@@ -297,13 +309,13 @@ public class MVMaintenanceJob implements Writable {
         return String.format("MVJob of %s/%s", view.getName(), view.getId());
     }
 
-    public static MVMaintenanceJob read(DataInput input) {
-        throw UnsupportedException.unsupportedException("TODO");
+    public static MVMaintenanceJob read(DataInput input) throws IOException {
+        return GsonUtils.GSON.fromJson(Text.readString(input), MVMaintenanceJob.class);
     }
 
     @Override
     public void write(DataOutput out) throws IOException {
-        throw UnsupportedException.unsupportedException("TODO");
+        Text.writeString(out, GsonUtils.GSON.toJson(this));
     }
 
     /*
