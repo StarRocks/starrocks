@@ -31,6 +31,7 @@ TEST(FileSystemTest, test_good_construction) {
     }
 }
 
+<<<<<<< HEAD
 TEST(FileSystemTest, test_bad_construction) {
     std::vector<std::string> cases = {"webhdfs://aaa", "simplefs://"};
     for (auto& c : cases) {
@@ -43,3 +44,6 @@ TEST(FileSystemTest, test_bad_construction) {
 }
 
 } // namespace starrocks
+=======
+} // namespace starrocks
+>>>>>>> e1e3659ed ([Enhancement] Use hadoop filesystem default if no specific storage sdk found (#13845))
