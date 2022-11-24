@@ -286,13 +286,15 @@ Status PInternalServiceImplBase<T>::_exec_batch_plan_fragments(brpc::Controller*
         promise_statuses.emplace_back(std::move(ms));
     }
 
+    Status res;
+
     for (auto& promise : promise_statuses) {
-        // When a preparation fails, return error immediately. The other unfinished preparation is safe,
-        // since they can use the shared pointer of promise and t_batch_requests.
-        RETURN_IF_ERROR(promise->get_future().get());
+        // update status if error
+        auto st = promise->get_future().get();
+        res = st.ok() ? res : st;
     }
 
-    return Status::OK();
+    return res;
 }
 
 template <typename T>
