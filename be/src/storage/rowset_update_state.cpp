@@ -506,10 +506,9 @@ Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_
                             tablet->tablet_id(), rowset_id, segment_id, read_column_ids.size(),
                             t_rewrite_end - t_rewrite_start);
 
-    // Assume all segment is rewrite
-    // TODO create a new function, finish_apply
-    /*
     FileSystem::Default()->rename_file(dest_path, src_path);
+    RETURN_IF_ERROR(rowset->reload_segment(segment_id));
+    /*
     if (segment_id == rowset->num_segments() - 1) {
         LOG(INFO) << "reload rowset: " << rowset_id << " segment_id: " << segment_id << " num_segment: " << rowset->num_segments();
         RETURN_IF_ERROR(rowset->reload());
