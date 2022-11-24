@@ -45,7 +45,11 @@ Status OlapScanOperator::do_prepare(RuntimeState*) {
     return Status::OK();
 }
 
-void OlapScanOperator::do_close(RuntimeState*) {}
+void OlapScanOperator::do_close(RuntimeState*) {
+    for (const auto& rowsets_per_tablet : _tablet_rowsets) {
+        Rowset::release_readers(rowsets_per_tablet);
+    }
+}
 
 Status OlapScanOperator::_capture_tablet_rowsets() {
     const auto& morsels = this->morsel_queue()->morsels();
@@ -74,6 +78,7 @@ Status OlapScanOperator::_capture_tablet_rowsets() {
         {
             std::shared_lock l(tablet->get_header_lock());
             RETURN_IF_ERROR(tablet->capture_consistent_rowsets(Version(0, version), &_tablet_rowsets[i]));
+            Rowset::acquire_readers(_tablet_rowsets[i]);
         }
     }
 
