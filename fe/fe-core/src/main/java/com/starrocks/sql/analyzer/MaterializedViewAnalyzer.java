@@ -352,11 +352,9 @@ public class MaterializedViewAnalyzer {
         private void replaceTableAlias(SlotRef slotRef,
                                        CreateMaterializedViewStatement statement,
                                        Map<TableName, Table> tableNameTableMap) {
-            if (slotRef.getTblNameWithoutAnalyzed().getDb() == null) {
-                TableName tableName = slotRef.getTblNameWithoutAnalyzed();
-                OlapTable table = ((OlapTable) tableNameTableMap.get(tableName));
-                slotRef.setTblName(new TableName(null, statement.getTableName().getDb(), table.getName()));
-            }
+            TableName tableName = slotRef.getTblNameWithoutAnalyzed();
+            OlapTable table = ((OlapTable) tableNameTableMap.get(tableName));
+            slotRef.setTblName(new TableName(null, statement.getTableName().getDb(), table.getName()));
         }
 
         private void checkDistribution(CreateMaterializedViewStatement statement,
