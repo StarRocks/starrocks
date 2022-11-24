@@ -1,8 +1,5 @@
-#include <benchmark/benchmark.h>
-
 #include <iostream>
 #include <memory>
-
 #include "exec/vectorized/file_scanner.h"
 #include "formats/csv/csv_reader.h"
 #include "fs/fs.h"
@@ -77,7 +74,7 @@ public:
         }
     }
 
-    Status open() {
+    Status open() override {
         std::shared_ptr<SequentialFile> file;
         TNetworkAddress address;
         TBrokerScanRangeParams params;
@@ -93,7 +90,7 @@ public:
     }
 
     // Do nothing
-    StatusOr<ChunkPtr> get_next() { return Status::OK(); };
+    StatusOr<ChunkPtr> get_next() override { return Status::OK(); };
 
     Status init_buffer() { return _csv_reader->init_buff(); }
 
@@ -110,7 +107,7 @@ public:
         return st;
     }
 
-    void close() { FileScanner::close(); }
+    void close() override { FileScanner::close(); }
 
 private:
     TBrokerScanRange _scan_range;
