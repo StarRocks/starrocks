@@ -31,6 +31,7 @@
 #include "common/config.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
+#include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "storage/compaction_manager.h"
 #include "storage/data_dir.h"
@@ -1343,8 +1344,8 @@ Status TabletManager::create_tablet_from_meta_snapshot(DataDir* store, TTabletId
     if (snapshot_meta->tablet_meta().updates().next_log_id() != 0) {
         return Status::InternalError("non-zero log id in tablet meta");
     }
-    LOG(INFO) << Substitute("create tablet from snapshot tablet:$0 version:$1 path:$2", tablet_id,
-                            snapshot_meta->snapshot_version(), schema_hash_path);
+    LOG(INFO) << strings::Substitute("create tablet from snapshot tablet:$0 version:$1 path:$2", tablet_id,
+                                     snapshot_meta->snapshot_version(), schema_hash_path);
 
     // Set of rowset id collected from rowset meta.
     std::set<uint32_t> set1;

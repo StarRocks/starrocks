@@ -1,4 +1,4 @@
-// This file is made available under Elastic License 2.0.
+// This file is made available under Elastic License 2.0.g
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/test/olap/rowset/segment_v2/zone_map_index_test.cpp
 
@@ -46,11 +46,10 @@ protected:
 
     void TearDown() override { StoragePageCache::release_global_cache(); }
 
-    void test_string(const std::string& testname, Field* field) {
+    void test_string(const std::string& testname, TypeInfoPtr type_info, int length) {
         std::string filename = kTestDir + "/" + testname;
 
-        std::unique_ptr<ZoneMapIndexWriter> builder =
-                ZoneMapIndexWriter::create(field->type_info().get(), field->length());
+        std::unique_ptr<ZoneMapIndexWriter> builder = ZoneMapIndexWriter::create(type_info.get(), length);
         std::vector<std::string> values1 = {"aaaa", "bbbb", "cccc", "dddd", "eeee", "ffff"};
         for (auto& value : values1) {
             Slice slice(value);
@@ -106,9 +105,9 @@ TEST_F(ColumnZoneMapTest, NormalTestIntPage) {
     std::string filename = kTestDir + "/NormalTestIntPage";
 
     TabletColumn int_column = create_int_key(0);
-    Field* field = FieldFactory::create(int_column);
+    TypeInfoPtr type_info = get_type_info(int_column);
 
-    std::unique_ptr<ZoneMapIndexWriter> builder = ZoneMapIndexWriter::create(field->type_info().get(), field->length());
+    std::unique_ptr<ZoneMapIndexWriter> builder = ZoneMapIndexWriter::create(type_info.get(), 4);
     std::vector<int> values1 = {1, 10, 11, 20, 21, 22};
     for (auto value : values1) {
         builder->add_values((const uint8_t*)&value, 1);
@@ -150,23 +149,20 @@ TEST_F(ColumnZoneMapTest, NormalTestIntPage) {
 
     ASSERT_EQ(true, zone_maps[2].has_null());
     ASSERT_EQ(false, zone_maps[2].has_not_null());
-    delete field;
 }
 
 // Test for string
 TEST_F(ColumnZoneMapTest, NormalTestVarcharPage) {
     TabletColumn varchar_column = create_varchar_key(0);
-    Field* field = FieldFactory::create(varchar_column);
-    test_string("NormalTestVarcharPage", field);
-    delete field;
+    TypeInfoPtr type_info = get_type_info(varchar_column);
+    test_string("NormalTestVarcharPage", type_info, 10);
 }
 
 // Test for string
 TEST_F(ColumnZoneMapTest, NormalTestCharPage) {
     TabletColumn char_column = create_char_key(0);
-    Field* field = FieldFactory::create(char_column);
-    test_string("NormalTestCharPage", field);
-    delete field;
+    TypeInfoPtr type_info = get_type_info(char_column);
+    test_string("NormalTestCharPage", type_info, 10);
 }
 
 } // namespace starrocks

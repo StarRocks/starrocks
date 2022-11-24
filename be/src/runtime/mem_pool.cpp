@@ -26,7 +26,7 @@
 #include <sstream>
 
 #include "runtime/current_thread.h"
-#include "runtime/memory/chunk_allocator.h"
+#include "runtime/memory/mem_chunk_allocator.h"
 #include "util/bit_util.h"
 #include "util/starrocks_metrics.h"
 
@@ -40,7 +40,7 @@ const int MemPool::MAX_CHUNK_SIZE;
 const int MemPool::DEFAULT_ALIGNMENT;
 uint32_t MemPool::k_zero_length_region_ alignas(std::max_align_t) = MEM_POOL_POISON;
 
-MemPool::ChunkInfo::ChunkInfo(const Chunk& chunk_) : chunk(chunk_) {
+MemPool::ChunkInfo::ChunkInfo(const MemChunk& chunk_) : chunk(chunk_) {
     StarRocksMetrics::instance()->memory_pool_bytes_total.increment(chunk.size);
 }
 
@@ -48,7 +48,7 @@ MemPool::~MemPool() {
     int64_t total_bytes_released = 0;
     for (auto& chunk : chunks_) {
         total_bytes_released += chunk.chunk.size;
-        ChunkAllocator::instance()->free(chunk.chunk);
+        MemChunkAllocator::instance()->free(chunk.chunk);
     }
     StarRocksMetrics::instance()->memory_pool_bytes_total.increment(-total_bytes_released);
 }
@@ -67,7 +67,7 @@ void MemPool::free_all() {
     int64_t total_bytes_released = 0;
     for (auto& chunk : chunks_) {
         total_bytes_released += chunk.chunk.size;
-        ChunkAllocator::instance()->free(chunk.chunk);
+        MemChunkAllocator::instance()->free(chunk.chunk);
     }
     chunks_.clear();
     next_chunk_size_ = INITIAL_CHUNK_SIZE;
@@ -118,8 +118,8 @@ bool MemPool::find_chunk(size_t min_size, bool check_limits) {
     chunk_size = BitUtil::RoundUpToPowerOfTwo(chunk_size);
 
     // Allocate a new chunk. Return early if allocate fails.
-    Chunk chunk;
-    if (!ChunkAllocator::instance()->allocate(chunk_size, &chunk)) {
+    MemChunk chunk;
+    if (!MemChunkAllocator::instance()->allocate(chunk_size, &chunk)) {
         if (tls_thread_status.is_catched()) {
             throw std::bad_alloc();
         } else {

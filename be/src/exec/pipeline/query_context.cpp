@@ -31,9 +31,9 @@ QueryContext::QueryContext()
 QueryContext::~QueryContext() {
     // When destruct FragmentContextManager, we use query-level MemTracker. since when PipelineDriver executor
     // release QueryContext when it finishes the last driver of the query, the current instance-level MemTracker will
-    // be freed before it is adopted to account memory usage of ChunkAllocator. In destructor of FragmentContextManager,
+    // be freed before it is adopted to account memory usage of MemChunkAllocator. In destructor of FragmentContextManager,
     // the per-instance RuntimeStates that contain instance-level MemTracker is freed one by one, if there are
-    // remaining other RuntimeStates after the current RuntimeState is freed, ChunkAllocator uses the MemTracker of the
+    // remaining other RuntimeStates after the current RuntimeState is freed, MemChunkAllocator uses the MemTracker of the
     // current RuntimeState to release Operators, OperatorFactories in the remaining RuntimeStates will trigger
     // segmentation fault.
     {
@@ -368,6 +368,28 @@ void QueryContextManager::report_fragments_with_same_host(
                 cur_batch_report_indexes.push_back(i);
                 reported[i] = true;
             }
+        }
+    }
+}
+
+void QueryContextManager::collect_query_statistics(const PCollectQueryStatisticsRequest* request,
+                                                   PCollectQueryStatisticsResult* response) {
+    for (int i = 0; i < request->query_ids_size(); i++) {
+        const PUniqueId& p_query_id = request->query_ids(i);
+        TUniqueId id;
+        id.__set_hi(p_query_id.hi());
+        id.__set_lo(p_query_id.lo());
+        if (auto query_ctx = get(id); query_ctx != nullptr) {
+            int64_t cpu_cost = query_ctx->cpu_cost();
+            int64_t scan_rows = query_ctx->cur_scan_rows_num();
+            int64_t scan_bytes = query_ctx->get_scan_bytes();
+            auto query_statistics = response->add_query_statistics();
+            auto query_id = query_statistics->mutable_query_id();
+            query_id->set_hi(p_query_id.hi());
+            query_id->set_lo(p_query_id.lo());
+            query_statistics->set_cpu_cost_ns(cpu_cost);
+            query_statistics->set_scan_rows(scan_rows);
+            query_statistics->set_scan_bytes(scan_bytes);
         }
     }
 }

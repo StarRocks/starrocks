@@ -54,11 +54,10 @@ public class CurrentQuerySqlProcDir implements ProcDirInterface {
             return null;
         }
 
-        if (!name.equals("fragments")) {
-            throw new AnalysisException(name + " does't exist.");
+        if (!name.equals("hosts")) {
+            throw new AnalysisException(name + " doesn't exist.");
         }
-
-        return new CurrentQueryFragmentProcNode(item);
+        return new CurrentQueryHostProcNode(item);
     }
 
     @Override

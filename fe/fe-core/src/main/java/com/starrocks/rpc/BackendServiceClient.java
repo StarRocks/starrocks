@@ -25,6 +25,7 @@ import com.google.common.base.Preconditions;
 import com.starrocks.common.Config;
 import com.starrocks.proto.PCancelPlanFragmentRequest;
 import com.starrocks.proto.PCancelPlanFragmentResult;
+import com.starrocks.proto.PCollectQueryStatisticsResult;
 import com.starrocks.proto.PExecBatchPlanFragmentsResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
 import com.starrocks.proto.PFetchDataResult;
@@ -177,6 +178,18 @@ public class BackendServiceClient {
             return service.triggerProfileReport(request);
         } catch (Throwable e) {
             LOG.warn("fetch data catch a exception, address={}:{}",
+                    address.getHostname(), address.getPort(), e);
+            throw new RpcException(address.hostname, e.getMessage());
+        }
+    }
+
+    public Future<PCollectQueryStatisticsResult> collectQueryStatisticsAsync(
+            TNetworkAddress address, PCollectQueryStatisticsRequest request) throws RpcException {
+        try {
+            final PBackendService service = BrpcProxy.getBackendService(address);
+            return service.collectQueryStatistics(request);
+        } catch (Throwable e) {
+            LOG.warn("collect query statistics catch an exception, address={}:{}",
                     address.getHostname(), address.getPort(), e);
             throw new RpcException(address.hostname, e.getMessage());
         }

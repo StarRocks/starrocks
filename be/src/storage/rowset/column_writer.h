@@ -28,7 +28,6 @@
 #include "gen_cpp/segment.pb.h" // for EncodingTypePB
 #include "gutil/strings/substitute.h"
 #include "runtime/global_dict/types.h"
-#include "storage/field.h"
 #include "storage/rowset/binary_dict_page.h"
 #include "storage/rowset/common.h"
 #include "storage/rowset/page_pointer.h" // for PagePointer
@@ -82,8 +81,8 @@ public:
     static StatusOr<std::unique_ptr<ColumnWriter>> create(const ColumnWriterOptions& opts, const TabletColumn* column,
                                                           WritableFile* wfile);
 
-    explicit ColumnWriter(std::unique_ptr<Field> field, bool is_nullable)
-            : _field(std::move(field)), _is_nullable(is_nullable) {}
+    explicit ColumnWriter(TypeInfoPtr type_info, int length, bool is_nullable)
+            : _type_info(std::move(type_info)), _length(length), _is_nullable(is_nullable) {}
 
     virtual ~ColumnWriter() = default;
 
@@ -118,14 +117,16 @@ public:
     // not in global_dict, it will return false
     virtual bool is_global_dict_valid() { return true; }
 
+    TypeInfo* type_info() const { return _type_info.get(); }
+    int length() const { return _length; }
     bool is_nullable() const { return _is_nullable; }
-
-    Field* get_field() const { return _field.get(); }
 
     virtual uint64_t total_mem_footprint() const = 0;
 
-private:
-    std::unique_ptr<Field> _field;
+protected:
+    TypeInfoPtr _type_info;
+    // NOTE: only used for CHAR/VARCHAR type.
+    int _length;
     bool _is_nullable;
 };
 
@@ -135,7 +136,7 @@ private:
 // to file
 class ScalarColumnWriter final : public ColumnWriter {
 public:
-    ScalarColumnWriter(const ColumnWriterOptions& opts, std::unique_ptr<Field> field, WritableFile* output_file);
+    ScalarColumnWriter(const ColumnWriterOptions& opts, TypeInfoPtr type_info, WritableFile* output_file);
 
     ~ScalarColumnWriter() override;
 
@@ -247,7 +248,7 @@ private:
 
 class ArrayColumnWriter final : public ColumnWriter {
 public:
-    explicit ArrayColumnWriter(const ColumnWriterOptions& opts, std::unique_ptr<Field> field,
+    explicit ArrayColumnWriter(const ColumnWriterOptions& opts, TypeInfoPtr type_info,
                                std::unique_ptr<ScalarColumnWriter> null_writer,
                                std::unique_ptr<ScalarColumnWriter> offset_writer,
                                std::unique_ptr<ColumnWriter> element_writer);

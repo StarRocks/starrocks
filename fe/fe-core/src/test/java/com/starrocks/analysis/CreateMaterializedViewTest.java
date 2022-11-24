@@ -27,7 +27,6 @@ import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
@@ -350,7 +349,8 @@ public class CreateMaterializedViewTest {
             Assert.assertNotNull(baseColumn);
             Assert.assertEquals("k1", baseColumn.getName());
             // test sql
-            Assert.assertEquals("SELECT `tb1`.`k1`, `tb1`.`k2` AS `s2`\nFROM `test`.`tbl1` AS `tb1`",
+            Assert.assertEquals("SELECT `test`.`tb1`.`k1`, `test`.`tb1`.`k2` AS `s2`\n" +
+                            "FROM `test`.`tbl1` AS `tb1`",
                     materializedView.getViewDefineSql());
             // test property
             TableProperty tableProperty = materializedView.getTableProperty();
@@ -512,7 +512,8 @@ public class CreateMaterializedViewTest {
             Assert.assertEquals("k1", baseColumn.getName());
             // test sql
             Assert.assertEquals(
-                    "SELECT date_trunc('month', `tb1`.`k1`) AS `s1`, `tb2`.`k2` AS `s2`\nFROM `test`.`tbl1` AS `tb1` INNER JOIN `test`.`tbl2` AS `tb2` ON `tb1`.`k2` = `tb2`.`k2`",
+                    "SELECT date_trunc('month', `test`.`tb1`.`k1`) AS `s1`, `test`.`tb2`.`k2` AS `s2`\n" +
+                            "FROM `test`.`tbl1` AS `tb1` INNER JOIN `test`.`tbl2` AS `tb2` ON `test`.`tb1`.`k2` = `test`.`tb2`.`k2`",
                     materializedView.getViewDefineSql());
             // test property
             TableProperty tableProperty = materializedView.getTableProperty();
@@ -1903,7 +1904,7 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
-    public void testUseCte() {
+    public void testUseCte() throws Exception {
         String sql = "create materialized view mv1\n" +
                 "DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
                 "REFRESH ASYNC\n" +
@@ -1911,15 +1912,32 @@ public class CreateMaterializedViewTest {
                 "(select * from tbl1)\n" +
                 "SELECT k1,k2\n" +
                 "FROM tbl;";
-        try {
-            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        } catch (Exception e) {
-            Assert.assertEquals("Materialized view query statement not support cte", e.getMessage());
-        }
+        UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+
+        sql = "create materialized view mv1\n" +
+                "DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
+                "REFRESH ASYNC AS " +
+                "WITH cte1 AS (select k1, k2 from tbl1),\n" +
+                "     cte2 AS (select count(*) cnt from tbl1)\n" +
+                "SELECT cte1.k1, cte2.cnt\n" +
+                "FROM cte1, cte2;";
+        UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
     }
 
     @Test
-    public void testUseSubQuery() {
+    public void testUseSubQuery() throws Exception {
+        String sql = "create materialized view mv1 " +
+                "distributed by hash(k2) buckets 10 " +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ") " +
+                "as select k1, k2 from (select * from tbl1) tbl";
+        UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+    }
+
+    @Test
+    public void testUseSubQueryWithPartition() throws Exception {
         String sql = "create materialized view mv1 " +
                 "partition by k1 " +
                 "distributed by hash(k2) buckets 10 " +
@@ -1931,7 +1949,8 @@ public class CreateMaterializedViewTest {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.assertEquals("Materialized view query statement not support subquery", e.getMessage());
+            Assert.assertEquals("Materialized view partition expression `tbl`.`k1` could only ref to base table",
+                    e.getMessage());
         }
     }
 

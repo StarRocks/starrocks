@@ -30,7 +30,6 @@
 #include "common/logging.h" // LOG
 #include "fs/fs.h"          // FileSystem
 #include "gen_cpp/segment.pb.h"
-#include "storage/field.h"
 #include "storage/rowset/column_writer.h" // ColumnWriter
 #include "storage/rowset/page_io.h"
 #include "storage/seek_tuple.h"

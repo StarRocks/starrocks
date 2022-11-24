@@ -32,8 +32,8 @@
   + [Transform data at loading](./loading/Etl_in_loading.md)
 + Data Unloading
   + [Overview of data unloading](./unloading/Export.md)
-  + [Spark connector](./unloading/Spark_connector.md)
-  + [Flink connector](./unloading/Flink_connector.md)
+  + [Use Spark connector to read data from StarRocks](./unloading/Spark_connector.md)
+  + [Use Flink connector to read data from StarRocks](./unloading/Flink_connector.md)
 + Query Data Sources
   + Catalog
     + [Overview](./data_source/catalog/catalog_overview.md)

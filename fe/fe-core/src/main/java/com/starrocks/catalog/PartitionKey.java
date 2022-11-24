@@ -244,11 +244,7 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
                 sb.append(value);
                 continue;
             } else {
-                value = "\"" + expr.getRealValue() + "\"";
-                if (expr instanceof DateLiteral) {
-                    DateLiteral dateLiteral = (DateLiteral) expr;
-                    value = dateLiteral.toSql();
-                }
+                value = "\"" + expr.getStringValue() + "\"";
             }
             sb.append(value);
 
@@ -275,11 +271,7 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
             if (expr == MaxLiteral.MAX_VALUE) {
                 value = expr.toSql();
             } else {
-                value = expr.getRealValue();
-                if (expr instanceof DateLiteral) {
-                    DateLiteral dateLiteral = (DateLiteral) expr;
-                    value = dateLiteral.getStringValue();
-                }
+                value = expr.getStringValue();
             }
             if (keys.size() - 1 == i) {
                 builder.append(value);

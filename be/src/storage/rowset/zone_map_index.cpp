@@ -26,11 +26,13 @@
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "storage/chunk_helper.h"
+#include "storage/decimal_type_info.h"
 #include "storage/olap_define.h"
 #include "storage/olap_type_infra.h"
 #include "storage/rowset/encoding_info.h"
 #include "storage/rowset/indexed_column_reader.h"
 #include "storage/rowset/indexed_column_writer.h"
+#include "storage/type_traits.h"
 #include "storage/types.h"
 #include "util/unaligned_access.h"
 
@@ -179,7 +181,7 @@ Status ZoneMapIndexWriterImpl<type>::flush() {
     if (_page_zone_map.min_value.value < _segment_zone_map.min_value.value) {
         _type_info->direct_copy(&_segment_zone_map.min_value.value, &_page_zone_map.min_value.value, nullptr);
     }
-    if (_page_zone_map.min_value.value > _segment_zone_map.min_value.value) {
+    if (_page_zone_map.max_value.value > _segment_zone_map.max_value.value) {
         _type_info->direct_copy(&_segment_zone_map.max_value.value, &_page_zone_map.max_value.value, nullptr);
     }
     if (_page_zone_map.has_null) {

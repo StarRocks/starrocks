@@ -10,6 +10,7 @@
 
 #include "column/fixed_length_column.h"
 #include "column/vectorized_schema.h"
+#include "common/config.h"
 #include "storage/vector_chunk_iterator.h"
 
 namespace starrocks::vectorized {
