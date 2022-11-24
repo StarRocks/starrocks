@@ -127,6 +127,11 @@ private:
     const size_t _num_morsels;
     std::atomic<size_t> _pop_index;
 
+    bool _assign_morsels = false;
+    int _scan_dop;
+    std::map<int, Morsels> _morsels_per_operator;
+    std::map<int, std::atomic_size_t> _next_morsel_index_per_operator;
+
     std::vector<std::vector<RowsetSharedPtr>> _tablet_rowsets;
 };
 
