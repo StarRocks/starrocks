@@ -134,34 +134,4 @@ TEST_F(CompactionPolicyTest, test_base_by_segment_num) {
     }
 }
 
-// rowsets: [1, 2, 3, 4, 5, 6]
-// rowsets data size: [10, 20, 30, 40, 50, 60]
-// cumulative point: 3
-TEST_F(CompactionPolicyTest, test_base_by_data_size) {
-    _tablet_metadata->set_cumulative_point(3);
-    _tablet_metadata->set_version(2);
-    for (int i = 1; i < 7; ++i) {
-        auto* rowset_metadata = _tablet_metadata->mutable_rowsets()->Add();
-        rowset_metadata->mutable_segments()->Add("file");
-        if (i <= 6) {
-            rowset_metadata->set_overlapped(false);
-        } else {
-            rowset_metadata->set_overlapped(true);
-        }
-        rowset_metadata->set_data_size(i * 10);
-        rowset_metadata->set_id(i);
-    }
-    CHECK_OK(_tablet_manager->put_tablet_metadata(*_tablet_metadata));
-
-    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(_tablet_metadata->id()));
-    auto tablet_ptr = std::make_shared<Tablet>(tablet);
-    ASSIGN_OR_ABORT(auto compaction_policy, CompactionPolicy::create_compaction_policy(tablet_ptr));
-    ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets(2));
-    // input rowsets: [1, 2, 3]
-    ASSERT_EQ(3, input_rowsets.size());
-    for (int i = 0; i < 3; ++i) {
-        EXPECT_EQ(i + 1, input_rowsets[i]->id());
-    }
-}
-
 } // namespace starrocks::lake
