@@ -62,11 +62,6 @@ public class BoolLiteral extends LiteralExpr {
     }
 
     @Override
-    public Object getRealValue() {
-        return value;
-    }
-
-    @Override
     public Expr clone() {
         return new BoolLiteral(this);
     }
@@ -108,6 +103,11 @@ public class BoolLiteral extends LiteralExpr {
     @Override
     public String toSqlImpl() {
         return value ? "TRUE" : "FALSE";
+    }
+
+    @Override
+    public Object getRealObjectValue() {
+        return value;
     }
 
     @Override
