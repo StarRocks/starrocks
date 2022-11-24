@@ -352,10 +352,22 @@ public class MaterializedViewAnalyzer {
         private void replaceTableAlias(SlotRef slotRef,
                                        CreateMaterializedViewStatement statement,
                                        Map<TableName, Table> tableNameTableMap) {
+<<<<<<< HEAD
             if (slotRef.getTblNameWithoutAnalyzed().getDb() == null) {
                 TableName tableName = slotRef.getTblNameWithoutAnalyzed();
                 OlapTable table = ((OlapTable) tableNameTableMap.get(tableName));
                 slotRef.setTblName(new TableName(null, statement.getTableName().getDb(), table.getName()));
+=======
+            TableName tableName = slotRef.getTblNameWithoutAnalyzed();
+            Table table = tableNameTableMap.get(tableName);
+            List<MaterializedView.BaseTableInfo> baseTableInfos = statement.getBaseTableInfos();
+            for (MaterializedView.BaseTableInfo baseTableInfo : baseTableInfos) {
+                if (baseTableInfo.getTable().equals(table)) {
+                    slotRef.setTblName(new TableName(baseTableInfo.getCatalogName(),
+                            baseTableInfo.getDbName(), table.getName()));
+                    break;
+                }
+>>>>>>> 1427b8a4b ([BugFix] Fix column name resolved ignore resolve db name (#13504))
             }
         }
 

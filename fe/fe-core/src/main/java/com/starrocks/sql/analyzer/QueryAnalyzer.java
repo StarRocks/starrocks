@@ -160,7 +160,7 @@ public class QueryAnalyzer {
         public Scope visitSelect(SelectRelation selectRelation, Scope scope) {
             AnalyzeState analyzeState = new AnalyzeState();
             //Record aliases at this level to prevent alias conflicts
-            Set<String> aliasSet = new HashSet<>();
+            Set<TableName> aliasSet = new HashSet<>();
             Relation resolvedRelation = resolveTableRef(selectRelation.getRelation(), scope, aliasSet);
             if (resolvedRelation instanceof TableFunctionRelation) {
                 throw unsupportedException("Table function must be used with lateral join");
@@ -185,7 +185,7 @@ public class QueryAnalyzer {
             return analyzeState.getOutputScope();
         }
 
-        private Relation resolveTableRef(Relation relation, Scope scope, Set<String> aliasSet) {
+        private Relation resolveTableRef(Relation relation, Scope scope, Set<TableName> aliasSet) {
             if (relation instanceof JoinRelation) {
                 JoinRelation join = (JoinRelation) relation;
                 join.setLeft(resolveTableRef(join.getLeft(), scope, aliasSet));
@@ -196,12 +196,15 @@ public class QueryAnalyzer {
                 }
                 return join;
             } else if (relation instanceof TableRelation) {
+<<<<<<< HEAD
                 if (aliasSet.contains(relation.getResolveTableName().getTbl())) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_NONUNIQ_TABLE, relation.getResolveTableName().getTbl());
                 } else {
                     aliasSet.add(relation.getResolveTableName().getTbl());
                 }
 
+=======
+>>>>>>> 1427b8a4b ([BugFix] Fix column name resolved ignore resolve db name (#13504))
                 TableRelation tableRelation = (TableRelation) relation;
                 TableName tableName = tableRelation.getName();
                 if (tableName != null && Strings.isNullOrEmpty(tableName.getDb())) {
@@ -223,7 +226,7 @@ public class QueryAnalyzer {
                         // Because the reused cte should not be considered the same relation.
                         // eg: with w as (select * from t0) select v1,sum(v2) from w group by v1 " +
                         //                "having v1 in (select v3 from w where v2 = 2)
-                        // cte used in outer query and subquery can't use same relation-id and field
+                        // cte used in outer query and sub-query can't use same relation-id and field
                         CTERelation newCteRelation = new CTERelation(cteRelation.getCteMouldId(), tableName.getTbl(),
                                 cteRelation.getColumnOutputNames(),
                                 cteRelation.getCteQueryStatement());
@@ -233,6 +236,17 @@ public class QueryAnalyzer {
                                 new Scope(RelationId.of(newCteRelation), new RelationFields(outputFields.build())));
                         return newCteRelation;
                     }
+                }
+
+                TableName resolveTableName = relation.getResolveTableName();
+                MetaUtils.normalizationTableName(session, resolveTableName);
+                if (aliasSet.contains(resolveTableName)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_NONUNIQ_TABLE,
+                            relation.getResolveTableName().getTbl());
+                } else {
+                    aliasSet.add(new TableName(resolveTableName.getCatalog(),
+                            resolveTableName.getDb(),
+                            resolveTableName.getTbl()));
                 }
 
                 Table table = resolveTable(tableRelation.getName());
@@ -252,10 +266,16 @@ public class QueryAnalyzer {
                 }
             } else {
                 if (relation.getResolveTableName() != null) {
+<<<<<<< HEAD
                     if (aliasSet.contains(relation.getResolveTableName().getTbl())) {
                         ErrorReport.reportSemanticException(ErrorCode.ERR_NONUNIQ_TABLE, relation.getResolveTableName().getTbl());
+=======
+                    if (aliasSet.contains(relation.getResolveTableName())) {
+                        ErrorReport.reportSemanticException(ErrorCode.ERR_NONUNIQ_TABLE,
+                                relation.getResolveTableName().getTbl());
+>>>>>>> 1427b8a4b ([BugFix] Fix column name resolved ignore resolve db name (#13504))
                     } else {
-                        aliasSet.add(relation.getResolveTableName().getTbl());
+                        aliasSet.add(relation.getResolveTableName());
                     }
                 }
                 return relation;
@@ -676,7 +696,7 @@ public class QueryAnalyzer {
 
             Table table = metadataMgr.getTable(catalogName, dbName, tbName);
             if (table == null) {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR, tbName);
+                ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR, dbName + "." + tbName);
             }
 
             if (table.isNativeTable() &&

@@ -121,7 +121,7 @@ public class AST2SQL {
 
             if (relation.isResolvedInFromClause()) {
                 if (relation.getAlias() != null) {
-                    sqlBuilder.append(" AS ").append(relation.getAlias());
+                    sqlBuilder.append(" AS ").append(relation.getAlias().getTbl());
                 }
                 return sqlBuilder.toString();
             }
@@ -191,7 +191,12 @@ public class AST2SQL {
 
         @Override
         public String visitSubquery(SubqueryRelation subquery, Void context) {
+<<<<<<< HEAD
             return "(" + visit(subquery.getQueryStatement()) + ")" + " " + subquery.getAlias();
+=======
+            return "(" + visit(subquery.getQueryStatement()) + ")"
+                    + " " + (subquery.getAlias() == null ? "" : subquery.getAlias().getTbl());
+>>>>>>> 1427b8a4b ([BugFix] Fix column name resolved ignore resolve db name (#13504))
         }
 
         @Override
@@ -201,7 +206,7 @@ public class AST2SQL {
 
             if (node.getAlias() != null) {
                 sqlBuilder.append(" AS ");
-                sqlBuilder.append(node.getAlias());
+                sqlBuilder.append(node.getAlias().getTbl());
             }
             return sqlBuilder.toString();
         }
@@ -280,7 +285,7 @@ public class AST2SQL {
 
             if (node.getAlias() != null) {
                 sqlBuilder.append(" AS ");
-                sqlBuilder.append(node.getAlias());
+                sqlBuilder.append(node.getAlias().getTbl());
             }
             return sqlBuilder.toString();
         }
@@ -304,7 +309,7 @@ public class AST2SQL {
                 values.add(rowBuilder.toString());
             }
             sqlBuilder.append(Joiner.on(", ").join(values));
-            sqlBuilder.append(") ").append(node.getAlias());
+            sqlBuilder.append(") ").append(node.getAlias().getTbl());
 
             return sqlBuilder.toString();
         }
@@ -321,7 +326,17 @@ public class AST2SQL {
 
             sqlBuilder.append(")");
             if (node.getAlias() != null) {
+<<<<<<< HEAD
                 sqlBuilder.append(" ").append(node.getAlias());
+=======
+                sqlBuilder.append(" ").append(node.getAlias().getTbl());
+
+                if (node.getColumnNames() != null) {
+                    sqlBuilder.append("(");
+                    sqlBuilder.append(Joiner.on(",").join(node.getColumnNames()));
+                    sqlBuilder.append(")");
+                }
+>>>>>>> 1427b8a4b ([BugFix] Fix column name resolved ignore resolve db name (#13504))
             }
             return sqlBuilder.toString();
         }

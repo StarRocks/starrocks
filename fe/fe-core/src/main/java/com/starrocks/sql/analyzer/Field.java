@@ -63,18 +63,113 @@ public class Field {
             if (relationAlias == null) {
                 return false;
             }
-            return relationAlias.getTbl().equals(expr.getTblNameWithoutAnalyzed().getTbl())
-                    && expr.getColumnName().equalsIgnoreCase(this.name);
+            return matchesPrefix(expr.getTblNameWithoutAnalyzed()) && expr.getColumnName().equalsIgnoreCase(this.name);
         } else {
             return expr.getColumnName().equalsIgnoreCase(this.name);
         }
     }
 
+<<<<<<< HEAD
     public boolean matchesPrefix(TableName prefix) {
         if (relationAlias != null) {
             return relationAlias.getTbl().equals(prefix.getTbl());
+=======
+    private boolean tryToParseAsStructType(SlotRef slotRef) {
+        QualifiedName qualifiedName = slotRef.getQualifiedName();
+        tmpUsedStructFieldPos.clear();
+
+        if (qualifiedName == null) {
+            return slotRef.getColumnName().equalsIgnoreCase(this.name);
+        }
+
+        if (relationAlias == null) {
+            return false;
+        }
+
+        // Generate current field's full qualified name.
+        // fieldFullQualifiedName: [CatalogName, DatabaseName, TableName, ColumnName]
+        String[] fieldFullQualifiedName = new String[] {
+                relationAlias.getCatalog(),
+                relationAlias.getDb(),
+                relationAlias.getTbl(),
+                name
+        };
+
+        // First start matching from CatalogName, if it fails, then start matching from DatabaseName, and so on.
+        for (int i = 0; i < 4; i++) {
+            if (tryToMatch(fieldFullQualifiedName, i, qualifiedName)) {
+                return true;
+            }
         }
         return false;
+    }
+
+    private boolean tryToMatch(String[] fieldFullQualifiedName, int index, QualifiedName qualifiedName) {
+        String[] slotRefPartsArray = qualifiedName.getParts().toArray(new String[0]);
+        int matchIndex = 0;
+        // i = 0 means match from catalog name,
+        // i = 1, match from database name,
+        // i = 2, match from table name, only table name is case-sensitive,
+        // i = 3, match from column name.
+        for (; index < 4 && matchIndex < slotRefPartsArray.length; index++) {
+            if (fieldFullQualifiedName[index] == null) {
+                return false;
+            }
+
+            String part = slotRefPartsArray[matchIndex++];
+            String comparedPart = fieldFullQualifiedName[index];
+            // Only table name is case-sensitive, we will convert other parts to lower case.
+            if (index != 2) {
+                part = part.toLowerCase();
+                comparedPart = comparedPart.toLowerCase();
+            }
+            if (!part.equals(comparedPart)) {
+                return false;
+            }
+        }
+
+        if (index < 4) {
+            // Not match to col name, return false directly.
+            return false;
+        }
+
+        // matchIndex reach the end of slotRefPartsArray, means this SlotRef matched all.
+        if (matchIndex == slotRefPartsArray.length) {
+            return true;
+        }
+
+        // matchIndex not reach end of slotRefPartsArray, it must be StructType.
+        Type tmpType = type;
+        for (; matchIndex < slotRefPartsArray.length; matchIndex++) {
+            if (!tmpType.isStructType()) {
+                return false;
+            }
+            StructField structField = ((StructType) tmpType).getField(slotRefPartsArray[matchIndex]);
+            if (structField == null) {
+                return false;
+            }
+            // Record the struct field position that matches successfully.
+            tmpUsedStructFieldPos.add(structField.getPosition());
+            tmpType = structField.getType();
+        }
+        return true;
+    }
+
+    public List<Integer> getTmpUsedStructFieldPos() {
+        return tmpUsedStructFieldPos;
+    }
+
+    public boolean matchesPrefix(TableName tableName) {
+        if (tableName.getCatalog() != null && !tableName.getCatalog().equals(relationAlias.getCatalog())) {
+            return false;
+>>>>>>> 1427b8a4b ([BugFix] Fix column name resolved ignore resolve db name (#13504))
+        }
+
+        if (tableName.getDb() != null && !tableName.getDb().equals(relationAlias.getDb())) {
+            return false;
+        }
+
+        return tableName.getTbl().equals(relationAlias.getTbl());
     }
 
     @Override
