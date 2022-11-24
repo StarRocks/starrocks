@@ -10,6 +10,20 @@
 #include "gutil/macros.h"
 #include "io/io_error.h"
 
+#ifdef USE_STAROS
+#include "fslib/metric_key.h"
+#include "metrics/metrics.h"
+#endif
+
+#ifdef USE_STAROS
+namespace {
+static const staros::starlet::metrics::Labels kSrPosixFsLables({{"fstype", "srposix"}});
+
+DEFINE_SUMMARY_METRIC_KEY_WITH_TAG(s_posixread_iosize, staros::starlet::fslib::kMKReadIOSize, kSrPosixFsLables);
+DEFINE_SUMMARY_METRIC_KEY_WITH_TAG(s_posixread_iolatency, staros::starlet::fslib::kMKReadIOLatency, kSrPosixFsLables);
+} // namespace
+#endif
+
 namespace starrocks::io {
 
 #define CHECK_IS_CLOSED(is_closed)                                                       \
@@ -40,11 +54,17 @@ Status FdInputStream::close() {
 StatusOr<int64_t> FdInputStream::read(void* data, int64_t count) {
     CHECK_IS_CLOSED(_is_closed);
     ssize_t res;
+#ifdef USE_STAROS
+    staros::starlet::metrics::TimeObserver observer(s_posixread_iolatency);
+#endif
     RETRY_ON_EINTR(res, ::pread(_fd, static_cast<char*>(data), count, _offset));
     if (UNLIKELY(res < 0)) {
         _errno = errno;
         return io_error("read", _errno);
     }
+#ifdef USE_STAROS
+    s_posixread_iosize.Observe(res);
+#endif
     _offset += res;
     return res;
 }
