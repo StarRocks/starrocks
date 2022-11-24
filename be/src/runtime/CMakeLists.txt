@@ -44,7 +44,6 @@ set(RUNTIME_FILES
     mem_pool.cpp
     plan_fragment_executor.cpp
     primitive_type.cpp
-    raw_value.cpp
     result_sink.cpp
     result_buffer_mgr.cpp
     runtime_state.cpp
@@ -52,7 +51,6 @@ set(RUNTIME_FILES
     decimalv2_value.cpp
     large_int_value.cpp
     fragment_mgr.cpp
-    dpp_sink_internal.cpp
     load_path_mgr.cpp
     types.cpp
     mem_tracker.cpp
