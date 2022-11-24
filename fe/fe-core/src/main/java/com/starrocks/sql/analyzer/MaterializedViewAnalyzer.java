@@ -233,7 +233,75 @@ public class MaterializedViewAnalyzer {
             }
         }
 
+<<<<<<< HEAD
         private void checkDistribution(CreateMaterializedViewStatement statement) {
+=======
+        private void checkPartitionColumnWithBaseHMSTable(SlotRef slotRef, HiveMetaStoreTable table) {
+            List<String> partitionColumnNames = table.getPartitionColumnNames();
+            if (table.isUnPartitioned()) {
+                throw new SemanticException("Materialized view partition column in partition exp " +
+                        "must be base table partition column");
+            } else {
+                if (partitionColumnNames.size() != 1) {
+                    throw new SemanticException("Materialized view related base table partition columns " +
+                            "only supports single column");
+                }
+                String partitionColumn = partitionColumnNames.get(0);
+                if (!partitionColumn.equalsIgnoreCase(slotRef.getColumnName())) {
+                    throw new SemanticException("Materialized view partition column in partition exp " +
+                            "must be base table partition column");
+                }
+            }
+        }
+
+        private void checkPartitionColumnWithBaseIcebergTable(SlotRef slotRef, IcebergTable table) {
+            org.apache.iceberg.Table icebergTable = table.getIcebergTable();
+            PartitionSpec partitionSpec = icebergTable.spec();
+            if (partitionSpec.isUnpartitioned()) {
+                throw new SemanticException("Materialized view partition column in partition exp " +
+                        "must be base table partition column");
+            } else {
+                if (partitionSpec.fields().size() != 1) {
+                    throw new SemanticException("Materialized view related base table partition columns " +
+                            "only supports single column");
+                }
+                String partitionColumn = partitionSpec.fields().get(0).name();
+                if (!partitionColumn.equalsIgnoreCase(slotRef.getColumnName())) {
+                    throw new SemanticException("Materialized view partition column in partition exp " +
+                            "must be base table partition column");
+                }
+            }
+        }
+
+        private SlotRef getSlotRef(Expr expr) {
+            if (expr instanceof SlotRef) {
+                return ((SlotRef) expr);
+            } else {
+                List<SlotRef> slotRefs = Lists.newArrayList();
+                expr.collect(SlotRef.class, slotRefs);
+                Preconditions.checkState(slotRefs.size() == 1);
+                return slotRefs.get(0);
+            }
+        }
+
+        private void replaceTableAlias(SlotRef slotRef,
+                                       CreateMaterializedViewStatement statement,
+                                       Map<TableName, Table> tableNameTableMap) {
+            TableName tableName = slotRef.getTblNameWithoutAnalyzed();
+            Table table = tableNameTableMap.get(tableName);
+            List<MaterializedView.BaseTableInfo> baseTableInfos = statement.getBaseTableInfos();
+            for (MaterializedView.BaseTableInfo baseTableInfo : baseTableInfos) {
+                if (baseTableInfo.getTable().equals(table)) {
+                    slotRef.setTblName(new TableName(baseTableInfo.getCatalogName(),
+                            baseTableInfo.getDbName(), table.getName()));
+                    break;
+                }
+            }
+        }
+
+        private void checkDistribution(CreateMaterializedViewStatement statement,
+                                       Map<TableName, Table> tableNameTableMap) {
+>>>>>>> 1427b8a4b ([BugFix] Fix column name resolved ignore resolve db name (#13504))
             DistributionDesc distributionDesc = statement.getDistributionDesc();
             Map<String, String> properties = statement.getProperties();
             List<Column> mvColumnItems = statement.getMvColumnItems();

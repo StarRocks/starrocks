@@ -7,7 +7,6 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
@@ -166,6 +165,304 @@ public class CreateMaterializedViewTest {
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                         "PROPERTIES('replication_num' = '1');")
                 .useDatabase("test");
+<<<<<<< HEAD
+=======
+        starRocksAssert.withView("create view test.view_to_tbl1 as select * from test.tbl1;");
+        currentState = GlobalStateMgr.getCurrentState();
+        testDb = currentState.getDb("test");
+    }
+
+    private void dropMv(String mvName) throws Exception {
+        String sql = "drop materialized view " + mvName;
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, statementBase);
+        stmtExecutor.execute();
+    }
+
+    private void dropTableForce(String tableName) throws Exception {
+        String sql = "drop table " + tableName +" force";
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, statementBase);
+        stmtExecutor.execute();
+    }
+
+    private void dropTable(String tableName) throws Exception {
+        String sql = "drop table " + tableName;
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, statementBase);
+        stmtExecutor.execute();
+    }
+
+    private List<TaskRunStatus> waitingTaskFinish() {
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        List<TaskRunStatus> taskRuns = taskManager.showTaskRunStatus(null);
+        int retryCount = 0, maxRetry = 5;
+        while (retryCount < maxRetry) {
+            ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
+            Constants.TaskRunState state = taskRuns.get(0).getState();
+            if (state == Constants.TaskRunState.FAILED || state == Constants.TaskRunState.SUCCESS) {
+                break;
+            }
+            retryCount++;
+            LOG.info("waiting for TaskRunState retryCount:" + retryCount);
+        }
+        return taskRuns;
+    }
+
+    private void waitingRollupJobV2Finish() throws Exception{
+        // waiting alterJobV2 finish
+        Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobsV2();
+        //Assert.assertEquals(1, alterJobs.size());
+
+        for (AlterJobV2 alterJobV2 : alterJobs.values()) {
+            if (alterJobV2.getType() != AlterJobV2.JobType.ROLLUP) {
+                continue;
+            }
+            while (!alterJobV2.getJobState().isFinalState()) {
+                System.out.println(
+                        "rollup job " + alterJobV2.getJobId() + " is running. state: " + alterJobV2.getJobState());
+                ThreadUtil.sleepAtLeastIgnoreInterrupts(1000L);
+            }
+        }
+    }
+
+    // ========== full test ==========
+
+    @Test
+    public void testFullCreate() throws Exception {
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
+            }
+        };
+        LocalDateTime startTime = LocalDateTime.now().plusSeconds(3);
+        String sql = "create materialized view mv1\n" +
+                "partition by date_trunc('month',k1)\n" +
+                "distributed by hash(s2) buckets 10\n" +
+                "refresh async START('" + startTime.format(DateUtils.DATE_TIME_FORMATTER) +
+                "') EVERY(INTERVAL 3 SECOND)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n" +
+                "as select tb1.k1, k2 s2 from tbl1 tb1;";
+        try {
+            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
+            ThreadUtil.sleepAtLeastIgnoreInterrupts(4000L);
+            Table mv1 = testDb.getTable("mv1");
+            Assert.assertTrue(mv1 instanceof MaterializedView);
+            // test partition
+            MaterializedView materializedView = (MaterializedView) mv1;
+            PartitionInfo partitionInfo = materializedView.getPartitionInfo();
+            Assert.assertEquals(1, partitionInfo.getPartitionColumns().size());
+            Assert.assertTrue(partitionInfo instanceof ExpressionRangePartitionInfo);
+            ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
+            Expr partitionExpr = expressionRangePartitionInfo.getPartitionExprs().get(0);
+            Assert.assertTrue(partitionExpr instanceof FunctionCallExpr);
+            FunctionCallExpr partitionFunctionCallExpr = (FunctionCallExpr) partitionExpr;
+            Assert.assertEquals("date_trunc", partitionFunctionCallExpr.getFnName().getFunction());
+            List<SlotRef> slotRefs = Lists.newArrayList();
+            partitionFunctionCallExpr.collect(SlotRef.class, slotRefs);
+            SlotRef partitionSlotRef = slotRefs.get(0);
+            Assert.assertEquals("k1", partitionSlotRef.getColumnName());
+            List<MaterializedView.BaseTableInfo> baseTableInfos = materializedView.getBaseTableInfos();
+            Assert.assertEquals(1, baseTableInfos.size());
+            Expr partitionRefTableExpr = materializedView.getPartitionRefTableExprs().get(0);
+            List<SlotRef> tableSlotRefs = Lists.newArrayList();
+            partitionRefTableExpr.collect(SlotRef.class, tableSlotRefs);
+            SlotRef slotRef = tableSlotRefs.get(0);
+            TableName baseTableName = slotRef.getTblNameWithoutAnalyzed();
+            Assert.assertEquals(baseTableName.getDb(), testDb.getFullName());
+            Table baseTable = testDb.getTable(baseTableName.getTbl());
+            Assert.assertNotNull(baseTable);
+            Assert.assertEquals(baseTableInfos.get(0).getTableId(), baseTable.getId());
+            Assert.assertEquals(1, baseTable.getRelatedMaterializedViews().size());
+            Column baseColumn = baseTable.getColumn(slotRef.getColumnName());
+            Assert.assertNotNull(baseColumn);
+            Assert.assertEquals("k1", baseColumn.getName());
+            // test sql
+            Assert.assertEquals("SELECT `test`.`tb1`.`k1`, `test`.`tb1`.`k2` AS `s2`\n" +
+                            "FROM `test`.`tbl1` AS `tb1`",
+                    materializedView.getViewDefineSql());
+            // test property
+            TableProperty tableProperty = materializedView.getTableProperty();
+            Assert.assertEquals(1, tableProperty.getReplicationNum().shortValue());
+            Assert.assertEquals(OlapTable.OlapTableState.NORMAL, materializedView.getState());
+            Assert.assertEquals(KeysType.DUP_KEYS, materializedView.getKeysType());
+            Assert.assertEquals(Table.TableType.MATERIALIZED_VIEW,
+                    materializedView.getType()); //TableTypeMATERIALIZED_VIEW
+            Assert.assertEquals(0, materializedView.getRelatedMaterializedViews().size(), 0);
+            Assert.assertEquals(2, materializedView.getBaseSchema().size());
+            Assert.assertTrue(materializedView.isActive());
+            // test sync
+            testFullCreateSync(materializedView, baseTable);
+        } catch (Exception e) {
+            Assert.fail(e.getMessage());
+        } finally {
+            dropMv("mv1");
+        }
+    }
+
+    public void testFullCreateSync(MaterializedView materializedView, Table baseTable) throws Exception {
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        String mvTaskName = TaskBuilder.getMvTaskName(materializedView.getId());
+        List<TaskRunStatus> taskRuns = waitingTaskFinish();
+        Assert.assertEquals(Constants.TaskRunState.SUCCESS, taskRuns.get(0).getState());
+        Collection<Partition> baseTablePartitions = ((OlapTable) baseTable).getPartitions();
+        Collection<Partition> mvPartitions = materializedView.getPartitions();
+        Assert.assertEquals(2, mvPartitions.size());
+        Assert.assertEquals(baseTablePartitions.size(), mvPartitions.size());
+
+        // add partition p3
+        String addPartitionSql = "ALTER TABLE test.tbl1 ADD PARTITION p3 values less than('2020-04-01');";
+        new StmtExecutor(connectContext, addPartitionSql).execute();
+        taskManager.executeTask(mvTaskName);
+        waitingTaskFinish();
+        Assert.assertEquals(3, baseTablePartitions.size());
+        Assert.assertEquals(baseTablePartitions.size(), mvPartitions.size());
+
+        // delete partition p3
+        String dropPartitionSql = "ALTER TABLE test.tbl1 DROP PARTITION p3\n";
+        new StmtExecutor(connectContext, dropPartitionSql).execute();
+        taskManager.executeTask(mvTaskName);
+        waitingTaskFinish();
+        Assert.assertEquals(2, mvPartitions.size());
+        Assert.assertEquals(baseTablePartitions.size(), mvPartitions.size());
+    }
+
+    @Test
+    public void testCreateAsync() {
+        LocalDateTime startTime = LocalDateTime.now().plusSeconds(3);
+        String sql = "create materialized view mv1\n" +
+                "partition by date_trunc('month',k1)\n" +
+                "distributed by hash(s2) buckets 10\n" +
+                "refresh async START('" + startTime.format(DateUtils.DATE_TIME_FORMATTER) +
+                "') EVERY(INTERVAL 3 MONTH)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n" +
+                "as select tb1.k1, k2 s2 from tbl1 tb1;";
+        Assert.assertThrows(IllegalArgumentException.class,
+                () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext));
+    }
+
+    @Test
+    public void testCreateAsyncNormal() throws Exception {
+        LocalDateTime startTime = LocalDateTime.now().plusSeconds(3);
+        String sql = "create materialized view mv1\n" +
+                "partition by date_trunc('month',k1)\n" +
+                "distributed by hash(s2) buckets 10\n" +
+                "refresh async START('" + startTime.format(DateUtils.DATE_TIME_FORMATTER) +
+                "') EVERY(INTERVAL 3 DAY)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n" +
+                "as select tb1.k1, k2 s2 from tbl1 tb1;";
+        UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+    }
+
+    @Test
+    public void testCreateAsyncLowercase() throws Exception {
+        LocalDateTime startTime = LocalDateTime.now().plusSeconds(3);
+        String sql = "create materialized view mv1\n" +
+                "partition by date_trunc('month',k1)\n" +
+                "distributed by hash(s2) buckets 10\n" +
+                "refresh async START('" + startTime.format(DateUtils.DATE_TIME_FORMATTER) +
+                "') EVERY(INTERVAL 3 day)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n" +
+                "as select tb1.k1, k2 s2 from tbl1 tb1;";
+        UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+    }
+
+    @Test
+    public void testCreateAsyncWithSingleTable() throws Exception {
+        String sql = "create materialized view mv1\n" +
+                "partition by date_trunc('month',k1)\n" +
+                "distributed by hash(s2)\n" +
+                "as select tb1.k1, k2 s2 from tbl1 tb1;";
+        CreateMaterializedViewStatement createMaterializedViewStatement = (CreateMaterializedViewStatement)
+                UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        RefreshSchemeDesc refreshSchemeDesc = createMaterializedViewStatement.getRefreshSchemeDesc();
+        Assert.assertEquals(MaterializedView.RefreshType.MANUAL,refreshSchemeDesc.getType());
+    }
+
+    @Test
+    public void testCreateSyncWithSingleTable() throws Exception {
+        String sql = "create materialized view mv1\n" +
+                "as select tb1.k1, k2 s2 from tbl1 tb1;";
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        Assert.assertTrue(statementBase instanceof CreateMaterializedViewStmt);
+    }
+
+    @Test
+    public void testFullCreateMultiTables() throws Exception {
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
+            }
+        };
+        String sql = "create materialized view mv1\n" +
+                "partition by s1\n" +
+                "distributed by hash(s2) buckets 10\n" +
+                "refresh async START('9999-12-31') EVERY(INTERVAL 3 SECOND)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n" +
+                "as select date_trunc('month',tb1.k1) s1, tb2.k2 s2 from tbl1 tb1 join tbl2 tb2 on tb1.k2 = tb2.k2;";
+        try {
+            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
+            Table mv1 = testDb.getTable("mv1");
+            Assert.assertTrue(mv1 instanceof MaterializedView);
+            // test partition
+            MaterializedView materializedView = (MaterializedView) mv1;
+            PartitionInfo partitionInfo = materializedView.getPartitionInfo();
+            Assert.assertEquals(1, partitionInfo.getPartitionColumns().size());
+            Assert.assertTrue(partitionInfo instanceof ExpressionRangePartitionInfo);
+            ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
+            Expr partitionExpr = expressionRangePartitionInfo.getPartitionExprs().get(0);
+            Assert.assertTrue(partitionExpr instanceof SlotRef);
+            SlotRef partitionSlotRef = (SlotRef) partitionExpr;
+            Assert.assertEquals("s1", partitionSlotRef.getColumnName());
+            List<MaterializedView.BaseTableInfo> baseTableInfos = materializedView.getBaseTableInfos();
+            Assert.assertEquals(2, baseTableInfos.size());
+            Expr partitionRefTableExpr = materializedView.getPartitionRefTableExprs().get(0);
+            List<SlotRef> slotRefs = Lists.newArrayList();
+            partitionRefTableExpr.collect(SlotRef.class, slotRefs);
+            SlotRef slotRef = slotRefs.get(0);
+            TableName baseTableName = slotRef.getTblNameWithoutAnalyzed();
+            Assert.assertEquals(baseTableName.getDb(), testDb.getFullName());
+            Table baseTable = testDb.getTable(baseTableName.getTbl());
+            Assert.assertNotNull(baseTable);
+            Assert.assertTrue(baseTableInfos.stream().anyMatch(baseTableInfo ->
+                    baseTableInfo.getTableId() == baseTable.getId()));
+            Assert.assertTrue(1 <= baseTable.getRelatedMaterializedViews().size());
+            Column baseColumn = baseTable.getColumn(slotRef.getColumnName());
+            Assert.assertNotNull(baseColumn);
+            Assert.assertEquals("k1", baseColumn.getName());
+            // test sql
+            Assert.assertEquals(
+                    "SELECT date_trunc('month', `test`.`tb1`.`k1`) AS `s1`, `test`.`tb2`.`k2` AS `s2`\n" +
+                            "FROM `test`.`tbl1` AS `tb1` INNER JOIN `test`.`tbl2` AS `tb2` ON `test`.`tb1`.`k2` = `test`.`tb2`.`k2`",
+                    materializedView.getViewDefineSql());
+            // test property
+            TableProperty tableProperty = materializedView.getTableProperty();
+            Assert.assertEquals(1, tableProperty.getReplicationNum().shortValue(), 1);
+            Assert.assertEquals(OlapTable.OlapTableState.NORMAL, materializedView.getState());
+            Assert.assertEquals(KeysType.DUP_KEYS, materializedView.getKeysType());
+            Assert.assertEquals(Table.TableType.MATERIALIZED_VIEW,
+                    materializedView.getType()); //TableTypeMATERIALIZED_VIEW
+            Assert.assertEquals(0, materializedView.getRelatedMaterializedViews().size());
+            Assert.assertEquals(2, materializedView.getBaseSchema().size());
+            Assert.assertTrue(materializedView.isActive());
+        } catch (Exception e) {
+            Assert.fail(e.getMessage());
+        } finally {
+            dropMv("mv1");
+        }
+>>>>>>> 1427b8a4b ([BugFix] Fix column name resolved ignore resolve db name (#13504))
     }
 
     @Test
