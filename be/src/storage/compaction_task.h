@@ -52,21 +52,21 @@ struct CompactionTaskInfo {
     uint64_t task_id{0};
     Version output_version;
     uint64_t elapsed_time{0};
-    int64_t tablet_id;
-    double compaction_score;
+    int64_t tablet_id{0};
+    double compaction_score{0};
     int64_t start_time{0};
     int64_t end_time{0};
-    size_t input_rows_num;
-    uint32_t input_rowsets_num;
-    size_t input_rowsets_size;
-    size_t input_segments_num;
-    uint32_t segment_iterator_num;
+    size_t input_rows_num{0};
+    uint32_t input_rowsets_num{0};
+    size_t input_rowsets_size{0};
+    size_t input_segments_num{0};
+    uint32_t segment_iterator_num{0};
     uint32_t output_segments_num{0};
     uint32_t output_rowset_size{0};
     size_t merged_rows{0};
     size_t filtered_rows{0};
     size_t output_num_rows{0};
-    CompactionType compaction_type;
+    CompactionType compaction_type{CompactionType::INVALID_COMPACTION};
 
     // for vertical compaction
     size_t column_group_size{0};
