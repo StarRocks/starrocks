@@ -12,6 +12,7 @@ public class GrantRoleStmt extends BaseGrantRevokeRoleStmt {
     public GrantRoleStmt(String granteeRole, UserIdentity userIdent) {
         super(granteeRole, userIdent, "GRANT", "TO");
     }
+
     public GrantRoleStmt(String granteeRole, String role) {
         super(granteeRole, role, "GRANT", "TO");
     }

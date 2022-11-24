@@ -24,12 +24,12 @@ import java.util.List;
  * so their execution efficiency can be approximately regarded as consistent. The implementation of
  * broadcast join is a little different from the other three.
  * 1. In the build hash table stage of broadcast join, the parallelism is 1
- *    while it can be parallelized in shuffle join.
+ * while it can be parallelized in shuffle join.
  * 2. Broadcast join consumes more memory for redundant data in multiple BEs.
  * 3. The data size in each hash table of shuffle join is 1/parallelism of right table_size
- *    while it is full size in broadcast join. A small hash table can improve probe efficiency.
+ * while it is full size in broadcast join. A small hash table can improve probe efficiency.
  * 4. The process of redistributing data by shuffle operation makes the tasks of each processing thread
- *    are more balanced, and it is more conducive to parallel computing.
+ * are more balanced, and it is more conducive to parallel computing.
  * Therefore, our join execution cost calculation model should consider parameters such as join execution mode,
  * parallelism, and left and right table size. The most important thing in the model is the evaluation of the
  * probe cost for each row. When the size of the right table is greater than bottom_number, the average probe
