@@ -137,7 +137,7 @@ INTO TABLE <table_name>
 
 ### `broker_properties`
 
-用于提供通过 Broker 访问的数据源的信息。不同的 Broker、以及不同的访问方式，需要提供的数据源信息也不同。
+用于提供访问数据源的鉴权信息。数据源不同，需要提供的鉴权信息也不同。
 
 #### HDFS
 
