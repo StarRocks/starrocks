@@ -22,6 +22,8 @@
 package com.starrocks.analysis;
 
 import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.RowDelimiter;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -30,42 +32,35 @@ public class RowDelimiterTest {
     public void testNormal() throws AnalysisException {
         // \n
         RowDelimiter delimiter = new RowDelimiter("\n");
-        delimiter.analyze();
         Assert.assertEquals("'\n'", delimiter.toSql());
         Assert.assertEquals("\n", delimiter.getRowDelimiter());
 
         // \x01
         delimiter = new RowDelimiter("\\x01");
-        delimiter.analyze();
         Assert.assertEquals("'\\x01'", delimiter.toSql());
         Assert.assertEquals("\1", delimiter.getRowDelimiter());
 
         // \x00 \x01
         delimiter = new RowDelimiter("\\x0001");
-        delimiter.analyze();
         Assert.assertEquals("'\\x0001'", delimiter.toSql());
         Assert.assertEquals("\0\1", delimiter.getRowDelimiter());
 
         delimiter = new RowDelimiter("|");
-        delimiter.analyze();
         Assert.assertEquals("'|'", delimiter.toSql());
         Assert.assertEquals("|", delimiter.getRowDelimiter());
 
         delimiter = new RowDelimiter("\\|");
-        delimiter.analyze();
         Assert.assertEquals("'\\|'", delimiter.toSql());
         Assert.assertEquals("\\|", delimiter.getRowDelimiter());
     }
 
-    @Test(expected = AnalysisException.class)
-    public void testHexFormatError() throws AnalysisException {
+    @Test(expected = SemanticException.class)
+    public void testHexFormatError() {
         RowDelimiter delimiter = new RowDelimiter("\\x0g");
-        delimiter.analyze();
     }
 
-    @Test(expected = AnalysisException.class)
-    public void testHexLengthError() throws AnalysisException {
+    @Test(expected = SemanticException.class)
+    public void testHexLengthError() {
         RowDelimiter delimiter = new RowDelimiter("\\x011");
-        delimiter.analyze();
     }
 }

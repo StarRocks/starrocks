@@ -47,6 +47,7 @@ import java.util.stream.Collectors;
 public class CostModel {
 
     private static final Logger LOG = LogManager.getLogger(CostModel.class);
+
     public static double calculateCost(GroupExpression expression) {
         ExpressionContext expressionContext = new ExpressionContext(expression);
         return calculateCost(expressionContext);
