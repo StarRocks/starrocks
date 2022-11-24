@@ -4,7 +4,6 @@ package com.starrocks.lake.delete;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.AccessTestUtil;
-import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.SlotRef;
@@ -33,6 +32,7 @@ import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.persist.EditLog;
 import com.starrocks.proto.DeleteDataRequest;
 import com.starrocks.proto.DeleteDataResponse;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryStateException;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
@@ -89,7 +89,7 @@ public class DeleteTest {
 
     private Database db;
     private Auth auth;
-    private Analyzer analyzer;
+    private ConnectContext connectContext = new ConnectContext();
     private DeleteHandler deleteHandler;
 
     private Database createDb() {
@@ -153,9 +153,9 @@ public class DeleteTest {
 
     @Before
     public void setUp() {
+        connectContext.setGlobalStateMgr(globalStateMgr);
         deleteHandler = new DeleteHandler();
         auth = AccessTestUtil.fetchAdminAccess();
-        analyzer = AccessTestUtil.fetchAdminAnalyzer();
         db = createDb();
     }
 
@@ -217,8 +217,8 @@ public class DeleteTest {
                 new PartitionNames(false, Lists.newArrayList(partitionName)), binaryPredicate);
 
         try {
-            deleteStmt.analyze(analyzer);
-        } catch (UserException e) {
+            com.starrocks.sql.analyzer.Analyzer.analyze(deleteStmt, connectContext);
+        } catch (Exception e) {
             Assert.fail();
         }
 
@@ -283,8 +283,8 @@ public class DeleteTest {
                 new PartitionNames(false, Lists.newArrayList(partitionName)), binaryPredicate);
 
         try {
-            deleteStmt.analyze(analyzer);
-        } catch (UserException e) {
+            com.starrocks.sql.analyzer.Analyzer.analyze(deleteStmt, connectContext);
+        } catch (Exception e) {
             Assert.fail();
         }
 
@@ -324,7 +324,7 @@ public class DeleteTest {
         DeleteStmt deleteStmt = new DeleteStmt(new TableName(dbName, tableName),
                 new PartitionNames(false, Lists.newArrayList(partitionName)), binaryPredicate);
 
-        deleteStmt.analyze(analyzer);
+        com.starrocks.sql.analyzer.Analyzer.analyze(deleteStmt, connectContext);
         try {
             deleteHandler.process(deleteStmt);
         } catch (DdlException e) {
