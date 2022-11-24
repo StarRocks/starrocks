@@ -42,6 +42,7 @@ OlapScanOperator::OlapScanOperator(OperatorFactory* factory, int32_t id, ScanNod
 
 Status OlapScanOperator::do_prepare(RuntimeState*) {
     RETURN_IF_ERROR(_capture_tablet_rowsets());
+    _morsel_queue->set_tablet_rowsets(_tablet_rowsets);
     return Status::OK();
 }
 
