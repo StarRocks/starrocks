@@ -8,6 +8,10 @@
 #include "storage/olap_common.h"
 
 namespace starrocks {
+
+class Rowset;
+using RowsetSharedPtr = std::shared_ptr<Rowset>;
+
 namespace pipeline {
 class Morsel;
 using MorselPtr = std::unique_ptr<Morsel>;
@@ -23,8 +27,8 @@ public:
 
     int32_t get_plan_node_id() const { return _plan_node_id; }
 
-    void set_rowsets(std::vector<RowsetSharedPtr> rowsets) { _rowsets = std::move(rowsets); }
-    const std::vector<RowsetSharedPtr>& rowsets() const { return _rowsets; }
+    void set_rowsets(std::vector<RowsetSharedPtr> rowsets);
+    const std::vector<RowsetSharedPtr>& rowsets() const;
 
 private:
     int32_t _plan_node_id;
@@ -73,9 +77,7 @@ public:
 
     bool empty() const { return _pop_index >= _num_morsels; }
 
-    void set_tablet_rowsets(const std::vector<std::vector<RowsetSharedPtr>>& tablet_rowsets) {
-        _tablet_rowsets = tablet_rowsets;
-    }
+    void set_tablet_rowsets(const std::vector<std::vector<RowsetSharedPtr>>& tablet_rowsets);
 
     // Split the morsel queue into `split_size` morsel queues.
     // For example:
