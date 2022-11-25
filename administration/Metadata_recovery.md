@@ -160,7 +160,13 @@ java -jar lib/je-7.3.7.jar DbPrintLog -h meta/bdb/ -vd
 ALTER SYSTEM DROP FOLLOWER/OBSERVER;
 ```
 
-然后通过加入全新 FE 的方式重新添加各 FE 节点。
+然后您需要将恢复节点的 **/fe/meta/** 备份，然后清空该目录。
+
+```shell
+rm -rf meta/*
+```
+
+最后通过加入全新 FE 的方式重新添加各 FE 节点。
 
 ```shell
 bin/start_fe.sh --helper "fe_host:edit_log_port" --daemon
