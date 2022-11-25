@@ -785,4 +785,7 @@ CONF_Int64(max_length_for_bitmap_function, "1000000");
 
 // Used to limit buffer size of tablet send channel.
 CONF_mInt64(send_channel_buffer_limit, "67108864");
+
+CONF_mInt64(l0_max_file_size, "209715200"); // 200MB
+
 } // namespace starrocks::config
