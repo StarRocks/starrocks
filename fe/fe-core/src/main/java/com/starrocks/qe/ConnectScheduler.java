@@ -25,6 +25,10 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
 import com.starrocks.common.ThreadPoolManager;
+import com.starrocks.metric.GaugeMetric;
+import com.starrocks.metric.Metric;
+import com.starrocks.metric.MetricLabel;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.MysqlProto;
 import com.starrocks.mysql.nio.NConnectContext;
 import com.starrocks.mysql.privilege.PrivPredicate;
@@ -49,6 +53,7 @@ public class ConnectScheduler {
 
     private final Map<Long, ConnectContext> connectionMap = Maps.newConcurrentMap();
     private final Map<String, AtomicInteger> connByUser = Maps.newConcurrentMap();
+    private final Map<String, GaugeMetric<Integer>> userConnMetricsCounter = Maps.newConcurrentMap();
     private final ExecutorService executor = ThreadPoolManager
             .newDaemonCacheThreadPool(Config.max_connection_scheduler_threads_num, "connect-scheduler-pool", true);
 
@@ -131,6 +136,7 @@ public class ConnectScheduler {
         numberConnection.incrementAndGet();
         connByUser.get(ctx.getQualifiedUser()).incrementAndGet();
         connectionMap.put((long) ctx.getConnectionId(), ctx);
+        updateConnectUsersMetrics(ctx);
         return true;
     }
 
@@ -141,6 +147,30 @@ public class ConnectScheduler {
             if (conns != null) {
                 conns.decrementAndGet();
             }
+        }
+
+        if (userConnMetricsCounter.containsKey(ctx.getQualifiedUser())) {
+            if (userConnMetricsCounter.get(ctx.getQualifiedUser()).getValue() <= 1) {
+                userConnMetricsCounter.remove(ctx.getQualifiedUser());
+                MetricRepo.removeMetric(ctx.getQualifiedUser());
+            }
+        }
+    }
+
+    // update metrics about connection by users
+    public void updateConnectUsersMetrics(ConnectContext ctx) {
+        String userName = ctx.getQualifiedUser();
+        if (userConnMetricsCounter.get(userName) == null) {
+            GaugeMetric<Integer> connections = new GaugeMetric<Integer>(
+                    "connection_total_user", Metric.MetricUnit.CONNECTIONS, "total connections by user") {
+                @Override
+                public Integer getValue() {
+                    return connByUser.get(userName).get();
+                }
+            };
+            connections.addLabel(new MetricLabel("user", userName));
+            MetricRepo.addMetric(connections);
+            userConnMetricsCounter.put(userName, connections);
         }
     }
 

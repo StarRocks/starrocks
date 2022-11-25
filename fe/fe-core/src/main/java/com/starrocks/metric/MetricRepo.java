@@ -685,5 +685,8 @@ public final class MetricRepo {
         init();
         STARROCKS_METRIC_REGISTER.addMetric(metric);
     }
-}
 
+    public static void removeMetric(String name) {
+        STARROCKS_METRIC_REGISTER.removeMetrics(name);
+    }
+}
