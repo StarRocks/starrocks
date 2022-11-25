@@ -303,7 +303,7 @@ public class MaterializedViewRewriter {
         List<ColumnRefOperator> originalOutputColumns = queryColumnRefMap.keySet().stream().collect(Collectors.toList());
 
         // rewrite query
-        OptExpressionDuplicator duplicator = new OptExpressionDuplicator(rewriteContext.getQueryRefFactory());
+        OptExpressionDuplicator duplicator = new OptExpressionDuplicator(materializationContext);
         OptExpression newQueryInput = duplicator.duplicate(queryInput);
         List<ColumnRefOperator> newQueryOutputColumns = duplicator.getMappedColumns(originalOutputColumns);
 

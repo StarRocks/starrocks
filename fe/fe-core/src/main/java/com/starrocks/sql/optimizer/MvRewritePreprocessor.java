@@ -73,16 +73,16 @@ public class MvRewritePreprocessor {
             // 1. build mv query logical plan
             ColumnRefFactory mvColumnRefFactory = new ColumnRefFactory();
             MaterializedViewOptimizer mvOptimizer = new MaterializedViewOptimizer();
-            OptExpression mvPlan = mvOptimizer.optimize(mv, mvColumnRefFactory, connectContext);
+            OptExpression mvPlan = mvOptimizer.optimize(mv, mvColumnRefFactory, connectContext, partitionNamesToRefresh);
             if (!MvUtils.isValidMVPlan(mvPlan)) {
                 continue;
             }
 
             List<ColumnRefOperator> mvOutputColumns = mvOptimizer.getOutputExpressions();
             MaterializationContext materializationContext =
-                    new MaterializationContext(mv, mvPlan, queryColumnRefFactory, mvColumnRefFactory);
+                    new MaterializationContext(mv, mvPlan, queryColumnRefFactory, mvColumnRefFactory, partitionNamesToRefresh);
             // generate scan mv plan here to reuse it in rule applications
-            LogicalOlapScanOperator scanMvOp = createScanMvExpression(materializationContext);
+            LogicalOlapScanOperator scanMvOp = createScanMvOperator(materializationContext);
             materializationContext.setScanMvOperator(scanMvOp);
             String dbName = connectContext.getGlobalStateMgr().getDb(mv.getDbId()).getFullName();
             connectContext.getDumpInfo().addTable(dbName, mv);
@@ -108,7 +108,7 @@ public class MvRewritePreprocessor {
         }
     }
 
-    private LogicalOlapScanOperator createScanMvExpression(MaterializationContext materializationContext) {
+    private LogicalOlapScanOperator createScanMvOperator(MaterializationContext materializationContext) {
         MaterializedView mv = materializationContext.getMv();
 
         ImmutableMap.Builder<ColumnRefOperator, Column> colRefToColumnMetaMapBuilder = ImmutableMap.builder();
