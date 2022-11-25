@@ -95,7 +95,8 @@ std::string get_usage(const std::string& progname) {
           "--json_meta_path=path\n";
     ss << "./meta_tool --operation=delete_meta "
           "--root_path=/path/to/storage/path --tablet_id=tabletid "
-          "[--schema_hash=schemahash]\n";
+          "[--schema_hash=schemahash] | ./meta_tool --operation=delete_meta "
+          "--root_path=/path/to/storage/path --table_id=tableid\n";
     ss << "./meta_tool --operation=delete_meta --tablet_file=file_path\n";
     ss << "./meta_tool --operation=delete_table_meta --table_id=table_id\n";
     ss << "./meta_tool --operation=delete_rowset_meta "
@@ -170,7 +171,13 @@ void load_meta(DataDir* data_dir) {
 }
 
 void delete_meta(DataDir* data_dir) {
-    if (FLAGS_schema_hash != 0) {
+    if (FLAGS_table_id != 0) {
+        auto st = TabletMetaManager::remove_table_meta(data_dir, FLAGS_table_id);
+        if (!st.ok()) {
+            std::cout << "delete table meta failed for table_id:" << FLAGS_table_id << ", status:" << st << std::endl;
+            return;
+        }
+    } else if (FLAGS_schema_hash != 0) {
         auto st = TabletMetaManager::remove(data_dir, FLAGS_tablet_id, FLAGS_schema_hash);
         if (!st.ok()) {
             std::cout << "delete tablet meta failed for tablet_id:" << FLAGS_tablet_id
@@ -188,16 +195,6 @@ void delete_meta(DataDir* data_dir) {
     std::cout << "delete meta successfully" << std::endl;
 }
 
-void delete_table_meta(DataDir* data_dir) {
-    auto st = TabletMetaManager::remove_table_meta(data_dir, FLAGS_table_id);
-    if (!st.ok()) {
-        std::cout << "delete table meta failed for table_id:" << FLAGS_table_id << " status:" << st.to_string()
-                  << std::endl;
-        return;
-    }
-    std::cout << "delete meta successfully" << std::endl;
-}
-
 void delete_rowset_meta(DataDir* data_dir) {
     std::string key = "rst_" + FLAGS_tablet_uid + "_" + FLAGS_rowset_id;
     Status s = data_dir->get_meta()->remove(starrocks::META_COLUMN_FAMILY_INDEX, key);
@@ -210,25 +207,25 @@ void delete_rowset_meta(DataDir* data_dir) {
 }
 
 void delete_persistent_index_meta(DataDir* data_dir) {
-    std::string key = "tpi_";
-    starrocks::put_fixed64_le(&key, BigEndian::FromHost64(FLAGS_tablet_id));
-    Status st = data_dir->get_meta()->remove(starrocks::META_COLUMN_FAMILY_INDEX, key);
-    if (st.ok()) {
-        std::cout << "delete tablet persistent index meta success, tablet_id: " << FLAGS_tablet_id << std::endl;
+    if (FLAGS_table_id != 0) {
+        auto st = TabletMetaManager::remove_table_persistent_index_meta(data_dir, FLAGS_table_id);
+        if (!st.ok()) {
+            std::cout << "delete table persistent index meta failed for table_id:" << FLAGS_table_id
+                      << " status:" << st.to_string() << std::endl;
+            return;
+        }
+        std::cout << "delete table persistent index meta successfully" << std::endl;
     } else {
-        std::cout << "delete tablet persistent index meta failed, tablet_id: " << FLAGS_tablet_id
-                  << ", status: " << st.to_string() << std::endl;
+        std::string key = "tpi_";
+        starrocks::put_fixed64_le(&key, BigEndian::FromHost64(FLAGS_tablet_id));
+        Status st = data_dir->get_meta()->remove(starrocks::META_COLUMN_FAMILY_INDEX, key);
+        if (st.ok()) {
+            std::cout << "delete tablet persistent index meta success, tablet_id: " << FLAGS_tablet_id << std::endl;
+        } else {
+            std::cout << "delete tablet persistent index meta failed, tablet_id: " << FLAGS_tablet_id
+                      << ", status: " << st.to_string() << std::endl;
+        }
     }
-}
-
-void delete_table_persistent_index_meta(DataDir* data_dir) {
-    auto st = TabletMetaManager::remove_table_persistent_index_meta(data_dir, FLAGS_table_id);
-    if (!st.ok()) {
-        std::cout << "delete table persistent index meta failed for table_id:" << FLAGS_table_id
-                  << " status:" << st.to_string() << std::endl;
-        return;
-    }
-    std::cout << "delete table persistent index meta successfully" << std::endl;
 }
 
 void compact_meta(DataDir* data_dir) {
@@ -623,9 +620,7 @@ int meta_tool_main(int argc, char** argv) {
                                                   "compact_meta",
                                                   "get_meta_stats",
                                                   "ls",
-                                                  "check_table_meta_consistency",
-                                                  "delete_table_meta",
-                                                  "delete_table_persistent_index_meta"};
+                                                  "check_table_meta_consistency"};
         if (valid_operations.find(FLAGS_operation) == valid_operations.end()) {
             std::cout << "invalid operation:" << FLAGS_operation << std::endl;
             return -1;
@@ -662,10 +657,6 @@ int meta_tool_main(int argc, char** argv) {
             list_meta(data_dir.get());
         } else if (FLAGS_operation == "check_table_meta_consistency") {
             check_meta_consistency(data_dir.get());
-        } else if (FLAGS_operation == "delete_table_meta") {
-            delete_table_meta(data_dir.get());
-        } else if (FLAGS_operation == "delete_table_persistent_index_meta") {
-            delete_table_persistent_index_meta(data_dir.get());
         } else {
             std::cout << "invalid operation: " << FLAGS_operation << "\n" << usage << std::endl;
             return -1;

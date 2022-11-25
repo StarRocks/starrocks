@@ -1250,6 +1250,25 @@ Status TabletMetaManager::get_stats(DataDir* store, MetaStoreStats* stats, bool 
     return Status::OK();
 }
 
+Status TabletMetaManager::remove_primary_key_meta(DataDir* store, WriteBatch* batch, TTabletId tablet_id) {
+    if (!clear_log(store, batch, tablet_id).ok()) {
+        LOG(WARNING) << "clear_log add to batch failed";
+    }
+    if (!clear_del_vector(store, batch, tablet_id).ok()) {
+        LOG(WARNING) << "clear delvec add to batch failed";
+    }
+    if (!clear_rowset(store, batch, tablet_id).ok()) {
+        LOG(WARNING) << "clear rowset add to batch failed";
+    }
+    if (!clear_pending_rowset(store, batch, tablet_id).ok()) {
+        LOG(WARNING) << "clear rowset add to batch failed";
+    }
+    if (!clear_persistent_index(store, batch, tablet_id).ok()) {
+        LOG(WARNING) << "clear persistent index add to batch failed";
+    }
+    return Status::OK();
+}
+
 Status TabletMetaManager::remove(DataDir* store, TTabletId tablet_id) {
     KVStore* meta = store->get_meta();
     WriteBatch batch;
@@ -1282,21 +1301,7 @@ Status TabletMetaManager::remove(DataDir* store, TTabletId tablet_id) {
     string prefix = strings::Substitute("$0$1_", HEADER_PREFIX, tablet_id);
     RETURN_IF_ERROR(meta->iterate(META_COLUMN_FAMILY_INDEX, prefix, traverse_tabletmeta_func));
     if (is_primary) {
-        if (!clear_log(store, &batch, tablet_id).ok()) {
-            LOG(WARNING) << "clear_log add to batch failed";
-        }
-        if (!clear_del_vector(store, &batch, tablet_id).ok()) {
-            LOG(WARNING) << "clear delvec add to batch failed";
-        }
-        if (!clear_rowset(store, &batch, tablet_id).ok()) {
-            LOG(WARNING) << "clear rowset add to batch failed";
-        }
-        if (!clear_pending_rowset(store, &batch, tablet_id).ok()) {
-            LOG(WARNING) << "clear rowset add to batch failed";
-        }
-        if (!clear_persistent_index(store, &batch, tablet_id).ok()) {
-            LOG(WARNING) << "clear persistent index add to batch failed";
-        }
+        remove_primary_key_meta(store, &batch, tablet_id);
     }
     return meta->write_batch(&batch);
 }
@@ -1319,21 +1324,7 @@ Status TabletMetaManager::remove_table_meta(DataDir* store, TTableId table_id) {
                 if (!st.ok()) {
                     LOG(WARNING) << "batch.Delete failed, key:" << key;
                 } else if (is_primary) {
-                    if (!clear_log(store, &batch, tablet_meta_pb.tablet_id()).ok()) {
-                        LOG(WARNING) << "clear_log add to batch failed";
-                    }
-                    if (!clear_del_vector(store, &batch, tablet_meta_pb.tablet_id()).ok()) {
-                        LOG(WARNING) << "clear delvec add to batch failed";
-                    }
-                    if (!clear_rowset(store, &batch, tablet_meta_pb.tablet_id()).ok()) {
-                        LOG(WARNING) << "clear rowset add to batch failed";
-                    }
-                    if (!clear_pending_rowset(store, &batch, tablet_meta_pb.tablet_id()).ok()) {
-                        LOG(WARNING) << "clear rowset add to batch failed";
-                    }
-                    if (!clear_persistent_index(store, &batch, tablet_meta_pb.tablet_id()).ok()) {
-                        LOG(WARNING) << "clear persistent index add to batch failed";
-                    }
+                    remove_primary_key_meta(store, &batch, tablet_meta_pb.tablet_id());
                 }
             }
         }
