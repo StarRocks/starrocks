@@ -258,7 +258,12 @@ public enum ErrorCode {
     ERR_QUERY_EXCEPTION(5077, new byte[] {'4', '2', '0', '0', '0'},
             "Query cancelled by crash of backends."),
     ERROR_NO_WG_ERROR(5079, new byte[] {'4', '2', '0', '0', '0'},
-            "Unknown workgroup '%s' ");
+            "Unknown workgroup '%s' "),
+    ERR_PLAN_VALIDATE_ERROR(6000, new byte[] {'0', '7', '0', '0', '0'},
+            "Incorrect logical plan found in operator: %s. Invalid reason: %s"),
+    ERR_INVALID_DATE_ERROR(6001, new byte[] {'2', '2', '0', '0', '0'}, "Incorrect %s value %s");
+
+
 
     ErrorCode(int code, byte[] sqlState, String errorMsg) {
         this.code = code;
