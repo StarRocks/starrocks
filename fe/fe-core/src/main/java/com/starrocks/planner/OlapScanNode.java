@@ -732,21 +732,8 @@ public class OlapScanNode extends ScanNode {
         return partitions.subList(numPartitions - numHotIds, numPartitions).stream().map(Map.Entry::getKey)
                 .collect(Collectors.toSet());
     }
-    @Override
-    public void normalizeConjuncts(FragmentNormalizer normalizer, TNormalPlanNode planNode, List<Expr> conjuncts) {
-        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
-        if (partitionInfo.getType() != PartitionType.RANGE) {
-            normalizer.setUncacheable(true);
-            return;
-        }
-        // suppress NotImplementationException
-        RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+    private List<Expr> decomposeRangePredicates(FragmentNormalizer normalizer, TNormalPlanNode planNode, RangePartitionInfo rangePartitionInfo, List<Expr> conjuncts) {
         List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
-        // Only support one-column partition key, so it is uncacheable for multi-column partition key.
-        if (partitionColumns.size() != 1) {
-            normalizer.setUncacheable(true);
-            return;
-        }
         Set<Long> selectedPartIdSet = new HashSet<>(selectedPartitionIds);
         selectedPartIdSet.removeAll(getHotPartitionIds(rangePartitionInfo));
 
@@ -787,7 +774,23 @@ public class OlapScanNode extends ScanNode {
             rangeMap = rangePartitionInfo.getSortedRangeMap(selectedPartIdSet);
         } catch (AnalysisException ignored) {
         }
-        conjuncts = normalizer.getPartitionRangePredicates(conjuncts, rangeMap, rangePartitionInfo, slotId);
+        return normalizer.getPartitionRangePredicates(conjuncts, rangeMap, rangePartitionInfo, slotId);
+    }
+
+    @Override
+    public void normalizeConjuncts(FragmentNormalizer normalizer, TNormalPlanNode planNode, List<Expr> conjuncts) {
+        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+        // TODO (by satanson): predicates' decomposition
+        //  At present, we support predicates' decomposition on RangePartition with single-column partition key.
+        //  in the future, predicates' decomposition on RangePartition with multi-column partition key will be
+        //  supported.
+        if (partitionInfo.getType() == PartitionType.RANGE &&
+                ((RangePartitionInfo) partitionInfo).getPartitionColumns().size() == 1) {
+            RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+            conjuncts = decomposeRangePredicates(normalizer, planNode, rangePartitionInfo, conjuncts);
+        } else {
+            normalizer.createSimpleRangeMap(getSelectedPartitionIds());
+        }
         planNode.setConjuncts(normalizer.normalizeExprs(conjuncts));
     }
 
