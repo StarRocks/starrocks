@@ -104,7 +104,11 @@ docker build --no-cache --progress=plain -t starrocks:1.0 .
 运行以下命令启动 Docker 容器。
 
 ```shell
+1、端口映射启动方式
 docker run -p 9030:9030 -p 8030:8030 -p 8040:8040 --privileged=true -itd --name starrocks-test starrocks:1.0
+
+2、同宿主机网络环境启动方式（避免使用stream load导入数据等找不到be节点ip地址）
+docker run  --network host  --privileged=true -itd --name starrocks-test starrocks:1.0
 ```
 
 ## 连接 StarRocks
