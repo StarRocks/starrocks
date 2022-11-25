@@ -98,13 +98,12 @@ std::string get_usage(const std::string& progname) {
           "[--schema_hash=schemahash] | ./meta_tool --operation=delete_meta "
           "--root_path=/path/to/storage/path --table_id=tableid\n";
     ss << "./meta_tool --operation=delete_meta --tablet_file=file_path\n";
-    ss << "./meta_tool --operation=delete_table_meta --table_id=table_id\n";
     ss << "./meta_tool --operation=delete_rowset_meta "
           "--root_path=/path/to/storage/path --tablet_uid=tablet_uid "
           "--rowset_id=rowset_id\n";
     ss << "./meta_tool --operation=delete_persistent_index_meta "
-          "--root_path=/path/to/storage/path --tablet_id=tabletid\n";
-    ss << "./meta_tool --operation=delete_table_persistent_index_meta "
+          "--root_path=/path/to/storage/path --tablet_id=tabletid | "
+          "./meta_tool --operation=delete_persistent_index_meta "
           "--root_path=/path/to/storage/path --table_id=tableid\n";
     ss << "./meta_tool --operation=compact_meta --root_path=/path/to/storage/path\n";
     ss << "./meta_tool --operation=get_meta_stats --root_path=/path/to/storage/path\n";
