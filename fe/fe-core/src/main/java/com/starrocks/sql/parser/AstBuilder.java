@@ -348,6 +348,7 @@ import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.TerminalNode;
 import org.apache.commons.collections4.ListUtils;
+import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.io.StringWriter;
@@ -1080,65 +1081,30 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         QueryStatement queryStatement = (QueryStatement) visit(context.queryStatement());
 
         RefreshSchemeDesc refreshSchemeDesc = null;
-        Map<String, String> properties = null;
+        Map<String, String> properties = new HashMap<>();
         ExpressionPartitionDesc expressionPartitionDesc = null;
         DistributionDesc distributionDesc = null;
 
         for (StarRocksParser.MaterializedViewDescContext desc : ListUtils.emptyIfNull(context.materializedViewDesc())) {
             // process properties
             if (desc.properties() != null) {
-                if (properties != null) {
+                if (MapUtils.isNotEmpty(properties)) {
                     throw new IllegalArgumentException("Duplicated PROPERTIES clause");
                 }
-                properties = new HashMap<>();
                 List<Property> propertyList = visit(desc.properties().property(), Property.class);
                 for (Property property : propertyList) {
                     properties.put(property.getKey(), property.getValue());
                 }
             }
             // process refresh
-            if (desc.refreshSchemeDesc() == null) {
-                if (desc.distributionDesc() == null) {
-                    // use old materialized index
-                    refreshSchemeDesc = new SyncRefreshSchemeDesc();
-                } else {
-                    // use new manual refresh
-                    refreshSchemeDesc = new ManualRefreshSchemeDesc();
-                }
-            } else {
+            if (desc.refreshSchemeDesc() != null) {
                 if (refreshSchemeDesc != null) {
-                    throw new IllegalArgumentException("Duplicated REFRESH caluse");
+                    throw new IllegalArgumentException("Duplicated REFRESH clause");
                 }
                 refreshSchemeDesc = ((RefreshSchemeDesc) visit(desc.refreshSchemeDesc()));
             }
-            if (refreshSchemeDesc instanceof SyncRefreshSchemeDesc) {
-                if (desc.primaryExpression() != null) {
-                    throw new IllegalArgumentException(
-                            "Partition by is not supported by SYNC refresh type int materialized view");
-                }
-                if (desc.distributionDesc() != null) {
-                    throw new IllegalArgumentException(
-                            "Distribution by is not supported by SYNC refresh type in materialized view");
-                }
-                return new CreateMaterializedViewStmt(tableName.getTbl(), queryStatement, properties);
-            }
-            if (refreshSchemeDesc instanceof AsyncRefreshSchemeDesc) {
-                AsyncRefreshSchemeDesc asyncRefreshSchemeDesc = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
-                if (!checkMaterializedViewAsyncRefreshSchemeUnitIdentifier(asyncRefreshSchemeDesc)) {
-                    throw new IllegalArgumentException(
-                            "CreateMaterializedView UnitIdentifier only support 'SECOND','MINUTE','HOUR' or 'DAY'");
-                }
 
-            }
-            if (!Config.enable_experimental_mv) {
-                throw new IllegalArgumentException("The experimental mv is disabled, " +
-                        "you can set FE config enable_experimental_mv=true to enable it.");
-            }
-            if (refreshSchemeDesc instanceof IncrementalRefreshSchemeDesc) {
-                throw new IllegalArgumentException("Realtime materialized view is not supported");
-            }
-
-            // process partition
+            // process partition by
             if (desc.primaryExpression() != null) {
                 if (expressionPartitionDesc != null) {
                     throw new IllegalArgumentException("Duplicated PARTITION clause");
@@ -1153,13 +1119,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                             break;
                         }
                     }
-                    if (expressionPartitionDesc == null) {
-                        throw new IllegalArgumentException(
-                                "Partition exp not supports:" + expr.toSql());
-                    }
                 } else {
-                    throw new IllegalArgumentException(
-                            "Partition exp not supports:" + expr.toSql());
+                    throw new IllegalArgumentException("Partition exp not supports:" + expr.toSql());
+                }
+
+                if (expressionPartitionDesc == null) {
+                    throw new IllegalArgumentException("Partition exp not supports:" + expr.toSql());
                 }
             }
 
@@ -1170,6 +1135,42 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 }
                 distributionDesc = (DistributionDesc) visit(desc.distributionDesc());
             }
+        }
+
+        if (refreshSchemeDesc == null) {
+            if (distributionDesc == null) {
+                // use old materialized index
+                refreshSchemeDesc = new SyncRefreshSchemeDesc();
+            } else {
+                // use new manual refresh
+                refreshSchemeDesc = new ManualRefreshSchemeDesc();
+            }
+        }
+        if (refreshSchemeDesc instanceof SyncRefreshSchemeDesc) {
+            if (expressionPartitionDesc != null) {
+                throw new IllegalArgumentException(
+                        "Partition by is not supported by SYNC refresh type int materialized view");
+            }
+            if (distributionDesc != null) {
+                throw new IllegalArgumentException(
+                        "Distribution by is not supported by SYNC refresh type in materialized view");
+            }
+            return new CreateMaterializedViewStmt(tableName.getTbl(), queryStatement, properties);
+        }
+        if (refreshSchemeDesc instanceof AsyncRefreshSchemeDesc) {
+            AsyncRefreshSchemeDesc asyncRefreshSchemeDesc = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
+            if (!checkMaterializedViewAsyncRefreshSchemeUnitIdentifier(asyncRefreshSchemeDesc)) {
+                throw new IllegalArgumentException(
+                        "CreateMaterializedView UnitIdentifier only support 'SECOND','MINUTE','HOUR' or 'DAY'");
+            }
+        }
+
+        if (!Config.enable_experimental_mv) {
+            throw new IllegalArgumentException("The experimental mv is disabled, " +
+                    "you can set FE config enable_experimental_mv=true to enable it.");
+        }
+        if (refreshSchemeDesc instanceof IncrementalRefreshSchemeDesc) {
+            throw new IllegalArgumentException("Realtime materialized view is not supported");
         }
 
         return new CreateMaterializedViewStatement(tableName, ifNotExist, comment,
