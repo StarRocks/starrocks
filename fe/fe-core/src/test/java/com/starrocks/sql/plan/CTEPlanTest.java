@@ -687,7 +687,6 @@ public class CTEPlanTest extends PlanTestBase {
         }
     }
 
-
     @Test
     public void testNestCte() throws Exception {
         String sql = "select /*+SET_VAR(cbo_max_reorder_node_use_exhaustive=1)*/* " +
@@ -701,5 +700,33 @@ public class CTEPlanTest extends PlanTestBase {
                 "  STREAM DATA SINK\n" +
                 "    EXCHANGE ID: 21\n" +
                 "    RANDOM");
+    }
+
+    @Test
+    public void testGatherWindowCTE() throws Exception {
+        String sql = " WITH with_t_0 as (\n" +
+                "  SELECT v3 FROM t0 \n" +
+                ")\n" +
+                "SELECT\n" +
+                "  subt0.v3,\n" +
+                "  ROW_NUMBER() OVER (PARTITION BY subt0.v3, subt0.v2),\n" +
+                "  LAST_VALUE(subt0.v1) OVER (ORDER BY subt0.v3)\n" +
+                "FROM t0 subt0, with_t_0\n" +
+                "UNION ALL\n" +
+                "SELECT\n" +
+                "  subt0.v3,\n" +
+                "  ROW_NUMBER() OVER (PARTITION BY subt0.v3, subt0.v2),\n" +
+                "  LAST_VALUE(subt0.v1) OVER (ORDER BY subt0.v3)\n" +
+                "FROM t0 subt0, with_t_0";
+
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  24:ANALYTIC\n" +
+                "  |  functions: [, row_number(), ]\n" +
+                "  |  partition by: 14: v3, 13: v2\n" +
+                "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                "  |  \n" +
+                "  23:SORT\n" +
+                "  |  order by: <slot 14> 14: v3 ASC, <slot 13> 13: v2 ASC\n" +
+                "  |  offset: 0");
     }
 }

@@ -37,8 +37,6 @@ public class OptExpression {
     private GroupExpression groupExpression;
     // Required properties for children.
     private List<PhysicalPropertySet> requiredProperties;
-    // Output property, only set up after best plan is generated.
-    private PhysicalPropertySet outputProperty;
 
     public OptExpression() {
         this.inputs = Lists.newArrayList();
@@ -120,10 +118,6 @@ public class OptExpression {
 
     public List<PhysicalPropertySet> getRequiredProperties() {
         return this.requiredProperties;
-    }
-
-    public void setOutputProperty(PhysicalPropertySet outputProperty) {
-        this.outputProperty = outputProperty;
     }
 
     // This function assume the child expr logical property has been derived
