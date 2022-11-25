@@ -129,14 +129,6 @@ public class PrivilegeCheckerV2 {
         }
     }
 
-    public static void checkAnyActionOnTable(ConnectContext context,
-                                             TableName tableName) {
-        if (!CatalogMgr.isInternalCatalog(tableName.getCatalog())) {
-            throw new SemanticException(EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG);
-        }
-        PrivilegeManager.checkAnyActionOnTable(context, tableName.getDb(), tableName.getTbl());
-    }
-
     static void checkDbAction(ConnectContext context, String catalogName, String dbName,
                               PrivilegeType.DbAction action) {
         if (!CatalogMgr.isInternalCatalog(catalogName)) {
