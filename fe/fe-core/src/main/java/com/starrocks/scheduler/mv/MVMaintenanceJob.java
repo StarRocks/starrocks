@@ -136,6 +136,7 @@ public class MVMaintenanceJob implements Writable {
                     break;
                 case RUN_EPOCH:
                     epoch.onSchedule();
+                    // TODO(murphy) make it event-driven instead of blocking here
                     epochCoordinator.beginEpoch(epoch);
                     epochCoordinator.commitEpoch(epoch);
                     break;
