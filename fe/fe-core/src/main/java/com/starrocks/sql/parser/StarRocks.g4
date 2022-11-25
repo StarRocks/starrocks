@@ -1930,6 +1930,7 @@ varType
     : GLOBAL
     | LOCAL
     | SESSION
+    | VERBOSE
     ;
 
 comment

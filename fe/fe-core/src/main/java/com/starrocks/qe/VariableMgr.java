@@ -270,6 +270,11 @@ public class VariableMgr {
         if (ctx == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_SYSTEM_VARIABLE, setVar.getVariable());
         }
+
+        if (setVar.getType() == SetType.VERBOSE) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_WRONG_TYPE_FOR_VAR, setVar.getVariable());
+        }
+
         // Check variable attribute and setVar
         checkUpdate(setVar, ctx.getFlag());
 
@@ -509,8 +514,10 @@ public class VariableMgr {
                         row.add(name);
                         String currentValue = getValue(sessionVar, ctx.getField());
                         row.add(currentValue);
-                        row.add(ctx.defaultValue);
-                        row.add(String.valueOf(!ctx.defaultValue.equals(currentValue)));
+                        if (type == SetType.VERBOSE) {
+                            row.add(ctx.defaultValue);
+                            row.add(String.valueOf(!ctx.defaultValue.equals(currentValue)));
+                        }
                     } else {
                         LOG.error("sessionVar is null during dumping session variables.");
                         continue;
@@ -519,8 +526,6 @@ public class VariableMgr {
                     row.add(name);
                     String currentValue = getValue(ctx.getObj(), ctx.getField());
                     row.add(currentValue);
-                    row.add(ctx.defaultValue);
-                    row.add(String.valueOf(!ctx.defaultValue.equals(currentValue)));
                 }
 
                 if (row.get(0).equalsIgnoreCase(SessionVariable.SQL_MODE)) {

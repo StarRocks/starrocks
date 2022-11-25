@@ -4886,6 +4886,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return SetType.GLOBAL;
         } else if (context.LOCAL() != null || context.SESSION() != null) {
             return SetType.SESSION;
+        } else if (context.VERBOSE() != null) {
+            return SetType.VERBOSE;
         } else {
             return SetType.DEFAULT;
         }

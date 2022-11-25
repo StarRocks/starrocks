@@ -21,6 +21,12 @@ public class ShowVariablesStmt extends ShowStmt {
             ShowResultSetMetaData.builder()
                     .addColumn(new Column(NAME_COL, ScalarType.createVarchar(20)))
                     .addColumn(new Column(VALUE_COL, ScalarType.createVarchar(20)))
+                    .build();
+
+    private static final ShowResultSetMetaData VERBOSE_META_DATA =
+            ShowResultSetMetaData.builder()
+                    .addColumn(new Column(NAME_COL, ScalarType.createVarchar(20)))
+                    .addColumn(new Column(VALUE_COL, ScalarType.createVarchar(20)))
                     .addColumn(new Column(DEFAULT_VALUE, ScalarType.createVarchar(20)))
                     .addColumn(new Column(IS_CHANGED, ScalarType.createVarchar(20)))
                     .build();
@@ -94,7 +100,7 @@ public class ShowVariablesStmt extends ShowStmt {
 
     @Override
     public ShowResultSetMetaData getMetaData() {
-        return META_DATA;
+        return type != SetType.VERBOSE ? META_DATA : VERBOSE_META_DATA;
     }
 
     @Override
