@@ -1576,6 +1576,8 @@ public abstract class Type implements Cloneable {
             case VARCHAR:
             case HLL:
             case BITMAP:
+            // Because mysql does not have a large int type, mysql will treat it as hex after exceeding bigint
+            case LARGEINT:
                 return CHARSET_UTF8;
             default:
                 return CHARSET_BINARY;

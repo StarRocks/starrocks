@@ -55,7 +55,7 @@ public class TypeTest {
         type = Type.LARGEINT;
         Assert.assertEquals(40, type.getMysqlResultSetFieldLength());
         Assert.assertEquals(0, type.getMysqlResultSetFieldDecimals());
-        Assert.assertEquals(63, type.getMysqlResultSetFieldCharsetIndex());
+        Assert.assertEquals(33, type.getMysqlResultSetFieldCharsetIndex());
 
         // date
         type = Type.DATE;
