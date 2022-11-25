@@ -246,7 +246,7 @@ public class CompactionScheduler extends Daemon {
         context.setTxnId(txnId);
         context.setBeToTablets(beToTablets);
         context.setStartTs(System.currentTimeMillis());
-        context.setPartitionName(String.format("%s.%s.%s", db.getFullName(), table.getName(), partition.getName()));
+        context.setFullPartitionName(String.format("%s.%s.%s", db.getFullName(), table.getName(), partition.getName()));
 
         long nextCompactionInterval = MIN_COMPACTION_INTERVAL_MS_ON_SUCCESS;
         try {

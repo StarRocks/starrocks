@@ -43,7 +43,7 @@ public class CompactionsProcDir implements ProcDirInterface {
         ConcurrentHashMap<PartitionIdentifier, CompactionContext> runningCompactions = compactionManager.getRunningCompactions();
         for (CompactionContext context : runningCompactions.values()) {
             List<String> row = new ArrayList<>();
-            row.add(String.valueOf(context.getPartitionName()));
+            row.add(String.valueOf(context.getFullPartitionName()));
             row.add(String.valueOf(context.getTxnId()));
             row.add(TimeUtils.longToTimeString(context.getStartTs()));
 
