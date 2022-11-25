@@ -83,4 +83,9 @@ public class AnalyzeStructTest {
         analyzeFail("SELECT b.b.c.d.f FROM deeper_table");
         analyzeSuccess("SELECT b.b.c.d.e FROM deeper_table");
     }
+
+    @Test
+    public void testOrderBy() {
+        analyzeSuccess("SELECT b, b.a FROM struct_a ORDER BY 2");
+    }
 }

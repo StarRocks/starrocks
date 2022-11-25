@@ -606,6 +606,12 @@ public class SelectAnalyzer {
                                     field.getOriginExpression().equals(f.getOriginExpression()))) {
                 continue;
             }
+
+            // If field's type can't be Order By, ignore it.
+            if (!field.getType().canOrderBy()) {
+                continue;
+            }
+
             allFields.add(field);
         }
 
