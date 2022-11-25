@@ -37,8 +37,13 @@ public class OptExpression {
     private GroupExpression groupExpression;
     // Required properties for children.
     private List<PhysicalPropertySet> requiredProperties;
+<<<<<<< HEAD
     // Output property, only set up after best plan is generated.
     private PhysicalPropertySet outputProperty;
+=======
+    // MV Operator property, inferred from best plan
+    private MVOperatorProperty mvOperatorProperty;
+>>>>>>> 2eddc9224 ([BugFix] Fix two window with cte bug (#13920))
 
     public OptExpression() {
         this.inputs = Lists.newArrayList();
@@ -120,10 +125,6 @@ public class OptExpression {
 
     public List<PhysicalPropertySet> getRequiredProperties() {
         return this.requiredProperties;
-    }
-
-    public void setOutputProperty(PhysicalPropertySet outputProperty) {
-        this.outputProperty = outputProperty;
     }
 
     // This function assume the child expr logical property has been derived
