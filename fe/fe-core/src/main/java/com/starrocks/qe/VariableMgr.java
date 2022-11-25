@@ -526,6 +526,10 @@ public class VariableMgr {
                     row.add(name);
                     String currentValue = getValue(ctx.getObj(), ctx.getField());
                     row.add(currentValue);
+                    if (type == SetType.VERBOSE) {
+                        row.add(ctx.defaultValue);
+                        row.add(String.valueOf(!ctx.defaultValue.equals(currentValue)));
+                    }
                 }
 
                 if (row.get(0).equalsIgnoreCase(SessionVariable.SQL_MODE)) {
