@@ -1676,7 +1676,10 @@ public class ShowExecutor {
         jobs.sort(Comparator.comparing(AnalyzeJob::getId));
         for (AnalyzeJob job : jobs) {
             try {
-                rows.add(ShowAnalyzeJobStmt.showAnalyzeJobs(job));
+                List<String> result = ShowAnalyzeJobStmt.showAnalyzeJobs(ctx, job);
+                if (result != null) {
+                    rows.add(result);
+                }
             } catch (MetaNotFoundException e) {
                 // pass
             }
@@ -1692,7 +1695,10 @@ public class ShowExecutor {
         statuses.sort(Comparator.comparing(AnalyzeStatus::getId));
         for (AnalyzeStatus status : statuses) {
             try {
-                rows.add(ShowAnalyzeStatusStmt.showAnalyzeStatus(status));
+                List<String> result = ShowAnalyzeStatusStmt.showAnalyzeStatus(ctx, status);
+                if (result != null) {
+                    rows.add(result);
+                }
             } catch (MetaNotFoundException e) {
                 // pass
             }
@@ -1707,7 +1713,10 @@ public class ShowExecutor {
         List<List<String>> rows = Lists.newArrayList();
         for (BasicStatsMeta meta : metas) {
             try {
-                rows.add(ShowBasicStatsMetaStmt.showBasicStatsMeta(meta));
+                List<String> result = ShowBasicStatsMetaStmt.showBasicStatsMeta(ctx, meta);
+                if (result != null) {
+                    rows.add(result);
+                }
             } catch (MetaNotFoundException e) {
                 // pass
             }
@@ -1722,7 +1731,10 @@ public class ShowExecutor {
         List<List<String>> rows = Lists.newArrayList();
         for (HistogramStatsMeta meta : metas) {
             try {
-                rows.add(ShowHistogramStatsMetaStmt.showHistogramStatsMeta(meta));
+                List<String> result = ShowHistogramStatsMetaStmt.showHistogramStatsMeta(ctx, meta);
+                if (result != null) {
+                    rows.add(result);
+                }
             } catch (MetaNotFoundException e) {
                 // pass
             }
