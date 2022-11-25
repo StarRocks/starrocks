@@ -1248,7 +1248,10 @@ Status TabletManager::_drop_tablet_unlocked(TTabletId tablet_id, TabletDropFlag 
     TabletSharedPtr dropped_tablet = it->second;
     tablet_map.erase(it);
     _remove_tablet_from_partition(*dropped_tablet);
-    dropped_tablet->stop_compaction();
+    if (config::enable_event_based_compaction_framework) {
+        dropped_tablet->stop_compaction();
+        StorageEngine::instance()->compaction_manager()->remove_candidate(dropped_tablet->tablet_id());
+    }
 
     DroppedTabletInfo drop_info{.tablet = dropped_tablet, .flag = flag};
 
