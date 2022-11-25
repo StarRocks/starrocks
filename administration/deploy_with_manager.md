@@ -2,7 +2,7 @@
 
 本文介绍如何使用 StarRocks Manager 自动部署 StarRocks 集群。
 
-> StarRocks Manager 为企业版功能，如需试用，请至 [StarRocks 官网](https://www.starrocks.com/zh-CN/download) 页面下方点击「现在咨询」获取。
+> StarRocks Manager 为企业版功能，如需试用，请至 [StarRocks 官网](https://www.starrocks.io/download/community) 页面下方点击「现在咨询」获取。
 
 ## 前提条件
 
