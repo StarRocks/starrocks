@@ -83,14 +83,16 @@ public class ShowVariablesStmt extends ShowStmt {
         item = new SelectListItem(new SlotRef(tableName, "VARIABLE_VALUE"), VALUE_COL);
         selectList.addItem(item);
         aliasMap.put(new SlotRef(null, VALUE_COL), item.getExpr().clone(null));
-        // default_value
-        item = new SelectListItem(new SlotRef(tableName, DEFAULT_VALUE), DEFAULT_VALUE);
-        selectList.addItem(item);
-        aliasMap.put(new SlotRef(null, DEFAULT_VALUE), item.getExpr().clone(null));
-        // is_changed
-        item = new SelectListItem(new SlotRef(tableName, IS_CHANGED), IS_CHANGED);
-        selectList.addItem(item);
-        aliasMap.put(new SlotRef(null, IS_CHANGED), item.getExpr().clone(null));
+        if (type == SetType.VERBOSE) {
+            // default_value
+            item = new SelectListItem(new SlotRef(tableName, DEFAULT_VALUE), DEFAULT_VALUE);
+            selectList.addItem(item);
+            aliasMap.put(new SlotRef(null, DEFAULT_VALUE), item.getExpr().clone(null));
+            // is_changed
+            item = new SelectListItem(new SlotRef(tableName, IS_CHANGED), IS_CHANGED);
+            selectList.addItem(item);
+            aliasMap.put(new SlotRef(null, IS_CHANGED), item.getExpr().clone(null));
+        }
 
         where = where.substitute(aliasMap);
 
