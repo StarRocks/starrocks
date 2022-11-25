@@ -971,7 +971,7 @@ public class LocalMetastore implements ConnectorMetadata {
         // 1. If the partition is less than recentPartitionNum, use backendNum to speculate the bucketNum
         int bucketNum = 0;
         if (olapTable.getPartitions().size() < recentPartitionNum) {
-            bucketNum = calBucketNumAccordingToBackends();
+            bucketNum = CatalogUtils.calBucketNumAccordingToBackends();
             return bucketNum;
         }
 
@@ -985,7 +985,7 @@ public class LocalMetastore implements ConnectorMetadata {
             }
         }
 
-        bucketNum = calBucketNumAccordingToBackends();
+        bucketNum = CatalogUtils.calBucketNumAccordingToBackends();
         if (!dataImported) {
             return bucketNum;
         }
@@ -2031,7 +2031,7 @@ public class LocalMetastore implements ConnectorMetadata {
                     distributionInfo, indexes, properties);
         } else {
             if (distributionInfo.getBucketNum() == 0) {
-                int bucketNum = calBucketNumAccordingToBackends();
+                int bucketNum = CatalogUtils.calBucketNumAccordingToBackends();
                 distributionInfo.setBucketNum(bucketNum);
             }
 
@@ -3233,7 +3233,7 @@ public class LocalMetastore implements ConnectorMetadata {
         Preconditions.checkNotNull(distributionDesc);
         DistributionInfo distributionInfo = distributionDesc.toDistributionInfo(baseSchema);
         if (distributionInfo.getBucketNum() == 0) {
-            int numBucket = calBucketNumAccordingToBackends();
+            int numBucket = CatalogUtils.calBucketNumAccordingToBackends();
             distributionInfo.setBucketNum(numBucket);
         }
         // create refresh scheme

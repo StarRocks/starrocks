@@ -24,6 +24,7 @@ import com.starrocks.thrift.MVTaskType;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TMVMaintenanceStartTask;
+import com.starrocks.thrift.TMVMaintenanceStopTask;
 import com.starrocks.thrift.TMVMaintenanceTasks;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TUniqueId;
@@ -295,7 +296,7 @@ public class MVMaintenanceJob implements Writable {
             request.setTask_type(MVTaskType.STOP_MAINTENANCE);
             request.setJob_id(getJobId());
             request.setTask_id(task.getTaskId());
-            request.setStart_maintenance(new TMVMaintenanceStartTask());
+            request.setStop_maintenance(new TMVMaintenanceStopTask());
             Backend backend =
                     Preconditions.checkNotNull(GlobalStateMgr.getCurrentSystemInfo().getBackend(beId),
                             "backend not found:" + beId);

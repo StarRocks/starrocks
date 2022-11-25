@@ -38,7 +38,7 @@ class TxnBasedEpochCoordinator implements EpochCoordinator {
 
     // TODO(murphy) make it configurable
     private static final long JOB_TIMEOUT = 120;
-    private static final long TXN_VISIBLE_TIMEOUT_MILLIS = 10_1000;
+    private static final long TXN_VISIBLE_TIMEOUT_MILLIS = 100_1000;
 
     private final MVMaintenanceJob mvMaintenanceJob;
     private Future<PMVMaintenanceTaskResult> resFuture;
@@ -83,8 +83,10 @@ class TxnBasedEpochCoordinator implements EpochCoordinator {
         try {
             epoch.onCommitting();
 
-            GlobalStateMgr.getCurrentGlobalTransactionMgr().commitAndPublishTransaction(database,
+            boolean published = GlobalStateMgr.getCurrentGlobalTransactionMgr().commitAndPublishTransaction(database,
                     epoch.getTxnId(), commitInfo, failedInfo, TXN_VISIBLE_TIMEOUT_MILLIS);
+            Preconditions.checkState(published, "must be published");
+
             // TODO(murphy) collect binlog consumption state from execution
             BinlogConsumeStateVO binlogState = new BinlogConsumeStateVO();
 

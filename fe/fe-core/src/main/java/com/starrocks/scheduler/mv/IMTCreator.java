@@ -8,6 +8,7 @@ import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.KeysDesc;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TypeDef;
+import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
@@ -87,7 +88,7 @@ class IMTCreator {
         Preconditions.checkNotNull(distributionDesc);
         DistributionInfo distributionInfo = distributionDesc.toDistributionInfo(columns);
         if (distributionInfo.getBucketNum() == 0) {
-            int numBucket = calBucketNumAccordingToBackends();
+            int numBucket = CatalogUtils.calBucketNumAccordingToBackends();
             distributionInfo.setBucketNum(numBucket);
         }
 
@@ -206,7 +207,7 @@ class IMTCreator {
             DistributionDesc distributionDesc = new DistributionDesc();
             Preconditions.checkNotNull(distributionDesc);
             HashDistributionInfo distributionInfo = new HashDistributionInfo();
-            distributionInfo.setBucketNum(calBucketNumAccordingToBackends());
+            distributionInfo.setBucketNum(CatalogUtils.calBucketNumAccordingToBackends());
             distributionInfo.setDistributionColumns(keyColumns);
 
             // TODO(murphy) refine it
@@ -225,24 +226,6 @@ class IMTCreator {
             return null;
         }
 
-    }
-
-    // Copy from LocalMetaStore
-    public static int calBucketNumAccordingToBackends() {
-        int backendNum = GlobalStateMgr.getCurrentSystemInfo().getBackendIds().size();
-        // When POC, the backends is not greater than three most of the time.
-        // The bucketNum will be given a small multiplier factor for small backends.
-        int bucketNum = 0;
-        if (backendNum <= 3) {
-            bucketNum = 2 * backendNum;
-        } else if (backendNum <= 6) {
-            bucketNum = backendNum;
-        } else if (backendNum <= 12) {
-            bucketNum = 12;
-        } else {
-            bucketNum = Math.min(backendNum, 48);
-        }
-        return bucketNum;
     }
 
 }

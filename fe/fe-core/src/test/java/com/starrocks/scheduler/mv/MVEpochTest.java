@@ -19,7 +19,7 @@ class MVEpochTest {
         long txnId = 9137;
         BinlogConsumeStateVO binlog = new BinlogConsumeStateVO();
         binlog.getBinlogMap().put(
-                new BinlogConsumeStateVO.BinlogIdVO(1, 2, 3),
+                new BinlogConsumeStateVO.BinlogIdVO(1),
                 new BinlogConsumeStateVO.BinlogLSNVO(2, 1));
         MVEpoch epoch = new MVEpoch(1024);
         epoch.onReady();

@@ -3,9 +3,12 @@
 package com.starrocks.scheduler.mv;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.TabletInvertedIndex;
+import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TBinlogOffset;
 import com.starrocks.thrift.TBinlogScanRange;
 import lombok.Data;
@@ -31,12 +34,13 @@ public class BinlogConsumeStateVO implements Writable {
 
     public List<TBinlogScanRange> toThrift() {
         List<TBinlogScanRange> res = new ArrayList<>();
+        TabletInvertedIndex tabletIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         binlogMap.forEach((key, value) -> {
             TBinlogScanRange scan = new TBinlogScanRange();
-            scan.setTable_id(key.getTableId());
+            TabletMeta meta = tabletIndex.getTabletMeta(key.getTabletId());
+            scan.setTable_id(meta.getTableId());
             scan.setTablet_id(key.getTabletId());
-            // TODO(murphy) partitionId ?
-            scan.setPartition_id(0);
+            scan.setPartition_id(meta.getPartitionId());
             scan.setLsn(value.toThrift());
             res.add(scan);
         });
@@ -57,11 +61,6 @@ public class BinlogConsumeStateVO implements Writable {
      */
     @Value
     public static class BinlogIdVO implements Writable {
-        @SerializedName("dbId")
-        long dbId;
-
-        @SerializedName("tableId")
-        long tableId;
 
         @SerializedName("tabletId")
         long tabletId;
