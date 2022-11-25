@@ -2,8 +2,12 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.UserIdentity;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -11,6 +15,7 @@ import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AddSqlBlackListStmt;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
@@ -25,12 +30,14 @@ import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
 import com.starrocks.sql.ast.AlterResourceStmt;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
+import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.CancelAlterSystemStmt;
+import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateFileStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
@@ -42,14 +49,17 @@ import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.sql.ast.DropFileStmt;
+import com.starrocks.sql.ast.DropHistogramStmt;
 import com.starrocks.sql.ast.DropResourceStmt;
 import com.starrocks.sql.ast.DropRoleStmt;
+import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.InstallPluginStmt;
 import com.starrocks.sql.ast.JoinRelation;
+import com.starrocks.sql.ast.KillAnalyzeStmt;
 import com.starrocks.sql.ast.KillStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RecoverDbStmt;
@@ -60,14 +70,18 @@ import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SetUserPropertyStmt;
 import com.starrocks.sql.ast.SetVar;
+import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
+import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
 import com.starrocks.sql.ast.ShowAuthenticationStmt;
 import com.starrocks.sql.ast.ShowBackendsStmt;
+import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowBrokerStmt;
 import com.starrocks.sql.ast.ShowCatalogsStmt;
 import com.starrocks.sql.ast.ShowComputeNodesStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowFrontendsStmt;
 import com.starrocks.sql.ast.ShowGrantsStmt;
+import com.starrocks.sql.ast.ShowHistogramStatsMetaStmt;
 import com.starrocks.sql.ast.ShowPluginsStmt;
 import com.starrocks.sql.ast.ShowProcStmt;
 import com.starrocks.sql.ast.ShowRolesStmt;
@@ -84,8 +98,13 @@ import com.starrocks.sql.ast.UninstallPluginStmt;
 import com.starrocks.sql.ast.UseCatalogStmt;
 import com.starrocks.sql.ast.UseDbStmt;
 import com.starrocks.sql.ast.ViewRelation;
+import com.starrocks.statistic.AnalyzeJob;
+import com.starrocks.statistic.AnalyzeManager;
+import com.starrocks.statistic.AnalyzeStatus;
+import com.starrocks.statistic.StatsConstants;
 
 import java.util.List;
+import java.util.Set;
 
 public class PrivilegeCheckerV2 {
     private static final String EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG = "external catalog is not supported for now!";
@@ -177,6 +196,81 @@ public class PrivilegeCheckerV2 {
     static void checkStmtNodePrivilege(ConnectContext context) {
         if (!PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.OPERATE)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "NODE");
+        }
+    }
+
+    public static Set<TableName> getAllTableNamesForAnalyzeJobStmt(long dbId, long tableId) {
+        Set<TableName> tableNames = Sets.newHashSet();
+        if (StatsConstants.DEFAULT_ALL_ID != tableId && StatsConstants.DEFAULT_ALL_ID != dbId) {
+            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+            if (db != null && !db.isInfoSchemaDb()) {
+                Table table = db.getTable(tableId);
+                if (table != null) {
+                    tableNames.add(new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                            db.getFullName(), table.getName()));
+                }
+            }
+        } else if (StatsConstants.DEFAULT_ALL_ID == tableId && StatsConstants.DEFAULT_ALL_ID != dbId) {
+            getTableNamesInDb(tableNames, dbId);
+        } else if (dbId == StatsConstants.DEFAULT_ALL_ID) {
+            List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIds();
+            for (Long id : dbIds) {
+                getTableNamesInDb(tableNames, id);
+            }
+        }
+
+        return tableNames;
+    }
+
+    private static void getTableNamesInDb(Set<TableName> tableNames, Long id) {
+        Database db = GlobalStateMgr.getCurrentState().getDb(id);
+        if (db != null && !db.isInfoSchemaDb()) {
+            for (Table table : db.getTables()) {
+                TableName tableNameNew = new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                        db.getFullName(), table.getName());
+                tableNames.add(tableNameNew);
+            }
+        }
+    }
+
+    private static void checkTblPrivilegeForKillAnalyzeStmt(ConnectContext context, Database db,
+                                                            Table table, long analyzeId) {
+        if (db != null && table != null) {
+            if (!PrivilegeManager.checkTableAction(context, db.getOriginName(),
+                    table.getName(), PrivilegeType.TableAction.SELECT) ||
+                    !PrivilegeManager.checkTableAction(context, db.getOriginName(),
+                            table.getName(), PrivilegeType.TableAction.INSERT)
+            ) {
+                throw new SemanticException(String.format(
+                        "You need SELECT and INSERT action on %s.%s to kill analyze job %d",
+                        db.getOriginName(), table.getName(), analyzeId));
+            }
+        }
+    }
+
+    public static void checkPrivilegeForKillAnalyzeStmt(ConnectContext context, long analyzeId) {
+        AnalyzeManager analyzeManager = GlobalStateMgr.getCurrentAnalyzeMgr();
+        AnalyzeStatus analyzeStatus = analyzeManager.getAnalyzeStatus(analyzeId);
+        AnalyzeJob analyzeJob = analyzeManager.getAnalyzeJob(analyzeId);
+        if (analyzeStatus != null) {
+            long dbId = analyzeStatus.getDbId();
+            long tableId = analyzeStatus.getTableId();
+            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+            // If the db or table doesn't exist anymore, we won't check privilege on it
+            if (db != null) {
+                Table table = db.getTable(tableId);
+                checkTblPrivilegeForKillAnalyzeStmt(context, db, table, analyzeId);
+            }
+        } else if (analyzeJob != null) {
+            Set<TableName> tableNames = PrivilegeCheckerV2.getAllTableNamesForAnalyzeJobStmt(analyzeJob.getDbId(),
+                    analyzeJob.getTableId());
+            tableNames.forEach(tableName -> {
+                Database db = GlobalStateMgr.getCurrentState().getDb(tableName.getDb());
+                if (db != null) {
+                    Table table = db.getTable(tableName.getTbl());
+                    checkTblPrivilegeForKillAnalyzeStmt(context, db, table, analyzeId);
+                }
+            });
         }
     }
 
@@ -456,6 +550,75 @@ public class PrivilegeCheckerV2 {
         @Override
         public Void visitShowSmallFilesStatement(ShowSmallFilesStmt statement, ConnectContext context) {
             checkAnyActionOnOrUnderDb(context, context.getCurrentCatalog(), statement.getDbName());
+            return null;
+        }
+
+        // --------------------------------------- Analyze related statements -----------------------------
+
+        @Override
+        public Void visitAnalyzeStatement(AnalyzeStmt statement, ConnectContext context) {
+            checkTableAction(context, statement.getTableName(), PrivilegeType.TableAction.SELECT);
+            checkTableAction(context, statement.getTableName(), PrivilegeType.TableAction.INSERT);
+            return null;
+        }
+
+        @Override
+        public Void visitCreateAnalyzeJobStatement(CreateAnalyzeJobStmt statement, ConnectContext context) {
+            Set<TableName> tableNames = getAllTableNamesForAnalyzeJobStmt(statement.getDbId(), statement.getTableId());
+            tableNames.forEach(tableName -> {
+                checkTableAction(context, tableName, PrivilegeType.TableAction.SELECT);
+                checkTableAction(context, tableName, PrivilegeType.TableAction.INSERT);
+            });
+            return null;
+        }
+
+        @Override
+        public Void visitDropHistogramStatement(DropHistogramStmt statement, ConnectContext context) {
+            checkTableAction(context, statement.getTableName(), PrivilegeType.TableAction.SELECT);
+            checkTableAction(context, statement.getTableName(), PrivilegeType.TableAction.INSERT);
+            return null;
+        }
+
+        @Override
+        public Void visitDropStatsStatement(DropStatsStmt statement, ConnectContext context) {
+            checkTableAction(context, statement.getTableName(), PrivilegeType.TableAction.SELECT);
+            checkTableAction(context, statement.getTableName(), PrivilegeType.TableAction.INSERT);
+            return null;
+        }
+
+        @Override
+        public Void visitShowAnalyzeJobStatement(ShowAnalyzeJobStmt statement, ConnectContext context) {
+            // `show analyze job` only show tables that user has any privilege on, we will check it in
+            // the execution logic, not here, see `ShowAnalyzeJobStmt#showAnalyzeJobs()` for details.
+            return null;
+        }
+
+        @Override
+        public Void visitShowAnalyzeStatusStatement(ShowAnalyzeStatusStmt statement, ConnectContext context) {
+            // `show analyze status` only show tables that user has any privilege on, we will check it in
+            // the execution logic, not here, see `ShowAnalyzeStatusStmt#showAnalyzeStatus()` for details.
+            return null;
+        }
+
+        @Override
+        public Void visitShowBasicStatsMetaStatement(ShowBasicStatsMetaStmt statement, ConnectContext context) {
+            // `show stats meta` only show tables that user has any privilege on, we will check it in
+            // the execution logic, not here, see `ShowBasicStatsMetaStmt#showBasicStatsMeta()` for details.
+            return null;
+        }
+
+        @Override
+        public Void visitShowHistogramStatsMetaStatement(ShowHistogramStatsMetaStmt statement, ConnectContext context) {
+            // `show histogram meta` only show tables that user has any privilege on, we will check it in
+            // the execution logic, not here, see `ShowHistogramStatsMetaStmt#showHistogramStatsMeta()` for details.
+            return null;
+        }
+
+        @Override
+        public Void visitKillAnalyzeStatement(KillAnalyzeStmt statement, ConnectContext context) {
+            // `kill analyze {id}` can only kill analyze job that user has privileges(SELECT + INSERT) on,
+            // we will check it in the execution logic, not here, see `ShowExecutor#handleKillAnalyzeStmt()`
+            // for details.
             return null;
         }
 

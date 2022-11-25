@@ -3,22 +3,37 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.authentication.AuthenticationManager;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Table;
 import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateUserStmt;
+import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
+import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
+import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
+import com.starrocks.sql.ast.ShowHistogramStatsMetaStmt;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.statistic.AnalyzeJob;
+import com.starrocks.statistic.AnalyzeManager;
+import com.starrocks.statistic.AnalyzeStatus;
+import com.starrocks.statistic.BasicStatsMeta;
+import com.starrocks.statistic.HistogramStatsMeta;
+import com.starrocks.statistic.StatsConstants;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
 
@@ -33,12 +48,18 @@ public class PrivilegeCheckerV2Test {
         UtFrameUtils.createMinStarRocksCluster();
         UtFrameUtils.addMockBackend(10002);
         UtFrameUtils.addMockBackend(10003);
-        String createTblStmtStr = "create table db1.tbl1(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) "
+        String createTblStmtStr1 = "create table db1.tbl1(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) "
+                + "AGGREGATE KEY(k1, k2,k3,k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
+        String createTblStmtStr2 = "create table db2.tbl1(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) "
+                + "AGGREGATE KEY(k1, k2,k3,k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
+        String createTblStmtStr3 = "create table db1.tbl2(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) "
                 + "AGGREGATE KEY(k1, k2,k3,k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
         starRocksAssert = new StarRocksAssert(UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT));
         starRocksAssert.withDatabase("db1");
         starRocksAssert.withDatabase("db2");
-        starRocksAssert.withTable(createTblStmtStr);
+        starRocksAssert.withTable(createTblStmtStr1);
+        starRocksAssert.withTable(createTblStmtStr2);
+        starRocksAssert.withTable(createTblStmtStr3);
         privilegeManager = starRocksAssert.getCtx().getGlobalStateMgr().getPrivilegeManager();
         starRocksAssert.getCtx().setRemoteIP("localhost");
         privilegeManager.initBuiltinRolesAndUsers();
@@ -227,6 +248,240 @@ public class PrivilegeCheckerV2Test {
                 (ShowStmt) UtFrameUtils.parseStmtWithNewParser("SHOW catalogs", ctx)).execute();
         Assert.assertEquals(1, res.getResultRows().size());
         Assert.assertEquals("test_ex_catalog3", res.getResultRows().get(0).get(0));
+    }
+
+    @Test
+    public void testAnalyzeStatements() throws Exception {
+        // check analyze table: SELECT + INSERT on table
+        verifyGrantRevoke(
+                "analyze table db1.tbl1",
+                "grant SELECT,INSERT on db1.tbl1 to test",
+                "revoke SELECT,INSERT on db1.tbl1 from test",
+                "SELECT command denied to user 'test'");
+
+        // check create analyze all: need SELECT + INSERT on all tables in all databases
+        verifyMultiGrantRevoke(
+                "create analyze all;",
+                Arrays.asList(
+                        "grant SELECT,INSERT on db1.tbl1 to test",
+                        "grant SELECT,INSERT on db1.tbl2 to test",
+                        "grant SELECT,INSERT on db2.tbl1 to test"
+                ),
+                Arrays.asList(
+                        "revoke SELECT,INSERT on db1.tbl1 from test",
+                        "revoke SELECT,INSERT on db1.tbl2 from test",
+                        "revoke SELECT,INSERT on db2.tbl1 from test"
+                ),
+                "SELECT command denied to user 'test'");
+
+        // check create analyze database xxx: need SELECT + INSERT on all tables in the database
+        verifyMultiGrantRevoke(
+                "create analyze database db1;",
+                Arrays.asList(
+                        "grant SELECT,INSERT on db1.tbl1 to test",
+                        "grant SELECT,INSERT on db1.tbl2 to test"
+                ),
+                Arrays.asList(
+                        "revoke SELECT,INSERT on db1.tbl1 from test",
+                        "revoke SELECT,INSERT on db1.tbl2 from test"
+                ),
+                "SELECT command denied to user 'test'");
+
+        // check create analyze table xxx: need SELECT + INSERT on the table
+        verifyMultiGrantRevoke(
+                "create analyze table db1.tbl1;",
+                Arrays.asList(
+                        "grant SELECT,INSERT on db1.tbl1 to test"
+                ),
+                Arrays.asList(
+                        "revoke SELECT,INSERT on db1.tbl1 from test"
+                ),
+                "SELECT command denied to user 'test'");
+
+        // check drop stats xxx: SELECT + INSERT on table
+        verifyGrantRevoke(
+                "drop stats db1.tbl1",
+                "grant SELECT,INSERT on db1.tbl1 to test",
+                "revoke SELECT,INSERT on db1.tbl1 from test",
+                "SELECT command denied to user 'test'");
+
+        // check analyze table xxx drop histogram on xxx_col: SELECT + INSERT on table
+        verifyGrantRevoke(
+                "analyze table db1.tbl1 drop histogram on k1",
+                "grant SELECT,INSERT on db1.tbl1 to test",
+                "revoke SELECT,INSERT on db1.tbl1 from test",
+                "SELECT command denied to user 'test'");
+    }
+
+    @Test
+    public void testShowAnalyzeJobStatement() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        ctxToRoot();
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "grant DROP on db1.tbl1 to test", ctx), ctx);
+        ctxToTestUser();
+        AnalyzeManager analyzeManager = GlobalStateMgr.getCurrentAnalyzeMgr();
+        AnalyzeJob analyzeJob = new AnalyzeJob(-1, -1, Lists.newArrayList(),
+                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE, Maps.newHashMap(),
+                StatsConstants.ScheduleStatus.FINISH, LocalDateTime.MIN);
+        List<String> showResult = ShowAnalyzeJobStmt.showAnalyzeJobs(ctx, analyzeJob);
+        System.out.println(showResult);
+        // can show result for analyze job with all type
+        Assert.assertNotNull(showResult);
+
+        analyzeJob.setId(2);
+        analyzeManager.addAnalyzeJob(analyzeJob);
+        grantRevokeSqlAsRoot("grant SELECT,INSERT on db1.tbl1 to test");
+        grantRevokeSqlAsRoot("grant SELECT,INSERT on db1.tbl2 to test");
+        try {
+            PrivilegeCheckerV2.checkPrivilegeForKillAnalyzeStmt(ctx, analyzeJob.getId());
+        } catch (SemanticException e) {
+            Assert.assertTrue(e.getMessage().contains("You need SELECT and INSERT action on db2.tbl1"));
+        }
+        grantRevokeSqlAsRoot("grant SELECT,INSERT on db2.tbl1 to test");
+        PrivilegeCheckerV2.checkPrivilegeForKillAnalyzeStmt(ctx, analyzeJob.getId());
+        grantRevokeSqlAsRoot("revoke SELECT,INSERT on db1.tbl1 from test");
+        grantRevokeSqlAsRoot("revoke SELECT,INSERT on db1.tbl2 from test");
+        grantRevokeSqlAsRoot("revoke SELECT,INSERT on db2.tbl1 from test");
+
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        Database db1 = globalStateMgr.getDb("db1");
+        analyzeJob = new AnalyzeJob(db1.getId(), -1, Lists.newArrayList(),
+                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE, Maps.newHashMap(),
+                StatsConstants.ScheduleStatus.FINISH, LocalDateTime.MIN);
+        showResult = ShowAnalyzeJobStmt.showAnalyzeJobs(ctx, analyzeJob);
+        System.out.println(showResult);
+        // can show result for analyze job with db.*
+        Assert.assertNotNull(showResult);
+
+        analyzeJob.setId(3);
+        analyzeManager.addAnalyzeJob(analyzeJob);
+        grantRevokeSqlAsRoot("grant SELECT,INSERT on db1.tbl1 to test");
+        try {
+            PrivilegeCheckerV2.checkPrivilegeForKillAnalyzeStmt(ctx, analyzeJob.getId());
+        } catch (SemanticException e) {
+            Assert.assertTrue(e.getMessage().contains("You need SELECT and INSERT action on db1.tbl2"));
+        }
+        grantRevokeSqlAsRoot("grant SELECT,INSERT on db1.tbl2 to test");
+        PrivilegeCheckerV2.checkPrivilegeForKillAnalyzeStmt(ctx, analyzeJob.getId());
+        grantRevokeSqlAsRoot("revoke SELECT,INSERT on db1.tbl1 from test");
+        grantRevokeSqlAsRoot("revoke SELECT,INSERT on db1.tbl2 from test");
+
+        Table tbl1 = db1.getTable("tbl1");
+        analyzeJob = new AnalyzeJob(db1.getId(), tbl1.getId(), Lists.newArrayList(),
+                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE, Maps.newHashMap(),
+                StatsConstants.ScheduleStatus.FINISH, LocalDateTime.MIN);
+        showResult = ShowAnalyzeJobStmt.showAnalyzeJobs(ctx, analyzeJob);
+        System.out.println(showResult);
+        // can show result for analyze job on table that user has any privilege on
+        Assert.assertNotNull(showResult);
+        Assert.assertEquals("tbl1", showResult.get(2));
+
+        analyzeJob.setId(4);
+        analyzeManager.addAnalyzeJob(analyzeJob);
+        try {
+            PrivilegeCheckerV2.checkPrivilegeForKillAnalyzeStmt(ctx, analyzeJob.getId());
+        } catch (SemanticException e) {
+            Assert.assertTrue(e.getMessage().contains("You need SELECT and INSERT action on db1.tbl1"));
+        }
+        grantRevokeSqlAsRoot("grant SELECT,INSERT on db1.tbl1 to test");
+        PrivilegeCheckerV2.checkPrivilegeForKillAnalyzeStmt(ctx, analyzeJob.getId());
+        grantRevokeSqlAsRoot("revoke SELECT,INSERT on db1.tbl1 from test");
+
+        Database db2 = globalStateMgr.getDb("db2");
+        tbl1 = db2.getTable("tbl1");
+        analyzeJob = new AnalyzeJob(db2.getId(), tbl1.getId(), Lists.newArrayList(),
+                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE, Maps.newHashMap(),
+                StatsConstants.ScheduleStatus.FINISH, LocalDateTime.MIN);
+        showResult = ShowAnalyzeJobStmt.showAnalyzeJobs(ctx, analyzeJob);
+        System.out.println(showResult);
+        // cannot show result for analyze job on table that user doesn't have any privileges on
+        Assert.assertNull(showResult);
+        grantRevokeSqlAsRoot("revoke DROP on db1.tbl1 from test");
+    }
+
+    @Test
+    public void testShowAnalyzeStatusStatement() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        ctxToRoot();
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "grant DROP on db1.tbl1 to test", ctx), ctx);
+        ctxToTestUser();
+        AnalyzeManager analyzeManager = GlobalStateMgr.getCurrentAnalyzeMgr();
+
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        Database db1 = globalStateMgr.getDb("db1");
+        Table tbl1 = db1.getTable("tbl1");
+
+        AnalyzeStatus analyzeStatus = new AnalyzeStatus(1, db1.getId(), tbl1.getId(),
+                Lists.newArrayList(), StatsConstants.AnalyzeType.FULL,
+                StatsConstants.ScheduleType.ONCE, Maps.newHashMap(),
+                LocalDateTime.of(2020, 1, 1, 1, 1));
+        analyzeStatus.setEndTime(LocalDateTime.of(2020, 1, 1, 1, 1));
+        analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FINISH);
+        analyzeStatus.setReason("Test Success");
+        List<String> showResult = ShowAnalyzeStatusStmt.showAnalyzeStatus(ctx, analyzeStatus);
+        System.out.println(showResult);
+        // can show result for analyze status on table that user has any privilege on
+        Assert.assertNotNull(showResult);
+        Assert.assertEquals("tbl1", showResult.get(2));
+
+        grantRevokeSqlAsRoot("grant SELECT,INSERT on db1.tbl1 to test");
+        analyzeManager.addAnalyzeStatus(analyzeStatus);
+        PrivilegeCheckerV2.checkPrivilegeForKillAnalyzeStmt(ctx, analyzeStatus.getId());
+        grantRevokeSqlAsRoot("revoke SELECT,INSERT on db1.tbl1 from test");
+
+        try {
+            PrivilegeCheckerV2.checkPrivilegeForKillAnalyzeStmt(ctx, analyzeStatus.getId());
+        } catch (SemanticException e) {
+            Assert.assertTrue(e.getMessage().contains("You need SELECT and INSERT action"));
+        }
+
+        BasicStatsMeta basicStatsMeta = new BasicStatsMeta(db1.getId(), tbl1.getId(), null,
+                StatsConstants.AnalyzeType.FULL,
+                LocalDateTime.of(2020, 1, 1, 1, 1), Maps.newHashMap());
+        showResult = ShowBasicStatsMetaStmt.showBasicStatsMeta(ctx, basicStatsMeta);
+        System.out.println(showResult);
+        // can show result for stats on table that user has any privilege on
+        Assert.assertNotNull(showResult);
+
+        HistogramStatsMeta histogramStatsMeta = new HistogramStatsMeta(db1.getId(), tbl1.getId(), "v1",
+                StatsConstants.AnalyzeType.HISTOGRAM,
+                LocalDateTime.of(2020, 1, 1, 1, 1),
+                Maps.newHashMap());
+        showResult = ShowHistogramStatsMetaStmt.showHistogramStatsMeta(ctx, histogramStatsMeta);
+        System.out.println(showResult);
+        // can show result for stats on table that user has any privilege on
+        Assert.assertNotNull(showResult);
+
+        Database db2 = globalStateMgr.getDb("db2");
+        tbl1 = db2.getTable("tbl1");
+        analyzeStatus = new AnalyzeStatus(1, db2.getId(), tbl1.getId(),
+                Lists.newArrayList(), StatsConstants.AnalyzeType.FULL,
+                StatsConstants.ScheduleType.ONCE, Maps.newHashMap(),
+                LocalDateTime.of(2020, 1, 1, 1, 1));
+        showResult = ShowAnalyzeStatusStmt.showAnalyzeStatus(ctx, analyzeStatus);
+        System.out.println(showResult);
+        // cannot show result for analyze status on table that user doesn't have any privileges on
+        Assert.assertNull(showResult);
+
+        basicStatsMeta = new BasicStatsMeta(db2.getId(), tbl1.getId(), null,
+                StatsConstants.AnalyzeType.FULL,
+                LocalDateTime.of(2020, 1, 1, 1, 1), Maps.newHashMap());
+        showResult = ShowBasicStatsMetaStmt.showBasicStatsMeta(ctx, basicStatsMeta);
+        System.out.println(showResult);
+        // cannot show result for stats on table that user doesn't have any privilege on
+        Assert.assertNull(showResult);
+
+        histogramStatsMeta = new HistogramStatsMeta(db2.getId(), tbl1.getId(), "v1",
+                StatsConstants.AnalyzeType.HISTOGRAM,
+                LocalDateTime.of(2020, 1, 1, 1, 1),
+                Maps.newHashMap());
+        showResult = ShowHistogramStatsMetaStmt.showHistogramStatsMeta(ctx, histogramStatsMeta);
+        System.out.println(showResult);
+        // cannot show result for stats on table that user doesn't have any privilege on
+        Assert.assertNull(showResult);
+        grantRevokeSqlAsRoot("revoke DROP on db1.tbl1 from test");
     }
 
     @Test

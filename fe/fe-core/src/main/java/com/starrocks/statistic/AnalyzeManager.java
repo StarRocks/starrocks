@@ -61,6 +61,14 @@ public class AnalyzeManager implements Writable {
         histogramStatsMetaMap = Maps.newConcurrentMap();
     }
 
+    public AnalyzeJob getAnalyzeJob(long id) {
+        return analyzeJobMap.get(id);
+    }
+
+    public AnalyzeStatus getAnalyzeStatus(long id) {
+        return analyzeStatusMap.get(id);
+    }
+
     public void addAnalyzeJob(AnalyzeJob job) {
         long id = GlobalStateMgr.getCurrentState().getNextId();
         job.setId(id);
