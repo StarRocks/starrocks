@@ -37,6 +37,8 @@ struct TCacheParam {
 5: optional bool force_populate;
 6: optional i64 entry_max_bytes;
 7: optional i64 entry_max_rows;
+8: optional bool can_use_multiversion;
+10:optional Types.TKeysType keys_type;
 }
 
 // TPlanFragment encapsulates info needed to execute a particular

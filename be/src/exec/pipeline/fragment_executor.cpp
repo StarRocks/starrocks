@@ -327,6 +327,8 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
             cache_param.slot_remapping[slot] = remapped_slot;
             cache_param.reverse_slot_remapping[remapped_slot] = slot;
         }
+        cache_param.can_use_multiversion = tcache_param.can_use_multiversion;
+        cache_param.keys_type = tcache_param.keys_type;
         _fragment_ctx->set_enable_cache(true);
     }
 
@@ -358,14 +360,14 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
                         continue;
                     }
                     const auto& region = tcache_param.region_map.at(partition_id);
-                    std::string cache_suffix_key;
-                    cache_suffix_key.reserve(sizeof(partition_id) + region.size() + sizeof(tablet_id));
-                    cache_suffix_key.insert(cache_suffix_key.end(), (uint8_t*)&partition_id,
+                    std::string cache_prefix_key;
+                    cache_prefix_key.reserve(sizeof(partition_id) + region.size() + sizeof(tablet_id));
+                    cache_prefix_key.insert(cache_prefix_key.end(), (uint8_t*)&partition_id,
                                             ((uint8_t*)&partition_id) + sizeof(partition_id));
-                    cache_suffix_key.insert(cache_suffix_key.end(), region.begin(), region.end());
-                    cache_suffix_key.insert(cache_suffix_key.end(), (uint8_t*)&tablet_id,
+                    cache_prefix_key.insert(cache_prefix_key.end(), region.begin(), region.end());
+                    cache_prefix_key.insert(cache_prefix_key.end(), (uint8_t*)&tablet_id,
                                             ((uint8_t*)&tablet_id) + sizeof(tablet_id));
-                    _fragment_ctx->cache_param().cache_key_prefixes[tablet_id] = std::move(cache_suffix_key);
+                    _fragment_ctx->cache_param().cache_key_prefixes[tablet_id] = std::move(cache_prefix_key);
                 }
             }
         }
