@@ -42,10 +42,9 @@ using std::stringstream;
 namespace starrocks {
 
 std::string HyperLogLog::empty() {
-    static HyperLogLog hll;
     std::string buf;
     buf.resize(HLL_EMPTY_SIZE);
-    hll.serialize((uint8_t*)buf.c_str());
+    (*(uint8_t*)buf.c_str()) = HLL_DATA_EMPTY;
     return buf;
 }
 
