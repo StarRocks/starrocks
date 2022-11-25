@@ -5,25 +5,28 @@ package com.starrocks.load.loadv2.dpp;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder;
 
+import java.io.Serializable;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 
-public class ExpressionEncoderHelper {
+public class ExpressionEncoderHelper implements Serializable {
 
     private ExpressionEncoder encoder;
-    private Object instance = null;
-    private Method toRowMethod = null;
+    private transient Object instance = null;
+    private transient Method toRowMethod = null;
 
     public ExpressionEncoderHelper(ExpressionEncoder encoder) {
         this.encoder = encoder;
-        initMethod();
     }
 
     /**
      * See SPARK-31450
      * Spark 3.0.0 remove toRow method.
      */
-    private void initMethod() {
+    private void initMethodIfNeeded() {
+        if (toRowMethod != null) {
+            return;
+        }
         Class<? extends ExpressionEncoder> encoderClass = encoder.getClass();
         try {
             toRowMethod = encoderClass.getMethod("toRow", Object.class);
@@ -41,6 +44,7 @@ public class ExpressionEncoderHelper {
     }
 
     public InternalRow toRow(Object obj) {
+        initMethodIfNeeded();
         try {
             return (InternalRow) toRowMethod.invoke(instance, obj);
         } catch (IllegalAccessException | InvocationTargetException e) {
