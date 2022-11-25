@@ -84,6 +84,10 @@ public class FileSystemManager {
     private static final String KERBEROS_PRINCIPAL = "kerberos_principal";
     private static final String KERBEROS_KEYTAB = "kerberos_keytab";
     private static final String KERBEROS_KEYTAB_CONTENT = "kerberos_keytab_content";
+    private static final String AUTHENTICATION_TBDS = "tbds";
+    private static final String TBDS_SECUREID = "hadoop_security_authentication_tbds_secureid";
+    private static final String TBDS_SECUREKEY = "hadoop_security_authentication_tbds_securekey";
+    private static final String TBDS_USERNAME = "hadoop_security_authentication_tbds_username";
     private static final String DFS_HA_NAMENODE_KERBEROS_PRINCIPAL_PATTERN =
             "dfs.namenode.kerberos.principal.pattern";
     // arguments for ha hdfs
@@ -247,7 +251,7 @@ public class FileSystemManager {
         String authentication = properties.getOrDefault(CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHENTICATION,
                 AUTHENTICATION_SIMPLE);
         if (Strings.isNullOrEmpty(authentication) || (!authentication.equals(AUTHENTICATION_SIMPLE)
-                && !authentication.equals(AUTHENTICATION_KERBEROS))) {
+                && !authentication.equals(AUTHENTICATION_KERBEROS) && !authentication.equals(AUTHENTICATION_TBDS))) {
             logger.warn("invalid authentication:" + authentication);
             throw new BrokerException(TBrokerOperationStatusCode.INVALID_ARGUMENT,
                     "invalid authentication:" + authentication);
@@ -255,10 +259,8 @@ public class FileSystemManager {
         String hdfsUgi = username + "," + password;
         FileSystemIdentity fileSystemIdentity = null;
         BrokerFileSystem fileSystem = null;
-        if (authentication.equals(AUTHENTICATION_SIMPLE)) {
-            fileSystemIdentity = new FileSystemIdentity(host, hdfsUgi);
-        } else {
-            // for kerberos, use host + principal + keytab as filesystemindentity
+        if (authentication.equals(AUTHENTICATION_KERBEROS)) {
+            // for kerberos, use host + principal + keytab as filesystem identity
             String kerberosContent = "";
             if (properties.containsKey(KERBEROS_KEYTAB)) {
                 kerberosContent = properties.get(KERBEROS_KEYTAB);
@@ -283,7 +285,28 @@ public class FileSystemManager {
                 throw new BrokerException(TBrokerOperationStatusCode.INVALID_ARGUMENT,
                         e.getMessage());
             }
+        } else if (authentication.equals(AUTHENTICATION_TBDS)) {
+            // for tbds, use host + usename + secureid + securekey as filesystem identity
+            if (!properties.containsKey(TBDS_USERNAME)) {
+                throw new BrokerException(TBrokerOperationStatusCode.INVALID_ARGUMENT,
+                        TBDS_USERNAME + " is required for tbds authentication");
+            }
+            if (!properties.containsKey(TBDS_SECUREID)) {
+                throw new BrokerException(TBrokerOperationStatusCode.INVALID_ARGUMENT,
+                        TBDS_SECUREID + " is required for tbds authentication");
+            }
+            if (!properties.containsKey(TBDS_SECUREKEY)) {
+                throw new BrokerException(TBrokerOperationStatusCode.INVALID_ARGUMENT,
+                        TBDS_SECUREKEY + " is required for tbds authentication");
+            }
+            String tdbsUgi = String.format("%s,%s,%s", properties.get(TBDS_USERNAME), properties.get(TBDS_SECUREID),
+                    properties.get(TBDS_SECUREKEY));
+            fileSystemIdentity = new FileSystemIdentity(host, tdbsUgi);
+        } else {
+            // for simple, use host + username + password as filesystem identity
+            fileSystemIdentity = new FileSystemIdentity(host, hdfsUgi);
         }
+
         cachedFileSystem.putIfAbsent(fileSystemIdentity, new BrokerFileSystem(fileSystemIdentity));
         fileSystem = cachedFileSystem.get(fileSystemIdentity);
         if (fileSystem == null) {
@@ -350,6 +373,13 @@ public class FileSystemManager {
                                     e.getMessage());
                         }
                     }
+                } else if (authentication.equals(AUTHENTICATION_TBDS)) {
+                    conf.set(CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHENTICATION, AUTHENTICATION_TBDS);
+                    conf.set(TBDS_SECUREID, properties.get(TBDS_SECUREID));
+                    conf.set(TBDS_SECUREKEY, properties.get(TBDS_SECUREKEY));
+                    conf.set(TBDS_USERNAME, properties.get(TBDS_USERNAME));
+                    UserGroupInformation.setConfiguration(conf);
+                    UserGroupInformation.loginUserFromSubject(null);
                 }
                 if (!Strings.isNullOrEmpty(dfsNameServices)) {
                     // ha hdfs arguments
