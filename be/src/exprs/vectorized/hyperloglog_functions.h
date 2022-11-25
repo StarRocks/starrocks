@@ -5,7 +5,8 @@
 #include "exprs/vectorized/function_helper.h"
 
 namespace starrocks::vectorized {
-class HyperloglogFunction {
+
+class HyperloglogFunctions {
 public:
     /**
      * @param: [hyperloglog string]

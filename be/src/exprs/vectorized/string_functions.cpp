@@ -751,7 +751,8 @@ static inline ColumnPtr right_not_const(FunctionContext* context, const starrock
  * @paramType: [BinaryColumn, IntColumn, IntColumn]
  * @return: BinaryColumn
  */
-ColumnPtr StringFunctions::substring(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::substring(FunctionContext* context,
+                                               const starrocks::vectorized::Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
     auto state = reinterpret_cast<SubstrState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
     if (state != nullptr && state->is_const) {
@@ -762,7 +763,7 @@ ColumnPtr StringFunctions::substring(FunctionContext* context, const starrocks::
 
 // left
 // left(s, n) equals to substr(s, 1, n)
-ColumnPtr StringFunctions::left(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::left(FunctionContext* context, const Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
     Columns values;
     values.emplace_back(columns[0]);
@@ -775,7 +776,7 @@ ColumnPtr StringFunctions::left(FunctionContext* context, const Columns& columns
 // right
 // right(s, n) equals to substr(s, -n, n) except the case len(s) < n under which
 // right(s, n) return the entire s.
-ColumnPtr StringFunctions::right(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::right(FunctionContext* context, const Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
     auto state = reinterpret_cast<SubstrState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
@@ -793,7 +794,7 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(starts_withImpl, str, prefix) {
     return str_sp.starts_with(prefix_sp);
 }
 
-ColumnPtr StringFunctions::starts_with(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::starts_with(FunctionContext* context, const Columns& columns) {
     return VectorizedStrictBinaryFunction<starts_withImpl>::evaluate<TYPE_VARCHAR, TYPE_BOOLEAN>(columns[0],
                                                                                                  columns[1]);
 }
@@ -805,7 +806,7 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(ends_withImpl, str, suffix) {
     return str_sp.ends_with(suffix_sp);
 }
 
-ColumnPtr StringFunctions::ends_with(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::ends_with(FunctionContext* context, const Columns& columns) {
     return VectorizedStrictBinaryFunction<ends_withImpl>::evaluate<TYPE_VARCHAR, TYPE_BOOLEAN>(columns[0], columns[1]);
 }
 
@@ -844,7 +845,7 @@ public:
     }
 };
 
-ColumnPtr StringFunctions::space(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::space(FunctionContext* context, const Columns& columns) {
     return VectorizedUnaryFunction<SpaceFunction>::evaluate<TYPE_INT, TYPE_VARCHAR>(columns[0]);
 }
 
@@ -1025,7 +1026,7 @@ static inline ColumnPtr repeat_not_const(const Columns& columns) {
 }
 
 // repeat
-ColumnPtr StringFunctions::repeat(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::repeat(FunctionContext* context, const Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
     if (columns[1]->is_constant()) {
         return repeat_const(columns);
@@ -1422,17 +1423,17 @@ static ColumnPtr pad(FunctionContext* context, const Columns& columns) {
 }
 
 // lpad
-ColumnPtr StringFunctions::lpad(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::lpad(FunctionContext* context, const Columns& columns) {
     RETURN_COLUMN(pad<PAD_TYPE_LEFT>(context, columns), "lpad");
 }
 
 // rpad
-ColumnPtr StringFunctions::rpad(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::rpad(FunctionContext* context, const Columns& columns) {
     RETURN_COLUMN(pad<PAD_TYPE_RIGHT>(context, columns), "rpad");
 }
 
 // append_trailing_char_if_absent
-ColumnPtr StringFunctions::append_trailing_char_if_absent(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::append_trailing_char_if_absent(FunctionContext* context, const Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
     size_t row_num = columns[0]->size();
@@ -1551,7 +1552,7 @@ DEFINE_UNARY_FN_WITH_IMPL(lengthImpl, str) {
     return str.size;
 }
 
-ColumnPtr StringFunctions::length(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::length(FunctionContext* context, const Columns& columns) {
     return VectorizedStrictUnaryFunction<lengthImpl>::evaluate<TYPE_VARCHAR, TYPE_INT>(columns[0]);
 }
 
@@ -1559,7 +1560,8 @@ DEFINE_UNARY_FN_WITH_IMPL(utf8LengthImpl, str) {
     return utf8_len(str.data, str.data + str.size);
 }
 
-ColumnPtr StringFunctions::utf8_length(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::utf8_length(FunctionContext* context,
+                                                 const starrocks::vectorized::Columns& columns) {
     return VectorizedStrictUnaryFunction<utf8LengthImpl>::evaluate<TYPE_VARCHAR, TYPE_INT>(columns[0]);
 }
 
@@ -1632,7 +1634,7 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(lowerImpl, str) {
     return v;
 }
 
-ColumnPtr StringFunctions::lower(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::lower(FunctionContext* context, const Columns& columns) {
     return VectorizedUnaryFunction<StringCaseToggleFunction<false>>::evaluate<TYPE_VARCHAR>(columns[0]);
 }
 
@@ -1643,7 +1645,7 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(upperImpl, str) {
     return v;
 }
 
-ColumnPtr StringFunctions::upper(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::upper(FunctionContext* context, const Columns& columns) {
     return VectorizedUnaryFunction<StringCaseToggleFunction<true>>::evaluate<TYPE_VARCHAR>(columns[0]);
 }
 
@@ -1719,7 +1721,7 @@ struct ReverseFunction {
     }
 };
 
-ColumnPtr StringFunctions::reverse(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::reverse(FunctionContext* context, const Columns& columns) {
     return VectorizedUnaryFunction<ReverseFunction>::evaluate<TYPE_VARCHAR>(columns[0]);
 }
 
@@ -1958,7 +1960,7 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(trimImpl, str) {
     return std::string(str.data + begin, end - begin + 1);
 }
 
-ColumnPtr StringFunctions::trim(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::trim(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
     return VectorizedUnaryFunction<AdaptiveTrimFunction<8>>::evaluate<TYPE_VARCHAR>(columns[0]);
 }
 
@@ -1971,7 +1973,7 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(ltrimImpl, str) {
     return std::string(str.data + begin, str.size - begin);
 }
 
-ColumnPtr StringFunctions::ltrim(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::ltrim(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
     return VectorizedUnaryFunction<AdaptiveLTrimFunction<8>>::evaluate<TYPE_VARCHAR>(columns[0]);
 }
 
@@ -1988,7 +1990,7 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(rtrimImpl, str) {
     return std::string(str.data, (str.data[end] == ' ') ? end : end + 1);
 }
 
-ColumnPtr StringFunctions::rtrim(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::rtrim(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
     return VectorizedUnaryFunction<AdaptiveRTrimFunction<8>>::evaluate<TYPE_VARCHAR>(columns[0]);
 }
 
@@ -1999,7 +2001,7 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(hex_intImpl, v) {
     return ss.str();
 }
 
-ColumnPtr StringFunctions::hex_int(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::hex_int(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
     return VectorizedStringStrictUnaryFunction<hex_intImpl>::evaluate<TYPE_BIGINT, TYPE_VARCHAR>(columns[0]);
 }
 
@@ -2014,7 +2016,8 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(hex_stringImpl, str) {
     return ss.str();
 }
 
-ColumnPtr StringFunctions::hex_string(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::hex_string(FunctionContext* context,
+                                                const starrocks::vectorized::Columns& columns) {
     return VectorizedStringStrictUnaryFunction<hex_stringImpl>::evaluate<TYPE_VARCHAR, TYPE_VARCHAR>(columns[0]);
 }
 
@@ -2087,7 +2090,7 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(unhexImpl, str) {
     return std::string(result.data(), result_len);
 }
 
-ColumnPtr StringFunctions::unhex(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::unhex(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
     return VectorizedStringStrictUnaryFunction<unhexImpl>::evaluate<TYPE_VARCHAR, TYPE_VARCHAR>(columns[0]);
 }
 
@@ -2121,7 +2124,7 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(sm3Impl, str) {
     return result.str();
 }
 
-ColumnPtr StringFunctions::sm3(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::sm3(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
     return VectorizedStringStrictUnaryFunction<sm3Impl>::evaluate<TYPE_VARCHAR, TYPE_VARCHAR>(columns[0]);
 }
 
@@ -2130,7 +2133,7 @@ DEFINE_UNARY_FN_WITH_IMPL(asciiImpl, str) {
     return str.size == 0 ? 0 : static_cast<uint8_t>(str.data[0]);
 }
 
-ColumnPtr StringFunctions::ascii(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::ascii(FunctionContext* context, const Columns& columns) {
     return VectorizedStrictUnaryFunction<asciiImpl>::evaluate<TYPE_CHAR, TYPE_INT>(columns[0]);
 }
 
@@ -2138,7 +2141,7 @@ DEFINE_UNARY_FN_WITH_IMPL(get_charImpl, value) {
     return std::string((char*)&value, 1);
 }
 
-ColumnPtr StringFunctions::get_char(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::get_char(FunctionContext* context, const Columns& columns) {
     return VectorizedStringStrictUnaryFunction<get_charImpl>::evaluate<TYPE_INT, TYPE_CHAR>(columns[0]);
 }
 
@@ -2151,7 +2154,7 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(strcmpImpl, lhs, rhs) {
     return ret > 0 ? 1 : -1;
 }
 
-ColumnPtr StringFunctions::strcmp(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::strcmp(FunctionContext* context, const Columns& columns) {
     return VectorizedStrictBinaryFunction<strcmpImpl>::evaluate<TYPE_VARCHAR, TYPE_INT>(columns[0], columns[1]);
 }
 
@@ -2319,7 +2322,7 @@ static inline ColumnPtr concat_not_const(Columns const& columns) {
  * @paramType: [BinaryColumn, ......]`
  * @return: BinaryColumn
  */
-ColumnPtr StringFunctions::concat(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::concat(FunctionContext* context, const Columns& columns) {
     if (columns.size() == 1) {
         return columns[0];
     }
@@ -2400,7 +2403,7 @@ ColumnPtr concat_ws_small(ColumnViewer<TYPE_VARCHAR>& sep_viewer, std::vector<Co
     return builder.build(is_const);
 }
 // concat_ws
-ColumnPtr StringFunctions::concat_ws(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::concat_ws(FunctionContext* context, const Columns& columns) {
     const auto column_num = columns.size();
     if (column_num <= 1 || columns[0]->only_null()) {
         return ColumnHelper::create_const_null_column(columns[0]->size());
@@ -2474,7 +2477,8 @@ ColumnPtr StringFunctions::concat_ws(FunctionContext* context, const Columns& co
  * @paramType: [BinaryColumn]
  * @return: BooleanColumn
  */
-ColumnPtr StringFunctions::null_or_empty(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::null_or_empty(FunctionContext* context,
+                                                   const starrocks::vectorized::Columns& columns) {
     DCHECK_EQ(columns.size(), 1);
     auto str_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
 
@@ -2786,7 +2790,7 @@ static ColumnPtr regexp_extract_const(re2::RE2* const_re, const Columns& columns
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-ColumnPtr StringFunctions::regexp_extract(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::regexp_extract(FunctionContext* context, const Columns& columns) {
     auto state = reinterpret_cast<StringFunctionsState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
 
     if (state->const_pattern) {
@@ -2920,7 +2924,7 @@ static ColumnPtr regexp_replace_use_hyperscan(StringFunctionsState* state, const
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-ColumnPtr StringFunctions::regexp_replace(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::regexp_replace(FunctionContext* context, const Columns& columns) {
     auto state = reinterpret_cast<StringFunctionsState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
 
     if (state->const_pattern) {
@@ -2936,8 +2940,8 @@ ColumnPtr StringFunctions::regexp_replace(FunctionContext* context, const Column
     return regexp_replace_general(context, options, columns);
 }
 
-ColumnPtr StringFunctions::money_format_double(FunctionContext* context,
-                                               const starrocks::vectorized::Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::money_format_double(FunctionContext* context,
+                                                         const starrocks::vectorized::Columns& columns) {
     auto money_viewer = ColumnViewer<TYPE_DOUBLE>(columns[0]);
 
     auto size = columns[0]->size();
@@ -2956,8 +2960,8 @@ ColumnPtr StringFunctions::money_format_double(FunctionContext* context,
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-ColumnPtr StringFunctions::money_format_bigint(FunctionContext* context,
-                                               const starrocks::vectorized::Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::money_format_bigint(FunctionContext* context,
+                                                         const starrocks::vectorized::Columns& columns) {
     auto money_viewer = ColumnViewer<TYPE_BIGINT>(columns[0]);
 
     auto size = columns[0]->size();
@@ -2976,8 +2980,8 @@ ColumnPtr StringFunctions::money_format_bigint(FunctionContext* context,
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-ColumnPtr StringFunctions::money_format_largeint(FunctionContext* context,
-                                                 const starrocks::vectorized::Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::money_format_largeint(FunctionContext* context,
+                                                           const starrocks::vectorized::Columns& columns) {
     auto money_viewer = ColumnViewer<TYPE_LARGEINT>(columns[0]);
 
     auto size = columns[0]->size();
@@ -2998,8 +3002,8 @@ ColumnPtr StringFunctions::money_format_largeint(FunctionContext* context,
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-ColumnPtr StringFunctions::money_format_decimalv2val(FunctionContext* context,
-                                                     const starrocks::vectorized::Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::money_format_decimalv2val(FunctionContext* context,
+                                                               const starrocks::vectorized::Columns& columns) {
     auto money_viewer = ColumnViewer<TYPE_DECIMALV2>(columns[0]);
 
     auto size = columns[0]->size();
@@ -3064,7 +3068,8 @@ Status StringFunctions::parse_url_close(starrocks_udf::FunctionContext* context,
     return Status::OK();
 }
 
-ColumnPtr StringFunctions::parse_url_general(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::parse_url_general(FunctionContext* context,
+                                                       const starrocks::vectorized::Columns& columns) {
     auto str_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
     auto part_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
 
@@ -3101,8 +3106,8 @@ ColumnPtr StringFunctions::parse_url_general(FunctionContext* context, const sta
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-ColumnPtr StringFunctions::parse_url_const(UrlParser::UrlPart* url_part, FunctionContext* context,
-                                           const starrocks::vectorized::Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::parse_url_const(UrlParser::UrlPart* url_part, FunctionContext* context,
+                                                     const starrocks::vectorized::Columns& columns) {
     auto str_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
 
     auto size = columns[0]->size();
@@ -3129,7 +3134,8 @@ ColumnPtr StringFunctions::parse_url_const(UrlParser::UrlPart* url_part, Functio
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-ColumnPtr StringFunctions::parse_url(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::parse_url(FunctionContext* context,
+                                               const starrocks::vectorized::Columns& columns) {
     DCHECK_EQ(columns.size(), 2);
     auto* state = reinterpret_cast<ParseUrlState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
 
