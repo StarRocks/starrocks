@@ -124,7 +124,7 @@ void MetricCollector::get_metrics(std::vector<Metric*>* metrics) {
     }
 }
 
-MetricRegistry::~MetricRegistry() {
+MetricRegistry::~MetricRegistry() noexcept {
     {
         std::unique_lock lock(_mutex);
 
