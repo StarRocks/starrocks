@@ -54,8 +54,8 @@ public class SparkYarnConfigFiles {
     private static final String HADOOP_PREFIX = "hadoop.";
     private static final String YARN_PREFIX = "yarn.";
 
-    private String configDir;
-    private List<ConfigFile> configFiles;
+    private final String configDir;
+    private final List<ConfigFile> configFiles;
 
     public String getConfigDir() {
         return this.configDir;
@@ -170,19 +170,27 @@ public class SparkYarnConfigFiles {
             return;
         }
         if (file.isFile()) {
-            file.delete();
+            if (!file.delete()) {
+                LOG.warn("Failed to delete file, filepath={}", file.getAbsolutePath());
+            }
             return;
         }
         File[] files = file.listFiles();
-        for (File file1 : files) {
-            clearAndDelete(file1.getAbsolutePath());
+        if (files != null) {
+            for (File file1 : files) {
+                clearAndDelete(file1.getAbsolutePath());
+            }
         }
-        file.delete();
+        if (!file.delete()) {
+            LOG.warn("Failed to delete directory, directoryPath={}", file.getAbsolutePath());
+        }
     }
 
     private void mkdir(String configDir) {
         File file = new File(configDir);
-        file.mkdirs();
+        if (!file.mkdirs()) {
+            LOG.warn("Failed to create directory, directoryPath={}", file.getAbsolutePath());
+        }
     }
 
     // xml config file
@@ -192,8 +200,8 @@ public class SparkYarnConfigFiles {
         private static final String NAME = "name";
         private static final String VALUE = "value";
 
-        private String filePath;
-        private Map<String, String> configProperties;
+        private final String filePath;
+        private final Map<String, String> configProperties;
 
         public XMLConfigFile(String filePath, Map<String, String> configProperties) {
             this.filePath = filePath;
@@ -234,7 +242,7 @@ public class SparkYarnConfigFiles {
         }
 
         private Node appendNode(Node parent, String tag, String content) {
-            Element child = null;
+            Element child;
             if (parent instanceof Document) {
                 child = ((Document) parent).createElement(tag);
             } else {
