@@ -377,6 +377,10 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         return dbId;
     }
 
+    public void setDbId(long dbId) {
+        this.dbId = dbId;
+    }
+
     public boolean isActive() {
         return active;
     }
@@ -403,6 +407,10 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
     public Set<Long> getBaseTableIds() {
         return baseTableIds;
+    }
+
+    public void setBaseTableIds(Set<Long> baseTableIds) {
+        this.baseTableIds = baseTableIds;
     }
 
     public List<BaseTableInfo> getBaseTableInfos() {

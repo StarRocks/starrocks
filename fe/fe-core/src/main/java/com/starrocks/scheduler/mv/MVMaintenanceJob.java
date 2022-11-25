@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.scheduler.mv;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.MaterializedView;
@@ -39,6 +40,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -60,28 +62,30 @@ public class MVMaintenanceJob implements Writable {
     @SerializedName("viewId")
     private final long viewId;
     @SerializedName("state")
-    private final AtomicReference<JobState> state = new AtomicReference<>();
+    private JobState serializedState;
     @SerializedName("epoch")
     private final MVEpoch epoch;
 
     // TODO(murphy) serialize the plan, current we need to rebuild the plan for job
-    private ExecPlan plan;
+    private transient ExecPlan plan;
 
     // Runtime ephemeral state
     // At most one thread could execute this job, this flag indicates is someone scheduling this job
-    private final AtomicBoolean inSchedule = new AtomicBoolean(false);
-    private final MaterializedView view;
-    private ConnectContext connectContext;
+    private transient AtomicReference<JobState> state = new AtomicReference<>();
+    private transient AtomicBoolean inSchedule = new AtomicBoolean(false);
+    private transient MaterializedView view;
+    private transient ConnectContext connectContext;
     // TODO(murphy) implement a real query coordinator
-    private Coordinator queryCoordinator;
-    private TxnBasedEpochCoordinator epochCoordinator;
-    private List<MVMaintenanceTask> tasks;
+    private transient Coordinator queryCoordinator;
+    private transient TxnBasedEpochCoordinator epochCoordinator;
+    private transient List<MVMaintenanceTask> tasks;
 
     public MVMaintenanceJob(MaterializedView view) {
         this.jobId = view.getId();
         this.viewId = view.getId();
         this.view = view;
         this.epoch = new MVEpoch(view.getId());
+        this.serializedState = JobState.INIT;
         this.state.set(JobState.INIT);
         this.plan = Preconditions.checkNotNull(view.getMaintenancePlan());
     }
@@ -166,6 +170,8 @@ public class MVMaintenanceJob implements Writable {
             // Build conenction context
             this.connectContext = new ConnectContext();
             this.connectContext.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+            this.connectContext.setQueryId(new UUID(1, 2));
+            this.connectContext.setExecutionId(new TUniqueId(1, 2));
 
             // Build  query coordinator
             ExecPlan execPlan = this.view.getMaintenancePlan();
@@ -194,6 +200,7 @@ public class MVMaintenanceJob implements Writable {
      * <p>
      * Build physical fragments for the maintenance plan
      */
+    @VisibleForTesting
     private void buildPhysicalTopology() throws Exception {
         queryCoordinator.prepareExec();
 
@@ -348,7 +355,7 @@ public class MVMaintenanceJob implements Writable {
     }
 
     public long getJobId() {
-        return view.getId();
+        return jobId;
     }
 
     public Coordinator getQueryCoordinator() {
@@ -365,11 +372,16 @@ public class MVMaintenanceJob implements Writable {
     }
 
     public static MVMaintenanceJob read(DataInput input) throws IOException {
-        return GsonUtils.GSON.fromJson(Text.readString(input), MVMaintenanceJob.class);
+        MVMaintenanceJob job = GsonUtils.GSON.fromJson(Text.readString(input), MVMaintenanceJob.class);
+        job.state = new AtomicReference<>();
+        job.inSchedule = new AtomicBoolean();
+        job.state.set(job.getSerializedState());
+        return job;
     }
 
     @Override
     public void write(DataOutput out) throws IOException {
+        serializedState = state.get();
         Text.writeString(out, GsonUtils.GSON.toJson(this));
     }
 
