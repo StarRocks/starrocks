@@ -37,9 +37,7 @@ constexpr size_t bucket_size_max = 256;
 constexpr uint64_t seed0 = 12980785309524476958ULL;
 constexpr uint64_t seed1 = 9110941936030554525ULL;
 // perform l0 snapshot if l0_memory exceeds this value
-constexpr size_t l0_snapshot_size_max = 4 * 1024 * 1024;
-// perform l0 flush to l1 if l0_memory exceeds this value and l1 is null
-constexpr size_t l0_flush_size_min = 8 * 1024 * 1024;
+constexpr size_t l0_snapshot_size_max = 16 * 1024 * 1024;
 // perform l0 l1 merge compaction if l1_file_size / l0_memory >= this value and l0_memory > l0_snapshot_size_max
 constexpr size_t l0_l1_merge_ratio = 10;
 
@@ -1401,7 +1399,28 @@ Status PersistentIndex::abort() {
 // case4 will append wals into l0 file
 Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta) {
     DCHECK_EQ(index_meta->key_size(), _key_size);
-    RETURN_IF_ERROR(_check_and_flush_l0());
+    // check if _l0 need be flush, there are two conditions:
+    //   1. _l1 is not exist, _flush_l0 and build _l1
+    //   2. _l1 is exist, merge _l0 and _l1
+    // rebuild _l0 and _l1
+    // In addition, there may be I/O waste because we append wals firstly and do _flush_l0 or _merge_compaction.
+    const auto l0_mem_size = _l0->memory_usage();
+    uint64_t l1_file_size = _l1 ? _l1->file_size() : 0;
+    // if l1 is not empty,
+    if (l1_file_size != 0) {
+        // and l0 memory usage is large enough,
+        if (l0_mem_size * l0_l1_merge_ratio > l1_file_size) {
+            // do l0 l1 merge compaction
+            _flushed = true;
+            RETURN_IF_ERROR(_merge_compaction());
+        }
+        // if l1 is empty, and l0 memory usage is large enough
+    } else if (l0_mem_size > l0_snapshot_size_max) {
+        // do flush l0
+        _flushed = true;
+        RETURN_IF_ERROR(_flush_l0());
+    }
+    _dump_snapshot |= !_flushed && l0_file_size() > config::l0_max_file_size;
     // for case1 and case2
     if (_flushed) {
         // create a new empty _l0 file because all data in _l0 has write into _l1 files
@@ -1633,34 +1652,6 @@ Status PersistentIndex::_reload(const PersistentIndexMetaPB& index_meta) {
         LOG(WARNING) << "reload persistent index failed, status: " << st.to_string();
     }
     return st;
-}
-
-// check _l0 should be flush or not, if not, return
-// if _l0 should be flush, there are two conditions:
-//   1. _l1 is not exist, _flush_l0 and build _l1
-//   2. _l1 is exist, merge _l0 and _l1
-// rebuild _l0 and _l1
-// In addition, there may be io waste because we append wals first and
-// do _flush_l0 or merge compaction.
-Status PersistentIndex::_check_and_flush_l0() {
-    size_t kv_size = _key_size + sizeof(IndexValue);
-    size_t l0_mem_size = kv_size * _l0->size();
-    uint64_t l1_file_size = 0;
-    if (_l1 != nullptr) {
-        _l1->file_size(&l1_file_size);
-    }
-    if (l0_mem_size <= l0_flush_size_min &&
-        ((l0_mem_size <= l0_snapshot_size_max) || (l1_file_size / l0_mem_size > l0_l1_merge_ratio))) {
-        return Status::OK();
-    }
-    _flushed = true;
-    // flush _l0
-    if (_l1 == nullptr) {
-        RETURN_IF_ERROR(_flush_l0());
-    } else {
-        RETURN_IF_ERROR(_merge_compaction());
-    }
-    return Status::OK();
 }
 
 size_t PersistentIndex::mutable_index_size() {
