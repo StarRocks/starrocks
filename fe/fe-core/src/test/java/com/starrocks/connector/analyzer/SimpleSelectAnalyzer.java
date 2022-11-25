@@ -39,6 +39,9 @@ import java.util.stream.Stream;
 import static com.starrocks.analysis.Expr.pushNegationToOperands;
 import static com.starrocks.sql.common.ErrorType.INTERNAL_ERROR;
 
+
+// This analyzer is used to test the compatibility of query SQL, do not need to analyze
+// the scope for select clauses
 public class SimpleSelectAnalyzer {
 
     public void analyze(AnalyzeState analyzeState,

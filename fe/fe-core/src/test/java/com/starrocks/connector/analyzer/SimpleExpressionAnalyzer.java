@@ -84,6 +84,10 @@ import java.util.stream.Stream;
 import static com.starrocks.sql.analyzer.AnalyticAnalyzer.verifyAnalyticExpression;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 
+
+// This analyzer is used to test the compatibility of query SQL, do not need to verify
+// the column valid, focus on analyze functions, and this analyzer do not support analyze
+// UDF
 public class SimpleExpressionAnalyzer {
     private static final Pattern HAS_TIME_PART = Pattern.compile("^.*[HhIiklrSsT]+.*$");
 

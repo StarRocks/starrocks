@@ -50,7 +50,8 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 
-
+// This analyzer is used to test the compatibility of query SQL, do not need to verify the
+// catalog/database/table exist.
 public class SimpleQueryAnalyzer {
     public void analyze(StatementBase node) {
         new Visitor().process(node);
