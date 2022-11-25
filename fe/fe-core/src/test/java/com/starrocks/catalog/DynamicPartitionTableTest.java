@@ -448,7 +448,7 @@ public class DynamicPartitionTableTest {
                 "\"dynamic_partition.buckets\" = \"1\"\n" +
                 ");";
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
-        OlapTable emptyDynamicTable = (OlapTable) db.getTable(tableName);
-        Assert.assertTrue(emptyDynamicTable.getAllPartitions().size() == 7);
+        OlapTable table = (OlapTable) db.getTable(tableName);
+        Assert.assertTrue(table.getAllPartitions().size() == 7);
     }
 }
