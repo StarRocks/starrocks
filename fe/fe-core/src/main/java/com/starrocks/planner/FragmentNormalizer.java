@@ -39,6 +39,7 @@ import java.nio.ByteBuffer;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -460,5 +461,12 @@ public class FragmentNormalizer {
             remainConjuncts.addAll(boundOtherExprs);
             return remainConjuncts;
         }
+    }
+
+    // For partition that not support partition column range predicates' decomposition, we
+    // just create a simple selectedRangeMap which is used to construct cache key in BE.
+    public void createSimpleRangeMap(Collection<Long> selectedPartitionIds) {
+        selectedRangeMap = Maps.newHashMap();
+        selectedPartitionIds.stream().forEach(id -> selectedRangeMap.put(id, "[]"));
     }
 }
