@@ -42,7 +42,7 @@ import java.lang.reflect.Field;
 public class AuditLogBuilder extends Plugin implements AuditPlugin {
     private static final Logger LOG = LogManager.getLogger(AuditLogBuilder.class);
 
-    private PluginInfo pluginInfo;
+    private final PluginInfo pluginInfo;
 
     public AuditLogBuilder() {
         pluginInfo = new PluginInfo(PluginMgr.BUILTIN_PLUGIN_PREFIX + "AuditLogBuilder", PluginType.AUDIT,
@@ -80,7 +80,28 @@ public class AuditLogBuilder extends Plugin implements AuditPlugin {
                 if (af.value().equals("Time")) {
                     queryTime = (long) f.get(event);
                 }
-                sb.append("|").append(af.value()).append("=").append(String.valueOf(f.get(event)));
+
+                // Ignore -1 by default, ignore 0 if annotated with ignore_zero
+                Object value = f.get(event);
+                if (value instanceof Long) {
+                    long longValue = (Long) value;
+                    if (longValue == -1 || (longValue == 0 && af.ignore_zero())) {
+                        continue;
+                    }
+                }
+                if (value instanceof Integer) {
+                    int intValue = (Integer) value;
+                    if (intValue == -1 || (intValue == 0 && af.ignore_zero())) {
+                        continue;
+                    }
+                }
+                if (value instanceof Double) {
+                    double doubleValue = (Double) value;
+                    if (doubleValue == -1 || (doubleValue == 0 && af.ignore_zero())) {
+                        continue;
+                    }
+                }
+                sb.append("|").append(af.value()).append("=").append(value);
             }
 
             String auditLog = sb.toString();
@@ -93,4 +114,18 @@ public class AuditLogBuilder extends Plugin implements AuditPlugin {
             LOG.debug("failed to process audit event", e);
         }
     }
+<<<<<<< HEAD
+=======
+
+    private boolean isBigQuery(AuditEvent event) {
+        if (event.bigQueryLogCPUSecondThreshold >= 0 &&
+                event.cpuCostNs > event.bigQueryLogCPUSecondThreshold * 1000000000L) {
+            return true;
+        }
+        if (event.bigQueryLogScanBytesThreshold >= 0 && event.scanBytes > event.bigQueryLogScanBytesThreshold) {
+            return true;
+        }
+        return event.bigQueryLogScanRowsThreshold >= 0 && event.scanRows > event.bigQueryLogScanRowsThreshold;
+    }
+>>>>>>> aeef667e3 ([Enhancement] skip log empty audit event (#14006))
 }
