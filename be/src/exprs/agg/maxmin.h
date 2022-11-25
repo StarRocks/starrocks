@@ -17,46 +17,11 @@ template <LogicalType PT, typename = guard::Guard>
 struct MaxAggregateData {};
 
 template <LogicalType PT>
-struct MaxAggregateData<PT, IntegralPTGuard<PT>> {
+struct MaxAggregateData<PT, AggregatePTGuard<PT>> {
     using T = RunTimeCppType<PT>;
-    T result = std::numeric_limits<T>::lowest();
+    T result = RunTimeTypeLimits<PT>::min_value();
 
-    void reset() { result = std::numeric_limits<T>::lowest(); }
-};
-
-template <LogicalType PT>
-struct MaxAggregateData<PT, FloatPTGuard<PT>> {
-    using T = RunTimeCppType<PT>;
-    T result = std::numeric_limits<T>::lowest();
-    void reset() { result = std::numeric_limits<T>::lowest(); }
-};
-
-template <>
-struct MaxAggregateData<TYPE_DECIMALV2, guard::Guard> {
-    DecimalV2Value result = DecimalV2Value::get_min_decimal();
-
-    void reset() { result = DecimalV2Value::get_min_decimal(); }
-};
-
-template <LogicalType PT>
-struct MaxAggregateData<PT, DecimalPTGuard<PT>> {
-    using T = RunTimeCppType<PT>;
-    T result = get_min_decimal<T>();
-    void reset() { result = get_min_decimal<T>(); }
-};
-
-template <>
-struct MaxAggregateData<TYPE_DATETIME, guard::Guard> {
-    TimestampValue result = TimestampValue::MIN_TIMESTAMP_VALUE;
-
-    void reset() { result = TimestampValue::MIN_TIMESTAMP_VALUE; }
-};
-
-template <>
-struct MaxAggregateData<TYPE_DATE, guard::Guard> {
-    DateValue result = DateValue::MIN_DATE_VALUE;
-
-    void reset() { result = DateValue::MIN_DATE_VALUE; }
+    void reset() { result = RunTimeTypeLimits<PT>::min_value(); }
 };
 
 template <LogicalType PT>
@@ -78,46 +43,11 @@ template <LogicalType PT, typename = guard::Guard>
 struct MinAggregateData {};
 
 template <LogicalType PT>
-struct MinAggregateData<PT, IntegralPTGuard<PT>> {
+struct MinAggregateData<PT, AggregatePTGuard<PT>> {
     using T = RunTimeCppType<PT>;
-    T result = std::numeric_limits<T>::max();
+    T result = RunTimeTypeLimits<PT>::max_value();
 
-    void reset() { result = std::numeric_limits<T>::max(); }
-};
-
-template <LogicalType PT>
-struct MinAggregateData<PT, FloatPTGuard<PT>> {
-    using T = RunTimeCppType<PT>;
-    T result = std::numeric_limits<T>::max();
-
-    void reset() { result = std::numeric_limits<T>::max(); }
-};
-
-template <>
-struct MinAggregateData<TYPE_DECIMALV2, guard::Guard> {
-    DecimalV2Value result = DecimalV2Value::get_max_decimal();
-
-    void reset() { result = DecimalV2Value::get_max_decimal(); }
-};
-
-template <LogicalType PT>
-struct MinAggregateData<PT, DecimalPTGuard<PT>> {
-    using T = RunTimeCppType<PT>;
-    T result = get_max_decimal<T>();
-    void reset() { result = get_max_decimal<T>(); }
-};
-template <>
-struct MinAggregateData<TYPE_DATETIME, guard::Guard> {
-    TimestampValue result = TimestampValue::MAX_TIMESTAMP_VALUE;
-
-    void reset() { result = TimestampValue::MAX_TIMESTAMP_VALUE; }
-};
-
-template <>
-struct MinAggregateData<TYPE_DATE, guard::Guard> {
-    DateValue result = DateValue::MAX_DATE_VALUE;
-
-    void reset() { result = DateValue::MAX_DATE_VALUE; }
+    void reset() { result = RunTimeTypeLimits<PT>::max_value(); }
 };
 
 template <LogicalType PT>
@@ -147,9 +77,9 @@ struct MinElement {
     void operator()(State& state, const T& right) const { state.result = std::min<T>(state.result, right); }
 };
 
-template <LogicalType PT>
-struct MaxElement<PT, MaxAggregateData<PT>, StringPTGuard<PT>> {
-    void operator()(MaxAggregateData<PT>& state, const Slice& right) const {
+template <LogicalType PT, typename State>
+struct MaxElement<PT, State, StringPTGuard<PT>> {
+    void operator()(State& state, const Slice& right) const {
         if (!state.has_value() || state.slice().compare(right) < 0) {
             state.buffer.resize(right.size);
             memcpy(state.buffer.data(), right.data, right.size);
@@ -158,9 +88,9 @@ struct MaxElement<PT, MaxAggregateData<PT>, StringPTGuard<PT>> {
     }
 };
 
-template <LogicalType PT>
-struct MinElement<PT, MinAggregateData<PT>, StringPTGuard<PT>> {
-    void operator()(MinAggregateData<PT>& state, const Slice& right) const {
+template <LogicalType PT, typename State>
+struct MinElement<PT, State, StringPTGuard<PT>> {
+    void operator()(State& state, const Slice& right) const {
         if (!state.has_value() || state.slice().compare(right) > 0) {
             state.buffer.resize(right.size);
             memcpy(state.buffer.data(), right.data, right.size);
