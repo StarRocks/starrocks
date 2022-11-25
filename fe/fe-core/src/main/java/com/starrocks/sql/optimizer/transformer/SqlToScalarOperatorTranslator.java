@@ -385,7 +385,7 @@ public final class SqlToScalarOperatorTranslator {
 
         @Override
         public ScalarOperator visitLambdaArguments(LambdaArgument node, Context context) {
-            return columnRefFactory.create(node.getName(), node.getType(), node.isNullable());
+            return columnRefFactory.create(node.getName(), node.getType(), node.isNullable(), true);
         }
 
         @Override

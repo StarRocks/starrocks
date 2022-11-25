@@ -128,7 +128,7 @@ public class QueryQueueManagerTest {
         mockCoordinatorEnableCheckQueue();
         GlobalVariable.setQueryQueueSelectEnable(true);
         manager.maybeWait(connectCtx, coordinator);
-        Assert.assertEquals(0, connectCtx.getAuditEventBuilder().build().pendingTimeMs);
+        Assert.assertEquals(-1, connectCtx.getAuditEventBuilder().build().pendingTimeMs);
         Assert.assertEquals(0, manager.numPendingQueries());
 
         // Case 2: Coordinator doesn't enable to check queue.
@@ -136,7 +136,7 @@ public class QueryQueueManagerTest {
         mockCoordinatorNotEnableCheckQueue();
         GlobalVariable.setQueryQueueSelectEnable(true);
         manager.maybeWait(connectCtx, coordinator);
-        Assert.assertEquals(0, connectCtx.getAuditEventBuilder().build().pendingTimeMs);
+        Assert.assertEquals(-1, connectCtx.getAuditEventBuilder().build().pendingTimeMs);
         Assert.assertEquals(0, manager.numPendingQueries());
 
         // Case 3: Coordinator need check queue but resource isn't overloaded.
@@ -144,7 +144,7 @@ public class QueryQueueManagerTest {
         mockCoordinatorEnableCheckQueue();
         mockCanRunMore();
         manager.maybeWait(connectCtx, coordinator);
-        Assert.assertEquals(0, connectCtx.getAuditEventBuilder().build().pendingTimeMs);
+        Assert.assertEquals(-1, connectCtx.getAuditEventBuilder().build().pendingTimeMs);
         Assert.assertEquals(0, manager.numPendingQueries());
 
     }

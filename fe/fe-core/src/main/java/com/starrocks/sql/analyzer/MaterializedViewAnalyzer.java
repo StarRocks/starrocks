@@ -71,6 +71,7 @@ import com.starrocks.sql.optimizer.transformer.OptExprBuilder;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.plan.ExecPlan;
 import org.apache.iceberg.PartitionSpec;
+import org.apache.logging.log4j.util.Strings;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -81,6 +82,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
 import static com.starrocks.server.CatalogMgr.isInternalCatalog;
 
 public class MaterializedViewAnalyzer {
@@ -103,6 +105,22 @@ public class MaterializedViewAnalyzer {
                     table instanceof IcebergTable;
         }
 
+        private boolean isExternalTableFromResource(Table table) {
+            if (table instanceof OlapTable) {
+                return false;
+            } else if (table instanceof HiveTable || table instanceof HudiTable) {
+                HiveMetaStoreTable hiveMetaStoreTable = (HiveMetaStoreTable) table;
+                String catalogName = hiveMetaStoreTable.getCatalogName();
+                return Strings.isBlank(catalogName) || isResourceMappingCatalog(catalogName);
+            } else if (table instanceof IcebergTable) {
+                IcebergTable icebergTable = (IcebergTable) table;
+                String catalogName = icebergTable.getCatalog();
+                return Strings.isBlank(catalogName) || isResourceMappingCatalog(catalogName);
+            } else {
+                return true;
+            }
+        }
+
         @Override
         public Void visitCreateMaterializedViewStatement(CreateMaterializedViewStatement statement,
                                                          ConnectContext context) {
@@ -120,14 +138,7 @@ public class MaterializedViewAnalyzer {
                 throw new SemanticException("Materialized view query statement only support select");
             }
             SelectRelation selectRelation = ((SelectRelation) queryStatement.getQueryRelation());
-            // check cte
-            if (selectRelation.hasWithClause()) {
-                throw new SemanticException("Materialized view query statement not support cte");
-            }
-            // check subquery
-            if (!AnalyzerUtils.collectAllSubQueryRelation(queryStatement).isEmpty()) {
-                throw new SemanticException("Materialized view query statement not support subquery");
-            }
+
             // check alias except * and SlotRef
             List<SelectListItem> selectListItems = selectRelation.getSelectList().getItems();
             for (SelectListItem selectListItem : selectListItems) {
@@ -166,6 +177,11 @@ public class MaterializedViewAnalyzer {
                 if (table instanceof MaterializedView && !((MaterializedView) table).isActive()) {
                     throw new SemanticException(
                             "Create materialized view from inactive materialized view: " + table.getName());
+                }
+                if (isExternalTableFromResource(table)) {
+                    throw new SemanticException(
+                            "Only supports creating materialized views based on the external table " +
+                                    "which created by catalog");
                 }
                 Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(tableNameInfo.getCatalog(),
                         tableNameInfo.getDb());
@@ -393,7 +409,10 @@ public class MaterializedViewAnalyzer {
             SlotRef slotRef = getSlotRef(statement.getPartitionRefTableExpr());
             Table table = tableNameTableMap.get(slotRef.getTblNameWithoutAnalyzed());
 
-            if (table.isLocalTable()) {
+            if (table == null) {
+                throw new SemanticException("Materialized view partition expression %s could only ref to base table",
+                        slotRef.toSql());
+            } else if (table.isLocalTable()) {
                 checkPartitionColumnWithBaseOlapTable(slotRef, (OlapTable) table);
             } else if (table.isHiveTable() || table.isHudiTable()) {
                 checkPartitionColumnWithBaseHMSTable(slotRef, (HiveMetaStoreTable) table);

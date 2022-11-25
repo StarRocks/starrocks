@@ -82,7 +82,7 @@ void OlapChunkSource::_init_counter(RuntimeState* state) {
     _raw_rows_counter = ADD_COUNTER(_runtime_profile, "RawRowsRead", TUnit::UNIT);
     _read_pages_num_counter = ADD_COUNTER(_runtime_profile, "ReadPagesNum", TUnit::UNIT);
     _cached_pages_num_counter = ADD_COUNTER(_runtime_profile, "CachedPagesNum", TUnit::UNIT);
-    _pushdown_predicates_counter = ADD_COUNTER(_runtime_profile, "PushdownPredicates", TUnit::UNIT);
+    _pushdown_predicates_counter = ADD_COUNTER_SKIP_MERGE(_runtime_profile, "PushdownPredicates", TUnit::UNIT);
 
     _get_rowsets_timer = ADD_TIMER(_runtime_profile, "GetRowsets");
     _get_delvec_timer = ADD_TIMER(_runtime_profile, "GetDelVec");
@@ -263,7 +263,7 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
             ChunkHelper::convert_schema_to_format_v2(tablet_schema, reader_columns);
 
     _reader = std::make_shared<TabletReader>(_tablet, Version(_morsel->from_version(), _version),
-                                             std::move(child_schema));
+                                             std::move(child_schema), _morsel->rowsets());
     if (reader_columns.size() == scanner_columns.size()) {
         _prj_iter = _reader;
     } else {

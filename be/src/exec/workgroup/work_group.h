@@ -68,10 +68,20 @@ private:
 using WorkGroupDriverSchedEntity = WorkGroupSchedEntity<pipeline::DriverQueue>;
 using WorkGroupScanSchedEntity = WorkGroupSchedEntity<ScanTaskQueue>;
 
+struct RunningQueryToken {
+public:
+    RunningQueryToken(WorkGroupPtr wg) : wg(std::move(wg)) {}
+    ~RunningQueryToken();
+
+private:
+    WorkGroupPtr wg;
+};
+using RunningQueryTokenPtr = std::unique_ptr<RunningQueryToken>;
+
 // WorkGroup is the unit of resource isolation, it has {CPU, Memory, Concurrency} quotas which limit the
 // resource usage of the queries belonging to the WorkGroup. Each user has be bound to a WorkGroup, when
 // the user issues a query, then the corresponding WorkGroup is chosen to manage the query.
-class WorkGroup {
+class WorkGroup : public std::enable_shared_from_this<WorkGroup> {
 public:
     WorkGroup(std::string name, int64_t id, int64_t version, size_t cpu_limit, double memory_limit, size_t concurrency,
               WorkGroupType type);
@@ -140,7 +150,7 @@ public:
     static int128_t create_unique_id(int64_t id, int64_t version) { return (((int128_t)version) << 64) | id; }
 
     Status check_big_query(const QueryContext& query_context);
-    Status try_incr_num_queries();
+    StatusOr<RunningQueryTokenPtr> acquire_running_query_token();
     void decr_num_queries();
     int64_t num_running_queries() const { return _num_running_queries; }
     int64_t num_total_queries() const { return _num_total_queries; }

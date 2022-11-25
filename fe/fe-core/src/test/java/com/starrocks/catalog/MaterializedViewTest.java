@@ -3,6 +3,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.SlotRef;
@@ -718,5 +719,25 @@ public class MaterializedViewTest {
         TaskSchedule schedule = connectContext.getGlobalStateMgr().getTaskManager().getTask(mvTaskName).getSchedule();
         // start time must equal 2022-12-31
         Assert.assertEquals(4828164311L, asyncRefreshContext.getStartTime());
+    }
+
+    @Test
+    public void testMvMysqlType() {
+        MaterializedView mv = new MaterializedView();
+        String mysqlType = mv.getMysqlType();
+        Assert.assertEquals("VIEW", mysqlType);
+    }
+
+    @Test
+    public void testShouldRefreshBy() {
+        MaterializedView mv = new MaterializedView();
+        MaterializedView.MvRefreshScheme mvRefreshScheme = new MaterializedView.MvRefreshScheme();
+        mvRefreshScheme.setType(MaterializedView.RefreshType.ASYNC);
+        mv.setRefreshScheme(mvRefreshScheme);
+        boolean shouldRefresh = mv.shouldTriggeredRefreshBy(null, null);
+        Assert.assertTrue(shouldRefresh);
+        mv.setTableProperty(new TableProperty(Maps.newConcurrentMap()));
+        shouldRefresh = mv.shouldTriggeredRefreshBy(null, null);
+        Assert.assertTrue(shouldRefresh);
     }
 }
