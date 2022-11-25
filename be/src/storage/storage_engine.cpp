@@ -784,13 +784,14 @@ Status StorageEngine::_start_trash_sweep(double* usage) {
     }
     const time_t local_now = mktime(&local_tm_now);
 
+    double max_usage = 0.0;
     for (DataDirInfo& info : data_dir_infos) {
         if (!info.is_used) {
             continue;
         }
 
         double curr_usage = (double)(info.disk_capacity - info.available) / info.disk_capacity;
-        *usage = *usage > curr_usage ? *usage : curr_usage;
+        max_usage = std::max(max_usage, curr_usage);
 
         Status curr_res = Status::OK();
         std::string snapshot_path = info.path + SNAPSHOT_PREFIX;
@@ -806,6 +807,9 @@ Status StorageEngine::_start_trash_sweep(double* usage) {
             LOG(WARNING) << "failed to sweep trash. [path=%s" << trash_path << ", err_code=" << curr_res;
             res = curr_res;
         }
+    }
+    if (usage != nullptr) {
+        *usage = max_usage;
     }
 
     // clear expire incremental rowset, move deleted tablet to trash
