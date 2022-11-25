@@ -2,7 +2,6 @@
 
 #include <utility>
 
-#include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/column_visitor_adapter.h"
