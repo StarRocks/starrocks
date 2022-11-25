@@ -1330,7 +1330,7 @@ public class ReportHandler extends Daemon {
 
                 GlobalStateMgr.getCurrentState().getEditLog().logAddReplica(info);
 
-                LOG.info("add replica[{}-{}] to globalStateMgr. backend:[{}] replicas:", tabletId, replicaId, backendId,
+                LOG.info("add replica[{}-{}] to globalStateMgr. backend:[{}] replicas: {}", tabletId, replicaId, backendId,
                         tablet.getReplicaInfos());
             } else {
                 // replica is enough. check if this tablet is already in meta
