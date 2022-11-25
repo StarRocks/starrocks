@@ -98,7 +98,7 @@ public:
 
     virtual size_t num_original_morsels() const = 0;
     virtual size_t max_degree_of_parallelism() const = 0;
-    virtual bool empty() const = 0;
+    virtual bool empty(int driver_seq) const = 0;
     virtual StatusOr<MorselPtr> try_get(int driver_seq) = 0;
 
     virtual std::string name() const = 0;
@@ -120,7 +120,7 @@ public:
 
     size_t num_original_morsels() const override { return _num_morsels; }
     size_t max_degree_of_parallelism() const override { return _num_morsels; }
-    bool empty() const override;
+    bool empty(int driver_seq) const override;
     StatusOr<MorselPtr> try_get(int driver_seq) override;
 
     std::string name() const override { return "fixed_morsel_queue"; }
@@ -157,7 +157,7 @@ public:
 
     size_t num_original_morsels() const override { return _morsels.size(); }
     size_t max_degree_of_parallelism() const override { return _degree_of_parallelism; }
-    bool empty() const override { return _tablet_idx >= _tablets.size(); }
+    bool empty(int driver_seq) const override { return _tablet_idx >= _tablets.size(); }
     StatusOr<MorselPtr> try_get(int driver_seq) override;
 
     std::string name() const override { return "physical_split_morsel_queue"; }

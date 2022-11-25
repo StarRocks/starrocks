@@ -149,7 +149,7 @@ bool ScanOperator::has_output() const {
     // return true if more i/o tasks can be committed.
 
     // Can pick up more morsels.
-    if (!_morsel_queue->empty()) {
+    if (!_morsel_queue->empty(_driver_sequence)) {
         return true;
     }
 
@@ -178,7 +178,7 @@ bool ScanOperator::is_finished() const {
     }
 
     // Any io task is running or needs to run.
-    if (_num_running_io_tasks > 0 || !_morsel_queue->empty()) {
+    if (_num_running_io_tasks > 0 || !_morsel_queue->empty(_driver_sequence)) {
         return false;
     }
 

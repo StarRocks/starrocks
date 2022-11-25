@@ -56,14 +56,11 @@ FixedMorselQueue::FixedMorselQueue(Morsels&& morsels, int dop)
     }
 }
 
-bool FixedMorselQueue::empty() const {
+bool FixedMorselQueue::empty(int driver_seq) const {
     if (_assign_morsels) {
-        for (const auto& [seq, index] : _next_idx_per_operator) {
-            if (index.load() < _morsel_idxs_per_operator.at(seq).size()) {
-                return false;
-            }
-        }
-        return true;
+        const auto& next_index = _next_idx_per_operator.at(driver_seq);
+        const auto& morsel_idxs = _morsel_idxs_per_operator.at(driver_seq);
+        return next_index >= morsel_idxs.size();
     } else {
         return _pop_index >= _num_morsels;
     }
