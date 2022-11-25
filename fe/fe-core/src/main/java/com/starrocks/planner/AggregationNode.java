@@ -25,6 +25,7 @@ import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.AggregateInfo;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.DescriptorTable;
@@ -34,7 +35,6 @@ import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleId;
-import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
@@ -53,6 +53,7 @@ import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Optional;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -329,6 +330,10 @@ public class AggregationNode extends PlanNode {
         int numAggExprs = (aggExprs == null || aggExprs.isEmpty()) ? 0 : aggExprs.size();
         IntStream.range(0, numAggExprs).forEach(i ->
                 slotIdsAndAggExprs.put(slotIds.get(i + numGroupingExprs), aggExprs.get(i)));
+
+        normalizer.addAggColumnDependentSlotIds(slotIdsAndAggExprs);
+        normalizer.disableMultiversionIfExprsDependOnAggColumns(groupingExprs);
+
         Pair<List<Integer>, List<ByteBuffer>> remappedAggExprs =
                 normalizer.normalizeSlotIdsAndExprs(slotIdsAndAggExprs);
         aggrNode.setAggregate_functions(remappedAggExprs.second);

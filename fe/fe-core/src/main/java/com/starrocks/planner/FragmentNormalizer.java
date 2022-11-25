@@ -6,6 +6,7 @@ import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.BetweenPredicate;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.CompoundPredicate;
@@ -32,8 +33,6 @@ import com.starrocks.thrift.TExpr;
 import org.apache.thrift.TException;
 import org.apache.thrift.TSerializer;
 import org.apache.thrift.protocol.TCompactProtocol;
-import org.apache.thrift.protocol.TJSONProtocol;
-import org.apache.thrift.protocol.TSimpleJSONProtocol;
 
 import java.nio.ByteBuffer;
 import java.security.MessageDigest;
@@ -41,11 +40,9 @@ import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
-import java.util.function.BinaryOperator;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 // FragmentNormalizer is used to normalize a cacheable Fragment. After a cacheable Fragment
@@ -74,6 +71,8 @@ public class FragmentNormalizer {
     private boolean canUseMultiVersion = true;
 
     private KeysType keysType;
+
+    private Set<SlotId> aggColumnDependentSlotIds;
 
     public FragmentNormalizer(ExecPlan execPlan, PlanFragment fragment) {
         this.execPlan = execPlan;
@@ -409,11 +408,11 @@ public class FragmentNormalizer {
             }
         }
 
-        // TODO(by satanson): If the bound exprs contain no simple range exprs but only contain complex exprs, then
-        //  cached result is reused poorly. so we mark the fragment uncacheable. As a matter of fact, some complex
-        //  exprs can also be decomposed into simple range exprs, later we all extends the scope of simple range exprs.
+        // TODO(by satanson): If the bound exprs contain no simple range exprs but only contain complex exprs, we
+        //  create a simpleRangeMap without predicates' decomposition to turn on the cache. date_trunc function
+        //  is frequently-used, we should decompose predicates contains date_trunc in the future.
         if (!boundOtherExprs.isEmpty() && boundSimpleRegionExprs.isEmpty()) {
-            uncacheable = true;
+            createSimpleRangeMap(rangeMap.stream().map(Map.Entry::getKey).collect(Collectors.toSet()));
             return conjuncts;
         }
 
@@ -452,8 +451,10 @@ public class FragmentNormalizer {
                 selectedRangeMap.put(partitionKeyRange.getKey(), range.toString());
             }
         }
+        // After we decompose the predicates, we should create a simple selectedRangeMap to turn on query cache if
+        // we get a empty selectedRangeMap. it is defensive-style programming.
         if (selectedRangeMap.isEmpty()) {
-            uncacheable = true;
+            createSimpleRangeMap(rangeMap.stream().map(Map.Entry::getKey).collect(Collectors.toSet()));
             return conjuncts;
         } else {
             List<Expr> remainConjuncts = Lists.newArrayList();
@@ -468,5 +469,36 @@ public class FragmentNormalizer {
     public void createSimpleRangeMap(Collection<Long> selectedPartitionIds) {
         selectedRangeMap = Maps.newHashMap();
         selectedPartitionIds.stream().forEach(id -> selectedRangeMap.put(id, "[]"));
+    }
+
+    public Set<SlotId> getAggColumnDependentSlotIds() {
+        return aggColumnDependentSlotIds;
+    }
+
+    public void setAggColumnDependentSlotIds(Set<SlotId> aggColumnDependentSlotIds) {
+        this.aggColumnDependentSlotIds = aggColumnDependentSlotIds;
+    }
+
+    public void addAggColumnDependentSlotIds(Map<SlotId, Expr> exprs) {
+        exprs.forEach((slotId, expr) -> {
+            List<SlotRef> slotRefs = Lists.newArrayList();
+            expr.collect(SlotRef.class, slotRefs);
+            Set<SlotId> referenced = slotRefs.stream().map(SlotRef::getSlotId).collect(Collectors.toSet());
+            if (!Sets.intersection(this.aggColumnDependentSlotIds, referenced).isEmpty()) {
+                this.aggColumnDependentSlotIds.add(slotId);
+            }
+        });
+    }
+
+    public void disableMultiversionIfExprsDependOnAggColumns(List<Expr> exprs) {
+        if (exprs == null || exprs.isEmpty()) {
+            return;
+        }
+        List<SlotRef> slotRefs = Lists.newArrayList();
+        exprs.forEach(e -> e.collect(SlotRef.class, slotRefs));
+        Set<SlotId> dependSlotIds = slotRefs.stream().map(SlotRef::getSlotId).collect(Collectors.toSet());
+        if (!Sets.intersection(dependSlotIds, this.aggColumnDependentSlotIds).isEmpty()) {
+            this.setCanUseMultiVersion(false);
+        }
     }
 }
