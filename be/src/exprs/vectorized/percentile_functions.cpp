@@ -11,7 +11,7 @@
 
 namespace starrocks::vectorized {
 
-ColumnPtr PercentileFunctions::percentile_hash(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> PercentileFunctions::percentile_hash(FunctionContext* context, const Columns& columns) {
     ColumnViewer<TYPE_DOUBLE> viewer(columns[0]);
 
     auto percentile_column = PercentileColumn::create();
@@ -31,12 +31,12 @@ ColumnPtr PercentileFunctions::percentile_hash(FunctionContext* context, const C
     }
 }
 
-ColumnPtr PercentileFunctions::percentile_empty(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> PercentileFunctions::percentile_empty(FunctionContext* context, const Columns& columns) {
     PercentileValue value;
     return ColumnHelper::create_const_column<TYPE_PERCENTILE>(&value, 1);
 }
 
-ColumnPtr PercentileFunctions::percentile_approx_raw(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> PercentileFunctions::percentile_approx_raw(FunctionContext* context, const Columns& columns) {
     ColumnViewer<TYPE_PERCENTILE> viewer1(columns[0]);
     ColumnViewer<TYPE_DOUBLE> viewer2(columns[1]);
     size_t size = columns[0]->size();

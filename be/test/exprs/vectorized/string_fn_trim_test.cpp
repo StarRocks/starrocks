@@ -40,7 +40,7 @@ TEST_F(StringFunctionTrimTest, trimTest) {
 
     ctx->set_constant_columns(columns);
     ASSERT_OK(StringFunctions::trim_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
-    ColumnPtr result = StringFunctions::trim(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::trim(ctx.get(), columns).value();
     ASSERT_EQ(4096, result->size());
 
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
@@ -135,17 +135,17 @@ TEST_F(StringFunctionTrimTest, trimOrphanEmptyStringTest) {
 
     ctx->set_constant_columns(columns);
     ASSERT_OK(StringFunctions::trim_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
-    ColumnPtr result = StringFunctions::trim(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::trim(ctx.get(), columns).value();
     ASSERT_EQ(1, result->size());
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
     ASSERT_EQ(v->get_slice(0).size, 0);
 
-    result = StringFunctions::rtrim(ctx.get(), columns);
+    result = StringFunctions::rtrim(ctx.get(), columns).value();
     ASSERT_EQ(1, result->size());
     v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
     ASSERT_EQ(v->get_slice(0).size, 0);
 
-    result = StringFunctions::ltrim(ctx.get(), columns);
+    result = StringFunctions::ltrim(ctx.get(), columns).value();
     ASSERT_EQ(1, result->size());
     v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
     ASSERT_EQ(v->get_slice(0).size, 0);
@@ -165,7 +165,7 @@ TEST_F(StringFunctionTrimTest, ltrimTest) {
 
     ctx->set_constant_columns(columns);
     ASSERT_OK(StringFunctions::trim_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
-    ColumnPtr result = StringFunctions::ltrim(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::ltrim(ctx.get(), columns).value();
     ASSERT_EQ(4096, result->size());
 
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
@@ -190,7 +190,7 @@ TEST_F(StringFunctionTrimTest, rtrimTest) {
 
     ctx->set_constant_columns(columns);
     ASSERT_OK(StringFunctions::trim_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
-    ColumnPtr result = StringFunctions::rtrim(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::rtrim(ctx.get(), columns).value();
     ASSERT_EQ(4096, result->size());
 
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
@@ -221,9 +221,9 @@ TEST_F(StringFunctionTrimTest, trimSpacesTest) {
 
     ctx->set_constant_columns(columns);
     ASSERT_OK(StringFunctions::trim_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
-    ColumnPtr rtrim_result = StringFunctions::rtrim(ctx.get(), columns);
-    ColumnPtr ltrim_result = StringFunctions::ltrim(ctx.get(), columns);
-    ColumnPtr trim_result = StringFunctions::trim(ctx.get(), columns);
+    ColumnPtr rtrim_result = StringFunctions::rtrim(ctx.get(), columns).value();
+    ColumnPtr ltrim_result = StringFunctions::ltrim(ctx.get(), columns).value();
+    ColumnPtr trim_result = StringFunctions::trim(ctx.get(), columns).value();
     ASSERT_EQ(4096, rtrim_result->size());
     ASSERT_EQ(4096, ltrim_result->size());
     ASSERT_EQ(4096, trim_result->size());
