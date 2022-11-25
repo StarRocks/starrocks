@@ -235,6 +235,10 @@ public class OptExpressionValidator extends OptExpressionVisitor<OptExpression, 
                         ErrorType.USER_ERROR, toType, constant.getValue());
             }
         }
+
+        private boolean needDateValidate() {
+            return (sqlMode & SqlModeHelper.MODE_FORBID_INVALID_DATE) > 0;
+        }
     }
 
     private boolean needValidate() {
@@ -242,17 +246,6 @@ public class OptExpressionValidator extends OptExpressionVisitor<OptExpression, 
             return false;
         }
 
-        long sqlMode = ConnectContext.get().getSessionVariable().getSqlMode();
-        if ((sqlMode & SqlModeHelper.MODE_FORBID_INVALID_DATE) > 0) {
-            return true;
-        } else {
-            return false;
-        }
-
+        return (ConnectContext.get().getSessionVariable().getSqlMode() & SqlModeHelper.MODE_FORBID_INVALID_DATE) > 0;
     }
-
-    private boolean needDateValidate() {
-        return (sqlMode & SqlModeHelper.MODE_FORBID_INVALID_DATE) > 0;
-    }
-
 }
