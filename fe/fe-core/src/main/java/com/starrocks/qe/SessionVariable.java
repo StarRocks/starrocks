@@ -306,8 +306,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_MATERIALIZED_VIEW_UNION_REWRITE = "enable_materialized_view_union_rewrite";
     public static final String ENABLE_RULE_BASED_MATERIALIZED_VIEW_REWRITE =
             "enable_rule_based_materialized_view_rewrite";
-    public static final String ENABLE_COST_BASED_MATERIALIZED_VIEW_REWRITE =
-            "enable_cost_based_materialized_view_rewrite";
 
     public static final String ENABLE_BIG_QUERY_LOG = "enable_big_query_log";
     public static final String BIG_QUERY_LOG_CPU_SECOND_THRESHOLD = "big_query_log_cpu_second_threshold";
@@ -790,9 +788,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // Users need to set up according to their own scenario.
     @VarAttr(name = BIG_QUERY_LOG_SCAN_ROWS_THRESHOLD)
     private long bigQueryLogScanRowsThreshold = 1000000000L;
-
-    @VarAttr(name = ENABLE_COST_BASED_MATERIALIZED_VIEW_REWRITE)
-    private boolean enableCostBasedMaterializedViewRewrite = true;
 
     public boolean getEnablePopulateBlockCache() {
         return enablePopulateBlockCache;
@@ -1490,14 +1485,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setBigQueryLogScanRowsThreshold(long bigQueryLogScanRowsThreshold) {
         this.bigQueryLogScanRowsThreshold = bigQueryLogScanRowsThreshold;
-    }
-
-    public boolean isEnableCostBasedMaterializedViewRewrite() {
-        return enableCostBasedMaterializedViewRewrite;
-    }
-
-    public void setEnableCostBasedMaterializedViewRewrite(boolean enableCostBasedMaterializedViewRewrite) {
-        this.enableCostBasedMaterializedViewRewrite = enableCostBasedMaterializedViewRewrite;
     }
 
     // Serialize to thrift object
