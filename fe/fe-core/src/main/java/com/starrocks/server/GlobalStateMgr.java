@@ -2085,15 +2085,6 @@ public class GlobalStateMgr {
                 }
             }
             sb.append(Joiner.on(", ").join(keysColumnNames)).append(")");
-            MaterializedIndexMeta index = olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexId());
-            if (index.getSortKeyIdxes() != null) {
-                sb.append("\nORDER BY(");
-                List<String> sortKeysColumnNames = Lists.newArrayList();
-                for (Integer i : index.getSortKeyIdxes()) {
-                    sortKeysColumnNames.add("`" + table.getBaseSchema().get(i).getName() + "`");
-                }
-                sb.append(Joiner.on(", ").join(sortKeysColumnNames)).append(")");
-            }
             if (!Strings.isNullOrEmpty(table.getComment())) {
                 sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
             }
@@ -2112,6 +2103,17 @@ public class GlobalStateMgr {
             // distribution
             DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo();
             sb.append("\n").append(distributionInfo.toSql());
+
+            // order by
+            MaterializedIndexMeta index = olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexId());
+            if (index.getSortKeyIdxes() != null) {
+                sb.append("\nORDER BY(");
+                List<String> sortKeysColumnNames = Lists.newArrayList();
+                for (Integer i : index.getSortKeyIdxes()) {
+                    sortKeysColumnNames.add("`" + table.getBaseSchema().get(i).getName() + "`");
+                }
+                sb.append(Joiner.on(", ").join(sortKeysColumnNames)).append(")");
+            }
 
             // properties
             sb.append("\nPROPERTIES (\n");
