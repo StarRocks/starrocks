@@ -132,8 +132,8 @@ private:
 
     bool _assign_morsels = false;
     int _scan_dop;
-    std::map<int, std::vector<int>> _morsel_idxs_per_operator;
-    std::map<int, std::atomic_size_t> _next_idx_per_operator;
+    std::vector<std::vector<int>> _morsel_idxs_per_operator;
+    std::vector<std::atomic_size_t> _next_idx_per_operator;
 
     std::vector<std::vector<RowsetSharedPtr>> _tablet_rowsets;
 };

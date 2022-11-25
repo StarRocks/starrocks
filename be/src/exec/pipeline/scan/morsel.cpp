@@ -38,12 +38,18 @@ std::vector<TInternalScanRange*> FixedMorselQueue::olap_scan_ranges() const {
 }
 
 FixedMorselQueue::FixedMorselQueue(Morsels&& morsels, int dop)
-        : _morsels(std::move(morsels)), _num_morsels(_morsels.size()), _pop_index(0), _scan_dop(dop) {
-    int io_parallelism = dop * ScanOperator::MAX_IO_TASKS_PER_OP;
-    if (dop > 1 && _num_morsels <= io_parallelism) {
+        : _morsels(std::move(morsels)),
+          _num_morsels(_morsels.size()),
+          _pop_index(0),
+          _assign_morsels(dop > 1 && _num_morsels <= dop * ScanOperator::MAX_IO_TASKS_PER_OP),
+          _scan_dop(dop),
+          _morsel_idxs_per_operator(_assign_morsels ? dop : 0),
+          _next_idx_per_operator(_assign_morsels ? dop : 0) {
+    if (_assign_morsels) {
         for (int i = 0; i < dop; i++) {
             _next_idx_per_operator[i] = 0;
         }
+
         int operator_seq = 0;
         for (int i = 0; i < _morsels.size(); i++) {
             _morsel_idxs_per_operator[operator_seq].push_back(i);
@@ -58,8 +64,8 @@ FixedMorselQueue::FixedMorselQueue(Morsels&& morsels, int dop)
 
 bool FixedMorselQueue::empty(int driver_seq) const {
     if (_assign_morsels) {
-        const auto& next_index = _next_idx_per_operator.at(driver_seq);
-        const auto& morsel_idxs = _morsel_idxs_per_operator.at(driver_seq);
+        const auto& next_index = _next_idx_per_operator[driver_seq];
+        const auto& morsel_idxs = _morsel_idxs_per_operator[driver_seq];
         return next_index >= morsel_idxs.size();
     } else {
         return _pop_index >= _num_morsels;
