@@ -94,11 +94,11 @@ public class CompactionContext {
         return visibleTs;
     }
 
-    public void setPartitionName(String partitionName) {
+    public void setFullPartitionName(String partitionName) {
         this.partitionName = partitionName;
     }
 
-    public String getPartitionName() {
+    public String getFullPartitionName() {
         return partitionName;
     }
 
