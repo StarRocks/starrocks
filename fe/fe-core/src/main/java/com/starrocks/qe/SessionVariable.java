@@ -299,6 +299,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // We assume that for PRIMARY_KEYS and UNIQUE_KEYS, the latest partitions are hot partitions that are updated
     // frequently, so it should not be cached in query cache since its disruptive cache invalidation.
     public static final String QUERY_CACHE_HOT_PARTITION_NUM = "query_cache_hot_partition_num";
+
+    public static final String QUERY_CACHE_AGG_CARDINALITY_LIMIT = "query_cache_agg_cardinality_limit";
     public static final String TRANSMISSION_ENCODE_LEVEL = "transmission_encode_level";
 
     public static final String NESTED_MV_REWRITE_MAX_LEVEL = "nested_mv_rewrite_max_level";
@@ -756,6 +758,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = QUERY_CACHE_HOT_PARTITION_NUM)
     private int queryCacheHotPartitionNum = 3;
+
+    @VarAttr(name = QUERY_CACHE_AGG_CARDINALITY_LIMIT)
+    private long queryCacheAggCardinalityLimit = 5000000;
 
     @VarAttr(name = NESTED_MV_REWRITE_MAX_LEVEL)
     private int nestedMvRewriteMaxLevel = 3;
@@ -1409,6 +1414,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public int getQueryCacheHotPartitionNum() {
         return queryCacheHotPartitionNum;
+    }
+
+    public void setQueryCacheAggCardinalityLimit(long limit) {
+        this.queryCacheAggCardinalityLimit = limit;
+    }
+
+    public long getQueryCacheAggCardinalityLimit() {
+        return queryCacheAggCardinalityLimit;
     }
 
     public void setEnableQueryCache(boolean on) {
