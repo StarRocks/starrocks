@@ -1,19 +1,23 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
-#include "storage/cumulative_compaction.h"
+#include "storage/default_compaction_policy.h"
 
 #include <fmt/format.h>
 #include <gtest/gtest.h>
 
 #include <memory>
 
-#include "column/schema.h"
+#include "column/vectorized_schema.h"
 #include "fs/fs_util.h"
 #include "runtime/exec_env.h"
+#include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
 #include "storage/compaction.h"
+#include "storage/compaction_context.h"
+#include "storage/compaction_manager.h"
 #include "storage/compaction_utils.h"
+#include "storage/cumulative_compaction.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
@@ -23,9 +27,9 @@
 
 namespace starrocks::vectorized {
 
-class CumulativeCompactionTest : public testing::Test {
+class DefaultCompactionPolicyTest : public testing::Test {
 public:
-    ~CumulativeCompactionTest() override {
+    ~DefaultCompactionPolicyTest() override {
         if (_engine) {
             _engine->stop();
             delete _engine;
@@ -176,32 +180,38 @@ public:
         }
     }
 
-    void do_compaction() {
-        create_tablet_schema(UNIQUE_KEYS);
+    void init_compaction_context(const TabletSharedPtr& tablet) {
+        std::unique_ptr<CompactionContext> compaction_context = std::make_unique<CompactionContext>();
+        compaction_context->policy = std::make_unique<DefaultCumulativeBaseCompactionPolicy>(tablet.get());
+        tablet->set_compaction_context(compaction_context);
+    }
 
-        TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
-        create_tablet_meta(tablet_meta.get());
-
-        for (int i = 0; i < 2; ++i) {
-            write_new_version(tablet_meta);
+    Status compact(const TabletSharedPtr& tablet) {
+        if (!tablet->need_compaction()) {
+            LOG(WARNING) << "no need compact";
+            return Status::InternalError("no need compact");
         }
 
-        TabletSharedPtr tablet =
-                Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
-        tablet->init();
+        auto task = tablet->create_compaction_task();
+        if (task == nullptr) {
+            LOG(WARNING) << "task is null";
+            return Status::InternalError("task is null");
+        }
 
-        CumulativeCompaction cumulative_compaction(_compaction_mem_tracker.get(), tablet);
-        auto res = cumulative_compaction.compact();
-        ASSERT_TRUE(res.ok());
+        task->run();
+        if (task->compaction_task_state() == COMPACTION_FAILED) {
+            LOG(WARNING) << "task fail";
+            return Status::InternalError("task fail");
+        }
 
-        ASSERT_EQ(1, tablet->version_count());
-        ASSERT_EQ(2, tablet->cumulative_layer_point());
+        return Status::OK();
     }
 
     void SetUp() override {
         config::min_cumulative_compaction_num_singleton_deltas = 2;
         config::max_cumulative_compaction_num_singleton_deltas = 5;
         config::max_compaction_concurrency = 1;
+        config::min_base_compaction_num_singleton_deltas = 10;
         Compaction::init(config::max_compaction_concurrency);
 
         config::storage_root_path = std::filesystem::current_path().string() + "/data_test_cumulative_compaction";
@@ -217,6 +227,8 @@ public:
             Status s = starrocks::StorageEngine::open(options, &_engine);
             ASSERT_TRUE(s.ok()) << s.to_string();
         }
+
+        _engine->compaction_manager()->_disable_update_tablet = true;
 
         _schema_hash_path = fmt::format("{}/data/0/12345/1111", config::storage_root_path);
         ASSERT_OK(fs::create_directories(_schema_hash_path));
@@ -248,14 +260,14 @@ protected:
     int64_t _version;
 };
 
-TEST_F(CumulativeCompactionTest, test_init_succeeded) {
+TEST_F(DefaultCompactionPolicyTest, test_init_succeeded) {
     TabletMetaSharedPtr tablet_meta(new TabletMeta());
     TabletSharedPtr tablet = Tablet::create_tablet_from_meta(tablet_meta, nullptr);
-    CumulativeCompaction cumulative_compaction(_compaction_mem_tracker.get(), tablet);
-    ASSERT_FALSE(cumulative_compaction.compact().ok());
+    init_compaction_context(tablet);
+    ASSERT_FALSE(compact(tablet).ok());
 }
 
-TEST_F(CumulativeCompactionTest, test_candidate_rowsets_empty) {
+TEST_F(DefaultCompactionPolicyTest, test_candidate_rowsets_empty) {
     TabletSchemaPB schema_pb;
     schema_pb.set_keys_type(KeysType::DUP_KEYS);
 
@@ -265,23 +277,12 @@ TEST_F(CumulativeCompactionTest, test_candidate_rowsets_empty) {
 
     TabletSharedPtr tablet = Tablet::create_tablet_from_meta(tablet_meta, nullptr);
     tablet->init();
-    CumulativeCompaction cumulative_compaction(_compaction_mem_tracker.get(), tablet);
-    ASSERT_FALSE(cumulative_compaction.compact().ok());
+    init_compaction_context(tablet);
+
+    ASSERT_FALSE(compact(tablet).ok());
 }
 
-TEST_F(CumulativeCompactionTest, test_horizontal_compact_succeed) {
-    LOG(INFO) << "test_horizontal_compact_succeed";
-    config::vertical_compaction_max_columns_per_group = 5;
-    do_compaction();
-}
-
-TEST_F(CumulativeCompactionTest, test_vertical_compact_succeed) {
-    LOG(INFO) << "test_vertical_compact_succeed";
-    config::vertical_compaction_max_columns_per_group = 1;
-    do_compaction();
-}
-
-TEST_F(CumulativeCompactionTest, test_min_cumulative_compaction) {
+TEST_F(DefaultCompactionPolicyTest, test_min_cumulative_compaction) {
     LOG(INFO) << "test_min_cumulative_compaction";
     create_tablet_schema(UNIQUE_KEYS);
 
@@ -293,9 +294,9 @@ TEST_F(CumulativeCompactionTest, test_min_cumulative_compaction) {
     TabletSharedPtr tablet =
             Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
     tablet->init();
+    init_compaction_context(tablet);
 
-    CumulativeCompaction cumulative_compaction(_compaction_mem_tracker.get(), tablet);
-    auto res = cumulative_compaction.compact();
+    auto res = compact(tablet);
     ASSERT_FALSE(res.ok());
 
     ASSERT_EQ(1, tablet->version_count());
@@ -307,7 +308,7 @@ TEST_F(CumulativeCompactionTest, test_min_cumulative_compaction) {
     ASSERT_EQ(0, versions[0].second);
 }
 
-TEST_F(CumulativeCompactionTest, test_max_cumulative_compaction) {
+TEST_F(DefaultCompactionPolicyTest, test_max_cumulative_compaction) {
     LOG(INFO) << "test_max_cumulative_compaction";
     create_tablet_schema(UNIQUE_KEYS);
 
@@ -321,9 +322,9 @@ TEST_F(CumulativeCompactionTest, test_max_cumulative_compaction) {
     TabletSharedPtr tablet =
             Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
     tablet->init();
+    init_compaction_context(tablet);
 
-    CumulativeCompaction cumulative_compaction(_compaction_mem_tracker.get(), tablet);
-    auto res = cumulative_compaction.compact();
+    auto res = compact(tablet);
     ASSERT_TRUE(res.ok());
 
     ASSERT_EQ(2, tablet->version_count());
@@ -337,7 +338,7 @@ TEST_F(CumulativeCompactionTest, test_max_cumulative_compaction) {
     ASSERT_EQ(5, versions[1].second);
 }
 
-TEST_F(CumulativeCompactionTest, test_missed_first_version) {
+TEST_F(DefaultCompactionPolicyTest, test_missed_first_version) {
     LOG(INFO) << "test_missed_first_version";
     create_tablet_schema(UNIQUE_KEYS);
 
@@ -351,10 +352,10 @@ TEST_F(CumulativeCompactionTest, test_missed_first_version) {
     TabletSharedPtr tablet =
             Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
     tablet->init();
+    init_compaction_context(tablet);
 
     {
-        CumulativeCompaction cumulative_compaction(_compaction_mem_tracker.get(), tablet);
-        auto res = cumulative_compaction.compact();
+        auto res = compact(tablet);
         ASSERT_FALSE(res.ok());
 
         ASSERT_EQ(2, tablet->version_count());
@@ -369,7 +370,7 @@ TEST_F(CumulativeCompactionTest, test_missed_first_version) {
     }
 }
 
-TEST_F(CumulativeCompactionTest, test_missed_version_after_cumulative_point) {
+TEST_F(DefaultCompactionPolicyTest, test_missed_version_after_cumulative_point) {
     LOG(INFO) << "test_missed_version_after_cumulative_point";
     create_tablet_schema(UNIQUE_KEYS);
 
@@ -387,13 +388,13 @@ TEST_F(CumulativeCompactionTest, test_missed_version_after_cumulative_point) {
     TabletSharedPtr tablet =
             Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
     tablet->init();
+    init_compaction_context(tablet);
 
     ASSERT_EQ(4, tablet->version_count());
 
     // compaction 0-1
     {
-        CumulativeCompaction cumulative_compaction(_compaction_mem_tracker.get(), tablet);
-        auto res = cumulative_compaction.compact();
+        auto res = compact(tablet);
         ASSERT_TRUE(res.ok());
 
         ASSERT_EQ(3, tablet->version_count());
@@ -411,8 +412,7 @@ TEST_F(CumulativeCompactionTest, test_missed_version_after_cumulative_point) {
 
     // compaction 3-4
     {
-        CumulativeCompaction cumulative_compaction(_compaction_mem_tracker.get(), tablet);
-        auto res = cumulative_compaction.compact();
+        auto res = compact(tablet);
         ASSERT_TRUE(res.ok());
 
         ASSERT_EQ(2, tablet->version_count());
@@ -444,8 +444,7 @@ TEST_F(CumulativeCompactionTest, test_missed_version_after_cumulative_point) {
 
     // compaction 2
     {
-        CumulativeCompaction cumulative_compaction(_compaction_mem_tracker.get(), tablet);
-        auto res = cumulative_compaction.compact();
+        auto res = compact(tablet);
         ASSERT_TRUE(res.ok());
 
         ASSERT_EQ(3, tablet->version_count());
@@ -463,25 +462,20 @@ TEST_F(CumulativeCompactionTest, test_missed_version_after_cumulative_point) {
 
     // move cumulative point
     {
-        CumulativeCompaction cumulative_compaction(_compaction_mem_tracker.get(), tablet);
-        auto res = cumulative_compaction.compact();
-        ASSERT_FALSE(res.ok());
+        auto res = compact(tablet);
+        ASSERT_TRUE(res.ok());
 
-        ASSERT_EQ(3, tablet->version_count());
+        ASSERT_EQ(1, tablet->version_count());
         ASSERT_EQ(5, tablet->cumulative_layer_point());
         std::vector<Version> versions;
         tablet->list_versions(&versions);
-        ASSERT_EQ(3, versions.size());
+        ASSERT_EQ(1, versions.size());
         ASSERT_EQ(0, versions[0].first);
-        ASSERT_EQ(1, versions[0].second);
-        ASSERT_EQ(2, versions[1].first);
-        ASSERT_EQ(2, versions[1].second);
-        ASSERT_EQ(3, versions[2].first);
-        ASSERT_EQ(4, versions[2].second);
+        ASSERT_EQ(4, versions[0].second);
     }
 }
 
-TEST_F(CumulativeCompactionTest, test_missed_two_version) {
+TEST_F(DefaultCompactionPolicyTest, test_missed_two_version) {
     LOG(INFO) << "test_missed_two_version";
     create_tablet_schema(UNIQUE_KEYS);
 
@@ -499,13 +493,13 @@ TEST_F(CumulativeCompactionTest, test_missed_two_version) {
     TabletSharedPtr tablet =
             Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
     tablet->init();
+    init_compaction_context(tablet);
 
     ASSERT_EQ(4, tablet->version_count());
 
     // compaction 0-1
     {
-        CumulativeCompaction cumulative_compaction(_compaction_mem_tracker.get(), tablet);
-        auto res = cumulative_compaction.compact();
+        auto res = compact(tablet);
         ASSERT_TRUE(res.ok());
 
         ASSERT_EQ(3, tablet->version_count());
@@ -523,8 +517,7 @@ TEST_F(CumulativeCompactionTest, test_missed_two_version) {
 
     // compaction 4-5
     {
-        CumulativeCompaction cumulative_compaction(_compaction_mem_tracker.get(), tablet);
-        auto res = cumulative_compaction.compact();
+        auto res = compact(tablet);
         ASSERT_TRUE(res.ok());
 
         ASSERT_EQ(2, tablet->version_count());
@@ -556,8 +549,7 @@ TEST_F(CumulativeCompactionTest, test_missed_two_version) {
 
     // won't compaction since only less that min_cumulative_compaction_num_singleton_deltas
     {
-        CumulativeCompaction cumulative_compaction(_compaction_mem_tracker.get(), tablet);
-        auto res = cumulative_compaction.compact();
+        auto res = compact(tablet);
         ASSERT_FALSE(res.ok());
 
         ASSERT_EQ(3, tablet->version_count());
@@ -593,8 +585,7 @@ TEST_F(CumulativeCompactionTest, test_missed_two_version) {
 
     // compaction 2-3
     {
-        CumulativeCompaction cumulative_compaction(_compaction_mem_tracker.get(), tablet);
-        auto res = cumulative_compaction.compact();
+        auto res = compact(tablet);
         ASSERT_TRUE(res.ok());
 
         ASSERT_EQ(3, tablet->version_count());
@@ -612,25 +603,20 @@ TEST_F(CumulativeCompactionTest, test_missed_two_version) {
 
     // move cumulative point
     {
-        CumulativeCompaction cumulative_compaction(_compaction_mem_tracker.get(), tablet);
-        auto res = cumulative_compaction.compact();
-        ASSERT_FALSE(res.ok());
+        auto res = compact(tablet);
+        ASSERT_TRUE(res.ok());
 
-        ASSERT_EQ(3, tablet->version_count());
+        ASSERT_EQ(1, tablet->version_count());
         ASSERT_EQ(6, tablet->cumulative_layer_point());
         std::vector<Version> versions;
         tablet->list_versions(&versions);
-        ASSERT_EQ(3, versions.size());
+        ASSERT_EQ(1, versions.size());
         ASSERT_EQ(0, versions[0].first);
-        ASSERT_EQ(1, versions[0].second);
-        ASSERT_EQ(2, versions[1].first);
-        ASSERT_EQ(3, versions[1].second);
-        ASSERT_EQ(4, versions[2].first);
-        ASSERT_EQ(5, versions[2].second);
+        ASSERT_EQ(5, versions[0].second);
     }
 }
 
-TEST_F(CumulativeCompactionTest, test_delete_version) {
+TEST_F(DefaultCompactionPolicyTest, test_delete_version) {
     LOG(INFO) << "test_missed_first_version";
     create_tablet_schema(UNIQUE_KEYS);
 
@@ -645,13 +631,13 @@ TEST_F(CumulativeCompactionTest, test_delete_version) {
     TabletSharedPtr tablet =
             Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
     tablet->init();
+    init_compaction_context(tablet);
 
     ASSERT_EQ(3, tablet->version_count());
     ASSERT_EQ(-1, tablet->cumulative_layer_point());
 
     {
-        CumulativeCompaction cumulative_compaction(_compaction_mem_tracker.get(), tablet);
-        auto res = cumulative_compaction.compact();
+        auto res = compact(tablet);
         ASSERT_TRUE(res.ok());
 
         ASSERT_EQ(3, tablet->version_count());
@@ -668,8 +654,7 @@ TEST_F(CumulativeCompactionTest, test_delete_version) {
     }
 
     {
-        CumulativeCompaction cumulative_compaction(_compaction_mem_tracker.get(), tablet);
-        auto res = cumulative_compaction.compact();
+        auto res = compact(tablet);
         ASSERT_FALSE(res.ok());
 
         ASSERT_EQ(3, tablet->version_count());
@@ -686,8 +671,7 @@ TEST_F(CumulativeCompactionTest, test_delete_version) {
     }
 
     {
-        CumulativeCompaction cumulative_compaction(_compaction_mem_tracker.get(), tablet);
-        auto res = cumulative_compaction.compact();
+        auto res = compact(tablet);
         ASSERT_FALSE(res.ok());
 
         ASSERT_EQ(3, tablet->version_count());
@@ -704,7 +688,7 @@ TEST_F(CumulativeCompactionTest, test_delete_version) {
     }
 }
 
-TEST_F(CumulativeCompactionTest, test_missed_and_delete_version) {
+TEST_F(DefaultCompactionPolicyTest, test_missed_and_delete_version) {
     LOG(INFO) << "test_missed_two_version";
     create_tablet_schema(UNIQUE_KEYS);
 
@@ -725,13 +709,13 @@ TEST_F(CumulativeCompactionTest, test_missed_and_delete_version) {
     TabletSharedPtr tablet =
             Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
     tablet->init();
+    init_compaction_context(tablet);
 
     ASSERT_EQ(5, tablet->version_count());
 
     // compaction 0-1
     {
-        CumulativeCompaction cumulative_compaction(_compaction_mem_tracker.get(), tablet);
-        auto res = cumulative_compaction.compact();
+        auto res = compact(tablet);
         ASSERT_TRUE(res.ok());
 
         ASSERT_EQ(4, tablet->version_count());
@@ -751,8 +735,7 @@ TEST_F(CumulativeCompactionTest, test_missed_and_delete_version) {
 
     // compaction 6-7
     {
-        CumulativeCompaction cumulative_compaction(_compaction_mem_tracker.get(), tablet);
-        auto res = cumulative_compaction.compact();
+        auto res = compact(tablet);
         ASSERT_TRUE(res.ok());
 
         ASSERT_EQ(3, tablet->version_count());
@@ -788,8 +771,7 @@ TEST_F(CumulativeCompactionTest, test_missed_and_delete_version) {
 
     // compaction 2
     {
-        CumulativeCompaction cumulative_compaction(_compaction_mem_tracker.get(), tablet);
-        auto res = cumulative_compaction.compact();
+        auto res = compact(tablet);
         ASSERT_TRUE(res.ok());
 
         ASSERT_EQ(4, tablet->version_count());
@@ -809,48 +791,22 @@ TEST_F(CumulativeCompactionTest, test_missed_and_delete_version) {
 
     // move cumulative point
     {
-        CumulativeCompaction cumulative_compaction(_compaction_mem_tracker.get(), tablet);
-        auto res = cumulative_compaction.compact();
-        ASSERT_FALSE(res.ok());
+        auto res = compact(tablet);
+        ASSERT_TRUE(res.ok());
 
-        ASSERT_EQ(4, tablet->version_count());
+        ASSERT_EQ(2, tablet->version_count());
         ASSERT_EQ(4, tablet->cumulative_layer_point());
         std::vector<Version> versions;
         tablet->list_versions(&versions);
-        ASSERT_EQ(4, versions.size());
+        ASSERT_EQ(2, versions.size());
         ASSERT_EQ(0, versions[0].first);
-        ASSERT_EQ(1, versions[0].second);
-        ASSERT_EQ(2, versions[1].first);
-        ASSERT_EQ(2, versions[1].second);
-        ASSERT_EQ(3, versions[2].first);
-        ASSERT_EQ(3, versions[2].second);
-        ASSERT_EQ(6, versions[3].first);
-        ASSERT_EQ(7, versions[3].second);
+        ASSERT_EQ(3, versions[0].second);
+        ASSERT_EQ(6, versions[1].first);
+        ASSERT_EQ(7, versions[1].second);
     }
 }
 
-TEST_F(CumulativeCompactionTest, test_read_chunk_size) {
-    // total row size is 0 in old segment
-    int64_t mem_limit = 2147483648;
-    int32_t config_chunk_size = 4096;
-    int64_t total_num_rows = 10000;
-    int64_t total_mem_footprint = 0;
-    size_t source_num = 10;
-    ASSERT_EQ(config_chunk_size, CompactionUtils::get_read_chunk_size(mem_limit, config_chunk_size, total_num_rows,
-                                                                      total_mem_footprint, source_num));
-
-    // normal total memory footprint
-    total_mem_footprint = 1073741824;
-    ASSERT_EQ(2001, CompactionUtils::get_read_chunk_size(mem_limit, config_chunk_size, total_num_rows,
-                                                         total_mem_footprint, source_num));
-
-    // mem limit is 0
-    mem_limit = 0;
-    ASSERT_EQ(config_chunk_size, CompactionUtils::get_read_chunk_size(mem_limit, config_chunk_size, total_num_rows,
-                                                                      total_mem_footprint, source_num));
-}
-
-TEST_F(CumulativeCompactionTest, test_multi_segment_cumulative_compaction) {
+TEST_F(DefaultCompactionPolicyTest, test_multi_segment_cumulative_compaction) {
     LOG(INFO) << "test_multi_segment_cumulative_compaction";
     create_tablet_schema(UNIQUE_KEYS);
 
@@ -865,9 +821,9 @@ TEST_F(CumulativeCompactionTest, test_multi_segment_cumulative_compaction) {
     TabletSharedPtr tablet =
             Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
     tablet->init();
+    init_compaction_context(tablet);
 
-    CumulativeCompaction cumulative_compaction(_compaction_mem_tracker.get(), tablet);
-    auto res = cumulative_compaction.compact();
+    auto res = compact(tablet);
     ASSERT_TRUE(res.ok());
 
     ASSERT_EQ(1, tablet->version_count());
