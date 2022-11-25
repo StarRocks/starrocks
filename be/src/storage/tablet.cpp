@@ -1170,6 +1170,7 @@ void Tablet::_update_tablet_compaction_context() {
     }
 }
 
+<<<<<<< HEAD
 // protected by meta lock
 std::unique_ptr<CompactionContext> Tablet::_get_compaction_context() {
     // construct compaction context from tablet
@@ -1270,6 +1271,14 @@ std::shared_ptr<CompactionTask> Tablet::get_compaction(CompactionType type, bool
                 _cumulative_compaction_task = compaction_policy->create_compaction();
             }
             return _cumulative_compaction_task;
+=======
+std::shared_ptr<CompactionTask> Tablet::create_compaction_task() {
+    std::lock_guard lock(_compaction_task_lock);
+    if (_compaction_task == nullptr && _enable_compaction) {
+        if (_compaction_context) {
+            _compaction_task = _compaction_context->policy->create_compaction(
+                    std::static_pointer_cast<Tablet>(shared_from_this()));
+>>>>>>> 9e748d97d ([BugFix] Fix tablet ptr leak in compaction manager after it dropped (#13829))
         }
     } else {
         LOG(WARNING) << "no need to compact for type:" << type;
@@ -1294,6 +1303,7 @@ std::vector<CompactionCandidate> Tablet::_get_compaction_candidates() {
     return candidates;
 }
 
+<<<<<<< HEAD
 std::vector<CompactionCandidate> Tablet::get_compaction_candidates(bool need_update_context) {
     std::unique_lock wrlock(_meta_lock);
     if (need_update_context) {
@@ -1314,6 +1324,13 @@ bool Tablet::_need_compaction_unlock(CompactionType type) const {
     }
     if (_compaction_context->need_compaction(type)) {
         if (type == BASE_COMPACTION) {
+=======
+bool Tablet::need_compaction() {
+    std::lock_guard lock(_compaction_task_lock);
+    if (_compaction_task == nullptr && _enable_compaction) {
+        if (_compaction_context != nullptr &&
+            _compaction_context->policy->need_compaction(&_compaction_context->score, &_compaction_context->type)) {
+>>>>>>> 9e748d97d ([BugFix] Fix tablet ptr leak in compaction manager after it dropped (#13829))
             // if there is running task, return false
             // else, return true
             return !_base_compaction_task;
@@ -1350,11 +1367,17 @@ void Tablet::reset_compaction(CompactionType type) {
     } else {
         _base_compaction_task.reset();
     }
+    _enable_compaction = false;
 }
 
 // for ut
 void Tablet::set_compaction_context(std::unique_ptr<CompactionContext>& compaction_context) {
     _compaction_context = std::move(compaction_context);
+}
+
+bool Tablet::enable_compaction() {
+    std::lock_guard lock(_compaction_task_lock);
+    return _enable_compaction;
 }
 
 } // namespace starrocks

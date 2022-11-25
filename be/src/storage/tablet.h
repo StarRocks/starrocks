@@ -245,6 +245,8 @@ public:
 
     void reset_compaction(CompactionType type);
 
+    bool enable_compaction();
+
     bool get_enable_persistent_index() { return _tablet_meta->get_enable_persistent_index(); }
 
     void set_enable_persistent_index(bool enable_persistent_index) {
@@ -322,8 +324,15 @@ private:
 
     // compaction related
     std::unique_ptr<CompactionContext> _compaction_context;
+<<<<<<< HEAD
     std::shared_ptr<CompactionTask> _base_compaction_task;
     std::shared_ptr<CompactionTask> _cumulative_compaction_task;
+=======
+    std::shared_ptr<CompactionTask> _compaction_task;
+    bool _enable_compaction = true;
+
+    std::mutex _compaction_task_lock;
+>>>>>>> 9e748d97d ([BugFix] Fix tablet ptr leak in compaction manager after it dropped (#13829))
 
     // if this tablet is broken, set to true. default is false
     // timestamp of last cumu compaction failure

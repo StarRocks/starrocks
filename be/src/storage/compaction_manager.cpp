@@ -45,15 +45,93 @@ void CompactionManager::update_candidates(std::vector<CompactionCandidate> candi
             }
         }
         for (auto& candidate : candidates) {
+<<<<<<< HEAD
             candidate.score = candidate.tablet->compaction_score(candidate.type) * 100;
             _compaction_candidates.emplace(std::move(candidate));
+=======
+            if (candidate.tablet->enable_compaction()) {
+                VLOG(1) << "update candidate " << candidate.tablet->tablet_id() << " type "
+                        << starrocks::to_string(candidate.type) << " score " << candidate.score;
+                _compaction_candidates.emplace(std::move(candidate));
+            }
+>>>>>>> 9e748d97d ([BugFix] Fix tablet ptr leak in compaction manager after it dropped (#13829))
         }
         VLOG(2) << "_compaction_candidates size:" << _compaction_candidates.size()
                 << ", to add candidates:" << candidates.size() << " erase candidates: " << erase_num;
     }
+<<<<<<< HEAD
     if (candidates.size() != erase_num) {
         VLOG(2) << "new compaction candidate added. notify scheduler";
         _notify_schedulers();
+=======
+    _notify_schedulers();
+}
+
+void CompactionManager::remove_candidate(int64_t tablet_id) {
+    std::lock_guard lg(_candidates_mutex);
+    for (auto iter = _compaction_candidates.begin(); iter != _compaction_candidates.end();) {
+        if (tablet_id == iter->tablet->tablet_id()) {
+            iter = _compaction_candidates.erase(iter);
+            break;
+        } else {
+            iter++;
+        }
+    }
+}
+
+bool CompactionManager::_check_precondition(const CompactionCandidate& candidate) {
+    if (!candidate.tablet) {
+        LOG(WARNING) << "candidate with null tablet";
+        return false;
+    }
+    const TabletSharedPtr& tablet = candidate.tablet;
+    if (tablet->tablet_state() != TABLET_RUNNING) {
+        VLOG(2) << "skip tablet:" << tablet->tablet_id() << " because tablet state is:" << tablet->tablet_state()
+                << ", not RUNNING";
+        return false;
+    }
+
+    if (tablet->has_compaction_task()) {
+        // tablet already has a running compaction task, skip it
+        VLOG(2) << "skip tablet:" << tablet->tablet_id() << " because there is another running compaction task.";
+        return false;
+    }
+
+    int64_t last_failure_ts = 0;
+    DataDir* data_dir = tablet->data_dir();
+    if (candidate.type == CUMULATIVE_COMPACTION) {
+        std::unique_lock lk(tablet->get_cumulative_lock(), std::try_to_lock);
+        if (!lk.owns_lock()) {
+            VLOG(2) << "skip tablet:" << tablet->tablet_id() << " for cumulative lock";
+            return false;
+        }
+        // control the concurrent running tasks's limit
+        // allow overruns up to twice the configured limit
+        uint16_t num = StorageEngine::instance()->compaction_manager()->running_cumulative_tasks_num_for_dir(data_dir);
+        if (config::cumulative_compaction_num_threads_per_disk > 0 &&
+            num >= config::cumulative_compaction_num_threads_per_disk * 2) {
+            VLOG(2) << "skip tablet:" << tablet->tablet_id()
+                    << " for limit of cumulative compaction task per disk. disk path:" << data_dir->path()
+                    << ", running num:" << num;
+            return false;
+        }
+        last_failure_ts = tablet->last_cumu_compaction_failure_time();
+    } else if (candidate.type == BASE_COMPACTION) {
+        std::unique_lock lk(tablet->get_base_lock(), std::try_to_lock);
+        if (!lk.owns_lock()) {
+            VLOG(2) << "skip tablet:" << tablet->tablet_id() << " for base lock";
+            return false;
+        }
+        uint16_t num = StorageEngine::instance()->compaction_manager()->running_base_tasks_num_for_dir(data_dir);
+        if (config::base_compaction_num_threads_per_disk > 0 &&
+            num >= config::base_compaction_num_threads_per_disk * 2) {
+            VLOG(2) << "skip tablet:" << tablet->tablet_id()
+                    << " for limit of base compaction task per disk. disk path:" << data_dir->path()
+                    << ", running num:" << num;
+            return false;
+        }
+        last_failure_ts = tablet->last_base_compaction_failure_time();
+>>>>>>> 9e748d97d ([BugFix] Fix tablet ptr leak in compaction manager after it dropped (#13829))
     }
 }
 

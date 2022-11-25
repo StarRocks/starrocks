@@ -38,7 +38,13 @@ public:
 
     void update_candidates(std::vector<CompactionCandidate> candidates);
 
+<<<<<<< HEAD
     void insert_candidates(std::vector<CompactionCandidate> candidates);
+=======
+    void remove_candidate(int64_t tablet_id);
+
+    bool pick_candidate(CompactionCandidate* candidate);
+>>>>>>> 9e748d97d ([BugFix] Fix tablet ptr leak in compaction manager after it dropped (#13829))
 
     CompactionCandidate pick_candidate();
 
