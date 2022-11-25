@@ -822,7 +822,7 @@ public class OlapScanNode extends ScanNode {
                 normalizer.getExecPlan().getDescTbl().getTupleDesc(tupleIds.get(0)).getSlots().stream()
                         .filter(s -> aggColumnNames.contains(s.getColumn().getName())).map(s -> s.getId())
                         .collect(Collectors.toSet());
-        normalizer.setAggColumnDependentSlotIds(aggColumnSlotIds);
+        normalizer.setSlotsUseAggColumns(aggColumnSlotIds);
 
         TNormalOlapScanNode scanNode = new TNormalOlapScanNode();
         scanNode.setTablet_id(olapTable.getId());

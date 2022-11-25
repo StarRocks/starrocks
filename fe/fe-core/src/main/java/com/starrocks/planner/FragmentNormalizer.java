@@ -72,7 +72,7 @@ public class FragmentNormalizer {
 
     private KeysType keysType;
 
-    private Set<SlotId> aggColumnDependentSlotIds;
+    private Set<SlotId> slotsUseAggColumns;
 
     public FragmentNormalizer(ExecPlan execPlan, PlanFragment fragment) {
         this.execPlan = execPlan;
@@ -471,33 +471,33 @@ public class FragmentNormalizer {
         selectedPartitionIds.stream().forEach(id -> selectedRangeMap.put(id, "[]"));
     }
 
-    public Set<SlotId> getAggColumnDependentSlotIds() {
-        return aggColumnDependentSlotIds;
+    public Set<SlotId> getSlotsUseAggColumns() {
+        return slotsUseAggColumns;
     }
 
-    public void setAggColumnDependentSlotIds(Set<SlotId> aggColumnDependentSlotIds) {
-        this.aggColumnDependentSlotIds = aggColumnDependentSlotIds;
+    public void setSlotsUseAggColumns(Set<SlotId> slotsUseAggColumns) {
+        this.slotsUseAggColumns = slotsUseAggColumns;
     }
 
-    public void addAggColumnDependentSlotIds(Map<SlotId, Expr> exprs) {
+    public void addSlotsUseAggColumns(Map<SlotId, Expr> exprs) {
         exprs.forEach((slotId, expr) -> {
             List<SlotRef> slotRefs = Lists.newArrayList();
             expr.collect(SlotRef.class, slotRefs);
-            Set<SlotId> referenced = slotRefs.stream().map(SlotRef::getSlotId).collect(Collectors.toSet());
-            if (!Sets.intersection(this.aggColumnDependentSlotIds, referenced).isEmpty()) {
-                this.aggColumnDependentSlotIds.add(slotId);
+            Set<SlotId> usedColumnIds = slotRefs.stream().map(SlotRef::getSlotId).collect(Collectors.toSet());
+            if (!Sets.intersection(this.slotsUseAggColumns, usedColumnIds).isEmpty()) {
+                this.slotsUseAggColumns.add(slotId);
             }
         });
     }
 
-    public void disableMultiversionIfExprsDependOnAggColumns(List<Expr> exprs) {
+    public void disableMultiversionIfExprsUseAggColumns(List<Expr> exprs) {
         if (exprs == null || exprs.isEmpty()) {
             return;
         }
         List<SlotRef> slotRefs = Lists.newArrayList();
         exprs.forEach(e -> e.collect(SlotRef.class, slotRefs));
-        Set<SlotId> dependSlotIds = slotRefs.stream().map(SlotRef::getSlotId).collect(Collectors.toSet());
-        if (!Sets.intersection(dependSlotIds, this.aggColumnDependentSlotIds).isEmpty()) {
+        Set<SlotId> usedColumnIds = slotRefs.stream().map(SlotRef::getSlotId).collect(Collectors.toSet());
+        if (!Sets.intersection(usedColumnIds, this.slotsUseAggColumns).isEmpty()) {
             this.setCanUseMultiVersion(false);
         }
     }
