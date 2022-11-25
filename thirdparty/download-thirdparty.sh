@@ -290,6 +290,8 @@ fi
 if [ ! -f $PATCHED_MARK ] && [ $BRPC_SOURCE == "incubator-brpc-0.9.7" ]; then
     patch -p1 < $TP_PATCH_DIR/incubator-brpc-0.9.7.patch
     touch $PATCHED_MARK
+    patch -p1 < $TP_PATCH_DIR/incubator-brpc-0.9.7-dl_sym.patch
+    touch $PATCHED_MARK
 fi
 cd -
 echo "Finished patching $BRPC_SOURCE"
