@@ -13,23 +13,13 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
-public class CompactionsProcDir implements ProcDirInterface {
+public class CompactionsProcNode implements ProcNodeInterface {
     private List<String> titles = new ArrayList<>();
 
-    public CompactionsProcDir() {
+    public CompactionsProcNode() {
         titles.add("Partition");
         titles.add("TxnID");
         titles.add("StartTime");
-    }
-
-    @Override
-    public boolean register(String name, ProcNodeInterface node) {
-        return false;
-    }
-
-    @Override
-    public ProcNodeInterface lookup(String name) throws AnalysisException {
-        return null;
     }
 
     @Override
