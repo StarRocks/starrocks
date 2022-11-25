@@ -125,6 +125,13 @@ public class TypeTest {
         Assert.assertEquals(0, type.getMysqlResultSetFieldDecimals());
         Assert.assertEquals(33, type.getMysqlResultSetFieldCharsetIndex());
 
+        // hll
+        type = Type.JSON;
+        // default 20 * 3
+        Assert.assertEquals(60, type.getMysqlResultSetFieldLength());
+        Assert.assertEquals(0, type.getMysqlResultSetFieldDecimals());
+        Assert.assertEquals(33, type.getMysqlResultSetFieldCharsetIndex());
+
         // array
         ArrayType arrayType = new ArrayType(Type.INT);
         // default 20 * 3
