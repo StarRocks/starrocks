@@ -9,25 +9,25 @@ include "AgentService.thrift"
 include "InternalService.thrift"
 
 struct TMVMaintenanceStartTask {
-    1: required string db_name
-    2: required string mv_name
+    1: optional string db_name
+    2: optional string mv_name
     3: optional InternalService.TExecPlanFragmentParams plan_params
 }
 
 struct TMVMaintenanceStopTask {
 }
 
-struct TBinlogLSN {
-    1: required Types.TVersion version
-    2: required i64 lsn
+struct TBinlogOffset {
+    1: optional Types.TVersion version
+    2: optional i64 lsn
 }
 
 struct TBinlogScanRange {
   1: optional string db_name
-  2: required Types.TTableId table_id
-  3: required Types.TPartitionId partition_id
-  4: required Types.TTabletId tablet_id
-  5: required TBinlogLSN lsn
+  2: optional Types.TTableId table_id
+  3: optional Types.TPartitionId partition_id
+  4: optional Types.TTabletId tablet_id
+  5: optional TBinlogOffset lsn
 }
 
 struct TMVEpoch {
@@ -61,11 +61,11 @@ enum MVTaskType {
 // Why not put them into the AgentTask interface? 
 // Cause it's under rapid development and changed quickly, it should not disturb the stable interfaces
 struct TMVMaintenanceTasks {
-    1: required AgentService.TAgentServiceVersion protocol_version
-    2: required MVTaskType task_type
-    3: required i64 signature
-    4: required i64 job_id
-    5: required i64 task_id
+    1: optional AgentService.TAgentServiceVersion protocol_version
+    2: optional MVTaskType task_type
+    3: optional i64 signature
+    4: optional i64 job_id
+    5: optional i64 task_id
 
     11: optional TMVMaintenanceStartTask start_maintenance
     12: optional TMVMaintenanceStopTask stop_maintenance

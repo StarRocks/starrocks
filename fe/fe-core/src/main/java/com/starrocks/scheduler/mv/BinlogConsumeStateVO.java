@@ -6,7 +6,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.thrift.TBinlogLSN;
+import com.starrocks.thrift.TBinlogOffset;
 import com.starrocks.thrift.TBinlogScanRange;
 import lombok.Data;
 import lombok.Value;
@@ -84,11 +84,14 @@ public class BinlogConsumeStateVO implements Writable {
         @SerializedName("version")
         long version;
 
-        @SerializedName("sequence")
-        long logicalSequence;
+        @SerializedName("lsn")
+        long lsn;
 
-        public TBinlogLSN toThrift() {
-            return new TBinlogLSN(version, logicalSequence);
+        public TBinlogOffset toThrift() {
+            TBinlogOffset res = new TBinlogOffset();
+            res.setLsn(lsn);
+            res.setVersion(version);
+            return res;
         }
 
         public static BinlogLSNVO read(DataInput input) throws IOException {
@@ -103,7 +106,7 @@ public class BinlogConsumeStateVO implements Writable {
 
         @Override
         public int compareTo(@NotNull BinlogLSNVO o) {
-            return Long.compare(this.logicalSequence, o.logicalSequence);
+            return Long.compare(this.lsn, o.lsn);
         }
     }
 }
