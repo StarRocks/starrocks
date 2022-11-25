@@ -1040,7 +1040,7 @@ static bool str_to_int64(const char* ptr, const char** endptr, int64_t* ret) {
     }
     if (ptr == end || !isdigit(*ptr)) {
         *endptr = ptr;
-        *ret = neg ? -value_1 : value_1;
+        *ret = neg ? (~value_1 + 1) : value_1;
         return true;
     }
     // TODO

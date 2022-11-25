@@ -22,6 +22,7 @@
 #include "exec/olap_common.h"
 
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -97,18 +98,34 @@ inline std::string cast_to_string<vectorized::TimestampValue>(vectorized::Timest
 template <class T>
 inline std::string cast_to_string(T value, [[maybe_unused]] LogicalType pt, [[maybe_unused]] int precision,
                                   [[maybe_unused]] int scale) {
+    // According to https://rules.sonarsource.com/cpp/RSPEC-5275, it is better
+    // to use static_cast to cast from integral/float/bool type to integral type, otherwise
+    // reinterpret_cast may produce undefined behavior
+    constexpr bool use_static_cast = std::is_integral_v<T> || std::is_floating_point_v<T> || std::is_same_v<T, bool>;
     switch (pt) {
     case TYPE_DECIMAL32: {
         using CppType = vectorized::RunTimeCppType<TYPE_DECIMAL32>;
-        return DecimalV3Cast::to_string<CppType>(*reinterpret_cast<CppType*>(&value), precision, scale);
+        if constexpr (use_static_cast) {
+            return DecimalV3Cast::to_string<CppType>(static_cast<CppType>(value), precision, scale);
+        } else {
+            return DecimalV3Cast::to_string<CppType>(*reinterpret_cast<CppType*>(&value), precision, scale);
+        }
     }
     case TYPE_DECIMAL64: {
         using CppType = vectorized::RunTimeCppType<TYPE_DECIMAL64>;
-        return DecimalV3Cast::to_string<CppType>(*reinterpret_cast<CppType*>(&value), precision, scale);
+        if constexpr (use_static_cast) {
+            return DecimalV3Cast::to_string<CppType>(static_cast<CppType>(value), precision, scale);
+        } else {
+            return DecimalV3Cast::to_string<CppType>(*reinterpret_cast<CppType*>(&value), precision, scale);
+        }
     }
     case TYPE_DECIMAL128: {
         using CppType = vectorized::RunTimeCppType<TYPE_DECIMAL128>;
-        return DecimalV3Cast::to_string<CppType>(*reinterpret_cast<CppType*>(&value), precision, scale);
+        if constexpr (use_static_cast) {
+            return DecimalV3Cast::to_string<CppType>(static_cast<CppType>(value), precision, scale);
+        } else {
+            return DecimalV3Cast::to_string<CppType>(*reinterpret_cast<CppType*>(&value), precision, scale);
+        }
     }
     default:
         return cast_to_string<T>(value);

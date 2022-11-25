@@ -163,7 +163,7 @@ public:
         NUM_PRIORITY,
     };
 
-    ~ThreadPool();
+    ~ThreadPool() noexcept;
 
     // Wait for the running tasks to complete and then shutdown the threads.
     // All the other pending tasks in the queue will be removed.

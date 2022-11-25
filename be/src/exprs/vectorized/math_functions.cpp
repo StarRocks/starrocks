@@ -662,7 +662,7 @@ StatusOr<ColumnPtr> MathFunctions::conv_string(FunctionContext* context, const C
             CHECK(false) << "unreachable path, parse_res: " << parse_res;
         }
         if (negative) {
-            decimal64_num = -decimal64_num;
+            decimal64_num = (~decimal64_num + 1);
         }
 
         result.append(Slice(decimal_to_base(decimal64_num, dest_base_value)));

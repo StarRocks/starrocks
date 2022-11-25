@@ -53,7 +53,7 @@ Status LocalExchangeSourceOperator::set_finished(RuntimeState* state) {
     std::lock_guard<std::mutex> l(_chunk_lock);
     _is_finished = true;
     // Compute out the number of rows of the _full_chunk_queue.
-    size_t full_rows_num = 0;
+    int64_t full_rows_num = 0;
     while (!_full_chunk_queue.empty()) {
         auto chunk = std::move(_full_chunk_queue.front());
         _full_chunk_queue.pop();
