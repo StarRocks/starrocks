@@ -34,7 +34,6 @@ import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleId;
-import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
@@ -329,6 +328,10 @@ public class AggregationNode extends PlanNode {
         int numAggExprs = (aggExprs == null || aggExprs.isEmpty()) ? 0 : aggExprs.size();
         IntStream.range(0, numAggExprs).forEach(i ->
                 slotIdsAndAggExprs.put(slotIds.get(i + numGroupingExprs), aggExprs.get(i)));
+
+        normalizer.addSlotsUseAggColumns(slotIdsAndAggExprs);
+        normalizer.disableMultiversionIfExprsUseAggColumns(groupingExprs);
+
         Pair<List<Integer>, List<ByteBuffer>> remappedAggExprs =
                 normalizer.normalizeSlotIdsAndExprs(slotIdsAndAggExprs);
         aggrNode.setAggregate_functions(remappedAggExprs.second);

@@ -527,7 +527,7 @@ public class QueryCacheTest {
             ctx.getSessionVariable().setNewPlanerAggStage(3);
             testNoGroupBy(agg, whereClauses);
         } finally {
-            ctx.getSessionVariable().setCboCteReuse(false);
+            ctx.getSessionVariable().setCboCteReuse(oldCboCteReuse);
         }
     }
 
@@ -822,9 +822,9 @@ public class QueryCacheTest {
     @Test
     public void testPredicateDecompositionFailure() {
         List<String> unCacheableQueryList = Lists.newArrayList(
-                "select sum(v1) from t1 where date_trunc('day', ts)='2022-01-02'",
-                "select sum(v1) from t1 where ts not in ('2022-01-03 00:00:00')",
-                "select sum(v1) from t1 where ts < '2022-01-03 00:00:00' or ts > '2022-01-10 00:00:00'"
+                "select sum(v1) from t1 where date_trunc('day', ts)='2022-01-02' and rand() > 0.5",
+                "select sum(v1) from t1 where ts not in ('2022-01-03 00:00:00') and sleep(4)>10",
+                "select sum(v1) from t1 where ts < '2022-01-03 00:00:00' or ts > '2022-01-10 00:00:00' and uuid()>10"
         );
         Assert.assertTrue(unCacheableQueryList.stream().noneMatch(q -> getCachedFragment(q).isPresent()));
     }
@@ -1119,6 +1119,65 @@ public class QueryCacheTest {
             List<String> matchedRanges =
                     rangeMap.values().stream().filter(expectRanges::contains).collect(Collectors.toList());
             Assert.assertEquals(matchedRanges.size(), expectRanges.size());
+        }
+    }
+
+    @Test
+    public void testQueryOnAggTableWithGroupByOrHavingClauseDependsOnAggColumn() {
+        String[] queries = new String[] {
+                "select v1, count(v2) from t7 group by v1",
+                "select count(v2) from t7 where concat('abc', cast(v1 + 10 as varchar)) like '%bc10'",
+                "select ts, count(v2) from t7 where v1 > 3 group by ts",
+                "select ts, count(v2) from t7 " +
+                        "where (case v1 % 3 when 0 then 'E' when 1 then 'A' else NULL end) is NOT NULL " +
+                        "group by ts",
+                "select count(v2) from t7 " +
+                        "where (case v1 % 3 when 0 then 'E' when 1 then 'A' else NULL end) is NOT NULL",
+                "select ts, count(v2) from t7 where v1 > 3 group by ts",
+                "select /*+ SET_VAR(new_planner_agg_stage='1')*/ " +
+                        "date_trunc('day', ts) as day, sum(v1) as sum_v1 " +
+                        "from t7 " +
+                        "where  " +
+                        "   ts >= '2022-01-01 00:00:00' and ts <= '2022-01-01 23:59:59' " +
+                        "   and c1 = 'abc' " +
+                        "group by day having sum_v1 > 10",
+        };
+        for (String query : queries) {
+            System.out.println(query);
+            Optional<PlanFragment> optFrag = getCachedFragment(query);
+            Assert.assertTrue(optFrag.isPresent());
+            Assert.assertFalse(optFrag.get().getCacheParam().isCan_use_multiversion());
+        }
+
+        String[] negativeQueries = new String[] {
+                "select ts, count(v2) from t7 group by ts",
+                "select count(v2) from t7 where date_trunc('day', ts) = '2022-01-13'",
+                "select ts, count(v2) from t7 where c1 like 'abc%' group by ts",
+                "select ts, count(v2) from t7 " +
+                        "where (case length(c1) % 3 when 0 then 'E' when 1 then 'A' else NULL end) is NOT NULL " +
+                        "group by ts",
+                "select count(v2) from t7 " +
+                        "where (case length(c1) % 3 when 0 then 'E' when 1 then 'A' else NULL end) is NOT NULL",
+                "select ts, count(v2) from t7 where length(c1) > 3 group by ts",
+                "select /*+ SET_VAR(new_planner_agg_stage='2')*/ " +
+                        "date_trunc('day', ts) as day, sum(v1) as sum_v1 " +
+                        "from t7 " +
+                        "where  " +
+                        "   ts >= '2022-01-01 00:00:00' and ts <= '2022-01-01 23:59:59' " +
+                        "   and c1 = 'abc' " +
+                        "group by day having sum_v1 > 10",
+                "select /*+ SET_VAR(new_planner_agg_stage='1')*/ " +
+                        "sqrt(cast(sum(v1) as double)) > 3.1415926 " +
+                        "from t7 " +
+                        "where  " +
+                        "   ts >= '2022-01-01 00:00:00' and ts <= '2022-01-01 23:59:59' " +
+                        "   and c1 = 'abc' ",
+        };
+        for (String query : negativeQueries) {
+            System.out.println(query);
+            Optional<PlanFragment> optFrag = getCachedFragment(query);
+            Assert.assertTrue(optFrag.isPresent());
+            Assert.assertTrue(optFrag.get().getCacheParam().isCan_use_multiversion());
         }
     }
 }
