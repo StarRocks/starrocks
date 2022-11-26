@@ -32,12 +32,10 @@ import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.sql.ast.PartitionNames;
-import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.TupleDescriptor;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
@@ -59,11 +57,9 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
-import com.starrocks.lake.LakeTablet;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
-import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TExplainLevel;
@@ -799,11 +795,10 @@ public class OlapScanNode extends ScanNode {
     // of the tablet from merging the snapshot result in cache and the delta rowsets in disk.
     private boolean canUseMultiVersionCache() {
         switch (olapTable.getKeysType()) {
-            case DUP_KEYS:
-                return true;
             case PRIMARY_KEYS:
             case UNIQUE_KEYS:
                 return false;
+            case DUP_KEYS:
             case AGG_KEYS: {
                 List<Column> columns = selectedIndexId == -1 ? olapTable.getBaseSchema() :
                         olapTable.getSchemaByIndexId(selectedIndexId);
@@ -817,6 +812,18 @@ public class OlapScanNode extends ScanNode {
     protected void toNormalForm(TNormalPlanNode planNode, FragmentNormalizer normalizer) {
         normalizer.setKeysType(olapTable.getKeysType());
         normalizer.setCanUseMultiVersion(canUseMultiVersionCache());
+
+        List<Column> columns = selectedIndexId == -1 ? olapTable.getBaseSchema() :
+                olapTable.getSchemaByIndexId(selectedIndexId);
+
+        Set<String> aggColumnNames =
+                columns.stream().filter(Column::isAggregated).map(Column::getName).collect(Collectors.toSet());
+        Set<SlotId> aggColumnSlotIds =
+                normalizer.getExecPlan().getDescTbl().getTupleDesc(tupleIds.get(0)).getSlots().stream()
+                        .filter(s -> aggColumnNames.contains(s.getColumn().getName())).map(s -> s.getId())
+                        .collect(Collectors.toSet());
+        normalizer.setSlotsUseAggColumns(aggColumnSlotIds);
+
         TNormalOlapScanNode scanNode = new TNormalOlapScanNode();
         scanNode.setTablet_id(olapTable.getId());
         scanNode.setIndex_id(selectedIndexId);
@@ -844,7 +851,6 @@ public class OlapScanNode extends ScanNode {
         scanNode.setDict_int_ids(dictIntIds);
         planNode.setNode_type(TPlanNodeType.OLAP_SCAN_NODE);
         planNode.setOlap_scan_node(scanNode);
-
         normalizeConjuncts(normalizer, planNode, conjuncts);
     }
 }
