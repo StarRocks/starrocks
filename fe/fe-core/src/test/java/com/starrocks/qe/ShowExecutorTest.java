@@ -474,8 +474,8 @@ public class ShowExecutorTest {
         // Mock variable
         VariableMgr variableMgr = new VariableMgr();
         List<List<String>> rows = Lists.newArrayList();
-        rows.add(Lists.newArrayList("var1", "abc", "abc", "false"));
-        rows.add(Lists.newArrayList("var2", "abc", "abc", "false"));
+        rows.add(Lists.newArrayList("var1", "abc"));
+        rows.add(Lists.newArrayList("var2", "abc"));
         new Expectations(variableMgr) {
             {
                 VariableMgr.dump((SetType) any, (SessionVariable) any, (PatternMatcher) any);
@@ -491,6 +491,8 @@ public class ShowExecutorTest {
         ShowVariablesStmt stmt = new ShowVariablesStmt(SetType.SESSION, "var%");
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
+        Assert.assertEquals(2, resultSet.getMetaData().getColumnCount());
+        Assert.assertEquals(2, resultSet.getResultRows().get(0).size());
 
         Assert.assertTrue(resultSet.next());
         Assert.assertEquals("var1", resultSet.getString(0));
@@ -511,7 +513,7 @@ public class ShowExecutorTest {
 
     @Test
     public void testShowVariable2() throws AnalysisException, DdlException {
-        ShowVariablesStmt stmt = new ShowVariablesStmt(SetType.SESSION, null);
+        ShowVariablesStmt stmt = new ShowVariablesStmt(SetType.VERBOSE, null);
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
         Assert.assertEquals(4, resultSet.getMetaData().getColumnCount());
@@ -523,7 +525,7 @@ public class ShowExecutorTest {
         Assert.assertTrue(resultSet.getResultRows().size() > 0);
         Assert.assertEquals(4, resultSet.getResultRows().get(0).size());
 
-        ShowVariablesStmt stmt2 = new ShowVariablesStmt(SetType.SESSION, "query_%");
+        ShowVariablesStmt stmt2 = new ShowVariablesStmt(SetType.VERBOSE, "query_%");
         ShowExecutor executor2 = new ShowExecutor(ctx, stmt2);
         ShowResultSet resultSet2 = executor2.execute();
         Assert.assertEquals(4, resultSet2.getMetaData().getColumnCount());
