@@ -21,18 +21,18 @@ VECTORIZED_BIT_BINARY_IMPL(bitShiftRight, >>);
 #undef VECTORIZED_BIT_BINARY_IMPL
 
 DEFINE_BINARY_FUNCTION_WITH_IMPL(bitShiftRightLogicalImpl, v, shift) {
-    if constexpr (std::is_same(LType, int8_t)) {
-        return uint8_t(l) >> r;
-    } else if constexpr (std::is_same(LType, int16_t)) {
-        return uint16_t(l) >> r;
-    } else if constexpr (std::is_same(LType, int32_t)) {
-        return uint32_t(l) >> r;
-    } else if constexpr (std::is_same(LType, int64_t)) {
-        return uint64_t(l) >> r;
-    } else if constexpr (std::is_same(LType, __int128_t)) {
-        return uint128_t(l) >> r;
+    if constexpr (std::is_same_v<LType, int8_t>) {
+        return uint8_t(v) >> shift;
+    } else if constexpr (std::is_same_v<LType, int16_t>) {
+        return uint16_t(v) >> shift;
+    } else if constexpr (std::is_same_v<LType, int32_t>) {
+        return uint32_t(v) >> shift;
+    } else if constexpr (std::is_same_v<LType, int64_t>) {
+        return uint64_t(v) >> shift;
+    } else if constexpr (std::is_same_v<LType, __int128_t>) {
+        return uint128_t(v) >> shift;
     } else {
-        return l >> r;
+        return v >> shift;
     }
 }
 

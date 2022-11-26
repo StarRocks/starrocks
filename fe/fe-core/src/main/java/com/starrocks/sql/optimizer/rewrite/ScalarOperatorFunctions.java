@@ -660,7 +660,7 @@ public class ScalarOperatorFunctions {
 
     @ConstantFunction(name = "bitShiftLeft", argTypes = {LARGEINT, BIGINT}, returnType = LARGEINT)
     public static ConstantOperator bitShiftLeftLargeInt(ConstantOperator first, ConstantOperator second) {
-        return ConstantOperator.createLargeInt(first.getLargeInt().shiftLeft((int)second.getBigint()));
+        return ConstantOperator.createLargeInt(first.getLargeInt().shiftLeft((int) second.getBigint()));
     }
 
     @ConstantFunction(name = "bitShiftRight", argTypes = {TINYINT, BIGINT}, returnType = TINYINT)
@@ -685,7 +685,7 @@ public class ScalarOperatorFunctions {
 
     @ConstantFunction(name = "bitShiftRight", argTypes = {LARGEINT, BIGINT}, returnType = LARGEINT)
     public static ConstantOperator bitShiftRightLargeInt(ConstantOperator first, ConstantOperator second) {
-        return ConstantOperator.createLargeInt(first.getLargeInt().shiftRight((int)second.getBigint()));
+        return ConstantOperator.createLargeInt(first.getLargeInt().shiftRight((int) second.getBigint()));
     }
 
     @ConstantFunction(name = "bitShiftRightLogical", argTypes = {TINYINT, BIGINT}, returnType = TINYINT)
@@ -710,7 +710,7 @@ public class ScalarOperatorFunctions {
 
     @ConstantFunction(name = "bitShiftRightLogical", argTypes = {LARGEINT, BIGINT}, returnType = LARGEINT)
     public static ConstantOperator bitShiftRightLogicalLargeInt(ConstantOperator first, ConstantOperator second) {
-        return ConstantOperator.createLargeInt(bitShiftRightLogicalForInt128(first.getLargeInt(), (int)second.getBigint()));
+        return ConstantOperator.createLargeInt(bitShiftRightLogicalForInt128(first.getLargeInt(), (int) second.getBigint()));
     }
 
     @ConstantFunction(name = "concat", argTypes = {VARCHAR}, returnType = VARCHAR)

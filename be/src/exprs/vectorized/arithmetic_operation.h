@@ -117,15 +117,15 @@ struct ArithmeticBinaryOperator {
         } else if constexpr (is_bit_shift_right_op<Op>) {
             return l >> r;
         } else if constexpr (is_bit_shift_right_logical_op<Op>) {
-            if constexpr (std::is_same(LType, int8_t)) {
+            if constexpr (std::is_same_v<LType, int8_t>) {
                 return uint8_t(l) >> r;
-            } else if constexpr (std::is_same(LType, int16_t)) {
+            } else if constexpr (std::is_same_v<LType, int16_t>) {
                 return uint16_t(l) >> r;
-            } else if constexpr (std::is_same(LType, int32_t)) {
+            } else if constexpr (std::is_same_v<LType, int32_t>) {
                 return uint32_t(l) >> r;
-            } else if constexpr (std::is_same(LType, int64_t)) {
+            } else if constexpr (std::is_same_v<LType, int64_t>) {
                 return uint64_t(l) >> r;
-            } else if constexpr (std::is_same(LType, __int128_t)) {
+            } else if constexpr (std::is_same_v<LType, __int128_t>) {
                 return uint128_t(l) >> r;
             } 
         } else {

@@ -186,6 +186,28 @@ public:
     }
 };
 
+template <PrimitiveType Type, typename OP>
+class VectorizedBitShiftArithmeticExpr final : public Expr {
+public:
+    DEFINE_CLASS_CONSTRUCTOR(VectorizedBitShiftArithmeticExpr);
+    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
+        auto l = _children[0]->evaluate(context, ptr);
+        auto r = _children[1]->evaluate(context, ptr);
+        
+        using ArithmeticOp = ArithmeticBinaryOperator<OP, Type>;
+        return VectorizedStrictBinaryFunction<ArithmeticOp>::template evaluate<Type, TYPE_BIGINT, Type>(l, r);
+    }
+    std::string debug_string() const override {
+        std::stringstream out;
+        auto expr_debug_string = Expr::debug_string();
+        out << "VectorizedBitShiftArithmeticExpr ("
+            << "lhs=" << _children[0]->type().debug_string() << ", rhs=" << _children[1]->type().debug_string()
+            << ", result=" << this->type().debug_string() << ", lhs_is_constant=" << _children[0]->is_constant()
+            << ", rhs_is_constant=" << _children[1]->is_constant() << ", expr (" << expr_debug_string << ") )";
+        return out.str();
+    }
+};
+
 #undef DEFINE_CLASS_CONSTRUCTOR
 
 #define CASE_TYPE(TYPE, OP) \
@@ -255,12 +277,6 @@ Expr* VectorizedArithmeticExprFactory::from_thrift(const starrocks::TExprNode& n
         SWITCH_INT_TYPE(BitOrOp);
     case TExprOpcode::BITXOR:
         SWITCH_INT_TYPE(BitXorOp);
-    case TExprOpcode::BIT_SHIFT_LEFT:
-        SWITCH_INT_TYPE(BitShiftLeftOp);
-    case TExprOpcode::BIT_SHIFT_RIGHT:
-        SWITCH_INT_TYPE(BitShiftRightOp);
-    case TExprOpcode::BIT_SHIFT_LEFT_LOGICAL:
-        SWITCH_INT_TYPE(BitShiftRightLogicalOp);    
 
 #undef CASE_FN
 
@@ -279,6 +295,15 @@ Expr* VectorizedArithmeticExprFactory::from_thrift(const starrocks::TExprNode& n
 #define CASE_FN(TYPE, OP) return new VectorizedBitNotArithmeticExpr<TYPE>(node);
     case TExprOpcode::BITNOT:
         SWITCH_INT_TYPE(TYPE_NULL);
+#undef CASE_FN
+
+#define CASE_FN(TYPE, OP) return new VectorizedBitShiftArithmeticExpr<TYPE, OP>(node);
+    case TExprOpcode::BIT_SHIFT_LEFT:
+        SWITCH_INT_TYPE(BitShiftLeftOp);
+    case TExprOpcode::BIT_SHIFT_RIGHT:
+        SWITCH_INT_TYPE(BitShiftRightOp);
+    case TExprOpcode::BIT_SHIFT_RIGHT_LOGICAL:
+        SWITCH_INT_TYPE(BitShiftRightLogicalOp);    
 #undef CASE_FN
 
     default:
