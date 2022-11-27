@@ -19,62 +19,12 @@
 
 #include <utility>
 
-#include "column/array_column.h"
 #include "column/column_helper.h"
 #include "exprs/vectorized/mock_vectorized_expr.h"
+#include "testutil/column_test_helper.h"
+#include "testutil/exprs_test_helper.h"
 
 namespace starrocks::vectorized {
-
-namespace {
-
-ColumnPtr build_int_column(const std::vector<int>& values) {
-    auto data = Int32Column::create();
-    data->append_numbers(values.data(), values.size() * sizeof(int32_t));
-    return data;
-}
-
-ColumnPtr build_int_column(const std::vector<int>& values, const std::vector<uint8_t>& nullflags) {
-    DCHECK_EQ(values.size(), nullflags.size());
-    auto null = NullColumn::create();
-    null->append_numbers(nullflags.data(), nullflags.size());
-
-    auto data = build_int_column(values);
-
-    return NullableColumn::create(std::move(data), std::move(null));
-}
-
-ColumnPtr build_string_column(const std::vector<Slice>& values) {
-    auto data = BinaryColumn::create();
-    data->append_strings(values);
-    return data;
-}
-
-ColumnPtr build_string_column(const std::vector<Slice>& values, const std::vector<uint8_t>& nullflags) {
-    DCHECK_EQ(values.size(), nullflags.size());
-    auto null = NullColumn::create();
-    null->append_numbers(nullflags.data(), nullflags.size());
-
-    auto data = build_string_column(values);
-
-    return NullableColumn::create(std::move(data), std::move(null));
-}
-
-std::unique_ptr<Expr> create_array_expr(const TTypeDesc& type) {
-    TExprNode node;
-    node.__set_node_type(TExprNodeType::ARRAY_EXPR);
-    node.__set_is_nullable(true);
-    node.__set_type(type);
-    node.__set_num_children(0);
-
-    auto* expr = ArrayExprFactory::from_thrift(node);
-    return std::unique_ptr<Expr>(expr);
-}
-
-std::unique_ptr<Expr> create_array_expr(const TypeDescriptor& type) {
-    return create_array_expr(type.to_thrift());
-}
-
-} // anonymous namespace
 
 class ArrayExprTest : public ::testing::Test {
 protected:
@@ -113,7 +63,7 @@ TEST_F(ArrayExprTest, test_evaluate) {
 
     // []
     {
-        std::unique_ptr<Expr> expr(create_array_expr(type_arr_int));
+        std::unique_ptr<Expr> expr(ExprsTestHelper::create_array_expr(type_arr_int));
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_EQ(1, result->size());
         ASSERT_TRUE(result->is_array());
@@ -124,10 +74,10 @@ TEST_F(ArrayExprTest, test_evaluate) {
     // [3, 4, 8]
     // [6, 8, 12]
     {
-        std::unique_ptr<Expr> expr(create_array_expr(type_arr_int));
-        expr->add_child(new_mock_expr(build_int_column({1, 3, 6}), LogicalType::TYPE_INT));
-        expr->add_child(new_mock_expr(build_int_column({2, 4, 8}), LogicalType::TYPE_INT));
-        expr->add_child(new_mock_expr(build_int_column({4, 8, 12}), LogicalType::TYPE_INT));
+        std::unique_ptr<Expr> expr(ExprsTestHelper::create_array_expr(type_arr_int));
+        expr->add_child(new_mock_expr(ColumnTestHelper::build_column<int32_t>({1, 3, 6}), LogicalType::TYPE_INT));
+        expr->add_child(new_mock_expr(ColumnTestHelper::build_column<int32_t>({2, 4, 8}), LogicalType::TYPE_INT));
+        expr->add_child(new_mock_expr(ColumnTestHelper::build_column<int32_t>({4, 8, 12}), LogicalType::TYPE_INT));
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_EQ(3, result->size());
 
@@ -151,10 +101,11 @@ TEST_F(ArrayExprTest, test_evaluate) {
     // [3, 4, NULL]
     // [6, 8, 12]
     {
-        std::unique_ptr<Expr> expr(create_array_expr(type_arr_int));
-        expr->add_child(new_mock_expr(build_int_column({1, 3, 6}), LogicalType::TYPE_INT));
-        expr->add_child(new_mock_expr(build_int_column({2, 4, 8}), LogicalType::TYPE_INT));
-        expr->add_child(new_mock_expr(build_int_column({4, 0, 12}, {0, 1, 0}), LogicalType::TYPE_INT));
+        std::unique_ptr<Expr> expr(ExprsTestHelper::create_array_expr(type_arr_int));
+        expr->add_child(new_mock_expr(ColumnTestHelper::build_column<int32_t>({1, 3, 6}), LogicalType::TYPE_INT));
+        expr->add_child(new_mock_expr(ColumnTestHelper::build_column<int32_t>({2, 4, 8}), LogicalType::TYPE_INT));
+        expr->add_child(new_mock_expr(ColumnTestHelper::build_nullable_column<int32_t>({4, 0, 12}, {0, 1, 0}),
+                                      LogicalType::TYPE_INT));
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_EQ(3, result->size());
 
@@ -180,10 +131,11 @@ TEST_F(ArrayExprTest, test_evaluate) {
     {
         TypeDescriptor type_varchar(LogicalType::TYPE_VARCHAR);
         type_varchar.len = 10;
-        std::unique_ptr<Expr> expr(create_array_expr(type_arr_str));
-        expr->add_child(new_mock_expr(build_string_column({"a", "ab", ""}), type_varchar));
-        expr->add_child(new_mock_expr(build_string_column({"", "bcd", "xyz"}), type_varchar));
-        expr->add_child(new_mock_expr(build_string_column({"x", "", "x"}, {0, 1, 0}), type_varchar));
+        std::unique_ptr<Expr> expr(ExprsTestHelper::create_array_expr(type_arr_str));
+        expr->add_child(new_mock_expr(ColumnTestHelper::build_column<Slice>({"a", "ab", ""}), type_varchar));
+        expr->add_child(new_mock_expr(ColumnTestHelper::build_column<Slice>({"", "bcd", "xyz"}), type_varchar));
+        expr->add_child(new_mock_expr(ColumnTestHelper::build_nullable_column<std::string>({"x", "", "x"}, {0, 1, 0}),
+                                      type_varchar));
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_EQ(3, result->size());
 

@@ -69,7 +69,7 @@ public:
     Chunk(Chunk&& other) = default;
     Chunk& operator=(Chunk&& other) = default;
 
-    ~Chunk() = default;
+    virtual ~Chunk() = default;
 
     // Disallow copy and assignment.
     Chunk(const Chunk& other) = delete;
