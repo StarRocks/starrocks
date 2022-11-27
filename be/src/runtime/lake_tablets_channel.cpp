@@ -19,6 +19,7 @@
 #include "gutil/macros.h"
 #include "runtime/descriptors.h"
 #include "runtime/load_channel.h"
+#include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/tablets_channel.h"
 #include "serde/protobuf_serde.h"
