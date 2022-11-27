@@ -355,6 +355,7 @@
       + [split](./sql-reference/sql-functions/string-functions/split.md)
       + [split_part](./sql-reference/sql-functions/string-functions/split_part.md)
       + [starts_with](./sql-reference/sql-functions/string-functions/starts_with.md)
+      + [strcmp](./sql-reference/sql-functions/string-functions/strcmp.md)
       + [strleft](./sql-reference/sql-functions/string-functions/strleft.md)
       + [strright](./sql-reference/sql-functions/string-functions/strright.md)
     + JSON Functions
