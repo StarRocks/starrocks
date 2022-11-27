@@ -139,7 +139,7 @@ public class ScalarOperatorsReuseTest {
     }
 
     @Test
-    public void testNonDeterministicFunc() {
+    public void testNonDeterministicFuncCommonUsed() {
         ColumnRefOperator column1 = columnRefFactory.create("t1", ScalarType.INT, true);
         ColumnRefOperator column2 = columnRefFactory.create("t2", ScalarType.INT, true);
         ColumnRefOperator column3 = columnRefFactory.create("t3", ScalarType.INT, true);
@@ -157,7 +157,31 @@ public class ScalarOperatorsReuseTest {
                 Lists.newArrayList(add3, ConstantOperator.createInt(1)));
 
         Map<Integer, Map<ScalarOperator, ColumnRefOperator>> commonSubScalarOperators =
-                ScalarOperatorsReuse.collectCommonSubScalarOperators(ImmutableList.of(add4), columnRefFactory);
+                ScalarOperatorsReuse.collectCommonSubScalarOperators(ImmutableList.of(add1, add2, add3, add4), columnRefFactory);
         assertTrue(commonSubScalarOperators.isEmpty());
     }
+
+    @Test
+    public void testNonDeterministicFuncNotCommonUsed() {
+        ColumnRefOperator column1 = columnRefFactory.create("t1", ScalarType.INT, true);
+        ColumnRefOperator column2 = columnRefFactory.create("t2", ScalarType.INT, true);
+        ColumnRefOperator column3 = columnRefFactory.create("t3", ScalarType.INT, true);
+
+        CallOperator add1 = new CallOperator("add", Type.INT,
+                Lists.newArrayList(column1, ConstantOperator.createInt(1)));
+
+        CallOperator add2 = new CallOperator("add", Type.INT,
+                Lists.newArrayList(add1, column2));
+
+        CallOperator add3 = new CallOperator("add", Type.INT,
+                Lists.newArrayList(add2, new CallOperator(FunctionSet.RANDOM, Type.DOUBLE, Lists.newArrayList())));
+
+        CallOperator add4 = new CallOperator("add", Type.INT,
+                Lists.newArrayList(add3, column3));
+
+        Map<Integer, Map<ScalarOperator, ColumnRefOperator>> commonSubScalarOperators =
+                ScalarOperatorsReuse.collectCommonSubScalarOperators(ImmutableList.of(add1, add2, add3, add4), columnRefFactory);
+        assertEquals(2, commonSubScalarOperators.size());
+    }
+
 }

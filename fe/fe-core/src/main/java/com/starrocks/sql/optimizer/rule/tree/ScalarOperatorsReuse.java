@@ -219,7 +219,7 @@ public class ScalarOperatorsReuse {
 
         private int collectCommonOperatorsByDepth(int depth, ScalarOperator operator) {
             Set<ScalarOperator> operators = getOperatorsByDepth(depth, operatorsByDepth);
-            if (operators.contains(operator)) {
+            if (!isNonDeterministicFuncExist(operator) && operators.contains(operator)) {
                 Set<ScalarOperator> commonOperators = getOperatorsByDepth(depth, commonOperatorsByDepth);
                 commonOperators.add(operator);
             }
@@ -235,7 +235,7 @@ public class ScalarOperatorsReuse {
 
         @Override
         public Integer visit(ScalarOperator scalarOperator, Void context) {
-            if (isNonDeterministicFuncExist(scalarOperator) || scalarOperator.getChildren().isEmpty()) {
+            if (scalarOperator.getChildren().isEmpty()) {
                 return 0;
             }
 
