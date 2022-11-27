@@ -3,6 +3,7 @@
 package com.starrocks.sql.optimizer.rule.tree;
 
 import com.google.common.collect.ImmutableMap;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -234,7 +235,7 @@ public class ScalarOperatorsReuse {
 
         @Override
         public Integer visit(ScalarOperator scalarOperator, Void context) {
-            if (scalarOperator.getChildren().isEmpty()) {
+            if (isNonDeterministicFuncExist(scalarOperator) || scalarOperator.getChildren().isEmpty()) {
                 return 0;
             }
 
@@ -245,6 +246,24 @@ public class ScalarOperatorsReuse {
         @Override
         public Integer visitDictMappingOperator(DictMappingOperator scalarOperator, Void context) {
             return collectCommonOperatorsByDepth(1, scalarOperator);
+        }
+
+        // If a scalarOperator contains any non-deterministic function, it cannot be reused
+        // because the non-deterministic function results returned each time are inconsistent.
+        private boolean isNonDeterministicFuncExist(ScalarOperator scalarOperator) {
+            if (scalarOperator instanceof CallOperator) {
+                String fnName = ((CallOperator) scalarOperator).getFnName();
+                if (FunctionSet.nonDeterministicFunctions.contains(fnName)) {
+                    return true;
+                }
+            }
+
+            for (ScalarOperator child : scalarOperator.getChildren()) {
+                if (isNonDeterministicFuncExist(child)) {
+                    return true;
+                }
+            }
+            return false;
         }
 
     }

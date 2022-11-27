@@ -2,7 +2,9 @@
 
 package com.starrocks.sql.optimizer.rewrite;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -133,6 +135,29 @@ public class ScalarOperatorsReuseTest {
                 ScalarOperatorsReuse.collectCommonSubScalarOperators(oldOperators, columnRefFactory);
 
         // FixMe(kks): could we improve this case?
+        assertTrue(commonSubScalarOperators.isEmpty());
+    }
+
+    @Test
+    public void testNonDeterministicFunc() {
+        ColumnRefOperator column1 = columnRefFactory.create("t1", ScalarType.INT, true);
+        ColumnRefOperator column2 = columnRefFactory.create("t2", ScalarType.INT, true);
+        ColumnRefOperator column3 = columnRefFactory.create("t3", ScalarType.INT, true);
+
+        CallOperator add1 = new CallOperator("add", Type.INT,
+                Lists.newArrayList(column1, new CallOperator(FunctionSet.RANDOM, Type.DOUBLE, Lists.newArrayList())));
+
+        CallOperator add2 = new CallOperator("add", Type.INT,
+                Lists.newArrayList(add1, column2));
+
+        CallOperator add3 = new CallOperator("add", Type.INT,
+                Lists.newArrayList(add2, column3));
+
+        CallOperator add4 = new CallOperator("add", Type.INT,
+                Lists.newArrayList(add3, ConstantOperator.createInt(1)));
+
+        Map<Integer, Map<ScalarOperator, ColumnRefOperator>> commonSubScalarOperators =
+                ScalarOperatorsReuse.collectCommonSubScalarOperators(ImmutableList.of(add4), columnRefFactory);
         assertTrue(commonSubScalarOperators.isEmpty());
     }
 }
