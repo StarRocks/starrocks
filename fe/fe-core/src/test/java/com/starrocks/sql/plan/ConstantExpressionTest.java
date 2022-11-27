@@ -111,6 +111,36 @@ public class ConstantExpressionTest extends PlanTestBase {
     }
 
     @Test
+    public void testCastNumericToDate() throws Exception {
+        testFragmentPlanContainsConstExpr(
+                "select cast (1 as date);",
+                "NULL");
+
+        testFragmentPlanContainsConstExpr(
+                "select cast (20200120 as date);",
+                "'2020-01-20'");
+
+        testFragmentPlanContainsConstExpr(
+                "select cast (200120 as date);",
+                "'2020-01-20'");
+
+        testFragmentPlanContainsConstExpr(
+                "select cast (990120 as date);",
+                "'1999-01-20'");
+
+        testFragmentPlanContainsConstExpr(
+                "select cast (10000100 as date);",
+                "NULL");
+    }
+
+    @Test
+    public void testCastNumericToDateTime() throws Exception {
+        testFragmentPlanContainsConstExpr(
+                "select cast (20200120202001 as datetime);",
+                "'2020-01-20 20:20:01'");
+    }
+
+    @Test
     public void testCastToDecimalLiteral() throws Exception {
         testFragmentPlanContainsConstExpr(
                 "select cast(151971657 as decimal32);",
