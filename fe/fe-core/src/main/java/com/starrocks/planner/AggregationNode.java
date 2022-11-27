@@ -38,6 +38,8 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.thrift.TAggregationNode;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TExpr;
@@ -306,10 +308,39 @@ public class AggregationNode extends PlanNode {
         return getChildren().stream().allMatch(PlanNode::canUsePipeLine);
     }
 
+    private void disableCacheIfHighCardinalityGroupBy(FragmentNormalizer normalizer) {
+        if (ConnectContext.get() == null || getCardinality() == -1) {
+            return;
+        }
+        long cardinalityLimit = ConnectContext.get().getSessionVariable().getQueryCacheAggCardinalityLimit();
+        long cardinality = getCardinality();
+        if (cardinality < cardinalityLimit || aggInfo.getGroupingExprs().isEmpty()) {
+            return;
+        }
+        List<Expr> groupByExprs = aggInfo.getGroupingExprs();
+        if (groupByExprs.size() > 3) {
+            normalizer.setUncacheable(true);
+        }
+        List<SlotRef> slotRefs = groupByExprs.stream().filter(e -> e instanceof SlotRef && e.getType().isStringType())
+                .map(e -> (SlotRef) e).collect(Collectors.toList());
+        // we assume that if there exists a very high cardinality of string-typed group-by columns whose average length is
+        // greater than 24 bytes(it is equivalent to three bigint-typed group-by columns), then cache populating penalty
+        // is unacceptable.
+        List<ColumnStatistic> stringColumnStatistics = slotRefs.stream()
+                .map(slot -> columnStatistics.get(new ColumnRefOperator(slot.getSlotId().asInt(), null, null, false)))
+                .filter(stat -> stat != null && !stat.isUnknown() &&
+                        stat.getAverageRowSize() * stat.getDistinctValuesCount() > 24 * cardinalityLimit)
+                .collect(Collectors.toList());
+        if (!stringColumnStatistics.isEmpty()) {
+            normalizer.setUncacheable(true);
+        }
+    }
+
     @Override
     protected void toNormalForm(TNormalPlanNode planNode, FragmentNormalizer normalizer) {
+        disableCacheIfHighCardinalityGroupBy(normalizer);
         TNormalAggregationNode aggrNode = new TNormalAggregationNode();
-        TupleId tupleId = needsFinalize? aggInfo.getOutputTupleId():aggInfo.getIntermediateTupleId();
+        TupleId tupleId = needsFinalize ? aggInfo.getOutputTupleId() : aggInfo.getIntermediateTupleId();
         List<SlotId> slotIds = normalizer.getExecPlan().getDescTbl().getTupleDesc(tupleId).getSlots()
                 .stream().map(SlotDescriptor::getId).collect(Collectors.toList());
 
