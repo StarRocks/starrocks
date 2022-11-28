@@ -430,14 +430,14 @@ Status Aggregator::_evaluate_const_columns(int i) {
     return Status::OK();
 }
 
-void Aggregator::convert_to_chunk_no_groupby(vectorized::ChunkPtr* chunk) {
+Status Aggregator::convert_to_chunk_no_groupby(vectorized::ChunkPtr* chunk) {
     // TODO(kks): we should approve memory allocate here
     vectorized::Columns agg_result_column = _create_agg_result_columns();
 
     if (_needs_finalize) {
-        _finalize_to_chunk(_single_agg_state, agg_result_column);
+        TRY_CATCH_BAD_ALLOC(_finalize_to_chunk(_single_agg_state, agg_result_column));
     } else {
-        _serialize_to_chunk(_single_agg_state, agg_result_column);
+        TRY_CATCH_BAD_ALLOC(_serialize_to_chunk(_single_agg_state, agg_result_column));
     }
 
     // For agg function column is non-nullable and table is empty
@@ -465,6 +465,8 @@ void Aggregator::convert_to_chunk_no_groupby(vectorized::ChunkPtr* chunk) {
     ++_num_rows_returned;
     *chunk = std::move(result_chunk);
     _is_ht_eos = true;
+
+    return Status::OK();
 }
 
 void Aggregator::process_limit(vectorized::ChunkPtr* chunk) {
@@ -834,6 +836,5 @@ void Aggregator::_init_agg_hash_variant(HashVariantType& hash_variant) {
     SET_FIXED_SLICE_HASH_MAP_FIELD(phase2_slice_fx8);
     SET_FIXED_SLICE_HASH_MAP_FIELD(phase2_slice_fx16);
 #undef SET_FIXED_SLICE_HASH_MAP_FIELD
-
 } // namespace starrocks
 } // namespace starrocks
