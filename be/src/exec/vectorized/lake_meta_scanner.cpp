@@ -1,20 +1,18 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
-#include "exec/vectorized/olap_meta_scanner.h"
+#include "exec/vectorized/lake_meta_scanner.h"
 
-#include "exec/vectorized/olap_meta_scan_node.h"
-#include "storage/storage_engine.h"
-#include "storage/tablet_manager.h"
+#include "exec/vectorized/lake_meta_scan_node.h"
 
 namespace starrocks::vectorized {
 
-OlapMetaScanner::OlapMetaScanner(OlapMetaScanNode* parent) : _parent(parent) {}
+LakeMetaScanner::LakeMetaScanner(LakeMetaScanNode* parent) : _parent(parent) {}
 
-Status OlapMetaScanner::init(RuntimeState* runtime_state, const MetaScannerParams& params) {
+Status LakeMetaScanner::init(RuntimeState* runtime_state, const MetaScannerParams& params) {
     _runtime_state = runtime_state;
     RETURN_IF_ERROR(_get_tablet(params.scan_range));
     RETURN_IF_ERROR(_init_meta_reader_params());
-    _reader = std::make_shared<OlapMetaReader>();
+    _reader = std::make_shared<LakeMetaReader>();
 
     if (_reader == nullptr) {
         return Status::InternalError("Failed to allocate meta reader.");
@@ -24,8 +22,9 @@ Status OlapMetaScanner::init(RuntimeState* runtime_state, const MetaScannerParam
     return Status::OK();
 }
 
-Status OlapMetaScanner::_init_meta_reader_params() {
+Status LakeMetaScanner::_init_meta_reader_params() {
     _reader_params.tablet = _tablet;
+    _reader_params.tablet_schema = _tablet_schema;
     _reader_params.version = Version(0, _version);
     _reader_params.runtime_state = _runtime_state;
     _reader_params.chunk_size = _runtime_state->chunk_size();
@@ -35,7 +34,7 @@ Status OlapMetaScanner::_init_meta_reader_params() {
     return Status::OK();
 }
 
-Status OlapMetaScanner::get_chunk(RuntimeState* state, ChunkPtr* chunk) {
+Status LakeMetaScanner::get_chunk(RuntimeState* state, ChunkPtr* chunk) {
     if (state->is_cancelled()) {
         return Status::Cancelled("canceled state");
     }
@@ -46,7 +45,7 @@ Status OlapMetaScanner::get_chunk(RuntimeState* state, ChunkPtr* chunk) {
     return _reader->do_get_next(chunk);
 }
 
-Status OlapMetaScanner::open(RuntimeState* state) {
+Status LakeMetaScanner::open(RuntimeState* state) {
     DCHECK(!_is_closed);
     if (!_is_open) {
         _is_open = true;
@@ -55,33 +54,22 @@ Status OlapMetaScanner::open(RuntimeState* state) {
     return Status::OK();
 }
 
-void OlapMetaScanner::close(RuntimeState* state) {
+void LakeMetaScanner::close(RuntimeState* state) {
     if (_is_closed) {
         return;
     }
-    _tablet.reset();
     _reader.reset();
     _is_closed = true;
 }
 
-bool OlapMetaScanner::has_more() {
+bool LakeMetaScanner::has_more() {
     return _reader->has_more();
 }
 
-Status OlapMetaScanner::_get_tablet(const TInternalScanRange* scan_range) {
-    TTabletId tablet_id = scan_range->tablet_id;
-    SchemaHash schema_hash = strtoul(scan_range->schema_hash.c_str(), nullptr, 10);
+Status LakeMetaScanner::_get_tablet(const TInternalScanRange* scan_range) {
     _version = strtoul(scan_range->version.c_str(), nullptr, 10);
-
-    std::string err;
-    _tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, true, &err);
-    if (!_tablet) {
-        std::stringstream ss;
-        ss << "failed to get tablet. tablet_id=" << tablet_id << ", with schema_hash=" << schema_hash
-           << ", reason=" << err;
-        LOG(WARNING) << ss.str();
-        return Status::InternalError(ss.str());
-    }
+    ASSIGN_OR_RETURN(_tablet, ExecEnv::GetInstance()->lake_tablet_manager()->get_tablet(scan_range->tablet_id));
+    ASSIGN_OR_RETURN(_tablet_schema, _tablet->get_schema());
     return Status::OK();
 }
 

@@ -135,6 +135,8 @@ add_library(Storage STATIC
     tablet_reader.cpp
     tablet_reader_params.cpp
     meta_reader.cpp
+    lake_meta_reader.cpp
+    olap_meta_reader.cpp
     seek_tuple.cpp
     union_iterator.cpp
     unique_iterator.cpp
