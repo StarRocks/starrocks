@@ -794,7 +794,7 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
     uint32_t rowset_id = version_info.deltas[0];
     auto& version = version_info.version;
     VLOG(1) << "apply_rowset_commit start tablet:" << tablet_id << " version:" << version.to_string()
-              << " rowset:" << rowset_id;
+            << " rowset:" << rowset_id;
     RowsetSharedPtr rowset = _get_rowset(rowset_id);
     auto manager = StorageEngine::instance()->update_manager();
 
@@ -848,27 +848,7 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
         return;
     }
 
-    int64_t t_load = MonotonicMillis();
-    /*
-    span->AddEvent("reslove_conflict");
-    int64_t t_load = MonotonicMillis();
-    EditVersion latest_applied_version;
-    st = get_latest_applied_version(&latest_applied_version);
-    if (st.ok()) {
-        st = state.apply(&_tablet, rowset.get(), rowset_id, latest_applied_version, index);
-        manager->update_state_cache().update_object_size(state_entry, state.memory_usage());
-    }
-    if (!st.ok()) {
-        manager->update_state_cache().remove(state_entry);
-        std::string msg = strings::Substitute("_apply_rowset_commit error: apply rowset update state failed: $0 $1",
-                                              st.to_string(), debug_string());
-        LOG(ERROR) << msg;
-        _set_error(msg);
-        return;
-    }
-    */
     int64_t t_apply = MonotonicMillis();
-
     std::int32_t conditional_column = -1;
     const auto& txn_meta = rowset->rowset_meta()->get_meta_pb().txn_meta();
     if (txn_meta.has_merge_condition()) {
@@ -899,8 +879,9 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
             st = state.apply(&_tablet, rowset.get(), rowset_id, i, latest_applied_version, index);
             if (!st.ok()) {
                 manager->update_state_cache().remove(state_entry);
-                std::string msg = Substitute("_apply_rowset_commit error: apply rowset update state failed: $0 $1",
-                                             st.to_string(), debug_string());
+                std::string msg =
+                        strings::Substitute("_apply_rowset_commit error: apply rowset update state failed: $0 $1",
+                                            st.to_string(), debug_string());
                 LOG(ERROR) << msg;
                 _set_error(msg);
                 return;
@@ -910,17 +891,6 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
         }
         state.release_upserts(i);
     }
-    /*
-    st = state.finish_apply(&_tablet, rowset.get());
-    if (!st.ok()) {
-        manager->update_state_cache().remove(state_entry);
-        std::string msg = Substitute("_apply_rowset_commit error: apply rowset update state failed: $0 $1",
-                                     st.to_string(), debug_string());
-        LOG(ERROR) << msg;
-        _set_error(msg);
-        return;
-    }
-    */
 
     for (uint32_t i = 0; i < rowset->num_delete_files(); i++) {
         state.load_deletes(rowset.get(), i);
@@ -1101,8 +1071,8 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
               << " " << del_percent << "% rowset:" << rowset_id << " #seg:" << rowset->num_segments()
               << " #op(upsert:" << rowset->num_rows() << " del:" << delete_op << ") #del:" << old_total_del << "+"
               << new_del << "=" << total_del << " #dv:" << ndelvec << " duration:" << t_write - t_start << "ms"
-              << strings::Substitute("($0/$1/$2/$3/$4)", t_load - t_start, t_apply - t_load, t_index - t_apply,
-                                     t_delvec - t_index, t_write - t_delvec);
+              << strings::Substitute("($0/$1/$2/$3)", t_apply - t_start, t_index - t_apply, t_delvec - t_index,
+                                     t_write - t_delvec);
     VLOG(1) << "rowset commit apply " << delvec_change_info << " " << _debug_string(true, true);
 }
 
@@ -3382,7 +3352,8 @@ Status TabletUpdates::prepare_partial_update_states_unlock(Tablet* tablet, const
         // get next_rowset_id and read_version to identify conflict
         std::lock_guard wl(_lock);
         if (_edit_version_infos.empty()) {
-            string msg = Substitute("tablet deleted when prepare_partial_update_states tablet:$0", _tablet.tablet_id());
+            string msg = strings::Substitute("tablet deleted when prepare_partial_update_states tablet:$0",
+                                             _tablet.tablet_id());
             LOG(WARNING) << msg;
             return Status::InternalError(msg);
         }
@@ -3397,8 +3368,8 @@ Status TabletUpdates::prepare_partial_update_states_unlock(Tablet* tablet, const
     manager->index_cache().update_object_size(index_entry, index.memory_usage());
     if (!st.ok()) {
         manager->index_cache().remove(index_entry);
-        std::string msg = Substitute("prepare_partial_update_states error: load primary index failed: $0 $1",
-                                     st.to_string(), debug_string());
+        std::string msg = strings::Substitute("prepare_partial_update_states error: load primary index failed: $0 $1",
+                                              st.to_string(), debug_string());
         LOG(ERROR) << msg;
         _set_error(msg);
         return Status::InternalError(msg);

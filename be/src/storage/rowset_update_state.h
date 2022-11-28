@@ -83,8 +83,6 @@ public:
     void release_upserts(uint32_t idx);
     void release_deletes(uint32_t idx);
 
-    Status finish_apply(Tablet* tablet, Rowset* rowset);
-
 private:
     Status _load_deletes(Rowset* rowset, uint32_t delete_id, Column* pk_column);
     Status _load_upserts(Rowset* rowset, uint32_t upsert_id, Column* pk_column);

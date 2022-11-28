@@ -63,7 +63,8 @@ public:
 
     void set_write_buffer_size(size_t max_buffer_size) { _max_buffer_size = max_buffer_size; }
 
-    static Schema convert_schema(const TabletSchema* tablet_schema, const std::vector<SlotDescriptor*>* slot_descs);
+    static VectorizedSchema convert_schema(const TabletSchema* tablet_schema,
+                                           const std::vector<SlotDescriptor*>* slot_descs);
 
 private:
     void _merge();

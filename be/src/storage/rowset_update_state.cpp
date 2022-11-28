@@ -304,6 +304,7 @@ void RowsetUpdateState::plan_read_by_rssid(const vector<uint64_t>& rowids, size_
 }
 
 // Assume segment idx has been loaded and _upserts[idx] is not null
+// The caller should make sure `load_upserts` has been called success before call this function
 Status RowsetUpdateState::_prepare_partial_update_states(Tablet* tablet, Rowset* rowset, uint32_t idx, bool need_lock) {
     if (_partial_update_states.size() == 0) {
         _partial_update_states.resize(rowset->num_segments());
@@ -369,7 +370,7 @@ Status RowsetUpdateState::_prepare_partial_update_states(Tablet* tablet, Rowset*
     int64_t t_end = MonotonicMillis();
     _partial_update_states[idx].inited = true;
 
-    LOG(INFO) << Substitute(
+    LOG(INFO) << strings::Substitute(
             "prepare PartialUpdateState tablet:$0 segment:$1 #row:$2(#non-default:$3) #column:$4 "
             "time:$5ms(index:$6/value:$7)",
             _tablet_id, idx, total_rows, total_rows - num_default, read_columns.size(), t_end - t_start,
@@ -391,7 +392,7 @@ Status RowsetUpdateState::_check_and_resolve_conflict(Tablet* tablet, Rowset* ro
                                                       std::vector<uint32_t>& read_column_ids,
                                                       const PrimaryIndex& index) {
     if (_partial_update_states.size() <= segment_id || !_partial_update_states[segment_id].inited) {
-        std::string msg = Substitute(
+        std::string msg = strings::Substitute(
                 "_check_and_reslove_conflict tablet:$0 rowset:$1 segment:$2 failed, partial_update_states size:$3",
                 tablet->tablet_id(), rowset_id, segment_id, _partial_update_states.size());
         LOG(WARNING) << msg;
@@ -452,7 +453,7 @@ Status RowsetUpdateState::_check_and_resolve_conflict(Tablet* tablet, Rowset* ro
         }
     }
     int64_t t_end = MonotonicMillis();
-    LOG(INFO) << Substitute(
+    LOG(INFO) << strings::Substitute(
             "_check_and_resolve_conflict tablet:$0 rowset:$1 segmet:$2 version:($3 $4) #conflict-row:$5 #column:$6 "
             "time:$7ms(index:$8/value:$9)",
             tablet->tablet_id(), rowset_id, segment_id, _partial_update_states[segment_id].read_version.to_string(),
@@ -502,18 +503,15 @@ Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_
                                              _partial_update_states[segment_id].write_columns, segment_id,
                                              partial_rowset_footer));
     int64_t t_rewrite_end = MonotonicMillis();
-    LOG(INFO) << Substitute("apply partial segment tablet:$0 rowset:$1 seg:$2 #column:$3 #rewrite:$4ms",
-                            tablet->tablet_id(), rowset_id, segment_id, read_column_ids.size(),
-                            t_rewrite_end - t_rewrite_start);
+    LOG(INFO) << strings::Substitute("apply partial segment tablet:$0 rowset:$1 seg:$2 #column:$3 #rewrite:$4ms",
+                                     tablet->tablet_id(), rowset_id, segment_id, read_column_ids.size(),
+                                     t_rewrite_end - t_rewrite_start);
 
+    // we should reload segment after rewrite segment file because we may read data from the segment during
+    // the subsequent apply process. And the segment will be treated as a full segment, so we must reload
+    // segment[segment_id] of partial rowset
     FileSystem::Default()->rename_file(dest_path, src_path);
     RETURN_IF_ERROR(rowset->reload_segment(segment_id));
-    /*
-    if (segment_id == rowset->num_segments() - 1) {
-        LOG(INFO) << "reload rowset: " << rowset_id << " segment_id: " << segment_id << " num_segment: " << rowset->num_segments();
-        RETURN_IF_ERROR(rowset->reload());
-    }
-    */
 
     for (size_t col_idx = 0; col_idx < _partial_update_states[segment_id].write_columns.size(); col_idx++) {
         if (_partial_update_states[segment_id].write_columns[col_idx] != nullptr) {
@@ -522,31 +520,6 @@ Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_
     }
     _partial_update_states[segment_id].release();
     return Status::OK();
-}
-
-Status RowsetUpdateState::finish_apply(Tablet* tablet, Rowset* rowset) {
-    const auto& rowset_meta_pb = rowset->rowset_meta()->get_meta_pb();
-    if (!rowset_meta_pb.has_txn_meta() || rowset->num_segments() == 0 ||
-        rowset_meta_pb.txn_meta().has_merge_condition()) {
-        return Status::OK();
-    }
-    vector<std::pair<string, string>> rewrite_files;
-    DeferOp clean_temp_files([&] {
-        for (auto& e : rewrite_files) {
-            FileSystem::Default()->delete_file(e.second);
-        }
-    });
-    for (size_t i = 0; i < rowset->num_segments(); i++) {
-        auto src_path = Rowset::segment_file_path(tablet->schema_hash_path(), rowset->rowset_id(), i);
-        auto dest_path = Rowset::segment_temp_file_path(tablet->schema_hash_path(), rowset->rowset_id(), i);
-        if (!fs::path_exist(dest_path) || !fs::path_exist(src_path)) {
-            LOG(WARNING) << "file not exist " << dest_path;
-            return Status::InternalError("file not exist");
-        } else {
-            FileSystem::Default()->rename_file(dest_path, src_path);
-        }
-    }
-    return rowset->reload();
 }
 
 std::string RowsetUpdateState::to_string() const {
