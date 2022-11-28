@@ -257,7 +257,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
         }
         if (db != null) {
-            for (String tableName : db.getTableNamesWithLock()) {
+            for (String tableName : db.getTableNamesViewWithLock()) {
                 LOG.debug("get table: {}, wait to check", tableName);
                 if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser, params.db,
                         tableName, PrivPredicate.SHOW)) {
@@ -713,7 +713,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
             Database db = GlobalStateMgr.getCurrentState().getDb(fullName);
             if (db != null) {
-                for (String tableName : db.getTableNamesWithLock()) {
+                for (String tableName : db.getTableNamesViewWithLock()) {
                     LOG.debug("get table: {}, wait to check", tableName);
                     if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser, fullName,
                             tableName, PrivPredicate.SHOW)) {
