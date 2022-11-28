@@ -48,7 +48,7 @@ public class JournalTask implements Future<Boolean> {
 
     public long estimatedSizeByte() {
         // journal id + buffer
-        return Long.SIZE / 8 + buffer.getLength();
+        return Long.SIZE / 8 + (long) buffer.getLength();
     }
 
     public DataOutputBuffer getBuffer() {

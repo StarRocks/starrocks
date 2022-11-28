@@ -141,8 +141,9 @@ public class QueryAnalyzer {
                     String database = originField.getRelationAlias() == null ? session.getDatabase() :
                             originField.getRelationAlias().getDb();
                     TableName tableName = new TableName(database, cteName);
-                    outputFields.add(new Field(withQuery.getColumnOutputNames().get(fieldIdx), originField.getType(), tableName,
-                            originField.getOriginExpression()));
+                    outputFields.add(
+                            new Field(withQuery.getColumnOutputNames().get(fieldIdx), originField.getType(), tableName,
+                                    originField.getOriginExpression()));
                 }
 
                 /*
@@ -694,7 +695,8 @@ public class QueryAnalyzer {
             } else {
                 if (node.getColumnNames().size() != tableFunction.getTableFnReturnTypes().size()) {
                     throw new SemanticException("table %s has %s columns available but %s columns specified",
-                            node.getAlias().getTbl(), node.getColumnNames().size(), tableFunction.getTableFnReturnTypes().size());
+                            node.getAlias().getTbl(), node.getColumnNames().size(),
+                            tableFunction.getTableFnReturnTypes().size());
                 }
             }
 
@@ -730,9 +732,7 @@ public class QueryAnalyzer {
             }
 
             Database database = metadataMgr.getDb(catalogName, dbName);
-            if (database == null) {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
-            }
+            MetaUtils.checkDbNullAndReport(database, dbName);
 
             Table table = metadataMgr.getTable(catalogName, dbName, tbName);
             if (table == null) {

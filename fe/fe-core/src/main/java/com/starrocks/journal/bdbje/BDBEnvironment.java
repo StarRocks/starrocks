@@ -248,7 +248,7 @@ public class BDBEnvironment {
         JournalException exception = null;
         for (int i = 0; i < RETRY_TIME; i++) {
             if (i > 0) {
-                Thread.sleep(SLEEP_INTERVAL_SEC * 1000);
+                Thread.sleep(SLEEP_INTERVAL_SEC * 1000L);
             }
             try {
                 LOG.info("start to setup bdb environment for {} times", i + 1);
@@ -361,7 +361,7 @@ public class BDBEnvironment {
         JournalException exception = null;
         for (int i = 0; i < RETRY_TIME; i++) {
             if (i > 0) {
-                Thread.sleep(SLEEP_INTERVAL_SEC * 1000);
+                Thread.sleep(SLEEP_INTERVAL_SEC * 1000L);
             }
 
             try {
