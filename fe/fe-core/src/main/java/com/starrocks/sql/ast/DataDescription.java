@@ -587,21 +587,24 @@ public class DataDescription {
             throw new AnalysisException("No table name in load statement.");
         }
 
-        // check auth
-        if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(), fullDbName, tableName,
-                PrivPredicate.LOAD)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "LOAD",
-                    ConnectContext.get().getQualifiedUser(),
-                    ConnectContext.get().getRemoteIP(), tableName);
+        if (!GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+            // check auth
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(), fullDbName, tableName,
+                                                                         PrivPredicate.LOAD)) {
+                ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "LOAD",
+                                                    ConnectContext.get().getQualifiedUser(),
+                                                    ConnectContext.get().getRemoteIP(), tableName);
+            }
         }
-
         // check hive table auth
         if (isLoadFromTable()) {
-            if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(), fullDbName, srcTableName,
-                    PrivPredicate.SELECT)) {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "SELECT",
-                        ConnectContext.get().getQualifiedUser(),
-                        ConnectContext.get().getRemoteIP(), srcTableName);
+            if (!GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(), fullDbName, srcTableName,
+                                                                             PrivPredicate.SELECT)) {
+                    ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "SELECT",
+                                                        ConnectContext.get().getQualifiedUser(),
+                                                        ConnectContext.get().getRemoteIP(), srcTableName);
+                }
             }
         }
     }

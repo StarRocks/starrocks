@@ -161,6 +161,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -1013,6 +1014,22 @@ public class ShowExecutor {
             LOG.warn(e.getMessage(), e);
             throw new AnalysisException(e.getMessage());
         }
+        // In new privilege framework(RBAC), user needs any action on the table to show routione load job on it.
+        if (ctx.getGlobalStateMgr().isUsingNewPrivilege()) {
+            Iterator<RoutineLoadJob> iterator = routineLoadJobList.iterator();
+            while (iterator.hasNext()) {
+                RoutineLoadJob routineLoadJob = iterator.next();
+                try {
+                    if (!PrivilegeManager.checkAnyActionOnTable(ctx,
+                                                                routineLoadJob.getDbFullName(),
+                                                                routineLoadJob.getTableName())) {
+                        iterator.remove();
+                    }
+                } catch (MetaNotFoundException e) {
+                    // ignore
+                }
+            }
+        }
 
         if (routineLoadJobList != null) {
             RoutineLoadFunctionalExprProvider fProvider = showRoutineLoadStmt.getFunctionalExprProvider(this.ctx);
@@ -1062,16 +1079,23 @@ public class ShowExecutor {
             throw new AnalysisException(
                     "The table metadata of job has been changed. The job will be cancelled automatically", e);
         }
-        if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
-                dbFullName,
-                tableName,
-                PrivPredicate.LOAD)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "LOAD",
-                    ConnectContext.get().getQualifiedUser(),
-                    ConnectContext.get().getRemoteIP(),
-                    tableName);
+        // In new privilege framework(RBAC), user needs any action on the table to show routione load job on it.
+        if (ctx.getGlobalStateMgr().isUsingNewPrivilege()) {
+            if (!PrivilegeManager.checkAnyActionOnTable(ctx, dbFullName, tableName)) {
+                resultSet = new ShowResultSet(showRoutineLoadTaskStmt.getMetaData(), rows);
+                return;
+            }
+        } else {
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(ConnectContext.get(),
+                                                                         dbFullName,
+                                                                         tableName,
+                                                                         PrivPredicate.LOAD)) {
+                ErrorReport.reportAnalysisException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "LOAD",
+                                                    ConnectContext.get().getQualifiedUser(),
+                                                    ConnectContext.get().getRemoteIP(),
+                                                    tableName);
+            }
         }
-
         // get routine load task info
         rows.addAll(routineLoadJob.getTasksShowInfo());
         resultSet = new ShowResultSet(showRoutineLoadTaskStmt.getMetaData(), rows);
