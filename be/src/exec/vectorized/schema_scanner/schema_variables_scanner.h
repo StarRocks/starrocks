@@ -18,12 +18,6 @@ public:
     Status start(RuntimeState* state) override;
     Status get_next(ChunkPtr* chunk, bool* eos) override;
 
-    /*
-    static SchemaScanner::ColumnDesc* get_column_desc(TVarType::type type) {
-        return type == TVarType::VERBOSE ? _s_verbose_vars_columns : _s_vars_columns;
-    }
-    */
-
 private:
     Status fill_chunk(ChunkPtr* chunk);
 
