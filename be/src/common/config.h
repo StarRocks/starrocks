@@ -893,6 +893,6 @@ CONF_mInt64(send_channel_buffer_limit, "67108864");
 // other value means the default value
 CONF_Int32(exception_stack_level, "1");
 CONF_String(exception_stack_white_list, "std::");
-CONF_String(exception_stack_black_list, "apache::thrift::,ue2::");
+CONF_String(exception_stack_black_list, "apache::thrift::,ue2::,arangodb::");
 
 } // namespace starrocks::config

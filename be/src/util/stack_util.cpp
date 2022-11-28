@@ -88,6 +88,7 @@ public:
 private:
     ExceptionStackContext() {
         _level = starrocks::config::exception_stack_level;
+        // other values mean the default value.
         if (_level < -1 || _level > 2) {
             _level = 1;
         }
