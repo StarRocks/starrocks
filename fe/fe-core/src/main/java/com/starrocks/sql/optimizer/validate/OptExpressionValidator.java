@@ -244,7 +244,10 @@ public class OptExpressionValidator extends OptExpressionVisitor<OptExpression, 
         private boolean needDateValidate() {
             return (sqlMode & SqlModeHelper.MODE_FORBID_INVALID_DATE) > 0;
         }
+<<<<<<< HEAD
 
+=======
+>>>>>>> 7ccfdb6c7 ([BugFix] add FORBID_INVALID_DATA sql_mode (#13768))
     }
 
     private boolean needValidate() {

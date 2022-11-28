@@ -82,10 +82,13 @@ public class ErrorReport {
         throw new DdlException(reportCommon(pattern, errorCode, objs));
     }
 
+<<<<<<< HEAD
     public static void reportRuntimeDdlException(ErrorCode errorCode, Object... objs) {
         throw new RuntimeException(new DdlException(reportCommon(null, errorCode, objs)));
     }
 
+=======
+>>>>>>> 7ccfdb6c7 ([BugFix] add FORBID_INVALID_DATA sql_mode (#13768))
     public static void reportValidateException(ErrorCode errorCode, ErrorType errorType, Object... objs) {
         throw new ValidateException(errorCode.formatErrorMsg(objs), errorType);
     }
