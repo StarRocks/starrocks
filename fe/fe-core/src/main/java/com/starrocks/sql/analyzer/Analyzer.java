@@ -42,6 +42,7 @@ import com.starrocks.sql.ast.CreateFileStmt;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
+import com.starrocks.sql.ast.CreateProcedureStmt;
 import com.starrocks.sql.ast.CreateRepositoryStmt;
 import com.starrocks.sql.ast.CreateResourceGroupStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
@@ -470,6 +471,16 @@ public class Analyzer {
 
         @Override
         public Void visitCreateFunctionStatement(CreateFunctionStmt statement, ConnectContext context) {
+            try {
+                statement.analyze(context);
+            } catch (AnalysisException e) {
+                throw new SemanticException(e.getMessage());
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitCreateProcedure(CreateProcedureStmt statement, ConnectContext context) {
             try {
                 statement.analyze(context);
             } catch (AnalysisException e) {

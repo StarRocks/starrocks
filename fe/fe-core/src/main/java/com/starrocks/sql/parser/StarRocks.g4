@@ -140,6 +140,7 @@ statement
     | showFunctionsStatement
     | dropFunctionStatement
     | createFunctionStatement
+    | createProcedureStatement
 
     // Load Statement
     | loadStatement
@@ -947,6 +948,14 @@ createFunctionStatement
     : CREATE functionType=(TABLE | AGGREGATE)? FUNCTION qualifiedName '(' typeList ')' RETURNS returnType=type (INTERMEDIATE intermediateType =  type)? properties?
     ;
 
+createProcedureStatement
+    : CREATE PROCEDURE qualifiedName '(' procParam (',' procParam)* ')' properties?
+    ;
+
+procParam
+    : paramType=(IN | OUT | INOUT ) qualifiedName type
+    ;
+
 typeList
     : type?  ( ',' type)* (',' DOTDOTDOT) ?
     ;
@@ -1375,9 +1384,13 @@ showSmallFilesStatement
     ;
 
 // ------------------------------------------- Set Statement -----------------------------------------------------------
+callStatement
+    : CALL qualifiedName '(' (expression ',')* userVariable')'
+    ;
 
 setStatement
     : SET setVar (',' setVar)*
+    | callStatement
     ;
 
 setVar
