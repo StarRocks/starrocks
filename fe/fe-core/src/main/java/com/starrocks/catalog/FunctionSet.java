@@ -26,6 +26,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.protobuf.MapEntry;
 import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.builtins.VectorizedBuiltinFunctions;
@@ -420,6 +421,36 @@ public class FunctionSet {
                     .add(Type.CHAR)
                     .add(Type.VARCHAR)
                     .build();
+
+    private static final Set<Type> MULTI_DISTINCT_COUNT_TYPES =
+            ImmutableSet.<Type>builder()
+                    .addAll(Type.INTEGER_TYPES)
+                    .addAll(Type.FLOAT_TYPES)
+                    .addAll(Type.DECIMAL_TYPES)
+                    .add(Type.CHAR)
+                    .add(Type.VARCHAR)
+                    .add(Type.DATE)
+                    .add(Type.DATETIME)
+                    .add(Type.DECIMALV2)
+                    .build();
+
+    private static final Map<Type, Type> ARRAY_AGG_TYPES = ImmutableMap.<Type, Type>builder()
+            .put(Type.BOOLEAN, Type.ARRAY_BOOLEAN)
+            .put(Type.TINYINT, Type.ARRAY_TINYINT)
+            .put(Type.SMALLINT, Type.ARRAY_SMALLINT)
+            .put(Type.INT, Type.ARRAY_INT)
+            .put(Type.BIGINT, Type.ARRAY_BIGINT)
+            .put(Type.LARGEINT, Type.ARRAY_LARGEINT)
+            .put(Type.FLOAT, Type.ARRAY_FLOAT)
+            .put(Type.DOUBLE, Type.ARRAY_DOUBLE)
+            .put(Type.VARCHAR, Type.ARRAY_VARCHAR)
+            .put(Type.CHAR, Type.ARRAY_VARCHAR)
+            .put(Type.DATE, Type.ARRAY_DATE)
+            .put(Type.DATETIME, Type.ARRAY_DATETIME)
+            .put(Type.DECIMAL32, Type.ARRAY_DECIMALV2)
+            .put(Type.TIME, Type.ARRAY_DATETIME) // ??
+            .put(Type.JSON, Type.ARRAY_JSON)
+            .build();
     /**
      * Use for vectorized engine, but we can't use vectorized function directly, because we
      * need to check whether the expression tree can use vectorized function from bottom to
@@ -712,12 +743,6 @@ public class FunctionSet {
                 continue; // Only function `Count` support pseudo types now.
             }
 
-            // MULTI_DISTINCT_COUNTM
-            addBuiltin(AggregateFunction.createBuiltin(FunctionSet.MULTI_DISTINCT_COUNT, Lists.newArrayList(t),
-                    Type.BIGINT,
-                    Type.VARBINARY,
-                    false, true, true));
-
             // Min
             addBuiltin(AggregateFunction.createBuiltin(MIN,
                     Lists.newArrayList(t), t, t, true, true, false));
@@ -763,6 +788,14 @@ public class FunctionSet {
             addBuiltin(AggregateFunction.createBuiltin(INTERSECT_COUNT,
                     Lists.newArrayList(Type.BITMAP, t, t), Type.BIGINT, Type.VARCHAR, true,
                     true, false, true));
+        }
+
+        // MULTI_DISTINCT_COUNTM
+        for (Type type: MULTI_DISTINCT_COUNT_TYPES) {
+            addBuiltin(AggregateFunction.createBuiltin(FunctionSet.MULTI_DISTINCT_COUNT, Lists.newArrayList(type),
+                    Type.BIGINT,
+                    Type.VARBINARY,
+                    false, true, true));
         }
 
         // Sum
@@ -1002,51 +1035,11 @@ public class FunctionSet {
     }
 
     private void registerBuiltinArrayAggFunction() {
-        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG,
-                Lists.newArrayList(Type.BOOLEAN), Type.ARRAY_BOOLEAN, Type.ARRAY_BOOLEAN,
+        for (Map.Entry<Type, Type>  entry: ARRAY_AGG_TYPES.entrySet()) {
+         addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG,
+                Lists.newArrayList(entry.getKey()), entry.getValue(), entry.getValue(),
                 false, false, false));
-        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG,
-                Lists.newArrayList(Type.TINYINT), Type.ARRAY_TINYINT, Type.ARRAY_TINYINT,
-                false, false, false));
-        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG,
-                Lists.newArrayList(Type.SMALLINT), Type.ARRAY_SMALLINT, Type.ARRAY_SMALLINT,
-                false, false, false));
-        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG,
-                Lists.newArrayList(Type.INT), Type.ARRAY_INT, Type.ARRAY_INT,
-                false, false, false));
-        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG,
-                Lists.newArrayList(Type.BIGINT), Type.ARRAY_BIGINT, Type.ARRAY_BIGINT,
-                false, false, false));
-        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG,
-                Lists.newArrayList(Type.LARGEINT), Type.ARRAY_LARGEINT, Type.ARRAY_LARGEINT,
-                false, false, false));
-        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG,
-                Lists.newArrayList(Type.FLOAT), Type.ARRAY_FLOAT, Type.ARRAY_FLOAT,
-                false, false, false));
-        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG,
-                Lists.newArrayList(Type.DOUBLE), Type.ARRAY_DOUBLE, Type.ARRAY_DOUBLE,
-                false, false, false));
-        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG,
-                Lists.newArrayList(Type.VARCHAR), Type.ARRAY_VARCHAR, Type.ARRAY_VARCHAR,
-                false, false, false));
-        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG,
-                Lists.newArrayList(Type.CHAR), Type.ARRAY_VARCHAR, Type.ARRAY_VARCHAR,
-                false, false, false));
-        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG,
-                Lists.newArrayList(Type.DATE), Type.ARRAY_DATE, Type.ARRAY_DATE,
-                false, false, false));
-        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG,
-                Lists.newArrayList(Type.DATETIME), Type.ARRAY_DATETIME, Type.ARRAY_DATETIME,
-                false, false, false));
-        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG,
-                Lists.newArrayList(Type.DECIMAL32), Type.ARRAY_DECIMALV2, Type.ARRAY_DECIMALV2,
-                false, false, false));
-        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG,
-                Lists.newArrayList(Type.TIME), Type.ARRAY_DATETIME, Type.ARRAY_DATETIME,
-                false, false, false));
-        addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG,
-                Lists.newArrayList(Type.JSON), Type.ARRAY_JSON, Type.ARRAY_JSON,
-                false, false, false));
+        }
     }
 
     public List<Function> getBuiltinFunctions() {
