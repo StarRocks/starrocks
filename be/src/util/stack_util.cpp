@@ -66,18 +66,18 @@ public:
         }
         return exception_name;
     }
-    bool in_black_list(const string& exception) {
+    bool prefix_in_black_list(const string& exception) {
         for (auto const& str : _black_list) {
-            if (exception.find(str) != exception.npos) {
+            if (exception.rfind(str, 0) == 0) {
                 return true;
             }
         }
         return false;
     }
 
-    bool in_white_list(const string& exception) {
+    bool prefix_in_white_list(const string& exception) {
         for (auto const& str : _white_list) {
-            if (exception.find(str) != exception.npos) {
+            if (exception.rfind(str, 0) == 0) {
                 return true;
             }
         }
@@ -110,9 +110,9 @@ void __wrap___cxa_throw(void* thrown_exception, void* info, void (*dest)(void*))
     auto print_level = ExceptionStackContext::get_instance()->get_level();
     if (print_level != 0) {
         string exception_name = ExceptionStackContext::get_exception_name((void*)info);
-        if ((print_level == 1 && ExceptionStackContext::get_instance()->in_white_list(exception_name)) ||
+        if ((print_level == 1 && ExceptionStackContext::get_instance()->prefix_in_white_list(exception_name)) ||
             print_level == -1 ||
-            (print_level == 2 && !ExceptionStackContext::get_instance()->in_black_list(exception_name))) {
+            (print_level == 2 && !ExceptionStackContext::get_instance()->prefix_in_black_list(exception_name))) {
             auto query_id = CurrentThread::current().query_id();
             auto fragment_instance_id = CurrentThread::current().fragment_instance_id();
             auto stack = fmt::format("{}, query_id={}, fragment_instance_id={} throws exception: {}, trace:\n {} \n",

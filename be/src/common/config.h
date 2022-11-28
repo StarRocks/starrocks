@@ -888,8 +888,8 @@ CONF_mInt64(send_channel_buffer_limit, "67108864");
 // exception_stack_level controls when to print exception's stack
 // -1, enable print all exceptions' stack
 // 0, disable print exceptions' stack
-// 1, print the white list's exceptions' stack (default)
-// 2, print all exceptions' stack that is not in black_lists
+// 1, print exceptions' stack whose prefix is in the white list(default)
+// 2, print exceptions' stack whose prefix is not in the black list
 // other value means the default value
 CONF_Int32(exception_stack_level, "1");
 CONF_String(exception_stack_white_list, "std::");
