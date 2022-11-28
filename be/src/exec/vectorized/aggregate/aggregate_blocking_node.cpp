@@ -138,6 +138,7 @@ Status AggregateBlockingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
     int32_t chunk_size = runtime_state()->chunk_size();
 
     if (_aggregator->is_none_group_by_exprs()) {
+<<<<<<< HEAD
         SCOPED_TIMER(_aggregator->get_results_timer());
         _aggregator->convert_to_chunk_no_groupby(chunk);
     } else {
@@ -149,6 +150,11 @@ Status AggregateBlockingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
                     *_aggregator->hash_map_variant().NAME, chunk_size, chunk);
         APPLY_FOR_AGG_VARIANT_ALL(HASH_MAP_METHOD)
 #undef HASH_MAP_METHOD
+=======
+        RETURN_IF_ERROR(_aggregator->convert_to_chunk_no_groupby(chunk));
+    } else {
+        RETURN_IF_ERROR(_aggregator->convert_hash_map_to_chunk(chunk_size, chunk));
+>>>>>>> 465c43bca ([Enhancement] Add catch bad alloc for serialize/finalize/transmit_chunk (#13641))
     }
 
     size_t old_size = (*chunk)->num_rows();
