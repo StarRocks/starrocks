@@ -73,11 +73,9 @@ public class PlannerProfile {
         return timers.computeIfAbsent(name, (key) -> new ScopedTimer());
     }
 
-    private static final PlannerProfile DEFAULT_INSTANCE = new PlannerProfile();
-
     public static ScopedTimer getScopedTimer(String name) {
         // to avoid null.
-        PlannerProfile p = DEFAULT_INSTANCE;
+        PlannerProfile p = new PlannerProfile();
         ConnectContext ctx = ConnectContext.get();
         if (ctx != null) {
             p = ctx.getPlannerProfile();
