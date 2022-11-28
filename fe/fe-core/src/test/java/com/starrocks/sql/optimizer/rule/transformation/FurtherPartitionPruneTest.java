@@ -161,7 +161,6 @@ class FurtherPartitionPruneTest extends PlanTestBase {
         List<String> sqlList = Lists.newArrayList();
         sqlList.add("select * from less_than_tbl where k1 is null");
         sqlList.add("select * from less_than_tbl where k1 is null or k1 <=> null");
-        sqlList.add("select * from less_than_tbl where k1 = 1 and k1 is null");
         sqlList.add("select * from less_than_tbl where k1 = '2020-06-30' and k1 is null");
         sqlList.add("select * from less_than_tbl where k1 > '2020-06-30' and k1 is null");
         sqlList.add("select * from less_than_tbl where k1 != '2020-06-30' and k1 is null");
