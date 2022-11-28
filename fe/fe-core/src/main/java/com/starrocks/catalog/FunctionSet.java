@@ -801,7 +801,8 @@ public class FunctionSet {
         // Sum
         registerBuiltinSumAggFunction(SUM);
         registerBuiltinSumAggFunction(SUM_DISTINCT);
-        registerBuiltinSumAggFunction(MULTI_DISTINCT_SUM);
+        // MultiDistinctSum
+        registerBuiltinSumDistinctAggFunction();
 
         // Avg
         registerBuiltinAvgAggFunction();
@@ -931,9 +932,14 @@ public class FunctionSet {
 
     private void registerBuiltinSumAggFunction(String name) {
         for (ScalarType type: Type.INTEGER_TYPES) {
-            addBuiltin(AggregateFunction.createBuiltin(name,
-                    Lists.newArrayList(type), Type.BIGINT, Type.BIGINT,
-                    false, true, false));
+            if (type.isLargeint()) {
+                addBuiltin(AggregateFunction.createBuiltin(name,
+                        Lists.newArrayList(Type.LARGEINT), Type.LARGEINT, Type.LARGEINT, false, true, false));
+            } else {
+                addBuiltin(AggregateFunction.createBuiltin(name,
+                        Lists.newArrayList(type), Type.BIGINT, Type.BIGINT,
+                        false, true, false));
+            }
         }
         for (ScalarType type: Type.FLOAT_TYPES) {
             addBuiltin(AggregateFunction.createBuiltin(name,
@@ -949,6 +955,31 @@ public class FunctionSet {
                 Lists.newArrayList(Type.DECIMALV2), Type.DECIMALV2, Type.DECIMALV2, false, true, false));
     }
 
+    private void registerBuiltinSumDistinctAggFunction() {
+        for (ScalarType type: Type.INTEGER_TYPES) {
+            if (type.isLargeint()) {
+                addBuiltin(AggregateFunction.createBuiltin(MULTI_DISTINCT_SUM,
+                        Lists.newArrayList(type), Type.LARGEINT, Type.VARBINARY,
+                        false, true, false));
+            } else {
+                addBuiltin(AggregateFunction.createBuiltin(MULTI_DISTINCT_SUM,
+                        Lists.newArrayList(type), Type.BIGINT, Type.VARBINARY,
+                        false, true, false));
+            }
+        }
+        for (ScalarType type: Type.FLOAT_TYPES) {
+            addBuiltin(AggregateFunction.createBuiltin(MULTI_DISTINCT_SUM,
+                    Lists.newArrayList(type), Type.DOUBLE, Type.VARBINARY,
+                    false, true, false));
+        }
+        for (ScalarType type: Type.DECIMAL_TYPES) {
+            addBuiltin(AggregateFunction.createBuiltin(MULTI_DISTINCT_SUM,
+                    Lists.newArrayList(type), Type.DECIMAL128, Type.VARBINARY,
+                    false, true, false));
+        }
+        addBuiltin(AggregateFunction.createBuiltin(MULTI_DISTINCT_SUM,
+                Lists.newArrayList(Type.DECIMALV2), Type.DECIMALV2, Type.VARBINARY, false, true, false));
+    }
     private void registerBuiltinAvgAggFunction() {
         // TODO: switch to CHAR(sizeof(AvgIntermediateType) when that becomes available
         for (ScalarType type: Type.INTEGER_TYPES) {
