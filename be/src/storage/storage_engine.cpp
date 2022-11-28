@@ -628,7 +628,7 @@ size_t StorageEngine::_compaction_check_one_round() {
     while (!bg_worker_stopped()) {
         bool finished = _tablet_manager->get_next_batch_tablets(batch_size, &tablets);
         for (auto& tablet : tablets) {
-            _compaction_manager->update_tablet(tablet, true, false);
+            _compaction_manager->update_tablet(tablet);
         }
         tablets_num_checked += tablets.size();
         tablets.clear();
