@@ -448,7 +448,7 @@ PARALLEL_TEST(JsonParserTest, test_illegal_json_array) {
 PARALLEL_TEST(JsonParserTest, test_big_json) {
     simdjson::ondemand::parser simdjson_parser;
     // The padded_string would allocate memory with simdjson::SIMDJSON_PADDING bytes padding.
-    simdjson::padded_string input = simdjson::padded_string::load("./be/test/exec/test_data/json_scanner/1.7MB.json");
+    simdjson::padded_string input = simdjson::padded_string::load("./be/test/exec/test_data/json_scanner/1.4MB.json");
 
     std::unique_ptr<JsonParser> parser(new JsonDocumentStreamParser(&simdjson_parser));
 
@@ -461,8 +461,8 @@ PARALLEL_TEST(JsonParserTest, test_big_json) {
 
     st = parser->get_current(&row);
     ASSERT_TRUE(st.ok());
-    int64_t val = row.find_field("key10086").get_int64();
-    ASSERT_EQ(val, 10086);
+    int64_t val = row.find_field("key2").get_int64();
+    ASSERT_EQ(val, 12345);
 
     st = parser->advance();
     ASSERT_TRUE(st.is_end_of_file());
