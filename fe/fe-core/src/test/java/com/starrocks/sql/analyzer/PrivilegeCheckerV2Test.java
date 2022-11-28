@@ -2,12 +2,14 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
@@ -29,6 +31,8 @@ import com.starrocks.statistic.HistogramStatsMeta;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -49,11 +53,11 @@ public class PrivilegeCheckerV2Test {
         UtFrameUtils.addMockBackend(10002);
         UtFrameUtils.addMockBackend(10003);
         String createTblStmtStr1 = "create table db1.tbl1(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) "
-                + "AGGREGATE KEY(k1, k2,k3,k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
+                + "primary KEY(k1, k2, k3) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
         String createTblStmtStr2 = "create table db2.tbl1(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) "
-                + "AGGREGATE KEY(k1, k2,k3,k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
+                + "AGGREGATE KEY(k1, k2, k3, k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
         String createTblStmtStr3 = "create table db1.tbl2(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) "
-                + "AGGREGATE KEY(k1, k2,k3,k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
+                + "AGGREGATE KEY(k1, k2, k3, k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
         starRocksAssert = new StarRocksAssert(UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT));
         starRocksAssert.withDatabase("db1");
         starRocksAssert.withDatabase("db2");
@@ -195,6 +199,33 @@ public class PrivilegeCheckerV2Test {
             System.out.println(e.getMessage());
             Assert.assertTrue(e.getMessage().contains(expectError));
         }
+    }
+
+    private static void checkOperateLoad(String sql) throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+
+        // check resoure privilege
+        StatementBase statement = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        try {
+            PrivilegeCheckerV2.check(statement, ctx);
+            Assert.fail();
+        } catch (SemanticException e) {
+            System.out.println(e.getMessage() + ", sql: " + sql);
+            Assert.assertTrue(e.getMessage().contains(
+                    "USAGE denied to user 'test'@'localhost' for resoure '[my_spark]'"
+            ));
+        }
+        ctxToRoot();
+        String grantResource = "grant USAGE on resource 'my_spark' to test;";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(grantResource, ctx), ctx);
+        ctxToTestUser();
+
+        // check table privilege
+        verifyGrantRevoke(
+                sql,
+                "grant insert on db1.tbl1 to test",
+                "revoke insert on db1.tbl1 from test",
+                "INSERT command denied to user 'test'@'localhost' for table '[tbl1]'");
     }
 
     @Test
@@ -501,6 +532,11 @@ public class PrivilegeCheckerV2Test {
                 "grant delete on db1.tbl1 to test",
                 "revoke delete on db1.tbl1 from test",
                 "DELETE command denied to user 'test'");
+        verifyGrantRevoke(
+                "update db1.tbl1 set k4 = 2 where k3 = 1",
+                "grant update on db1.tbl1 to test",
+                "revoke update on db1.tbl1 from test",
+                "UPDATE command denied to user 'test'");
     }
 
     @Test
@@ -898,7 +934,7 @@ public class PrivilegeCheckerV2Test {
                 "revoke ALTER on database " + testDbName + " from test",
                 "Access denied for user 'test' to database '" + testDbName + "'");
     }
-    
+
     @Test
     public void testShowNodeStmt() throws Exception {
 
@@ -1065,5 +1101,210 @@ public class PrivilegeCheckerV2Test {
         String sql = "SET PASSWORD FOR 'jack'@'192.%' = PASSWORD('123456');";
         String expectError = "Access denied; you need (at least one of) the GRANT privilege(s) for this operation";
         verifyNODEAndGRANT(sql, expectError);
+    }
+
+    @Test
+    public void testRoutineLoadStmt() throws Exception {
+
+        // CREATE ROUTINE LOAD STMT
+        String createSql = "CREATE ROUTINE LOAD db1.job_name2 ON tbl1 " +
+                           "COLUMNS(c1) FROM KAFKA " +
+                           "( 'kafka_broker_list' = 'broker1:9092', 'kafka_topic' = 'my_topic', " +
+                           " 'kafka_partitions' = '0,1,2', 'kafka_offsets' = '0,0,0');";
+        verifyGrantRevoke(
+                createSql,
+                "grant insert on db1.tbl1 to test",
+                "revoke insert on db1.tbl1 from test",
+                "INSERT command denied to user 'test'@'localhost' for table 'tbl1'");
+
+        // ALTER ROUTINE LOAD STMT
+        new MockUp<KafkaUtil>() {
+            @Mock
+            public List<Integer> getAllKafkaPartitions(String brokerList, String topic,
+                                                       ImmutableMap<String, String> properties) {
+                return Lists.newArrayList(0, 1, 2);
+            }
+        };
+        String alterSql = "ALTER ROUTINE LOAD FOR db1.job_name2 PROPERTIES ( 'desired_concurrent_number' = '1')";
+        ConnectContext ctx = starRocksAssert.getCtx();
+        StatementBase statement = UtFrameUtils.parseStmtWithNewParser(alterSql, starRocksAssert.getCtx());
+        try {
+            PrivilegeCheckerV2.check(statement, ctx);
+            Assert.fail();
+        } catch (SemanticException e) {
+            System.out.println(e.getMessage() + ", sql: " + alterSql);
+            Assert.assertTrue(e.getMessage().contains("Routine load job [job_name2] not found when checking privilege"));
+        }
+        ctxToRoot();
+        starRocksAssert.withRoutineLoad(createSql);
+        ctxToTestUser();
+        verifyGrantRevoke(
+                "ALTER ROUTINE LOAD FOR db1.job_name1 PROPERTIES ( 'desired_concurrent_number' = '1');",
+                "grant insert on db1.tbl1 to test",
+                "revoke insert on db1.tbl1 from test",
+                "INSERT command denied to user 'test'@'localhost' for table 'tbl1'");
+
+        // STOP ROUTINE LOAD STMT
+        verifyGrantRevoke(
+                "STOP ROUTINE LOAD FOR db1.job_name1;",
+                "grant insert on db1.tbl1 to test",
+                "revoke insert on db1.tbl1 from test",
+                "INSERT command denied to user 'test'@'localhost' for table 'tbl1'");
+
+        // RESUME ROUTINE LOAD STMT
+        verifyGrantRevoke(
+                "RESUME ROUTINE LOAD FOR db1.job_name1;",
+                "grant insert on db1.tbl1 to test",
+                "revoke insert on db1.tbl1 from test",
+                "INSERT command denied to user 'test'@'localhost' for table 'tbl1'");
+
+        // PAUSE ROUTINE LOAD STMT
+        verifyGrantRevoke(
+                "PAUSE ROUTINE LOAD FOR db1.job_name1;",
+                "grant insert on db1.tbl1 to test",
+                "revoke insert on db1.tbl1 from test",
+                "INSERT command denied to user 'test'@'localhost' for table 'tbl1'");
+
+        // SHOW ROUTINE LOAD stmt;
+        String showRoutineLoadSql = "SHOW ROUTINE LOAD FOR db1.job_name1;";
+        statement = UtFrameUtils.parseStmtWithNewParser(showRoutineLoadSql, starRocksAssert.getCtx());
+        PrivilegeCheckerV2.check(statement, ctx);
+
+        // SHOW ROUTINE LOAD TASK FROM DB
+        String showRoutineLoadTaskSql = "SHOW ROUTINE LOAD TASK FROM db1 WHERE JobName = 'job_name1';";
+        statement = UtFrameUtils.parseStmtWithNewParser(showRoutineLoadTaskSql, starRocksAssert.getCtx());
+        PrivilegeCheckerV2.check(statement, ctx);
+    }
+
+    @Test
+    public void testRoutineLoadShowStmt() throws Exception {
+
+        ctxToRoot();
+        String createSql = "CREATE ROUTINE LOAD db1.job_name1 ON tbl1 " +
+                           "COLUMNS(c1) FROM KAFKA " +
+                           "( 'kafka_broker_list' = 'broker1:9092', 'kafka_topic' = 'my_topic', " +
+                           " 'kafka_partitions' = '0,1,2', 'kafka_offsets' = '0,0,0');";
+        new MockUp<KafkaUtil>() {
+            @Mock
+            public List<Integer> getAllKafkaPartitions(String brokerList, String topic,
+                                                       ImmutableMap<String, String> properties) {
+                return Lists.newArrayList(0, 1, 2);
+            }
+        };
+        starRocksAssert.withRoutineLoad(createSql);
+
+        String showRoutineLoadTaskSql = "SHOW ROUTINE LOAD TASK FROM db1 WHERE JobName = 'job_name1';";
+        StatementBase statementTask = UtFrameUtils.parseStmtWithNewParser(showRoutineLoadTaskSql, starRocksAssert.getCtx());
+        ShowExecutor executor = new ShowExecutor(starRocksAssert.getCtx(), (ShowStmt) statementTask);
+        ShowResultSet set = executor.execute();
+        for (int i = 0; i < 30; i++) {
+            set = executor.execute();
+            if (set.getResultRows().size() > 0) {
+                break;
+            } else {
+                Thread.sleep(1000);
+            }
+        }
+        Assert.assertTrue(set.getResultRows().size() > 0);
+
+        ctxToTestUser();
+        // SHOW ROUTINE LOAD TASK
+        ShowExecutor executorBeforeGrant = new ShowExecutor(starRocksAssert.getCtx(), (ShowStmt) statementTask);
+        set = executorBeforeGrant.execute();
+        Assert.assertEquals(0, set.getResultRows().size());
+        ctxToRoot();
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("grant insert on db1.tbl1 to test", starRocksAssert.getCtx()),
+                                starRocksAssert.getCtx());
+        ctxToTestUser();
+        ShowExecutor executorAfterGrant = new ShowExecutor(starRocksAssert.getCtx(), (ShowStmt) statementTask);
+        set = executorAfterGrant.execute();
+        Assert.assertTrue(set.getResultRows().size() > 0);
+        ctxToRoot();
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("revoke insert on db1.tbl1 from test",
+                                                                    starRocksAssert.getCtx()),
+                                starRocksAssert.getCtx());
+        ctxToTestUser();
+    }
+
+
+    @Test
+    public void testLoadStmt() throws Exception {
+
+        // LOAD STMT
+        // create resource
+        UtFrameUtils.addBroker("broker0");
+        String createResourceStmt = "CREATE EXTERNAL RESOURCE \"my_spark\""  +
+                                    "PROPERTIES (" +
+                                    "\"type\" = \"spark\"," +
+                                    "\"spark.master\" = \"yarn\", " +
+                                    "\"spark.submit.deployMode\" = \"cluster\", " +
+                                    "\"spark.executor.memory\" = \"1g\", " +
+                                    "\"spark.yarn.queue\" = \"queue0\", " +
+                                    "\"spark.hadoop.yarn.resourcemanager.address\" = \"resourcemanager_host:8032\", " +
+                                    "\"spark.hadoop.fs.defaultFS\" = \"hdfs://namenode_host:9000\", " +
+                                    "\"working_dir\" = \"hdfs://namenode_host:9000/tmp/starrocks\", " +
+                                    "\"broker\" = \"broker0\", " +
+                                    "\"broker.username\" = \"user0\", " +
+                                    "\"broker.password\" = \"password0\"" +
+                                    ");";
+        starRocksAssert.withResource(createResourceStmt);
+        // create load & check resource privilege
+        String createSql = "LOAD LABEL db1.job_name1" +
+                           "(DATA INFILE('hdfs://test:8080/user/starrocks/data/input/example1.csv') " +
+                           "INTO TABLE tbl1) " +
+                           "WITH RESOURCE 'my_spark'" +
+                           "('username' = 'test_name','password' = 'pwd') " +
+                           "PROPERTIES ('timeout' = '3600');";
+        StatementBase statement = UtFrameUtils.parseStmtWithNewParser(createSql, starRocksAssert.getCtx());
+        ctxToTestUser();
+        ConnectContext ctx = starRocksAssert.getCtx();
+        try {
+            PrivilegeCheckerV2.check(statement, ctx);
+            Assert.fail();
+        } catch (SemanticException e) {
+            System.out.println(e.getMessage() + ", sql: " + createSql);
+            Assert.assertTrue(e.getMessage().contains(
+                    "Access denied; you need (at least one of) the USAGE privilege(s) for this operation"
+            ));
+        }
+        // create load & check table privilege
+        createSql = "LOAD LABEL db1.job_name1" +
+                    "(DATA INFILE('hdfs://test:8080/user/starrocks/data/input/example1.csv') " +
+                    "INTO TABLE tbl1) " +
+                    "WITH BROKER 'my_broker'" +
+                    "('username' = 'test_name','password' = 'pwd') " +
+                    "PROPERTIES ('timeout' = '3600');";
+        verifyGrantRevoke(
+                createSql,
+                "grant insert on db1.tbl1 to test",
+                "revoke insert on db1.tbl1 from test",
+                "INSERT command denied to user 'test'@'localhost' for table '[tbl1]'");
+
+
+        // create broker load
+        createSql = "LOAD LABEL db1.job_name1" +
+                    "(DATA INFILE('hdfs://test:8080/user/starrocks/data/input/example1.csv') " +
+                    "INTO TABLE tbl1) " +
+                    "WITH RESOURCE 'my_spark'" +
+                    "('username' = 'test_name','password' = 'pwd') " +
+                    "PROPERTIES ('timeout' = '3600');";
+        starRocksAssert.withLoad(createSql);
+
+        // ALTER LOAD STMT
+        String alterLoadSql = "ALTER LOAD FOR db1.job_name1 PROPERTIES ('priority' = 'LOW');";
+        checkOperateLoad(alterLoadSql);
+
+        // CANCEL LOAD STMT
+        ctxToRoot();
+        String revokeResource = "revoke USAGE on resource 'my_spark' from test;";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(revokeResource, ctx), ctx);
+        ctxToTestUser();
+        String cancelLoadSql = "CANCEL LOAD FROM db1 WHERE LABEL = 'job_name1'";
+        checkOperateLoad(cancelLoadSql);
+
+        // SHOW LOAD STMT
+        String showLoadSql = "SHOW LOAD FROM db1";
+        statement = UtFrameUtils.parseStmtWithNewParser(showLoadSql, starRocksAssert.getCtx());
+        PrivilegeCheckerV2.check(statement, ctx);
     }
 }
