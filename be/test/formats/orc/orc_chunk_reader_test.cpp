@@ -1565,6 +1565,44 @@ TEST_F(OrcChunkReaderTest, TestReadStructCaseSensitiveField) {
 }
 
 /**
+ * ORC format: struct<c0:int,c1:struct<cc0:int,Cc1:string>>
+ * Data:
+ * {c0: 1, c1: {cc0: 11, Cc1: "Smith"}}
+ * {c0: 2, c1: {cc0: 22, Cc1: "Cruise"}}
+ * {c0: 3, c1: {cc0: 33, Cc1: "hello"}}
+ * {c0: 4, c1: {cc0: 44, Cc1: "world"}}
+ */
+TEST_F(OrcChunkReaderTest, TestUnConvertableType) {
+    static const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/orc_test_struct_basic.orc";
+
+    {
+        /**
+        *  Load one subfield
+        */
+        SlotDesc c0{"c1", TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT)};
+        SlotDesc c1{"c0", TypeDescriptor::from_primtive_type(LogicalType::TYPE_STRUCT)};
+        c1.type.children.push_back(TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR));
+        c1.type.field_names.emplace_back("Cc1");
+        c1.type.selected_fields.reserve(1);
+        c1.type.selected_fields.clear();
+        c1.type.selected_fields.push_back(true);
+
+        SlotDesc slot_descs[] = {c0, c1, {""}};
+
+        std::vector<SlotDescriptor*> src_slot_descriptors;
+        ObjectPool pool;
+        create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
+
+        OrcChunkReader reader(_runtime_state.get(), src_slot_descriptors);
+        reader.set_use_orc_column_names(true);
+        reader.set_case_sensitive(true);
+        auto input_stream = orc::readLocalFile(input_orc_file);
+        Status st = reader.init(std::move(input_stream));
+        EXPECT_FALSE(!st.ok());
+    }
+}
+
+/**
  * ORC format: struct<c0:int,c1:array<struct<c11:int,c12:array<string>>>,c2:array<map<int,struct<c21:int,c22:string>>>>
  */
 TEST_F(OrcChunkReaderTest, TestReadStructArrayMap) {

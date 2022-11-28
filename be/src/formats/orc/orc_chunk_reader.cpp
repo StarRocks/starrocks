@@ -30,7 +30,7 @@ namespace starrocks::vectorized {
 const FillColumnFunction& find_fill_func(LogicalType type, bool nullable);
 
 // NOLINTNEXTLINE
-const static std::unordered_map<orc::TypeKind, LogicalType> g_orc_starrocks_type_mapping = {
+const static std::unordered_map<orc::TypeKind, LogicalType> g_orc_starrocks_primitive_type_mapping = {
         {orc::BOOLEAN, TYPE_BOOLEAN},
         {orc::BYTE, TYPE_TINYINT},
         {orc::SHORT, TYPE_SMALLINT},
@@ -49,9 +49,9 @@ const static std::unordered_map<orc::TypeKind, LogicalType> g_orc_starrocks_type
 };
 
 // NOLINTNEXTLINE
-const static std::set<orc::TypeKind> g_orc_int_type = {
-        orc::BOOLEAN, orc::BYTE, orc::SHORT, orc::INT, orc::LONG, orc::FLOAT, orc::DOUBLE,
-};
+//const static std::set<orc::TypeKind> g_orc_int_type = {
+//        orc::BOOLEAN, orc::BYTE, orc::SHORT, orc::INT, orc::LONG, orc::FLOAT, orc::DOUBLE,
+//};
 
 // NOLINTNEXTLINE
 const static std::set<LogicalType> g_starrocks_int_type = {TYPE_BOOLEAN, TYPE_TINYINT,  TYPE_SMALLINT, TYPE_INT,
@@ -1459,8 +1459,8 @@ static Status _create_type_descriptor_by_orc(const TypeDescriptor& origin_type, 
         auto precision = (int)orc_type->getPrecision();
         auto scale = (int)orc_type->getScale();
         auto len = (int)orc_type->getMaximumLength();
-        auto iter = g_orc_starrocks_type_mapping.find(kind);
-        if (iter == g_orc_starrocks_type_mapping.end()) {
+        auto iter = g_orc_starrocks_primitive_type_mapping.find(kind);
+        if (iter == g_orc_starrocks_primitive_type_mapping.end()) {
             return Status::NotSupported("Unsupported ORC type: " + orc_type->toString());
         }
         result->type = iter->second;
