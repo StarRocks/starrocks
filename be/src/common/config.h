@@ -892,9 +892,7 @@ CONF_mInt64(send_channel_buffer_limit, "67108864");
 // 2, print all exceptions' stack that is not in black_lists
 // other value means the default value
 CONF_Int32(exception_stack_level, "1");
-CONF_String(exception_stack_white_list,
-            "bad_alloc,runtime_error,logic_error,length_error,out_of_range,range_error,overflow_error,bad_typeid,bad_"
-            "cast,system_error");
+CONF_String(exception_stack_white_list, "std::");
 CONF_String(exception_stack_black_list, "apache::thrift::,ue2::");
 
 } // namespace starrocks::config
