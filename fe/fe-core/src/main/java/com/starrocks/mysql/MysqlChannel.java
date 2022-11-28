@@ -263,8 +263,7 @@ public class MysqlChannel {
     }
 
     private void writeHeader(int length) throws IOException {
-        long leftLength = sendBuffer.capacity() - sendBuffer.position();
-        if (leftLength < 4) {
+        if ((sendBuffer.capacity() - sendBuffer.position()) < 4) {
             flush();
         }
 

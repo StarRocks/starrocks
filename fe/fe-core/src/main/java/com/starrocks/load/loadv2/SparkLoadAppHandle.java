@@ -38,8 +38,6 @@ import java.util.List;
 
 public class SparkLoadAppHandle implements Writable {
     private static final Logger LOG = LogManager.getLogger(SparkLoadAppHandle.class);
-    // 5min
-    private static final long SUBMIT_APP_TIMEOUT_MS = 300 * 1000;
 
     private transient Process process;
 

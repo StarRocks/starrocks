@@ -68,7 +68,7 @@ public class FastByteArrayInputStream extends InputStream {
 
     public final long skip(long n) {
         if ((pos + n) > count) {
-            n = count - pos;
+            n = (long) count - (long) pos;
         }
         if (n < 0) {
             return 0;
