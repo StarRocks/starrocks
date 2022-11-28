@@ -101,4 +101,54 @@ scoped_refptr<TabletsChannel> LoadChannel::get_tablets_channel(int64_t index_id)
     return (it != _tablets_channels.end()) ? it->second : nullptr;
 }
 
+<<<<<<< HEAD
+=======
+Status LoadChannel::_build_chunk_meta(const ChunkPB& pb_chunk) {
+    if (_has_chunk_meta.load(std::memory_order_acquire)) {
+        return Status::OK();
+    }
+    std::lock_guard l(_chunk_meta_lock);
+    if (_has_chunk_meta.load(std::memory_order_acquire)) {
+        return Status::OK();
+    }
+    StatusOr<serde::ProtobufChunkMeta> res = serde::build_protobuf_chunk_meta(*_row_desc, pb_chunk);
+    if (!res.ok()) return res.status();
+    _chunk_meta = std::move(res).value();
+    _has_chunk_meta.store(true, std::memory_order_release);
+    return Status::OK();
+}
+
+Status LoadChannel::_deserialize_chunk(const ChunkPB& pchunk, vectorized::Chunk& chunk,
+                                       faststring* uncompressed_buffer) {
+    if (pchunk.compress_type() == CompressionTypePB::NO_COMPRESSION) {
+        TRY_CATCH_BAD_ALLOC({
+            serde::ProtobufChunkDeserializer des(_chunk_meta);
+            StatusOr<vectorized::Chunk> res = des.deserialize(pchunk.data());
+            if (!res.ok()) return res.status();
+            chunk = std::move(res).value();
+        });
+    } else {
+        size_t uncompressed_size = 0;
+        {
+            const BlockCompressionCodec* codec = nullptr;
+            RETURN_IF_ERROR(get_block_compression_codec(pchunk.compress_type(), &codec));
+            uncompressed_size = pchunk.uncompressed_size();
+            TRY_CATCH_BAD_ALLOC(uncompressed_buffer->resize(uncompressed_size));
+            Slice output{uncompressed_buffer->data(), uncompressed_size};
+            RETURN_IF_ERROR(codec->decompress(pchunk.data(), &output));
+        }
+        {
+            TRY_CATCH_BAD_ALLOC({
+                std::string_view buff(reinterpret_cast<const char*>(uncompressed_buffer->data()), uncompressed_size);
+                serde::ProtobufChunkDeserializer des(_chunk_meta);
+                StatusOr<vectorized::Chunk> res = Status::OK();
+                TRY_CATCH_BAD_ALLOC(res = des.deserialize(buff));
+                if (!res.ok()) return res.status();
+                chunk = std::move(res).value();
+            });
+        }
+    }
+    return Status::OK();
+}
+>>>>>>> 465c43bca ([Enhancement] Add catch bad alloc for serialize/finalize/transmit_chunk (#13641))
 } // namespace starrocks

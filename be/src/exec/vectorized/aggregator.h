@@ -15,6 +15,7 @@
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/expr.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 #include "runtime/types.h"
@@ -118,7 +119,7 @@ public:
     void compute_batch_agg_states_with_selection(size_t chunk_size);
 
     // Convert one row agg states to chunk
-    void convert_to_chunk_no_groupby(vectorized::ChunkPtr* chunk);
+    Status convert_to_chunk_no_groupby(vectorized::ChunkPtr* chunk);
 
     void process_limit(vectorized::ChunkPtr* chunk);
 
@@ -255,6 +256,7 @@ private:
     RuntimeProfile::Counter* _expr_release_timer{};
 
 public:
+<<<<<<< HEAD
     template <typename HashMapWithKey>
     void build_hash_map(HashMapWithKey& hash_map_with_key, size_t chunk_size, bool agg_group_by_with_limit = false) {
         if (agg_group_by_with_limit) {
@@ -292,6 +294,11 @@ public:
                 },
                 &_tmp_agg_states, &_streaming_selection);
     }
+=======
+    void build_hash_map(size_t chunk_size, bool agg_group_by_with_limit = false);
+    void build_hash_map_with_selection(size_t chunk_size);
+    Status convert_hash_map_to_chunk(int32_t chunk_size, vectorized::ChunkPtr* chunk);
+>>>>>>> 465c43bca ([Enhancement] Add catch bad alloc for serialize/finalize/transmit_chunk (#13641))
 
     template <typename HashSetWithKey>
     void build_hash_set(HashSetWithKey& hash_set, size_t chunk_size) {

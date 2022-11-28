@@ -175,9 +175,41 @@ Status NodeChannel::open_wait() {
         return _err_st;
     }
 
+<<<<<<< HEAD
     // add batch closure
     _add_batch_closure = ReusableClosure<PTabletWriterAddBatchResult>::create();
     _add_batch_closure->addFailedHandler([this]() {
+=======
+    if (open_closure->result.has_is_repeated_chunk()) {
+        _enable_colocate_mv_index &= open_closure->result.is_repeated_chunk();
+    } else {
+        _enable_colocate_mv_index = false;
+    }
+
+    return status;
+}
+
+Status NodeChannel::_serialize_chunk(const vectorized::Chunk* src, ChunkPB* dst) {
+    VLOG_ROW << "serializing " << src->num_rows() << " rows";
+
+    {
+        SCOPED_RAW_TIMER(&_serialize_batch_ns);
+        StatusOr<ChunkPB> res = Status::OK();
+        TRY_CATCH_BAD_ALLOC(res = serde::ProtobufChunkSerde::serialize(*src));
+        if (!res.ok()) {
+            _cancelled = true;
+            _err_st = res.status();
+            return _err_st;
+        }
+        res->Swap(dst);
+    }
+    DCHECK(dst->has_uncompressed_size());
+    DCHECK_EQ(dst->uncompressed_size(), dst->data().size());
+
+    size_t uncompressed_size = dst->uncompressed_size();
+
+    if (_compress_codec != nullptr && _compress_codec->exceed_max_input_size(uncompressed_size)) {
+>>>>>>> 465c43bca ([Enhancement] Add catch bad alloc for serialize/finalize/transmit_chunk (#13641))
         _cancelled = true;
         _err_st = _add_batch_closure->result.status();
     });
