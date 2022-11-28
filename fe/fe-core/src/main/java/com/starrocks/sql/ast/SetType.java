@@ -29,6 +29,10 @@ public enum SetType {
         if (tType == TVarType.GLOBAL) {
             return SetType.GLOBAL;
         }
+
+        if (tType == TVarType.VERBOSE) {
+            return SetType.VERBOSE;
+        }
         return SetType.SESSION;
     }
 }
