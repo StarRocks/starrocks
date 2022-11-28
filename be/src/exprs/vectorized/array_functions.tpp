@@ -1053,6 +1053,8 @@ private:
     }
 };
 
+// by design array_filter(array, bool_array), if bool_array is null, return an empty array. We do not return null, as
+// it will change the null property of return results which keeps the same with the first argument array.
 class ArrayFilter {
 public:
     static ColumnPtr process([[maybe_unused]] FunctionContext* ctx, const Columns& columns) {
@@ -1061,11 +1063,22 @@ public:
 
 private:
     static ColumnPtr _array_filter(const Columns& columns) {
-        RETURN_IF_COLUMNS_ONLY_NULL(columns);
+        if (columns[0]->only_null()) {
+            return columns[0];
+        }
 
         size_t chunk_size = columns[0]->size();
         ColumnPtr src_column = ColumnHelper::unpack_and_duplicate_const_column(chunk_size, columns[0]);
         ColumnPtr dest_column = src_column->clone_empty();
+        if (columns[1]->only_null()) { // return empty array for non-null array by design.
+            auto data_column = dest_column;
+            if (dest_column->is_nullable()) {
+                data_column = down_cast<const NullableColumn*>(dest_column.get())->data_column();
+            }
+            data_column->append_default(chunk_size);
+            return dest_column;
+        }
+
         ColumnPtr bool_column = ColumnHelper::unpack_and_duplicate_const_column(chunk_size, columns[1]);
 
         if (src_column->is_nullable()) {
