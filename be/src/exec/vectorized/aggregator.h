@@ -305,7 +305,8 @@ public:
     }
 
     template <typename HashMapWithKey>
-    Status convert_hash_map_to_chunk(HashMapWithKey& hash_map_with_key, int32_t chunk_size, vectorized::ChunkPtr* chunk) {
+    Status convert_hash_map_to_chunk(HashMapWithKey& hash_map_with_key, int32_t chunk_size,
+                                     vectorized::ChunkPtr* chunk) {
         SCOPED_TIMER(_get_results_timer);
         using Iterator = typename HashMapWithKey::Iterator;
         auto it = std::any_cast<Iterator>(_it_hash);
@@ -336,12 +337,14 @@ public:
             if (_needs_finalize) {
                 for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
                     TRY_CATCH_BAD_ALLOC(_agg_functions[i]->batch_finalize(_agg_fn_ctxs[i], read_index, _tmp_agg_states,
-                                                      _agg_states_offsets[i], agg_result_columns[i].get()));
+                                                                          _agg_states_offsets[i],
+                                                                          agg_result_columns[i].get()));
                 }
             } else {
                 for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
                     TRY_CATCH_BAD_ALLOC(_agg_functions[i]->batch_serialize(_agg_fn_ctxs[i], read_index, _tmp_agg_states,
-                                                       _agg_states_offsets[i], agg_result_columns[i].get()));
+                                                                           _agg_states_offsets[i],
+                                                                           agg_result_columns[i].get()));
                 }
             }
         }

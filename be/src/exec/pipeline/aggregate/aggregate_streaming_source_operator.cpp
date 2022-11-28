@@ -91,8 +91,8 @@ Status AggregateStreamingSourceOperator::_output_chunk_from_hash_map(vectorized:
     if (false) {
     }
 #define HASH_MAP_METHOD(NAME)                                                                                     \
-    else if (_aggregator->hash_map_variant().type == vectorized::AggHashMapVariant::Type::NAME)                   \
-            RETURN_IF_ERROR(_aggregator->convert_hash_map_to_chunk<decltype(_aggregator->hash_map_variant().NAME)::element_type>( \
+    else if (_aggregator->hash_map_variant().type == vectorized::AggHashMapVariant::Type::NAME) RETURN_IF_ERROR(  \
+            _aggregator->convert_hash_map_to_chunk<decltype(_aggregator->hash_map_variant().NAME)::element_type>( \
                     *_aggregator->hash_map_variant().NAME, state->chunk_size(), chunk));
     APPLY_FOR_AGG_VARIANT_ALL(HASH_MAP_METHOD)
 #undef HASH_MAP_METHOD
