@@ -25,6 +25,17 @@ bool WorkGroupSchedEntity<Q>::is_sq_wg() const {
     return _workgroup->is_sq_wg();
 }
 
+template <typename Q>
+void WorkGroupSchedEntity<Q>::incr_runtime_ns(int64_t runtime_ns) {
+    _vruntime_ns += runtime_ns / cpu_limit();
+    _unadjusted_runtime_ns += runtime_ns;
+}
+
+template <typename Q>
+void WorkGroupSchedEntity<Q>::adjust_runtime_ns(int64_t runtime_ns) {
+    _vruntime_ns += runtime_ns / cpu_limit();
+}
+
 template class WorkGroupSchedEntity<pipeline::DriverQueue>;
 template class WorkGroupSchedEntity<ScanTaskQueue>;
 
@@ -302,15 +313,33 @@ void WorkGroupManager::add_metrics_unlocked(const WorkGroupPtr& wg, UniqueLockTy
     _wg_metrics[wg->name()] = wg->unique_id();
 }
 
+double _calculate_ratio(int64_t curr_value, int64_t sum_value) {
+    if (sum_value <= 0) {
+        return 0;
+    }
+    return double(curr_value) / sum_value;
+}
+
 void WorkGroupManager::update_metrics_unlocked() {
     int64_t sum_cpu_runtime_ns = 0;
     int64_t sum_scan_runtime_ns = 0;
     int64_t sum_connector_scan_runtime_ns = 0;
     for (const auto& [_, wg] : _workgroups) {
-        sum_cpu_runtime_ns += wg->driver_sched_entity()->runtime_ns();
-        sum_scan_runtime_ns += wg->scan_sched_entity()->runtime_ns();
-        sum_connector_scan_runtime_ns += wg->connector_scan_sched_entity()->runtime_ns();
+        wg->driver_sched_entity()->mark_curr_runtime_ns();
+        wg->scan_sched_entity()->mark_curr_runtime_ns();
+        wg->connector_scan_sched_entity()->mark_curr_runtime_ns();
+
+        sum_cpu_runtime_ns += wg->driver_sched_entity()->growth_runtime_ns();
+        sum_scan_runtime_ns += wg->scan_sched_entity()->growth_runtime_ns();
+        sum_connector_scan_runtime_ns += wg->connector_scan_sched_entity()->growth_runtime_ns();
     }
+    DeferOp mark_last_runtime_op([this] {
+        for (const auto& [_, wg] : _workgroups) {
+            wg->driver_sched_entity()->mark_last_runtime_ns();
+            wg->scan_sched_entity()->mark_last_runtime_ns();
+            wg->connector_scan_sched_entity()->mark_last_runtime_ns();
+        }
+    });
 
     for (const auto& [name, wg_id] : _wg_metrics) {
         auto wg_it = _workgroups.find(wg_id);
@@ -318,15 +347,11 @@ void WorkGroupManager::update_metrics_unlocked() {
             const auto& wg = wg_it->second;
             VLOG(2) << "workgroup update_metrics " << name;
 
-            double cpu_expected_use_ratio = _sum_cpu_limit == 0 ? 0 : double(wg->cpu_limit()) / _sum_cpu_limit;
-            double cpu_use_ratio =
-                    sum_cpu_runtime_ns <= 0 ? 0 : double(wg->driver_sched_entity()->runtime_ns()) / sum_cpu_runtime_ns;
-            double scan_use_ratio =
-                    sum_scan_runtime_ns <= 0 ? 0 : double(wg->scan_sched_entity()->runtime_ns()) / sum_scan_runtime_ns;
-            double connector_scan_use_ratio =
-                    sum_connector_scan_runtime_ns <= 0
-                            ? 0
-                            : double(wg->connector_scan_sched_entity()->runtime_ns()) / sum_connector_scan_runtime_ns;
+            double cpu_expected_use_ratio = _calculate_ratio(wg->cpu_limit(), _sum_cpu_limit);
+            double cpu_use_ratio = _calculate_ratio(wg->driver_sched_entity()->growth_runtime_ns(), sum_cpu_runtime_ns);
+            double scan_use_ratio = _calculate_ratio(wg->scan_sched_entity()->growth_runtime_ns(), sum_scan_runtime_ns);
+            double connector_scan_use_ratio = _calculate_ratio(wg->connector_scan_sched_entity()->growth_runtime_ns(),
+                                                               sum_connector_scan_runtime_ns);
 
             _wg_cpu_limit_metrics[name]->set_value(cpu_expected_use_ratio);
             _wg_cpu_metrics[name]->set_value(cpu_use_ratio);
