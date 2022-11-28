@@ -23,6 +23,7 @@
 #include "exprs/expr.h"
 #include "gen_cpp/QueryPlanExtra_constants.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
@@ -205,7 +206,7 @@ public:
     void compute_batch_agg_states_with_selection(size_t chunk_size);
 
     // Convert one row agg states to chunk
-    void convert_to_chunk_no_groupby(vectorized::ChunkPtr* chunk);
+    Status convert_to_chunk_no_groupby(vectorized::ChunkPtr* chunk);
 
     void process_limit(vectorized::ChunkPtr* chunk);
 
@@ -348,6 +349,7 @@ protected:
     AggStatistics* _agg_stat;
 
 public:
+<<<<<<< HEAD
     template <typename HashMapWithKey>
     ATTRIBUTE_NOINLINE void build_hash_map(HashMapWithKey& hash_map_with_key, size_t chunk_size,
                                            bool agg_group_by_with_limit = false) {
@@ -378,6 +380,11 @@ public:
     ATTRIBUTE_NOINLINE void build_hash_set_with_selection(HashSetWithKey& hash_set, size_t chunk_size) {
         hash_set.build_set(chunk_size, _group_by_columns, &_streaming_selection);
     }
+=======
+    void build_hash_map(size_t chunk_size, bool agg_group_by_with_limit = false);
+    void build_hash_map_with_selection(size_t chunk_size);
+    Status convert_hash_map_to_chunk(int32_t chunk_size, vectorized::ChunkPtr* chunk);
+>>>>>>> 465c43bca ([Enhancement] Add catch bad alloc for serialize/finalize/transmit_chunk (#13641))
 
     template <typename HashMapWithKey>
     ATTRIBUTE_NOINLINE void convert_hash_map_to_chunk(HashMapWithKey& hash_map_with_key, int32_t chunk_size,

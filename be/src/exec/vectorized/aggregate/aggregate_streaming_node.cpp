@@ -171,7 +171,7 @@ Status AggregateStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bo
 
         if (_aggregator->hash_map_variant().size() > 0) {
             // child has iterator over, and the hashtable has data
-            _output_chunk_from_hash_map(chunk);
+            RETURN_IF_ERROR(_output_chunk_from_hash_map(chunk));
             *eos = false;
             _aggregator->process_limit(chunk);
             DCHECK_CHUNK(*chunk);
@@ -191,15 +191,20 @@ Status AggregateStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bo
     return Status::OK();
 }
 
-void AggregateStreamingNode::_output_chunk_from_hash_map(ChunkPtr* chunk) {
+Status AggregateStreamingNode::_output_chunk_from_hash_map(ChunkPtr* chunk) {
     if (!_aggregator->it_hash().has_value()) {
         _aggregator->it_hash() = _aggregator->_state_allocator.begin();
         COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_map_variant().size());
     }
 
+<<<<<<< HEAD
     _aggregator->hash_map_variant().visit([&](auto& hash_map_with_key) {
         _aggregator->convert_hash_map_to_chunk(*hash_map_with_key, runtime_state()->chunk_size(), chunk);
     });
+=======
+    RETURN_IF_ERROR(_aggregator->convert_hash_map_to_chunk(runtime_state()->chunk_size(), chunk));
+    return Status::OK();
+>>>>>>> 465c43bca ([Enhancement] Add catch bad alloc for serialize/finalize/transmit_chunk (#13641))
 }
 
 std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateStreamingNode::decompose_to_pipeline(
