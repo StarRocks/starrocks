@@ -43,6 +43,9 @@ public:
         /// Init DescriptorTable
         TDescriptorTableBuilder desc_tbl_builder;
         for (auto& slot_info : slot_infos) {
+            if (slot_info.empty()) {
+                continue;
+            }
             generate_desc_tuple(slot_info, &desc_tbl_builder);
         }
         DescriptorTbl* desc_tbl = nullptr;
