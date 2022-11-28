@@ -640,7 +640,7 @@ void FileReaderTest::_create_int_conjunct_ctxs(TExprOpcode::type opcode, SlotId 
     std::vector<TExpr> t_conjuncts;
     t_conjuncts.emplace_back(t_expr);
 
-    Expr::create_expr_trees(&_pool, t_conjuncts, conjunct_ctxs);
+    Expr::create_expr_trees(&_pool, t_conjuncts, conjunct_ctxs, nullptr);
     Expr::prepare(*conjunct_ctxs, _runtime_state);
     Expr::open(*conjunct_ctxs, _runtime_state);
 }
@@ -689,7 +689,7 @@ void FileReaderTest::_create_string_conjunct_ctxs(TExprOpcode::type opcode, Slot
     std::vector<TExpr> t_conjuncts;
     t_conjuncts.emplace_back(t_expr);
 
-    Expr::create_expr_trees(&_pool, t_conjuncts, conjunct_ctxs);
+    Expr::create_expr_trees(&_pool, t_conjuncts, conjunct_ctxs, nullptr);
     Expr::prepare(*conjunct_ctxs, _runtime_state);
     Expr::open(*conjunct_ctxs, _runtime_state);
 }

@@ -22,7 +22,7 @@ OlapTablePartitionParam::OlapTablePartitionParam(std::shared_ptr<OlapTableSchema
 
 OlapTablePartitionParam::~OlapTablePartitionParam() = default;
 
-Status OlapTablePartitionParam::init() {
+Status OlapTablePartitionParam::init(RuntimeState* state) {
     std::map<std::string, SlotDescriptor*> slots_map;
     for (auto slot_desc : _schema->tuple_desc()->slots()) {
         slots_map.emplace(slot_desc->col_name(), slot_desc);
@@ -54,7 +54,7 @@ Status OlapTablePartitionParam::init() {
     _distributed_columns.resize(_distributed_slot_descs.size());
 
     if (_t_param.__isset.partition_exprs) {
-        RETURN_IF_ERROR(Expr::create_expr_trees(&_obj_pool, _t_param.partition_exprs, &_partitions_expr_ctxs));
+        RETURN_IF_ERROR(Expr::create_expr_trees(&_obj_pool, _t_param.partition_exprs, &_partitions_expr_ctxs, state));
     }
 
     // initial partitions

@@ -126,7 +126,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > DistinctBlockingNode::d
         AggrMode aggr_mode = should_cache ? (post_cache ? AM_BLOCKING_POST_CACHE : AM_BLOCKING_PRE_CACHE) : AM_DEFAULT;
         aggregator_factory->set_aggr_mode(aggr_mode);
         std::vector<ExprContext*> partition_expr_ctxs;
-        Expr::create_expr_trees(_pool, _tnode.agg_node.grouping_exprs, &partition_expr_ctxs);
+        Expr::create_expr_trees(_pool, _tnode.agg_node.grouping_exprs, &partition_expr_ctxs, runtime_state());
         Expr::prepare(partition_expr_ctxs, runtime_state());
         Expr::open(partition_expr_ctxs, runtime_state());
         auto sink_operator = std::make_shared<AggregateDistinctBlockingSinkOperatorFactory>(

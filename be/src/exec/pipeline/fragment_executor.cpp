@@ -790,10 +790,10 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
             Status st;
             std::unique_ptr<starrocks::stream_load::OlapTableSink> sink =
                     std::make_unique<starrocks::stream_load::OlapTableSink>(runtime_state->obj_pool(), output_exprs,
-                                                                            &st);
+                                                                            &st, runtime_state);
             RETURN_IF_ERROR(st);
             if (sink != nullptr) {
-                RETURN_IF_ERROR(sink->init(thrift_sink));
+                RETURN_IF_ERROR(sink->init(thrift_sink, runtime_state));
             }
             RuntimeProfile* sink_profile = sink->profile();
             if (sink_profile != nullptr) {
