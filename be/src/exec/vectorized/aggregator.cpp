@@ -969,7 +969,7 @@ void Aggregator::build_hash_map_with_selection(size_t chunk_size) {
     });
 }
 
-void Aggregator::build_hash_map_allocate_and_with_selection(size_t chunk_size) {
+void Aggregator::build_hash_map_allocate_and_with_selection(size_t chunk_size, bool agg_group_by_with_limit) {
     _hash_map_variant.visit([&](auto& hash_map_with_key) {
         using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
         using Func = decltype(AllocateState<MapType>(this));
