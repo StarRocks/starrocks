@@ -513,15 +513,15 @@ Status Aggregator::_evaluate_const_columns(int i) {
     return Status::OK();
 }
 
-void Aggregator::convert_to_chunk_no_groupby(vectorized::ChunkPtr* chunk) {
+Status Aggregator::convert_to_chunk_no_groupby(vectorized::ChunkPtr* chunk) {
     SCOPED_TIMER(_agg_stat->get_results_timer);
     // TODO(kks): we should approve memory allocate here
     vectorized::Columns agg_result_column = _create_agg_result_columns(1);
     auto use_intermediate = _use_intermediate_as_output();
     if (!use_intermediate) {
-        _finalize_to_chunk(_single_agg_state, agg_result_column);
+        TRY_CATCH_BAD_ALLOC(_finalize_to_chunk(_single_agg_state, agg_result_column));
     } else {
-        _serialize_to_chunk(_single_agg_state, agg_result_column);
+        TRY_CATCH_BAD_ALLOC(_serialize_to_chunk(_single_agg_state, agg_result_column));
     }
 
     // For agg function column is non-nullable and table is empty
@@ -545,6 +545,8 @@ void Aggregator::convert_to_chunk_no_groupby(vectorized::ChunkPtr* chunk) {
     ++_num_rows_processed;
     *chunk = std::move(result_chunk);
     _is_ht_eos = true;
+
+    return Status::OK();
 }
 
 void Aggregator::process_limit(vectorized::ChunkPtr* chunk) {
@@ -962,10 +964,10 @@ void Aggregator::build_hash_map_with_selection(size_t chunk_size) {
     });
 }
 
-void Aggregator::convert_hash_map_to_chunk(int32_t chunk_size, vectorized::ChunkPtr* chunk) {
+Status Aggregator::convert_hash_map_to_chunk(int32_t chunk_size, vectorized::ChunkPtr* chunk) {
     SCOPED_TIMER(_agg_stat->get_results_timer);
 
-    _hash_map_variant.visit([&](auto& variant_value) {
+    RETURN_IF_ERROR(_hash_map_variant.visit([&](auto& variant_value) {
         auto& hash_map_with_key = *variant_value;
         using HashMapWithKey = std::remove_reference_t<decltype(hash_map_with_key)>;
 
@@ -1001,13 +1003,15 @@ void Aggregator::convert_hash_map_to_chunk(int32_t chunk_size, vectorized::Chunk
             SCOPED_TIMER(_agg_stat->agg_append_timer);
             if (!use_intermediate) {
                 for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
-                    _agg_functions[i]->batch_finalize(_agg_fn_ctxs[i], read_index, _tmp_agg_states,
-                                                      _agg_states_offsets[i], agg_result_columns[i].get());
+                    TRY_CATCH_BAD_ALLOC(_agg_functions[i]->batch_finalize(_agg_fn_ctxs[i], read_index, _tmp_agg_states,
+                                                                          _agg_states_offsets[i],
+                                                                          agg_result_columns[i].get()));
                 }
             } else {
                 for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
-                    _agg_functions[i]->batch_serialize(_agg_fn_ctxs[i], read_index, _tmp_agg_states,
-                                                       _agg_states_offsets[i], agg_result_columns[i].get());
+                    TRY_CATCH_BAD_ALLOC(_agg_functions[i]->batch_serialize(_agg_fn_ctxs[i], read_index, _tmp_agg_states,
+                                                                           _agg_states_offsets[i],
+                                                                           agg_result_columns[i].get()));
                 }
             }
         }
@@ -1025,9 +1029,9 @@ void Aggregator::convert_hash_map_to_chunk(int32_t chunk_size, vectorized::Chunk
                     group_by_columns[0]->append_default();
 
                     if (!use_intermediate) {
-                        _finalize_to_chunk(hash_map_with_key.null_key_data, agg_result_columns);
+                        TRY_CATCH_BAD_ALLOC(_finalize_to_chunk(hash_map_with_key.null_key_data, agg_result_columns));
                     } else {
-                        _serialize_to_chunk(hash_map_with_key.null_key_data, agg_result_columns);
+                        TRY_CATCH_BAD_ALLOC(_serialize_to_chunk(hash_map_with_key.null_key_data, agg_result_columns));
                     }
 
                     ++read_index;
@@ -1043,7 +1047,11 @@ void Aggregator::convert_hash_map_to_chunk(int32_t chunk_size, vectorized::Chunk
         _num_rows_returned += read_index;
         _num_rows_processed += read_index;
         *chunk = std::move(result_chunk);
-    });
+
+        return Status::OK();
+    }));
+
+    return Status::OK();
 }
 
 void Aggregator::build_hash_set(size_t chunk_size) {
