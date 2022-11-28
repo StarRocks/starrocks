@@ -190,6 +190,14 @@ public:
 
     Status init();
 
+    uint64_t file_size() {
+        if (_index_file != nullptr) {
+            return _index_file->size();
+        } else {
+            return 0;
+        }
+    }
+
     // batch get
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
@@ -318,11 +326,13 @@ public:
     Status check_not_exist(size_t n, const Slice* keys, size_t key_size);
 
     // get Immutable index file size;
-    void file_size(uint64_t* file_size) {
+    uint64_t file_size() {
         if (_file != nullptr) {
             auto res = _file->get_size();
             CHECK(res.ok()) << res.status(); // FIXME: no abort
-            *file_size = *res;
+            return *res;
+        } else {
+            return 0;
         }
     }
 
@@ -531,8 +541,6 @@ private:
     bool _can_dump_directly();
 
     Status _delete_expired_index_file(const EditVersion& l0_version, const EditVersion& l1_version);
-
-    Status _check_and_flush_l0();
 
     Status _flush_l0();
 
