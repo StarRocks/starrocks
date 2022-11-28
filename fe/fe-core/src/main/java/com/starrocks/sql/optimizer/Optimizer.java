@@ -38,8 +38,11 @@ import com.starrocks.sql.optimizer.rule.transformation.SemiReorderRule;
 import com.starrocks.sql.optimizer.task.DeriveStatsTask;
 import com.starrocks.sql.optimizer.task.OptimizeGroupTask;
 import com.starrocks.sql.optimizer.task.TaskContext;
+<<<<<<< HEAD
 import com.starrocks.sql.optimizer.task.TopDownRewriteIterativeTask;
 import com.starrocks.sql.optimizer.task.TopDownRewriteOnceTask;
+=======
+>>>>>>> 7ccfdb6c7 ([BugFix] add FORBID_INVALID_DATA sql_mode (#13768))
 import com.starrocks.sql.optimizer.validate.OptExpressionValidator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -58,6 +61,36 @@ public class Optimizer {
         return context;
     }
 
+<<<<<<< HEAD
+=======
+    public OptExpression optimize(ConnectContext connectContext,
+                                  OptExpression logicOperatorTree,
+                                  PhysicalPropertySet requiredProperty,
+                                  ColumnRefSet requiredColumns,
+                                  ColumnRefFactory columnRefFactory) {
+        prepare(connectContext, logicOperatorTree, columnRefFactory);
+        if (optimizerConfig.isRuleBased()) {
+            return optimizeByRule(connectContext, logicOperatorTree, requiredProperty, requiredColumns);
+        } else {
+            return optimizeByCost(connectContext, logicOperatorTree, requiredProperty, requiredColumns);
+        }
+    }
+
+    // Optimize by rule will return logical plan.
+    // Used by materialized view query rewrite optimization.
+    private OptExpression optimizeByRule(ConnectContext connectContext,
+                                         OptExpression logicOperatorTree,
+                                         PhysicalPropertySet requiredProperty,
+                                         ColumnRefSet requiredColumns) {
+        OptimizerTraceUtil.logOptExpression(connectContext, "origin logicOperatorTree:\n%s", logicOperatorTree);
+        TaskContext rootTaskContext =
+                new TaskContext(context, requiredProperty, requiredColumns.clone(), Double.MAX_VALUE);
+        logicOperatorTree = rewriteAndValidatePlan(logicOperatorTree, rootTaskContext);
+        OptimizerTraceUtil.log(connectContext, "after logical rewrite, new logicOperatorTree:\n%s", logicOperatorTree);
+        return logicOperatorTree;
+    }
+
+>>>>>>> 7ccfdb6c7 ([BugFix] add FORBID_INVALID_DATA sql_mode (#13768))
     /**
      * Optimizer will transform and implement the logical operator based on
      * the {@see Rule}, then cost the physical operator, and finally find the
@@ -84,6 +117,12 @@ public class Optimizer {
         context.setTraceInfo(new OptimizerTraceInfo(connectContext.getQueryId()));
         TaskContext rootTaskContext =
                 new TaskContext(context, requiredProperty, requiredColumns.clone(), Double.MAX_VALUE);
+<<<<<<< HEAD
+=======
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.RuleBaseOptimize")) {
+            logicOperatorTree = rewriteAndValidatePlan(logicOperatorTree, rootTaskContext);
+        }
+>>>>>>> 7ccfdb6c7 ([BugFix] add FORBID_INVALID_DATA sql_mode (#13768))
 
         // Note: root group of memo maybe change after rewrite,
         // so we should always get root group and root group expression
@@ -283,10 +322,24 @@ public class Optimizer {
             CTEUtils.collectCteOperators(memo, context);
         }
 
+<<<<<<< HEAD
         // compute CTE inline by costs
         while (cteContext.needOptimizeCTE() && cteContext.hasInlineCTE()) {
             ruleRewriteOnlyOnce(memo, rootTaskContext, RuleSetType.INLINE_CTE);
             CTEUtils.collectCteOperators(memo, context);
+=======
+    private OptExpression rewriteAndValidatePlan(OptExpression tree, TaskContext rootTaskContext) {
+        OptExpression result = logicalRuleRewrite(tree, rootTaskContext);
+        OptExpressionValidator validator = new OptExpressionValidator();
+        validator.visit(tree, null);
+        return result;
+    }
+
+    private OptExpression pushDownAggregation(OptExpression tree, TaskContext rootTaskContext,
+                                              ColumnRefSet requiredColumns) {
+        if (context.getSessionVariable().getCboPushDownAggregateMode() == -1) {
+            return tree;
+>>>>>>> 7ccfdb6c7 ([BugFix] add FORBID_INVALID_DATA sql_mode (#13768))
         }
 
         ruleRewriteIterative(memo, rootTaskContext, new PruneEmptyWindowRule());

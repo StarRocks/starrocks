@@ -84,6 +84,21 @@ public class ErrorReport {
 
     public static void reportValidateException(ErrorCode errorCode, ErrorType errorType, Object... objs) {
         throw new ValidateException(errorCode.formatErrorMsg(objs), errorType);
+<<<<<<< HEAD
+=======
+    }
+
+    public interface DdlExecutor {
+        void apply() throws UserException;
+    }
+
+    public static void wrapWithRuntimeException(DdlExecutor fun) {
+        try {
+            fun.apply();
+        } catch (UserException e) {
+            throw new RuntimeException(e);
+        }
+>>>>>>> 7ccfdb6c7 ([BugFix] add FORBID_INVALID_DATA sql_mode (#13768))
     }
 
     public static void report(String pattern, Object... objs) {
