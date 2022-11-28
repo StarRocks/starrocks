@@ -35,6 +35,7 @@
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/client_cache.h"
+#include "runtime/current_thread.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/descriptors.h"
 #include "runtime/dpp_sink_internal.h"
@@ -282,7 +283,8 @@ Status DataStreamSender::Channel::_do_send_chunk_rpc(PTransmitChunkParams* reque
     _chunk_closure->cntl.Reset();
     _chunk_closure->cntl.set_timeout_ms(_brpc_timeout_ms);
     _chunk_closure->cntl.request_attachment().append(attachment);
-    _brpc_stub->transmit_chunk(&_chunk_closure->cntl, request, &_chunk_closure->result, _chunk_closure);
+    TRY_CATCH_BAD_ALLOC(
+            _brpc_stub->transmit_chunk(&_chunk_closure->cntl, request, &_chunk_closure->result, _chunk_closure));
     _request_seq++;
     return Status::OK();
 }
@@ -678,12 +680,14 @@ Status DataStreamSender::serialize_chunk(const vectorized::Chunk* src, ChunkPB* 
         SCOPED_TIMER(_serialize_chunk_timer);
         // We only serialize chunk meta for first chunk
         if (*is_first_chunk) {
-            StatusOr<ChunkPB> res = serde::ProtobufChunkSerde::serialize(*src);
+            StatusOr<ChunkPB> res = Status::OK();
+            TRY_CATCH_BAD_ALLOC(res = serde::ProtobufChunkSerde::serialize(*src));
             if (!res.ok()) return res.status();
             res->Swap(dst);
             *is_first_chunk = false;
         } else {
-            StatusOr<ChunkPB> res = serde::ProtobufChunkSerde::serialize_without_meta(*src);
+            StatusOr<ChunkPB> res = Status::OK();
+            TRY_CATCH_BAD_ALLOC(res = serde::ProtobufChunkSerde::serialize_without_meta(*src));
             if (!res.ok()) return res.status();
             res->Swap(dst);
         }

@@ -21,6 +21,6 @@ public:
             pipeline::PipelineBuilderContext* context) override;
 
 private:
-    void _output_chunk_from_hash_map(ChunkPtr* chunk);
+    Status _output_chunk_from_hash_map(ChunkPtr* chunk);
 };
 } // namespace starrocks::vectorized

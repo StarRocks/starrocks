@@ -32,9 +32,9 @@ StatusOr<vectorized::ChunkPtr> AggregateBlockingSourceOperator::pull_chunk(Runti
     vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
 
     if (_aggregator->is_none_group_by_exprs()) {
-        _aggregator->convert_to_chunk_no_groupby(&chunk);
+        RETURN_IF_ERROR(_aggregator->convert_to_chunk_no_groupby(&chunk));
     } else {
-        _aggregator->convert_hash_map_to_chunk(chunk_size, &chunk);
+        RETURN_IF_ERROR(_aggregator->convert_hash_map_to_chunk(chunk_size, &chunk));
     }
 
     size_t old_size = chunk->num_rows();
