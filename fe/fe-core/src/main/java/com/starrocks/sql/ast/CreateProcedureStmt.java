@@ -55,10 +55,17 @@ public class CreateProcedureStmt extends DdlStmt {
             if (arg.getInputType().equals(OUT)) {
                 hasOutput = true;
             }
+            if (arg.getInputType().equals(INOUT)) {
+                throw new AnalysisException("Unsupported INOUT parameter");
+            }
         }
-        List<TypeDef> typedefs = args.stream().map(ProcArgType::getType).collect(Collectors.toList());
+        if (!hasOutput) {
+            throw new AnalysisException("Unsupported no OUT parameter");
+        }
+        List<TypeDef> typedefs =
+                args.subList(1, args.size()).stream().map(ProcArgType::getType).collect(Collectors.toList());
         FunctionArgsDef funcArgs = new FunctionArgsDef(typedefs, false);
-        CreateFunctionStmt proc =
+        proc =
                 new CreateFunctionStmt("SCALAR", new FunctionName(name), funcArgs,
                         TypeDef.createVarchar(ScalarType.MAX_VARCHAR_LENGTH),
                         null, properties);

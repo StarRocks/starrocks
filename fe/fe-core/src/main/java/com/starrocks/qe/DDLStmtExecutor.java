@@ -48,6 +48,7 @@ import com.starrocks.sql.ast.CreateFileStmt;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
+import com.starrocks.sql.ast.CreateProcedureStmt;
 import com.starrocks.sql.ast.CreateRepositoryStmt;
 import com.starrocks.sql.ast.CreateResourceGroupStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
@@ -179,6 +180,19 @@ public class DDLStmtExecutor {
                     ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, name.getDb());
                 }
                 db.addFunction(stmt.getFunction());
+            });
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitCreateProcedure(CreateProcedureStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                FunctionName name = stmt.getProc().getFunctionName();
+                Database db = context.getGlobalStateMgr().getDb(name.getDb());
+                if (db == null) {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, name.getDb());
+                }
+                db.addFunction(stmt.getProc().getFunction());
             });
             return null;
         }
