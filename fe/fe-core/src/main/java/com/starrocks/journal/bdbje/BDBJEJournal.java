@@ -297,7 +297,7 @@ public class BDBJEJournal implements Journal {
             try {
                 // sleep before retry
                 if (i != 0) {
-                    Thread.sleep(SLEEP_INTERVAL_SEC * 1000);
+                    Thread.sleep(SLEEP_INTERVAL_SEC * 1000L);
                 }
 
                 currentTrasaction = currentJournalDB.getDb().getEnvironment().beginTransaction(
@@ -336,7 +336,7 @@ public class BDBJEJournal implements Journal {
             try {
                 // sleep before retry
                 if (i != 0) {
-                    Thread.sleep(SLEEP_INTERVAL_SEC * 1000);
+                    Thread.sleep(SLEEP_INTERVAL_SEC * 1000L);
                 }
 
                 OperationStatus status = currentJournalDB.put(currentTrasaction, theKey, theData);
@@ -381,7 +381,7 @@ public class BDBJEJournal implements Journal {
             for (int i = 0; i < RETRY_TIME; i++) {
                 // retry cleanups
                 if (i != 0) {
-                    Thread.sleep(SLEEP_INTERVAL_SEC * 1000);
+                    Thread.sleep(SLEEP_INTERVAL_SEC * 1000L);
 
                     if (currentTrasaction == null || !currentTrasaction.isValid()) {
                         try {

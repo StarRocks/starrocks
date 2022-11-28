@@ -32,7 +32,7 @@ public class LoadEtlChecker extends LeaderDaemon {
     private LoadManager loadManager;
 
     public LoadEtlChecker(LoadManager loadManager) {
-        super("Load etl checker", Config.load_checker_interval_second * 1000);
+        super("Load etl checker", Config.load_checker_interval_second * 1000L);
         this.loadManager = loadManager;
     }
 

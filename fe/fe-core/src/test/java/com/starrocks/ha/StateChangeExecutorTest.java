@@ -58,7 +58,7 @@ public class StateChangeExecutorTest {
             Assert.assertEquals(newType, execution.getType());
         }
 
-        executor.exit();
+        executor.setStop();
     }
 
     @Test
