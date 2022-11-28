@@ -32,8 +32,11 @@ import com.starrocks.sql.optimizer.rule.transformation.SemiReorderRule;
 import com.starrocks.sql.optimizer.task.DeriveStatsTask;
 import com.starrocks.sql.optimizer.task.OptimizeGroupTask;
 import com.starrocks.sql.optimizer.task.TaskContext;
+<<<<<<< HEAD
 import com.starrocks.sql.optimizer.task.TopDownRewriteIterativeTask;
 import com.starrocks.sql.optimizer.task.TopDownRewriteOnceTask;
+=======
+>>>>>>> 7ccfdb6c7 ([BugFix] add FORBID_INVALID_DATA sql_mode (#13768))
 import com.starrocks.sql.optimizer.validate.OptExpressionValidator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -52,6 +55,36 @@ public class Optimizer {
         return context;
     }
 
+<<<<<<< HEAD
+=======
+    public OptExpression optimize(ConnectContext connectContext,
+                                  OptExpression logicOperatorTree,
+                                  PhysicalPropertySet requiredProperty,
+                                  ColumnRefSet requiredColumns,
+                                  ColumnRefFactory columnRefFactory) {
+        prepare(connectContext, logicOperatorTree, columnRefFactory);
+        if (optimizerConfig.isRuleBased()) {
+            return optimizeByRule(connectContext, logicOperatorTree, requiredProperty, requiredColumns);
+        } else {
+            return optimizeByCost(connectContext, logicOperatorTree, requiredProperty, requiredColumns);
+        }
+    }
+
+    // Optimize by rule will return logical plan.
+    // Used by materialized view query rewrite optimization.
+    private OptExpression optimizeByRule(ConnectContext connectContext,
+                                         OptExpression logicOperatorTree,
+                                         PhysicalPropertySet requiredProperty,
+                                         ColumnRefSet requiredColumns) {
+        OptimizerTraceUtil.logOptExpression(connectContext, "origin logicOperatorTree:\n%s", logicOperatorTree);
+        TaskContext rootTaskContext =
+                new TaskContext(context, requiredProperty, requiredColumns.clone(), Double.MAX_VALUE);
+        logicOperatorTree = rewriteAndValidatePlan(logicOperatorTree, rootTaskContext);
+        OptimizerTraceUtil.log(connectContext, "after logical rewrite, new logicOperatorTree:\n%s", logicOperatorTree);
+        return logicOperatorTree;
+    }
+
+>>>>>>> 7ccfdb6c7 ([BugFix] add FORBID_INVALID_DATA sql_mode (#13768))
     /**
      * Optimizer will transform and implement the logical operator based on
      * the {@see Rule}, then cost the physical operator, and finally find the
@@ -77,7 +110,14 @@ public class Optimizer {
         context = new OptimizerContext(memo, columnRefFactory, connectContext);
         context.setTraceInfo(new OptimizerTraceInfo(connectContext.getQueryId()));
         TaskContext rootTaskContext =
+<<<<<<< HEAD
                 new TaskContext(context, requiredProperty, (ColumnRefSet) requiredColumns.clone(), Double.MAX_VALUE);
+=======
+                new TaskContext(context, requiredProperty, requiredColumns.clone(), Double.MAX_VALUE);
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.RuleBaseOptimize")) {
+            logicOperatorTree = rewriteAndValidatePlan(logicOperatorTree, rootTaskContext);
+        }
+>>>>>>> 7ccfdb6c7 ([BugFix] add FORBID_INVALID_DATA sql_mode (#13768))
 
         // Note: root group of memo maybe change after rewrite,
         // so we should always get root group and root group expression
@@ -236,12 +276,98 @@ public class Optimizer {
 
         cleanUpMemoGroup(memo);
 
+<<<<<<< HEAD
         // compute CTE inline by costs
         if (cteContext.needOptimizeCTE()) {
             CTEUtils.collectCteOperators(memo, context);
             if (cteContext.hasInlineCTE()) {
                 ruleRewriteIterative(memo, rootTaskContext, RuleSetType.INLINE_CTE);
                 CTEUtils.collectCteOperators(memo, context);
+=======
+        CTEUtils.collectCteOperators(tree, context);
+        // inline CTE if consume use once
+        while (cteContext.hasInlineCTE()) {
+            ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.INLINE_CTE);
+            CTEUtils.collectCteOperators(tree, context);
+        }
+
+        ruleRewriteIterative(tree, rootTaskContext, new PruneEmptyWindowRule());
+        ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
+        ruleRewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
+        ruleRewriteOnlyOnce(tree, rootTaskContext, new GroupByCountDistinctRewriteRule());
+        ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.INTERSECT_REWRITE);
+        ruleRewriteIterative(tree, rootTaskContext, new RemoveAggregationFromAggTable());
+
+        if (!optimizerConfig.isRuleSetTypeDisable(RuleSetType.SINGLE_TABLE_MV_REWRITE)
+                && sessionVariable.isEnableMaterializedViewRewrite()
+                && sessionVariable.isEnableRuleBasedMaterializedViewRewrite()) {
+            // now add single table materialized view rewrite rules in rule based rewrite phase to boost optimization
+            ruleRewriteIterative(tree, rootTaskContext, RuleSetType.SINGLE_TABLE_MV_REWRITE);
+        }
+        return tree.getInputs().get(0);
+    }
+
+    private OptExpression rewriteAndValidatePlan(OptExpression tree, TaskContext rootTaskContext) {
+        OptExpression result = logicalRuleRewrite(tree, rootTaskContext);
+        OptExpressionValidator validator = new OptExpressionValidator();
+        validator.visit(tree, null);
+        return result;
+    }
+
+    private OptExpression pushDownAggregation(OptExpression tree, TaskContext rootTaskContext,
+                                              ColumnRefSet requiredColumns) {
+        if (context.getSessionVariable().getCboPushDownAggregateMode() == -1) {
+            return tree;
+        }
+
+        tree = new PushDownAggregateRule().rewrite(tree, rootTaskContext);
+        deriveLogicalProperty(tree);
+
+        rootTaskContext.setRequiredColumns(requiredColumns.clone());
+        ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
+        return tree;
+    }
+
+    private void deriveLogicalProperty(OptExpression root) {
+        for (OptExpression child : root.getInputs()) {
+            deriveLogicalProperty(child);
+        }
+
+        ExpressionContext context = new ExpressionContext(root);
+        context.deriveLogicalProperty();
+        root.setLogicalProperty(context.getRootProperty());
+    }
+
+    void memoOptimize(ConnectContext connectContext, Memo memo, TaskContext rootTaskContext) {
+        OptExpression tree = memo.getRootGroup().extractLogicalTree();
+        // Join reorder
+        SessionVariable sessionVariable = connectContext.getSessionVariable();
+        if (!sessionVariable.isDisableJoinReorder()
+                && Utils.countInnerJoinNodeSize(tree) < sessionVariable.getCboMaxReorderNode()) {
+            if (Utils.countInnerJoinNodeSize(tree) > sessionVariable.getCboMaxReorderNodeUseExhaustive()) {
+                CTEUtils.collectForceCteStatistics(memo, context);
+                new ReorderJoinRule().transform(tree, context);
+                context.getRuleSet().addJoinCommutativityWithOutInnerRule();
+            } else {
+                if (Utils.capableSemiReorder(tree, false, 0, sessionVariable.getCboMaxReorderNodeUseExhaustive())) {
+                    context.getRuleSet().getTransformRules().add(new SemiReorderRule());
+                }
+                context.getRuleSet().addJoinTransformationRules();
+            }
+        }
+
+        if (!sessionVariable.isMVPlanner()) {
+            //add join implementRule
+            String joinImplementationMode = ConnectContext.get().getSessionVariable().getJoinImplementationMode();
+            if ("merge".equalsIgnoreCase(joinImplementationMode)) {
+                context.getRuleSet().addMergeJoinImplementationRule();
+            } else if ("hash".equalsIgnoreCase(joinImplementationMode)) {
+                context.getRuleSet().addHashJoinImplementationRule();
+            } else if ("nestloop".equalsIgnoreCase(joinImplementationMode)) {
+                context.getRuleSet().addNestLoopJoinImplementationRule();
+            } else {
+                context.getRuleSet().addAutoJoinImplementationRule();
+>>>>>>> 7ccfdb6c7 ([BugFix] add FORBID_INVALID_DATA sql_mode (#13768))
             }
         }
 
