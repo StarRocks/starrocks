@@ -29,7 +29,6 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
-#include "config.h"
 #include "exprs/expr.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/substitute.h"
@@ -56,7 +55,7 @@ namespace starrocks::stream_load {
 
 NodeChannel::NodeChannel(OlapTableSink* parent, int64_t node_id) : _parent(parent), _node_id(node_id) {
     // restrict the chunk memory usage of send queue
-    _mem_tracker = std::make_unique<MemTracker>(config::send_channel_buffer_limit, "", nullptr);
+    _mem_tracker = std::make_unique<MemTracker>(64 * 1024 * 1024, "", nullptr);
 }
 
 NodeChannel::~NodeChannel() noexcept {
