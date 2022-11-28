@@ -198,7 +198,7 @@ Status AggregateStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bo
 
         if (_aggregator->hash_map_variant().size() > 0) {
             // child has iterator over, and the hashtable has data
-            _output_chunk_from_hash_map(chunk);
+            RETURN_IF_ERROR(_output_chunk_from_hash_map(chunk));
             *eos = false;
             _aggregator->process_limit(chunk);
             DCHECK_CHUNK(*chunk);
@@ -218,7 +218,7 @@ Status AggregateStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bo
     return Status::OK();
 }
 
-void AggregateStreamingNode::_output_chunk_from_hash_map(ChunkPtr* chunk) {
+Status AggregateStreamingNode::_output_chunk_from_hash_map(ChunkPtr* chunk) {
     if (!_aggregator->it_hash().has_value()) {
         if (false) {
         }
@@ -236,14 +236,15 @@ void AggregateStreamingNode::_output_chunk_from_hash_map(ChunkPtr* chunk) {
     if (false) {
     }
 #define HASH_MAP_METHOD(NAME)                                                                                     \
-    else if (_aggregator->hash_map_variant().type == AggHashMapVariant::Type::NAME)                               \
+    else if (_aggregator->hash_map_variant().type == AggHashMapVariant::Type::NAME) RETURN_IF_ERROR(              \
             _aggregator->convert_hash_map_to_chunk<decltype(_aggregator->hash_map_variant().NAME)::element_type>( \
-                    *_aggregator->hash_map_variant().NAME, runtime_state()->chunk_size(), chunk);
+                    *_aggregator->hash_map_variant().NAME, runtime_state()->chunk_size(), chunk));
     APPLY_FOR_AGG_VARIANT_ALL(HASH_MAP_METHOD)
 #undef HASH_MAP_METHOD
     else {
         DCHECK(false);
     }
+    return Status::OK();
 }
 
 std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateStreamingNode::decompose_to_pipeline(

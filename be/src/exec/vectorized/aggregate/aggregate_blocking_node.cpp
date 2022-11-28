@@ -139,14 +139,14 @@ Status AggregateBlockingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
 
     if (_aggregator->is_none_group_by_exprs()) {
         SCOPED_TIMER(_aggregator->get_results_timer());
-        _aggregator->convert_to_chunk_no_groupby(chunk);
+        RETURN_IF_ERROR(_aggregator->convert_to_chunk_no_groupby(chunk));
     } else {
         if (false) {
         }
 #define HASH_MAP_METHOD(NAME)                                                                                     \
-    else if (_aggregator->hash_map_variant().type == AggHashMapVariant::Type::NAME)                               \
+    else if (_aggregator->hash_map_variant().type == AggHashMapVariant::Type::NAME) RETURN_IF_ERROR(              \
             _aggregator->convert_hash_map_to_chunk<decltype(_aggregator->hash_map_variant().NAME)::element_type>( \
-                    *_aggregator->hash_map_variant().NAME, chunk_size, chunk);
+                    *_aggregator->hash_map_variant().NAME, chunk_size, chunk));
         APPLY_FOR_AGG_VARIANT_ALL(HASH_MAP_METHOD)
 #undef HASH_MAP_METHOD
     }
