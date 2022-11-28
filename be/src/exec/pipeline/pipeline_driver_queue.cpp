@@ -371,7 +371,7 @@ void WorkGroupDriverQueue::_enqueue_workgroup(workgroup::WorkGroupDriverSchedEnt
             int64_t diff_vruntime_ns = new_vruntime_ns - wg_entity->vruntime_ns();
             if (diff_vruntime_ns > 0) {
                 DCHECK(_wg_entities.find(wg_entity) == _wg_entities.end());
-                wg_entity->incr_runtime_ns(diff_vruntime_ns * wg_entity->cpu_limit());
+                wg_entity->adjust_runtime_ns(diff_vruntime_ns * wg_entity->cpu_limit());
             }
         }
     }
