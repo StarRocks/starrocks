@@ -251,6 +251,17 @@ public class QueryAnalyzer {
                     viewRelation.setAlias(tableRelation.getAlias());
                     return viewRelation;
                 } else {
+<<<<<<< HEAD
+=======
+                    if (tableRelation.getTemporalClause() != null) {
+                        if (table.getType() != Table.TableType.MYSQL) {
+                            throw unsupportedException(
+                                    "unsupported table type for temporal clauses: " + table.getType() +
+                                            "; only external MYSQL tables support temporal clauses");
+                        }
+                    }
+
+>>>>>>> 89d298cc2 ([Enhancement] Fix FE sonar bugs (#14053))
                     if (table.isSupported()) {
                         tableRelation.setTable(table);
                         return tableRelation;
