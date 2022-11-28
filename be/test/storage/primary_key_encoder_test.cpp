@@ -8,25 +8,26 @@
 
 #include "column/chunk.h"
 #include "column/datum.h"
-#include "column/schema.h"
+#include "column/vectorized_schema.h"
+#include "gutil/stringprintf.h"
 #include "storage/chunk_helper.h"
 
 using namespace std;
 
 namespace starrocks {
 
-static unique_ptr<vectorized::Schema> create_key_schema(const vector<LogicalType>& types) {
-    vectorized::Fields fields;
+static unique_ptr<vectorized::VectorizedSchema> create_key_schema(const vector<LogicalType>& types) {
+    vectorized::VectorizedFields fields;
     std::vector<ColumnId> sort_key_idxes(types.size());
     for (int i = 0; i < types.size(); i++) {
         string name = StringPrintf("col%d", i);
-        auto fd = new vectorized::Field(i, name, types[i], false);
+        auto fd = new vectorized::VectorizedField(i, name, types[i], false);
         fd->set_is_key(true);
         fd->set_aggregate_method(OLAP_FIELD_AGGREGATION_NONE);
         fields.emplace_back(fd);
         sort_key_idxes[i] = i;
     }
-    return std::make_unique<vectorized::Schema>(std::move(fields), PRIMARY_KEYS, sort_key_idxes);
+    return std::make_unique<vectorized::VectorizedSchema>(std::move(fields), PRIMARY_KEYS, sort_key_idxes);
 }
 
 TEST(PrimaryKeyEncoderTest, testEncodeInt32) {

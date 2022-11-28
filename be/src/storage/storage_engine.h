@@ -381,4 +381,37 @@ public:
     Status start_bg_threads() override { return Status::OK(); };
 };
 
+/// Load min_garbage_sweep_interval and max_garbage_sweep_interval from config,
+/// and calculate a proper sweep interval according to the disk usage and min/max interval.
+///
+/// *maybe_interval_updated* can be used to check and update min/max interval from config.
+/// All the methods are not thread-safe.
+class GarbageSweepIntervalCalculator {
+public:
+    GarbageSweepIntervalCalculator();
+
+    DISALLOW_COPY(GarbageSweepIntervalCalculator);
+    DISALLOW_MOVE(GarbageSweepIntervalCalculator);
+
+    double& mutable_disk_usage() { return _disk_usage; }
+
+    // Return true and update min and max interval, if the value from config is changed.
+    bool maybe_interval_updated();
+    // Calculate the interval according to the disk usage and min/max interval.
+    int32_t curr_interval() const;
+
+private:
+    void _normalize_min_max();
+
+    // The value read from config.
+    int32_t _original_min_interval;
+    int32_t _original_max_interval;
+    // The value after normalized.
+    int32_t _min_interval;
+    int32_t _max_interval;
+
+    // Value is in [0, 1].
+    double _disk_usage = 1.0;
+};
+
 } // namespace starrocks

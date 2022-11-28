@@ -293,6 +293,10 @@ public class OrderByTest extends PlanTestBase {
         sql = "select t0.*, t0_not_null.* from t0, t0_not_null order by t0_not_null.v1";
         plan = getFragmentPlan(sql);
         assertContains(plan, "order by: <slot 4> 4: v1 ASC");
+
+        sql = "select t0.v1, t0_not_null.v1 from t0, t0_not_null order by t0_not_null.v1";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "order by: <slot 4> 4: v1 ASC");
     }
 
     @Test

@@ -24,7 +24,7 @@ private:
 TEST_F(HyperLogLogFunctionsTest, hllEmptyTest) {
     {
         Columns c;
-        auto column = HyperloglogFunction::hll_empty(ctx, c);
+        auto column = HyperloglogFunctions::hll_empty(ctx, c).value();
 
         ASSERT_TRUE(column->is_constant());
 
@@ -46,7 +46,7 @@ TEST_F(HyperLogLogFunctionsTest, hllHashTest) {
 
         columns.push_back(col1);
 
-        auto v = HyperloglogFunction::hll_hash(ctx, columns);
+        auto v = HyperloglogFunctions::hll_hash(ctx, columns).value();
 
         ASSERT_TRUE(v->is_object());
 
@@ -92,7 +92,7 @@ TEST_F(HyperLogLogFunctionsTest, hllCardinalityTest) {
 
         columns.push_back(col1);
 
-        auto v = HyperloglogFunction::hll_cardinality(ctx, columns);
+        auto v = HyperloglogFunctions::hll_cardinality(ctx, columns).value();
 
         ASSERT_TRUE(v->is_numeric());
 
@@ -146,7 +146,7 @@ TEST_F(HyperLogLogFunctionsTest, hllCardinalityFromStringTest) {
 
         columns.push_back(col1);
 
-        auto v = HyperloglogFunction::hll_cardinality_from_string(ctx, columns);
+        auto v = HyperloglogFunctions::hll_cardinality_from_string(ctx, columns).value();
 
         ASSERT_TRUE(v->is_numeric());
 

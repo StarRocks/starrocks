@@ -116,7 +116,7 @@ HdfsPartitionDescriptor::HdfsPartitionDescriptor(const TDeltaLakeTable& thrift_t
           _thrift_partition_key_exprs(thrift_partition.partition_key_exprs) {}
 
 Status HdfsPartitionDescriptor::create_part_key_exprs(RuntimeState* state, ObjectPool* pool, int32_t chunk_size) {
-    RETURN_IF_ERROR(Expr::create_expr_trees(pool, _thrift_partition_key_exprs, &_partition_key_value_evals));
+    RETURN_IF_ERROR(Expr::create_expr_trees(pool, _thrift_partition_key_exprs, &_partition_key_value_evals, state));
     RETURN_IF_ERROR(Expr::prepare(_partition_key_value_evals, state));
     RETURN_IF_ERROR(Expr::open(_partition_key_value_evals, state));
     return Status::OK();

@@ -51,7 +51,8 @@ private:
     HdfsScannerContext* _create_context_for_late_materialization();
 
     HdfsScannerContext* _create_file4_base_context();
-    HdfsScannerContext* _create_context_for_struct_solumn();
+    HdfsScannerContext* _create_context_for_struct_column();
+    HdfsScannerContext* _create_context_for_upper_pred();
 
     HdfsScannerContext* _create_file5_base_context();
     HdfsScannerContext* _create_file6_base_context();
@@ -182,6 +183,10 @@ private:
     // 4    {"c1_0":4,"c1_1":[4,5,6]}       [{"c2_0":4,"c2_1":null},{"c2_0":5,"c2_1":null},{"c2_0":6,"c2_1":4}]
     std::string _file_struct_null_path =
             "./be/test/exec/test_data/parquet_scanner/file_reader_test_struct_null.parquet";
+
+    std::string _file_col_not_null_path = "./be/test/exec/test_data/parquet_scanner/col_not_null.parquet";
+
+    std::string _file_map_null_path = "./be/test/exec/test_data/parquet_scanner/map_null.parquet";
 
     std::shared_ptr<RowDescriptor> _row_desc = nullptr;
     RuntimeState* _runtime_state = nullptr;
@@ -448,11 +453,19 @@ HdfsScannerContext* FileReaderTest::_create_file5_base_context() {
     return ctx;
 }
 
-HdfsScannerContext* FileReaderTest::_create_context_for_struct_solumn() {
+HdfsScannerContext* FileReaderTest::_create_context_for_struct_column() {
     auto* ctx = _create_file4_base_context();
     // create conjuncts
     // c3 = "c", c2 is not in slots, so the slot_id=1
     _create_string_conjunct_ctxs(TExprOpcode::EQ, 1, "c", &ctx->conjunct_ctxs_by_slot[1]);
+    return ctx;
+}
+
+HdfsScannerContext* FileReaderTest::_create_context_for_upper_pred() {
+    auto* ctx = _create_file4_base_context();
+    // create conjuncts
+    // B1 = "C", c2,c4 is not in slots, so the slot_id=2
+    _create_string_conjunct_ctxs(TExprOpcode::EQ, 2, "C", &ctx->conjunct_ctxs_by_slot[2]);
     return ctx;
 }
 
@@ -627,7 +640,7 @@ void FileReaderTest::_create_int_conjunct_ctxs(TExprOpcode::type opcode, SlotId 
     std::vector<TExpr> t_conjuncts;
     t_conjuncts.emplace_back(t_expr);
 
-    Expr::create_expr_trees(&_pool, t_conjuncts, conjunct_ctxs);
+    Expr::create_expr_trees(&_pool, t_conjuncts, conjunct_ctxs, nullptr);
     Expr::prepare(*conjunct_ctxs, _runtime_state);
     Expr::open(*conjunct_ctxs, _runtime_state);
 }
@@ -676,7 +689,7 @@ void FileReaderTest::_create_string_conjunct_ctxs(TExprOpcode::type opcode, Slot
     std::vector<TExpr> t_conjuncts;
     t_conjuncts.emplace_back(t_expr);
 
-    Expr::create_expr_trees(&_pool, t_conjuncts, conjunct_ctxs);
+    Expr::create_expr_trees(&_pool, t_conjuncts, conjunct_ctxs, nullptr);
     Expr::prepare(*conjunct_ctxs, _runtime_state);
     Expr::open(*conjunct_ctxs, _runtime_state);
 }
@@ -991,7 +1004,7 @@ TEST_F(FileReaderTest, TestReadStructUpperColumns) {
     ;
 
     // init
-    auto* ctx = _create_context_for_struct_solumn();
+    auto* ctx = _create_context_for_struct_column();
     Status status = file_reader->init(ctx);
     ASSERT_TRUE(status.ok());
 
@@ -1003,6 +1016,36 @@ TEST_F(FileReaderTest, TestReadStructUpperColumns) {
     auto chunk = _create_struct_chunk();
     status = file_reader->get_next(&chunk);
     ASSERT_TRUE(status.ok());
+    ASSERT_EQ(3, chunk->num_rows());
+    for (int i = 0; i < chunk->num_rows(); ++i) {
+        std::cout << "row" << i << ": " << chunk->debug_row(i) << std::endl;
+    }
+
+    ColumnPtr int_col = chunk->get_column_by_slot_id(0);
+    int i = int_col->get(0).get_int32();
+    EXPECT_EQ(i, 3);
+
+    ColumnPtr char_col = chunk->get_column_by_slot_id(2);
+    Slice s = char_col->get(0).get_slice();
+    std::string res(s.data, s.size);
+    EXPECT_EQ(res, "C");
+}
+
+TEST_F(FileReaderTest, TestReadWithUpperPred) {
+    auto file = _create_file(_file4_path);
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
+                                                    std::filesystem::file_size(_file4_path));
+
+    // init
+    auto* ctx = _create_context_for_upper_pred();
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok());
+
+    // get next
+    auto chunk = _create_struct_chunk();
+    status = file_reader->get_next(&chunk);
+    ASSERT_TRUE(status.ok());
+    LOG(ERROR) << "status: " << status.get_error_msg();
     ASSERT_EQ(3, chunk->num_rows());
     for (int i = 0; i < chunk->num_rows(); ++i) {
         std::cout << "row" << i << ": " << chunk->debug_row(i) << std::endl;
@@ -1607,6 +1650,115 @@ TEST_F(FileReaderTest, TestReadMapColumnWithPartialMaterialize) {
     EXPECT_EQ(chunk->debug_row(6), "[7, ['k1'->NULL, 'k2'->NULL], [NULL->['f2'->NULL]], [NULL->[1, 2, 3]]]");
     EXPECT_EQ(chunk->debug_row(7),
               "[8, ['k3'->NULL], [NULL->['f1'->NULL, 'f2'->NULL, 'f3'->NULL]], [NULL->[1], NULL->[2]]]");
+}
+
+TEST_F(FileReaderTest, TestReadNotNull) {
+    auto file = _create_file(_file_col_not_null_path);
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
+                                                    std::filesystem::file_size(_file_col_not_null_path));
+
+    // --------------init context---------------
+    auto ctx = _create_scan_context();
+
+    TypeDescriptor type_int = TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT);
+
+    TypeDescriptor type_map(LogicalType::TYPE_MAP);
+    type_map.children.emplace_back(TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR));
+    type_map.children.emplace_back(TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT));
+    type_map.selected_fields.emplace_back(true);
+    type_map.selected_fields.emplace_back(true);
+
+    TypeDescriptor type_struct = TypeDescriptor::from_primtive_type(LogicalType::TYPE_STRUCT);
+    type_struct.children.emplace_back(TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR));
+    type_struct.field_names.emplace_back("a");
+    type_struct.selected_fields.emplace_back(true);
+
+    type_struct.children.emplace_back(TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT));
+    type_struct.field_names.emplace_back("b");
+    type_struct.selected_fields.emplace_back(true);
+
+    SlotDesc slot_descs[] = {
+            {"col_int", type_int},
+            {"col_map", type_map},
+            {"col_struct", type_struct},
+            {""},
+    };
+
+    ctx->tuple_desc = create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+    ctx->scan_ranges.emplace_back(_create_scan_range(_file_col_not_null_path));
+    // --------------finish init context---------------
+
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok());
+
+    EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
+
+    auto chunk = std::make_shared<vectorized::Chunk>();
+    chunk->append_column(vectorized::ColumnHelper::create_column(type_int, true), chunk->num_columns());
+    chunk->append_column(vectorized::ColumnHelper::create_column(type_map, true), chunk->num_columns());
+    chunk->append_column(vectorized::ColumnHelper::create_column(type_struct, true), chunk->num_columns());
+
+    status = file_reader->get_next(&chunk);
+    ASSERT_TRUE(status.ok());
+    ASSERT_EQ(3, chunk->num_rows());
+
+    EXPECT_EQ("[1, ['a'->1], {a: 'a', b: 1}]", chunk->debug_row(0));
+    EXPECT_EQ("[2, ['b'->2, 'c'->3], {a: 'b', b: 2}]", chunk->debug_row(1));
+    EXPECT_EQ("[3, ['c'->3], {a: 'c', b: 3}]", chunk->debug_row(2));
+
+    for (int i = 0; i < 3; ++i) {
+        std::cout << "row" << i << ": " << chunk->debug_row(i) << std::endl;
+    }
+}
+
+TEST_F(FileReaderTest, TestReadMapNull) {
+    auto file = _create_file(_file_map_null_path);
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
+                                                    std::filesystem::file_size(_file_map_null_path));
+
+    // --------------init context---------------
+    auto ctx = _create_scan_context();
+
+    TypeDescriptor type_int = TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT);
+
+    TypeDescriptor type_map(LogicalType::TYPE_MAP);
+    type_map.children.emplace_back(TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR));
+    type_map.children.emplace_back(TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT));
+    type_map.selected_fields.emplace_back(true);
+    type_map.selected_fields.emplace_back(true);
+
+    SlotDesc slot_descs[] = {
+            {"uuid", type_int},
+            {"c1", type_map},
+            {""},
+    };
+
+    ctx->tuple_desc = create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+    ctx->scan_ranges.emplace_back(_create_scan_range(_file_map_null_path));
+    // --------------finish init context---------------
+
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok());
+
+    EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
+
+    auto chunk = std::make_shared<vectorized::Chunk>();
+    chunk->append_column(vectorized::ColumnHelper::create_column(type_int, true), chunk->num_columns());
+    chunk->append_column(vectorized::ColumnHelper::create_column(type_map, true), chunk->num_columns());
+
+    status = file_reader->get_next(&chunk);
+    ASSERT_TRUE(status.ok());
+    ASSERT_EQ(3, chunk->num_rows());
+
+    EXPECT_EQ("[1, NULL]", chunk->debug_row(0));
+    EXPECT_EQ("[2, NULL]", chunk->debug_row(1));
+    EXPECT_EQ("[3, NULL]", chunk->debug_row(2));
+
+    for (int i = 0; i < 3; ++i) {
+        std::cout << "row" << i << ": " << chunk->debug_row(i) << std::endl;
+    }
 }
 
 } // namespace starrocks::parquet

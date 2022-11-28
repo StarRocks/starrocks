@@ -52,7 +52,7 @@ public:
     OlapTablePartitionParam(std::shared_ptr<OlapTableSchemaParam> schema, const TOlapTablePartitionParam& param);
     ~OlapTablePartitionParam();
 
-    Status init();
+    Status init(RuntimeState* state);
 
     Status prepare(RuntimeState* state);
     Status open(RuntimeState* state);

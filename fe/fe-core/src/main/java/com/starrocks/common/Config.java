@@ -1024,7 +1024,7 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int storage_high_watermark_usage_percent = 85;
     @ConfField(mutable = true)
-    public static long storage_min_left_capacity_bytes = 2 * 1024 * 1024 * 1024; // 2G
+    public static long storage_min_left_capacity_bytes = 2L * 1024 * 1024 * 1024; // 2G
 
     /**
      * If capacity of disk reach the 'storage_flood_stage_usage_percent' and 'storage_flood_stage_left_capacity_bytes',
@@ -1035,7 +1035,7 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int storage_flood_stage_usage_percent = 95;
     @ConfField(mutable = true)
-    public static long storage_flood_stage_left_capacity_bytes = 1 * 1024 * 1024 * 1024; // 1G
+    public static long storage_flood_stage_left_capacity_bytes = 1024L * 1024 * 1024; // 1G
 
     // update interval of tablet stat
     // All frontends will get tablet stat from all backends at each interval
@@ -1096,6 +1096,12 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true, aliases = {"disable_colocate_balance"})
     public static boolean tablet_sched_disable_colocate_balance = false;
+
+    /**
+     * If BE is down beyond this time, tablets on that BE of colcoate table will be migrated to other available BEs
+     */
+    @ConfField(mutable = true)
+    public static long tablet_sched_colocate_be_down_tolerate_time_s = 12L * 3600L;
 
     @ConfField(aliases = {"tablet_balancer_strategy"})
     public static String tablet_sched_balancer_strategy = "disk_and_tablet";
@@ -1404,7 +1410,7 @@ public class Config extends ConfigBase {
      * The collect thread work interval
      */
     @ConfField(mutable = true)
-    public static long statistic_collect_interval_sec = 5 * 60; // 5m
+    public static long statistic_collect_interval_sec = 5L * 60L; // 5m
 
     /**
      * Num of thread to handle statistic collect
@@ -1428,7 +1434,7 @@ public class Config extends ConfigBase {
      * The column statistic cache update interval
      */
     @ConfField(mutable = true)
-    public static long statistic_update_interval_sec = 24 * 60 * 60;
+    public static long statistic_update_interval_sec = 24L * 60L * 60L;
 
     /**
      * Enable full statistics collection
@@ -1735,6 +1741,13 @@ public class Config extends ConfigBase {
     @ConfField
     public static String starmgr_s3_sk = "";
 
+    @ConfField
+    public static String hdfs_url = "";
+
+    /* default file store type used */
+    @ConfField
+    public static String default_fs_type = "S3";
+
     /**
      * default storage cache ttl of lake table
      */
@@ -1813,19 +1826,22 @@ public class Config extends ConfigBase {
     public static String jaeger_grpc_endpoint = "";
 
     @ConfField
-    public static String lake_compaction_selector = "SimpleSelector";
+    public static String lake_compaction_selector = "ScoreSelector";
 
     @ConfField
-    public static String lake_compaction_sorter = "RandomSorter";
+    public static String lake_compaction_sorter = "ScoreSorter";
 
-    @ConfField
+    @ConfField(mutable = true)
     public static long lake_compaction_simple_selector_min_versions = 3;
 
-    @ConfField
+    @ConfField(mutable = true)
     public static long lake_compaction_simple_selector_threshold_versions = 10;
 
-    @ConfField
+    @ConfField(mutable = true)
     public static long lake_compaction_simple_selector_threshold_seconds = 300;
+
+    @ConfField(mutable = true)
+    public static double lake_compaction_score_selector_min_score = 2.0;
 
     /**
      * -1 means calculate the value in an adaptive way.

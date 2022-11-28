@@ -167,7 +167,8 @@ bool RuntimeFilterHelper::filter_zonemap_with_min_max(LogicalType type, const Jo
     return type_dispatch_filter(type, false, FilterZoneMapWithMinMaxOp(), filter, min_column, max_column);
 }
 
-Status RuntimeFilterBuildDescriptor::init(ObjectPool* pool, const TRuntimeFilterDescription& desc) {
+Status RuntimeFilterBuildDescriptor::init(ObjectPool* pool, const TRuntimeFilterDescription& desc,
+                                          RuntimeState* state) {
     _filter_id = desc.filter_id;
     _build_expr_order = desc.expr_order;
     _has_remote_targets = desc.has_remote_targets;
@@ -193,12 +194,12 @@ Status RuntimeFilterBuildDescriptor::init(ObjectPool* pool, const TRuntimeFilter
         _broadcast_grf_destinations = desc.broadcast_grf_destinations;
     }
 
-    RETURN_IF_ERROR(Expr::create_expr_tree(pool, desc.build_expr, &_build_expr_ctx));
+    RETURN_IF_ERROR(Expr::create_expr_tree(pool, desc.build_expr, &_build_expr_ctx, state));
     return Status::OK();
 }
 
-Status RuntimeFilterProbeDescriptor::init(ObjectPool* pool, const TRuntimeFilterDescription& desc,
-                                          TPlanNodeId node_id) {
+Status RuntimeFilterProbeDescriptor::init(ObjectPool* pool, const TRuntimeFilterDescription& desc, TPlanNodeId node_id,
+                                          RuntimeState* state) {
     _filter_id = desc.filter_id;
     _is_local = !desc.has_remote_targets;
     _build_plan_node_id = desc.build_plan_node_id;
@@ -210,7 +211,7 @@ Status RuntimeFilterProbeDescriptor::init(ObjectPool* pool, const TRuntimeFilter
         const auto& it = const_cast<TRuntimeFilterDescription&>(desc).plan_node_id_to_target_expr.find(node_id);
         if (it != desc.plan_node_id_to_target_expr.end()) {
             not_found = false;
-            RETURN_IF_ERROR(Expr::create_expr_tree(pool, it->second, &_probe_expr_ctx));
+            RETURN_IF_ERROR(Expr::create_expr_tree(pool, it->second, &_probe_expr_ctx, state));
         }
     }
 
@@ -223,7 +224,7 @@ Status RuntimeFilterProbeDescriptor::init(ObjectPool* pool, const TRuntimeFilter
         // TODO(lishuming): maybe reuse probe exprs because partition_by_exprs and probe_expr
         // must be overlapped.
         if (it != desc.plan_node_id_to_partition_by_exprs.end()) {
-            RETURN_IF_ERROR(Expr::create_expr_trees(pool, it->second, &_partition_by_exprs_contexts));
+            RETURN_IF_ERROR(Expr::create_expr_trees(pool, it->second, &_partition_by_exprs_contexts, state));
         }
     }
 
@@ -631,7 +632,7 @@ public:
     bool is_constant() const override { return false; }
     bool is_bound(const std::vector<TupleId>& tuple_ids) const override { return false; }
 
-    ColumnPtr evaluate_with_filter(ExprContext* context, vectorized::Chunk* ptr, uint8_t* filter) override {
+    StatusOr<ColumnPtr> evaluate_with_filter(ExprContext* context, vectorized::Chunk* ptr, uint8_t* filter) override {
         const vectorized::ColumnPtr col = ptr->get_column_by_slot_id(_slot_id);
         size_t size = col->size();
 
@@ -683,7 +684,7 @@ public:
         return result;
     }
 
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {
         return evaluate_with_filter(context, ptr, nullptr);
     }
 

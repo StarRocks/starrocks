@@ -68,6 +68,8 @@ private:
     std::vector<std::string> _columns;
     // where clause
     std::vector<std::string> _filters;
+    // temporal clause
+    std::string _temporal_clause;
 
     // Tuple index in tuple row.
     size_t _slot_num = 0;
@@ -75,7 +77,7 @@ private:
 
     int64_t _rows_read = 0;
     int64_t _bytes_read = 0;
-    int64_t _cpu_time_spent_ns = 0;
+    int64_t _cpu_time_ns = 0;
 
     Status fill_chunk(vectorized::ChunkPtr* chunk, char** data, size_t* length);
 

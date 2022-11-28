@@ -214,7 +214,7 @@ public:
 
 private:
     template <LogicalType ResultType>
-    static ColumnPtr _json_query_impl(starrocks_udf::FunctionContext* context, const Columns& columns);
+    static StatusOr<ColumnPtr> _json_query_impl(starrocks_udf::FunctionContext* context, const Columns& columns);
 
     /**
      * Parse string column as json column

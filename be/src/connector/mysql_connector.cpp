@@ -51,6 +51,7 @@ Status MySQLDataSource::_init_params(RuntimeState* state) {
 
     _columns = _provider->_mysql_scan_node.columns;
     _filters = _provider->_mysql_scan_node.filters;
+    _temporal_clause = _provider->_mysql_scan_node.temporal_clause;
 
     _table_name = _provider->_mysql_scan_node.table_name;
 
@@ -187,8 +188,8 @@ Status MySQLDataSource::open(RuntimeState* state) {
         }
     }
 
-    RETURN_IF_ERROR(
-            _mysql_scanner->query(_table_name, _columns, _filters, filters_in, filters_null_in_set, _read_limit));
+    RETURN_IF_ERROR(_mysql_scanner->query(_table_name, _columns, _filters, filters_in, filters_null_in_set, _read_limit,
+                                          _temporal_clause));
     // check materialize slot num
     int materialize_num = 0;
 
@@ -257,7 +258,7 @@ int64_t MySQLDataSource::num_bytes_read() const {
 }
 
 int64_t MySQLDataSource::cpu_time_spent() const {
-    return _cpu_time_spent_ns;
+    return _cpu_time_ns;
 }
 
 void MySQLDataSource::close(RuntimeState* state) {
@@ -265,7 +266,7 @@ void MySQLDataSource::close(RuntimeState* state) {
 }
 
 Status MySQLDataSource::fill_chunk(vectorized::ChunkPtr* chunk, char** data, size_t* length) {
-    SCOPED_RAW_TIMER(&_cpu_time_spent_ns);
+    SCOPED_RAW_TIMER(&_cpu_time_ns);
 
     int materialized_col_idx = -1;
     for (size_t col_idx = 0; col_idx < _slot_num; ++col_idx) {

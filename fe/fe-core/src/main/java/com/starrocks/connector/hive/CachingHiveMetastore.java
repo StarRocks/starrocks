@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkState;
@@ -294,33 +295,43 @@ public class CachingHiveMetastore implements IHiveMetastore {
             HivePartitionName hivePartitionName = HivePartitionName.of(hiveDbName, hiveTblName, Lists.newArrayList());
             Partition updatedPartition = loadPartition(hivePartitionName);
             partitionCache.put(hivePartitionName, updatedPartition);
+            tableStatsCache.put(hiveTableName, loadTableStatistics(hiveTableName));
         } else {
-            List<HivePartitionName> presentPartitionNames = getPresentPartitionNames(partitionCache, hiveDbName, hiveTblName);
-            if (presentPartitionNames.size() > 0) {
-                for (int i = 0; i < presentPartitionNames.size(); i += Config.max_hive_partitions_per_rpc) {
-                    List<HivePartitionName> partsToFetch = presentPartitionNames.subList(
-                            i, Math.min(i + Config.max_hive_partitions_per_rpc, presentPartitionNames.size()));
-                    Map<HivePartitionName, Partition> updatedPartitions = loadPartitionsByNames(partsToFetch);
-                    partitionCache.putAll(updatedPartitions);
-                }
+            List<String> existNames = loadPartitionKeys(hiveTableName);
+
+            List<HivePartitionName> presentPartitionNames = getPresentPartitionNames(
+                    partitionCache, hiveDbName, hiveTblName);
+            refreshPartitions(presentPartitionNames, existNames, this::loadPartitionsByNames, partitionCache);
+
+            List<HivePartitionName> presentPartitionStatistics = getPresentPartitionNames(
+                    partitionStatsCache, hiveDbName, hiveTblName);
+            refreshPartitions(presentPartitionStatistics, existNames, this::loadPartitionsStatistics, partitionStatsCache);
+        }
+    }
+
+    private <T> void refreshPartitions(List<HivePartitionName> presentInCache,
+                                       List<String> partitionNamesInHMS,
+                                       Function<List<HivePartitionName>, Map<HivePartitionName, T>> reload,
+                                       LoadingCache<HivePartitionName, T> cache) {
+        List<HivePartitionName> needToRefresh = Lists.newArrayList();
+        List<HivePartitionName> needToInvalidate = Lists.newArrayList();
+        for (HivePartitionName name : presentInCache) {
+            if (name.getPartitionNames().isPresent() && partitionNamesInHMS.contains(name.getPartitionNames().get())) {
+                needToRefresh.add(name);
+            } else {
+                needToInvalidate.add(name);
             }
         }
 
-        if (hmsTable.isUnPartitioned()) {
-            tableStatsCache.put(hiveTableName, loadTableStatistics(hiveTableName));
-        } else {
-            List<HivePartitionName> presentPartitionStatistics = getPresentPartitionNames(
-                    partitionStatsCache, hiveDbName, hiveTblName);
-            if (presentPartitionStatistics.size() > 0) {
-                for (int i = 0; i < presentPartitionStatistics.size(); i += Config.max_hive_partitions_per_rpc) {
-                    List<HivePartitionName> partsToFetch = presentPartitionStatistics.subList(
-                            i, Math.min(i + Config.max_hive_partitions_per_rpc, presentPartitionStatistics.size()));
-                    Map<HivePartitionName, HivePartitionStats> updatePartitionStats =
-                            loadPartitionsStatistics(partsToFetch);
-                    partitionStatsCache.putAll(updatePartitionStats);
-                }
+        if (needToRefresh.size() > 0) {
+            for (int i = 0; i < needToRefresh.size(); i += Config.max_hive_partitions_per_rpc) {
+                List<HivePartitionName> partsToFetch = needToRefresh.subList(
+                        i, Math.min(i + Config.max_hive_partitions_per_rpc, needToRefresh.size()));
+                Map<HivePartitionName, T> updatedPartitions = reload.apply(partsToFetch);
+                cache.putAll(updatedPartitions);
             }
         }
+        cache.invalidateAll(needToInvalidate);
     }
 
     public synchronized void refreshPartition(List<HivePartitionName> partitionNames) {

@@ -499,6 +499,17 @@ public class ExpressionTest extends PlanTestBase {
     }
 
     @Test
+    public void testLambdaPredicateOnScan() throws Exception {
+        starRocksAssert.withTable("create table test_lambda_on_scan" +
+                "(c0 INT, c2 array<int>) " +
+                " duplicate key(c0) distributed by hash(c0) buckets 1 " +
+                "properties('replication_num'='1');");
+        String sql = "select * from test_lambda_on_scan where array_map(x -> x, c2) is not null";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("array_map"));
+    }
+
+    @Test
     public void testInPredicateNormalize() throws Exception {
         starRocksAssert.withTable("create table test_in_pred_norm" +
                 "(c0 INT, c1 INT, c2 INT, c3 INT, c4 DATE, c5 DATE) " +

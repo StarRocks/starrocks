@@ -38,6 +38,7 @@ Usage: $0 <options>
      --with-aws                     enable to test aws
      --with-bench                   enable to build with benchmark
      --with-gcov                    enable to build with gcov
+     --module                       module to run uts
      --use-staros                   enable to build with staros
      -j                             build parallel
 
@@ -59,6 +60,7 @@ OPTS=$(getopt \
   -l 'run' \
   -l 'clean' \
   -l "gtest_filter:" \
+  -l 'module:' \
   -l 'with-aws' \
   -l 'with-bench' \
   -l 'use-staros' \
@@ -76,9 +78,9 @@ eval set -- "$OPTS"
 CLEAN=0
 RUN=0
 TEST_FILTER=*
+TEST_MODULE=".*"
 HELP=0
 WITH_AWS=OFF
-WITH_BENCH=OFF
 USE_STAROS=OFF
 WITH_BLOCK_CACHE=OFF
 WITH_GCOV=OFF
@@ -86,10 +88,10 @@ while true; do
     case "$1" in
         --clean) CLEAN=1 ; shift ;;
         --run) RUN=1 ; shift ;;
-        --gtest_filter) TEST_FILTER=$2 ; shift 2;; 
-        --help) HELP=1 ; shift ;; 
+        --gtest_filter) TEST_FILTER=$2 ; shift 2;;
+        --module) TEST_MODULE=$2; shift 2;;
+        --help) HELP=1 ; shift ;;
         --with-aws) WITH_AWS=ON; shift ;;
-        --with-bench) WITH_BENCH=ON; shift ;;
         --with-gcov) WITH_GCOV=ON; shift ;;
         --use-staros) USE_STAROS=ON; shift ;;
         -j) PARALLEL=$2; shift 2 ;;
@@ -136,7 +138,7 @@ if [ "${USE_STAROS}" == "ON"  ]; then
               -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
               -DMAKE_TEST=ON -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
               -DUSE_AVX2=$USE_AVX2 -DUSE_SSE4_2=$USE_SSE4_2 \
-              -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DWITH_BENCH=${WITH_BENCH}  \
+              -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
               -DUSE_STAROS=${USE_STAROS} -DWITH_GCOV=${WITH_GCOV} \
               -DWITH_BLOCK_CACHE=${WITH_BLOCK_CACHE} \
               -Dprotobuf_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/protobuf \
@@ -153,7 +155,7 @@ else
               -DUSE_AVX2=$USE_AVX2 -DUSE_SSE4_2=$USE_SSE4_2 \
               -DWITH_GCOV=${WITH_GCOV} \
               -DWITH_BLOCK_CACHE=${WITH_BLOCK_CACHE} \
-              -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DWITH_BENCH=${WITH_BENCH} ../
+              -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ../
 fi
 time ${BUILD_SYSTEM} -j${PARALLEL}
 
@@ -219,6 +221,8 @@ if [ "${WITH_BLOCK_CACHE}" == "ON"  ]; then
     export LD_LIBRARY_PATH=$CACHELIB_DIR/lib:$CACHELIB_DIR/lib64:$CACHELIB_DIR/deps/lib:$CACHELIB_DIR/deps/lib64:$LD_LIBRARY_PATH
 fi
 
+echo "GTEST_OPTIONS:${GTEST_OPTIONS}"
+
 # HADOOP_CLASSPATH defined in $STARROCKS_HOME/conf/hadoop_env.sh
 # put $STARROCKS_HOME/conf ahead of $HADOOP_CLASSPATH so that custom config can replace the config in $HADOOP_CLASSPATH
 export CLASSPATH=$STARROCKS_HOME/conf:$HADOOP_CLASSPATH:$CLASSPATH
@@ -237,21 +241,28 @@ if [ -d ${STARROCKS_TEST_BINARY_DIR}/util/test_data ]; then
 fi
 cp -r ${STARROCKS_HOME}/be/test/util/test_data ${STARROCKS_TEST_BINARY_DIR}/util/
 
-test_files=`find ${STARROCKS_TEST_BINARY_DIR} -type f -perm -111 -name "*test" | grep -v starrocks_test | grep -v bench_test`
+test_files=`find ${STARROCKS_TEST_BINARY_DIR} -type f -perm -111 -name "*test" \
+    | grep -v starrocks_test \
+    | grep -v bench_test \
+    | grep -e "$TEST_MODULE" `
 
 # run cases in starrocks_test in parallel if has gtest-parallel script.
 # reference: https://github.com/google/gtest-parallel
-if [ -x ${GTEST_PARALLEL} ]; then
-    ${GTEST_PARALLEL} ${STARROCKS_TEST_BINARY_DIR}/starrocks_test --gtest_filter=${TEST_FILTER} --serialize_test_cases ${GTEST_PARALLEL_OPTIONS}
-else
-    ${STARROCKS_TEST_BINARY_DIR}/starrocks_test --gtest_filter=${TEST_FILTER}
+if [[ $TEST_MODULE == '.*'  || $TEST_MODULE == 'starrocks_test' ]]; then
+  echo "Run test file: starrocks_test"
+  if [ -x ${GTEST_PARALLEL} ]; then
+      ${GTEST_PARALLEL} ${STARROCKS_TEST_BINARY_DIR}/starrocks_test --gtest_catch_exceptions=0 --gtest_filter=${TEST_FILTER} --serialize_test_cases ${GTEST_PARALLEL_OPTIONS}
+  else
+      ${STARROCKS_TEST_BINARY_DIR}/starrocks_test $GTEST_OPTIONS --gtest_filter=${TEST_FILTER}
+  fi
 fi
 
 for test in ${test_files[@]}
 do
+    echo "Run test file: $test"
     file_name=${test##*/}
     if [ -z $RUN_FILE ] || [ $file_name == $RUN_FILE ]; then
         echo "=== Run $file_name ==="
-        $test --gtest_filter=${TEST_FILTER}
+        $test $GTEST_OPTIONS --gtest_filter=${TEST_FILTER}
     fi
 done

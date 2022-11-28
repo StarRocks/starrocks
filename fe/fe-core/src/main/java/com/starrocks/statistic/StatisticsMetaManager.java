@@ -40,7 +40,7 @@ public class StatisticsMetaManager extends LeaderDaemon {
     private int lossTableCount = 0;
 
     public StatisticsMetaManager() {
-        super("statistics meta manager", 60 * 1000);
+        super("statistics meta manager", 60L * 1000L);
     }
 
     private boolean checkDatabaseExist() {

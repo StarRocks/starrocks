@@ -7,6 +7,9 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SqlModeHelper;
@@ -25,6 +28,12 @@ import java.util.Map;
 public class MetaUtils {
 
     private static final Logger LOG = LogManager.getLogger(MVUtils.class);
+
+    public static void checkDbNullAndReport(Database db, String name) throws AnalysisException {
+        if (db == null) {
+            ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_DB_ERROR, name);
+        }
+    }
 
     public static Database getDatabase(ConnectContext session, long dbId) {
         Database db = session.getGlobalStateMgr().getDb(dbId);

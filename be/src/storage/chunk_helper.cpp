@@ -6,13 +6,15 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/column_pool.h"
-#include "column/schema.h"
 #include "column/type_traits.h"
+#include "column/vectorized_schema.h"
+#include "gutil/strings/fastmem.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "simd/simd.h"
 #include "storage/olap_type_infra.h"
 #include "storage/tablet_schema.h"
+#include "storage/type_traits.h"
 #include "storage/type_utils.h"
 #include "storage/types.h"
 #include "util/metrics.h"
@@ -82,9 +84,9 @@ struct CppColumnTraits<TYPE_JSON> {
     using ColumnType = vectorized::JsonColumn;
 };
 
-vectorized::Field ChunkHelper::convert_field(ColumnId id, const TabletColumn& c) {
+vectorized::VectorizedField ChunkHelper::convert_field(ColumnId id, const TabletColumn& c) {
     TypeInfoPtr type_info = get_type_info(c);
-    starrocks::vectorized::Field f(id, std::string(c.name()), type_info, c.is_nullable());
+    starrocks::vectorized::VectorizedField f(id, std::string(c.name()), type_info, c.is_nullable());
     f.set_is_key(c.is_key());
     f.set_short_key_length(c.index_length());
     f.set_aggregate_method(c.aggregation());
@@ -92,16 +94,16 @@ vectorized::Field ChunkHelper::convert_field(ColumnId id, const TabletColumn& c)
     return f;
 }
 
-vectorized::Schema ChunkHelper::convert_schema(const starrocks::TabletSchema& schema) {
-    starrocks::vectorized::Fields fields;
+vectorized::VectorizedSchema ChunkHelper::convert_schema(const starrocks::TabletSchema& schema) {
+    starrocks::vectorized::VectorizedFields fields;
     for (ColumnId cid = 0; cid < schema.num_columns(); ++cid) {
         auto f = convert_field(cid, schema.column(cid));
-        fields.emplace_back(std::make_shared<starrocks::vectorized::Field>(std::move(f)));
+        fields.emplace_back(std::make_shared<starrocks::vectorized::VectorizedField>(std::move(f)));
     }
-    return starrocks::vectorized::Schema(std::move(fields), schema.keys_type(), schema.sort_key_idxes());
+    return starrocks::vectorized::VectorizedSchema(std::move(fields), schema.keys_type(), schema.sort_key_idxes());
 }
 
-starrocks::vectorized::Field ChunkHelper::convert_field_to_format_v2(ColumnId id, const TabletColumn& c) {
+starrocks::vectorized::VectorizedField ChunkHelper::convert_field_to_format_v2(ColumnId id, const TabletColumn& c) {
     LogicalType type = TypeUtils::to_storage_format_v2(c.type());
 
     TypeInfoPtr type_info = nullptr;
@@ -113,7 +115,7 @@ starrocks::vectorized::Field ChunkHelper::convert_field_to_format_v2(ColumnId id
     } else {
         type_info = get_type_info(type);
     }
-    starrocks::vectorized::Field f(id, std::string(c.name()), type_info, c.is_nullable());
+    starrocks::vectorized::VectorizedField f(id, std::string(c.name()), type_info, c.is_nullable());
     f.set_is_key(c.is_key());
     f.set_length(c.length());
 
@@ -136,26 +138,28 @@ starrocks::vectorized::Field ChunkHelper::convert_field_to_format_v2(ColumnId id
     return f;
 }
 
-starrocks::vectorized::Schema ChunkHelper::convert_schema_to_format_v2(const starrocks::TabletSchema& schema) {
-    return starrocks::vectorized::Schema(schema.schema());
+starrocks::vectorized::VectorizedSchema ChunkHelper::convert_schema_to_format_v2(
+        const starrocks::TabletSchema& schema) {
+    return starrocks::vectorized::VectorizedSchema(schema.schema());
 }
 
-starrocks::vectorized::Schema ChunkHelper::convert_schema_to_format_v2(const starrocks::TabletSchema& schema,
-                                                                       const std::vector<ColumnId>& cids) {
-    return starrocks::vectorized::Schema(schema.schema(), cids);
+starrocks::vectorized::VectorizedSchema ChunkHelper::convert_schema_to_format_v2(const starrocks::TabletSchema& schema,
+                                                                                 const std::vector<ColumnId>& cids) {
+    return starrocks::vectorized::VectorizedSchema(schema.schema(), cids);
 }
 
-starrocks::vectorized::Schema ChunkHelper::get_short_key_schema_with_format_v2(const starrocks::TabletSchema& schema) {
+starrocks::vectorized::VectorizedSchema ChunkHelper::get_short_key_schema_with_format_v2(
+        const starrocks::TabletSchema& schema) {
     std::vector<ColumnId> short_key_cids;
     const auto& sort_key_idxes = schema.sort_key_idxes();
     short_key_cids.reserve(schema.num_short_key_columns());
     for (auto i = 0; i < schema.num_short_key_columns(); ++i) {
         short_key_cids.push_back(sort_key_idxes[i]);
     }
-    return starrocks::vectorized::Schema(schema.schema(), short_key_cids);
+    return starrocks::vectorized::VectorizedSchema(schema.schema(), short_key_cids);
 }
 
-ColumnId ChunkHelper::max_column_id(const starrocks::vectorized::Schema& schema) {
+ColumnId ChunkHelper::max_column_id(const starrocks::vectorized::VectorizedSchema& schema) {
     ColumnId id = 0;
     for (const auto& field : schema.fields()) {
         id = std::max(id, field->id());
@@ -196,7 +200,8 @@ inline std::shared_ptr<vectorized::DecimalColumnType<T>> get_decimal_column_ptr(
 template <bool force>
 struct ColumnPtrBuilder {
     template <LogicalType ftype>
-    vectorized::ColumnPtr operator()(size_t chunk_size, const vectorized::Field& field, int precision, int scale) {
+    vectorized::ColumnPtr operator()(size_t chunk_size, const vectorized::VectorizedField& field, int precision,
+                                     int scale) {
         auto nullable = [&](vectorized::ColumnPtr c) -> vectorized::ColumnPtr {
             return field.is_nullable()
                            ? vectorized::NullableColumn::create(
@@ -229,27 +234,28 @@ struct ColumnPtrBuilder {
 };
 
 template <bool force>
-vectorized::ColumnPtr column_from_pool(const vectorized::Field& field, size_t chunk_size) {
+vectorized::ColumnPtr column_from_pool(const vectorized::VectorizedField& field, size_t chunk_size) {
     auto precision = field.type()->precision();
     auto scale = field.type()->scale();
     return field_type_dispatch_column(field.type()->type(), ColumnPtrBuilder<force>(), chunk_size, field, precision,
                                       scale);
 }
 
-vectorized::Chunk* ChunkHelper::new_chunk_pooled(const vectorized::Schema& schema, size_t chunk_size, bool force) {
+vectorized::Chunk* ChunkHelper::new_chunk_pooled(const vectorized::VectorizedSchema& schema, size_t chunk_size,
+                                                 bool force) {
     vectorized::Columns columns;
     columns.reserve(schema.num_fields());
     for (size_t i = 0; i < schema.num_fields(); i++) {
-        const vectorized::FieldPtr& f = schema.field(i);
+        const vectorized::VectorizedFieldPtr& f = schema.field(i);
         auto column = (force && !config::disable_column_pool) ? column_from_pool<true>(*f, chunk_size)
                                                               : column_from_pool<false>(*f, chunk_size);
         column->reserve(chunk_size);
         columns.emplace_back(std::move(column));
     }
-    return new vectorized::Chunk(std::move(columns), std::make_shared<vectorized::Schema>(schema));
+    return new vectorized::Chunk(std::move(columns), std::make_shared<vectorized::VectorizedSchema>(schema));
 }
 
-std::vector<size_t> ChunkHelper::get_char_field_indexes(const vectorized::Schema& schema) {
+std::vector<size_t> ChunkHelper::get_char_field_indexes(const vectorized::VectorizedSchema& schema) {
     std::vector<size_t> char_field_indexes;
     for (size_t i = 0; i < schema.num_fields(); ++i) {
         const auto& field = schema.field(i);
@@ -260,7 +266,8 @@ std::vector<size_t> ChunkHelper::get_char_field_indexes(const vectorized::Schema
     return char_field_indexes;
 }
 
-void ChunkHelper::padding_char_columns(const std::vector<size_t>& char_column_indexes, const vectorized::Schema& schema,
+void ChunkHelper::padding_char_columns(const std::vector<size_t>& char_column_indexes,
+                                       const vectorized::VectorizedSchema& schema,
                                        const starrocks::TabletSchema& tschema, vectorized::Chunk* chunk) {
     size_t num_rows = chunk->num_rows();
     for (auto field_index : char_column_indexes) {
@@ -326,7 +333,7 @@ vectorized::ColumnPtr ChunkHelper::column_from_field_type(LogicalType type, bool
     return field_type_dispatch_column(type, ColumnBuilder(), nullable);
 }
 
-vectorized::ColumnPtr ChunkHelper::column_from_field(const vectorized::Field& field) {
+vectorized::ColumnPtr ChunkHelper::column_from_field(const vectorized::VectorizedField& field) {
     auto NullableIfNeed = [&](vectorized::ColumnPtr col) -> vectorized::ColumnPtr {
         return field.is_nullable()
                        ? vectorized::NullableColumn::create(std::move(col), vectorized::NullColumn::create())
@@ -350,16 +357,17 @@ vectorized::ColumnPtr ChunkHelper::column_from_field(const vectorized::Field& fi
     }
 }
 
-vectorized::ChunkPtr ChunkHelper::new_chunk(const vectorized::Schema& schema, size_t n) {
+vectorized::ChunkPtr ChunkHelper::new_chunk(const vectorized::VectorizedSchema& schema, size_t n) {
     size_t fields = schema.num_fields();
     vectorized::Columns columns;
     columns.reserve(fields);
     for (size_t i = 0; i < fields; i++) {
-        const vectorized::FieldPtr& f = schema.field(i);
+        const vectorized::VectorizedFieldPtr& f = schema.field(i);
         columns.emplace_back(column_from_field(*f));
         columns.back()->reserve(n);
     }
-    return std::make_shared<vectorized::Chunk>(std::move(columns), std::make_shared<vectorized::Schema>(schema));
+    return std::make_shared<vectorized::Chunk>(std::move(columns),
+                                               std::make_shared<vectorized::VectorizedSchema>(schema));
 }
 
 std::shared_ptr<vectorized::Chunk> ChunkHelper::new_chunk(const TupleDescriptor& tuple_desc, size_t n) {
@@ -460,6 +468,7 @@ void ChunkAccumulator::finalize() {
 }
 
 void ChunkPipelineAccumulator::push(const vectorized::ChunkPtr& chunk) {
+    chunk->check_or_die();
     DCHECK(_out_chunk == nullptr);
     if (_in_chunk == nullptr) {
         _in_chunk = chunk;

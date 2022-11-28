@@ -16,20 +16,14 @@ namespace starrocks {
 
 namespace fslib = staros::starlet::fslib;
 
-std::ostream& operator<<(std::ostream& os, const staros::starlet::ShardInfo& shard) {
-    return os << "Shard{.id=" << shard.id << " .uri=" << shard.obj_store_info.s3_obj_store.uri << "}";
-}
-
 absl::Status StarOSWorker::add_shard(const ShardInfo& shard) {
     std::unique_lock l(_mtx);
-    LOG(INFO) << "Adding " << shard;
     _shards.try_emplace(shard.id, ShardInfoDetails(shard));
     return absl::OkStatus();
 }
 
 absl::Status StarOSWorker::remove_shard(const ShardId id) {
     std::unique_lock l(_mtx);
-    LOG(INFO) << "Removing " << id;
     _shards.erase(id);
     return absl::OkStatus();
 }
@@ -102,29 +96,38 @@ absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::get_shard_files
 
         // FIXME: currently the cache root dir is set from be.conf, could be changed in future
         std::string cache_dir = config::starlet_cache_dir;
-        auto cache_setting = info.get_cache_setting();
-        bool cache_enabled = cache_setting.enable_cache && !cache_dir.empty();
+        auto cache_info = info.cache_info;
+        bool cache_enabled = cache_info.enable_cache() && !cache_dir.empty();
 
         std::string scheme = "file://";
-        switch (info.obj_store_info.scheme) {
-        case staros::starlet::ObjectStoreType::S3:
+        switch (info.path_info.fs_info().fs_type()) {
+        case staros::FileStoreType::S3:
             scheme = "s3://";
             {
-                auto& s3_info = info.obj_store_info.s3_obj_store;
-                localconf[fslib::kSysRoot] = s3_info.uri;
-                if (!s3_info.region.empty()) {
-                    localconf[fslib::kS3Region] = s3_info.region;
+                auto& s3_info = info.path_info.fs_info().s3_fs_info();
+                if (!info.path_info.full_path().empty()) {
+                    localconf[fslib::kSysRoot] = info.path_info.full_path();
                 }
-                if (!s3_info.endpoint.empty()) {
-                    localconf[fslib::kS3OverrideEndpoint] = s3_info.endpoint;
+                if (!s3_info.bucket().empty()) {
+                    localconf[fslib::kS3Bucket] = s3_info.bucket();
                 }
-                if (!s3_info.access_key.empty()) {
-                    localconf[fslib::kS3AccessKeyId] = s3_info.access_key;
+                if (!s3_info.region().empty()) {
+                    localconf[fslib::kS3Region] = s3_info.region();
                 }
-                if (!s3_info.access_key_secret.empty()) {
-                    localconf[fslib::kS3AccessKeySecret] = s3_info.access_key_secret;
+                if (!s3_info.endpoint().empty()) {
+                    localconf[fslib::kS3OverrideEndpoint] = s3_info.endpoint();
+                }
+                if (!s3_info.access_key().empty()) {
+                    localconf[fslib::kS3AccessKeyId] = s3_info.access_key();
+                }
+                if (!s3_info.access_key_secret().empty()) {
+                    localconf[fslib::kS3AccessKeySecret] = s3_info.access_key_secret();
                 }
             }
+            break;
+        case staros::FileStoreType::HDFS:
+            scheme = "hdfs://";
+            localconf[fslib::kSysRoot] = info.path_info.full_path();
             break;
         default:
             return absl::InvalidArgumentError("Unknown shard storage scheme!");
@@ -143,10 +146,10 @@ absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::get_shard_files
             localconf[fslib::kSysRoot] = "/";
             // original fs sys.root as cachefs persistent uri
             localconf[fslib::kCacheFsPersistUri] = tmp[fslib::kSysRoot];
-            // use shard id as cache identifier
-            localconf[fslib::kCacheFsIdentifier] = absl::StrFormat("%d", info.id);
-            localconf[fslib::kCacheFsTtlSecs] = absl::StrFormat("%ld", cache_setting.cache_entry_ttl_sec);
-            if (cache_setting.allow_async_write_back) {
+            // use persistent uri as identifier to maximize sharing of cache data
+            localconf[fslib::kCacheFsIdentifier] = tmp[fslib::kSysRoot];
+            localconf[fslib::kCacheFsTtlSecs] = absl::StrFormat("%ld", cache_info.ttl_seconds());
+            if (cache_info.async_write_back()) {
                 localconf[fslib::kCacheFsAsyncWriteBack] = "true";
             }
 

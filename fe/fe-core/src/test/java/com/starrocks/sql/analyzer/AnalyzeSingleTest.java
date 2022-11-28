@@ -605,6 +605,7 @@ public class AnalyzeSingleTest {
                 "select t0.v1, v1 from t0"))
                 .getQueryRelation();
         Assert.assertEquals("v1,v1", String.join(",", query.getColumnOutputNames()));
+        analyzeFail("create view v as select t0.v1, v1 from t0", "Duplicate column name 'v1'");
 
         query = ((QueryStatement) analyzeSuccess(
                 "select * from t0, t1"))
@@ -620,5 +621,7 @@ public class AnalyzeSingleTest {
         analyzeSuccess("select v1 as v from t0 order by t0.v1");
         analyzeFail("select v1 as v from t0 order by test.v",
                 "Column '`test`.`v`' cannot be resolved");
+
+        analyzeFail("create view v as select * from t0,tnotnull", "Duplicate column name 'v1'");
     }
 }

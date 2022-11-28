@@ -39,6 +39,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.Objects;
 
 public class TableName implements Writable, GsonPreProcessable, GsonPostProcessable {
     public static final String LAMBDA_FUNC_TABLE = "__LAMBDA_TABLE";
@@ -166,17 +167,6 @@ public class TableName implements Writable, GsonPreProcessable, GsonPostProcessa
         return stringBuilder.toString();
     }
 
-    @Override
-    public boolean equals(Object other) {
-        if (this == other) {
-            return true;
-        }
-        if (other instanceof TableName) {
-            return toString().equals(other.toString());
-        }
-        return false;
-    }
-
     public String toSql() {
         StringBuilder stringBuilder = new StringBuilder();
         if (catalog != null && !CatalogMgr.isInternalCatalog(catalog)) {
@@ -209,5 +199,20 @@ public class TableName implements Writable, GsonPreProcessable, GsonPostProcessa
     @Override
     public void gsonPreProcess() throws IOException {
         fullDb = ClusterNamespace.getFullName(db);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        TableName tableName = (TableName) o;
+        return Objects.equals(catalog, tableName.catalog)
+                && Objects.equals(tbl, tableName.tbl)
+                && Objects.equals(db, tableName.db);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(catalog, tbl, db);
     }
 }

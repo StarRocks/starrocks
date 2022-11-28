@@ -85,7 +85,7 @@ public class Daemon extends Thread {
         this.metaContext = metaContext;
     }
 
-    public void exit() {
+    public void setStop() {
         isStop.set(true);
     }
 

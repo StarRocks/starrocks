@@ -10,6 +10,8 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.privilege.PrivilegeManager;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.AnalyzeJob;
@@ -38,7 +40,8 @@ public class ShowAnalyzeJobStmt extends ShowStmt {
                     .addColumn(new Column("Reason", ScalarType.createVarchar(100)))
                     .build();
 
-    public static List<String> showAnalyzeJobs(AnalyzeJob analyzeJob) throws MetaNotFoundException {
+    public static List<String> showAnalyzeJobs(ConnectContext context,
+                                               AnalyzeJob analyzeJob) throws MetaNotFoundException {
         List<String> row = Lists.newArrayList("", "ALL", "ALL", "ALL", "", "", "", "", "", "");
         long dbId = analyzeJob.getDbId();
         long tableId = analyzeJob.getTableId();
@@ -62,6 +65,14 @@ public class ShowAnalyzeJobStmt extends ShowStmt {
                 }
 
                 row.set(2, table.getName());
+
+                // In new privilege framework(RBAC), user needs any action on the table to show analysis job on it,
+                // for jobs on entire instance or entire db, we just show it directly because there isn't a specified
+                // table to check privilege on.
+                if (context.getGlobalStateMgr().isUsingNewPrivilege() &&
+                        !PrivilegeManager.checkAnyActionOnTable(context, db.getOriginName(), table.getName())) {
+                    return null;
+                }
 
                 if (null != columns && !columns.isEmpty()
                         && (columns.size() != table.getBaseSchema().size())) {

@@ -20,11 +20,11 @@ public class PhysicalDeltaLakeScanOperator extends PhysicalScanOperator {
     private ScanOperatorPredicates predicates;
 
     public PhysicalDeltaLakeScanOperator(Table table,
-                                    Map<ColumnRefOperator, Column> columnRefMap,
-                                    ScanOperatorPredicates predicates,
-                                    long limit,
-                                    ScalarOperator predicate,
-                                    Projection projection) {
+                                         Map<ColumnRefOperator, Column> columnRefMap,
+                                         ScanOperatorPredicates predicates,
+                                         long limit,
+                                         ScalarOperator predicate,
+                                         Projection projection) {
         super(OperatorType.PHYSICAL_DELTALAKE_SCAN, table, columnRefMap, limit, predicate, projection);
         this.predicates = predicates;
     }

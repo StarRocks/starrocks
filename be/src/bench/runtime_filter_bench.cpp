@@ -106,7 +106,11 @@ static void do_benchmark_hash_partitioned(benchmark::State& state, TRuntimeFilte
         ASSERT_EQ(true_count, num_rows);
         total_evalute_time += MonotonicMillis() - t0;
     }
-    state.counters["evalute_time(ms)"] = total_evalute_time / iterate_times / num_column;
+    if (!num_column) {
+        state.counters["evalute_time(ms)"] = 0;
+    } else {
+        state.counters["evalute_time(ms)"] = total_evalute_time / iterate_times / num_column;
+    }
     state.PauseTiming();
 }
 

@@ -32,8 +32,8 @@
   + [Transform data at loading](./loading/Etl_in_loading.md)
 + Data Unloading
   + [Overview of data unloading](./unloading/Export.md)
-  + [Spark connector](./unloading/Spark_connector.md)
-  + [Flink connector](./unloading/Flink_connector.md)
+  + [Use Spark connector to read data from StarRocks](./unloading/Spark_connector.md)
+  + [Use Flink connector to read data from StarRocks](./unloading/Flink_connector.md)
 + Query Data Sources
   + Catalog
     + [Overview](./data_source/catalog/catalog_overview.md)
@@ -431,10 +431,19 @@
       + [sha2](./sql-reference/sql-functions/crytographic-functions/sha2.md)
       + [sm3](./sql-reference/sql-functions/crytographic-functions/sm3.md)
     + Math Functions
+      + [acos](./sql-reference/sql-functions/math-functions/acos.md)
+      + [asin](./sql-reference/sql-functions/math-functions/asin.md)
+      + [atan](./sql-reference/sql-functions/math-functions/atan.md)
+      + [cos](./sql-reference/sql-functions/math-functions/cos.md)
+      + [cosh](./sql-reference/sql-functions/math-functions/cosh.md)
       + [greatest](./sql-reference/sql-functions/math-functions/greatest.md)
       + [least](./sql-reference/sql-functions/math-functions/least.md)
       + [rand](./sql-reference/sql-functions/math-functions/rand.md)
+      + [sin](./sql-reference/sql-functions/math-functions/sin.md)
+      + [sinh](./sql-reference/sql-functions/math-functions/sinh.md)
       + [square](./sql-reference/sql-functions/math-functions/square.md)
+      + [tan](./sql-reference/sql-functions/math-functions/tan.md)
+      + [tanh](./sql-reference/sql-functions/math-functions/tanh.md)
     + Utility Functions
       + [current_version](./sql-reference/sql-functions/utility-functions/current_version.md)
       + [version](./sql-reference/sql-functions/utility-functions/version.md)

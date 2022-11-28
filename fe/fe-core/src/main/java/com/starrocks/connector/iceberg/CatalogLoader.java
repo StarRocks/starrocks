@@ -41,6 +41,10 @@ public interface CatalogLoader {
         return new GlueCatalogLoader(name, hadoopConf, properties);
     }
 
+    static CatalogLoader rest(String name, Configuration hadoopConf, Map<String, String> properties) {
+        return new RESTCatalogLoader(name, hadoopConf, properties);
+    }
+
     class GlueCatalogLoader implements CatalogLoader {
         private final String catalogName;
         private final SerializableConfiguration hadoopConf;
@@ -134,6 +138,34 @@ public interface CatalogLoader {
                     .add("name", name)
                     .add("catalogImpl", catalogImpl)
                     .toString();
+        }
+    }
+
+    class RESTCatalogLoader implements CatalogLoader {
+        private final String catalogName;
+        private final SerializableConfiguration hadoopConf;
+        private final String uri;
+        private final Map<String, String> properties;
+
+        private RESTCatalogLoader(String catalogName, Configuration conf, Map<String, String> properties) {
+            this.catalogName = catalogName;
+            this.hadoopConf = new SerializableConfiguration(conf);
+            this.uri = properties.get(CatalogProperties.URI);
+            this.properties = Maps.newHashMap(properties);
+        }
+
+        @Override
+        public Catalog loadCatalog() {
+            return CatalogUtil.loadCatalog(IcebergRESTCatalog.class.getName(), catalogName, properties,
+                hadoopConf.get());
+        }
+
+        @Override
+        public String toString() {
+            return MoreObjects.toStringHelper(this)
+                .add("catalogName", catalogName)
+                .add("uri", uri)
+                .toString();
         }
     }
 }

@@ -29,7 +29,6 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
         List<OptExpression> results = Lists.newArrayList();
         for (MaterializationContext mvContext : context.getCandidateMvs()) {
             mvContext.setQueryExpression(queryExpression);
-            mvContext.setQueryRefFactory(context.getColumnRefFactory());
             mvContext.setOptimizerContext(context);
             MaterializedViewRewriter rewriter = getMaterializedViewRewrite(mvContext);
             List<OptExpression> rewritten = rewriter.rewrite();
@@ -40,7 +39,7 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
         return results;
     }
 
-    MaterializedViewRewriter getMaterializedViewRewrite(MaterializationContext mvContext) {
+    public MaterializedViewRewriter getMaterializedViewRewrite(MaterializationContext mvContext) {
         return new MaterializedViewRewriter(mvContext);
     }
 }

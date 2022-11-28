@@ -21,7 +21,7 @@
 #include <ctime>
 #include <string>
 
-#include "storage/field.h"
+#include "storage/uint24.h"
 
 namespace starrocks {
 

@@ -108,18 +108,18 @@ public class LoadPlanner {
     List<ImportColumnDesc> columnDescs;
     private StreamLoadInfo streamLoadInfo;
     private boolean routimeStreamLoadNegative;
-    
+
     // Stream load related structs
     private String label;
     // Routine load related structs
     TRoutineLoadTask routineLoadTask;
 
     public LoadPlanner(long loadJobId, TUniqueId loadId, long txnId, long dbId, OlapTable destTable,
-            boolean strictMode, String timezone, long timeoutS,
-            long startTime, boolean partialUpdate, ConnectContext context,
-            Map<String, String> sessionVariables, long loadMemLimit, long execMemLimit,
-            BrokerDesc brokerDesc, List<BrokerFileGroup> brokerFileGroups,
-            List<List<TBrokerFileStatus>> fileStatusesList, int filesAdded) {
+                       boolean strictMode, String timezone, long timeoutS,
+                       long startTime, boolean partialUpdate, ConnectContext context,
+                       Map<String, String> sessionVariables, long loadMemLimit, long execMemLimit,
+                       BrokerDesc brokerDesc, List<BrokerFileGroup> brokerFileGroups,
+                       List<List<TBrokerFileStatus>> fileStatusesList, int filesAdded) {
         this.loadJobId = loadJobId;
         this.loadId = loadId;
         this.txnId = txnId;
@@ -182,13 +182,13 @@ public class LoadPlanner {
         this.descTable = analyzer.getDescTbl();
         this.enableDictOptimize = Config.enable_dict_optimize_stream_load;
         this.startTime = System.currentTimeMillis();
-        this.sessionVariables = sessionVariables; 
+        this.sessionVariables = sessionVariables;
     }
 
-    public LoadPlanner(long loadJobId, TUniqueId loadId, long txnId, long dbId, String dbName, OlapTable destTable, 
+    public LoadPlanner(long loadJobId, TUniqueId loadId, long txnId, long dbId, String dbName, OlapTable destTable,
             boolean strictMode, String timezone, boolean partialUpdate, ConnectContext context,
             Map<String, String> sessionVariables, long loadMemLimit, long execMemLimit,
-            boolean routimeStreamLoadNegative, int parallelInstanceNum, List<ImportColumnDesc> columnDescs, 
+            boolean routimeStreamLoadNegative, int parallelInstanceNum, List<ImportColumnDesc> columnDescs,
             StreamLoadInfo streamLoadInfo, String label, long timeoutS) {
         this(loadJobId, loadId, txnId, dbId, dbName, destTable, strictMode, timezone, partialUpdate, context,
                 sessionVariables, loadMemLimit, execMemLimit, routimeStreamLoadNegative, parallelInstanceNum,
@@ -319,7 +319,7 @@ public class LoadPlanner {
 
             if (col.getType().isVarchar() && enableDictOptimize
                     && IDictManager.getInstance().hasGlobalDict(destTable.getId(),
-                            col.getName())) {
+                    col.getName())) {
                 Optional<ColumnDict> dict = IDictManager.getInstance().getGlobalDict(destTable.getId(), col.getName());
                 dict.ifPresent(columnDict -> globalDicts.add(new Pair<>(slotDesc.getId().asInt(), columnDict)));
             }
@@ -360,7 +360,7 @@ public class LoadPlanner {
     }
 
     private void prepareSinkFragment(PlanFragment sinkFragment, List<Long> partitionIds, boolean canUsePipeLine,
-            boolean completeTabletSink) throws UserException {
+                                     boolean completeTabletSink) throws UserException {
         DataSink dataSink = null;
         if (destTable instanceof OlapTable) {
             // 4. Olap table sink

@@ -160,17 +160,6 @@ message RestoreSnapshotsResponse {
     optional int32 pad = 1;
 }
 
-message CheckCompactionRequest {
-    // Calculate the compaction score for each of the following tablets
-    repeated int64 tablet_ids = 1;
-    optional int64 version = 2;
-}
-
-message CheckCompactionResponse {
-    // Mapping from tablet id to copmaction score
-    map<int64, double> compaction_scores = 1;
-}
-
 service LakeService {
     rpc publish_version(PublishVersionRequest) returns (PublishVersionResponse);
     rpc publish_log_version(PublishLogVersionRequest) returns (PublishLogVersionResponse);
@@ -184,6 +173,5 @@ service LakeService {
     rpc unlock_tablet_metadata(UnlockTabletMetadataRequest) returns (UnlockTabletMetadataResponse);
     rpc upload_snapshots(UploadSnapshotsRequest) returns (UploadSnapshotsResponse);
     rpc restore_snapshots(RestoreSnapshotsRequest) returns (RestoreSnapshotsResponse);
-    rpc check_compaction(CheckCompactionRequest) returns (CheckCompactionResponse);
 }
 

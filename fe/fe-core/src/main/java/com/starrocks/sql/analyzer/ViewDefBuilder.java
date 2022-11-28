@@ -164,7 +164,7 @@ public class ViewDefBuilder {
 
             if (relation.isResolvedInFromClause()) {
                 if (relation.getAlias() != null) {
-                    sqlBuilder.append(" AS ").append(relation.getAlias());
+                    sqlBuilder.append(" AS ").append(relation.getAlias().getTbl());
                 }
                 return sqlBuilder.toString();
             }
@@ -186,7 +186,7 @@ public class ViewDefBuilder {
 
             if (node.getAlias() != null) {
                 sqlBuilder.append(" AS ");
-                sqlBuilder.append("`").append(node.getAlias()).append("`");
+                sqlBuilder.append("`").append(node.getAlias().getTbl()).append("`");
             }
             return sqlBuilder.toString();
         }
@@ -209,7 +209,7 @@ public class ViewDefBuilder {
             }
             if (node.getAlias() != null) {
                 sqlBuilder.append(" AS ");
-                sqlBuilder.append("`").append(node.getAlias()).append("`");
+                sqlBuilder.append("`").append(node.getAlias().getTbl()).append("`");
             }
             return sqlBuilder.toString();
         }

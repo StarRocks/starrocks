@@ -25,7 +25,6 @@
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/select_operator.h"
 #include "exprs/expr.h"
-#include "runtime/raw_value.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {

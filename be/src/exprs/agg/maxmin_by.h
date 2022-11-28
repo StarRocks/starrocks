@@ -16,65 +16,13 @@ template <LogicalType PT, typename = guard::Guard>
 struct MaxByAggregateData {};
 
 template <LogicalType PT>
-struct MaxByAggregateData<PT, IntegralPTGuard<PT>> {
+struct MaxByAggregateData<PT, AggregatePTGuard<PT>> {
     using T = RunTimeCppType<PT>;
     raw::RawVector<uint8_t> buffer_result;
-    T max = std::numeric_limits<T>::lowest();
+    T max = RunTimeTypeLimits<PT>::min_value();
     void reset() {
         buffer_result.clear();
-        max = std::numeric_limits<T>::lowest();
-    }
-};
-
-template <LogicalType PT>
-struct MaxByAggregateData<PT, FloatPTGuard<PT>> {
-    using T = RunTimeCppType<PT>;
-    raw::RawVector<uint8_t> buffer_result;
-    T max = std::numeric_limits<T>::lowest();
-    void reset() {
-        buffer_result.clear();
-        max = std::numeric_limits<T>::lowest();
-    }
-};
-
-template <>
-struct MaxByAggregateData<TYPE_DECIMALV2, guard::Guard> {
-    raw::RawVector<uint8_t> buffer_result;
-    DecimalV2Value max = DecimalV2Value::get_min_decimal();
-    void reset() {
-        buffer_result.clear();
-        max = DecimalV2Value::get_min_decimal();
-    }
-};
-
-template <LogicalType PT>
-struct MaxByAggregateData<PT, DecimalPTGuard<PT>> {
-    using T = RunTimeCppType<PT>;
-    raw::RawVector<uint8_t> buffer_result;
-    T max = std::numeric_limits<T>::lowest();
-    void reset() {
-        buffer_result.clear();
-        max = std::numeric_limits<T>::lowest();
-    }
-};
-
-template <>
-struct MaxByAggregateData<TYPE_DATETIME, guard::Guard> {
-    raw::RawVector<uint8_t> buffer_result;
-    TimestampValue max = TimestampValue::MIN_TIMESTAMP_VALUE;
-    void reset() {
-        buffer_result.clear();
-        max = TimestampValue::MIN_TIMESTAMP_VALUE;
-    }
-};
-
-template <>
-struct MaxByAggregateData<TYPE_DATE, guard::Guard> {
-    raw::RawVector<uint8_t> buffer_result;
-    DateValue max = DateValue::MIN_DATE_VALUE;
-    void reset() {
-        buffer_result.clear();
-        max = DateValue::MIN_DATE_VALUE;
+        max = RunTimeTypeLimits<PT>::min_value();
     }
 };
 
@@ -111,9 +59,9 @@ struct MaxByAggregateData<PT, StringPTGuard<PT>> {
     }
 };
 
-template <LogicalType PT>
-struct MaxByElement<PT, MaxByAggregateData<PT>, StringPTGuard<PT>> {
-    void operator()(MaxByAggregateData<PT>& state, Column* col, size_t row_num, const Slice& right) const {
+template <LogicalType PT, typename State>
+struct MaxByElement<PT, State, StringPTGuard<PT>> {
+    void operator()(State& state, Column* col, size_t row_num, const Slice& right) const {
         if (!state.has_value() || state.slice_max().compare(right) < 0) {
             state.buffer_result.resize(col->serialize_size(row_num));
             col->serialize(row_num, state.buffer_result.data());
@@ -123,7 +71,7 @@ struct MaxByElement<PT, MaxByAggregateData<PT>, StringPTGuard<PT>> {
         }
     }
 
-    void operator()(MaxByAggregateData<PT>& state, const char* buffer, size_t size, const Slice& right) const {
+    void operator()(State& state, const char* buffer, size_t size, const Slice& right) const {
         if (!state.has_value() || state.slice_max().compare(right) < 0) {
             state.buffer_result.resize(size);
             memcpy(state.buffer_result.data(), buffer, size);

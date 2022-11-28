@@ -23,3 +23,10 @@ Fixes #
 - [ ] This pr will affect users' behaviors
 - [ ] This pr needs user documentation (for new or modified features or behaviors)
   - [ ] I have added documentation for my new feature or new function
+
+## Bugfix cherry-pick branch check:
+- [ ] I have checked the version labels which the pr will be auto backported to target branch
+  - [ ] 2.5
+  - [ ] 2.4
+  - [ ] 2.3
+  - [ ] 2.2

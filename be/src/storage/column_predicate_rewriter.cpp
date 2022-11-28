@@ -13,6 +13,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/config.h"
 #include "common/object_pool.h"
+#include "common/statusor.h"
 #include "exprs/expr_context.h"
 #include "exprs/vectorized/in_const_predicate.hpp"
 #include "exprs/vectorized/runtime_filter_bank.h"
@@ -32,7 +33,7 @@ Status ColumnPredicateRewriter::rewrite_predicate(ObjectPool* pool) {
     // because schema has reordered
     // so we only need to check the first `predicate_column_size` fields
     for (size_t i = 0; i < _column_size; i++) {
-        const FieldPtr& field = _schema.field(i);
+        const VectorizedFieldPtr& field = _schema.field(i);
         ColumnId cid = field->id();
         if (_need_rewrite[cid]) {
             RETURN_IF_ERROR(_rewrite_predicate(pool, field));
@@ -41,7 +42,7 @@ Status ColumnPredicateRewriter::rewrite_predicate(ObjectPool* pool) {
     return Status::OK();
 }
 
-StatusOr<bool> ColumnPredicateRewriter::_rewrite_predicate(ObjectPool* pool, const FieldPtr& field) {
+StatusOr<bool> ColumnPredicateRewriter::_rewrite_predicate(ObjectPool* pool, const VectorizedFieldPtr& field) {
     auto cid = field->id();
     DCHECK(_column_iterators[cid]->all_page_dict_encoded());
     auto iter = _predicates.find(cid);
@@ -346,7 +347,8 @@ StatusOr<bool> ColumnPredicateRewriter::_rewrite_expr_predicate(ObjectPool* pool
 
     DCHECK_IF_ERROR(filter->prepare(state));
     DCHECK_IF_ERROR(filter->open(state));
-    *ptr = new ColumnExprPredicate(get_type_info(kDictCodeType), pred->column_id(), state, filter, pred->slot_desc());
+    ASSIGN_OR_RETURN(*ptr, ColumnExprPredicate::make_column_expr_predicate(
+                                   get_type_info(kDictCodeType), pred->column_id(), state, filter, pred->slot_desc()))
     filter->close(state);
 
     return true;

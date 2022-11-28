@@ -87,7 +87,7 @@ Status RowsetUpdateState::_load_upserts(Rowset* rowset, uint32_t idx, vectorized
     for (size_t i = 0; i < schema.num_key_columns(); i++) {
         pk_columns.push_back((uint32_t)i);
     }
-    vectorized::Schema pkey_schema = ChunkHelper::convert_schema_to_format_v2(schema, pk_columns);
+    vectorized::VectorizedSchema pkey_schema = ChunkHelper::convert_schema_to_format_v2(schema, pk_columns);
     auto res = rowset->get_segment_iterators2(pkey_schema, nullptr, 0, &stats);
     if (!res.ok()) {
         return res.status();
@@ -139,7 +139,7 @@ Status RowsetUpdateState::_do_load(Tablet* tablet, Rowset* rowset) {
     for (size_t i = 0; i < schema.num_key_columns(); i++) {
         pk_columns.push_back((uint32_t)i);
     }
-    vectorized::Schema pkey_schema = ChunkHelper::convert_schema_to_format_v2(schema, pk_columns);
+    vectorized::VectorizedSchema pkey_schema = ChunkHelper::convert_schema_to_format_v2(schema, pk_columns);
     std::unique_ptr<vectorized::Column> pk_column;
     if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
         CHECK(false) << "create column for primary key encoder failed";
@@ -173,7 +173,7 @@ Status RowsetUpdateState::load_deletes(Rowset* rowset, uint32_t idx) {
     for (size_t i = 0; i < schema.num_key_columns(); i++) {
         pk_columns.push_back((uint32_t)i);
     }
-    vectorized::Schema pkey_schema = ChunkHelper::convert_schema_to_format_v2(schema, pk_columns);
+    vectorized::VectorizedSchema pkey_schema = ChunkHelper::convert_schema_to_format_v2(schema, pk_columns);
     std::unique_ptr<vectorized::Column> pk_column;
     if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
         CHECK(false) << "create column for primary key encoder failed";
@@ -187,7 +187,7 @@ Status RowsetUpdateState::load_upserts(Rowset* rowset, uint32_t upsert_id) {
     for (size_t i = 0; i < schema.num_key_columns(); i++) {
         pk_columns.push_back((uint32_t)i);
     }
-    vectorized::Schema pkey_schema = ChunkHelper::convert_schema_to_format_v2(schema, pk_columns);
+    vectorized::VectorizedSchema pkey_schema = ChunkHelper::convert_schema_to_format_v2(schema, pk_columns);
     std::unique_ptr<vectorized::Column> pk_column;
     if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
         CHECK(false) << "create column for primary key encoder failed";
@@ -352,7 +352,7 @@ Status RowsetUpdateState::_prepare_partial_update_states(Tablet* tablet, Rowset*
     }
     int64_t t_end = MonotonicMillis();
 
-    LOG(INFO) << Substitute(
+    LOG(INFO) << strings::Substitute(
             "prepare PartialUpdateState tablet:$0 read_version:$1 #segment:$2 #row:$3(#non-default:$4) #column:$5 "
             "time:$6ms(index:$7/value:$8)",
             _tablet_id, _read_version.to_string(), num_segments, total_rows, total_nondefault_rows, read_columns.size(),
@@ -429,7 +429,7 @@ Status RowsetUpdateState::_check_and_resolve_conflict(Tablet* tablet, Rowset* ro
         }
     }
     int64_t t_end = MonotonicMillis();
-    LOG(INFO) << Substitute(
+    LOG(INFO) << strings::Substitute(
             "_check_and_resolve_conflict tablet:$0 rowset:$1 version:($2 $3) #conflict-row:$4 #column:$5 "
             "time:$6ms(index:$7/value:$8)",
             tablet->tablet_id(), rowset_id, _read_version.to_string(), latest_applied_version.to_string(),
@@ -491,9 +491,9 @@ Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_
                                                      partial_rowset_footer));
         }
         int64_t t_rewrite_end = MonotonicMillis();
-        LOG(INFO) << Substitute("apply partial segment tablet:$0 rowset:$1 seg:$2 #column:$3 #rewrite:$4ms",
-                                tablet->tablet_id(), rowset_id, i, read_column_ids.size(),
-                                t_rewrite_end - t_rewrite_start);
+        LOG(INFO) << strings::Substitute("apply partial segment tablet:$0 rowset:$1 seg:$2 #column:$3 #rewrite:$4ms",
+                                         tablet->tablet_id(), rowset_id, i, read_column_ids.size(),
+                                         t_rewrite_end - t_rewrite_start);
     }
     if (is_rewrite) {
         for (size_t i = 0; i < num_segments; i++) {
@@ -515,7 +515,7 @@ Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_
 }
 
 std::string RowsetUpdateState::to_string() const {
-    return Substitute("RowsetUpdateState tablet:$0", _tablet_id);
+    return strings::Substitute("RowsetUpdateState tablet:$0", _tablet_id);
 }
 
 } // namespace starrocks

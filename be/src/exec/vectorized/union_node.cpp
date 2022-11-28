@@ -30,14 +30,14 @@ Status UnionNode::init(const TPlanNode& tnode, RuntimeState* state) {
     const auto& const_expr_lists = tnode.union_node.const_expr_lists;
     for (const auto& exprs : const_expr_lists) {
         std::vector<ExprContext*> ctxs;
-        RETURN_IF_ERROR(Expr::create_expr_trees(_pool, exprs, &ctxs));
+        RETURN_IF_ERROR(Expr::create_expr_trees(_pool, exprs, &ctxs, state));
         _const_expr_lists.push_back(ctxs);
     }
 
     const auto& result_expr_lists = tnode.union_node.result_expr_lists;
     for (const auto& exprs : result_expr_lists) {
         std::vector<ExprContext*> ctxs;
-        RETURN_IF_ERROR(Expr::create_expr_trees(_pool, exprs, &ctxs));
+        RETURN_IF_ERROR(Expr::create_expr_trees(_pool, exprs, &ctxs, state));
         _child_expr_lists.push_back(ctxs);
     }
 

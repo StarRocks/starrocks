@@ -34,7 +34,7 @@ inline bool offsets_equal(const UInt32Column::Ptr& array1, const UInt32Column::P
 // The input array column maybe nullable, so first remove the wrap of nullable property.
 // The result of lambda expressions do not change the offsets of the current array and the null map.
 // NOTE the return column must be of the return type.
-ColumnPtr ArrayMapExpr::evaluate(ExprContext* context, Chunk* chunk) {
+StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* chunk) {
     std::vector<ColumnPtr> inputs;
     NullColumnPtr input_null_map = nullptr;
     std::shared_ptr<ArrayColumn> input_array = nullptr;
@@ -88,7 +88,7 @@ ColumnPtr ArrayMapExpr::evaluate(ExprContext* context, Chunk* chunk) {
         // construct a new chunk to evaluate the lambda expression.
         auto cur_chunk = std::make_shared<vectorized::Chunk>();
         // put all arguments into the new chunk
-        vector<SlotId> arguments_ids;
+        std::vector<SlotId> arguments_ids;
         auto lambda_func = dynamic_cast<LambdaFunction*>(_children[0]);
         int argument_num = lambda_func->get_lambda_arguments_ids(&arguments_ids);
         DCHECK(argument_num == inputs.size());
@@ -96,7 +96,7 @@ ColumnPtr ArrayMapExpr::evaluate(ExprContext* context, Chunk* chunk) {
             cur_chunk->append_column(inputs[i], arguments_ids[i]); // column ref
         }
         // put captured columns into the new chunk aligning with the first array's offsets
-        vector<SlotId> slot_ids;
+        std::vector<SlotId> slot_ids;
         _children[0]->get_slot_ids(&slot_ids);
         for (auto id : slot_ids) {
             DCHECK(id > 0);

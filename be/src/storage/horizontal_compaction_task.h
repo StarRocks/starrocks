@@ -15,7 +15,7 @@ class RowsetWriter;
 
 namespace vectorized {
 class TabletReader;
-class Schema;
+class VectorizedSchema;
 } // namespace vectorized
 class HorizontalCompactionTask : public CompactionTask {
 public:
@@ -26,7 +26,7 @@ public:
 private:
     Status _horizontal_compact_data(Statistics* statistics);
     StatusOr<size_t> _compact_data(int32_t chunk_size, vectorized::TabletReader& reader,
-                                   const vectorized::Schema& schema, RowsetWriter* output_rs_writer);
+                                   const vectorized::VectorizedSchema& schema, RowsetWriter* output_rs_writer);
     void _failure_callback();
     void _success_callback();
 };

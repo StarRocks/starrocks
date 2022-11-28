@@ -1265,8 +1265,10 @@ Status OrcChunkReader::_init_include_columns(const std::unique_ptr<OrcMapping>& 
     build_column_name_to_id_mapping(&_name_to_column_id, _hive_column_names, _reader->getType(), _case_sensitive);
 
     std::list<uint64_t> include_column_id;
+
+    // NOTICE: No need to explicit include root column id, otherwise it will read out all fields.
     // Include root column id.
-    include_column_id.emplace_back(0);
+    // include_column_id.emplace_back(0);
 
     for (size_t i = 0; i < _src_slot_descriptors.size(); i++) {
         SlotDescriptor* desc = _src_slot_descriptors[i];
@@ -1282,7 +1284,7 @@ Status OrcChunkReader::_init_include_columns(const std::unique_ptr<OrcMapping>& 
         for (size_t pos : _lazy_load_ctx->lazy_load_indices) {
             SlotDescriptor* desc = _src_slot_descriptors[pos];
             if (desc == nullptr) continue;
-            RETURN_IF_ERROR(mapping->set_include_column_id(pos, desc->type(), &lazy_load_column_id));
+            RETURN_IF_ERROR(mapping->set_lazyload_column_id(pos, &lazy_load_column_id));
         }
 
         _row_reader_options.includeLazyLoadColumnIndexes(lazy_load_column_id);
@@ -1291,12 +1293,25 @@ Status OrcChunkReader::_init_include_columns(const std::unique_ptr<OrcMapping>& 
     return Status::OK();
 }
 
+const std::vector<bool>& OrcChunkReader::TEST_get_selected_column_id_list() {
+    return _row_reader->getSelectedColumns();
+}
+
+const std::vector<bool>& OrcChunkReader::TEST_get_lazyload_column_id_list() {
+    return _row_reader->getLazyLoadColumns();
+}
+
 Status OrcChunkReader::init(std::unique_ptr<orc::Reader> reader) {
     _reader = std::move(reader);
     // ORC writes empty schema (struct<>) to ORC files containing zero rows.
     // Hive 0.12
     if (_reader->getNumberOfRows() == 0) {
         return Status::EndOfFile("number of rows is 0");
+    }
+
+    if (_hive_column_names == nullptr) {
+        // If hive_column_names is nullptr, we have to use orc's column name.
+        set_use_orc_column_names(true);
     }
 
     // ensure search argument is not null.
@@ -1308,12 +1323,13 @@ Status OrcChunkReader::init(std::unique_ptr<orc::Reader> reader) {
         _row_reader_options.searchArgument(builder->build());
     }
     // Build root_mapping, including all columns in orc.
-    const std::unique_ptr<OrcMapping> root_mapping =
-            OrcMappingFactory::build_mapping(_src_slot_descriptors, _reader->getType(), _case_sensitive);
-    if (root_mapping == nullptr) {
-        return Status::InternalError("Build orc root mapping failed.");
-    }
+    std::unique_ptr<OrcMapping> root_mapping = nullptr;
+    ASSIGN_OR_RETURN(root_mapping,
+                     OrcMappingFactory::build_mapping(_src_slot_descriptors, _reader->getType(), _case_sensitive,
+                                                      _use_orc_column_names, _hive_column_names));
+    DCHECK(root_mapping != nullptr);
     RETURN_IF_ERROR(_init_include_columns(root_mapping));
+    RETURN_IF_ERROR(_init_src_types(root_mapping));
     try {
         _row_reader = _reader->createRowReader(_row_reader_options);
     } catch (std::exception& e) {
@@ -1324,14 +1340,12 @@ Status OrcChunkReader::init(std::unique_ptr<orc::Reader> reader) {
     }
     // Build selected column mapping, because after `include column operation`, all included column's column id
     // will re-assign.
-    _root_selected_mapping =
-            OrcMappingFactory::build_mapping(_src_slot_descriptors, _reader->getType(), _case_sensitive);
-    if (_root_selected_mapping == nullptr) {
-        return Status::InternalError("Build orc root selected mapping failed.");
-    }
+    ASSIGN_OR_RETURN(_root_selected_mapping,
+                     OrcMappingFactory::build_mapping(_src_slot_descriptors, _reader->getType(), _case_sensitive,
+                                                      _use_orc_column_names, _hive_column_names));
+    DCHECK(_root_selected_mapping != nullptr);
     // TODO(SmithCruise) delete _init_position_in_orc() when develop subfield lazy load.
     RETURN_IF_ERROR(_init_position_in_orc());
-    RETURN_IF_ERROR(_init_src_types());
     RETURN_IF_ERROR(_init_cast_exprs());
     RETURN_IF_ERROR(_init_fill_functions());
     return Status::OK();
@@ -1339,8 +1353,8 @@ Status OrcChunkReader::init(std::unique_ptr<orc::Reader> reader) {
 
 Status OrcChunkReader::_init_position_in_orc() {
     int column_size = _src_slot_descriptors.size();
-    _position_in_orc.clear();
-    _position_in_orc.resize(column_size);
+    std::vector<int> position_in_orc;
+    position_in_orc.resize(column_size);
     _slot_id_to_position.clear();
 
     std::unordered_map<int, int> column_id_to_pos;
@@ -1372,7 +1386,7 @@ Status OrcChunkReader::_init_position_in_orc() {
             return Status::NotFound(s);
         }
         int pos = it2->second;
-        _position_in_orc[i] = pos;
+        position_in_orc[i] = pos;
         SlotId id = slot_desc->id();
         _slot_id_to_position[id] = pos;
     }
@@ -1380,12 +1394,12 @@ Status OrcChunkReader::_init_position_in_orc() {
     if (_lazy_load_ctx != nullptr) {
         for (int i = 0; i < _lazy_load_ctx->active_load_slots.size(); i++) {
             int src_index = _lazy_load_ctx->active_load_indices[i];
-            int pos = _position_in_orc[src_index];
+            int pos = position_in_orc[src_index];
             _lazy_load_ctx->active_load_orc_positions[i] = pos;
         }
         for (int i = 0; i < _lazy_load_ctx->lazy_load_slots.size(); i++) {
             int src_index = _lazy_load_ctx->lazy_load_indices[i];
-            int pos = _position_in_orc[src_index];
+            int pos = position_in_orc[src_index];
             _lazy_load_ctx->lazy_load_orc_positions[i] = pos;
         }
     }
@@ -1411,12 +1425,12 @@ static Status _create_type_descriptor_by_orc(const TypeDescriptor& origin_type, 
         // assign selected_fields information
         result->selected_fields = origin_type.selected_fields;
         DCHECK_EQ(0, result->children.size());
-        result->children.emplace_back();
 
-        TypeDescriptor& key_type = result->children.back();
+        TypeDescriptor& key_type = result->children.emplace_back();
         RETURN_IF_ERROR(_create_type_descriptor_by_orc(origin_type.children.at(0), orc_type->getSubtype(0),
                                                        mapping->get_column_id_or_child_mapping(0).orc_mapping,
                                                        &key_type));
+
         result->children.emplace_back();
         TypeDescriptor& value_type = result->children.back();
         RETURN_IF_ERROR(_create_type_descriptor_by_orc(origin_type.children.at(1), orc_type->getSubtype(1),
@@ -1495,7 +1509,7 @@ static void _try_implicit_cast(TypeDescriptor* from, const TypeDescriptor& to) {
     }
 }
 
-Status OrcChunkReader::_init_src_types() {
+Status OrcChunkReader::_init_src_types(const std::unique_ptr<OrcMapping>& mapping) {
     int column_size = _src_slot_descriptors.size();
     // update source types.
     _src_types.clear();
@@ -1505,11 +1519,10 @@ Status OrcChunkReader::_init_src_types() {
         if (slot_desc == nullptr) {
             continue;
         }
-        int pos_of_orc = _position_in_orc[i];
-        const orc::Type* orc_type = _row_reader->getSelectedType().getSubtype(pos_of_orc);
+        const orc::Type* orc_type =
+                _reader->getType().getSubtypeByColumnId(mapping->get_column_id_or_child_mapping(i).orc_column_id);
         RETURN_IF_ERROR(_create_type_descriptor_by_orc(
-                slot_desc->type(), orc_type, _root_selected_mapping->get_column_id_or_child_mapping(i).orc_mapping,
-                &_src_types[i]));
+                slot_desc->type(), orc_type, mapping->get_column_id_or_child_mapping(i).orc_mapping, &_src_types[i]));
         _try_implicit_cast(&_src_types[i], slot_desc->type());
     }
     return Status::OK();
@@ -1577,7 +1590,6 @@ OrcChunkReader::~OrcChunkReader() {
     _src_types.clear();
     _slot_id_to_desc.clear();
     _slot_id_to_position.clear();
-    _position_in_orc.clear();
     _cast_exprs.clear();
     _fill_functions.clear();
 }
@@ -1607,7 +1619,7 @@ Status OrcChunkReader::_fill_chunk(ChunkPtr* chunk, const std::vector<SlotDescri
                                    const std::vector<int>* indices) {
     int column_size = src_slot_descriptors.size();
     DCHECK_GT(_batch->numElements, 0);
-    const auto& batch_vec = down_cast<orc::StructVectorBatch*>(_batch.get())->fields;
+    const auto& batch_vec = down_cast<orc::StructVectorBatch*>(_batch.get());
     if (_broker_load_mode) {
         // always allocate load filter. it's much easier to use in fill chunk function.
         if (_broker_load_filter == nullptr) {
@@ -1625,7 +1637,9 @@ Status OrcChunkReader::_fill_chunk(ChunkPtr* chunk, const std::vector<SlotDescri
             src_index = (*indices)[src_index];
         }
         set_current_slot(slot_desc);
-        orc::ColumnVectorBatch* cvb = batch_vec[_position_in_orc[src_index]];
+        orc::ColumnVectorBatch* cvb =
+                batch_vec->fieldsColumnIdMap[_root_selected_mapping->get_column_id_or_child_mapping(src_index)
+                                                     .orc_column_id];
         if (!slot_desc->is_nullable() && cvb->hasNulls) {
             if (_broker_load_mode) {
                 std::string error_msg =
@@ -1684,8 +1698,9 @@ ChunkPtr OrcChunkReader::_create_chunk(const std::vector<SlotDescriptor*>& src_s
     return chunk;
 }
 
-ChunkPtr OrcChunkReader::_cast_chunk(ChunkPtr* chunk, const std::vector<SlotDescriptor*>& src_slot_descriptors,
-                                     const std::vector<int>* indices) {
+StatusOr<ChunkPtr> OrcChunkReader::_cast_chunk(ChunkPtr* chunk,
+                                               const std::vector<SlotDescriptor*>& src_slot_descriptors,
+                                               const std::vector<int>* indices) {
     ChunkPtr& src = (*chunk);
     size_t chunk_size = src->num_rows();
     ChunkPtr cast_chunk = std::make_shared<Chunk>();
@@ -1699,7 +1714,8 @@ ChunkPtr OrcChunkReader::_cast_chunk(ChunkPtr* chunk, const std::vector<SlotDesc
         if (indices != nullptr) {
             src_index = (*indices)[src_index];
         }
-        ColumnPtr col = _cast_exprs[src_index]->evaluate(nullptr, src.get());
+        // TODO(murphy) check status
+        ASSIGN_OR_RETURN(ColumnPtr col, _cast_exprs[src_index]->evaluate_checked(nullptr, src.get()));
         col = ColumnHelper::unfold_const_column(slot->type(), chunk_size, col);
         DCHECK_LE(col->size(), chunk_size);
         cast_chunk->append_column(std::move(col), slot->id());
@@ -1714,22 +1730,20 @@ Status OrcChunkReader::fill_chunk(ChunkPtr* chunk) {
     return _fill_chunk(chunk, _src_slot_descriptors, nullptr);
 }
 
-ChunkPtr OrcChunkReader::cast_chunk(ChunkPtr* chunk) {
+StatusOr<ChunkPtr> OrcChunkReader::cast_chunk_checked(ChunkPtr* chunk) {
     return _cast_chunk(chunk, _src_slot_descriptors, nullptr);
 }
 
 StatusOr<ChunkPtr> OrcChunkReader::get_chunk() {
     ChunkPtr ptr = create_chunk();
     RETURN_IF_ERROR(fill_chunk(&ptr));
-    ChunkPtr ret = cast_chunk(&ptr);
-    return ret;
+    return cast_chunk_checked(&ptr);
 }
 
 StatusOr<ChunkPtr> OrcChunkReader::get_active_chunk() {
     ChunkPtr ptr = _create_chunk(_lazy_load_ctx->active_load_slots, &_lazy_load_ctx->active_load_indices);
     RETURN_IF_ERROR(_fill_chunk(&ptr, _lazy_load_ctx->active_load_slots, &_lazy_load_ctx->active_load_indices));
-    ChunkPtr ret = _cast_chunk(&ptr, _lazy_load_ctx->active_load_slots, &_lazy_load_ctx->active_load_indices);
-    return ret;
+    return _cast_chunk(&ptr, _lazy_load_ctx->active_load_slots, &_lazy_load_ctx->active_load_indices);
 }
 
 void OrcChunkReader::lazy_filter_on_cvb(Filter* filter) {
@@ -1743,8 +1757,7 @@ void OrcChunkReader::lazy_filter_on_cvb(Filter* filter) {
 StatusOr<ChunkPtr> OrcChunkReader::get_lazy_chunk() {
     ChunkPtr ptr = _create_chunk(_lazy_load_ctx->lazy_load_slots, &_lazy_load_ctx->lazy_load_indices);
     RETURN_IF_ERROR(_fill_chunk(&ptr, _lazy_load_ctx->lazy_load_slots, &_lazy_load_ctx->lazy_load_indices));
-    ChunkPtr ret = _cast_chunk(&ptr, _lazy_load_ctx->lazy_load_slots, &_lazy_load_ctx->lazy_load_indices);
-    return ret;
+    return _cast_chunk(&ptr, _lazy_load_ctx->lazy_load_slots, &_lazy_load_ctx->lazy_load_indices);
 }
 
 void OrcChunkReader::lazy_read_next(size_t numValues) {
@@ -1888,7 +1901,7 @@ static inline orc::Int128 to_orc128(int128_t value) {
     return {int64_t(value >> 64), uint64_t(value)};
 }
 
-static orc::Literal translate_to_orc_literal(Expr* lit, orc::PredicateDataType pred_type) {
+static StatusOr<orc::Literal> translate_to_orc_literal(Expr* lit, orc::PredicateDataType pred_type) {
     TExprNodeType::type node_type = lit->node_type();
     LogicalType ptype = lit->type().type;
     if (node_type == TExprNodeType::type::NULL_LITERAL) {
@@ -1896,7 +1909,7 @@ static orc::Literal translate_to_orc_literal(Expr* lit, orc::PredicateDataType p
     }
 
     auto* vlit = down_cast<VectorizedLiteral*>(lit);
-    ColumnPtr ptr = vlit->evaluate(nullptr, nullptr);
+    ASSIGN_OR_RETURN(auto ptr, vlit->evaluate_checked(nullptr, nullptr));
     if (ptr->only_null()) {
         return {pred_type};
     }
@@ -1921,27 +1934,27 @@ static orc::Literal translate_to_orc_literal(Expr* lit, orc::PredicateDataType p
     case LogicalType::TYPE_CHAR:
     case LogicalType::TYPE_BINARY: {
         const Slice& slice = datum.get_slice();
-        return {slice.data, slice.size};
+        return orc::Literal{slice.data, slice.size};
     }
     case LogicalType::TYPE_DATE:
-        return {orc::PredicateDataType::DATE, native_date_to_orc_date(datum.get_date())};
+        return orc::Literal{orc::PredicateDataType::DATE, native_date_to_orc_date(datum.get_date())};
     case LogicalType::TYPE_DECIMAL:
     case LogicalType::TYPE_DECIMALV2: {
         const DecimalV2Value& value = datum.get_decimal();
-        return {to_orc128(value.value()), value.PRECISION, value.SCALE};
+        return orc::Literal{to_orc128(value.value()), value.PRECISION, value.SCALE};
     }
     case LogicalType::TYPE_DECIMAL32:
-        return {orc::Int128(datum.get_int32()), lit->type().precision, lit->type().scale};
+        return orc::Literal{orc::Int128(datum.get_int32()), lit->type().precision, lit->type().scale};
     case LogicalType::TYPE_DECIMAL64:
-        return {orc::Int128(datum.get_int64()), lit->type().precision, lit->type().scale};
+        return orc::Literal{orc::Int128(datum.get_int64()), lit->type().precision, lit->type().scale};
     case LogicalType::TYPE_DECIMAL128:
-        return {to_orc128(datum.get_int128()), lit->type().precision, lit->type().scale};
+        return orc::Literal{to_orc128(datum.get_int128()), lit->type().precision, lit->type().scale};
     default:
         CHECK(false) << "failed to handle primitive type = " << std::to_string(ptype);
     }
 }
 
-void OrcChunkReader::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc::SearchArgumentBuilder>& builder) {
+Status OrcChunkReader::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc::SearchArgumentBuilder>& builder) {
     TExprNodeType::type node_type = conjunct->node_type();
     TExprOpcode::type op_type = conjunct->op();
     if (node_type == TExprNodeType::type::COMPOUND_PRED) {
@@ -1958,7 +1971,7 @@ void OrcChunkReader::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc::Se
             _add_conjunct(c, builder);
         }
         builder->end();
-        return;
+        return Status::OK();
     }
 
     // handle conjuncts
@@ -1969,14 +1982,14 @@ void OrcChunkReader::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc::Se
         orc::TruthValue val = orc::TruthValue::NO;
         if (node_type == TExprNodeType::BOOL_LITERAL) {
             Expr* literal = const_cast<Expr*>(conjunct);
-            ColumnPtr ptr = literal->evaluate(nullptr, nullptr);
+            auto ptr = literal->evaluate_checked(nullptr, nullptr).value();
             const Datum& datum = ptr->get(0);
             if (datum.get_int8()) {
                 val = orc::TruthValue::YES;
             }
         }
         builder->literal(val);
-        return;
+        return Status::OK();
     }
 
     Expr* slot = conjunct->get_child(0);
@@ -1988,7 +2001,7 @@ void OrcChunkReader::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc::Se
 
     if (node_type == TExprNodeType::type::BINARY_PRED) {
         Expr* lit = conjunct->get_child(1);
-        orc::Literal literal = translate_to_orc_literal(lit, pred_type);
+        ASSIGN_OR_RETURN(orc::Literal literal, translate_to_orc_literal(lit, pred_type));
 
         switch (op_type) {
         case TExprOpcode::EQ:
@@ -2028,7 +2041,7 @@ void OrcChunkReader::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc::Se
         default:
             CHECK(false) << "unexpected op_type in binary_pred type. op_type = " << std::to_string(op_type);
         }
-        return;
+        return Status::OK();
     }
 
     if (node_type == TExprNodeType::IN_PRED) {
@@ -2039,22 +2052,23 @@ void OrcChunkReader::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc::Se
         std::vector<orc::Literal> literals;
         for (int i = 1; i < conjunct->get_num_children(); i++) {
             Expr* lit = conjunct->get_child(i);
-            orc::Literal literal = translate_to_orc_literal(lit, pred_type);
+            ASSIGN_OR_RETURN(orc::Literal literal, translate_to_orc_literal(lit, pred_type));
             literals.emplace_back(literal);
         }
         builder->in(name, pred_type, literals);
         if (neg) {
             builder->end();
         }
-        return;
+        return Status::OK();
     }
 
     if (node_type == TExprNodeType::IS_NULL_PRED) {
         builder->isNull(name, pred_type);
-        return;
+        return Status::OK();
     }
 
     CHECK(false) << "unexpected node_type = " << std::to_string(node_type);
+    return Status::OK();
 }
 
 #define ADD_RF_TO_BUILDER                                            \
@@ -2159,12 +2173,12 @@ bool OrcChunkReader::_add_runtime_filter(const SlotDescriptor* slot, const JoinR
     return false;
 }
 
-void OrcChunkReader::set_conjuncts(const std::vector<Expr*>& conjuncts) {
-    set_conjuncts_and_runtime_filters(conjuncts, nullptr);
+Status OrcChunkReader::set_conjuncts(const std::vector<Expr*>& conjuncts) {
+    return set_conjuncts_and_runtime_filters(conjuncts, nullptr);
 }
 
-void OrcChunkReader::set_conjuncts_and_runtime_filters(const std::vector<Expr*>& conjuncts,
-                                                       const RuntimeFilterProbeCollector* rf_collector) {
+Status OrcChunkReader::set_conjuncts_and_runtime_filters(const std::vector<Expr*>& conjuncts,
+                                                         const RuntimeFilterProbeCollector* rf_collector) {
     std::unique_ptr<orc::SearchArgumentBuilder> builder = orc::SearchArgumentFactory::newBuilder();
     int ok = 0;
     builder->startAnd();
@@ -2175,7 +2189,7 @@ void OrcChunkReader::set_conjuncts_and_runtime_filters(const std::vector<Expr*>&
             continue;
         }
         ok += 1;
-        _add_conjunct(expr, builder);
+        RETURN_IF_ERROR(_add_conjunct(expr, builder));
     }
 
     if (rf_collector != nullptr) {
@@ -2199,6 +2213,7 @@ void OrcChunkReader::set_conjuncts_and_runtime_filters(const std::vector<Expr*>&
         VLOG_FILE << "OrcChunkReader::set_conjuncts. search argument = " << sargs->toString();
         _row_reader_options.searchArgument(std::move(sargs));
     }
+    return Status::OK();
 }
 
 #define DOWN_CAST_ASSIGN_MIN_MAX(TYPE)                         \

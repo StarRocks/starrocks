@@ -464,7 +464,7 @@ public class FunctionCallExpr extends Expr {
     @Override
     public Expr uncheckedCastTo(Type targetType) throws AnalysisException {
         Type type = getFn().getReturnType();
-	if (!type.equals(targetType)) {
+        if (!type.equals(targetType)) {
             return super.uncheckedCastTo(targetType);
         } else {
             return this;

@@ -899,7 +899,7 @@ public class GlobalStateMgr {
         createTaskCleaner();
 
         // 7. init starosAgent
-        if (Config.use_staros && !starOSAgent.init()) {
+        if (Config.use_staros && !starOSAgent.init(null)) {
             LOG.error("init starOSAgent failed");
             System.exit(-1);
         }
@@ -935,7 +935,8 @@ public class GlobalStateMgr {
     }
 
     protected void initJournal() throws JournalException, InterruptedException {
-        BlockingQueue<JournalTask> journalQueue = new ArrayBlockingQueue<JournalTask>(Config.metadata_journal_queue_size);
+        BlockingQueue<JournalTask> journalQueue =
+                new ArrayBlockingQueue<JournalTask>(Config.metadata_journal_queue_size);
         journal = JournalFactory.create(nodeMgr.getNodeName());
         journalWriter = new JournalWriter(journal, journalQueue);
 
@@ -976,7 +977,7 @@ public class GlobalStateMgr {
         FrontendNodeType oldType = feType;
         // stop replayer
         if (replayer != null) {
-            replayer.exit();
+            replayer.setStop();
             try {
                 replayer.join();
             } catch (InterruptedException e) {
@@ -1280,7 +1281,8 @@ public class GlobalStateMgr {
         Preconditions.checkState(remoteChecksum == checksum, remoteChecksum + " vs. " + checksum);
 
         if (isUsingNewPrivilege() && needUpgradedToNewPrivilege() && !isLeader() && !isCheckpointThread()) {
-            LOG.warn("follower has to wait for leader to upgrade the privileges, set usingNewPrivilege = false for now");
+            LOG.warn(
+                    "follower has to wait for leader to upgrade the privileges, set usingNewPrivilege = false for now");
             usingNewPrivilege.set(false);
             domainResolver = new DomainResolver(auth);
         }
@@ -1473,14 +1475,18 @@ public class GlobalStateMgr {
         // Move image.ckpt to image.dataVersion
         LOG.info("Move " + ckpt.getAbsolutePath() + " to " + curFile.getAbsolutePath());
         if (!ckpt.renameTo(curFile)) {
-            curFile.delete();
+            if (!curFile.delete()) {
+                LOG.warn("Failed to delete file, filepath={}", curFile.getAbsolutePath());
+            }
             throw new IOException();
         }
     }
 
     public void saveImage(File curFile, long replayedJournalId) throws IOException {
         if (!curFile.exists()) {
-            curFile.createNewFile();
+            if (!curFile.createNewFile()) {
+                LOG.warn("Failed to create file, filepath={}", curFile.getAbsolutePath());
+            }
         }
 
         // save image does not need any lock. because only checkpoint thread will call this method.
@@ -1639,7 +1645,6 @@ public class GlobalStateMgr {
         };
     }
 
-
     public void createReplayer() {
         replayer = new Daemon("replayer", REPLAY_INTERVAL_MS) {
             private JournalCursor cursor = null;
@@ -1762,7 +1767,6 @@ public class GlobalStateMgr {
             // TODO exit gracefully
             Util.stdoutWithTime(e.getMessage());
             System.exit(-1);
-
 
         } finally {
             if (cursor != null) {
@@ -2081,15 +2085,6 @@ public class GlobalStateMgr {
                 }
             }
             sb.append(Joiner.on(", ").join(keysColumnNames)).append(")");
-            MaterializedIndexMeta index = olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexId());
-            if (index.getSortKeyIdxes() != null) {
-                sb.append("\nORDER BY(");
-                List<String> sortKeysColumnNames = Lists.newArrayList();
-                for (Integer i : index.getSortKeyIdxes()) {
-                    sortKeysColumnNames.add("`" + table.getBaseSchema().get(i).getName() + "`");
-                }
-                sb.append(Joiner.on(", ").join(sortKeysColumnNames)).append(")");
-            }
             if (!Strings.isNullOrEmpty(table.getComment())) {
                 sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
             }
@@ -2108,6 +2103,17 @@ public class GlobalStateMgr {
             // distribution
             DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo();
             sb.append("\n").append(distributionInfo.toSql());
+
+            // order by
+            MaterializedIndexMeta index = olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexId());
+            if (index.getSortKeyIdxes() != null) {
+                sb.append("\nORDER BY(");
+                List<String> sortKeysColumnNames = Lists.newArrayList();
+                for (Integer i : index.getSortKeyIdxes()) {
+                    sortKeysColumnNames.add("`" + table.getBaseSchema().get(i).getName() + "`");
+                }
+                sb.append(Joiner.on(", ").join(sortKeysColumnNames)).append(")");
+            }
 
             // properties
             sb.append("\nPROPERTIES (\n");
@@ -2161,7 +2167,8 @@ public class GlobalStateMgr {
             if (table.isLakeTable()) {
                 Map<String, String> storageProperties = ((LakeTable) olapTable).getProperties();
 
-                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE)
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                        .append(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE)
                         .append("\" = \"");
                 sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE)).append("\"");
 
@@ -2169,7 +2176,8 @@ public class GlobalStateMgr {
                         .append("\" = \"");
                 sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL)).append("\"");
 
-                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_ALLOW_ASYNC_WRITE_BACK)
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                        .append(PropertyAnalyzer.PROPERTIES_ALLOW_ASYNC_WRITE_BACK)
                         .append("\" = \"");
                 sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_ALLOW_ASYNC_WRITE_BACK)).append("\"");
             }
@@ -2180,7 +2188,8 @@ public class GlobalStateMgr {
             sb.append(olapTable.getStorageFormat()).append("\"");
 
             // enable_persistent_index
-            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                    .append(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)
                     .append("\" = \"");
             sb.append(olapTable.enablePersistentIndex()).append("\"");
 
@@ -2695,7 +2704,6 @@ public class GlobalStateMgr {
         return this.icebergRepository;
     }
 
-
     public MetastoreEventsProcessor getMetastoreEventsProcessor() {
         return this.metastoreEventsProcessor;
     }
@@ -2750,7 +2758,7 @@ public class GlobalStateMgr {
     }
 
     public static short calcShortKeyColumnCount(List<Column> indexColumns, Map<String, String> properties,
-            List<Integer> sortKeyIdxes)
+                                                List<Integer> sortKeyIdxes)
             throws DdlException {
         LOG.debug("sort key size: {}", sortKeyIdxes.size());
         Preconditions.checkArgument(sortKeyIdxes.size() > 0);
@@ -2860,6 +2868,7 @@ public class GlobalStateMgr {
     public void replayAlterMaterializedViewProperties(short opCode, ModifyTablePropertyOperationLog log) {
         this.alter.replayAlterMaterializedViewProperties(opCode, log);
     }
+
     /*
      * used for handling CancelAlterStmt (for client is the CANCEL ALTER
      * command). including SchemaChangeHandler and RollupHandler
@@ -2974,6 +2983,10 @@ public class GlobalStateMgr {
         if (!catalogMgr.catalogExists(newCatalogName)) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_CATALOG_ERROR, newCatalogName);
         }
+        if (isUsingNewPrivilege() && !CatalogMgr.isInternalCatalog(newCatalogName) &&
+                !PrivilegeManager.checkAnyActionOnCatalog(ctx, newCatalogName)) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USE CATALOG");
+        }
         ctx.setCurrentCatalog(newCatalogName);
     }
 
@@ -2994,12 +3007,17 @@ public class GlobalStateMgr {
             } else {
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_AND_DB_ERROR, identifier);
             }
+            if (isUsingNewPrivilege() && !CatalogMgr.isInternalCatalog(newCatalogName) &&
+                    !PrivilegeManager.checkAnyActionOnCatalog(ctx, newCatalogName)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USE CATALOG");
+            }
             ctx.setCurrentCatalog(newCatalogName);
         }
 
         // Check auth for internal catalog.
         // Here we check the request permission that sent by the mysql client or jdbc.
         // So we didn't check UseDbStmt permission in PrivilegeChecker.
+        // TODO: external catalog should also check any action on or under db when change db on context
         if (CatalogMgr.isInternalCatalog(ctx.getCurrentCatalog())) {
             if (isUsingNewPrivilege()) {
                 if (!PrivilegeManager.checkAnyActionOnOrUnderDb(ctx, dbName)) {
@@ -3143,7 +3161,8 @@ public class GlobalStateMgr {
         try {
             table = metadataMgr.getTable(catalogName, dbName, tblName);
             if (!(table instanceof HiveMetaStoreTable)) {
-                throw new StarRocksConnectorException("table : " + tableName + " not exists, or is not hive/hudi external table");
+                throw new StarRocksConnectorException(
+                        "table : " + tableName + " not exists, or is not hive/hudi external table");
             }
             hmsTable = (HiveMetaStoreTable) table;
         } finally {
@@ -3208,7 +3227,8 @@ public class GlobalStateMgr {
     public List<Partition> createTempPartitionsFromPartitions(Database db, Table table,
                                                               String namePostfix, List<Long> sourcePartitionIds,
                                                               List<Long> tmpPartitionIds) {
-        return localMetastore.createTempPartitionsFromPartitions(db, table, namePostfix, sourcePartitionIds, tmpPartitionIds);
+        return localMetastore.createTempPartitionsFromPartitions(db, table, namePostfix, sourcePartitionIds,
+                tmpPartitionIds);
     }
 
     public void truncateTable(TruncateTableStmt truncateTableStmt) throws DdlException {

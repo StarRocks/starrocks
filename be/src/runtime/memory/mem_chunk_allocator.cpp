@@ -19,14 +19,14 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "runtime/memory/chunk_allocator.h"
+#include "runtime/memory/mem_chunk_allocator.h"
 
 #include <memory>
 #include <mutex>
 
 #include "gutil/dynamic_annotations.h"
 #include "runtime/current_thread.h"
-#include "runtime/memory/chunk.h"
+#include "runtime/memory/mem_chunk.h"
 #include "runtime/memory/system_allocator.h"
 #include "util/bit_util.h"
 #include "util/cpu_info.h"
@@ -37,7 +37,7 @@
 
 namespace starrocks {
 
-ChunkAllocator* ChunkAllocator::_s_instance = nullptr;
+MemChunkAllocator* MemChunkAllocator::_s_instance = nullptr;
 
 static IntCounter local_core_alloc_count(MetricUnit::NOUNIT);
 static IntCounter other_core_alloc_count(MetricUnit::NOUNIT);
@@ -48,11 +48,11 @@ static IntCounter system_free_cost_ns(MetricUnit::NANOSECONDS);
 
 #ifdef BE_TEST
 static std::mutex s_mutex;
-ChunkAllocator* ChunkAllocator::instance() {
+MemChunkAllocator* MemChunkAllocator::instance() {
     std::lock_guard<std::mutex> l(s_mutex);
     if (_s_instance == nullptr) {
         CpuInfo::init();
-        ChunkAllocator::init_instance(nullptr, 4096);
+        MemChunkAllocator::init_instance(nullptr, 4096);
     }
     return _s_instance;
 }
@@ -104,9 +104,9 @@ private:
     std::vector<std::vector<uint8_t*>> _chunk_lists;
 };
 
-void ChunkAllocator::init_instance(MemTracker* mem_tracker, size_t reserve_limit) {
+void MemChunkAllocator::init_instance(MemTracker* mem_tracker, size_t reserve_limit) {
     if (_s_instance != nullptr) return;
-    _s_instance = new ChunkAllocator(mem_tracker, reserve_limit);
+    _s_instance = new MemChunkAllocator(mem_tracker, reserve_limit);
 
 #define REGISTER_METIRC_WITH_NAME(name, metric) StarRocksMetrics::instance()->metrics()->register_metric(#name, &metric)
 
@@ -122,7 +122,7 @@ void ChunkAllocator::init_instance(MemTracker* mem_tracker, size_t reserve_limit
     REGISTER_METIRC(system_free_cost_ns);
 }
 
-ChunkAllocator::ChunkAllocator(MemTracker* mem_tracker, size_t reserve_limit)
+MemChunkAllocator::MemChunkAllocator(MemTracker* mem_tracker, size_t reserve_limit)
         : _mem_tracker(mem_tracker),
           _reserve_bytes_limit(reserve_limit),
           _reserved_bytes(0),
@@ -132,7 +132,7 @@ ChunkAllocator::ChunkAllocator(MemTracker* mem_tracker, size_t reserve_limit)
     }
 }
 
-bool ChunkAllocator::allocate(size_t size, Chunk* chunk) {
+bool MemChunkAllocator::allocate(size_t size, MemChunk* chunk) {
     bool ret = true;
 #ifndef BE_TEST
     MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker);
@@ -187,7 +187,7 @@ bool ChunkAllocator::allocate(size_t size, Chunk* chunk) {
     return ret;
 }
 
-void ChunkAllocator::free(const Chunk& chunk) {
+void MemChunkAllocator::free(const MemChunk& chunk) {
 #ifndef BE_TEST
     MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker);
     DeferOp op([&] {

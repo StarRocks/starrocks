@@ -20,6 +20,7 @@
 #include "runtime/primitive_type.h"
 #include "storage/chunk_helper.h"
 #include "storage/predicate_parser.h"
+#include "storage/tablet_schema.h"
 #include "storage/vectorized_column_predicate.h"
 #include "testutil/assert.h"
 
@@ -58,12 +59,12 @@ using PredicatePtr = std::unique_ptr<ColumnPredicate>;
 
 // NOLINTNEXTLINE
 TEST(ConjunctivePredicatesTest, test_evaluate) {
-    SchemaPtr schema(new Schema());
-    auto c0_field = std::make_shared<Field>(0, "c0", TYPE_INT, true);
-    auto c1_field = std::make_shared<Field>(1, "c1", TYPE_CHAR, true);
-    auto c2_field = std::make_shared<Field>(2, "c2", TYPE_DATE, true);
-    auto c3_field = std::make_shared<Field>(3, "c3", TYPE_DATETIME, true);
-    auto c4_field = std::make_shared<Field>(4, "c4", TYPE_DECIMALV2, true);
+    VectorizedSchemaPtr schema(new VectorizedSchema());
+    auto c0_field = std::make_shared<VectorizedField>(0, "c0", TYPE_INT, true);
+    auto c1_field = std::make_shared<VectorizedField>(1, "c1", TYPE_CHAR, true);
+    auto c2_field = std::make_shared<VectorizedField>(2, "c2", TYPE_DATE, true);
+    auto c3_field = std::make_shared<VectorizedField>(3, "c3", TYPE_DATETIME, true);
+    auto c4_field = std::make_shared<VectorizedField>(4, "c4", TYPE_DECIMALV2, true);
 
     schema->append(c0_field);
     schema->append(c1_field);
@@ -158,8 +159,8 @@ TEST(ConjunctivePredicatesTest, test_evaluate) {
 
 // NOLINTNEXTLINE
 TEST(ConjunctivePredicatesTest, test_evaluate_and) {
-    SchemaPtr schema(new Schema());
-    schema->append(std::make_shared<Field>(0, "c0", TYPE_INT, true));
+    VectorizedSchemaPtr schema(new VectorizedSchema());
+    schema->append(std::make_shared<VectorizedField>(0, "c0", TYPE_INT, true));
 
     auto c0 = ChunkHelper::column_from_field_type(TYPE_INT, true);
 
@@ -197,8 +198,8 @@ TEST(ConjunctivePredicatesTest, test_evaluate_and) {
 
 // NOLINTNEXTLINE
 TEST(ConjunctivePredicatesTest, test_evaluate_or) {
-    SchemaPtr schema(new Schema());
-    schema->append(std::make_shared<Field>(0, "c0", TYPE_INT, true));
+    VectorizedSchemaPtr schema(new VectorizedSchema());
+    schema->append(std::make_shared<VectorizedField>(0, "c0", TYPE_INT, true));
 
     auto c0 = ChunkHelper::column_from_field_type(TYPE_INT, true);
 

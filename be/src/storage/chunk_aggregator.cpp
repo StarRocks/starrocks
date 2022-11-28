@@ -9,7 +9,7 @@
 
 namespace starrocks::vectorized {
 
-ChunkAggregator::ChunkAggregator(const starrocks::vectorized::Schema* schema, uint32_t reserve_rows,
+ChunkAggregator::ChunkAggregator(const starrocks::vectorized::VectorizedSchema* schema, uint32_t reserve_rows,
                                  uint32_t max_aggregate_rows, double factor, bool is_vertical_merge, bool is_key)
         : _schema(schema),
           _reserve_rows(reserve_rows),
@@ -51,14 +51,14 @@ ChunkAggregator::ChunkAggregator(const starrocks::vectorized::Schema* schema, ui
     aggregate_reset();
 }
 
-ChunkAggregator::ChunkAggregator(const Schema* schema, uint32_t max_aggregate_rows, double factor)
+ChunkAggregator::ChunkAggregator(const VectorizedSchema* schema, uint32_t max_aggregate_rows, double factor)
         : ChunkAggregator(schema, max_aggregate_rows, max_aggregate_rows, factor, false, false) {}
 
-ChunkAggregator::ChunkAggregator(const Schema* schema, uint32_t reserve_rows, uint32_t max_aggregate_rows,
+ChunkAggregator::ChunkAggregator(const VectorizedSchema* schema, uint32_t reserve_rows, uint32_t max_aggregate_rows,
                                  double factor)
         : ChunkAggregator(schema, reserve_rows, max_aggregate_rows, factor, false, false) {}
 
-ChunkAggregator::ChunkAggregator(const Schema* schema, uint32_t max_aggregate_rows, double factor,
+ChunkAggregator::ChunkAggregator(const VectorizedSchema* schema, uint32_t max_aggregate_rows, double factor,
                                  bool is_vertical_merge, bool is_key)
         : ChunkAggregator(schema, max_aggregate_rows, max_aggregate_rows, factor, is_vertical_merge, is_key) {}
 

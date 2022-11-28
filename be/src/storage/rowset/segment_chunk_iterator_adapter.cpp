@@ -8,7 +8,7 @@ namespace starrocks::vectorized {
 
 SegmentChunkIteratorAdapter::SegmentChunkIteratorAdapter(const TabletSchema& tablet_schema,
                                                          const std::vector<LogicalType>& new_types,
-                                                         const Schema& out_schema, int chunk_size)
+                                                         const VectorizedSchema& out_schema, int chunk_size)
         : ChunkIterator(out_schema, chunk_size),
           _tablet_schema(tablet_schema),
           _new_types(new_types),
@@ -42,7 +42,7 @@ Status SegmentChunkIteratorAdapter::do_get_next(Chunk* out_chunk) {
     return Status::OK();
 }
 
-Status SegmentChunkIteratorAdapter::do_get_next(Chunk* out_chunk, vector<uint32_t>* rowid) {
+Status SegmentChunkIteratorAdapter::do_get_next(Chunk* out_chunk, std::vector<uint32_t>* rowid) {
     if (_in_chunk == nullptr) {
         auto reserve_size = config::vector_chunk_size;
         _in_chunk = ChunkHelper::new_chunk(_inner_iter->schema(), reserve_size);

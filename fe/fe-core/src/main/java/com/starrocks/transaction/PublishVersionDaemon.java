@@ -38,6 +38,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.Utils;
+import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.server.GlobalStateMgr;
@@ -50,10 +51,10 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
 
 public class PublishVersionDaemon extends LeaderDaemon {
@@ -342,24 +343,16 @@ public class PublishVersionDaemon extends LeaderDaemon {
             db.readUnlock();
         }
 
-        return publishNormalTablets(normalTablets, txnId, txnVersion) && publishShadowTablets(shadowTablets, txnId, txnVersion);
-    }
-
-    private boolean publishNormalTablets(@Nullable List<Tablet> tablets, long txnId, long version)
-            throws RpcException, NoAliveBackendException {
-        if (tablets == null || tablets.isEmpty()) {
-            return true;
+        if (shadowTablets != null && !shadowTablets.isEmpty()) {
+            Utils.publishLogVersion(shadowTablets, txnId, txnVersion);
         }
-        Utils.publishVersion(tablets, txnId, version - 1, version);
-        return true;
-    }
+        if (normalTablets != null && !normalTablets.isEmpty()) {
+            Map<Long, Double> compactionScores = new HashMap<>();
+            Utils.publishVersion(normalTablets, txnId, txnVersion - 1, txnVersion, compactionScores);
 
-    private boolean publishShadowTablets(@Nullable List<Tablet> tablets, long txnId, long version)
-            throws RpcException, NoAliveBackendException {
-        if (tablets == null || tablets.isEmpty()) {
-            return true;
+            Quantiles quantiles = Quantiles.compute(compactionScores.values());
+            partitionCommitInfo.setCompactionScore(quantiles);
         }
-        Utils.publishLogVersion(tablets, txnId, version);
         return true;
     }
 

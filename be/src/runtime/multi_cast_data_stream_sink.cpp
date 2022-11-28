@@ -12,9 +12,9 @@ void MultiCastDataStreamSink::add_data_stream_sink(std::unique_ptr<DataStreamSen
     _sinks.emplace_back(std::move(data_stream_sink));
 }
 
-Status MultiCastDataStreamSink::init(const TDataSink& thrift_sink) {
+Status MultiCastDataStreamSink::init(const TDataSink& thrift_sink, RuntimeState* state) {
     for (auto& s : _sinks) {
-        RETURN_IF_ERROR(s->init(thrift_sink));
+        RETURN_IF_ERROR(s->init(thrift_sink, state));
     }
     return Status::OK();
 }

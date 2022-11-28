@@ -59,7 +59,7 @@ public:
         _data_consumer_pool.start_bg_worker();
     }
 
-    ~RoutineLoadTaskExecutor() {
+    ~RoutineLoadTaskExecutor() noexcept {
         _thread_pool.shutdown();
         _thread_pool.join();
 

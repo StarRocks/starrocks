@@ -201,7 +201,7 @@ public class SelectAnalyzer {
                 }
                 if (fields.isEmpty()) {
                     if (item.getTblName() != null) {
-                        throw new SemanticException("Table %s not found", item.getTblName());
+                        throw new SemanticException("Unknown table '%s'", item.getTblName());
                     }
                     if (fromRelation != null) {
                         throw new SemanticException("SELECT * not allowed in queries without FROM clause");

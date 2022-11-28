@@ -1,6 +1,6 @@
 // This file is made available under Elastic License 2.0.
 // This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/be/src/runtime/raw_value.h
+//   https://github.com/apache/incubator-doris/blob/master/be/test/runtime/memory/chunk_allocator_test.cpp
 
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
@@ -19,19 +19,23 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#pragma once
+#include "runtime/memory/mem_chunk_allocator.h"
 
-#include "runtime/types.h"
+#include <gtest/gtest.h>
+
+#include "common/config.h"
+#include "runtime/memory/mem_chunk.h"
 
 namespace starrocks {
 
-// Useful utility functions for runtime values (which are passed around as void*).
-// TODO(murphy) remove it
-class RawValue {
-public:
-    // Compares both values.
-    // Return value is < 0  if v1 < v2, 0 if v1 == v2, > 0 if v1 > v2.
-    static int compare(const void* v1, const void* v2, const TypeDescriptor& type);
-};
-
+TEST(MemChunkAllocatorTest, Normal) {
+    config::use_mmap_allocate_chunk = true;
+    for (size_t size = 4096; size <= 1024 * 1024; size <<= 1) {
+        MemChunk chunk;
+        ASSERT_TRUE(MemChunkAllocator::instance()->allocate(size, &chunk));
+        ASSERT_NE(nullptr, chunk.data);
+        ASSERT_EQ(size, chunk.size);
+        MemChunkAllocator::instance()->free(chunk);
+    }
+}
 } // namespace starrocks

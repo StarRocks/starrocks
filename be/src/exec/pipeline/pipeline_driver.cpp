@@ -408,31 +408,16 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
         }
         _fragment_ctx->finish();
         auto status = _fragment_ctx->final_status();
-        _fragment_ctx->runtime_state()->exec_env()->driver_executor()->report_exec_state(_fragment_ctx, status, true);
+        _fragment_ctx->runtime_state()->exec_env()->driver_executor()->report_exec_state(_query_ctx, _fragment_ctx,
+                                                                                         status, true);
         _fragment_ctx->destroy_pass_through_chunk_buffer();
         auto fragment_id = _fragment_ctx->fragment_instance_id();
         if (_query_ctx->count_down_fragments()) {
             auto query_id = _query_ctx->query_id();
             DCHECK(!this->is_still_pending_finish());
-
-            auto frag_id = _fragment_ctx->fragment_instance_id();
-            int active_fragments = _query_ctx->num_active_fragments();
-            int active_drivers = _fragment_ctx->num_drivers();
-
             // Acquire the pointer to avoid be released when removing query
             auto query_trace = _query_ctx->shared_query_trace();
-            auto wg = _workgroup;
-            auto fragment_ctx_ptr = uintptr_t(_fragment_ctx);
-            auto query_ctx_ptr = uintptr_t(_query_ctx);
-            if (ExecEnv::GetInstance()->query_context_mgr()->remove(query_id)) {
-                if (wg) {
-                    LOG(INFO) << "decrease num running queries in workgroup " << wg->id()
-                              << " query_id=" << print_id(query_id) << ", fragment_ctx address=" << fragment_ctx_ptr
-                              << ", fragment_instance_id=" << print_id(frag_id) << ", active_drivers=" << active_drivers
-                              << ", active_fragments=" << active_fragments << ", query_ctx address=" << query_ctx_ptr;
-                    wg->decr_num_queries();
-                }
-            }
+            ExecEnv::GetInstance()->query_context_mgr()->remove(query_id);
             QUERY_TRACE_END("finalize", _driver_name);
             // @TODO(silverbullet233): if necessary, remove the dump from the execution thread
             // considering that this feature is generally used for debugging,

@@ -67,7 +67,7 @@ git clone https://github.com/StarRocks/starrocks.git
 Create `installed/bin` directory in `thirdparty`.
 
 ```bash
-cd starrocks && mkdir -p starrocks/thirdparty/installed/bin
+cd starrocks && mkdir -p thirdparty/installed/bin
 ```
 
 Then create soft link for Thrift and Protobuf respectively.
@@ -80,9 +80,9 @@ ln -s /opt/homebrew/bin/protoc thirdparty/installed/bin/protoc
 **Setting environment variables**
 
 ```bash
-export JAVA_HOME="/opt/homebrew/Cellar/openjdk@11/11.0.15" (Caution: The jdk stable version number may be changed)
+export JAVA_HOME="/opt/homebrew/Cellar/openjdk@11/11.0.15" # Caution: The jdk version may be different in you desktop
 export PYTHON=/usr/bin/python3
-export STARROCKS_THIRDPARTY=/Users/smith/Code/starrocks/thirdparty
+export STARROCKS_THIRDPARTY=$(pwd)/thirdparty # Caution: Make sure you are in the starrocks directory
 ```
 
 ## Generate source code
@@ -111,6 +111,7 @@ mvn install -DskipTests
 
 2. Add Coding style setting
     To standardize the coding style, you should import the `fe/starrocks_intellij_style.xml` code style file in IDEA.
+![image-20220701193938856](../../assets/IDEA-2.png)
 
 ## Run StarRocks FE in MacOS
 
@@ -149,8 +150,6 @@ export LOG_DIR=/Users/smith/Code/starrocks/fe/log
 4. Modify the priority_networks in `fe/conf/fe.conf` to `127.0.0.1/24` to prevent FE from using the current computer's LAN IP and cause the port fail to bind.
 
 5. Then you have run StarRocks FE successfully.
-
-![image-20220701193938856](../../assets/IDEA-2.png)
 
 ## DEBUG StarRocks FE in MacOS
 

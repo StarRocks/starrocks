@@ -95,6 +95,7 @@ import java.nio.file.Files;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
@@ -254,6 +255,14 @@ public class UtFrameUtils {
         return be;
     }
 
+    public static void addBroker(String brokerName) throws Exception {
+        Collection<Pair<String, Integer>> addresses = new ArrayList<>();
+        Pair<String, Integer> pair = new Pair<>("127.0.0.1", 8080);
+        addresses.add(pair);
+        String location = "bos://backup-cmy";
+        GlobalStateMgr.getCurrentState().getBrokerMgr().addBrokers(brokerName, addresses);
+    }
+
     public static void dropMockBackend(int backendId) throws DdlException {
         GlobalStateMgr.getCurrentSystemInfo().dropBackend(backendId);
     }
@@ -322,16 +331,22 @@ public class UtFrameUtils {
                     !statementBase.isExplain()) {
                 String viewName = "view" + INDEX.getAndIncrement();
                 String createView = "create view " + viewName + " as " + originStmt;
-                CreateViewStmt createTableStmt =
-                        (CreateViewStmt) UtFrameUtils.parseStmtWithNewParser(createView, connectContext);
+                CreateViewStmt createTableStmt;
                 try {
-                    StatementBase viewStatement =
-                            com.starrocks.sql.parser.SqlParser.parse(createTableStmt.getInlineViewDef(),
-                                    connectContext.getSessionVariable().getSqlMode()).get(0);
-                    com.starrocks.sql.analyzer.Analyzer.analyze(viewStatement, connectContext);
-                } catch (Exception e) {
-                    System.out.println(e.getMessage());
-                    throw e;
+                    createTableStmt = (CreateViewStmt) UtFrameUtils.parseStmtWithNewParser(createView, connectContext);
+                    try {
+                        StatementBase viewStatement =
+                                com.starrocks.sql.parser.SqlParser.parse(createTableStmt.getInlineViewDef(),
+                                        connectContext.getSessionVariable().getSqlMode()).get(0);
+                        com.starrocks.sql.analyzer.Analyzer.analyze(viewStatement, connectContext);
+                    } catch (Exception e) {
+                        System.out.println(e.getMessage());
+                        throw e;
+                    }
+                } catch (SemanticException | AnalysisException e) {
+                    if (!e.getMessage().contains("Duplicate column name")) {
+                        throw e;
+                    }
                 }
             }
 

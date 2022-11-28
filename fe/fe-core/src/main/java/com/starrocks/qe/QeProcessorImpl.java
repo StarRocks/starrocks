@@ -104,6 +104,7 @@ public final class QeProcessorImpl implements QeProcessor {
             final String queryIdStr = DebugUtil.printId(info.getConnectContext().getExecutionId());
             final QueryStatisticsItem item = new QueryStatisticsItem.Builder()
                     .queryId(queryIdStr)
+                    .executionId(info.getConnectContext().getExecutionId())
                     .queryStartTime(info.getStartExecTime())
                     .sql(info.getSql())
                     .user(context.getQualifiedUser())

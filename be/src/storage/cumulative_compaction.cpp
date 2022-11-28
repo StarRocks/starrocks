@@ -160,7 +160,7 @@ Status CumulativeCompaction::pick_rowsets_to_compact() {
         prev_end_version = rowset->end_version();
     }
 
-    if (_input_rowsets.empty() && transient_rowsets.size() >= config::min_cumulative_compaction_num_singleton_deltas) {
+    if (_input_rowsets.empty() && compaction_score >= config::min_cumulative_compaction_num_singleton_deltas) {
         _input_rowsets = transient_rowsets;
     }
 

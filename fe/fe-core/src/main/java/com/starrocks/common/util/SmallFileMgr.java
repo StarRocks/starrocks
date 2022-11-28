@@ -131,7 +131,7 @@ public class SmallFileMgr implements Writable {
 
     public static class SmallFiles {
         // file name -> file
-        private Map<String, SmallFile> files = Maps.newHashMap();
+        private final Map<String, SmallFile> files = Maps.newHashMap();
 
         public SmallFiles() {
 
@@ -162,8 +162,8 @@ public class SmallFileMgr implements Writable {
     }
 
     // db id -> globalStateMgr -> files
-    private Table<Long, String, SmallFiles> files = HashBasedTable.create();
-    private Map<Long, SmallFile> idToFiles = Maps.newHashMap();
+    private final Table<Long, String, SmallFiles> files = HashBasedTable.create();
+    private final Map<Long, SmallFile> idToFiles = Maps.newHashMap();
 
     public SmallFileMgr() {
     }
@@ -344,7 +344,7 @@ public class SmallFileMgr implements Writable {
                 base64Content = Base64.getEncoder().encodeToString(buf);
             } else {
                 byte[] buf = new byte[4096];
-                int tmpSize = 0;
+                int tmpSize;
                 try (BufferedInputStream in = new BufferedInputStream(url.openStream())) {
                     do {
                         tmpSize = in.read(buf);
@@ -419,7 +419,9 @@ public class SmallFileMgr implements Writable {
             }
 
             // file is invalid, delete it and create a new one
-            file.delete();
+            if (!file.delete()) {
+                LOG.warn("Failed to delete file, filepath={}", file.getAbsolutePath());
+            }
         }
 
         // write to file
@@ -427,7 +429,9 @@ public class SmallFileMgr implements Writable {
             if (!file.getParentFile().exists() && !file.getParentFile().mkdirs()) {
                 throw new IOException("failed to make dir for file: " + fileName);
             }
-            file.createNewFile();
+            if (!file.createNewFile()) {
+                LOG.warn("Failed to create file, filepath={}", file.getAbsolutePath());
+            }
             byte[] decoded = Base64.getDecoder().decode(smallFile.content);
             FileOutputStream outputStream = new FileOutputStream(file);
             outputStream.write(decoded);
@@ -447,7 +451,7 @@ public class SmallFileMgr implements Writable {
     }
 
     private boolean checkMd5(File file, String expectedMd5) throws DdlException {
-        String md5sum = null;
+        String md5sum;
         try {
             md5sum = DigestUtils.md5Hex(new FileInputStream(file));
         } catch (FileNotFoundException e) {

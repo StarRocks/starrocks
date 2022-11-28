@@ -471,7 +471,7 @@ struct ScalarTypeInfoImpl<TYPE_LARGEINT> : public ScalarTypeInfoImplBase<TYPE_LA
                 current = 0;
             }
 
-            value = is_negative ? -current : current;
+            value = is_negative ? (~current + 1) : current;
         }
         unaligned_store<int128_t>(buf, value);
         return Status::OK();
