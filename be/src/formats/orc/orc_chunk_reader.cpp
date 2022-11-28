@@ -49,11 +49,6 @@ const static std::unordered_map<orc::TypeKind, LogicalType> g_orc_starrocks_prim
 };
 
 // NOLINTNEXTLINE
-//const static std::set<orc::TypeKind> g_orc_int_type = {
-//        orc::BOOLEAN, orc::BYTE, orc::SHORT, orc::INT, orc::LONG, orc::FLOAT, orc::DOUBLE,
-//};
-
-// NOLINTNEXTLINE
 const static std::set<LogicalType> g_starrocks_int_type = {TYPE_BOOLEAN, TYPE_TINYINT,  TYPE_SMALLINT, TYPE_INT,
                                                            TYPE_BIGINT,  TYPE_LARGEINT, TYPE_FLOAT,    TYPE_DOUBLE};
 

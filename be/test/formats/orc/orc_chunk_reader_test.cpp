@@ -1598,7 +1598,7 @@ TEST_F(OrcChunkReaderTest, TestUnConvertableType) {
         reader.set_case_sensitive(true);
         auto input_stream = orc::readLocalFile(input_orc_file);
         Status st = reader.init(std::move(input_stream));
-        EXPECT_FALSE(!st.ok());
+        EXPECT_FALSE(st.ok());
     }
 }
 
