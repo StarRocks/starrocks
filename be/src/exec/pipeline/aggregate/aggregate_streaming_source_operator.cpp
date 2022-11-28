@@ -67,13 +67,13 @@ StatusOr<vectorized::ChunkPtr> AggregateStreamingSourceOperator::pull_chunk(Runt
     // Even if it is streaming mode, the purpose of reading from hash table is to
     // correctly process the state of hash table(_is_ht_eos)
     vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
-    _output_chunk_from_hash_map(&chunk, state);
+    RETURN_IF_ERROR(_output_chunk_from_hash_map(&chunk, state));
     eval_runtime_bloom_filters(chunk.get());
     DCHECK_CHUNK(chunk);
     return std::move(chunk);
 }
 
-void AggregateStreamingSourceOperator::_output_chunk_from_hash_map(vectorized::ChunkPtr* chunk, RuntimeState* state) {
+Status AggregateStreamingSourceOperator::_output_chunk_from_hash_map(vectorized::ChunkPtr* chunk, RuntimeState* state) {
     if (!_aggregator->it_hash().has_value()) {
         if (false) {
         }
@@ -88,6 +88,7 @@ void AggregateStreamingSourceOperator::_output_chunk_from_hash_map(vectorized::C
         COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_map_variant().size());
     }
 
+<<<<<<< HEAD
     if (false) {
     }
 #define HASH_MAP_METHOD(NAME)                                                                                     \
@@ -99,5 +100,9 @@ void AggregateStreamingSourceOperator::_output_chunk_from_hash_map(vectorized::C
     else {
         DCHECK(false);
     }
+=======
+    RETURN_IF_ERROR(_aggregator->convert_hash_map_to_chunk(state->chunk_size(), chunk));
+    return Status::OK();
+>>>>>>> 465c43bca ([Enhancement] Add catch bad alloc for serialize/finalize/transmit_chunk (#13641))
 }
 } // namespace starrocks::pipeline
