@@ -54,7 +54,21 @@ public:
 
     int64_t vruntime_ns() const { return _vruntime_ns; }
     int64_t runtime_ns() const { return _vruntime_ns * cpu_limit(); }
-    void incr_runtime_ns(int64_t runtime_ns) { _vruntime_ns += runtime_ns / cpu_limit(); }
+
+    /// Return the growth runtime in the range [last, curr].
+    /// For example:
+    ///     mark_curr_runtime_ns();           // Move curr to latest.
+    ///     auto value = growth_runtime_ns;   // Get growth value in [curr, last] multiple times.
+    ///     auto value = growth_runtime_ns;
+    ///     mark_last_runtime_ns();           // Move last to curr.
+    int64_t growth_runtime_ns() const { return _curr_unadjusted_runtime_ns - _last_unadjusted_runtime_ns; }
+    /// Update curr runtime to the latest runtime.
+    void mark_curr_runtime_ns() { _curr_unadjusted_runtime_ns = _unadjusted_runtime_ns; }
+    /// Update last runtime to the curr runtime.
+    void mark_last_runtime_ns() { _last_unadjusted_runtime_ns = _curr_unadjusted_runtime_ns; }
+
+    void incr_runtime_ns(int64_t runtime_ns);
+    void adjust_runtime_ns(int64_t runtime_ns);
 
 private:
     WorkGroup* _workgroup; // The workgroup owning this entity.
@@ -63,6 +77,10 @@ private:
     Q* _in_queue = nullptr;                 // The queue on which this entity is queued.
 
     int64_t _vruntime_ns = 0;
+
+    int64_t _unadjusted_runtime_ns = 0;
+    int64_t _curr_unadjusted_runtime_ns = 0;
+    int64_t _last_unadjusted_runtime_ns = 0;
 };
 
 using WorkGroupDriverSchedEntity = WorkGroupSchedEntity<pipeline::DriverQueue>;
