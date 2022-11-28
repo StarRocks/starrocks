@@ -398,13 +398,13 @@ DataStreamSender::DataStreamSender(RuntimeState* state, int sender_id, const Row
     _request_bytes_threshold = config::max_transmit_batched_bytes;
 }
 
-Status DataStreamSender::init(const TDataSink& tsink) {
-    RETURN_IF_ERROR(DataSink::init(tsink));
+Status DataStreamSender::init(const TDataSink& tsink, RuntimeState* state) {
+    RETURN_IF_ERROR(DataSink::init(tsink, state));
     const TDataStreamSink& t_stream_sink = tsink.stream_sink;
     if (_part_type == TPartitionType::HASH_PARTITIONED ||
         _part_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
-        RETURN_IF_ERROR(
-                Expr::create_expr_trees(_pool, t_stream_sink.output_partition.partition_exprs, &_partition_expr_ctxs));
+        RETURN_IF_ERROR(Expr::create_expr_trees(_pool, t_stream_sink.output_partition.partition_exprs,
+                                                &_partition_expr_ctxs, state));
     } else if (_part_type == TPartitionType::RANGE_PARTITIONED) {
         // NOTE: should never go here
         return Status::NotSupported("Range partition is not supported anymore.");

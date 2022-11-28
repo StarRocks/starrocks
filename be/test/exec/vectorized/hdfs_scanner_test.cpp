@@ -276,7 +276,7 @@ static ExprContext* create_expr_context(ObjectPool* pool, const std::vector<TExp
     TExpr texpr;
     texpr.__set_nodes(nodes);
     ExprContext* ctx;
-    Status st = Expr::create_expr_tree(pool, texpr, &ctx);
+    Status st = Expr::create_expr_tree(pool, texpr, &ctx, nullptr);
     DCHECK(st.ok()) << st.get_error_msg();
     return ctx;
 }

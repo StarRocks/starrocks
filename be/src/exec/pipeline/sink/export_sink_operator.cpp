@@ -195,7 +195,7 @@ Status ExportSinkOperator::push_chunk(RuntimeState* state, const vectorized::Chu
 
 Status ExportSinkOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
-    RETURN_IF_ERROR(Expr::create_expr_trees(state->obj_pool(), _t_output_expr, &_output_expr_ctxs));
+    RETURN_IF_ERROR(Expr::create_expr_trees(state->obj_pool(), _t_output_expr, &_output_expr_ctxs, state));
     RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state));
     RETURN_IF_ERROR(Expr::open(_output_expr_ctxs, state));
 

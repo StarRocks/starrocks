@@ -1572,6 +1572,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setEnable_query_debug_trace(enableQueryDebugTrace);
         tResult.setEnable_pipeline_query_statistic(enablePipelineQueryStatistic);
 
+        tResult.setAllow_throw_exception((sqlMode & SqlModeHelper.MODE_ALLOW_THROW_EXCEPTION) != 0);
         return tResult;
     }
 

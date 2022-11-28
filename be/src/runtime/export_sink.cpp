@@ -46,12 +46,12 @@ ExportSink::ExportSink(ObjectPool* pool, const RowDescriptor& row_desc, const st
           _rows_written_counter(nullptr),
           _write_timer(nullptr) {}
 
-Status ExportSink::init(const TDataSink& t_sink) {
-    RETURN_IF_ERROR(DataSink::init(t_sink));
+Status ExportSink::init(const TDataSink& t_sink, RuntimeState* state) {
+    RETURN_IF_ERROR(DataSink::init(t_sink, state));
     _t_export_sink = t_sink.export_sink;
 
     // From the thrift expressions create the real exprs.
-    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, _t_output_expr, &_output_expr_ctxs));
+    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, _t_output_expr, &_output_expr_ctxs, state));
     return Status::OK();
 }
 

@@ -283,7 +283,7 @@ TEST_F(MemoryScratchSinkTest, work_flow_normal) {
     MemoryScratchSink sink(*_row_desc, _exprs, _tsink);
     TDataSink data_sink;
     data_sink.memory_scratch_sink = _tsink;
-    ASSERT_TRUE(sink.init(data_sink).ok());
+    ASSERT_TRUE(sink.init(data_sink, nullptr).ok());
     ASSERT_TRUE(sink.prepare(_state).ok());
 
     auto maybe_chunk = scanner->get_next();

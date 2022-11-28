@@ -160,7 +160,7 @@ Status ExecNode::init_join_runtime_filters(const TPlanNode& tnode, RuntimeState*
         for (const auto& desc : tnode.probe_runtime_filters) {
             vectorized::RuntimeFilterProbeDescriptor* rf_desc =
                     _pool->add(new vectorized::RuntimeFilterProbeDescriptor());
-            RETURN_IF_ERROR(rf_desc->init(_pool, desc, _id));
+            RETURN_IF_ERROR(rf_desc->init(_pool, desc, _id, state));
             register_runtime_filter_descriptor(state, rf_desc);
         }
     }
@@ -186,7 +186,7 @@ void ExecNode::init_runtime_filter_for_operator(OperatorFactory* op, pipeline::P
 Status ExecNode::init(const TPlanNode& tnode, RuntimeState* state) {
     VLOG(2) << "ExecNode init:\n" << apache::thrift::ThriftDebugString(tnode);
     _runtime_state = state;
-    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, tnode.conjuncts, &_conjunct_ctxs));
+    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, tnode.conjuncts, &_conjunct_ctxs, state));
     RETURN_IF_ERROR(init_join_runtime_filters(tnode, state));
     if (tnode.__isset.local_rf_waiting_set) {
         _local_rf_waiting_set = tnode.local_rf_waiting_set;
