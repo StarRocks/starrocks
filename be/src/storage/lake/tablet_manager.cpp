@@ -767,6 +767,10 @@ Status TabletManager::delete_tablet_metadata_lock(int64_t tablet_id, int64_t ver
     return st.is_not_found() ? Status::OK() : st;
 }
 
+std::set<int64_t> TabletManager::owned_tablets() {
+    return _location_provider->owned_tablets();
+}
+
 void TabletManager::start_gc() {
     int r = bthread_start_background(&_metadata_gc_tid, nullptr, metadata_gc_trigger, this);
     PLOG_IF(FATAL, r != 0) << "Fail to call bthread_start_background";

@@ -117,6 +117,9 @@ public:
 
     void start_gc();
 
+    // Return a set of tablet that owned by this TabletManager.
+    std::set<int64_t> owned_tablets();
+
 private:
     using CacheValue = std::variant<TabletMetadataPtr, TxnLogPtr, TabletSchemaPtr, SegmentPtr>;
 
