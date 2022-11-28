@@ -22,6 +22,7 @@
 #include "exprs/expr.h"
 #include "gen_cpp/QueryPlanExtra_constants.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
@@ -204,7 +205,7 @@ public:
     void compute_batch_agg_states_with_selection(size_t chunk_size);
 
     // Convert one row agg states to chunk
-    void convert_to_chunk_no_groupby(vectorized::ChunkPtr* chunk);
+    Status convert_to_chunk_no_groupby(vectorized::ChunkPtr* chunk);
 
     void process_limit(vectorized::ChunkPtr* chunk);
 
@@ -349,7 +350,7 @@ protected:
 public:
     void build_hash_map(size_t chunk_size, bool agg_group_by_with_limit = false);
     void build_hash_map_with_selection(size_t chunk_size);
-    void convert_hash_map_to_chunk(int32_t chunk_size, vectorized::ChunkPtr* chunk);
+    Status convert_hash_map_to_chunk(int32_t chunk_size, vectorized::ChunkPtr* chunk);
 
     void build_hash_set(size_t chunk_size);
     void build_hash_set_with_selection(size_t chunk_size);
