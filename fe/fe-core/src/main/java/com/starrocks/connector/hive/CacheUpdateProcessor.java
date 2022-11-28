@@ -181,14 +181,14 @@ public class CacheUpdateProcessor {
 
     public void invalidateTable(String dbName, String tableName, String originLocation) {
         String tableLocation;
-        try {
-            tableLocation = ((HiveMetaStoreTable) metastore.getTable(dbName, tableName)).getTableLocation();
-        } catch (Exception e) {
-            LOG.warn("Failed to get table {}.{}. Use origin table location:{}", dbName, tableName, originLocation);
-            if (!Strings.isNullOrEmpty(originLocation)) {
-                tableLocation = originLocation;
-            } else {
-                LOG.error("Can't get table location. ignore it");
+        if (!Strings.isNullOrEmpty(originLocation)) {
+            tableLocation = originLocation;
+        } else {
+            LOG.warn("table [{}.{}] origin location is null", dbName, tableName);
+            try {
+                tableLocation = ((HiveMetaStoreTable) metastore.getTable(dbName, tableName)).getTableLocation();
+            } catch (Exception e) {
+                LOG.error("Can't get table location from cache or hive metastore. ignore it");
                 return;
             }
         }
