@@ -105,7 +105,12 @@ absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::get_shard_files
             scheme = "s3://";
             {
                 auto& s3_info = info.path_info.fs_info().s3_fs_info();
-                localconf[fslib::kSysRoot] = info.path_info.full_path();
+                if (!info.path_info.full_path().empty()) {
+                    localconf[fslib::kSysRoot] = info.path_info.full_path();
+                }
+                if (!s3_info.bucket().empty()) {
+                    localconf[fslib::kS3Bucket] = s3_info.bucket();
+                }
                 if (!s3_info.region().empty()) {
                     localconf[fslib::kS3Region] = s3_info.region();
                 }
