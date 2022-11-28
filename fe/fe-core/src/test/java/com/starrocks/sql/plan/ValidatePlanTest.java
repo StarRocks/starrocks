@@ -5,6 +5,7 @@ package com.starrocks.sql.plan;
 import com.google.common.collect.Lists;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.SqlModeHelper;
+<<<<<<< HEAD
 import org.junit.Test;
 
 import java.util.List;
@@ -16,6 +17,49 @@ public class ValidatePlanTest extends PlanTestBase {
     @Test
     public void invalidDateSqlTest() {
         FeConstants.runningUnitTest = false;
+=======
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+
+import java.util.List;
+import java.util.stream.Stream;
+
+import static org.junit.Assert.fail;
+
+class ValidatePlanTest extends PlanTestBase {
+
+    @BeforeAll
+    public static void beforeClass() throws Exception {
+        PlanTestBase.beforeClass();
+    }
+
+
+    @ParameterizedTest
+    @MethodSource("invalidDateSqlList")
+    void invalidDateSqlTest(String sql) {
+        FeConstants.runningUnitTest = false;
+        connectContext.getSessionVariable().setSqlMode(SqlModeHelper.MODE_FORBID_INVALID_DATE);
+        String plan = "";
+        try {
+            plan = getFragmentPlan(sql);
+            fail("sql cannot execute with validation, but plan is: " + plan);
+        } catch (Exception e) {
+            assertContains(e.getMessage(), "Incorrect");
+        }
+
+        connectContext.getSessionVariable().setSqlMode(0);
+        try {
+            getFragmentPlan(sql);
+        } catch (Exception e) {
+            fail("sql can execute without validation, but error happens: " + plan);
+        }
+    }
+
+
+    private static Stream<Arguments> invalidDateSqlList() {
+>>>>>>> 7ccfdb6c7 ([BugFix] add FORBID_INVALID_DATA sql_mode (#13768))
         List<String> sqlList = Lists.newArrayList();
         sqlList.add("select cast('a' as date)");
         sqlList.add("select cast('a' as datetime)");
@@ -28,6 +72,7 @@ public class ValidatePlanTest extends PlanTestBase {
         sqlList.add("select * from test_all_type where id_date > '2021-11-30' or id_date < " +
                 "cast(str_to_date('2021-11-31', 'yyyy-MM-dd') as int)");
         sqlList.add("select *, cast(20211131 as date) from t1 union all select *, cast(20211130 as date) from t2");
+<<<<<<< HEAD
         for (String sql : sqlList) {
             connectContext.getSessionVariable().setSqlMode(SqlModeHelper.MODE_FORBID_INVALID_DATE);
             String plan = "";
@@ -46,4 +91,9 @@ public class ValidatePlanTest extends PlanTestBase {
             }
         }
     }
+=======
+        return sqlList.stream().map(e -> Arguments.of(e));
+    }
+
+>>>>>>> 7ccfdb6c7 ([BugFix] add FORBID_INVALID_DATA sql_mode (#13768))
 }
