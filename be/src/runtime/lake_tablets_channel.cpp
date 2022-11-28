@@ -19,6 +19,7 @@
 #include "gutil/macros.h"
 #include "runtime/descriptors.h"
 #include "runtime/load_channel.h"
+#include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/tablets_channel.h"
 #include "serde/protobuf_serde.h"
@@ -134,12 +135,21 @@ private:
 
     std::unordered_map<int64_t, uint32_t> _tablet_id_to_sorted_indexes;
     std::unordered_map<int64_t, std::unique_ptr<AsyncDeltaWriter>> _delta_writers;
+
+    vectorized::GlobalDictByNameMaps _global_dicts;
+    std::unique_ptr<MemPool> _mem_pool;
 };
 
 LakeTabletsChannel::LakeTabletsChannel(LoadChannel* load_channel, const TabletsChannelKey& key, MemTracker* mem_tracker)
-        : TabletsChannel(), _load_channel(load_channel), _key(key), _mem_tracker(mem_tracker) {}
+        : TabletsChannel(),
+          _load_channel(load_channel),
+          _key(key),
+          _mem_tracker(mem_tracker),
+          _mem_pool(std::make_unique<MemPool>()) {}
 
-LakeTabletsChannel::~LakeTabletsChannel() = default;
+LakeTabletsChannel::~LakeTabletsChannel() {
+    _mem_pool.reset();
+}
 
 Status LakeTabletsChannel::open(const PTabletWriterOpenRequest& params, std::shared_ptr<OlapTableSchemaParam> schema) {
     _txn_id = params.txn_id();
@@ -321,6 +331,21 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
     }
     if (slots == nullptr) {
         return Status::InvalidArgument(fmt::format("Unknown index_id: {}", _key.to_string()));
+    }
+    // init global dict info if needed
+    for (auto& slot : params.schema().slot_descs()) {
+        vectorized::GlobalDictMap global_dict;
+        if (slot.global_dict_words_size()) {
+            for (size_t i = 0; i < slot.global_dict_words_size(); i++) {
+                const std::string& dict_word = slot.global_dict_words(i);
+                auto* data = _mem_pool->allocate(dict_word.size());
+                RETURN_IF_UNLIKELY_NULL(data, Status::MemoryAllocFailed("alloc mem for global dict failed"));
+                memcpy(data, dict_word.data(), dict_word.size());
+                Slice slice(data, dict_word.size());
+                global_dict.emplace(slice, i);
+            }
+            _global_dicts.insert(std::make_pair(slot.col_name(), std::move(global_dict)));
+        }
     }
 
     std::vector<int64_t> tablet_ids;

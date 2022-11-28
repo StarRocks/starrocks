@@ -216,7 +216,6 @@ Status PlanFragmentExecutor::_open_internal_vectorized() {
     vectorized::ChunkPtr chunk;
     while (true) {
         RETURN_IF_ERROR(runtime_state()->check_mem_limit("QUERY"));
-
         RETURN_IF_ERROR(_get_next_internal_vectorized(&chunk));
 
         if (chunk == nullptr) {

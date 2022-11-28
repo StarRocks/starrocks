@@ -1,25 +1,26 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-#include "exec/vectorized/olap_meta_scan_node.h"
+
+#include "exec/vectorized/lake_meta_scan_node.h"
 
 #include "exec/pipeline/noop_sink_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "exec/pipeline/scan/lake_meta_scan_prepare_operator.h"
 #include "exec/pipeline/scan/meta_scan_context.h"
 #include "exec/pipeline/scan/meta_scan_operator.h"
-#include "exec/pipeline/scan/olap_meta_scan_prepare_operator.h"
 
 namespace starrocks::vectorized {
 
-OlapMetaScanNode::OlapMetaScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
+LakeMetaScanNode::LakeMetaScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : MetaScanNode(pool, tnode, descs) {}
 
-Status OlapMetaScanNode::open(RuntimeState* state) {
+Status LakeMetaScanNode::open(RuntimeState* state) {
     if (!_is_init) {
         return Status::InternalError("Open before Init.");
     }
     for (auto& scan_range : _scan_ranges) {
         MetaScannerParams scanner_params;
         scanner_params.scan_range = scan_range.get();
-        OlapMetaScanner* scanner = _obj_pool.add(new OlapMetaScanner(this));
+        LakeMetaScanner* scanner = _obj_pool.add(new LakeMetaScanner(this));
         RETURN_IF_ERROR(scanner->init(state, scanner_params));
         _scanners.push_back(scanner);
     }
@@ -38,7 +39,7 @@ Status OlapMetaScanNode::open(RuntimeState* state) {
     return Status::OK();
 }
 
-Status OlapMetaScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
+Status LakeMetaScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     DCHECK(state != nullptr && chunk != nullptr && eos != nullptr);
     RETURN_IF_CANCELLED(state);
 
@@ -56,7 +57,7 @@ Status OlapMetaScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eo
     return Status::OK();
 }
 
-std::vector<std::shared_ptr<pipeline::OperatorFactory>> OlapMetaScanNode::decompose_to_pipeline(
+std::vector<std::shared_ptr<pipeline::OperatorFactory>> LakeMetaScanNode::decompose_to_pipeline(
         pipeline::PipelineBuilderContext* context) {
     auto* morsel_queue_factory = context->morsel_queue_factory_of_source_operator(id());
     size_t dop = morsel_queue_factory->size();
@@ -70,7 +71,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> OlapMetaScanNode::decomp
     auto scan_ctx_factory = std::make_shared<pipeline::MetaScanContextFactory>(this, dop, shared_morsel_queue,
                                                                                std::move(buffer_limiter));
 
-    auto scan_prepare_op = std::make_shared<pipeline::OlapMetaScanPrepareOperatorFactory>(context->next_operator_id(),
+    auto scan_prepare_op = std::make_shared<pipeline::LakeMetaScanPrepareOperatorFactory>(context->next_operator_id(),
                                                                                           id(), this, scan_ctx_factory);
     scan_prepare_op->set_degree_of_parallelism(shared_morsel_queue ? 1 : dop);
 
