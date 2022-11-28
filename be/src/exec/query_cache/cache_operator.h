@@ -9,6 +9,7 @@
 #include "exec/query_cache/cache_param.h"
 #include "exec/query_cache/lane_arbiter.h"
 #include "exec/query_cache/multilane_operator.h"
+#include "storage/rowset/rowset.h"
 namespace starrocks {
 namespace pipeline {
 class PipelineDriver;
@@ -37,6 +38,7 @@ public:
     Status reset_lane(RuntimeState* state, LaneOwnerType lane_owner);
     void populate_cache(int64_t tablet_id);
     int64_t cached_version(int64_t tablet_id);
+    std::tuple<int64_t, std::vector<RowsetSharedPtr>> delta_version_and_rowsets(int64_t tablet_id);
     Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
     bool has_output() const override;
