@@ -952,16 +952,30 @@ void Aggregator::build_hash_map(size_t chunk_size, bool agg_group_by_with_limit)
 
     _hash_map_variant.visit([&](auto& hash_map_with_key) {
         using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
-        hash_map_with_key->compute_agg_states(chunk_size, _group_by_columns, _mem_pool.get(),
-                                              AllocateState<MapType>(this), &_tmp_agg_states);
+        using Func = decltype(AllocateState<MapType>(this));
+        hash_map_with_key->template compute_agg_states<Func, true, false>(chunk_size, _group_by_columns,
+                                                                          _mem_pool.get(), AllocateState<MapType>(this),
+                                                                          &_tmp_agg_states, nullptr);
     });
 }
 
 void Aggregator::build_hash_map_with_selection(size_t chunk_size) {
     _hash_map_variant.visit([&](auto& hash_map_with_key) {
         using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
-        hash_map_with_key->compute_agg_states(chunk_size, _group_by_columns, AllocateState<MapType>(this),
-                                              &_tmp_agg_states, &_streaming_selection);
+        using Func = decltype(AllocateState<MapType>(this));
+        hash_map_with_key->template compute_agg_states<Func, false, true>(chunk_size, _group_by_columns,
+                                                                          _mem_pool.get(), AllocateState<MapType>(this),
+                                                                          &_tmp_agg_states, &_streaming_selection);
+    });
+}
+
+void Aggregator::build_hash_map_allocate_and_with_selection(size_t chunk_size) {
+    _hash_map_variant.visit([&](auto& hash_map_with_key) {
+        using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
+        using Func = decltype(AllocateState<MapType>(this));
+        hash_map_with_key->template compute_agg_states<Func, true, true>(chunk_size, _group_by_columns, _mem_pool.get(),
+                                                                         AllocateState<MapType>(this), &_tmp_agg_states,
+                                                                         &_streaming_selection);
     });
 }
 
@@ -1056,13 +1070,15 @@ Status Aggregator::convert_hash_map_to_chunk(int32_t chunk_size, vectorized::Chu
 }
 
 void Aggregator::build_hash_set(size_t chunk_size) {
-    _hash_set_variant.visit(
-            [&](auto& hash_set) { hash_set->build_set(chunk_size, _group_by_columns, _mem_pool.get()); });
+    _hash_set_variant.visit([&](auto& hash_set) {
+        hash_set->template build_set<true>(chunk_size, _group_by_columns, _mem_pool.get(), nullptr);
+    });
 }
 
 void Aggregator::build_hash_set_with_selection(size_t chunk_size) {
-    _hash_set_variant.visit(
-            [&](auto& hash_set) { hash_set->build_set(chunk_size, _group_by_columns, &_streaming_selection); });
+    _hash_set_variant.visit([&](auto& hash_set) {
+        hash_set->template build_set<false>(chunk_size, _group_by_columns, _mem_pool.get(), &_streaming_selection);
+    });
 }
 
 void Aggregator::convert_hash_set_to_chunk(int32_t chunk_size, vectorized::ChunkPtr* chunk) {
