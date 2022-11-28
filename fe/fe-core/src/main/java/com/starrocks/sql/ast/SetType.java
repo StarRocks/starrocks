@@ -9,7 +9,8 @@ public enum SetType {
     DEFAULT("DEFAULT"),
     GLOBAL("GLOBAL"),
     SESSION("SESSION"),
-    USER("USER");
+    USER("USER"),
+    VERBOSE("VERBOSE");
 
     private final String desc;
 
