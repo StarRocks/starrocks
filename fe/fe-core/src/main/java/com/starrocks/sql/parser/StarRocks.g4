@@ -1207,9 +1207,14 @@ grantRevokeClause
     : (user | ROLE identifierOrString ) (WITH GRANT OPTION)?
     ;
 
+columnNameList
+    : identifierOrString (',' identifierOrString)*
+    ;
+
 grantPrivilegeStatement
     : GRANT IMPERSONATE ON user TO grantRevokeClause                                               #grantImpersonateBrief
     | GRANT privilegeActionList ON tableDbPrivilegeObjectNameList TO grantRevokeClause             #grantTablePrivBrief
+    | GRANT privilegeActionList ON tableDbPrivilegeObjectNameList COLUMNS columnNameList TO grantRevokeClause  #grantColumnPrivBrief
     | GRANT privilegeActionList ON privilegeType (privilegeObjectNameList)? TO grantRevokeClause   #grantPrivWithType
     | GRANT privilegeActionList ON ALL privilegeType (IN ALL privilegeType)* (IN privilegeType identifierOrString)? TO grantRevokeClause   #grantOnAll
     ;

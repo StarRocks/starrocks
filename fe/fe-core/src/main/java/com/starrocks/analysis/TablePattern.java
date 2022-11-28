@@ -29,6 +29,8 @@ import com.starrocks.mysql.privilege.Auth.PrivLevel;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.Arrays;
+import java.util.List;
 
 // only the following 3 formats are allowed
 // db.tbl
@@ -38,6 +40,8 @@ public class TablePattern implements Writable {
     private String db;
     private String tbl;
     boolean isAnalyzed = false;
+    // This is ugly, but for only for xc purpose
+    private List<String> columnNameList = null;
 
     public static TablePattern ALL;
 
@@ -48,6 +52,14 @@ public class TablePattern implements Writable {
         } catch (AnalysisException e) {
             // will not happen
         }
+    }
+
+    public void setColumnNameList(List<String> columnNameList) {
+        this.columnNameList = columnNameList;
+    }
+
+    public List<String> getColumnNameList() {
+        return columnNameList;
     }
 
     private TablePattern() {
@@ -135,12 +147,35 @@ public class TablePattern implements Writable {
         } else {
             Text.writeString(out, ClusterNamespace.getFullName(db));
         }
-        Text.writeString(out, tbl);
+        // for xc only
+        if (columnNameList != null) {
+            StringBuilder sb = new StringBuilder();
+            sb.append(tbl).append("____");
+            int s = columnNameList.size();
+            for (int i = 0; i < s; i++) {
+                sb.append(columnNameList.get(i));
+                if (i != s - 1) {
+                    sb.append("___");
+                }
+            }
+            String outStr = sb.toString();
+            Text.writeString(out, sb.toString());
+        } else {
+            Text.writeString(out, tbl);
+        }
     }
 
     public void readFields(DataInput in) throws IOException {
         db = ClusterNamespace.getNameFromFullName(Text.readString(in));
-        tbl = Text.readString(in);
+        String tmp = Text.readString(in);
+        // for xc only
+        if (tmp.contains("____")) {
+            tbl = tmp.split("____")[0];
+            String columnStringList = tmp.split("____")[1];
+            columnNameList = Arrays.asList(columnStringList.split("___"));
+        } else {
+            tbl = tmp;
+        }
         isAnalyzed = true;
     }
 }

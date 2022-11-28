@@ -28,7 +28,9 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.StarRocksFE;
+import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ResourcePattern;
+import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TablePattern;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.AuthorizationInfo;
@@ -55,6 +57,8 @@ import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.RevokePrivilegeStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
+import com.starrocks.sql.ast.SelectList;
+import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetUserPropertyStmt;
 import org.apache.logging.log4j.LogManager;
@@ -133,7 +137,7 @@ public class Auth implements Writable {
         return dbPrivTable;
     }
 
-    protected TablePrivTable getTablePrivTable() {
+    public TablePrivTable getTablePrivTable() {
         return tablePrivTable;
     }
 
@@ -241,13 +245,14 @@ public class Auth implements Writable {
         return roleNames.get(0);
     }
 
-    private void grantTblPrivs(UserIdentity userIdentity, String db, String tbl, boolean errOnExist,
-                               boolean errOnNonExist, PrivBitSet privs) throws DdlException {
+    private void grantTblPrivs(UserIdentity userIdentity, String db, String tbl, List<String> columnNameList,
+                               boolean errOnExist, boolean errOnNonExist, PrivBitSet privs) throws DdlException {
         TablePrivEntry entry;
         try {
             entry = TablePrivEntry.create(userIdentity.getHost(), db, userIdentity.getQualifiedUser(), tbl,
                     userIdentity.isDomain(), privs);
             entry.setSetByDomainResolver(false);
+            entry.setColumnNameList(columnNameList);
         } catch (AnalysisException e) {
             throw new DdlException(e.getMessage());
         }
@@ -545,8 +550,31 @@ public class Auth implements Writable {
                                      PrivPredicate wanted, PrivBitSet savedPrivs) {
         readLock();
         try {
-            tablePrivTable.getPrivs(currentUser, db, tbl, savedPrivs);
+            TablePrivEntry matchedTablePrivEntry = tablePrivTable.getPrivs(currentUser, db, tbl, savedPrivs);
             if (Privilege.satisfy(savedPrivs, wanted)) {
+                if (matchedTablePrivEntry.getColumnNameList() != null && wanted == PrivPredicate.SELECT &&
+                        currentUser != UserIdentity.ROOT) {
+                    Set<String> columnNameSet = Sets.newHashSet(matchedTablePrivEntry.getColumnNameList());
+                    SelectList currentSelectList = currentUser.getCurrentSelectList();
+                    // This is only for xc purpose
+                    if (currentSelectList != null) {
+                        List<SelectListItem> selectListItems = currentSelectList.getItems();
+                        if (selectListItems != null) {
+                            for (SelectListItem selectListItem : selectListItems) {
+                                if (selectListItem.isStar()) {
+                                    return false;
+                                }
+                                Expr expr = selectListItem.getExpr();
+                                if (expr instanceof SlotRef) {
+                                    SlotRef slotRef = (SlotRef) expr;
+                                    if (!columnNameSet.contains(slotRef.getColumnName())) {
+                                        return false;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                 return true;
             }
             return false;
@@ -859,6 +887,13 @@ public class Auth implements Writable {
     public void grant(GrantPrivilegeStmt stmt) throws DdlException {
         PrivBitSet privs = stmt.getPrivBitSet();
         if (stmt.getPrivType().equals("TABLE") || stmt.getPrivType().equals("DATABASE")) {
+            if (stmt.getColumnNameList() != null) {
+                List<Privilege> plist = privs.toPrivilegeList();
+                if (plist.size() != 1 || plist.get(0) != Privilege.SELECT_PRIV) {
+                    throw new DdlException("Can only grant SELECT_PRIV on table columns");
+                }
+            }
+            stmt.getTblPattern().setColumnNameList(stmt.getColumnNameList());
             grantInternal(stmt.getUserIdentity(), stmt.getRole(), stmt.getTblPattern(), privs, true, false);
         } else if (stmt.getPrivType().equals("RESOURCE")) {
             grantInternal(stmt.getUserIdentity(), stmt.getRole(), stmt.getResourcePattern(), privs, true, false);
@@ -1009,7 +1044,7 @@ public class Auth implements Writable {
                     break;
                 case TABLE:
                     grantTblPrivs(userIdent, tblPattern.getQuolifiedDb(),
-                            tblPattern.getTbl(),
+                            tblPattern.getTbl(), tblPattern.getColumnNameList(),
                             false /* err on exist */,
                             false /* err on non exist */,
                             privs);

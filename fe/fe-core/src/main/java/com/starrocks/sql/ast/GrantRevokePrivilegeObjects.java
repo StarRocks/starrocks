@@ -9,6 +9,7 @@ import java.util.List;
 
 public class GrantRevokePrivilegeObjects implements ParseNode {
     private List<List<String>> privilegeObjectNameTokensList = null;
+    private List<String> columnNameList = null;
     private List<UserIdentity> userPrivilegeObjectList = null;
     // grant create_table on all databases to userx
     // ==> allTypeList: ["databases"], restrictType: null, restrictName: null
@@ -19,6 +20,14 @@ public class GrantRevokePrivilegeObjects implements ParseNode {
     private List<String> allTypeList = null;
     private String restrictType = null;
     private String restrictName = null;
+
+    public List<String> getColumnNameList() {
+        return columnNameList;
+    }
+
+    public void setColumnNameList(List<String> columnNameList) {
+        this.columnNameList = columnNameList;
+    }
 
     public void setPrivilegeObjectNameTokensList(List<List<String>> privilegeObjectNameTokensList) {
         this.privilegeObjectNameTokensList = privilegeObjectNameTokensList;

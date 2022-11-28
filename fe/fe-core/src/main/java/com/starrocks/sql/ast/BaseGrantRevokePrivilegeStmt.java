@@ -62,6 +62,10 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
         return objects.getPrivilegeObjectNameTokensList();
     }
 
+    public List<String> getColumnNameList() {
+        return objects.getColumnNameList();
+    }
+
     public List<UserIdentity> getUserPrivilegeObjectList() {
         return objects.getUserPrivilegeObjectList();
     }

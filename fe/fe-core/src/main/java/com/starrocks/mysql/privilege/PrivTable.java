@@ -62,6 +62,10 @@ public abstract class PrivTable implements Writable {
     // see PrivEntry for more detail
     protected boolean isClassNameWrote = false;
 
+    public List<PrivEntry> getEntry(UserIdentity u) {
+        return map.get(u);
+    }
+
     /*
      * Add an entry to priv table.
      * If entry already exists and errOnExist is false, we try to reset or merge the new priv entry with existing one.
@@ -94,6 +98,16 @@ public abstract class PrivTable implements Writable {
                     mergePriv(existingEntry, newEntry);
                     existingEntry.setSetByDomainResolver(false);
                     LOG.debug("merge priv entry: {}", existingEntry);
+                }
+                if (existingEntry instanceof TablePrivEntry && newEntry instanceof TablePrivEntry) {
+                    TablePrivEntry existingTableEntry = (TablePrivEntry) existingEntry;
+                    TablePrivEntry newTableEntry = (TablePrivEntry) newEntry;
+                    if ((newTableEntry.getColumnNameList() != null &&
+                            existingTableEntry.getColumnNameList() != null) ||
+                            (newTableEntry.getColumnNameList() == null &&
+                                    existingTableEntry.getColumnNameList() != null)) {
+                        existingTableEntry.setColumnNameList(newTableEntry.getColumnNameList());
+                    }
                 }
             }
             return existingEntry;

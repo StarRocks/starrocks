@@ -28,6 +28,8 @@ import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.Arrays;
+import java.util.List;
 
 public class TablePrivEntry extends DbPrivEntry {
     public static final String ANY_TBL = "*";
@@ -35,6 +37,15 @@ public class TablePrivEntry extends DbPrivEntry {
     private PatternMatcher tblPattern;
     private String origTbl;
     private boolean isAnyTbl;
+    private List<String> columnNameList = null;
+
+    public List<String> getColumnNameList() {
+        return columnNameList;
+    }
+
+    public void setColumnNameList(List<String> columnNameList) {
+        this.columnNameList = columnNameList;
+    }
 
     protected TablePrivEntry() {
     }
@@ -133,14 +144,37 @@ public class TablePrivEntry extends DbPrivEntry {
         }
         super.write(out);
 
-        Text.writeString(out, origTbl);
+        // for xc only
+        if (columnNameList != null) {
+            StringBuilder sb = new StringBuilder();
+            sb.append(origTbl).append("____");
+            int s = columnNameList.size();
+            for (int i = 0; i < s; i++) {
+                sb.append(columnNameList.get(i));
+                if (i != s - 1) {
+                    sb.append("___");
+                }
+            }
+            String outStr = sb.toString();
+            Text.writeString(out, sb.toString());
+        } else {
+            Text.writeString(out, origTbl);
+        }
 
         isClassNameWrote = false;
     }
 
     public void readFields(DataInput in) throws IOException {
         super.readFields(in);
-        origTbl = Text.readString(in);
+        String tmp = Text.readString(in);
+        // for xc only
+        if (tmp.contains("____")) {
+            origTbl = tmp.split("____")[0];
+            String columnStringList = tmp.split("____")[1];
+            columnNameList = Arrays.asList(columnStringList.split("___"));
+        } else {
+            origTbl = tmp;
+        }
     }
 
     @Override

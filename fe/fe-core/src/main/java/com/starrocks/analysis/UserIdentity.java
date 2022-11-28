@@ -34,6 +34,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
+import com.starrocks.sql.ast.SelectList;
 import com.starrocks.thrift.TUserIdentity;
 
 import java.io.DataInput;
@@ -61,6 +62,8 @@ public class UserIdentity implements Writable, GsonPostProcessable, GsonPreProce
     private boolean isAnalyzed = false;
 
     public static final UserIdentity ROOT;
+
+    private SelectList currentSelectList;
 
     static {
         ROOT = new UserIdentity(Auth.ROOT_USER, "%");
@@ -107,6 +110,14 @@ public class UserIdentity implements Writable, GsonPostProcessable, GsonPreProce
     public String getQualifiedUser() {
         Preconditions.checkState(isAnalyzed);
         return realUser;
+    }
+
+    public SelectList getCurrentSelectList() {
+        return currentSelectList;
+    }
+
+    public void setCurrentSelectList(SelectList currentSelectList) {
+        this.currentSelectList = currentSelectList;
     }
 
     public String getHost() {
