@@ -185,7 +185,7 @@ public class AccessTestUtil {
                 minTimes = 0;
                 result = null;
 
-                db.getTableNamesWithLock();
+                db.getTableNamesViewWithLock();
                 minTimes = 0;
                 result = Sets.newHashSet("testTable");
 
@@ -368,7 +368,7 @@ public class AccessTestUtil {
                 minTimes = 0;
                 result = null;
 
-                db.getTableNamesWithLock();
+                db.getTableNamesViewWithLock();
                 minTimes = 0;
                 result = Sets.newHashSet("t");
 
