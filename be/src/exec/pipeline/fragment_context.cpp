@@ -17,10 +17,16 @@ void FragmentContext::set_final_status(const Status& status) {
     Status* old_status = nullptr;
     if (_final_status.compare_exchange_strong(old_status, &_s_status)) {
         _s_status = status;
-        if (_final_status.load()->is_cancelled()) {
-            LOG(WARNING) << "[Driver] Canceled, query_id=" << print_id(_query_id)
-                         << ", instance_id=" << print_id(_fragment_instance_id)
-                         << ", reason=" << final_status().to_string();
+        if (_s_status.is_cancelled()) {
+            auto detailed_message = _s_status.detailed_message();
+            std::stringstream ss;
+            ss << "[Driver] Canceled, query_id=" << print_id(_query_id)
+               << ", instance_id=" << print_id(_fragment_instance_id) << ", reason=" << detailed_message;
+            if (detailed_message == "LimitReach" || detailed_message == "UserCancel" || detailed_message == "TimeOut") {
+                LOG(INFO) << ss.str();
+            } else {
+                LOG(WARNING) << ss.str();
+            }
             DriverExecutor* executor = enable_resource_group() ? _runtime_state->exec_env()->wg_driver_executor()
                                                                : _runtime_state->exec_env()->driver_executor();
             for (auto& driver : _drivers) {
