@@ -2,12 +2,17 @@
 
 #include "storage/lake/gc.h"
 
+#include <rapidjson/error/en.h>
+#include <rapidjson/reader.h>
+#include <rapidjson/writer.h>
+
 #include <algorithm>
 #include <ctime>
 #include <unordered_map>
 
 #include "common/config.h"
 #include "fs/fs.h"
+#include "fs/rapidjson_stream_adapter.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/location_provider.h"
@@ -17,34 +22,52 @@
 
 namespace starrocks::lake {
 
-static Status write_orphan_list_file(const std::set<std::string>& orphans, WritableFile* file) {
-    for (const auto& s : orphans) {
-        RETURN_IF_ERROR(file->append(s));
-        RETURN_IF_ERROR(file->append("\n"));
-    }
-    DCHECK_EQ((kSegmentFileNameLength + 1) * orphans.size(), file->size());
-    return file->close();
-}
+static const char* const kOrphanSegmentKey = "orphan_segments";
 
-static Status read_orphan_list_file(RandomAccessFile* file, std::vector<std::string>* orphans) {
-    auto stream = file->stream();
-    auto size_or = stream->get_size();
-    if (size_or.status().is_not_found()) { // File does not exist
-        return Status::OK();
-    } else if (!size_or.ok()) {
-        return size_or.status();
+struct OrphanSegmentHandler {
+    FileSystem* fs;
+    std::string dir;
+
+    bool Null() { return true; }
+    bool Bool(bool b) { return true; }
+    bool Int(int i) { return true; }
+    bool Uint(unsigned u) { return true; }
+    bool Int64(int64_t i) { return true; }
+    bool Uint64(uint64_t u) { return true; }
+    bool Double(double d) { return true; }
+    bool RawNumber(const char* str, rapidjson::SizeType length, bool copy) { return true; }
+    bool String(const char* str, rapidjson::SizeType length, bool copy) {
+        std::string_view name(str, length);
+        VLOG(2) << "Dropping disk cache of " << name;
+        auto path = join_path(dir, name);
+        // TODO: Add a new interface for dropping disk cache
+        auto st = fs->delete_file(path);
+        LOG_IF(ERROR, !st.ok() && !st.is_not_found()) << "Fail to drop disk cache of " << name << ": " << st;
+        return true;
     }
-    auto size = *size_or;
-    DCHECK_EQ(0, size % (kSegmentFileNameLength + 1));
-    raw::RawVector<char> buff;
-    buff.resize(size); // TODO: streaming read
-    RETURN_IF_ERROR(file->read_fully(buff.data(), size));
-    orphans->reserve(size / (kSegmentFileNameLength + 1));
-    for (auto offset = 0L; offset < size; offset += (kSegmentFileNameLength + 1)) {
-        orphans->emplace_back(&buff[offset], kSegmentFileNameLength);
-        DCHECK_EQ('\n', buff[offset + kSegmentFileNameLength + 1]);
+    bool StartObject() { return true; }
+    bool Key(const char* str, rapidjson::SizeType length, bool copy) { return true; }
+    bool EndObject(rapidjson::SizeType memberCount) { return true; }
+    bool StartArray() { return true; }
+    bool EndArray(rapidjson::SizeType elementCount) { return true; }
+};
+
+static Status write_orphan_list_file(const std::set<std::string>& orphans, WritableFile* file) {
+    raw::RawVector<char> buffer(4096);
+    RapidJSONWriteStreamAdapter os(file, buffer.data(), buffer.size());
+    rapidjson::Writer<RapidJSONWriteStreamAdapter> writer(os);
+    writer.StartObject();
+    writer.Key(kOrphanSegmentKey);
+    writer.StartArray();
+    for (const auto& s : orphans) {
+        writer.String(s.data(), s.size());
     }
-    return Status::OK();
+    writer.EndArray();
+    writer.EndObject();
+    if (!os.status().ok()) {
+        return os.status();
+    }
+    return file->close();
 }
 
 static Status delete_tablet_metadata(std::string_view root_location, const std::set<int64_t>& owned_tablets) {
@@ -132,14 +155,14 @@ static Status drop_disk_cache(std::string_view root_location) {
     } else if (!file_or.ok()) {
         return file_or.status();
     }
-    std::vector<std::string> orphan_segments;
-    RETURN_IF_ERROR(read_orphan_list_file(file_or->get(), &orphan_segments));
-    for (const auto& seg : orphan_segments) {
-        VLOG(3) << "Dropping disk cache of " << seg;
-        auto location = join_path(segment_root_location, seg);
-        // TODO: Add a new interface for dropping disk cache
-        auto st = fs->delete_file(location);
-        LOG_IF(WARNING, !st.ok() && !st.is_not_found()) << "Fail to drop cache of " << seg << ": " << st;
+    raw::RawVector<char> buffer(/*16MB=*/16L * 1024 * 1024);
+    RapidJSONReadStreamAdapter is(file_or->get(), buffer.data(), buffer.size());
+    OrphanSegmentHandler handler{.fs = fs.get(), .dir = segment_root_location};
+    rapidjson::Reader reader;
+    auto ok = reader.Parse(is, handler);
+    LOG_IF(ERROR, !is.status().ok()) << "Fail to read orphan list file: " << is.status();
+    if (!ok) {
+        LOG(ERROR) << "Fail to parse json: " << rapidjson::GetParseError_En(ok.Code());
     }
     return Status::OK();
 }
