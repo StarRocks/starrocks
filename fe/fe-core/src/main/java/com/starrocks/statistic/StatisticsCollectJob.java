@@ -83,19 +83,32 @@ public abstract class StatisticsCollectJob {
     }
 
     public void collectStatisticSync(String sql, ConnectContext context) throws Exception {
-        LOG.debug("statistics collect sql : " + sql);
-        StatementBase parsedStmt = SqlParser.parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
-        StmtExecutor executor = new StmtExecutor(context, parsedStmt);
-        context.setExecutor(executor);
-        context.setQueryId(UUIDUtil.genUUID());
-        context.setStartTime();
-        executor.execute();
+        int count = 0;
+        int maxRetryTimes = 10;
+        do {
+            LOG.debug("statistics collect sql : " + sql);
+            StatementBase parsedStmt = SqlParser.parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
+            StmtExecutor executor = new StmtExecutor(context, parsedStmt);
+            context.setExecutor(executor);
+            context.setQueryId(UUIDUtil.genUUID());
+            context.setStartTime();
+            executor.execute();
 
-        if (context.getState().getStateType() == QueryState.MysqlStateType.ERR) {
-            LOG.warn("Statistics collect fail | Error Message [" + context.getState().getErrorMessage() + "] | " +
-                    "SQL [" + sql + "]");
-            throw new DdlException(context.getState().getErrorMessage());
-        }
+            if (context.getState().getStateType() == QueryState.MysqlStateType.ERR) {
+                LOG.warn("Statistics collect fail | Error Message [" + context.getState().getErrorMessage() + "] | " +
+                        "SQL [" + sql + "]");
+                if (context.getState().getErrorMessage().contains("Too many versions")) {
+                    Thread.sleep(60000);
+                    count++;
+                } else {
+                    throw new DdlException(context.getState().getErrorMessage());
+                }
+            } else {
+                return;
+            }
+        } while (count < maxRetryTimes);
+
+        throw new DdlException(context.getState().getErrorMessage());
     }
 
     protected String getDataSize(Column column, boolean isSample) {

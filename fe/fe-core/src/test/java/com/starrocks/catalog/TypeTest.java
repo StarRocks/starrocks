@@ -55,7 +55,7 @@ public class TypeTest {
         type = Type.LARGEINT;
         Assert.assertEquals(40, type.getMysqlResultSetFieldLength());
         Assert.assertEquals(0, type.getMysqlResultSetFieldDecimals());
-        Assert.assertEquals(63, type.getMysqlResultSetFieldCharsetIndex());
+        Assert.assertEquals(33, type.getMysqlResultSetFieldCharsetIndex());
 
         // date
         type = Type.DATE;
@@ -122,6 +122,13 @@ public class TypeTest {
         type = Type.HLL;
         // MAX_HLL_LENGTH(16385) * 3
         Assert.assertEquals(49155, type.getMysqlResultSetFieldLength());
+        Assert.assertEquals(0, type.getMysqlResultSetFieldDecimals());
+        Assert.assertEquals(33, type.getMysqlResultSetFieldCharsetIndex());
+
+        // hll
+        type = Type.JSON;
+        // default 20 * 3
+        Assert.assertEquals(60, type.getMysqlResultSetFieldLength());
         Assert.assertEquals(0, type.getMysqlResultSetFieldDecimals());
         Assert.assertEquals(33, type.getMysqlResultSetFieldCharsetIndex());
 
