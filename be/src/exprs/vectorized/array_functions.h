@@ -96,9 +96,23 @@ public:
     DEFINE_ARRAY_SORT_FN(json, PrimitiveType::TYPE_JSON)
 #undef DEFINE_ARRAY_SORT_FN
 
+<<<<<<< HEAD
 #define DEFINE_ARRAY_REVERSE_FN(NAME, PT)                                                     \
     static ColumnPtr array_reverse_##NAME(FunctionContext* context, const Columns& columns) { \
         return ArrayReverse<PT>::process(context, columns);                                   \
+=======
+#define DEFINE_ARRAY_SORTBY_FN(NAME, PT)                                                               \
+    static StatusOr<ColumnPtr> array_sortby_##NAME(FunctionContext* context, const Columns& columns) { \
+        return ArraySortBy<PT>::process(context, columns);                                             \
+    }
+    APPLY_COMMONE_TYPES_FOR_ARRAY(DEFINE_ARRAY_SORTBY_FN)
+    DEFINE_ARRAY_SORTBY_FN(json, LogicalType::TYPE_JSON)
+#undef DEFINE_ARRAY_SORTBY_FN
+
+#define DEFINE_ARRAY_REVERSE_FN(NAME, PT)                                                               \
+    static StatusOr<ColumnPtr> array_reverse_##NAME(FunctionContext* context, const Columns& columns) { \
+        return ArrayReverse<PT>::process(context, columns);                                             \
+>>>>>>> f8402628f ([Feature] support array_sortby (#14034))
     }
     APPLY_COMMONE_TYPES_FOR_ARRAY(DEFINE_ARRAY_REVERSE_FN)
     DEFINE_ARRAY_REVERSE_FN(json, PrimitiveType::TYPE_JSON)
