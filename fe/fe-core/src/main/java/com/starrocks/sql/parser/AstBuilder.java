@@ -5313,6 +5313,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 type.setAssignedStrLenInColDefinition();
             }
             return type;
+        } else if (context.BLOB() != null) {
+            // BLOB is the same with VARBINARY in SR.
+            return ScalarType.createVarbinary(-1);
         } else {
             return ScalarType.createType(context.getChild(0).getText());
         }

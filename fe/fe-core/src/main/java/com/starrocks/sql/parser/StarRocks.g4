@@ -2036,6 +2036,7 @@ baseType
     | PERCENTILE
     | JSON
     | VARBINARY typeParameter?
+    | BLOB
     ;
 
 decimalType
