@@ -17,7 +17,6 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ListUtil;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.load.EtlJobType;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.DataStreamSink;
@@ -94,13 +93,9 @@ public class CoordinatorPrepare {
     private final Random random = new Random();
 
     private TNetworkAddress coordAddress;
-    private final long jobId = -1; // job which this task belongs to
-    private final TUniqueId queryId;
+    private TUniqueId queryId;
     private final ConnectContext connectContext;
-    private final boolean needReport;
     private final boolean preferComputeNode;
-    //this query use compute node number
-    private final int useComputeNodeNumber;
     private final TQueryGlobals queryGlobals;
     private final TQueryOptions queryOptions;
     private final boolean usePipeline;
@@ -113,7 +108,6 @@ public class CoordinatorPrepare {
     private final Set<Integer> replicateScanIds = new HashSet<>();
     private final Set<Integer> bucketShuffleFragmentIds = new HashSet<>();
     private final Set<Integer> rightOrFullBucketShuffleFragmentIds = new HashSet<>();
-    private EtlJobType etlJobType;
     private final Set<TUniqueId> instanceIds = Sets.newHashSet();
 
     private final List<PlanFragment> fragments;
@@ -174,9 +168,7 @@ public class CoordinatorPrepare {
         if (context.getLastQueryId() != null) {
             this.queryGlobals.setLast_query_id(context.getLastQueryId().toString());
         }
-        this.needReport = context.getSessionVariable().isEnableProfile();
         this.preferComputeNode = context.getSessionVariable().isPreferComputeNode();
-        this.useComputeNodeNumber = context.getSessionVariable().getUseComputeNodes();
         this.nextInstanceId = new TUniqueId();
         nextInstanceId.setHi(queryId.hi);
         nextInstanceId.setLo(queryId.lo + 1);
@@ -1149,10 +1141,6 @@ public class CoordinatorPrepare {
         }
 
         return resourceGroup;
-    }
-
-    public void setEtlJobType(EtlJobType etlJobType) {
-        this.etlJobType = etlJobType;
     }
 
     // fragment instance exec param, it is used to assemble

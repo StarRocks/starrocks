@@ -40,6 +40,7 @@ import com.starrocks.common.util.Counter;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.load.EtlJobType;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.planner.PlanFragment;
@@ -169,6 +170,7 @@ public class Coordinator {
     private final boolean preferComputeNode;
     //this query use compute node number
     private final int useComputeNodeNumber;
+    private EtlJobType etlJobType;
 
     private final CoordinatorPrepare coordinatorPrepare;
 
@@ -328,7 +330,7 @@ public class Coordinator {
         nextInstanceId.setLo(queryId.lo + 1);
 
         this.coordinatorPrepare = new CoordinatorPrepare(context, fragments, scanNodes);
-        coordinatorPrepare.setEtlJobType(loadPlanner.getEtlJobType());
+        etlJobType = loadPlanner.getEtlJobType();
     }
 
     public long getJobId() {
