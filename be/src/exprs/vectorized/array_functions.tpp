@@ -1152,7 +1152,7 @@ private:
 
 // array_sortby(array, key_array) the key_array should not change the null property of array, if key_array is null,
 // keep the array the same.
-template <LogicalType PT>
+template <PrimitiveType PT>
 class ArraySortBy : public ArraySort<PT> {
 public:
     using ColumnType = RunTimeColumnType<PT>;

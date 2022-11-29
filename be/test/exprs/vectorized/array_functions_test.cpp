@@ -4713,7 +4713,7 @@ TEST_F(ArrayFunctionsTest, array_sortby_tinyint_with_nullable) {
     src_column2->append_datum(DatumArray{(int8_t)3, (int8_t)6, Datum()});
 
     {
-        ArraySortBy<LogicalType::TYPE_TINYINT> sort;
+        ArraySortBy<PrimitiveType::TYPE_TINYINT> sort;
         auto dest_column = sort.process(nullptr, {src_column, src_column2});
 
         ASSERT_TRUE(dest_column->is_nullable());
@@ -4733,7 +4733,7 @@ TEST_F(ArrayFunctionsTest, array_sortby_tinyint_with_nullable) {
         ASSERT_EQ(dest_column->get(9).get_array()[2].get_int8(), (int8_t)(23));
     }
     {
-        ArraySortBy<LogicalType::TYPE_TINYINT> sort;
+        ArraySortBy<PrimitiveType::TYPE_TINYINT> sort;
         auto dest_column = sort.process(nullptr, {src_column2, src_column});
 
         ASSERT_TRUE(dest_column->is_nullable());
@@ -4772,7 +4772,7 @@ TEST_F(ArrayFunctionsTest, array_sortby_tinyint) {
     src_column2->append_datum(DatumArray{Datum(), (int8_t)43});
 
     {
-        ArraySortBy<LogicalType::TYPE_TINYINT> sort;
+        ArraySortBy<PrimitiveType::TYPE_TINYINT> sort;
         auto dest_column = sort.process(nullptr, {src_column, src_column2});
 
         ASSERT_TRUE(!dest_column->is_nullable());
@@ -4787,7 +4787,7 @@ TEST_F(ArrayFunctionsTest, array_sortby_tinyint) {
         ASSERT_TRUE(dest_column->get(5).get_array()[1].is_null());
     }
     {
-        ArraySortBy<LogicalType::TYPE_TINYINT> sort;
+        ArraySortBy<PrimitiveType::TYPE_TINYINT> sort;
         auto dest_column = sort.process(nullptr, {src_column2, src_column});
 
         ASSERT_TRUE(!dest_column->is_nullable());
@@ -4829,7 +4829,7 @@ TEST_F(ArrayFunctionsTest, array_sortby_tinyint_with_nullable_notnull) {
     src_column2->append_datum(DatumArray{(int8_t)-33, (int8_t)6});
     src_column2->append_datum(DatumArray{(int8_t)3, (int8_t)6, Datum()});
     {
-        ArraySortBy<LogicalType::TYPE_TINYINT> sort;
+        ArraySortBy<PrimitiveType::TYPE_TINYINT> sort;
         auto dest_column = sort.process(nullptr, {src_column, src_column2});
 
         ASSERT_TRUE(dest_column->is_nullable());
@@ -4849,7 +4849,7 @@ TEST_F(ArrayFunctionsTest, array_sortby_tinyint_with_nullable_notnull) {
         ASSERT_EQ(dest_column->get(9).get_array()[2].get_int8(), (int8_t)(23));
     }
     {
-        ArraySortBy<LogicalType::TYPE_TINYINT> sort;
+        ArraySortBy<PrimitiveType::TYPE_TINYINT> sort;
         auto dest_column = sort.process(nullptr, {src_column2, src_column});
 
         ASSERT_TRUE(!dest_column->is_nullable());
@@ -4889,7 +4889,7 @@ TEST_F(ArrayFunctionsTest, array_sortby_varchar_with_nullable) {
     src_column2->append_datum(DatumArray{Datum(), (int8_t)4});
 
     {
-        ArraySortBy<LogicalType::TYPE_TINYINT> sort;
+        ArraySortBy<PrimitiveType::TYPE_TINYINT> sort;
         auto dest_column = sort.process(nullptr, {src_column, src_column2});
 
         ASSERT_TRUE(dest_column->is_nullable());
@@ -4902,7 +4902,7 @@ TEST_F(ArrayFunctionsTest, array_sortby_varchar_with_nullable) {
         _check_array<Slice>({Slice("4"), Slice("1")}, dest_column->get(5).get_array());
     }
     {
-        ArraySortBy<LogicalType::TYPE_VARCHAR> sort;
+        ArraySortBy<PrimitiveType::TYPE_VARCHAR> sort;
         auto dest_column = sort.process(nullptr, {src_column2, src_column});
 
         ASSERT_TRUE(dest_column->is_nullable());
@@ -4925,18 +4925,18 @@ TEST_F(ArrayFunctionsTest, array_sortby_with_only_null) {
     auto src_column2 = ColumnHelper::create_const_null_column(1);
 
     {
-        ArraySortBy<LogicalType::TYPE_TINYINT> sort;
+        ArraySortBy<PrimitiveType::TYPE_TINYINT> sort;
         auto dest_column = sort.process(nullptr, {src_column, src_column2});
         _check_array<int8_t>({(int8_t)(5), (int8_t)(3), (int8_t)(6)}, dest_column->get(0).get_array());
     }
     {
-        ArraySortBy<LogicalType::TYPE_TINYINT> sort;
+        ArraySortBy<PrimitiveType::TYPE_TINYINT> sort;
         auto dest_column = sort.process(nullptr, {src_column2, src_column});
         ASSERT_TRUE(dest_column->only_null());
     }
 
     {
-        ArraySortBy<LogicalType::TYPE_TINYINT> sort;
+        ArraySortBy<PrimitiveType::TYPE_TINYINT> sort;
         auto dest_column = sort.process(nullptr, {src_column2, src_column2});
         ASSERT_TRUE(dest_column->only_null());
     }
