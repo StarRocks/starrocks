@@ -52,19 +52,19 @@ public class HDFSBrokerServiceImpl implements TFileBrokerService.Iface {
 
     private static Logger logger = Logger.getLogger(HDFSBrokerServiceImpl.class.getName());
     private FileSystemManager fileSystemManager;
-    
+
     public HDFSBrokerServiceImpl() {
         fileSystemManager = new FileSystemManager();
     }
-    
+
     private TBrokerOperationStatus generateOKStatus() {
         return new TBrokerOperationStatus(TBrokerOperationStatusCode.OK);
     }
-    
+
     @Override
     public TBrokerListResponse listPath(TBrokerListPathRequest request)
             throws TException {
-        logger.info("received a list path request, request detail: " + request);
+        logger.info("receive a delete path request, path: " + request.path);
         TBrokerListResponse response = new TBrokerListResponse();
         try {
             boolean fileNameOnly = false;
@@ -87,7 +87,7 @@ public class HDFSBrokerServiceImpl implements TFileBrokerService.Iface {
     @Override
     public TBrokerOperationStatus deletePath(TBrokerDeletePathRequest request)
             throws TException {
-        logger.info("receive a delete path request, request detail: " + request);
+        logger.info("receive a delete path request, path: " + request.path);
         try {
             fileSystemManager.deletePath(request.path, request.properties);
         } catch (BrokerException e) {
@@ -101,7 +101,7 @@ public class HDFSBrokerServiceImpl implements TFileBrokerService.Iface {
     @Override
     public TBrokerOperationStatus renamePath(TBrokerRenamePathRequest request)
             throws TException {
-        logger.info("receive a rename path request, request detail: " + request);
+        logger.info("receive a rename path request, source path: " + request.srcPath + ", dest path: " + request.destPath);
         try {
             fileSystemManager.renamePath(request.srcPath, request.destPath, request.properties);
         } catch (BrokerException e) {
@@ -115,7 +115,7 @@ public class HDFSBrokerServiceImpl implements TFileBrokerService.Iface {
     @Override
     public TBrokerCheckPathExistResponse checkPathExist(
             TBrokerCheckPathExistRequest request) throws TException {
-        logger.info("receive a check path request, request detail: " + request);
+        logger.info("receive a check path request, path: " + request.path);
         TBrokerCheckPathExistResponse response = new TBrokerCheckPathExistResponse();
         try {
             boolean isPathExist = fileSystemManager.checkPathExist(request.path, request.properties);
@@ -132,7 +132,7 @@ public class HDFSBrokerServiceImpl implements TFileBrokerService.Iface {
     @Override
     public TBrokerOpenReaderResponse openReader(TBrokerOpenReaderRequest request)
             throws TException {
-        logger.info("receive a open reader request, request detail: " + request);
+        logger.info("receive a open reader request, path: " + request.path + ", start offset: " + request.startOffset + ", client id: " + request.clientId);
         TBrokerOpenReaderResponse response = new TBrokerOpenReaderResponse();
         try {
             TBrokerFD fd = fileSystemManager.openReader(request.clientId, request.path,
@@ -150,7 +150,7 @@ public class HDFSBrokerServiceImpl implements TFileBrokerService.Iface {
     @Override
     public TBrokerReadResponse pread(TBrokerPReadRequest request)
             throws TException {
-        logger.debug("receive a read request, request detail: " + request);
+        logger.debug("receive a read request, fd: " + request.fd + ", offset: " + request.offset + ", length: " + request.length);
         Stopwatch stopwatch = BrokerPerfMonitor.startWatch();
         TBrokerReadResponse response = new TBrokerReadResponse();
         try {
@@ -164,8 +164,8 @@ public class HDFSBrokerServiceImpl implements TFileBrokerService.Iface {
             return response;
         } finally {
             stopwatch.stop();
-            logger.debug("read request fd: " + request.fd.high + "" 
-                    + request.fd.low + " cost " 
+            logger.debug("read request fd: " + request.fd.high + ""
+                    + request.fd.low + " cost "
                     + stopwatch.elapsed(TimeUnit.MILLISECONDS) + " millis");
         }
         return response;
@@ -174,7 +174,7 @@ public class HDFSBrokerServiceImpl implements TFileBrokerService.Iface {
     @Override
     public TBrokerOperationStatus seek(TBrokerSeekRequest request)
             throws TException {
-        logger.debug("receive a seek request, request detail: " + request);
+        logger.debug("receive a seek request, fd: " + request.fd + ", offset: " + request.offset);
         try {
             fileSystemManager.seek(request.fd, request.offset);
         } catch (BrokerException e) {
@@ -188,7 +188,8 @@ public class HDFSBrokerServiceImpl implements TFileBrokerService.Iface {
     @Override
     public TBrokerOperationStatus closeReader(TBrokerCloseReaderRequest request)
             throws TException {
-        logger.info("receive a close reader request, request detail: " + request);
+        logger.info("receive a close reader request, fd: " + request.fd);
+
         try {
             fileSystemManager.closeReader(request.fd);
         } catch (BrokerException e) {
@@ -202,7 +203,7 @@ public class HDFSBrokerServiceImpl implements TFileBrokerService.Iface {
     @Override
     public TBrokerOpenWriterResponse openWriter(TBrokerOpenWriterRequest request)
             throws TException {
-        logger.info("receive a open writer request, request detail: " + request);
+        logger.info("receive a open writer request, path: " + request.path + ", mode: " + request.openMode + ", client id: " + request.clientId);
         TBrokerOpenWriterResponse response = new TBrokerOpenWriterResponse();
         try {
             TBrokerFD fd = fileSystemManager.openWriter(request.clientId, request.path, request.properties);
@@ -220,7 +221,7 @@ public class HDFSBrokerServiceImpl implements TFileBrokerService.Iface {
     @Override
     public TBrokerOperationStatus pwrite(TBrokerPWriteRequest request)
             throws TException {
-        logger.debug("receive a pwrite request, request detail: " + request);
+        logger.debug("receive a pwrite request, fd: " + request.fd + ", offset: " + request.offset + ", size: " + request.data.remaining());
         Stopwatch stopwatch = BrokerPerfMonitor.startWatch();
         try {
             fileSystemManager.pwrite(request.fd, request.offset, request.getData());
@@ -230,8 +231,8 @@ public class HDFSBrokerServiceImpl implements TFileBrokerService.Iface {
             return errorStatus;
         } finally {
             stopwatch.stop();
-            logger.debug("write request fd: " + request.fd.high + "" 
-                    + request.fd.low + " cost " 
+            logger.debug("write request fd: " + request.fd.high + ""
+                    + request.fd.low + " cost "
                     + stopwatch.elapsed(TimeUnit.MILLISECONDS) + " millis");
         }
         return generateOKStatus();
@@ -254,7 +255,7 @@ public class HDFSBrokerServiceImpl implements TFileBrokerService.Iface {
     @Override
     public TBrokerOperationStatus ping(TBrokerPingBrokerRequest request)
             throws TException {
-        logger.debug("receive a ping request, request detail: " + request);
+        logger.debug("receive a ping request, client id: " + request.clientId);
         try {
             fileSystemManager.ping(request.clientId);
         } catch (BrokerException e) {
