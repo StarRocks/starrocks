@@ -174,7 +174,7 @@ static StatusOr<std::set<std::string>> find_orphan_segments(TabletManager* table
     }
 
     if (segments.empty()) {
-        return Status::OK();
+        return segments;
     }
 
     auto check_rowset = [&](const RowsetMetadata& rowset) {
