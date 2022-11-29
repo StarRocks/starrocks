@@ -742,7 +742,8 @@ public:
             auto* dest_null_column = dest_nullable_column->mutable_null_column();
 
             if (src_column->has_null()) {
-                dest_null_column->get_data() = src_null_column.get_data();
+                dest_null_column->get_data().assign(src_null_column.get_data().begin(),
+                                                    src_null_column.get_data().end());
             } else {
                 dest_null_column->get_data().resize(chunk_size, 0);
             }
@@ -1091,7 +1092,8 @@ private:
             auto* dest_data_column = dest_nullable_column->mutable_data_column();
 
             if (src_column->has_null()) {
-                dest_null_column->get_data() = src_null_column->get_data();
+                dest_null_column->get_data().assign(src_null_column->get_data().begin(),
+                                                    src_null_column->get_data().end());
             } else {
                 dest_null_column->get_data().resize(chunk_size, 0);
             }
@@ -1183,7 +1185,8 @@ public:
             auto* dest_null_column = dest_nullable_column->mutable_null_column();
 
             if (src_column->has_null()) {
-                dest_null_column->get_data() = src_null_column.get_data();
+                dest_null_column->get_data().assign(src_null_column.get_data().begin(),
+                                                    src_null_column.get_data().end());
             } else {
                 dest_null_column->get_data().resize(chunk_size, 0);
             }
