@@ -15,7 +15,7 @@
 #pragma once
 
 #include <queue>
-
+#include <unordered_set>
 #include "formats/csv/converter.h"
 
 namespace starrocks::vectorized {
@@ -184,6 +184,8 @@ protected:
     raw::RawVector<char> _escape_data;
     virtual Status _fill_buffer() { return Status::InternalError("unsupported csv reader!"); }
     std::queue<CSVLine> _csv_buff;
+    std::unordered_set<size_t> _escape_pos;
+    std::vector<CSVField> _fields;
 
 private:
     Status _expand_buffer();

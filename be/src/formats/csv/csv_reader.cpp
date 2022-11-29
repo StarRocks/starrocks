@@ -36,8 +36,8 @@ static std::pair<const char*, size_t> trim(const char* value, size_t len) {
     return std::make_pair(value + begin, end - begin + 1);
 }
 
-bool CSVReader::isColumnSeparator(bool expandBuffer) {
-    if (_column_separator_length == 1) {
+inline bool CSVReader::isColumnSeparator(bool expandBuffer) {
+    if (LIKELY(_column_separator_length == 1)) {
         if (*(_buff.position()) == _column_separator[0]) {
             _buff.skip(1);
             return true;
@@ -67,8 +67,8 @@ bool CSVReader::isColumnSeparator(bool expandBuffer) {
     return false;
 }
 
-bool CSVReader::isRowDelimiter(bool expandBuffer) {
-    if (_row_delimiter_length == 1) {
+inline bool CSVReader::isRowDelimiter(bool expandBuffer) {
+    if (LIKELY(_row_delimiter_length == 1)) {
         if (*(_buff.position()) == _row_delimiter[0]) {
             _buff.skip(1);
             return true;
@@ -133,7 +133,7 @@ Status CSVReader::readMore(bool expandBuffer) {
 }
 
 Status CSVReader::more_lines() {
-    if (_limit > 0 && _parsed_bytes > _limit) {
+    if (UNLIKELY(_limit > 0 && _parsed_bytes > _limit)) {
         return Status::EndOfFile("Reached limit");
     }
     Status status = Status::OK();
@@ -142,7 +142,7 @@ Status CSVReader::more_lines() {
     //     return status;
     // }
     _escape_data.clear();
-    std::unordered_set<size_t> escape_pos;
+    _escape_pos.clear();
     ParseState curState = START;
     ParseState preState = curState;
     // parsed_start and parsed_end record a line at the start and end of the buff.
@@ -155,10 +155,10 @@ Status CSVReader::more_lines() {
     bool is_escape_field = false;
     bool notGetLine = true;
     bool reachBuffEnd = false;
-    std::vector<CSVField> fields;
+    _fields.clear();
     while (true) {
         // At the end of a row, or the end of a field, no new data is read.
-        if (curState != NEWLINE && curState != DELIMITER) {
+        if (LIKELY(curState != NEWLINE && curState != DELIMITER)) {
             if (UNLIKELY(_buff.available() < 1)) {
                 status = readMore(notGetLine);
                 if (!status.ok()) {
@@ -177,7 +177,7 @@ Status CSVReader::more_lines() {
         switch (curState) {
         case START:
             // Trim space is enabled and the leading space is skipped in the START state
-            if (_trim_space) {
+            if (UNLIKELY(_trim_space)) {
                 while (*(_buff.position()) == ' ') {
                     _buff.skip(1);
                     if (UNLIKELY(_buff.available() < 1)) {
@@ -197,29 +197,29 @@ Status CSVReader::more_lines() {
             filed_start = _buff.position_offset();
 
             // newline
-            if (isRowDelimiter(notGetLine)) {
+            if (UNLIKELY(isRowDelimiter(notGetLine))) {
                 curState = NEWLINE;
                 break;
             }
 
             // delimiter
-            if (isColumnSeparator(notGetLine)) {
+            if (UNLIKELY(isColumnSeparator(notGetLine))) {
                 curState = DELIMITER;
                 break;
             }
 
             // escape
-            if (*(_buff.position()) == _escape) {
+            if (UNLIKELY(*(_buff.position()) == _escape)) {
                 // trick here.
                 preState = ORDINARY;
                 curState = ESCAPE;
-                escape_pos.insert(_buff.position_offset());
+                _escape_pos.insert(_buff.position_offset());
                 _buff.skip(1);
                 break;
             }
 
             // enclose
-            if (*(_buff.position()) == _enclose) {
+            if (UNLIKELY(*(_buff.position()) == _enclose)) {
                 _buff.skip(1);
                 if (UNLIKELY(_buff.available() < 1)) {
                     status = readMore(notGetLine);
@@ -309,7 +309,7 @@ Status CSVReader::more_lines() {
                 if (*(_buff.position()) == _enclose) {
                     preState = curState;
                     curState = ENCLOSE_ESCAPE;
-                    escape_pos.insert(_buff.position_offset() - 1);
+                    _escape_pos.insert(_buff.position_offset() - 1);
                 } else {
                     curState = ORDINARY;
                 }
@@ -319,7 +319,7 @@ Status CSVReader::more_lines() {
             if (*(_buff.position()) == _escape) {
                 preState = curState;
                 curState = ESCAPE;
-                escape_pos.insert(_buff.position_offset());
+                _escape_pos.insert(_buff.position_offset());
                 _buff.skip(1);
                 break;
             }
@@ -371,19 +371,19 @@ Status CSVReader::more_lines() {
             }
 
             // escape
-            if (*(_buff.position()) == _escape) {
+            if (UNLIKELY(*(_buff.position()) == _escape)) {
                 preState = curState;
                 curState = ESCAPE;
-                escape_pos.insert(_buff.position_offset());
+                _escape_pos.insert(_buff.position_offset());
                 _buff.skip(1);
                 break;
             }
 
             // enclose
-            if (*(_buff.position()) == _enclose) {
+            if (UNLIKELY(*(_buff.position()) == _enclose)) {
                 preState = curState;
                 curState = ENCLOSE_ESCAPE;
-                escape_pos.insert(_buff.position_offset());
+                _escape_pos.insert(_buff.position_offset());
                 _buff.skip(1);
                 break;
             }
@@ -395,21 +395,21 @@ Status CSVReader::more_lines() {
         case DELIMITER:
             filed_end = _buff.position_offset();
             // The field has an escape and needs to be stripped of the escape character and copied to a separate storage space.
-            if (escape_pos.size() > 0) {
+            if (UNLIKELY(_escape_pos.size() > 0)) {
                 is_escape_field = true;
                 size_t new_filed_start = _escape_data.size();
                 for (size_t i = filed_start; i < _buff.position_offset(); i++) {
-                    if (escape_pos.count(i)) {
+                    if (_escape_pos.count(i)) {
                         continue;
                     }
                     _escape_data.push_back(_buff.get_char(i));
                 }
-                escape_pos.clear();
+                _escape_pos.clear();
                 filed_start = new_filed_start;
                 filed_end = _escape_data.size();
             }
             // push field
-            if (is_enclose_field) {
+            if (UNLIKELY(is_enclose_field)) {
                 if (_trim_space) {
                     const char* basePtr = _buff.base_ptr();
                     if (is_escape_field) {
@@ -417,24 +417,24 @@ Status CSVReader::more_lines() {
                     }
                     std::pair<const char*, size_t> newPos =
                             trim(basePtr + filed_start, filed_end - _column_separator_length - filed_start - 1);
-                    fields.emplace_back(newPos.first - basePtr, newPos.second, is_escape_field);
+                    _fields.emplace_back(newPos.first - basePtr, newPos.second, is_escape_field);
                 } else {
                     // Remove the last enclose character.
-                    fields.emplace_back(filed_start, filed_end - _column_separator_length - filed_start - 1,
+                    _fields.emplace_back(filed_start, filed_end - _column_separator_length - filed_start - 1,
                                         is_escape_field);
                 }
 
             } else {
-                if (_trim_space) {
+                if (UNLIKELY(_trim_space)) {
                     const char* basePtr = _buff.base_ptr();
                     if (is_escape_field) {
                         basePtr = _escape_data.data();
                     }
                     std::pair<const char*, size_t> newPos =
                             trim(basePtr + filed_start, filed_end - _column_separator_length - filed_start);
-                    fields.emplace_back(newPos.first - basePtr, newPos.second, is_escape_field);
+                    _fields.emplace_back(newPos.first - basePtr, newPos.second, is_escape_field);
                 } else {
-                    fields.emplace_back(filed_start, filed_end - _column_separator_length - filed_start,
+                    _fields.emplace_back(filed_start, filed_end - _column_separator_length - filed_start,
                                         is_escape_field);
                 }
             }
@@ -453,9 +453,9 @@ Status CSVReader::more_lines() {
             _parsed_bytes += _buff.position_offset() - parsed_start;
             parsed_end = _buff.position_offset();
             // push line
-            if (status.ok() || status.is_end_of_file()) {
+            if (LIKELY(status.ok() || status.is_end_of_file())) {
                 // For empty line, skip it. And restart state machine.
-                if (fields.size() == 0 && _buff.position_offset() - _row_delimiter_length - filed_start == 0) {
+                if (UNLIKELY(_fields.size() == 0 && _buff.position_offset() - _row_delimiter_length - filed_start == 0)) {
                     curState = START;
                     is_enclose_field = false;
                     is_escape_field = false;
@@ -468,21 +468,21 @@ Status CSVReader::more_lines() {
                 }
                 if (filed_start != std::string::npos) {
                     filed_end = _buff.position_offset();
-                    if (escape_pos.size() > 0) {
+                    if (UNLIKELY(_escape_pos.size() > 0)) {
                         is_escape_field = true;
                         size_t new_filed_start = _escape_data.size();
                         for (size_t i = filed_start; i < _buff.position_offset(); i++) {
-                            if (escape_pos.count(i)) {
+                            if (_escape_pos.count(i)) {
                                 continue;
                             }
                             _escape_data.push_back(_buff.get_char(i));
                         }
-                        escape_pos.clear();
+                        _escape_pos.clear();
                         filed_start = new_filed_start;
                         filed_end = _escape_data.size();
                     }
 
-                    if (is_enclose_field) {
+                    if (UNLIKELY(is_enclose_field)) {
                         if (_trim_space) {
                             const char* basePtr = _buff.base_ptr();
                             if (is_escape_field) {
@@ -490,39 +490,39 @@ Status CSVReader::more_lines() {
                             }
                             std::pair<const char*, size_t> newPos =
                                     trim(basePtr + filed_start, filed_end - _row_delimiter_length - filed_start - 1);
-                            fields.emplace_back(newPos.first - basePtr, newPos.second, is_escape_field);
+                            _fields.emplace_back(newPos.first - basePtr, newPos.second, is_escape_field);
                         } else {
-                            fields.emplace_back(filed_start, filed_end - _row_delimiter_length - filed_start - 1,
+                            _fields.emplace_back(filed_start, filed_end - _row_delimiter_length - filed_start - 1,
                                                 is_escape_field);
                         }
                         notGetLine = false;
                     } else {
-                        if (_trim_space) {
+                        if (UNLIKELY(_trim_space)) {
                             const char* basePtr = _buff.base_ptr();
                             if (is_escape_field) {
                                 basePtr = _escape_data.data();
                             }
                             std::pair<const char*, size_t> newPos =
                                     trim(basePtr + filed_start, filed_end - _row_delimiter_length - filed_start);
-                            fields.emplace_back(newPos.first - basePtr, newPos.second, is_escape_field);
+                            _fields.emplace_back(newPos.first - basePtr, newPos.second, is_escape_field);
                         } else {
-                            fields.emplace_back(filed_start, filed_end - _row_delimiter_length - filed_start,
+                            _fields.emplace_back(filed_start, filed_end - _row_delimiter_length - filed_start,
                                                 is_escape_field);
                         }
                         notGetLine = false;
                     }
                     filed_start = std::string::npos;
                     CSVLine newLine;
-                    newLine.fields = fields;
+                    newLine.fields = _fields;
                     newLine.parsed_start = parsed_start;
                     newLine.parsed_end = parsed_end;
                     _csv_buff.push(newLine);
                 }
             }
-            if (!status.ok()) {
+            if (UNLIKELY(!status.ok())) {
                 return status;
             }
-            fields.clear();
+            _fields.clear();
             curState = START;
             is_escape_field = false;
             is_enclose_field = false;
