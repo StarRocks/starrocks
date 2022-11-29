@@ -247,7 +247,7 @@ cp -r ${STARROCKS_HOME}/be/test/util/test_data ${STARROCKS_TEST_BINARY_DIR}/util
 if [ "${TEST_MODULE}" == ".*" ] || [ "${TEST_MODULE}" == "starrocks_test" ]; then
   echo "Run test file: starrocks_test"
   if [ -x ${GTEST_PARALLEL} ]; then
-      ${GTEST_PARALLEL} ${STARROCKS_TEST_BINARY_DIR}/starrocks_test --gtest_filter=${TEST_FILTER} --serialize_test_cases ${GTEST_PARALLEL_OPTIONS}
+      ${GTEST_PARALLEL} ${STARROCKS_TEST_BINARY_DIR}/starrocks_test $GTEST_OPTIONS --gtest_filter=${TEST_FILTER} --serialize_test_cases ${GTEST_PARALLEL_OPTIONS}
   else
       ${STARROCKS_TEST_BINARY_DIR}/starrocks_test $GTEST_OPTIONS --gtest_filter=${TEST_FILTER}
   fi
