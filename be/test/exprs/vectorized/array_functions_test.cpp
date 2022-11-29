@@ -4687,4 +4687,259 @@ TEST_F(ArrayFunctionsTest, array_distinct_only_null) {
     }
 }
 
+TEST_F(ArrayFunctionsTest, array_sortby_tinyint_with_nullable) {
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, true);
+    src_column->append_datum(DatumArray{(int8_t)3, (int8_t)4, (int8_t)5});
+    src_column->append_datum(Datum());
+    src_column->append_datum(DatumArray{(int8_t)2, (int8_t)4});
+    src_column->append_datum(Datum());
+    src_column->append_datum(DatumArray{});
+    src_column->append_datum(Datum());
+    src_column->append_datum(DatumArray{});
+    src_column->append_datum(DatumArray{Datum(), (int8_t)-23});
+    src_column->append_datum(DatumArray{(int8_t)43, (int8_t)23});
+    src_column->append_datum(DatumArray{(int8_t)43, (int8_t)23, Datum()});
+
+    auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, true);
+    src_column2->append_datum(DatumArray{(int8_t)82, (int8_t)1, (int8_t)4});
+    src_column2->append_datum(DatumArray{(int8_t)23});
+    src_column2->append_datum(Datum());
+    src_column2->append_datum(Datum());
+    src_column2->append_datum(DatumArray{});
+    src_column2->append_datum(DatumArray{});
+    src_column2->append_datum(Datum());
+    src_column2->append_datum(DatumArray{(int8_t)3, (int8_t)6});
+    src_column2->append_datum(DatumArray{(int8_t)-23, Datum()});
+    src_column2->append_datum(DatumArray{(int8_t)3, (int8_t)6, Datum()});
+
+    {
+        ArraySortBy<LogicalType::TYPE_TINYINT> sort;
+        auto dest_column = sort.process(nullptr, {src_column, src_column2});
+
+        ASSERT_TRUE(dest_column->is_nullable());
+        ASSERT_EQ(dest_column->size(), 10);
+        _check_array<int8_t>({(int8_t)(4), (int8_t)(5), (int8_t)(3)}, dest_column->get(0).get_array());
+        ASSERT_TRUE(dest_column->get(1).is_null());
+        _check_array<int8_t>({(int8_t)(2), (int8_t)(4)}, dest_column->get(2).get_array());
+        ASSERT_TRUE(dest_column->get(3).is_null());
+        ASSERT_TRUE(dest_column->get(4).get_array().empty());
+        ASSERT_TRUE(dest_column->get(5).is_null());
+        ASSERT_TRUE(dest_column->get(6).get_array().empty());
+        ASSERT_TRUE(dest_column->get(7).get_array()[0].is_null());
+        ASSERT_EQ(dest_column->get(7).get_array()[1].get_int8(), (int8_t)(-23));
+        _check_array<int8_t>({(int8_t)(23), (int8_t)(43)}, dest_column->get(8).get_array());
+        ASSERT_TRUE(dest_column->get(9).get_array()[0].is_null());
+        ASSERT_EQ(dest_column->get(9).get_array()[1].get_int8(), (int8_t)(43));
+        ASSERT_EQ(dest_column->get(9).get_array()[2].get_int8(), (int8_t)(23));
+    }
+    {
+        ArraySortBy<LogicalType::TYPE_TINYINT> sort;
+        auto dest_column = sort.process(nullptr, {src_column2, src_column});
+
+        ASSERT_TRUE(dest_column->is_nullable());
+        ASSERT_EQ(dest_column->size(), 10);
+        _check_array<int8_t>({(int8_t)(82), (int8_t)(1), (int8_t)(4)}, dest_column->get(0).get_array());
+        _check_array<int8_t>({(int8_t)(23)}, dest_column->get(1).get_array());
+        ASSERT_TRUE(dest_column->get(2).is_null());
+        ASSERT_TRUE(dest_column->get(3).is_null());
+        ASSERT_TRUE(dest_column->get(4).get_array().empty());
+        ASSERT_TRUE(dest_column->get(5).get_array().empty());
+        ASSERT_TRUE(dest_column->get(6).is_null());
+        _check_array<int8_t>({(int8_t)(3), (int8_t)(6)}, dest_column->get(7).get_array());
+        ASSERT_TRUE(dest_column->get(8).get_array()[0].is_null());
+        ASSERT_EQ(dest_column->get(8).get_array()[1].get_int8(), (int8_t)(-23));
+        ASSERT_TRUE(dest_column->get(9).get_array()[0].is_null());
+        ASSERT_EQ(dest_column->get(9).get_array()[1].get_int8(), (int8_t)(6));
+        ASSERT_EQ(dest_column->get(9).get_array()[2].get_int8(), (int8_t)(3));
+    }
+}
+
+TEST_F(ArrayFunctionsTest, array_sortby_tinyint) {
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, false);
+    src_column->append_datum(DatumArray{(int8_t)5, (int8_t)3, (int8_t)6});
+    src_column->append_datum(DatumArray{(int8_t)5, (int8_t)3, (int8_t)6});
+    src_column->append_datum(DatumArray{});
+    src_column->append_datum(DatumArray{(int8_t)125, (int8_t)123});
+    src_column->append_datum(DatumArray{Datum()});
+    src_column->append_datum(DatumArray{(int8_t)4, Datum()});
+
+    auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, false);
+    src_column2->append_datum(DatumArray{(int8_t)3, (int8_t)73, (int8_t)30});
+    src_column2->append_datum(DatumArray{(int8_t)3, (int8_t)2, (int8_t)1});
+    src_column2->append_datum(DatumArray{});
+    src_column2->append_datum(DatumArray{Datum(), (int8_t)-43});
+    src_column2->append_datum(DatumArray{(int8_t)4});
+    src_column2->append_datum(DatumArray{Datum(), (int8_t)43});
+
+    {
+        ArraySortBy<LogicalType::TYPE_TINYINT> sort;
+        auto dest_column = sort.process(nullptr, {src_column, src_column2});
+
+        ASSERT_TRUE(!dest_column->is_nullable());
+        ASSERT_EQ(dest_column->size(), 6);
+
+        _check_array<int8_t>({(int8_t)(5), (int8_t)(6), (int8_t)(3)}, dest_column->get(0).get_array());
+        _check_array<int8_t>({(int8_t)(6), (int8_t)(3), (int8_t)(5)}, dest_column->get(1).get_array());
+        ASSERT_TRUE(dest_column->get(2).get_array().empty());
+        _check_array<int8_t>({(int8_t)(125), (int8_t)(123)}, dest_column->get(3).get_array());
+        ASSERT_TRUE(dest_column->get(4).get_array()[0].is_null());
+        ASSERT_EQ(dest_column->get(5).get_array()[0].get_int8(), (int8_t)(4));
+        ASSERT_TRUE(dest_column->get(5).get_array()[1].is_null());
+    }
+    {
+        ArraySortBy<LogicalType::TYPE_TINYINT> sort;
+        auto dest_column = sort.process(nullptr, {src_column2, src_column});
+
+        ASSERT_TRUE(!dest_column->is_nullable());
+        ASSERT_EQ(dest_column->size(), 6);
+
+        _check_array<int8_t>({(int8_t)(73), (int8_t)(3), (int8_t)(30)}, dest_column->get(0).get_array());
+        _check_array<int8_t>({(int8_t)(2), (int8_t)(3), (int8_t)(1)}, dest_column->get(1).get_array());
+        ASSERT_TRUE(dest_column->get(2).get_array().empty());
+        ASSERT_EQ(dest_column->get(3).get_array()[0].get_int8(), (int8_t)(-43));
+        ASSERT_TRUE(dest_column->get(3).get_array()[1].is_null());
+        ASSERT_EQ(dest_column->get(4).get_array()[0].get_int8(), (int8_t)(4));
+        ASSERT_EQ(dest_column->get(5).get_array()[0].get_int8(), (int8_t)(43));
+        ASSERT_TRUE(dest_column->get(5).get_array()[1].is_null());
+    }
+}
+
+TEST_F(ArrayFunctionsTest, array_sortby_tinyint_with_nullable_notnull) {
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, true);
+    src_column->append_datum(DatumArray{(int8_t)3, (int8_t)4, (int8_t)5});
+    src_column->append_datum(Datum());
+    src_column->append_datum(DatumArray{(int8_t)2, (int8_t)4});
+    src_column->append_datum(Datum());
+    src_column->append_datum(DatumArray{});
+    src_column->append_datum(Datum());
+    src_column->append_datum(DatumArray{});
+    src_column->append_datum(DatumArray{Datum(), Datum()});
+    src_column->append_datum(DatumArray{(int8_t)43, (int8_t)23});
+    src_column->append_datum(DatumArray{(int8_t)43, (int8_t)23, Datum()});
+
+    auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, false);
+    src_column2->append_datum(DatumArray{(int8_t)82, (int8_t)1, (int8_t)4});
+    src_column2->append_datum(DatumArray{(int8_t)23});
+    src_column2->append_datum(DatumArray{(int8_t)3, Datum()});
+    src_column2->append_datum(DatumArray{Datum()});
+    src_column2->append_datum(DatumArray{});
+    src_column2->append_datum(DatumArray{});
+    src_column2->append_datum(DatumArray{});
+    src_column2->append_datum(DatumArray{Datum(), Datum()});
+    src_column2->append_datum(DatumArray{(int8_t)-33, (int8_t)6});
+    src_column2->append_datum(DatumArray{(int8_t)3, (int8_t)6, Datum()});
+    {
+        ArraySortBy<LogicalType::TYPE_TINYINT> sort;
+        auto dest_column = sort.process(nullptr, {src_column, src_column2});
+
+        ASSERT_TRUE(dest_column->is_nullable());
+        ASSERT_EQ(dest_column->size(), 10);
+        _check_array<int8_t>({(int8_t)(4), (int8_t)(5), (int8_t)(3)}, dest_column->get(0).get_array());
+        ASSERT_TRUE(dest_column->get(1).is_null());
+        _check_array<int8_t>({(int8_t)(4), (int8_t)(2)}, dest_column->get(2).get_array());
+        ASSERT_TRUE(dest_column->get(3).is_null());
+        ASSERT_TRUE(dest_column->get(4).get_array().empty());
+        ASSERT_TRUE(dest_column->get(5).is_null());
+        ASSERT_TRUE(dest_column->get(6).get_array().empty());
+        ASSERT_TRUE(dest_column->get(7).get_array()[0].is_null());
+        ASSERT_TRUE(dest_column->get(7).get_array()[1].is_null());
+        _check_array<int8_t>({(int8_t)(43), (int8_t)(23)}, dest_column->get(8).get_array());
+        ASSERT_TRUE(dest_column->get(9).get_array()[0].is_null());
+        ASSERT_EQ(dest_column->get(9).get_array()[1].get_int8(), (int8_t)(43));
+        ASSERT_EQ(dest_column->get(9).get_array()[2].get_int8(), (int8_t)(23));
+    }
+    {
+        ArraySortBy<LogicalType::TYPE_TINYINT> sort;
+        auto dest_column = sort.process(nullptr, {src_column2, src_column});
+
+        ASSERT_TRUE(!dest_column->is_nullable());
+        ASSERT_EQ(dest_column->size(), 10);
+        _check_array<int8_t>({(int8_t)(82), (int8_t)(1), (int8_t)(4)}, dest_column->get(0).get_array());
+        _check_array<int8_t>({(int8_t)(23)}, dest_column->get(1).get_array());
+        ASSERT_EQ(dest_column->get(2).get_array()[0].get_int8(), (int8_t)(3));
+        ASSERT_TRUE(dest_column->get(2).get_array()[1].is_null());
+        ASSERT_TRUE(dest_column->get(3).get_array()[0].is_null());
+        ASSERT_TRUE(dest_column->get(4).get_array().empty());
+        ASSERT_TRUE(dest_column->get(5).get_array().empty());
+        ASSERT_TRUE(dest_column->get(6).get_array().empty());
+        ASSERT_TRUE(dest_column->get(7).get_array()[0].is_null());
+        ASSERT_TRUE(dest_column->get(7).get_array()[1].is_null());
+        _check_array<int8_t>({(int8_t)(6), (int8_t)(-33)}, dest_column->get(8).get_array());
+        ASSERT_TRUE(dest_column->get(9).get_array()[0].is_null());
+        ASSERT_EQ(dest_column->get(9).get_array()[1].get_int8(), (int8_t)(6));
+        ASSERT_EQ(dest_column->get(9).get_array()[2].get_int8(), (int8_t)(3));
+    }
+}
+
+TEST_F(ArrayFunctionsTest, array_sortby_varchar_with_nullable) {
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, true);
+    src_column->append_datum(DatumArray{Slice("5"), Slice("3"), Slice("6")});
+    src_column->append_datum(DatumArray{Slice("8")});
+    src_column->append_datum(DatumArray{Slice("4")});
+    src_column->append_datum(Datum());
+    src_column->append_datum(DatumArray{Slice("4"), Slice("1")});
+    src_column->append_datum(DatumArray{Slice("4"), Slice("1")});
+
+    auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, true);
+    src_column2->append_datum(DatumArray{(int8_t)3, (int8_t)5, (int8_t)6});
+    src_column2->append_datum(DatumArray{(int8_t)3});
+    src_column2->append_datum(Datum());
+    src_column2->append_datum(DatumArray{Datum()});
+    src_column2->append_datum(DatumArray{(int8_t)4, Datum()});
+    src_column2->append_datum(DatumArray{Datum(), (int8_t)4});
+
+    {
+        ArraySortBy<LogicalType::TYPE_TINYINT> sort;
+        auto dest_column = sort.process(nullptr, {src_column, src_column2});
+
+        ASSERT_TRUE(dest_column->is_nullable());
+        ASSERT_EQ(dest_column->size(), 6);
+        _check_array<Slice>({Slice("5"), Slice("3"), Slice("6")}, dest_column->get(0).get_array());
+        _check_array<Slice>({Slice("8")}, dest_column->get(1).get_array());
+        _check_array<Slice>({Slice("4")}, dest_column->get(2).get_array());
+        ASSERT_TRUE(dest_column->get(3).is_null());
+        _check_array<Slice>({Slice("1"), Slice("4")}, dest_column->get(4).get_array());
+        _check_array<Slice>({Slice("4"), Slice("1")}, dest_column->get(5).get_array());
+    }
+    {
+        ArraySortBy<LogicalType::TYPE_VARCHAR> sort;
+        auto dest_column = sort.process(nullptr, {src_column2, src_column});
+
+        ASSERT_TRUE(dest_column->is_nullable());
+        ASSERT_EQ(dest_column->size(), 6);
+        _check_array<int8_t>({(int8_t)(5), (int8_t)(3), (int8_t)(6)}, dest_column->get(0).get_array());
+        _check_array<int8_t>({(int8_t)(3)}, dest_column->get(1).get_array());
+        ASSERT_TRUE(dest_column->get(2).is_null());
+        ASSERT_TRUE(dest_column->get(3).get_array()[0].is_null());
+        ASSERT_TRUE(dest_column->get(4).get_array()[0].is_null());
+        ASSERT_EQ(dest_column->get(4).get_array()[1].get_int8(), (int8_t)(4));
+        ASSERT_EQ(dest_column->get(5).get_array()[0].get_int8(), (int8_t)(4));
+        ASSERT_TRUE(dest_column->get(5).get_array()[1].is_null());
+    }
+}
+
+TEST_F(ArrayFunctionsTest, array_sortby_with_only_null) {
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_TINYINT, false);
+    src_column->append_datum(DatumArray{(int8_t)5, (int8_t)3, (int8_t)6});
+
+    auto src_column2 = ColumnHelper::create_const_null_column(1);
+
+    {
+        ArraySortBy<LogicalType::TYPE_TINYINT> sort;
+        auto dest_column = sort.process(nullptr, {src_column, src_column2});
+        _check_array<int8_t>({(int8_t)(5), (int8_t)(3), (int8_t)(6)}, dest_column->get(0).get_array());
+    }
+    {
+        ArraySortBy<LogicalType::TYPE_TINYINT> sort;
+        auto dest_column = sort.process(nullptr, {src_column2, src_column});
+        ASSERT_TRUE(dest_column->only_null());
+    }
+
+    {
+        ArraySortBy<LogicalType::TYPE_TINYINT> sort;
+        auto dest_column = sort.process(nullptr, {src_column2, src_column2});
+        ASSERT_TRUE(dest_column->only_null());
+    }
+}
+
 } // namespace starrocks::vectorized
