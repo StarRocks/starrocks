@@ -423,7 +423,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 }
 
                 // save table names for recycling
-                Set<String> tableNames = db.getTableNamesWithLock();
+                Set<String> tableNames = new HashSet(db.getTableNamesViewWithLock());
                 runnableList = unprotectDropDb(db, isForceDrop, false);
                 if (!isForceDrop) {
                     recycleBin.recycleDatabase(db, tableNames);
@@ -479,7 +479,7 @@ public class LocalMetastore implements ConnectorMetadata {
             Database db = fullNameToDb.get(dbName);
             db.writeLock();
             try {
-                Set<String> tableNames = db.getTableNamesWithLock();
+                Set<String> tableNames = new HashSet(db.getTableNamesViewWithLock());
                 runnableList = unprotectDropDb(db, isForceDrop, true);
                 if (!isForceDrop) {
                     recycleBin.recycleDatabase(db, tableNames);
