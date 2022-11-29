@@ -2,9 +2,9 @@
 
 ## Description
 
-Sums all values in an array.
+Sums all data in an ARRAY and returns the result.
 
-### Syntax
+## Syntax
 
 ```Haskell
 array_sum(array(type))

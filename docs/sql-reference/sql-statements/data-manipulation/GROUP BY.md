@@ -1,6 +1,6 @@
 # GROUP BY
 
-## description
+## Description
 
 GROUP BY `GROUPING SETS` ｜ `CUBE` ｜ `ROLLUP` is an extension of the GROUP BY clause. It can realize the aggregation of groups of multiple sets in a GROUP BY clause. The result is equivalent to the UNION operation of multiple corresponding GROUP BY clauses.
 
@@ -87,7 +87,7 @@ GROUP BY clause is a special case of GROUP BY GROUPING SETS containing only one 
   )
   ```
 
-## example
+## Examples
 
   The following is an example of actual data:
 

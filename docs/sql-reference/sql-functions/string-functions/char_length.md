@@ -1,16 +1,16 @@
 # char_length
 
-## description
+## Description
 
-### Syntax
+This function returns the length of a string. For multibytes characters, it returns the number of characters. It currently only supports utf8 coding. Note: This function is also named as character_length.
+
+## Syntax
 
 ```Haskell
 INT char_length(VARCHAR str)
 ```
 
-This function returns the length of a string. For multibytes characters, it returns the number of characters. It currently only supports utf8 coding. Note: This function is also named as character_length.
-
-## example
+## Examples
 
 ```Plain Text
 MySQL > select char_length("abc");

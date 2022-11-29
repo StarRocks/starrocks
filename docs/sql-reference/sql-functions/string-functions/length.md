@@ -1,16 +1,16 @@
 # length
 
-## description
+## Description
 
-### Syntax
+This function returns the length of a string (in bytes).
+
+## Syntax
 
 ```Haskell
 INT length(VARCHAR str)
 ```
 
-This function returns the length of a string (in bytes).
-
-## example
+## Examples
 
 ```Plain Text
 MySQL > select length("abc");

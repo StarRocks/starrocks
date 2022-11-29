@@ -32,10 +32,10 @@ public class MarkDownParserTest {
         lines.add("# SHOW TABLES");
         lines.add("## name");
         lines.add("SHOW TABLES");
-        lines.add("## description");
+        lines.add("## eescription");
         lines.add("SYNTAX:");
         lines.add("\tSHOW TABLES [FROM] database");
-        lines.add("## example");
+        lines.add("## examples");
         lines.add("show tables;");
         lines.add("## keyword");
         lines.add("SHOW, TABLES");
@@ -63,7 +63,7 @@ public class MarkDownParserTest {
         lines.add("SHOW TABLES");
         lines.add("## description");
         lines.add("SYNTAX:\n\tSHOW TABLES [FROM] database");
-        lines.add("## example");
+        lines.add("## examples");
         lines.add("show tables;");
         lines.add("## keyword");
         lines.add("SHOW, TABLES");
@@ -140,7 +140,7 @@ public class MarkDownParserTest {
         lines.add("SYNTAX:\n\tSHOW TABLES [FROM] database");
         lines.add("####Parameter");
         lines.add(">table_name");
-        lines.add("## example");
+        lines.add("## examples");
         lines.add("show tables;");
         lines.add("### Exam1");
         lines.add("exam1");
@@ -167,7 +167,7 @@ public class MarkDownParserTest {
         lines.add("SHOW TABLES");
         lines.add("## ");
         lines.add("SYNTAX:\n\tSHOW TABLES [FROM] database");
-        lines.add("## example");
+        lines.add("## Examples");
         lines.add("show tables;");
         lines.add("## keyword");
         lines.add("SHOW, TABLES");

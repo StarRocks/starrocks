@@ -1,6 +1,6 @@
 # CREATE USER
 
-## description
+## Description
 
 ### Syntax
 
@@ -26,7 +26,7 @@ auth_option: {
 
 If a role is specified, it will automatically grant all permissions the role owns to this newly created user with the precondition that the role already exists. If a role is not specified, the user defaults to having no permission.  
 
-## example
+## Examples
 
 1. Create a passwordless user (without specifying host, it is equivalent to jack@'%')
 
