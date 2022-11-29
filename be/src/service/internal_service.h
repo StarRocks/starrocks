@@ -124,6 +124,32 @@ public:
                                     google::protobuf::Closure* done) override;
 
 private:
+    void _transmit_chunk(::google::protobuf::RpcController* controller, const ::starrocks::PTransmitChunkParams* request,
+                        ::starrocks::PTransmitChunkResult* response, ::google::protobuf::Closure* done);
+
+    void _transmit_runtime_filter(::google::protobuf::RpcController* controller,
+                                 const ::starrocks::PTransmitRuntimeFilterParams* request,
+                                 ::starrocks::PTransmitRuntimeFilterResult* response,
+                                 ::google::protobuf::Closure* done);
+
+    void _exec_plan_fragment(google::protobuf::RpcController* controller, const PExecPlanFragmentRequest* request,
+                            PExecPlanFragmentResult* result, google::protobuf::Closure* done);
+
+    void _exec_batch_plan_fragments(google::protobuf::RpcController* controller,
+                                   const PExecBatchPlanFragmentsRequest* request, PExecBatchPlanFragmentsResult* result,
+                                   google::protobuf::Closure* done);
+
+    void _async_exec_batch_plan_fragments(google::protobuf::RpcController* controller,
+                                   const PExecBatchPlanFragmentsRequest* request, PExecBatchPlanFragmentsResult* result,
+                                   google::protobuf::Closure* done);
+
+
+    void _cancel_plan_fragment(google::protobuf::RpcController* controller, const PCancelPlanFragmentRequest* request,
+                              PCancelPlanFragmentResult* result, google::protobuf::Closure* done);
+
+    void _fetch_data(google::protobuf::RpcController* controller, const PFetchDataRequest* request,
+                    PFetchDataResult* result, google::protobuf::Closure* done);
+
     void _get_info_impl(const PProxyRequest* request, PProxyResult* response,
                         GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>* latch, int timeout_ms);
 
