@@ -30,7 +30,6 @@ import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
-import org.postgresql.core.BaseStatement;
 
 public class ShowTableStmtTest {
 
@@ -70,8 +69,9 @@ public class ShowTableStmtTest {
         String sql = "show full tables where table_type !='VIEW'";
         stmt = (ShowTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         QueryStatement queryStatement = stmt.toSelectStmt();
-        String expect = "SELECT TABLE_NAME AS Tables_in_testDb, TABLE_TYPE AS Table_type FROM information_schema.tables"
-                + " WHERE (TABLE_SCHEMA = 'testDb') AND (TABLE_TYPE != 'VIEW')";
+        String expect = "SELECT information_schema.tables.TABLE_NAME AS Tables_in_testDb, " +
+                "information_schema.tables.TABLE_TYPE AS Table_type FROM " +
+                "information_schema.tables WHERE (information_schema.tables.TABLE_SCHEMA = 'testDb') AND (information_schema.tables.TABLE_TYPE != 'VIEW')";
         Assert.assertEquals(expect, AST2SQL.toString(queryStatement));
     }
 
