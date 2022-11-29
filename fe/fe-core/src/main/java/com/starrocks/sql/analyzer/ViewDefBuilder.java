@@ -52,6 +52,24 @@ public class ViewDefBuilder {
                 res += ".";
             }
 
+            res += '`' + fieldName + '`';
+            if (!fieldName.equalsIgnoreCase(columnName)) {
+                res += " AS `" + columnName + "`";
+            }
+            return res;
+        }
+
+        private String buildStructColumnName(TableName tableName, String fieldName, String columnName) {
+            String res = "";
+            if (tableName != null) {
+                if (!simple) {
+                    res = tableName.toSql();
+                } else {
+                    res = "`" + tableName.getTbl() + "`";
+                }
+                res += ".";
+            }
+
             fieldName = handleColumnName(fieldName);
             columnName = handleColumnName(columnName);
 
@@ -94,14 +112,20 @@ public class ViewDefBuilder {
             List<String> selectListString = new ArrayList<>();
             for (int i = 0; i < stmt.getOutputExpr().size(); ++i) {
                 Expr expr = stmt.getOutputExpr().get(i);
-                String columnName = stmt.getScope().getRelationFields().getFieldByIndex(i).getName();
+                String columnName = stmt.getColumnOutputNames().get(i);
 
                 if (expr instanceof FieldReference) {
                     Field field = stmt.getScope().getRelationFields().getFieldByIndex(i);
                     selectListString.add(buildColumnName(field.getRelationAlias(), field.getName(), columnName));
                 } else if (expr instanceof SlotRef) {
                     SlotRef slot = (SlotRef) expr;
-                    selectListString.add(buildColumnName(slot.getTblNameWithoutAnalyzed(), slot.getColumnName(), columnName));
+                    if (slot.getOriginType().isStructType()) {
+                        selectListString.add(buildStructColumnName(slot.getTblNameWithoutAnalyzed(),
+                                slot.getColumnName(), columnName));
+                    } else {
+                        selectListString.add(buildColumnName(slot.getTblNameWithoutAnalyzed(), slot.getColumnName(),
+                                columnName));
+                    }
                 } else {
                     selectListString.add(visit(expr) + " AS `" + columnName + "`");
                 }
@@ -197,7 +221,13 @@ public class ViewDefBuilder {
 
         @Override
         public String visitSlot(SlotRef expr, Void context) {
-            return buildColumnName(expr.getTblNameWithoutAnalyzed(), expr.getColumnName(), expr.getColumnName());
+            if (expr.getOriginType().isStructType()) {
+                return buildStructColumnName(expr.getTblNameWithoutAnalyzed(),
+                        expr.getColumnName(), expr.getColumnName());
+            } else {
+                return buildColumnName(expr.getTblNameWithoutAnalyzed(),
+                        expr.getColumnName(), expr.getColumnName());
+            }
         }
     }
 }
