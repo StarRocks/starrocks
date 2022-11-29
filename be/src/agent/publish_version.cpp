@@ -23,14 +23,17 @@ const uint32_t PUBLISH_VERSION_SUBMIT_MAX_RETRY = 10;
 bvar::LatencyRecorder g_publish_latency("be", "publish");
 
 struct TabletPublishVersionTask {
+    // input params
     int64_t txn_id{0};
     int64_t partition_id{0};
     int64_t tablet_id{0};
-    int64_t version{0};
-    int64_t current_version{0};
+    int64_t version{0}; // requested publish version
     RowsetSharedPtr rowset;
+    // output params
     Status st;
-    int64_t max_continuous_version{0}; // max continuous version after publish is done
+    // max continuous version after publish is done
+    // or 0 which means tablet not found or publish task cannot be submitted
+    int64_t max_continuous_version{0};
 };
 
 void run_publish_version_task(ThreadPoolToken* token, const PublishVersionAgentTaskRequest& publish_version_task,
@@ -108,7 +111,7 @@ void run_publish_version_task(ThreadPoolToken* token, const PublishVersionAgentT
                               << " partition:" << task.partition_id << " txn_id: " << task.txn_id
                               << " rowset:" << task.rowset->rowset_id();
                 }
-                task.current_version = tablet->max_continuous_version();
+                task.max_continuous_version = tablet->max_continuous_version();
             });
             if (st.is_service_unavailable()) {
                 int64_t retry_sleep_ms = 50 * retry_time;
@@ -142,10 +145,10 @@ void run_publish_version_task(ThreadPoolToken* token, const PublishVersionAgentT
                 st = task.st;
             }
         }
-        if (task.current_version > 0) {
+        if (task.max_continuous_version > 0) {
             auto& pair = tablet_versions.emplace_back();
             pair.__set_tablet_id(task.tablet_id);
-            pair.__set_version(task.current_version);
+            pair.__set_version(task.max_continuous_version);
         }
     }
 

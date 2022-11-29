@@ -166,7 +166,7 @@ public class PublishVersionTask extends AgentTask {
             }
         }
         if (!droppedTablets.isEmpty()) {
-            LOG.warn("during publish version some tablets were dropped(maybe by alter), tabletIds={}", droppedTablets);
+            LOG.info("during publish version some tablets were dropped(maybe by alter), tabletIds={}", droppedTablets);
         }
         db.writeLock();
         try {
