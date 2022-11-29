@@ -44,8 +44,8 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
 import java.util.Set;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Predicate;
 import java.util.zip.Adler32;
 
@@ -286,7 +286,7 @@ public class Util {
     }
 
     public static int generateSchemaHash() {
-        return Math.abs(new Random().nextInt());
+        return Math.abs(ThreadLocalRandom.current().nextInt());
     }
 
     public static String dumpThread(Thread t, int lineNum) {
