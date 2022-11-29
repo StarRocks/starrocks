@@ -8,6 +8,7 @@ bool Sm3::is_little_endian = (*(char*)&Sm3::ENDIAN_TEST_VALUE == 1) ? true : fal
 
 // Cyclic shift left k-bit operation
 unsigned int Sm3::left_rotate(unsigned int word, int k) {
+    k = k % WORD_BITS;
     return (word) << (k) | (word) >> (WORD_BITS - (k));
 }
 
