@@ -38,6 +38,7 @@
 
 #include <list>
 #include <mutex>
+#include <shared_mutex>
 #include <set>
 
 #include "column/vectorized_fwd.h"
@@ -113,7 +114,7 @@ private:
     static const uint32_t BUCKET_NUM = 127;
 
     // protects all fields below
-    typedef bthread::Mutex Mutex;
+    typedef std::shared_mutex Mutex;
     Mutex _lock[BUCKET_NUM];
 
     // map from hash value of fragment instance id/node id pair to stream receivers;
