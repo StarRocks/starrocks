@@ -8,6 +8,7 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 
 import java.util.Map;
+import java.util.Set;
 
 public class MaterializationContext {
     private MaterializedView mv;
@@ -27,14 +28,18 @@ public class MaterializationContext {
 
     private Map<ColumnRefOperator, ColumnRefOperator> outputMapping;
 
+    private Set<String> mvPartitionNamesToRefresh;
+
     public MaterializationContext(MaterializedView mv,
                                   OptExpression mvExpression,
                                   ColumnRefFactory queryColumnRefFactory,
-                                  ColumnRefFactory mvColumnRefFactory) {
+                                  ColumnRefFactory mvColumnRefFactory,
+                                  Set<String> mvPartitionNamesToRefresh) {
         this.mv = mv;
         this.mvExpression = mvExpression;
         this.queryRefFactory = queryColumnRefFactory;
         this.mvColumnRefFactory = mvColumnRefFactory;
+        this.mvPartitionNamesToRefresh = mvPartitionNamesToRefresh;
     }
 
     public MaterializedView getMv() {
@@ -87,5 +92,9 @@ public class MaterializationContext {
 
     public void setOutputMapping(Map<ColumnRefOperator, ColumnRefOperator> outputMapping) {
         this.outputMapping = outputMapping;
+    }
+
+    public Set<String> getMvPartitionNamesToRefresh() {
+        return mvPartitionNamesToRefresh;
     }
 }
