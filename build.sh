@@ -297,7 +297,7 @@ if [ ${BUILD_FE} -eq 1 -o ${BUILD_SPARK_DPP} -eq 1 ]; then
         FE_MODULES="fe-common,spark-dpp"
     fi
     if [ ${BUILD_FE} -eq 1 ]; then
-        FE_MODULES="fe-common,spark-dpp,fe-core"
+        FE_MODULES="staros,fe-common,spark-dpp,fe-core"
     fi
 fi
 
@@ -308,7 +308,7 @@ if [ ${FE_MODULES}x != ""x ]; then
     if [ ${CLEAN} -eq 1 ]; then
         ${MVN_CMD} clean
     fi
-    ${MVN_CMD} package -pl ${FE_MODULES} -DskipTests
+    ${MVN_CMD} package -am -pl ${FE_MODULES} -DskipTests
     cd ${STARROCKS_HOME}
 fi
 

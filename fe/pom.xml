@@ -32,6 +32,7 @@ under the License.
         <module>fe-common</module>
         <module>spark-dpp</module>
         <module>fe-core</module>
+        <module>staros</module>
     </modules>
 
     <name>starrocks-fe</name>
