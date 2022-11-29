@@ -56,6 +56,8 @@ public:
         Read();
     }
 
+    DISALLOW_COPY_AND_MOVE(RapidJSONReadStreamAdapter);
+
     Ch Peek() const { return *_current; }
     Ch Take() {
         Ch c = *_current;
