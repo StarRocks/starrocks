@@ -1071,6 +1071,57 @@ TEST_F(OrcChunkReaderTest, TestReadArrayBasic) {
     }
 }
 
+// the file schema create table dec_orc(id int, arr ARRAY<decimal(9,9>) STORED AS ORC;
+// the file data:
+// 1	[0.999999999]
+// 2	[0.000000001,null]
+// 3	[null,null]
+// 4	[0.123456789]
+// we use this to test that the data is decimal<9, 9> which type should be decimal32 but we use decimal64
+
+TEST_F(OrcChunkReaderTest, TestReadArrayDecimal) {
+    TypeDescriptor type_array(PrimitiveType::TYPE_ARRAY);
+    type_array.children.emplace_back(TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, 9, 9));
+
+    SlotDesc slot_descs[] = {
+            {"id",  TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
+            {"arr", type_array},
+            {""},
+    };
+
+    static const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/dec_orc.orc";
+    std::vector<SlotDescriptor*> src_slot_descriptors;
+    ObjectPool pool;
+    create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
+
+    {
+        OrcChunkReader reader(_runtime_state.get(), src_slot_descriptors);
+        auto input_stream = orc::readLocalFile(input_orc_file);
+        Status st = reader.init(std::move(input_stream));
+        DCHECK(st.ok()) << st.get_error_msg();
+
+        st = reader.read_next();
+        DCHECK(st.ok()) << st.get_error_msg();
+        ChunkPtr ckptr = reader.create_chunk();
+        DCHECK(ckptr != nullptr);
+        st = reader.fill_chunk(&ckptr);
+        DCHECK(st.ok()) << st.get_error_msg();
+        ChunkPtr result = reader.cast_chunk(&ckptr);
+        DCHECK(result != nullptr);
+
+        EXPECT_EQ(result->num_rows(), 4);
+        EXPECT_EQ(result->num_columns(), 2);
+
+        for (int i = 0; i < result->num_rows(); ++i) {
+            std::cout << "row" << i << ": " << result->debug_row(i) << std::endl;
+        }
+        EXPECT_EQ(result->debug_row(0), "[1, [0.999999999]]");
+        EXPECT_EQ(result->debug_row(1), "[2, [0.000000001, NULL]]");
+        EXPECT_EQ(result->debug_row(2), "[3, [NULL, NULL]]");
+        EXPECT_EQ(result->debug_row(3), "[4, [0.123456789]]");
+    }
+}
+
 /**
  * File Version: 0.12 with ORC_135
 Rows: 1
