@@ -107,7 +107,7 @@ template <typename T>
 void PInternalServiceImplBase<T>::transmit_chunk(google::protobuf::RpcController* cntl_base,
                                                  const PTransmitChunkParams* request, PTransmitChunkResult* response,
                                                  google::protobuf::Closure* done) {
-    auto task = [this, cntl_base, request, response, done]() {
+    auto task = [=]() {
         this->_transmit_chunk(cntl_base, request, response, done);
     };
     if (!_exec_env->query_rpc_pool()->try_offer(std::move(task))) {
@@ -160,7 +160,7 @@ void PInternalServiceImplBase<T>::transmit_runtime_filter(google::protobuf::RpcC
                                                           const PTransmitRuntimeFilterParams* request,
                                                           PTransmitRuntimeFilterResult* response,
                                                           google::protobuf::Closure* done) {
-    auto task = [this, cntl_base, request, response, done]() {
+    auto task = [=]() {
         this->_transmit_runtime_filter(cntl_base, request, response, done);
     };
     if (!_exec_env->query_rpc_pool()->try_offer(std::move(task))) {
@@ -197,7 +197,7 @@ void PInternalServiceImplBase<T>::exec_plan_fragment(google::protobuf::RpcContro
                                                      const PExecPlanFragmentRequest* request,
                                                      PExecPlanFragmentResult* response,
                                                      google::protobuf::Closure* done) {
-    auto task = [this, cntl_base, request, response, done]() {
+    auto task = [=]() {
         this->_exec_plan_fragment(cntl_base, request, response, done);
     };
     if (!_exec_env->query_rpc_pool()->try_offer(std::move(task))) {
@@ -231,7 +231,7 @@ void PInternalServiceImplBase<T>::exec_batch_plan_fragments(google::protobuf::Rp
                                                             const PExecBatchPlanFragmentsRequest* request,
                                                             PExecBatchPlanFragmentsResult* response,
                                                             google::protobuf::Closure* done) {
-    auto task = [this, cntl_base, request, response, done]() {
+    auto task = [=]() {
         this->_exec_batch_plan_fragments(cntl_base, request, response, done);
     };
     if (!_exec_env->pipeline_prepare_pool()->try_offer(std::move(task))) {
@@ -370,7 +370,7 @@ void PInternalServiceImplBase<T>::cancel_plan_fragment(google::protobuf::RpcCont
                                                        const PCancelPlanFragmentRequest* request,
                                                        PCancelPlanFragmentResult* result,
                                                        google::protobuf::Closure* done) {
-    auto task = [this, cntl_base, request, result, done]() {
+    auto task = [=]() {
         this->_cancel_plan_fragment(cntl_base, request, result, done);
     };
     if (!_exec_env->query_rpc_pool()->try_offer(std::move(task))) {
@@ -436,7 +436,7 @@ template <typename T>
 void PInternalServiceImplBase<T>::fetch_data(google::protobuf::RpcController* cntl_base,
                                              const PFetchDataRequest* request, PFetchDataResult* result,
                                              google::protobuf::Closure* done) {
-    auto task = [this, cntl_base, request, result, done]() { this->_fetch_data(cntl_base, request, result, done); };
+    auto task = [=]() { this->_fetch_data(cntl_base, request, result, done); };
     if (!_exec_env->query_rpc_pool()->try_offer(std::move(task))) {
         ClosureGuard closure_guard(done);
         Status::ServiceUnavailable("submit fetch_data task failed").to_protobuf(result->mutable_status());
