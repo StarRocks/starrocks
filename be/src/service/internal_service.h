@@ -140,10 +140,6 @@ private:
                                     const PExecBatchPlanFragmentsRequest* request,
                                     PExecBatchPlanFragmentsResult* result, google::protobuf::Closure* done);
 
-    void _async_exec_batch_plan_fragments(google::protobuf::RpcController* controller,
-                                          const PExecBatchPlanFragmentsRequest* request,
-                                          PExecBatchPlanFragmentsResult* result, google::protobuf::Closure* done);
-
     void _cancel_plan_fragment(google::protobuf::RpcController* controller, const PCancelPlanFragmentRequest* request,
                                PCancelPlanFragmentResult* result, google::protobuf::Closure* done);
 
@@ -158,7 +154,6 @@ private:
                                int timeout_ms);
 
     Status _exec_plan_fragment(brpc::Controller* cntl);
-    Status _exec_batch_plan_fragments(brpc::Controller* cntl);
     Status _exec_plan_fragment_by_pipeline(const TExecPlanFragmentParams& t_common_request,
                                            const TExecPlanFragmentParams& t_unique_request);
     Status _exec_plan_fragment_by_non_pipeline(const TExecPlanFragmentParams& t_request);
