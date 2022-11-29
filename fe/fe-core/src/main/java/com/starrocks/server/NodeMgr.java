@@ -725,7 +725,7 @@ public class NodeMgr {
 
             Frontend existFe = getFeByHost(fqdn);
             if (null != existFe) {
-                throw new DdlException("frontend use host [" + fqdn + "] already exists ");
+                throw new DdlException("frontend with host [" + fqdn + "] already exists ");
             }
 
             // step 1 update the fe information stored in bdb
