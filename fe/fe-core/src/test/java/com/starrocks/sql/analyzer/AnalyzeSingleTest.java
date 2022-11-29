@@ -471,7 +471,11 @@ public class AnalyzeSingleTest {
                 connectContext.getSessionVariable().getSqlMode()).get(0);
         Analyzer.analyze(statementBase, connectContext);
         Assert.assertEquals(
+<<<<<<< HEAD
                 "SELECT * FROM default_cluster:test.tall WHERE ta LIKE (concat(concat('h', 'a', 'i'), '%'))",
+=======
+                "SELECT * FROM test.tall WHERE test.tall.ta LIKE (concat(concat('h', 'a', 'i'), '%'))",
+>>>>>>> e3b6d66c4 ([BugFix] Fix when output has duplicate item, order by works on wrong column-ref (#13754))
                 AST2SQL.toString(statementBase));
 
         connectContext.getSessionVariable().setSqlMode(0);
@@ -479,7 +483,11 @@ public class AnalyzeSingleTest {
                 connectContext.getSessionVariable().getSqlMode()).get(0);
         Analyzer.analyze(statementBase, connectContext);
         Assert.assertEquals(
+<<<<<<< HEAD
                 "SELECT * FROM default_cluster:test.tall WHERE (ta LIKE (concat('h', 'a', 'i'))) OR TRUE",
+=======
+                "SELECT * FROM test.tall WHERE (test.tall.ta LIKE (concat('h', 'a', 'i'))) OR TRUE",
+>>>>>>> e3b6d66c4 ([BugFix] Fix when output has duplicate item, order by works on wrong column-ref (#13754))
                 AST2SQL.toString(statementBase));
 
         analyzeFail("select * from  tall where ta like concat(\"h\", \"a\", \"i\")||'%'",
@@ -489,22 +497,34 @@ public class AnalyzeSingleTest {
         statementBase = SqlParser.parse("select * from  tall order by ta",
                 connectContext.getSessionVariable().getSqlMode()).get(0);
         Analyzer.analyze(statementBase, connectContext);
+<<<<<<< HEAD
         Assert.assertEquals("SELECT * FROM default_cluster:test.tall ORDER BY ta ASC NULLS LAST ",
+=======
+        Assert.assertEquals("SELECT * FROM test.tall ORDER BY test.tall.ta ASC NULLS LAST ",
+>>>>>>> e3b6d66c4 ([BugFix] Fix when output has duplicate item, order by works on wrong column-ref (#13754))
                 AST2SQL.toString(statementBase));
 
-        statementBase = SqlParser.parse("select * from  tall order by ta desc",
+        statementBase = SqlParser.parse("select * from  test.tall order by test.tall.ta desc",
                 connectContext.getSessionVariable().getSqlMode()).get(0);
         Analyzer.analyze(statementBase, connectContext);
         Assert.assertEquals(
+<<<<<<< HEAD
                 "SELECT * FROM default_cluster:test.tall ORDER BY ta DESC NULLS FIRST ",
+=======
+                "SELECT * FROM test.tall ORDER BY test.tall.ta DESC NULLS FIRST ",
+>>>>>>> e3b6d66c4 ([BugFix] Fix when output has duplicate item, order by works on wrong column-ref (#13754))
                 AST2SQL.toString(statementBase));
 
         connectContext.getSessionVariable().setSqlMode(0);
-        statementBase = SqlParser.parse("select * from  tall order by ta",
+        statementBase = SqlParser.parse("select * from  test.tall order by test.tall.ta",
                 connectContext.getSessionVariable().getSqlMode()).get(0);
         Analyzer.analyze(statementBase, connectContext);
         Assert.assertEquals(
+<<<<<<< HEAD
                 "SELECT * FROM default_cluster:test.tall ORDER BY ta ASC ",
+=======
+                "SELECT * FROM test.tall ORDER BY test.tall.ta ASC ",
+>>>>>>> e3b6d66c4 ([BugFix] Fix when output has duplicate item, order by works on wrong column-ref (#13754))
                 AST2SQL.toString(statementBase));
     }
 
@@ -560,4 +580,94 @@ public class AnalyzeSingleTest {
         selectRelation = (SelectRelation) ((QueryStatement) statementBase).getQueryRelation();
         Assert.assertEquals("1", selectRelation.getSelectList().getOptHints().get("broadcast_row_limit"));
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testLowCard() {
+        String sql = "select * from test.t0 [_META_]";
+        QueryStatement queryStatement = (QueryStatement) analyzeSuccess(sql);
+        Assert.assertTrue(((TableRelation) ((SelectRelation) queryStatement.getQueryRelation()).getRelation()).isMetaQuery());
+    }
+
+    @Test
+    public void testSync() {
+        analyzeSuccess("sync");
+    }
+
+    @Test
+    public void testUnsupportedStatement() {
+        analyzeSuccess("start transaction");
+        analyzeSuccess("start transaction with consistent snapshot");
+        analyzeSuccess("begin");
+        analyzeSuccess("begin work");
+        analyzeSuccess("commit");
+        analyzeSuccess("commit work");
+        analyzeSuccess("commit and no chain release");
+        analyzeSuccess("rollback");
+    }
+
+    @Test
+    public void testASTChildCountLimit() {
+        Config.expr_children_limit = 5;
+        analyzeSuccess("select * from test.t0 where v1 in (1,2,3,4,5)");
+        analyzeSuccess("select * from test.t0 where v1 in (1,2,3,4)");
+
+        analyzeFail("select * from test.t0 where v1 in (1,2,3,4,5,6)",
+                "Expression child number 6 exceeded the maximum 5");
+        analyzeFail("select [1,2,3,4,5,6]",
+                "Expression child number 6 exceeded the maximum 5");
+        analyzeFail("select array<int>[1,2,3,4,5,6]",
+                "Expression child number 6 exceeded the maximum 5");
+        analyzeFail("select * from (values(1,2,3,4,5,6)) t",
+                "Expression child number 6 exceeded the maximum 5");
+        analyzeFail("insert into t0 values(1,2,3),(1,2,3),(1,2,3),(1,2,3),(1,2,3),(1,2,3)",
+                "Expression child number 6 exceeded the maximum 5");
+        analyzeFail("insert into t0 values(1,2,3,4,5,6)",
+                "Expression child number 6 exceeded the maximum 5");
+
+        Config.expr_children_limit = 100000;
+        analyzeSuccess("select * from test.t0 where v1 in (1,2,3,4,5,6)");
+    }
+
+    @Test
+    public void testOrderByWithSameColumnName() {
+        analyzeFail("select * from t0, tnotnull order by v1", "Column 'v1' is ambiguous");
+        analyzeSuccess("select * from t0, tnotnull order by t0.v1");
+
+        analyzeFail("select t0.v1 from t0, tnotnull order by v2", "Column 'v2' is ambiguous");
+        analyzeSuccess("select t0.v1 from t0, tnotnull order by v1");
+        analyzeSuccess("select tnotnull.v1 from t0, tnotnull order by v1");
+        analyzeSuccess("select t0.v1 from t0, tnotnull order by t0.v1");
+        analyzeFail("select t0.v1 as v from t0, tnotnull order by v1", "Column 'v1' is ambiguous");
+        analyzeSuccess("select t0.v1 as v from t0, tnotnull order by t0.v1");
+        analyzeFail("select t0.v1, tnotnull.v1 from t0, tnotnull order by v1", "Column 'v1' is ambiguous");
+    }
+
+    @Test
+    public void testOutputNamesWithDB() {
+        QueryRelation query = ((QueryStatement) analyzeSuccess(
+                "select t0.v1, v1 from t0"))
+                .getQueryRelation();
+        Assert.assertEquals("v1,v1", String.join(",", query.getColumnOutputNames()));
+        analyzeFail("create view v as select t0.v1, v1 from t0", "Duplicate column name 'v1'");
+
+        query = ((QueryStatement) analyzeSuccess(
+                "select * from t0, t1"))
+                .getQueryRelation();
+        Assert.assertEquals("v1,v2,v3,v4,v5,v6", String.join(",", query.getColumnOutputNames()));
+
+        query = ((QueryStatement) analyzeSuccess(
+                "select t0.*, abs(t0.v1), abs(v1) from t0, t1"))
+                .getQueryRelation();
+        Assert.assertEquals("v1,v2,v3,abs(t0.v1),abs(v1)", String.join(",", query.getColumnOutputNames()));
+
+        analyzeSuccess("select v1 as v from t0 order by v1");
+        analyzeSuccess("select v1 as v from t0 order by t0.v1");
+        analyzeFail("select v1 as v from t0 order by test.v",
+                "Column '`test`.`v`' cannot be resolved");
+
+        analyzeFail("create view v as select * from t0,tnotnull", "Duplicate column name 'v1'");
+    }
+>>>>>>> e3b6d66c4 ([BugFix] Fix when output has duplicate item, order by works on wrong column-ref (#13754))
 }

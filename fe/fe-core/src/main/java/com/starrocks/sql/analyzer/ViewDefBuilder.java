@@ -24,6 +24,70 @@ public class ViewDefBuilder {
     }
 
     private static class ViewDefBuilderVisitor extends AST2SQL.SQLBuilder {
+<<<<<<< HEAD
+=======
+
+        private final boolean simple;
+
+        public ViewDefBuilderVisitor(boolean simple) {
+            this.simple = simple;
+        }
+
+        private String buildColumnName(TableName tableName, String fieldName, String columnName) {
+            String res = "";
+            if (tableName != null) {
+                if (!simple) {
+                    res = tableName.toSql();
+                } else {
+                    res = "`" + tableName.getTbl() + "`";
+                }
+                res += ".";
+            }
+
+            res += '`' + fieldName + '`';
+            if (!fieldName.equalsIgnoreCase(columnName)) {
+                res += " AS `" + columnName + "`";
+            }
+            return res;
+        }
+
+        private String buildStructColumnName(TableName tableName, String fieldName, String columnName) {
+            String res = "";
+            if (tableName != null) {
+                if (!simple) {
+                    res = tableName.toSql();
+                } else {
+                    res = "`" + tableName.getTbl() + "`";
+                }
+                res += ".";
+            }
+
+            fieldName = handleColumnName(fieldName);
+            columnName = handleColumnName(columnName);
+
+            res += fieldName;
+            if (!fieldName.equalsIgnoreCase(columnName)) {
+                res += " AS " + columnName;
+            }
+            return res;
+        }
+
+        // Consider struct, like fieldName = a.b.c, columnName = a.b.c
+        private String handleColumnName(String name) {
+            String[] fields = name.split("\\.");
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < fields.length; i++) {
+                sb.append("`");
+                sb.append(fields[i]);
+                sb.append("`");
+                if (i < fields.length - 1) {
+                    sb.append(".");
+                }
+            }
+            return sb.toString();
+        }
+
+>>>>>>> e3b6d66c4 ([BugFix] Fix when output has duplicate item, order by works on wrong column-ref (#13754))
         @Override
         public String visitNode(ParseNode node, Void context) {
             return "";
@@ -41,13 +105,26 @@ public class ViewDefBuilder {
             List<String> selectListString = new ArrayList<>();
             for (int i = 0; i < stmt.getOutputExpr().size(); ++i) {
                 Expr expr = stmt.getOutputExpr().get(i);
-                String columnName = stmt.getScope().getRelationFields().getFieldByIndex(i).getName();
+                String columnName = stmt.getColumnOutputNames().get(i);
 
                 if (expr instanceof FieldReference) {
                     Field field = stmt.getScope().getRelationFields().getFieldByIndex(i);
+<<<<<<< HEAD
                     selectListString.add(
                             (field.getRelationAlias() == null ? "" : field.getRelationAlias().toSql() + ".")
                                     + "`" + field.getName() + "`" + " AS `" + columnName + "`");
+=======
+                    selectListString.add(buildColumnName(field.getRelationAlias(), field.getName(), columnName));
+                } else if (expr instanceof SlotRef) {
+                    SlotRef slot = (SlotRef) expr;
+                    if (slot.getOriginType().isStructType()) {
+                        selectListString.add(buildStructColumnName(slot.getTblNameWithoutAnalyzed(),
+                                slot.getColumnName(), columnName));
+                    } else {
+                        selectListString.add(buildColumnName(slot.getTblNameWithoutAnalyzed(), slot.getColumnName(),
+                                columnName));
+                    }
+>>>>>>> e3b6d66c4 ([BugFix] Fix when output has duplicate item, order by works on wrong column-ref (#13754))
                 } else {
                     selectListString.add(visit(expr) + " AS `" + columnName + "`");
                 }
@@ -132,7 +209,17 @@ public class ViewDefBuilder {
 
         @Override
         public String visitSlot(SlotRef expr, Void context) {
+<<<<<<< HEAD
             return expr.toSql();
+=======
+            if (expr.getOriginType().isStructType()) {
+                return buildStructColumnName(expr.getTblNameWithoutAnalyzed(),
+                        expr.getColumnName(), expr.getColumnName());
+            } else {
+                return buildColumnName(expr.getTblNameWithoutAnalyzed(),
+                        expr.getColumnName(), expr.getColumnName());
+            }
+>>>>>>> e3b6d66c4 ([BugFix] Fix when output has duplicate item, order by works on wrong column-ref (#13754))
         }
     }
 }

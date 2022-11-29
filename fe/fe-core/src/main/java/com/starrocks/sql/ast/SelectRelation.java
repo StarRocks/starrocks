@@ -54,6 +54,8 @@ public class SelectRelation extends QueryRelation {
      */
     private List<Expr> orderSourceExpressions;
 
+    private List<Integer> outputExprInOrderByScope;
+
     /**
      * Relations referenced in From clause. The Relation can be a CTE/table
      * reference a subquery or two relation joined together.
@@ -120,6 +122,7 @@ public class SelectRelation extends QueryRelation {
 
         this.sortClause = analyzeState.getOrderBy();
         this.orderSourceExpressions = analyzeState.getOrderSourceExpressions();
+        this.outputExprInOrderByScope = analyzeState.getOutputExprInOrderByScope();
 
         this.outputAnalytic = analyzeState.getOutputAnalytic();
         this.orderByAnalytic = analyzeState.getOrderByAnalytic();
@@ -181,8 +184,12 @@ public class SelectRelation extends QueryRelation {
         return orderSourceExpressions;
     }
 
+    public List<Integer> getOutputExprInOrderByScope() {
+        return outputExprInOrderByScope;
+    }
+
     public boolean hasAggregation() {
-        return !(groupBy.isEmpty() && aggregate.isEmpty());
+        return !(groupBy.isEmpty() && aggregate.isEmpty()) || isDistinct;
     }
 
     public List<AnalyticExpr> getOutputAnalytic() {
