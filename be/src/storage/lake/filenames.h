@@ -17,7 +17,7 @@ constexpr static const int kTxnLogFilenameLength = 37;
 constexpr static const int kTabletMetadataLockFilenameLength = 55;
 constexpr static const int kSegmentFileNameLength = 40;
 
-constexpr static const char* const kOrphanListFileName = "orphans";
+constexpr static const char* const kOrphanListFileName = "orphans.txt";
 
 inline bool is_segment(std::string_view file_name) {
     return HasSuffixString(file_name, ".dat");
