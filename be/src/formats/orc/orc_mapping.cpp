@@ -120,16 +120,12 @@ StatusOr<std::unique_ptr<OrcMapping>> OrcMappingFactory::build_mapping(
 Status OrcMappingFactory::_check_orc_type_can_converte_2_logical_type(const orc::Type& orc_source_type,
                                                                       const TypeDescriptor& slot_target_type) {
     bool can_convert = true;
-    if (slot_target_type.is_array_type()) {
-        can_convert = orc_source_type.getKind() == orc::TypeKind::LIST;
-    } else if (slot_target_type.is_map_type()) {
-        can_convert = orc_source_type.getKind() == orc::TypeKind::MAP;
-    } else if (slot_target_type.is_struct_type()) {
-        can_convert = orc_source_type.getKind() == orc::TypeKind::STRUCT;
-    } else if (slot_target_type.is_date_type()) {
-        can_convert = (orc_source_type.getKind() == orc::TypeKind::DATE) ||
-                      (orc_source_type.getKind() == orc::TypeKind::TIMESTAMP) ||
-                      (orc_source_type.getKind() == orc::TypeKind::TIMESTAMP_INSTANT);
+    if (orc_source_type.getKind() == orc::TypeKind::LIST) {
+        can_convert = slot_target_type.is_array_type();
+    } else if (orc_source_type.getKind() == orc::TypeKind::MAP) {
+        can_convert = slot_target_type.is_map_type();
+    } else if (orc_source_type.getKind() == orc::TypeKind::STRUCT) {
+        can_convert = slot_target_type.is_struct_type();
     }
 
     //TODO Other primitive type not check now!
