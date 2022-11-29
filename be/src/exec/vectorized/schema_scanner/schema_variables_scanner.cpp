@@ -25,7 +25,7 @@ SchemaScanner::ColumnDesc SchemaVariablesScanner::_s_verbose_vars_columns[] = {
 
 SchemaVariablesScanner::SchemaVariablesScanner(TVarType::type type)
         : SchemaScanner(type == TVarType::VERBOSE ? _s_verbose_vars_columns : _s_vars_columns,
-          type == TVarType::VERBOSE ? 2 : 4),
+                        type == TVarType::VERBOSE ? 2 : 4),
           _type(type) {}
 
 SchemaVariablesScanner::~SchemaVariablesScanner() = default;
