@@ -14,6 +14,10 @@ mysql -h <fe_host> -P9030 -u root
 
 使用 `root` 用户创建 `example_db` 数据库。
 
+> **注意**
+>
+> 在指定数据库名、表名和列名等变量时，如果使用了保留关键字，必须使用反引号 (`) 包裹，否则可能会产生报错。有关 StarRocks 的保留关键字列表，请参见[关键字](../keywords.md#保留关键字)。
+
 ```sql
 CREATE DATABASE example_db;
 ```
