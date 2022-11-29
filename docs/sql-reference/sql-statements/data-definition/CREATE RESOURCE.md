@@ -1,6 +1,6 @@
 # CREATE RESOURCE
 
-## description
+## Description
 
 This statement is used to create resources. Only user root or admin can create resources. Currently, only Spark and Hive resources are supported. Other external resources may be added to StarRocks in the future, such as Spark/GPU for query, HDFS/S3 for external storage, and MapReduce for ETL.
 
@@ -16,7 +16,7 @@ Note:
 1. PROPERTIES specifies the resource type. Currently, only Spark and Hive are supported.
 2. The PROPERTIES vary depending on the resource type. See examples for details.
 
-## example
+## Examples
 
 1. Create a Spark resource named spark0 in yarn Cluster mode.
 

@@ -4,7 +4,7 @@
 
 Changes user information.
 
-### Syntax
+## Syntax
 
 ```SQL
 ALTER USER

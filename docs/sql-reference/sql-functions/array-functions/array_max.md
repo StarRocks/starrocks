@@ -1,16 +1,16 @@
 # array_max
 
-## description
+## Description
 
-### Syntax
+Obtains the maximum value of all data in an ARRAY and return this result.
+
+## Syntax
 
 ```Haskell
 array_max(array(type))
 ```
 
-Find the maximum value of all data in an ARRAY and return this result.
-
-## example
+## Examples
 
 ```plain text
 mysql> select array_max([113, 11, 12]);

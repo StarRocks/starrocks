@@ -1,6 +1,6 @@
 # ADMIN CHECK TABLET
 
-## description
+## Description
 
 This statement is used to check a group of tablets.
 
@@ -19,7 +19,7 @@ Note:
 
    Consistency: Check the consistency of replicas of the tablet. This command is asynchronous. After sending it, StarRocks will start checking the consistency among corresponding tablets. The final results will be shown in the InconsistentTabletNum column in the result of SHOW PROC "/statistic".
 
-## example
+## Examples
 
 1. Check the consistency of replicas on a group of specified tablets
 
