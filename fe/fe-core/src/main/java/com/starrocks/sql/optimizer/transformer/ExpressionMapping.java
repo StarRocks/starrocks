@@ -101,7 +101,29 @@ public class ExpressionMapping {
             scope.tryResolveFeild((SlotRef) expression)
                     .ifPresent(field -> fieldMappings[field.getRelationFieldIndex()] = variable);
         }
+<<<<<<< HEAD
         expressionToColumns.put(expression, variable);
+=======
+
+        expressionToColumns.put(expression, columnRefOperator);
+    }
+
+    public void putWithSymbol(Expr expression, Expr resolveExpr, ColumnRefOperator columnRefOperator) {
+        if (resolveExpr instanceof SlotRef) {
+            if (expression instanceof SlotRef
+                    && ((SlotRef) expression).getColumnName().equals(((SlotRef) resolveExpr).getColumnName())) {
+                // There is no alias, and it is an expression of SlotRef,
+                // which is resolved according to the original expression
+                scope.tryResolveField((SlotRef) expression)
+                        .ifPresent(field -> fieldMappings[field.getRelationFieldIndex()] = columnRefOperator);
+            } else {
+                scope.tryResolveField((SlotRef) resolveExpr)
+                        .ifPresent(field -> fieldMappings[field.getRelationFieldIndex()] = columnRefOperator);
+            }
+        }
+
+        expressionToColumns.put(expression, columnRefOperator);
+>>>>>>> e3b6d66c4 ([BugFix] Fix when output has duplicate item, order by works on wrong column-ref (#13754))
     }
 
     public boolean hasExpression(Expr expr) {

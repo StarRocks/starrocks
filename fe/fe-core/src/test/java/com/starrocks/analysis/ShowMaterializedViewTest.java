@@ -48,6 +48,7 @@ public class ShowMaterializedViewTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testNormal() throws AnalysisException {
         // use default database
         ShowMaterializedViewStmt stmt = new ShowMaterializedViewStmt("test");
@@ -58,5 +59,69 @@ public class ShowMaterializedViewTest {
         }
         Assert.assertEquals("testCluster:test", stmt.getDb());
         Assert.assertEquals("SHOW MATERIALIZED VIEW FROM testCluster:test", stmt.toString());
+=======
+    public void testNormal() throws Exception {
+        ctx = UtFrameUtils.createDefaultCtx();
+        ctx.setDatabase("testDb");
+
+        ShowMaterializedViewStmt stmt = new ShowMaterializedViewStmt("");
+
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
+        Assert.assertEquals("testDb", stmt.getDb());
+        Assert.assertEquals(5, stmt.getMetaData().getColumnCount());
+        Assert.assertEquals("id", stmt.getMetaData().getColumn(0).getName());
+        Assert.assertEquals("name", stmt.getMetaData().getColumn(1).getName());
+        Assert.assertEquals("database_name", stmt.getMetaData().getColumn(2).getName());
+        Assert.assertEquals("text", stmt.getMetaData().getColumn(3).getName());
+        Assert.assertEquals("rows", stmt.getMetaData().getColumn(4).getName());
+
+        stmt = new ShowMaterializedViewStmt("abc", (String) null);
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
+        Assert.assertEquals("abc", stmt.getDb());
+        Assert.assertEquals(5, stmt.getMetaData().getColumnCount());
+        Assert.assertEquals("id", stmt.getMetaData().getColumn(0).getName());
+        Assert.assertEquals("name", stmt.getMetaData().getColumn(1).getName());
+        Assert.assertEquals("database_name", stmt.getMetaData().getColumn(2).getName());
+        Assert.assertEquals("text", stmt.getMetaData().getColumn(3).getName());
+        Assert.assertEquals("rows", stmt.getMetaData().getColumn(4).getName());
+
+        stmt = new ShowMaterializedViewStmt("abc", "bcd");
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
+        Assert.assertEquals("bcd", stmt.getPattern());
+        Assert.assertEquals("abc", stmt.getDb());
+        Assert.assertEquals(5, stmt.getMetaData().getColumnCount());
+        Assert.assertEquals("id", stmt.getMetaData().getColumn(0).getName());
+        Assert.assertEquals("name", stmt.getMetaData().getColumn(1).getName());
+        Assert.assertEquals("database_name", stmt.getMetaData().getColumn(2).getName());
+        Assert.assertEquals("text", stmt.getMetaData().getColumn(3).getName());
+        Assert.assertEquals("rows", stmt.getMetaData().getColumn(4).getName());
+
+        stmt = (ShowMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(
+                "SHOW MATERIALIZED VIEW FROM abc where name = 'mv1';", ctx);
+        Assert.assertEquals("abc", stmt.getDb());
+        Assert.assertEquals(
+                "SELECT information_schema.materialized_views.MATERIALIZED_VIEW_ID AS id, " +
+                        "information_schema.materialized_views.TABLE_NAME AS name, " +
+                        "information_schema.materialized_views.TABLE_SCHEMA AS database_name, " +
+                        "information_schema.materialized_views.MATERIALIZED_VIEW_DEFINITION AS text, " +
+                        "information_schema.materialized_views.TABLE_ROWS AS rows " +
+                        "FROM information_schema.materialized_views " +
+                        "WHERE information_schema.materialized_views.TABLE_NAME = 'mv1'",
+                AST2SQL.toString(stmt.toSelectStmt()));
+        Assert.assertEquals(5, stmt.getMetaData().getColumnCount());
+        Assert.assertEquals("id", stmt.getMetaData().getColumn(0).getName());
+        Assert.assertEquals("name", stmt.getMetaData().getColumn(1).getName());
+        Assert.assertEquals("database_name", stmt.getMetaData().getColumn(2).getName());
+        Assert.assertEquals("text", stmt.getMetaData().getColumn(3).getName());
+        Assert.assertEquals("rows", stmt.getMetaData().getColumn(4).getName());
+    }
+
+    @Test(expected = SemanticException.class)
+    public void testNoDb() throws Exception {
+        ctx = UtFrameUtils.createDefaultCtx();
+        ShowMaterializedViewStmt stmt = new ShowMaterializedViewStmt("");
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
+        Assert.fail("No exception throws");
+>>>>>>> e3b6d66c4 ([BugFix] Fix when output has duplicate item, order by works on wrong column-ref (#13754))
     }
 }
