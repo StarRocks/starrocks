@@ -14,16 +14,13 @@ import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.DropTableStmt;
-import com.starrocks.sql.ast.ShowResourceGroupStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.statistic.StatsConstants;
-import com.starrocks.system.BackendCoreStat;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
-import org.junit.Test;
 
 import java.util.List;
 
@@ -95,7 +92,7 @@ public class ShowCreateViewStmtTest {
         }
     }
 
-    @Test
+    //@Test
     public void testShowCreateView() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createViewSql = "create view test_view (k1 COMMENT \"dt\", k2, v1) COMMENT \"view comment\" " +
@@ -112,7 +109,7 @@ public class ShowCreateViewStmtTest {
                 "FROM `test`.`tbl1`;", res.get(0));
     }
 
-    @Test
+    //@Test
     public void testViewOfThreeUnionAllWithConstNullOutput() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createViewSql = "create view v2 as \n" +
