@@ -119,12 +119,21 @@ public class CreateTableAnalyzer {
         statement.setCharsetName(analyzeCharsetName(statement.getCharsetName()).toLowerCase());
 
         KeysDesc keysDesc = statement.getKeysDesc();
+        List<ColumnDef> columnDefs = statement.getColumnDefs();
         if (statement.getSortKeys() != null) {
             if (keysDesc == null || keysDesc.getKeysType() != KeysType.PRIMARY_KEYS) {
                 throw new IllegalArgumentException("only primary key support sort key");
             }
+            List<String> columnNames = columnDefs.stream().map(ColumnDef::getName).collect(Collectors.toList());
+            for (String sortKey : statement.getSortKeys()) {
+                int idx = columnNames.indexOf(sortKey);
+                ColumnDef cd = columnDefs.get(idx);
+                cd.setPrimaryKeyNonNullable();
+                if (cd.isAllowNull()) {
+                    throw new SemanticException("primary key's order by column[" + cd.getName() + "] cannot be nullable");
+                }
+            }
         }
-        List<ColumnDef> columnDefs = statement.getColumnDefs();
         PartitionDesc partitionDesc = statement.getPartitionDesc();
         // analyze key desc
         if (statement.isOlapOrLakeEngine()) {
