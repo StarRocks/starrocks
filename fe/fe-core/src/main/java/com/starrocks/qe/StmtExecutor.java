@@ -1509,8 +1509,8 @@ public class StmtExecutor {
             String timeoutInfo = GlobalStateMgr.getCurrentGlobalTransactionMgr()
                     .getTxnPublishTimeoutDebugInfo(database.getId(), transactionId);
             LOG.warn("txn {} publish timeout {}", transactionId, timeoutInfo);
-            if (timeoutInfo.length() > 120) {
-                timeoutInfo = timeoutInfo.substring(0, 120) + "...";
+            if (timeoutInfo.length() > 240) {
+                timeoutInfo = timeoutInfo.substring(0, 240) + "...";
             }
             errMsg = "Publish timeout " + timeoutInfo;
         }
