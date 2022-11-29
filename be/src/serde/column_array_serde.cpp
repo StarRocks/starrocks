@@ -100,6 +100,10 @@ const uint8_t* decode_integers(const uint8_t* buff, void* target, size_t size) {
 }
 
 uint8_t* encode_string_lz4(const void* data, size_t size, uint8_t* buff, int encode_level) {
+    if (size > LZ4_MAX_INPUT_SIZE) {
+        throw std::runtime_error(
+                fmt::format("The input size for compression should be less than {}", LZ4_MAX_INPUT_SIZE));
+    }
     uint64_t encode_size =
             LZ4_compress_fast(reinterpret_cast<const char*>(data), reinterpret_cast<char*>(buff + sizeof(uint64_t)),
                               size, LZ4_compressBound(size), std::max(1, std::abs(encode_level / 10000) % 100));
