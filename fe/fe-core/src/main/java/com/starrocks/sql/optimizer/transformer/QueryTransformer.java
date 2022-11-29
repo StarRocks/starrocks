@@ -70,12 +70,24 @@ class QueryTransformer {
         if (queryBlock.hasOrderByClause()) {
             if (!queryBlock.hasAggregation()) {
                 //requires both output and source fields to be visible if there are no aggregations
-                builder = projectForOrder(builder, queryBlock.getOutputExpr(), builder.getFieldMappings(),
+                builder = projectForOrder(builder,
+                        queryBlock.getOutputExpression(),
+                        queryBlock.getOutputExprInOrderByScope(),
+                        queryBlock.getColumnOutputNames(),
+                        builder.getFieldMappings(),
                         queryBlock.getOrderScope(), false);
             } else {
                 //requires output fields, groups and translated aggregations to be visible for queries with aggregation
+
+                List<String> outputNames = new ArrayList<>(queryBlock.getColumnOutputNames());
+                for (int i = 0; i < queryBlock.getOrderSourceExpressions().size(); ++i) {
+                    outputNames.add(queryBlock.getOrderSourceExpressions().get(i).toString());
+                }
+
                 builder = projectForOrder(builder,
                         Iterables.concat(queryBlock.getOutputExpr(), queryBlock.getOrderSourceExpressions()),
+                        queryBlock.getOutputExprInOrderByScope(),
+                        outputNames,
                         builder.getFieldMappings(),
                         queryBlock.getOrderScope(), true);
             }
@@ -119,32 +131,69 @@ class QueryTransformer {
                 node).getRootBuilder();
     }
 
-    private OptExprBuilder projectForOrder(OptExprBuilder subOpt, Iterable<Expr> expressions,
+    private OptExprBuilder projectForOrder(OptExprBuilder subOpt,
+                                           Iterable<Expr> outputExpression,
+                                           List<Integer> outputExprInOrderByScope,
+                                           List<String> outputNames,
                                            List<ColumnRefOperator> sourceExpression, Scope scope,
                                            boolean withAggregation) {
         ExpressionMapping outputTranslations = new ExpressionMapping(scope);
-
-        List<ColumnRefOperator> fieldMappings = new ArrayList<>();
         Map<ColumnRefOperator, ScalarOperator> projections = Maps.newHashMap();
         SubqueryTransformer subqueryTransformer = new SubqueryTransformer(session);
 
+<<<<<<< HEAD
         for (Expr expression : expressions) {
             subOpt = subqueryTransformer.handleScalarSubqueries(columnRefFactory, subOpt, expression, cteContext);
             ColumnRefOperator columnRef = findOrCreateColumnRefForExpr(expression,
                     subOpt.getExpressionMapping(), projections, columnRefFactory);
             fieldMappings.add(columnRef);
             outputTranslations.put(expression, columnRef);
+=======
+        int outputExprIdx = 0;
+        for (Expr expression : outputExpression) {
+            Map<ScalarOperator, SubqueryOperator> subqueryPlaceholders = Maps.newHashMap();
+            ScalarOperator scalarOperator = SqlToScalarOperatorTranslator.translate(expression,
+                    subOpt.getExpressionMapping(), columnRefFactory,
+                    session, cteContext, subOpt, subqueryPlaceholders, false);
+            Pair<ScalarOperator, OptExprBuilder> pair =
+                    SubqueryUtils.rewriteScalarOperator(scalarOperator, subOpt, subqueryPlaceholders);
+            scalarOperator = pair.first;
+            subOpt = pair.second;
+            ColumnRefOperator columnRefOperator = getOrCreateColumnRefOperator(expression, scalarOperator, projections);
+            projections.put(columnRefOperator, scalarOperator);
+
+            if (outputExprInOrderByScope.contains(outputExprIdx)) {
+                outputTranslations.putWithSymbol(expression,
+                        new SlotRef(null, outputNames.get(outputExprIdx)), columnRefOperator);
+            } else {
+                outputTranslations.putWithSymbol(expression, expression, columnRefOperator);
+            }
+            outputExprIdx++;
+>>>>>>> e3b6d66c4 ([BugFix] Fix when output has duplicate item, order by works on wrong column-ref (#13754))
         }
 
+        //1. If there is no aggregation, there are two namespaces in orderByScope.
+        //   The first layer is outputScope and the second layer is sourceScope.
+        //   Here, directly set the parsed sourceExpression to the corresponding offset position
+        //
+        //2. If there is aggregation, other expressions (agg in orderBy and grouping key not in output)
+        //   will be put into orderSourceExpressions, and they will be used as outputExpression for parsing processing.
+
         if (!withAggregation) {
-            for (ColumnRefOperator expression : sourceExpression) {
-                projections.put(expression, expression);
-                fieldMappings.add(expression);
+            List<ColumnRefOperator> fieldMappings = new ArrayList<>(outputTranslations.getFieldMappings());
+            for (int i = 0; i < sourceExpression.size(); ++i) {
+                ColumnRefOperator columnRefOperator = sourceExpression.get(i);
+                projections.put(columnRefOperator, columnRefOperator);
+                // Why not use outputExprIdx, but scope.getRelationFields().size()?
+                // Because the length of outputExpression and the first layer of orderByScope are not equal.
+                // The specific logic is in computeAndAssignOrderScope
+                fieldMappings.set(scope.getRelationFields().size() + i, columnRefOperator);
             }
+
+            outputTranslations.setFieldMappings(fieldMappings);
         }
 
         LogicalProjectOperator projectOperator = new LogicalProjectOperator(projections);
-        outputTranslations.setFieldMappings(fieldMappings);
         return new OptExprBuilder(projectOperator, Lists.newArrayList(subOpt), outputTranslations);
     }
 

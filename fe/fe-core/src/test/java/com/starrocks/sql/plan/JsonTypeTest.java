@@ -146,7 +146,7 @@ public class JsonTypeTest extends PlanTestBase {
             ExceptionChecker.expectThrowsWithMsg(
                     SemanticException.class,
                     String.format(
-                            "Invalid type cast from json to %s in sql `v_json`",
+                            "Invalid type cast from json to %s in sql `test.tjson_test.v_json`",
                             notAllowType),
                     () -> getFragmentPlan(columnCastSql)
             );

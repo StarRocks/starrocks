@@ -529,8 +529,13 @@ public class AST2SQL {
             }
         }
 
+        @Override
         public String visitSlot(SlotRef node, Void context) {
-            return node.getColumnName();
+            if (node.getTblNameWithoutAnalyzed() != null) {
+                return node.getTblNameWithoutAnalyzed().toString() + "." + node.getColumnName();
+            } else {
+                return node.getColumnName();
+            }
         }
 
         public String visitSubquery(Subquery node, Void context) {
