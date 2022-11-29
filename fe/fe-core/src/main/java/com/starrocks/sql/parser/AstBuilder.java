@@ -188,7 +188,6 @@ import com.starrocks.sql.ast.GrantRevokeClause;
 import com.starrocks.sql.ast.GrantRevokePrivilegeObjects;
 import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.HashDistributionDesc;
-import com.starrocks.sql.ast.HelpStmt;
 import com.starrocks.sql.ast.Identifier;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.ImportColumnsStmt;
@@ -2322,7 +2321,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitHelpStatement(StarRocksParser.HelpStatementContext context) {
         String mask = ((Identifier) visit(context.identifierOrString())).getValue();
-        return new HelpStmt(mask);
+        throw new IllegalArgumentException("help is not supported, please refer to official document");
     }
 
     // ------------------------------------------- Backup Store Statement ----------------------------------------------

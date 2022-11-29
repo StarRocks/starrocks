@@ -95,7 +95,6 @@ import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.DescribeStmt;
-import com.starrocks.sql.ast.HelpStmt;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
@@ -192,8 +191,6 @@ public class ShowExecutor {
             handleShowAuthor();
         } else if (stmt instanceof ShowProcStmt) {
             handleShowProc();
-        } else if (stmt instanceof HelpStmt) {
-            handleHelp();
         } else if (stmt instanceof ShowDbStmt) {
             handleShowDb();
         } else if (stmt instanceof ShowTableStmt) {
@@ -881,64 +878,6 @@ public class ShowExecutor {
             db.readUnlock();
         }
         resultSet = new ShowResultSet(showStmt.getMetaData(), rows);
-    }
-
-    // Handle help statement.
-    private void handleHelp() {
-        HelpStmt helpStmt = (HelpStmt) stmt;
-        String mark = helpStmt.getMask();
-        HelpModule module = HelpModule.getInstance();
-
-        // Get topic
-        HelpTopic topic = module.getTopic(mark);
-        // Get by Keyword
-        if (topic == null) {
-            List<String> topics = module.listTopicByKeyword(mark);
-            if (topics.size() == 0) {
-                // assign to avoid code style problem
-                topic = null;
-            } else if (topics.size() == 1) {
-                topic = module.getTopic(topics.get(0));
-            } else {
-                // Send topic list and category list
-                List<List<String>> rows = Lists.newArrayList();
-                for (String str : topics) {
-                    rows.add(Lists.newArrayList(str, "N"));
-                }
-                List<String> categories = module.listCategoryByName(mark);
-                for (String str : categories) {
-                    rows.add(Lists.newArrayList(str, "Y"));
-                }
-                resultSet = new ShowResultSet(helpStmt.getKeywordMetaData(), rows);
-                return;
-            }
-        }
-        if (topic != null) {
-            resultSet = new ShowResultSet(helpStmt.getMetaData(), Lists.<List<String>>newArrayList(
-                    Lists.newArrayList(topic.getName(), topic.getDescription(), topic.getExample())));
-        } else {
-            List<String> categories = module.listCategoryByName(mark);
-            if (categories.isEmpty()) {
-                // If no category match for this name, return
-                resultSet = new ShowResultSet(helpStmt.getKeywordMetaData(), EMPTY_SET);
-            } else if (categories.size() > 1) {
-                // Send category list
-                resultSet = new ShowResultSet(helpStmt.getCategoryMetaData(),
-                        Lists.<List<String>>newArrayList(categories));
-            } else {
-                // Send topic list and sub-category list
-                List<List<String>> rows = Lists.newArrayList();
-                List<String> topics = module.listTopicByCategory(categories.get(0));
-                for (String str : topics) {
-                    rows.add(Lists.newArrayList(str, "N"));
-                }
-                List<String> subCategories = module.listCategoryByCategory(categories.get(0));
-                for (String str : subCategories) {
-                    rows.add(Lists.newArrayList(str, "Y"));
-                }
-                resultSet = new ShowResultSet(helpStmt.getKeywordMetaData(), rows);
-            }
-        }
     }
 
     // Show load statement.
