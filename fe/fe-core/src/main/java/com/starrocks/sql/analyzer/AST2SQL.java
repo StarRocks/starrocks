@@ -1,7 +1,9 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
+import com.google.common.base.Function;
 import com.google.common.base.Joiner;
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.AnalyticWindow;
 import com.starrocks.analysis.ArithmeticExpr;
@@ -35,10 +37,12 @@ import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.common.util.PrintableMap;
 import com.starrocks.mysql.privilege.Privilege;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.CTERelation;
+import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.DefaultValueExpr;
 import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.FieldReference;
@@ -46,6 +50,7 @@ import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
+import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
@@ -91,6 +96,40 @@ public class AST2SQL {
                 }
                 sb.append(setVar.getVariable() + " = " + setVar.getExpression().toSql());
                 idx++;
+            }
+            return sb.toString();
+        }
+
+        @Override
+        public String visitLoadStatement(LoadStmt stmt, Void context) {
+            StringBuilder sb = new StringBuilder();
+
+            sb.append("LOAD LABEL ").append(stmt.getLabel().toString());
+            sb.append("(");
+            Joiner.on(",").appendTo(sb, Lists.transform(stmt.getDataDescriptions(), new Function<DataDescription, Object>() {
+                @Override
+                public Object apply(DataDescription dataDescription) {
+                    return dataDescription.toString();
+                }
+            })).append(")");
+
+            if (stmt.getBrokerDesc() != null) {
+                sb.append(stmt.getBrokerDesc());
+            }
+
+            if (stmt.getCluster() != null) {
+                sb.append("BY '");
+                sb.append(stmt.getCluster());
+                sb.append("'");
+            }
+            if (stmt.getResourceDesc() != null) {
+                sb.append(stmt.getResourceDesc());
+            }
+
+            if (stmt.getProperties() != null && !stmt.getProperties().isEmpty()) {
+                sb.append("PROPERTIES (");
+                sb.append(new PrintableMap<String, String>(stmt.getProperties(), "=", true, false));
+                sb.append(")");
             }
             return sb.toString();
         }
