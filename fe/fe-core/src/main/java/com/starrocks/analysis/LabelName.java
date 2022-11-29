@@ -31,7 +31,6 @@ import com.starrocks.common.FeNameFormat;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.SystemInfoService;
 import org.apache.commons.lang.builder.HashCodeBuilder;
 
 import java.io.DataInput;
