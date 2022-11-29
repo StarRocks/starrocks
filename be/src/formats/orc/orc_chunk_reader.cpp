@@ -49,11 +49,6 @@ const static std::unordered_map<orc::TypeKind, PrimitiveType> g_orc_starrocks_ty
 };
 
 // NOLINTNEXTLINE
-const static std::set<orc::TypeKind> g_orc_int_type = {
-        orc::BOOLEAN, orc::BYTE, orc::SHORT, orc::INT, orc::LONG, orc::FLOAT, orc::DOUBLE,
-};
-
-// NOLINTNEXTLINE
 const static std::set<PrimitiveType> g_starrocks_int_type = {TYPE_BOOLEAN, TYPE_TINYINT,  TYPE_SMALLINT, TYPE_INT,
                                                              TYPE_BIGINT,  TYPE_LARGEINT, TYPE_FLOAT,    TYPE_DOUBLE};
 
@@ -1459,8 +1454,8 @@ static Status _create_type_descriptor_by_orc(const TypeDescriptor& origin_type, 
         auto precision = (int)orc_type->getPrecision();
         auto scale = (int)orc_type->getScale();
         auto len = (int)orc_type->getMaximumLength();
-        auto iter = g_orc_starrocks_type_mapping.find(kind);
-        if (iter == g_orc_starrocks_type_mapping.end()) {
+        auto iter = g_orc_starrocks_primitive_type_mapping.find(kind);
+        if (iter == g_orc_starrocks_primitive_type_mapping.end()) {
             return Status::NotSupported("Unsupported ORC type: " + orc_type->toString());
         }
         result->type = iter->second;
