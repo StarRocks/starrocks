@@ -1004,7 +1004,8 @@ public class Coordinator {
                     profileFragmentId += 1;
                 }
 
-                for (List<Pair<List<BackendExecState>, TExecBatchPlanFragmentsParams>> inflightRequests : inflightRequestsList) {
+                for (List<Pair<List<BackendExecState>, TExecBatchPlanFragmentsParams>> inflightRequests :
+                        inflightRequestsList) {
                     List<Pair<BackendExecState, Future<PExecBatchPlanFragmentsResult>>> futures = Lists.newArrayList();
                     for (Pair<List<BackendExecState>, TExecBatchPlanFragmentsParams> inflightRequest : inflightRequests) {
                         List<BackendExecState> execStates = inflightRequest.first;
