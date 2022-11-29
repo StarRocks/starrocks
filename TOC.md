@@ -395,7 +395,6 @@
       + [array_avg](/sql-reference/sql-functions/array-functions/array_avg.md)
       + [array_concat](/sql-reference/sql-functions/array-functions/array_concat.md)
       + [array_contains](/sql-reference/sql-functions/array-functions/array_contains.md)
-      + [array_contains_all](/sql-reference/sql-functions/array-functions/array_contains_all.md)
       + [array_difference](/sql-reference/sql-functions/array-functions/array_difference.md)
       + [array_distinct](/sql-reference/sql-functions/array-functions/array_distinct.md)
       + [array_intersect](/sql-reference/sql-functions/array-functions/array_intersect.md)
