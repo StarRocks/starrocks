@@ -88,4 +88,11 @@ public class AnalyzeDeleteTest {
                 "delete from tprimary using tprimary2 tp2 join t0 where tprimary.pk = tp2.pk " +
                         "and tp2.pk = t0.v1 and t0.v2 > 0");
     }
+
+    @Test
+    public void testCTE() {
+        analyzeSuccess(
+                "with tp2cte as (select * from tprimary2 where v2 < 10) delete from tprimary using " +
+                        "tp2cte where tprimary.pk = tp2cte.pk");
+    }
 }
