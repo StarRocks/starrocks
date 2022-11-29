@@ -6,6 +6,7 @@ import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.BetweenPredicate;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.CompoundPredicate;
@@ -19,29 +20,29 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.thrift.TCacheParam;
 import com.starrocks.thrift.TNormalPlanNode;
 import com.starrocks.thrift.TExpr;
 import org.apache.thrift.TException;
 import org.apache.thrift.TSerializer;
 import org.apache.thrift.protocol.TCompactProtocol;
-import org.apache.thrift.protocol.TJSONProtocol;
-import org.apache.thrift.protocol.TSimpleJSONProtocol;
 
 import java.nio.ByteBuffer;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
-import java.util.function.BinaryOperator;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 // FragmentNormalizer is used to normalize a cacheable Fragment. After a cacheable Fragment
@@ -67,6 +68,11 @@ public class FragmentNormalizer {
     private List<TNormalPlanNode> normalizedPlanNodes = Lists.newArrayList();
     private Map<Long, String> selectedRangeMap = Maps.newHashMap();
     private boolean uncacheable = false;
+    private boolean canUseMultiVersion = true;
+
+    private KeysType keysType;
+
+    private Set<SlotId> slotsUseAggColumns;
 
     public FragmentNormalizer(ExecPlan execPlan, PlanFragment fragment) {
         this.execPlan = execPlan;
@@ -92,6 +98,22 @@ public class FragmentNormalizer {
 
     public void setUncacheable(boolean uncacheable) {
         this.uncacheable = uncacheable;
+    }
+
+    public void setCanUseMultiVersion(boolean canUse) {
+        canUseMultiVersion = canUse;
+    }
+
+    public boolean isCanUseMultiVersion() {
+        return canUseMultiVersion;
+    }
+
+    public void setKeysType(KeysType keysType) {
+        this.keysType = keysType;
+    }
+
+    public KeysType getKeysType() {
+        return keysType;
     }
 
     private static String toHexString(byte[] bytes) {
@@ -188,10 +210,17 @@ public class FragmentNormalizer {
             for (int i = 0; i < slotIds.size(); ++i) {
                 outputSlotIdRemapping.put(slotIds.get(i).asInt(), remappedSlotIds.get(i));
             }
-            fragment.setCachePlanNodeId(topmostPlanNode.getId());
-            fragment.setDigest(ByteBuffer.wrap(digest.digest()));
-            fragment.setSlotRemapping(outputSlotIdRemapping);
-            fragment.setRangeMap(selectedRangeMap);
+            PlanNodeId planNodeId = topmostPlanNode.getId();
+            if (planNodeId != null && planNodeId.isValid()) {
+                TCacheParam cacheParam = new TCacheParam();
+                cacheParam.setId(planNodeId.asInt());
+                cacheParam.setDigest(ByteBuffer.wrap(digest.digest()));
+                cacheParam.setSlot_remapping(outputSlotIdRemapping);
+                cacheParam.setRegion_map(selectedRangeMap);
+                cacheParam.setCan_use_multiversion(canUseMultiVersion);
+                cacheParam.setKeys_type(keysType.toThrift());
+                fragment.setCacheParam(cacheParam);
+            }
         } catch (TException | NoSuchAlgorithmException e) {
             throw new RuntimeException("Fatal error happens when normalize PlanFragment", e);
         }
@@ -379,12 +408,12 @@ public class FragmentNormalizer {
             }
         }
 
-        // TODO(by satanson): If the bound exprs contain no simple range exprs but only contain complex exprs, then
-        //  cached result is reused poorly. so we mark the fragment uncacheable. As a matter of fact, some complex
-        //  exprs can also be decomposed into simple range exprs, later we all extends the scope of simple range exprs.
+        // TODO(by satanson): If the bound exprs contain no simple range exprs but only contain complex exprs, we
+        //  create a simpleRangeMap without predicates' decomposition to turn on the cache. date_trunc function
+        //  is frequently-used, we should decompose predicates contains date_trunc in the future.
         if (!boundOtherExprs.isEmpty() && boundSimpleRegionExprs.isEmpty()) {
-             uncacheable = true;
-             return conjuncts;
+            createSimpleRangeMap(rangeMap.stream().map(Map.Entry::getKey).collect(Collectors.toSet()));
+            return conjuncts;
         }
 
         if (boundSimpleRegionExprs.isEmpty()) {
@@ -422,14 +451,54 @@ public class FragmentNormalizer {
                 selectedRangeMap.put(partitionKeyRange.getKey(), range.toString());
             }
         }
+        // After we decompose the predicates, we should create a simple selectedRangeMap to turn on query cache if
+        // we get a empty selectedRangeMap. it is defensive-style programming.
         if (selectedRangeMap.isEmpty()) {
-            uncacheable = true;
+            createSimpleRangeMap(rangeMap.stream().map(Map.Entry::getKey).collect(Collectors.toSet()));
             return conjuncts;
         } else {
             List<Expr> remainConjuncts = Lists.newArrayList();
             remainConjuncts.addAll(unboundExprs);
             remainConjuncts.addAll(boundOtherExprs);
             return remainConjuncts;
+        }
+    }
+
+    // For partition that not support partition column range predicates' decomposition, we
+    // just create a simple selectedRangeMap which is used to construct cache key in BE.
+    public void createSimpleRangeMap(Collection<Long> selectedPartitionIds) {
+        selectedRangeMap = Maps.newHashMap();
+        selectedPartitionIds.stream().forEach(id -> selectedRangeMap.put(id, "[]"));
+    }
+
+    public Set<SlotId> getSlotsUseAggColumns() {
+        return slotsUseAggColumns;
+    }
+
+    public void setSlotsUseAggColumns(Set<SlotId> slotsUseAggColumns) {
+        this.slotsUseAggColumns = slotsUseAggColumns;
+    }
+
+    public void addSlotsUseAggColumns(Map<SlotId, Expr> exprs) {
+        exprs.forEach((slotId, expr) -> {
+            List<SlotRef> slotRefs = Lists.newArrayList();
+            expr.collect(SlotRef.class, slotRefs);
+            Set<SlotId> usedColumnIds = slotRefs.stream().map(SlotRef::getSlotId).collect(Collectors.toSet());
+            if (!Sets.intersection(this.slotsUseAggColumns, usedColumnIds).isEmpty()) {
+                this.slotsUseAggColumns.add(slotId);
+            }
+        });
+    }
+
+    public void disableMultiversionIfExprsUseAggColumns(List<Expr> exprs) {
+        if (exprs == null || exprs.isEmpty()) {
+            return;
+        }
+        List<SlotRef> slotRefs = Lists.newArrayList();
+        exprs.forEach(e -> e.collect(SlotRef.class, slotRefs));
+        Set<SlotId> usedColumnIds = slotRefs.stream().map(SlotRef::getSlotId).collect(Collectors.toSet());
+        if (!Sets.intersection(usedColumnIds, this.slotsUseAggColumns).isEmpty()) {
+            this.setCanUseMultiVersion(false);
         }
     }
 }

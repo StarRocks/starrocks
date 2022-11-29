@@ -142,10 +142,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     private boolean hasJoinNode = false;
     private boolean hasOlapScanNode = false;
 
-    private PlanNodeId cachePlanNodeId = null;
-    private ByteBuffer digest = null;
-    private Map<Integer, Integer> slotRemapping = Maps.newHashMap();
-    private Map<Long, String> rangeMap = Maps.newHashMap();
+    private TCacheParam cacheParam = null;
     private boolean hasOlapTableSink = false;
     private boolean forceSetTableSinkDop = false;
     private boolean forceAssignScanRangesPerDriverSeq = false;
@@ -292,38 +289,6 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         this.outputExprs = Expr.cloneList(outputExprs, null);
     }
 
-    public void setCachePlanNodeId(PlanNodeId cachePlanNodeId) {
-        this.cachePlanNodeId = cachePlanNodeId;
-    }
-
-    public PlanNodeId getCachePlanNodeId() {
-        return cachePlanNodeId;
-    }
-
-    public ByteBuffer getDigest() {
-        return digest;
-    }
-
-    public void setDigest(ByteBuffer digest) {
-        this.digest = digest;
-    }
-
-    public Map<Integer, Integer> getSlotRemapping() {
-        return slotRemapping;
-    }
-
-    public void setSlotRemapping(Map<Integer, Integer> slotRemapping) {
-        this.slotRemapping = slotRemapping;
-    }
-
-    public Map<Long, String> getRangeMap() {
-        return rangeMap;
-    }
-
-    public void setRangeMap(Map<Long, String> rangeMap) {
-        this.rangeMap = rangeMap;
-    }
-
     /**
      * Finalize plan tree and create stream sink, if needed.
      */
@@ -381,12 +346,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         if (!loadGlobalDicts.isEmpty()) {
             result.setLoad_global_dicts(dictToThrift(loadGlobalDicts));
         }
-        if (cachePlanNodeId != null && cachePlanNodeId.isValid()) {
-            TCacheParam cacheParam = new TCacheParam();
-            cacheParam.setId(getCachePlanNodeId().asInt());
-            cacheParam.setDigest(getDigest());
-            cacheParam.setRegion_map(getRangeMap());
-            cacheParam.setSlot_remapping(getSlotRemapping());
+        if (cacheParam != null) {
             if (ConnectContext.get() != null) {
                 SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
                 cacheParam.setForce_populate(sessionVariable.isQueryCacheForcePopulate());
@@ -664,5 +624,13 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
     public boolean hasOlapScanNode() {
         return hasOlapScanNode;
+    }
+
+    public TCacheParam getCacheParam() {
+        return cacheParam;
+    }
+
+    public void setCacheParam(TCacheParam cacheParam) {
+        this.cacheParam = cacheParam;
     }
 }

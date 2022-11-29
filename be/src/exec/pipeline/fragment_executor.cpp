@@ -172,7 +172,7 @@ Status FragmentExecutor::_prepare_workgroup(const UnifiedExecPlanFragmentParams&
             wg = WorkGroupManager::instance()->get_default_workgroup();
         }
         DCHECK(wg != nullptr);
-        RETURN_IF_ERROR(_query_ctx->init_query(wg.get()));
+        RETURN_IF_ERROR(_query_ctx->init_query_once(wg.get()));
         _wg = wg;
     }
     DCHECK(!_fragment_ctx->enable_resource_group() || _wg != nullptr);
@@ -327,6 +327,8 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
             cache_param.slot_remapping[slot] = remapped_slot;
             cache_param.reverse_slot_remapping[remapped_slot] = slot;
         }
+        cache_param.can_use_multiversion = tcache_param.can_use_multiversion;
+        cache_param.keys_type = tcache_param.keys_type;
         _fragment_ctx->set_enable_cache(true);
     }
 
@@ -358,14 +360,14 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
                         continue;
                     }
                     const auto& region = tcache_param.region_map.at(partition_id);
-                    std::string cache_suffix_key;
-                    cache_suffix_key.reserve(sizeof(partition_id) + region.size() + sizeof(tablet_id));
-                    cache_suffix_key.insert(cache_suffix_key.end(), (uint8_t*)&partition_id,
+                    std::string cache_prefix_key;
+                    cache_prefix_key.reserve(sizeof(partition_id) + region.size() + sizeof(tablet_id));
+                    cache_prefix_key.insert(cache_prefix_key.end(), (uint8_t*)&partition_id,
                                             ((uint8_t*)&partition_id) + sizeof(partition_id));
-                    cache_suffix_key.insert(cache_suffix_key.end(), region.begin(), region.end());
-                    cache_suffix_key.insert(cache_suffix_key.end(), (uint8_t*)&tablet_id,
+                    cache_prefix_key.insert(cache_prefix_key.end(), region.begin(), region.end());
+                    cache_prefix_key.insert(cache_prefix_key.end(), (uint8_t*)&tablet_id,
                                             ((uint8_t*)&tablet_id) + sizeof(tablet_id));
-                    _fragment_ctx->cache_param().cache_key_prefixes[tablet_id] = std::move(cache_suffix_key);
+                    _fragment_ctx->cache_param().cache_key_prefixes[tablet_id] = std::move(cache_prefix_key);
                 }
             }
         }
@@ -663,11 +665,7 @@ void FragmentExecutor::_fail_cleanup() {
         }
         if (_query_ctx->count_down_fragments()) {
             auto query_id = _query_ctx->query_id();
-            if (ExecEnv::GetInstance()->query_context_mgr()->remove(query_id)) {
-                if (_wg) {
-                    _wg->decr_num_queries();
-                }
-            }
+            ExecEnv::GetInstance()->query_context_mgr()->remove(query_id);
         }
     }
 }

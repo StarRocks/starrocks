@@ -724,7 +724,7 @@ Status TabletManager::load_tablet_from_meta(DataDir* data_dir, TTabletId tablet_
     LOG_IF(WARNING, !st.ok()) << "Fail to add tablet " << tablet->full_name();
     // no concurrent access here
     if (config::enable_event_based_compaction_framework) {
-        StorageEngine::instance()->compaction_manager()->update_tablet_async(tablet, true, false);
+        StorageEngine::instance()->compaction_manager()->update_tablet_async(tablet);
     }
 
     return st;
@@ -1247,7 +1247,10 @@ Status TabletManager::_drop_tablet_unlocked(TTabletId tablet_id, TabletDropFlag 
     TabletSharedPtr dropped_tablet = it->second;
     tablet_map.erase(it);
     _remove_tablet_from_partition(*dropped_tablet);
-    dropped_tablet->stop_compaction();
+    if (config::enable_event_based_compaction_framework) {
+        dropped_tablet->stop_compaction();
+        StorageEngine::instance()->compaction_manager()->remove_candidate(dropped_tablet->tablet_id());
+    }
 
     DroppedTabletInfo drop_info{.tablet = dropped_tablet, .flag = flag};
 

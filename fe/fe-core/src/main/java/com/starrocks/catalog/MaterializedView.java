@@ -4,6 +4,7 @@ package com.starrocks.catalog;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
@@ -51,6 +52,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -573,10 +575,17 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         if (!isLoadTriggeredRefresh()) {
             return false;
         }
-        List<TableName> excludedTriggerTables = this.getTableProperty().getExcludedTriggerTables();
+        TableProperty tableProperty = getTableProperty();
+        if (tableProperty == null) {
+            return true;
+        }
+        List<TableName> excludedTriggerTables =  tableProperty.getExcludedTriggerTables();
+        if (excludedTriggerTables == null) {
+            return true;
+        }
         for (TableName tables : excludedTriggerTables) {
             if (tables.getDb() == null) {
-                if (tables.getTbl().equals(tableName))  {
+                if (tables.getTbl().equals(tableName)) {
                     return false;
                 }
             } else {
@@ -686,6 +695,43 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         return sb.toString();
     }
 
+    private static final ImmutableSet<String> NEED_SHOW_PROPS;
+
+    static {
+        NEED_SHOW_PROPS = new ImmutableSet.Builder<String>()
+        .add(PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME)
+        .add(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)
+        .add(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT)
+        .add(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)
+        .add(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)
+        .build();
+    }
+
+    public Map<String, String> getMaterializedViewPropMap() {
+
+        Map<String, String> propsMap = new HashMap<>();
+        // replicationNum
+        Short replicationNum = this.getDefaultReplicationNum();
+        propsMap.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, String.valueOf(replicationNum));
+
+        // storageMedium
+        String storageMedium = this.getStorageMedium();
+        propsMap.put(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM, storageMedium);
+        Map<String, String> properties = this.getTableProperty().getProperties();
+
+        // NEED_SHOW_PROPS
+        NEED_SHOW_PROPS.forEach(prop -> {
+            if (properties.containsKey(prop)) {
+                if (prop.equals(PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME)) {
+                    propsMap.put(prop, TimeUtils.longToTimeString(
+                            Long.parseLong(properties.get(prop))));
+                } else {
+                    propsMap.put(prop, properties.get(prop));
+                }
+            }
+        });
+        return propsMap;
+    }
 
     public boolean containsBaseTable(TableName tableName) {
         for (BaseTableInfo baseTableInfo : baseTableInfos) {

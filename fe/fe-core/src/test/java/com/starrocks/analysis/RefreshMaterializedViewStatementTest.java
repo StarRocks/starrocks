@@ -74,11 +74,12 @@ public class RefreshMaterializedViewStatementTest {
     public void testRefreshMaterializedView() throws Exception {
         cluster.runSql("test",
                 "create table t1 ( c1 bigint NOT NULL, c2 string not null, c3 int not null ) " +
-                        "DISTRIBUTED BY HASH(c1) BUCKETS 1 " +
-                        "PROPERTIES(\"replication_num\" = \"1\");");
+                        " DISTRIBUTED BY HASH(c1) BUCKETS 1 " +
+                        " PROPERTIES(\"replication_num\" = \"1\");");
         Database db = starRocksAssert.getCtx().getGlobalStateMgr().getDb("test");
         starRocksAssert.withNewMaterializedView("create materialized view mv1 distributed by hash(`c1`) " +
-                "as select c1, sum(c3) as total from t1 group by c1");
+                " refresh manual" +
+                " as select c1, sum(c3) as total from t1 group by c1");
         cluster.runSql("test", "insert into t1 values(1, \"str1\", 100)");
         Table t1 = db.getTable("t1");
         Assert.assertNotNull(t1);

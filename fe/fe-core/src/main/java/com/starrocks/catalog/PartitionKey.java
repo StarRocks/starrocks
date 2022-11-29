@@ -183,7 +183,7 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
             case INT:
             case BIGINT: {
                 IntLiteral intLiteral = (IntLiteral) literal;
-                final long maxValue = 1L << ((type.getSlotSize() << 3) - 1) - 1L;
+                final long maxValue = (1L << ((type.getSlotSize() << 3) - 1)) - 1L;
                 long succ = intLiteral.getValue();
                 succ += succ < maxValue ? 1L : 0L;
                 key.pushColumn(new IntLiteral(succ, Type.fromPrimitiveType(type)), type);

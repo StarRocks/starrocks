@@ -13,6 +13,7 @@ import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -141,7 +142,7 @@ public class CTASAnalyzer {
                 }
             }
 
-            int defaultBucket = 10;
+            int defaultBucket = Config.default_bucket_num;
             DistributionDesc distributionDesc =
                     new HashDistributionDesc(defaultBucket, Lists.newArrayList(defaultColumnName));
             createTableStmt.setDistributionDesc(distributionDesc);
