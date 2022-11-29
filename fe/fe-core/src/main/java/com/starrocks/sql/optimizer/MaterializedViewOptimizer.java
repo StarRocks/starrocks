@@ -28,7 +28,6 @@ import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 
 public class MaterializedViewOptimizer {
@@ -70,10 +69,14 @@ public class MaterializedViewOptimizer {
         if (partitionTableAndColumns == null) {
             return false;
         }
+        if (!partitionTableAndColumns.first.isNativeTable()) {
+            // for external table, we can not get modified partitions now.
+            return false;
+        }
         OlapTable partitionByTable = (OlapTable) partitionTableAndColumns.first;
-        List<Range<PartitionKey>> uptodateBaseTableRanges =
-                getUptodatePartitionRangeForTable(partitionByTable, mv, mvPartitionNamesToRefresh);
-        if (uptodateBaseTableRanges.isEmpty()) {
+        List<Range<PartitionKey>> latestBaseTableRanges =
+                getLatestPartitionRangeForTable(partitionByTable, mv, mvPartitionNamesToRefresh);
+        if (latestBaseTableRanges.isEmpty()) {
             // if do not have an uptodate partition, do not rewrite
             return false;
         }
@@ -88,11 +91,8 @@ public class MaterializedViewOptimizer {
                     partitionTableAndColumns.first.getTableIdentifier())) {
                 continue;
             }
-            Optional<Column> columnOptional = scanOperator.getColumnMetaToColRefMap()
-                    .keySet().stream().filter(col -> col.getName().equals(partitionColumn.getName())).findFirst();
-            Preconditions.checkState(columnOptional.isPresent());
-            ColumnRefOperator columnRef = scanOperator.getColumnReference(columnOptional.get());
-            List<ScalarOperator> partitionPredicates = convertRanges(columnRef, uptodateBaseTableRanges);
+            ColumnRefOperator columnRef = scanOperator.getColumnReference(partitionColumn);
+            List<ScalarOperator> partitionPredicates = convertRanges(columnRef, latestBaseTableRanges);
             ScalarOperator partialPartitionPredicate = Utils.compoundOr(partitionPredicates);
             ScalarOperator originalPredicate = scanOperator.getPredicate();
             ScalarOperator newPredicate = Utils.compoundAnd(originalPredicate, partialPartitionPredicate);
@@ -101,12 +101,12 @@ public class MaterializedViewOptimizer {
         return true;
     }
 
-    private List<Range<PartitionKey>> getUptodatePartitionRangeForTable(OlapTable partitionByTable,
-                                                                        MaterializedView mv,
-                                                                        Set<String> mvPartitionNamesToRefresh) {
+    private List<Range<PartitionKey>> getLatestPartitionRangeForTable(OlapTable partitionByTable,
+                                                                      MaterializedView mv,
+                                                                      Set<String> mvPartitionNamesToRefresh) {
         Set<String> modifiedPartitionNames = mv.getUpdatedPartitionNamesOfTable(partitionByTable);
-        List<Range<PartitionKey>> baseTableRanges = getUptodatePartitionRange(partitionByTable, modifiedPartitionNames);
-        List<Range<PartitionKey>> mvRanges = getUptodatePartitionRange(mv, mvPartitionNamesToRefresh);
+        List<Range<PartitionKey>> baseTableRanges = getLatestPartitionRange(partitionByTable, modifiedPartitionNames);
+        List<Range<PartitionKey>> mvRanges = getLatestPartitionRange(mv, mvPartitionNamesToRefresh);
         List<Range<PartitionKey>> uptodateBaseTableRanges = Lists.newArrayList();
         for (Range<PartitionKey> range : baseTableRanges) {
             if (mvRanges.stream().anyMatch(mvRange -> mvRange.encloses(range))) {
@@ -116,7 +116,7 @@ public class MaterializedViewOptimizer {
         return uptodateBaseTableRanges;
     }
 
-    private List<Range<PartitionKey>> getUptodatePartitionRange(OlapTable table, Set<String> modifiedPartitionNames) {
+    private List<Range<PartitionKey>> getLatestPartitionRange(OlapTable table, Set<String> modifiedPartitionNames) {
         List<Range<PartitionKey>> resultRanges = Lists.newArrayList();
         // partitions that will be excluded
         Set<Long> modifiedIds = Sets.newHashSet();
@@ -126,13 +126,13 @@ public class MaterializedViewOptimizer {
             }
         }
         RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) table.getPartitionInfo();
-        List<Range<PartitionKey>> uptodatePartitionRanges = rangePartitionInfo.getRangeList(modifiedIds, false);
-        if (uptodatePartitionRanges.isEmpty()) {
+        List<Range<PartitionKey>> latestPartitionRanges = rangePartitionInfo.getRangeList(modifiedIds, false);
+        if (latestPartitionRanges.isEmpty()) {
             return resultRanges;
         }
 
-        for (int i = 0; i < uptodatePartitionRanges.size(); i++) {
-            Range<PartitionKey> currentRange = uptodatePartitionRanges.get(i);
+        for (int i = 0; i < latestPartitionRanges.size(); i++) {
+            Range<PartitionKey> currentRange = latestPartitionRanges.get(i);
             boolean merged = false;
             for (int j = 0; j < resultRanges.size(); j++) {
                 // 1 < r < 10, 10 <= r < 20 => 1 < r < 20
