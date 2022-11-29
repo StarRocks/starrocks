@@ -70,10 +70,6 @@ public class Field {
     }
 
     public boolean matchesPrefix(TableName tableName) {
-        if (tableName.getCatalog() != null && !tableName.getCatalog().equals(relationAlias.getCatalog())) {
-            return false;
-        }
-
         if (tableName.getDb() != null && !tableName.getDb().equals(relationAlias.getDb())) {
             return false;
         }

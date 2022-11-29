@@ -160,13 +160,12 @@ public class TableName implements Writable {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         TableName tableName = (TableName) o;
-        return Objects.equals(catalog, tableName.catalog)
-                && Objects.equals(tbl, tableName.tbl)
+        return Objects.equals(tbl, tableName.tbl)
                 && Objects.equals(db, tableName.db);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(catalog, tbl, db);
+        return Objects.hash(tbl, db);
     }
 }

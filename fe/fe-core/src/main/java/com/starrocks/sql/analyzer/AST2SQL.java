@@ -299,7 +299,7 @@ public class AST2SQL {
 
             sqlBuilder.append(")");
             if (node.getAlias() != null) {
-                sqlBuilder.append(" ").append(node.getAlias()).getTbl();
+                sqlBuilder.append(" ").append(node.getAlias().getTbl());
             }
             return sqlBuilder.toString();
         }

@@ -52,8 +52,10 @@ import com.starrocks.sql.optimizer.base.SetQualifier;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
@@ -182,8 +184,8 @@ public class QueryAnalyzer {
         private Relation resolveTableRef(Relation relation, Scope scope, Set<TableName> aliasSet) {
             if (relation instanceof JoinRelation) {
                 JoinRelation join = (JoinRelation) relation;
-                join.setLeft(resolveTableRef(join.getLeft(), scope));
-                Relation rightRelation = resolveTableRef(join.getRight(), scope);
+                join.setLeft(resolveTableRef(join.getLeft(), scope, aliasSet));
+                Relation rightRelation = resolveTableRef(join.getRight(), scope, aliasSet);
                 join.setRight(rightRelation);
                 if (rightRelation instanceof TableFunctionRelation) {
                     join.setLateral(true);
@@ -229,9 +231,7 @@ public class QueryAnalyzer {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_NONUNIQ_TABLE,
                             relation.getResolveTableName().getTbl());
                 } else {
-                    aliasSet.add(new TableName(resolveTableName.getCatalog(),
-                            resolveTableName.getDb(),
-                            resolveTableName.getTbl()));
+                    aliasSet.add(new TableName(resolveTableName.getDb(), resolveTableName.getTbl()));
                 }
 
                 Table table = resolveTable(tableRelation.getName());
