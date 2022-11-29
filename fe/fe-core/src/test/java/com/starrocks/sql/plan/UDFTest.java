@@ -6,6 +6,8 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Type;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -13,6 +15,7 @@ import org.junit.Test;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class UDFTest extends PlanTestBase {
     @BeforeClass
@@ -76,5 +79,32 @@ public class UDFTest extends PlanTestBase {
         sql = "select v1,v2,v3,t.unnest,o.unnest from t0,unnest([1,2,3]) t, unnest([4,5,6]) o ";
         explain = getFragmentPlan(sql);
         Assert.assertTrue(explain.contains("TableValueFunction"));
+    }
+
+    @Test
+    public void testMultiUnnest() throws Exception {
+        String sql = "with t as (select [1,2,3] as a, [4,5,6] as b, [4,5,6] as c) select * from t,unnest(a,b,c)";
+        PhysicalTableFunctionOperator tp = (PhysicalTableFunctionOperator) getExecPlan(sql).getPhysicalPlan().getOp();
+
+        Assert.assertEquals(3, tp.getFnParamColumnRef().size());
+        Assert.assertEquals("[6, 8, 8]",
+                tp.getFnParamColumnRef().stream().map(ColumnRefOperator::getId).collect(Collectors.toList()).toString());
+
+        sql = "select * from tarray, unnest(v3, v3)";
+        tp = (PhysicalTableFunctionOperator) getExecPlan(sql).getPhysicalPlan().getOp();
+        Assert.assertEquals(2, tp.getFnParamColumnRef().size());
+        Assert.assertEquals("[3, 3]",
+                tp.getFnParamColumnRef().stream().map(ColumnRefOperator::getId).collect(Collectors.toList()).toString());
+
+        sql = "WITH t AS (\n" +
+                "SELECT array_sort(v3) AS a,\n" +
+                "array_sort(v3) AS b\n" +
+                "FROM tarray\n" +
+                "GROUP BY v3 )\n" +
+                "select unnest.a, unnest.b from t, unnest(a, b) as unnest(a, b);";
+        tp = (PhysicalTableFunctionOperator) getExecPlan(sql).getPhysicalPlan().getOp();
+        Assert.assertEquals(2, tp.getFnParamColumnRef().size());
+        Assert.assertEquals("[8, 8]",
+                tp.getFnParamColumnRef().stream().map(ColumnRefOperator::getId).collect(Collectors.toList()).toString());
     }
 }
