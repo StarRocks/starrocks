@@ -1,16 +1,16 @@
 # bitmap_and
 
-## description
+## Description
 
-### Syntax
+Calculates the intersection of two input bitmaps and return the new bitmap.
+
+## Syntax
 
 ```Haskell
 BITMAP BITMAP_AND(BITMAP lhs, BITMAP rhs)
 ```
 
-Calculate the intersection of two input bitmaps and return the new bitmap.
-
-## example
+## Examples
 
 ```plain text
 MySQL > select bitmap_count(bitmap_and(to_bitmap(1), to_bitmap(2))) cnt;

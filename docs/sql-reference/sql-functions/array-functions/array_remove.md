@@ -2,7 +2,7 @@
 
 ## Description
 
-Remove an element from an array.
+Removes an element from an array.
 
 ## Syntax
 
