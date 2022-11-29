@@ -148,7 +148,7 @@ static Status delete_txn_log(std::string_view root_location, const std::set<int6
 static Status drop_disk_cache(std::string_view root_location) {
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_location));
     auto segment_root_location = join_path(root_location, kSegmentDirectoryName);
-    auto orphan_list_location = join_path(root_location, kOrphanListFileName);
+    auto orphan_list_location = join_path(root_location, kGCFileName);
     auto file_or = fs->new_random_access_file(orphan_list_location);
     if (file_or.status().is_not_found()) {
         return Status::OK();
@@ -314,7 +314,7 @@ Status segment_gc(std::string_view root_location, TabletManager* tablet_mgr) {
     ASSIGN_OR_RETURN(auto orphan_segments, find_orphan_segments(tablet_mgr, root_location, tablet_metadatas, txn_logs));
     // Write orphan segment list file
     WritableFileOptions opts{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
-    ASSIGN_OR_RETURN(auto orphan_list_file, fs->new_writable_file(opts, join_path(root_location, kOrphanListFileName)));
+    ASSIGN_OR_RETURN(auto orphan_list_file, fs->new_writable_file(opts, join_path(root_location, kGCFileName)));
     RETURN_IF_ERROR(write_orphan_list_file(orphan_segments, orphan_list_file.get()));
     // Delete orphan segment files
     for (auto& seg : orphan_segments) {
