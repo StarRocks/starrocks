@@ -242,11 +242,10 @@
       + [from_unixtime](/sql-reference/sql-functions/date-time-functions/from_unixtime.md)
       + [hour](/sql-reference/sql-functions/date-time-functions/hour.md)
       + [hours_diff](/sql-reference/sql-functions/date-time-functions/hours_diff.md)
-      md)
       + [minute](/sql-reference/sql-functions/date-time-functions/minute.md)
       + [minutes_diff](/sql-reference/sql-functions/date-time-functions/minutes_diff.md)
       + [microseconds_add](/sql-reference/sql-functions/date-time-functions/microseconds_add.md)
-      + [microseconds_sub](/sql-reference/sql-functions/date-time-functions/microseconds_sub.
+      + [microseconds_sub](/sql-reference/sql-functions/date-time-functions/microseconds_sub.md)
       + [month](/sql-reference/sql-functions/date-time-functions/month.md)
       + [monthname](/sql-reference/sql-functions/date-time-functions/monthname.md)
       + [months_diff](/sql-reference/sql-functions/date-time-functions/months_diff.md)
@@ -387,10 +386,9 @@
       + [bitmap_to_string](/sql-reference/sql-functions/bitmap-functions/bitmap_to_string.md)
       + [bitmap_to_array](/sql-reference/sql-functions/bitmap-functions/bitmap_to_array.md)
       + [bitmap_union](/sql-reference/sql-functions/bitmap-functions/bitmap_union.md)
-      + [bitmap_union_count](/sql-reference/sql-functions/bitmap-functions/bitmap_union_count.
+      + [bitmap_union_count](/sql-reference/sql-functions/bitmap-functions/bitmap_union_count.md)
       + [to_bitmap](/sql-reference/sql-functions/bitmap-functions/to_bitmap.md)
       + [base64_to_bitmap](/sql-reference/sql-functions/bitmap-functions/base64_to_bitmap.md)
-      md)
     + 数组函数
       + [array_agg](/sql-reference/sql-functions/array-functions/array_agg.md)
       + [array_append](/sql-reference/sql-functions/array-functions/array_append.md)
