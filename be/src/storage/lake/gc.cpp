@@ -38,6 +38,7 @@ static Status read_orphan_list_file(RandomAccessFile* file, std::vector<std::str
     DCHECK_EQ(0, size % (kSegmentFileNameLength + 1));
     raw::RawVector<char> buff;
     buff.resize(size); // TODO: streaming read
+    RETURN_IF_ERROR(file->read_fully(buff.data(), size));
     orphans->reserve(size / (kSegmentFileNameLength + 1));
     for (auto offset = 0L; offset < size; offset += (kSegmentFileNameLength + 1)) {
         orphans->emplace_back(&buff[offset], kSegmentFileNameLength);
