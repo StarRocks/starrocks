@@ -167,7 +167,7 @@ public class MarkDownParserTest {
         lines.add("SHOW TABLES");
         lines.add("## ");
         lines.add("SYNTAX:\n\tSHOW TABLES [FROM] database");
-        lines.add("## Examples");
+        lines.add("## example");
         lines.add("show tables;");
         lines.add("## keyword");
         lines.add("SHOW, TABLES");
