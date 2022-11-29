@@ -216,7 +216,8 @@ Status OrcMappingFactory::_init_orc_mapping_with_hive_column_names(std::unique_p
 
         size_t pos_in_slot_descriptor = it->second;
 
-        RETURN_IF_ERROR(_check_orc_type_can_converte_2_logical_type(*orc_sub_type, slot_descs[it->second]->type()));
+        RETURN_IF_ERROR(
+                _check_orc_type_can_converte_2_logical_type(*orc_sub_type, slot_descs[pos_in_slot_descriptor]->type()));
 
         OrcMappingPtr need_add_child_mapping = nullptr;
         // handle nested mapping for complex type mapping
@@ -271,8 +272,9 @@ Status OrcMappingFactory::_set_child_mapping(const OrcMappingPtr& mapping, const
         }
     } else if (origin_type.type == LogicalType::TYPE_ARRAY) {
         DCHECK(orc_type.getKind() == orc::TypeKind::LIST);
-        const TypeDescriptor& origin_child_type = origin_type.children[0];
         const orc::Type& orc_child_type = *orc_type.getSubtype(0);
+        const TypeDescriptor& origin_child_type = origin_type.children[0];
+        // Check Array's element can be converted
         RETURN_IF_ERROR(_check_orc_type_can_converte_2_logical_type(orc_child_type, origin_child_type));
 
         size_t need_add_column_id = orc_child_type.getColumnId();
@@ -288,7 +290,9 @@ Status OrcMappingFactory::_set_child_mapping(const OrcMappingPtr& mapping, const
     } else if (origin_type.type == LogicalType::TYPE_MAP) {
         DCHECK(orc_type.getKind() == orc::TypeKind::MAP);
 
+        // Check Map's key can be converted
         RETURN_IF_ERROR(_check_orc_type_can_converte_2_logical_type(*orc_type.getSubtype(0), origin_type.children[0]));
+        // Check Map's value can be converted
         RETURN_IF_ERROR(_check_orc_type_can_converte_2_logical_type(*orc_type.getSubtype(1), origin_type.children[1]));
 
         // Map's key must be primitivte type
@@ -308,6 +312,8 @@ Status OrcMappingFactory::_set_child_mapping(const OrcMappingPtr& mapping, const
                                                case_sensitive));
         }
         mapping->add_mapping(1, need_add_value_column_id, need_add_vaule_child_mapping);
+    } else {
+        DCHECK(false) << "Unreachable";
     }
     return Status::OK();
 }
