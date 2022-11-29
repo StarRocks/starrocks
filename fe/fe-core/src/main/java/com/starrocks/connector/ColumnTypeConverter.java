@@ -291,7 +291,7 @@ public class ColumnTypeConverter {
     }
 
     private static ArrayType convertToArrayType(io.delta.standalone.types.ArrayType arrayType) {
-        return new ArrayType(fromDeltaLakeType(arrayType.getElementType()));
+        return new ArrayType(fromDeltaLakeType(arrayType.getElementType()), true);
     }
 
     public static String getTypeKeyword(String type) {
@@ -326,7 +326,7 @@ public class ColumnTypeConverter {
             if (fromHiveTypeToArrayType(matcher.group(1)).equals(Type.UNKNOWN_TYPE)) {
                 itemType = Type.UNKNOWN_TYPE;
             } else {
-                itemType = new ArrayType(fromHiveTypeToArrayType(matcher.group(1)));
+                itemType = new ArrayType(fromHiveTypeToArrayType(matcher.group(1)), true);
             }
         } else {
             itemType = fromHiveType(typeStr);
@@ -417,7 +417,7 @@ public class ColumnTypeConverter {
     }
 
     private static ArrayType fromHudiTypeToArrayType(Schema typeSchema) {
-        return new ArrayType(fromHudiType(typeSchema.getElementType()));
+        return new ArrayType(fromHudiType(typeSchema.getElementType()), true);
     }
 
     public static boolean validateHiveColumnType(Type type, Type otherType) {
