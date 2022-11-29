@@ -1,6 +1,6 @@
 # TINYINT
 
-## description
+## Description
 
 TINYINT
 

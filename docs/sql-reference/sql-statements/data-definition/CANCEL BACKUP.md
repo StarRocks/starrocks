@@ -1,6 +1,6 @@
 # CANCEL BACKUP
 
-## description
+## Description
 
 This statement is used to cancel an ongoing BACKUP task.
 
@@ -10,7 +10,7 @@ Syntax:
 CANCEL BACKUP FROM db_name;
 ```
 
-## example
+## Examples
 
 1. Cancel BACKUP task from example_db.
 

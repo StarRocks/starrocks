@@ -1,6 +1,6 @@
 # DROP USER
 
-## description
+## Description
 
 ### Syntax
 
@@ -15,7 +15,7 @@ user@['domain']
 
  Delete a specified user identity
 
-## example
+## Examples
 
 1. Delete user jack@'192.%'
 

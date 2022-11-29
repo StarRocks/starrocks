@@ -1,16 +1,16 @@
 # bitmap_remove
 
-## description
+## Description
 
-### Syntax
+Removes input from lhs and return as a result set.
+
+## Syntax
 
 ```Haskell
 bitmap_remove(BITMAP lhs, BIGINT input)
 ```
 
-Remove input from lhs and return as a result set.
-
-## example
+## Examples
 
 ```plain text
 mysql> select bitmap_to_string(**bitmap_remove**(bitmap_from_string('1, 3'), 3)) cnt;
