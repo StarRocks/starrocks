@@ -104,7 +104,7 @@ Status DistinctBlockingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool
 
     // For having
     RETURN_IF_ERROR(ExecNode::eval_conjuncts(_conjunct_ctxs, (*chunk).get()));
-    _aggregator->update_num_rows_returned(-(old_size - (*chunk)->num_rows()));
+    _aggregator->update_num_rows_returned(-(old_size - static_cast<int64_t>((*chunk)->num_rows())));
 
     _aggregator->process_limit(chunk);
 
