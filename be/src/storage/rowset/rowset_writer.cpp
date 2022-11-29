@@ -579,6 +579,10 @@ Status HorizontalRowsetWriter::_final_merge() {
             } else if (_context.tablet_schema->keys_type() == KeysType::UNIQUE_KEYS ||
                        _context.tablet_schema->keys_type() == KeysType::AGG_KEYS) {
                 itr = new_aggregate_iterator(new_heap_merge_iterator(seg_iterators), true);
+            } else {
+                return Status::NotSupported(
+                        fmt::format("final merge: schema change with sorting do not support {} type",
+                                    KeysType_Name(_context.tablet_schema->keys_type())));
             }
         } else {
             itr = new_aggregate_iterator(new_heap_merge_iterator(seg_iterators, _context.merge_condition), true);
@@ -673,6 +677,10 @@ Status HorizontalRowsetWriter::_final_merge() {
                 } else if (_context.tablet_schema->keys_type() == KeysType::UNIQUE_KEYS ||
                            _context.tablet_schema->keys_type() == KeysType::AGG_KEYS) {
                     itr = new_aggregate_iterator(new_mask_merge_iterator(seg_iterators, mask_buffer.get()), false);
+                } else {
+                    return Status::NotSupported(
+                            fmt::format("final merge: schema change with sorting do not support {} type",
+                                        KeysType_Name(_context.tablet_schema->keys_type())));
                 }
             } else {
                 itr = new_aggregate_iterator(new_mask_merge_iterator(seg_iterators, mask_buffer.get()), false);
@@ -740,6 +748,10 @@ Status HorizontalRowsetWriter::_final_merge() {
             } else if (_context.tablet_schema->keys_type() == KeysType::UNIQUE_KEYS ||
                        _context.tablet_schema->keys_type() == KeysType::AGG_KEYS) {
                 itr = new_aggregate_iterator(new_heap_merge_iterator(seg_iterators), 0);
+            } else {
+                return Status::NotSupported(
+                        fmt::format("final merge: schema change with sorting do not support {} type",
+                                    KeysType_Name(_context.tablet_schema->keys_type())));
             }
             _context.schema_change_sorting = false;
         } else {
