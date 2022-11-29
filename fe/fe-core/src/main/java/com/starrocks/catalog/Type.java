@@ -135,8 +135,11 @@ public abstract class Type implements Cloneable {
 
     public static final ImmutableList<ScalarType> INTEGER_TYPES =
             ImmutableList.of(BOOLEAN, TINYINT, SMALLINT, INT, BIGINT, LARGEINT);
+
+    // TODO(lism): DOUBLE type should be the first because `registerBuiltinSumAggFunction` replies
+    // the order to implicitly cast.
     public static final ImmutableList<ScalarType> FLOAT_TYPES =
-            ImmutableList.of(FLOAT, DOUBLE);
+            ImmutableList.of(DOUBLE, FLOAT);
 
     // NOTE: DECIMAL_TYPES not contain DECIMALV2
     public static final ImmutableList<ScalarType> DECIMAL_TYPES =
