@@ -199,6 +199,8 @@ public class AnalyzeTestUtil {
                 "\"storage_format\" = \"DEFAULT\"\n" +
                 ");");
 
+    }
+
     public static String getDbName() {
         return DB_NAME;
     }

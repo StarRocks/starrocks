@@ -169,7 +169,7 @@ public class AST2SQL {
 
         @Override
         public String visitSubquery(SubqueryRelation subquery, Void context) {
-            return "(" + visit(subquery.getQueryStatement()) + ")" + " " + subquery.getAlias().getTbl());
+            return "(" + visit(subquery.getQueryStatement()) + ")" + " " + subquery.getAlias().getTbl();
         }
 
         @Override
