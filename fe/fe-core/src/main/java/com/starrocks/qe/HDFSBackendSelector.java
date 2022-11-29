@@ -58,7 +58,7 @@ public class HDFSBackendSelector implements BackendSelector {
     Multimap<String, ComputeNode> hostToBackends = HashMultimap.create();
     private final ScanNode scanNode;
     private final List<TScanRangeLocations> locations;
-    private final Coordinator.FragmentScanRangeAssignment assignment;
+    private final CoordinatorPrepare.FragmentScanRangeAssignment assignment;
     private final Set<Long> usedBackendIDs;
     private final Map<TNetworkAddress, Long> addressToBackendId;
     private final ImmutableCollection<ComputeNode> computeNodes;
@@ -123,7 +123,7 @@ public class HDFSBackendSelector implements BackendSelector {
     private HdfsScanRangeHasher hdfsScanRangeHasher;
 
     public HDFSBackendSelector(ScanNode scanNode, List<TScanRangeLocations> locations,
-                               Coordinator.FragmentScanRangeAssignment assignment,
+                               CoordinatorPrepare.FragmentScanRangeAssignment assignment,
                                Map<TNetworkAddress, Long> addressToBackendId,
                                Set<Long> usedBackendIDs,
                                ImmutableCollection<ComputeNode> computeNodes,

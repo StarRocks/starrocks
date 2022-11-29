@@ -34,6 +34,7 @@ import java.util.Map;
 public class CoordinatorTest {
     ConnectContext ctx;
     Coordinator coordinator;
+    CoordinatorPrepare coordinatorPrepare;
 
     @Before
     public void setUp() throws IOException {
@@ -42,6 +43,7 @@ public class CoordinatorTest {
         ConnectContext.threadLocalInfo.set(ctx);
 
         coordinator = new Coordinator(ctx, Lists.newArrayList(), Lists.newArrayList(), new TDescriptorTable());
+        coordinatorPrepare = new CoordinatorPrepare(ctx, Lists.newArrayList(), Lists.newArrayList());
     }
 
     private void testComputeBucketSeq2InstanceOrdinal(JoinNode.DistributionMode mode) throws IOException {
@@ -51,10 +53,13 @@ public class CoordinatorTest {
         PlanFragment fragment =
                 new PlanFragment(new PlanFragmentId(1), new EmptySetNode(new PlanNodeId(1), tupleIdArrayList),
                         new DataPartition(TPartitionType.RANDOM));
-        Coordinator.FragmentExecParams params = coordinator.new FragmentExecParams(fragment);
-        Coordinator.FInstanceExecParam instance0 = new Coordinator.FInstanceExecParam(null, null, 0, params);
-        Coordinator.FInstanceExecParam instance1 = new Coordinator.FInstanceExecParam(null, null, 1, params);
-        Coordinator.FInstanceExecParam instance2 = new Coordinator.FInstanceExecParam(null, null, 2, params);
+        CoordinatorPrepare.FragmentExecParams params = coordinatorPrepare.new FragmentExecParams(fragment);
+        CoordinatorPrepare.FInstanceExecParam instance0 =
+                new CoordinatorPrepare.FInstanceExecParam(null, null, 0, params);
+        CoordinatorPrepare.FInstanceExecParam instance1 =
+                new CoordinatorPrepare.FInstanceExecParam(null, null, 1, params);
+        CoordinatorPrepare.FInstanceExecParam instance2 =
+                new CoordinatorPrepare.FInstanceExecParam(null, null, 2, params);
         instance0.bucketSeqToDriverSeq = ImmutableMap.of(2, -1, 0, -1);
         instance1.bucketSeqToDriverSeq = ImmutableMap.of(1, -1, 4, -1);
         instance2.bucketSeqToDriverSeq = ImmutableMap.of(3, -1, 5, -1);
@@ -65,7 +70,7 @@ public class CoordinatorTest {
         rf.setJoinMode(mode);
         fragment.getBuildRuntimeFilters().put(1, rf);
         Assert.assertTrue(rf.getBucketSeqToInstance() == null || rf.getBucketSeqToInstance().isEmpty());
-        coordinator.computeBucketSeq2InstanceOrdinal(params, 6);
+        coordinatorPrepare.computeBucketSeq2InstanceOrdinal(params, 6);
         params.setBucketSeqToInstanceForRuntimeFilters();
         Assert.assertEquals(rf.getBucketSeqToInstance(), Arrays.<Integer>asList(0, 1, 0, 2, 1, 2));
     }
@@ -99,19 +104,19 @@ public class CoordinatorTest {
                                                              List<Map<Integer, Integer>> expectedBucketSeqToDriverSeqs,
                                                              List<Integer> expectedNumScanRangesList,
                                                              List<Map<Integer, Integer>> expectedDriverSeq2NumScanRangesList) {
-        Coordinator.FragmentExecParams params = coordinator.new FragmentExecParams(null);
-        Coordinator.BucketSeqToScanRange bucketSeqToScanRange = new Coordinator.BucketSeqToScanRange();
+        CoordinatorPrepare.FragmentExecParams params = coordinatorPrepare.new FragmentExecParams(null);
+        CoordinatorPrepare.BucketSeqToScanRange bucketSeqToScanRange = new CoordinatorPrepare.BucketSeqToScanRange();
         for (Integer bucketSeq : bucketSeqToAddress.keySet()) {
             bucketSeqToScanRange.put(bucketSeq, createScanId2scanRanges(scanId, 1));
         }
 
-        coordinator.computeColocatedJoinInstanceParam(bucketSeqToAddress, bucketSeqToScanRange,
+        coordinatorPrepare.computeColocatedJoinInstanceParam(bucketSeqToAddress, bucketSeqToScanRange,
                 parallelExecInstanceNum, pipelineDop, enablePipeline, params);
         params.instanceExecParams.sort(Comparator.comparing(param -> param.host));
 
         Assert.assertEquals(expectedInstances, params.instanceExecParams.size());
         for (int i = 0; i < expectedInstances; ++i) {
-            Coordinator.FInstanceExecParam param = params.instanceExecParams.get(i);
+            CoordinatorPrepare.FInstanceExecParam param = params.instanceExecParams.get(i);
             Assert.assertEquals(expectedParamAddresses.get(i), param.host);
             Assert.assertEquals(expectedPipelineDops.get(i).intValue(), param.getPipelineDop());
 

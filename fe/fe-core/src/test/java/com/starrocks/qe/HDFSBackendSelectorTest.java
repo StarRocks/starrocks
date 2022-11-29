@@ -68,7 +68,7 @@ public class HDFSBackendSelectorTest {
         return ans;
     }
 
-    private Map<TNetworkAddress, Long> computeHostReadBytes(Coordinator.FragmentScanRangeAssignment assignment,
+    private Map<TNetworkAddress, Long> computeHostReadBytes(CoordinatorPrepare.FragmentScanRangeAssignment assignment,
                                                             int scanNodeId) {
         Map<TNetworkAddress, Long> stats = new HashMap<>();
         for (Map.Entry<TNetworkAddress, Map<Integer, List<TScanRangeParams>>> entry : assignment.entrySet()) {
@@ -96,7 +96,8 @@ public class HDFSBackendSelectorTest {
         int scanRangeSize = 10000;
         int hostNumber = 3;
         List<TScanRangeLocations> locations = createScanRanges(scanRangeNumber, scanRangeSize);
-        Coordinator.FragmentScanRangeAssignment assignment = new Coordinator.FragmentScanRangeAssignment();
+        CoordinatorPrepare.FragmentScanRangeAssignment assignment =
+                new CoordinatorPrepare.FragmentScanRangeAssignment();
         Map<TNetworkAddress, Long> addressToBackendId = new HashMap<>();
         Set<Long> usedBackendIDs = new HashSet<>();
         List<ComputeNode> computeNodes = createComputeNodes(hostNumber);
@@ -144,7 +145,8 @@ public class HDFSBackendSelectorTest {
             }
         }
 
-        Coordinator.FragmentScanRangeAssignment assignment = new Coordinator.FragmentScanRangeAssignment();
+        CoordinatorPrepare.FragmentScanRangeAssignment assignment =
+                new CoordinatorPrepare.FragmentScanRangeAssignment();
         Map<TNetworkAddress, Long> addressToBackendId = new HashMap<>();
         Set<Long> usedBackendIDs = new HashSet<>();
         List<ComputeNode> computeNodes = createComputeNodes(hostNumber);

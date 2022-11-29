@@ -1080,7 +1080,7 @@ public class StmtExecutor {
         String explainString = "";
         if (parsedStmt.getExplainLevel() == StatementBase.ExplainLevel.VERBOSE) {
             if (context.getSessionVariable().isEnableResourceGroup()) {
-                ResourceGroup resourceGroup = Coordinator.prepareResourceGroup(context, queryType);
+                ResourceGroup resourceGroup = CoordinatorPrepare.prepareResourceGroup(context, queryType);
                 String resourceGroupStr =
                         resourceGroup != null ? resourceGroup.getName() : ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME;
                 explainString += "RESOURCE GROUP: " + resourceGroupStr + "\n\n";
