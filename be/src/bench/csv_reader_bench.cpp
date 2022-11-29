@@ -102,13 +102,16 @@ public:
     Status init_buffer() { return _csv_reader->init_buff(); }
 
     Status get_all_v1(int64_t& read_line_cnt) {
-        CSVReader::Record dummy;
+        CSVReader::Record record;
         Status st = Status::OK();
+        CSVReader::Fields fields;
         while (true) {
-            st = _csv_reader->next_record(&dummy);
+            st = _csv_reader->next_record(&record);
             if (!st.ok()) {
                 break;
             }
+            fields.clear();
+            _csv_reader->split_record(record, &fields);
             read_line_cnt++;
         }
         return st;
