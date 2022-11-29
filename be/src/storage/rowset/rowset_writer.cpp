@@ -542,10 +542,17 @@ Status HorizontalRowsetWriter::_final_merge() {
                                                      config::vertical_compaction_max_columns_per_group,
                                                      segments.size()) == VERTICAL_COMPACTION) {
         std::vector<std::vector<uint32_t>> column_groups;
-        CompactionUtils::split_column_into_groups(_context.tablet_schema->num_columns(),
-                                                  _context.tablet_schema->sort_key_idxes(),
-                                                  config::vertical_compaction_max_columns_per_group, &column_groups);
-
+        if (_context.tablet_schema->sort_key_idxes().empty()) {
+            std::vector<ColumnId> primary_key_iota_idxes(_context.tablet_schema->num_key_columns());
+            std::iota(primary_key_iota_idxes.begin(), primary_key_iota_idxes.end(), 0);
+            CompactionUtils::split_column_into_groups(_context.tablet_schema->num_columns(), primary_key_iota_idxes,
+                                                      config::vertical_compaction_max_columns_per_group,
+                                                      &column_groups);
+        } else {
+            CompactionUtils::split_column_into_groups(
+                    _context.tablet_schema->num_columns(), _context.tablet_schema->sort_key_idxes(),
+                    config::vertical_compaction_max_columns_per_group, &column_groups);
+        }
         auto schema = ChunkHelper::convert_schema_to_format_v2(*_context.tablet_schema, column_groups[0]);
         if (!_context.merge_condition.empty()) {
             for (int i = _context.tablet_schema->num_key_columns(); i < _context.tablet_schema->num_columns(); ++i) {

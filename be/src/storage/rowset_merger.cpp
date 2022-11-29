@@ -43,6 +43,7 @@ struct MergeEntry {
     const vectorized::VectorizedSchema* encode_schema = nullptr;
     uint16_t order;
     std::vector<vectorized::RowSourceMask>* source_masks = nullptr;
+    static thread_local ColumnId first_sort_column_idx;
 
     MergeEntry() = default;
     ~MergeEntry() { close(); }
@@ -95,7 +96,7 @@ struct MergeEntry {
                     PrimaryKeyEncoder::encode(*encode_schema, *chunk, 0, chunk->num_rows(), chunk_pk_column.get());
                 } else {
                     // just use chunk's first column
-                    chunk_pk_column = chunk->get_column_by_index(0);
+                    chunk_pk_column = chunk->get_column_by_index(first_sort_column_idx);
                 }
                 DCHECK(chunk_pk_column->size() > 0);
                 DCHECK(chunk_pk_column->size() == chunk->num_rows());
@@ -113,6 +114,9 @@ struct MergeEntry {
         }
     }
 };
+
+template <typename T>
+thread_local ColumnId MergeEntry<T>::first_sort_column_idx = 0;
 
 template <class T>
 struct MergeEntryCmp {
@@ -223,9 +227,17 @@ public:
         MonotonicStopWatch timer;
         timer.start();
         if (cfg.algorithm == VERTICAL_COMPACTION) {
-            CompactionUtils::split_column_into_groups(tablet.num_columns(), tablet.tablet_schema().sort_key_idxes(),
-                                                      config::vertical_compaction_max_columns_per_group,
-                                                      &column_groups);
+            if (tablet.tablet_schema().sort_key_idxes().empty()) {
+                std::vector<ColumnId> primary_key_iota_idxes(tablet.num_key_columns());
+                std::iota(primary_key_iota_idxes.begin(), primary_key_iota_idxes.end(), 0);
+                CompactionUtils::split_column_into_groups(tablet.num_columns(), primary_key_iota_idxes,
+                                                          config::vertical_compaction_max_columns_per_group,
+                                                          &column_groups);
+            } else {
+                CompactionUtils::split_column_into_groups(tablet.num_columns(), tablet.tablet_schema().sort_key_idxes(),
+                                                          config::vertical_compaction_max_columns_per_group,
+                                                          &column_groups);
+            }
             RETURN_IF_ERROR(_do_merge_vertically(tablet, version, rowsets, writer, cfg, column_groups,
                                                  &total_input_size, &total_rows, &total_chunk, &stats));
         } else {
@@ -261,7 +273,9 @@ private:
             if (!PrimaryKeyEncoder::create_column(schema, &sort_column, schema.sort_key_idxes()).ok()) {
                 LOG(FATAL) << "create column for primary key encoder failed";
             }
-        } else if (schema.num_key_fields() > 1) {
+        } else if (schema.sort_key_idxes().size() == 1) {
+            MergeEntry<T>::first_sort_column_idx = schema.sort_key_idxes()[0];
+        } else if (schema.sort_key_idxes().empty() && schema.num_key_fields() > 1) {
             if (!PrimaryKeyEncoder::create_column(schema, &sort_column).ok()) {
                 LOG(FATAL) << "create column for primary key encoder failed";
             }
@@ -411,7 +425,10 @@ private:
             rowsets_mask_buffer.emplace_back(std::move(rowset_mask_buffer));
         }
         {
-            VectorizedSchema schema = ChunkHelper::get_sort_key_schema_with_format_v2(tablet.tablet_schema());
+            VectorizedSchema schema =
+                    tablet.tablet_schema().sort_key_idxes().empty()
+                            ? ChunkHelper::convert_schema_to_format_v2(tablet.tablet_schema(), column_groups[0])
+                            : ChunkHelper::get_sort_key_schema_with_format_v2(tablet.tablet_schema());
             RETURN_IF_ERROR(_do_merge_horizontally(tablet, version, schema, rowsets, writer, cfg, total_input_size,
                                                    total_rows, total_chunk, stats, mask_buffer.get(),
                                                    &rowsets_mask_buffer));
