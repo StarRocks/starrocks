@@ -107,7 +107,7 @@ template <typename T>
 void PInternalServiceImplBase<T>::transmit_chunk(google::protobuf::RpcController* cntl_base,
                                                  const PTransmitChunkParams* request, PTransmitChunkResult* response,
                                                  google::protobuf::Closure* done) {
-    auto task = [this, cntl_base, request, response, done] () {
+    auto task = [this, cntl_base, request, response, done]() {
         this->_transmit_chunk(cntl_base, request, response, done);
     };
     if (!_exec_env->query_rpc_pool()->try_offer(task)) {
@@ -118,8 +118,8 @@ void PInternalServiceImplBase<T>::transmit_chunk(google::protobuf::RpcController
 
 template <typename T>
 void PInternalServiceImplBase<T>::_transmit_chunk(google::protobuf::RpcController* cntl_base,
-                                                 const PTransmitChunkParams* request, PTransmitChunkResult* response,
-                                                 google::protobuf::Closure* done) {
+                                                  const PTransmitChunkParams* request, PTransmitChunkResult* response,
+                                                  google::protobuf::Closure* done) {
     auto begin_ts = MonotonicNanos();
     VLOG_ROW << "transmit data: " << (uint64_t)(request) << " fragment_instance_id=" << print_id(request->finst_id())
              << " node=" << request->node_id() << " begin";
@@ -165,15 +165,15 @@ void PInternalServiceImplBase<T>::transmit_runtime_filter(google::protobuf::RpcC
     };
     if (!_exec_env->query_rpc_pool()->try_offer(task)) {
         ClosureGuard closure_guard(done);
-        Status::ServiceUnavailable("submit transmit_runtime_filter task failed").to_protobuf(response->mutable_status());
+        Status::ServiceUnavailable("submit transmit_runtime_filter task failed")
+                .to_protobuf(response->mutable_status());
     }
-
 }
 template <typename T>
 void PInternalServiceImplBase<T>::_transmit_runtime_filter(google::protobuf::RpcController* cntl_base,
-                                                          const PTransmitRuntimeFilterParams* request,
-                                                          PTransmitRuntimeFilterResult* response,
-                                                          google::protobuf::Closure* done) {
+                                                           const PTransmitRuntimeFilterParams* request,
+                                                           PTransmitRuntimeFilterResult* response,
+                                                           google::protobuf::Closure* done) {
     VLOG_FILE << "transmit runtime filter: fragment_instance_id = " << print_id(request->finst_id())
               << " query_id = " << print_id(request->query_id()) << ", is_partial = " << request->is_partial()
               << ", filter_id = " << request->filter_id() << ", is_pipeline = " << request->is_pipeline();
@@ -197,7 +197,7 @@ void PInternalServiceImplBase<T>::exec_plan_fragment(google::protobuf::RpcContro
                                                      const PExecPlanFragmentRequest* request,
                                                      PExecPlanFragmentResult* response,
                                                      google::protobuf::Closure* done) {
-    auto task = [this, cntl_base, request, response, done] () {
+    auto task = [this, cntl_base, request, response, done]() {
         this->_exec_plan_fragment(cntl_base, request, response, done);
     };
     if (!_exec_env->query_rpc_pool()->try_offer(task)) {
@@ -208,9 +208,9 @@ void PInternalServiceImplBase<T>::exec_plan_fragment(google::protobuf::RpcContro
 
 template <typename T>
 void PInternalServiceImplBase<T>::_exec_plan_fragment(google::protobuf::RpcController* cntl_base,
-                                                     const PExecPlanFragmentRequest* request,
-                                                     PExecPlanFragmentResult* response,
-                                                     google::protobuf::Closure* done) {
+                                                      const PExecPlanFragmentRequest* request,
+                                                      PExecPlanFragmentResult* response,
+                                                      google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
     auto* cntl = static_cast<brpc::Controller*>(cntl_base);
     if (k_starrocks_exit.load(std::memory_order_relaxed)) {
@@ -231,7 +231,7 @@ void PInternalServiceImplBase<T>::exec_batch_plan_fragments(google::protobuf::Rp
                                                             const PExecBatchPlanFragmentsRequest* request,
                                                             PExecBatchPlanFragmentsResult* response,
                                                             google::protobuf::Closure* done) {
-    auto task = [this, cntl_base, request, response, done] () {
+    auto task = [this, cntl_base, request, response, done]() {
         this->_async_exec_batch_plan_fragments(cntl_base, request, response, done);
     };
     if (!_exec_env->pipeline_prepare_pool()->try_offer(task)) {
@@ -242,9 +242,9 @@ void PInternalServiceImplBase<T>::exec_batch_plan_fragments(google::protobuf::Rp
 
 template <typename T>
 void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::RpcController* cntl_base,
-                                                            const PExecBatchPlanFragmentsRequest* request,
-                                                            PExecBatchPlanFragmentsResult* response,
-                                                            google::protobuf::Closure* done) {
+                                                             const PExecBatchPlanFragmentsRequest* request,
+                                                             PExecBatchPlanFragmentsResult* response,
+                                                             google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
     auto* cntl = static_cast<brpc::Controller*>(cntl_base);
     if (k_starrocks_exit.load(std::memory_order_relaxed)) {
@@ -263,15 +263,16 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
 class ExecBatchPlanFragmentsContext {
 public:
     ExecBatchPlanFragmentsContext(std::shared_ptr<TExecBatchPlanFragmentsParams> t_batch_requests,
-        PExecBatchPlanFragmentsResult* response,google::protobuf::Closure* done, int32_t remaining_task_num):
-        _t_batch_requests(t_batch_requests),
-        _response(response), _done(done), _remaining_task_num(remaining_task_num) {}
+                                  PExecBatchPlanFragmentsResult* response, google::protobuf::Closure* done,
+                                  int32_t remaining_task_num)
+            : _t_batch_requests(t_batch_requests),
+              _response(response),
+              _done(done),
+              _remaining_task_num(remaining_task_num) {}
 
     ~ExecBatchPlanFragmentsContext() = default;
 
-    TExecBatchPlanFragmentsParams* t_batch_requests() const {
-        return _t_batch_requests.get();
-    }
+    TExecBatchPlanFragmentsParams* t_batch_requests() const { return _t_batch_requests.get(); }
 
     bool has_error() const {
         std::shared_lock l(_mu);
@@ -306,9 +307,9 @@ private:
 
 template <typename T>
 void PInternalServiceImplBase<T>::_async_exec_batch_plan_fragments(google::protobuf::RpcController* cntl_base,
-                                                            const PExecBatchPlanFragmentsRequest* request,
-                                                            PExecBatchPlanFragmentsResult* response,
-                                                            google::protobuf::Closure* done) {
+                                                                   const PExecBatchPlanFragmentsRequest* request,
+                                                                   PExecBatchPlanFragmentsResult* response,
+                                                                   google::protobuf::Closure* done) {
     LOG(INFO) << "begine _async_exec_batch_plan_fragments";
     auto* cntl = static_cast<brpc::Controller*>(cntl_base);
     auto ser_request = cntl->request_attachment().to_string();
@@ -316,7 +317,8 @@ void PInternalServiceImplBase<T>::_async_exec_batch_plan_fragments(google::proto
     {
         const auto* buf = (const uint8_t*)ser_request.data();
         uint32_t len = ser_request.size();
-        if (Status status = deserialize_thrift_msg(buf, &len, TProtocolType::BINARY, t_batch_requests.get()); !status.ok()) {
+        if (Status status = deserialize_thrift_msg(buf, &len, TProtocolType::BINARY, t_batch_requests.get());
+            !status.ok()) {
             status.to_protobuf(response->mutable_status());
             done->Run();
             return;
@@ -345,16 +347,18 @@ void PInternalServiceImplBase<T>::_async_exec_batch_plan_fragments(google::proto
         done->Run();
         return;
     }
-    std::shared_ptr<ExecBatchPlanFragmentsContext> ctx = std::make_shared<ExecBatchPlanFragmentsContext>(t_batch_requests, response, done, remaining_task_num);
-    for (int i = 1;i < unique_requests.size();i++) {
+    std::shared_ptr<ExecBatchPlanFragmentsContext> ctx =
+            std::make_shared<ExecBatchPlanFragmentsContext>(t_batch_requests, response, done, remaining_task_num);
+    for (int i = 1; i < unique_requests.size(); i++) {
         LOG(INFO) << "submit exec plan fragment " << i;
-        auto task = [this, i, ctx] () {
+        auto task = [this, i, ctx]() {
             LOG(INFO) << "run exec plan fragment " << i;
             if (ctx->has_error()) {
                 return;
             }
             auto t_batch_requests = ctx->t_batch_requests();
-            Status status = _exec_plan_fragment_by_pipeline(t_batch_requests->common_param, t_batch_requests->unique_param_per_instance[i]);
+            Status status = _exec_plan_fragment_by_pipeline(t_batch_requests->common_param,
+                                                            t_batch_requests->unique_param_per_instance[i]);
             ctx->finish_one_task(status);
         };
         if (!_exec_env->pipeline_prepare_pool()->try_offer(task)) {
@@ -362,9 +366,7 @@ void PInternalServiceImplBase<T>::_async_exec_batch_plan_fragments(google::proto
             return;
         }
     }
-
 }
-
 
 template <typename T>
 void PInternalServiceImplBase<T>::tablet_writer_add_batch(google::protobuf::RpcController* controller,
@@ -522,9 +524,9 @@ void PInternalServiceImplBase<T>::cancel_plan_fragment(google::protobuf::RpcCont
 
 template <typename T>
 void PInternalServiceImplBase<T>::_cancel_plan_fragment(google::protobuf::RpcController* cntl_base,
-                                                       const PCancelPlanFragmentRequest* request,
-                                                       PCancelPlanFragmentResult* result,
-                                                       google::protobuf::Closure* done) {
+                                                        const PCancelPlanFragmentRequest* request,
+                                                        PCancelPlanFragmentResult* result,
+                                                        google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
     TUniqueId tid;
     tid.__set_hi(request->finst_id().hi());
@@ -577,9 +579,7 @@ template <typename T>
 void PInternalServiceImplBase<T>::fetch_data(google::protobuf::RpcController* cntl_base,
                                              const PFetchDataRequest* request, PFetchDataResult* result,
                                              google::protobuf::Closure* done) {
-    auto task = [this, cntl_base, request, result, done] () {
-        this->_fetch_data(cntl_base, request, result, done);
-    };
+    auto task = [this, cntl_base, request, result, done]() { this->_fetch_data(cntl_base, request, result, done); };
     if (!_exec_env->query_rpc_pool()->try_offer(task)) {
         ClosureGuard closure_guard(done);
         Status::ServiceUnavailable("submit fetch_data task failed").to_protobuf(result->mutable_status());
@@ -588,8 +588,8 @@ void PInternalServiceImplBase<T>::fetch_data(google::protobuf::RpcController* cn
 
 template <typename T>
 void PInternalServiceImplBase<T>::_fetch_data(google::protobuf::RpcController* cntl_base,
-                                             const PFetchDataRequest* request, PFetchDataResult* result,
-                                             google::protobuf::Closure* done) {
+                                              const PFetchDataRequest* request, PFetchDataResult* result,
+                                              google::protobuf::Closure* done) {
     auto* cntl = static_cast<brpc::Controller*>(cntl_base);
     auto* ctx = new GetResultBatchCtx(cntl, result, done);
     _exec_env->result_mgr()->fetch_data(request->finst_id(), ctx);

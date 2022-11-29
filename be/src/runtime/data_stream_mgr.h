@@ -38,8 +38,8 @@
 
 #include <list>
 #include <mutex>
-#include <shared_mutex>
 #include <set>
+#include <shared_mutex>
 
 #include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
