@@ -30,7 +30,7 @@ namespace starrocks::vectorized {
 const FillColumnFunction& find_fill_func(PrimitiveType type, bool nullable);
 
 // NOLINTNEXTLINE
-const static std::unordered_map<orc::TypeKind, PrimitiveType> g_orc_starrocks_type_mapping = {
+const static std::unordered_map<orc::TypeKind, PrimitiveType> g_orc_starrocks_primitive_type_mapping = {
         {orc::BOOLEAN, TYPE_BOOLEAN},
         {orc::BYTE, TYPE_TINYINT},
         {orc::SHORT, TYPE_SMALLINT},
