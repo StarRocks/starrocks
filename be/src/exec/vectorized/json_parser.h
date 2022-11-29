@@ -22,6 +22,8 @@ public:
 
 protected:
     simdjson::ondemand::parser* const _parser;
+    uint8_t* _data = nullptr;
+    size_t _len = 0;
 };
 
 // JsonDocumentStreamParser parse json in document stream (ndjson).
@@ -36,9 +38,6 @@ public:
     std::string left_bytes_string(size_t sz) noexcept override;
 
 private:
-    uint8_t* _data = nullptr;
-    size_t _len = 0;
-
     // data is parsed as a document stream.
 
     // iterator context for document stream.

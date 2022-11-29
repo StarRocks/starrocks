@@ -69,7 +69,7 @@ private:
     Status _try_to_trigger_next_scan(RuntimeState* state);
     void _finish_chunk_source_task(RuntimeState* state, int chunk_source_index, int64_t cpu_time_ns, int64_t scan_rows,
                                    int64_t scan_bytes);
-    void _merge_chunk_source_profiles();
+    void _merge_chunk_source_profiles(RuntimeState* state);
     size_t _buffer_unplug_threshold() const;
     size_t _num_buffered_chunks() const;
 

@@ -279,8 +279,12 @@ public class ColocateTableBalancer extends MasterDaemon {
         TabletScheduler tabletScheduler = globalStateMgr.getTabletScheduler();
         long checkStartTime = System.currentTimeMillis();
 
+        long start = System.nanoTime();
+        long lockTotalTime = 0;
+        long lockStart;
         // check each group
         Set<GroupId> groupIds = colocateIndex.getAllGroupIds();
+        GROUP:
         for (GroupId groupId : groupIds) {
             List<Long> tableIds = colocateIndex.getAllTableIds(groupId);
             Database db = globalStateMgr.getDbIncludeRecycleBin(groupId.dbId);
@@ -294,9 +298,13 @@ public class ColocateTableBalancer extends MasterDaemon {
             }
 
             boolean isGroupStable = true;
+            // set the config to a local variable to avoid config params changed.
+            int partitionBatchNum = Config.tablet_checker_partition_batch_num;
+            int partitionChecked = 0;
             db.readLock();
+            lockStart = System.nanoTime();
             try {
-                OUT:
+                TABLE:
                 for (Long tableId : tableIds) {
                     OlapTable olapTable = (OlapTable) globalStateMgr.getTableIncludeRecycleBin(db, tableId);
                     if (olapTable == null || !colocateIndex.isColocateTable(olapTable.getId())) {
@@ -304,6 +312,25 @@ public class ColocateTableBalancer extends MasterDaemon {
                     }
 
                     for (Partition partition : globalStateMgr.getPartitionsIncludeRecycleBin(olapTable)) {
+                        partitionChecked++;
+                        if (partitionChecked % partitionBatchNum == 0) {
+                            lockTotalTime += System.nanoTime() - lockStart;
+                            // release lock, so that lock can be acquired by other threads.
+                            LOG.debug("partition checked reached batch value, release lock");
+                            db.readUnlock();
+                            db.readLock();
+                            LOG.debug("balancer get lock again");
+                            lockStart = System.nanoTime();
+                            if (globalStateMgr.getDbIncludeRecycleBin(groupId.dbId) == null) {
+                                continue GROUP;
+                            }
+                            if (globalStateMgr.getTableIncludeRecycleBin(db, olapTable.getId()) == null) {
+                                continue TABLE;
+                            }
+                            if (globalStateMgr.getPartitionIncludeRecycleBin(olapTable, partition.getId()) == null) {
+                                continue;
+                            }
+                        }
                         short replicationNum =
                                 globalStateMgr.getReplicationNumIncludeRecycleBin(olapTable.getPartitionInfo(),
                                         partition.getId());
@@ -369,7 +396,7 @@ public class ColocateTableBalancer extends MasterDaemon {
                                                 // tablet in scheduler exceed limit, skip this group and check next one.
                                                 LOG.info("number of scheduling tablets in tablet scheduler"
                                                         + " exceed to limit. stop colocate table check");
-                                                break OUT;
+                                                break TABLE;
                                             }
                                             if (res == AddResult.ADDED && tabletCtx.getRelocationForRepair()) {
                                                 LOG.info("add tablet relocation task to scheduler, tablet id: {}, " +
@@ -404,9 +431,14 @@ public class ColocateTableBalancer extends MasterDaemon {
                     colocateIndex.markGroupUnstable(groupId, true);
                 }
             } finally {
+                lockTotalTime += System.nanoTime() - lockStart;
                 db.readUnlock();
             }
         } // end for groups
+
+        long cost = (System.nanoTime() - start) / 1000000;
+        lockTotalTime = lockTotalTime / 1000000;
+        LOG.info("finished to match colocate group. cost: {} ms, in lock time: {} ms", cost, lockTotalTime);
     }
 
     /*
@@ -715,8 +747,8 @@ public class ColocateTableBalancer extends MasterDaemon {
         } else if (!be.isAvailable()) {
             // 1. BE is dead for a long time
             // 2. BE is under decommission
-            if ((!be.isAlive() &&
-                    (currTime - be.getLastUpdateMs()) > Config.tablet_repair_delay_factor_second * 1000 * 2)
+            if ((!be.isAlive()
+                    && (currTime - be.getLastUpdateMs()) > Config.tablet_sched_colocate_be_down_tolerate_time_s * 1000)
                     || be.isDecommissioned()) {
                 return false;
             }
