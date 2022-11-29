@@ -53,9 +53,9 @@ public class HdfsService {
         fileSystemManager.getTProperties(path, loadProperties, tProperties);
     }
 
-    public void listPath(TBrokerListPathRequest request, List<TBrokerFileStatus> fileStatuses, boolean skipDir, 
-            boolean fileNameOnly) throws UserException {
-        LOG.info("received a list path request, request detail: " + request);
+    public void listPath(TBrokerListPathRequest request, List<TBrokerFileStatus> fileStatuses, boolean skipDir,
+                         boolean fileNameOnly) throws UserException {
+        LOG.info("receive a delete path request, path: {}", request.path);
         List<TBrokerFileStatus> allFileStatuses = fileSystemManager.listPath(request.path, fileNameOnly,
                 request.properties);
 
@@ -69,63 +69,68 @@ public class HdfsService {
 
     public void deletePath(TBrokerDeletePathRequest request)
             throws UserException {
-        LOG.info("receive a delete path request, request detail: " + request);
+        LOG.info("receive a delete path request, path: {}", request.path);
         fileSystemManager.deletePath(request.path, request.properties);
     }
 
     public void renamePath(TBrokerRenamePathRequest request)
             throws UserException {
-        LOG.info("receive a rename path request, request detail: " + request);
+        LOG.info("receive a rename path request, source path: {}, dest path: {}",
+                request.srcPath, request.destPath);
         fileSystemManager.renamePath(request.srcPath, request.destPath, request.properties);
     }
 
     public boolean checkPathExist(
             TBrokerCheckPathExistRequest request) throws UserException {
-        LOG.info("receive a check path request, request detail: " + request);
+        LOG.info("receive a check path request, path: {}", request.path);
         return fileSystemManager.checkPathExist(request.path, request.properties);
     }
 
     public TBrokerFD openReader(TBrokerOpenReaderRequest request)
             throws UserException {
-        LOG.info("receive a open reader request, request detail: " + request);
+        LOG.info("receive a open reader request, path: {}, start offset: {}, client id: {}",
+                request.path, request.startOffset, request.clientId);
         return fileSystemManager.openReader(request.path,
-                    request.startOffset, request.properties);
+                request.startOffset, request.properties);
     }
 
     public byte[] pread(TBrokerPReadRequest request)
             throws UserException {
-        LOG.debug("receive a read request, request detail: " + request);
+        LOG.debug("receive a read request, fd: {}, offset: {}, length: {}",
+                request.fd, request.offset, request.length);
         return fileSystemManager.pread(request.fd, request.offset, request.length);
     }
 
     public void seek(TBrokerSeekRequest request)
             throws UserException {
-        LOG.debug("receive a seek request, request detail: " + request);
+        LOG.debug("receive a seek request, fd: {}, offset: {}", request.fd, request.offset);
         fileSystemManager.seek(request.fd, request.offset);
     }
 
     public void closeReader(TBrokerCloseReaderRequest request)
             throws UserException {
-        LOG.info("receive a close reader request, request detail: " + request);
+        LOG.info("receive a close reader request, fd: {}", request.fd);
         fileSystemManager.closeReader(request.fd);
     }
 
     public TBrokerFD openWriter(TBrokerOpenWriterRequest request)
             throws UserException {
-        LOG.info("receive a open writer request, request detail: " + request);
+        LOG.info("receive a open writer request, path: {}, mode: {}, client id: {}",
+                request.path, request.openMode, request.clientId);
         TBrokerFD fd = fileSystemManager.openWriter(request.path, request.properties);
         return fd;
     }
 
     public void pwrite(TBrokerPWriteRequest request)
             throws UserException {
-        LOG.debug("receive a pwrite request, request detail: " + request);
+        LOG.debug("receive a pwrite request, fd: {}, offset: {}, size: {}",
+                request.fd, request.offset, request.data.remaining());
         fileSystemManager.pwrite(request.fd, request.offset, request.getData());
     }
 
     public void closeWriter(TBrokerCloseWriterRequest request)
             throws UserException {
-        LOG.info("receive a close writer request, request detail: " + request);
+        LOG.info("receive a close writer request, fd: {}", request.fd);
         fileSystemManager.closeWriter(request.fd);
     }
 }
