@@ -20,13 +20,14 @@ public:
     ResultSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                        TResultSinkType::type sink_type, std::vector<ExprContext*> output_expr_ctxs,
                        const std::shared_ptr<BufferControlBlock>& sender, std::atomic<int32_t>& num_result_sinks,
-                       std::atomic<int64_t>& num_written_rows, FragmentContext* const fragment_ctx)
+                       std::atomic<int64_t>& num_written_rows, bool ignore_result, FragmentContext* const fragment_ctx)
             : Operator(factory, id, "result_sink", plan_node_id, driver_sequence),
               _sink_type(sink_type),
               _output_expr_ctxs(std::move(output_expr_ctxs)),
               _sender(sender),
               _num_result_sinkers(num_result_sinks),
               _num_written_rows(num_written_rows),
+              _ignore_result(ignore_result),
               _fragment_ctx(fragment_ctx) {}
 
     ~ResultSinkOperator() override = default;
@@ -63,6 +64,7 @@ private:
     const std::shared_ptr<BufferControlBlock>& _sender;
     std::atomic<int32_t>& _num_result_sinkers;
     std::atomic<int64_t>& _num_written_rows;
+    bool _ignore_result;
 
     std::shared_ptr<ResultWriter> _writer;
     mutable TFetchDataResultPtrs _fetch_data_result;
@@ -78,10 +80,11 @@ private:
 class ResultSinkOperatorFactory final : public OperatorFactory {
 public:
     ResultSinkOperatorFactory(int32_t id, TResultSinkType::type sink_type, std::vector<TExpr> t_output_expr,
-                              FragmentContext* const fragment_ctx)
+                              bool ignore_result, FragmentContext* const fragment_ctx)
             : OperatorFactory(id, "result_sink", Operator::s_pseudo_plan_node_id_for_result_sink),
               _sink_type(sink_type),
               _t_output_expr(std::move(t_output_expr)),
+              _ignore_result(ignore_result),
               _fragment_ctx(fragment_ctx) {}
 
     ~ResultSinkOperatorFactory() override = default;
@@ -94,7 +97,7 @@ public:
         _increment_num_result_sinkers_no_barrier();
         return std::make_shared<ResultSinkOperator>(this, _id, _plan_node_id, driver_sequence, _sink_type,
                                                     _output_expr_ctxs, _sender, _num_result_sinkers, _num_written_rows,
-                                                    _fragment_ctx);
+                                                    _ignore_result, _fragment_ctx);
     }
 
     Status prepare(RuntimeState* state) override;
@@ -114,6 +117,8 @@ private:
     std::shared_ptr<BufferControlBlock> _sender;
     std::atomic<int32_t> _num_result_sinkers = 0;
     std::atomic<int64_t> _num_written_rows = 0;
+
+    bool _ignore_result = false;
 
     FragmentContext* const _fragment_ctx;
 };

@@ -115,6 +115,11 @@ Status ResultSinkOperator::push_chunk(RuntimeState* state, const vectorized::Chu
     if (!_last_error.ok()) {
         return _last_error;
     }
+
+    if (_ignore_result) {
+        return Status::OK();
+    }
+
     DCHECK(_fetch_data_result.empty());
 
     auto status = _writer->process_chunk(chunk.get());

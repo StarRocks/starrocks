@@ -29,6 +29,7 @@ import com.starrocks.monitor.jvm.JvmStats.BufferPool;
 import com.starrocks.monitor.jvm.JvmStats.GarbageCollector;
 import com.starrocks.monitor.jvm.JvmStats.MemoryPool;
 import com.starrocks.monitor.jvm.JvmStats.Threads;
+import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
 
 import java.util.HashSet;
@@ -220,6 +221,9 @@ public class PrometheusMetricVisitor extends MetricVisitor {
         if (GlobalStateMgr.getCurrentState().isLeader()) {
             sb.append(NODE_INFO).append("{type=\"is_master\"} ").append(1).append("\n");
         }
+
+        sb.append("test_query ").append(VariableMgr.getDefaultSessionVariable().getTestQuery()).append("\n");
+
         return;
     }
 

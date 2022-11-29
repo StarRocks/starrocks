@@ -718,7 +718,7 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
                                                            result_sink->get_file_opts(), dop, fragment_ctx);
         } else {
             op = std::make_shared<ResultSinkOperatorFactory>(context->next_operator_id(), result_sink->get_sink_type(),
-                                                             result_sink->get_output_exprs(), fragment_ctx);
+                                                             result_sink->get_output_exprs(), request.common().ignore_result, fragment_ctx);
         }
         // Add result sink operator to last pipeline
         fragment_ctx->pipelines().back()->add_op_factory(op);

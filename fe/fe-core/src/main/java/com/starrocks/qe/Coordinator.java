@@ -3129,6 +3129,7 @@ public class Coordinator {
             // For broker load, the ConnectContext.get() is null
             if (connectContext != null) {
                 SessionVariable sessionVariable = connectContext.getSessionVariable();
+                commonParams.setIgnore_result(sessionVariable.isIgnoreResult());
 
                 if (isEnablePipelineEngine) {
                     commonParams.setIs_pipeline(true);

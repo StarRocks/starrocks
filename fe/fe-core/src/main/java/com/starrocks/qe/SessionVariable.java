@@ -314,6 +314,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String BIG_QUERY_LOG_SCAN_BYTES_THRESHOLD = "big_query_log_scan_bytes_threshold";
     public static final String BIG_QUERY_LOG_SCAN_ROWS_THRESHOLD = "big_query_log_scan_rows_threshold";
 
+    public static final String IGNORE_RESULT = "ignore_result";
+    public static final String TEST_QUERY = "test_query";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(ENABLE_SPILLING)
@@ -793,6 +796,20 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // Users need to set up according to their own scenario.
     @VarAttr(name = BIG_QUERY_LOG_SCAN_ROWS_THRESHOLD)
     private long bigQueryLogScanRowsThreshold = 1000000000L;
+
+    @VarAttr(name = TEST_QUERY, flag = VariableMgr.INVISIBLE)
+    private int testQuery = 0;
+
+    @VarAttr(name = IGNORE_RESULT, flag = VariableMgr.INVISIBLE)
+    private boolean ignoreResult = false;
+
+    public boolean isIgnoreResult() {
+        return ignoreResult;
+    }
+
+    public int getTestQuery() {
+        return testQuery;
+    }
 
     public boolean getEnablePopulateBlockCache() {
         return enablePopulateBlockCache;
