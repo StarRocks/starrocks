@@ -105,6 +105,9 @@ public:
                                                                const std::vector<std::string>* hive_column_names);
 
 private:
+    static Status _check_orc_type_can_converte_2_logical_type(const orc::Type& orc_source_type,
+                                                              const TypeDescriptor& slot_target_type);
+
     static Status _init_orc_mapping_with_orc_column_names(std::unique_ptr<OrcMapping>& mapping,
                                                           const std::vector<SlotDescriptor*>& slot_descs,
                                                           const orc::Type& orc_root_type, const bool case_sensitve);
