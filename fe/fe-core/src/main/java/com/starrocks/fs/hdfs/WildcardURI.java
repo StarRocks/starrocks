@@ -55,7 +55,6 @@ public class WildcardURI {
             uri.normalize();
         } catch (UnsupportedEncodingException | URISyntaxException e) {
             LOG.warn("failed to encoded uri: " + path, e);
-            e.printStackTrace();
             throw new UserException("invalid input path {} " + path);
         }
     }
