@@ -15,7 +15,7 @@ Status JsonDocumentStreamParser::parse(uint8_t* data, size_t len, size_t allocat
         _data = data;
         _len = len;
 
-        _doc_stream = _parser->iterate_many(data, len);
+        _doc_stream = _parser->iterate_many(data, len, len);
 
         _doc_stream_itr = _doc_stream.begin();
 
