@@ -810,9 +810,4 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     public boolean needAuditEncryption() {
         return true;
     }
-
-    @Override
-    public String toString() {
-        return AST2SQL.toString(this);
-    }
 }
