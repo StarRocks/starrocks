@@ -40,6 +40,7 @@ import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.stream.Stream;
 
 public class MetaHelper {
     private static final Logger LOG = LogManager.getLogger(MetaHelper.class);
@@ -152,14 +153,22 @@ public class MetaHelper {
 
         Path imageDir = Paths.get(Config.meta_dir + GlobalStateMgr.IMAGE_DIR);
         Path bdbDir = Paths.get(BDBEnvironment.getBdbDir());
-        boolean haveImageData = Files.exists(imageDir) &&
-                Files.walk(imageDir).anyMatch(path -> path.getFileName().toString().startsWith("image."));
-        boolean haveBDBData = Files.exists(bdbDir) &&
-                Files.walk(bdbDir).anyMatch(path -> path.getFileName().toString().endsWith(".jdb"));
+        boolean haveImageData = false;
+        if (Files.exists(imageDir)) {
+            try (Stream<Path> stream = Files.walk(imageDir)) {
+                haveImageData = stream.anyMatch(path -> path.getFileName().toString().startsWith("image."));
+            }
+        }
+        boolean haveBDBData = false;
+        if (Files.exists(bdbDir)) {
+            try (Stream<Path> stream = Files.walk(bdbDir)) {
+                haveBDBData = stream.anyMatch(path -> path.getFileName().toString().endsWith(".jdb"));
+            }
+        }
         if (haveImageData && !haveBDBData && !Config.start_with_incomplete_meta) {
             LOG.error("image exists, but bdb dir is empty, " +
-                    "set start_with_incomplete_meta to true if you want to start with incomplete meta, " +
-                    "but this is very dangerous.");
+                    "set start_with_incomplete_meta to true if you want to forcefully recover from image data, " +
+                    "this may end with stale meta data, so please be careful.");
             throw new InvalidMetaDirException();
         }
     }
