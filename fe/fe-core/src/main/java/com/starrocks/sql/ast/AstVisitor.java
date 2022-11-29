@@ -470,6 +470,10 @@ public abstract class AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
+    public R visitCreateProcedure(CreateProcedureStmt createProcedureStmt, C context) {
+        return visitDDLStatement(createProcedureStmt, context);
+    }
+
     // ---------------------------------------- LOAD Statement----------------------------------------------------------
 
     public R visitLoadStatement(LoadStmt statement, C context) {

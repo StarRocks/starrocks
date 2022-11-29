@@ -139,6 +139,7 @@ import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.CreateIndexClause;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
+import com.starrocks.sql.ast.CreateProcedureStmt;
 import com.starrocks.sql.ast.CreateRepositoryStmt;
 import com.starrocks.sql.ast.CreateResourceGroupStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
@@ -2609,6 +2610,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitSetStatement(StarRocksParser.SetStatementContext context) {
+        if (context.callStatement() != null) {
+            return new SetStmt(Lists.newArrayList((SetVar) visit(context.callStatement())));
+        }
         List<SetVar> propertyList = visit(context.setVar(), SetVar.class);
         return new SetStmt(propertyList);
     }
@@ -2632,6 +2636,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 return new SetVar(variable, expr);
             }
         }
+    }
+
+    @Override
+    public ParseNode visitCallStatement(StarRocksParser.CallStatementContext context) {
+        List<Expr> arguments = visit(context.expression(), Expr.class);
+        FunctionName fnName = FunctionName.createFnName(context.qualifiedName().getText());
+        FunctionCallExpr expr = new FunctionCallExpr(fnName, arguments);
+        return new UserVariable(context.userVariable().identifierOrString().getText(), expr);
     }
 
     @Override
@@ -3706,6 +3718,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         return new CreateFunctionStmt(functionType, FunctionName.createFnName(functionName),
                 getFunctionArgsDef(context.typeList()), returnTypeDef, intermediateType, properties);
+    }
+
+    @Override
+    public ParseNode visitCreateProcedureStatement(StarRocksParser.CreateProcedureStatementContext context) {
+        String name = context.qualifiedName().getText();
+        List<CreateProcedureStmt.ProcArgType> args = context.procParam().stream()
+                .map(i -> new CreateProcedureStmt.ProcArgType(new TypeDef(getType(i.type())), i.paramType.getText()))
+                .collect(toList());
+        Map<String, String> properties = getProperties(context.properties());
+        return new CreateProcedureStmt(name, args, properties);
     }
 
     // ------------------------------------------- Privilege Statement -------------------------------------------------

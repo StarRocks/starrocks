@@ -91,14 +91,14 @@ public class CreateFunctionStmt extends DdlStmt {
                     .build();
 
     private static class UDFInternalClass {
-        public Class clazz = null;
+        public Class<?> clazz = null;
         public Map<String, Method> methods = null;
 
         public String getCanonicalName() {
             return clazz.getCanonicalName();
         }
 
-        public void setClazz(Class clazz) {
+        public void setClazz(Class<?> clazz) {
             this.clazz = clazz;
         }
 
@@ -139,15 +139,15 @@ public class CreateFunctionStmt extends DdlStmt {
             }
         }
 
-        private void checkParamJavaType(Method method, Class expType, Parameter p) throws AnalysisException {
+        private void checkParamJavaType(Method method, Class<?> expType, Parameter p) throws AnalysisException {
             checkJavaType(method, expType, p.getType(), p.getName());
         }
 
-        private void checkReturnJavaType(Method method, Class expType) throws AnalysisException {
+        private void checkReturnJavaType(Method method, Class<?> expType) throws AnalysisException {
             checkJavaType(method, expType, method.getReturnType(), RETURN_FIELD_NAME);
         }
 
-        private void checkJavaType(Method method, Class expType, Class ptype, String pname)
+        private void checkJavaType(Method method, Class<?> expType, Class<?> ptype, String pname)
                 throws AnalysisException {
             if (!expType.equals(ptype)) {
                 throw new AnalysisException(
@@ -174,7 +174,7 @@ public class CreateFunctionStmt extends DdlStmt {
             checkUdfType(method, expType, method.getReturnType(), RETURN_FIELD_NAME);
         }
 
-        private void checkUdfType(Method method, Type expType, Class ptype, String pname)
+        private void checkUdfType(Method method, Type expType, Class<?> ptype, String pname)
                 throws AnalysisException {
             if (!(expType instanceof ScalarType)) {
                 throw new AnalysisException(
