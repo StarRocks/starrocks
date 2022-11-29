@@ -134,8 +134,8 @@ TEST_F(ArrayExprTest, test_evaluate) {
         std::unique_ptr<Expr> expr(ExprsTestHelper::create_array_expr(type_arr_str));
         expr->add_child(new_mock_expr(ColumnTestHelper::build_column<Slice>({"a", "ab", ""}), type_varchar));
         expr->add_child(new_mock_expr(ColumnTestHelper::build_column<Slice>({"", "bcd", "xyz"}), type_varchar));
-        expr->add_child(new_mock_expr(ColumnTestHelper::build_nullable_column<std::string>({"x", "", "x"}, {0, 1, 0}),
-                                      type_varchar));
+        expr->add_child(
+                new_mock_expr(ColumnTestHelper::build_nullable_column<Slice>({"x", "", "x"}, {0, 1, 0}), type_varchar));
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_EQ(3, result->size());
 
