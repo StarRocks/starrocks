@@ -198,7 +198,7 @@ public class HdfsUtil {
         FileChannel channel = null;
         HdfsWriter writer = new HdfsWriter(destFilePath, brokerDesc);
         ByteBuffer byteBuffer = ByteBuffer.allocate(READ_BUFFER_SIZE_B);
-        try (FileInputStream inputFs = new FileInputStream(srcFilePath)){
+        try (FileInputStream inputFs = new FileInputStream(srcFilePath)) {
             writer.open();
             channel = inputFs.getChannel();
             while (true) {
