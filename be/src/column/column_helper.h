@@ -349,9 +349,29 @@ public:
             result_offset += __builtin_popcount(m);                             \
         }                                                                       \
     }
+
+// In theory we should put k1 in clobbers.
+// But since we compile code with AVX2, k1 register is not used.
+#define AVX512F_ASM_COPY(SHIFT, MASK, WIDTH)                    \
+    {                                                           \
+        auto m = (mask >> SHIFT) & MASK;                        \
+        if (m) {                                                \
+            T* src = data + start_offset + SHIFT;               \
+            T* dst = data + result_offset;                      \
+            __asm__ volatile(                                   \
+                    "vmovdqu32 (%[s]), %%zmm1\n"                \
+                    "kmovw %[mask], %%k1\n"                     \
+                    "vpcompressd %%zmm1, %%zmm0%{%%k1%}%{z%}\n" \
+                    "vmovdqu32 %%zmm0, (%[d])\n"                \
+                    : [s] "+r"(src), [d] "+r"(dst)              \
+                    : [mask] "r"(m)                             \
+                    : "zmm0", "zmm1", "memory");                \
+            result_offset += __builtin_popcount(m);             \
+        }                                                       \
+    }
                 if constexpr (avx512f && sizeof(T) == 4) {
-                    AVX512F_COPY(0, 0xffff, 32);
-                    AVX512F_COPY(16, 0xffff, 32);
+                    AVX512F_ASM_COPY(0, 0xffff, 32);
+                    AVX512F_ASM_COPY(16, 0xffff, 32);
                 } else {
                     phmap::priv::BitMask<uint32_t, 32> bitmask(mask);
                     for (auto idx : bitmask) {
