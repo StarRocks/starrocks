@@ -60,7 +60,7 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
         for (String column : columns) {
             String sql = buildCollectMCV(db, table, mcvSize, column);
             StatisticExecutor statisticExecutor = new StatisticExecutor();
-            List<TStatisticData> mcv = statisticExecutor.queryMCV(sql);
+            List<TStatisticData> mcv = statisticExecutor.queryMCV(context, sql);
 
             Map<String, String> mostCommonValues = new HashMap<>();
             for (TStatisticData tStatisticData : mcv) {
