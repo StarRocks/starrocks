@@ -332,7 +332,6 @@ Status CSVReader::more_lines() {
             _buff.skip(1);
             break;
 
-        // TODO: review ESCAPE
         case ESCAPE:
             // escape enclose
             if (*(_buff.position()) == _enclose) {
@@ -359,13 +358,13 @@ Status CSVReader::more_lines() {
 
         case ORDINARY:
             // newline
-            if (isRowDelimiter(notGetLine)) {
+            if (UNLIKELY(isRowDelimiter(notGetLine))) {
                 curState = NEWLINE;
                 break;
             }
 
             // delimiter
-            if (isColumnSeparator(notGetLine)) {
+            if (UNLIKELY(isColumnSeparator(notGetLine))) {
                 curState = DELIMITER;
                 break;
             }
