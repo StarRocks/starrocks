@@ -262,8 +262,15 @@ public class GlobalStateMgr {
     public static final long NEXT_ID_INIT_VALUE = 10000;
     private static final int STATE_CHANGE_CHECK_INTERVAL_MS = 100;
     private static final int REPLAY_INTERVAL_MS = 1;
+<<<<<<< HEAD
     private static final String BDB_DIR = "/bdb";
     private static final String IMAGE_DIR = "/image";
+=======
+    public static final String IMAGE_DIR = "/image";
+    // will break the loop and refresh in-memory data after at most 10w logs or at most 1 seconds
+    private static final long REPLAYER_MAX_MS_PER_LOOP = 1000L;
+    private static final long REPLAYER_MAX_LOGS_PER_LOOP = 100000L;
+>>>>>>> a6074ce01 ([Enhancement] Add meta incomplete check (#14246))
 
     private String metaDir;
     private String bdbDir;

@@ -35,6 +35,7 @@ import com.starrocks.journal.bdbje.BDBEnvironment;
 import com.starrocks.journal.bdbje.BDBJEJournal;
 import com.starrocks.journal.bdbje.BDBTool;
 import com.starrocks.journal.bdbje.BDBToolOptions;
+import com.starrocks.leader.MetaHelper;
 import com.starrocks.qe.CoordinatorMonitor;
 import com.starrocks.qe.QeService;
 import com.starrocks.server.GlobalStateMgr;
@@ -101,6 +102,12 @@ public class StarRocksFE {
             // check command line options
             checkCommandLineOptions(cmdLineOpts);
 
+<<<<<<< HEAD
+=======
+            // check meta dir
+            MetaHelper.checkMetaDir();
+
+>>>>>>> a6074ce01 ([Enhancement] Add meta incomplete check (#14246))
             LOG.info("StarRocks FE starting...");
 
             FrontendOptions.init();
