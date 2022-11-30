@@ -7,8 +7,7 @@
 #include "exprs/vectorized/function_helper.h"
 #include "udf/udf.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 class HashFunctions {
 public:
     /**
@@ -18,8 +17,8 @@ public:
     DEFINE_VECTORIZED_FN(murmur_hash3_32);
 };
 
-inline ColumnPtr HashFunctions::murmur_hash3_32(FunctionContext* context,
-                                                const starrocks::vectorized::Columns& columns) {
+inline StatusOr<ColumnPtr> HashFunctions::murmur_hash3_32(FunctionContext* context,
+                                                          const starrocks::vectorized::Columns& columns) {
     std::vector<ColumnViewer<TYPE_VARCHAR>> viewers;
 
     viewers.reserve(columns.size());
@@ -48,5 +47,4 @@ inline ColumnPtr HashFunctions::murmur_hash3_32(FunctionContext* context,
     return builder.build(ColumnHelper::is_all_const(columns));
 }
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

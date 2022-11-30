@@ -5,7 +5,7 @@
 #include <vector>
 
 #include "column/datum.h"
-#include "column/schema.h"
+#include "column/vectorized_schema.h"
 #include "storage/short_key_index.h"
 
 namespace starrocks::vectorized {
@@ -17,7 +17,8 @@ public:
     // default is infinite.
     SeekTuple() = default;
 
-    SeekTuple(Schema schema, std::vector<Datum> values) : _schema(std::move(schema)), _values(std::move(values)) {
+    SeekTuple(VectorizedSchema schema, std::vector<Datum> values)
+            : _schema(std::move(schema)), _values(std::move(values)) {
 #ifndef NDEBUG
         if (_schema.sort_key_idxes().empty()) {
             // Ensure the columns are continuous and started from zero.
@@ -30,7 +31,7 @@ public:
 
     bool empty() const { return _values.empty(); }
 
-    const Schema& schema() const { return _schema; }
+    const VectorizedSchema& schema() const { return _schema; }
 
     size_t columns() const { return _values.size(); }
 
@@ -42,12 +43,12 @@ public:
     // appended at the tail.
     std::string short_key_encode(size_t num_short_keys, uint8_t padding) const;
 
-    void convert_to(SeekTuple* new_tuple, const std::vector<FieldType>& new_types) const;
+    void convert_to(SeekTuple* new_tuple, const std::vector<LogicalType>& new_types) const;
 
     std::string debug_string() const;
 
 private:
-    Schema _schema;
+    VectorizedSchema _schema;
     std::vector<Datum> _values;
 };
 

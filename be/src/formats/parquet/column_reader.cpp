@@ -185,8 +185,7 @@ public:
     Status prepare_batch(size_t* num_records, ColumnContentType content_type, vectorized::Column* dst) override {
         vectorized::NullableColumn* nullable_column = nullptr;
         vectorized::MapColumn* map_column = nullptr;
-        if (_field->is_nullable) {
-            DCHECK(dst->is_nullable());
+        if (dst->is_nullable()) {
             nullable_column = down_cast<vectorized::NullableColumn*>(dst);
             DCHECK(nullable_column->mutable_data_column()->is_map());
             map_column = down_cast<vectorized::MapColumn*>(nullable_column->mutable_data_column());
@@ -232,7 +231,7 @@ public:
         bool has_null = false;
 
         // ParquetFiled Map -> Map<Struct<key,value>>
-        def_rep_to_offset(_field->children[0].level_info, def_levels, rep_levels, num_levels, &offsets[0], &is_nulls[0],
+        def_rep_to_offset(_field->level_info, def_levels, rep_levels, num_levels, &offsets[0], &is_nulls[0],
                           &num_offsets, &has_null);
         offsets.resize(num_offsets + 1);
         is_nulls.resize(num_offsets);
@@ -245,8 +244,7 @@ public:
             value_column->append_default(offsets.back());
         }
 
-        if (_field->is_nullable) {
-            DCHECK(dst->is_nullable());
+        if (dst->is_nullable()) {
             DCHECK(nullable_column != nullptr);
             nullable_column->mutable_null_column()->swap_column(null_column);
             nullable_column->set_has_null(has_null);
@@ -286,8 +284,7 @@ public:
     Status prepare_batch(size_t* num_records, ColumnContentType content_type, vectorized::Column* dst) override {
         vectorized::NullableColumn* nullable_column = nullptr;
         vectorized::StructColumn* struct_column = nullptr;
-        if (_field->is_nullable) {
-            DCHECK(dst->is_nullable());
+        if (dst->is_nullable()) {
             nullable_column = down_cast<vectorized::NullableColumn*>(dst);
             DCHECK(nullable_column->mutable_data_column()->is_struct());
             struct_column = down_cast<vectorized::StructColumn*>(nullable_column->mutable_data_column());
@@ -305,8 +302,7 @@ public:
             RETURN_IF_ERROR(_child_readers[i]->prepare_batch(num_records, content_type, child_column));
         }
 
-        if (_field->is_nullable) {
-            DCHECK(dst->is_nullable());
+        if (dst->is_nullable()) {
             DCHECK(nullable_column != nullptr);
             // Assume all rows are not null in struct level.
             // Use subfield's NullableColumn instead.
@@ -332,13 +328,13 @@ private:
 
 Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField* field, const TypeDescriptor& col_type,
                             std::unique_ptr<ColumnReader>* output) {
-    if (field->type.type == PrimitiveType::TYPE_ARRAY) {
+    if (field->type.type == LogicalType::TYPE_ARRAY) {
         std::unique_ptr<ColumnReader> child_reader;
         RETURN_IF_ERROR(ColumnReader::create(opts, &field->children[0], col_type.children[0], &child_reader));
         std::unique_ptr<ListColumnReader> reader(new ListColumnReader(opts));
         RETURN_IF_ERROR(reader->init(field, std::move(child_reader)));
         *output = std::move(reader);
-    } else if (field->type.type == PrimitiveType::TYPE_MAP) {
+    } else if (field->type.type == LogicalType::TYPE_MAP) {
         std::unique_ptr<ColumnReader> key_reader;
         // ParquetFiled Map -> Map<Struct<key,value>>
         DCHECK(field->children[0].type.type == TYPE_STRUCT);
@@ -355,7 +351,7 @@ Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField*
         std::unique_ptr<MapColumnReader> reader(new MapColumnReader(opts));
         RETURN_IF_ERROR(reader->init(field, std::move(key_reader), std::move(value_reader)));
         *output = std::move(reader);
-    } else if (field->type.type == PrimitiveType::TYPE_STRUCT) {
+    } else if (field->type.type == LogicalType::TYPE_STRUCT) {
         // build tmp mapping for ParquetField
         std::unordered_map<std::string, size_t> field_name_2_pos;
         for (size_t i = 0; i < field->children.size(); i++) {

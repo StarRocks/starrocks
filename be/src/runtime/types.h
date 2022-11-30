@@ -37,7 +37,7 @@ class TypeInfo;
 // Describes a type. Includes the enum, children types, and any type-specific metadata
 // (e.g. precision and scale for decimals).
 struct TypeDescriptor {
-    PrimitiveType type{INVALID_TYPE};
+    LogicalType type{TYPE_UNKNOWN};
     /// Only meaningful for type TYPE_CHAR/TYPE_VARCHAR/TYPE_HLL
     int len{-1};
     static constexpr int MAX_VARCHAR_LENGTH = 1048576;
@@ -67,9 +67,9 @@ struct TypeDescriptor {
     // Only set if type == TYPE_MAP || type == TYPE_STRUCT.
     std::vector<bool> selected_fields;
 
-    TypeDescriptor() {}
+    TypeDescriptor() = default;
 
-    explicit TypeDescriptor(PrimitiveType type) : type(type), len(-1), precision(-1), scale(-1) {}
+    explicit TypeDescriptor(LogicalType type) : type(type) {}
 
     static TypeDescriptor create_char_type(int len) {
         TypeDescriptor ret;
@@ -123,7 +123,7 @@ struct TypeDescriptor {
         return ret;
     }
 
-    static TypeDescriptor create_decimalv3_type(PrimitiveType type, int precision, int scale) {
+    static TypeDescriptor create_decimalv3_type(LogicalType type, int precision, int scale) {
         DCHECK(type == TYPE_DECIMAL32 || type == TYPE_DECIMAL64 || type == TYPE_DECIMAL128);
         DCHECK_LE(precision, MAX_PRECISION);
         DCHECK_LE(scale, MAX_SCALE);
@@ -142,7 +142,7 @@ struct TypeDescriptor {
         return ret;
     }
 
-    static TypeDescriptor from_primtive_type(PrimitiveType type,
+    static TypeDescriptor from_primtive_type(LogicalType type,
                                              [[maybe_unused]] int len = TypeDescriptor::MAX_VARCHAR_LENGTH,
                                              [[maybe_unused]] int precision = 27, [[maybe_unused]] int scale = 9) {
         switch (type) {
@@ -199,7 +199,7 @@ struct TypeDescriptor {
             return true;
         }
         if (is_decimal_type()) {
-            return type == o.type && scale == o.scale;
+            return type == o.type && precision == o.precision && scale == o.scale;
         } else {
             return type == o.type;
         }

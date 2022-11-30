@@ -32,7 +32,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
-import com.staros.proto.ShardStorageInfo;
+import com.staros.proto.FilePathInfo;
 import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.KeysDesc;
@@ -423,7 +423,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 }
 
                 // save table names for recycling
-                Set<String> tableNames = db.getTableNamesWithLock();
+                Set<String> tableNames = new HashSet(db.getTableNamesViewWithLock());
                 runnableList = unprotectDropDb(db, isForceDrop, false);
                 if (!isForceDrop) {
                     recycleBin.recycleDatabase(db, tableNames);
@@ -479,7 +479,7 @@ public class LocalMetastore implements ConnectorMetadata {
             Database db = fullNameToDb.get(dbName);
             db.writeLock();
             try {
-                Set<String> tableNames = db.getTableNamesWithLock();
+                Set<String> tableNames = new HashSet(db.getTableNamesViewWithLock());
                 runnableList = unprotectDropDb(db, isForceDrop, true);
                 if (!isForceDrop) {
                     recycleBin.recycleDatabase(db, tableNames);
@@ -2065,8 +2065,8 @@ public class LocalMetastore implements ConnectorMetadata {
                 }
 
                 // get service shard storage info from StarMgr
-                ShardStorageInfo shardStorageInfo = stateMgr.getStarOSAgent().getServiceShardStorageInfo();
-                ((LakeTable) olapTable).setStorageInfo(shardStorageInfo, enableStorageCache,
+                FilePathInfo pathInfo = stateMgr.getStarOSAgent().allocateFilePath(tableId);
+                ((LakeTable) olapTable).setStorageInfo(pathInfo, enableStorageCache,
                         storageCacheTtlS, allowAsyncWriteBack);
 
             } else {
@@ -2656,7 +2656,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
         int bucketNum = distributionInfo.getBucketNum();
         List<Long> shardIds = stateMgr.getStarOSAgent().createShards(bucketNum,
-                table.getPartitionShardStorageInfo(partitionId), partitionId);
+                table.getPartitionFilePathInfo(partitionId), table.getPartitionFileCacheInfo(partitionId), partitionId);
         for (long shardId : shardIds) {
             Tablet tablet = new LakeTablet(shardId);
             index.addTablet(tablet, tabletMeta);
@@ -2934,7 +2934,7 @@ public class LocalMetastore implements ConnectorMetadata {
         if (fullNameToDb.containsKey(name)) {
             return fullNameToDb.get(name);
         } else {
-            // This maybe a information_schema db request, and information_schema db name is case insensitive.
+            // This maybe an information_schema db request, and information_schema db name is case-insensitive.
             // So, we first extract db name to check if it is information_schema.
             // Then we reassemble the origin cluster name with lower case db name,
             // and finally get information_schema db from the name map.
@@ -3537,7 +3537,7 @@ public class LocalMetastore implements ConnectorMetadata {
             LiteralExpr startExpr = sortedRange.get(partitionNum - limit).lowerEndpoint().getKeys().get(0);
             LiteralExpr endExpr = sortedRange.get(partitionNum - 1).upperEndpoint().getKeys().get(0);
             String partitionStart = AnalyzerUtils.parseLiteralExprToDateString(startExpr, 0);
-            String partitionEnd = AnalyzerUtils.parseLiteralExprToDateString(endExpr, 1);;
+            String partitionEnd = AnalyzerUtils.parseLiteralExprToDateString(endExpr, 1);
             HashMap<String, String> taskRunProperties = new HashMap<>();
             taskRunProperties.put(TaskRun.PARTITION_START, partitionStart);
             taskRunProperties.put(TaskRun.PARTITION_END, partitionEnd);

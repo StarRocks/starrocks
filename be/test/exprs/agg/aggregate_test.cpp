@@ -76,7 +76,7 @@ ColumnPtr gen_input_column1() {
     return column;
 }
 
-template <PrimitiveType PT>
+template <LogicalType PT>
 ColumnPtr gen_input_decimal_column1(const FunctionContext::TypeDesc* type_desc) {
     auto column = RunTimeColumnType<PT>::create(type_desc->precision, type_desc->scale);
     for (int i = 0; i < 1024; i++) {
@@ -175,7 +175,7 @@ ColumnPtr gen_input_column2<DateValue>() {
     return column;
 }
 
-template <PrimitiveType PT>
+template <LogicalType PT>
 ColumnPtr gen_input_decimal_column2(const FunctionContext::TypeDesc* type_desc) {
     auto column = RunTimeColumnType<PT>::create(type_desc->precision, type_desc->scale);
     for (int i = 2000; i < 3000; i++) {
@@ -221,7 +221,7 @@ void test_agg_function(FunctionContext* ctx, const AggregateFunction* func, TRes
     ASSERT_EQ(merge_result, result_column->get_data()[2]);
 }
 
-template <PrimitiveType PT, typename TResult = RunTimeCppType<TYPE_DECIMAL128>, typename = DecimalPTGuard<PT>>
+template <LogicalType PT, typename TResult = RunTimeCppType<TYPE_DECIMAL128>, typename = DecimalPTGuard<PT>>
 void test_decimal_agg_function(FunctionContext* ctx, const AggregateFunction* func, TResult update_result1,
                                TResult update_result2, TResult merge_result) {
     using ResultColumn = RunTimeColumnType<TYPE_DECIMAL128>;

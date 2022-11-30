@@ -48,7 +48,7 @@
 #include "runtime/load_channel_mgr.h"
 #include "runtime/load_path_mgr.h"
 #include "runtime/mem_tracker.h"
-#include "runtime/memory/chunk_allocator.h"
+#include "runtime/memory/mem_chunk_allocator.h"
 #include "runtime/profile_report_worker.h"
 #include "runtime/result_buffer_mgr.h"
 #include "runtime/result_queue_mgr.h"
@@ -59,7 +59,6 @@
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/transaction_mgr.h"
-#include "runtime/thread_resource_mgr.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/starlet_location_provider.h"
 #include "storage/lake/tablet_manager.h"
@@ -138,7 +137,6 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     _backend_client_cache = new BackendServiceClientCache(config::max_client_cache_size_per_host);
     _frontend_client_cache = new FrontendServiceClientCache(config::max_client_cache_size_per_host);
     _broker_client_cache = new BrokerServiceClientCache(config::max_client_cache_size_per_host);
-    _thread_mgr = new ThreadResourceMgr();
     // query_context_mgr keeps slotted map with 64 slot to reduce contention
     _query_context_mgr = new pipeline::QueryContextManager(6);
     RETURN_IF_ERROR(_query_context_mgr->init());
@@ -390,7 +388,7 @@ Status ExecEnv::init_mem_tracker() {
     int64_t consistency_mem_limit = calc_max_consistency_memory(process_mem_tracker()->limit());
     _consistency_mem_tracker = regist_tracker(consistency_mem_limit, "consistency", process_mem_tracker());
 
-    ChunkAllocator::init_instance(_chunk_allocator_mem_tracker.get(), config::chunk_reserved_bytes_limit);
+    MemChunkAllocator::init_instance(_chunk_allocator_mem_tracker.get(), config::chunk_reserved_bytes_limit);
 
     SetMemTrackerForColumnPool op(column_pool_mem_tracker());
     vectorized::ForEach<vectorized::ColumnPoolList>(op);
@@ -460,7 +458,6 @@ void ExecEnv::_destroy() {
     SAFE_DELETE(_connector_scan_executor_with_workgroup);
     SAFE_DELETE(_runtime_filter_cache);
     SAFE_DELETE(_thread_pool);
-    SAFE_DELETE(_thread_mgr);
 
     if (_lake_tablet_manager != nullptr) {
         _lake_tablet_manager->prune_metacache();

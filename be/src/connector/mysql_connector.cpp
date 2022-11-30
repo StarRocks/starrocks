@@ -51,6 +51,7 @@ Status MySQLDataSource::_init_params(RuntimeState* state) {
 
     _columns = _provider->_mysql_scan_node.columns;
     _filters = _provider->_mysql_scan_node.filters;
+    _temporal_clause = _provider->_mysql_scan_node.temporal_clause;
 
     _table_name = _provider->_mysql_scan_node.table_name;
 
@@ -109,7 +110,7 @@ Status MySQLDataSource::open(RuntimeState* state) {
         SlotId slot_id = slot_ids[0];
         auto iter = slot_by_id.find(slot_id);
         if (iter != slot_by_id.end()) {
-            PrimitiveType type = iter->second->type().type;
+            LogicalType type = iter->second->type().type;
             // dipatch to process,
             // we support numerical type, char type and date type.
             switch (type) {
@@ -152,7 +153,7 @@ Status MySQLDataSource::open(RuntimeState* state) {
 #undef APPLY_FOR_VARCHAR_DATE_TYPE
 #undef CONVERT_APPEND_TO_SQL
 
-            case INVALID_TYPE:
+            case TYPE_UNKNOWN:
             case TYPE_NULL:
             case TYPE_BINARY:
             case TYPE_DECIMAL:
@@ -173,13 +174,22 @@ Status MySQLDataSource::open(RuntimeState* state) {
             case TYPE_JSON:
             case TYPE_FUNCTION:
             case TYPE_VARBINARY:
+            case TYPE_UNSIGNED_TINYINT:
+            case TYPE_UNSIGNED_SMALLINT:
+            case TYPE_UNSIGNED_INT:
+            case TYPE_UNSIGNED_BIGINT:
+            case TYPE_DISCRETE_DOUBLE:
+            case TYPE_DATE_V1:
+            case TYPE_DATETIME_V1:
+            case TYPE_NONE:
+            case TYPE_MAX_VALUE:
                 break;
             }
         }
     }
 
-    RETURN_IF_ERROR(
-            _mysql_scanner->query(_table_name, _columns, _filters, filters_in, filters_null_in_set, _read_limit));
+    RETURN_IF_ERROR(_mysql_scanner->query(_table_name, _columns, _filters, filters_in, filters_null_in_set, _read_limit,
+                                          _temporal_clause));
     // check materialize slot num
     int materialize_num = 0;
 
@@ -248,7 +258,7 @@ int64_t MySQLDataSource::num_bytes_read() const {
 }
 
 int64_t MySQLDataSource::cpu_time_spent() const {
-    return _cpu_time_spent_ns;
+    return _cpu_time_ns;
 }
 
 void MySQLDataSource::close(RuntimeState* state) {
@@ -256,7 +266,7 @@ void MySQLDataSource::close(RuntimeState* state) {
 }
 
 Status MySQLDataSource::fill_chunk(vectorized::ChunkPtr* chunk, char** data, size_t* length) {
-    SCOPED_RAW_TIMER(&_cpu_time_spent_ns);
+    SCOPED_RAW_TIMER(&_cpu_time_ns);
 
     int materialized_col_idx = -1;
     for (size_t col_idx = 0; col_idx < _slot_num; ++col_idx) {
@@ -465,7 +475,7 @@ Status MySQLDataSource::append_text_to_column(const char* data, const int& len, 
     return Status::OK();
 }
 
-template <PrimitiveType PT, typename CppType>
+template <LogicalType PT, typename CppType>
 void MySQLDataSource::append_value_to_column(Column* column, CppType& value) {
     using ColumnType = typename vectorized::RunTimeColumnType<PT>;
 

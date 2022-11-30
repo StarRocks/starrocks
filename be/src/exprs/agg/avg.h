@@ -13,35 +13,35 @@
 namespace starrocks::vectorized {
 
 // AvgResultPT for final result
-template <PrimitiveType PT, typename = guard::Guard>
+template <LogicalType PT, typename = guard::Guard>
 struct AvgResultTrait {
-    static const PrimitiveType value = PT;
+    static const LogicalType value = PT;
 };
-template <PrimitiveType PT>
+template <LogicalType PT>
 struct AvgResultTrait<PT, ArithmeticPTGuard<PT>> {
-    static const PrimitiveType value = TYPE_DOUBLE;
+    static const LogicalType value = TYPE_DOUBLE;
 };
-template <PrimitiveType PT>
+template <LogicalType PT>
 struct AvgResultTrait<PT, DecimalPTGuard<PT>> {
-    static const PrimitiveType value = TYPE_DECIMAL128;
+    static const LogicalType value = TYPE_DECIMAL128;
 };
 
-template <PrimitiveType PT>
-inline constexpr PrimitiveType AvgResultPT = AvgResultTrait<PT>::value;
+template <LogicalType PT>
+inline constexpr LogicalType AvgResultPT = AvgResultTrait<PT>::value;
 
 // ImmediateAvgResultPT for immediate accumulated result
-template <PrimitiveType PT, typename = guard::Guard>
-inline constexpr PrimitiveType ImmediateAvgResultPT = PT;
+template <LogicalType PT, typename = guard::Guard>
+inline constexpr LogicalType ImmediateAvgResultPT = PT;
 
-template <PrimitiveType PT>
-inline constexpr PrimitiveType ImmediateAvgResultPT<PT, AvgDoublePTGuard<PT>> = TYPE_DOUBLE;
+template <LogicalType PT>
+inline constexpr LogicalType ImmediateAvgResultPT<PT, AvgDoublePTGuard<PT>> = TYPE_DOUBLE;
 
-template <PrimitiveType PT>
-inline constexpr PrimitiveType ImmediateAvgResultPT<PT, AvgDecimal64PTGuard<PT>> = TYPE_DECIMAL64;
+template <LogicalType PT>
+inline constexpr LogicalType ImmediateAvgResultPT<PT, AvgDecimal64PTGuard<PT>> = TYPE_DECIMAL64;
 
 // Only for compile
-template <PrimitiveType PT>
-inline constexpr PrimitiveType ImmediateAvgResultPT<PT, StringPTGuard<PT>> = TYPE_DOUBLE;
+template <LogicalType PT>
+inline constexpr LogicalType ImmediateAvgResultPT<PT, StringPTGuard<PT>> = TYPE_DOUBLE;
 
 template <typename T>
 struct AvgAggregateState {
@@ -49,7 +49,7 @@ struct AvgAggregateState {
     int64_t count = 0;
 };
 
-template <PrimitiveType PT, typename T = RunTimeCppType<PT>, PrimitiveType ImmediatePT = ImmediateAvgResultPT<PT>,
+template <LogicalType PT, typename T = RunTimeCppType<PT>, LogicalType ImmediatePT = ImmediateAvgResultPT<PT>,
           typename ImmediateType = RunTimeCppType<ImmediatePT>>
 class AvgAggregateFunction final
         : public AggregateFunctionBatchHelper<AvgAggregateState<ImmediateType>,
@@ -247,7 +247,7 @@ public:
 
     std::string get_name() const override { return "avg"; }
 };
-template <PrimitiveType PT, typename = DecimalPTGuard<PT>>
+template <LogicalType PT, typename = DecimalPTGuard<PT>>
 using DecimalAvgAggregateFunction =
         AvgAggregateFunction<PT, RunTimeCppType<PT>, TYPE_DECIMAL128, RunTimeCppType<TYPE_DECIMAL128>>;
 

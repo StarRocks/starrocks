@@ -56,7 +56,7 @@ public:
     // Factory function for BloomFilter
     static Status create(BloomFilterAlgorithmPB algorithm, std::unique_ptr<BloomFilter>* bf);
 
-    BloomFilter() {}
+    BloomFilter() = default;
 
     virtual ~BloomFilter() { delete[] _data; }
 

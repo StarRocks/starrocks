@@ -21,5 +21,6 @@ public enum RuleSetType {
     INLINE_CTE,
     INTERSECT_REWRITE,
     SINGLE_TABLE_MV_REWRITE,
+    MULTI_TABLE_MV_REWRITE,
     NUM_RULE_SET;
 }

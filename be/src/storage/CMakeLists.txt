@@ -110,7 +110,6 @@ add_library(Storage STATIC
     task/engine_clone_task.cpp
     task/engine_storage_migration_task.cpp
     task/engine_alter_tablet_task.cpp
-    column_vector.cpp
     aggregate_iterator.cpp
     async_delta_writer.cpp
     chunk_helper.cpp
@@ -136,6 +135,8 @@ add_library(Storage STATIC
     tablet_reader.cpp
     tablet_reader_params.cpp
     meta_reader.cpp
+    lake_meta_reader.cpp
+    olap_meta_reader.cpp
     seek_tuple.cpp
     union_iterator.cpp
     unique_iterator.cpp

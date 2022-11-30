@@ -62,6 +62,8 @@ public:
     void set_cache_operator(const query_cache::CacheOperatorPtr& cache_operator) { _cache_operator = cache_operator; }
     void set_ticket_checker(query_cache::TicketCheckerPtr& ticket_checker) { _ticket_checker = ticket_checker; }
 
+    void set_query_ctx(const QueryContextPtr& query_ctx);
+
 protected:
     static constexpr size_t kIOTaskBatchSize = 64;
 
@@ -91,7 +93,7 @@ private:
                                    int64_t scan_bytes);
     void _detach_chunk_sources();
 
-    void _merge_chunk_source_profiles();
+    void _merge_chunk_source_profiles(RuntimeState* state);
     size_t _buffer_unplug_threshold() const;
 
     // emit EOS chunk when we receive the last chunk of the tablet.

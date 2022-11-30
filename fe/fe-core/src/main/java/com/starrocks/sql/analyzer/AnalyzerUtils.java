@@ -462,7 +462,7 @@ public class AnalyzerUtils {
         } else if (srcType.isArrayType()) {
             newType = new ArrayType(transformType(((ArrayType) srcType).getItemType()));
         } else {
-            throw new SemanticException("Unsupported CTAS transform type: %s", srcType.getPrimitiveType());
+            throw new SemanticException("Unsupported CTAS transform type: %s", srcType);
         }
         return newType;
     }

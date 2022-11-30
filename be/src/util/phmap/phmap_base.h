@@ -1836,16 +1836,16 @@ template <typename T>
 constexpr copy_traits get_ctor_copy_traits() {
     return std::is_copy_constructible<T>::value
                    ? copy_traits::copyable
-                   : std::is_move_constructible<T>::value ? copy_traits::movable : copy_traits::non_movable;
+                   : (std::is_move_constructible<T>::value ? copy_traits::movable : copy_traits::non_movable);
 }
 
 template <typename T>
 constexpr copy_traits get_assign_copy_traits() {
     return phmap::is_copy_assignable<T>::value && std::is_copy_constructible<T>::value
                    ? copy_traits::copyable
-                   : phmap::is_move_assignable<T>::value && std::is_move_constructible<T>::value
-                             ? copy_traits::movable
-                             : copy_traits::non_movable;
+                   : (phmap::is_move_assignable<T>::value && std::is_move_constructible<T>::value
+                              ? copy_traits::movable
+                              : copy_traits::non_movable);
 }
 
 // Whether T is constructible or convertible from optional<U>.
@@ -2332,7 +2332,7 @@ constexpr auto operator==(const optional<T>& x, const optional<U>& y)
         -> decltype(optional_internal::convertible_to_bool(*x == *y)) {
     return static_cast<bool>(x) != static_cast<bool>(y)
                    ? false
-                   : static_cast<bool>(x) == false ? true : static_cast<bool>(*x == *y);
+                   : (static_cast<bool>(x) == false ? true : static_cast<bool>(*x == *y));
 }
 
 // Returns: If bool(x) != bool(y), true; otherwise, if bool(x) == false, false;
@@ -2342,7 +2342,7 @@ constexpr auto operator!=(const optional<T>& x, const optional<U>& y)
         -> decltype(optional_internal::convertible_to_bool(*x != *y)) {
     return static_cast<bool>(x) != static_cast<bool>(y)
                    ? true
-                   : static_cast<bool>(x) == false ? false : static_cast<bool>(*x != *y);
+                   : (static_cast<bool>(x) == false ? false : static_cast<bool>(*x != *y));
 }
 // Returns: If !y, false; otherwise, if !x, true; otherwise *x < *y.
 template <typename T, typename U>

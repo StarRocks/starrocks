@@ -12,9 +12,9 @@ namespace starrocks::vectorized {
 
 PARALLEL_TEST(MapFunctionsTest, test_map_function) {
     TypeDescriptor type_map_int_int;
-    type_map_int_int.type = PrimitiveType::TYPE_MAP;
-    type_map_int_int.children.emplace_back(TypeDescriptor(PrimitiveType::TYPE_INT));
-    type_map_int_int.children.emplace_back(TypeDescriptor(PrimitiveType::TYPE_INT));
+    type_map_int_int.type = LogicalType::TYPE_MAP;
+    type_map_int_int.children.emplace_back(TypeDescriptor(LogicalType::TYPE_INT));
+    type_map_int_int.children.emplace_back(TypeDescriptor(LogicalType::TYPE_INT));
 
     auto column = ColumnHelper::create_column(type_map_int_int, true);
 
@@ -64,7 +64,7 @@ PARALLEL_TEST(MapFunctionsTest, test_map_function) {
     //   0
     //   NULL
 
-    auto result = MapFunctions::map_size(nullptr, {column});
+    auto result = MapFunctions::map_size(nullptr, {column}).value();
     EXPECT_EQ(6, result->size());
 
     ASSERT_FALSE(result->get(0).is_null());
@@ -100,7 +100,7 @@ PARALLEL_TEST(MapFunctionsTest, test_map_function) {
     //   [2]
     //   []
     //   NULL
-    auto result_keys = MapFunctions::map_keys(nullptr, {column});
+    auto result_keys = MapFunctions::map_keys(nullptr, {column}).value();
     EXPECT_EQ(6, result->size());
 
     EXPECT_EQ(3, result_keys->get(0).get_array().size());
@@ -134,7 +134,7 @@ PARALLEL_TEST(MapFunctionsTest, test_map_function) {
     //   [99]
     //   []
     //   NULL
-    auto result_values = MapFunctions::map_values(nullptr, {column});
+    auto result_values = MapFunctions::map_values(nullptr, {column}).value();
     EXPECT_EQ(6, result->size());
 
     EXPECT_EQ(3, result_values->get(0).get_array().size());

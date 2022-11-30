@@ -78,7 +78,7 @@ public:
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
                     size_t end) const override {
         DCHECK_GT(end, start);
-        Int64Column* column = down_cast<Int64Column*>(dst);
+        auto* column = down_cast<Int64Column*>(dst);
         for (size_t i = start; i < end; ++i) {
             column->get_data()[i] = this->data(state).count;
         }
@@ -91,7 +91,7 @@ public:
 
     void batch_serialize(FunctionContext* ctx, size_t chunk_size, const Buffer<AggDataPtr>& agg_states,
                          size_t state_offset, Column* to) const override {
-        Int64Column* column = down_cast<Int64Column*>(to);
+        auto* column = down_cast<Int64Column*>(to);
         Buffer<int64_t>& result_data = column->get_data();
         for (size_t i = 0; i < chunk_size; i++) {
             result_data.emplace_back(this->data(agg_states[i] + state_offset).count);
@@ -283,7 +283,7 @@ public:
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
                     size_t end) const override {
         DCHECK_GT(end, start);
-        Int64Column* column = down_cast<Int64Column*>(dst);
+        auto* column = down_cast<Int64Column*>(dst);
         for (size_t i = start; i < end; ++i) {
             column->get_data()[i] = this->data(state).count;
         }
@@ -296,7 +296,7 @@ public:
 
     void batch_serialize(FunctionContext* ctx, size_t chunk_size, const Buffer<AggDataPtr>& agg_states,
                          size_t state_offset, Column* to) const override {
-        Int64Column* column = down_cast<Int64Column*>(to);
+        auto* column = down_cast<Int64Column*>(to);
         Buffer<int64_t>& result_data = column->get_data();
         for (size_t i = 0; i < chunk_size; i++) {
             result_data.emplace_back(this->data(agg_states[i] + state_offset).count);
@@ -310,7 +310,7 @@ public:
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
                                      ColumnPtr* dst) const override {
-        Int64Column* column = down_cast<Int64Column*>((*dst).get());
+        auto* column = down_cast<Int64Column*>((*dst).get());
         if (src[0]->is_nullable()) {
             const auto* nullable_column = down_cast<const NullableColumn*>(src[0].get());
             if (nullable_column->has_null()) {

@@ -7,12 +7,14 @@
 #include "column/json_column.h"
 #include "common/logging.h"
 #include "exec/vectorized/sorting/sorting.h"
+#include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/primitive_type_infra.h"
 #include "storage/chunk_helper.h"
 #include "storage/memtable_sink.h"
 #include "storage/primary_key_encoder.h"
+#include "storage/tablet_schema.h"
 #include "util/starrocks_metrics.h"
 #include "util/time.h"
 
@@ -22,13 +24,14 @@ namespace starrocks::vectorized {
 static const string LOAD_OP_COLUMN = "__op";
 static const size_t kPrimaryKeyLimitSize = 128;
 
-Schema MemTable::convert_schema(const TabletSchema* tablet_schema, const std::vector<SlotDescriptor*>* slot_descs) {
-    Schema schema = ChunkHelper::convert_schema_to_format_v2(*tablet_schema);
+VectorizedSchema MemTable::convert_schema(const TabletSchema* tablet_schema,
+                                          const std::vector<SlotDescriptor*>* slot_descs) {
+    VectorizedSchema schema = ChunkHelper::convert_schema_to_format_v2(*tablet_schema);
     if (tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && slot_descs != nullptr &&
         slot_descs->back()->col_name() == LOAD_OP_COLUMN) {
         // load slots have __op field, so add to _vectorized_schema
-        auto op_column = std::make_shared<starrocks::vectorized::Field>((ColumnId)-1, LOAD_OP_COLUMN,
-                                                                        FieldType::OLAP_FIELD_TYPE_TINYINT, false);
+        auto op_column = std::make_shared<starrocks::vectorized::VectorizedField>((ColumnId)-1, LOAD_OP_COLUMN,
+                                                                                  LogicalType::TYPE_TINYINT, false);
         op_column->set_aggregate_method(OLAP_FIELD_AGGREGATION_REPLACE);
         schema.append(op_column);
     }
@@ -44,7 +47,7 @@ void MemTable::_init_aggregator_if_needed() {
     }
 }
 
-MemTable::MemTable(int64_t tablet_id, const Schema* schema, const std::vector<SlotDescriptor*>* slot_descs,
+MemTable::MemTable(int64_t tablet_id, const VectorizedSchema* schema, const std::vector<SlotDescriptor*>* slot_descs,
                    MemTableSink* sink, std::string merge_condition, MemTracker* mem_tracker)
         : _tablet_id(tablet_id),
           _vectorized_schema(schema),
@@ -60,7 +63,7 @@ MemTable::MemTable(int64_t tablet_id, const Schema* schema, const std::vector<Sl
     _init_aggregator_if_needed();
 }
 
-MemTable::MemTable(int64_t tablet_id, const Schema* schema, const std::vector<SlotDescriptor*>* slot_descs,
+MemTable::MemTable(int64_t tablet_id, const VectorizedSchema* schema, const std::vector<SlotDescriptor*>* slot_descs,
                    MemTableSink* sink, MemTracker* mem_tracker)
         : _tablet_id(tablet_id),
           _vectorized_schema(schema),
@@ -76,7 +79,7 @@ MemTable::MemTable(int64_t tablet_id, const Schema* schema, const std::vector<Sl
     _init_aggregator_if_needed();
 }
 
-MemTable::MemTable(int64_t tablet_id, const Schema* schema, MemTableSink* sink, int64_t max_buffer_size,
+MemTable::MemTable(int64_t tablet_id, const VectorizedSchema* schema, MemTableSink* sink, int64_t max_buffer_size,
                    MemTracker* mem_tracker)
         : _tablet_id(tablet_id),
           _vectorized_schema(schema),
@@ -195,7 +198,7 @@ Status MemTable::finalize() {
                 int64_t t2 = MonotonicMicros();
                 _aggregate(true);
                 int64_t t3 = MonotonicMicros();
-                VLOG(1) << Substitute("memtable final sort:$0 agg:$1 total:$2", t2 - t1, t3 - t2, t3 - t1);
+                VLOG(1) << strings::Substitute("memtable final sort:$0 agg:$1 total:$2", t2 - t1, t3 - t2, t3 - t1);
             } else {
                 // if there is only one data chunk and merge once,
                 // no need to perform an additional merge.
@@ -280,7 +283,7 @@ void MemTable::_merge() {
     int64_t t2 = MonotonicMicros();
     _aggregate(false);
     int64_t t3 = MonotonicMicros();
-    VLOG(1) << Substitute("memtable sort:$0 agg:$1 total:$2", t2 - t1, t3 - t2, t3 - t1);
+    VLOG(1) << strings::Substitute("memtable sort:$0 agg:$1 total:$2", t2 - t1, t3 - t2, t3 - t1);
     ++_merge_count;
 }
 

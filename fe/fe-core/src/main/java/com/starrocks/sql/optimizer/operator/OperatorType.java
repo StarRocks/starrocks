@@ -100,6 +100,7 @@ public enum OperatorType {
     DICT_MAPPING,
     CLONE,
     LAMBDA_FUNCTION,
+    LAMBDA_ARGUMENT,
     SUBQUERY,
     SUBFIELD,
 
@@ -111,4 +112,11 @@ public enum OperatorType {
     PATTERN_MULTI_LEAF,
     // for all type scan node
     PATTERN_SCAN,
+    // for extracting pattern like this
+    //     join
+    //    /    \
+    //  join   table
+    //  /  \
+    // table table
+    PATTERN_MULTIJOIN,
 }

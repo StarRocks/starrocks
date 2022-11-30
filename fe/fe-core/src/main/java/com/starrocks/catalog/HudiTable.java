@@ -344,7 +344,7 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
     @Override
     public void onDrop(Database db, boolean force, boolean replay) {
         if (isResourceMappingCatalog(getCatalogName())) {
-            GlobalStateMgr.getCurrentState().getMetadataMgr().dropTable(getCatalogName(), hiveDbName, hiveTableName);
+            GlobalStateMgr.getCurrentState().getMetadataMgr().dropTable(getCatalogName(), db.getFullName(), name);
         }
     }
 

@@ -44,17 +44,13 @@ set(RUNTIME_FILES
     mem_pool.cpp
     plan_fragment_executor.cpp
     primitive_type.cpp
-    raw_value.cpp
     result_sink.cpp
     result_buffer_mgr.cpp
     runtime_state.cpp
     string_value.cpp
-    thread_resource_mgr.cpp
-    decimal_value.cpp
     decimalv2_value.cpp
     large_int_value.cpp
     fragment_mgr.cpp
-    dpp_sink_internal.cpp
     load_path_mgr.cpp
     types.cpp
     mem_tracker.cpp
@@ -84,7 +80,7 @@ set(RUNTIME_FILES
     statistic_result_writer.cpp
     variable_result_writer.cpp
     memory/system_allocator.cpp
-    memory/chunk_allocator.cpp
+    memory/mem_chunk_allocator.cpp
     chunk_cursor.cpp
     sorted_chunks_merger.cpp
     time_types.cpp

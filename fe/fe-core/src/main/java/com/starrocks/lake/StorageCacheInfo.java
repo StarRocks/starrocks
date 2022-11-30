@@ -3,7 +3,7 @@
 package com.starrocks.lake;
 
 import com.google.gson.annotations.SerializedName;
-import com.staros.proto.CacheInfo;
+import com.staros.proto.FileCacheInfo;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
 
@@ -15,18 +15,18 @@ public class StorageCacheInfo implements GsonPreProcessable, GsonPostProcessable
     // 0 indicates "disable cache"
     @SerializedName(value = "cacheInfoBytes")
     private byte[] cacheInfoBytes;
-    private CacheInfo cacheInfo;
+    private FileCacheInfo cacheInfo;
 
-    public StorageCacheInfo(CacheInfo cacheInfo) {
+    public StorageCacheInfo(FileCacheInfo cacheInfo) {
         this.cacheInfo = cacheInfo;
     }
 
-    public StorageCacheInfo(boolean enableCache, long cacheTtlS, boolean allowAsyncWriteBack) {
-        this.cacheInfo = CacheInfo.newBuilder().setEnableCache(enableCache).setTtlSeconds(cacheTtlS)
-                .setAllowAsyncWriteBack(allowAsyncWriteBack).build();
+    public StorageCacheInfo(boolean enableCache, long cacheTtlS, boolean asyncWriteBack) {
+        this.cacheInfo = FileCacheInfo.newBuilder().setEnableCache(enableCache).setTtlSeconds(cacheTtlS)
+                .setAsyncWriteBack(asyncWriteBack).build();
     }
 
-    public CacheInfo getCacheInfo() {
+    public FileCacheInfo getCacheInfo() {
         return cacheInfo;
     }
 
@@ -39,7 +39,7 @@ public class StorageCacheInfo implements GsonPreProcessable, GsonPostProcessable
     }
 
     public boolean isAllowAsyncWriteBack() {
-        return cacheInfo.getAllowAsyncWriteBack();
+        return cacheInfo.getAsyncWriteBack();
     }
 
     @Override
@@ -52,7 +52,7 @@ public class StorageCacheInfo implements GsonPreProcessable, GsonPostProcessable
     @Override
     public void gsonPostProcess() throws IOException {
         if (cacheInfoBytes != null) {
-            cacheInfo = CacheInfo.parseFrom(cacheInfoBytes);
+            cacheInfo = FileCacheInfo.parseFrom(cacheInfoBytes);
         }
     }
 }

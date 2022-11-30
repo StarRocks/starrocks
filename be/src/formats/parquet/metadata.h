@@ -11,7 +11,7 @@ namespace starrocks::parquet {
 // Class corresponding to FileMetaData in thrift
 class FileMetaData {
 public:
-    FileMetaData() {}
+    FileMetaData() = default;
     ~FileMetaData() = default;
 
     Status init(const tparquet::FileMetaData& t_metadata);

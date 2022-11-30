@@ -100,7 +100,7 @@ public class NullLiteral extends LiteralExpr {
     }
 
     @Override
-    public Object getRealValue() {
+    public Object getRealObjectValue() {
         return getStringValue();
     }
 

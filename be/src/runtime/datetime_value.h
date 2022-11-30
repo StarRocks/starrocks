@@ -69,10 +69,9 @@ struct TimeInterval {
     int32_t microsecond{0};
     bool is_neg{false};
 
-    TimeInterval() {}
+    TimeInterval() = default;
 
-    TimeInterval(TimeUnit unit, int count, bool is_neg_param)
-            : year(0), month(0), day(0), hour(0), minute(0), second(0), microsecond(0), is_neg(is_neg_param) {
+    TimeInterval(TimeUnit unit, int count, bool is_neg_param) : is_neg(is_neg_param) {
         switch (unit) {
         case YEAR:
             year = count;

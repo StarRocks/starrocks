@@ -34,7 +34,6 @@
 #include "common/status.h"
 #include "fs/fs_util.h"
 #include "storage/data_dir.h"
-#include "storage/field.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
 #include "storage/snapshot_meta.h"
@@ -96,7 +95,7 @@ public:
     }
 
 private:
-    SnapshotManager(MemTracker* mem_tracker) : _mem_tracker(mem_tracker), _snapshot_base_id(0) {}
+    SnapshotManager(MemTracker* mem_tracker) : _mem_tracker(mem_tracker) {}
 
     std::string _calc_snapshot_id_path(const TabletSharedPtr& tablet, int64_t timeout_s);
 
@@ -112,7 +111,7 @@ private:
 
     // snapshot
     std::mutex _snapshot_mutex;
-    uint64_t _snapshot_base_id;
+    uint64_t _snapshot_base_id{0};
 }; // SnapshotManager
 
 } // namespace starrocks

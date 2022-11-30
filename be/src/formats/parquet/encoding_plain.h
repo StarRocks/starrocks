@@ -27,7 +27,7 @@ public:
         return Status::OK();
     }
 
-    Slice build() override { return Slice(_buffer.data(), _buffer.size()); }
+    Slice build() override { return {_buffer.data(), _buffer.size()}; }
 
 private:
     enum { SIZE_OF_TYPE = sizeof(T) };
@@ -42,7 +42,7 @@ public:
     ~PlainEncoder() override = default;
 
     Status append(const uint8_t* vals, size_t count) override {
-        const Slice* slices = (const Slice*)vals;
+        const auto* slices = (const Slice*)vals;
         for (int i = 0; i < count; ++i) {
             put_fixed32_le(&_buffer, static_cast<uint32_t>(slices[i].size));
             _buffer.append(slices[i].data, slices[i].size);
@@ -50,7 +50,7 @@ public:
         return Status::OK();
     }
 
-    Slice build() override { return Slice(_buffer.data(), _buffer.size()); }
+    Slice build() override { return {_buffer.data(), _buffer.size()}; }
 
 private:
     faststring _buffer;
@@ -292,7 +292,7 @@ public:
     Status append(const uint8_t* vals, size_t count) override {
         if (count == 0) return Status::OK();
 
-        const Slice* slices = (const Slice*)vals;
+        const auto* slices = (const Slice*)vals;
         _buffer.reserve(_buffer.size() + count * slices[0].size);
         for (int i = 0; i < count; ++i) {
             DCHECK_EQ(slices[0].size, slices[i].size);
@@ -301,7 +301,7 @@ public:
         return Status::OK();
     }
 
-    Slice build() override { return Slice(_buffer.data(), _buffer.size()); }
+    Slice build() override { return {_buffer.data(), _buffer.size()}; }
 
 private:
     faststring _buffer;

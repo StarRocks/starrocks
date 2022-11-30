@@ -25,7 +25,7 @@ public:
 
     virtual ~RowsetMerger() = default;
 
-    virtual Status do_merge(Tablet& tablet, int64_t version, const Schema& schema,
+    virtual Status do_merge(Tablet& tablet, int64_t version, const VectorizedSchema& schema,
                             const vector<RowsetSharedPtr>& rowsets, RowsetWriter* writer, const MergeConfig& cfg) = 0;
 };
 
@@ -40,7 +40,7 @@ struct MergeEntry {
     ChunkIteratorPtr segment_itr;
     std::unique_ptr<RowsetReleaseGuard> rowset_release_guard;
     // set |encode_schema| if require encode chunk pk columns
-    const vectorized::Schema* encode_schema = nullptr;
+    const vectorized::VectorizedSchema* encode_schema = nullptr;
     uint16_t order;
     std::vector<vectorized::RowSourceMask>* source_masks = nullptr;
 
@@ -75,7 +75,12 @@ struct MergeEntry {
         rowset_release_guard.reset();
     }
 
-    Status init() { return next(); }
+    Status init() {
+        if (segment_itr == nullptr) {
+            return Status::EndOfFile("End of merge entry iterator");
+        }
+        return next();
+    }
 
     Status next() {
         DCHECK(pk_cur == nullptr || pk_cur > pk_last);
@@ -206,8 +211,8 @@ public:
         return Status::EndOfFile("merge end");
     }
 
-    Status do_merge(Tablet& tablet, int64_t version, const Schema& schema, const vector<RowsetSharedPtr>& rowsets,
-                    RowsetWriter* writer, const MergeConfig& cfg) override {
+    Status do_merge(Tablet& tablet, int64_t version, const VectorizedSchema& schema,
+                    const vector<RowsetSharedPtr>& rowsets, RowsetWriter* writer, const MergeConfig& cfg) override {
         _chunk_size = cfg.chunk_size;
 
         size_t total_input_size = 0;
@@ -246,7 +251,7 @@ public:
     }
 
 private:
-    Status _do_merge_horizontally(Tablet& tablet, int64_t version, const Schema& schema,
+    Status _do_merge_horizontally(Tablet& tablet, int64_t version, const VectorizedSchema& schema,
                                   const vector<RowsetSharedPtr>& rowsets, RowsetWriter* writer, const MergeConfig& cfg,
                                   size_t* total_input_size, size_t* total_rows, size_t* total_chunk,
                                   OlapReaderStatistics* stats, RowSourceMaskBuffer* mask_buffer = nullptr,
@@ -385,8 +390,8 @@ private:
         }
 
         if (stats->raw_rows_read != *total_rows) {
-            string msg = Substitute("update compaction rows read($0) != rows written($1)", stats->raw_rows_read,
-                                    *total_rows);
+            string msg = strings::Substitute("update compaction rows read($0) != rows written($1)",
+                                             stats->raw_rows_read, *total_rows);
             LOG(WARNING) << msg;
             return Status::InternalError(msg);
         }
@@ -408,7 +413,8 @@ private:
             rowsets_mask_buffer.emplace_back(std::move(rowset_mask_buffer));
         }
         {
-            Schema schema = ChunkHelper::convert_schema_to_format_v2(tablet.tablet_schema(), column_groups[0]);
+            VectorizedSchema schema =
+                    ChunkHelper::convert_schema_to_format_v2(tablet.tablet_schema(), column_groups[0]);
             RETURN_IF_ERROR(_do_merge_horizontally(tablet, version, schema, rowsets, writer, cfg, total_input_size,
                                                    total_rows, total_chunk, stats, mask_buffer.get(),
                                                    &rowsets_mask_buffer));
@@ -425,7 +431,8 @@ private:
             vector<vectorized::ChunkIteratorPtr> iterators;
             iterators.reserve(rowsets.size());
             OlapReaderStatistics non_key_stats;
-            Schema schema = ChunkHelper::convert_schema_to_format_v2(tablet.tablet_schema(), column_groups[i]);
+            VectorizedSchema schema =
+                    ChunkHelper::convert_schema_to_format_v2(tablet.tablet_schema(), column_groups[i]);
             for (size_t j = 0; j < rowsets.size(); j++) {
                 const auto& rowset = rowsets[j];
                 rowsets_mask_buffer[j]->flip_to_read();
@@ -489,8 +496,9 @@ private:
             }
 
             if (non_key_stats.raw_rows_read != *total_rows) {
-                string msg = Substitute("update compaction rows read($0) != rows written($1) when merging non keys",
-                                        non_key_stats.raw_rows_read, *total_rows);
+                string msg =
+                        strings::Substitute("update compaction rows read($0) != rows written($1) when merging non keys",
+                                            non_key_stats.raw_rows_read, *total_rows);
                 LOG(WARNING) << msg;
                 return Status::InternalError(msg);
             }
@@ -513,39 +521,39 @@ private:
 
 Status compaction_merge_rowsets(Tablet& tablet, int64_t version, const vector<RowsetSharedPtr>& rowsets,
                                 RowsetWriter* writer, const MergeConfig& cfg) {
-    Schema schema = ChunkHelper::convert_schema_to_format_v2(tablet.tablet_schema());
+    VectorizedSchema schema = ChunkHelper::convert_schema_to_format_v2(tablet.tablet_schema());
     std::unique_ptr<RowsetMerger> merger;
     auto key_type = PrimaryKeyEncoder::encoded_primary_key_type(schema, schema.sort_key_idxes());
     switch (key_type) {
-    case OLAP_FIELD_TYPE_BOOL:
+    case TYPE_BOOLEAN:
         merger = std::make_unique<RowsetMergerImpl<uint8_t>>();
         break;
-    case OLAP_FIELD_TYPE_TINYINT:
+    case TYPE_TINYINT:
         merger = std::make_unique<RowsetMergerImpl<int8_t>>();
         break;
-    case OLAP_FIELD_TYPE_SMALLINT:
+    case TYPE_SMALLINT:
         merger = std::make_unique<RowsetMergerImpl<int16_t>>();
         break;
-    case OLAP_FIELD_TYPE_INT:
+    case TYPE_INT:
         merger = std::make_unique<RowsetMergerImpl<int32_t>>();
         break;
-    case OLAP_FIELD_TYPE_BIGINT:
+    case TYPE_BIGINT:
         merger = std::make_unique<RowsetMergerImpl<int64_t>>();
         break;
-    case OLAP_FIELD_TYPE_LARGEINT:
+    case TYPE_LARGEINT:
         merger = std::make_unique<RowsetMergerImpl<int128_t>>();
         break;
-    case OLAP_FIELD_TYPE_VARCHAR:
+    case TYPE_VARCHAR:
         merger = std::make_unique<RowsetMergerImpl<Slice>>();
         break;
-    case OLAP_FIELD_TYPE_DATE_V2:
+    case TYPE_DATE:
         merger = std::make_unique<RowsetMergerImpl<int32_t>>();
         break;
-    case OLAP_FIELD_TYPE_TIMESTAMP:
+    case TYPE_DATETIME:
         merger = std::make_unique<RowsetMergerImpl<int64_t>>();
         break;
     default:
-        return Status::NotSupported(StringPrintf("primary key type not support: %s", field_type_to_string(key_type)));
+        return Status::NotSupported(StringPrintf("primary key type not support: %s", logical_type_to_string(key_type)));
     }
     return merger->do_merge(tablet, version, schema, rowsets, writer, cfg);
 }

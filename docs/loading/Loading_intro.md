@@ -100,7 +100,7 @@ You can determine the loading method of your choice based on your business scena
 
 - If you load data from Kafka and the data requires multi-table joins and extract, transform and load (ETL), you can use Apache Flink® to pre-process the data and then use the [flink-connector-starrocks](../loading/Flink-connector-starrocks.md) plug-in to perform a Stream Load job to load the data into StarRocks.
 
-- If you load data from Hive, you can use [Broker Load](../loading/BrokerLoad.md) or [Spark Load](../loading/SparkLoad.md) to load the data. However, we recommend that you create an [external Hive table](../data_source/External_table.md#hive-external-table) and then use the INSERT INTO SELECT statement to load the data into the external Hive table. 
+- If you load data from Hive, you can use [Broker Load](../loading/BrokerLoad.md) or [Spark Load](../loading/SparkLoad.md) to load the data. However, we recommend that you create an [external Hive table](../data_source/External_table.md#hive-external-table) and then use the INSERT INTO SELECT statement to load the data into the external Hive table.
 
 - If you load data from MySQL databases, you can use [starrockswriter](../loading/DataX-starrocks-writer.md) to load the data. However, we recommend that you create an [external MySQL table](../data_source/External_table.md#mysql-external-table) and then load the data into the external MySQL table.
 
@@ -117,6 +117,28 @@ StarRocks provides parameters for you to limit the memory usage for each load jo
 The parameters that are used to limit memory usage vary for each loading method. For more information, see [Stream Load](../loading/StreamLoad.md), [Broker Load](../loading/BrokerLoad.md), [Routine Load](../loading/RoutineLoad.md), [Spark Load](../loading/SparkLoad.md), and [INSERT](../loading/InsertInto.md). Note that a load job usually runs on multiple BEs. Therefore, the parameters limit the memory usage of each load job on each involved BE rather than the total memory usage of the load job on all involved BEs.
 
 StarRocks also provides parameters for you to limit the total memory usage of all load jobs that run on each individual BE. For more information, see the "[System configurations](../loading/Loading_intro.md#system-configurations)" section of this topic.
+
+## Usage notes
+
+When you load data, you can choose not to load the data from a specific field of your data file:
+
+- If you have specified the `DEFAULT` keyword for the destination StarRocks table column mapping the source field when you create the StarRocks table, StarRocks automatically fills the specified default value into the destination column.
+
+  [Stream Load](../loading/StreamLoad.md), [Broker Load](../loading/BrokerLoad.md), [Routine Load](../loading/RoutineLoad.md), and [INSERT](../loading/InsertInto.md) supports `DEFAULT current_timestamp`, `DEFAULT <default_value>`, and `DEFAULT (<expression>)`. [Spark Load](../loading/SparkLoad.md) supports only `DEFAULT current_timestamp` and `DEFAULT <default_value>`.
+
+  > **NOTE**
+  >
+  > `DEFAULT (<expression>)` supports only the functions `uuid()` and`uuid_numeric()`.
+
+- If you did not specify the `DEFAULT` keyword for the destination StarRocks table column mapping the source field when you create the StarRocks table, StarRocks automatically fills `NULL` into the destination column.
+
+  > **NOTE**
+  >
+  > If the destination column is defined as `NOT NULL`, the load fails.
+
+  For [Stream Load](../loading/StreamLoad.md), [Broker Load](../loading/BrokerLoad.md), [Routine Load](../loading/RoutineLoad.md), and [Spark Load](../loading/SparkLoad.md), you can also specify the value you want to fill in the destination column by using the parameter that is used to specify column mapping.
+
+For information about the usage of `NOT NULL` and `DEFAULT`, see [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md).
 
 ## System configurations
 

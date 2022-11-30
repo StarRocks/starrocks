@@ -87,6 +87,9 @@ StatusOr<MorselPtr> FixedMorselQueue::try_get() {
     }
     idx = _pop_index.fetch_add(1);
     if (idx < _num_morsels) {
+        if (!_tablet_rowsets.empty()) {
+            _morsels[idx]->set_rowsets(std::move(_tablet_rowsets[idx]));
+        }
         return std::move(_morsels[idx]);
     } else {
         return nullptr;
@@ -159,6 +162,7 @@ StatusOr<MorselPtr> PhysicalSplitMorselQueue::try_get() {
 
     MorselPtr morsel = std::make_unique<PhysicalSplitScanMorsel>(
             scan_morsel->get_plan_node_id(), *(scan_morsel->get_scan_range()), std::move(rowid_range));
+    morsel->set_rowsets(_tablet_rowsets[_tablet_idx]);
     _inc_num_splits(_is_last_split_of_current_morsel());
     return morsel;
 }
@@ -420,6 +424,7 @@ StatusOr<MorselPtr> LogicalSplitMorselQueue::try_get() {
     auto* scan_morsel = down_cast<ScanMorsel*>(_morsels[_tablet_idx].get());
     auto morsel = std::make_unique<LogicalSplitScanMorsel>(
             scan_morsel->get_plan_node_id(), *(scan_morsel->get_scan_range()), std::move(short_key_ranges));
+    morsel->set_rowsets(_tablet_rowsets[_tablet_idx]);
     _inc_num_splits(_is_last_split_of_current_morsel());
     return morsel;
 }
@@ -565,7 +570,7 @@ Status LogicalSplitMorselQueue::_init_tablet() {
     RETURN_IF_ERROR(_largest_rowset->load());
     ASSIGN_OR_RETURN(_segment_group, _create_segment_group(_largest_rowset));
 
-    _short_key_schema = std::make_shared<vectorized::Schema>(
+    _short_key_schema = std::make_shared<vectorized::VectorizedSchema>(
             ChunkHelper::get_short_key_schema_with_format_v2(_tablets[_tablet_idx]->tablet_schema()));
     _sample_splitted_scan_blocks =
             _splitted_scan_rows * _segment_group->num_blocks() / _tablets[_tablet_idx]->num_rows();

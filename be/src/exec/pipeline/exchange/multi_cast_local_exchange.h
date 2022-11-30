@@ -1,10 +1,11 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
+#include <utility>
+
 #include "column/chunk.h"
 #include "exec/pipeline/source_operator.h"
 
-namespace starrocks {
-namespace pipeline {
+namespace starrocks::pipeline {
 
 // For uni cast stream sink, we just add a exchange sink operator
 // at the end of the pipeline. It works like
@@ -82,7 +83,7 @@ public:
                                          std::shared_ptr<MultiCastLocalExchanger> exchanger)
             : SourceOperator(factory, id, "multi_cast_local_exchange_source", plan_node_id, driver_sequence),
               _mcast_consumer_index(mcast_consumer_index),
-              _exchanger(exchanger) {}
+              _exchanger(std::move(std::move(exchanger))) {}
 
     Status prepare(RuntimeState* state) override;
 
@@ -106,7 +107,7 @@ public:
                                                 std::shared_ptr<MultiCastLocalExchanger> exchanger)
             : SourceOperatorFactory(id, "multi_cast_local_exchange_source", plan_node_id),
               _mcast_consumer_index(mcast_consumer_index),
-              _exchanger(exchanger) {}
+              _exchanger(std::move(std::move(exchanger))) {}
     ~MultiCastLocalExchangeSourceOperatorFactory() override = default;
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         return std::make_shared<MultiCastLocalExchangeSourceOperator>(this, _id, _plan_node_id, driver_sequence,
@@ -126,7 +127,7 @@ public:
                                        const int32_t driver_sequence,
                                        std::shared_ptr<MultiCastLocalExchanger> exchanger)
             : Operator(factory, id, "multi_cast_local_exchange_sink", plan_node_id, driver_sequence),
-              _exchanger(exchanger) {}
+              _exchanger(std::move(std::move(exchanger))) {}
 
     ~MultiCastLocalExchangeSinkOperator() override = default;
 
@@ -157,7 +158,8 @@ class MultiCastLocalExchangeSinkOperatorFactory final : public OperatorFactory {
 public:
     MultiCastLocalExchangeSinkOperatorFactory(int32_t id, int32_t plan_node_id,
                                               std::shared_ptr<MultiCastLocalExchanger> exchanger)
-            : OperatorFactory(id, "multi_cast_local_exchange_sink", plan_node_id), _exchanger(exchanger) {}
+            : OperatorFactory(id, "multi_cast_local_exchange_sink", plan_node_id),
+              _exchanger(std::move(std::move(exchanger))) {}
 
     ~MultiCastLocalExchangeSinkOperatorFactory() override = default;
 
@@ -170,5 +172,4 @@ private:
     std::shared_ptr<MultiCastLocalExchanger> _exchanger;
 };
 
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline

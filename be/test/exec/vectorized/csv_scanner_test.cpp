@@ -24,8 +24,8 @@ protected:
 
     std::unique_ptr<CSVScanner> create_csv_scanner(const std::vector<TypeDescriptor>& types,
                                                    const std::vector<TBrokerRangeDesc>& ranges,
-                                                   const string& multi_row_delimiter = "\n",
-                                                   const string& multi_column_separator = "|") {
+                                                   const std::string& multi_row_delimiter = "\n",
+                                                   const std::string& multi_column_separator = "|") {
         /// Init DescriptorTable
         TDescriptorTableBuilder desc_tbl_builder;
         TTupleDescriptorBuilder tuple_desc_builder;
@@ -628,7 +628,7 @@ TEST_F(CSVScannerTest, test_record_length_exceed_limit) {
 }
 
 TEST_F(CSVScannerTest, test_empty) {
-    auto run_test = [this](PrimitiveType pt) {
+    auto run_test = [this](LogicalType pt) {
         std::vector<TypeDescriptor> types{TypeDescriptor(pt)};
         if (pt == TYPE_VARCHAR || pt == TYPE_CHAR) {
             types[0].len = 10;

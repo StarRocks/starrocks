@@ -14,7 +14,7 @@ public:
             : ChunkIterator(children[0]->schema(), children[0]->chunk_size()), _children(std::move(children)) {
 #ifndef NDEBUG
         for (auto& iter : _children) {
-            const Schema& child_schema = iter->schema();
+            const VectorizedSchema& child_schema = iter->schema();
             CHECK_EQ(_schema.num_fields(), child_schema.num_fields());
             for (int i = 0; i < _schema.num_fields(); i++) {
                 CHECK_EQ(_schema.field(i)->to_string(), child_schema.field(i)->to_string());
@@ -70,7 +70,7 @@ inline Status UnionIterator::do_get_next(Chunk* chunk) {
     return Status::EndOfFile("End of union iterator");
 }
 
-inline Status UnionIterator::do_get_next(Chunk* chunk, vector<uint32_t>* rowid) {
+inline Status UnionIterator::do_get_next(Chunk* chunk, std::vector<uint32_t>* rowid) {
     while (_cur_idx < _children.size()) {
         Status res = _children[_cur_idx]->get_next(chunk, rowid);
         if (res.is_end_of_file()) {

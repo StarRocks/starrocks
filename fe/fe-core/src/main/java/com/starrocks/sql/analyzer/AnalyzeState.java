@@ -28,7 +28,6 @@ public class AnalyzeState {
     private List<Expr> outputExpressions;
     private Scope outputScope;
     private boolean isDistinct = false;
-    private Scope orderScope;
     private Expr predicate;
     private Relation relation;
     private LimitElement limit;
@@ -40,8 +39,19 @@ public class AnalyzeState {
     private List<Expr> groupingFunctionCallExprs;
 
     private List<OrderByElement> orderBy;
-
+    private Scope orderScope;
     private List<Expr> orderSourceExpressions;
+
+    /**
+     * outputExprInOrderByScope is used to record which expressions in outputExpression are to be
+     * recorded in the first level of OrderByScope (order by expressions can refer to columns in output)
+     * Which columns satisfy the condition?
+     * 1. An expression of type SlotRef.
+     * When both tables t0 and t1 contain the v1 column, select t0.v1 from t0, t1 order by v1 will
+     * refer to v1 in outputExpr instead of reporting an error.
+     * 2. There is an aliased output expression
+     */
+    private List<Integer> outputExprInOrderByScope;
 
     private List<AnalyticExpr> outputAnalytic;
     private List<AnalyticExpr> orderByAnalytic;
@@ -106,6 +116,14 @@ public class AnalyzeState {
 
     public void setOrderSourceExpressions(List<Expr> orderSourceExpressions) {
         this.orderSourceExpressions = orderSourceExpressions;
+    }
+
+    public List<Integer> getOutputExprInOrderByScope() {
+        return outputExprInOrderByScope;
+    }
+
+    public void setOutputExprInOrderByScope(List<Integer> outputExprInOrderByScope) {
+        this.outputExprInOrderByScope = outputExprInOrderByScope;
     }
 
     public List<Expr> getOutputExpressions() {

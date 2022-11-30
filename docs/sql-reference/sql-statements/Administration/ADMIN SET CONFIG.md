@@ -1,6 +1,6 @@
 # ADMIN SET CONFIG
 
-## description
+## Description
 
 This statement is used to set the configuration items for the cluster (Currently it only supports the setting of FE configuration items.). Settable configuration items can be viewed through ADMIN SHOW FRONTEND CONFIG command.
 
@@ -12,7 +12,7 @@ Syntax:
 ADMIN SET FRONTEND CONFIG ("key" = "value");
 ```
 
-## example
+## Examples
 
 1. Set 'disable_balance' as true
 

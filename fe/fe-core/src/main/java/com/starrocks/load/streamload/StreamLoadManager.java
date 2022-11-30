@@ -3,7 +3,6 @@ package com.starrocks.load.streamload;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-// import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
@@ -13,11 +12,9 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
-// import com.starrocks.common.io.Text;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.http.rest.TransactionResult;
-// import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TNetworkAddress;
 import io.netty.handler.codec.http.HttpHeaders;
@@ -59,8 +56,8 @@ public class StreamLoadManager {
         lock.readLock().unlock();
     }
 
-    public StreamLoadManager() { 
-        init(); 
+    public StreamLoadManager() {
+        init();
     }
 
     public void init() {
@@ -70,8 +67,8 @@ public class StreamLoadManager {
         lock = new ReentrantReadWriteLock(true);
     }
 
-    public void beginLoadTask(String dbName, String tableName, String label, long timeoutMillis, 
-            int channelNum, int channelId, TransactionResult resp) throws UserException {
+    public void beginLoadTask(String dbName, String tableName, String label, long timeoutMillis,
+                              int channelNum, int channelId, TransactionResult resp) throws UserException {
         StreamLoadTask task = null;
         Database db = checkDbName(dbName);
         long dbId = db.getId();
@@ -111,8 +108,8 @@ public class StreamLoadManager {
         }
     }
 
-    public StreamLoadTask createLoadTask(Database db, String tableName, String label, long timeoutMillis, 
-            int channelNum, int channelId) throws UserException {
+    public StreamLoadTask createLoadTask(Database db, String tableName, String label, long timeoutMillis,
+                                         int channelNum, int channelId) throws UserException {
         Table table;
         db.readLock();
         try {
@@ -162,7 +159,7 @@ public class StreamLoadManager {
             throw new UserException("Database[" + dbName + "] does not exist");
         }
         return db;
-    } 
+    }
 
     // add load tasks and also add to to callback factory
     private void addLoadTask(StreamLoadTask task) {
@@ -183,7 +180,7 @@ public class StreamLoadManager {
         GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().addCallback(task);
     }
 
-    public TNetworkAddress executeLoadTask(String label, int channelId, HttpHeaders headers, TransactionResult resp) 
+    public TNetworkAddress executeLoadTask(String label, int channelId, HttpHeaders headers, TransactionResult resp)
             throws UserException {
         boolean needUnLock = true;
         readLock();
@@ -206,7 +203,7 @@ public class StreamLoadManager {
         }
     }
 
-    public void prepareLoadTask(String label, int channelId, HttpHeaders headers, TransactionResult resp) 
+    public void prepareLoadTask(String label, int channelId, HttpHeaders headers, TransactionResult resp)
             throws UserException {
         boolean needUnLock = true;
         readLock();
@@ -225,8 +222,8 @@ public class StreamLoadManager {
         }
     }
 
-    public void tryPrepareLoadTaskTxn(String label, TransactionResult resp) 
-        throws UserException {
+    public void tryPrepareLoadTaskTxn(String label, TransactionResult resp)
+            throws UserException {
         boolean needUnLock = true;
         readLock();
         try {
@@ -246,7 +243,7 @@ public class StreamLoadManager {
         }
     }
 
-    public void commitLoadTask(String label, TransactionResult resp) 
+    public void commitLoadTask(String label, TransactionResult resp)
             throws UserException {
         boolean needUnLock = true;
         readLock();
@@ -265,7 +262,7 @@ public class StreamLoadManager {
         }
     }
 
-    public void rollbackLoadTask(String label, TransactionResult resp) 
+    public void rollbackLoadTask(String label, TransactionResult resp)
             throws UserException {
         boolean needUnLock = true;
         readLock();
@@ -425,7 +422,7 @@ public class StreamLoadManager {
     }
 
     public synchronized long getChecksum() {
-        return idToStreamLoadTask.size() + dbToLabelToStreamLoadTask.size();
+        return (long) idToStreamLoadTask.size() + (long) dbToLabelToStreamLoadTask.size();
     }
 
     public static StreamLoadManager loadStreamLoadManager(DataInput in) throws IOException {
@@ -441,7 +438,7 @@ public class StreamLoadManager {
                 LOG.info("discard expired task: {}", loadTask.getLabel());
                 continue;
             }
-            
+
             streamLoadManager.addLoadTask(loadTask);
         }
         return streamLoadManager;

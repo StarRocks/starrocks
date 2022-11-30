@@ -13,6 +13,8 @@ SchemaScanner::ColumnDesc SchemaVariablesScanner::_s_vars_columns[] = {
         //   name,       type,          size
         {"VARIABLE_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
         {"VARIABLE_VALUE", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"DEFAULT_VALUE", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"IS_CHANGED", TYPE_VARCHAR, sizeof(StringValue), false},
 };
 
 SchemaVariablesScanner::SchemaVariablesScanner(TVarType::type type)
@@ -60,6 +62,24 @@ Status SchemaVariablesScanner::fill_chunk(ChunkPtr* chunk) {
             // value
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(2);
+                Slice value(_begin->second.c_str(), _begin->second.length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 3: {
+            // default_value
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(3);
+                Slice value(_begin->second.c_str(), _begin->second.length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 4: {
+            // is_changed
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(4);
                 Slice value(_begin->second.c_str(), _begin->second.length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
             }

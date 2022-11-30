@@ -23,12 +23,14 @@
 
 #include <memory>
 
+#include "column/chunk.h"
 #include "exec/local_file_writer.h"
 #include "exec/plain_text_builder.h"
 #include "formats/csv/converter.h"
 #include "formats/csv/output_stream.h"
 #include "fs/fs_broker.h"
 #include "fs/fs_posix.h"
+#include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
 #include "util/date_func.h"
 #include "util/uid_util.h"

@@ -119,8 +119,8 @@ public class StatisticExecutor {
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         Table table = db.getTable(tableId);
 
-        if (!table.isOlapTable()) {
-            throw new SemanticException("Table '%s' is not a OLAP table", table.getName());
+        if (!table.isOlapOrLakeTable()) {
+            throw new SemanticException("Table '%s' is not a OLAP table or LAKE table", table.getName());
         }
 
         OlapTable olapTable = (OlapTable) table;

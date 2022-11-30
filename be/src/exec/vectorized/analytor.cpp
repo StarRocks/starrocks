@@ -112,7 +112,7 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
             ++node_idx;
             Expr* expr = nullptr;
             ExprContext* ctx = nullptr;
-            RETURN_IF_ERROR(Expr::create_tree_from_thrift(_pool, desc.nodes, nullptr, &node_idx, &expr, &ctx));
+            RETURN_IF_ERROR(Expr::create_tree_from_thrift(_pool, desc.nodes, nullptr, &node_idx, &expr, &ctx, state));
             _agg_expr_ctxs[i].emplace_back(ctx);
         }
 
@@ -208,7 +208,7 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
         }
     }
 
-    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, analytic_node.partition_exprs, &_partition_ctxs));
+    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, analytic_node.partition_exprs, &_partition_ctxs, state));
     _partition_columns.resize(_partition_ctxs.size());
     for (size_t i = 0; i < _partition_ctxs.size(); i++) {
         _partition_columns[i] = vectorized::ColumnHelper::create_column(
@@ -216,7 +216,7 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
                 _partition_ctxs[i]->root()->is_constant(), 0);
     }
 
-    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, analytic_node.order_by_exprs, &_order_ctxs));
+    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, analytic_node.order_by_exprs, &_order_ctxs, state));
     _order_columns.resize(_order_ctxs.size());
     for (size_t i = 0; i < _order_ctxs.size(); i++) {
         _order_columns[i] = vectorized::ColumnHelper::create_column(
@@ -432,8 +432,8 @@ void Analytor::create_agg_result_columns(int64_t chunk_size) {
                                                                                 _agg_fn_types[i].has_nullable_child);
             // binary column cound't call resize method like Numeric Column,
             // so we only reserve it.
-            if (_agg_fn_types[i].result_type.type == PrimitiveType::TYPE_CHAR ||
-                _agg_fn_types[i].result_type.type == PrimitiveType::TYPE_VARCHAR) {
+            if (_agg_fn_types[i].result_type.type == LogicalType::TYPE_CHAR ||
+                _agg_fn_types[i].result_type.type == LogicalType::TYPE_VARCHAR) {
                 _result_window_columns[i]->reserve(chunk_size);
             } else {
                 _result_window_columns[i]->resize(chunk_size);

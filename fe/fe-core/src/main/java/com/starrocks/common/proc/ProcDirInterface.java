@@ -24,7 +24,7 @@ package com.starrocks.common.proc;
 import com.starrocks.common.AnalysisException;
 
 public interface ProcDirInterface extends ProcNodeInterface {
-    public boolean register(String name, ProcNodeInterface node);
+    boolean register(String name, ProcNodeInterface node);
 
-    public ProcNodeInterface lookup(String name) throws AnalysisException;
+    ProcNodeInterface lookup(String name) throws AnalysisException;
 }

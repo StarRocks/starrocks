@@ -468,6 +468,9 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                     new LogicalMysqlScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
                             columnMetaToColRefMap, Operator.DEFAULT_LIMIT,
                             null, null);
+            if (node.getTemporalClause() != null) {
+                ((LogicalMysqlScanOperator) scanOperator).setTemporalClause(node.getTemporalClause());
+            }
         } else if (Table.TableType.ELASTICSEARCH.equals(node.getTable().getType())) {
             scanOperator =
                     new LogicalEsScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
@@ -668,19 +671,19 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
             throw new StarRocksPlannerException("table function not support null parameter", ErrorType.USER_ERROR);
         }
 
-        Map<ColumnRefOperator, ScalarOperator> projectMap = new HashMap<>();
+        List<Pair<ColumnRefOperator, ScalarOperator>> projectMap = new ArrayList<>();
         for (ScalarOperator scalarOperator : operator.getChildren()) {
             if (scalarOperator instanceof ColumnRefOperator) {
-                projectMap.put((ColumnRefOperator) scalarOperator, scalarOperator);
+                projectMap.add(Pair.create((ColumnRefOperator) scalarOperator, scalarOperator));
             } else {
                 ColumnRefOperator columnRefOperator =
                         columnRefFactory.create(scalarOperator, scalarOperator.getType(), scalarOperator.isNullable());
-                projectMap.put(columnRefOperator, scalarOperator);
+                projectMap.add(Pair.create(columnRefOperator, scalarOperator));
             }
         }
 
-        Operator root =
-                new LogicalTableFunctionOperator(new ColumnRefSet(outputColumns), node.getTableFunction(), projectMap);
+        Operator root = new LogicalTableFunctionOperator(
+                new ColumnRefSet(outputColumns), node.getTableFunction(), projectMap);
         return new LogicalPlan(new OptExprBuilder(root, Collections.emptyList(),
                 new ExpressionMapping(new Scope(RelationId.of(node), node.getRelationFields()), outputColumns)),
                 null, null);

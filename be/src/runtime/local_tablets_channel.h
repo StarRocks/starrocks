@@ -72,12 +72,12 @@ private:
         explicit WriteContext(PTabletWriterAddBatchResult* response)
                 : _response_lock(),
                   _response(response),
-                  _latch(nullptr),
+
                   _chunk(),
                   _row_indexes(),
                   _channel_row_idx_start_points() {}
 
-        ~WriteContext() {
+        ~WriteContext() noexcept {
             if (_latch) _latch->count_down();
         }
 
@@ -114,7 +114,7 @@ private:
 
         mutable bthread::Mutex _response_lock;
         PTabletWriterAddBatchResult* _response;
-        BThreadCountDownLatch* _latch;
+        BThreadCountDownLatch* _latch{nullptr};
 
         vectorized::Chunk _chunk;
         std::unique_ptr<uint32_t[]> _row_indexes;

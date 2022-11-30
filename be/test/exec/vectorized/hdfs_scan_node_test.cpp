@@ -57,13 +57,13 @@ vectorized::ChunkPtr HdfsScanNodeTest::_create_chunk() {
     vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
 
     auto col1 =
-            vectorized::ColumnHelper::create_column(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT), true);
-    auto col2 = vectorized::ColumnHelper::create_column(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BIGINT),
+            vectorized::ColumnHelper::create_column(TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT), true);
+    auto col2 =
+            vectorized::ColumnHelper::create_column(TypeDescriptor::from_primtive_type(LogicalType::TYPE_BIGINT), true);
+    auto col3 = vectorized::ColumnHelper::create_column(TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR),
                                                         true);
-    auto col3 = vectorized::ColumnHelper::create_column(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR),
+    auto col4 = vectorized::ColumnHelper::create_column(TypeDescriptor::from_primtive_type(LogicalType::TYPE_DATETIME),
                                                         true);
-    auto col4 = vectorized::ColumnHelper::create_column(
-            TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_DATETIME), true);
     chunk->append_column(col1, 0);
     chunk->append_column(col2, 1);
     chunk->append_column(col3, 2);
@@ -219,16 +219,12 @@ std::shared_ptr<TPlanNode> HdfsScanNodeTest::_create_tplan_node_for_filter_parti
 DescriptorTbl* HdfsScanNodeTest::_create_table_desc() {
     TDescriptorTableBuilder table_desc_builder;
     TSlotDescriptorBuilder slot_desc_builder;
-    auto slot1 =
-            slot_desc_builder.type(PrimitiveType::TYPE_INT).column_name("col1").column_pos(0).nullable(true).build();
+    auto slot1 = slot_desc_builder.type(LogicalType::TYPE_INT).column_name("col1").column_pos(0).nullable(true).build();
     auto slot2 =
-            slot_desc_builder.type(PrimitiveType::TYPE_BIGINT).column_name("col2").column_pos(1).nullable(true).build();
+            slot_desc_builder.type(LogicalType::TYPE_BIGINT).column_name("col2").column_pos(1).nullable(true).build();
     auto slot3 = slot_desc_builder.string_type(255).column_name("col3").column_pos(2).nullable(true).build();
-    auto slot4 = slot_desc_builder.type(PrimitiveType::TYPE_DATETIME)
-                         .column_name("col4")
-                         .column_pos(3)
-                         .nullable(true)
-                         .build();
+    auto slot4 =
+            slot_desc_builder.type(LogicalType::TYPE_DATETIME).column_name("col4").column_pos(3).nullable(true).build();
     TTupleDescriptorBuilder tuple_desc_builder;
     tuple_desc_builder.add_slot(slot1);
     tuple_desc_builder.add_slot(slot2);
@@ -255,16 +251,12 @@ DescriptorTbl* HdfsScanNodeTest::_create_table_desc() {
 DescriptorTbl* HdfsScanNodeTest::_create_table_desc_for_filter_partition() {
     TDescriptorTableBuilder table_desc_builder;
     TSlotDescriptorBuilder slot_desc_builder;
-    auto slot1 =
-            slot_desc_builder.type(PrimitiveType::TYPE_INT).column_name("col1").column_pos(0).nullable(true).build();
+    auto slot1 = slot_desc_builder.type(LogicalType::TYPE_INT).column_name("col1").column_pos(0).nullable(true).build();
     auto slot2 =
-            slot_desc_builder.type(PrimitiveType::TYPE_BIGINT).column_name("col2").column_pos(1).nullable(true).build();
+            slot_desc_builder.type(LogicalType::TYPE_BIGINT).column_name("col2").column_pos(1).nullable(true).build();
     auto slot3 = slot_desc_builder.string_type(255).column_name("col3").column_pos(2).nullable(true).build();
-    auto slot4 = slot_desc_builder.type(PrimitiveType::TYPE_DATETIME)
-                         .column_name("col4")
-                         .column_pos(3)
-                         .nullable(true)
-                         .build();
+    auto slot4 =
+            slot_desc_builder.type(LogicalType::TYPE_DATETIME).column_name("col4").column_pos(3).nullable(true).build();
     TTupleDescriptorBuilder tuple_desc_builder;
     tuple_desc_builder.add_slot(slot1);
     tuple_desc_builder.add_slot(slot2);

@@ -1,22 +1,23 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
-#include "storage/cumulative_compaction.h"
+#include "storage/default_compaction_policy.h"
 
 #include <fmt/format.h>
 #include <gtest/gtest.h>
 
 #include <memory>
 
-#include "column/schema.h"
+#include "column/vectorized_schema.h"
 #include "fs/fs_util.h"
 #include "runtime/exec_env.h"
+#include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
 #include "storage/compaction.h"
 #include "storage/compaction_context.h"
 #include "storage/compaction_manager.h"
 #include "storage/compaction_utils.h"
-#include "storage/default_compaction_policy.h"
+#include "storage/cumulative_compaction.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
@@ -35,7 +36,7 @@ public:
             _engine = nullptr;
         }
     }
-    void write_new_version(TabletMetaSharedPtr tablet_meta) {
+    void write_new_version(const TabletMetaSharedPtr& tablet_meta) {
         RowsetWriterContext rowset_writer_context;
         create_rowset_writer_context(&rowset_writer_context, _version);
         _version++;
@@ -52,7 +53,7 @@ public:
         tablet_meta->add_rs_meta(src_rowset->rowset_meta());
     }
 
-    void write_specify_version(TabletSharedPtr tablet, int64_t version) {
+    void write_specify_version(const TabletSharedPtr& tablet, int64_t version) {
         RowsetWriterContext rowset_writer_context;
         create_rowset_writer_context(&rowset_writer_context, version);
         std::unique_ptr<RowsetWriter> rowset_writer;
@@ -68,7 +69,7 @@ public:
         ASSERT_TRUE(tablet->add_rowset(src_rowset).ok());
     }
 
-    void write_delete_version(TabletMetaSharedPtr tablet_meta, int64_t version) {
+    void write_delete_version(const TabletMetaSharedPtr& tablet_meta, int64_t version) {
         RowsetWriterContext rowset_writer_context;
         create_rowset_writer_context(&rowset_writer_context, version);
         std::unique_ptr<RowsetWriter> rowset_writer;
@@ -165,25 +166,27 @@ public:
     void rowset_writer_add_rows(std::unique_ptr<RowsetWriter>& writer) {
         std::vector<std::string> test_data;
         auto schema = ChunkHelper::convert_schema_to_format_v2(*_tablet_schema);
-        auto chunk = ChunkHelper::new_chunk(schema, 1024);
-        for (size_t i = 0; i < 1024; ++i) {
-            test_data.push_back("well" + std::to_string(i));
-            auto& cols = chunk->columns();
-            cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
-            Slice field_1(test_data[i]);
-            cols[1]->append_datum(vectorized::Datum(field_1));
-            cols[2]->append_datum(vectorized::Datum(static_cast<int32_t>(10000 + i)));
+        for (size_t j = 0; j < 8; ++j) {
+            auto chunk = ChunkHelper::new_chunk(schema, 128);
+            for (size_t i = 0; i < 128; ++i) {
+                test_data.push_back("well" + std::to_string(i));
+                auto& cols = chunk->columns();
+                cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
+                Slice field_1(test_data[i]);
+                cols[1]->append_datum(vectorized::Datum(field_1));
+                cols[2]->append_datum(vectorized::Datum(static_cast<int32_t>(10000 + i)));
+            }
+            CHECK_OK(writer->add_chunk(*chunk));
         }
-        CHECK_OK(writer->add_chunk(*chunk));
     }
 
-    void init_compaction_context(TabletSharedPtr tablet) {
+    void init_compaction_context(const TabletSharedPtr& tablet) {
         std::unique_ptr<CompactionContext> compaction_context = std::make_unique<CompactionContext>();
         compaction_context->policy = std::make_unique<DefaultCumulativeBaseCompactionPolicy>(tablet.get());
         tablet->set_compaction_context(compaction_context);
     }
 
-    Status compact(TabletSharedPtr tablet) {
+    Status compact(const TabletSharedPtr& tablet) {
         if (!tablet->need_compaction()) {
             LOG(WARNING) << "no need compact";
             return Status::InternalError("no need compact");
@@ -801,6 +804,35 @@ TEST_F(DefaultCompactionPolicyTest, test_missed_and_delete_version) {
         ASSERT_EQ(6, versions[1].first);
         ASSERT_EQ(7, versions[1].second);
     }
+}
+
+TEST_F(DefaultCompactionPolicyTest, test_multi_segment_cumulative_compaction) {
+    LOG(INFO) << "test_multi_segment_cumulative_compaction";
+    create_tablet_schema(UNIQUE_KEYS);
+
+    config::max_segment_file_size = 128;
+    DeferOp defer([&] { config::max_segment_file_size = 1073741824; });
+
+    TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
+    create_tablet_meta(tablet_meta.get());
+
+    write_new_version(tablet_meta);
+
+    TabletSharedPtr tablet =
+            Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
+    tablet->init();
+    init_compaction_context(tablet);
+
+    auto res = compact(tablet);
+    ASSERT_TRUE(res.ok());
+
+    ASSERT_EQ(1, tablet->version_count());
+    ASSERT_EQ(1, tablet->cumulative_layer_point());
+    std::vector<Version> versions;
+    tablet->list_versions(&versions);
+    ASSERT_EQ(1, versions.size());
+    ASSERT_EQ(0, versions[0].first);
+    ASSERT_EQ(0, versions[0].second);
 }
 
 } // namespace starrocks::vectorized

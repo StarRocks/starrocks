@@ -1,26 +1,27 @@
-# QueryDump Interface Documentation
+# QueryDump interface
 
-This page describes how to use the QueryDump feature of StarRocks.
+This topic describes how to use the QueryDump interface of StarRocks.
 
-If you encounter any of the following problems when executing SQL queries with starrocks, you can use QueryDump feature to send the SQL and related information to StarRocks, and StarRocks will assist in troubleshooting the problem at the first time.
+If you encounter any of the following issues when executing SQL queries with StarRocks, you can use QueryDump to send the SQL and related information to StarRocks technical support, and StarRocks will assist in troubleshooting at the first time.
 
-* Execute SQL or Explain return `Unknow Error`.
-* Execute SQL and return an error message or exception that isn't normally returned.
-* Execute SQL isn't as efficient as expected, or the execution plan is found to have optimization points (e.g. partitions can be prune, Join order adjusted)
+* `Unknown Error` is returned when you execute SQL or EXPLAIN.
+* An error message or exception is returned when you execute SQL.
+* Executing SQL isn't as efficient as expected, or the execution plan can be optimized (for example, partitions can be pruned or Join order can be adjusted).
 
 ## Feature
+
 The QueryDump interface will return the information that FE relies on when executing SQL, including:
 
-1. the query statement
-2. the create statement of table
-3. session variables
-4. the number of BEs
-5. statistics information (Min, Max values)
-6. exception information (exception stack)
+* Query statement
+* Table creation statement
+* Session variables
+* Number of BEs
+* Statistics information (Min, Max values)
+* Exception information (exception stack)
 
+## HTTP interface
 
-## Http Interface
-Http Post
+HTTP Post
 
 ```shell
  fe_host:fe_http_port/api/query_dump?db=${database} post_data=${Query}
@@ -34,16 +35,17 @@ Parameter description:
 
 * query_file: the file containing the query
 * dump_file: the output file
-* db: the database where the SQL is executed, the db parameter is optional when include `use db` in the query, otherwise it needs to be specified
+* db: the database where the SQL is executed. The `db` parameter is optional if the query includes `use db`. Otherwise, it must be specified.
 
-E.g. 
+Example
 
 ```shell
 wget --user=root --password=123 --post-file query_file http://127.0.0.1:8130/api/query_dump?db=tpch -O dump_file
 ```
 
-## Retrun Data
-The format of the returned data is json. e.g.
+## Return data
+
+Data is returned in JSON format.
 
 ```json
 {
@@ -72,5 +74,3 @@ The format of the returned data is json. e.g.
   "exception": []
 }
 ```
-
-

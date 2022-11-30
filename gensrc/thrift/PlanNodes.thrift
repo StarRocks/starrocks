@@ -68,6 +68,7 @@ enum TPlanNodeType {
   STREAM_SCAN_NODE,
   STREAM_JOIN_NODE,
   STREAM_AGG_NODE,
+  LAKE_META_SCAN_NODE,
 }
 
 // phases of an execution node
@@ -316,6 +317,7 @@ struct TMySQLScanNode {
   3: required list<string> columns
   4: required list<string> filters
   5: optional i64 limit
+  6: optional string temporal_clause
 }
 
 struct TFileScanNode {

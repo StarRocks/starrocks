@@ -31,7 +31,6 @@
 #include <sstream>
 #include <string>
 
-#include "runtime/decimal_value.h"
 #include "util/hash_util.hpp"
 #include "util/integer_util.h"
 

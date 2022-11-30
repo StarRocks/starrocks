@@ -17,7 +17,7 @@ public:
     virtual Status get_bytes(const uint8_t** buffer, size_t offset, size_t* nbytes, bool peek) = 0;
     virtual void seek_to(uint64_t offset) = 0;
     virtual void skip(uint64_t nbytes) = 0;
-    virtual ~IBufferedInputStream() {}
+    virtual ~IBufferedInputStream() = default;
 };
 
 class DefaultBufferedInputStream : public IBufferedInputStream {

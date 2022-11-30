@@ -4,14 +4,7 @@ package com.starrocks.sql.optimizer;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.TableName;
-import com.starrocks.catalog.Database;
-import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.PartitionInfo;
-import com.starrocks.catalog.SinglePartitionInfo;
-import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
-import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.Explain;
@@ -22,7 +15,6 @@ import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.cost.CostEstimate;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.join.ReorderJoinRule;
@@ -55,13 +47,12 @@ import com.starrocks.sql.optimizer.rule.tree.UseSortAggregateRule;
 import com.starrocks.sql.optimizer.task.OptimizeGroupTask;
 import com.starrocks.sql.optimizer.task.RewriteTreeTask;
 import com.starrocks.sql.optimizer.task.TaskContext;
-import com.starrocks.sql.optimizer.transformer.LogicalPlan;
+import com.starrocks.sql.optimizer.validate.OptExpressionValidator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Collections;
 import java.util.List;
-import java.util.Set;
 
 /**
  * Optimizer's entrance class
@@ -110,7 +101,7 @@ public class Optimizer {
         OptimizerTraceUtil.logOptExpression(connectContext, "origin logicOperatorTree:\n%s", logicOperatorTree);
         TaskContext rootTaskContext =
                 new TaskContext(context, requiredProperty, requiredColumns.clone(), Double.MAX_VALUE);
-        logicOperatorTree = logicalRuleRewrite(logicOperatorTree, rootTaskContext);
+        logicOperatorTree = rewriteAndValidatePlan(logicOperatorTree, rootTaskContext);
         OptimizerTraceUtil.log(connectContext, "after logical rewrite, new logicOperatorTree:\n%s", logicOperatorTree);
         return logicOperatorTree;
     }
@@ -126,9 +117,9 @@ public class Optimizer {
      * @return the lowest cost physical operator for this query
      */
     private OptExpression optimizeByCost(ConnectContext connectContext,
-                                  OptExpression logicOperatorTree,
-                                  PhysicalPropertySet requiredProperty,
-                                  ColumnRefSet requiredColumns) {
+                                         OptExpression logicOperatorTree,
+                                         PhysicalPropertySet requiredProperty,
+                                         ColumnRefSet requiredColumns) {
         // Phase 1: none
         OptimizerTraceUtil.logOptExpression(connectContext, "origin logicOperatorTree:\n%s", logicOperatorTree);
         // Phase 2: rewrite based on memo and group
@@ -136,7 +127,7 @@ public class Optimizer {
         TaskContext rootTaskContext =
                 new TaskContext(context, requiredProperty, requiredColumns.clone(), Double.MAX_VALUE);
         try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.RuleBaseOptimize")) {
-            logicOperatorTree = logicalRuleRewrite(logicOperatorTree, rootTaskContext);
+            logicOperatorTree = rewriteAndValidatePlan(logicOperatorTree, rootTaskContext);
         }
 
         memo.init(logicOperatorTree);
@@ -195,61 +186,11 @@ public class Optimizer {
         if (Config.enable_experimental_mv
                 && connectContext.getSessionVariable().isEnableMaterializedViewRewrite()
                 && !optimizerConfig.isRuleBased()) {
-            registerMaterializedViews(logicOperatorTree, connectContext);
-        }
-    }
-
-    private void registerMaterializedViews(OptExpression logicOperatorTree, ConnectContext connectContext) {
-        List<Table> tables = Utils.getAllTables(logicOperatorTree);
-
-        // get all related materialized views, include nested mvs
-        Set<MaterializedView> relatedMvs =
-                Utils.getRelatedMvs(connectContext.getSessionVariable().getNestedMvRewriteMaxLevel(), tables);
-
-        for (MaterializedView mv : relatedMvs) {
-            if (!mv.isActive()) {
-                continue;
+            try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.preprocessMvs")) {
+                MvRewritePreprocessor preprocessor =
+                        new MvRewritePreprocessor(connectContext, columnRefFactory, context, logicOperatorTree);
+                preprocessor.prepareMvCandidatesForPlan();
             }
-            Set<String> partitionNamesToRefresh = mv.getPartitionNamesToRefreshForMv();
-            PartitionInfo partitionInfo = mv.getPartitionInfo();
-            if (partitionInfo instanceof SinglePartitionInfo) {
-                if (!partitionNamesToRefresh.isEmpty()) {
-                    continue;
-                }
-            } else if (partitionNamesToRefresh.containsAll(mv.getPartitionNames())) {
-                // if the mv is partitioned, and all partitions need refresh,
-                // then it can not be an candidate
-                continue;
-            }
-
-            // 1. build mv query logical plan
-            ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-            MaterializedViewOptimizer mvOptimizer = new MaterializedViewOptimizer();
-            OptExpression mvPlan = mvOptimizer.optimize(mv, columnRefFactory, connectContext);
-            if (!Utils.isValidMVPlan(mvPlan)) {
-                continue;
-            }
-
-            List<ColumnRefOperator> outputExpressions = mvOptimizer.getOutputExpressions();
-            MaterializationContext materializationContext = new MaterializationContext(
-                    mv, mvPlan, columnRefFactory, outputExpressions);
-
-            // generate scan mv plan
-            Database db = context.getCatalog().getDb(mv.getDbId());
-            TableName tableName = new TableName(db.getFullName(), mv.getName());
-            String selectMvSql = "select * from " + tableName.toSql();
-            Pair<OptExpression, LogicalPlan> scanMvPlans =
-                    Utils.getRuleOptimizedLogicalPlan(selectMvSql, context.getColumnRefFactory(), connectContext);
-            OptExpression scanMvPlan = scanMvPlans.first;
-            if (!Utils.isLogicalSPJ(scanMvPlan)) {
-                continue;
-            }
-            if (!(scanMvPlan.getOp() instanceof LogicalOlapScanOperator)) {
-                continue;
-            }
-            materializationContext.setScanMvOperator(scanMvPlan.getOp());
-            materializationContext.setScanMvOutputExpressions(scanMvPlans.second.getOutputColumn());
-            context.addCandidateMvs(materializationContext);
         }
     }
 
@@ -364,6 +305,13 @@ public class Optimizer {
         return tree.getInputs().get(0);
     }
 
+    private OptExpression rewriteAndValidatePlan(OptExpression tree, TaskContext rootTaskContext) {
+        OptExpression result = logicalRuleRewrite(tree, rootTaskContext);
+        OptExpressionValidator validator = new OptExpressionValidator();
+        validator.visit(tree, null);
+        return result;
+    }
+
     private OptExpression pushDownAggregation(OptExpression tree, TaskContext rootTaskContext,
                                               ColumnRefSet requiredColumns) {
         if (context.getSessionVariable().getCboPushDownAggregateMode() == -1) {
@@ -419,8 +367,12 @@ public class Optimizer {
                 context.getRuleSet().addAutoJoinImplementationRule();
             }
         } else {
-            // add realtime mv rules
             context.getRuleSet().addRealtimeMVRules();
+        }
+
+        if (!context.getCandidateMvs().isEmpty()
+                && connectContext.getSessionVariable().isEnableMaterializedViewRewrite()) {
+            context.getRuleSet().addMultiTableMvRewriteRule();
         }
 
         context.getTaskScheduler().pushTask(new OptimizeGroupTask(rootTaskContext, memo.getRootGroup()));
@@ -476,7 +428,6 @@ public class Optimizer {
                 childPlans);
         // record inputProperties at optExpression, used for planFragment builder to determine join type
         expression.setRequiredProperties(inputProperties);
-        expression.setOutputProperty(groupExpression.getOutputProperty(requiredProperty));
         expression.setStatistics(groupExpression.getGroup().hasConfidenceStatistic(requiredProperty) ?
                 groupExpression.getGroup().getConfidenceStatistic(requiredProperty) :
                 groupExpression.getGroup().getStatistics());

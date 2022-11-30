@@ -106,7 +106,8 @@ public class ExpressionAnalyzer {
         if (expr instanceof FunctionCallExpr) {
             // expand this in the future.
             if (((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.ARRAY_MAP) ||
-                    ((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.ARRAY_FILTER)) {
+                    ((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.ARRAY_FILTER) ||
+                    ((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.ARRAY_SORTBY)) {
                 return true;
             } else if (((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.TRANSFORM)) {
                 // transform just a alias of array_map
@@ -130,6 +131,17 @@ public class ExpressionAnalyzer {
             functionCallExpr.clearChildren();
             functionCallExpr.addChild(arr1);
             functionCallExpr.addChild(arrayMap);
+            return arrayMap;
+        } else if (functionCallExpr.getFnName().getFunction().equals(FunctionSet.ARRAY_SORTBY)
+                && functionCallExpr.getChild(0) instanceof LambdaFunctionExpr) {
+            // array_sortby(lambda_func_expr, arr1...) -> array_sortby(arr1, array_map(lambda_func_expr, arr1...))
+            FunctionCallExpr arrayMap = new FunctionCallExpr(FunctionSet.ARRAY_MAP,
+                    Lists.newArrayList(functionCallExpr.getChildren()));
+            Expr arr1 = functionCallExpr.getChild(1);
+            functionCallExpr.clearChildren();
+            functionCallExpr.addChild(arr1);
+            functionCallExpr.addChild(arrayMap);
+            functionCallExpr.setType(arr1.getType());
             return arrayMap;
         }
         return null;
@@ -206,7 +218,11 @@ public class ExpressionAnalyzer {
         @Override
         public Void visitSubfieldExpr(SubfieldExpr node, Scope scope) {
             Expr child = node.getChild(0);
-            Preconditions.checkArgument(child.getType().isStructType());
+            // User enter an invalid sql, like SELECT 'col'.b FROM tbl;
+            // 'col' will be parsed as StringLiteral, it's invalid.
+            // TODO(SmithCruise) We should handle this problem in parser in the future.
+            Preconditions.checkArgument(child.getType().isStructType(),
+                    String.format("%s must be a struct type, check if you are using `'`", child.toSql()));
             StructType structType = (StructType) child.getType();
             StructField structField = structType.getField(node.getFieldName());
 
@@ -725,20 +741,32 @@ public class ExpressionAnalyzer {
                 fn = getStrToDateFunction(node, argumentTypes);
             } else if (fnName.equals(FunctionSet.ARRAY_FILTER)) {
                 if (node.getChildren().size() != 2) {
-                    throw new SemanticException(
-                            FunctionSet.ARRAY_FILTER + " should have 2 array inputs or lambda functions.");
+                    throw new SemanticException(fnName + " should have 2 array inputs or lambda functions.");
                 }
                 if (!node.getChild(0).getType().isArrayType() && !node.getChild(0).getType().isNull()) {
-                    throw new SemanticException("The first input of " + FunctionSet.ARRAY_FILTER +
+                    throw new SemanticException("The first input of " + fnName +
                             " should be an array or a lambda function.");
                 }
                 if (!node.getChild(1).getType().isArrayType() && !node.getChild(1).getType().isNull()) {
-                    throw new SemanticException("The second input of " + FunctionSet.ARRAY_FILTER +
+                    throw new SemanticException("The second input of " + fnName +
                             " should be an array or a lambda function.");
                 }
                 // force the second array be of Type.ARRAY_BOOLEAN
                 node.setChild(1, new CastExpr(Type.ARRAY_BOOLEAN, node.getChild(1)));
                 argumentTypes[1] = Type.ARRAY_BOOLEAN;
+                fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            } else if (fnName.equals(FunctionSet.ARRAY_SORTBY)) {
+                if (node.getChildren().size() != 2) {
+                    throw new SemanticException(fnName + " should have 2 array inputs or lambda functions.");
+                }
+                if (!node.getChild(0).getType().isArrayType() && !node.getChild(0).getType().isNull()) {
+                    throw new SemanticException("The first input of " + fnName +
+                            " should be an array or a lambda function.");
+                }
+                if (!node.getChild(1).getType().isArrayType() && !node.getChild(1).getType().isNull()) {
+                    throw new SemanticException("The second input of " + fnName +
+                            " should be an array or a lambda function.");
+                }
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             } else if (fnName.equals(FunctionSet.TIME_SLICE) || fnName.equals(FunctionSet.DATE_SLICE)) {
                 if (!(node.getChild(1) instanceof IntLiteral)) {
@@ -1066,8 +1094,7 @@ public class ExpressionAnalyzer {
                     if (userVariable.getResolvedExpression() instanceof NullLiteral) {
                         node.setIsNull();
                     } else {
-                        Object variableValue = userVariable.getResolvedExpression().getRealValue();
-                        node.setValue(variableValue);
+                        node.setValue(userVariable.getResolvedExpression().getRealObjectValue());
                     }
                 } else {
                     VariableMgr.fillValue(session.getSessionVariable(), node);

@@ -7,7 +7,8 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 
-import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 public class MaterializationContext {
     private MaterializedView mv;
@@ -18,12 +19,6 @@ public class MaterializationContext {
 
     private ColumnRefFactory mvColumnRefFactory;
 
-    // output expressions of mv define sql
-    private List<ColumnRefOperator> mvOutputExpressions;
-
-    // output expressions of select * from mv
-    private List<ColumnRefOperator> scanMvOutputExpressions;
-
     // logical OptExpression for query
     private OptExpression queryExpression;
 
@@ -31,14 +26,20 @@ public class MaterializationContext {
 
     private OptimizerContext optimizerContext;
 
+    private Map<ColumnRefOperator, ColumnRefOperator> outputMapping;
+
+    private Set<String> mvPartitionNamesToRefresh;
+
     public MaterializationContext(MaterializedView mv,
                                   OptExpression mvExpression,
-                                  ColumnRefFactory columnRefFactory,
-                                  List<ColumnRefOperator> mvOutputExpressions) {
+                                  ColumnRefFactory queryColumnRefFactory,
+                                  ColumnRefFactory mvColumnRefFactory,
+                                  Set<String> mvPartitionNamesToRefresh) {
         this.mv = mv;
         this.mvExpression = mvExpression;
-        this.mvColumnRefFactory = columnRefFactory;
-        this.mvOutputExpressions = mvOutputExpressions;
+        this.queryRefFactory = queryColumnRefFactory;
+        this.mvColumnRefFactory = mvColumnRefFactory;
+        this.mvPartitionNamesToRefresh = mvPartitionNamesToRefresh;
     }
 
     public MaterializedView getMv() {
@@ -59,18 +60,6 @@ public class MaterializationContext {
 
     public ColumnRefFactory getMvColumnRefFactory() {
         return mvColumnRefFactory;
-    }
-
-    public List<ColumnRefOperator> getMvOutputExpressions() {
-        return mvOutputExpressions;
-    }
-
-    public List<ColumnRefOperator> getScanMvOutputExpressions() {
-        return scanMvOutputExpressions;
-    }
-
-    public void setScanMvOutputExpressions(List<ColumnRefOperator> scanMvOutputExpressions) {
-        this.scanMvOutputExpressions = scanMvOutputExpressions;
     }
 
     public OptExpression getQueryExpression() {
@@ -95,5 +84,17 @@ public class MaterializationContext {
 
     public void setOptimizerContext(OptimizerContext optimizerContext) {
         this.optimizerContext = optimizerContext;
+    }
+
+    public Map<ColumnRefOperator, ColumnRefOperator> getOutputMapping() {
+        return outputMapping;
+    }
+
+    public void setOutputMapping(Map<ColumnRefOperator, ColumnRefOperator> outputMapping) {
+        this.outputMapping = outputMapping;
+    }
+
+    public Set<String> getMvPartitionNamesToRefresh() {
+        return mvPartitionNamesToRefresh;
     }
 }

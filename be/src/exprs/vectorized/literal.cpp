@@ -20,7 +20,7 @@ namespace starrocks::vectorized {
         break;                                                                              \
     }
 
-template <PrimitiveType PT>
+template <LogicalType PT>
 static RunTimeCppType<PT> unpack_decimal(const std::string& s) {
     static_assert(pt_is_decimal<PT>);
     RunTimeCppType<PT> value;
@@ -32,7 +32,7 @@ static RunTimeCppType<PT> unpack_decimal(const std::string& s) {
     return value;
 }
 
-template <PrimitiveType DecimalType, typename = DecimalPTGuard<DecimalType>>
+template <LogicalType DecimalType, typename = DecimalPTGuard<DecimalType>>
 static ColumnPtr const_column_from_literal(const TExprNode& node, int precision, int scale) {
     using CppType = RunTimeCppType<DecimalType>;
     using ColumnType = RunTimeColumnType<DecimalType>;
@@ -142,7 +142,7 @@ VectorizedLiteral::VectorizedLiteral(ColumnPtr&& value, const TypeDescriptor& ty
 
 #undef CASE_TYPE_COLUMN
 
-ColumnPtr VectorizedLiteral::evaluate(ExprContext* context, vectorized::Chunk* ptr) {
+StatusOr<ColumnPtr> VectorizedLiteral::evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) {
     ColumnPtr column = _value->clone_empty();
     column->append(*_value, 0, 1);
     if (ptr != nullptr) {

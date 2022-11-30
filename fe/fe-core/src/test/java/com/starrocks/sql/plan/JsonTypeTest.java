@@ -40,14 +40,14 @@ public class JsonTypeTest extends PlanTestBase {
     @Test
     public void testJoin() {
         ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
-                "Type percentile/hll/bitmap/json not support aggregation/group-by/order-by/union/join",
+                "Type percentile/hll/bitmap/json/struct/map not support aggregation/group-by/order-by/union/join",
                 () -> getFragmentPlan("select * from tjson_test t1 join tjson_test t2 using(v_json)"));
 
         ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
-                "Type percentile/hll/bitmap/json not support aggregation/group-by/order-by/union/join",
+                "Type percentile/hll/bitmap/json/struct/map not support aggregation/group-by/order-by/union/join",
                 () -> getFragmentPlan("select * from tjson_test t1 join tjson_test t2 on t1.v_json = t2.v_json"));
         ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
-                "Type percentile/hll/bitmap/json not support aggregation/group-by/order-by/union/join",
+                "Type percentile/hll/bitmap/json/struct/map not support aggregation/group-by/order-by/union/join",
                 () -> getFragmentPlan("select * from tjson_test t1 join tjson_test t2 on t1.v_json > t2.v_json"));
 
         ExceptionChecker.expectThrowsNoException(
@@ -146,7 +146,7 @@ public class JsonTypeTest extends PlanTestBase {
             ExceptionChecker.expectThrowsWithMsg(
                     SemanticException.class,
                     String.format(
-                            "Invalid type cast from json to %s in sql `v_json`",
+                            "Invalid type cast from json to %s in sql `test.tjson_test.v_json`",
                             notAllowType),
                     () -> getFragmentPlan(columnCastSql)
             );

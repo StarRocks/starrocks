@@ -76,6 +76,7 @@ public abstract class SetOperationNode extends PlanNode {
     // Set in init() and substituted against the corresponding child's output smap.
     protected List<List<Expr>> materializedResultExprLists_ = Lists.newArrayList();
     protected List<List<Expr>> materializedConstExprLists_ = Lists.newArrayList();
+    protected List<Expr> setOperationOutputList = Lists.newArrayList();
 
     // Indicates if this UnionNode is inside a subplan.
     protected boolean isInSubplan_;
@@ -129,6 +130,10 @@ public abstract class SetOperationNode extends PlanNode {
 
     public void setOutputSlotIdToChildSlotIdMaps(List<Map<Integer, Integer>> outputSlotIdToChildSlotIdMaps) {
         this.outputSlotIdToChildSlotIdMaps = outputSlotIdToChildSlotIdMaps;
+    }
+
+    public void setSetOperationOutputList(List<Expr> setOperationOutputList) {
+        this.setOperationOutputList = setOperationOutputList;
     }
 
     @Override
@@ -198,6 +203,13 @@ public abstract class SetOperationNode extends PlanNode {
             }
         }
         if (detailLevel == TExplainLevel.VERBOSE) {
+            if (CollectionUtils.isNotEmpty(setOperationOutputList)) {
+                output.append(prefix).append("output exprs:").append("\n");
+                output.append(prefix).append("    ")
+                        .append(setOperationOutputList.stream().map(Expr::explain).collect(
+                                Collectors.joining(" | "))).append("\n");
+            }
+
             if (CollectionUtils.isNotEmpty(materializedResultExprLists_)) {
                 output.append(prefix).append("child exprs:").append("\n");
                 for (List<Expr> exprs : materializedResultExprLists_) {
@@ -264,7 +276,7 @@ public abstract class SetOperationNode extends PlanNode {
                 newSlotExprs.add(mexpr);
             }
         }
-        return newSlotExprs.size() > 0? Optional.of(newSlotExprs) : Optional.empty();
+        return newSlotExprs.size() > 0 ? Optional.of(newSlotExprs) : Optional.empty();
     }
 
     public Optional<List<List<Expr>>> candidatesOfSlotExprsForChild(List<Expr> exprs, int childIdx) {

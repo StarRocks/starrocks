@@ -922,14 +922,7 @@ public class PlanFragmentBuilder {
             tupleDescriptor.setTable(referenceTable);
 
             // set slot
-            for (Map.Entry<ColumnRefOperator, Column> entry : node.getColRefToColumnMetaMap().entrySet()) {
-                SlotDescriptor slotDescriptor =
-                        context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getKey().getId()));
-                slotDescriptor.setColumn(entry.getValue());
-                slotDescriptor.setIsNullable(entry.getValue().isAllowNull());
-                slotDescriptor.setIsMaterialized(true);
-                context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().toString(), slotDescriptor));
-            }
+            prepareContextSlots(node, context, tupleDescriptor);
 
             IcebergScanNode icebergScanNode =
                     new IcebergScanNode(context.getNextNodeId(), tupleDescriptor, "IcebergScanNode");
@@ -943,6 +936,8 @@ public class PlanFragmentBuilder {
                     icebergScanNode.getConjuncts()
                             .add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
                 }
+
+                icebergScanNode.preProcessIcebergPredicate(predicates);
                 icebergScanNode.getScanRangeLocations();
                 //set slot for equality delete file
                 icebergScanNode.appendEqualityColumns(node, columnRefFactory, context);
@@ -1051,6 +1046,10 @@ public class PlanFragmentBuilder {
 
             MysqlScanNode scanNode = new MysqlScanNode(context.getNextNodeId(), tupleDescriptor,
                     (MysqlTable) node.getTable());
+
+            if (node.getTemporalClause() != null) {
+                scanNode.setTemporalClause(node.getTemporalClause());
+            }
 
             // set predicate
             List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
@@ -2265,12 +2264,15 @@ public class PlanFragmentBuilder {
 
             // reset column is nullable, for handle union select xx join select xxx...
             setOperationNode.setHasNullableGenerateChild();
+            List<Expr> setOutputList = Lists.newArrayList();
             for (ColumnRefOperator columnRefOperator : setOperation.getOutputColumnRefOp()) {
                 SlotDescriptor slotDesc = context.getDescTbl().getSlotDesc(new SlotId(columnRefOperator.getId()));
                 slotDesc.setIsNullable(slotDesc.getIsNullable() | setOperationNode.isHasNullableGenerateChild());
+                setOutputList.add(new SlotRef(String.valueOf(columnRefOperator.getId()), slotDesc));
             }
             setOperationTuple.computeMemLayout();
 
+            setOperationNode.setSetOperationOutputList(setOutputList);
             setOperationNode.setMaterializedResultExprLists_(materializedResultExprLists);
             setOperationNode.setLimit(setOperation.getLimit());
             setOperationNode.computeStatistics(optExpr.getStatistics());
@@ -2378,7 +2380,7 @@ public class PlanFragmentBuilder {
                     inputFragment.getPlanRoot(),
                     udtfOutputTuple,
                     physicalTableFunction.getFn(),
-                    Arrays.stream(physicalTableFunction.getParamColumnRefs().getColumnIds()).boxed()
+                    physicalTableFunction.getFnParamColumnRef().stream().map(ColumnRefOperator::getId)
                             .collect(Collectors.toList()),
                     Arrays.stream(physicalTableFunction.getOuterColumnRefSet().getColumnIds()).boxed()
                             .collect(Collectors.toList()),

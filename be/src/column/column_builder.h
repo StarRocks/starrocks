@@ -9,10 +9,9 @@
 #include "column/type_traits.h"
 #include "util/raw_container.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
-template <PrimitiveType Type>
+template <LogicalType Type>
 class ColumnBuilder {
 public:
     using DataColumnPtr = typename RunTimeColumnType<Type>::Ptr;
@@ -198,5 +197,4 @@ public:
 
 private:
 };
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

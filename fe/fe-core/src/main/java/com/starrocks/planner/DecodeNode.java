@@ -84,6 +84,7 @@ public class DecodeNode extends PlanNode {
                 .collect(Collectors.toList());
         decodeNode.setFrom_dict_ids(fromDictIds);
         decodeNode.setTo_string_ids(toStringIds);
+        normalizer.addSlotsUseAggColumns(stringFunctions);
         Pair<List<Integer>, List<ByteBuffer>> slotIdsAndExprs = normalizer.normalizeSlotIdsAndExprs(stringFunctions);
         decodeNode.setSlot_ids(slotIdsAndExprs.first);
         decodeNode.setString_functions(slotIdsAndExprs.second);

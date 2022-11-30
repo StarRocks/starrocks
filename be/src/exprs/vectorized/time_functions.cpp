@@ -20,14 +20,14 @@ static int day_to_first[8] = {0 /*never use*/, 6, 0, 1, 2, 3, 4, 5};
 // avoid format function OOM, the value just based on experience
 const static int DEFAULT_DATE_FORMAT_LIMIT = 100;
 
-#define DEFINE_TIME_UNARY_FN(NAME, TYPE, RESULT_TYPE)                                                         \
-    ColumnPtr TimeFunctions::NAME(FunctionContext* context, const starrocks::vectorized::Columns& columns) {  \
-        return VectorizedStrictUnaryFunction<NAME##Impl>::evaluate<TYPE, RESULT_TYPE>(VECTORIZED_FN_ARGS(0)); \
+#define DEFINE_TIME_UNARY_FN(NAME, TYPE, RESULT_TYPE)                                                                  \
+    StatusOr<ColumnPtr> TimeFunctions::NAME(FunctionContext* context, const starrocks::vectorized::Columns& columns) { \
+        return VectorizedStrictUnaryFunction<NAME##Impl>::evaluate<TYPE, RESULT_TYPE>(VECTORIZED_FN_ARGS(0));          \
     }
 
-#define DEFINE_TIME_STRING_UNARY_FN(NAME, TYPE, RESULT_TYPE)                                                        \
-    ColumnPtr TimeFunctions::NAME(FunctionContext* context, const starrocks::vectorized::Columns& columns) {        \
-        return VectorizedStringStrictUnaryFunction<NAME##Impl>::evaluate<TYPE, RESULT_TYPE>(VECTORIZED_FN_ARGS(0)); \
+#define DEFINE_TIME_STRING_UNARY_FN(NAME, TYPE, RESULT_TYPE)                                                           \
+    StatusOr<ColumnPtr> TimeFunctions::NAME(FunctionContext* context, const starrocks::vectorized::Columns& columns) { \
+        return VectorizedStringStrictUnaryFunction<NAME##Impl>::evaluate<TYPE, RESULT_TYPE>(VECTORIZED_FN_ARGS(0));    \
     }
 
 #define DEFINE_TIME_UNARY_FN_WITH_IMPL(NAME, TYPE, RESULT_TYPE, FN) \
@@ -35,7 +35,7 @@ const static int DEFAULT_DATE_FORMAT_LIMIT = 100;
     DEFINE_TIME_UNARY_FN(NAME, TYPE, RESULT_TYPE);
 
 #define DEFINE_TIME_BINARY_FN(NAME, LTYPE, RTYPE, RESULT_TYPE)                                                         \
-    ColumnPtr TimeFunctions::NAME(FunctionContext* context, const starrocks::vectorized::Columns& columns) {           \
+    StatusOr<ColumnPtr> TimeFunctions::NAME(FunctionContext* context, const starrocks::vectorized::Columns& columns) { \
         return VectorizedStrictBinaryFunction<NAME##Impl>::evaluate<LTYPE, RTYPE, RESULT_TYPE>(VECTORIZED_FN_ARGS(0),  \
                                                                                                VECTORIZED_FN_ARGS(1)); \
     }
@@ -44,12 +44,12 @@ const static int DEFAULT_DATE_FORMAT_LIMIT = 100;
     DEFINE_BINARY_FUNCTION(NAME##Impl, FN);                                  \
     DEFINE_TIME_BINARY_FN(NAME, LTYPE, RTYPE, RESULT_TYPE);
 
-#define DEFINE_TIME_UNARY_FN_EXTEND(NAME, TYPE, RESULT_TYPE, IDX)                                               \
-    ColumnPtr TimeFunctions::NAME(FunctionContext* context, const starrocks::vectorized::Columns& columns) {    \
-        return VectorizedStrictUnaryFunction<NAME##Impl>::evaluate<TYPE, RESULT_TYPE>(VECTORIZED_FN_ARGS(IDX)); \
+#define DEFINE_TIME_UNARY_FN_EXTEND(NAME, TYPE, RESULT_TYPE, IDX)                                                      \
+    StatusOr<ColumnPtr> TimeFunctions::NAME(FunctionContext* context, const starrocks::vectorized::Columns& columns) { \
+        return VectorizedStrictUnaryFunction<NAME##Impl>::evaluate<TYPE, RESULT_TYPE>(VECTORIZED_FN_ARGS(IDX));        \
     }
 
-template <PrimitiveType Type>
+template <LogicalType Type>
 ColumnPtr date_valid(const ColumnPtr& v1) {
     if (v1->only_null()) {
         return v1;
@@ -93,11 +93,11 @@ ColumnPtr date_valid(const ColumnPtr& v1) {
     }
 }
 
-#define DEFINE_TIME_CALC_FN(NAME, LTYPE, RTYPE, RESULT_TYPE)                                                 \
-    ColumnPtr TimeFunctions::NAME(FunctionContext* context, const starrocks::vectorized::Columns& columns) { \
-        auto p = VectorizedStrictBinaryFunction<NAME##Impl>::evaluate<LTYPE, RTYPE, RESULT_TYPE>(            \
-                VECTORIZED_FN_ARGS(0), VECTORIZED_FN_ARGS(1));                                               \
-        return date_valid<RESULT_TYPE>(p);                                                                   \
+#define DEFINE_TIME_CALC_FN(NAME, LTYPE, RTYPE, RESULT_TYPE)                                                           \
+    StatusOr<ColumnPtr> TimeFunctions::NAME(FunctionContext* context, const starrocks::vectorized::Columns& columns) { \
+        auto p = VectorizedStrictBinaryFunction<NAME##Impl>::evaluate<LTYPE, RTYPE, RESULT_TYPE>(                      \
+                VECTORIZED_FN_ARGS(0), VECTORIZED_FN_ARGS(1));                                                         \
+        return date_valid<RESULT_TYPE>(p);                                                                             \
     }
 
 Status TimeFunctions::convert_tz_prepare(starrocks_udf::FunctionContext* context,
@@ -153,7 +153,7 @@ Status TimeFunctions::convert_tz_close(starrocks_udf::FunctionContext* context,
     return Status::OK();
 }
 
-ColumnPtr TimeFunctions::convert_tz_general(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> TimeFunctions::convert_tz_general(FunctionContext* context, const Columns& columns) {
     auto time_viewer = ColumnViewer<TYPE_DATETIME>(columns[0]);
     auto from_str = ColumnViewer<TYPE_VARCHAR>(columns[1]);
     auto to_str = ColumnViewer<TYPE_VARCHAR>(columns[2]);
@@ -208,8 +208,8 @@ ColumnPtr TimeFunctions::convert_tz_general(FunctionContext* context, const Colu
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-ColumnPtr TimeFunctions::convert_tz_const(FunctionContext* context, const Columns& columns, const cctz::time_zone& from,
-                                          const cctz::time_zone& to) {
+StatusOr<ColumnPtr> TimeFunctions::convert_tz_const(FunctionContext* context, const Columns& columns,
+                                                    const cctz::time_zone& from, const cctz::time_zone& to) {
     auto time_viewer = ColumnViewer<TYPE_DATETIME>(columns[0]);
 
     auto size = columns[0]->size();
@@ -248,7 +248,7 @@ ColumnPtr TimeFunctions::convert_tz_const(FunctionContext* context, const Column
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-ColumnPtr TimeFunctions::convert_tz(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> TimeFunctions::convert_tz(FunctionContext* context, const Columns& columns) {
     auto* ctc = reinterpret_cast<ConvertTzCtx*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
     if (ctc == nullptr) {
         return convert_tz_general(context, columns);
@@ -261,7 +261,7 @@ ColumnPtr TimeFunctions::convert_tz(FunctionContext* context, const Columns& col
     return convert_tz_const(context, columns, ctc->from_tz, ctc->to_tz);
 }
 
-ColumnPtr TimeFunctions::utc_timestamp(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> TimeFunctions::utc_timestamp(FunctionContext* context, const Columns& columns) {
     starrocks::RuntimeState* state = context->impl()->state();
     DateTimeValue dtv;
     if (dtv.from_unixtime(state->timestamp_ms() / 1000, "+00:00")) {
@@ -273,11 +273,11 @@ ColumnPtr TimeFunctions::utc_timestamp(FunctionContext* context, const Columns& 
     }
 }
 
-ColumnPtr TimeFunctions::timestamp(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> TimeFunctions::timestamp(FunctionContext* context, const Columns& columns) {
     return columns[0];
 }
 
-ColumnPtr TimeFunctions::now(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> TimeFunctions::now(FunctionContext* context, const Columns& columns) {
     starrocks::RuntimeState* state = context->impl()->state();
     DateTimeValue dtv;
     if (dtv.from_unixtime(state->timestamp_ms() / 1000, state->timezone_obj())) {
@@ -289,7 +289,7 @@ ColumnPtr TimeFunctions::now(FunctionContext* context, const Columns& columns) {
     }
 }
 
-ColumnPtr TimeFunctions::curtime(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> TimeFunctions::curtime(FunctionContext* context, const Columns& columns) {
     starrocks::RuntimeState* state = context->impl()->state();
     DateTimeValue dtv;
     if (dtv.from_unixtime(state->timestamp_ms() / 1000, state->timezone())) {
@@ -300,7 +300,7 @@ ColumnPtr TimeFunctions::curtime(FunctionContext* context, const Columns& column
     }
 }
 
-ColumnPtr TimeFunctions::curdate(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> TimeFunctions::curdate(FunctionContext* context, const Columns& columns) {
     starrocks::RuntimeState* state = context->impl()->state();
     DateTimeValue dtv;
     if (dtv.from_unixtime(state->timestamp_ms() / 1000, state->timezone())) {
@@ -675,7 +675,7 @@ Status TimeFunctions::time_slice_prepare(starrocks_udf::FunctionContext* context
 
     ScalarFunction function;
     const FunctionContext::TypeDesc* boundary = context->get_arg_type(0);
-    if (boundary->type == PrimitiveType::TYPE_DATETIME) {
+    if (boundary->type == LogicalType::TYPE_DATETIME) {
         // floor specify START as the result time.
         if (time_base == "floor") {
             if (period_unit == "second") {
@@ -723,7 +723,7 @@ Status TimeFunctions::time_slice_prepare(starrocks_udf::FunctionContext* context
             }
         }
     } else {
-        DCHECK_EQ(boundary->type, PrimitiveType::TYPE_DATE);
+        DCHECK_EQ(boundary->type, LogicalType::TYPE_DATE);
         if (time_base == "floor") {
             if (period_unit == "second" || period_unit == "minute" || period_unit == "hour") {
                 return Status::InvalidArgument("can't use time_slice for date with time(hour/minute/second)");
@@ -824,7 +824,7 @@ DEFINE_TIME_SLICE_FN(year);
 
 #undef DEFINE_TIME_SLICE_FN
 
-ColumnPtr TimeFunctions::time_slice(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> TimeFunctions::time_slice(FunctionContext* context, const Columns& columns) {
     auto ctc = reinterpret_cast<DateTruncCtx*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
     return ctc->function(context, columns);
 }
@@ -935,7 +935,7 @@ DEFINE_TIME_BINARY_FN(seconds_diff, TYPE_DATETIME, TYPE_DATETIME, TYPE_BIGINT);
 /*
  * definition for to_unix operators(SQL TYPE: DATETIME)
  */
-ColumnPtr TimeFunctions::to_unix_from_datetime(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> TimeFunctions::to_unix_from_datetime(FunctionContext* context, const Columns& columns) {
     DCHECK_EQ(columns.size(), 1);
 
     auto date_viewer = ColumnViewer<TYPE_DATETIME>(columns[0]);
@@ -970,7 +970,7 @@ ColumnPtr TimeFunctions::to_unix_from_datetime(FunctionContext* context, const C
 /*
  * definition for to_unix operators(SQL TYPE: DATE)
  */
-ColumnPtr TimeFunctions::to_unix_from_date(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> TimeFunctions::to_unix_from_date(FunctionContext* context, const Columns& columns) {
     DCHECK_EQ(columns.size(), 1);
 
     auto date_viewer = ColumnViewer<TYPE_DATE>(columns[0]);
@@ -1002,7 +1002,7 @@ ColumnPtr TimeFunctions::to_unix_from_date(FunctionContext* context, const Colum
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-ColumnPtr TimeFunctions::to_unix_from_datetime_with_format(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> TimeFunctions::to_unix_from_datetime_with_format(FunctionContext* context, const Columns& columns) {
     DCHECK_EQ(columns.size(), 2);
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
@@ -1042,7 +1042,7 @@ ColumnPtr TimeFunctions::to_unix_from_datetime_with_format(FunctionContext* cont
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-ColumnPtr TimeFunctions::to_unix_for_now(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> TimeFunctions::to_unix_for_now(FunctionContext* context, const Columns& columns) {
     DCHECK_EQ(columns.size(), 0);
     auto result = Int32Column::create();
     result->append(context->impl()->state()->timestamp_ms() / 1000);
@@ -1055,7 +1055,7 @@ ColumnPtr TimeFunctions::to_unix_for_now(FunctionContext* context, const Columns
 /*
  * definition for from_unix operators
  */
-ColumnPtr TimeFunctions::from_unix_to_datetime(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> TimeFunctions::from_unix_to_datetime(FunctionContext* context, const Columns& columns) {
     DCHECK_EQ(columns.size(), 1);
 
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
@@ -1150,7 +1150,7 @@ Status TimeFunctions::from_unix_close(starrocks_udf::FunctionContext* context,
     return Status::OK();
 }
 
-ColumnPtr TimeFunctions::from_unix_with_format_general(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> TimeFunctions::from_unix_with_format_general(FunctionContext* context, const Columns& columns) {
     DCHECK_EQ(columns.size(), 2);
 
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
@@ -1184,7 +1184,7 @@ ColumnPtr TimeFunctions::from_unix_with_format_general(FunctionContext* context,
             continue;
         }
 
-        string new_fmt = convert_format(format);
+        std::string new_fmt = convert_format(format);
 
         char buf[128];
         if (!dtv.to_format_string((const char*)new_fmt.c_str(), new_fmt.size(), buf)) {
@@ -1197,8 +1197,8 @@ ColumnPtr TimeFunctions::from_unix_with_format_general(FunctionContext* context,
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-ColumnPtr TimeFunctions::from_unix_with_format_const(std::string& format_content, FunctionContext* context,
-                                                     const Columns& columns) {
+StatusOr<ColumnPtr> TimeFunctions::from_unix_with_format_const(std::string& format_content, FunctionContext* context,
+                                                               const Columns& columns) {
     DCHECK_EQ(columns.size(), 2);
 
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
@@ -1236,8 +1236,8 @@ ColumnPtr TimeFunctions::from_unix_with_format_const(std::string& format_content
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-ColumnPtr TimeFunctions::from_unix_to_datetime_with_format(FunctionContext* context,
-                                                           const starrocks::vectorized::Columns& columns) {
+StatusOr<ColumnPtr> TimeFunctions::from_unix_to_datetime_with_format(FunctionContext* context,
+                                                                     const starrocks::vectorized::Columns& columns) {
     DCHECK_EQ(columns.size(), 2);
     auto* state = reinterpret_cast<FromUnixState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
 
@@ -1263,7 +1263,7 @@ DEFINE_UNARY_FN_WITH_IMPL(from_daysImpl, v) {
     return dv;
 }
 
-ColumnPtr TimeFunctions::from_days(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> TimeFunctions::from_days(FunctionContext* context, const Columns& columns) {
     return date_valid<TYPE_DATE>(
             VectorizedStrictUnaryFunction<from_daysImpl>::evaluate<TYPE_INT, TYPE_DATE>(VECTORIZED_FN_ARGS(0)));
 }
@@ -1355,9 +1355,9 @@ Status TimeFunctions::str_to_date_prepare(starrocks_udf::FunctionContext* contex
 // try to transfer content to date format based on "%Y-%m-%d",
 // if successful, return result TimestampValue
 // else take a uncommon approach to process this content.
-ColumnPtr TimeFunctions::str_to_date_from_date_format(FunctionContext* context,
-                                                      const starrocks::vectorized::Columns& columns,
-                                                      const char* str_format) {
+StatusOr<ColumnPtr> TimeFunctions::str_to_date_from_date_format(FunctionContext* context,
+                                                                const starrocks::vectorized::Columns& columns,
+                                                                const char* str_format) {
     size_t size = columns[0]->size();
     ColumnBuilder<TYPE_DATETIME> result(size);
 
@@ -1397,9 +1397,9 @@ ColumnPtr TimeFunctions::str_to_date_from_date_format(FunctionContext* context,
 // try to transfer content to date format based on "%Y-%m-%d %H:%i:%s",
 // if successful, return result TimestampValue
 // else take a uncommon approach to process this content.
-ColumnPtr TimeFunctions::str_to_date_from_datetime_format(FunctionContext* context,
-                                                          const starrocks::vectorized::Columns& columns,
-                                                          const char* str_format) {
+StatusOr<ColumnPtr> TimeFunctions::str_to_date_from_datetime_format(FunctionContext* context,
+                                                                    const starrocks::vectorized::Columns& columns,
+                                                                    const char* str_format) {
     size_t size = columns[0]->size();
     ColumnBuilder<TYPE_DATETIME> result(size);
 
@@ -1448,7 +1448,7 @@ void TimeFunctions::str_to_date_internal(TimestampValue* ts, const Slice& fmt, c
 }
 
 // Try to process string content, based on uncommon string format
-ColumnPtr TimeFunctions::str_to_date_uncommon(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> TimeFunctions::str_to_date_uncommon(FunctionContext* context, const Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
     size_t size = columns[0]->size(); // minimum number of rows.
@@ -1471,7 +1471,7 @@ ColumnPtr TimeFunctions::str_to_date_uncommon(FunctionContext* context, const Co
 }
 
 // str_to_date, for the "str_to_date" in sql.
-ColumnPtr TimeFunctions::str_to_date(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> TimeFunctions::str_to_date(FunctionContext* context, const Columns& columns) {
     auto* ctx = reinterpret_cast<StrToDateCtx*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
     if (ctx == nullptr) {
         return str_to_date_uncommon(context, columns);
@@ -1501,8 +1501,8 @@ DEFINE_UNARY_FN_WITH_IMPL(TimestampToDate, value) {
     return DateValue{timestamp::to_julian(value._timestamp)};
 }
 
-ColumnPtr TimeFunctions::str2date(FunctionContext* context, const Columns& columns) {
-    ColumnPtr datetime = str_to_date(context, columns);
+StatusOr<ColumnPtr> TimeFunctions::str2date(FunctionContext* context, const Columns& columns) {
+    ASSIGN_OR_RETURN(ColumnPtr datetime, str_to_date(context, columns));
     return VectorizedStrictUnaryFunction<TimestampToDate>::evaluate<TYPE_DATETIME, TYPE_DATE>(datetime);
 }
 
@@ -1568,7 +1568,7 @@ Status TimeFunctions::format_close(starrocks_udf::FunctionContext* context,
     return Status::OK();
 }
 
-template <typename OP, PrimitiveType Type>
+template <typename OP, LogicalType Type>
 ColumnPtr date_format_func(const Columns& cols, size_t patten_size) {
     ColumnViewer<Type> viewer(cols[0]);
 
@@ -1698,8 +1698,8 @@ bool standard_format_one_row(const TimestampValue& timestamp_value, char* buf, c
     return b;
 }
 
-template <PrimitiveType Type>
-ColumnPtr standard_format(const std::string& fmt, int len, const starrocks::vectorized::Columns& columns) {
+template <LogicalType Type>
+StatusOr<ColumnPtr> standard_format(const std::string& fmt, int len, const starrocks::vectorized::Columns& columns) {
     if (fmt.size() <= 0) {
         return ColumnHelper::create_const_null_column(columns[0]->size());
     }
@@ -1722,8 +1722,8 @@ ColumnPtr standard_format(const std::string& fmt, int len, const starrocks::vect
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-template <PrimitiveType Type>
-ColumnPtr do_format(const TimeFunctions::FormatCtx* ctx, const Columns& cols) {
+template <LogicalType Type>
+StatusOr<ColumnPtr> do_format(const TimeFunctions::FormatCtx* ctx, const Columns& cols) {
     if (ctx->fmt_type == TimeFunctions::yyyyMMdd) {
         return date_format_func<yyyyMMddImpl, Type>(cols, 8);
     } else if (ctx->fmt_type == TimeFunctions::yyyy_MM_dd) {
@@ -1741,7 +1741,7 @@ ColumnPtr do_format(const TimeFunctions::FormatCtx* ctx, const Columns& cols) {
     }
 }
 
-template <PrimitiveType Type>
+template <LogicalType Type>
 void common_format_process(ColumnViewer<Type>* viewer_date, ColumnViewer<TYPE_VARCHAR>* viewer_format,
                            ColumnBuilder<TYPE_VARCHAR>* builder, int i) {
     if (viewer_format->is_null(i) || viewer_format->value(i).empty()) {
@@ -1771,7 +1771,7 @@ void common_format_process(ColumnViewer<Type>* viewer_date, ColumnViewer<TYPE_VA
 }
 
 // datetime_format
-ColumnPtr TimeFunctions::datetime_format(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> TimeFunctions::datetime_format(FunctionContext* context, const Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
     auto* fc = reinterpret_cast<FormatCtx*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
 
@@ -1797,7 +1797,7 @@ ColumnPtr TimeFunctions::datetime_format(FunctionContext* context, const Columns
 }
 
 // date_format
-ColumnPtr TimeFunctions::date_format(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> TimeFunctions::date_format(FunctionContext* context, const Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
     auto* fc = reinterpret_cast<FormatCtx*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
@@ -1922,7 +1922,7 @@ DEFINE_UNARY_FN_WITH_IMPL(datetime_trunc_quarterImpl, v) {
 }
 DEFINE_TIME_UNARY_FN_EXTEND(datetime_trunc_quarter, TYPE_DATETIME, TYPE_DATETIME, 1);
 
-ColumnPtr TimeFunctions::datetime_trunc(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> TimeFunctions::datetime_trunc(FunctionContext* context, const Columns& columns) {
     auto ctc = reinterpret_cast<DateTruncCtx*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
     return ctc->function(context, columns);
 }
@@ -1977,7 +1977,8 @@ Status TimeFunctions::date_trunc_prepare(starrocks_udf::FunctionContext* context
     return Status::OK();
 }
 
-ColumnPtr TimeFunctions::date_trunc_day(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
+StatusOr<ColumnPtr> TimeFunctions::date_trunc_day(FunctionContext* context,
+                                                  const starrocks::vectorized::Columns& columns) {
     return columns[1];
 }
 
@@ -2009,7 +2010,7 @@ DEFINE_UNARY_FN_WITH_IMPL(date_trunc_quarterImpl, v) {
 }
 DEFINE_TIME_UNARY_FN_EXTEND(date_trunc_quarter, TYPE_DATE, TYPE_DATE, 1);
 
-ColumnPtr TimeFunctions::date_trunc(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> TimeFunctions::date_trunc(FunctionContext* context, const Columns& columns) {
     auto ctc = reinterpret_cast<DateTruncCtx*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
     return ctc->function(context, columns);
 }

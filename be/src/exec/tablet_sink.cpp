@@ -29,6 +29,7 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
+#include "config.h"
 #include "exprs/expr.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/substitute.h"
@@ -55,7 +56,7 @@ namespace starrocks::stream_load {
 
 NodeChannel::NodeChannel(OlapTableSink* parent, int64_t node_id) : _parent(parent), _node_id(node_id) {
     // restrict the chunk memory usage of send queue
-    _mem_tracker = std::make_unique<MemTracker>(64 * 1024 * 1024, "", nullptr);
+    _mem_tracker = std::make_unique<MemTracker>(config::send_channel_buffer_limit, "", nullptr);
 }
 
 NodeChannel::~NodeChannel() noexcept {
@@ -286,7 +287,8 @@ Status NodeChannel::_serialize_chunk(const vectorized::Chunk* src, ChunkPB* dst)
 
     {
         SCOPED_RAW_TIMER(&_serialize_batch_ns);
-        StatusOr<ChunkPB> res = serde::ProtobufChunkSerde::serialize(*src);
+        StatusOr<ChunkPB> res = Status::OK();
+        TRY_CATCH_BAD_ALLOC(res = serde::ProtobufChunkSerde::serialize(*src));
         if (!res.ok()) {
             _cancelled = true;
             _err_st = res.status();
@@ -772,13 +774,14 @@ bool IndexChannel::has_intolerable_failure() {
     }
 }
 
-OlapTableSink::OlapTableSink(ObjectPool* pool, const std::vector<TExpr>& texprs, Status* status) : _pool(pool) {
+OlapTableSink::OlapTableSink(ObjectPool* pool, const std::vector<TExpr>& texprs, Status* status, RuntimeState* state)
+        : _pool(pool) {
     if (!texprs.empty()) {
-        *status = Expr::create_expr_trees(_pool, texprs, &_output_expr_ctxs);
+        *status = Expr::create_expr_trees(_pool, texprs, &_output_expr_ctxs, state);
     }
 }
 
-Status OlapTableSink::init(const TDataSink& t_sink) {
+Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
     DCHECK(t_sink.__isset.olap_table_sink);
     const auto& table_sink = t_sink.olap_table_sink;
     _merge_condition = table_sink.merge_condition;
@@ -801,7 +804,7 @@ Status OlapTableSink::init(const TDataSink& t_sink) {
     _schema = std::make_shared<OlapTableSchemaParam>();
     RETURN_IF_ERROR(_schema->init(table_sink.schema));
     _vectorized_partition = _pool->add(new vectorized::OlapTablePartitionParam(_schema, table_sink.partition));
-    RETURN_IF_ERROR(_vectorized_partition->init());
+    RETURN_IF_ERROR(_vectorized_partition->init(state));
     _location = _pool->add(new OlapTableLocationParam(table_sink.location));
     _nodes_info = _pool->add(new StarRocksNodesInfo(table_sink.nodes_info));
 
@@ -873,19 +876,12 @@ Status OlapTableSink::prepare(RuntimeState* state) {
         }
     }
 
-    _max_decimal_val.resize(_output_tuple_desc->slots().size());
-    _min_decimal_val.resize(_output_tuple_desc->slots().size());
-
     _max_decimalv2_val.resize(_output_tuple_desc->slots().size());
     _min_decimalv2_val.resize(_output_tuple_desc->slots().size());
     // check if need validate batch
     for (int i = 0; i < _output_tuple_desc->slots().size(); ++i) {
         auto* slot = _output_tuple_desc->slots()[i];
         switch (slot->type().type) {
-        case TYPE_DECIMAL:
-            _max_decimal_val[i].to_max_decimal(slot->type().precision, slot->type().scale);
-            _min_decimal_val[i].to_min_decimal(slot->type().precision, slot->type().scale);
-            break;
         case TYPE_DECIMALV2:
             _max_decimalv2_val[i].to_max_decimal(slot->type().precision, slot->type().scale);
             _min_decimalv2_val[i].to_min_decimal(slot->type().precision, slot->type().scale);
@@ -1475,7 +1471,7 @@ void OlapTableSink::_print_decimal_error_msg(RuntimeState* state, const DecimalV
 #endif
 }
 
-template <PrimitiveType PT, typename CppType = vectorized::RunTimeCppType<PT>>
+template <LogicalType PT, typename CppType = vectorized::RunTimeCppType<PT>>
 void _print_decimalv3_error_msg(RuntimeState* state, const CppType& decimal, const SlotDescriptor* desc) {
     if (state->has_reached_max_error_msg_num()) {
         return;
@@ -1490,7 +1486,7 @@ void _print_decimalv3_error_msg(RuntimeState* state, const CppType& decimal, con
 #endif
 }
 
-template <PrimitiveType PT>
+template <LogicalType PT>
 void OlapTableSink::_validate_decimal(RuntimeState* state, vectorized::Column* column, const SlotDescriptor* desc,
                                       std::vector<uint8_t>* validate_selection) {
     using CppType = vectorized::RunTimeCppType<PT>;

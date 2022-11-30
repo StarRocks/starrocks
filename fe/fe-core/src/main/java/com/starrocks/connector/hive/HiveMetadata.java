@@ -16,6 +16,7 @@ import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.RemoteFileOperations;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -29,6 +30,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import static com.starrocks.connector.PartitionUtil.toHivePartitionName;
+import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
 
 public class HiveMetadata implements ConnectorMetadata {
     private static final Logger LOG = LogManager.getLogger(HiveMetadata.class);
@@ -151,7 +153,7 @@ public class HiveMetadata implements ConnectorMetadata {
     }
 
     public void refreshTable(String srDbName, Table table, List<String> partitionNames) {
-        if (partitionNames != null && partitionNames.size() > 1) {
+        if (partitionNames != null && partitionNames.size() > 0) {
             cacheUpdateProcessor.ifPresent(processor -> processor.refreshPartition(table, partitionNames));
         } else {
             cacheUpdateProcessor.ifPresent(processor -> processor.refreshTable(srDbName, table));
@@ -161,7 +163,11 @@ public class HiveMetadata implements ConnectorMetadata {
     public void dropTable(DropTableStmt stmt) throws DdlException {
         String dbName = stmt.getDbName();
         String tableName = stmt.getTableName();
-        cacheUpdateProcessor.ifPresent(processor -> processor.invalidateTable(dbName, tableName));
+        if (isResourceMappingCatalog(catalogName)) {
+            HiveTable hiveTable = (HiveTable) GlobalStateMgr.getCurrentState().getMetadata().getTable(dbName, tableName);
+            cacheUpdateProcessor.ifPresent(processor -> processor.invalidateTable(
+                    hiveTable.getDbName(), hiveTable.getTableName(), hiveTable.getTableLocation()));
+        }
     }
 
     public void clear() {

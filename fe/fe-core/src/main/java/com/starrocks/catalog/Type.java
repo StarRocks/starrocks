@@ -695,31 +695,37 @@ public abstract class Type implements Cloneable {
 
     public boolean canApplyToNumeric() {
         // TODO(mofei) support sum, avg for JSON
-        return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType();
+        return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType() && !isStructType() &&
+                !isMapType();
     }
 
     public boolean canJoinOn() {
-        return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType();
+        return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType() && !isStructType() &&
+                !isMapType();
     }
 
     public boolean canGroupBy() {
         // TODO(mofei) support group by for JSON
-        return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType();
+        return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType() && !isStructType() &&
+                !isMapType();
     }
 
     public boolean canOrderBy() {
         // TODO(mofei) support order by for JSON
-        return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType();
+        return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType() && !isStructType() &&
+                !isMapType();
     }
 
     public boolean canPartitionBy() {
         // TODO(mofei) support partition by for JSON
-        return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType();
+        return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType() && !isStructType() &&
+                !isMapType();
     }
 
     public boolean canDistinct() {
         // TODO(mofei) support distinct by for JSON
-        return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType();
+        return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType() && !isStructType() &&
+                !isMapType();
     }
 
     public boolean canStatistic() {
@@ -739,8 +745,8 @@ public abstract class Type implements Cloneable {
         return !(isFloatingPointType() || isComplexType() || isOnlyMetricType() || isJsonType() || isBinaryType());
     }
 
-    public boolean canAggregateArguments() {
-        return !(isNull() || isChar() || isTime() || isArrayType() || isJsonType()
+    public boolean canBeWindowFunctionArgumentTypes() {
+        return !(isNull() || isChar() || isTime() || isComplexType() || isJsonType()
                 || isPseudoType() || isFunctionType() || isBinaryType());
     }
 
@@ -757,7 +763,7 @@ public abstract class Type implements Cloneable {
     }
 
     public static final String ONLY_METRIC_TYPE_ERROR_MSG =
-            "Type percentile/hll/bitmap/json not support aggregation/group-by/order-by/union/join";
+            "Type percentile/hll/bitmap/json/struct/map not support aggregation/group-by/order-by/union/join";
 
     public boolean isHllType() {
         return isScalarType(PrimitiveType.HLL);
@@ -1570,6 +1576,9 @@ public abstract class Type implements Cloneable {
             case VARCHAR:
             case HLL:
             case BITMAP:
+            // Because mysql does not have a large int type, mysql will treat it as hex after exceeding bigint
+            case LARGEINT:
+            case JSON:
                 return CHARSET_UTF8;
             default:
                 return CHARSET_BINARY;

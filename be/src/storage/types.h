@@ -71,7 +71,7 @@ public:
     virtual uint32_t hash_code(const void* data, uint32_t seed) const = 0;
     virtual size_t size() const = 0;
 
-    virtual FieldType type() const = 0;
+    virtual LogicalType type() const = 0;
 
     virtual int precision() const { return -1; }
 
@@ -90,24 +90,24 @@ protected:
 
 // TypeComparator
 // static compare functions for performance-critical scenario
-template <FieldType ftype>
+template <LogicalType ftype>
 struct TypeComparator {
     static int cmp(const void* lhs, const void* rhs);
 };
 
-bool is_scalar_field_type(FieldType field_type);
+bool is_scalar_field_type(LogicalType field_type);
 
-bool is_complex_metric_type(FieldType field_type);
+bool is_complex_metric_type(LogicalType field_type);
 
-const TypeInfo* get_scalar_type_info(FieldType t);
+const TypeInfo* get_scalar_type_info(LogicalType t);
 
-TypeInfoPtr get_type_info(FieldType field_type);
+TypeInfoPtr get_type_info(LogicalType field_type);
 
 TypeInfoPtr get_type_info(const ColumnMetaPB& column_meta_pb);
 
 TypeInfoPtr get_type_info(const TabletColumn& col);
 
-TypeInfoPtr get_type_info(FieldType field_type, [[maybe_unused]] int precision, [[maybe_unused]] int scale);
+TypeInfoPtr get_type_info(LogicalType field_type, [[maybe_unused]] int precision, [[maybe_unused]] int scale);
 
 TypeInfoPtr get_type_info(const TypeInfo* type_info);
 

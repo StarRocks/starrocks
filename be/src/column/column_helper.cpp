@@ -5,6 +5,7 @@
 #include <runtime/types.h>
 
 #include "column/array_column.h"
+#include "column/chunk.h"
 #include "column/json_column.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
@@ -212,10 +213,10 @@ ColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool null
 }
 
 struct ColumnBuilder {
-    template <PrimitiveType ptype>
+    template <LogicalType ptype>
     ColumnPtr operator()(const TypeDescriptor& type_desc, size_t size) {
         switch (ptype) {
-        case INVALID_TYPE:
+        case TYPE_UNKNOWN:
         case TYPE_NULL:
         case TYPE_BINARY:
         case TYPE_DECIMAL:
@@ -244,16 +245,16 @@ ColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool null
     }
 
     ColumnPtr p;
-    if (type_desc.type == PrimitiveType::TYPE_ARRAY) {
+    if (type_desc.type == LogicalType::TYPE_ARRAY) {
         auto offsets = UInt32Column::create(size);
         auto data = create_column(type_desc.children[0], true, is_const, size);
         p = ArrayColumn::create(std::move(data), std::move(offsets));
-    } else if (type_desc.type == PrimitiveType::TYPE_MAP) {
+    } else if (type_desc.type == LogicalType::TYPE_MAP) {
         auto offsets = UInt32Column ::create(size);
         auto keys = create_column(type_desc.children[0], true, is_const, size);
         auto values = create_column(type_desc.children[1], true, is_const, size);
         p = MapColumn::create(std::move(keys), std::move(values), std::move(offsets));
-    } else if (type_desc.type == PrimitiveType::TYPE_STRUCT) {
+    } else if (type_desc.type == LogicalType::TYPE_STRUCT) {
         size_t field_size = type_desc.children.size();
         DCHECK_EQ(field_size, type_desc.selected_fields.size());
         Columns columns;
@@ -352,7 +353,7 @@ ColumnPtr ColumnHelper::convert_time_column_from_double_to_str(const ColumnPtr& 
         res = NullableColumn::create(get_binary_column(data_column, column->size()), nullable_column->null_column());
     } else if (column->is_constant()) {
         auto* const_column = down_cast<vectorized::ConstColumn*>(column.get());
-        string time_str = time_str_from_double(const_column->get(0).get_double());
+        std::string time_str = time_str_from_double(const_column->get(0).get_double());
         res = vectorized::ColumnHelper::create_const_column<TYPE_VARCHAR>(time_str, column->size());
     } else {
         auto* data_column = down_cast<DoubleColumn*>(column.get());

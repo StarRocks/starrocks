@@ -26,7 +26,7 @@ public:
         auto* col_array = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(arg0));
         Columns result;
         if (arg0->has_null()) {
-            NullableColumn* nullable_array_column = down_cast<NullableColumn*>(arg0);
+            auto* nullable_array_column = down_cast<NullableColumn*>(arg0);
 
             auto offset_column = col_array->offsets_column();
             ColumnPtr compacted_offset_column = offset_column->clone_empty();

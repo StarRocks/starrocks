@@ -109,7 +109,7 @@ public class BrokerDesc implements Writable {
         return desc;
     }
 
-    public String toSql() {
+    public String toString() {
         StringBuilder sb = new StringBuilder();
         sb.append("WITH BROKER ").append(name);
         if (properties != null && !properties.isEmpty()) {

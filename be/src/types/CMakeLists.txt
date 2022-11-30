@@ -7,5 +7,6 @@ add_library(Types STATIC
     bitmap_value.cpp
     date_value.cpp
     hll.cpp
+    logical_type.cpp
     timestamp_value.cpp
 )

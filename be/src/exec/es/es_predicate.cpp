@@ -61,7 +61,7 @@ static constexpr bool is_type_in() {
     return (std::is_same_v<T, Ts> || ...);
 }
 
-VExtLiteral::VExtLiteral(PrimitiveType type, vectorized::ColumnPtr column, const std::string& timezone) {
+VExtLiteral::VExtLiteral(LogicalType type, vectorized::ColumnPtr column, const std::string& timezone) {
     DCHECK(!column->empty());
     // We need to convert the predicate column into the corresponding string.
     // Some types require special handling, because the default behavior of Datum may not match the behavior of ES.
@@ -316,7 +316,7 @@ Status EsPredicate::_build_functioncall_predicate(const Expr* conjunct, bool* ha
                 return Status::InternalError("build disjuncts failed: slot_desc is null");
             }
 
-            PrimitiveType type = expr->type().type;
+            LogicalType type = expr->type().type;
             if (type != TYPE_VARCHAR && type != TYPE_CHAR) {
                 return Status::InternalError("build disjuncts failed: like value is not a string");
             }
@@ -341,7 +341,7 @@ Status EsPredicate::_build_functioncall_predicate(const Expr* conjunct, bool* ha
     return Status::OK();
 }
 
-template <PrimitiveType type, typename Func>
+template <LogicalType type, typename Func>
 Status build_inpred_values(const Predicate* pred, bool& is_not_in, Func&& func) {
     const auto* vpred = down_cast<const vectorized::VectorizedInConstPredicate<type>*>(pred);
     const auto& hash_set = vpred->hash_set();

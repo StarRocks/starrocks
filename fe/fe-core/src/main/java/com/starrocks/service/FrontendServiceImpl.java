@@ -257,7 +257,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
         }
         if (db != null) {
-            for (String tableName : db.getTableNamesWithLock()) {
+            for (String tableName : db.getTableNamesViewWithLock()) {
                 LOG.debug("get table: {}, wait to check", tableName);
                 if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser, params.db,
                         tableName, PrivPredicate.SHOW)) {
@@ -713,7 +713,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
             Database db = GlobalStateMgr.getCurrentState().getDb(fullName);
             if (db != null) {
-                for (String tableName : db.getTableNamesWithLock()) {
+                for (String tableName : db.getTableNamesViewWithLock()) {
                     LOG.debug("get table: {}, wait to check", tableName);
                     if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser, fullName,
                             tableName, PrivPredicate.SHOW)) {
@@ -1023,8 +1023,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             String timeoutInfo = GlobalStateMgr.getCurrentGlobalTransactionMgr()
                     .getTxnPublishTimeoutDebugInfo(db.getId(), request.getTxnId());
             LOG.warn("txn {} publish timeout {}", request.getTxnId(), timeoutInfo);
-            if (timeoutInfo.length() > 120) {
-                timeoutInfo = timeoutInfo.substring(0, 120) + "...";
+            if (timeoutInfo.length() > 240) {
+                timeoutInfo = timeoutInfo.substring(0, 240) + "...";
             }
             status.addToError_msgs("Publish timeout. The data will be visible after a while" + timeoutInfo);
             return;

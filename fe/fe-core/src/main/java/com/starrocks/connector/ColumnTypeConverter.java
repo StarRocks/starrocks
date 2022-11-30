@@ -2,7 +2,9 @@
 
 package com.starrocks.connector;
 
+import com.google.common.base.Preconditions;
 import com.starrocks.catalog.ArrayType;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
@@ -155,7 +157,7 @@ public class ColumnTypeConverter {
                 if (type.isArrayType()) {
                     return type;
                 } else {
-                    isConvertedFailed = false;
+                    isConvertedFailed = true;
                     break;
                 }
             case FIXED:
@@ -174,6 +176,36 @@ public class ColumnTypeConverter {
                     primitiveType = PrimitiveType.VARCHAR;
                     break;
                 }
+            case RECORD:
+                // Struct type
+                List<Schema.Field> fields = avroSchema.getFields();
+                Preconditions.checkArgument(fields.size() > 0);
+                ArrayList<StructField> structFields = new ArrayList<>(fields.size());
+                for (Schema.Field field : fields) {
+                    String fieldName = field.name();
+                    Type fieldType = fromHudiType(field.schema());
+                    if (fieldType.isUnknown()) {
+                        isConvertedFailed = true;
+                        break;
+                    }
+                    structFields.add(new StructField(fieldName, fieldType));
+                }
+
+                if (!isConvertedFailed) {
+                    return new StructType(structFields);
+                }
+            case MAP:
+                Schema value = avroSchema.getValueType();
+                Type valueType = fromHudiType(value);
+                if (valueType.isUnknown()) {
+                    isConvertedFailed = true;
+                    break;
+                }
+
+                if (!isConvertedFailed) {
+                    // Hudi map's key must be string
+                    return new MapType(ScalarType.createDefaultString(), valueType);
+                }
             case UNION:
                 List<Schema> nonNullMembers = avroSchema.getTypes().stream()
                         .filter(schema -> !Schema.Type.NULL.equals(schema.getType()))
@@ -186,7 +218,6 @@ public class ColumnTypeConverter {
                     break;
                 }
             case ENUM:
-            case MAP:
             default:
                 isConvertedFailed = true;
                 break;
@@ -260,7 +291,7 @@ public class ColumnTypeConverter {
     }
 
     private static ArrayType convertToArrayType(io.delta.standalone.types.ArrayType arrayType) {
-        return new ArrayType(fromDeltaLakeType(arrayType.getElementType()));
+        return new ArrayType(fromDeltaLakeType(arrayType.getElementType()), true);
     }
 
     public static String getTypeKeyword(String type) {
@@ -295,7 +326,7 @@ public class ColumnTypeConverter {
             if (fromHiveTypeToArrayType(matcher.group(1)).equals(Type.UNKNOWN_TYPE)) {
                 itemType = Type.UNKNOWN_TYPE;
             } else {
-                itemType = new ArrayType(fromHiveTypeToArrayType(matcher.group(1)));
+                itemType = new ArrayType(fromHiveTypeToArrayType(matcher.group(1)), true);
             }
         } else {
             itemType = fromHiveType(typeStr);
@@ -386,7 +417,7 @@ public class ColumnTypeConverter {
     }
 
     private static ArrayType fromHudiTypeToArrayType(Schema typeSchema) {
-        return new ArrayType(fromHudiType(typeSchema.getElementType()));
+        return new ArrayType(fromHudiType(typeSchema.getElementType()), true);
     }
 
     public static boolean validateHiveColumnType(Type type, Type otherType) {
@@ -456,5 +487,33 @@ public class ColumnTypeConverter {
             default:
                 return false;
         }
+    }
+
+    public static boolean columnEquals(Column base, Column other) {
+        if (base == other) {
+            return true;
+        }
+
+        if (!base.getName().equalsIgnoreCase(other.getName())) {
+            return false;
+        }
+
+        if (!base.getType().equals(other.getType())) {
+            return false;
+        }
+
+        if (base.getStrLen() != other.getStrLen()) {
+            return false;
+        }
+
+        if (base.getPrecision() != other.getPrecision()) {
+            return false;
+        }
+
+        if (base.getScale() != other.getScale()) {
+            return false;
+        }
+
+        return true;
     }
 }

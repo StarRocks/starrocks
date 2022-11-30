@@ -25,23 +25,74 @@
 
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
-#include "runtime/mem_pool.h"
 #include "storage/chunk_helper.h"
+#include "storage/decimal_type_info.h"
 #include "storage/olap_define.h"
 #include "storage/olap_type_infra.h"
 #include "storage/rowset/encoding_info.h"
 #include "storage/rowset/indexed_column_reader.h"
 #include "storage/rowset/indexed_column_writer.h"
+#include "storage/type_traits.h"
 #include "storage/types.h"
 #include "util/unaligned_access.h"
 
 namespace starrocks {
 
+template <LogicalType type>
+struct ZoneMapDatumBase {
+    using CppType = typename TypeTraits<type>::CppType;
+    CppType value;
+
+    void init([[maybe_unused]] TypeInfo* type_info, [[maybe_unused]] int length) {}
+    void set_to_max(TypeInfo* type_info) { type_info->set_to_max(&value); }
+    void set_to_min(TypeInfo* type_info) { type_info->set_to_min(&value); }
+    std::string to_zone_map_string(TypeInfo* type_info) const { return type_info->to_string(&value); }
+};
+
+template <LogicalType type>
+struct ZoneMapDatum : public ZoneMapDatumBase<type> {};
+
+template <>
+struct ZoneMapDatum<TYPE_DECIMAL32> : public ZoneMapDatumBase<TYPE_DECIMAL32> {
+    std::string to_zone_map_string(TypeInfo* type_info) const { return get_decimal_zone_map_string(type_info, &value); }
+};
+
+template <>
+struct ZoneMapDatum<TYPE_DECIMAL64> : public ZoneMapDatumBase<TYPE_DECIMAL64> {
+    std::string to_zone_map_string(TypeInfo* type_info) const { return get_decimal_zone_map_string(type_info, &value); }
+};
+
+template <>
+struct ZoneMapDatum<TYPE_DECIMAL128> : public ZoneMapDatumBase<TYPE_DECIMAL128> {
+    std::string to_zone_map_string(TypeInfo* type_info) const { return get_decimal_zone_map_string(type_info, &value); }
+};
+
+template <>
+struct ZoneMapDatum<TYPE_CHAR> : public ZoneMapDatumBase<TYPE_CHAR> {
+    void init([[maybe_unused]] TypeInfo* type_info_, int length) {
+        _length = length;
+        raw::make_room(&_value_container, length);
+        value.data = (char*)_value_container.c_str();
+        value.size = length;
+    }
+    void set_to_max([[maybe_unused]] TypeInfo* type_info) {
+        value.size = _length;
+        memset(value.data, 0xFF, value.size);
+    }
+    void set_to_min([[maybe_unused]] TypeInfo* type_info) { value.size = 0; }
+    int _length;
+    std::string _value_container;
+};
+
+template <>
+struct ZoneMapDatum<TYPE_VARCHAR> : public ZoneMapDatum<TYPE_CHAR> {};
+
+template <LogicalType type>
 struct ZoneMap {
     // min value of zone
-    char* min_value = nullptr;
+    ZoneMapDatum<type> min_value;
     // max value of zone
-    char* max_value = nullptr;
+    ZoneMapDatum<type> max_value;
 
     // if both has_null and has_not_null is false, means no rows.
     // if has_null is true and has_not_null is false, means all rows is null.
@@ -52,20 +103,22 @@ struct ZoneMap {
     // has_not_null means whether zone has none-null value
     bool has_not_null = false;
 
-    void to_proto(ZoneMapPB* dst, Field* field) const {
-        dst->set_min(field->to_zone_map_string(min_value));
-        dst->set_max(field->to_zone_map_string(max_value));
+    void to_proto(ZoneMapPB* dst, TypeInfo* type_info) const {
+        dst->set_min(min_value.to_zone_map_string(type_info));
+        dst->set_max(max_value.to_zone_map_string(type_info));
         dst->set_has_null(has_null);
         dst->set_has_not_null(has_not_null);
     }
 };
 
-template <FieldType type>
+template <LogicalType type>
 class ZoneMapIndexWriterImpl final : public ZoneMapIndexWriter {
     using CppType = typename TypeTraits<type>::CppType;
 
 public:
-    explicit ZoneMapIndexWriterImpl(starrocks::Field* field);
+    // TypeInfo is used for all kinds of types. It is used to change the content of datum of the max/min value.
+    // length is only used for CHAR/VARCHAR, and used to allocate enough memory for min/max value.
+    explicit ZoneMapIndexWriterImpl(TypeInfo* type_info, int length);
 
     void add_values(const void* values, size_t count) override;
 
@@ -79,60 +132,57 @@ public:
     uint64_t size() const override { return _estimated_size; }
 
 private:
-    void _reset_zone_map(ZoneMap* zone_map) {
+    void _reset_zone_map(ZoneMap<type>* zone_map) {
         // we should allocate max varchar length and set to max for min value
-        _field->set_to_max(zone_map->min_value);
-        _field->set_to_min(zone_map->max_value);
+        zone_map->min_value.set_to_max(_type_info);
+        zone_map->max_value.set_to_min(_type_info);
         zone_map->has_null = false;
         zone_map->has_not_null = false;
     }
 
-    Field* _field;
+    TypeInfo* _type_info;
     // memory will be managed by MemPool
-    ZoneMap _page_zone_map;
-    ZoneMap _segment_zone_map;
-    // TODO(zc): we should replace this memory pool later, we only allocate min/max
-    // for field. But MemPool allocate 4KB least, it will a waste for most cases.
-    MemPool _pool;
+    ZoneMap<type> _page_zone_map;
+    ZoneMap<type> _segment_zone_map;
 
     // serialized ZoneMapPB for each data page
     std::vector<std::string> _values;
     uint64_t _estimated_size = 0;
 };
 
-template <FieldType type>
-ZoneMapIndexWriterImpl<type>::ZoneMapIndexWriterImpl(Field* field) : _field(field) {
-    _page_zone_map.min_value = _field->allocate_value(&_pool);
-    _page_zone_map.max_value = _field->allocate_value(&_pool);
+template <LogicalType type>
+ZoneMapIndexWriterImpl<type>::ZoneMapIndexWriterImpl(TypeInfo* type_info, int length) : _type_info(type_info) {
+    _page_zone_map.min_value.init(_type_info, length);
+    _page_zone_map.max_value.init(_type_info, length);
     _reset_zone_map(&_page_zone_map);
-    _segment_zone_map.min_value = _field->allocate_value(&_pool);
-    _segment_zone_map.max_value = _field->allocate_value(&_pool);
+    _segment_zone_map.min_value.init(_type_info, length);
+    _segment_zone_map.max_value.init(_type_info, length);
     _reset_zone_map(&_segment_zone_map);
 }
 
-template <FieldType type>
+template <LogicalType type>
 void ZoneMapIndexWriterImpl<type>::add_values(const void* values, size_t count) {
     if (count > 0) {
         _page_zone_map.has_not_null = true;
         const auto* vals = reinterpret_cast<const CppType*>(values);
         auto [pmin, pmax] = std::minmax_element(vals, vals + count);
-        if (unaligned_load<CppType>(pmin) < unaligned_load<CppType>(_page_zone_map.min_value)) {
-            _field->type_info()->direct_copy(_page_zone_map.min_value, pmin, nullptr);
+        if (unaligned_load<CppType>(pmin) < _page_zone_map.min_value.value) {
+            _type_info->direct_copy(&_page_zone_map.min_value.value, pmin, nullptr);
         }
-        if (unaligned_load<CppType>(pmax) > unaligned_load<CppType>(_page_zone_map.max_value)) {
-            _field->type_info()->direct_copy(_page_zone_map.max_value, pmax, nullptr);
+        if (unaligned_load<CppType>(pmax) > _page_zone_map.max_value.value) {
+            _type_info->direct_copy(&_page_zone_map.max_value.value, pmax, nullptr);
         }
     }
 }
 
-template <FieldType type>
+template <LogicalType type>
 Status ZoneMapIndexWriterImpl<type>::flush() {
     // Update segment zone map.
-    if (_field->compare(_segment_zone_map.min_value, _page_zone_map.min_value) > 0) {
-        _field->type_info()->direct_copy(_segment_zone_map.min_value, _page_zone_map.min_value, nullptr);
+    if (_page_zone_map.min_value.value < _segment_zone_map.min_value.value) {
+        _type_info->direct_copy(&_segment_zone_map.min_value.value, &_page_zone_map.min_value.value, nullptr);
     }
-    if (_field->compare(_segment_zone_map.max_value, _page_zone_map.max_value) < 0) {
-        _field->type_info()->direct_copy(_segment_zone_map.max_value, _page_zone_map.max_value, nullptr);
+    if (_page_zone_map.max_value.value > _segment_zone_map.max_value.value) {
+        _type_info->direct_copy(&_segment_zone_map.max_value.value, &_page_zone_map.max_value.value, nullptr);
     }
     if (_page_zone_map.has_null) {
         _segment_zone_map.has_null = true;
@@ -142,7 +192,7 @@ Status ZoneMapIndexWriterImpl<type>::flush() {
     }
 
     ZoneMapPB zone_map_pb;
-    _page_zone_map.to_proto(&zone_map_pb, _field);
+    _page_zone_map.to_proto(&zone_map_pb, _type_info);
     _reset_zone_map(&_page_zone_map);
 
     std::string serialized_zone_map;
@@ -156,29 +206,29 @@ Status ZoneMapIndexWriterImpl<type>::flush() {
 }
 
 struct ZoneMapIndexWriterBuilder {
-    template <FieldType ftype>
-    std::unique_ptr<ZoneMapIndexWriter> operator()(Field* field) {
-        return std::make_unique<ZoneMapIndexWriterImpl<ftype>>(field);
+    template <LogicalType ftype>
+    std::unique_ptr<ZoneMapIndexWriter> operator()(TypeInfo* type_info, int length) {
+        return std::make_unique<ZoneMapIndexWriterImpl<ftype>>(type_info, length);
     }
 };
 
-std::unique_ptr<ZoneMapIndexWriter> ZoneMapIndexWriter::create(starrocks::Field* field) {
-    return field_type_dispatch_zonemap_index(field->type(), ZoneMapIndexWriterBuilder(), field);
+std::unique_ptr<ZoneMapIndexWriter> ZoneMapIndexWriter::create(TypeInfo* type_info, int length) {
+    return field_type_dispatch_zonemap_index(type_info->type(), ZoneMapIndexWriterBuilder(), type_info, length);
 }
 
-template <FieldType type>
+template <LogicalType type>
 Status ZoneMapIndexWriterImpl<type>::finish(WritableFile* wfile, ColumnIndexMetaPB* index_meta) {
     index_meta->set_type(ZONE_MAP_INDEX);
     ZoneMapIndexPB* meta = index_meta->mutable_zone_map_index();
     // store segment zone map
-    _segment_zone_map.to_proto(meta->mutable_segment_zone_map(), _field);
+    _segment_zone_map.to_proto(meta->mutable_segment_zone_map(), _type_info);
 
     // write out zone map for each data pages
-    TypeInfoPtr typeinfo = get_type_info(OLAP_FIELD_TYPE_OBJECT);
+    TypeInfoPtr typeinfo = get_type_info(TYPE_OBJECT);
     IndexedColumnWriterOptions options;
     options.write_ordinal_index = true;
     options.write_value_index = false;
-    options.encoding = EncodingInfo::get_default_encoding(OLAP_FIELD_TYPE_OBJECT, false);
+    options.encoding = EncodingInfo::get_default_encoding(TYPE_OBJECT, false);
     options.compression = NO_COMPRESSION; // currently not compressed
 
     IndexedColumnWriter writer(options, typeinfo, wfile);
@@ -222,7 +272,7 @@ Status ZoneMapIndexReader::_do_load(FileSystem* fs, const std::string& filename,
 
     _page_zone_maps.resize(reader.num_values());
 
-    auto column = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_VARCHAR, false);
+    auto column = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
     // read and cache all page zone maps
     for (int i = 0; i < reader.num_values(); ++i) {
         RETURN_IF_ERROR(iter->seek_to_ordinal(i));

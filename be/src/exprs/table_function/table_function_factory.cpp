@@ -16,7 +16,7 @@ namespace starrocks::vectorized {
 
 struct TableFunctionMapHash {
     size_t operator()(
-            const std::tuple<std::string, std::vector<PrimitiveType>, std::vector<PrimitiveType>>& quadruple) const {
+            const std::tuple<std::string, std::vector<LogicalType>, std::vector<LogicalType>>& quadruple) const {
         std::hash<std::string> hasher;
 
         size_t fn_hash = hasher(std::get<0>(quadruple));
@@ -36,8 +36,8 @@ class TableFunctionResolver {
     DECLARE_SINGLETON(TableFunctionResolver);
 
 public:
-    const TableFunction* get_table_function(const std::string& name, const std::vector<PrimitiveType>& arg_type,
-                                            const std::vector<PrimitiveType>& return_type) const {
+    const TableFunction* get_table_function(const std::string& name, const std::vector<LogicalType>& arg_type,
+                                            const std::vector<LogicalType>& return_type) const {
         auto pair = _infos_mapping.find(std::make_tuple(name, arg_type, return_type));
         if (pair == _infos_mapping.end()) {
             return nullptr;
@@ -45,14 +45,14 @@ public:
         return pair->second.get();
     }
 
-    void add_function_mapping(std::string&& name, const std::vector<PrimitiveType>& arg_type,
-                              const std::vector<PrimitiveType>& return_type, const TableFunctionPtr& table_func) {
+    void add_function_mapping(std::string&& name, const std::vector<LogicalType>& arg_type,
+                              const std::vector<LogicalType>& return_type, const TableFunctionPtr& table_func) {
         _infos_mapping.emplace(std::make_tuple(name, arg_type, return_type), table_func);
     }
 
 private:
-    std::unordered_map<std::tuple<std::string, std::vector<PrimitiveType>, std::vector<PrimitiveType>>,
-                       TableFunctionPtr, TableFunctionMapHash>
+    std::unordered_map<std::tuple<std::string, std::vector<LogicalType>, std::vector<LogicalType>>, TableFunctionPtr,
+                       TableFunctionMapHash>
             _infos_mapping;
     TableFunctionResolver(const TableFunctionResolver&) = delete;
     const TableFunctionResolver& operator=(const TableFunctionResolver&) = delete;
@@ -90,8 +90,8 @@ TableFunctionResolver::TableFunctionResolver() {
 
 TableFunctionResolver::~TableFunctionResolver() = default;
 
-const TableFunction* get_table_function(const std::string& name, const std::vector<PrimitiveType>& arg_type,
-                                        const std::vector<PrimitiveType>& return_type,
+const TableFunction* get_table_function(const std::string& name, const std::vector<LogicalType>& arg_type,
+                                        const std::vector<LogicalType>& return_type,
                                         TFunctionBinaryType::type binary_type) {
     if (binary_type == TFunctionBinaryType::BUILTIN) {
         return TableFunctionResolver::instance()->get_table_function(name, arg_type, return_type);

@@ -59,7 +59,7 @@ public:
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
                     size_t end) const override {
         DCHECK_GT(end, start);
-        Int64Column* column = down_cast<Int64Column*>(dst);
+        auto* column = down_cast<Int64Column*>(dst);
         for (size_t i = start; i < end; ++i) {
             column->get_data()[i] = this->data(state).bytes;
         }
@@ -72,7 +72,7 @@ public:
 
     void batch_serialize(FunctionContext* ctx, size_t chunk_size, const Buffer<AggDataPtr>& agg_states,
                          size_t state_offset, Column* to) const override {
-        Int64Column* column = down_cast<Int64Column*>(to);
+        auto* column = down_cast<Int64Column*>(to);
         Buffer<int64_t>& result_data = column->get_data();
         for (size_t i = 0; i < chunk_size; i++) {
             result_data.emplace_back(this->data(agg_states[i] + state_offset).bytes);
@@ -90,16 +90,16 @@ public:
             if (elapsed_time > 0) {
                 speed = this->data(state).bytes * 1.0 / 1048576.0 * 1000000 / (elapsed_time / 1000.0);
             }
-            string unit = "MB/s";
+            std::string unit = "MB/s";
             if (speed >= 1024) {
                 speed /= 1024;
                 unit = "GB/s";
             }
 
-            string res = "exchange " + std::to_string(this->data(state).bytes) + " bytes in " +
-                         std::to_string(elapsed_time * 1.0 / NANOS_PER_SEC) +
-                         " s, speed = " + fmt::format("{:.4f} ", speed) + unit;
-            BinaryColumn* column = down_cast<BinaryColumn*>(to);
+            std::string res = "exchange " + std::to_string(this->data(state).bytes) + " bytes in " +
+                              std::to_string(elapsed_time * 1.0 / NANOS_PER_SEC) +
+                              " s, speed = " + fmt::format("{:.4f} ", speed) + unit;
+            auto* column = down_cast<BinaryColumn*>(to);
             column->append(Slice(res));
         }
     }

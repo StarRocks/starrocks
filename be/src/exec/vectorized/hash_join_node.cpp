@@ -60,9 +60,9 @@ Status HashJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
     for (const auto& eq_join_conjunct : eq_join_conjuncts) {
         ExprContext* left = nullptr;
         ExprContext* right = nullptr;
-        RETURN_IF_ERROR(Expr::create_expr_tree(_pool, eq_join_conjunct.left, &left));
+        RETURN_IF_ERROR(Expr::create_expr_tree(_pool, eq_join_conjunct.left, &left, state));
         _probe_expr_ctxs.push_back(left);
-        RETURN_IF_ERROR(Expr::create_expr_tree(_pool, eq_join_conjunct.right, &right));
+        RETURN_IF_ERROR(Expr::create_expr_tree(_pool, eq_join_conjunct.right, &right, state));
         _build_expr_ctxs.push_back(right);
         if (!left->root()->type().support_join() || !right->root()->type().support_join()) {
             return Status::NotSupported(fmt::format("join on type {}={} is not supported",
@@ -99,12 +99,12 @@ Status HashJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
         }
     }
 
-    RETURN_IF_ERROR(
-            Expr::create_expr_trees(_pool, tnode.hash_join_node.other_join_conjuncts, &_other_join_conjunct_ctxs));
+    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, tnode.hash_join_node.other_join_conjuncts,
+                                            &_other_join_conjunct_ctxs, state));
 
     for (const auto& desc : tnode.hash_join_node.build_runtime_filters) {
         auto* rf_desc = _pool->add(new RuntimeFilterBuildDescriptor());
-        RETURN_IF_ERROR(rf_desc->init(_pool, desc));
+        RETURN_IF_ERROR(rf_desc->init(_pool, desc, state));
         _build_runtime_filters.emplace_back(rf_desc);
     }
     _runtime_join_filter_pushdown_limit = 1024000;
@@ -898,7 +898,7 @@ Status HashJoinNode::_do_publish_runtime_filters(RuntimeState* state, int64_t li
         if (!rf_desc->has_consumer()) continue;
         // skip if ht.size() > limit and it's only for local.
         if (!rf_desc->has_remote_targets() && _ht.get_row_count() > limit) continue;
-        PrimitiveType build_type = rf_desc->build_expr_type();
+        LogicalType build_type = rf_desc->build_expr_type();
         JoinRuntimeFilter* filter = RuntimeFilterHelper::create_runtime_bloom_filter(_pool, build_type);
         if (filter == nullptr) continue;
         filter->set_join_mode(rf_desc->join_mode());

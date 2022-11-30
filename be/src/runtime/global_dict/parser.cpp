@@ -49,7 +49,7 @@ public:
         }
     }
 
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {
         size_t num_rows = ptr->num_rows();
         if (_always_null) {
             return ColumnHelper::create_const_null_column(num_rows);

@@ -16,7 +16,6 @@ import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CloneExpr;
 import com.starrocks.analysis.CollectionElementExpr;
 import com.starrocks.analysis.CompoundPredicate;
-import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
@@ -78,9 +77,6 @@ import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 
-import java.math.BigDecimal;
-import java.math.BigInteger;
-import java.time.LocalDateTime;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -223,8 +219,9 @@ public final class SqlToScalarOperatorTranslator {
         // Example: the Deque is [1,2,3,4]
         // when push(5) -> [5,1,2,3,4]
         // then pop() -> [1,2,3,4]
-        // -1 means select all fields in the same level, 0 means select 0th field in this level
+        // Empty usedSubFieldPos means select all fields
         private final Deque<Integer> usedSubFieldPos = new ArrayDeque<>();
+
         public Visitor(ExpressionMapping expressionMapping, ColumnRefFactory columnRefFactory,
                        List<ColumnRefOperator> correlation, ConnectContext session,
                        CTETransformerContext cteContext, OptExprBuilder builder,
@@ -272,15 +269,20 @@ public final class SqlToScalarOperatorTranslator {
                 Preconditions.checkArgument(node.getUsedStructFieldPos() != null, "StructType SlotRef must have" +
                         "an non-empty usedStructFiledPos!");
                 Preconditions.checkArgument(node.getUsedStructFieldPos().size() > 0);
-                List<Integer> usedStructFieldPos = node.getUsedStructFieldPos();
-                returnValue = SubfieldOperator.build(columnRefOperator, node.getOriginType(), usedStructFieldPos);
+                returnValue = SubfieldOperator.build(columnRefOperator, node.getOriginType(), node.getUsedStructFieldPos());
 
                 for (int i = node.getUsedStructFieldPos().size() - 1; i >= 0; i--) {
                     usedSubFieldPos.push(node.getUsedStructFieldPos().get(i));
                 }
-            }
 
-            columnRefOperator.addUsedSubfieldPos(ImmutableList.copyOf(usedSubFieldPos));
+                columnRefOperator.addUsedSubfieldPos(ImmutableList.copyOf(usedSubFieldPos));
+
+                for (int i = 0; i < node.getUsedStructFieldPos().size(); i++) {
+                    usedSubFieldPos.pop();
+                }
+            } else {
+                columnRefOperator.addUsedSubfieldPos(ImmutableList.copyOf(usedSubFieldPos));
+            }
             return returnValue;
         }
 
@@ -296,7 +298,10 @@ public final class SqlToScalarOperatorTranslator {
 
         @Override
         public ScalarOperator visitFieldReference(FieldReference node, Context context) {
-            return expressionMapping.getColumnRefWithIndex(node.getFieldIndex());
+            ColumnRefOperator scalarOperator = expressionMapping.getColumnRefWithIndex(node.getFieldIndex());
+            // Consider a Table [a:int, b:int], for SELECT * FROM tbl, a and b will be FieldReference, not SlotRef.
+            scalarOperator.addUsedSubfieldPos(ImmutableList.copyOf(usedSubFieldPos));
+            return scalarOperator;
         }
 
         @Override
@@ -377,7 +382,7 @@ public final class SqlToScalarOperatorTranslator {
 
         @Override
         public ScalarOperator visitLambdaArguments(LambdaArgument node, Context context) {
-            return columnRefFactory.create(node.getName(), node.getType(), node.isNullable());
+            return columnRefFactory.create(node.getName(), node.getType(), node.isNullable(), true);
         }
 
         @Override
@@ -593,45 +598,7 @@ public final class SqlToScalarOperatorTranslator {
                 return ConstantOperator.createNull(node.getType());
             }
 
-            Object value = node.getRealValue();
-            Type type = node.getType();
-
-            if (type.isBoolean()) {
-                return ConstantOperator.createBoolean((boolean) value);
-            } else if (type.isTinyint()) {
-                return ConstantOperator.createTinyInt((byte) node.getLongValue());
-            } else if (type.isSmallint()) {
-                return ConstantOperator.createSmallInt((short) node.getLongValue());
-            } else if (type.isInt()) {
-                return ConstantOperator.createInt((int) node.getLongValue());
-            } else if (type.isBigint()) {
-                return ConstantOperator.createBigint(node.getLongValue());
-            } else if (type.isLargeint()) {
-                return ConstantOperator.createLargeInt((BigInteger) value);
-            } else if (type.isFloat()) {
-                return ConstantOperator.createFloat((double) value);
-            } else if (type.isDouble()) {
-                return ConstantOperator.createDouble((double) value);
-            } else if (type.isDate()) {
-                DateLiteral dl = (DateLiteral) node;
-                return ConstantOperator
-                        .createDate(LocalDateTime.of((int) dl.getYear(), (int) dl.getMonth(), (int) dl.getDay(), 0, 0));
-            } else if (type.isDatetime()) {
-                DateLiteral dl = (DateLiteral) node;
-                return ConstantOperator.createDatetime(LocalDateTime
-                        .of((int) dl.getYear(), (int) dl.getMonth(), (int) dl.getDay(), (int) dl.getHour(),
-                                (int) dl.getMinute(), (int) dl.getSecond()));
-            } else if (type.isDecimalOfAnyVersion()) {
-                return ConstantOperator.createDecimal((BigDecimal) value, type);
-            } else if (type.isVarchar()) {
-                return ConstantOperator.createVarchar((String) value);
-            } else if (type.isChar()) {
-                return ConstantOperator.createChar((String) value);
-            } else if (type.isBinaryType()) {
-                return ConstantOperator.createBinary((byte[]) value, type);
-            } else {
-                throw new UnsupportedOperationException("nonsupport constant type");
-            }
+            return ConstantOperator.createObject(node.getRealObjectValue(), node.getType());
         }
 
         @Override

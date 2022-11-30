@@ -5,8 +5,7 @@
 #include "common/object_pool.h"
 #include "exprs/expr.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 class ColumnRef final : public Expr {
 public:
@@ -38,7 +37,7 @@ public:
     std::string debug_string() const override;
 
     // vector query engine
-    vectorized::ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override;
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override;
 
     static vectorized::ColumnPtr& get_column(Expr* expr, vectorized::Chunk* chunk);
 
@@ -50,5 +49,4 @@ private:
     TupleId _tuple_id = 0; // used for desc this slot from
 };
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

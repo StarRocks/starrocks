@@ -8,8 +8,7 @@
 #include "runtime/runtime_state.h"
 #include "util/priority_thread_pool.hpp"
 
-namespace starrocks {
-namespace pipeline {
+namespace starrocks::pipeline {
 
 class SinkIOExecutor : public bthread::Executor {
 public:
@@ -26,7 +25,7 @@ public:
 private:
     SinkIOExecutor() = default;
 
-    ~SinkIOExecutor() = default;
+    ~SinkIOExecutor() override = default;
 };
 
 // SinkIOBuffer accepts input from all sink operators, it uses an execution queue to asynchronously process chunks one by one.
@@ -97,7 +96,7 @@ public:
     }
 
     static int execute_io_task(void* meta, bthread::TaskIterator<const vectorized::ChunkPtr>& iter) {
-        SinkIOBuffer* sink_io_buffer = static_cast<SinkIOBuffer*>(meta);
+        auto* sink_io_buffer = static_cast<SinkIOBuffer*>(meta);
         for (; iter; ++iter) {
             sink_io_buffer->_process_chunk(iter);
         }
@@ -123,5 +122,4 @@ protected:
     static const int32_t kExecutionQueueSizeLimit = 64;
 };
 
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline

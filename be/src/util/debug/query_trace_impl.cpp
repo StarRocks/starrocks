@@ -179,7 +179,7 @@ ScopedTracer::ScopedTracer(std::string name, std::string category)
     _start_ts = MonotonicMicros();
 }
 
-ScopedTracer::~ScopedTracer() {
+ScopedTracer::~ScopedTracer() noexcept {
     if (tls_trace_ctx.event_buffer != nullptr) {
         _duration = MonotonicMicros() - _start_ts;
         tls_trace_ctx.event_buffer->add(

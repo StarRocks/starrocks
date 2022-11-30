@@ -9,14 +9,13 @@
 #include "common/status.h"
 #include "udf/udf.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 using PrepareFunction = Status (*)(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
 using CloseFunction = Status (*)(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
-using ScalarFunction = ColumnPtr (*)(FunctionContext* context, const Columns& columns);
+using ScalarFunction = StatusOr<ColumnPtr> (*)(FunctionContext* context, const Columns& columns);
 
 struct FunctionDescriptor {
     std::string name;
@@ -64,5 +63,4 @@ private:
     static FunctionTables _fn_tables;
 };
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

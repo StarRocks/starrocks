@@ -705,7 +705,7 @@ Status ClassAnalyzer::get_method_desc(const std::string& sign, std::vector<Metho
     RETURN_IF_ERROR(get_udaf_method_desc(sign, desc));
     // return type may be a void type
     for (int i = 1; i < desc->size(); ++i) {
-        if (desc->at(i).type == INVALID_TYPE) {
+        if (desc->at(i).type == TYPE_UNKNOWN) {
             return Status::InternalError(fmt::format("unknown type sign:{}", sign));
         }
     }
@@ -732,7 +732,7 @@ Status ClassAnalyzer::get_udaf_method_desc(const std::string& sign, std::vector<
                 i++;
             }
             // return Status::NotSupported("Not support Array Type");
-            desc->emplace_back(MethodTypeDescriptor{INVALID_TYPE, true});
+            desc->emplace_back(MethodTypeDescriptor{TYPE_UNKNOWN, true});
         }
         if (sign[i] == 'L') {
             int st = i + 1;
@@ -753,7 +753,7 @@ Status ClassAnalyzer::get_udaf_method_desc(const std::string& sign, std::vector<
             } else if (type == "java/lang/String") {
                 desc->emplace_back(MethodTypeDescriptor{TYPE_VARCHAR, true});
             } else {
-                desc->emplace_back(MethodTypeDescriptor{INVALID_TYPE, true});
+                desc->emplace_back(MethodTypeDescriptor{TYPE_UNKNOWN, true});
             }
             continue;
         }
@@ -768,9 +768,9 @@ Status ClassAnalyzer::get_udaf_method_desc(const std::string& sign, std::vector<
         ADD_PRIM_METHOD_TYPE_DESC('D', TYPE_DOUBLE)
             // clang-format on
         } else if (sign[i] == 'V') {
-            desc->emplace_back(MethodTypeDescriptor{INVALID_TYPE, false});
+            desc->emplace_back(MethodTypeDescriptor{TYPE_UNKNOWN, false});
         } else {
-            desc->emplace_back(MethodTypeDescriptor{INVALID_TYPE, false});
+            desc->emplace_back(MethodTypeDescriptor{TYPE_UNKNOWN, false});
         }
     }
 

@@ -156,7 +156,7 @@ LRUCache::LRUCache() {
     _lru.prev = &_lru;
 }
 
-LRUCache::~LRUCache() {
+LRUCache::~LRUCache() noexcept {
     prune();
 }
 

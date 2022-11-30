@@ -180,7 +180,7 @@ void JDBCScanner::_init_profile() {
     _runtime_profile->add_info_string("Query", _scan_ctx.sql);
 }
 
-StatusOr<PrimitiveType> JDBCScanner::_precheck_data_type(const std::string& java_class, SlotDescriptor* slot_desc) {
+StatusOr<LogicalType> JDBCScanner::_precheck_data_type(const std::string& java_class, SlotDescriptor* slot_desc) {
     auto type = slot_desc->type().type;
     if (java_class == "java.lang.Short") {
         if (type != TYPE_TINYINT && type != TYPE_SMALLINT && type != TYPE_INT && type != TYPE_BIGINT) {

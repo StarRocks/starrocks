@@ -44,7 +44,7 @@ struct MysqlScannerParam {
     std::string passwd;
     std::string db;
     unsigned long client_flag{0};
-    MysqlScannerParam() {}
+    MysqlScannerParam() = default;
 };
 
 // Mysql Scanner for scan data from mysql
@@ -60,7 +60,8 @@ public:
     Status query(const std::string& table, const std::vector<std::string>& fields,
                  const std::vector<std::string>& filters,
                  const std::unordered_map<std::string, std::vector<std::string>>& filters_in,
-                 std::unordered_map<std::string, bool>& filters_null_in_set, int64_t limit);
+                 std::unordered_map<std::string, bool>& filters_null_in_set, int64_t limit,
+                 const std::string& temporal_clause);
     Status get_next_row(char*** buf, unsigned long** lengths, bool* eos);
 
     int field_num() const { return _field_num; }

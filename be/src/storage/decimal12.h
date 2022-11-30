@@ -31,7 +31,7 @@ namespace starrocks {
 
 // the sign of integer must be same as fraction
 struct decimal12_t {
-    decimal12_t() {}
+    decimal12_t() = default;
     decimal12_t(int64_t int_part, int32_t frac_part) {
         integer = int_part;
         fraction = frac_part;

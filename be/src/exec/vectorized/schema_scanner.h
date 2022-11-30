@@ -43,7 +43,7 @@ struct SchemaScannerParam {
 
     SchemaScannerParam()
 
-    {}
+            = default;
 };
 
 // virtual scanner for all schema table
@@ -51,7 +51,7 @@ class SchemaScanner {
 public:
     struct ColumnDesc {
         const char* name;
-        PrimitiveType type;
+        LogicalType type;
         int size;
         bool is_null;
     };

@@ -53,7 +53,8 @@ public:
     template <typename Container>
     void predicates_of_column(ColumnId cid, Container* container) const;
 
-    Status convert_to(ConjunctivePredicates* dst, const std::vector<FieldType>& new_types, ObjectPool* obj_pool) const {
+    Status convert_to(ConjunctivePredicates* dst, const std::vector<LogicalType>& new_types,
+                      ObjectPool* obj_pool) const {
         size_t num_vec_preds = _vec_preds.size();
         dst->_vec_preds.resize(num_vec_preds);
         for (size_t i = 0; i < num_vec_preds; ++i) {

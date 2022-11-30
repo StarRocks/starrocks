@@ -68,9 +68,7 @@ Status AggregateBlockingNode::open(RuntimeState* state) {
             SCOPED_TIMER(_aggregator->agg_compute_timer());
             if (!_aggregator->is_none_group_by_exprs()) {
                 TRY_CATCH_ALLOC_SCOPE_START()
-                _aggregator->hash_map_variant().visit([&](auto& hash_table_with_key) {
-                    _aggregator->build_hash_map(*hash_table_with_key, chunk_size, agg_group_by_with_limit);
-                });
+                _aggregator->build_hash_map(chunk_size, agg_group_by_with_limit);
                 _mem_tracker->set(_aggregator->hash_map_variant().reserved_memory_usage(_aggregator->mem_pool()));
 
                 _aggregator->try_convert_to_two_level_map();
@@ -133,17 +131,15 @@ Status AggregateBlockingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
         *eos = true;
         return Status::OK();
     }
-    int32_t chunk_size = runtime_state()->chunk_size();
+    const auto chunk_size = runtime_state()->chunk_size();
 
     if (_aggregator->is_none_group_by_exprs()) {
-        _aggregator->convert_to_chunk_no_groupby(chunk);
+        RETURN_IF_ERROR(_aggregator->convert_to_chunk_no_groupby(chunk));
     } else {
-        _aggregator->hash_map_variant().visit([&](auto& hash_map_with_key) {
-            _aggregator->convert_hash_map_to_chunk(*hash_map_with_key, chunk_size, chunk);
-        });
+        RETURN_IF_ERROR(_aggregator->convert_hash_map_to_chunk(chunk_size, chunk));
     }
 
-    size_t old_size = (*chunk)->num_rows();
+    const int64_t old_size = (*chunk)->num_rows();
     eval_join_runtime_filters(chunk->get());
 
     // For having
@@ -226,7 +222,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> AggregateBlockingNode::d
 
     auto try_interpolate_local_shuffle = [this, context](auto& ops) {
         std::vector<ExprContext*> group_by_expr_ctxs;
-        Expr::create_expr_trees(_pool, _tnode.agg_node.grouping_exprs, &group_by_expr_ctxs);
+        Expr::create_expr_trees(_pool, _tnode.agg_node.grouping_exprs, &group_by_expr_ctxs, runtime_state());
         Expr::prepare(group_by_expr_ctxs, runtime_state());
         Expr::open(group_by_expr_ctxs, runtime_state());
         return context->maybe_interpolate_local_shuffle_exchange(runtime_state(), ops, group_by_expr_ctxs);

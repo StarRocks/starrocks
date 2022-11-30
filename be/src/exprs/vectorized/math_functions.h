@@ -319,7 +319,7 @@ public:
      * @param: [TypeColumn, TypeColumn]
      * @return: TypeColumn
      */
-    template <PrimitiveType Type>
+    template <LogicalType Type>
     DEFINE_VECTORIZED_FN(pmod) {
         auto l = VECTORIZED_FN_ARGS(0);
         auto r = VECTORIZED_FN_ARGS(1);
@@ -336,7 +336,7 @@ public:
      * @param: [TypeColumn, TypeColumn]
      * @return: TypeColumn
      */
-    template <PrimitiveType Type>
+    template <LogicalType Type>
     DEFINE_VECTORIZED_FN(fmod) {
         auto l = VECTORIZED_FN_ARGS(0);
         auto r = VECTORIZED_FN_ARGS(1);
@@ -351,7 +351,7 @@ public:
      * @param: [TypeColumn, TypeColumn]
      * @return: TypeColumn
      */
-    template <PrimitiveType Type>
+    template <LogicalType Type>
     DEFINE_VECTORIZED_FN(mod) {
         auto l = VECTORIZED_FN_ARGS(0);
         auto r = VECTORIZED_FN_ARGS(1);
@@ -375,7 +375,7 @@ public:
      * @param: [TypeColumn]
      * @return: TypeColumn
      */
-    template <PrimitiveType Type>
+    template <LogicalType Type>
     DEFINE_VECTORIZED_FN(positive) {
         return VECTORIZED_FN_ARGS(0);
     }
@@ -386,7 +386,7 @@ public:
      * @param: [TypeColumn]
      * @return: TypeColumn
      */
-    template <PrimitiveType Type>
+    template <LogicalType Type>
     DEFINE_VECTORIZED_FN(negative) {
         if constexpr (pt_is_decimal<Type>) {
             const auto& type = context->get_return_type();
@@ -403,8 +403,8 @@ public:
     * @param: [TypeColumn, ...]
     * @return: TypeColumn
     */
-    template <PrimitiveType Type>
-    static ColumnPtr least(FunctionContext* context, const Columns& columns) {
+    template <LogicalType Type>
+    static StatusOr<ColumnPtr> least(FunctionContext* context, const Columns& columns) {
         if (columns.size() == 1) {
             return columns[0];
         }
@@ -444,8 +444,8 @@ public:
      * @param: [TypeColumn, ...]
      * @return: TypeColumn
      */
-    template <PrimitiveType Type>
-    static ColumnPtr greatest(FunctionContext* context, const Columns& columns) {
+    template <LogicalType Type>
+    static StatusOr<ColumnPtr> greatest(FunctionContext* context, const Columns& columns) {
         if (columns.size() == 1) {
             return columns[0];
         }
@@ -480,7 +480,7 @@ public:
     }
 
     template <DecimalRoundRule rule>
-    static ColumnPtr decimal_round(FunctionContext* context, const Columns& columns);
+    static StatusOr<ColumnPtr> decimal_round(FunctionContext* context, const Columns& columns);
 
     // Specifically, keep_scale means whether to keep the original scale of lv
     // Given an example

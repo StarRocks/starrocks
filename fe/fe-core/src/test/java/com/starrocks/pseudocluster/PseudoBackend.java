@@ -13,6 +13,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.proto.PCancelPlanFragmentRequest;
 import com.starrocks.proto.PCancelPlanFragmentResult;
+import com.starrocks.proto.PCollectQueryStatisticsResult;
 import com.starrocks.proto.PExecBatchPlanFragmentsResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
 import com.starrocks.proto.PFetchDataResult;
@@ -899,6 +900,12 @@ public class PseudoBackend {
         @Override
         public Future<PTriggerProfileReportResult> triggerProfileReport(
                 com.starrocks.rpc.PTriggerProfileReportRequest request) {
+            return null;
+        }
+
+        @Override
+        public Future<PCollectQueryStatisticsResult> collectQueryStatistics(
+                com.starrocks.rpc.PCollectQueryStatisticsRequest request) {
             return null;
         }
 

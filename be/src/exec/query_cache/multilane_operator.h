@@ -11,8 +11,7 @@
 #include "exec/query_cache/lane_arbiter.h"
 #include "runtime/runtime_state.h"
 
-namespace starrocks {
-namespace query_cache {
+namespace starrocks::query_cache {
 class MultilaneOperator;
 using MultilaneOperatorRawPtr = MultilaneOperator*;
 using MultilaneOperators = std::vector<MultilaneOperatorRawPtr>;
@@ -29,12 +28,11 @@ class MultilaneOperator final : public pipeline::Operator {
 public:
     struct Lane {
         pipeline::OperatorPtr processor;
-        int64_t lane_owner;
+        int64_t lane_owner{-1};
         int lane_id;
-        bool last_chunk_received;
-        bool eof_sent;
-        Lane(pipeline::OperatorPtr&& op, int id)
-                : processor(std::move(op)), lane_owner(-1), lane_id(id), last_chunk_received(false), eof_sent(false) {}
+        bool last_chunk_received{false};
+        bool eof_sent{false};
+        Lane(pipeline::OperatorPtr&& op, int id) : processor(std::move(op)), lane_id(id) {}
         std::string to_debug_string() const {
             return strings::Substitute("Lane(lane_owner=$0, last_chunk_received=$1, eof_send=$2, operator=$3)",
                                        lane_owner, last_chunk_received, eof_sent, processor->get_name());
@@ -44,7 +42,7 @@ public:
     MultilaneOperator(pipeline::OperatorFactory* factory, int32_t driver_sequence, size_t num_lanes,
                       pipeline::Operators&& processors, bool can_passthrough);
 
-    ~MultilaneOperator() = default;
+    ~MultilaneOperator() override = default;
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
@@ -92,5 +90,4 @@ private:
     const size_t _num_lanes;
     bool _can_passthrough = false;
 };
-} // namespace query_cache
-} // namespace starrocks
+} // namespace starrocks::query_cache

@@ -64,7 +64,7 @@ StatusOr<vectorized::ChunkPtr> SortedAggregateStreamingSourceOperator::pull_chun
     if (chunk == nullptr) {
         return chunk;
     }
-    size_t old_size = chunk->num_rows();
+    const int64_t old_size = chunk->num_rows();
     eval_runtime_bloom_filters(chunk.get());
 
     // For having

@@ -16,7 +16,8 @@ namespace starrocks::vectorized {
  * @paramType: [BinaryColumn, BinaryColumn, IntColumn]
  * @return: BinaryColumn
  */
-ColumnPtr StringFunctions::split_part(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::split_part(FunctionContext* context,
+                                                const starrocks::vectorized::Columns& columns) {
     DCHECK_EQ(columns.size(), 3);
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
@@ -84,8 +85,8 @@ ColumnPtr StringFunctions::split_part(FunctionContext* context, const starrocks:
             }
         } else {
             // if delimiter is a string, use memmem to split
-            int32_t pre_offset = -delimiter.size;
-            int32_t offset = -delimiter.size;
+            int32_t pre_offset = -static_cast<int32_t>(delimiter.size);
+            int32_t offset = -static_cast<int32_t>(delimiter.size);
             int32_t num = 0;
             while (num < part_number) {
                 pre_offset = offset;

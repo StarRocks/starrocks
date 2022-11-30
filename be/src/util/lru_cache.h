@@ -26,7 +26,7 @@ extern Cache* new_lru_cache(size_t capacity);
 
 class CacheKey {
 public:
-    CacheKey() {}
+    CacheKey() = default;
     // Create a slice that refers to d[0,n-1].
     CacheKey(const char* d, size_t n) : _data(d), _size(n) {}
 
@@ -214,7 +214,7 @@ typedef struct LRUHandle {
         if (next == this) {
             return *(reinterpret_cast<CacheKey*>(value));
         } else {
-            return CacheKey(key_data, key_length);
+            return {key_data, key_length};
         }
     }
 
@@ -261,7 +261,7 @@ private:
 class LRUCache {
 public:
     LRUCache();
-    ~LRUCache();
+    ~LRUCache() noexcept;
 
     // Separate from constructor so caller can easily make an array of LRUCache
     void set_capacity(size_t capacity);

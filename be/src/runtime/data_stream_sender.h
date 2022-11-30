@@ -72,7 +72,7 @@ public:
                      bool enable_exchange_perf);
     ~DataStreamSender() override;
 
-    Status init(const TDataSink& thrift_sink) override;
+    Status init(const TDataSink& thrift_sink, RuntimeState* state) override;
 
     // Must be called before other API calls, and before the codegen'd IR module is
     // compiled (i.e. in an ExecNode's Prepare() function).
@@ -127,7 +127,6 @@ private:
 
     RuntimeState* _state{};
     ObjectPool* _pool;
-    const RowDescriptor& _row_desc;
 
     int _current_channel_idx; // index of current channel to send to if _random == true
 
@@ -158,10 +157,6 @@ private:
     // so we pick a random order for the index
     std::vector<int> _channel_indices;
     std::vector<std::shared_ptr<Channel>> _channel_shared_ptrs;
-
-    // map from range value to partition_id
-    // sorted in ascending order by range for binary search
-    std::vector<PartitionInfo*> _partition_infos;
 
     // This array record the channel start point in _row_indexes
     // And the last item is the number of rows of the current shuffle chunk.

@@ -8,14 +8,15 @@
 #include "exec/exec_node.h"
 #include "exec/vectorized/hdfs_scanner.h"
 #include "exprs/expr.h"
+#include "gutil/strings/substitute.h"
 #include "runtime/types.h"
 #include "simd/simd.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks::parquet {
 
-constexpr static const PrimitiveType kDictCodePrimitiveType = TYPE_INT;
-constexpr static const FieldType kDictCodeFieldType = OLAP_FIELD_TYPE_INT;
+constexpr static const LogicalType kDictCodePrimitiveType = TYPE_INT;
+constexpr static const LogicalType kDictCodeFieldType = TYPE_INT;
 
 GroupReader::GroupReader(GroupReaderParam& param, int row_group_number) : _param(param) {
     _row_group_metadata =
@@ -230,11 +231,11 @@ void GroupReader::_collect_field_io_range(const ParquetField& field,
     // and it may not be equal to col_idx_in_chunk.
     // 3. For array type, the physical_column_index is 0, we need to iterate the children and
     // collect their io ranges.
-    if (field.type.type == PrimitiveType::TYPE_ARRAY || field.type.type == PrimitiveType::TYPE_STRUCT) {
+    if (field.type.type == LogicalType::TYPE_ARRAY || field.type.type == LogicalType::TYPE_STRUCT) {
         for (auto& child : field.children) {
             _collect_field_io_range(child, ranges, end_offset);
         }
-    } else if (field.type.type == PrimitiveType::TYPE_MAP) {
+    } else if (field.type.type == LogicalType::TYPE_MAP) {
         // ParquetFiled Map -> Map<Struct<key,value>>
         DCHECK(field.children[0].type.type == TYPE_STRUCT);
         for (auto& child : field.children[0].children) {

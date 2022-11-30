@@ -54,7 +54,6 @@ PlanFragmentExecutor::PlanFragmentExecutor(ExecEnv* exec_env, report_status_call
           _done(false),
           _prepared(false),
           _closed(false),
-          _has_thread_token(false),
           enable_profile(true),
           _is_report_on_cancel(true),
           _collect_query_statistics_with_every_batch(false),
@@ -82,14 +81,6 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
     if (request.query_options.__isset.enable_profile) {
         enable_profile = request.query_options.enable_profile;
     }
-
-    // Reserve one main thread from the pool
-    _runtime_state->resource_pool()->acquire_thread_token();
-    _has_thread_token = true;
-
-    _average_thread_tokens = profile()->add_sampling_counter(
-            "AverageThreadTokens", std::bind<int64_t>(std::mem_fn(&ThreadResourceMgr::ResourcePool::num_threads),
-                                                      _runtime_state->resource_pool()));
 
     // set up desc tbl
     DescriptorTbl* desc_tbl = nullptr;
@@ -225,7 +216,6 @@ Status PlanFragmentExecutor::_open_internal_vectorized() {
     vectorized::ChunkPtr chunk;
     while (true) {
         RETURN_IF_ERROR(runtime_state()->check_mem_limit("QUERY"));
-
         RETURN_IF_ERROR(_get_next_internal_vectorized(&chunk));
 
         if (chunk == nullptr) {
@@ -273,8 +263,6 @@ Status PlanFragmentExecutor::_open_internal_vectorized() {
     // Setting to NULL ensures that the d'tor won't double-close the sink.
     _sink.reset(nullptr);
     _done = true;
-
-    release_thread_token();
 
     send_report(true);
 
@@ -417,14 +405,6 @@ void PlanFragmentExecutor::report_profile_once() {
     }
 
     send_report(false);
-}
-
-void PlanFragmentExecutor::release_thread_token() {
-    if (_has_thread_token) {
-        _has_thread_token = false;
-        _runtime_state->resource_pool()->release_thread_token(true);
-        profile()->stop_sampling_counters_updates(_average_thread_tokens);
-    }
 }
 
 void PlanFragmentExecutor::close() {

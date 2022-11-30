@@ -10,7 +10,7 @@
 
 namespace starrocks::vectorized {
 
-void SeekTuple::convert_to(SeekTuple* new_tuple, const std::vector<FieldType>& new_types) const {
+void SeekTuple::convert_to(SeekTuple* new_tuple, const std::vector<LogicalType>& new_types) const {
     _schema.convert_to(&new_tuple->_schema, new_types);
 
     RowConverter converter;

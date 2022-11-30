@@ -7,12 +7,11 @@
 
 #include "util/slice.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 class SeekTuple;
-class Schema;
-using SchemaPtr = std::shared_ptr<Schema>;
+class VectorizedSchema;
+using VectorizedSchemaPtr = std::shared_ptr<VectorizedSchema>;
 struct ShortKeyOption;
 using ShortKeyOptionPtr = std::unique_ptr<ShortKeyOption>;
 
@@ -25,7 +24,7 @@ public:
     ShortKeyOption(const SeekTuple* tuple_key, bool inclusive)
             : tuple_key(tuple_key), short_key_schema(nullptr), short_key(""), inclusive(inclusive) {}
 
-    ShortKeyOption(SchemaPtr short_key_schema, const Slice& short_key, bool inclusive)
+    ShortKeyOption(VectorizedSchemaPtr short_key_schema, const Slice& short_key, bool inclusive)
             : tuple_key(nullptr),
               short_key_schema(std::move(short_key_schema)),
               short_key(short_key),
@@ -37,7 +36,7 @@ public:
     // Only one of tuple_key and short_key_schema has value.
     const SeekTuple* const tuple_key;
 
-    const SchemaPtr short_key_schema;
+    const VectorizedSchemaPtr short_key_schema;
     const Slice short_key;
 
     const bool inclusive;
@@ -54,5 +53,4 @@ public:
     const ShortKeyOptionPtr upper;
 };
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

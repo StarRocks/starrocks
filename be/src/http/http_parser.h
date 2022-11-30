@@ -26,7 +26,7 @@ struct HttpChunkParseCtx {
     int state{0};     // Parse state
     size_t size{0};   // Chunk size
     size_t length{0}; // minimal length need to read
-    HttpChunkParseCtx() {}
+    HttpChunkParseCtx() = default;
 };
 
 std::ostream& operator<<(std::ostream& os, const HttpChunkParseCtx& ctx);

@@ -39,11 +39,11 @@ class PageDecoderOptions;
 class EncodingInfo {
 public:
     // Get EncodingInfo for TypeInfo and EncodingTypePB
-    static Status get(const FieldType& data_type, EncodingTypePB encoding_type, const EncodingInfo** encoding);
+    static Status get(const LogicalType& data_type, EncodingTypePB encoding_type, const EncodingInfo** encoding);
 
     // optimize_value_search: whether the encoding scheme should optimize for ordered data
     // and support fast value seek operation
-    static EncodingTypePB get_default_encoding(const FieldType& data_type, bool optimize_value_seek);
+    static EncodingTypePB get_default_encoding(const LogicalType& data_type, bool optimize_value_seek);
 
     Status create_page_builder(const PageBuilderOptions& opts, PageBuilder** builder) const {
         return _create_builder_func(opts, builder);
@@ -51,7 +51,7 @@ public:
     Status create_page_decoder(const Slice& data, const PageDecoderOptions& opts, PageDecoder** decoder) const {
         return _create_decoder_func(data, opts, decoder);
     }
-    FieldType type() const { return _type; }
+    LogicalType type() const { return _type; }
     EncodingTypePB encoding() const { return _encoding; }
 
 private:
@@ -66,7 +66,7 @@ private:
     using CreateDecoderFunc = std::function<Status(const Slice&, const PageDecoderOptions& opts, PageDecoder**)>;
     CreateDecoderFunc _create_decoder_func;
 
-    FieldType _type;
+    LogicalType _type;
     EncodingTypePB _encoding;
 };
 

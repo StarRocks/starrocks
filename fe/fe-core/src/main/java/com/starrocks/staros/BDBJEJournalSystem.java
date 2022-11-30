@@ -68,7 +68,7 @@ public class BDBJEJournalSystem implements JournalSystem {
     public void onBecomeLeader() {
         // stop replayer
         if (replayer != null) {
-            replayer.exit();
+            replayer.setStop();
             try {
                 replayer.join();
             } catch (InterruptedException e) {

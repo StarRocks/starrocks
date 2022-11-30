@@ -118,7 +118,10 @@ Fixed length string. Range：1 ~ 255. Default value: 1.
 
 * VARCHAR[(length)]
 
-Variable length string. Range：1 ~ 1048576
+A variable-length string. The default value is 1. Unit: bytes.
+
+- In versions earlier than StarRocks 2.1, the value range of `length` is 1–65533.
+- [Preview] In StarRocks 2.1 and later versions, the value range of `length` is 1–1048576.
 
 
 
@@ -179,14 +182,7 @@ Syntax:
 INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] COMMENT 'xxxxxx'
 ```
 
-Note:
-
-index_name: Index name
-
-col_name: Column name
-
-> Note:
-> Currently only BITMAP index is supported and it only applies to single columns.
+You can only create bitmap indexes when you create tables. For more information about parameter descriptions and usage notes, see [Bitmap indexing](../../../using_starrocks/Bitmap_index.md#create-a-bitmap-index).
 
 ### ENGINE type
 

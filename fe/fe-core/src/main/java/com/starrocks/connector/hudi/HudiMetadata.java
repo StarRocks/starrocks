@@ -7,6 +7,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveMetaStoreTable;
+import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
@@ -19,6 +20,7 @@ import com.starrocks.connector.hive.HiveMetastoreOperations;
 import com.starrocks.connector.hive.HiveStatisticsProvider;
 import com.starrocks.connector.hive.Partition;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -32,6 +34,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import static com.starrocks.connector.PartitionUtil.toHivePartitionName;
+import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
 
 public class HudiMetadata implements ConnectorMetadata {
     private static final Logger LOG = LogManager.getLogger(HudiMetadata.class);
@@ -150,7 +153,7 @@ public class HudiMetadata implements ConnectorMetadata {
     }
 
     public void refreshTable(String srDbName, Table table, List<String> partitionNames) {
-        if (partitionNames != null && partitionNames.size() > 1) {
+        if (partitionNames != null && partitionNames.size() > 0) {
             cacheUpdateProcessor.ifPresent(processor -> processor.refreshPartition(table, partitionNames));
         } else {
             cacheUpdateProcessor.ifPresent(processor -> processor.refreshTable(srDbName, table));
@@ -160,7 +163,11 @@ public class HudiMetadata implements ConnectorMetadata {
     public void dropTable(DropTableStmt stmt) throws DdlException {
         String dbName = stmt.getDbName();
         String tableName = stmt.getTableName();
-        cacheUpdateProcessor.ifPresent(processor -> processor.invalidateTable(dbName, tableName));
+        if (isResourceMappingCatalog(catalogName)) {
+            HudiTable hudiTable = (HudiTable) GlobalStateMgr.getCurrentState().getMetadata().getTable(dbName, tableName);
+            cacheUpdateProcessor.ifPresent(processor -> processor.invalidateTable(
+                    hudiTable.getDbName(), hudiTable.getTableName(), hudiTable.getTableLocation()));
+        }
     }
 
     public void clear() {

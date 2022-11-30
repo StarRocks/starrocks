@@ -8,9 +8,7 @@
 #include "connector/connector.h"
 #include "exec/mysql_scanner.h"
 
-namespace starrocks {
-
-namespace connector {
+namespace starrocks::connector {
 class MySQLConnector final : public Connector {
 public:
     ~MySQLConnector() override = default;
@@ -70,6 +68,8 @@ private:
     std::vector<std::string> _columns;
     // where clause
     std::vector<std::string> _filters;
+    // temporal clause
+    std::string _temporal_clause;
 
     // Tuple index in tuple row.
     size_t _slot_num = 0;
@@ -77,16 +77,15 @@ private:
 
     int64_t _rows_read = 0;
     int64_t _bytes_read = 0;
-    int64_t _cpu_time_spent_ns = 0;
+    int64_t _cpu_time_ns = 0;
 
     Status fill_chunk(vectorized::ChunkPtr* chunk, char** data, size_t* length);
 
     Status append_text_to_column(const char* data, const int& len, const SlotDescriptor* slot_desc,
                                  vectorized::Column* column);
 
-    template <PrimitiveType PT, typename CppType = vectorized::RunTimeCppType<PT>>
+    template <LogicalType PT, typename CppType = vectorized::RunTimeCppType<PT>>
     void append_value_to_column(vectorized::Column* column, CppType& value);
 };
 
-} // namespace connector
-} // namespace starrocks
+} // namespace starrocks::connector

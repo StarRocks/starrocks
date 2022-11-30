@@ -286,6 +286,7 @@ public class FunctionSet {
     public static final String ARRAY_SUM = "array_sum";
     public static final String ARRAY_REMOVE = "array_remove";
     public static final String ARRAY_FILTER = "array_filter";
+    public static final String ARRAY_SORTBY = "array_sortby";
 
     // Bit functions:
     public static final String BITAND = "bitand";
@@ -1065,7 +1066,7 @@ public class FunctionSet {
         for (Type t : Type.getSupportedTypes()) {
             // null/char/time is handled through type promotion
             // TODO: array/json/pseudo is not supported yet
-            if (!t.canAggregateArguments()) {
+            if (!t.canBeWindowFunctionArgumentTypes()) {
                 continue;
             }
             addBuiltin(AggregateFunction.createAnalyticBuiltin(

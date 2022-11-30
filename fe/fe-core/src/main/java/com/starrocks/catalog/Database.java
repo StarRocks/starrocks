@@ -568,7 +568,7 @@ public class Database extends MetaObject implements Writable {
         return materializedViews;
     }
 
-    public Set<String> getTableNamesWithLock() {
+    public Set<String> getTableNamesViewWithLock() {
         readLock();
         try {
             return Collections.unmodifiableSet(this.nameToTable.keySet());

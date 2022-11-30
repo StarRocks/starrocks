@@ -30,7 +30,6 @@
 #include "gen_cpp/segment.pb.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
-#include "storage/field.h"
 #include "storage/rowset/binary_plain_page.h"
 #include "util/once.h"
 #include "util/slice.h"
@@ -46,7 +45,7 @@ class WritableFile;
 // reader can prune an entire segment without reading pages.
 class ZoneMapIndexWriter {
 public:
-    static std::unique_ptr<ZoneMapIndexWriter> create(starrocks::Field* field);
+    static std::unique_ptr<ZoneMapIndexWriter> create(TypeInfo* type_info, int length);
 
     virtual ~ZoneMapIndexWriter() = default;
 

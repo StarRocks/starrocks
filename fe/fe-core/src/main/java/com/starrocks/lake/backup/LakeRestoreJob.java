@@ -6,7 +6,7 @@ import autovalue.shaded.com.google.common.common.collect.Maps;
 import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Range;
-import com.staros.proto.ShardStorageInfo;
+import com.staros.proto.FilePathInfo;
 import com.starrocks.backup.BackupJobInfo;
 import com.starrocks.backup.BackupJobInfo.BackupIndexInfo;
 import com.starrocks.backup.BackupJobInfo.BackupTabletInfo;
@@ -291,10 +291,10 @@ public class LakeRestoreJob extends RestoreJob {
     @Override
     protected Status resetTableForRestore(OlapTable remoteOlapTbl, Database db) {
         try {
-            ShardStorageInfo shardStorageInfo = globalStateMgr.getStarOSAgent().getServiceShardStorageInfo();
+            FilePathInfo pathInfo = globalStateMgr.getStarOSAgent().allocateFilePath(remoteOlapTbl.getId());
             LakeTable remoteLakeTbl = (LakeTable) remoteOlapTbl;
             StorageInfo storageInfo = remoteLakeTbl.getTableProperty().getStorageInfo();
-            remoteLakeTbl.setStorageInfo(shardStorageInfo, storageInfo.isEnableStorageCache(),
+            remoteLakeTbl.setStorageInfo(pathInfo, storageInfo.isEnableStorageCache(),
                     storageInfo.getStorageCacheTtlS(), storageInfo.isAllowAsyncWriteBack());
             remoteLakeTbl.resetIdsForRestore(globalStateMgr, db, restoreReplicationNum);
         } catch (DdlException e) {

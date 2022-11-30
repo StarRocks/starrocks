@@ -827,6 +827,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         {
             String unionPlan = plans.get(0);
             assertContains(unionPlan, "  0:UNION\n" +
+                    "  |  output exprs:\n" +
+                    "  |      [9, BIGINT, true] | [10, BIGINT, true] | [11, BIGINT, true]\n" +
                     "  |  child exprs:\n" +
                     "  |      [4, BIGINT, true] | [2, BIGINT, true] | [3, BIGINT, true]\n" +
                     "  |      [8, BIGINT, true] | [6, BIGINT, true] | [7, BIGINT, true]\n" +
@@ -855,10 +857,12 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         // === check except plan ===
         {
             String exceptPlan = plans.get(1);
-            Assert.assertTrue(exceptPlan.contains("  0:EXCEPT\n" +
+            assertContains(exceptPlan, "  0:EXCEPT\n" +
+                    "  |  output exprs:\n" +
+                    "  |      [9, BIGINT, true] | [10, BIGINT, true] | [11, BIGINT, true]\n" +
                     "  |  child exprs:\n" +
                     "  |      [4, BIGINT, true] | [2, BIGINT, true] | [3, BIGINT, true]\n" +
-                    "  |      [8, BIGINT, true] | [6, BIGINT, true] | [7, BIGINT, true]\n"));
+                    "  |      [8, BIGINT, true] | [6, BIGINT, true] | [7, BIGINT, true]\n");
             Assert.assertTrue(exceptPlan.contains("     probe runtime filters:\n" +
                     "     - filter_id = 0, probe_expr = (5: v4 + 2)"));
             Assert.assertTrue(exceptPlan.contains("     probe runtime filters:\n" +
@@ -867,10 +871,12 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         // === check intersect plan ====
         {
             String intersectPlan = plans.get(2);
-            Assert.assertTrue(intersectPlan.contains("  0:INTERSECT\n" +
+            assertContains(intersectPlan, "  0:INTERSECT\n" +
+                    "  |  output exprs:\n" +
+                    "  |      [9, BIGINT, true] | [10, BIGINT, true] | [11, BIGINT, true]\n" +
                     "  |  child exprs:\n" +
                     "  |      [4, BIGINT, true] | [2, BIGINT, true] | [3, BIGINT, true]\n" +
-                    "  |      [8, BIGINT, true] | [6, BIGINT, true] | [7, BIGINT, true]\n"));
+                    "  |      [8, BIGINT, true] | [6, BIGINT, true] | [7, BIGINT, true]\n");
             Assert.assertTrue(intersectPlan.contains("     probe runtime filters:\n" +
                     "     - filter_id = 0, probe_expr = (5: v4 + 2)"));
             Assert.assertTrue(intersectPlan.contains("     probe runtime filters:\n" +

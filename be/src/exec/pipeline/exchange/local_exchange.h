@@ -20,9 +20,9 @@ namespace pipeline {
 // Exchange the local data from local sink operator to local source operator
 class LocalExchanger {
 public:
-    explicit LocalExchanger(const std::string& name, std::shared_ptr<LocalExchangeMemoryManager> memory_manager,
+    explicit LocalExchanger(std::string name, std::shared_ptr<LocalExchangeMemoryManager> memory_manager,
                             LocalExchangeSourceOperatorFactory* source)
-            : _name(name), _memory_manager(std::move(memory_manager)), _source(source) {}
+            : _name(std::move(name)), _memory_manager(std::move(memory_manager)), _source(source) {}
 
     virtual Status accept(const vectorized::ChunkPtr& chunk, int32_t sink_driver_sequence) = 0;
 

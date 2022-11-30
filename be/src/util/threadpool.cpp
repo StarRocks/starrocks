@@ -237,7 +237,7 @@ ThreadPool::ThreadPool(const ThreadPoolBuilder& builder)
           _total_queued_tasks(0),
           _tokenless(new_token(ExecutionMode::CONCURRENT)) {}
 
-ThreadPool::~ThreadPool() {
+ThreadPool::~ThreadPool() noexcept {
     // There should only be one live token: the one used in tokenless submission.
     CHECK_EQ(1, _tokens.size()) << strings::Substitute("Threadpool $0 destroyed with $1 allocated tokens", _name,
                                                        _tokens.size());

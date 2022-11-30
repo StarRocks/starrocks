@@ -120,7 +120,7 @@ Status SchemaScanner::_create_slot_descs(ObjectPool* pool) {
     for (int i = 0; i < _column_num; ++i) {
         TSlotDescriptor t_slot_desc;
         auto type_desc = TypeDescriptor(_columns[i].type);
-        if (_columns[i].type == PrimitiveType::TYPE_VARCHAR || _columns[i].type == PrimitiveType::TYPE_CHAR) {
+        if (_columns[i].type == LogicalType::TYPE_VARCHAR || _columns[i].type == LogicalType::TYPE_CHAR) {
             type_desc.len = _columns[i].size;
         }
 

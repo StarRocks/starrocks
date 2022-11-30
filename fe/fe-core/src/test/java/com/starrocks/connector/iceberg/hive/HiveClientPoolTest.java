@@ -137,6 +137,6 @@ public class HiveClientPoolTest {
             }
         };
 
-        Assert.assertEquals(databases, clients.run(client -> client.getAllDatabases()));
+        Assert.assertEquals(databases, clients.run(client -> client.getAllDatabases(), true));
     }
 }
