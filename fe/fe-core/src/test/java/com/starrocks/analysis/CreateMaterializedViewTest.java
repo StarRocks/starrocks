@@ -24,7 +24,6 @@ import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
@@ -44,7 +43,6 @@ import org.junit.Test;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 public class CreateMaterializedViewTest {
@@ -308,8 +306,8 @@ public class CreateMaterializedViewTest {
             Assert.assertNotNull(baseColumn);
             Assert.assertEquals("k1", baseColumn.getName());
             // test sql
-            Assert.assertEquals("SELECT `tb1`.`k1` AS `k1`, `tb1`.`k2` AS `s2` " +
-                    "FROM `test`.`tbl1` AS `tb1`", materializedView.getViewDefineSql());
+            Assert.assertEquals("SELECT `test`.`tb1`.`k1` AS `k1`, `test`.`tb1`.`k2` AS `s2` FROM `test`.`tbl1` AS `tb1`",
+                    materializedView.getViewDefineSql());
             // test property
             TableProperty tableProperty = materializedView.getTableProperty();
             Assert.assertEquals(1, tableProperty.getReplicationNum().shortValue());
@@ -471,10 +469,9 @@ public class CreateMaterializedViewTest {
             Assert.assertNotNull(baseColumn);
             Assert.assertEquals("k1", baseColumn.getName());
             // test sql
-            Assert.assertEquals("SELECT date_trunc('month', `tb1`.`k1`) AS `s1`, `tb2`.`k2` AS `s2` " +
-                    "FROM `test`.`tbl1` AS `tb1` " +
-                    "INNER JOIN `test`.`tbl2` AS `tb2` " +
-                    "ON `tb1`.`k2` = `tb2`.`k2`", materializedView.getViewDefineSql());
+            Assert.assertEquals(
+                    "SELECT date_trunc('month', `test`.`tb1`.`k1`) AS `s1`, `test`.`tb2`.`k2` AS `s2` FROM `test`.`tbl1` AS `tb1` INNER JOIN `test`.`tbl2` AS `tb2` ON `test`.`tb1`.`k2` = `test`.`tb2`.`k2`",
+                    materializedView.getViewDefineSql());
             // test property
             TableProperty tableProperty = materializedView.getTableProperty();
             Assert.assertEquals(1, tableProperty.getReplicationNum().shortValue(), 1);
