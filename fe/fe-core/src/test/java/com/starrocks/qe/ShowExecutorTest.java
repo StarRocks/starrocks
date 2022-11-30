@@ -921,7 +921,7 @@ public class ShowExecutorTest {
                         .setHiveTableName("test_table")
                         .setPartitionColumnNames(partitions)
                         .setFullSchema(fullSchema)
-                        .setTableLocation("")
+                        .setTableLocation("hdfs://hadoop/hive/warehouse/test.db/test")
                         .setCreateTime(10000);
                 return tableBuilder.build();
             }
@@ -941,6 +941,7 @@ public class ShowExecutorTest {
                 ")\n" +
                 "WITH (\n" +
                 " partitioned_by = ARRAY [ year, dt ]\n" +
-                ")", resultSet.getResultRows().get(0).get(1));
+                ")\n" +
+                "LOCATION 'hdfs://hadoop/hive/warehouse/test.db/test'", resultSet.getResultRows().get(0).get(1));
     }
 }

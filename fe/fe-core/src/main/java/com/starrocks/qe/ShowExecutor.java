@@ -722,6 +722,12 @@ public class ShowExecutor {
             createTableSql.append(String.join(", ", table.getPartitionColumnNames())).append(" ]\n)");
         }
 
+        // Location
+        String location = table.getTableLocation();
+        if (!Strings.isNullOrEmpty(location)) {
+            createTableSql.append("\nLOCATION ").append("'").append(location).append("'");
+        }
+
         List<List<String>> rows = Lists.newArrayList();
         rows.add(Lists.newArrayList(tableName, createTableSql.toString()));
         resultSet = new ShowResultSet(stmt.getMetaData(), rows);

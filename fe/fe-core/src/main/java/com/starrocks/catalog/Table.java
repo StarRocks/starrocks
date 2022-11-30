@@ -250,6 +250,10 @@ public class Table extends MetaObject implements Writable {
         return createTime;
     }
 
+    public String getTableLocation() {
+        return null;
+    }
+
     public TTableDescriptor toThrift(List<ReferencedPartitionInfo> partitions) {
         return null;
     }
