@@ -234,11 +234,14 @@ public class AnalyzeManager implements Writable {
         Set<Long> tableIdHasDeleted = new HashSet<>(basicStatsMetaMap.keySet());
         tableIdHasDeleted.removeAll(tables);
 
-        dropBasicStatsMetaAndData(tableIdHasDeleted);
-        dropHistogramStatsMetaAndData(tableIdHasDeleted);
+        ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
+        statsConnectCtx.setThreadLocalInfo();
+
+        dropBasicStatsMetaAndData(statsConnectCtx, tableIdHasDeleted);
+        dropHistogramStatsMetaAndData(statsConnectCtx, tableIdHasDeleted);
     }
 
-    public void dropBasicStatsMetaAndData(Set<Long> tableIdHasDeleted) {
+    public void dropBasicStatsMetaAndData(ConnectContext statsConnectCtx, Set<Long> tableIdHasDeleted) {
         StatisticExecutor statisticExecutor = new StatisticExecutor();
         for (Long tableId : tableIdHasDeleted) {
             BasicStatsMeta basicStatsMeta = basicStatsMetaMap.get(tableId);
@@ -247,14 +250,14 @@ public class AnalyzeManager implements Writable {
             }
             // Both types of tables need to be deleted, because there may have been a switch of
             // collecting statistics types, leaving some discarded statistics data.
-            statisticExecutor.dropTableStatistics(tableId, StatsConstants.AnalyzeType.SAMPLE);
-            statisticExecutor.dropTableStatistics(tableId, StatsConstants.AnalyzeType.FULL);
+            statisticExecutor.dropTableStatistics(statsConnectCtx, tableId, StatsConstants.AnalyzeType.SAMPLE);
+            statisticExecutor.dropTableStatistics(statsConnectCtx, tableId, StatsConstants.AnalyzeType.FULL);
             GlobalStateMgr.getCurrentState().getEditLog().logRemoveBasicStatsMeta(basicStatsMetaMap.get(tableId));
             basicStatsMetaMap.remove(tableId);
         }
     }
 
-    public void dropHistogramStatsMetaAndData(Set<Long> tableIdHasDeleted) {
+    public void dropHistogramStatsMetaAndData(ConnectContext statsConnectCtx, Set<Long> tableIdHasDeleted) {
         Map<Long, List<String>> expireHistogram = new HashMap<>();
         for (Pair<Long, String> entry : histogramStatsMetaMap.keySet()) {
             if (tableIdHasDeleted.contains(entry.first)) {
@@ -268,7 +271,7 @@ public class AnalyzeManager implements Writable {
 
         for (Map.Entry<Long, List<String>> histogramItem : expireHistogram.entrySet()) {
             StatisticExecutor statisticExecutor = new StatisticExecutor();
-            statisticExecutor.dropHistogram(histogramItem.getKey(), histogramItem.getValue());
+            statisticExecutor.dropHistogram(statsConnectCtx, histogramItem.getKey(), histogramItem.getValue());
 
             for (String histogramColumn : histogramItem.getValue()) {
                 Pair<Long, String> histogramKey = new Pair<>(histogramItem.getKey(), histogramColumn);
