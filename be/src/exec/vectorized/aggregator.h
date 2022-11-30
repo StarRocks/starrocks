@@ -350,7 +350,7 @@ protected:
 public:
     void build_hash_map(size_t chunk_size, bool agg_group_by_with_limit = false);
     void build_hash_map_with_selection(size_t chunk_size);
-    void build_hash_map_allocate_and_with_selection(size_t chunk_size, bool agg_group_by_with_limit = false);
+    void build_hash_map_with_selection_and_allocation(size_t chunk_size, bool agg_group_by_with_limit = false);
     Status convert_hash_map_to_chunk(int32_t chunk_size, vectorized::ChunkPtr* chunk);
 
     void build_hash_set(size_t chunk_size);

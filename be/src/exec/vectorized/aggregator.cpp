@@ -952,30 +952,29 @@ void Aggregator::build_hash_map(size_t chunk_size, bool agg_group_by_with_limit)
 
     _hash_map_variant.visit([&](auto& hash_map_with_key) {
         using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
-        using Func = decltype(AllocateState<MapType>(this));
-        hash_map_with_key->template compute_agg_states<Func, true, false>(chunk_size, _group_by_columns,
-                                                                          _mem_pool.get(), AllocateState<MapType>(this),
-                                                                          &_tmp_agg_states, nullptr);
+        hash_map_with_key->build_hash_map(chunk_size, _group_by_columns, _mem_pool.get(), AllocateState<MapType>(this),
+                                          &_tmp_agg_states);
     });
 }
 
 void Aggregator::build_hash_map_with_selection(size_t chunk_size) {
     _hash_map_variant.visit([&](auto& hash_map_with_key) {
         using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
-        using Func = decltype(AllocateState<MapType>(this));
-        hash_map_with_key->template compute_agg_states<Func, false, true>(chunk_size, _group_by_columns,
-                                                                          _mem_pool.get(), AllocateState<MapType>(this),
-                                                                          &_tmp_agg_states, &_streaming_selection);
+        hash_map_with_key->build_hash_map_with_selection(chunk_size, _group_by_columns, _mem_pool.get(),
+                                                         AllocateState<MapType>(this), &_tmp_agg_states,
+                                                         &_streaming_selection);
     });
 }
 
-void Aggregator::build_hash_map_allocate_and_with_selection(size_t chunk_size, bool agg_group_by_with_limit) {
+// When meets not found group keys, mark the first pos into `_streaming_selection` and insert into the hashmap
+// so the following group keys(same as the first not found group keys) are not marked as non-founded.
+// This can be used for stream mv so no need to find multi times for the same non-found group keys.
+void Aggregator::build_hash_map_with_selection_and_allocation(size_t chunk_size, bool agg_group_by_with_limit) {
     _hash_map_variant.visit([&](auto& hash_map_with_key) {
         using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
-        using Func = decltype(AllocateState<MapType>(this));
-        hash_map_with_key->template compute_agg_states<Func, true, true>(chunk_size, _group_by_columns, _mem_pool.get(),
-                                                                         AllocateState<MapType>(this), &_tmp_agg_states,
-                                                                         &_streaming_selection);
+        hash_map_with_key->build_hash_map_with_selection_and_allocation(chunk_size, _group_by_columns, _mem_pool.get(),
+                                                                        AllocateState<MapType>(this), &_tmp_agg_states,
+                                                                        &_streaming_selection);
     });
 }
 
