@@ -182,8 +182,4 @@ public class OptExpression {
         }
         return sb.toString();
     }
-
-    public boolean canUsePipeLine() {
-        return op.canUsePipeLine() && inputs.stream().allMatch(OptExpression::canUsePipeLine);
-    }
 }
