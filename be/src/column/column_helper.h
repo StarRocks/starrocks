@@ -17,6 +17,7 @@
 #include "column/type_traits.h"
 #include "gutil/bits.h"
 #include "gutil/casts.h"
+#include "gutil/cpu.h"
 #include "runtime/primitive_type.h"
 #include "util/phmap/phmap.h"
 
@@ -311,8 +312,8 @@ public:
     using ColumnsConstIterator = Columns::const_iterator;
     static bool is_all_const(ColumnsConstIterator const& begin, ColumnsConstIterator const& end);
     static size_t compute_bytes_size(ColumnsConstIterator const& begin, ColumnsConstIterator const& end);
-    template <typename T>
-    static size_t filter_range(const Column::Filter& filter, T* data, size_t from, size_t to) {
+    template <typename T, bool avx512f>
+    static size_t t_filter_range(const Column::Filter& filter, T* data, size_t from, size_t to) {
         auto start_offset = from;
         auto result_offset = from;
 
@@ -337,9 +338,25 @@ public:
                 result_offset += kBatchNums;
 
             } else {
-                phmap::priv::BitMask<uint32_t, 32> bitmask(mask);
-                for (auto idx : bitmask) {
-                    *(data + result_offset++) = *(data + start_offset + idx);
+#define AVX512F_COPY(SHIFT, MASK, WIDTH)                                        \
+    {                                                                           \
+        auto m = (mask >> SHIFT) & MASK;                                        \
+        if (m) {                                                                \
+            __m512i dst;                                                        \
+            __m512i src = _mm512_loadu_epi##WIDTH(data + start_offset + SHIFT); \
+            dst = _mm512_mask_compress_epi##WIDTH(dst, m, src);                 \
+            _mm512_storeu_epi##WIDTH(data + result_offset, dst);                \
+            result_offset += __builtin_popcount(m);                             \
+        }                                                                       \
+    }
+                if constexpr (avx512f && sizeof(T) == 4) {
+                    AVX512F_COPY(0, 0xffff, 32);
+                    AVX512F_COPY(16, 0xffff, 32);
+                } else {
+                    phmap::priv::BitMask<uint32_t, 32> bitmask(mask);
+                    for (auto idx : bitmask) {
+                        *(data + result_offset++) = *(data + start_offset + idx);
+                    }
                 }
             }
 
@@ -384,6 +401,15 @@ public:
         }
 
         return result_offset;
+    }
+
+    template <typename T>
+    static size_t filter_range(const Column::Filter& filter, T* data, size_t from, size_t to) {
+        if (base::CPU::instance()->has_avx512f()) {
+            return t_filter_range<T, true>(filter, data, from, to);
+        } else {
+            return t_filter_range<T, false>(filter, data, from, to);
+        }
     }
 
     template <typename T>
