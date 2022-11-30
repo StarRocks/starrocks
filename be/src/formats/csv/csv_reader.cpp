@@ -137,10 +137,10 @@ Status CSVReader::more_lines() {
         return Status::EndOfFile("Reached limit");
     }
     Status status = Status::OK();
-    // status = buffInit();
-    // if (!status.ok()) {
-    //     return status;
-    // }
+    status = buffInit();
+    if (!status.ok()) {
+        return status;
+    }
     _escape_data.clear();
     _escape_pos.clear();
     ParseState curState = START;
