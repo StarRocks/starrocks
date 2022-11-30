@@ -158,15 +158,15 @@ sh bin/stop_cn.sh
 > 注意
 >
 > * 由于 StarRocks 保证 BE 后向兼容 FE，因此您需要**先升级 BE 节点，再升级 FE 节点**。错误的升级顺序可能导致新旧 FE、BE 节点不兼容，进而导致 BE 节点停止服务。
-> * StarRocks 2.0 之前的大版本升级时必须逐个大版本升级，2.0 之后的版本可以跨大版本升级。StarRocks 2.0 是当前的长期支持版本（Long Term Support，LTS），维护期为半年以上。
+> * StarRocks 2.0 之前的大版本升级时必须**逐个大版本**升级，2.0 之后的版本可以**跨大版本**升级。更为推荐的稳妥方式是逐个版本升级，比如 1.19->2.0->2.1->2.2->2.3->2.4。StarRocks 2.2 是当前的长期支持版本（Long Term Support，LTS），维护期为半年以上。
 >
 > |版本|可直接升级版本|注意事项|是否为 LTS 版本|
 > |----|------------|--------|--------------|
 > |1.18.x||更早版本需要按照 <a href="update_from_dorisdb.md">标准版 DorisDB 升级到社区版 StarRocks</a> 操作。|否|
 > |1.19.x|必须从1.18.x升级||否|
-> |2.0.x|必须从1.19.x升级|升级过程中需要暂时关闭 Clone。|是|
+> |2.0.x|必须从1.19.x升级|升级过程中需要暂时关闭 Clone。|否|
 > |2.1.x|必须从2.0.x 升级|灰度升级前需要修改 <code>vector_chunk_size</code> 和 <code>batch_size</code>。|否|
-> |2.2.x|可以从2.0.x 或 2.1.x 升级|回滚需要配置 <code>ignore_unknown_log_id</code> 为 <code>true</code>。||
+> |2.2.x|可以从2.0.x 或 2.1.x 升级|回滚需要配置 <code>ignore_unknown_log_id</code> 为 <code>true</code>。|是|
 > |2.3.x|可以从2.0.x、2.1.x 或 2.2.x 升级|不建议跨版本回滚。回滚需要配置 <code>ignore_unknown_log_id</code> 为 <code>true</code>。||
 
 ### 下载安装文件
