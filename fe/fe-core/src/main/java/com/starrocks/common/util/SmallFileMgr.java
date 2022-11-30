@@ -525,8 +525,7 @@ public class SmallFileMgr implements Writable {
             try {
                 smallFiles.addFile(smallFile.name, smallFile);
             } catch (DdlException e) {
-                // should not happen
-                e.printStackTrace();
+                LOG.warn(e);
             }
         }
     }

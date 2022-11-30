@@ -21,6 +21,9 @@
 
 package com.starrocks.common.io;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.EOFException;
@@ -48,6 +51,7 @@ import java.util.zip.CheckedOutputStream;
  */
 public class Text implements Writable {
 
+    private static final Logger LOG = LogManager.getLogger(Text.class);
     private static final byte[] EMPTY_BYTES = new byte[0];
 
     private byte[] bytes;
@@ -157,7 +161,7 @@ public class Text implements Writable {
             return -1; // not found
         } catch (CharacterCodingException e) {
             // can't get here
-            e.printStackTrace();
+            LOG.warn(e);
             return -1;
         }
     }

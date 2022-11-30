@@ -276,7 +276,7 @@ public class NodeMgr {
                         Thread.sleep(5000);
                         continue;
                     } catch (InterruptedException e) {
-                        e.printStackTrace();
+                        LOG.warn(e);
                         System.exit(-1);
                     }
                 }

@@ -31,6 +31,8 @@ import com.starrocks.persist.Storage;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Frontend;
 import io.netty.handler.codec.http.HttpMethod;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -38,6 +40,8 @@ import java.util.Date;
 import java.util.List;
 
 public class HaAction extends WebBaseAction {
+
+    private static final Logger LOG = LogManager.getLogger(HaAction.class);
 
     public HaAction(ActionController controller) {
         super(controller);
@@ -130,7 +134,7 @@ public class HaAction extends WebBaseAction {
             buffer.append("<p>last checkpoint time: " + date + "</p>");
             buffer.append("</pre>");
         } catch (IOException e) {
-            e.printStackTrace();
+            LOG.warn(e);
         }
     }
 

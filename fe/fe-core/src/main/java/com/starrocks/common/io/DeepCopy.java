@@ -64,7 +64,6 @@ public class DeepCopy {
             readMethod.invoke(dest, in);
             in.close();
         } catch (Exception e) {
-            e.printStackTrace();
             LOG.warn("failed to copy object.", e);
             return false;
         } finally {
