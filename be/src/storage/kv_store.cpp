@@ -26,6 +26,8 @@
 #include <vector>
 
 #include "common/logging.h"
+#include "gutil/strings/substitute.h"
+#include "rocksdb/convenience.h"
 #include "rocksdb/db.h"
 #include "rocksdb/options.h"
 #include "rocksdb/slice.h"
@@ -71,6 +73,10 @@ Status KVStore::init(bool read_only) {
     options.create_missing_column_families = true;
     std::string db_path = _root_path + META_POSTFIX;
 
+    rocksdb::BlockBasedTableOptions bbt_opts;
+    rocksdb::GetBlockBasedTableOptionsFromString(
+            bbt_opts, strings::Substitute("block_cache=$0M", config::rocksdb_block_cache), &bbt_opts);
+
     // The index of each column family must be consistent with the enum `ColumnFamilyIndex`
     // defined in olap_define.h
     std::vector<ColumnFamilyDescriptor> cf_descs(NUM_COLUMN_FAMILY_INDEX);
@@ -81,6 +87,7 @@ Status KVStore::init(bool read_only) {
     cf_descs[2].name = META_COLUMN_FAMILY;
     cf_descs[2].options.prefix_extractor.reset(NewFixedPrefixTransform(PREFIX_LENGTH));
     cf_descs[2].options.compression = rocksdb::kSnappyCompression;
+    cf_descs[2].options.table_factory.reset(NewBlockBasedTableFactory(bbt_opts));
     static_assert(NUM_COLUMN_FAMILY_INDEX == 3);
 
     rocksdb::Status s;

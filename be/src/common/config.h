@@ -895,4 +895,6 @@ CONF_Int32(exception_stack_level, "1");
 CONF_String(exception_stack_white_list, "std::");
 CONF_String(exception_stack_black_list, "apache::thrift::,ue2::,arangodb::");
 
+CONF_Int32(rocksdb_block_cache, "512"); // 512MB
+
 } // namespace starrocks::config
