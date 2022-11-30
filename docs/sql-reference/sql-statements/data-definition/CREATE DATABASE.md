@@ -1,6 +1,6 @@
 # CREATE DATABASE
 
-## description
+## Description
 
 This statement is used to create databases.
 
@@ -10,7 +10,7 @@ Syntax:
 CREATE DATABASE [IF NOT EXISTS] db_name;
 ```
 
-## example
+## Examples
 
 1. Create database db_test.
 
