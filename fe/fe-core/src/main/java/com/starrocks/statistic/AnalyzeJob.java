@@ -6,6 +6,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.StatsConstants.AnalyzeType;
 import com.starrocks.statistic.StatsConstants.ScheduleStatus;
@@ -120,7 +121,7 @@ public class AnalyzeJob implements Writable {
         return properties;
     }
 
-    public void run(StatisticExecutor statisticExecutor) {
+    public void run(ConnectContext statsConnectContext, StatisticExecutor statisticExecutor) {
         setStatus(StatsConstants.ScheduleStatus.RUNNING);
         GlobalStateMgr.getCurrentAnalyzeMgr().updateAnalyzeJobWithoutLog(this);
         List<StatisticsCollectJob> statisticsCollectJobList =
@@ -134,7 +135,7 @@ public class AnalyzeJob implements Writable {
             analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
             GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
 
-            statisticExecutor.collectStatistics(statsJob, analyzeStatus, true);
+            statisticExecutor.collectStatistics(statsConnectContext, statsJob, analyzeStatus, true);
             if (analyzeStatus.getStatus().equals(StatsConstants.ScheduleStatus.FAILED)) {
                 setStatus(StatsConstants.ScheduleStatus.FAILED);
                 setWorkTime(LocalDateTime.now());

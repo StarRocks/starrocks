@@ -104,4 +104,14 @@ public class StatisticsExecutorTest extends PlanTestBase {
 
         collectJob.collectStatisticSync(sql, context);
     }
+
+    @Test
+    public void testSessionVariableInStats() {
+        ConnectContext context = new ConnectContext();
+        context.getSessionVariable().setStatisticCollectParallelism(5);
+        context.setThreadLocalInfo();
+
+        ConnectContext statsContext = StatisticUtils.buildConnectContext();
+        Assert.assertEquals(1, statsContext.getSessionVariable().getParallelExecInstanceNum());
+    }
 }

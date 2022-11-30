@@ -12,8 +12,10 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.StatisticExecutor;
+import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.thrift.TStatisticData;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -39,7 +41,9 @@ public class ColumnBasicStatsCacheLoader implements AsyncCacheLoader<ColumnStats
                                                                            @NonNull Executor executor) {
         return CompletableFuture.supplyAsync(() -> {
             try {
-                List<TStatisticData> statisticData = queryStatisticsData(cacheKey.tableId, cacheKey.column);
+                ConnectContext connectContext = StatisticUtils.buildConnectContext();
+                connectContext.setThreadLocalInfo();
+                List<TStatisticData> statisticData = queryStatisticsData(connectContext, cacheKey.tableId, cacheKey.column);
                 // check TStatisticData is not empty, There may be no such column Statistics in BE
                 if (!statisticData.isEmpty()) {
                     return Optional.of(convert2ColumnStatistics(statisticData.get(0)));
@@ -66,7 +70,10 @@ public class ColumnBasicStatsCacheLoader implements AsyncCacheLoader<ColumnStats
                     tableId = key.tableId;
                     columns.add(key.column);
                 }
-                List<TStatisticData> statisticData = queryStatisticsData(tableId, columns);
+
+                ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
+                statsConnectCtx.setThreadLocalInfo();
+                List<TStatisticData> statisticData = queryStatisticsData(statsConnectCtx, tableId, columns);
                 Map<ColumnStatsCacheKey, Optional<ColumnStatistic>> result = new HashMap<>();
                 // There may be no statistics for the column in BE
                 // Complete the list of statistics information, otherwise the columns without statistics may be called repeatedly
@@ -95,12 +102,12 @@ public class ColumnBasicStatsCacheLoader implements AsyncCacheLoader<ColumnStats
         return asyncLoad(key, executor);
     }
 
-    private List<TStatisticData> queryStatisticsData(long tableId, String column) throws Exception {
-        return queryStatisticsData(tableId, ImmutableList.of(column));
+    private List<TStatisticData> queryStatisticsData(ConnectContext context, long tableId, String column) {
+        return queryStatisticsData(context, tableId, ImmutableList.of(column));
     }
 
-    private List<TStatisticData> queryStatisticsData(long tableId, List<String> columns) throws Exception {
-        return statisticExecutor.queryStatisticSync(null, tableId, columns);
+    private List<TStatisticData> queryStatisticsData(ConnectContext context, long tableId, List<String> columns) {
+        return statisticExecutor.queryStatisticSync(context, null, tableId, columns);
     }
 
     private ColumnStatistic convert2ColumnStatistics(TStatisticData statisticData) throws AnalysisException {

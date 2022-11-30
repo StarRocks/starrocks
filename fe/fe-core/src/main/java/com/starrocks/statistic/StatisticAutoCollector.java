@@ -6,6 +6,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.LeaderDaemon;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.StatsConstants.AnalyzeType;
 import com.starrocks.statistic.StatsConstants.ScheduleStatus;
@@ -58,13 +59,25 @@ public class StatisticAutoCollector extends LeaderDaemon {
                 analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
                 GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
 
+<<<<<<< HEAD
                 statisticExecutor.collectStatistics(statsJob, analyzeStatus, true);
+=======
+                ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
+                statsConnectCtx.setThreadLocalInfo();
+                STATISTIC_EXECUTOR.collectStatistics(statsConnectCtx, statsJob, analyzeStatus, true);
+>>>>>>> 1103f7300 (Fix the problem that the parallelism setting does not take effect because the buildConnectContext reuses the thread ConnectContext (#14352))
             }
         } else {
             List<AnalyzeJob> allAnalyzeJobs = GlobalStateMgr.getCurrentAnalyzeMgr().getAllAnalyzeJobList();
             allAnalyzeJobs.sort((o1, o2) -> Long.compare(o2.getId(), o1.getId()));
             for (AnalyzeJob analyzeJob : allAnalyzeJobs) {
+<<<<<<< HEAD
                 analyzeJob.run(statisticExecutor);
+=======
+                ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
+                statsConnectCtx.setThreadLocalInfo();
+                analyzeJob.run(statsConnectCtx, STATISTIC_EXECUTOR);
+>>>>>>> 1103f7300 (Fix the problem that the parallelism setting does not take effect because the buildConnectContext reuses the thread ConnectContext (#14352))
             }
         }
     }
