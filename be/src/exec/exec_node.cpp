@@ -27,6 +27,7 @@
 #include <sstream>
 
 #include "column/column_helper.h"
+#include "common/compiler_util.h"
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "exec/empty_set_node.h"
@@ -366,7 +367,10 @@ Status ExecNode::create_tree_helper(RuntimeState* state, ObjectPool* pool, const
     ExecNode* node = nullptr;
     RETURN_IF_ERROR(create_vectorized_node(state, pool, tnodes[*node_idx], descs, &node));
 
-    // assert(parent != NULL || (node_idx == 0 && root_expr != NULL));
+    DCHECK((parent != nullptr) || (root != nullptr));
+    if (UNLIKELY(parent == nullptr && root == nullptr)) {
+        return Status::InternalError("parent and root shouldn't both be null");
+    }
     if (parent != nullptr) {
         parent->_children.push_back(node);
     } else {
