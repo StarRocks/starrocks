@@ -181,6 +181,7 @@
       + [TRUNCATE TABLE](./sql-reference/sql-statements/data-definition/TRUNCATE%20TABLE.md)
       + [USE](./sql-reference/sql-statements/data-definition/USE.md)
     + DML
+      + [ALTER LOAD](./sql-reference/sql-statements/data-manipulation/ALTER%20LOAD.md)
       + [ALTER ROUTINE LOAD](./sql-reference/sql-statements/data-manipulation/alter-routine-load.md)
       + [BROKER LOAD](./sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md)
       + [CANCEL LOAD](./sql-reference/sql-statements/data-manipulation/CANCEL%20LOAD.md)
