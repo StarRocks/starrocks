@@ -48,6 +48,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |edit_log_roll_num|50000|该参数用于控制日志文件的大小，指定了每写多少条元数据日志，执行一次日志滚动操作来为这些日志生成新的日志文件。新日志文件会写入到 BDBJE Database。|
 |ignore_unknown_log_id|FALSE|是否忽略未知的 logID。当 FE 回滚到低版本时，可能存在低版本 BE 无法识别的 logID。<br>如果为 TRUE，则 FE 会忽略这些 logID；否则 FE 会退出。|
 |ignore_meta_check|FALSE|是否忽略元数据落后的情形。如果为 true，非主 FE 将忽略主 FE 与其自身之间的元数据延迟间隙，即使元数据延迟间隙超过 meta_delay_toleration_second，非主 FE 仍将提供读取服务。<br>当您尝试停止 Master FE 较长时间，但仍希望非 Master FE 可以提供读取服务时，该参数会很有帮助。|
+|meta_delay_toleration_second | 300  | FE 所在 StarRocks 集群中，非 Leader FE 能够容忍的元数据落后的最大时间。单位：秒。如果非 Leader FE 上的元数据与 Leader FE 上的元数据之间的延迟时间超过该参数取值，则该非 Leader FE 将停止服务。 |
 |drop_backend_after_decommission|TRUE|BE 被下线后，是否删除该 BE。true 代表 BE 被下线后会立即删除该 BE。False 代表下线完成后不删除 BE。|
 |enable_collect_query_detail_info|FALSE|是否收集查询的 profile 信息。设置为 true 时，系统会收集查询的 profile。设置为 false 时，系统不会收集查询的 profile。|
 
@@ -407,7 +408,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 |serialize_batch|FALSE|BE 之间 rpc 通信是否序列化 RowBatch，用于查询层之间的数据传输|
 |max_unpacked_row_block_size|104857600|单个 block 最大的字节数，100MB|
 |file_descriptor_cache_clean_interval|3600|文件句柄缓存清理的间隔，用于清理长期不用的文件句柄|
-|storage_root_path|${STARROCKS_HOME}/storage|存储数据的目录，多块盘配置使用分隔符 `;` 间隔，例如：/data1/starrocks;/data2/starrocks。如果为 SSD 磁盘，需在路径后添加 `.SSD`，如果为 HDD 磁盘，需在路径后添加 `.HDD`。|
+|storage_root_path|${STARROCKS_HOME}/storage|存储数据的目录，多块盘配置使用分号 `;` 隔开，例如：/data1,medium:hdd;/data2,medium:ssd。如果为 SSD 磁盘，需在路径后添加 `ssd`，如果为 HDD 磁盘，需在路径后添加 `hdd`。|
 |max_percentage_of_error_disk|0|磁盘错误达到一定比例，BE 退出|
 |default_num_rows_per_data_block|1024|每个 block 的数据行数|
 |max_tablet_num_per_shard|1024|每个 shard 的 tablet 数目，用于划分 tablet，防止单个目录下 tablet 子目录过多|
