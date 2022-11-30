@@ -282,7 +282,7 @@ public class MaterializedViewAnalyzer {
             List<String> columnOutputNames = queryRelation.getColumnOutputNames();
             List<Expr> outputExpression = queryRelation.getOutputExpression();
             for (int i = 0; i < outputExpression.size(); ++i) {
-                Type type = AnalyzerUtils.transformType(outputExpression.get(i).getType());
+                Type type = AnalyzerUtils.transformTypeForMv(outputExpression.get(i).getType());
                 Column column = new Column(columnOutputNames.get(i), type,
                         outputExpression.get(i).isNullable());
                 // set default aggregate type, look comments in class Column
