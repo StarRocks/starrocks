@@ -46,9 +46,9 @@ public final class GlobalVariable {
     public static final String DEFAULT_ROWSET_TYPE = "default_rowset_type";
     public static final String CHARACTER_SET_DATABASE = "character_set_database";
 
-    public static final String QUERY_QUEUE_SELECT_ENABLE = "query_queue_select_enable";
-    public static final String QUERY_QUEUE_STATISTIC_ENABLE = "query_queue_statistic_enable";
-    public static final String QUERY_QUEUE_INSERT_ENABLE = "query_queue_insert_enable";
+    public static final String ENABLE_QUERY_QUEUE_SELECT = "enable_query_queue_select";
+    public static final String ENABLE_QUERY_QUEUE_STATISTIC = "enable_query_queue_statistic";
+    public static final String ENABLE_QUERY_QUEUE_LOAD = "enable_query_queue_load";
     public static final String QUERY_QUEUE_FRESH_RESOURCE_USAGE_INTERVAL_MS =
             "query_queue_fresh_resource_usage_interval_ms";
     public static final String QUERY_QUEUE_CONCURRENCY_LIMIT = "query_queue_concurrency_limit";
@@ -99,7 +99,7 @@ public final class GlobalVariable {
     private static boolean performanceSchema = false;
 
     /**
-     * Query will be pending when BE is overloaded, if `queryQueueEnable` is true.
+     * Query will be pending when BE is overloaded, if `enableQueryQueueXxx` is true.
      * <p>
      * If the number of running queries of any BE `exceeds queryQueueConcurrencyLimit`,
      * or memory usage rate of any BE exceeds `queryQueueMemUsedPctLimit`,
@@ -115,12 +115,12 @@ public final class GlobalVariable {
      * The queries only using schema meta will never been queued, because a MySQL client will
      * query schema meta after the connection is established.
      */
-    @VariableMgr.VarAttr(name = QUERY_QUEUE_SELECT_ENABLE, flag = VariableMgr.GLOBAL)
-    private static boolean queryQueueSelectEnable = false;
-    @VariableMgr.VarAttr(name = QUERY_QUEUE_STATISTIC_ENABLE, flag = VariableMgr.GLOBAL)
-    private static boolean queryQueueStatisticEnable = false;
-    @VariableMgr.VarAttr(name = QUERY_QUEUE_INSERT_ENABLE, flag = VariableMgr.GLOBAL)
-    private static boolean queryQueueInsertEnable = false;
+    @VariableMgr.VarAttr(name = ENABLE_QUERY_QUEUE_SELECT, flag = VariableMgr.GLOBAL)
+    private static boolean enableQueryQueueSelect = false;
+    @VariableMgr.VarAttr(name = ENABLE_QUERY_QUEUE_STATISTIC, flag = VariableMgr.GLOBAL)
+    private static boolean enableQueryQueueStatistic = false;
+    @VariableMgr.VarAttr(name = ENABLE_QUERY_QUEUE_LOAD, flag = VariableMgr.GLOBAL)
+    private static boolean enableQueryQueueLoad = false;
     // Use the resource usage, only when the duration from the last report is within this interval.
     @VariableMgr.VarAttr(name = QUERY_QUEUE_FRESH_RESOURCE_USAGE_INTERVAL_MS, flag = VariableMgr.GLOBAL)
     private static long queryQueueResourceUsageIntervalMs = 5000;
@@ -139,28 +139,28 @@ public final class GlobalVariable {
     @VariableMgr.VarAttr(name = QUERY_QUEUE_MAX_QUEUED_QUERIES, flag = VariableMgr.GLOBAL)
     private static int queryQueueMaxQueuedQueries = 1024;
 
-    public static boolean isQueryQueueSelectEnable() {
-        return queryQueueSelectEnable;
+    public static boolean isEnableQueryQueueSelect() {
+        return enableQueryQueueSelect;
     }
 
-    public static void setQueryQueueSelectEnable(boolean queryQueueSelectEnable) {
-        GlobalVariable.queryQueueSelectEnable = queryQueueSelectEnable;
+    public static void setEnableQueryQueueSelect(boolean enableQueryQueueSelect) {
+        GlobalVariable.enableQueryQueueSelect = enableQueryQueueSelect;
     }
 
-    public static boolean isQueryQueueStatisticEnable() {
-        return queryQueueStatisticEnable;
+    public static boolean isEnableQueryQueueStatistic() {
+        return enableQueryQueueStatistic;
     }
 
-    public static void setQueryQueueStatisticEnable(boolean queryQueueStatisticEnable) {
-        GlobalVariable.queryQueueStatisticEnable = queryQueueStatisticEnable;
+    public static void setEnableQueryQueueStatistic(boolean enableQueryQueueStatistic) {
+        GlobalVariable.enableQueryQueueStatistic = enableQueryQueueStatistic;
     }
 
-    public static boolean isQueryQueueInsertEnable() {
-        return queryQueueInsertEnable;
+    public static boolean isEnableQueryQueueLoad() {
+        return enableQueryQueueLoad;
     }
 
-    public static void setQueryQueueInsertEnable(boolean queryQueueInsertEnable) {
-        GlobalVariable.queryQueueInsertEnable = queryQueueInsertEnable;
+    public static void setEnableQueryQueueLoad(boolean enableQueryQueueLoad) {
+        GlobalVariable.enableQueryQueueLoad = enableQueryQueueLoad;
     }
 
     public static long getQueryQueueResourceUsageIntervalMs() {
