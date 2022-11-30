@@ -36,8 +36,8 @@ protected:
 
     std::unique_ptr<CSVScanner> create_csv_scanner(const std::vector<TypeDescriptor>& types,
                                                    const std::vector<TBrokerRangeDesc>& ranges,
-                                                   const string& multi_row_delimiter = "\n",
-                                                   const string& multi_column_separator = "|",
+                                                   const std::string& multi_row_delimiter = "\n",
+                                                   const std::string& multi_column_separator = "|",
                                                    const int64_t skip_header = 0, const bool trim_space = false,
                                                    const char enclose = 0, const char escape = 0) {
         /// Init DescriptorTable
