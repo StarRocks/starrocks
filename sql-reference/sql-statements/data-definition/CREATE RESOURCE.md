@@ -46,7 +46,7 @@ Spark 集群配置不同，资源需要添加的配置项也不同。当前 Spar
 | spark.hadoop.fs.defaultFS                 | 是       | HDFS 中 NameNode 的地址。格式为：`hdfs://namenode_host:port`。 |
 | working_dir                               | 是       | 一个 HDFS 文件路径，用于存放 ETL 作业生成的文件。例如：`hdfs://host: port/tmp/starrocks`。 |
 | broker                                    | 是       | Broker 名称。您可以使用 [SHOW BROKER](/sql-reference/sql-statements/Administration/SHOW%20BROKER.md) 语句查看当前所有 Broker 的名称。如未添加过 Broker，可使用 [ALTER SYSTEM](/sql-reference/sql-statements/Administration/ALTER%20SYSTEM.md) 语句添加 Broker。 |
-| broker.username                           | 否       | HDFS 用户名。如设置该参数，那么 Broker 在读取 ETL 生成的中间数据时需要输入用户名和密码进行认证。 |
+| broker.username                           | 否       | 通过指定的 HDFS 用户去访问HDFS中的文件。如果 HDFS 文件只能由特定用户访问，则需要传入该参数，如果该文件是所有用户都可以访问的话，则不需要传入该参数。 |
 | broker.password                           | 否       | HDFS 用户密码。                                              |
 
 - 如您使用 YARN HA 作为 Spark 的 cluster manager，HDFS 来存储数据，则需添加如下配置项：
@@ -63,6 +63,8 @@ Spark 集群配置不同，资源需要添加的配置项也不同。当前 Spar
 | spark.hadoop.fs.defaultFS                        | 是       | Spark 使用的 HDFS 中 NameNode 节点地址。格式为：`hdfs://namenode_host:port`。 |
 | working_dir                                      | 是       | ETL 作业目录，用于存放 ETL 作业生成的中间数据。例如：`hdfs://host: port/tmp/starrocks`。 |
 | broker                                           | 是       | Broker 名称。您可以使用 [SHOW BROKER](/sql-reference/sql-statements/Administration/SHOW%20BROKER.md) 语句查看当前所有 Broker 的名称。如未添加过 Broker，可使用 [ALTER SYSTEM](/sql-reference/sql-statements/Administration/ALTER%20SYSTEM.md) 语句添加 Broker。 |
+| broker.username                           | 否       | 通过指定的 HDFS 用户去访问HDFS中的文件。如果 HDFS 文件只能由特定用户访问，则需要传入该参数，如果该文件是所有用户都可以访问的话，则不需要传入该参数。 |
+| broker.password                           | 否       | HDFS 用户密码。                                              |
 
 - 如您使用 YARN 作为 Spark 的cluster manager，HDFS HA来存储数据，则需添加如下配置项：
 
@@ -78,6 +80,8 @@ Spark 集群配置不同，资源需要添加的配置项也不同。当前 Spar
 | spark.hadoop.dfs.client.failover.proxy.provider              | 是       | HDFS 的 Java 类，其用来联系 Active 状态的 NameNode。该配置项供 Spark 使用。 |
 | working_dir                                                  | 是       | ETL 作业目录，用于存放 ETL 作业生成的中间数据。例如：`hdfs://host: port/tmp/starrocks`。 |
 | broker                                                       | 是       | Broker 名称。您可以使用 [SHOW BROKER](/sql-reference/sql-statements/Administration/SHOW%20BROKER.md) 语句查看当前所有 Broker 的名称。如未添加过 Broker，可使用 [ALTER SYSTEM](/sql-reference/sql-statements/Administration/ALTER%20SYSTEM.md) 语句添加 Broker。 |
+| broker.username                           | 否       | 通过指定的 HDFS 用户去访问HDFS中的文件。如果 HDFS 文件只能由特定用户访问，则需要传入该参数，如果该文件是所有用户都可以访问，则不需要传入该参数。 |
+| broker.password                           | 否       | HDFS 用户密码。                                              |
 | broker.dfs.nameservices                                      | 是       | HDFS nameservice 的 ID。该配置项供 Broker 使用。             |
 | broker.dfs.ha.namenodes. [nameservice ID]                    | 是       | HDFS NameNode 的 ID。您可配置多个 NameNode ID。多个 NameNode ID 之间要用逗号 (`,`) 隔开。该配置项供 Broker 使用。 |
 | broker.dfs.namenode.rpc-address. [nameservice ID].[name node ID] | 是       | 每个 HDFS NameNode 监听的 RPC 地址。注意需配置完全限定的 RPC 地址。该配置项供 Broker 使用。 |

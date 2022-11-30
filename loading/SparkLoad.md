@@ -20,9 +20,10 @@ Spark Load 任务的执行主要分为以下几个阶段：
 
 1. 用户向 FE 提交 Spark Load 任务；
 2. FE 调度提交 ETL 任务到 Spark 集群执行。
-3. Spark 集群执行 ETL 完成对导入数据的预处理。包括全局字典构建（BITMAP类型）、分区、排序、聚合等。
+3. Spark 集群执行 ETL 完成对导入数据的预处理。包括全局字典构建（BITMAP类型）、分区、排序、聚合等。预处理后的数据落盘 HDFS。
 4. ETL 任务完成后，FE 获取预处理过的每个分片的数据路径，并调度相关的 BE 执行 Push 任务。
-5. BE 通过 Broker 读取数据，转化为 StarRocks 存储格式。
+5. BE 通过 Broker 读取 HDFS 数据，转化为 StarRocks 存储格式。
+    > 如果选择不借助 Broker，则 BE 直接读取 HDFS 数据。
 6. FE 调度生效版本，完成导入任务。
 
 下图展示了 Spark Load 的主要流程：
