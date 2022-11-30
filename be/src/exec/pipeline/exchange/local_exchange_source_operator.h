@@ -59,7 +59,7 @@ private:
     bool _is_finished = false;
     std::queue<vectorized::ChunkPtr> _full_chunk_queue;
     std::queue<PartitionChunk> _partition_chunk_queue;
-    size_t _partition_rows_num = 0;
+    int64_t _partition_rows_num = 0;
 
     // TODO(KKS): make it lock free
     mutable std::mutex _chunk_lock;
