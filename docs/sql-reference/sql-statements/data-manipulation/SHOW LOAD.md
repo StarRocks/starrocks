@@ -65,6 +65,10 @@ The output of this statement varies based on loading methods.
 | URL            | The URL that is used to access the unqualified data detected in the load job. You can use the `curl` or `wget` command to access the URL and obtain the unqualified data. If no unqualified data is detected, `NULL` is returned. | The field has the same meaning in a Spark Load job as it does in a Broker Load job. | The field has the same meaning in a INSERT job as it does in a Broker Load job. |
 | JobDetails     | Other information related to the load job.<ul><li>`Unfinished backends`: The ID of the BE that does not complete data loading.</li><li>`ScannedRows`: The total number of rows that are loaded into StarRocks and the number of rows that are filtered out.</li><li>`TaskNumber`: A load job can be split into one or more tasks that concurrently run. This field indicates the number of load tasks.</li><li>`All backends`: The ID of the BE that is executing data loading.</li><li>`FileNumber`: The number of source data files.</li><li>`FileSize`: The data volume of source data files. Unit: bytes.</li></ul> | The field has the same meaning in a Spark Load job as it does in a Broker Load job. | The field has the same meaning in a INSERT job as it does in a Broker Load job. |
 
+> **NOTE**
+>
+> SHOW LOAD does not return the priorities of Broker Load jobs.
+
 ## Usage notes
 
 - The information returned by the SHOW LOAD statement is valid for 3 days from `LoadFinishTime` of a load job. After 3 days, the information cannot be displayed. You can use the `label_keep_max_second` parameter to modify the default validity period.
