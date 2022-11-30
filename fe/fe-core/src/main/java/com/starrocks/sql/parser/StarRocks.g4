@@ -1755,9 +1755,9 @@ columnReference
 informationFunctionExpression
     : name = DATABASE '(' ')'
     | name = SCHEMA '(' ')'
-    | name = USER '(' ')'
+    | name = USER ('(' ')')?
     | name = CONNECTION_ID '(' ')'
-    | name = CURRENT_USER '(' ')'
+    | name = CURRENT_USER ('(' ')')?
     ;
 
 specialFunctionExpression
@@ -2092,6 +2092,7 @@ nonReserved
     | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BOOLEAN | BROKER | BUCKETS | BUILTIN
     | CAST | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CURRENT | COLLATION | COLUMNS | COMMENT | COMMIT | COMMITTED
     | COMPUTE | CONNECTION | CONNECTION_ID | CONSISTENT | COSTS | COUNT | CONFIG
+    | CURRENT_USER
     | DATA | DATE | DATETIME | DAY | DECOMMISSION | DISTRIBUTION | DUPLICATE | DYNAMIC
     | END | ENGINE | ENGINES | ERRORS | EVENTS | EXECUTE | EXTERNAL | EXTRACT | EVERY
     | FILE | FILTER | FIRST | FLOOR | FOLLOWING | FORMAT | FN | FRONTEND | FRONTENDS | FOLLOWER | FREE | FUNCTIONS
