@@ -99,7 +99,7 @@ Note:
    other properties: Other information required for accessing remote storage, e.g. Authentication information, etc. 
    ```
 
-## example
+## Examples
 
 1. Add a node.
 

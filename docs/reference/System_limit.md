@@ -28,4 +28,4 @@ The default length is 1 byte.
 
 - StarRocks does not support modifying column names in tables.
 
-- By default, an expression can have a maximum of 10,000 children, which can be modified by using `expr_child_limit` in the `fe.conf` file.
+- By default, an expression can have a maximum of 10,000 children.

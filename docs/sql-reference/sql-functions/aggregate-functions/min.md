@@ -1,16 +1,16 @@
 # MIN
 
-## description
+## Description
 
-### Syntax
+Returns the minimum value of the expr expression.
+
+## Syntax
 
 ```Haskell
 MIN(expr)
 ```
 
-It returns the minimum value of the expr expression.
-
-## example
+## Examples
 
 ```plain text
 MySQL > select min(scan_rows)

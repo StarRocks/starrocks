@@ -1,16 +1,16 @@
 # murmur_hash3_32
 
-## description
+## Description
 
-### Syntax
+Returns the 32-bit murmur3 hash value of the input string.
+
+## Syntax
 
 ```Haskell
 INT MURMUR_HASH3_32(VARCHAR input, ...)
 ```
 
-Returns the 32-bit murmur3 hash value of the input string.
-
-## example
+## Examples
 
 ```Plain Text
 MySQL > select murmur_hash3_32(null);

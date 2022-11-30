@@ -1,6 +1,6 @@
 # SHOW TABLET
 
-## description
+## Description
 
 This statement is used to display tablet related information (for administrators only)
 
@@ -16,7 +16,7 @@ SHOW TABLET
 
 Now the show tablet command supports filtering according to the following fields: partition, index, name, version, backendid, state. It also supports sorting according to any field, and provides a limit to limit the number of returned items.
 
-## example
+## Examples
 
 1. Displays all the table information of the specified db table
 

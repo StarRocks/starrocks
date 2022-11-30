@@ -1,10 +1,15 @@
 # array_sum
 
 ## Description
+<<<<<<< HEAD
 
 Sums all values in an array.
+=======
+>>>>>>> 8926c9219 ([Doc] reorder functions and fix bugs (#14305))
 
-### Syntax
+Sums all data in an ARRAY and returns the result.
+
+## Syntax
 
 ```Haskell
 array_sum(array(type))
