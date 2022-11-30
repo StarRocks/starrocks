@@ -596,7 +596,8 @@ void StorageEngine::_start_clean_fd_cache() {
     VLOG(10) << "Cleaned file descriptor cache";
 }
 
-Status StorageEngine::_perform_cumulative_compaction(DataDir* data_dir) {
+Status StorageEngine::_perform_cumulative_compaction(DataDir* data_dir,
+                                                     std::pair<int32_t, int32_t> tablet_shards_range) {
     scoped_refptr<Trace> trace(new Trace);
     MonotonicStopWatch watch;
     watch.start();
@@ -607,8 +608,8 @@ Status StorageEngine::_perform_cumulative_compaction(DataDir* data_dir) {
     });
     ADOPT_TRACE(trace.get());
     TRACE("start to perform cumulative compaction");
-    TabletSharedPtr best_tablet =
-            _tablet_manager->find_best_tablet_to_compaction(CompactionType::CUMULATIVE_COMPACTION, data_dir);
+    TabletSharedPtr best_tablet = _tablet_manager->find_best_tablet_to_compaction(CompactionType::CUMULATIVE_COMPACTION,
+                                                                                  data_dir, tablet_shards_range);
     if (best_tablet == nullptr) {
         return Status::NotFound("there are no suitable tablets");
     }
@@ -637,7 +638,7 @@ Status StorageEngine::_perform_cumulative_compaction(DataDir* data_dir) {
     return Status::OK();
 }
 
-Status StorageEngine::_perform_base_compaction(DataDir* data_dir) {
+Status StorageEngine::_perform_base_compaction(DataDir* data_dir, std::pair<int32_t, int32_t> tablet_shards_range) {
     scoped_refptr<Trace> trace(new Trace);
     MonotonicStopWatch watch;
     watch.start();
@@ -648,8 +649,8 @@ Status StorageEngine::_perform_base_compaction(DataDir* data_dir) {
     });
     ADOPT_TRACE(trace.get());
     TRACE("start to perform base compaction");
-    TabletSharedPtr best_tablet =
-            _tablet_manager->find_best_tablet_to_compaction(CompactionType::BASE_COMPACTION, data_dir);
+    TabletSharedPtr best_tablet = _tablet_manager->find_best_tablet_to_compaction(CompactionType::BASE_COMPACTION,
+                                                                                  data_dir, tablet_shards_range);
     if (best_tablet == nullptr) {
         return Status::NotFound("there are no suitable tablets");
     }

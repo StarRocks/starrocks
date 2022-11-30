@@ -294,7 +294,8 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     const TabletSchema& tablet_schema = _tablet->tablet_schema();
     starrocks::vectorized::Schema child_schema =
             ChunkHelper::convert_schema_to_format_v2(tablet_schema, reader_columns);
-    _reader = std::make_shared<TabletReader>(_tablet, Version(0, _version), std::move(child_schema));
+    _reader =
+            std::make_shared<TabletReader>(_tablet, Version(0, _version), std::move(child_schema), _morsel->rowsets());
     if (reader_columns.size() == scanner_columns.size()) {
         _prj_iter = _reader;
     } else {

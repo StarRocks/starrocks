@@ -8,6 +8,10 @@
 #include "storage/olap_common.h"
 
 namespace starrocks {
+
+class Rowset;
+using RowsetSharedPtr = std::shared_ptr<Rowset>;
+
 namespace pipeline {
 class Morsel;
 using MorselPtr = std::unique_ptr<Morsel>;
@@ -20,10 +24,16 @@ class Morsel {
 public:
     Morsel(int32_t plan_node_id) : _plan_node_id(plan_node_id) {}
     virtual ~Morsel() = default;
+
     int32_t get_plan_node_id() const { return _plan_node_id; }
+
+    void set_rowsets(std::vector<RowsetSharedPtr> rowsets);
+    const std::vector<RowsetSharedPtr>& rowsets() const;
 
 private:
     int32_t _plan_node_id;
+
+    std::vector<RowsetSharedPtr> _rowsets;
 };
 
 class ScanMorsel final : public Morsel {
@@ -56,6 +66,9 @@ public:
         }
         idx = _pop_index.fetch_add(1);
         if (idx < _num_morsels) {
+            if (!_tablet_rowsets.empty()) {
+                _morsels[idx]->set_rowsets(std::move(_tablet_rowsets[idx]));
+            }
             return std::move(_morsels[idx]);
         } else {
             return {};
@@ -63,6 +76,8 @@ public:
     }
 
     bool empty() const { return _pop_index >= _num_morsels; }
+
+    void set_tablet_rowsets(const std::vector<std::vector<RowsetSharedPtr>>& tablet_rowsets);
 
     // Split the morsel queue into `split_size` morsel queues.
     // For example:
@@ -97,6 +112,8 @@ private:
     Morsels _morsels;
     const size_t _num_morsels;
     std::atomic<size_t> _pop_index;
+
+    std::vector<std::vector<RowsetSharedPtr>> _tablet_rowsets;
 };
 
 } // namespace pipeline

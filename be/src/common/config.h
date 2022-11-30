@@ -273,6 +273,7 @@ CONF_mInt32(cumulative_compaction_skip_window_seconds, "30");
 CONF_mInt32(update_compaction_check_interval_seconds, "60");
 CONF_Int32(update_compaction_num_threads_per_disk, "1");
 CONF_Int32(update_compaction_per_tablet_min_interval_seconds, "120"); // 2min
+CONF_mInt64(max_update_compaction_num_singleton_deltas, "1000");
 
 // if compaction of a tablet failed, this tablet should not be chosen to
 // compaction until this interval passes.
@@ -712,4 +713,6 @@ CONF_String(dependency_librdkafka_debug, "all");
 // The default value is set as the THREAD_POOL_SIZE of RoutineLoadTaskScheduler of FE.
 CONF_Int32(internal_service_async_thread_num, "10");
 
+// Used to limit buffer size of tablet send channel.
+CONF_mInt64(send_channel_buffer_limit, "67108864");
 } // namespace starrocks::config
