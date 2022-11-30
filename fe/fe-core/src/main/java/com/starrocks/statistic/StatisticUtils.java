@@ -45,18 +45,13 @@ public class StatisticUtils {
             .add("starrocks_monitor")
             .add("information_schema").build();
 
+
     public static ConnectContext buildConnectContext() {
         ConnectContext context = new ConnectContext();
         // Note: statistics query does not register query id to QeProcessorImpl::coordinatorMap,
         // but QeProcessorImpl::reportExecStatus will check query id,
         // So we must disable report query status from BE to FE
         context.getSessionVariable().setReportSuccess(false);
-        if (null != ConnectContext.get()) {
-            // from current session, may execute analyze stmt
-            context.getSessionVariable().setStatisticCollectParallelism(
-                    ConnectContext.get().getSessionVariable().getStatisticCollectParallelism());
-        }
-
         context.getSessionVariable().setParallelExecInstanceNum(1);
         context.getSessionVariable().setQueryTimeoutS((int) Config.statistic_collect_query_timeout);
         context.getSessionVariable().setEnablePipelineEngine(true);
@@ -66,8 +61,8 @@ public class StatisticUtils {
         context.setQualifiedUser(UserIdentity.ROOT.getQualifiedUser());
         context.setQueryId(UUIDUtil.genUUID());
         context.setExecutionId(UUIDUtil.toTUniqueId(context.getQueryId()));
-        context.setThreadLocalInfo();
         context.setStartTime();
+
         return context;
     }
 
