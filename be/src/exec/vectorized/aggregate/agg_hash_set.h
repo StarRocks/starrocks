@@ -55,6 +55,17 @@ using SliceAggTwoLevelHashSet =
                                       phmap::priv::Allocator<Slice>, 4>;
 
 // ==============================================================
+
+#define AGG_HASH_SET_COMMON_METHODS()                                                                \
+    void build_hash_set(size_t chunk_size, const Columns& key_columns, MemPool* pool) {              \
+        return build_set<true>(chunk_size, key_columns, pool, nullptr);                              \
+    }                                                                                                \
+                                                                                                     \
+    void build_hash_set_with_selection(size_t chunk_size, const Columns& key_columns, MemPool* pool, \
+                                       std::vector<uint8_t>* not_founds) {                           \
+        return build_set<false>(chunk_size, key_columns, pool, not_founds);                          \
+    }
+
 // handle one number hash key
 template <LogicalType primitive_type, typename HashSet>
 struct AggHashSetOfOneNumberKey {
@@ -67,6 +78,8 @@ struct AggHashSetOfOneNumberKey {
     static_assert(sizeof(FieldType) <= sizeof(KeyType), "hash set key size needs to be larger than the actual element");
 
     AggHashSetOfOneNumberKey(int32_t chunk_size) {}
+
+    AGG_HASH_SET_COMMON_METHODS()
 
     // When compute_and_allocate=false:
     // Elements queried in HashSet will be added to HashSet
@@ -112,6 +125,8 @@ struct AggHashSetOfOneNullableNumberKey {
     static_assert(sizeof(FieldType) <= sizeof(KeyType), "hash set key size needs to be larger than the actual element");
 
     AggHashSetOfOneNullableNumberKey(int32_t chunk_size) {}
+
+    AGG_HASH_SET_COMMON_METHODS()
 
     // When compute_and_allocate=false:
     // Elements queried in HashSet will be added to HashSet
@@ -178,6 +193,8 @@ struct AggHashSetOfOneStringKey {
 
     AggHashSetOfOneStringKey(int32_t chunk_size) {}
 
+    AGG_HASH_SET_COMMON_METHODS()
+
     // When compute_and_allocate=false:
     // Elements queried in HashSet will be added to HashSet
     // elements that cannot be queried are not processed,
@@ -226,6 +243,8 @@ struct AggHashSetOfOneNullableStringKey {
     HashSet hash_set;
 
     AggHashSetOfOneNullableStringKey(int32_t chunk_size) {}
+
+    AGG_HASH_SET_COMMON_METHODS()
 
     // When compute_and_allocate=false:
     // Elements queried in HashSet will be added to HashSet
@@ -311,6 +330,8 @@ struct AggHashSetOfSerializedKey {
             : _mem_pool(std::make_unique<MemPool>()),
               _buffer(_mem_pool->allocate(max_one_row_size * chunk_size)),
               _chunk_size(chunk_size) {}
+
+    AGG_HASH_SET_COMMON_METHODS()
 
     // When compute_and_allocate=false:
     // Elements queried in HashSet will be added to HashSet
@@ -412,6 +433,8 @@ struct AggHashSetOfSerializedKeyFixedSize {
               _chunk_size(chunk_size) {
         memset(buffer, 0x0, max_fixed_size * _chunk_size);
     }
+
+    AGG_HASH_SET_COMMON_METHODS()
 
     // When compute_and_allocate=false:
     // Elements queried in HashSet will be added to HashSet

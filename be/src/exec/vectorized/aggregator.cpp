@@ -1069,14 +1069,13 @@ Status Aggregator::convert_hash_map_to_chunk(int32_t chunk_size, vectorized::Chu
 }
 
 void Aggregator::build_hash_set(size_t chunk_size) {
-    _hash_set_variant.visit([&](auto& hash_set) {
-        hash_set->template build_set<true>(chunk_size, _group_by_columns, _mem_pool.get(), nullptr);
-    });
+    _hash_set_variant.visit(
+            [&](auto& hash_set) { hash_set->build_hash_set(chunk_size, _group_by_columns, _mem_pool.get()); });
 }
 
 void Aggregator::build_hash_set_with_selection(size_t chunk_size) {
     _hash_set_variant.visit([&](auto& hash_set) {
-        hash_set->template build_set<false>(chunk_size, _group_by_columns, _mem_pool.get(), &_streaming_selection);
+        hash_set->build_hash_set_with_selection(chunk_size, _group_by_columns, _mem_pool.get(), &_streaming_selection);
     });
 }
 
