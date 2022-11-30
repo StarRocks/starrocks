@@ -566,4 +566,20 @@ public class CTEPlanTest extends PlanTestBase {
                 "\n" +
                 "  0:OlapScanNode");
     }
+
+    @Test
+    public void testNullTypeHack() throws Exception {
+        String sql = "WITH cte_1 AS (\n" +
+                "  SELECT null v1\n" +
+                ")\n" +
+                "SELECT  \n" +
+                "  CASE \n" +
+                "    WHEN a.v1 = b.v1 THEN 1 \n" +
+                "    ELSE -1 \n" +
+                "  END IS_OK\n" +
+                "FROM cte_1 a, cte_1 b";
+
+        String plan = getThriftPlan(sql);
+        assertNotContains(plan, "NULL_TYPE");
+    }
 }
