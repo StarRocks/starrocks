@@ -112,9 +112,7 @@ public class InsertPlanner {
 
         // TODO: remove forceDisablePipeline when all the operators support pipeline engine.
         boolean isEnablePipeline = session.getSessionVariable().isEnablePipelineEngine();
-        boolean canUsePipeline =
-                isEnablePipeline && DataSink.canTableSinkUsePipeline(insertStmt.getTargetTable()) &&
-                        logicalPlan.canUsePipeline();
+        boolean canUsePipeline = isEnablePipeline && DataSink.canTableSinkUsePipeline(insertStmt.getTargetTable());
         boolean forceDisablePipeline = isEnablePipeline && !canUsePipeline;
         try {
             if (forceDisablePipeline) {
@@ -176,7 +174,7 @@ public class InsertPlanner {
                 throw new SemanticException("Unknown table type " + insertStmt.getTargetTable().getType());
             }
 
-            if (isEnablePipeline && canUsePipeline && insertStmt.getTargetTable() instanceof OlapTable) {
+            if (canUsePipeline && insertStmt.getTargetTable() instanceof OlapTable) {
                 PlanFragment sinkFragment = execPlan.getFragments().get(0);
                 if (shuffleServiceEnable) {
                     // For shuffle insert into, we only support tablet sink dop = 1
