@@ -40,8 +40,7 @@ public class UpdatePlanner {
 
         // TODO: remove forceDisablePipeline when all the operators support pipeline engine.
         boolean isEnablePipeline = session.getSessionVariable().isEnablePipelineEngine();
-        boolean canUsePipeline = isEnablePipeline && DataSink.canTableSinkUsePipeline(updateStmt.getTable()) &&
-                logicalPlan.canUsePipeline();
+        boolean canUsePipeline = isEnablePipeline && DataSink.canTableSinkUsePipeline(updateStmt.getTable());
         boolean forceDisablePipeline = isEnablePipeline && !canUsePipeline;
         try {
             if (forceDisablePipeline) {
@@ -86,7 +85,7 @@ public class UpdatePlanner {
                     table.enableReplicatedStorage());
             execPlan.getFragments().get(0).setSink(dataSink);
             execPlan.getFragments().get(0).setLoadGlobalDicts(globalDicts);
-            if (isEnablePipeline && canUsePipeline) {
+            if (canUsePipeline) {
                 PlanFragment sinkFragment = execPlan.getFragments().get(0);
                 if (ConnectContext.get().getSessionVariable().getPipelineSinkDop() <= 0) {
                     sinkFragment.setPipelineDop(ConnectContext.get().getSessionVariable().getParallelExecInstanceNum());
