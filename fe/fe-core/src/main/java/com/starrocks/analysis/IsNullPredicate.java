@@ -21,6 +21,7 @@
 
 package com.starrocks.analysis;
 
+import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.Type;
@@ -64,6 +65,10 @@ public class IsNullPredicate extends Predicate {
         return new IsNullPredicate(this);
     }
 
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(super.hashCode(), isNotNull);
+    }
     @Override
     public boolean equals(Object obj) {
         if (!super.equals(obj)) {

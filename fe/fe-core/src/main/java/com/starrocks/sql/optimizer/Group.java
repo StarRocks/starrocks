@@ -305,6 +305,20 @@ public class Group {
     }
 
     @Override
+    public boolean equals(Object obj) {
+        if (this == obj) {
+            return true;
+        }
+
+        if (!(obj instanceof Group)) {
+            return false;
+        }
+
+        Group that = (Group) obj;
+        return id == that.id;
+    }
+
+    @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
         sb.append("->  ").append("Group: ").append(id).append('\n');

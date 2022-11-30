@@ -21,6 +21,7 @@
 
 package com.starrocks.persist;
 
+import com.google.common.base.Objects;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Writable;
 import com.starrocks.server.GlobalStateMgr;
@@ -347,6 +348,13 @@ public class ReplicaPersistInfo implements Writable {
         if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_48) {
             schemaHash = in.readInt();
         }
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(backendId, replicaId, tabletId, indexId,
+                partitionId, tabletId, dbId, version, minReadableVersion,
+                dataSize, rowCount, lastFailedVersion, lastSuccessVersion);
     }
 
     @Override

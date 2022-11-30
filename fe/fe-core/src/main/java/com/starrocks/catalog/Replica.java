@@ -21,6 +21,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.base.Objects;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
@@ -576,6 +577,12 @@ public class Replica implements Writable {
         Replica replica = new Replica();
         replica.readFields(in);
         return replica;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(id, backendId, version, dataSize,
+                rowCount, state, lastFailedVersion, lastSuccessVersion, minReadableVersion);
     }
 
     @Override

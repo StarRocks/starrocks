@@ -21,6 +21,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
@@ -691,6 +692,11 @@ public class Database extends MetaObject implements Writable {
         } else {
             replicaQuotaSize = FeConstants.default_db_replica_quota_size;
         }
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(id, fullQualifiedName, dataQuotaBytes, idToTable);
     }
 
     public boolean equals(Object obj) {

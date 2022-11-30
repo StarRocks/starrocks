@@ -2,6 +2,7 @@
 
 package com.starrocks.system;
 
+import com.google.common.base.Objects;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.alter.DecommissionType;
 import com.starrocks.common.Config;
@@ -325,6 +326,11 @@ public class ComputeNode implements IComputable, Writable {
     public static ComputeNode read(DataInput in) throws IOException {
         String json = Text.readString(in);
         return GsonUtils.GSON.fromJson(json, ComputeNode.class);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(id, host, heartbeatPort, bePort, isAlive);
     }
 
     @Override

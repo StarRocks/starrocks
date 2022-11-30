@@ -21,6 +21,7 @@
 
 package com.starrocks.analysis;
 
+import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
@@ -125,6 +126,11 @@ public class InPredicate extends Predicate {
     @Override
     public String toString() {
         return toSql();
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(super.hashCode(), isNotIn);
     }
 
     @Override

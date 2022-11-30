@@ -26,6 +26,7 @@ import com.starrocks.load.loadv2.dpp.SparkDpp;
 import com.starrocks.load.loadv2.etl.EtlJobConfig.EtlColumnMapping;
 import com.starrocks.load.loadv2.etl.EtlJobConfig.EtlFileGroup;
 import com.starrocks.load.loadv2.etl.EtlJobConfig.EtlTable;
+import org.apache.commons.collections.MapUtils;
 import org.apache.commons.collections.map.MultiValueMap;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
@@ -200,10 +201,10 @@ public class SparkEtlJob {
             // only one table
             long tableId = -1;
             EtlTable table = null;
-            for (Map.Entry<Long, EtlTable> entry : etlJobConfig.tables.entrySet()) {
+            if (MapUtils.isNotEmpty(etlJobConfig.tables)) {
+                Map.Entry<Long, EtlTable> entry = etlJobConfig.tables.entrySet().stream().findFirst().get();
                 tableId = entry.getKey();
                 table = entry.getValue();
-                break;
             }
 
             if (table == null) {

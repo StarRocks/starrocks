@@ -248,7 +248,7 @@ public final class SparkDpp implements java.io.Serializable {
                                 columnObjects.add(keyColumns.get(i));
                             }
                             for (int i = 0; i < valueColumns.length; ++i) {
-                                columnObjects.add(sparkRDDAggregators[i].finalize(valueColumns[i]));
+                                columnObjects.add(sparkRDDAggregators[i].finish(valueColumns[i]));
                             }
 
                             Row rowWithoutBucketKey = RowFactory.create(columnObjects.toArray());

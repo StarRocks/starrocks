@@ -121,4 +121,18 @@ public class FunctionParams implements Writable {
         }
         return result;
     }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) {
+            return true;
+        }
+
+        if (!(obj instanceof FunctionParams)) {
+            return false;
+        }
+
+        FunctionParams that = (FunctionParams) obj;
+        return isStar == that.isStar && isDistinct == that.isDistinct && Objects.equals(exprs, that.exprs);
+    }
 }

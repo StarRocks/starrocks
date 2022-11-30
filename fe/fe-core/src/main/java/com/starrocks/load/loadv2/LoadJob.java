@@ -22,6 +22,7 @@
 package com.starrocks.load.loadv2;
 
 import com.google.common.base.Joiner;
+import com.google.common.base.Objects;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -950,6 +951,11 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     // So, the re-analyze must be invoked between the replay is finished and LoadJobScheduler is started.
     // Only, the PENDING load job need to be analyzed.
     public void analyze() {
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(id, dbId, label, state, jobType);
     }
 
     @Override

@@ -21,6 +21,7 @@
 
 package com.starrocks.load;
 
+import com.google.common.base.Objects;
 import com.google.common.base.Strings;
 import com.google.common.collect.HashBasedTable;
 import com.google.common.collect.Lists;
@@ -254,6 +255,12 @@ public class EtlStatus implements Writable {
         this.loadStatistic.totalFileSizeB = filesize;
     }
 
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(stats, counters, state, trackingUrl);
+    }
+
+    @Override
     public boolean equals(Object obj) {
         if (obj == this) {
             return true;

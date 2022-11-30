@@ -22,6 +22,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
@@ -149,6 +150,11 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
             }
         }
         return null;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(indexId, schemaVersion, schemaHash, shortKeyColumnCount, storageType, keysType);
     }
 
     @Override

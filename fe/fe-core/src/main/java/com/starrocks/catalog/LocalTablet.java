@@ -21,6 +21,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.base.Objects;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
@@ -394,6 +395,11 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         // we need to update immutableReplicas, because replicas after deserialization from a json string
         // will be different from the replicas initiated in the constructor
         immutableReplicas = Collections.unmodifiableList(replicas);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(replicas, id);
     }
 
     @Override

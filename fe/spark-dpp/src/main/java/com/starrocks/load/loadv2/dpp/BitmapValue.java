@@ -17,6 +17,7 @@
 
 package com.starrocks.load.loadv2.dpp;
 
+import com.google.common.base.Objects;
 import org.roaringbitmap.Util;
 
 import java.io.DataInput;
@@ -243,6 +244,11 @@ public class BitmapValue {
                 }
                 break;
         }
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(bitmapType);
     }
 
     @Override

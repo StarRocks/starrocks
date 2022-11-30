@@ -78,7 +78,7 @@ import com.starrocks.thrift.TTabletLocation;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWriteQuorumType;
 import com.starrocks.transaction.TransactionState;
-import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -87,7 +87,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collector;
 import java.util.stream.Collectors;
 
 public class OlapTableSink extends DataSink {
@@ -171,9 +170,9 @@ public class OlapTableSink extends DataSink {
         tSink.setTable_name(dstTable.getName());
         tSink.setTuple_id(tupleDescriptor.getId().asInt());
         int numReplicas = 1;
-        for (Partition partition : dstTable.getPartitions()) {
-            numReplicas = dstTable.getPartitionInfo().getReplicationNum(partition.getId());
-            break;
+        if (CollectionUtils.isNotEmpty(dstTable.getPartitions())) {
+            long partitionId = dstTable.getPartitions().stream().findFirst().get().getId();
+            numReplicas = dstTable.getPartitionInfo().getReplicationNum(partitionId);
         }
         tSink.setNum_replicas(numReplicas);
         tSink.setNeed_gen_rollup(dstTable.shouldLoadToNewRollup());

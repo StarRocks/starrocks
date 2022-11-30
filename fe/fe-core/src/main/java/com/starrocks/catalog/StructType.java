@@ -22,6 +22,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Joiner;
+import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
@@ -139,6 +140,11 @@ public class StructType extends Type {
                 structField.getType().selectAllFields();
             }
         }
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(fields);
     }
 
     @Override
