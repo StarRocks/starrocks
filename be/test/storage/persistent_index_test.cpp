@@ -269,6 +269,83 @@ PARALLEL_TEST(PersistentIndexTest, test_mutable_flush_to_immutable) {
     ASSERT_TRUE(idx_loaded->check_not_exist(10, check_not_exist_keys.data()).ok());
 }
 
+PARALLEL_TEST(PersistentIndexTest, test_l0_max_file_size) {
+    int64_t l0_max_file_size = config::l0_max_file_size;
+    config::l0_max_file_size = 200000;
+    FileSystem* fs = FileSystem::Default();
+    const std::string kPersistentIndexDir = "./PersistentIndexTest_test_flush_l0_max_file_size";
+    const std::string kIndexFile = "./PersistentIndexTest_test_flush_l0_max_file_size/index.l0.0.0";
+    bool created;
+    ASSERT_OK(fs->create_dir_if_missing(kPersistentIndexDir, &created));
+
+    using Key = uint64_t;
+    PersistentIndexMetaPB index_meta;
+    const int N = 40000;
+    vector<Key> keys;
+    vector<Slice> key_slices;
+    vector<IndexValue> values;
+    keys.reserve(N);
+    key_slices.reserve(N);
+    for (int i = 0; i < N; i++) {
+        keys.emplace_back(i);
+        values.emplace_back(i * 2);
+        key_slices.emplace_back((uint8_t*)(&keys[i]), sizeof(Key));
+    }
+
+    {
+        ASSIGN_OR_ABORT(auto wfile, FileSystem::Default()->new_writable_file(kIndexFile));
+        ASSERT_OK(wfile->close());
+    }
+
+    EditVersion version(0, 0);
+    index_meta.set_key_size(sizeof(Key));
+    index_meta.set_size(0);
+    version.to_pb(index_meta.mutable_version());
+    MutableIndexMetaPB* l0_meta = index_meta.mutable_l0_meta();
+    IndexSnapshotMetaPB* snapshot_meta = l0_meta->mutable_snapshot();
+    version.to_pb(snapshot_meta->mutable_version());
+
+    std::vector<IndexValue> old_values(N);
+    PersistentIndex index(kPersistentIndexDir);
+    auto one_time_num = N / 4;
+    // do snapshot twice, when cannot do flush_l0, which mean index_file checker works
+    for (auto i = 0; i < 2; ++i) {
+        ASSERT_OK(index.load(index_meta));
+        ASSERT_OK(index.prepare(EditVersion(i + 1, 0)));
+        ASSERT_OK(index.upsert(one_time_num, key_slices.data() + one_time_num * i, values.data() + one_time_num * i,
+                               old_values.data() + one_time_num * i));
+        ASSERT_OK(index.commit(&index_meta));
+        ASSERT_OK(index.on_commited());
+        ASSERT_TRUE(index_meta.l0_meta().wals().empty());
+    }
+
+    for (auto i = 2; i < 3; ++i) {
+        ASSERT_OK(index.load(index_meta));
+        ASSERT_OK(index.prepare(EditVersion(i + 1, 0)));
+        ASSERT_OK(index.upsert(one_time_num, key_slices.data() + one_time_num * i, values.data() + one_time_num * i,
+                               old_values.data() + one_time_num * i));
+        ASSERT_OK(index.commit(&index_meta));
+        ASSERT_OK(index.on_commited());
+    }
+
+    // do snapshot, when cannot do merge_compaction, which mean index_file checker works
+    auto loaded_num = one_time_num * 3;
+    one_time_num /= 10;
+    for (auto i = 3; i < 4; ++i) {
+        ASSERT_OK(index.load(index_meta));
+        ASSERT_OK(index.prepare(EditVersion(i + 1, 0)));
+        ASSERT_OK(index.upsert(one_time_num, key_slices.data() + loaded_num, values.data() + loaded_num,
+                               old_values.data() + loaded_num));
+        ASSERT_OK(index.commit(&index_meta));
+        ASSERT_OK(index.on_commited());
+        ASSERT_TRUE(index_meta.l0_meta().wals().empty());
+    }
+
+    ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
+
+    config::l0_max_file_size = l0_max_file_size;
+}
+
 TabletSharedPtr create_tablet(int64_t tablet_id, int32_t schema_hash) {
     TCreateTabletReq request;
     request.tablet_id = tablet_id;

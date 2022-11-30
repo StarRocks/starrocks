@@ -4,7 +4,7 @@
 
 Sums all values in an array.
 
-### Syntax
+## Syntax
 
 ```Haskell
 array_sum(array(type))

@@ -1,6 +1,6 @@
 # SHOW PROPERTY
 
-## description
+## Description
 
 This statement is used to view the user's properties
 
@@ -10,7 +10,7 @@ Syntax:
 SHOW PROPERTY [FOR user] [LIKE key]
 ```
 
-## example
+## Examples
 
 1. View the properties of jack user
 
