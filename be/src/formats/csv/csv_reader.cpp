@@ -420,7 +420,7 @@ Status CSVReader::more_lines() {
                 } else {
                     // Remove the last enclose character.
                     _fields.emplace_back(filed_start, filed_end - _column_separator_length - filed_start - 1,
-                                        is_escape_field);
+                                         is_escape_field);
                 }
 
             } else {
@@ -434,7 +434,7 @@ Status CSVReader::more_lines() {
                     _fields.emplace_back(newPos.first - basePtr, newPos.second, is_escape_field);
                 } else {
                     _fields.emplace_back(filed_start, filed_end - _column_separator_length - filed_start,
-                                        is_escape_field);
+                                         is_escape_field);
                 }
             }
             is_escape_field = false;
@@ -454,7 +454,8 @@ Status CSVReader::more_lines() {
             // push line
             if (LIKELY(status.ok() || status.is_end_of_file())) {
                 // For empty line, skip it. And restart state machine.
-                if (UNLIKELY(_fields.size() == 0 && _buff.position_offset() - _row_delimiter_length - filed_start == 0)) {
+                if (UNLIKELY(_fields.size() == 0 &&
+                             _buff.position_offset() - _row_delimiter_length - filed_start == 0)) {
                     curState = START;
                     is_enclose_field = false;
                     is_escape_field = false;
@@ -492,7 +493,7 @@ Status CSVReader::more_lines() {
                             _fields.emplace_back(newPos.first - basePtr, newPos.second, is_escape_field);
                         } else {
                             _fields.emplace_back(filed_start, filed_end - _row_delimiter_length - filed_start - 1,
-                                                is_escape_field);
+                                                 is_escape_field);
                         }
                         notGetLine = false;
                     } else {
@@ -506,7 +507,7 @@ Status CSVReader::more_lines() {
                             _fields.emplace_back(newPos.first - basePtr, newPos.second, is_escape_field);
                         } else {
                             _fields.emplace_back(filed_start, filed_end - _row_delimiter_length - filed_start,
-                                                is_escape_field);
+                                                 is_escape_field);
                         }
                         notGetLine = false;
                     }

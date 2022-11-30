@@ -16,6 +16,7 @@
 
 #include <queue>
 #include <unordered_set>
+
 #include "formats/csv/converter.h"
 
 namespace starrocks::vectorized {
