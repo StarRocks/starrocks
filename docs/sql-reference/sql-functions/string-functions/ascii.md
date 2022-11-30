@@ -1,16 +1,16 @@
 # ascii
 
-## description
+## Description
 
-### Syntax
+This function returns the ascii value of the leftmost character of a given string.
+
+## Syntax
 
 ```Haskell
 INT ascii(VARCHAR str)
 ```
 
-This function returns the ascii value of the leftmost character of a given string.
-
-## example
+## Examples
 
 ```Plain Text
 MySQL > select ascii('1');

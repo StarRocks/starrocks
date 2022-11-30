@@ -193,7 +193,7 @@ void CacheOperator::close(RuntimeState* state) {
 
 void CacheOperator::_handle_stale_cache_value(int64_t tablet_id, CacheValue& cache_value, PerLaneBufferPtr& buffer,
                                               int64_t version) {
-    // In BE unittest, stale value is considered as partial-hit
+// In BE unittest, stale value is considered as partial-hit
 #ifdef BE_TEST
     {
         buffer->state = PLBS_HIT_PARTIAL;
@@ -212,6 +212,15 @@ void CacheOperator::_handle_stale_cache_value(int64_t tablet_id, CacheValue& cac
     }
 #endif
 
+    if (_cache_param.keys_type != TKeysType::PRIMARY_KEYS) {
+        _handle_stale_cache_value_for_non_pk(tablet_id, cache_value, buffer, version);
+    } else {
+        _handle_stale_cache_value_for_pk(tablet_id, cache_value, buffer, version);
+    }
+}
+
+void CacheOperator::_handle_stale_cache_value_for_non_pk(int64_t tablet_id, CacheValue& cache_value,
+                                                         PerLaneBufferPtr& buffer, int64_t version) {
     // Try to reuse partial cache result when cached version is less than required version, delta versions
     // should be captured at first.
     auto status = StorageEngine::instance()->tablet_manager()->capture_tablet_and_rowsets(
@@ -237,8 +246,9 @@ void CacheOperator::_handle_stale_cache_value(int64_t tablet_id, CacheValue& cac
     Version delta_versions(min_version, max_version);
     buffer->tablet = tablet;
     auto has_delete_predicates = tablet->has_delete_predicates(delta_versions);
-    // case 1: there exist delete predicates in delta versions, the cache result is not reuse, so cache miss.
-    if (has_delete_predicates) {
+    // case 1: there exist delete predicates in delta versions, or data model can not support multiversion cache and
+    // the tablet has non-empty delta rowsets; then cache result is not reuse, so cache miss.
+    if (has_delete_predicates || (!_cache_param.can_use_multiversion && !all_rs_empty)) {
         buffer->state = PLBS_MISS;
         buffer->cached_version = 0;
         return;
@@ -266,6 +276,40 @@ void CacheOperator::_handle_stale_cache_value(int64_t tablet_id, CacheValue& cac
         buffer->num_bytes += chunk->bytes_usage();
     }
     buffer->chunks.back()->owner_info().set_last_chunk(false);
+}
+
+void CacheOperator::_handle_stale_cache_value_for_pk(int64_t tablet_id, starrocks::query_cache::CacheValue& cache_value,
+                                                     starrocks::query_cache::PerLaneBufferPtr& buffer,
+                                                     int64_t version) {
+    DCHECK(_cache_param.keys_type == TKeysType::PRIMARY_KEYS);
+    // At the present, PRIMARY_KEYS can not support merge-on-read, so we can not merge stale cache values and delta
+    // rowsets. Capturing delta rowsets is meaningless and unsupported, thus we capture all rowsets of the PK tablet.
+    auto status = StorageEngine::instance()->tablet_manager()->capture_tablet_and_rowsets(tablet_id, 0, version);
+    if (!status.ok()) {
+        buffer->state = PLBS_MISS;
+        buffer->cached_version = 0;
+        return;
+    }
+    auto& [tablet, rowsets] = status.value();
+    const auto snapshot_version = cache_value.version;
+    bool can_pickup_delta_rowsets = false;
+    bool exists_non_empty_delta_rowsets = false;
+    for (auto& rs : rowsets) {
+        can_pickup_delta_rowsets |= rs->start_version() == snapshot_version + 1;
+        exists_non_empty_delta_rowsets |= rs->start_version() > snapshot_version && rs->has_data_files();
+    }
+    if (exists_non_empty_delta_rowsets || !can_pickup_delta_rowsets) {
+        buffer->state = PLBS_MISS;
+        buffer->cached_version = 0;
+        return;
+    }
+
+    buffer->cached_version = cache_value.version;
+    auto chunks = remap_chunks(cache_value.result, _cache_param.reverse_slot_remapping);
+    _update_probe_metrics(tablet_id, chunks);
+    buffer->chunks = std::move(chunks);
+    buffer->state = PLBS_HIT_TOTAL;
+    buffer->chunks.back()->owner_info().set_last_chunk(true);
 }
 
 void CacheOperator::_update_probe_metrics(int64_t tablet_id, const std::vector<vectorized::ChunkPtr>& chunks) {

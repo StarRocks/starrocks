@@ -4,6 +4,8 @@ package com.starrocks.sql.optimizer.operator.logical;
 
 import com.google.common.collect.Maps;
 import com.starrocks.sql.optimizer.ExpressionContext;
+import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.Operator;
@@ -13,6 +15,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public abstract class LogicalOperator extends Operator {
 
@@ -30,6 +33,12 @@ public abstract class LogicalOperator extends Operator {
     }
 
     public abstract ColumnRefSet getOutputColumns(ExpressionContext expressionContext);
+
+    public ColumnRefOperator getSmallestColumn(ColumnRefFactory columnRefFactory, OptExpression opt) {
+        return Utils.findSmallestColumnRef(
+                getOutputColumns(new ExpressionContext(opt)).getStream().
+                        mapToObj(columnRefFactory::getColumnRef).collect(Collectors.toList()));
+    }
 
     // lineage means the merge of operator's column ref map, which is used to track
     // what does the ColumnRefOperator come from.

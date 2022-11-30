@@ -75,7 +75,7 @@ public class HeartbeatMgr extends LeaderDaemon {
     private static AtomicReference<TMasterInfo> masterInfo = new AtomicReference<>();
 
     public HeartbeatMgr(SystemInfoService nodeMgr, boolean needRegisterMetric) {
-        super("heartbeat mgr", Config.heartbeat_timeout_second * 1000);
+        super("heartbeat mgr", Config.heartbeat_timeout_second * 1000L);
         this.nodeMgr = nodeMgr;
         this.executor = ThreadPoolManager.newDaemonFixedThreadPool(Config.heartbeat_mgr_threads_num,
                 Config.heartbeat_mgr_blocking_queue_size, "heartbeat-mgr-pool", needRegisterMetric);

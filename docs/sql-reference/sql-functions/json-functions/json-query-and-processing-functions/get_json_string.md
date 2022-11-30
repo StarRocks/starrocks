@@ -1,12 +1,6 @@
 # get_json_string
 
-## description
-
-### Syntax
-
-```Haskell
-VARCHAR get_json_string(VARCHAR json_str, VARCHAR json_path)
-```
+## Description
 
 This function analyzes and gets the strings from a specified path in json string.
 
@@ -20,7 +14,14 @@ Content in the path should not contain " , [ and ].
 
 If the format of json_string or json_path is wrong, this function will return NULL.
 
-## example
+## Syntax
+
+```Haskell
+VARCHAR get_json_string(VARCHAR json_str, VARCHAR json_path)
+```
+
+
+## Examples
 
 1. Get the value whose key is "k1"
 

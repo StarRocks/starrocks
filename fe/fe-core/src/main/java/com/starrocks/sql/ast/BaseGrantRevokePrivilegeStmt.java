@@ -149,6 +149,7 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
     public boolean hasPrivilegeObject() {
         return this.objects != null;
     }
+
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitGrantRevokePrivilegeStatement(this, context);

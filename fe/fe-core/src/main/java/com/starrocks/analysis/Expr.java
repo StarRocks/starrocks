@@ -298,7 +298,7 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     /**
      * Does subclass-specific analysis. Subclasses should override analyzeImpl().
      */
-     protected void analyzeImpl(Analyzer analyzer) throws AnalysisException {
+    protected void analyzeImpl(Analyzer analyzer) throws AnalysisException {
     }
 
     /**
@@ -727,6 +727,7 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     public interface ExprVisitor {
         void visit(Expr expr, TExprNode texprNode);
     }
+
     // Append a flattened version of this expr, including all children, to 'container'.
     final void treeToThriftHelper(TExpr container, ExprVisitor visitor) {
         TExprNode msg = new TExprNode();

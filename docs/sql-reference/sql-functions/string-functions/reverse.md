@@ -1,16 +1,16 @@
 # reverse
 
-## description
+## Description
 
-### Syntax
+This function returns a string with the characters in reverse order.
+
+## Syntax
 
 ```Haskell
 VARCHAR reverse(VARCHAR str)
 ```
 
-This function returns a string with the characters in reverse order.
-
-## example
+## Examples
 
 ```Plain Text
 MySQL > SELECT REVERSE('hello');

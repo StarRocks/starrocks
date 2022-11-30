@@ -208,9 +208,8 @@ set(EXEC_FILES
         ./storage/tablet_updates_test.cpp
         ./storage/update_manager_test.cpp
         ./storage/compaction_utils_test.cpp
-        ./storage/compaction_context_test.cpp
         ./storage/compaction_manager_test.cpp
-        ./storage/base_and_cumulative_compaction_policy_test.cpp
+	./storage/default_compaction_policy_test.cpp
         ./storage/aggregate_iterator_test.cpp
         ./storage/chunk_aggregator_test.cpp
         ./storage/chunk_helper_test.cpp
@@ -278,6 +277,7 @@ set(EXEC_FILES
         ./util/countdown_latch_test.cpp
         ./util/crc32c_test.cpp
         ./util/dynamic_cache_test.cpp
+        ./util/exception_stack_test.cpp
         ./util/faststring_test.cpp
         ./util/filesystem_util_test.cpp
         ./util/frame_of_reference_coding_test.cpp

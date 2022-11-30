@@ -294,6 +294,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String QUERY_CACHE_FORCE_POPULATE = "query_cache_force_populate";
     public static final String QUERY_CACHE_ENTRY_MAX_BYTES = "query_cache_entry_max_bytes";
     public static final String QUERY_CACHE_ENTRY_MAX_ROWS = "query_cache_entry_max_rows";
+
+    // We assume that for PRIMARY_KEYS and UNIQUE_KEYS, the latest partitions are hot partitions that are updated
+    // frequently, so it should not be cached in query cache since its disruptive cache invalidation.
+    public static final String QUERY_CACHE_HOT_PARTITION_NUM = "query_cache_hot_partition_num";
+
+    public static final String QUERY_CACHE_AGG_CARDINALITY_LIMIT = "query_cache_agg_cardinality_limit";
     public static final String TRANSMISSION_ENCODE_LEVEL = "transmission_encode_level";
 
     public static final String NESTED_MV_REWRITE_MAX_LEVEL = "nested_mv_rewrite_max_level";
@@ -323,7 +329,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     // Limitations
     // mem limit can't smaller than bufferpool's default page size
-    public static final int MIN_EXEC_MEM_LIMIT = 2097152;
+    public static final long MIN_EXEC_MEM_LIMIT = 2097152;
     // query timeout cannot greater than one month
     public static final int MAX_QUERY_TIMEOUT = 259200;
 
@@ -647,9 +653,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // Either the build_max or probe_min equal to 0 would force use the filter,
     // otherwise would decide based on the cardinality
     @VariableMgr.VarAttr(name = GLOBAL_RUNTIME_FILTER_BUILD_MAX_SIZE, flag = VariableMgr.INVISIBLE)
-    private long globalRuntimeFilterBuildMaxSize = 64 * 1024 * 1024;
+    private long globalRuntimeFilterBuildMaxSize = 64L * 1024L * 1024L;
     @VariableMgr.VarAttr(name = GLOBAL_RUNTIME_FILTER_PROBE_MIN_SIZE, flag = VariableMgr.INVISIBLE)
-    private long globalRuntimeFilterProbeMinSize = 100 * 1024;
+    private long globalRuntimeFilterProbeMinSize = 100L * 1024L;
     @VariableMgr.VarAttr(name = GLOBAL_RUNTIME_FILTER_PROBE_MIN_SELECTIVITY, flag = VariableMgr.INVISIBLE)
     private float globalRuntimeFilterProbeMinSelectivity = 0.5f;
 
@@ -744,6 +750,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = QUERY_CACHE_ENTRY_MAX_ROWS)
     private long queryCacheEntryMaxRows = 409600;
+
+    @VarAttr(name = QUERY_CACHE_HOT_PARTITION_NUM)
+    private int queryCacheHotPartitionNum = 3;
+
+    @VarAttr(name = QUERY_CACHE_AGG_CARDINALITY_LIMIT)
+    private long queryCacheAggCardinalityLimit = 5000000;
 
     @VarAttr(name = NESTED_MV_REWRITE_MAX_LEVEL)
     private int nestedMvRewriteMaxLevel = 3;
@@ -1372,6 +1384,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public long getQueryCacheEntryMaxRows() {
         return queryCacheEntryMaxRows;
+    }
+
+    public void setQueryCacheHotPartitionNum(int n) {
+        queryCacheHotPartitionNum = n;
+    }
+
+    public int getQueryCacheHotPartitionNum() {
+        return queryCacheHotPartitionNum;
+    }
+
+    public void setQueryCacheAggCardinalityLimit(long limit) {
+        this.queryCacheAggCardinalityLimit = limit;
+    }
+
+    public long getQueryCacheAggCardinalityLimit() {
+        return queryCacheAggCardinalityLimit;
     }
 
     public void setEnableQueryCache(boolean on) {

@@ -12,7 +12,7 @@ The `date` parameter must be of the DATE or DATETIME type.
 INT DAYOFYEAR(DATETIME|DATE date)
 ```
 
-## example
+## Examples
 
 ```Plain Text
 MySQL > select dayofyear('2007-02-03 00:00:00');

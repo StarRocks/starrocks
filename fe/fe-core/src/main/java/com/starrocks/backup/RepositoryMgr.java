@@ -44,13 +44,13 @@ public class RepositoryMgr extends Daemon implements Writable {
     private static final Logger LOG = LogManager.getLogger(RepositoryMgr.class);
 
     // all key should be in lower case
-    private Map<String, Repository> repoNameMap = Maps.newConcurrentMap();
-    private Map<Long, Repository> repoIdMap = Maps.newConcurrentMap();
+    private final Map<String, Repository> repoNameMap = Maps.newConcurrentMap();
+    private final Map<Long, Repository> repoIdMap = Maps.newConcurrentMap();
 
-    private ReentrantLock lock = new ReentrantLock();
+    private final ReentrantLock lock = new ReentrantLock();
 
     public RepositoryMgr() {
-        super(Repository.class.getSimpleName(), 600 * 1000 /* 10min */);
+        super(Repository.class.getSimpleName(), 600L * 1000L /* 10min */);
     }
 
     @Override

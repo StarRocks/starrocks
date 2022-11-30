@@ -295,6 +295,7 @@ CONF_Int32(cumulative_compaction_num_threads_per_disk, "1");
 CONF_mInt32(update_compaction_check_interval_seconds, "60");
 CONF_Int32(update_compaction_num_threads_per_disk, "1");
 CONF_Int32(update_compaction_per_tablet_min_interval_seconds, "120"); // 2min
+CONF_mInt64(max_update_compaction_num_singleton_deltas, "1000");
 
 CONF_mInt32(repair_compaction_interval_seconds, "600"); // 10 min
 
@@ -320,7 +321,7 @@ CONF_mInt32(compaction_trace_threshold, "60");
 // the columns will be divided into groups for vertical compaction.
 CONF_Int64(vertical_compaction_max_columns_per_group, "5");
 
-CONF_Bool(enable_event_based_compaction_framework, "false");
+CONF_Bool(enable_event_based_compaction_framework, "true");
 
 CONF_Bool(enable_check_string_lengths, "true");
 // 5GB
@@ -879,4 +880,7 @@ CONF_mInt64(l0_max_file_size, "209715200"); // 200MB
 
 // Used by query cache, cache entries are evicted when it exceeds its capacity(500MB in default)
 CONF_Int64(query_cache_capacity, "536870912");
+
+// Used to limit buffer size of tablet send channel.
+CONF_mInt64(send_channel_buffer_limit, "67108864");
 } // namespace starrocks::config

@@ -152,6 +152,7 @@ public abstract class FunctionalExprProvider<U> {
         // analyze limit
         analyzeLimit(limit);
     }
+
     /**
      * Generated and connected predicates that is used in `List.stream().filter()` to filter instances(`<U>`).
      */

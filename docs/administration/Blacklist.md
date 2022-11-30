@@ -90,7 +90,7 @@ DELETE SQLBLACKLIST #indexlist#
 For example, delete the sqlblacklist 3 and 4 in the above blacklist:
 
 ~~~sql
-delete sqlblacklist  3, 4;   --（#indexlist#是以","分隔的id）
+delete sqlblacklist  3, 4;   -- #indexlist# is a list of IDs separated by comma (,).
 ~~~
 
 Then, the remaining sqlblacklist is as follows:

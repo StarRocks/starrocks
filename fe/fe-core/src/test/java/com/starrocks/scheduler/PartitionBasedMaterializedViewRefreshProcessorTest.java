@@ -163,7 +163,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
                         "AS SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` as a;");
     }
 
-    @Test
+    //@Test
     public void test() {
         new MockUp<StmtExecutor>() {
             @Mock

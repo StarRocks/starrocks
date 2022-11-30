@@ -138,14 +138,7 @@ public class MaterializedViewAnalyzer {
                 throw new SemanticException("Materialized view query statement only support select");
             }
             SelectRelation selectRelation = ((SelectRelation) queryStatement.getQueryRelation());
-            // check cte
-            if (selectRelation.hasWithClause()) {
-                throw new SemanticException("Materialized view query statement not support cte");
-            }
-            // check subquery
-            if (!AnalyzerUtils.collectAllSubQueryRelation(queryStatement).isEmpty()) {
-                throw new SemanticException("Materialized view query statement not support subquery");
-            }
+
             // check alias except * and SlotRef
             List<SelectListItem> selectListItems = selectRelation.getSelectList().getItems();
             for (SelectListItem selectListItem : selectListItems) {
@@ -416,7 +409,10 @@ public class MaterializedViewAnalyzer {
             SlotRef slotRef = getSlotRef(statement.getPartitionRefTableExpr());
             Table table = tableNameTableMap.get(slotRef.getTblNameWithoutAnalyzed());
 
-            if (table.isLocalTable()) {
+            if (table == null) {
+                throw new SemanticException("Materialized view partition expression %s could only ref to base table",
+                        slotRef.toSql());
+            } else if (table.isLocalTable()) {
                 checkPartitionColumnWithBaseOlapTable(slotRef, (OlapTable) table);
             } else if (table.isHiveTable() || table.isHudiTable()) {
                 checkPartitionColumnWithBaseHMSTable(slotRef, (HiveMetaStoreTable) table);
@@ -502,16 +498,14 @@ public class MaterializedViewAnalyzer {
         private void replaceTableAlias(SlotRef slotRef,
                                        CreateMaterializedViewStatement statement,
                                        Map<TableName, Table> tableNameTableMap) {
-            if (slotRef.getTblNameWithoutAnalyzed().getDb() == null) {
-                TableName tableName = slotRef.getTblNameWithoutAnalyzed();
-                Table table = tableNameTableMap.get(tableName);
-                List<MaterializedView.BaseTableInfo> baseTableInfos = statement.getBaseTableInfos();
-                for (MaterializedView.BaseTableInfo baseTableInfo : baseTableInfos) {
-                    if (baseTableInfo.getTable().equals(table)) {
-                        slotRef.setTblName(new TableName(baseTableInfo.getCatalogName(),
-                                baseTableInfo.getDbName(), table.getName()));
-                        break;
-                    }
+            TableName tableName = slotRef.getTblNameWithoutAnalyzed();
+            Table table = tableNameTableMap.get(tableName);
+            List<MaterializedView.BaseTableInfo> baseTableInfos = statement.getBaseTableInfos();
+            for (MaterializedView.BaseTableInfo baseTableInfo : baseTableInfos) {
+                if (baseTableInfo.getTable().equals(table)) {
+                    slotRef.setTblName(new TableName(baseTableInfo.getCatalogName(),
+                            baseTableInfo.getDbName(), table.getName()));
+                    break;
                 }
             }
         }

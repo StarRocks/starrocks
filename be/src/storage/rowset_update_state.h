@@ -49,7 +49,15 @@ public:
     static void plan_read_by_rssid(const vector<uint64_t>& rowids, size_t* num_default,
                                    std::map<uint32_t, std::vector<uint32_t>>* rowids_by_rssid, vector<uint32_t>* idxes);
 
+    Status load_deletes(Rowset* rowset, uint32_t delete_id);
+    Status load_upserts(Rowset* rowset, uint32_t upsert_id);
+    void release_upserts(uint32_t idx);
+    void release_deletes(uint32_t idx);
+
 private:
+    Status _load_deletes(Rowset* rowset, uint32_t delete_id, vectorized::Column* pk_column);
+    Status _load_upserts(Rowset* rowset, uint32_t upsert_id, vectorized::Column* pk_column);
+
     Status _do_load(Tablet* tablet, Rowset* rowset);
 
     Status _prepare_partial_update_states(Tablet* tablet, Rowset* rowset);

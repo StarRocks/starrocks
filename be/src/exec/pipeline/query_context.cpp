@@ -24,7 +24,8 @@ QueryContext::QueryContext()
         : _fragment_mgr(new FragmentContextManager()),
           _total_fragments(0),
           _num_fragments(0),
-          _num_active_fragments(0) {
+          _num_active_fragments(0),
+          _wg_running_query_token_ptr(nullptr) {
     _sub_plan_query_statistics_recvr = std::make_shared<QueryStatisticsRecvr>();
 }
 
@@ -93,12 +94,17 @@ void QueryContext::init_mem_tracker(int64_t bytes_limit, MemTracker* parent) {
     });
 }
 
-Status QueryContext::init_query(workgroup::WorkGroup* wg) {
+Status QueryContext::init_query_once(workgroup::WorkGroup* wg) {
     Status st = Status::OK();
     if (wg != nullptr) {
         std::call_once(_init_query_once, [this, &st, wg]() {
             this->init_query_begin_time();
-            st = wg->try_incr_num_queries();
+            auto maybe_token = wg->acquire_running_query_token();
+            if (maybe_token.ok()) {
+                _wg_running_query_token_ptr = std::move(maybe_token.value());
+            } else {
+                st = maybe_token.status();
+            }
         });
     }
 

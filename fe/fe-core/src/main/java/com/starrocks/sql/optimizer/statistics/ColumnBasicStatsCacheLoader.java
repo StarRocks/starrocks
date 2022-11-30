@@ -13,6 +13,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.statistic.StatisticExecutor;
 import com.starrocks.thrift.TStatisticData;
 import org.apache.logging.log4j.LogManager;
@@ -105,9 +106,7 @@ public class ColumnBasicStatsCacheLoader implements AsyncCacheLoader<ColumnStats
 
     private ColumnStatistic convert2ColumnStatistics(TStatisticData statisticData) throws AnalysisException {
         Database db = GlobalStateMgr.getCurrentState().getDb(statisticData.dbId);
-        if (db == null) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_DB_ERROR, statisticData.dbId);
-        }
+        MetaUtils.checkDbNullAndReport(db, String.valueOf(statisticData.dbId));
         Table table = db.getTable(statisticData.tableId);
         if (!(table instanceof OlapTable)) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR, statisticData.tableId);
