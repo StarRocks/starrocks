@@ -146,7 +146,7 @@ void TypeDescriptor::to_protobuf(PTypeDesc* proto_type) const {
     } else if (type == TYPE_STRUCT) {
         node->set_type(TTypeNodeType::STRUCT);
         DCHECK_EQ(field_names.size(), selected_fields.size());
-        for(size_t i = 0; i < field_names.size(); i++) {
+        for (size_t i = 0; i < field_names.size(); i++) {
             node->add_struct_fields()->set_name(field_names[i]);
             node->add_selected_fields(selected_fields[i]);
         }

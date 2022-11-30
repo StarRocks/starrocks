@@ -325,7 +325,7 @@ public:
     Status finish_batch() override { return Status::OK(); }
 
     void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) override {
-        for(const auto& reader : _child_readers) {
+        for (const auto& reader : _child_readers) {
             if (reader != nullptr) {
                 reader->get_levels(def_levels, rep_levels, num_levels);
                 return;
