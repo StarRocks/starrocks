@@ -666,7 +666,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                     rowCount *= cardinality;
                 } else {
                     rowCount *= cardinality * Math.pow(
-                            StatisticsEstimateCoefficient.UNKNOWN_GROUP_BY_CORRELATION_COEFFICIENT, groupByIndex + 1);
+                            StatisticsEstimateCoefficient.UNKNOWN_GROUP_BY_CORRELATION_COEFFICIENT, groupByIndex + 1D);
                     if (rowCount > inputStatistics.getOutputRowCount()) {
                         rowCount = inputStatistics.getOutputRowCount();
                     }
