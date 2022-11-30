@@ -156,6 +156,7 @@ public class MvRewriteOptimizationTest {
                 "     PREAGGREGATION: ON\n" +
                 "     partitions=1/1\n" +
                 "     rollup: mv_1");
+        PlanTestBase.assertContains(plan, "tabletRatio=6/6");
 
         String query2 = "select empid, deptno, name, salary from emps where empid = 6";
         String plan2 = getFragmentPlan(query2);
