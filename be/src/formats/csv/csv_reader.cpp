@@ -13,7 +13,6 @@
 // limitations under the License.
 
 #include "formats/csv/csv_reader.h"
-
 #include <unordered_set>
 
 namespace starrocks::vectorized {
