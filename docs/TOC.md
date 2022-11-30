@@ -339,17 +339,9 @@
         + [get_json_double](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/get_json_double.md)
         + [get_json_int](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/get_json_int.md)
         + [get_json_string](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/get_json_string.md)
-<<<<<<< HEAD
         + [JSON_EACH](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_each.md)
         + [JSON_QUERY](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_query.md)
         + [JSON_EXISTS](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_exists.md)
-=======
-        + [json_each](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_each.md)
-        + [json_exists](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_exists.md)
-        + [json_length](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_length.md)
-        + [json_keys](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_keys.md)
-        + [json_query](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_query.md)
->>>>>>> 8926c9219 ([Doc] reorder functions and fix bugs (#14305))
     + Bitmap Functions
       + [bitmap_and](./sql-reference/sql-functions/bitmap-functions/bitmap_and.md)
       + [bitmap_or](./sql-reference/sql-functions/bitmap-functions/bitmap_or.md)
