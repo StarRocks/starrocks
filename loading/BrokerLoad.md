@@ -348,6 +348,14 @@ WHERE LABEL = "label";
 
 一般情况下，一个导入作业只有一个 `data_desc`，只会拆分成一个子任务，子任务会拆分成与 BE 总数相等的实例。
 
+## 使用说明
+
+[FE 配置项](../administration/Configuration.md#fe-配置项) `async_load_task_pool_size` 指定了 Broker Load 任务线程池的大小，即 StarRocks 集群中可以并行执行的 Broker Load 任务的最大数量。
+
+StarRocks v2.4 及以前版本中，如果某一时间段内提交的 Broker Load 作业的任务总数超过最大数量，则超出作业会按照各自的提交时间放到队列中排队等待调度。
+
+StarRocks v2.5 版本中，如果某一时间段内提交的 Broker Load 作业的任务总数超过最大数量，则超出的作业会按照作业创建时指定的优先级被放到队列中排队等待调度。参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md#opt_properties) 文档中的可选参数 `priority`。您可以使用 [ALTER LOAD](../sql-reference/sql-statements/data-manipulation/ALTER%20LOAD.md) 语句修改处于 **QUEUEING** 状态或者 **LOADING** 状态的 Broker Load 作业的优先级。
+
 ## 常见问题
 
 请参见 [Broker Load 常见问题](/faq/loading/Broker_load_faq.md)。

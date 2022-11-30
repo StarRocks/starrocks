@@ -65,6 +65,10 @@ SHOW LOAD [ FROM db_name ]
 | URL            | 导入作业中质量不合格数据的访问地址。您可以使用 `curl` 或 `wget` 命令打开该地址。如果导入作业不存在质量不合格数据，该参数值为 `NULL`。 | 同 Broker Load。                                             | 同 Broker Load。                                             |
 | JobDetails     | 导入作业的其他信息，包括：<ul><li>`Unfinished backends`：未完成导入的 BE 节点 ID。</li><li>`ScannedRows`：实际处理的行数，包括导入的行数以及过滤掉的行数。</li><li>`TaskNumber`：子作业个数。</li><li>`All backends`：正在运行子作业的 BE 节点的 ID。</li><li>`FileNumber`：源文件的个数。</li><li>`FileSize`：所有源文件的总数据量，单位：字节。</li></ul> | 同 Broker Load。                                             | 同 Broker Load。                                             |
 
+> **说明**
+>
+> SHOW LOAD 不支持返回 Broker Load 作业的优先级。
+
 ## 注意事项
 
 - 导入作业相关信息具有时效性。默认自一个导入作业的完成时间 (`LoadFinishTime`) 起 3 天内可以查看到该导入作业的相关信息；3 天后，信息会失效，无法查到。您可以通过 FE 参数 `label_keep_max_second` 修改默认有效时间（单位：秒），操作如下：

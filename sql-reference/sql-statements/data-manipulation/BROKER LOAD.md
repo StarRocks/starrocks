@@ -343,6 +343,12 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 
   指定导入作业所使用的时区。默认为 `Asia/Shanghai` 时区。该参数会影响所有导入涉及的、跟时区设置有关的函数所返回的结果。受时区影响的函数有 strftime、alignment_timestamp 和 from_unixtime 等，具体请参见[设置时区](/administration/timezone.md)。导入参数 `timezone` 设置的时区对应“[设置时区](/administration/timezone.md)”中所述的会话级时区。
 
+- `priority`
+
+   指定导入作业的优先级。取值范围：`LOWEST`、`LOW`、`NORMAL`、`HIGH` 和 `HIGHEST`。默认值：`NORMAL`。Broker Load 通过 [FE 配置项](../administration/Configuration.md#fe-配置项) `async_load_task_pool_size` 指定任务线程池的大小，即 StarRocks 集群中可以并行执行的 Broker Load 任务的最大数量。如果某一时间段内提交的 Broker Load 作业的任务总数超过最大数量，则超出的作业会按照优先级在队列中排队等待调度。
+
+   已经创建成功的导入作业，如果处于 **QUEUEING** 状态或者 **LOADING** 状态，那么您可以使用 [ALTER LOAD](../data-manipulation/ALTER%20LOAD.md) 语句修改该作业的优先级。
+
 ## 示例
 
 本文以 HDFS 数据源为例，介绍各种导入配置。
