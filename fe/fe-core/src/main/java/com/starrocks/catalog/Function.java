@@ -669,6 +669,9 @@ public class Function implements Writable {
     public static Function read(DataInput input) throws IOException {
         Function function;
         FunctionType functionType = FunctionType.read(input);
+        if (functionType == null) {
+            throw new Error("Function type is null.");
+        }
         switch (functionType) {
             case SCALAR:
                 function = new ScalarFunction();

@@ -251,7 +251,9 @@ public class BrokerUtil {
                         LOG.warn("Broker close reader failed. path={}, address={}", path, address, ex);
                     }
                 }
-                if (tOperationStatus == null || tOperationStatus.getStatusCode() != TBrokerOperationStatusCode.OK) {
+                if (tOperationStatus == null) {
+                    LOG.warn("Broker close reader failed: operation status is null. path={}, address={}", path, address);
+                } else if  (tOperationStatus.getStatusCode() != TBrokerOperationStatusCode.OK) {
                     LOG.warn("Broker close reader failed. path={}, address={}, error={}", path, address,
                             tOperationStatus.getMessage());
                 } else {
