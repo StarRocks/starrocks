@@ -21,11 +21,16 @@ public:
 private:
     Status fill_chunk(ChunkPtr* chunk);
 
+    Status _fill_chunk_for_verbose(ChunkPtr* chunk);
+
     static SchemaScanner::ColumnDesc _s_vars_columns[];
+
+    static SchemaScanner::ColumnDesc _s_verbose_vars_columns[];
 
     TShowVariableResult _var_result;
     TVarType::type _type;
     std::map<std::string, std::string>::iterator _begin;
+    std::vector<starrocks::TVerboseVariableRecord>::iterator _verbose_iter;
 };
 
 } // namespace starrocks::vectorized

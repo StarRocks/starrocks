@@ -8,6 +8,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.InfoSchemaDb;
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
 
@@ -28,7 +29,7 @@ public class ShowVariablesStmt extends ShowStmt {
                     .addColumn(new Column(NAME_COL, ScalarType.createVarchar(20)))
                     .addColumn(new Column(VALUE_COL, ScalarType.createVarchar(20)))
                     .addColumn(new Column(DEFAULT_VALUE, ScalarType.createVarchar(20)))
-                    .addColumn(new Column(IS_CHANGED, ScalarType.createVarchar(20)))
+                    .addColumn(new Column(IS_CHANGED, ScalarType.createType(PrimitiveType.BOOLEAN)))
                     .build();
 
     private SetType type;
@@ -72,6 +73,8 @@ public class ShowVariablesStmt extends ShowStmt {
         TableName tableName;
         if (type == SetType.GLOBAL) {
             tableName = new TableName(InfoSchemaDb.DATABASE_NAME, "GLOBAL_VARIABLES");
+        } else if (type == SetType.VERBOSE) {
+            tableName = new TableName(InfoSchemaDb.DATABASE_NAME, "VERBOSE_SESSION_VARIABLES");
         } else {
             tableName = new TableName(InfoSchemaDb.DATABASE_NAME, "SESSION_VARIABLES");
         }

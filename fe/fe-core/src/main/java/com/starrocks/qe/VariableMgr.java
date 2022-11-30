@@ -516,7 +516,7 @@ public class VariableMgr {
                         row.add(currentValue);
                         if (type == SetType.VERBOSE) {
                             row.add(ctx.defaultValue);
-                            row.add(String.valueOf(!ctx.defaultValue.equals(currentValue)));
+                            row.add(ctx.defaultValue.equals(currentValue) ? "0" : "1");
                         }
                     } else {
                         LOG.error("sessionVar is null during dumping session variables.");
@@ -528,7 +528,7 @@ public class VariableMgr {
                     row.add(currentValue);
                     if (type == SetType.VERBOSE) {
                         row.add(ctx.defaultValue);
-                        row.add(String.valueOf(!ctx.defaultValue.equals(currentValue)));
+                        row.add(ctx.defaultValue.equals(currentValue) ? "0" : "1");
                     }
                 }
 

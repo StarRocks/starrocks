@@ -54,7 +54,8 @@ enum TStorageMedium {
 
 enum TVarType {
     SESSION,
-    GLOBAL
+    GLOBAL,
+    VERBOSE
 }
 
 enum TPrimitiveType {
