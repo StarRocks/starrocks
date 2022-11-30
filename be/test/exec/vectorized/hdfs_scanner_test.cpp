@@ -1281,8 +1281,8 @@ TEST_F(HdfsScannerTest, TestParqueTypeMismatchDecodeMinMax) {
 }
 
 TEST_F(HdfsScannerTest, TestCSVSkipHeader) {
-    SlotDesc csv_descs[] = {{"user_id", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR, 22)},
-                            {"action", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR, 22)},
+    SlotDesc csv_descs[] = {{"user_id", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR, 22)},
+                            {"action", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR, 22)},
                             {""}};
 
     const std::string skip_file = "./be/test/exec/test_data/csv_scanner/skipheader.csv";
@@ -1322,8 +1322,8 @@ TEST_F(HdfsScannerTest, TestCSVSkipHeader) {
 }
 
 TEST_F(HdfsScannerTest, TestCSVTrimSpace) {
-    SlotDesc csv_descs[] = {{"user_id", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR, 22)},
-                            {"action", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR, 22)},
+    SlotDesc csv_descs[] = {{"user_id", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR, 22)},
+                            {"action", TypeDescriptor::from_primtive_type(LogicalType::TYPE_VARCHAR, 22)},
                             {""}};
 
     const std::string trim_file = "./be/test/exec/test_data/csv_scanner/trim.csv";
