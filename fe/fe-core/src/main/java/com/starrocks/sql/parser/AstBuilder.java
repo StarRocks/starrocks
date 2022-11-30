@@ -531,17 +531,20 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitPartitionExpression(StarRocksParser.PartitionExpressionContext context) {
         Expr expr = (Expr) visit(context.expression());
-        List<Expr> exprs = ImmutableList.of(expr);
         if (context.DAY() != null) {
-            return new FunctionCallExpr("day", exprs);
+            return new FunctionCallExpr(FunctionSet.DATE_TRUNC,
+                    ImmutableList.of(new StringLiteral("day"), expr));
         } else if (context.HOUR() != null) {
-            return new FunctionCallExpr("hour", exprs);
+            return new FunctionCallExpr(FunctionSet.DATE_TRUNC,
+                    ImmutableList.of(new StringLiteral("hour"), expr));
         } else if (context.MONTH() != null) {
-            return new FunctionCallExpr("month", exprs);
+            return new FunctionCallExpr(FunctionSet.DATE_TRUNC,
+                    ImmutableList.of(new StringLiteral("month"), expr));
         } else if (context.YEAR() != null) {
-            return new FunctionCallExpr("year", exprs);
+            return new FunctionCallExpr(FunctionSet.DATE_TRUNC,
+                    ImmutableList.of(new StringLiteral("year"), expr));
         }
-        throw new ParsingException("No matching function with signature: %s(%s).", context.getText(), exprs);
+        throw new ParsingException("No matching function with signature: %s(%s).", context.getText(), expr);
     }
 
     private PartitionDesc getPartitionDesc(StarRocksParser.PartitionDescContext context) {
@@ -552,12 +555,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 partitionDescList.add(rangePartitionDesc);
             }
             Expr expr = (Expr) visit(context.partitionExpression().expression());
-            if (expr instanceof SlotRef) {
-                List<String> columnList = ImmutableList.of(((SlotRef) expr).getColumnName());
-                RangePartitionDesc rangePartitionDesc = new RangePartitionDesc(columnList, partitionDescList);
-                return new ExpressionPartitionDesc(rangePartitionDesc, expr);
-            }
-
+            List<String> columnList = ImmutableList.of(((SlotRef) expr).getColumnName());
+            RangePartitionDesc rangePartitionDesc = new RangePartitionDesc(columnList, partitionDescList);
+            return new ExpressionPartitionDesc(rangePartitionDesc, expr);
         }
 
         List<Identifier> identifierList = visit(context.identifierList().identifier(), Identifier.class);
