@@ -109,7 +109,7 @@ public class GenericPool<VALUE extends org.apache.thrift.TServiceClient> {
         try {
             pool.invalidateObject(address, object);
         } catch (Exception e) {
-            e.printStackTrace();
+            LOG.warn(e);
         }
     }
 

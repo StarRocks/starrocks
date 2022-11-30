@@ -754,7 +754,7 @@ public class PlanFragmentBuilder {
 
             } catch (Exception e) {
                 LOG.warn("Hudi scan node get scan range locations failed : " + e);
-                e.printStackTrace();
+                LOG.warn(e);
                 throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);
             }
 

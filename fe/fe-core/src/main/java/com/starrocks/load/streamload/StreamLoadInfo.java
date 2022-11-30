@@ -2,6 +2,7 @@
 package com.starrocks.load.streamload;
 
 import com.google.common.collect.Lists;
+import com.google.re2j.Pattern;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
@@ -31,6 +32,7 @@ import java.util.List;
 public class StreamLoadInfo {
 
     private static final Logger LOG = LogManager.getLogger(StreamLoadInfo.class);
+    private static final Pattern PART_NAME_SPLIT = Pattern.compile("\\s*,\\s*");
 
     private TUniqueId id;
     private long txnId;
@@ -203,7 +205,7 @@ public class StreamLoadInfo {
             rowDelimiter = new RowDelimiter(context.rowDelimiter);
         }
         if (context.partitions != null) {
-            String[] partNames = context.partitions.trim().split("\\s*,\\s*");
+            String[] partNames = PART_NAME_SPLIT.split(context.partitions.trim());
             if (context.useTempPartition) {
                 partitions = new PartitionNames(true, Lists.newArrayList(partNames));
             } else {
@@ -277,7 +279,7 @@ public class StreamLoadInfo {
             rowDelimiter = new RowDelimiter(request.getRowDelimiter());
         }
         if (request.isSetPartitions()) {
-            String[] partNames = request.getPartitions().trim().split("\\s*,\\s*");
+            String[] partNames = PART_NAME_SPLIT.split(request.getPartitions().trim());
             if (request.isSetIsTempPartition()) {
                 partitions = new PartitionNames(request.isIsTempPartition(), Lists.newArrayList(partNames));
             } else {
