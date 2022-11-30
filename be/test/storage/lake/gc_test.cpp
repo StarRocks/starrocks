@@ -252,7 +252,7 @@ TEST_F(GCTest, test_segment_gc) {
         }
     }
     {
-        auto orphan_list = join_path(kTestDir, kOrphanListFileName);
+        auto orphan_list = join_path(kTestDir, kGCFileName);
         auto st = fs->path_exists(orphan_list);
         ASSERT_OK(st);
     }
