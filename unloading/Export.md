@@ -98,7 +98,9 @@ WITH BROKER "mybroker"
 SHOW EXPORT WHERE queryid = "edee47f0-abe1-11ec-b9d1-00163e1e238f";
 ```
 
-> 说明：上述示例中，`queryid` 为导出作业的 ID。
+> **说明**
+>
+> 上述示例中，`queryid` 为导出作业的 ID。
 
 系统返回如下导出结果：
 
@@ -125,7 +127,9 @@ ErrorMsg: N/A
 CANCEL EXPORT WHERE queryid = "921d8f80-7c9d-11eb-9342-acde48001122";
 ```
 
-> 说明：上述示例中，`queryid` 为导出作业的 ID。
+> **说明**
+>
+> 上述示例中，`queryid` 为导出作业的 ID。
 
 有关 CANCEL EXPORT 语句的详细语法和参数说明，请参见 [CANCEL EXPORT](/sql-reference/sql-statements/data-manipulation/CANCEL%20EXPORT.md)。
 
