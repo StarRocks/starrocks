@@ -22,6 +22,8 @@
 package com.starrocks.analysis;
 
 import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.ColumnSeparator;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -30,42 +32,35 @@ public class ColumnSeparatorTest {
     public void testNormal() throws AnalysisException {
         // \t
         ColumnSeparator separator = new ColumnSeparator("\t");
-        separator.analyze();
         Assert.assertEquals("'\t'", separator.toSql());
         Assert.assertEquals("\t", separator.getColumnSeparator());
 
         // \x01
         separator = new ColumnSeparator("\\x01");
-        separator.analyze();
         Assert.assertEquals("'\\x01'", separator.toSql());
         Assert.assertEquals("\1", separator.getColumnSeparator());
 
         // \x00 \x01
         separator = new ColumnSeparator("\\x0001");
-        separator.analyze();
         Assert.assertEquals("'\\x0001'", separator.toSql());
         Assert.assertEquals("\0\1", separator.getColumnSeparator());
 
         separator = new ColumnSeparator("|");
-        separator.analyze();
         Assert.assertEquals("'|'", separator.toSql());
         Assert.assertEquals("|", separator.getColumnSeparator());
 
         separator = new ColumnSeparator("\\|");
-        separator.analyze();
         Assert.assertEquals("'\\|'", separator.toSql());
         Assert.assertEquals("\\|", separator.getColumnSeparator());
     }
 
-    @Test(expected = AnalysisException.class)
-    public void testHexFormatError() throws AnalysisException {
+    @Test(expected = SemanticException.class)
+    public void testHexFormatError() throws SemanticException {
         ColumnSeparator separator = new ColumnSeparator("\\x0g");
-        separator.analyze();
     }
 
-    @Test(expected = AnalysisException.class)
-    public void testHexLengthError() throws AnalysisException {
+    @Test(expected = SemanticException.class)
+    public void testHexLengthError() throws SemanticException {
         ColumnSeparator separator = new ColumnSeparator("\\x011");
-        separator.analyze();
     }
 }

@@ -485,7 +485,7 @@ public class DynamicPartitionUtil {
         // 1. get the offset week
         ZonedDateTime offsetWeek = current.plusWeeks(offset);
         // 2. get the date of `startOf` week
-        int day = offsetWeek.getDayOfWeek().getValue();
+        long day = offsetWeek.getDayOfWeek().getValue();
         ZonedDateTime resultTime = offsetWeek.plusDays(startOf.dayOfWeek - day);
         return getFormattedTimeWithoutHourMinuteSecond(resultTime, format);
     }

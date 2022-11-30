@@ -2034,49 +2034,25 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(unhexImpl, str) {
 
         // first half of byte
         char check_char = str.data[s_index];
-        for (;;) {
-            int value = check_char - '0';
-            if (value >= 0 && value <= ('9' - '0')) {
-                c += value * 16;
-                break;
-            }
-
-            value = check_char - 'A';
-            if (value >= 0 && value <= ('F' - 'A')) {
-                c += (value + 10) * 16;
-                break;
-            }
-
-            value = check_char - 'a';
-            if (value >= 0 && value <= ('f' - 'a')) {
-                c += (value + 10) * 16;
-                break;
-            }
-
+        if (int value = check_char - '0'; value >= 0 && value <= ('9' - '0')) {
+            c += value * 16;
+        } else if (int value = check_char - 'A'; value >= 0 && value <= ('F' - 'A')) {
+            c += (value + 10) * 16;
+        } else if (int value = check_char - 'a'; value >= 0 && value <= ('f' - 'a')) {
+            c += (value + 10) * 16;
+        } else {
             return {};
         }
 
         // second half of byte
         check_char = str.data[s_index + 1];
-        for (;;) {
-            int value = check_char - '0';
-            if (value >= 0 && value <= ('9' - '0')) {
-                c += value;
-                break;
-            }
-
-            value = check_char - 'A';
-            if (value >= 0 && value <= ('F' - 'A')) {
-                c += (value + 10);
-                break;
-            }
-
-            value = check_char - 'a';
-            if (value >= 0 && value <= ('f' - 'a')) {
-                c += (value + 10);
-                break;
-            }
-
+        if (int value = check_char - '0'; value >= 0 && value <= ('9' - '0')) {
+            c += value;
+        } else if (int value = check_char - 'A'; value >= 0 && value <= ('F' - 'A')) {
+            c += (value + 10);
+        } else if (int value = check_char - 'a'; value >= 0 && value <= ('f' - 'a')) {
+            c += (value + 10);
+        } else {
             return {};
         }
 

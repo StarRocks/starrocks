@@ -228,7 +228,7 @@ public class TransactionState implements Writable {
     private long publishVersionFinishTime = -1;
 
     private long callbackId = -1;
-    private long timeoutMs = Config.stream_load_default_timeout_second * 1000;
+    private long timeoutMs = Config.stream_load_default_timeout_second * 1000L;
 
     // optional
     private TxnCommitAttachment txnCommitAttachment;

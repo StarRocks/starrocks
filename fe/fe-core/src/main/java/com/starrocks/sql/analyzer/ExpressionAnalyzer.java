@@ -1070,8 +1070,7 @@ public class ExpressionAnalyzer {
                     if (userVariable.getResolvedExpression() instanceof NullLiteral) {
                         node.setIsNull();
                     } else {
-                        Object variableValue = userVariable.getResolvedExpression().getRealValue();
-                        node.setValue(variableValue);
+                        node.setValue(userVariable.getResolvedExpression().getRealObjectValue());
                     }
                 } else {
                     VariableMgr.fillValue(session.getSessionVariable(), node);

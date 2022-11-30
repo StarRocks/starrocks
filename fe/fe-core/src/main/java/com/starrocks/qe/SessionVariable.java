@@ -653,9 +653,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // Either the build_max or probe_min equal to 0 would force use the filter,
     // otherwise would decide based on the cardinality
     @VariableMgr.VarAttr(name = GLOBAL_RUNTIME_FILTER_BUILD_MAX_SIZE, flag = VariableMgr.INVISIBLE)
-    private long globalRuntimeFilterBuildMaxSize = 64 * 1024 * 1024;
+    private long globalRuntimeFilterBuildMaxSize = 64L * 1024L * 1024L;
     @VariableMgr.VarAttr(name = GLOBAL_RUNTIME_FILTER_PROBE_MIN_SIZE, flag = VariableMgr.INVISIBLE)
-    private long globalRuntimeFilterProbeMinSize = 100 * 1024;
+    private long globalRuntimeFilterProbeMinSize = 100L * 1024L;
     @VariableMgr.VarAttr(name = GLOBAL_RUNTIME_FILTER_PROBE_MIN_SELECTIVITY, flag = VariableMgr.INVISIBLE)
     private float globalRuntimeFilterProbeMinSelectivity = 0.5f;
 
