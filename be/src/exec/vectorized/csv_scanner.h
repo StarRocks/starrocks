@@ -41,6 +41,9 @@ public:
 
     void close() override;
 
+    // For test
+    void use_v2(bool use_v2) { _use_v2 = use_v2; }
+
 private:
     class ScannerCSVReader : public CSVReader {
     public:
