@@ -283,7 +283,7 @@ public class GlobalStateMgr {
     // 0 ~ 9999 used for qe
     public static final long NEXT_ID_INIT_VALUE = 10000;
     private static final int REPLAY_INTERVAL_MS = 1;
-    private static final String IMAGE_DIR = "/image";
+    public static final String IMAGE_DIR = "/image";
     // will break the loop and refresh in-memory data after at most 10w logs or at most 1 seconds
     private static final long REPLAYER_MAX_MS_PER_LOOP = 1000L;
     private static final long REPLAYER_MAX_LOGS_PER_LOOP = 100000L;
