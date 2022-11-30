@@ -167,7 +167,6 @@ public class StarRocksFE {
             }
         } catch (Throwable e) {
             LOG.error("StarRocksFE start failed", e);
-            LOG.warn(e);
         }
     }
 
