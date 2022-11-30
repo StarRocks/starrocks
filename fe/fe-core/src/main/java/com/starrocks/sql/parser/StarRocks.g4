@@ -1725,6 +1725,7 @@ functionCall
     | GROUPING '(' (expression (',' expression)*)? ')'                                    #groupingOperation
     | GROUPING_ID '(' (expression (',' expression)*)? ')'                                 #groupingOperation
     | informationFunctionExpression                                                       #informationFunction
+    | specialDateTimeExpression                                                           #specialDateTime
     | specialFunctionExpression                                                           #specialFunction
     | aggregationFunction over?                                                           #aggregationFunctionCall
     | windowFunction over                                                                 #windowFunctionCall
@@ -1758,6 +1759,14 @@ informationFunctionExpression
     | name = USER '(' ')'
     | name = CONNECTION_ID '(' ')'
     | name = CURRENT_USER '(' ')'
+    ;
+
+specialDateTimeExpression
+    : name=CURRENT_DATE
+    | name=CURRENT_TIME
+    | name=CURRENT_TIMESTAMP
+    | name=LOCALTIME
+    | name=LOCALTIMESTAMP
     ;
 
 specialFunctionExpression
@@ -2092,6 +2101,7 @@ nonReserved
     | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BOOLEAN | BROKER | BUCKETS | BUILTIN
     | CAST | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CURRENT | COLLATION | COLUMNS | COMMENT | COMMIT | COMMITTED
     | COMPUTE | CONNECTION | CONNECTION_ID | CONSISTENT | COSTS | COUNT | CONFIG
+    | CURRENT_DATE | CURRENT_TIME | CURRENT_TIMESTAMP
     | DATA | DATE | DATETIME | DAY | DECOMMISSION | DISTRIBUTION | DUPLICATE | DYNAMIC
     | END | ENGINE | ENGINES | ERRORS | EVENTS | EXECUTE | EXTERNAL | EXTRACT | EVERY
     | FILE | FILTER | FIRST | FLOOR | FOLLOWING | FORMAT | FN | FRONTEND | FRONTENDS | FOLLOWER | FREE | FUNCTIONS
@@ -2099,7 +2109,7 @@ nonReserved
     | HASH | HISTOGRAM | HELP | HLL_UNION | HOUR | HUB
     | IDENTIFIED | IMPERSONATE | INDEXES | INSTALL | INTERMEDIATE | INTERVAL | ISOLATION
     | JOB
-    | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOGICAL
+    | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOCALTIME | LOCALTIMESTAMP | LOGICAL
     | MANUAL | MATERIALIZED | MAX | META | MIN | MINUTE | MODE | MODIFY | MONTH | MERGE
     | NAME | NAMES | NEGATIVE | NO | NODE | NULLS
     | OBSERVER | OF | OFFSET | ONLY | OPEN | OPTION | OVERWRITE
