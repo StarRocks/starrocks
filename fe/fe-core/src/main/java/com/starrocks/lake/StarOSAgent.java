@@ -32,7 +32,6 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -305,7 +304,7 @@ public class StarOSAgent {
                 CreateShardInfo.Builder builder = CreateShardInfo.newBuilder();
                 builder.setReplicaCount(1);
                 builder.setShardId(GlobalStateMgr.getCurrentState().getNextId());
-                builder.setGroupId(groupId);
+                builder.setGroupIds(0, groupId);
                 builder.setPathInfo(pathInfo);
                 builder.setCacheInfo(cacheInfo);
                 createShardInfos.add(builder.build());
