@@ -2,7 +2,7 @@
 
 ## Description
 
-Sums all data in an ARRAY and returns the result.
+Sums all values in an array.
 
 ## Syntax
 
