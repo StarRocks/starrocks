@@ -1,6 +1,6 @@
 # BROKER LOAD
 
-## description
+## Description
 
 Broker Load is performed via brokers deployed with the StarRocks cluster. It will access data from corresponding data source and load data into StarRocks via Broker.
 

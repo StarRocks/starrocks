@@ -343,16 +343,16 @@ Run the Flink cluster and submit a Flink job to continuously synchronize full an
         [INFO] Submitting SQL update statement to the cluster...
         [INFO] SQL update statement has been successfully submitted to the cluster:
         Job ID: 5ae005c4b3425d8bb13fe660260a35da
-        ```
+    ```
 
-        If you only need to synchronize only a portion of the data, such as data whose payment time is later than December 21, 2021, you can use the `WHERE` clause in `INSERT INTO SELECT` to set a filter condition, such as `WHERE pay_dt > '2021-12-21'`. Data that does not meet this condition will not be synchronized to StarRocks.
+    If you only need to synchronize only a portion of the data, such as data whose payment time is later than December 21, 2021, you can use the `WHERE` clause in `INSERT INTO SELECT` to set a filter condition, such as `WHERE pay_dt > '2021-12-21'`. Data that does not meet this condition will not be synchronized to StarRocks.
 
-        If the following result is returned, the Flink job has been submitted for full and incremental synchronization.
+    If the following result is returned, the Flink job has been submitted for full and incremental synchronization.
 
-        ```SQL
-        [INFO] Submitting SQL update statement to the cluster...
-        [INFO] SQL update statement has been successfully submitted to the cluster:
-        Job ID: 5ae005c4b3425d8bb13fe660260a35da
+    ```SQL
+    [INFO] Submitting SQL update statement to the cluster...
+    [INFO] SQL update statement has been successfully submitted to the cluster:
+    Job ID: 5ae005c4b3425d8bb13fe660260a35da
     ```
 
 2. You can use the [Flink WebUI](https://nightlies.apache.org/flink/flink-docs-master/docs/try-flink/flink-operations-playground/#flink-webui) or run the `bin/flink list -running` command on  your Flink SQL client to view Flink jobs that are running in the Flink cluster and the job IDs.
