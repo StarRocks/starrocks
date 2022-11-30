@@ -1,16 +1,16 @@
 # lower
 
-## description
+## Description
 
-### Syntax
+This function converts all strings in an argument to lower-case.
+
+## Syntax
 
 ```Haskell
 INT lower(VARCHAR str)
 ```
 
-This function converts all strings in an argument to lower-case.
-
-## example
+## Examples
 
 ```Plain Text
 MySQL > SELECT lower("AbC123");

@@ -1,16 +1,16 @@
 # concat
 
-## description
+## Description
 
-### Syntax
+This function combines multiple strings. If any of the parameter value is NULL, it will return NULL.
+
+## Syntax
 
 ```Haskell
 VARCHAR concat(VARCHAR,...)
 ```
 
-This function combines multiple strings. If any of the parameter value is NULL, it will return NULL.
-
-## example
+## Examples
 
 ```Plain Text
 MySQL > select concat("a", "b");

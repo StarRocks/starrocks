@@ -1,16 +1,16 @@
 # array_sum
 
-## description
+## Description
 
-### Syntax
+Sums all data in an ARRAY and returns the result.
+
+## Syntax
 
 ```Haskell
 array_sum(array(type))
 ```
 
-Sum all data in an ARRAY and return the result.
-
-## example
+## Examples
 
 ```plain text
 mysql> select array_sum([11, 11, 12]);

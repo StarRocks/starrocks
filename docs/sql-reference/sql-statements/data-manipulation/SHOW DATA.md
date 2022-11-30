@@ -1,6 +1,6 @@
 # SHOW DATA
 
-## description
+## Description
 
 This statement is used to display the amount of data, the number of copies, and the number of statistical rows.
 
@@ -17,7 +17,7 @@ Note：
 3. When counting the number of rows, the copy with the largest number of rows among multiple copies shall prevail.
 4. The Total row in the result set represents the summary row. The Quota row represents the quota set by the current database. The Left line represents the remaining quota.
 
-## example
+## Examples
 
 1. Displays the data volume, copy quantity, summary data volume and summary copy quantity of each table in the default db.
 
