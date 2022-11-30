@@ -167,7 +167,6 @@ public class StarRocksFE {
             }
         } catch (Throwable e) {
             LOG.error("StarRocksFE start failed", e);
-            e.printStackTrace();
         }
     }
 
@@ -256,7 +255,7 @@ public class StarRocksFE {
         try {
             cmd = commandLineParser.parse(options, args);
         } catch (final ParseException e) {
-            e.printStackTrace();
+            LOG.error(e);
             System.err.println("Failed to parse command line. exit now");
             System.exit(-1);
         }

@@ -22,6 +22,7 @@
 package com.starrocks.http.action;
 
 import com.google.common.base.Strings;
+import com.google.re2j.Pattern;
 import com.starrocks.StarRocksFE;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
@@ -41,7 +42,6 @@ import java.util.Date;
 import java.util.GregorianCalendar;
 import java.util.Locale;
 import java.util.TimeZone;
-import java.util.regex.Pattern;
 import javax.activation.MimetypesFileTypeMap;
 
 /**
