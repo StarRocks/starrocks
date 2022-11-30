@@ -259,8 +259,10 @@ public:
         // check _value_reader
         if (_key_reader != nullptr) {
             _key_reader->get_levels(def_levels, rep_levels, num_levels);
-        } else {
+        } else if (_value_reader != nullptr) {
             _value_reader->get_levels(def_levels, rep_levels, num_levels);
+        } else {
+            DCHECK(false) << "Unreachable!";
         }
     }
 
