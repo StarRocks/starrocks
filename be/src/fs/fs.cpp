@@ -57,12 +57,14 @@ inline bool starts_with(std::string_view s, std::string_view prefix) {
 inline bool is_s3_uri(std::string_view uri) {
     return starts_with(uri, "oss://") || starts_with(uri, "s3n://") || starts_with(uri, "s3a://") ||
            starts_with(uri, "s3://") || starts_with(uri, "cos://") || starts_with(uri, "cosn://") ||
-           starts_with(uri, "obs://") || starts_with(uri, "ks3://");
+           starts_with(uri, "obs://") || starts_with(uri, "ks3://") || starts_with(uri, "gs://");
 }
 
+/*
 inline bool is_hdfs_uri(std::string_view uri) {
     return starts_with(uri, "hdfs://") || starts_with(uri, "viewfs://");
 }
+ */
 
 inline bool is_posix_uri(std::string_view uri) {
     return (memchr(uri.data(), ':', uri.size()) == nullptr) || starts_with(uri, "posix://");
@@ -72,9 +74,6 @@ StatusOr<std::unique_ptr<FileSystem>> FileSystem::CreateUniqueFromString(std::st
     if (is_posix_uri(uri)) {
         return new_fs_posix();
     }
-    if (is_hdfs_uri(uri)) {
-        return new_fs_hdfs(options);
-    }
     if (is_s3_uri(uri)) {
         return new_fs_s3(options);
     }
@@ -83,15 +82,14 @@ StatusOr<std::unique_ptr<FileSystem>> FileSystem::CreateUniqueFromString(std::st
         return new_fs_starlet();
     }
 #endif
-    return Status::NotSupported(fmt::format("No FileSystem associated with {}", uri));
+    // Since almost all famous storage are compatible with Hadoop FileSystem, it's always a choice to fallback using
+    // Hadoop FileSystem to access storage.
+    return new_fs_hdfs(options);
 }
 
 StatusOr<std::shared_ptr<FileSystem>> FileSystem::CreateSharedFromString(std::string_view uri) {
     if (is_posix_uri(uri)) {
         return get_tls_fs_posix();
-    }
-    if (is_hdfs_uri(uri)) {
-        return get_tls_fs_hdfs();
     }
     if (is_s3_uri(uri)) {
         return get_tls_fs_s3();
@@ -101,7 +99,9 @@ StatusOr<std::shared_ptr<FileSystem>> FileSystem::CreateSharedFromString(std::st
         return get_tls_fs_starlet();
     }
 #endif
-    return Status::NotSupported(fmt::format("No FileSystem associated with {}", uri));
+    // Since almost all famous storage are compatible with Hadoop FileSystem, it's always a choice to fallback using
+    // Hadoop FileSystem to access storage.
+    return get_tls_fs_hdfs();
 }
 
 } // namespace starrocks

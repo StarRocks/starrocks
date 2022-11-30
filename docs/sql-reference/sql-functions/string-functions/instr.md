@@ -1,16 +1,16 @@
 # instr
 
-## description
+## Description
 
-### Syntax
+This function returns the position where str first appeared in substr (start counting from 1 and measured in characters). If str is not found in substr, then this function will return 0.
+
+## Syntax
 
 ```Haskell
 INT instr(VARCHAR str, VARCHAR substr)
 ```
 
-This function returns the position where str first appeared in substr (start counting from 1 and measured in characters). If str is not found in substr, then this function will return 0.
-
-## example
+## Examples
 
 ```Plain Text
 MySQL > select instr("abc", "b");

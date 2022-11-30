@@ -1,16 +1,16 @@
 # array_min
 
-## description
+## Description
 
-### Syntax
+Obtains the minimum value of all data in an ARRAY and return this result.
+
+## Syntax
 
 ```Haskell
 array_min(array(type))
 ```
 
-Find the minimum value of all data in an ARRAY and return this result.
-
-## example
+## Examples
 
 ```plain text
 mysql> select array_min([113, 11, 12]);

@@ -87,7 +87,7 @@ private:
                                    int64_t scan_bytes);
     void _detach_chunk_sources();
 
-    void _merge_chunk_source_profiles();
+    void _merge_chunk_source_profiles(RuntimeState* state);
     size_t _buffer_unplug_threshold() const;
 
     inline void _set_scan_status(const Status& status) {

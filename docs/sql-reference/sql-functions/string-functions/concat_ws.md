@@ -1,16 +1,16 @@
 # concat_ws
 
-## description
+## Description
 
-### Syntax
+This function uses the first argument sep as the separator which combines the second with the rest to form a string. If the separator is NULL, the result is NULL. concat_ws does not skip empty strings, but it will skip NULL values.
+
+## Syntax
 
 ```Haskell
 VARCHAR concat_ws(VARCHAR sep, VARCHAR str,...)
 ```
 
-This function uses the first argument sep as the separator which combines the second with the rest to form a string. If the separator is NULL, the result is NULL. concat_ws function does not skip empty strings, but it will skip NULL values.
-
-## example
+## Examples
 
 ```Plain Text
 MySQL > select concat_ws("or", "d", "is");

@@ -12,7 +12,6 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.KeysType;
@@ -285,7 +284,7 @@ public class InsertPlanner {
                         new Scope(RelationId.anonymous(),
                                 new RelationFields(insertStatement.getTargetTable().getBaseSchema().stream()
                                         .map(col -> new Field(col.getName(), col.getType(),
-                                                new TableName(null, insertStatement.getTargetTable().getName()), null))
+                                                insertStatement.getTableName(), null))
                                         .collect(Collectors.toList()))), session);
 
                 ExpressionMapping expressionMapping =

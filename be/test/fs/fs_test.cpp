@@ -31,15 +31,4 @@ TEST(FileSystemTest, test_good_construction) {
     }
 }
 
-TEST(FileSystemTest, test_bad_construction) {
-    std::vector<std::string> cases = {"webhdfs://aaa", "simplefs://"};
-    for (auto& c : cases) {
-        EXPECT_ERROR(FileSystem::CreateUniqueFromString(c));
-    }
-
-    for (auto& c : cases) {
-        EXPECT_ERROR(FileSystem::CreateSharedFromString(c));
-    }
-}
-
 } // namespace starrocks

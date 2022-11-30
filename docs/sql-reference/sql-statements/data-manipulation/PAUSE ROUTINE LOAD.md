@@ -1,6 +1,6 @@
 # PAUSE ROUTINE LOAD
 
-## example
+## Examples
 
 1. Pause routine load job for test 1
 

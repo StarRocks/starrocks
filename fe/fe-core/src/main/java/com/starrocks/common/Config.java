@@ -1034,6 +1034,12 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, aliases = {"disable_colocate_balance"})
     public static boolean tablet_sched_disable_colocate_balance = false;
 
+    /**
+     * If BE is down beyond this time, tablets on that BE of colcoate table will be migrated to other available BEs
+     */
+    @ConfField(mutable = true)
+    public static long tablet_sched_colocate_be_down_tolerate_time_s = 12 * 3600;
+
     @ConfField(aliases = {"tablet_balancer_strategy"})
     public static String tablet_sched_balancer_strategy = "disk_and_tablet";
 
@@ -1102,6 +1108,13 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static int tablet_sched_checker_interval_seconds = 20;
+
+    /**
+     * After checked tablet_checker_partition_batch_num partitions, db lock will be released,
+     * so that other threads can get the lock.
+     */
+    @ConfField(mutable = true)
+    public static int tablet_checker_partition_batch_num = 500;
 
     @Deprecated
     @ConfField(mutable = true)

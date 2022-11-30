@@ -32,7 +32,7 @@ Status FileReader::init(vectorized::HdfsScannerContext* ctx) {
     RETURN_IF_ERROR(_parse_footer());
 
     std::unordered_set<std::string> names;
-    _file_metadata->schema().get_field_names(&names);
+    _file_metadata->schema().get_field_names(&names, _scanner_ctx->case_sensitive);
     _scanner_ctx->set_columns_from_file(names);
     ASSIGN_OR_RETURN(_is_file_filtered, _scanner_ctx->should_skip_by_evaluating_not_existed_slots());
     if (_is_file_filtered) {
