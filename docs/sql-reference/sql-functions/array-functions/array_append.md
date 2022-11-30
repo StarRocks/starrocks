@@ -1,16 +1,16 @@
 # array_append
 
-## description
+## Description
 
-### Syntax
+Adds a new element to the end of the array. Returns an array.
+
+## Syntax
 
 ```Haskell
 array_append(any_array, any_element)
 ```
 
-Add a new element to the end of the array.
-
-## example
+## Examples
 
 ```plain text
 mysql> select array_append([1, 2], 3);

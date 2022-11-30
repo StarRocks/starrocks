@@ -1,16 +1,16 @@
 # split_part
 
-## description
+## Description
 
-### Syntax
+This function splits a given string according to the separators and returns the requested part. (start counting from the beginning)
+
+## Syntax
 
 ```Haskell
 VARCHAR split_part(VARCHAR content, VARCHAR delimiter, INT field)
 ```
 
-This function splits a given string according to the separators and returns the requested part. (start counting from the beginning)
-
-## example
+## Examples
 
 ```Plain Text
 MySQL > select split_part("hello world", " ", 1);

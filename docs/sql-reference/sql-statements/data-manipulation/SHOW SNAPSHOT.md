@@ -1,6 +1,6 @@
 # SHOW SNAPSHOT
 
-## description
+## Description
 
 This statement is used to view backups that already exist in the repository.
 
@@ -24,7 +24,7 @@ Database：   the name of the database to which the backup data belongs
 Details：    display the data directory and file structure of the whole backup in the form of Json
 ```
 
-## example
+## Examples
 
 1. View existing backups in the example_repo repository:
 

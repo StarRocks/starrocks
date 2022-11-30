@@ -1,6 +1,6 @@
 # CREATE INDEX
 
-## description
+## Description
 
 This statement is used to create indexes.
 
@@ -15,7 +15,7 @@ Note:
 1. Only support bitmap index in the current version.
 2. Create BITMAP index only in a single column.
 
-## example
+## Examples
 
 1. Create bitmap index for siteid on table1.
 

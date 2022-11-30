@@ -1,6 +1,6 @@
 # SHOW DYNAMIC PARTITION TABLES
 
-## description
+## Description
 
 This statement is used to display the status of all dynamic partition tables in the current db
 
@@ -10,7 +10,7 @@ Syntax:
 SHOW DYNAMIC PARTITION TABLES [FROM db_name];
 ```
 
-## example
+## Examples
 
 1. Displays the status of all dynamic partition tables of the database
 

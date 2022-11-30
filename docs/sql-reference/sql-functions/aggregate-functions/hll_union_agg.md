@@ -1,12 +1,6 @@
 # HLL_UNION_AGG
 
-## description
-
-### Syntax
-
-```Haskell
-HLL_UNION_AGG(hll)
-```
+## Description
 
 HLL is an engineering implementation based on HyperLogLog algorithm, which is used to save the intermediate results of HyperLogGog calculation process.
 
@@ -16,7 +10,13 @@ An estimated result with an error of about 1% based on hll. The hll column is ge
 
 When importing, hll_hash function is used to specify which column in data is used to generate hll column. It is often used to replace count distinct, and to calculate uv quickly in business by combining rollup.
 
-## example
+## Syntax
+
+```Haskell
+HLL_UNION_AGG(hll)
+```
+
+## Examples
 
 ```plain text
 MySQL > select HLL_UNION_AGG(uv_set)
