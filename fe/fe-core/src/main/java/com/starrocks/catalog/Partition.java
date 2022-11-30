@@ -98,11 +98,15 @@ public class Partition extends MetaObject implements Writable {
     @SerializedName(value = "distributionInfo")
     private DistributionInfo distributionInfo;
 
+    @SerializedName(value = "shardGroupId")
+    private long shardGroupId;
+
     private Partition() {
     }
 
     public Partition(long id, String name,
-                     MaterializedIndex baseIndex, DistributionInfo distributionInfo) {
+                     MaterializedIndex baseIndex,
+                     DistributionInfo distributionInfo, long shardGroupId) {
         this.id = id;
         this.name = name;
         this.state = PartitionState.NORMAL;
@@ -115,6 +119,7 @@ public class Partition extends MetaObject implements Writable {
         this.nextVersion = PARTITION_INIT_VERSION + 1;
 
         this.distributionInfo = distributionInfo;
+        this.shardGroupId = shardGroupId;
     }
 
     public void setIdForRestore(long id) {
@@ -123,6 +128,10 @@ public class Partition extends MetaObject implements Writable {
 
     public long getId() {
         return this.id;
+    }
+
+    public long getShardGroupId() {
+        return this.shardGroupId;
     }
 
     public void setName(String newName) {

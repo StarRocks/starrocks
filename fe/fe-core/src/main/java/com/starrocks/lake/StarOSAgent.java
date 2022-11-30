@@ -31,6 +31,8 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -248,29 +250,50 @@ public class StarOSAgent {
         }
     }
 
-    public void deleteShards(Set<Long> shardIds) throws DdlException {
-        prepare();
-        try {
-            client.deleteShard(serviceId, shardIds);
-        } catch (StarClientException e) {
-            LOG.warn("Failed to delete shards. error: {}", e.getMessage());
-            throw new DdlException("Failed to delete shards. error: " + e.getMessage());
-        }
-    }
-
-    public void createShardGroup(long groupId) throws DdlException {
+    public long createShardGroup(long dbId, long tableId, long partitionId) throws DdlException {
         prepare();
         List<ShardGroupInfo> shardGroupInfos = null;
+        Map<String, String> propertyMap = new HashMap<>();
+        propertyMap.put("dbId", String.valueOf(dbId));
+        propertyMap.put("tableId", String.valueOf(tableId));
+        propertyMap.put("partitionId", String.valueOf(partitionId));
         try {
             List<CreateShardGroupInfo> createShardGroupInfos = new ArrayList<>();
-            createShardGroupInfos.add(CreateShardGroupInfo.newBuilder().setGroupId(groupId).build());
+            createShardGroupInfos.add(CreateShardGroupInfo.newBuilder()
+                    .setPolicy(PlacementPolicy.SPREAD)
+                    .putLabels("createTime", String.valueOf(System.currentTimeMillis()))
+                    .putAllProperties(propertyMap)
+                    .build());
             shardGroupInfos = client.createShardGroup(serviceId, createShardGroupInfos);
             LOG.debug("Create shard group success. shard group infos: {}", shardGroupInfos);
             Preconditions.checkState(shardGroupInfos.size() == 1);
         } catch (StarClientException e) {
             throw new DdlException("Failed to create shard group. error: " + e.getMessage());
         }
+        return shardGroupInfos.stream().map(ShardGroupInfo::getGroupId).collect(Collectors.toList()).get(0);
     }
+
+    public void deleteShardGroup(List<Long> groupIds) {
+        prepare();
+        try {
+            client.deleteShardGroup(serviceId, groupIds, true);
+        } catch (StarClientException e) {
+            LOG.warn("Failed to delete shard group. error: {}", e.getMessage());
+        }
+    }
+
+    public List<ShardGroupInfo> listShardGroup() {
+        prepare();
+        List<ShardGroupInfo> shardGroupInfo = new ArrayList<>();
+        try {
+            shardGroupInfo = client.listShardGroup(serviceId);
+        } catch (StarClientException e) {
+            LOG.info("list shard group failed");
+            return new ArrayList<>();
+        }
+        return shardGroupInfo;
+    }
+
 
     public List<Long> createShards(int numShards, FilePathInfo pathInfo, FileCacheInfo cacheInfo, long groupId)
         throws DdlException {

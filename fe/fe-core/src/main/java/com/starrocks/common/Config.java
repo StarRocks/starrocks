@@ -1742,6 +1742,9 @@ public class Config extends ConfigBase {
     public static String starmgr_s3_sk = "";
 
     @ConfField
+    public static long shard_group_clean_interval = 3600000L;
+
+    @ConfField
     public static String hdfs_url = "";
 
     /* default file store type used */

@@ -57,6 +57,7 @@ import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -442,16 +443,15 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
 
             Partition partition = partitionInfo.getPartition();
             if (partition.getName().equals(partitionName)) {
-                Set<Long> tabletIdSet = GlobalStateMgr.getCurrentState().onErasePartition(partition);
+                GlobalStateMgr.getCurrentState().onErasePartition(partition);
                 iterator.remove();
                 removeRecycleMarkers(entry.getKey());
+                List<Long> groupIds = new ArrayList<>();
+                groupIds.add(partition.getShardGroupId());
+                GlobalStateMgr.getCurrentState().getStarOSAgent().deleteShardGroup(groupIds);
 
                 LOG.info("erase partition[{}-{}] finished, because partition with the same name is recycled",
                         partition.getId(), partitionName);
-
-                if (!tabletIdSet.isEmpty()) {
-                    GlobalStateMgr.getCurrentState().getShardManager().getShardDeleter().addUnusedShardId(tabletIdSet);
-                }
             }
         }
     }

@@ -565,7 +565,8 @@ public class OlapTable extends Table implements GsonPostProcessable {
     }
 
     public Status createTabletsForRestore(int tabletNum, MaterializedIndex index, GlobalStateMgr globalStateMgr,
-                                          int replicationNum, long version, int schemaHash, long partitionId) {
+                                          int replicationNum, long version, int schemaHash,
+                                          long partitionId, long shardGroupId) {
         for (int i = 0; i < tabletNum; i++) {
             long newTabletId = globalStateMgr.getNextId();
             LocalTablet newTablet = new LocalTablet(newTabletId);
@@ -754,7 +755,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
 
     // This is a private method.
     // Call public "dropPartitionAndReserveTablet" and "dropPartition"
-    private Set<Long> dropPartition(long dbId, String partitionName, boolean isForceDrop, boolean reserveTablets) {
+    private void dropPartition(long dbId, String partitionName, boolean isForceDrop, boolean reserveTablets) {
         // 1. If "isForceDrop" is false, the partition will be added to the GlobalStateMgr Recyle bin, and all tablets of this
         //    partition will not be deleted.
         // 2. If "ifForceDrop" is true, the partition will be dropped the immediately, but whether to drop the tablets
@@ -762,7 +763,6 @@ public class OlapTable extends Table implements GsonPostProcessable {
         //    If "reserveTablets" is true, the tablets of this partition will not to deleted.
         //    Otherwise, the tablets of this partition will be deleted immediately.
         Partition partition = nameToPartition.get(partitionName);
-        Set<Long> tabletIds = new HashSet<Long>();
         if (partition != null) {
             idToPartition.remove(partition.getId());
             nameToPartition.remove(partitionName);
@@ -780,21 +780,20 @@ public class OlapTable extends Table implements GsonPostProcessable {
                         rangePartitionInfo.getStorageCacheInfo(partition.getId()),
                         isLakeTable());
             } else if (!reserveTablets) {
-                tabletIds = GlobalStateMgr.getCurrentState().onErasePartition(partition);
+                GlobalStateMgr.getCurrentState().onErasePartition(partition);
             }
 
             // drop partition info
             rangePartitionInfo.dropPartition(partition.getId());
         }
-        return tabletIds;
     }
 
-    public Set<Long> dropPartitionAndReserveTablet(String partitionName) {
-        return dropPartition(-1, partitionName, true, true);
+    public void dropPartitionAndReserveTablet(String partitionName) {
+        dropPartition(-1, partitionName, true, true);
     }
 
-    public Set<Long> dropPartition(long dbId, String partitionName, boolean isForceDrop) {
-        return dropPartition(dbId, partitionName, isForceDrop, !isForceDrop);
+    public void dropPartition(long dbId, String partitionName, boolean isForceDrop) {
+        dropPartition(dbId, partitionName, isForceDrop, !isForceDrop);
     }
 
     /*

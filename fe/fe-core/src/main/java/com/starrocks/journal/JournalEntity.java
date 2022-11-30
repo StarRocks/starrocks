@@ -717,11 +717,6 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
-            case OperationType.OP_DELETE_UNUSED_SHARD: {
-                data = ShardInfo.read(in);
-                isRead = true;
-                break;
-            }
             case OperationType.OP_STARMGR: {
                 data = StarMgrJournal.read(in);
                 isRead = true;

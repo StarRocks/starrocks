@@ -52,10 +52,11 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
             // create SHADOW index for each partition
             for (Partition partition : table.getPartitions()) {
                 long partitionId = partition.getId();
+                long shardGroupId = partition.getShardGroupId();
                 List<Tablet> originTablets = partition.getIndex(originIndexId).getTablets();
                 List<Long> shadowTabletIds =
-                        createShards(originTablets.size(), table.getPartitionFilePathInfo(partitionId),
-                                     table.getPartitionFileCacheInfo(partitionId), partitionId);
+                        createShards(originTablets.size(), table.getPartitionFilePathInfo(),
+                                     table.getPartitionFileCacheInfo(partitionId), shardGroupId);
                 Preconditions.checkState(originTablets.size() == shadowTabletIds.size());
 
                 TStorageMedium medium = table.getPartitionInfo().getDataProperty(partitionId).getStorageMedium();
