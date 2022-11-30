@@ -16,7 +16,6 @@ import com.starrocks.common.Reference;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ListUtil;
-import com.starrocks.common.util.TimeUtils;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.DataStreamSink;
@@ -69,8 +68,6 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.time.Instant;
-import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -96,9 +93,9 @@ public class CoordinatorPrepare {
     private TUniqueId queryId;
     private final ConnectContext connectContext;
     private final boolean preferComputeNode;
+    private final boolean usePipeline;
     private final TQueryGlobals queryGlobals;
     private final TQueryOptions queryOptions;
-    private final boolean usePipeline;
     private final TUniqueId nextInstanceId;
 
     // force schedule local be for HybridBackendSelector, only for hive now
@@ -148,26 +145,14 @@ public class CoordinatorPrepare {
     // Resource group
     private ResourceGroup resourceGroup = null;
 
-    public CoordinatorPrepare(ConnectContext context, List<PlanFragment> fragments, List<ScanNode> scanNodes) {
+    public CoordinatorPrepare(ConnectContext context, List<PlanFragment> fragments, List<ScanNode> scanNodes,
+                              TQueryGlobals queryGlobals, TQueryOptions queryOptions) {
         this.connectContext = context;
         this.queryId = context.getExecutionId();
         this.fragments = fragments;
         this.scanNodes = scanNodes;
-        this.queryGlobals = new TQueryGlobals();
-        this.queryOptions = context.getSessionVariable().toThrift();
-        long startTime = context.getStartTime();
-        if (context.getSessionVariable().getTimeZone().equals("CST")) {
-            this.queryGlobals.setTime_zone(TimeUtils.DEFAULT_TIME_ZONE);
-        } else {
-            this.queryGlobals.setTime_zone(context.getSessionVariable().getTimeZone());
-        }
-        String nowString =
-                DATE_FORMAT.format(Instant.ofEpochMilli(startTime).atZone(ZoneId.of(queryGlobals.time_zone)));
-        this.queryGlobals.setNow_string(nowString);
-        this.queryGlobals.setTimestamp_ms(startTime);
-        if (context.getLastQueryId() != null) {
-            this.queryGlobals.setLast_query_id(context.getLastQueryId().toString());
-        }
+        this.queryGlobals = queryGlobals;
+        this.queryOptions = queryOptions;
         this.preferComputeNode = context.getSessionVariable().isPreferComputeNode();
         this.nextInstanceId = new TUniqueId();
         nextInstanceId.setHi(queryId.hi);
@@ -178,7 +163,7 @@ public class CoordinatorPrepare {
 
     public void prepareExec() throws Exception {
         // prepare information
-        prepare();
+        prepareFragments();
 
         // prepare workgroup
         this.resourceGroup = prepareResourceGroup(connectContext,
@@ -200,7 +185,7 @@ public class CoordinatorPrepare {
         // prepareProfile();
     }
 
-    private void prepare() {
+    private void prepareFragments() {
         for (PlanFragment fragment : fragments) {
             fragmentExecParamsMap.put(fragment.getFragmentId(), new FragmentExecParams(fragment));
         }

@@ -205,7 +205,7 @@ public class Coordinator {
         nextInstanceId.setHi(queryId.hi);
         nextInstanceId.setLo(queryId.lo + 1);
 
-        this.coordinatorPrepare = new CoordinatorPrepare(context, fragments, scanNodes);
+        this.coordinatorPrepare = new CoordinatorPrepare(context, fragments, scanNodes, queryGlobals, queryOptions);
     }
 
     // Used for broker export task coordinator
@@ -244,7 +244,8 @@ public class Coordinator {
         nextInstanceId.setHi(queryId.hi);
         nextInstanceId.setLo(queryId.lo + 1);
 
-        this.coordinatorPrepare = new CoordinatorPrepare(connectContext, fragments, scanNodes);
+        this.coordinatorPrepare =
+                new CoordinatorPrepare(connectContext, fragments, scanNodes, queryGlobals, queryOptions);
     }
 
     // Used for broker load task coordinator
@@ -278,7 +279,7 @@ public class Coordinator {
         nextInstanceId.setHi(queryId.hi);
         nextInstanceId.setLo(queryId.lo + 1);
 
-        this.coordinatorPrepare = new CoordinatorPrepare(context, fragments, scanNodes);
+        this.coordinatorPrepare = new CoordinatorPrepare(context, fragments, scanNodes, queryGlobals, queryOptions);
     }
 
     public Coordinator(LoadPlanner loadPlanner) {
@@ -329,7 +330,7 @@ public class Coordinator {
         nextInstanceId.setHi(queryId.hi);
         nextInstanceId.setLo(queryId.lo + 1);
 
-        this.coordinatorPrepare = new CoordinatorPrepare(context, fragments, scanNodes);
+        this.coordinatorPrepare = new CoordinatorPrepare(context, fragments, scanNodes, queryGlobals, queryOptions);
         etlJobType = loadPlanner.getEtlJobType();
     }
 
@@ -420,17 +421,6 @@ public class Coordinator {
         return usedBackendIDs.contains(backendID);
     }
 
-    // Initialize
-    private void prepare() {
-        queryProfile = new RuntimeProfile("Execution Profile " + DebugUtil.printId(queryId));
-
-        fragmentProfiles = new ArrayList<>();
-        for (int i = 0; i < fragments.size(); i++) {
-            fragmentProfiles.add(new RuntimeProfile("Fragment " + i));
-            queryProfile.addChild(fragmentProfiles.get(i));
-        }
-
-    }
 
     private ImmutableMap<Long, ComputeNode> getIdToComputeNode() {
         ImmutableMap<Long, ComputeNode> idToComputeNode
@@ -477,9 +467,6 @@ public class Coordinator {
                     DebugUtil.printId(queryId), descTable);
         }
 
-        // prepare information
-        prepare();
-
         coordinatorPrepare.prepareExec();
 
         // create result receiver
@@ -520,6 +507,14 @@ public class Coordinator {
     }
 
     private void prepareProfile() {
+        queryProfile = new RuntimeProfile("Execution Profile " + DebugUtil.printId(queryId));
+
+        fragmentProfiles = new ArrayList<>();
+        for (int i = 0; i < fragments.size(); i++) {
+            fragmentProfiles.add(new RuntimeProfile("Fragment " + i));
+            queryProfile.addChild(fragmentProfiles.get(i));
+        }
+
         // to keep things simple, make async Cancel() calls wait until plan fragment
         // execution has been initiated, otherwise we might try to cancel fragment
         // execution at backends where it hasn't even started

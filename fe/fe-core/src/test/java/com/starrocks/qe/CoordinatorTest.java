@@ -43,7 +43,7 @@ public class CoordinatorTest {
         ConnectContext.threadLocalInfo.set(ctx);
 
         coordinator = new Coordinator(ctx, Lists.newArrayList(), Lists.newArrayList(), new TDescriptorTable());
-        coordinatorPrepare = new CoordinatorPrepare(ctx, Lists.newArrayList(), Lists.newArrayList());
+        coordinatorPrepare = coordinator.getPrepareInfo();
     }
 
     private void testComputeBucketSeq2InstanceOrdinal(JoinNode.DistributionMode mode) throws IOException {
