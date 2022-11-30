@@ -32,9 +32,4 @@ public class PhysicalSchemaScanOperator extends PhysicalScanOperator {
     public <R, C> R accept(OptExpressionVisitor<R, C> visitor, OptExpression optExpression, C context) {
         return visitor.visitPhysicalSchemaScan(optExpression, context);
     }
-
-    @Override
-    public boolean canUsePipeLine() {
-        return false;
-    }
 }

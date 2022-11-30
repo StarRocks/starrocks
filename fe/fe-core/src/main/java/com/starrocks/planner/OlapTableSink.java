@@ -103,9 +103,9 @@ public class OlapTableSink extends DataSink {
     // set after init called
     private TDataSink tDataSink;
 
-    private boolean enablePipelineLoad;
-    private TWriteQuorumType writeQuorum;
-    private boolean enableReplicatedStorage;
+    private final boolean enablePipelineLoad;
+    private final TWriteQuorumType writeQuorum;
+    private final boolean enableReplicatedStorage;
 
     public OlapTableSink(OlapTable dstTable, TupleDescriptor tupleDescriptor, List<Long> partitionIds,
             TWriteQuorumType writeQuorum, boolean enableReplicatedStorage) {
