@@ -1,6 +1,6 @@
 # Parameter Configuration
 
-After the service is started, you may adjust the configuration parameters to meet the business requirements. You need to reboot the BE and Fe to apply the changes.
+This topic describes FE, BE, Broker, and system parameters. It also provides suggestions on how to configure and tune these parameters.
 
 ## FE configuration items
 
@@ -104,7 +104,7 @@ After the service is started, you may adjust the configuration parameters to mee
 |enable_strict_storage_medium_check|TRUE|Swtich value to control if FE checks the available storage space.|
 |storage_cooldown_second|-1|The delay of cooldown from HDD storage to SSD storage. Unit: second. The default value indicates to disable the auto-cooldown.|
 
-## Configure BE
+## BE configuration items
 
 Some BE configuration items are dynamic parameters which you can set them by commands when BE nodes are still online. The rest of them are static parameters. You can only set the static parameters of a BE node by changing them in the corresponding configuration file **be.conf**, and restart the BE node to allow the change to take effect.
 
@@ -129,7 +129,7 @@ BE dynamic parameters are as follows:
 | report_workgroup_interval_seconds | 5 | Second | The time interval at which to report the most updated version of all workgroups. |
 | max_download_speed_kbps | 50000 | KB/s | The maximum download speed of each HTTP request. This value affects the performance of data replica synchronization across BE nodes. |
 | download_low_speed_limit_kbps | 50 | KB/s | The download speed lower limit of each HTTP request. An HTTP request aborts when it constantly runs with a lower speed than this value within the time span specified in the configuration item download_low_speed_time. |
-| download_low_speed_time | 300 | Second | The maximum time that an HTTP request can run with a download speed lower than the limit. An HTTP request aborts when it constantly runs with a lower speed than the value of download_low_speed_limit_kbps within the time span specified in this cinfiguration item. |
+| download_low_speed_time | 300 | Second | The maximum time that an HTTP request can run with a download speed lower than the limit. An HTTP request aborts when it constantly runs with a lower speed than the value of download_low_speed_limit_kbps within the time span specified in this configuration item. |
 | status_report_interval | 5 | Second | The time interval at which a query reports its profile, which can be used for query statistics collection by FE. |
 | scanner_thread_pool_thread_num | 48 | N/A | The number of threads which the storage engine used for concurrent storage volume scanning. All threads are managed in the thread pool. |
 | thrift_client_retry_interval_ms | 100 | ms | The time interval at which a thrift client retries. |
@@ -219,7 +219,7 @@ BE static parameters are as follows:
 | num_threads_per_core | 3 | N/A | The number threads started in each CPU core. |
 | compress_rowbatches | TRUE | N/A | The boolean value to control if to compress the row batches in RPCs between BEs. This configuration item is used for the data transmission between query layers. The value true indicates to compress the row batches. The value false indicates not to compress the row batches. |
 | serialize_batch | FALSE | N/A | The boolean value to control if to serialize the row batches in RPCs between BEs. This configuration item is used for the data transmission between query layers. The value true indicates to serialize the row batches. The value false indicates not to serialize the row batches. |
-| storage_root_path | ${STARROCKS_HOME}/storage | N/A | The directory of the storage volume. Multiple volumes can be separated by ;, for example, /data1/starrocks;/data2/starrocks. If the storage medium is SSD, add .SSD at the end of the directory. If the storage medium is HDD, add .HDD at the end of the directory. |
+| storage_root_path | ${STARROCKS_HOME}/storage | N/A | The directory of the storage volume. Multiple volumes are separated by semicolon (;), for example, /data1,medium:hdd;/data2,medium:ssd. If the storage medium is SSD, add `ssd` at the end of the directory. If the storage medium is HDD, add `hdd` at the end of the directory. |
 | max_tablet_num_per_shard | 1024 | N/A | The maximum number of tablets in each shard. This configuration item is used to restrict the number of tablet child directories under each storage directory. |
 | max_garbage_sweep_interval | 3600 | Second | The maximum time interval for garbage collection on storage volumes. |
 | min_garbage_sweep_interval | 180 | Second | The minimum time interval for garbage collection on storage volumes. |
