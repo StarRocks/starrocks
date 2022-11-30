@@ -520,14 +520,32 @@ public class VariableMgr {
                     // In this condition, we may retrieve session variables for caller.
                     if (sessionVar != null) {
                         row.add(name);
+<<<<<<< HEAD
                         row.add(getValue(sessionVar, ctx.getField()));
+=======
+                        String currentValue = getValue(sessionVar, ctx.getField());
+                        row.add(currentValue);
+                        if (type == SetType.VERBOSE) {
+                            row.add(ctx.defaultValue);
+                            row.add(ctx.defaultValue.equals(currentValue) ? "0" : "1");
+                        }
+>>>>>>> 6e916b2d2 ([BugFix] fix show verbose variables bug (#14230))
                     } else {
                         LOG.error("sessionVar is null during dumping session variables.");
                         continue;
                     }
                 } else {
                     row.add(name);
+<<<<<<< HEAD
                     row.add(getValue(ctx.getObj(), ctx.getField()));
+=======
+                    String currentValue = getValue(ctx.getObj(), ctx.getField());
+                    row.add(currentValue);
+                    if (type == SetType.VERBOSE) {
+                        row.add(ctx.defaultValue);
+                        row.add(ctx.defaultValue.equals(currentValue) ? "0" : "1");
+                    }
+>>>>>>> 6e916b2d2 ([BugFix] fix show verbose variables bug (#14230))
                 }
 
                 if (row.get(0).equalsIgnoreCase(SessionVariable.SQL_MODE)) {

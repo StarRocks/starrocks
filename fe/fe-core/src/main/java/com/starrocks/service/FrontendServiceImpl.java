@@ -157,6 +157,7 @@ import com.starrocks.thrift.TUpdateExportTaskStatusRequest;
 import com.starrocks.thrift.TUpdateResourceUsageRequest;
 import com.starrocks.thrift.TUpdateResourceUsageResponse;
 import com.starrocks.thrift.TUserPrivDesc;
+import com.starrocks.thrift.TVerboseVariableRecord;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionNotFoundException;
@@ -793,10 +794,22 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         if (ctx == null) {
             return result;
         }
-        List<List<String>> rows = VariableMgr.dump(SetType.fromThrift(params.getVarType()), ctx.getSessionVariable(),
+        SetType setType = SetType.fromThrift(params.getVarType());
+        List<List<String>> rows = VariableMgr.dump(setType, ctx.getSessionVariable(),
                 null);
-        for (List<String> row : rows) {
-            map.put(row.get(0), row.get(1));
+        if (setType != SetType.VERBOSE) {
+            for (List<String> row : rows) {
+                map.put(row.get(0), row.get(1));
+            }
+        } else {
+            for (List<String> row : rows) {
+                TVerboseVariableRecord record = new TVerboseVariableRecord();
+                record.setVariable_name(row.get(0));
+                record.setValue(row.get(1));
+                record.setDefault_value(row.get(2));
+                record.setIs_changed(row.get(3).equals("1"));
+                result.addToVerbose_variables(record);
+            }
         }
         return result;
     }

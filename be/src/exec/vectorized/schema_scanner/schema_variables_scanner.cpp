@@ -13,10 +13,23 @@ SchemaScanner::ColumnDesc SchemaVariablesScanner::_s_vars_columns[] = {
         //   name,       type,          size
         {"VARIABLE_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
         {"VARIABLE_VALUE", TYPE_VARCHAR, sizeof(StringValue), false},
+<<<<<<< HEAD
+=======
+};
+
+SchemaScanner::ColumnDesc SchemaVariablesScanner::_s_verbose_vars_columns[] = {
+        //   name,       type,          size
+        {"VARIABLE_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"VARIABLE_VALUE", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"DEFAULT_VALUE", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"IS_CHANGED", TYPE_BOOLEAN, 1, false},
+>>>>>>> 6e916b2d2 ([BugFix] fix show verbose variables bug (#14230))
 };
 
 SchemaVariablesScanner::SchemaVariablesScanner(TVarType::type type)
-        : SchemaScanner(_s_vars_columns, sizeof(_s_vars_columns) / sizeof(SchemaScanner::ColumnDesc)), _type(type) {}
+        : SchemaScanner(type == TVarType::VERBOSE ? _s_verbose_vars_columns : _s_vars_columns,
+                        type == TVarType::VERBOSE ? 4 : 2),
+          _type(type) {}
 
 SchemaVariablesScanner::~SchemaVariablesScanner() = default;
 
@@ -39,11 +52,21 @@ Status SchemaVariablesScanner::start(RuntimeState* state) {
     } else {
         return Status::InternalError("IP or port doesn't exists");
     }
-    _begin = _var_result.variables.begin();
+    if (_type != TVarType::VERBOSE) {
+        _begin = _var_result.variables.begin();
+    } else {
+        if (!_var_result.__isset.verbose_variables) {
+            return Status::InternalError("invalid verbose show variables result");
+        }
+        _verbose_iter = _var_result.verbose_variables.begin();
+    }
     return Status::OK();
 }
 
 Status SchemaVariablesScanner::fill_chunk(ChunkPtr* chunk) {
+    if (_type == TVarType::VERBOSE) {
+        return _fill_chunk_for_verbose(chunk);
+    }
     const auto& slot_id_to_index_map = (*chunk)->get_slot_id_to_index_map();
     for (const auto& [slot_id, index] : slot_id_to_index_map) {
         switch (slot_id) {
@@ -73,11 +96,63 @@ Status SchemaVariablesScanner::fill_chunk(ChunkPtr* chunk) {
     return Status::OK();
 }
 
+Status SchemaVariablesScanner::_fill_chunk_for_verbose(ChunkPtr* chunk) {
+    const auto& slot_id_to_index_map = (*chunk)->get_slot_id_to_index_map();
+    for (const auto& [slot_id, index] : slot_id_to_index_map) {
+        switch (slot_id) {
+        case 1: {
+            // variables names
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(1);
+                Slice value(_verbose_iter->variable_name.c_str(), _verbose_iter->variable_name.length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 2: {
+            // value
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(2);
+                Slice value(_verbose_iter->value.c_str(), _verbose_iter->value.length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 3: {
+            // default_value
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(3);
+                Slice value(_verbose_iter->default_value.c_str(), _verbose_iter->default_value.length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 4: {
+            // is_changed
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(4);
+                bool is_changed = _verbose_iter->is_changed;
+                fill_column_with_slot<TYPE_BOOLEAN>(column.get(), (void*)&is_changed);
+            }
+            break;
+        }
+        default:
+            break;
+        }
+    }
+    ++_verbose_iter;
+    return Status::OK();
+}
+
 Status SchemaVariablesScanner::get_next(ChunkPtr* chunk, bool* eos) {
     if (!_is_init) {
         return Status::InternalError("call this before initial.");
     }
-    if (_begin == _var_result.variables.end()) {
+    if (_type != TVarType::VERBOSE && _begin == _var_result.variables.end()) {
+        *eos = true;
+        return Status::OK();
+    }
+    if (_type == TVarType::VERBOSE && _verbose_iter == _var_result.verbose_variables.end()) {
         *eos = true;
         return Status::OK();
     }

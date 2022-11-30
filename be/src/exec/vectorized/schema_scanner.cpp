@@ -100,6 +100,8 @@ std::unique_ptr<SchemaScanner> SchemaScanner::create(TSchemaTableType::type type
         return std::make_unique<vectorized::SchemaMaterializedViewsScanner>();
     case TSchemaTableType::SCH_TABLES_CONFIG:
         return std::make_unique<vectorized::SchemaTablesConfigScanner>();
+    case TSchemaTableType::SCH_VERBOSE_SESSION_VARIABLES:
+        return std::make_unique<vectorized::SchemaVariablesScanner>(TVarType::VERBOSE);
     default:
         return std::make_unique<vectorized::SchemaDummyScanner>();
     }

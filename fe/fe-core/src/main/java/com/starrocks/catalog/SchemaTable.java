@@ -199,6 +199,19 @@ public class SchemaTable extends Table {
                             builder()
                                     .column("VARIABLE_NAME", ScalarType.createVarchar(64))
                                     .column("VARIABLE_VALUE", ScalarType.createVarchar(1024))
+<<<<<<< HEAD
+=======
+                                    .build()))
+                    .put("verbose_session_variables", new SchemaTable(
+                            SystemId.VERBOSE_SESSION_VARIABLES_ID,
+                            "verbose_session_variables",
+                            TableType.SCHEMA,
+                            builder()
+                                    .column("VARIABLE_NAME", ScalarType.createVarchar(64))
+                                    .column("VARIABLE_VALUE", ScalarType.createVarchar(1024))
+                                    .column("DEFAULT_VALUE", ScalarType.createVarchar(1024))
+                                    .column("IS_CHANGED", ScalarType.createType(PrimitiveType.BOOLEAN))
+>>>>>>> 6e916b2d2 ([BugFix] fix show verbose variables bug (#14230))
                                     .build()))
                     .put("columns", new SchemaTable(
                             SystemId.COLUMNS_ID,
@@ -556,6 +569,8 @@ public class SchemaTable extends Table {
         SCH_CREATE_TABLE("CREATE_TABLE", "CREATE_TABLE", TSchemaTableType.SCH_CREATE_TABLE),
         SCH_TASKS("TASKS", "TASKS", TSchemaTableType.SCH_TASKS),
         SCH_TASK_RUNS("TASK_RUNS", "TASK_RUNS", TSchemaTableType.SCH_TASK_RUNS),
+        SCH_VERBOSE_SESSION_VARIABLES("VERBOSE_SESSION_VARIABLES", "VERBOSE_SESSION_VARIABLES",
+                TSchemaTableType.SCH_VERBOSE_SESSION_VARIABLES),
         SCH_INVALID("NULL", "NULL", TSchemaTableType.SCH_INVALID);
 
         private final String description;

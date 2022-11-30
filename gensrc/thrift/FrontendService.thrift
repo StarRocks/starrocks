@@ -96,6 +96,14 @@ struct TShowVariableRequest {
 // Results of a call to describeTable()
 struct TShowVariableResult {
     1: required map<string, string> variables
+    2: optional list<TVerboseVariableRecord> verbose_variables
+}
+
+struct TVerboseVariableRecord {
+    1: optional string variable_name
+    2: optional string value
+    3: optional string default_value
+    4: optional bool is_changed
 }
 
 // Valid table file formats

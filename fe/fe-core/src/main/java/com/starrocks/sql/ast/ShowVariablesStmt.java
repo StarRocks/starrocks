@@ -8,6 +8,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.InfoSchemaDb;
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
 
@@ -21,6 +22,17 @@ public class ShowVariablesStmt extends ShowStmt {
                     .addColumn(new Column(VALUE_COL, ScalarType.createVarchar(20)))
                     .build();
 
+<<<<<<< HEAD
+=======
+    private static final ShowResultSetMetaData VERBOSE_META_DATA =
+            ShowResultSetMetaData.builder()
+                    .addColumn(new Column(NAME_COL, ScalarType.createVarchar(20)))
+                    .addColumn(new Column(VALUE_COL, ScalarType.createVarchar(20)))
+                    .addColumn(new Column(DEFAULT_VALUE, ScalarType.createVarchar(20)))
+                    .addColumn(new Column(IS_CHANGED, ScalarType.createType(PrimitiveType.BOOLEAN)))
+                    .build();
+
+>>>>>>> 6e916b2d2 ([BugFix] fix show verbose variables bug (#14230))
     private SetType type;
     private final String pattern;
     private Expr where;
@@ -62,6 +74,8 @@ public class ShowVariablesStmt extends ShowStmt {
         TableName tableName;
         if (type == SetType.GLOBAL) {
             tableName = new TableName(InfoSchemaDb.DATABASE_NAME, "GLOBAL_VARIABLES");
+        } else if (type == SetType.VERBOSE) {
+            tableName = new TableName(InfoSchemaDb.DATABASE_NAME, "VERBOSE_SESSION_VARIABLES");
         } else {
             tableName = new TableName(InfoSchemaDb.DATABASE_NAME, "SESSION_VARIABLES");
         }
