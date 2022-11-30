@@ -61,7 +61,7 @@ namespace starrocks {
     M(TYPE_DECIMAL32)                   \
     M(TYPE_DECIMAL64)                   \
     M(TYPE_DECIMAL128)                  \
-    M(TYPE_VARBINARY)                   
+    M(TYPE_VARBINARY)
 
 #define APPLY_FOR_UNSIGNED_LOGICAL_TYPE(M) \
     M(TYPE_UNSIGNED_INT)                   \
