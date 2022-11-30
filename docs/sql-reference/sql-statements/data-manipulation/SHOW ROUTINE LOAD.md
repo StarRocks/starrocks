@@ -1,6 +1,6 @@
 # SHOW ROUTINE LOAD
 
-## example
+## Examples
 
 1. Show all routine import jobs (including stopped or cancelled jobs) with the name test1. The result is one or more rows.
 

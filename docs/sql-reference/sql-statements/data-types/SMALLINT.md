@@ -1,6 +1,6 @@
 # SMALLINT
 
-## description
+## Description
 
 SMALLINT
 

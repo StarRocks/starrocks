@@ -1,16 +1,16 @@
 # lcase
 
-## description
+## Description
 
-### Syntax
+This function converts a string to lower-case. It is analogous to the function lower.
+
+## Syntax
 
 ```Haskell
 VARCHAR lcase(VARCHAR str)
 ```
 
-This function converts a string to lower-case. It is analogous to the function lower.
-
-## example
+## Examples
 
 ```Plain Text
 mysql> SELECT lcase("AbC123");

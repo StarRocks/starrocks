@@ -1,6 +1,6 @@
 # EXPORT
 
-## description
+## Description
 
 This statement is used to export the data in a specified table to a specified location.
 
@@ -66,7 +66,7 @@ broker;
 
     For brokers corresponding to different storage systems, the input parameters are different. Specific parameters can be referred to: the required properties of broker in`help broker load`
 
-## example
+## Examples
 
 1. Export all data from the testTbl table to HDFS
 

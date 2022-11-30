@@ -1,6 +1,6 @@
 # UNINTALL PLUGIN
 
-## description
+## Description
 
 This statement is used to uninstall a plugin.
 
@@ -14,7 +14,7 @@ plugin_name can be viewed through SHOW PLUGINS command
 
 Only non-builtin plugins can be uninstalled.
 
-## example
+## Examples
 
 1. Uninstall a plugin:
 
