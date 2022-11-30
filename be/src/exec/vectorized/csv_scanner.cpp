@@ -95,6 +95,11 @@ CSVScanner::CSVScanner(RuntimeState* state, RuntimeProfile* profile, const TBrok
     } else {
         _escape = 0;
     }
+    if (_enclose == 0 && _escape == 0) {
+        _use_v2 = false;
+    } else {
+        _use_v2 = true;
+    }
 }
 
 void CSVScanner::close() {
@@ -207,8 +212,12 @@ StatusOr<ChunkPtr> CSVScanner::get_next() {
         }
 
         src_chunk->set_num_rows(0);
-        // Status status = _parse_csv(src_chunk.get());
-        Status status = _parse_csv_v2(src_chunk.get());
+        Status status = Status::OK();
+        if (!_use_v2) {
+            status = _parse_csv(src_chunk.get());
+        } else {
+            status = _parse_csv_v2(src_chunk.get());
+        }
 
         if (!status.ok()) {
             if (status.is_end_of_file()) {

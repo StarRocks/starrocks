@@ -82,6 +82,7 @@ private:
     bool _trim_space;
     char _enclose;
     char _escape;
+    bool _use_v2;
 };
 
 } // namespace starrocks::vectorized
