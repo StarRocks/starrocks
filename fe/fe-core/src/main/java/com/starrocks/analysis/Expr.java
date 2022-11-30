@@ -755,7 +755,7 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         msg.output_scale = getOutputScale();
         msg.setIs_monotonic(isMonotonic());
         visitor.visit(this, msg);
-        // Echoes the above hack
+        // Echoes the above hack process
         if (PrimitiveType.NULL_TYPE.toThrift().equals(msg.child_type)) {
             msg.child_type = PrimitiveType.BOOLEAN.toThrift();
         }
