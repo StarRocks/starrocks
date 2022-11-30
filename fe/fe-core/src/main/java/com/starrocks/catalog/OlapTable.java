@@ -733,8 +733,9 @@ public class OlapTable extends Table implements GsonPostProcessable {
     public void renamePartition(String partitionName, String newPartitionName) {
         if (partitionInfo.getType() == PartitionType.UNPARTITIONED) {
             // bug fix
-            if (CollectionUtils.isNotEmpty(idToPartition.values())) {
-                Partition partition = idToPartition.values().stream().findFirst().get();
+            Optional<Partition> optionalPartition = idToPartition.values().stream().findFirst();
+            if (optionalPartition.isPresent()) {
+                Partition partition = optionalPartition.get();
                 partition.setName(newPartitionName);
                 nameToPartition.clear();
                 nameToPartition.put(newPartitionName, partition);
@@ -1524,8 +1525,9 @@ public class OlapTable extends Table implements GsonPostProcessable {
     // arbitrarily choose a partition, and get the buckets backends sequence from base index.
     public List<List<Long>> getArbitraryTabletBucketsSeq() throws DdlException {
         List<List<Long>> backendsPerBucketSeq = Lists.newArrayList();
-        if (CollectionUtils.isNotEmpty(idToPartition.values())) {
-            Partition partition = idToPartition.values().stream().findFirst().get();
+        Optional<Partition> optionalPartition = idToPartition.values().stream().findFirst();
+        if (optionalPartition.isPresent()) {
+            Partition partition = optionalPartition.get();
             short replicationNum = partitionInfo.getReplicationNum(partition.getId());
             MaterializedIndex baseIdx = partition.getBaseIndex();
             for (Long tabletId : baseIdx.getTabletIdsInOrder()) {

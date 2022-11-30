@@ -87,6 +87,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 public class OlapTableSink extends DataSink {
@@ -170,8 +171,9 @@ public class OlapTableSink extends DataSink {
         tSink.setTable_name(dstTable.getName());
         tSink.setTuple_id(tupleDescriptor.getId().asInt());
         int numReplicas = 1;
-        if (CollectionUtils.isNotEmpty(dstTable.getPartitions())) {
-            long partitionId = dstTable.getPartitions().stream().findFirst().get().getId();
+        Optional<Partition> optionalPartition = dstTable.getPartitions().stream().findFirst();
+        if (optionalPartition.isPresent()) {
+            long partitionId = optionalPartition.get().getId();
             numReplicas = dstTable.getPartitionInfo().getReplicationNum(partitionId);
         }
         tSink.setNum_replicas(numReplicas);

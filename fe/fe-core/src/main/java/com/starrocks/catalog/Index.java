@@ -123,7 +123,7 @@ public class Index implements Writable {
 
         Index other = (Index) obj;
         return Objects.equals(indexName, other.indexName) && Objects.equals(columns, other.columns)
-                && Objects.equals(indexType, indexType);
+                && Objects.equals(indexType, other.indexType);
 
     }
 
