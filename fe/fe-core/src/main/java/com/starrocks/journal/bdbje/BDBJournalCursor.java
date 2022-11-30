@@ -226,7 +226,9 @@ public class BDBJournalCursor implements JournalCursor {
         }
 
         // failed after retry
-        throw exception;
+        if (exception != null) {
+            throw exception;
+        }
     }
 
     protected JournalEntity deserializeData(DatabaseEntry data) throws JournalException {

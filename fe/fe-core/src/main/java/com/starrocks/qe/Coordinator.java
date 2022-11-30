@@ -2898,6 +2898,9 @@ public class Coordinator {
                     return false;
                 }
                 TNetworkAddress brpcAddress = toBrpcHost(address);
+                if (brpcAddress == null) {
+                    return false;
+                }
 
                 try {
                     BackendServiceClient.getInstance().cancelPlanFragmentAsync(brpcAddress,
@@ -3427,6 +3430,9 @@ public class Coordinator {
                         minAssignedBytes = assignedBytes;
                         minLocation = location;
                     }
+                }
+                if (minLocation == null) {
+                    throw new UserException("failed to find a location");
                 }
                 assignedBytesPerHost.put(minLocation.server,
                         assignedBytesPerHost.get(minLocation.server) + 1);

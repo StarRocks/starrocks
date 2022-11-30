@@ -461,6 +461,9 @@ public class DeleteHandler implements Writable {
         }
         for (Predicate condition : conditions) {
             SlotRef slotRef = getSlotRef(condition);
+            if (slotRef == null) {
+                throw new DdlException("unsupported delete condition:" + condition);
+            }
             String columnName = slotRef.getColumnName();
             if (!nameToColumn.containsKey(columnName)) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_FIELD_ERROR, columnName, table.getName());

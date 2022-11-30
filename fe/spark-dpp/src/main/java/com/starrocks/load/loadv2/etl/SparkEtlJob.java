@@ -206,6 +206,9 @@ public class SparkEtlJob {
                 break;
             }
 
+            if (table == null) {
+                throw new SparkDppException("invalid etl job config");
+            }
             // init hive configs like metastore service
             EtlFileGroup fileGroup = table.fileGroups.get(0);
             initSparkConfigs(fileGroup.hiveTableProperties);
