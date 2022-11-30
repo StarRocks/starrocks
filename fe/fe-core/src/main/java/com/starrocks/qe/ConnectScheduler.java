@@ -57,6 +57,8 @@ public class ConnectScheduler {
     private final ExecutorService executor = ThreadPoolManager
             .newDaemonCacheThreadPool(Config.max_connection_scheduler_threads_num, "connect-scheduler-pool", true);
 
+    private static final String CONNECTION_NUM_BY_USER = "connection_total_user";
+
     public ConnectScheduler(int maxConnections) {
         this.maxConnections = new AtomicInteger(maxConnections);
         numberConnection = new AtomicInteger(0);
@@ -149,25 +151,28 @@ public class ConnectScheduler {
             }
         }
 
-        if (userConnMetricsCounter.containsKey(ctx.getQualifiedUser())) {
+        userConnMetricsCounter.computeIfPresent(ctx.getQualifiedUser(), (k, v) -> {
             if (userConnMetricsCounter.get(ctx.getQualifiedUser()).getValue() <= 1) {
                 userConnMetricsCounter.remove(ctx.getQualifiedUser());
-                MetricRepo.removeMetric(ctx.getQualifiedUser());
+                MetricRepo.removeMetric(ctx.getQualifiedUser(), CONNECTION_NUM_BY_USER);
+                return null;
             }
-        }
+            return v;
+        });
     }
 
     // update metrics about connection by users
-    public void updateConnectUsersMetrics(ConnectContext ctx) {
+    public synchronized void updateConnectUsersMetrics(ConnectContext ctx) {
         String userName = ctx.getQualifiedUser();
-        if (userConnMetricsCounter.get(userName) == null) {
-            GaugeMetric<Integer> connections = new GaugeMetric<Integer>(
-                    "connection_total_user", Metric.MetricUnit.CONNECTIONS, "total connections by user") {
-                @Override
-                public Integer getValue() {
-                    return connByUser.get(userName).get();
-                }
-            };
+        GaugeMetric<Integer> connections = userConnMetricsCounter.getOrDefault(userName,
+                new GaugeMetric<Integer>(CONNECTION_NUM_BY_USER,
+                        Metric.MetricUnit.CONNECTIONS, "total connections by user") {
+                    @Override
+                    public Integer getValue() {
+                        return connByUser.get(userName).get();
+                    }
+                });
+        if (!userConnMetricsCounter.containsKey(userName)) {
             connections.addLabel(new MetricLabel("user", userName));
             MetricRepo.addMetric(connections);
             userConnMetricsCounter.put(userName, connections);
