@@ -211,9 +211,11 @@ public class EtlStatus implements Writable {
 
         int countersCount = (counters == null) ? 0 : counters.size();
         out.writeInt(countersCount);
-        for (Map.Entry<String, String> entry : counters.entrySet()) {
-            Text.writeString(out, entry.getKey());
-            Text.writeString(out, entry.getValue());
+        if (counters != null) {
+            for (Map.Entry<String, String> entry : counters.entrySet()) {
+                Text.writeString(out, entry.getKey());
+                Text.writeString(out, entry.getValue());
+            }
         }
         // TODO: Persist `tableCounters`
         // Text.writeString(out, GsonUtils.GSON.toJson(tableCounters));

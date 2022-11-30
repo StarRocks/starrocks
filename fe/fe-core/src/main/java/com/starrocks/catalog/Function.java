@@ -593,7 +593,7 @@ public class Function implements Writable {
             return code;
         }
 
-        public static FunctionType fromCode(int code) {
+        public static FunctionType fromCode(int code) throws IOException {
             switch (code) {
                 case 0:
                     return ORIGIN;
@@ -603,8 +603,9 @@ public class Function implements Writable {
                     return AGGREGATE;
                 case 3:
                     return TABLE;
+                default:
+                    throw new IOException("invalid function type code:" + code);
             }
-            return null;
         }
 
         public void write(DataOutput output) throws IOException {

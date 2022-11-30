@@ -17,6 +17,7 @@
 
 package com.starrocks.mysql;
 
+import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
@@ -188,6 +189,8 @@ public class MysqlPassword {
     // covert octet 'from' to hex 'to'
     // NOTE: this function assume that to buffer is enough
     private static void octetToHexSafe(byte[] to, int toOff, byte[] from) {
+        Preconditions.checkState(to != null);
+        Preconditions.checkState(from != null);
         int j = toOff;
         for (int i = 0; i < from.length; i++) {
             int val = from[i] & 0xff;

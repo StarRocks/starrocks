@@ -399,7 +399,9 @@ public class BDBJEJournal implements Journal {
 
                 // commit
                 try {
-                    currentTrasaction.commit();
+                    if (currentTrasaction != null) {
+                        currentTrasaction.commit();
+                    }
                     return;
                 } catch (DatabaseException e) {
                     String errMsg = String.format("failed to commit journal after retried %d times! txn[%s] db[%s]",
@@ -410,7 +412,9 @@ public class BDBJEJournal implements Journal {
                 }
             }
             // failed after retried
-            throw exception;
+            if (exception != null) {
+                throw exception;
+            }
         } finally {
             // always reset current txn
             currentTrasaction = null;

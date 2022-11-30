@@ -511,6 +511,9 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
     }
 
     private void recoverAllTables(RecycleDatabaseInfo dbInfo) throws DdlException {
+        if (dbInfo == null) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_NO_DB_ERROR);
+        }
         Database db = dbInfo.getDb();
         Set<String> tableNames = Sets.newHashSet(dbInfo.getTableNames());
         long dbId = db.getId();
