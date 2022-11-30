@@ -25,6 +25,7 @@ public class StatisticExecutorTest extends PlanTestBase {
                 Maps.newHashMap()));
 
         Assert.assertThrows(IllegalStateException.class,
-                () -> statisticExecutor.queryStatisticSync(db.getId(), olapTable.getId(), Lists.newArrayList("foo", "bar")));
+                () -> statisticExecutor.queryStatisticSync(
+                        StatisticUtils.buildConnectContext(), db.getId(), olapTable.getId(), Lists.newArrayList("foo", "bar")));
     }
 }
