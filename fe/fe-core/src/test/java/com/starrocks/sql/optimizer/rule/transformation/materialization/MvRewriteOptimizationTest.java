@@ -946,6 +946,7 @@ public class MvRewriteOptimizationTest {
         String plan8 = getFragmentPlan(query8);
         PlanTestBase.assertContains(plan8, "partial_mv_5");
         PlanTestBase.assertContains(plan8, "UNION");
+        PlanTestBase.assertNotContains(plan8, "c3 < -9223372036854775808");
         dropMv("test", "partial_mv_5");
     }
 
