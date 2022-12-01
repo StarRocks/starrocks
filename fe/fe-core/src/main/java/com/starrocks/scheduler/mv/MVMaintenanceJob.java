@@ -38,6 +38,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Future;
@@ -377,7 +378,25 @@ public class MVMaintenanceJob implements Writable {
 
     @Override
     public String toString() {
-        return String.format("MVJob of %s/%s", view.getName(), view.getId());
+        return String.format("MVJob id=%s,viewId=%d,epoch=%s, state=%s", jobId, viewId, epoch, state);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        MVMaintenanceJob that = (MVMaintenanceJob) o;
+        return jobId == that.jobId && viewId == that.viewId && Objects.equals(epoch, that.epoch) &&
+                Objects.equals(state.get(), that.state.get());
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(jobId, viewId, epoch, state.get());
     }
 
     public static MVMaintenanceJob read(DataInput input) throws IOException {

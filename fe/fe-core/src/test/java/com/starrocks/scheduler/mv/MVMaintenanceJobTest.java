@@ -46,11 +46,7 @@ class MVMaintenanceJobTest {
 
         new MockUp<TxnBasedEpochCoordinator>() {
             @Mock
-            public void beginEpoch(MVEpoch epoch) {
-            }
-
-            @Mock
-            public void commitEpoch(MVEpoch epoch) {
+            public void runEpoch(MVEpoch epoch) {
             }
         };
 
