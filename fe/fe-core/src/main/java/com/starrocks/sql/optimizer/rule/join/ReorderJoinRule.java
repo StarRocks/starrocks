@@ -141,7 +141,9 @@ public class ReorderJoinRule extends Rule {
             Collections.reverse(innerJoinTrees);
             for (OptExpression innerJoinRoot : innerJoinTrees) {
                 MultiJoinNode multiJoinNode = MultiJoinNode.toMultiJoinNode(innerJoinRoot);
-
+                if (!multiJoinNode.checkDependsPredicate()) {
+                    continue;
+                }
                 enumerate(new JoinReorderLeftDeep(context), context, innerJoinRoot, multiJoinNode);
                 //If there is no statistical information, the DP and greedy reorder algorithm are disabled,
                 //and the query plan degenerates to the left deep tree
