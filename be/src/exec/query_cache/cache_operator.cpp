@@ -28,6 +28,7 @@ struct PerLaneBuffer {
     PerLaneBufferState state;
     TabletSharedPtr tablet;
     std::vector<RowsetSharedPtr> rowsets;
+    RowsetsAcqRelPtr rowsets_acq_rel;
     int64_t required_version;
     int64_t cached_version;
     std::vector<ChunkPtr> chunks;
@@ -40,6 +41,7 @@ struct PerLaneBuffer {
         lane = -1;
         state = PLBS_INIT;
         tablet.reset();
+        rowsets_acq_rel.reset();
         rowsets.clear();
         required_version = 0;
         cached_version = 0;
@@ -234,7 +236,7 @@ void CacheOperator::_handle_stale_cache_value_for_non_pk(int64_t tablet_id, Cach
     }
 
     // Delta versions are captured, several situations should be taken into consideration.
-    auto& [tablet, rowsets] = status.value();
+    auto& [tablet, rowsets, rowsets_acq_rel] = status.value();
     auto all_rs_empty = true;
     auto min_version = std::numeric_limits<int64_t>::max();
     auto max_version = std::numeric_limits<int64_t>::min();
@@ -269,6 +271,7 @@ void CacheOperator::_handle_stale_cache_value_for_non_pk(int64_t tablet_id, Cach
     //  be scanned and merged with cache result to generate total result.
     buffer->state = PLBS_HIT_PARTIAL;
     buffer->rowsets = std::move(rowsets);
+    buffer->rowsets_acq_rel = std::move(rowsets_acq_rel);
     buffer->num_rows = 0;
     buffer->num_bytes = 0;
     for (const auto& chunk : buffer->chunks) {
@@ -290,7 +293,7 @@ void CacheOperator::_handle_stale_cache_value_for_pk(int64_t tablet_id, starrock
         buffer->cached_version = 0;
         return;
     }
-    auto& [tablet, rowsets] = status.value();
+    auto& [tablet, rowsets, rowsets_acq_rel] = status.value();
     const auto snapshot_version = cache_value.version;
     bool can_pickup_delta_rowsets = false;
     bool exists_non_empty_delta_rowsets = false;
@@ -414,6 +417,16 @@ int64_t CacheOperator::cached_version(int64_t tablet_id) {
         return buffer->required_version;
     } else {
         return buffer->cached_version;
+    }
+}
+
+std::tuple<int64_t, vector<RowsetSharedPtr>> CacheOperator::delta_version_and_rowsets(int64_t tablet_id) {
+    auto lane_it = _owner_to_lanes.find(tablet_id);
+    if (lane_it == _owner_to_lanes.end()) {
+        return make_tuple(0, vector<RowsetSharedPtr>{});
+    } else {
+        auto& buffer = _per_lane_buffers[lane_it->second];
+        return make_tuple(buffer->cached_version + 1, buffer->rowsets);
     }
 }
 
