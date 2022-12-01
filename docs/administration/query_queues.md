@@ -55,7 +55,7 @@ You can set the capacity of a query queue and the maximum timeout of queries in 
 
 You can view the statistics of query queues via the following ways:
 
-- Check the number of running queries, and memory and CPU usages in BE nodes using [SHOW PROC]():
+- Check the number of running queries, and memory and CPU usages in BE nodes using [SHOW PROC](../sql-reference/sql-statements/Administration/SHOW%20PROC.md):
 
 ```Plain
 mysql> SHOW PROC '/backends'\G
@@ -66,10 +66,10 @@ mysql> SHOW PROC '/backends'\G
            CpuUsedPct: 0.0 %
 ```
 
-- Check if a query is in a queue (when `IsPending` is `true`) using [SHOW PROCESSLIST]():
+- Check if a query is in a queue (when `IsPending` is `true`) using [SHOW PROCESSLIST](../sql-reference/sql-statements/Administration/SHOW%20PROCESSLIST.md):
 
 ```Plain
-MySQL [(none)]> SHOW PROCESSLIST;
+mysql> SHOW PROCESSLIST;
 +------+------+---------------------+-------+---------+---------------------+------+-------+-------------------+-----------+
 | Id   | User | Host                | Db    | Command | ConnectionStartTime | Time | State | Info              | IsPending |
 +------+------+---------------------+-------+---------+---------------------+------+-------+-------------------+-----------+
