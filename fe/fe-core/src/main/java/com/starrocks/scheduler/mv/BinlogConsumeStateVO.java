@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Binlog group consumption state of MV
@@ -57,6 +58,23 @@ public class BinlogConsumeStateVO implements Writable {
         Text.writeString(out, GsonUtils.GSON.toJson(this));
     }
 
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        BinlogConsumeStateVO that = (BinlogConsumeStateVO) o;
+        return Objects.equals(binlogMap, that.binlogMap);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(binlogMap);
+    }
+
     /**
      * Identifier of Binlog, which is tablet-granularity
      */
@@ -80,6 +98,23 @@ public class BinlogConsumeStateVO implements Writable {
 
         public long getTabletId() {
             return tabletId;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) {
+                return true;
+            }
+            if (o == null || getClass() != o.getClass()) {
+                return false;
+            }
+            BinlogIdVO that = (BinlogIdVO) o;
+            return tabletId == that.tabletId;
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(tabletId);
         }
     }
 
@@ -126,6 +161,23 @@ public class BinlogConsumeStateVO implements Writable {
 
         public long getLsn() {
             return lsn;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) {
+                return true;
+            }
+            if (o == null || getClass() != o.getClass()) {
+                return false;
+            }
+            BinlogLSNVO that = (BinlogLSNVO) o;
+            return version == that.version && lsn == that.lsn;
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(version, lsn);
         }
     }
 }
