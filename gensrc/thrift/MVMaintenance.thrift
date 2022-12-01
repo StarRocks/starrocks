@@ -50,25 +50,46 @@ struct TMVCommitEpochTask {
     2: optional list<AgentService.TPartitionVersionInfo> partition_version_infos
 }
 
+struct TMVReportEpochTask {
+    1: optional TMVEpoch epoch
+    // Each tablet's binlog consumption state
+    2: optional map<i64, TBinlogOffset> binlog_consume_state
+    // Transaction state
+    3: optional list<Types.TTabletCommitInfo> txn_commit_info
+    4: optional list<Types.TTabletFailInfo> txn_fail_info
+}
+
+struct TMVReportEpochResponse {
+}
+
 enum MVTaskType {
+    // For BE
     START_MAINTENANCE,
     STOP_MAINTENANCE,
     START_EPOCH,
     COMMIT_EPOCH,
+    
+    // For FE
+    REPORT_EPOCH,
 }
 
 // All tasks of MV maintenance
 // Why not put them into the AgentTask interface? 
 // Cause it's under rapid development and changed quickly, it should not disturb the stable interfaces
 struct TMVMaintenanceTasks {
+    // Common parameters for task
     1: optional AgentService.TAgentServiceVersion protocol_version
     2: optional MVTaskType task_type
     3: optional i64 signature
     4: optional i64 job_id
     5: optional i64 task_id
 
+    // Tasks for BE
     11: optional TMVMaintenanceStartTask start_maintenance
     12: optional TMVMaintenanceStopTask stop_maintenance
     13: optional TMVStartEpochTask start_epoch
     14: optional TMVCommitEpochTask commit_epoch
+    
+    // Tasks for FE
+    21: optional TMVReportEpochTask report_epoch
 }
