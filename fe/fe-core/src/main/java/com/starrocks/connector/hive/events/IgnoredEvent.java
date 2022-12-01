@@ -2,9 +2,9 @@
 
 package com.starrocks.connector.hive.events;
 
+import com.google.common.collect.Lists;
 import com.starrocks.connector.hive.CacheUpdateProcessor;
 import org.apache.hadoop.hive.metastore.api.NotificationEvent;
-import org.spark_project.guava.collect.Lists;
 
 import java.util.List;
 
