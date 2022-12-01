@@ -488,6 +488,11 @@ StatusOr<vectorized::ChunkPtr> NLJoinProbeOperator::pull_chunk(RuntimeState* sta
         if (ChunkPtr res = _output_accumulator.pull()) {
             return res;
         }
+
+        if (_output_accumulator.reach_limit()) {
+            _output_accumulator.finalize();
+            return _output_accumulator.pull();
+        }
     }
     _output_accumulator.finalize();
 
