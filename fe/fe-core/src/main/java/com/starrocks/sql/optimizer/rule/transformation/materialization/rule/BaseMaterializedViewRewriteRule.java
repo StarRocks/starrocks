@@ -39,7 +39,7 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
         return results;
     }
 
-    MaterializedViewRewriter getMaterializedViewRewrite(MaterializationContext mvContext) {
+    public MaterializedViewRewriter getMaterializedViewRewrite(MaterializationContext mvContext) {
         return new MaterializedViewRewriter(mvContext);
     }
 }
