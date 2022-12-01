@@ -314,7 +314,7 @@ struct FirstValueState<PT, StringPTGuard<PT>> {
     Slice slice() const { return {buffer.data(), buffer.size()}; }
 };
 
-template <LogicalType PT, typename T = RunTimeCppType<PT>, typename = guard::Guard>
+template <LogicalType PT, bool ignoreNulls, typename T = RunTimeCppType<PT>, typename = guard::Guard>
 class FirstValueWindowFunction final : public ValueWindowFunction<PT, FirstValueState<PT>, T> {
     using InputColumnType = typename ValueWindowFunction<PT, FirstValueState<PT>, T>::InputColumnType;
 
@@ -327,8 +327,14 @@ class FirstValueWindowFunction final : public ValueWindowFunction<PT, FirstValue
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                               int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                               int64_t frame_end) const override {
-        if (this->data(state).has_value) {
-            return;
+        if constexpr (ignoreNulls) {
+            if (!this->data(state).is_null && this->data(state).has_value) {
+                return;
+            }
+        } else {
+            if (this->data(state).has_value) {
+                return;
+            }
         }
 
         // For cases like: rows between 2 preceding and 1 preceding
@@ -348,6 +354,7 @@ class FirstValueWindowFunction final : public ValueWindowFunction<PT, FirstValue
         const Column* data_column = ColumnHelper::get_data_column(columns[0]);
         const InputColumnType* column = down_cast<const InputColumnType*>(data_column);
         this->data(state).value = column->get_data()[frame_start];
+        this->data(state).is_null = false;
         this->data(state).has_value = true;
     }
 
@@ -359,43 +366,53 @@ class FirstValueWindowFunction final : public ValueWindowFunction<PT, FirstValue
     std::string get_name() const override { return "nullable_first_value"; }
 };
 
-template <LogicalType PT, typename = guard::Guard>
+template <LogicalType PT, bool ignoreNulls, typename = guard::Guard>
 struct LastValueState {
     using T = RunTimeCppType<PT>;
     T value;
-    bool is_null = false;
+    bool is_null = ignoreNulls;
 };
 
-template <LogicalType PT>
-struct LastValueState<PT, StringPTGuard<PT>> {
+template <LogicalType PT, bool ignoreNulls>
+struct LastValueState<PT, ignoreNulls, StringPTGuard<PT>> {
     Buffer<uint8_t> buffer;
     bool is_null = false;
 
     Slice slice() const { return {buffer.data(), buffer.size()}; }
 };
 
-template <LogicalType PT, typename T = RunTimeCppType<PT>, typename = guard::Guard>
-class LastValueWindowFunction final : public ValueWindowFunction<PT, LastValueState<PT>, T> {
+template <LogicalType PT, bool ignoreNulls, typename T = RunTimeCppType<PT>, typename = guard::Guard>
+class LastValueWindowFunction final : public ValueWindowFunction<PT, LastValueState<PT, ignoreNulls>, T> {
     using InputColumnType = typename ValueWindowFunction<PT, FirstValueState<PT>, T>::InputColumnType;
 
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
         this->data(state).value = {};
-        this->data(state).is_null = false;
+        this->data(state).is_null = ignoreNulls;
     }
 
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                               int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                               int64_t frame_end) const override {
-        // For cases like: rows between 2 preceding and 1 preceding
-        // If frame_start ge frame_end, means the frame is empty
-        if (frame_start >= frame_end) {
-            this->data(state).is_null = true;
-            return;
-        }
+        if constexpr (!ignoreNulls) {
+            // For cases like: rows between 2 preceding and 1 preceding
+            // If frame_start ge frame_end, means the frame is empty
+            if (frame_start >= frame_end) {
+                this->data(state).is_null = true;
+                return;
+            }
 
-        if (columns[0]->is_null(frame_end - 1)) {
-            this->data(state).is_null = true;
-            return;
+            if (columns[0]->is_null(frame_end - 1)) {
+                this->data(state).is_null = true;
+                return;
+            }
+        } else {
+            if (frame_start >= frame_end) {
+                return;
+            }
+
+            if (columns[0]->is_null(frame_end - 1)) {
+                return;
+            }
         }
 
         this->data(state).is_null = false;
@@ -482,8 +499,9 @@ class LeadLagWindowFunction final : public ValueWindowFunction<PT, LeadLagState<
     std::string get_name() const override { return "lead-lag"; }
 };
 
-template <LogicalType PT>
-class FirstValueWindowFunction<PT, Slice, StringPTGuard<PT>> final : public WindowFunction<FirstValueState<PT>> {
+template <LogicalType PT, bool ignoreNulls>
+class FirstValueWindowFunction<PT, ignoreNulls, Slice, StringPTGuard<PT>> final
+        : public WindowFunction<FirstValueState<PT>> {
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
         this->data(state).buffer.clear();
         this->data(state).has_value = false;
@@ -493,8 +511,14 @@ class FirstValueWindowFunction<PT, Slice, StringPTGuard<PT>> final : public Wind
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                               int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                               int64_t frame_end) const override {
-        if (this->data(state).has_value) {
-            return;
+        if constexpr (ignoreNulls) {
+            if (!this->data(state).is_null && this->data(state).has_value) {
+                return;
+            }
+        } else {
+            if (this->data(state).has_value) {
+                return;
+            }
         }
 
         if (columns[0]->is_null(frame_start)) {
@@ -508,6 +532,7 @@ class FirstValueWindowFunction<PT, Slice, StringPTGuard<PT>> final : public Wind
         Slice slice = column->get_slice(frame_start);
         const auto* p = reinterpret_cast<const uint8_t*>(slice.data);
         this->data(state).buffer.insert(this->data(state).buffer.end(), p, p + slice.size);
+        this->data(state).is_null = false;
         this->data(state).has_value = true;
     }
 
@@ -519,28 +544,32 @@ class FirstValueWindowFunction<PT, Slice, StringPTGuard<PT>> final : public Wind
     std::string get_name() const override { return "nullable_first_value"; }
 };
 
-template <LogicalType PT>
-class LastValueWindowFunction<PT, Slice, StringPTGuard<PT>> final : public WindowFunction<LastValueState<PT>> {
+template <LogicalType PT, bool ignoreNulls>
+class LastValueWindowFunction<PT, ignoreNulls, Slice, StringPTGuard<PT>> final
+        : public WindowFunction<LastValueState<PT, ignoreNulls>> {
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
         this->data(state).buffer.clear();
-        this->data(state).is_null = false;
+        this->data(state).is_null = ignoreNulls;
     }
 
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                               int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                               int64_t frame_end) const override {
-        if (columns[0]->is_null(frame_end - 1)) {
-            this->data(state).is_null = true;
-            return;
-        }
-        this->data(state).is_null = false;
+        if (!columns[0]->is_null(frame_end - 1)) {
+            this->data(state).is_null = false;
 
-        const Column* data_column = ColumnHelper::get_data_column(columns[0]);
-        const auto* column = down_cast<const BinaryColumn*>(data_column);
-        Slice slice = column->get_slice(frame_end - 1);
-        const auto* p = reinterpret_cast<const uint8_t*>(slice.data);
-        this->data(state).buffer.clear();
-        this->data(state).buffer.insert(this->data(state).buffer.end(), p, p + slice.size);
+            const Column* data_column = ColumnHelper::get_data_column(columns[0]);
+            const auto* column = down_cast<const BinaryColumn*>(data_column);
+            Slice slice = column->get_slice(frame_end - 1);
+            const auto* p = reinterpret_cast<const uint8_t*>(slice.data);
+            this->data(state).buffer.clear();
+            this->data(state).buffer.insert(this->data(state).buffer.end(), p, p + slice.size);
+        } else {
+            if constexpr (!ignoreNulls) {
+                this->data(state).is_null = true;
+                return;
+            }
+        }
     }
 
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
