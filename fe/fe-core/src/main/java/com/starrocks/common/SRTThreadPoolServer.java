@@ -187,7 +187,19 @@ public class SRTThreadPoolServer extends TServer {
                 long remainTimeInMillis = requestTimeoutUnit.toMillis(requestTimeout);
                 while (true) {
                     try {
+                        ThreadPoolExecutor threadPoolExecutor = ((ThreadPoolExecutor) executorService);
+                        LOG.info("pool size: {}, core pool size: {}, " +
+                                        "largest pool size: {}, max pool size: {}, " +
+                                        "remaining queue size: {}, active count: {}",
+                                threadPoolExecutor.getPoolSize(),
+                                threadPoolExecutor.getCorePoolSize(),
+                                threadPoolExecutor.getLargestPoolSize(),
+                                threadPoolExecutor.getMaximumPoolSize(),
+                                threadPoolExecutor.getQueue().remainingCapacity(),
+                                threadPoolExecutor.getActiveCount());
+                        long start = System.nanoTime();
                         executorService.execute(wp);
+                        LOG.info("thrift submit time: {}", (System.nanoTime() - start) / 1000000);
                         break;
                     } catch (Throwable t) {
                         if (t instanceof RejectedExecutionException) {

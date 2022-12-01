@@ -549,7 +549,7 @@ public class Config extends ConfigBase {
      * some hang up problems in java.net.SocketInputStream.socketRead0
      */
     @ConfField
-    public static int thrift_client_timeout_ms = 0;
+    public static int thrift_client_timeout_ms = 5000;
 
     /**
      * The backlog_num for thrift server
@@ -672,6 +672,9 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static int thrift_server_max_worker_threads = 4096;
+
+    @ConfField
+    public static int thrift_server_queue_size = 4096;
 
     /**
      * Maximal wait seconds for straggler node in load
