@@ -456,7 +456,8 @@ public class ExpressionTest extends PlanTestBase {
         String plan = getThriftPlan(sql);
         Assert.assertTrue(
                 plan.contains("signature:unix_timestamp(VARCHAR, VARCHAR), scalar_fn:TScalarFunction(symbol:), " +
-                        "id:0, fid:50303, could_apply_dict_optimize:false), has_nullable_child:false, is_nullable:true"));
+                        "id:0, fid:50303, could_apply_dict_optimize:false, ignore_nulls:false), has_nullable_child:false, " + 
+                        "is_nullable:true"));
     }
 
     @Test
@@ -527,11 +528,25 @@ public class ExpressionTest extends PlanTestBase {
     }
     @Test
     public void testLambdaPredicateOnScan() throws Exception {
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> f71009fa5 (Fix fe ut)
         starRocksAssert.withTable("create table test_lambda_on_scan" +
                 "(c0 INT, c2 array<int>) " +
                 " duplicate key(c0) distributed by hash(c0) buckets 1 " +
                 "properties('replication_num'='1');");
+<<<<<<< HEAD
         String sql = "select * from test_lambda_on_scan where array_map(x -> x + 1, c2) is not null";
+=======
+        starRocksAssert.withTable("create table test_lambda_on_scan"
+                + "(c0 INT, c2 array<int>) "
+                + " duplicate key(c0) distributed by hash(c0) buckets 1 "
+                + "properties('replication_num'='1');");
+=======
+>>>>>>> f71009fa5 (Fix fe ut)
+        String sql = "select * from test_lambda_on_scan where array_map(x -> x, c2) is not null";
+>>>>>>> aa6b04e8a (Fix fe ut)
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("array_map"));
     }
