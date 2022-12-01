@@ -173,9 +173,11 @@ public class KafkaUtil {
                 address = new TNetworkAddress(be.getHost(), be.getBrpcPort());
 
                 // get info
-                request.timeout = Config.routine_load_kafka_timeout_second;
+                long timeout =  Config.routine_load_kafka_timeout_second > Config.routine_load_task_timeout_second * 2 ?
+                        Config.routine_load_kafka_timeout_second : Config.routine_load_kafka_timeout_second * 2;
+                request.timeout = timeout;
                 Future<PProxyResult> future = BackendServiceClient.getInstance().getInfo(address, request);
-                PProxyResult result = future.get(Config.routine_load_kafka_timeout_second, TimeUnit.SECONDS);
+                PProxyResult result = future.get(timeout, TimeUnit.SECONDS);
                 TStatusCode code = TStatusCode.findByValue(result.status.statusCode);
                 if (code != TStatusCode.OK) {
                     LOG.warn("failed to send proxy request to " + address + " err " + result.status.errorMsgs);
