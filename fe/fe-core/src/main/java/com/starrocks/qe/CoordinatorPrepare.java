@@ -302,19 +302,10 @@ public class CoordinatorPrepare {
                 queryOptions.getQuery_type() == TQueryType.LOAD ? ResourceGroupClassifier.QueryType.INSERT
                         : ResourceGroupClassifier.QueryType.SELECT);
 
-        // Compute fragment instance
         computeScanRangeAssignment();
-
         computeFragmentExecParams();
-
         traceInstance();
-
-        // create result receiver
-        // prepareResultSink();
-
         computeBeInstanceNumbers();
-
-        // prepareProfile();
     }
 
     private void prepareFragments() {
@@ -365,11 +356,10 @@ public class CoordinatorPrepare {
     }
 
     private void recordUsedBackend(TNetworkAddress addr, Long backendID) {
-        if (this.queryOptions.getLoad_job_type() == TLoadJobType.STREAM_LOAD) {
-            if (!bePortToBeWebServerPort.containsKey(addr)) {
-                Backend backend = idToBackend.get(backendID);
-                bePortToBeWebServerPort.put(addr, new TNetworkAddress(backend.getHost(), backend.getHttpPort()));
-            }
+        if (this.queryOptions.getLoad_job_type() == TLoadJobType.STREAM_LOAD &&
+                !bePortToBeWebServerPort.containsKey(addr)) {
+            Backend backend = idToBackend.get(backendID);
+            bePortToBeWebServerPort.put(addr, new TNetworkAddress(backend.getHost(), backend.getHttpPort()));
         }
         usedBackendIDs.add(backendID);
         addressToBackendID.put(addr, backendID);
@@ -1199,14 +1189,14 @@ public class CoordinatorPrepare {
             }
             return infoStr;
         } else {
-            String infoStr = "backend: ";
+            StringBuilder infoStr = new StringBuilder("backend: ");
             for (Map.Entry<Long, Backend> entry : this.idToBackend.entrySet()) {
                 Long backendID = entry.getKey();
                 Backend backend = entry.getValue();
-                infoStr += String.format("[%s alive: %b inBlacklist: %b] ", backend.getHost(),
-                        backend.isAlive(), SimpleScheduler.isInBlacklist(backendID));
+                infoStr.append(String.format("[%s alive: %b inBlacklist: %b] ", backend.getHost(),
+                        backend.isAlive(), SimpleScheduler.isInBlacklist(backendID)));
             }
-            return infoStr;
+            return infoStr.toString();
         }
     }
 
@@ -1331,14 +1321,16 @@ public class CoordinatorPrepare {
         }
     }
 
-    // map from an impalad host address to the per-node assigned scan ranges;
-    // records scan range assignment for a single fragment
-    static class FragmentScanRangeAssignment
-            extends HashMap<TNetworkAddress, Map<Integer, List<TScanRangeParams>>> {
+    /**
+     * map from an impalad host address to the per-node assigned scan ranges;
+     * records scan range assignment for a single fragment
+     */
+    static class FragmentScanRangeAssignment extends
+            HashMap<TNetworkAddress, Map<Integer, List<TScanRangeParams>>> {
     }
 
-    static class BucketSeqToScanRange extends HashMap<Integer, Map<Integer, List<TScanRangeParams>>> {
-
+    static class BucketSeqToScanRange
+            extends HashMap<Integer, Map<Integer, List<TScanRangeParams>>> {
     }
 
     // execution parameters for a single fragment,
@@ -1589,7 +1581,7 @@ public class CoordinatorPrepare {
 
         TExecBatchPlanFragmentsParams toThriftInBatch(
                 Set<TUniqueId> inFlightInstanceIds, TNetworkAddress destHost, TDescriptorTable descTable,
-                Set<Long> dbIds, boolean enablePipelineEngine, int accTabletSinkDop,
+                boolean enablePipelineEngine, int accTabletSinkDop,
                 int tabletSinkTotalDop) throws Exception {
 
             boolean forceSetTableSinkDop = fragment.forceSetTableSinkDop();
@@ -1727,7 +1719,7 @@ public class CoordinatorPrepare {
                 }
                 assignedBytesPerHost.put(minLocation.server, assignedBytesPerHost.get(minLocation.server) + 1);
 
-                Reference<Long> backendIdRef = new Reference<Long>();
+                Reference<Long> backendIdRef = new Reference<>();
                 TNetworkAddress execHostPort = SimpleScheduler.getHost(minLocation.backend_id,
                         scanRangeLocations.getLocations(),
                         idToBackend, backendIdRef);
@@ -1738,9 +1730,9 @@ public class CoordinatorPrepare {
                 recordUsedBackend(execHostPort, backendIdRef.getRef());
 
                 Map<Integer, List<TScanRangeParams>> scanRanges = BackendSelector.findOrInsert(
-                        assignment, execHostPort, new HashMap<Integer, List<TScanRangeParams>>());
+                        assignment, execHostPort, new HashMap<>());
                 List<TScanRangeParams> scanRangeParamsList = BackendSelector.findOrInsert(
-                        scanRanges, scanNode.getId().asInt(), new ArrayList<TScanRangeParams>());
+                        scanRanges, scanNode.getId().asInt(), new ArrayList<>());
                 // add scan range
                 TScanRangeParams scanRangeParams = new TScanRangeParams();
                 scanRangeParams.scan_range = scanRangeLocations.scan_range;
@@ -1889,7 +1881,7 @@ public class CoordinatorPrepare {
         private void getExecHostPortForFragmentIDAndBucketSeq(TScanRangeLocations seqLocation,
                                                               PlanFragmentId fragmentId, Integer bucketSeq,
                                                               ImmutableMap<Long, Backend> idToBackend)
-                throws Exception {
+                throws UserException {
             Map<Long, Integer> buckendIdToBucketCountMap = fragmentIdToBackendIdBucketCountMap.get(fragmentId);
             int maxBucketNum = Integer.MAX_VALUE;
             long buckendId = Long.MAX_VALUE;
@@ -1907,7 +1899,7 @@ public class CoordinatorPrepare {
             }
 
             buckendIdToBucketCountMap.put(buckendId, buckendIdToBucketCountMap.get(buckendId) + 1);
-            Reference<Long> backendIdRef = new Reference<Long>();
+            Reference<Long> backendIdRef = new Reference<>();
             TNetworkAddress execHostPort =
                     SimpleScheduler.getHost(buckendId, seqLocation.locations, idToBackend, backendIdRef);
             if (execHostPort == null) {

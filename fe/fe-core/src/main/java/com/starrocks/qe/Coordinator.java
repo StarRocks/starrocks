@@ -905,7 +905,7 @@ public class Coordinator {
                                 .map(CoordinatorPrepare.FInstanceExecParam::getInstanceId)
                                 .collect(Collectors.toSet());
                         TExecBatchPlanFragmentsParams tRequest =
-                                params.toThriftInBatch(curInstanceIds, host, curDescTable, dbIds, enablePipelineEngine,
+                                params.toThriftInBatch(curInstanceIds, host, curDescTable, enablePipelineEngine,
                                         accTabletSinkDop, tabletSinkTotalDop);
                         if (enablePipelineTableSinkDop) {
                             for (CoordinatorPrepare.FInstanceExecParam request : requests) {
@@ -1049,7 +1049,6 @@ public class Coordinator {
         ).collect(Collectors.toList());
     }
 
-    // TODO: move to prepare
     private void setGlobalRuntimeFilterParams(CoordinatorPrepare.FragmentExecParams topParams,
                                               TNetworkAddress mergeHost)
             throws Exception {
