@@ -85,7 +85,9 @@ public:
     size_t deserialize(const uint8_t* data);
     void merge(const SimdBlockFilter& bf);
     bool check_equal(const SimdBlockFilter& bf) const;
-    uint32_t directory_mask() const { return _directory_mask; }
+    uint32_t directory_mask() const {
+        return _directory_mask;
+    }
 
 private:
     // The number of bits to set in a tiny Bloom filter block
@@ -112,7 +114,9 @@ private:
     // log2(number of bytes in a bucket):
     static constexpr int LOG_BUCKET_BYTE_SIZE = 5;
 
-    size_t get_alloc_size() const { return 1ull << (_log_num_buckets + LOG_BUCKET_BYTE_SIZE); }
+    size_t get_alloc_size() const {
+        return 1ull << (_log_num_buckets + LOG_BUCKET_BYTE_SIZE);
+    }
 
     // Common:
     // log_num_buckets_ is the log (base 2) of the number of buckets in the directory:
@@ -499,6 +503,33 @@ public:
         return false;
     }
 
+    void compute_hash(const std::vector<Column*>& columns, RunningContext* ctx) const override {
+        if (columns.empty() || _join_mode == TRuntimeFilterBuildJoinMode::NONE) return;
+        size_t num_rows = columns[0]->size();
+
+        // initialize hash_values.
+        // reuse ctx's hash_values object.
+        std::vector<uint32_t>& _hash_values = ctx->hash_values;
+        switch (_join_mode) {
+        case TRuntimeFilterBuildJoinMode::LOCAL_HASH_BUCKET:
+        case TRuntimeFilterBuildJoinMode::COLOCATE:
+        case TRuntimeFilterBuildJoinMode::BORADCAST: {
+            _hash_values.assign(num_rows, 0);
+            break;
+        }
+        case TRuntimeFilterBuildJoinMode::PARTITIONED:
+        case TRuntimeFilterBuildJoinMode::SHUFFLE_HASH_BUCKET: {
+            _hash_values.assign(num_rows, HashUtil::FNV_SEED);
+            break;
+        }
+        default:
+            DCHECK(false) << "unexpected join mode: " << _join_mode;
+        }
+
+        // compute hash_values
+        _compute_hash_values_for_multi_part(ctx, _join_mode, columns, num_rows, _hash_values);
+    }
+
 private:
     void _init_min_max() {
         if constexpr (IsSlice<CppType>) {
@@ -649,33 +680,6 @@ private:
         const uint32_t bucket_idx = shuffle_hash;
         size_t hash = compute_hash(value);
         return _hash_partition_bf[bucket_idx].test_hash(hash);
-    }
-
-    void compute_hash(const std::vector<Column*>& columns, RunningContext* ctx) const override {
-        if (columns.empty() || _join_mode == TRuntimeFilterBuildJoinMode::NONE) return;
-        size_t num_rows = columns[0]->size();
-
-        // initialize hash_values.
-        // reuse ctx's hash_values object.
-        std::vector<uint32_t>& _hash_values = ctx->hash_values;
-        switch (_join_mode) {
-        case TRuntimeFilterBuildJoinMode::LOCAL_HASH_BUCKET:
-        case TRuntimeFilterBuildJoinMode::COLOCATE:
-        case TRuntimeFilterBuildJoinMode::BORADCAST: {
-            _hash_values.assign(num_rows, 0);
-            break;
-        }
-        case TRuntimeFilterBuildJoinMode::PARTITIONED:
-        case TRuntimeFilterBuildJoinMode::SHUFFLE_HASH_BUCKET: {
-            _hash_values.assign(num_rows, HashUtil::FNV_SEED);
-            break;
-        }
-        default:
-            DCHECK(false) << "unexpected join mode: " << _join_mode;
-        }
-
-        // compute hash_values
-        _compute_hash_values_for_multi_part(ctx, _join_mode, columns, num_rows, _hash_values);
     }
 
     using HashValues = std::vector<uint32_t>;
