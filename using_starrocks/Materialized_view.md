@@ -426,7 +426,11 @@ FROM tableA
 
 #### 开启异步物化视图
 
-使用异步物化视图前，您需要在 FE 配置文件 **fe.conf** 中添加 FE 配置项 `enable_experimental_mv` 并设置为 `true`，然后重启集群使配置生效。
+使用异步物化视图前，您需要使用以下命令设置 FE 配置项 `enable_experimental_mv` 为 `true`：
+
+```SQL
+ADMIN SET FRONTEND CONFIG ("enable_experimental_mv"="true");
+```
 
 #### 创建基表
 
