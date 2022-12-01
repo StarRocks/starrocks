@@ -785,6 +785,124 @@ public class MvRewriteOptimizationTest {
         dropMv("test", "join_agg_union_mv_1");
     }
 
+<<<<<<< HEAD
+=======
+    @Test
+    public void testPartialPartition() throws Exception {
+        starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
+
+        cluster.runSql("test", "insert into table_with_partition values(\"varchar1\", '1991-02-01', 1, 1, 1)");
+        cluster.runSql("test", "insert into table_with_partition values(\"varchar2\", '1992-02-01', 2, 1, 1)");
+        cluster.runSql("test", "insert into table_with_partition values(\"varchar3\", '1993-02-01', 3, 1, 1)");
+
+        createAndRefreshMv("test", "partial_mv",
+                "create materialized view partial_mv" +
+                        " partition by id_date" +
+                        " distributed by hash(`t1a`)" +
+                        " as" +
+                        " select t1a, id_date, t1b from table_with_partition");
+        // modify p1991 and make it outdated
+        // so p1992 and p1993 are updated
+        cluster.runSql("test", "insert into table_with_partition partition(p1991)" +
+                " values(\"varchar12\", '1991-03-01', 2, 1, 1)");
+
+        String query = "select t1a, id_date, t1b from table_with_partition" +
+                " where id_date >= '1993-02-01' and id_date < '1993-05-01'";
+        String plan = getFragmentPlan(query);
+        PlanTestBase.assertContains(plan, "partial_mv");
+
+        String query2 = "select t1a, id_date, t1b from table_with_partition" +
+                " where id_date >= '1992-02-01' and id_date < '1993-05-01'";
+        String plan2 = getFragmentPlan(query2);
+        PlanTestBase.assertContains(plan2, "partial_mv");
+
+        dropMv("test", "partial_mv");
+
+        createAndRefreshMv("test", "partial_mv_2",
+                "create materialized view partial_mv_2" +
+                        " partition by id_date" +
+                        " distributed by hash(`t1a`)" +
+                        " as" +
+                        " select t1a, id_date, t1b from table_with_partition where t1b > 100");
+        cluster.runSql("test", "insert into table_with_partition partition(p1991)" +
+                " values(\"varchar12\", '1991-03-01', 2, 1, 1)");
+        String query4 = "select t1a, id_date, t1b from table_with_partition" +
+                " where t1b > 110 and id_date >= '1993-02-01' and id_date < '1993-05-01'";
+        String plan4 = getFragmentPlan(query4);
+        PlanTestBase.assertContains(plan4, "partial_mv_2");
+        dropMv("test", "partial_mv_2");
+
+        cluster.runSql("test", "insert into table_with_day_partition values(\"varchar1\", '1991-03-30', 1, 1, 1)");
+        cluster.runSql("test", "insert into table_with_day_partition values(\"varchar2\", '1991-03-31', 2, 1, 1)");
+        cluster.runSql("test", "insert into table_with_day_partition values(\"varchar3\", '1991-04-01', 3, 1, 1)");
+        cluster.runSql("test", "insert into table_with_day_partition values(\"varchar3\", '1991-04-02', 4, 1, 1)");
+
+        createAndRefreshMv("test", "partial_mv_3",
+                "create materialized view partial_mv_3" +
+                        " partition by date_trunc('month', new_date)" +
+                        " distributed by hash(`t1a`)" +
+                        " as" +
+                        " select t1a, id_date as new_date, t1b from table_with_day_partition");
+        cluster.runSql("test", "insert into table_with_day_partition partition(p19910331)" +
+                " values(\"varchar12\", '1991-03-31', 2, 2, 1)");
+        String query5 = "select t1a, id_date, t1b from table_with_day_partition" +
+                " where id_date >= '1991-04-01' and id_date < '1991-04-03'";
+        String plan5 = getFragmentPlan(query5);
+        PlanTestBase.assertContains(plan5, "partial_mv_3");
+        dropMv("test", "partial_mv_3");
+
+        cluster.runSql("test", "insert into table_with_day_partition values(\"varchar1\", '1991-03-30', 1, 1, 1)");
+        cluster.runSql("test", "insert into table_with_day_partition values(\"varchar2\", '1991-03-31', 2, 1, 1)");
+        cluster.runSql("test", "insert into table_with_day_partition values(\"varchar3\", '1991-04-01', 3, 1, 1)");
+        cluster.runSql("test", "insert into table_with_day_partition values(\"varchar3\", '1991-04-02', 4, 1, 1)");
+
+        createAndRefreshMv("test", "partial_mv_3",
+                "create materialized view partial_mv_3" +
+                        " partition by new_date" +
+                        " distributed by hash(`t1a`)" +
+                        " as" +
+                        " select t1a, date_trunc('month', id_date) as new_date, t1b from table_with_day_partition");
+        cluster.runSql("test", "insert into table_with_day_partition partition(p19910331)" +
+                " values(\"varchar12\", '1991-03-31', 2, 2, 1)");
+        String query6 = "select t1a, date_trunc('month', id_date), t1b from table_with_day_partition" +
+                " where id_date >= '1991-04-01' and id_date < '1991-04-03'";
+        String plan6 = getFragmentPlan(query6);
+        PlanTestBase.assertContains(plan6, "partial_mv_3");
+        dropMv("test", "partial_mv_3");
+
+        cluster.runSql("test", "insert into table_with_partition values(\"varchar1\", '1991-02-01', 1, 1, 1)");
+        cluster.runSql("test", "insert into table_with_partition values(\"varchar2\", '1992-02-01', 2, 1, 1)");
+        cluster.runSql("test", "insert into table_with_partition values(\"varchar3\", '1993-02-01', 3, 1, 1)");
+        createAndRefreshMv("test", "partial_mv_4",
+                "create materialized view partial_mv_4" +
+                        " partition by new_name" +
+                        " distributed by hash(`t1a`)" +
+                        " as" +
+                        " select t1a, id_date as new_name, t1b from table_with_partition");
+        cluster.runSql("test", "insert into table_with_partition partition(p1991)" +
+                " values(\"varchar12\", '1991-03-01', 2, 1, 1)");
+        String query7 = "select t1a, id_date, t1b from table_with_partition" +
+                " where id_date >= '1993-02-01' and id_date < '1993-05-01'";
+        String plan7 = getFragmentPlan(query7);
+        PlanTestBase.assertContains(plan7, "partial_mv_4");
+
+        dropMv("test", "partial_mv_4");
+
+        cluster.runSql("test", "insert into test_base_part values (1, 1, 1, 1);");
+        createAndRefreshMv("test", "partial_mv_5", "create materialized view partial_mv_5" +
+                " partition by c3" +
+                " distributed by hash(c1) as" +
+                " select c1, c3, sum(c2) as c2 from test_base_part group by c1, c3;");
+        cluster.runSql("test", "alter table test_base_part add partition p4 values less than (\"2000\")");
+        cluster.runSql("test", "insert into test_base_part partition(p4) values (1, 2, 1500, 4)");
+        String query8 = "select sum(c2) from test_base_part";
+        String plan8 = getFragmentPlan(query8);
+        PlanTestBase.assertContains(plan8, "partial_mv_5");
+        PlanTestBase.assertContains(plan8, "UNION");
+        dropMv("test", "partial_mv_5");
+    }
+
+>>>>>>> 28c18e7a2 (optimize single table rewrite, enable single table rewrite without predicate (#14435))
     public String getFragmentPlan(String sql) throws Exception {
         String s = UtFrameUtils.getPlanAndFragment(connectContext, sql).second.
                 getExplainString(TExplainLevel.NORMAL);

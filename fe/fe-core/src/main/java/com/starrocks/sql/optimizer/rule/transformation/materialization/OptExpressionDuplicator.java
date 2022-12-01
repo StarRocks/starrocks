@@ -100,6 +100,25 @@ public class OptExpressionDuplicator {
 
             processCommon(opBuilder);
 
+<<<<<<< HEAD
+=======
+            if (partialPartitionRewrite
+                    && optExpression.getOp() instanceof LogicalOlapScanOperator
+                    && partitionByTable != null) {
+                // maybe partition column is not in the output columns, should add it
+                LogicalOlapScanOperator olapScan = (LogicalOlapScanOperator) optExpression.getOp();
+                OlapTable table = (OlapTable) olapScan.getTable();
+                if (table.getId() == partitionByTable.getId()) {
+                    if (!columnRefOperatorColumnMap.containsValue(partitionColumn)) {
+                        ColumnRefOperator partitionColumnRef = newColumnMetaToColRefMap.get(partitionColumn);
+                        columnRefColumnMapBuilder.put(partitionColumnRef, partitionColumn);
+                    }
+                }
+            }
+            ImmutableMap<ColumnRefOperator, Column> newColumnRefColumnMap = columnRefColumnMapBuilder.build();
+            scanBuilder.setColRefToColumnMetaMap(newColumnRefColumnMap);
+
+>>>>>>> 28c18e7a2 (optimize single table rewrite, enable single table rewrite without predicate (#14435))
             return OptExpression.create(opBuilder.build());
         }
 
