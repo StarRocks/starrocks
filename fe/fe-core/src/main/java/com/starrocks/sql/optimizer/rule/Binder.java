@@ -101,7 +101,8 @@ public class Binder {
             } else {
                 childPattern = pattern.childAt(patternIndex);
             }
-            OptExpression opt = match(childPattern, extractGroupExpression(childPattern, group), level + 1);
+            level = pattern.isPatternMultiJoin() && childPattern.isPatternMultiJoin() ? level + 1 : 0;
+            OptExpression opt = match(childPattern, extractGroupExpression(childPattern, group), level);
 
             if (opt == null) {
                 return null;
