@@ -527,4 +527,12 @@ public class SubqueryTest extends PlanTestBase {
                 "  |  <slot 4> : 4: v7\n" +
                 "  |  <slot 8> : 5: v8 + 1");
     }
+
+    @Test
+    public void testSemiJoinOnConditionRemain() throws Exception {
+        String sql = "select t0.v1 from t0 left anti join (select t3.v10 from t3 where true) subt3 " +
+                "on t0.v2 = subt3.v10 and t0.v2 != subt3.v10 where 1 in (select t0.v2 from t0, t2 where t2.v7 in (''));";
+        String plan = getFragmentPlan(sql);
+        System.out.println(plan);
+    }
 }
