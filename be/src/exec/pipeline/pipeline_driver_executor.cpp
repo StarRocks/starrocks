@@ -9,6 +9,7 @@
 #include "runtime/current_thread.h"
 #include "util/debug/query_trace.h"
 #include "util/defer_op.h"
+#include "util/stack_util.h"
 
 namespace starrocks::pipeline {
 

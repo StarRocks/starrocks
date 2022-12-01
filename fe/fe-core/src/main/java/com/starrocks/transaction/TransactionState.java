@@ -228,7 +228,7 @@ public class TransactionState implements Writable {
     private long publishVersionFinishTime = -1;
 
     private long callbackId = -1;
-    private long timeoutMs = Config.stream_load_default_timeout_second * 1000;
+    private long timeoutMs = Config.stream_load_default_timeout_second * 1000L;
 
     // optional
     private TxnCommitAttachment txnCommitAttachment;
@@ -250,7 +250,7 @@ public class TransactionState implements Writable {
     // used for PublishDaemon to check whether this txn can be published
     // not persisted, so need to rebuilt if FE restarts
     private volatile TransactionChecker finishChecker = null;
-    private long checkTimes = 0;
+    private long checkerCreationTime = 0;
     private Span txnSpan = null;
     private String traceParent = null;
 
@@ -674,8 +674,9 @@ public class TransactionState implements Writable {
         return publishVersionTasks;
     }
 
-    public void clearPublishVersionTasks() {
+    public void clearAfterPublished() {
         publishVersionTasks.clear();
+        finishChecker = null;
     }
 
     @Override
@@ -901,18 +902,16 @@ public class TransactionState implements Writable {
 
     // Note: caller should hold db lock
     public void prepareFinishChecker(Database db) {
-        if (finishChecker == null) {
-            synchronized (this) {
-                if (finishChecker == null) {
-                    finishChecker = TransactionChecker.create(this, db);
-                }
-            }
+        synchronized (this) {
+            finishChecker = TransactionChecker.create(this, db);
+            checkerCreationTime = System.nanoTime();
         }
     }
 
     public boolean checkCanFinish() {
-        // this may happen if FE restarts
-        if (finishChecker == null) {
+        // finishChecker may be null if FE restarts
+        // finishChecker may require refresh if table/partition is dropped, or index is changed caused by Alter job
+        if (finishChecker == null || System.nanoTime() - checkerCreationTime > 10000000000L) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
             if (db == null) {
                 // consider txn finished if db is dropped
@@ -928,17 +927,18 @@ public class TransactionState implements Writable {
         if (finishState == null) {
             finishState = new TxnFinishState();
         }
-        checkTimes++;
         boolean ret = finishChecker.finished(finishState);
         if (ret) {
             txnSpan.addEvent("check_ok");
-            txnSpan.setAttribute("check_times", checkTimes);
         }
         return ret;
     }
 
     public String getPublishTimeoutDebugInfo() {
-        if (finishChecker != null) {
+        if (!hasSendTask()) {
+            return "txn has not sent publish tasks yet, maybe waiting previous txns on the same table(s) to finish, tableIds: " +
+                    Joiner.on(",").join(getTableIdList());
+        } else if (finishChecker != null) {
             return finishChecker.debugInfo();
         } else {
             return getErrMsg();

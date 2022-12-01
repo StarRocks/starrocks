@@ -56,7 +56,7 @@ public class WebBaseAction extends BaseAction {
     private static final Logger LOG = LogManager.getLogger(WebBaseAction.class);
 
     protected static final String STARROCKS_SESSION_ID = "STARROCKS_SESSION_ID";
-    private static final long STARROCKS_SESSION_EXPIRED_TIME = 3600 * 24; // one day
+    private static final long STARROCKS_SESSION_EXPIRED_TIME = 3600L * 24L; // one day
 
     protected static final String PAGE_HEADER = "<!DOCTYPE html>"
             + "<html>"

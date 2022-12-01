@@ -1,6 +1,6 @@
 # CHAR
 
-## description
+## Description
 
 CHAR(M)
 

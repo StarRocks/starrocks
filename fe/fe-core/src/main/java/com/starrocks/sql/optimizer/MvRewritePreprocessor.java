@@ -10,6 +10,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
+import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
@@ -142,12 +143,15 @@ public class MvRewritePreprocessor {
                 new HashDistributionDesc(hashDistributeColumns, HashDistributionDesc.SourceType.LOCAL);
 
         List<Long> selectPartitionIds = Lists.newArrayList();
+        List<Long> selectTabletIds = Lists.newArrayList();
         Set<String> excludedPartitions = mv.getPartitionNamesToRefreshForMv();
         List<String> selectedPartitionNames = mv.getPartitionNames()
                 .stream().filter(name -> !excludedPartitions.contains(name)).collect(Collectors.toList());
         for (Partition p : mv.getPartitions()) {
             if (selectedPartitionNames.contains(p.getName())) {
                 selectPartitionIds.add(p.getId());
+                MaterializedIndex materializedIndex = p.getIndex(mv.getBaseIndexId());
+                selectTabletIds.addAll(materializedIndex.getTabletIdsInOrder());
             }
         }
         PartitionNames partitionNames = new PartitionNames(false, selectedPartitionNames);
@@ -160,7 +164,7 @@ public class MvRewritePreprocessor {
                 mv.getBaseIndexId(),
                 selectPartitionIds,
                 partitionNames,
-                Lists.newArrayList(),
+                selectTabletIds,
                 Lists.newArrayList());
         return scanOperator;
     }

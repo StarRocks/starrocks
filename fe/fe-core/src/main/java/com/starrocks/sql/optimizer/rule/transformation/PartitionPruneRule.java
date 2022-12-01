@@ -161,7 +161,7 @@ public class PartitionPruneRule extends TransformationRule {
     }
 
     private List<Long> rangePartitionPrune(OlapTable olapTable, RangePartitionInfo partitionInfo,
-                                      LogicalOlapScanOperator operator) {
+                                           LogicalOlapScanOperator operator) {
         Map<Long, Range<PartitionKey>> keyRangeById;
         if (operator.getPartitionNames() != null) {
             keyRangeById = Maps.newHashMap();

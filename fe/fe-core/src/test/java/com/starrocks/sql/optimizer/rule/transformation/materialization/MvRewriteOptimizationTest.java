@@ -156,6 +156,7 @@ public class MvRewriteOptimizationTest {
                 "     PREAGGREGATION: ON\n" +
                 "     partitions=1/1\n" +
                 "     rollup: mv_1");
+        PlanTestBase.assertContains(plan, "tabletRatio=6/6");
 
         String query2 = "select empid, deptno, name, salary from emps where empid = 6";
         String plan2 = getFragmentPlan(query2);
@@ -192,6 +193,7 @@ public class MvRewriteOptimizationTest {
     }
 
     public void testSingleTableRangePredicateRewrite() throws Exception {
+        starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewUnionRewrite(false);
         createAndRefreshMv("test", "mv_1",
                 "create materialized view mv_1 distributed by hash(empid)" +
                         " as select empid, deptno, name, salary from emps where empid < 5");
@@ -331,6 +333,20 @@ public class MvRewriteOptimizationTest {
         PlanTestBase.assertContains(plan2, "mv_");
         dropMv("test", "mv_1");
         dropMv("test", "mv_2");
+
+        createAndRefreshMv("test", "agg_mv_1",
+                "create materialized view agg_mv_1 distributed by hash(empid)" +
+                        " as select empid, deptno, sum(salary) as total_salary from emps" +
+                        " where empid < 5 group by empid, deptno");
+        createAndRefreshMv("test", "agg_mv_2",
+                "create materialized view agg_mv_2 distributed by hash(empid)" +
+                        " as select empid, deptno, sum(salary) as total_salary from emps" +
+                        " where empid < 10 group by empid, deptno");
+        String query2 = "select empid, sum(salary) from emps where empid < 5 group by empid";
+        String plan3 = getFragmentPlan(query2);
+        PlanTestBase.assertContains(plan3, "agg_mv_");
+        dropMv("test", "agg_mv_1");
+        dropMv("test", "agg_mv_2");
     }
 
     public void testNestedMvOnSingleTable() throws Exception {
@@ -690,6 +706,16 @@ public class MvRewriteOptimizationTest {
                 " group by v1, test_all_type.t1b";
         String plan8 = getFragmentPlan(query8);
         PlanTestBase.assertContains(plan8, "agg_join_mv_3");
+
+        // test group by keys order change
+        String query9 = "SELECT t0.v1, test_all_type.t1b," +
+                " (sum(test_all_type.t1c) * 2) + 1 as total_sum, (count(distinct test_all_type.t1c) + 1) * 2 as total_num" +
+                " from t0 join test_all_type" +
+                " on t0.v1 = test_all_type.t1d" +
+                " where t0.v1 < 99" +
+                " group by test_all_type.t1b, v1";
+        String plan9 = getFragmentPlan(query9);
+        PlanTestBase.assertContains(plan9, "agg_join_mv_3");
 
         dropMv("test", "agg_join_mv_3");
     }

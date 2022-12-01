@@ -1,6 +1,6 @@
 # CREATE FUNCTION
 
-## description
+## Description
 
 ### Syntax
 
@@ -50,7 +50,7 @@ properties: It is used to set properties related to aggregate function, which in
 
     If the `function_name` contains the database name, the custom function will be created in the corresponding database. Otherwise the function will be created in the database where the current session is located. The name and parameters of the new function cannot be the same as functions already existing in the current namespace, otherwise the creation will fail. But the creation can be successful with the same name and different parameters.
 
-## example
+## Examples
 
 1. Create a custom scalar function.
 
