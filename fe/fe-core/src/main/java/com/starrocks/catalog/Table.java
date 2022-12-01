@@ -216,6 +216,10 @@ public class Table extends MetaObject implements Writable {
         return type == TableType.ICEBERG;
     }
 
+    public boolean isDeltalakeTable() {
+        return type == TableType.DELTALAKE;
+    }
+
     // for create table
     public boolean isOlapOrLakeTable() {
         return isOlapTable() || isLakeTable();
@@ -248,10 +252,6 @@ public class Table extends MetaObject implements Writable {
 
     public long getCreateTime() {
         return createTime;
-    }
-
-    public String getTableLocation() {
-        return null;
     }
 
     public TTableDescriptor toThrift(List<ReferencedPartitionInfo> partitions) {

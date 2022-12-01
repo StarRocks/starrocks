@@ -37,8 +37,11 @@ import com.starrocks.backup.Repository;
 import com.starrocks.backup.RestoreJob;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.DynamicPartitionProperty;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.HiveMetaStoreTable;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
@@ -723,7 +726,15 @@ public class ShowExecutor {
         }
 
         // Location
-        String location = table.getTableLocation();
+        String location = null;
+        if (table.isHiveTable() || table.isHudiTable()) {
+            location = ((HiveMetaStoreTable) table).getTableLocation();
+        } else if (table.isIcebergTable()) {
+            location = ((IcebergTable) table).getTableLocation();
+        } else if (table.isDeltalakeTable()) {
+            location = ((DeltaLakeTable) table).getTableLocation();
+        }
+
         if (!Strings.isNullOrEmpty(location)) {
             createTableSql.append("\nLOCATION ").append("'").append(location).append("'");
         }
