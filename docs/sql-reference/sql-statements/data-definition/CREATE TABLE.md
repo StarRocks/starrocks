@@ -421,6 +421,21 @@ dynamic_partition.prefix: It is used to specify the prefix of the created partit
 
 dynamic_partition.buckets: It is used to specify the number of buckets automatically created in partitions.
 
+- Set write quorum for data loading
+
+If your StarRocks cluster has multiple data replicas, you can set different write quorum for tables, that is, how many replicas are required to return loading success before StarRocks can determine the loading task success. You can specify write quorum by adding the property `write_quorum` when you create a table.
+
+The valid values of `write_quorum` are:
+
+- `MAJORITY`：Default value. When the **majority** of data replicas return loading success, StarRocks returns loading task success. Otherwise, StarRocks returns loading task failed.
+- `ONE`：When **one** of the data replicas returns loading success, StarRocks returns loading task success. Otherwise, StarRocks returns loading task failed.
+- `ALL`：When **all** of the data replicas return loading success, StarRocks returns loading task success. Otherwise, StarRocks returns loading task failed.
+
+> **CAUTION**
+>
+> - Setting a low write quorum for loading increases the risk of data inaccessibility and even loss. For example, you load data into a table with one write quorum in a StarRocks cluster of two replicas, and the data was successfully loaded into only one replica. Despite that StarRocks determines the loading task succeeded, there is only one surviving replica of the data. If the server which stores the tablets of loaded data goes down, the data in these tablets becomes inaccessible. And if the disk of the server is damaged, the data is lost.
+> - StarRocks returns the loading task status only after all data replicas have returned the status. StarRocks will not return the loading task status when there are replicas whose loading status is unknown. In a replica, loading timeout is also considered as loading failed.
+
 - When building tables, Rollup can be created in bulk.
 
 Syntax:
