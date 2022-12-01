@@ -35,6 +35,7 @@
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/BackendService_types.h"
 #include "gen_cpp/MasterService_types.h"
+#include "gutil/macros.h"
 #include "storage/kv_store.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
@@ -46,7 +47,24 @@ namespace starrocks {
 
 class Tablet;
 class DataDir;
-using TabletAndRowsets = std::tuple<TabletSharedPtr, std::vector<RowsetSharedPtr>>;
+
+// RowsetsAcqRel is a RAII wrapper for invocation of Rowset::acquire_readers and Rowset::release_readers
+class RowsetsAcqRel;
+using RowsetsAcqRelPtr = std::shared_ptr<RowsetsAcqRel>;
+class RowsetsAcqRel {
+private:
+public:
+    explicit RowsetsAcqRel(const std::vector<RowsetSharedPtr>& rowsets) : _rowsets(rowsets) {
+        Rowset::acquire_readers(_rowsets);
+    }
+    ~RowsetsAcqRel() { Rowset::release_readers(_rowsets); }
+
+private:
+    DISALLOW_COPY_AND_MOVE(RowsetsAcqRel);
+    std::vector<RowsetSharedPtr> _rowsets;
+};
+
+using TabletAndRowsets = std::tuple<TabletSharedPtr, std::vector<RowsetSharedPtr>, RowsetsAcqRelPtr>;
 
 enum TabletDropFlag {
     kMoveFilesToTrash = 0,

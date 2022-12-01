@@ -392,7 +392,7 @@ StatusOr<TabletAndRowsets> TabletManager::capture_tablet_and_rowsets(TTabletId t
     std::shared_lock rlock(tablet->get_header_lock());
     std::vector<RowsetSharedPtr> rowsets;
     RETURN_IF_ERROR(tablet->capture_consistent_rowsets(Version{from_version, to_version}, &rowsets));
-    return std::make_tuple(std::move(tablet), std::move(rowsets));
+    return std::make_tuple(std::move(tablet), std::move(rowsets), std::make_shared<RowsetsAcqRel>(rowsets));
 }
 
 TabletSharedPtr TabletManager::_get_tablet_unlocked(TTabletId tablet_id, bool include_deleted, std::string* err) {
