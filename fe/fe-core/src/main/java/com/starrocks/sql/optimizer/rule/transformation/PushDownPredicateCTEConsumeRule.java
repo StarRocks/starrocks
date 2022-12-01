@@ -35,10 +35,10 @@ public class PushDownPredicateCTEConsumeRule extends TransformationRule {
         LogicalFilterOperator filter = (LogicalFilterOperator) input.getOp();
         LogicalCTEConsumeOperator consume = (LogicalCTEConsumeOperator) input.getInputs().get(0).getOp();
 
-        ScalarOperator newPredicate = Utils.compoundAnd(filter.getPredicate(), consume.getPredicate());
+        ScalarOperator mergedPredicate = Utils.compoundAnd(filter.getPredicate(), consume.getPredicate());
 
         LogicalCTEConsumeOperator newConsume = new LogicalCTEConsumeOperator.Builder()
-                .withOperator(consume).setPredicate(newPredicate).build();
+                .withOperator(consume).setPredicate(mergedPredicate).build();
 
         OptExpression output = OptExpression.create(newConsume,
                 OptExpression.create(filter, input.getInputs().get(0).getInputs()));
