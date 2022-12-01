@@ -38,7 +38,7 @@ static std::pair<const char*, size_t> trim(const char* value, size_t len) {
 
 inline bool CSVReader::isColumnSeparator(bool expandBuffer) {
     if (LIKELY(_column_separator_length == 1)) {
-        if (*(_buff.position()) == _column_separator[0]) {
+        if (*(_buff.position()) == _parse_options.column_separator[0]) {
             _buff.skip(1);
             return true;
         }
@@ -46,7 +46,8 @@ inline bool CSVReader::isColumnSeparator(bool expandBuffer) {
         int i = 0;
         const char* base_ptr = _buff.base_ptr();
         size_t p = _buff.position_offset();
-        while (i < _column_separator_length && p < _buff.limit_offset() && *(base_ptr + p) == _column_separator[i]) {
+        while (i < _column_separator_length && p < _buff.limit_offset() &&
+               *(base_ptr + p) == _parse_options.column_separator[i]) {
             i++;
             p++;
             if (_buff.limit_offset() - p < 1) {
@@ -69,7 +70,7 @@ inline bool CSVReader::isColumnSeparator(bool expandBuffer) {
 
 inline bool CSVReader::isRowDelimiter(bool expandBuffer) {
     if (LIKELY(_row_delimiter_length == 1)) {
-        if (*(_buff.position()) == _row_delimiter[0]) {
+        if (*(_buff.position()) == _parse_options.row_delimiter[0]) {
             _buff.skip(1);
             return true;
         }
@@ -77,7 +78,8 @@ inline bool CSVReader::isRowDelimiter(bool expandBuffer) {
         int i = 0;
         const char* base_ptr = _buff.base_ptr();
         size_t p = _buff.position_offset();
-        while (i < _row_delimiter_length && p < _buff.limit_offset() && *(base_ptr + p) == _row_delimiter[i]) {
+        while (i < _row_delimiter_length && p < _buff.limit_offset() &&
+               *(base_ptr + p) == _parse_options.row_delimiter[i]) {
             i++;
             p++;
             if (_buff.limit_offset() - p < 1) {
@@ -177,7 +179,7 @@ Status CSVReader::more_lines() {
         switch (curState) {
         case START:
             // Trim space is enabled and the leading space is skipped in the START state
-            if (UNLIKELY(_trim_space)) {
+            if (UNLIKELY(_parse_options.trim_space)) {
                 while (*(_buff.position()) == ' ') {
                     _buff.skip(1);
                     if (UNLIKELY(_buff.available() < 1)) {
@@ -209,7 +211,7 @@ Status CSVReader::more_lines() {
             }
 
             // escape
-            if (UNLIKELY(*(_buff.position()) == _escape)) {
+            if (UNLIKELY(*(_buff.position()) == _parse_options.escape)) {
                 // trick here.
                 preState = ORDINARY;
                 curState = ESCAPE;
@@ -219,7 +221,7 @@ Status CSVReader::more_lines() {
             }
 
             // enclose
-            if (UNLIKELY(*(_buff.position()) == _enclose)) {
+            if (UNLIKELY(*(_buff.position()) == _parse_options.enclose)) {
                 _buff.skip(1);
                 if (UNLIKELY(_buff.available() < 1)) {
                     status = readMore(notGetLine);
@@ -235,7 +237,7 @@ Status CSVReader::more_lines() {
                     }
                 }
                 filed_start = _buff.position_offset();
-                if (*(_buff.position()) != _enclose) {
+                if (*(_buff.position()) != _parse_options.enclose) {
                     curState = ENCLOSE;
                     is_enclose_field = true;
                     break;
@@ -291,7 +293,7 @@ Status CSVReader::more_lines() {
             // enclose character again, There are two possibilities:
             // 1. ENCLOSE state is over
             // 2. enclose to escape
-            if (*(_buff.position()) == _enclose) {
+            if (*(_buff.position()) == _parse_options.enclose) {
                 _buff.skip(1);
                 if (UNLIKELY(_buff.available() < 1)) {
                     status = readMore(notGetLine);
@@ -306,7 +308,7 @@ Status CSVReader::more_lines() {
                         goto newline_label;
                     }
                 }
-                if (*(_buff.position()) == _enclose) {
+                if (*(_buff.position()) == _parse_options.enclose) {
                     preState = curState;
                     curState = ENCLOSE_ESCAPE;
                     _escape_pos.insert(_buff.position_offset() - 1);
@@ -316,7 +318,7 @@ Status CSVReader::more_lines() {
                 break;
             }
             // escape
-            if (*(_buff.position()) == _escape) {
+            if (*(_buff.position()) == _parse_options.escape) {
                 preState = curState;
                 curState = ESCAPE;
                 _escape_pos.insert(_buff.position_offset());
@@ -334,13 +336,13 @@ Status CSVReader::more_lines() {
 
         case ESCAPE:
             // escape enclose
-            if (*(_buff.position()) == _enclose) {
+            if (*(_buff.position()) == _parse_options.enclose) {
                 curState = preState;
                 _buff.skip(1);
                 break;
             }
             // escape escape
-            if (*(_buff.position()) == _escape) {
+            if (*(_buff.position()) == _parse_options.escape) {
                 curState = preState;
                 _buff.skip(1);
                 break;
@@ -370,7 +372,7 @@ Status CSVReader::more_lines() {
             }
 
             // escape
-            if (UNLIKELY(*(_buff.position()) == _escape)) {
+            if (UNLIKELY(*(_buff.position()) == _parse_options.escape)) {
                 preState = curState;
                 curState = ESCAPE;
                 _escape_pos.insert(_buff.position_offset());
@@ -379,7 +381,7 @@ Status CSVReader::more_lines() {
             }
 
             // enclose
-            if (UNLIKELY(*(_buff.position()) == _enclose)) {
+            if (UNLIKELY(*(_buff.position()) == _parse_options.enclose)) {
                 preState = curState;
                 curState = ENCLOSE_ESCAPE;
                 _escape_pos.insert(_buff.position_offset());
@@ -409,7 +411,7 @@ Status CSVReader::more_lines() {
             }
             // push field
             if (UNLIKELY(is_enclose_field)) {
-                if (_trim_space) {
+                if (_parse_options.trim_space) {
                     const char* basePtr = _buff.base_ptr();
                     if (is_escape_field) {
                         basePtr = _escape_data.data();
@@ -424,7 +426,7 @@ Status CSVReader::more_lines() {
                 }
 
             } else {
-                if (UNLIKELY(_trim_space)) {
+                if (UNLIKELY(_parse_options.trim_space)) {
                     const char* basePtr = _buff.base_ptr();
                     if (is_escape_field) {
                         basePtr = _escape_data.data();
@@ -483,7 +485,7 @@ Status CSVReader::more_lines() {
                     }
 
                     if (UNLIKELY(is_enclose_field)) {
-                        if (_trim_space) {
+                        if (_parse_options.trim_space) {
                             const char* basePtr = _buff.base_ptr();
                             if (is_escape_field) {
                                 basePtr = _escape_data.data();
@@ -497,7 +499,7 @@ Status CSVReader::more_lines() {
                         }
                         notGetLine = false;
                     } else {
-                        if (UNLIKELY(_trim_space)) {
+                        if (UNLIKELY(_parse_options.trim_space)) {
                             const char* basePtr = _buff.base_ptr();
                             if (is_escape_field) {
                                 basePtr = _escape_data.data();
@@ -565,7 +567,7 @@ Status CSVReader::next_record(Record* record) {
     }
     char* d;
     size_t pos = 0;
-    while ((d = _buff.find(_row_delimiter, pos)) == nullptr) {
+    while ((d = _buff.find(_parse_options.row_delimiter, pos)) == nullptr) {
         pos = _buff.available();
         _buff.compact();
         if (_buff.free_space() == 0) {
@@ -619,8 +621,8 @@ void CSVReader::split_record(const Record& record, Fields* fields) const {
 
     if (_column_separator_length == 1) {
         for (size_t i = 0; i < size; ++i, ++ptr) {
-            if (*ptr == _column_separator[0]) {
-                if (_trim_space) {
+            if (*ptr == _parse_options.column_separator[0]) {
+                if (_parse_options.trim_space) {
                     std::pair<const char*, size_t> newPos = trim(value, ptr - value);
                     fields->emplace_back(newPos.first, newPos.second);
                 } else {
@@ -633,10 +635,10 @@ void CSVReader::split_record(const Record& record, Fields* fields) const {
         const auto* const base = ptr;
 
         do {
-            ptr = static_cast<char*>(
-                    memmem(value, size - (value - base), _column_separator.data(), _column_separator_length));
+            ptr = static_cast<char*>(memmem(value, size - (value - base), _parse_options.column_separator.data(),
+                                            _column_separator_length));
             if (ptr != nullptr) {
-                if (_trim_space) {
+                if (_parse_options.trim_space) {
                     std::pair<const char*, size_t> newPos = trim(value, ptr - value);
                     fields->emplace_back(newPos.first, newPos.second);
                 } else {
@@ -648,7 +650,7 @@ void CSVReader::split_record(const Record& record, Fields* fields) const {
 
         ptr = record.data + size;
     }
-    if (_trim_space) {
+    if (_parse_options.trim_space) {
         std::pair<const char*, size_t> newPos = trim(value, ptr - value);
         fields->emplace_back(newPos.first, newPos.second);
     } else {

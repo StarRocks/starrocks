@@ -43,13 +43,14 @@ Status CSVScanner::ScannerCSVReader::_fill_buffer() {
     _buff.add_limit(s.size);
     auto n = _buff.available();
     if (s.size == 0) {
-        if (n < _row_delimiter_length || _buff.find(_row_delimiter, n - _row_delimiter_length) == nullptr) {
+        if (n < _row_delimiter_length ||
+            _buff.find(_parse_options.row_delimiter, n - _row_delimiter_length) == nullptr) {
             // Has reached the end of file but still no record delimiter found, which
             // is valid, according the RFC, add the record delimiter ourself.
             if (_buff.free_space() < _row_delimiter_length) {
                 return Status::InternalError("CSV line length exceed limit " + std::to_string(_buff.capacity()));
             }
-            for (char ch : _row_delimiter) {
+            for (char ch : _parse_options.row_delimiter) {
                 _buff.append(ch);
             }
         }
@@ -66,36 +67,36 @@ CSVScanner::CSVScanner(RuntimeState* state, RuntimeProfile* profile, const TBrok
                        ScannerCounter* counter)
         : FileScanner(state, profile, scan_range.params, counter), _scan_range(scan_range) {
     if (scan_range.params.__isset.multi_column_separator) {
-        _field_delimiter = scan_range.params.multi_column_separator;
+        _parse_options.column_separator = scan_range.params.multi_column_separator;
     } else {
-        _field_delimiter = scan_range.params.column_separator;
+        _parse_options.column_separator = scan_range.params.column_separator;
     }
     if (scan_range.params.__isset.multi_row_delimiter) {
-        _record_delimiter = scan_range.params.multi_row_delimiter;
+        _parse_options.row_delimiter = scan_range.params.multi_row_delimiter;
     } else {
-        _record_delimiter = scan_range.params.row_delimiter;
+        _parse_options.row_delimiter = scan_range.params.row_delimiter;
     }
     if (scan_range.params.__isset.skip_header) {
-        _skip_header = scan_range.params.skip_header;
+        _parse_options.skip_header = scan_range.params.skip_header;
     } else {
-        _skip_header = 0;
+        _parse_options.skip_header = 0;
     }
     if (scan_range.params.__isset.trim_space) {
-        _trim_space = scan_range.params.trim_space;
+        _parse_options.trim_space = scan_range.params.trim_space;
     } else {
-        _trim_space = false;
+        _parse_options.trim_space = false;
     }
     if (scan_range.params.__isset.enclose) {
-        _enclose = scan_range.params.enclose;
+        _parse_options.enclose = scan_range.params.enclose;
     } else {
-        _enclose = 0;
+        _parse_options.enclose = 0;
     }
     if (scan_range.params.__isset.escape) {
-        _escape = scan_range.params.escape;
+        _parse_options.escape = scan_range.params.escape;
     } else {
-        _escape = 0;
+        _parse_options.escape = 0;
     }
-    if (_enclose == 0 && _escape == 0) {
+    if (_parse_options.enclose == 0 && _parse_options.escape == 0) {
         _use_v2 = false;
     } else {
         _use_v2 = true;
@@ -180,8 +181,7 @@ StatusOr<ChunkPtr> CSVScanner::get_next() {
                 return st;
             }
 
-            _curr_reader = std::make_unique<ScannerCSVReader>(file, _record_delimiter, _field_delimiter, _trim_space,
-                                                              _escape, _enclose);
+            _curr_reader = std::make_unique<ScannerCSVReader>(file, _parse_options);
             _curr_reader->set_counter(_counter);
             if (_scan_range.ranges[_curr_file_index].size > 0 &&
                 _scan_range.ranges[_curr_file_index].format_type == TFileFormatType::FORMAT_CSV_PLAIN) {
@@ -201,8 +201,8 @@ StatusOr<ChunkPtr> CSVScanner::get_next() {
                 RETURN_IF_ERROR(_curr_reader->next_record(&dummy));
             }
 
-            if (_skip_header) {
-                for (int64_t i = 0; i < _skip_header; i++) {
+            if (_parse_options.skip_header) {
+                for (int64_t i = 0; i < _parse_options.skip_header; i++) {
                     CSVReader::Record dummy;
                     RETURN_IF_ERROR(_curr_reader->next_record(&dummy));
                 }

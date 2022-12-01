@@ -118,6 +118,32 @@ struct CSVLine {
     }
 };
 
+struct CSVParseOptions {
+    std::string row_delimiter;
+    std::string column_separator;
+    int64_t skip_header;
+    bool trim_space;
+    char escape;
+    char enclose;
+    CSVParseOptions(const std::string row_delimiter_, const std::string column_separator_, int64_t skip_header_ = 0,
+                    bool trim_space_ = false, char escape_ = 0, char enclose_ = 0) {
+        row_delimiter = row_delimiter_;
+        column_separator = column_separator_;
+        skip_header = skip_header_;
+        trim_space = trim_space_;
+        escape = escape_;
+        enclose = enclose_;
+    }
+    CSVParseOptions() {
+        row_delimiter = '\n';
+        column_separator = ',';
+        skip_header = false;
+        trim_space = false;
+        escape = 0;
+        enclose = 0;
+    }
+};
+
 class CSVReader {
 #ifndef BE_TEST
     constexpr static size_t kMinBufferSize = 8 * 1024 * 1024L;
@@ -132,17 +158,10 @@ public:
     using Field = Slice;
     using Fields = std::vector<Field>;
 
-    CSVReader(const std::string& row_delimiter, const std::string& column_separator, bool trim_space = false,
-              char escape = 0, char enclose = 0, const size_t bufferSize = kMinBufferSize)
-            : _row_delimiter(row_delimiter),
-              _column_separator(column_separator),
-              _trim_space(trim_space),
-              _escape(escape),
-              _enclose(enclose),
-              _storage(bufferSize),
-              _buff(_storage.data(), _storage.size()) {
-        _row_delimiter_length = row_delimiter.size();
-        _column_separator_length = column_separator.size();
+    CSVReader(const CSVParseOptions& parse_options, const size_t bufferSize = kMinBufferSize)
+            : _parse_options(parse_options), _storage(bufferSize), _buff(_storage.data(), _storage.size()) {
+        _row_delimiter_length = parse_options.row_delimiter.size();
+        _column_separator_length = parse_options.column_separator.size();
     }
 
     virtual ~CSVReader() = default;
@@ -173,13 +192,9 @@ public:
     Status init_buff() { return _fill_buffer(); }
 
 protected:
-    std::string _row_delimiter;
-    std::string _column_separator;
+    CSVParseOptions _parse_options;
     size_t _row_delimiter_length;
     size_t _column_separator_length;
-    bool _trim_space;
-    char _escape;
-    char _enclose;
     raw::RawVector<char> _storage;
     CSVBuffer _buff;
     raw::RawVector<char> _escape_data;

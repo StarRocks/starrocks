@@ -47,9 +47,8 @@ public:
 private:
     class ScannerCSVReader : public CSVReader {
     public:
-        ScannerCSVReader(std::shared_ptr<SequentialFile> file, const std::string& record_delimiter,
-                         const std::string& field_delimiter, bool trim_space, char escape, char enclose)
-                : CSVReader(record_delimiter, field_delimiter, trim_space, escape, enclose) {
+        ScannerCSVReader(std::shared_ptr<SequentialFile> file, const CSVParseOptions& parse_options)
+                : CSVReader(parse_options) {
             _file = std::move(file);
         }
 
@@ -75,16 +74,11 @@ private:
 
     const TBrokerScanRange& _scan_range;
     std::vector<Column*> _column_raw_ptrs;
-    std::string _record_delimiter;
-    std::string _field_delimiter;
+    CSVParseOptions _parse_options;
     int _num_fields_in_csv = 0;
     int _curr_file_index = -1;
     CSVReaderPtr _curr_reader;
     std::vector<ConverterPtr> _converters;
-    int64_t _skip_header;
-    bool _trim_space;
-    char _enclose;
-    char _escape;
     bool _use_v2;
 };
 
