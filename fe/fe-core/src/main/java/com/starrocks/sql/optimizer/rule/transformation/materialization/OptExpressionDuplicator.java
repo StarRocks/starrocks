@@ -118,8 +118,8 @@ public class OptExpressionDuplicator {
                 LogicalOlapScanOperator olapScan = (LogicalOlapScanOperator) optExpression.getOp();
                 OlapTable table = (OlapTable) olapScan.getTable();
                 if (table.getId() == partitionByTable.getId()) {
-                    ColumnRefOperator partitionColumnRef = newColumnMetaToColRefMap.get(partitionColumn);
-                    if (!columnRefOperatorColumnMap.containsKey(partitionColumnRef)) {
+                    if (!columnRefOperatorColumnMap.containsValue(partitionColumn)) {
+                        ColumnRefOperator partitionColumnRef = newColumnMetaToColRefMap.get(partitionColumn);
                         columnRefColumnMapBuilder.put(partitionColumnRef, partitionColumn);
                     }
                 }
