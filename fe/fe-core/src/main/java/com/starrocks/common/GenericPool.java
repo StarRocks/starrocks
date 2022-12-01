@@ -127,11 +127,12 @@ public class GenericPool<VALUE extends org.apache.thrift.TServiceClient> {
                 LOG.debug("before create socket hostname={} key.port={} timeoutMs={}",
                         key.hostname, key.port, timeoutMs);
             }
-            TTransport transport = new TSocket(key.hostname, key.port, timeoutMs);
-            transport.open();
-            TProtocol protocol = new TBinaryProtocol(transport);
-            VALUE client = (VALUE) newInstance(className, protocol);
-            return client;
+            try (TTransport transport = new TSocket(key.hostname, key.port, timeoutMs)) {
+                transport.open();
+                TProtocol protocol = new TBinaryProtocol(transport);
+                VALUE client = (VALUE) newInstance(className, protocol);
+                return client;
+            }
         }
 
         @Override
