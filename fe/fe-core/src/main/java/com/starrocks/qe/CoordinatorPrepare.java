@@ -63,12 +63,10 @@ import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TScanRangeParams;
 import com.starrocks.thrift.TUniqueId;
-import lombok.Getter;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -81,16 +79,14 @@ import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 
-@Getter
 public class CoordinatorPrepare {
-    private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final Logger LOG = LogManager.getLogger(CoordinatorPrepare.class);
     private static final String LOCAL_IP = FrontendOptions.getLocalHostAddress();
 
     private final Random random = new Random();
 
     private TNetworkAddress coordAddress;
-    private TUniqueId queryId;
+    private final TUniqueId queryId;
     private final ConnectContext connectContext;
     private final boolean preferComputeNode;
     private final boolean usePipeline;
@@ -159,6 +155,142 @@ public class CoordinatorPrepare {
         nextInstanceId.setLo(queryId.lo + 1);
         this.forceScheduleLocal = context.getSessionVariable().isForceScheduleLocal();
         this.usePipeline = canUsePipeline(this.connectContext, this.fragments);
+    }
+
+    public TNetworkAddress getCoordAddress() {
+        return coordAddress;
+    }
+
+    public TUniqueId getQueryId() {
+        return queryId;
+    }
+
+    public ConnectContext getConnectContext() {
+        return connectContext;
+    }
+
+    public boolean isPreferComputeNode() {
+        return preferComputeNode;
+    }
+
+    public boolean isUsePipeline() {
+        return usePipeline;
+    }
+
+    public TQueryGlobals getQueryGlobals() {
+        return queryGlobals;
+    }
+
+    public TQueryOptions getQueryOptions() {
+        return queryOptions;
+    }
+
+    public TUniqueId getNextInstanceId() {
+        return nextInstanceId;
+    }
+
+    public boolean isForceScheduleLocal() {
+        return forceScheduleLocal;
+    }
+
+    public Set<Integer> getColocateFragmentIds() {
+        return colocateFragmentIds;
+    }
+
+    public Set<Integer> getReplicateFragmentIds() {
+        return replicateFragmentIds;
+    }
+
+    public Set<Integer> getReplicateScanIds() {
+        return replicateScanIds;
+    }
+
+    public Set<Integer> getBucketShuffleFragmentIds() {
+        return bucketShuffleFragmentIds;
+    }
+
+    public Set<Integer> getRightOrFullBucketShuffleFragmentIds() {
+        return rightOrFullBucketShuffleFragmentIds;
+    }
+
+    public Set<TUniqueId> getInstanceIds() {
+        return instanceIds;
+    }
+
+    public List<PlanFragment> getFragments() {
+        return fragments;
+    }
+
+    public List<ScanNode> getScanNodes() {
+        return scanNodes;
+    }
+
+    public Map<PlanFragmentId, FragmentExecParams> getFragmentExecParamsMap() {
+        return fragmentExecParamsMap;
+    }
+
+    public Map<PlanFragmentId, Map<Integer, TNetworkAddress>> getFragmentIdToSeqToAddressMap() {
+        return fragmentIdToSeqToAddressMap;
+    }
+
+    public Map<PlanFragmentId, BucketSeqToScanRange> getFragmentIdBucketSeqToScanRangeMap() {
+        return fragmentIdBucketSeqToScanRangeMap;
+    }
+
+    public Map<PlanFragmentId, Integer> getFragmentIdToBucketNumMap() {
+        return fragmentIdToBucketNumMap;
+    }
+
+    public Map<PlanFragmentId, Map<Long, Integer>> getFragmentIdToBackendIdBucketCountMap() {
+        return fragmentIdToBackendIdBucketCountMap;
+    }
+
+    public Map<PlanFragmentId, List<Integer>> getFragmentIdToSeqToInstanceMap() {
+        return fragmentIdToSeqToInstanceMap;
+    }
+
+    public Map<Integer, TNetworkAddress> getChannelIdToBEHTTP() {
+        return channelIdToBEHTTP;
+    }
+
+    public Map<Integer, TNetworkAddress> getChannelIdToBEPort() {
+        return channelIdToBEPort;
+    }
+
+    public Map<TNetworkAddress, TNetworkAddress> getBePortToBeWebServerPort() {
+        return bePortToBeWebServerPort;
+    }
+
+    public ImmutableMap<Long, Backend> getIdToBackend() {
+        return idToBackend;
+    }
+
+    public ImmutableMap<Long, ComputeNode> getIdToComputeNode() {
+        return idToComputeNode;
+    }
+
+    public boolean isHasComputeNode() {
+        return hasComputeNode;
+    }
+
+    public boolean isUsedComputeNode() {
+        return usedComputeNode;
+    }
+
+    public Set<Long> getUsedBackendIDs() {
+        return usedBackendIDs;
+    }
+
+    public Map<TNetworkAddress, Long> getAddressToBackendID() {
+        return addressToBackendID;
+    }
+
+    public ResourceGroup getResourceGroup() {
+        return resourceGroup;
+    }
+
+    public Map<TNetworkAddress, Integer> getHostToNumbers() {
+        return hostToNumbers;
     }
 
     public void prepareExec() throws Exception {

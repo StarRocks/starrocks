@@ -24,7 +24,6 @@ package com.starrocks.qe;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -40,7 +39,6 @@ import com.starrocks.common.util.Counter;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.load.EtlJobType;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.planner.PlanFragment;
@@ -112,14 +110,9 @@ public class Coordinator {
     private static final Logger LOG = LogManager.getLogger(Coordinator.class);
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
-    // parallel execute
-    private final TUniqueId nextInstanceId;
     // Overall status of the entire query; set to the first reported fragment error
     // status or to CANCELLED, if Cancel() is called.
     Status queryStatus = new Status();
-    // save of related backends of this query
-    private final Set<Long> usedBackendIDs = Sets.newConcurrentHashSet();
-    private final Map<TNetworkAddress, Long> addressToBackendID = Maps.newHashMap();
 
     // copied from TQueryExecRequest; constant across all fragments
     private final TDescriptorTable descTable;
@@ -167,10 +160,6 @@ public class Coordinator {
     private TUniqueId queryId;
     private final ConnectContext connectContext;
     private final boolean needReport;
-    private final boolean preferComputeNode;
-    //this query use compute node number
-    private final int useComputeNodeNumber;
-    private EtlJobType etlJobType;
 
     private final CoordinatorPrepare coordinatorPrepare;
 
@@ -199,11 +188,6 @@ public class Coordinator {
             this.queryGlobals.setLast_query_id(context.getLastQueryId().toString());
         }
         this.needReport = context.getSessionVariable().isEnableProfile();
-        this.preferComputeNode = context.getSessionVariable().isPreferComputeNode();
-        this.useComputeNodeNumber = context.getSessionVariable().getUseComputeNodes();
-        this.nextInstanceId = new TUniqueId();
-        nextInstanceId.setHi(queryId.hi);
-        nextInstanceId.setLo(queryId.lo + 1);
 
         this.coordinatorPrepare = new CoordinatorPrepare(context, fragments, scanNodes, queryGlobals, queryOptions);
     }
@@ -238,11 +222,6 @@ public class Coordinator {
         this.queryGlobals.setTimestamp_ms(startTime);
         this.queryGlobals.setTime_zone(timezone);
         this.needReport = true;
-        this.preferComputeNode = false;
-        this.useComputeNodeNumber = -1;
-        this.nextInstanceId = new TUniqueId();
-        nextInstanceId.setHi(queryId.hi);
-        nextInstanceId.setLo(queryId.lo + 1);
 
         this.coordinatorPrepare =
                 new CoordinatorPrepare(connectContext, fragments, scanNodes, queryGlobals, queryOptions);
@@ -273,11 +252,6 @@ public class Coordinator {
         this.queryGlobals.setTimestamp_ms(startTime);
         this.queryGlobals.setTime_zone(timezone);
         this.needReport = true;
-        this.preferComputeNode = false;
-        this.useComputeNodeNumber = -1;
-        this.nextInstanceId = new TUniqueId();
-        nextInstanceId.setHi(queryId.hi);
-        nextInstanceId.setLo(queryId.lo + 1);
 
         this.coordinatorPrepare = new CoordinatorPrepare(context, fragments, scanNodes, queryGlobals, queryOptions);
     }
@@ -324,14 +298,8 @@ public class Coordinator {
         }
 
         this.needReport = true;
-        this.preferComputeNode = context.getSessionVariable().isPreferComputeNode();
-        this.useComputeNodeNumber = context.getSessionVariable().getUseComputeNodes();
-        this.nextInstanceId = new TUniqueId();
-        nextInstanceId.setHi(queryId.hi);
-        nextInstanceId.setLo(queryId.lo + 1);
 
         this.coordinatorPrepare = new CoordinatorPrepare(context, fragments, scanNodes, queryGlobals, queryOptions);
-        etlJobType = loadPlanner.getEtlJobType();
     }
 
     public long getJobId() {
@@ -418,26 +386,7 @@ public class Coordinator {
     }
 
     public boolean isUsingBackend(Long backendID) {
-        return usedBackendIDs.contains(backendID);
-    }
-
-
-    private ImmutableMap<Long, ComputeNode> getIdToComputeNode() {
-        ImmutableMap<Long, ComputeNode> idToComputeNode
-                = ImmutableMap.copyOf(GlobalStateMgr.getCurrentSystemInfo().getIdComputeNode());
-        if (useComputeNodeNumber < 0 || useComputeNodeNumber >= idToComputeNode.size()) {
-            return idToComputeNode;
-        } else {
-            Map<Long, ComputeNode> computeNodes = new HashMap<>();
-            for (int i = 0; i < useComputeNodeNumber; i++) {
-                ComputeNode computeNode = SimpleScheduler.getComputeNode(idToComputeNode);
-                if (computeNode == null) {
-                    continue;
-                }
-                computeNodes.put(computeNode.getId(), computeNode);
-            }
-            return ImmutableMap.copyOf(computeNodes);
-        }
+        return coordinatorPrepare.getUsedBackendIDs().contains(backendID);
     }
 
     private void lock() {
@@ -531,7 +480,7 @@ public class Coordinator {
             TNetworkAddress execBeAddr = topParams.instanceExecParams.get(0).host;
             receiver = new ResultReceiver(
                     topParams.instanceExecParams.get(0).instanceId,
-                    addressToBackendID.get(execBeAddr),
+                    coordinatorPrepare.getAddressToBackendID().get(execBeAddr),
                     coordinatorPrepare.toBrpcHost(execBeAddr),
                     queryOptions.query_timeout * 1000);
 
@@ -557,11 +506,12 @@ public class Coordinator {
             this.queryOptions.setEnable_profile(true);
             deltaUrls = Lists.newArrayList();
             loadCounters = Maps.newHashMap();
-            List<Long> relatedBackendIds = Lists.newArrayList(addressToBackendID.values());
+            List<Long> relatedBackendIds = Lists.newArrayList(coordinatorPrepare.getAddressToBackendID().values());
             GlobalStateMgr.getCurrentState().getLoadManager()
                     .initJobProgress(jobId, queryId, coordinatorPrepare.getInstanceIds(),
                             relatedBackendIds);
-            LOG.info("dispatch load job: {} to {}", DebugUtil.printId(queryId), addressToBackendID.keySet());
+            LOG.info("dispatch load job: {} to {}", DebugUtil.printId(queryId),
+                    coordinatorPrepare.getAddressToBackendID().keySet());
         }
     }
 
@@ -689,7 +639,7 @@ public class Coordinator {
                         // TODO: pool of pre-formatted BackendExecStates?
                         TNetworkAddress host = instanceId2Host.get(tParam.params.fragment_instance_id);
                         BackendExecState execState = new BackendExecState(fragment.getFragmentId(), host,
-                                profileFragmentId, tParam, this.addressToBackendID);
+                                profileFragmentId, tParam, coordinatorPrepare.getAddressToBackendID());
                         backendExecStates.put(tParam.backend_num, execState);
                         if (needCheckBackendState) {
                             needCheckBackendExecStates.add(execState);
@@ -980,7 +930,8 @@ public class Coordinator {
                         for (TExecPlanFragmentParams tUniquePrams : tUniqueParamsList) {
                             // TODO: pool of pre-formatted BackendExecStates?
                             BackendExecState execState = new BackendExecState(fragment.getFragmentId(), host,
-                                    profileFragmentId, tCommonParams, tUniquePrams, this.addressToBackendID);
+                                    profileFragmentId, tCommonParams, tUniquePrams,
+                                    coordinatorPrepare.getAddressToBackendID());
                             execStates.add(execState);
                             backendExecStates.put(tUniquePrams.backend_num, execState);
                             if (needCheckBackendState) {
@@ -1838,7 +1789,7 @@ public class Coordinator {
                 } catch (RpcException e) {
                     LOG.warn("cancel plan fragment get a exception, address={}:{}", brpcAddress.getHostname(),
                             brpcAddress.getPort());
-                    SimpleScheduler.addToBlacklist(addressToBackendID.get(brpcAddress));
+                    SimpleScheduler.addToBlacklist(coordinatorPrepare.getAddressToBackendID().get(brpcAddress));
                 }
 
                 this.hasCanceled = true;
