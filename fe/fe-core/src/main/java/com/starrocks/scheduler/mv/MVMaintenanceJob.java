@@ -28,8 +28,6 @@ import com.starrocks.thrift.TMVMaintenanceStopTask;
 import com.starrocks.thrift.TMVMaintenanceTasks;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TUniqueId;
-import lombok.Data;
-import lombok.val;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -53,7 +51,6 @@ import java.util.concurrent.atomic.AtomicReference;
  * 1. Event driven: job state machine and execution is separated, and the state machine is driven by events
  * 2. Execution: the job is executed in JobExecutor, at most one thread could execute the job
  */
-@Data
 public class MVMaintenanceJob implements Writable {
     private static final Logger LOG = LogManager.getLogger(MVMaintenanceJob.class);
 
@@ -114,8 +111,8 @@ public class MVMaintenanceJob implements Writable {
         throw UnsupportedException.unsupportedException("TODO: implement pause action");
     }
 
-    public void continueJob() {
-        throw UnsupportedException.unsupportedException("TODO: implement continue action");
+    public void resumeJob() {
+        throw UnsupportedException.unsupportedException("TODO: implement resume action");
     }
 
     public void onSchedule() throws Exception {
@@ -218,7 +215,7 @@ public class MVMaintenanceJob implements Writable {
 
         this.tasks = new ArrayList<>();
         int taskId = 0;
-        for (val kv : fragmentExecParams.entrySet()) {
+        for (Map.Entry<PlanFragmentId, Coordinator.FragmentExecParams> kv : fragmentExecParams.entrySet()) {
             PlanFragmentId fragmentId = kv.getKey();
             CoordinatorPreprocessor.FragmentExecParams execParams = kv.getValue();
             List<TExecPlanFragmentParams> tParams =
@@ -366,6 +363,18 @@ public class MVMaintenanceJob implements Writable {
 
     public List<MVMaintenanceTask> getTasks() {
         return tasks;
+    }
+
+    private JobState getSerializedState() {
+        return serializedState;
+    }
+
+    public long getViewId() {
+        return viewId;
+    }
+
+    public MVEpoch getEpoch() {
+        return epoch;
     }
 
     @Override

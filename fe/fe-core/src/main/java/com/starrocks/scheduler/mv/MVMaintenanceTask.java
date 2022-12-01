@@ -9,7 +9,6 @@ import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TMVMaintenanceStartTask;
 import com.starrocks.thrift.TMVMaintenanceTasks;
 import com.starrocks.thrift.TUniqueId;
-import lombok.Data;
 
 /**
  * TODO(murphy) implement the Coordinator to compute task correctly
@@ -18,7 +17,6 @@ import lombok.Data;
  * 1. After maintenance job started, generated tasks are deployed on executors
  * 2. The execution of task is coordinated by EpochCoordinator on FE
  */
-@Data
 public class MVMaintenanceTask {
 
     // Job information of the job
@@ -59,5 +57,71 @@ public class MVMaintenanceTask {
         task.setPlan_params(fragmentInstance);
 
         return request;
+    }
+
+    public MVMaintenanceJob getJob() {
+        return job;
+    }
+
+    public void setJob(MVMaintenanceJob job) {
+        this.job = job;
+    }
+
+    public String getDbName() {
+        return dbName;
+    }
+
+    public void setDbName(String dbName) {
+        this.dbName = dbName;
+    }
+
+    public long getBeId() {
+        return beId;
+    }
+
+    public void setBeId(long beId) {
+        this.beId = beId;
+    }
+
+    public long getTaskId() {
+        return taskId;
+    }
+
+    public void setTaskId(long taskId) {
+        this.taskId = taskId;
+    }
+
+    public PlanFragmentId getFragmentId() {
+        return fragmentId;
+    }
+
+    public void setFragmentId(PlanFragmentId fragmentId) {
+        this.fragmentId = fragmentId;
+    }
+
+    public TUniqueId getInstanceId() {
+        return instanceId;
+    }
+
+    public void setInstanceId(TUniqueId instanceId) {
+        this.instanceId = instanceId;
+    }
+
+    public TExecPlanFragmentParams getFragmentInstance() {
+        return fragmentInstance;
+    }
+
+    public void setFragmentInstance(TExecPlanFragmentParams fragmentInstance) {
+        this.fragmentInstance = fragmentInstance;
+    }
+
+    @Override
+    public String toString() {
+        return "MVMaintenanceTask{" +
+                "job=" + job +
+                ", dbName='" + dbName + '\'' +
+                ", beId=" + beId +
+                ", taskId=" + taskId +
+                '}';
     }
 }

@@ -8,11 +8,11 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.thrift.TMVEpoch;
-import lombok.Data;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.Objects;
 
 /**
  * The incremental maintenance of MV consists of epochs, whose lifetime is defined as:
@@ -23,7 +23,6 @@ import java.io.IOException;
  * 5. Commit the transaction to make is visible to user
  * 6. Commit the binlog consumption LSN(be atomic with transaction commitment to make)
  */
-@Data
 public class MVEpoch implements Writable {
     public static final long MAX_EXEC_MILLIS = 1000;
     public static final long MAX_SCAN_ROWS = 10 * 10000;
@@ -142,5 +141,84 @@ public class MVEpoch implements Writable {
             return this.equals(FAILED);
         }
 
+    }
+
+    public long getMvId() {
+        return mvId;
+    }
+
+    public void setMvId(long mvId) {
+        this.mvId = mvId;
+    }
+
+    public EpochState getState() {
+        return state;
+    }
+
+    public void setState(EpochState state) {
+        this.state = state;
+    }
+
+    public BinlogConsumeStateVO getBinlogState() {
+        return binlogState;
+    }
+
+    public void setBinlogState(BinlogConsumeStateVO binlogState) {
+        this.binlogState = binlogState;
+    }
+
+    public long getStartTimeMilli() {
+        return startTimeMilli;
+    }
+
+    public void setStartTimeMilli(long startTimeMilli) {
+        this.startTimeMilli = startTimeMilli;
+    }
+
+    public long getCommitTimeMilli() {
+        return commitTimeMilli;
+    }
+
+    public void setCommitTimeMilli(long commitTimeMilli) {
+        this.commitTimeMilli = commitTimeMilli;
+    }
+
+    public long getTxnId() {
+        return txnId;
+    }
+
+    public void setTxnId(long txnId) {
+        this.txnId = txnId;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        MVEpoch mvEpoch = (MVEpoch) o;
+        return mvId == mvEpoch.mvId &&
+                commitTimeMilli == mvEpoch.commitTimeMilli && txnId == mvEpoch.txnId && state == mvEpoch.state &&
+                Objects.equals(binlogState, mvEpoch.binlogState);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(mvId, state, binlogState, txnId);
+    }
+
+    @Override
+    public String toString() {
+        return "MVEpoch{" +
+                "mvId=" + mvId +
+                ", state=" + state +
+                ", binlogState=" + binlogState +
+                ", startTimeMilli=" + startTimeMilli +
+                ", commitTimeMilli=" + commitTimeMilli +
+                ", txnId=" + txnId +
+                '}';
     }
 }
