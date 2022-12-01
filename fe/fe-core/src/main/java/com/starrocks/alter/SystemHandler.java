@@ -56,6 +56,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 /*
  * SystemHandler is for
@@ -101,7 +102,7 @@ public class SystemHandler extends AlterHandler {
             }
 
             LOG.info("backend {} lefts {} replicas to decommission(show up to 20): {}", beId, backendTabletIds.size(),
-                     backendTabletIds.stream().limit(20));
+                     backendTabletIds.stream().limit(20).collect(Collectors.toList()));
         }
     }
 
