@@ -79,6 +79,13 @@ public class BaseGrantRevokePrivilegeStmt extends DdlStmt {
         return objects.getUserPrivilegeObjectList();
     }
 
+    public FunctionArgsDef getFunctionArgsDef() {
+        return objects.getFunctionArgsDef();
+    }
+
+    public String getFunctionName() {
+        return objects.getFunctionName();
+    }
     public List<String> getAllTypeList() {
         return objects.getAllTypeList();
     }
