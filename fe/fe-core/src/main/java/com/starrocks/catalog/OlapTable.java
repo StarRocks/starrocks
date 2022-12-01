@@ -84,7 +84,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -551,7 +550,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
                 idx.clearTabletsForRestore();
                 Status status = createTabletsForRestore(tabletNum, idx, globalStateMgr,
                         partitionInfo.getReplicationNum(entry.getKey()), partition.getVisibleVersion(),
-                        schemaHash, partition.getId());
+                        schemaHash, partition.getId(), partition.getShardGroupId());
                 if (!status.ok()) {
                     return status;
                 }

@@ -14,7 +14,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -64,15 +63,21 @@ public class ShardDeleter extends LeaderDaemon {
         // 1.3.compute diff
         List<Long> groupIdFe = getAllPartitionId();
         List<ShardGroupInfo> shardGroupInfos = starOSAgent.listShardGroup();
+        // for debug
+        LOG.info("size of groupIdFe is {}, size of shardGroupInfos is {}",
+                groupIdFe.size(),shardGroupInfos.size());
         List<Long> groupIdStaros = shardGroupInfos.stream().map(ShardGroupInfo::getGroupId).collect(Collectors.toList());
+
+        if (shardGroupInfos.isEmpty()) {
+            return;
+        }
 
         Map<Long, String> groupToCreateTimeMap =
                 shardGroupInfos.stream().collect(Collectors.toMap(
                         obj -> obj.getGroupId(),
                         obj -> obj.getLabelsMap().get("createTime"),
-                        (key1 , key2) -> key1
+                        (key1, key2) -> key1
                 ));
-
 
         List<Long> diff = groupIdStaros.stream().filter(e -> {
             return !groupIdFe.contains(e);

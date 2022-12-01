@@ -2,9 +2,6 @@
 
 package com.starrocks.lake;
 
-import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.proto.DeleteTabletRequest;
-import com.starrocks.proto.DeleteTabletResponse;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
@@ -15,14 +12,10 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
 import org.junit.Before;
-import org.junit.Test;
 
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
 
 public class ShardDeleterTest {
 
@@ -86,26 +79,5 @@ public class ShardDeleterTest {
             }
         };
 
-    }
-
-    @Test
-    public void testNormal() throws Exception {
-
-        DeleteTabletResponse response = new DeleteTabletResponse();
-        response.failedTablets = new ArrayList<>();
-
-        new Expectations() {{
-                lakeService.deleteTablet((DeleteTabletRequest) any);
-                minTimes = 1;
-                result = CompletableFuture.completedFuture(response);
-
-                starOSAgent.deleteShards(ids);
-                minTimes = 1;
-                result = null;
-            }};
-
-        shardDeleter.runAfterCatalogReady();
-
-        Assert.assertEquals(Deencapsulation.getField(shardDeleter, "shardIds"), new HashSet<>());
     }
 }

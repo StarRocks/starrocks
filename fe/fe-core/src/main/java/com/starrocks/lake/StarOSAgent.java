@@ -15,6 +15,7 @@ import com.staros.proto.CreateShardInfo;
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
 import com.staros.proto.FileStoreType;
+import com.staros.proto.PlacementPolicy;
 import com.staros.proto.ReplicaInfo;
 import com.staros.proto.ReplicaRole;
 import com.staros.proto.ServiceInfo;

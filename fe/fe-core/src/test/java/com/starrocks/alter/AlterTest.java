@@ -906,7 +906,7 @@ public class AlterTest {
             {
                 agent.allocateFilePath(anyLong);
                 result = pathInfo;
-                agent.createShardGroup(anyLong);
+                agent.createShardGroup(anyLong, anyLong, anyLong);
                 agent.createShards(anyInt, (FilePathInfo) any, (FileCacheInfo) any, anyLong);
                 returns(Lists.newArrayList(20001L, 20002L, 20003L),
                         Lists.newArrayList(20004L, 20005L, 20006L),
@@ -989,7 +989,7 @@ public class AlterTest {
             {
                 agent.allocateFilePath(anyLong);
                 result = pathInfo;
-                agent.createShardGroup(anyLong);
+                agent.createShardGroup(anyLong, anyLong, anyLong);
                 agent.createShards(anyInt, (FilePathInfo) any, (FileCacheInfo) any, anyLong);
 
                 returns(Lists.newArrayList(30001L, 30002L, 30003L),
@@ -1892,7 +1892,7 @@ public class AlterTest {
             {
                 agent.allocateFilePath(anyLong);
                 result = pathInfo;
-                agent.createShardGroup(anyLong);
+                agent.createShardGroup(anyLong, anyLong, anyLong);
                 agent.createShards(anyInt, (FilePathInfo) any, (FileCacheInfo) any, anyLong);
 
                 returns(Lists.newArrayList(30001L, 30002L, 30003L),

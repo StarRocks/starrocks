@@ -104,9 +104,11 @@ public class Partition extends MetaObject implements Writable {
     private Partition() {
     }
 
+
+
     public Partition(long id, String name,
                      MaterializedIndex baseIndex,
-                     DistributionInfo distributionInfo, long shardGroupId) {
+                     DistributionInfo distributionInfo) {
         this.id = id;
         this.name = name;
         this.state = PartitionState.NORMAL;
@@ -119,6 +121,12 @@ public class Partition extends MetaObject implements Writable {
         this.nextVersion = PARTITION_INIT_VERSION + 1;
 
         this.distributionInfo = distributionInfo;
+    }
+
+    public Partition(long id, String name,
+                     MaterializedIndex baseIndex,
+                     DistributionInfo distributionInfo, long shardGroupId) {
+        this(id, name, baseIndex, distributionInfo);
         this.shardGroupId = shardGroupId;
     }
 
