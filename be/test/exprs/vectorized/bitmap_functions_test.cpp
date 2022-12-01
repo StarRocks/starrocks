@@ -1954,13 +1954,13 @@ TEST_F(VecBitmapFunctionsTest, bitmapToBase64Test) {
 
         auto sliceCol = BitmapFunctions::bitmap_to_base64(ctx, columns);
 
-        ColumnViewer<TYPE_VARCHAR> viewer(sliceCol);
+        ColumnViewer<TYPE_VARCHAR> viewer(sliceCol.value());
         Columns columns2;
         columns2.push_back(sliceCol);
 
         auto bitmapCol = BitmapFunctions::base64_to_bitmap(ctx, columns2);
 
-        ColumnViewer<TYPE_OBJECT> viewer2(bitmapCol);
+        ColumnViewer<TYPE_OBJECT> viewer2(bitmapCol.value());
         auto bmp = viewer2.value(0);
         ASSERT_EQ(0, bmp->cardinality());
     }
@@ -1975,14 +1975,14 @@ TEST_F(VecBitmapFunctionsTest, bitmapToBase64Test) {
 
         auto sliceCol = BitmapFunctions::bitmap_to_base64(ctx, columns);
 
-        ColumnViewer<TYPE_VARCHAR> viewer(sliceCol);
+        ColumnViewer<TYPE_VARCHAR> viewer(sliceCol.value());
 
         Columns columns2;
         columns2.push_back(sliceCol);
 
         auto bitmapCol = BitmapFunctions::base64_to_bitmap(ctx, columns2);
 
-        ColumnViewer<TYPE_OBJECT> viewer2(bitmapCol);
+        ColumnViewer<TYPE_OBJECT> viewer2(bitmapCol.value());
         auto bmp = viewer2.value(0);
         ASSERT_EQ(1, bmp->cardinality());
         ASSERT_TRUE(bmp->contains(1));
@@ -2003,13 +2003,13 @@ TEST_F(VecBitmapFunctionsTest, bitmapToBase64Test) {
 
         auto sliceCol = BitmapFunctions::bitmap_to_base64(ctx, columns);
 
-        ColumnViewer<TYPE_VARCHAR> viewer(sliceCol);
+        ColumnViewer<TYPE_VARCHAR> viewer(sliceCol.value());
 
         Columns columns2;
         columns2.push_back(sliceCol);
         auto bitmapCol = BitmapFunctions::base64_to_bitmap(ctx, columns2);
 
-        ColumnViewer<TYPE_OBJECT> viewer2(bitmapCol);
+        ColumnViewer<TYPE_OBJECT> viewer2(bitmapCol.value());
         auto bmp = viewer2.value(0);
         ASSERT_EQ(4, bmp->cardinality());
         ASSERT_TRUE(bmp->contains(1));
@@ -2029,13 +2029,13 @@ TEST_F(VecBitmapFunctionsTest, bitmapToBase64Test) {
 
         auto sliceCol = BitmapFunctions::bitmap_to_base64(ctx, columns);
 
-        ColumnViewer<TYPE_VARCHAR> viewer(sliceCol);
+        ColumnViewer<TYPE_VARCHAR> viewer(sliceCol.value());
 
         Columns columns2;
         columns2.push_back(sliceCol);
         auto bitmapCol = BitmapFunctions::base64_to_bitmap(ctx, columns2);
 
-        ColumnViewer<TYPE_OBJECT> viewer2(bitmapCol);
+        ColumnViewer<TYPE_OBJECT> viewer2(bitmapCol.value());
         auto bmp = viewer2.value(0);
         ASSERT_EQ(4, bmp->cardinality());
         ASSERT_TRUE(bmp->contains(1));
@@ -2055,13 +2055,13 @@ TEST_F(VecBitmapFunctionsTest, bitmapToBase64Test) {
 
         auto sliceCol = BitmapFunctions::bitmap_to_base64(ctx, columns);
 
-        ColumnViewer<TYPE_VARCHAR> viewer(sliceCol);
+        ColumnViewer<TYPE_VARCHAR> viewer(sliceCol.value());
 
         Columns columns2;
         columns2.push_back(sliceCol);
         auto bitmapCol = BitmapFunctions::base64_to_bitmap(ctx, columns2);
 
-        ColumnViewer<TYPE_OBJECT> viewer2(bitmapCol);
+        ColumnViewer<TYPE_OBJECT> viewer2(bitmapCol.value());
         auto bmp = viewer2.value(0);
         ASSERT_EQ(4, bmp->cardinality());
         ASSERT_TRUE(bmp->contains(600123456781));
