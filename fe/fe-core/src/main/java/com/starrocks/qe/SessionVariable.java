@@ -295,6 +295,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String QUERY_CACHE_FORCE_POPULATE = "query_cache_force_populate";
     public static final String QUERY_CACHE_ENTRY_MAX_BYTES = "query_cache_entry_max_bytes";
     public static final String QUERY_CACHE_ENTRY_MAX_ROWS = "query_cache_entry_max_rows";
+
+    // We assume that for PRIMARY_KEYS and UNIQUE_KEYS, the latest partitions are hot partitions that are updated
+    // frequently, so it should not be cached in query cache since its disruptive cache invalidation.
+    public static final String QUERY_CACHE_HOT_PARTITION_NUM = "query_cache_hot_partition_num";
+
+    public static final String QUERY_CACHE_AGG_CARDINALITY_LIMIT = "query_cache_agg_cardinality_limit";
     public static final String TRANSMISSION_ENCODE_LEVEL = "transmission_encode_level";
 
     public static final String NESTED_MV_REWRITE_MAX_LEVEL = "nested_mv_rewrite_max_level";
@@ -302,8 +308,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_MATERIALIZED_VIEW_UNION_REWRITE = "enable_materialized_view_union_rewrite";
     public static final String ENABLE_RULE_BASED_MATERIALIZED_VIEW_REWRITE =
             "enable_rule_based_materialized_view_rewrite";
-    public static final String ENABLE_COST_BASED_MATERIALIZED_VIEW_REWRITE =
-            "enable_cost_based_materialized_view_rewrite";
 
     public static final String ENABLE_BIG_QUERY_LOG = "enable_big_query_log";
     public static final String BIG_QUERY_LOG_CPU_SECOND_THRESHOLD = "big_query_log_cpu_second_threshold";
@@ -654,9 +658,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // Either the build_max or probe_min equal to 0 would force use the filter,
     // otherwise would decide based on the cardinality
     @VariableMgr.VarAttr(name = GLOBAL_RUNTIME_FILTER_BUILD_MAX_SIZE, flag = VariableMgr.INVISIBLE)
-    private long globalRuntimeFilterBuildMaxSize = 64 * 1024 * 1024;
+    private long globalRuntimeFilterBuildMaxSize = 64L * 1024L * 1024L;
     @VariableMgr.VarAttr(name = GLOBAL_RUNTIME_FILTER_PROBE_MIN_SIZE, flag = VariableMgr.INVISIBLE)
-    private long globalRuntimeFilterProbeMinSize = 100 * 1024;
+    private long globalRuntimeFilterProbeMinSize = 100L * 1024L;
     @VariableMgr.VarAttr(name = GLOBAL_RUNTIME_FILTER_PROBE_MIN_SELECTIVITY, flag = VariableMgr.INVISIBLE)
     private float globalRuntimeFilterProbeMinSelectivity = 0.5f;
 
@@ -752,6 +756,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = QUERY_CACHE_ENTRY_MAX_ROWS)
     private long queryCacheEntryMaxRows = 409600;
 
+    @VarAttr(name = QUERY_CACHE_HOT_PARTITION_NUM)
+    private int queryCacheHotPartitionNum = 3;
+
+    @VarAttr(name = QUERY_CACHE_AGG_CARDINALITY_LIMIT)
+    private long queryCacheAggCardinalityLimit = 5000000;
+
     @VarAttr(name = NESTED_MV_REWRITE_MAX_LEVEL)
     private int nestedMvRewriteMaxLevel = 3;
 
@@ -783,9 +793,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // Users need to set up according to their own scenario.
     @VarAttr(name = BIG_QUERY_LOG_SCAN_ROWS_THRESHOLD)
     private long bigQueryLogScanRowsThreshold = 1000000000L;
-
-    @VarAttr(name = ENABLE_COST_BASED_MATERIALIZED_VIEW_REWRITE)
-    private boolean enableCostBasedMaterializedViewRewrite = true;
 
     public boolean getEnablePopulateBlockCache() {
         return enablePopulateBlockCache;
@@ -1401,6 +1408,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return queryCacheEntryMaxRows;
     }
 
+    public void setQueryCacheHotPartitionNum(int n) {
+        queryCacheHotPartitionNum = n;
+    }
+
+    public int getQueryCacheHotPartitionNum() {
+        return queryCacheHotPartitionNum;
+    }
+
+    public void setQueryCacheAggCardinalityLimit(long limit) {
+        this.queryCacheAggCardinalityLimit = limit;
+    }
+
+    public long getQueryCacheAggCardinalityLimit() {
+        return queryCacheAggCardinalityLimit;
+    }
+
     public void setEnableQueryCache(boolean on) {
         enableQueryCache = on;
     }
@@ -1477,14 +1500,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.bigQueryLogScanRowsThreshold = bigQueryLogScanRowsThreshold;
     }
 
-    public boolean isEnableCostBasedMaterializedViewRewrite() {
-        return enableCostBasedMaterializedViewRewrite;
-    }
-
-    public void setEnableCostBasedMaterializedViewRewrite(boolean enableCostBasedMaterializedViewRewrite) {
-        this.enableCostBasedMaterializedViewRewrite = enableCostBasedMaterializedViewRewrite;
-    }
-
     // Serialize to thrift object
     // used for rest api
     public TQueryOptions toThrift() {
@@ -1557,6 +1572,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setEnable_query_debug_trace(enableQueryDebugTrace);
         tResult.setEnable_pipeline_query_statistic(enablePipelineQueryStatistic);
 
+        tResult.setAllow_throw_exception((sqlMode & SqlModeHelper.MODE_ALLOW_THROW_EXCEPTION) != 0);
         return tResult;
     }
 

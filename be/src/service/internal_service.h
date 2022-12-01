@@ -96,6 +96,10 @@ public:
                                 const PTriggerProfileReportRequest* request, PTriggerProfileReportResult* result,
                                 google::protobuf::Closure* done) override;
 
+    void collect_query_statistics(google::protobuf::RpcController* controller,
+                                  const PCollectQueryStatisticsRequest* request, PCollectQueryStatisticsResult* result,
+                                  google::protobuf::Closure* done) override;
+
     void get_info(google::protobuf::RpcController* controller, const PProxyRequest* request, PProxyResult* response,
                   google::protobuf::Closure* done) override;
 

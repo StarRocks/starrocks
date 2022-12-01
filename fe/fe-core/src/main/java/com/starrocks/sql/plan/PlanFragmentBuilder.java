@@ -769,7 +769,7 @@ public class PlanFragmentBuilder {
 
             } catch (Exception e) {
                 LOG.warn("Hudi scan node get scan range locations failed : " + e);
-                e.printStackTrace();
+                LOG.warn(e);
                 throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);
             }
 
@@ -922,14 +922,7 @@ public class PlanFragmentBuilder {
             tupleDescriptor.setTable(referenceTable);
 
             // set slot
-            for (Map.Entry<ColumnRefOperator, Column> entry : node.getColRefToColumnMetaMap().entrySet()) {
-                SlotDescriptor slotDescriptor =
-                        context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getKey().getId()));
-                slotDescriptor.setColumn(entry.getValue());
-                slotDescriptor.setIsNullable(entry.getValue().isAllowNull());
-                slotDescriptor.setIsMaterialized(true);
-                context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().toString(), slotDescriptor));
-            }
+            prepareContextSlots(node, context, tupleDescriptor);
 
             IcebergScanNode icebergScanNode =
                     new IcebergScanNode(context.getNextNodeId(), tupleDescriptor, "IcebergScanNode");
@@ -2387,7 +2380,7 @@ public class PlanFragmentBuilder {
                     inputFragment.getPlanRoot(),
                     udtfOutputTuple,
                     physicalTableFunction.getFn(),
-                    Arrays.stream(physicalTableFunction.getParamColumnRefs().getColumnIds()).boxed()
+                    physicalTableFunction.getFnParamColumnRef().stream().map(ColumnRefOperator::getId)
                             .collect(Collectors.toList()),
                     Arrays.stream(physicalTableFunction.getOuterColumnRefSet().getColumnIds()).boxed()
                             .collect(Collectors.toList()),

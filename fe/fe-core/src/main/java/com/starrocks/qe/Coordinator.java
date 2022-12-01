@@ -155,7 +155,7 @@ public class Coordinator {
     private static final String LOCAL_IP = FrontendOptions.getLocalHostAddress();
 
     // Random is used to shuffle instances of partitioned
-    private static final Random INSTANCE_RANDOM = new Random();
+    private final Random random = new Random();
     // parallel execute
     private final TUniqueId nextInstanceId;
     // Overall status of the entire query; set to the first reported fragment error
@@ -1954,7 +1954,7 @@ public class Coordinator {
                     // random select some instance
                     // get distinct host,  when parallel_fragment_exec_instance_num > 1, single host may execute several instances
                     List<TNetworkAddress> hosts = Lists.newArrayList(hostSet);
-                    Collections.shuffle(hosts, INSTANCE_RANDOM);
+                    Collections.shuffle(hosts, random);
 
                     for (int index = 0; index < exchangeInstances; index++) {
                         FInstanceExecParam instanceParam =
@@ -1973,7 +1973,7 @@ public class Coordinator {
                 // When group by cardinality is smaller than number of backend, only some backends always
                 // process while other has no data to process.
                 // So we shuffle instances to make different backends handle different queries.
-                Collections.shuffle(params.instanceExecParams, INSTANCE_RANDOM);
+                Collections.shuffle(params.instanceExecParams, random);
 
                 // TODO: switch to unpartitioned/coord execution if our input fragment
                 // is executed that way (could have been downgraded from distributed)
@@ -2898,6 +2898,9 @@ public class Coordinator {
                     return false;
                 }
                 TNetworkAddress brpcAddress = toBrpcHost(address);
+                if (brpcAddress == null) {
+                    return false;
+                }
 
                 try {
                     BackendServiceClient.getInstance().cancelPlanFragmentAsync(brpcAddress,
@@ -3427,6 +3430,9 @@ public class Coordinator {
                         minAssignedBytes = assignedBytes;
                         minLocation = location;
                     }
+                }
+                if (minLocation == null) {
+                    throw new UserException("failed to find a location");
                 }
                 assignedBytesPerHost.put(minLocation.server,
                         assignedBytesPerHost.get(minLocation.server) + 1);

@@ -356,7 +356,6 @@ public class InformationSchemaDataSource {
             case OLAP_EXTERNAL:
                 return "BASE TABLE";
             case MATERIALIZED_VIEW:
-                return "MATERIALIZED VIEW";
             case VIEW:
                 return "VIEW";
             default:

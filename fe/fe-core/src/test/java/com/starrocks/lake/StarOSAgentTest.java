@@ -55,7 +55,7 @@ public class StarOSAgentTest {
     @Before
     public void setUp() throws Exception {
         starosAgent = new StarOSAgent();
-        starosAgent.init();
+        starosAgent.init(null);
     }
 
     @Test

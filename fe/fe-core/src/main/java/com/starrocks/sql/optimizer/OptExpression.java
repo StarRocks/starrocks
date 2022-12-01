@@ -40,8 +40,6 @@ public class OptExpression {
     private GroupExpression groupExpression;
     // Required properties for children.
     private List<PhysicalPropertySet> requiredProperties;
-    // Output property, only set up after best plan is generated.
-    private PhysicalPropertySet outputProperty;
     // MV Operator property, inferred from best plan
     private MVOperatorProperty mvOperatorProperty;
 
@@ -127,10 +125,6 @@ public class OptExpression {
         return this.requiredProperties;
     }
 
-    public void setOutputProperty(PhysicalPropertySet outputProperty) {
-        this.outputProperty = outputProperty;
-    }
-
     // This function assume the child expr logical property has been derived
     public void deriveLogicalPropertyItself() {
         ExpressionContext context = new ExpressionContext(this);
@@ -187,9 +181,5 @@ public class OptExpression {
             sb.append(input.explain(childHeadlinePrefix, childDetailPrefix));
         }
         return sb.toString();
-    }
-
-    public boolean canUsePipeLine() {
-        return op.canUsePipeLine() && inputs.stream().allMatch(OptExpression::canUsePipeLine);
     }
 }

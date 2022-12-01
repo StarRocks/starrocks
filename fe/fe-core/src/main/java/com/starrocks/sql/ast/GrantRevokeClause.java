@@ -7,10 +7,10 @@ import com.starrocks.analysis.UserIdentity;
 
 /**
  * grantRevokeClause
- *     : (user | ROLE identifierOrString ) (WITH GRANT OPTION)?
- *     ;
+ * : (user | ROLE identifierOrString ) (WITH GRANT OPTION)?
+ * ;
  */
-public class GrantRevokeClause implements ParseNode  {
+public class GrantRevokeClause implements ParseNode {
     private UserIdentity userIdentity;
     private String roleName;
     private boolean withGrantOption;

@@ -83,6 +83,9 @@ public class UpdateAnalyzer {
         }
         SelectRelation selectRelation =
                 new SelectRelation(selectList, relation, updateStmt.getWherePredicate(), null, null);
+        if (updateStmt.getCommonTableExpressions() != null) {
+            updateStmt.getCommonTableExpressions().forEach(selectRelation::addCTERelation);
+        }
         QueryStatement queryStatement = new QueryStatement(selectRelation);
         queryStatement.setIsExplain(updateStmt.isExplain(), updateStmt.getExplainLevel());
         new QueryAnalyzer(session).analyze(queryStatement);

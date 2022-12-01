@@ -96,13 +96,15 @@ public class LoadStmtAnalyzer {
                     resourceDesc.analyze();
                     etlJobType = resourceDesc.getEtlJobType();
                     // check resource usage privilege
-                    if (!GlobalStateMgr.getCurrentState().getAuth().checkResourcePriv(ConnectContext.get(),
-                            resourceDesc.getName(),
-                            PrivPredicate.USAGE)) {
-                        ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
-                                "USAGE denied to user '" + ConnectContext.get().getQualifiedUser()
-                                        + "'@'" + ConnectContext.get().getRemoteIP()
-                                        + "' for resource '" + resourceDesc.getName() + "'");
+                    if (!GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                        if (!GlobalStateMgr.getCurrentState().getAuth().checkResourcePriv(ConnectContext.get(),
+                                                                                          resourceDesc.getName(),
+                                                                                          PrivPredicate.USAGE)) {
+                            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                                                                "USAGE denied to user '" + ConnectContext.get().getQualifiedUser()
+                                                                + "'@'" + ConnectContext.get().getRemoteIP()
+                                                                + "' for resource '" + resourceDesc.getName() + "'");
+                        }
                     }
                 } else if (brokerDesc != null) {
                     etlJobType = EtlJobType.BROKER;

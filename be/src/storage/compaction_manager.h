@@ -38,6 +38,8 @@ public:
 
     void update_candidates(std::vector<CompactionCandidate> candidates);
 
+    void remove_candidate(int64_t tablet_id);
+
     bool pick_candidate(CompactionCandidate* candidate);
 
     void update_tablet_async(TabletSharedPtr tablet);

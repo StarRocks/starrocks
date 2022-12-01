@@ -104,7 +104,7 @@ class CACHELINE_ALIGNED ColumnPool {
             _curr_free.bytes = 0;
         }
 
-        ~LocalPool() {
+        ~LocalPool() noexcept {
             if (_curr_free.nfree > 0 && !_pool->_push_free_block(_curr_free)) {
                 for (size_t i = 0; i < _curr_free.nfree; i++) {
                     ASAN_UNPOISON_MEMORY_REGION(_curr_free.ptrs[i], sizeof(T));

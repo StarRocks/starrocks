@@ -1330,7 +1330,7 @@ public class ReportHandler extends Daemon {
 
                 GlobalStateMgr.getCurrentState().getEditLog().logAddReplica(info);
 
-                LOG.info("add replica[{}-{}] to globalStateMgr. backend:[{}] replicas:", tabletId, replicaId, backendId,
+                LOG.info("add replica[{}-{}] to globalStateMgr. backend:[{}] replicas: {}", tabletId, replicaId, backendId,
                         tablet.getReplicaInfos());
             } else {
                 // replica is enough. check if this tablet is already in meta
@@ -1357,9 +1357,10 @@ public class ReportHandler extends Daemon {
                 task = reportQueue.take();
                 synchronized (pendingTaskMap) {
                     // using the lastest task
-                    task = pendingTaskMap.get(task.type).get(task.beId);
+                    long beId = task.beId;
+                    task = pendingTaskMap.get(task.type).get(beId);
                     if (task == null) {
-                        throw new Exception("pendingTaskMap not exists " + task.beId);
+                        throw new Exception("pendingTaskMap not exists " + beId);
                     }
                     pendingTaskMap.get(task.type).remove(task.beId, task);
                 }

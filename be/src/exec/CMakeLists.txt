@@ -62,8 +62,11 @@ set(EXEC_FILES
     vectorized/tablet_scanner.cpp
     vectorized/olap_scan_node.cpp
     vectorized/olap_scan_prepare.cpp
+    vectorized/meta_scan_node.cpp
     vectorized/olap_meta_scanner.cpp
     vectorized/olap_meta_scan_node.cpp
+    vectorized/lake_meta_scanner.cpp
+    vectorized/lake_meta_scan_node.cpp
     vectorized/hash_joiner.cpp
     vectorized/hash_join_node.cpp
     vectorized/join_hash_map.cpp
@@ -151,9 +154,11 @@ set(EXEC_FILES
     pipeline/scan/olap_scan_prepare_operator.cpp
     pipeline/scan/olap_scan_context.cpp
     pipeline/scan/connector_scan_operator.cpp
-    pipeline/scan/olap_meta_chunk_source.cpp
-    pipeline/scan/olap_meta_scan_operator.cpp
+    pipeline/scan/meta_chunk_source.cpp
+    pipeline/scan/meta_scan_operator.cpp
+    pipeline/scan/meta_scan_prepare_operator.cpp
     pipeline/scan/olap_meta_scan_prepare_operator.cpp
+    pipeline/scan/lake_meta_scan_prepare_operator.cpp
     pipeline/scan/olap_schema_chunk_source.cpp
     pipeline/scan/olap_schema_scan_operator.cpp
     pipeline/scan/olap_schema_scan_context.cpp

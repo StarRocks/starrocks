@@ -481,11 +481,15 @@ submitTaskStatement
 createMaterializedViewStatement
     : CREATE MATERIALIZED VIEW (IF NOT EXISTS)? mvName=qualifiedName
     comment?
-    (PARTITION BY primaryExpression)?
-    distributionDesc?
-    refreshSchemeDesc?
-    properties?
+    materializedViewDesc*
     AS queryStatement
+    ;
+
+materializedViewDesc
+    : (PARTITION BY primaryExpression)
+    | distributionDesc
+    | refreshSchemeDesc
+    | properties
     ;
 
 showMaterializedViewStatement
@@ -751,11 +755,11 @@ insertStatement
     ;
 
 updateStatement
-    : explainDesc? UPDATE qualifiedName SET assignmentList fromClause (WHERE where=expression)?
+    : explainDesc? withClause? UPDATE qualifiedName SET assignmentList fromClause (WHERE where=expression)?
     ;
 
 deleteStatement
-    : explainDesc? DELETE FROM qualifiedName partitionNames? (WHERE where=expression)?
+    : explainDesc? withClause? DELETE FROM qualifiedName partitionNames? (USING using=relations)? (WHERE where=expression)?
     ;
 
 // ------------------------------------------- Routine Statement -----------------------------------------------------------
@@ -1178,6 +1182,7 @@ privilegeActionReserved
     | DELETE
     | USAGE
     | CREATE_DATABASE
+    | UPDATE
     | ALL
     ;
 
@@ -1930,6 +1935,7 @@ varType
     : GLOBAL
     | LOCAL
     | SESSION
+    | VERBOSE
     ;
 
 comment

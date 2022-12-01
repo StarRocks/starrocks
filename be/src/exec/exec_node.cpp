@@ -27,6 +27,7 @@
 #include <sstream>
 
 #include "column/column_helper.h"
+#include "common/compiler_util.h"
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "exec/empty_set_node.h"
@@ -47,6 +48,7 @@
 #include "exec/vectorized/file_scan_node.h"
 #include "exec/vectorized/hash_join_node.h"
 #include "exec/vectorized/intersect_node.h"
+#include "exec/vectorized/lake_meta_scan_node.h"
 #include "exec/vectorized/olap_meta_scan_node.h"
 #include "exec/vectorized/olap_scan_node.h"
 #include "exec/vectorized/project_node.h"
@@ -160,7 +162,7 @@ Status ExecNode::init_join_runtime_filters(const TPlanNode& tnode, RuntimeState*
         for (const auto& desc : tnode.probe_runtime_filters) {
             vectorized::RuntimeFilterProbeDescriptor* rf_desc =
                     _pool->add(new vectorized::RuntimeFilterProbeDescriptor());
-            RETURN_IF_ERROR(rf_desc->init(_pool, desc, _id));
+            RETURN_IF_ERROR(rf_desc->init(_pool, desc, _id, state));
             register_runtime_filter_descriptor(state, rf_desc);
         }
     }
@@ -186,7 +188,7 @@ void ExecNode::init_runtime_filter_for_operator(OperatorFactory* op, pipeline::P
 Status ExecNode::init(const TPlanNode& tnode, RuntimeState* state) {
     VLOG(2) << "ExecNode init:\n" << apache::thrift::ThriftDebugString(tnode);
     _runtime_state = state;
-    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, tnode.conjuncts, &_conjunct_ctxs));
+    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, tnode.conjuncts, &_conjunct_ctxs, state));
     RETURN_IF_ERROR(init_join_runtime_filters(tnode, state));
     if (tnode.__isset.local_rf_waiting_set) {
         _local_rf_waiting_set = tnode.local_rf_waiting_set;
@@ -365,7 +367,10 @@ Status ExecNode::create_tree_helper(RuntimeState* state, ObjectPool* pool, const
     ExecNode* node = nullptr;
     RETURN_IF_ERROR(create_vectorized_node(state, pool, tnodes[*node_idx], descs, &node));
 
-    // assert(parent != NULL || (node_idx == 0 && root_expr != NULL));
+    DCHECK((parent != nullptr) || (root != nullptr));
+    if (UNLIKELY(parent == nullptr && root == nullptr)) {
+        return Status::InternalError("parent and root shouldn't both be null");
+    }
     if (parent != nullptr) {
         parent->_children.push_back(node);
     } else {
@@ -408,6 +413,9 @@ Status ExecNode::create_vectorized_node(starrocks::RuntimeState* state, starrock
         return Status::OK();
     case TPlanNodeType::META_SCAN_NODE:
         *node = pool->add(new vectorized::OlapMetaScanNode(pool, tnode, descs));
+        return Status::OK();
+    case TPlanNodeType::LAKE_META_SCAN_NODE:
+        *node = pool->add(new vectorized::LakeMetaScanNode(pool, tnode, descs));
         return Status::OK();
     case TPlanNodeType::AGGREGATION_NODE:
         if (tnode.agg_node.__isset.use_streaming_preaggregation && tnode.agg_node.use_streaming_preaggregation) {
@@ -773,6 +781,7 @@ void ExecNode::collect_scan_nodes(vector<ExecNode*>* nodes) {
     collect_nodes(TPlanNodeType::ES_HTTP_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::HDFS_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::META_SCAN_NODE, nodes);
+    collect_nodes(TPlanNodeType::LAKE_META_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::JDBC_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::MYSQL_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::LAKE_SCAN_NODE, nodes);

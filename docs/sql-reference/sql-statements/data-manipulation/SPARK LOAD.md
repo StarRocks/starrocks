@@ -1,6 +1,6 @@
 # SPARK LOAD
 
-## description
+## Description
 
 Spark load preprocesses the imported data through external spark resources, improves the import performance of a large amount of StarRocks data, and saves the computing resources of StarRocks cluster. It is mainly used in the scenario of initial migration and large amount of data import into StarRocks.
 
@@ -146,7 +146,7 @@ date（DATE/DATETIME）：2017-10-03, 2017-06-13 12:34:03。
 
 NULL value: \ N
 
-## example
+## Examples
 
 1. Import a batch of data from HDFS, and specify the timeout time and filtering ratio. Use the name my_ spark resources for spark.
 

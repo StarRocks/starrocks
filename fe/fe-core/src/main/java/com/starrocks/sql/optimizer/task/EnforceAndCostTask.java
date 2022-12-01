@@ -441,7 +441,8 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
                  * because repartition require sort again
                  */
                 PhysicalPropertySet newProperty =
-                        new PhysicalPropertySet(DistributionProperty.EMPTY, SortProperty.EMPTY);
+                        new PhysicalPropertySet(DistributionProperty.EMPTY, SortProperty.EMPTY,
+                                outputProperty.getCteProperty());
                 groupExpression.getGroup().replaceBestExpressionProperty(outputProperty, newProperty,
                         groupExpression.getCost(outputProperty));
                 enforcedProperty = enforceSortAndDistribute(newProperty, requiredProperty);

@@ -53,7 +53,6 @@
 #include "exprs/vectorized/placeholder_ref.h"
 #include "exprs/vectorized/subfield_expr.h"
 #include "runtime/primitive_type.h"
-#include "runtime/raw_value.h"
 #include "runtime/runtime_state.h"
 
 #pragma clang diagnostic push
@@ -180,7 +179,7 @@ Expr::Expr(const TExprNode& node, bool is_slotref)
 
 Expr::~Expr() = default;
 
-Status Expr::create_expr_tree(ObjectPool* pool, const TExpr& texpr, ExprContext** ctx) {
+Status Expr::create_expr_tree(ObjectPool* pool, const TExpr& texpr, ExprContext** ctx, RuntimeState* state) {
     // input is empty
     if (texpr.nodes.empty()) {
         *ctx = nullptr;
@@ -188,7 +187,7 @@ Status Expr::create_expr_tree(ObjectPool* pool, const TExpr& texpr, ExprContext*
     }
     int node_idx = 0;
     Expr* e = nullptr;
-    Status status = create_tree_from_thrift(pool, texpr.nodes, nullptr, &node_idx, &e, ctx);
+    Status status = create_tree_from_thrift(pool, texpr.nodes, nullptr, &node_idx, &e, ctx, state);
     if (status.ok() && node_idx + 1 != texpr.nodes.size()) {
         status = Status::InternalError("Expression tree only partially reconstructed. Not all thrift nodes were used.");
     }
@@ -200,32 +199,33 @@ Status Expr::create_expr_tree(ObjectPool* pool, const TExpr& texpr, ExprContext*
     return status;
 }
 
-Status Expr::create_expr_trees(ObjectPool* pool, const std::vector<TExpr>& texprs, std::vector<ExprContext*>* ctxs) {
+Status Expr::create_expr_trees(ObjectPool* pool, const std::vector<TExpr>& texprs, std::vector<ExprContext*>* ctxs,
+                               RuntimeState* state) {
     ctxs->clear();
     for (const auto& texpr : texprs) {
         ExprContext* ctx = nullptr;
-        RETURN_IF_ERROR(create_expr_tree(pool, texpr, &ctx));
+        RETURN_IF_ERROR(create_expr_tree(pool, texpr, &ctx, state));
         ctxs->push_back(ctx);
     }
     return Status::OK();
 }
 
 Status Expr::create_tree_from_thrift(ObjectPool* pool, const std::vector<TExprNode>& nodes, Expr* parent, int* node_idx,
-                                     Expr** root_expr, ExprContext** ctx) {
+                                     Expr** root_expr, ExprContext** ctx, RuntimeState* state) {
     // propagate error case
     if (*node_idx >= nodes.size()) {
         return Status::InternalError("Failed to reconstruct expression tree from thrift.");
     }
     int num_children = nodes[*node_idx].num_children;
     Expr* expr = nullptr;
-    RETURN_IF_ERROR(create_vectorized_expr(pool, nodes[*node_idx], &expr));
+    RETURN_IF_ERROR(create_vectorized_expr(pool, nodes[*node_idx], &expr, state));
     DCHECK(expr != nullptr);
     if (parent != nullptr) {
         parent->add_child(expr);
     }
     for (int i = 0; i < num_children; i++) {
         *node_idx += 1;
-        RETURN_IF_ERROR(create_tree_from_thrift(pool, nodes, expr, node_idx, nullptr, nullptr));
+        RETURN_IF_ERROR(create_tree_from_thrift(pool, nodes, expr, node_idx, nullptr, nullptr, state));
         // we are expecting a child, but have used all nodes
         // this means we have been given a bad tree and must fail
         if (*node_idx >= nodes.size()) {
@@ -247,7 +247,7 @@ Status Expr::create_tree_from_thrift(ObjectPool* pool, const std::vector<TExprNo
 }
 
 Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks::TExprNode& texpr_node,
-                                    starrocks::Expr** expr) {
+                                    starrocks::Expr** expr, RuntimeState* state) {
     switch (texpr_node.node_type) {
     case TExprNodeType::BOOL_LITERAL:
     case TExprNodeType::INT_LITERAL:
@@ -280,7 +280,8 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
     }
     case TExprNodeType::CAST_EXPR: {
         if (texpr_node.__isset.child_type || texpr_node.__isset.child_type_desc) {
-            *expr = pool->add(vectorized::VectorizedCastExprFactory::from_thrift(pool, texpr_node));
+            *expr = pool->add(vectorized::VectorizedCastExprFactory::from_thrift(
+                    pool, texpr_node, (state == nullptr) ? false : state->query_options().allow_throw_exception));
             if (*expr == nullptr) {
                 LogicalType to_type = TypeDescriptor::from_thrift(texpr_node.type).type;
                 LogicalType from_type = thrift_to_type(texpr_node.child_type);

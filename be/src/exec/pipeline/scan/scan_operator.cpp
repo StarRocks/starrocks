@@ -83,7 +83,7 @@ void ScanOperator::close(RuntimeState* state) {
     _tablets_counter = ADD_COUNTER_SKIP_MERGE(_unique_metrics, "TabletCount", TUnit::UNIT);
     COUNTER_SET(_tablets_counter, static_cast<int64_t>(_source_factory()->num_total_original_morsels()));
 
-    _merge_chunk_source_profiles();
+    _merge_chunk_source_profiles(state);
 
     do_close(state);
     Operator::close(state);
@@ -408,17 +408,27 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
                 if (!hit) {
                     break;
                 }
-                auto cached_version = _cache_operator->cached_version(lane_owner);
-                DCHECK(cached_version <= version);
-                if (cached_version == version) {
-                    ASSIGN_OR_RETURN(morsel, _morsel_queue->try_get());
-                } else {
-                    morsel->set_from_version(cached_version + 1);
+                auto [delta_version, delta_rowsets] = _cache_operator->delta_version_and_rowsets(lane_owner);
+                if (!delta_rowsets.empty()) {
+                    // We must reset rowsets of Morsel to captured delta rowsets, because TabletReader now
+                    // created from rowsets passed in to itself instead of capturing it from TabletManager again.
+                    morsel->set_from_version(delta_version);
+                    morsel->set_rowsets(delta_rowsets);
                     break;
+                } else {
+                    ASSIGN_OR_RETURN(morsel, _morsel_queue->try_get());
                 }
             } else if (acquire_result == query_cache::AR_SKIP) {
                 ASSIGN_OR_RETURN(morsel, _morsel_queue->try_get());
             } else if (acquire_result == query_cache::AR_IO) {
+                // When both intra-tablet parallelism and multi-version cache mechanisms take effects, we must
+                // use delta rowsets instead of the ensemble of rowsets to fetch rows from disk for all of the
+                // morsels originated from the identical tablet.
+                auto [delta_verrsion, delta_rowsets] = _cache_operator->delta_version_and_rowsets(lane_owner);
+                if (!delta_rowsets.empty()) {
+                    morsel->set_from_version(delta_verrsion);
+                    morsel->set_rowsets(delta_rowsets);
+                }
                 break;
             }
         }
@@ -441,9 +451,14 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
     return Status::OK();
 }
 
-void ScanOperator::_merge_chunk_source_profiles() {
+void ScanOperator::_merge_chunk_source_profiles(RuntimeState* state) {
     auto query_ctx = _query_ctx.lock();
-    DCHECK(query_ctx != nullptr);
+    // _query_ctx uses lazy initialization, maybe it is not initialized
+    // under certian circumstance
+    if (query_ctx == nullptr) {
+        query_ctx = state->exec_env()->query_context_mgr()->get(state->query_id());
+        DCHECK(query_ctx != nullptr);
+    }
     if (!query_ctx->is_report_profile()) {
         return;
     }

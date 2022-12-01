@@ -423,7 +423,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 }
 
                 // save table names for recycling
-                Set<String> tableNames = db.getTableNamesWithLock();
+                Set<String> tableNames = new HashSet(db.getTableNamesViewWithLock());
                 runnableList = unprotectDropDb(db, isForceDrop, false);
                 if (!isForceDrop) {
                     recycleBin.recycleDatabase(db, tableNames);
@@ -479,7 +479,7 @@ public class LocalMetastore implements ConnectorMetadata {
             Database db = fullNameToDb.get(dbName);
             db.writeLock();
             try {
-                Set<String> tableNames = db.getTableNamesWithLock();
+                Set<String> tableNames = new HashSet(db.getTableNamesViewWithLock());
                 runnableList = unprotectDropDb(db, isForceDrop, true);
                 if (!isForceDrop) {
                     recycleBin.recycleDatabase(db, tableNames);
@@ -2934,7 +2934,7 @@ public class LocalMetastore implements ConnectorMetadata {
         if (fullNameToDb.containsKey(name)) {
             return fullNameToDb.get(name);
         } else {
-            // This maybe a information_schema db request, and information_schema db name is case insensitive.
+            // This maybe an information_schema db request, and information_schema db name is case-insensitive.
             // So, we first extract db name to check if it is information_schema.
             // Then we reassemble the origin cluster name with lower case db name,
             // and finally get information_schema db from the name map.
@@ -3537,7 +3537,7 @@ public class LocalMetastore implements ConnectorMetadata {
             LiteralExpr startExpr = sortedRange.get(partitionNum - limit).lowerEndpoint().getKeys().get(0);
             LiteralExpr endExpr = sortedRange.get(partitionNum - 1).upperEndpoint().getKeys().get(0);
             String partitionStart = AnalyzerUtils.parseLiteralExprToDateString(startExpr, 0);
-            String partitionEnd = AnalyzerUtils.parseLiteralExprToDateString(endExpr, 1);;
+            String partitionEnd = AnalyzerUtils.parseLiteralExprToDateString(endExpr, 1);
             HashMap<String, String> taskRunProperties = new HashMap<>();
             taskRunProperties.put(TaskRun.PARTITION_START, partitionStart);
             taskRunProperties.put(TaskRun.PARTITION_END, partitionEnd);

@@ -9,6 +9,7 @@ import com.google.common.collect.Sets;
 import com.google.protobuf.Descriptors.EnumDescriptor;
 import com.staros.client.StarClient;
 import com.staros.client.StarClientException;
+import com.staros.manager.StarManagerServer;
 import com.staros.proto.CreateShardGroupInfo;
 import com.staros.proto.CreateShardInfo;
 import com.staros.proto.FileCacheInfo;
@@ -59,7 +60,7 @@ public class StarOSAgent {
         rwLock = new ReentrantReadWriteLock();
     }
 
-    public boolean init() {
+    public boolean init(StarManagerServer server) {
         if (Config.integrate_starmgr) {
             if (!Config.use_staros) {
                 LOG.error("integrate_starmgr is true but use_staros is false!");
@@ -73,7 +74,7 @@ public class StarOSAgent {
             }
         }
 
-        client = new StarClient();
+        client = new StarClient(server);
         client.connectServer(Config.starmgr_address);
         return true;
     }

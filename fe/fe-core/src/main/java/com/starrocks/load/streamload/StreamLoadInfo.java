@@ -2,11 +2,9 @@
 package com.starrocks.load.streamload;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.ColumnSeparator;
+import com.google.re2j.Pattern;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.RowDelimiter;
 import com.starrocks.catalog.Database;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.CompressionUtils;
@@ -14,10 +12,12 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
+import com.starrocks.sql.ast.ColumnSeparator;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.ImportColumnsStmt;
 import com.starrocks.sql.ast.ImportWhereStmt;
 import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.RowDelimiter;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TFileFormatType;
@@ -32,6 +32,7 @@ import java.util.List;
 public class StreamLoadInfo {
 
     private static final Logger LOG = LogManager.getLogger(StreamLoadInfo.class);
+    private static final Pattern PART_NAME_SPLIT = Pattern.compile("\\s*,\\s*");
 
     private TUniqueId id;
     private long txnId;
@@ -198,13 +199,13 @@ public class StreamLoadInfo {
             setWhereExpr(context.whereExpr);
         }
         if (context.columnSeparator != null) {
-            setColumnSeparator(context.columnSeparator);
+            columnSeparator = new ColumnSeparator(context.columnSeparator);
         }
         if (context.rowDelimiter != null) {
-            setRowDelimiter(context.rowDelimiter);
+            rowDelimiter = new RowDelimiter(context.rowDelimiter);
         }
         if (context.partitions != null) {
-            String[] partNames = context.partitions.trim().split("\\s*,\\s*");
+            String[] partNames = PART_NAME_SPLIT.split(context.partitions.trim());
             if (context.useTempPartition) {
                 partitions = new PartitionNames(true, Lists.newArrayList(partNames));
             } else {
@@ -272,13 +273,13 @@ public class StreamLoadInfo {
             setWhereExpr(request.getWhere());
         }
         if (request.isSetColumnSeparator()) {
-            setColumnSeparator(request.getColumnSeparator());
+            columnSeparator = new ColumnSeparator(request.getColumnSeparator());
         }
         if (request.isSetRowDelimiter()) {
-            setRowDelimiter(request.getRowDelimiter());
+            rowDelimiter = new RowDelimiter(request.getRowDelimiter());
         }
         if (request.isSetPartitions()) {
-            String[] partNames = request.getPartitions().trim().split("\\s*,\\s*");
+            String[] partNames = PART_NAME_SPLIT.split(request.getPartitions().trim());
             if (request.isSetIsTempPartition()) {
                 partitions = new PartitionNames(request.isIsTempPartition(), Lists.newArrayList(partNames));
             } else {
@@ -325,7 +326,7 @@ public class StreamLoadInfo {
         if (request.isSetLoad_dop()) {
             loadParallelRequestNum = request.getLoad_dop();
         }
-        
+
         if (request.isSetEnable_replicated_storage()) {
             enableReplicatedStorage = request.isEnable_replicated_storage();
         }
@@ -417,16 +418,6 @@ public class StreamLoadInfo {
     private void setMergeConditionExpr(String mergeConditionStr) throws UserException {
         this.mergeConditionStr = mergeConditionStr;
         // TODO:(caneGuy) use expr for update condition
-    }
-
-    private void setColumnSeparator(String oriSeparator) throws AnalysisException {
-        columnSeparator = new ColumnSeparator(oriSeparator);
-        columnSeparator.analyze();
-    }
-
-    private void setRowDelimiter(String orgDelimiter) throws AnalysisException {
-        rowDelimiter = new RowDelimiter(orgDelimiter);
-        rowDelimiter.analyze();
     }
 
     public long getLoadMemLimit() {

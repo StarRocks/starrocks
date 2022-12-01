@@ -105,7 +105,12 @@ absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::get_shard_files
             scheme = "s3://";
             {
                 auto& s3_info = info.path_info.fs_info().s3_fs_info();
-                localconf[fslib::kSysRoot] = info.path_info.full_path();
+                if (!info.path_info.full_path().empty()) {
+                    localconf[fslib::kSysRoot] = info.path_info.full_path();
+                }
+                if (!s3_info.bucket().empty()) {
+                    localconf[fslib::kS3Bucket] = s3_info.bucket();
+                }
                 if (!s3_info.region().empty()) {
                     localconf[fslib::kS3Region] = s3_info.region();
                 }
@@ -141,8 +146,8 @@ absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::get_shard_files
             localconf[fslib::kSysRoot] = "/";
             // original fs sys.root as cachefs persistent uri
             localconf[fslib::kCacheFsPersistUri] = tmp[fslib::kSysRoot];
-            // use shard id as cache identifier
-            localconf[fslib::kCacheFsIdentifier] = absl::StrFormat("%d", info.id);
+            // use persistent uri as identifier to maximize sharing of cache data
+            localconf[fslib::kCacheFsIdentifier] = tmp[fslib::kSysRoot];
             localconf[fslib::kCacheFsTtlSecs] = absl::StrFormat("%ld", cache_info.ttl_seconds());
             if (cache_info.async_write_back()) {
                 localconf[fslib::kCacheFsAsyncWriteBack] = "true";

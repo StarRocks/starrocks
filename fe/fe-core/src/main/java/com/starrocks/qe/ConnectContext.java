@@ -571,7 +571,7 @@ public class ConnectContext {
                         break;
                     }
                 } catch (InterruptedException e) {
-                    e.printStackTrace();
+                    LOG.warn(e);
                     LOG.warn("sleep exception, ignore.");
                     break;
                 }

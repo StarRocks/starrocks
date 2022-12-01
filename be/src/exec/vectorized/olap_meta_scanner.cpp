@@ -8,13 +8,13 @@
 
 namespace starrocks::vectorized {
 
-OlapMetaScanner::OlapMetaScanner(OlapMetaScanNode* parent) : _parent(parent), _runtime_state(nullptr) {}
+OlapMetaScanner::OlapMetaScanner(OlapMetaScanNode* parent) : _parent(parent) {}
 
-Status OlapMetaScanner::init(RuntimeState* runtime_state, const OlapMetaScannerParams& params) {
+Status OlapMetaScanner::init(RuntimeState* runtime_state, const MetaScannerParams& params) {
     _runtime_state = runtime_state;
     RETURN_IF_ERROR(_get_tablet(params.scan_range));
     RETURN_IF_ERROR(_init_meta_reader_params());
-    _reader = std::make_shared<MetaReader>();
+    _reader = std::make_shared<OlapMetaReader>();
 
     if (_reader == nullptr) {
         return Status::InternalError("Failed to allocate meta reader.");

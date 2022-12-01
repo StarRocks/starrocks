@@ -9,6 +9,7 @@
 #include "column/chunk.h"
 #include "column/datum.h"
 #include "column/vectorized_schema.h"
+#include "gutil/stringprintf.h"
 #include "storage/chunk_helper.h"
 
 using namespace std;

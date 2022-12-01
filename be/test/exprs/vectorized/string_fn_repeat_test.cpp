@@ -19,7 +19,7 @@ TEST_F(StringFunctionRepeatTest, repeatTest) {
     columns.emplace_back(str);
     columns.emplace_back(times);
 
-    ColumnPtr result = StringFunctions::repeat(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::repeat(ctx.get(), columns).value();
     ASSERT_EQ(20, result->size());
 
     auto v = ColumnViewer<TYPE_VARCHAR>(result);
@@ -45,7 +45,7 @@ TEST_F(StringFunctionRepeatTest, repeatLargeTest) {
     columns.emplace_back(str);
     columns.emplace_back(times);
 
-    ColumnPtr result = StringFunctions::repeat(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::repeat(ctx.get(), columns).value();
     ASSERT_EQ(1, result->size());
 }
 
@@ -66,7 +66,7 @@ TEST_F(StringFunctionRepeatTest, repeatConstTest) {
     columns.emplace_back(str);
     columns.emplace_back(ConstColumn::create(times, 1));
 
-    ColumnPtr result = StringFunctions::repeat(ctx.get(), columns);
+    ColumnPtr result = StringFunctions::repeat(ctx.get(), columns).value();
     const auto num_rows = str->size();
     ASSERT_EQ(num_rows, result->size());
 

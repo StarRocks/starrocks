@@ -31,7 +31,7 @@ import java.util.List;
 
 public class DeletePlanner {
     public ExecPlan plan(DeleteStmt deleteStatement, ConnectContext session) {
-        if (!deleteStatement.supportNewPlanner()) {
+        if (deleteStatement.shouldHandledByDeleteHandler()) {
             // executor will use DeleteHandler to handle delete statement
             // so just return empty plan here
             return null;
@@ -43,9 +43,7 @@ public class DeletePlanner {
 
         // TODO: remove forceDisablePipeline when all the operators support pipeline engine.
         boolean isEnablePipeline = session.getSessionVariable().isEnablePipelineEngine();
-        boolean canUsePipeline =
-                isEnablePipeline && DataSink.canTableSinkUsePipeline(deleteStatement.getTable()) &&
-                        logicalPlan.canUsePipeline();
+        boolean canUsePipeline = isEnablePipeline && DataSink.canTableSinkUsePipeline(deleteStatement.getTable());
         boolean forceDisablePipeline = isEnablePipeline && !canUsePipeline;
         try {
             if (forceDisablePipeline) {
@@ -91,7 +89,7 @@ public class DeletePlanner {
             DataSink dataSink = new OlapTableSink(table, olapTuple, partitionIds, table.writeQuorum(),
                     table.enableReplicatedStorage());
             execPlan.getFragments().get(0).setSink(dataSink);
-            if (isEnablePipeline && canUsePipeline) {
+            if (canUsePipeline) {
                 PlanFragment sinkFragment = execPlan.getFragments().get(0);
                 if (ConnectContext.get().getSessionVariable().getPipelineSinkDop() <= 0) {
                     sinkFragment.setPipelineDop(ConnectContext.get().getSessionVariable().getParallelExecInstanceNum());

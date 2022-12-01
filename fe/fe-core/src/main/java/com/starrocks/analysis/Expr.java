@@ -29,6 +29,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
@@ -298,7 +299,7 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     /**
      * Does subclass-specific analysis. Subclasses should override analyzeImpl().
      */
-     protected void analyzeImpl(Analyzer analyzer) throws AnalysisException {
+    protected void analyzeImpl(Analyzer analyzer) throws AnalysisException {
     }
 
     /**
@@ -727,6 +728,7 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     public interface ExprVisitor {
         void visit(Expr expr, TExprNode texprNode);
     }
+
     // Append a flattened version of this expr, including all children, to 'container'.
     final void treeToThriftHelper(TExpr container, ExprVisitor visitor) {
         TExprNode msg = new TExprNode();
@@ -753,6 +755,10 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         msg.output_scale = getOutputScale();
         msg.setIs_monotonic(isMonotonic());
         visitor.visit(this, msg);
+        // Echoes the above hack process
+        if (PrimitiveType.NULL_TYPE.toThrift().equals(msg.child_type)) {
+            msg.child_type = PrimitiveType.BOOLEAN.toThrift();
+        }
         container.addToNodes(msg);
         for (Expr child : children) {
             child.treeToThriftHelper(container, visitor);

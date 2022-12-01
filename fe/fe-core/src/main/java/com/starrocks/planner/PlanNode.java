@@ -898,6 +898,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
                 .collect(Collectors.toList());
         planNode.setNullable_tuples(nullable_tuples);
         toNormalForm(planNode, normalizer);
+        normalizer.disableMultiversionIfExprsUseAggColumns(conjuncts);
 
         return planNode;
     }

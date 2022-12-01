@@ -1,16 +1,16 @@
 # strcmp
 
-## description
+## Description
 
-### Syntax
+This function compares two strings. Returns 0 if lhs and rhs compare equal. Return -1 if lhs appears before rhs in lexicographical order. Returns 1 if lhs appears after rhs in lexicographical order. When the argument is NULL, the result is NULL.
+
+## Syntax
 
 ```Haskell
 INT strcmp(VARCHAR lhs, VARCHAR rhs)
 ```
 
-This function compares two strings. Returns 0 if lhs and rhs compare equal. Return -1 if lhs appears before rhs in lexicographical order. Returns 1 if lhs appears after rhs in lexicographical order. When the argument is NULL, the result is NULL.
-
-## example
+## Examples
 
 ```Plain Text
 mysql> select strcmp("test1", "test1");

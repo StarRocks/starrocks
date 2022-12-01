@@ -9,6 +9,7 @@
 
 #include "column/chunk.h"
 #include "common/config.h"
+#include "gutil/strings/substitute.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks::vectorized {
@@ -62,7 +63,7 @@ protected:
 // Compare two chunks by the one specific row of each other.
 class ComparableChunk : public MergingChunk {
 public:
-    explicit ComparableChunk(Chunk* chunk, size_t order, size_t key_columns, string merge_condition)
+    explicit ComparableChunk(Chunk* chunk, size_t order, size_t key_columns, std::string merge_condition)
             : MergingChunk(chunk),
               _order(order),
               _key_columns(key_columns),
@@ -169,7 +170,9 @@ inline Status MergeIterator::init() {
     DCHECK(_chunk_size > 0);
     DCHECK_EQ(_children.size(), _chunk_pool.size());
     for (size_t i = 0; i < _children.size(); i++) {
-        _chunk_pool[i] = ChunkHelper::new_chunk(output_schema(), _chunk_size);
+        // No need to reserve, because it's already reserved in segment interators.
+        // If we reserve here, for small segment files, it will consume large memory then need.
+        _chunk_pool[i] = ChunkHelper::new_chunk(output_schema(), 0);
         RETURN_IF_ERROR(fill(i));
     }
     _inited = true;

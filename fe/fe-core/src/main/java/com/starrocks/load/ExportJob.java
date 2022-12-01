@@ -359,6 +359,9 @@ public class ExportJob implements Writable {
             default:
                 break;
         }
+        if (fragment == null) {
+            throw new UserException("invalid table type:" + exportTable.getType());
+        }
         fragment.setOutputExprs(createOutputExprs());
 
         scanNode.setFragmentId(fragment.getFragmentId());

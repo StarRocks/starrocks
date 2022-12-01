@@ -42,7 +42,7 @@ Status SegmentChunkIteratorAdapter::do_get_next(Chunk* out_chunk) {
     return Status::OK();
 }
 
-Status SegmentChunkIteratorAdapter::do_get_next(Chunk* out_chunk, vector<uint32_t>* rowid) {
+Status SegmentChunkIteratorAdapter::do_get_next(Chunk* out_chunk, std::vector<uint32_t>* rowid) {
     if (_in_chunk == nullptr) {
         auto reserve_size = config::vector_chunk_size;
         _in_chunk = ChunkHelper::new_chunk(_inner_iter->schema(), reserve_size);

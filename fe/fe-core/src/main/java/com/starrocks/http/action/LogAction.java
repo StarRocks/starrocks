@@ -37,7 +37,7 @@ import java.util.List;
 
 public class LogAction extends WebBaseAction {
     private static final Logger LOG = LogManager.getLogger(LogAction.class);
-    private static long WEB_LOG_BYTES = 1024 * 1024;  // 1MB
+    private static final long WEB_LOG_BYTES = 1024L * 1024L;  // 1MB
 
     private String addVerboseName;
     private String delVerboseName;
@@ -96,7 +96,6 @@ public class LogAction extends WebBaseAction {
             appendUpdateVerboseButton(buffer, "del_verbose");
         } catch (IOException e) {
             LOG.error(e);
-            e.printStackTrace();
         }
     }
 

@@ -199,7 +199,7 @@ ColumnPtr haystack_vector_and_needle_vector(const ColumnPtr& haystack_ptr, const
     return builder.build(ColumnHelper::is_all_const({haystack_ptr, needle_ptr, start_pos_ptr}));
 }
 
-ColumnPtr StringFunctions::instr(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::instr(FunctionContext* context, const Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
     const ColumnPtr& haystack = columns[0];
@@ -213,7 +213,7 @@ ColumnPtr StringFunctions::instr(FunctionContext* context, const Columns& column
 }
 
 // locate without specified position
-ColumnPtr StringFunctions::locate(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::locate(FunctionContext* context, const Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
     const ColumnPtr& haystack = columns[1];
@@ -227,7 +227,7 @@ ColumnPtr StringFunctions::locate(FunctionContext* context, const Columns& colum
 }
 
 // locate with specified position
-ColumnPtr StringFunctions::locate_pos(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::locate_pos(FunctionContext* context, const Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
     const ColumnPtr& haystack = columns[1];

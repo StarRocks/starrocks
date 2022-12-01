@@ -575,10 +575,17 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         if (!isLoadTriggeredRefresh()) {
             return false;
         }
-        List<TableName> excludedTriggerTables = this.getTableProperty().getExcludedTriggerTables();
+        TableProperty tableProperty = getTableProperty();
+        if (tableProperty == null) {
+            return true;
+        }
+        List<TableName> excludedTriggerTables =  tableProperty.getExcludedTriggerTables();
+        if (excludedTriggerTables == null) {
+            return true;
+        }
         for (TableName tables : excludedTriggerTables) {
             if (tables.getDb() == null) {
-                if (tables.getTbl().equals(tableName))  {
+                if (tables.getTbl().equals(tableName)) {
                     return false;
                 }
             } else {
@@ -846,6 +853,9 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
     }
 
     public Pair<Table, Column> getPartitionTableAndColumn() {
+        if (!(partitionInfo instanceof ExpressionRangePartitionInfo)) {
+            return null;
+        }
         Expr partitionExpr = getPartitionRefTableExprs().get(0);
         List<SlotRef> slotRefs = Lists.newArrayList();
         partitionExpr.collect(SlotRef.class, slotRefs);

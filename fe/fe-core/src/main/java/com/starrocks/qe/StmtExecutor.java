@@ -82,11 +82,11 @@ import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.PrivilegeChecker;
+import com.starrocks.sql.analyzer.PrivilegeCheckerV2;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddSqlBlackListStmt;
 import com.starrocks.sql.ast.AnalyzeHistogramDesc;
 import com.starrocks.sql.ast.AnalyzeStmt;
-import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.ast.DelSqlBlackListStmt;
@@ -116,6 +116,7 @@ import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.statistic.AnalyzeManager;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.HistogramStatisticsCollectJob;
 import com.starrocks.statistic.StatisticExecutor;
@@ -642,7 +643,7 @@ public class StmtExecutor {
 
     // Because this is called by other thread
     public void cancel() {
-        if (parsedStmt instanceof DeleteStmt && !((DeleteStmt) parsedStmt).supportNewPlanner()) {
+        if (parsedStmt instanceof DeleteStmt && ((DeleteStmt) parsedStmt).shouldHandledByDeleteHandler()) {
             DeleteStmt deleteStmt = (DeleteStmt) parsedStmt;
             long jobId = deleteStmt.getJobId();
             if (jobId != -1) {
@@ -673,7 +674,7 @@ public class StmtExecutor {
                 // Only user itself and user with admin priv can kill connection
                 if (!killCtx.getQualifiedUser().equals(ConnectContext.get().getQualifiedUser())
                         && !GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(),
-                                                                                   PrivPredicate.ADMIN)) {
+                        PrivPredicate.ADMIN)) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_KILL_DENIED_ERROR, id);
                 }
             }
@@ -852,8 +853,14 @@ public class StmtExecutor {
 
     private void executeAnalyze(AnalyzeStmt analyzeStmt, AnalyzeStatus analyzeStatus, Database db, Table table) {
         StatisticExecutor statisticExecutor = new StatisticExecutor();
+
+        ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
+        // from current session, may execute analyze stmt
+        statsConnectCtx.getSessionVariable().setStatisticCollectParallelism(
+                context.getSessionVariable().getStatisticCollectParallelism());
+
         if (analyzeStmt.getAnalyzeTypeDesc() instanceof AnalyzeHistogramDesc) {
-            statisticExecutor.collectStatistics(
+            statisticExecutor.collectStatistics(statsConnectCtx,
                     new HistogramStatisticsCollectJob(db, table, analyzeStmt.getColumnNames(),
                             StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE,
                             analyzeStmt.getProperties()),
@@ -861,7 +868,7 @@ public class StmtExecutor {
                     //Sync load cache, auto-populate column statistic cache after Analyze table manually
                     false);
         } else {
-            statisticExecutor.collectStatistics(
+            statisticExecutor.collectStatistics(statsConnectCtx,
                     StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table, null,
                             analyzeStmt.getColumnNames(),
                             analyzeStmt.isSample() ? StatsConstants.AnalyzeType.SAMPLE :
@@ -880,7 +887,8 @@ public class StmtExecutor {
                 .collect(Collectors.toList());
 
         GlobalStateMgr.getCurrentAnalyzeMgr().dropAnalyzeStatus(table.getId());
-        GlobalStateMgr.getCurrentAnalyzeMgr().dropBasicStatsMetaAndData(Sets.newHashSet(table.getId()));
+        GlobalStateMgr.getCurrentAnalyzeMgr()
+                .dropBasicStatsMetaAndData(StatisticUtils.buildConnectContext(), Sets.newHashSet(table.getId()));
         GlobalStateMgr.getCurrentStatisticStorage().expireColumnStatistics(table, columns);
     }
 
@@ -891,13 +899,21 @@ public class StmtExecutor {
                 .collect(Collectors.toList());
 
         GlobalStateMgr.getCurrentAnalyzeMgr().dropAnalyzeStatus(table.getId());
-        GlobalStateMgr.getCurrentAnalyzeMgr().dropHistogramStatsMetaAndData(Sets.newHashSet(table.getId()));
+        GlobalStateMgr.getCurrentAnalyzeMgr()
+                .dropHistogramStatsMetaAndData(StatisticUtils.buildConnectContext(), Sets.newHashSet(table.getId()));
         GlobalStateMgr.getCurrentStatisticStorage().expireHistogramStatistics(table.getId(), columns);
     }
 
+
     private void handleKillAnalyzeStmt() {
         KillAnalyzeStmt killAnalyzeStmt = (KillAnalyzeStmt) parsedStmt;
-        GlobalStateMgr.getCurrentAnalyzeMgr().unregisterConnection(killAnalyzeStmt.getAnalyzeId(), true);
+        long analyzeId = killAnalyzeStmt.getAnalyzeId();
+        AnalyzeManager analyzeManager = GlobalStateMgr.getCurrentAnalyzeMgr();
+        if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+            PrivilegeCheckerV2.checkPrivilegeForKillAnalyzeStmt(context, analyzeId);
+        }
+        // Try to kill the job anyway.
+        analyzeManager.unregisterConnection(analyzeId, true);
     }
 
     private void handleAddSqlBlackListStmt() {
@@ -1137,16 +1153,6 @@ public class StmtExecutor {
         return statisticsForAuditLog;
     }
 
-    /**
-     * Below function is added by new analyzer
-     */
-    private boolean isStatisticsOrAnalyzer(StatementBase statement, ConnectContext context) {
-        return (statement instanceof InsertStmt &&
-                context.getDatabase().equalsIgnoreCase(StatsConstants.STATISTICS_DB_NAME))
-                || statement instanceof AnalyzeStmt
-                || statement instanceof CreateAnalyzeJobStmt;
-    }
-
     public void handleInsertOverwrite(InsertStmt insertStmt) throws Exception {
         Database database = MetaUtils.getDatabase(context, insertStmt.getTableName());
         Table table = insertStmt.getTargetTable();
@@ -1183,7 +1189,7 @@ public class StmtExecutor {
         }
 
         // special handling for delete of non-primary key table, using old handler
-        if (stmt instanceof DeleteStmt && !((DeleteStmt) stmt).supportNewPlanner()) {
+        if (stmt instanceof DeleteStmt && ((DeleteStmt) stmt).shouldHandledByDeleteHandler()) {
             try {
                 context.getGlobalStateMgr().getDeleteHandler().process((DeleteStmt) stmt);
                 context.getState().setOk();
@@ -1499,8 +1505,8 @@ public class StmtExecutor {
             String timeoutInfo = GlobalStateMgr.getCurrentGlobalTransactionMgr()
                     .getTxnPublishTimeoutDebugInfo(database.getId(), transactionId);
             LOG.warn("txn {} publish timeout {}", transactionId, timeoutInfo);
-            if (timeoutInfo.length() > 120) {
-                timeoutInfo = timeoutInfo.substring(0, 120) + "...";
+            if (timeoutInfo.length() > 240) {
+                timeoutInfo = timeoutInfo.substring(0, 240) + "...";
             }
             errMsg = "Publish timeout " + timeoutInfo;
         }

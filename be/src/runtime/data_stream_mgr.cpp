@@ -26,7 +26,6 @@
 
 #include "runtime/current_thread.h"
 #include "runtime/data_stream_recvr.h"
-#include "runtime/raw_value.h"
 #include "runtime/runtime_state.h"
 #include "util/starrocks_metrics.h"
 

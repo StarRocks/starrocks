@@ -462,10 +462,10 @@ vectorized_functions = [
     [70415, 'esquery', 'BOOLEAN', ['VARCHAR', 'VARCHAR'], 'ESFunctions::match'],
 
     # hyperloglog function
-    [80010, 'hll_cardinality', 'BIGINT', ['HLL'], 'HyperloglogFunction::hll_cardinality'],
-    [80011, 'hll_cardinality', 'BIGINT', ['VARCHAR'], 'HyperloglogFunction::hll_cardinality_from_string'],
-    [80020, 'hll_hash', 'HLL', ['VARCHAR'], 'HyperloglogFunction::hll_hash'],
-    [80030, 'hll_empty', 'HLL', [], 'HyperloglogFunction::hll_empty'],
+    [80010, 'hll_cardinality', 'BIGINT', ['HLL'], 'HyperloglogFunctions::hll_cardinality'],
+    [80011, 'hll_cardinality', 'BIGINT', ['VARCHAR'], 'HyperloglogFunctions::hll_cardinality_from_string'],
+    [80020, 'hll_hash', 'HLL', ['VARCHAR'], 'HyperloglogFunctions::hll_hash'],
+    [80030, 'hll_empty', 'HLL', [], 'HyperloglogFunctions::hll_empty'],
 
     # bitmap function
     [90010, 'to_bitmap', 'BITMAP', ['VARCHAR'], 'BitmapFunctions::to_bitmap', False],
@@ -773,6 +773,20 @@ vectorized_functions = [
     [150282, 'array_contains_all', 'BOOLEAN', ['ANY_ARRAY', 'ANY_ARRAY'], 'ArrayFunctions::array_contains_all'],
 
     [150300, 'array_filter', 'ANY_ARRAY',   ['ANY_ARRAY', 'ARRAY_BOOLEAN'],   'ArrayFunctions::array_filter'],
+
+    [150311, 'array_sortby', 'ANY_ARRAY',  ['ANY_ARRAY', 'ARRAY_BOOLEAN'],   'ArrayFunctions::array_sortby_boolean'],
+    [150312, 'array_sortby', 'ANY_ARRAY',  ['ANY_ARRAY', 'ARRAY_TINYINT'],   'ArrayFunctions::array_sortby_tinyint'],
+    [150313, 'array_sortby', 'ANY_ARRAY',  ['ANY_ARRAY', 'ARRAY_SMALLINT'],  'ArrayFunctions::array_sortby_smallint'],
+    [150314, 'array_sortby', 'ANY_ARRAY',  ['ANY_ARRAY', 'ARRAY_INT'],       'ArrayFunctions::array_sortby_int'],
+    [150315, 'array_sortby', 'ANY_ARRAY',  ['ANY_ARRAY', 'ARRAY_BIGINT'],    'ArrayFunctions::array_sortby_bigint'],
+    [150316, 'array_sortby', 'ANY_ARRAY',  ['ANY_ARRAY', 'ARRAY_LARGEINT'],  'ArrayFunctions::array_sortby_largeint'],
+    [150317, 'array_sortby', 'ANY_ARRAY',  ['ANY_ARRAY', 'ARRAY_FLOAT'],     'ArrayFunctions::array_sortby_float'],
+    [150318, 'array_sortby', 'ANY_ARRAY',  ['ANY_ARRAY', 'ARRAY_DOUBLE'],    'ArrayFunctions::array_sortby_double'],
+    [150319, 'array_sortby', 'ANY_ARRAY',  ['ANY_ARRAY', 'ARRAY_VARCHAR'],   'ArrayFunctions::array_sortby_varchar'],
+    [150320, 'array_sortby', 'ANY_ARRAY',  ['ANY_ARRAY', 'ARRAY_DECIMALV2'], 'ArrayFunctions::array_sortby_decimalv2'],
+    [150321, 'array_sortby', 'ANY_ARRAY',  ['ANY_ARRAY', 'ARRAY_DATETIME'],  'ArrayFunctions::array_sortby_datetime'],
+    [150322, 'array_sortby', 'ANY_ARRAY',  ['ANY_ARRAY', 'ARRAY_DATE'],      'ArrayFunctions::array_sortby_date'],
+    [150323, 'array_sortby', 'ANY_ARRAY',  ['ANY_ARRAY', 'ARRAY_JSON'],      'ArrayFunctions::array_sortby_json'],
 
     # high-order functions related to lambda functions.
     [160100, 'array_map','ANY_ARRAY',['FUNCTION','ANY_ARRAY', "..."],'ArrayFunctions::array_map'],

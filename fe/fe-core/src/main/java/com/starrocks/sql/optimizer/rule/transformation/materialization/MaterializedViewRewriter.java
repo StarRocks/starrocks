@@ -21,6 +21,7 @@ import com.starrocks.sql.optimizer.base.EquivalenceClasses;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.Projection;
+import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -108,18 +109,6 @@ public class MaterializedViewRewriter {
             return Lists.newArrayList();
         }
 
-        // construct output column mapping from mv sql to mv scan operator
-        // eg: for mv1 sql define: select a, (b + 1) as c2, (a * b) as c3 from table;
-        // select sql plan output columns:    a, b + 1, a * b
-        //                                    |    |      |
-        //                                    v    v      V
-        // mv scan operator output columns:  a,   c2,    c3
-        Map<ColumnRefOperator, ColumnRefOperator> outputMapping = Maps.newHashMap();
-        for (int i = 0; i < materializationContext.getMvOutputExpressions().size(); i++) {
-            outputMapping.put(materializationContext.getMvOutputExpressions().get(i),
-                    materializationContext.getScanMvOutputExpressions().get(i));
-        }
-
         Map<ColumnRefOperator, ScalarOperator> mvLineage =
                 getLineage(mvExpression, materializationContext.getMvColumnRefFactory());
         ReplaceColumnRefRewriter mvColumnRefRewriter = new ReplaceColumnRefRewriter(mvLineage, true);
@@ -145,14 +134,17 @@ public class MaterializedViewRewriter {
                 queryTables, queryExpression, materializationContext.getMvColumnRefFactory(), mvTables, mvExpression);
 
         // used to judge whether query scalar ops can be rewritten
+        List<ColumnRefOperator> scanMvOutputColumns =
+                ((LogicalOlapScanOperator) materializationContext.getScanMvOperator()).getOutputColumns();
         Set<ColumnRefOperator> queryColumnSet = queryRelationIdToColumns.values()
                 .stream().flatMap(List::stream)
-                .filter(columnRef -> !materializationContext.getScanMvOutputExpressions().contains(columnRef))
+                .filter(columnRef -> !scanMvOutputColumns.contains(columnRef))
                 .collect(Collectors.toSet());
         RewriteContext rewriteContext = new RewriteContext(queryExpression, queryPredicateSplit, queryEc,
                 queryRelationIdToColumns, materializationContext.getQueryRefFactory(),
                 queryColumnRefRewriter, mvExpression, mvPredicateSplit, mvRelationIdToColumns,
-                materializationContext.getMvColumnRefFactory(), mvColumnRefRewriter, outputMapping, queryColumnSet);
+                materializationContext.getMvColumnRefFactory(), mvColumnRefRewriter,
+                materializationContext.getOutputMapping(), queryColumnSet);
         List<OptExpression> results = Lists.newArrayList();
         for (BiMap<Integer, Integer> relationIdMapping : relationIdMappings) {
             rewriteContext.setQueryToMvRelationIdMapping(relationIdMapping);
@@ -311,7 +303,7 @@ public class MaterializedViewRewriter {
         List<ColumnRefOperator> originalOutputColumns = queryColumnRefMap.keySet().stream().collect(Collectors.toList());
 
         // rewrite query
-        OptExpressionDuplicator duplicator = new OptExpressionDuplicator(rewriteContext.getQueryRefFactory());
+        OptExpressionDuplicator duplicator = new OptExpressionDuplicator(materializationContext);
         OptExpression newQueryInput = duplicator.duplicate(queryInput);
         List<ColumnRefOperator> newQueryOutputColumns = duplicator.getMappedColumns(originalOutputColumns);
 

@@ -17,69 +17,13 @@ template <LogicalType PT, typename = guard::Guard>
 struct AnyValueAggregateData {};
 
 template <LogicalType PT>
-struct AnyValueAggregateData<PT, IntegralPTGuard<PT>> {
+struct AnyValueAggregateData<PT, AggregatePTGuard<PT>> {
     using T = RunTimeCppType<PT>;
-    T result = std::numeric_limits<T>::max();
+    T result = RunTimeTypeLimits<PT>::max_value();
     bool has_value = false;
 
     void reset() {
-        result = std::numeric_limits<T>::max();
-        has_value = false;
-    }
-};
-
-template <LogicalType PT>
-struct AnyValueAggregateData<PT, FloatPTGuard<PT>> {
-    using T = RunTimeCppType<PT>;
-    T result = std::numeric_limits<T>::max();
-    bool has_value = false;
-
-    void reset() {
-        result = std::numeric_limits<T>::max();
-        has_value = false;
-    }
-};
-
-template <>
-struct AnyValueAggregateData<TYPE_DECIMALV2, guard::Guard> {
-    bool has_value = false;
-    DecimalV2Value result = DecimalV2Value::get_max_decimal();
-
-    void reset() {
-        result = DecimalV2Value::get_max_decimal();
-        has_value = false;
-    }
-};
-
-template <LogicalType PT>
-struct AnyValueAggregateData<PT, DecimalPTGuard<PT>> {
-    bool has_value = false;
-    using T = RunTimeCppType<PT>;
-    T result = get_max_decimal<T>();
-    void reset() {
-        result = get_max_decimal<T>();
-        has_value = false;
-    }
-};
-
-template <>
-struct AnyValueAggregateData<TYPE_DATETIME, guard::Guard> {
-    bool has_value = false;
-    TimestampValue result = TimestampValue::MAX_TIMESTAMP_VALUE;
-
-    void reset() {
-        result = TimestampValue::MAX_TIMESTAMP_VALUE;
-        has_value = false;
-    }
-};
-
-template <>
-struct AnyValueAggregateData<TYPE_DATE, guard::Guard> {
-    bool has_value = false;
-    DateValue result = DateValue::MAX_DATE_VALUE;
-
-    void reset() {
-        result = DateValue::MAX_DATE_VALUE;
+        result = RunTimeTypeLimits<PT>::max_value();
         has_value = false;
     }
 };
@@ -123,9 +67,9 @@ struct AnyValueElement {
     }
 };
 
-template <LogicalType PT>
-struct AnyValueElement<PT, AnyValueAggregateData<PT>, StringPTGuard<PT>> {
-    void operator()(AnyValueAggregateData<PT>& state, const Slice& right) const {
+template <LogicalType PT, typename State>
+struct AnyValueElement<PT, State, StringPTGuard<PT>> {
+    void operator()(State& state, const Slice& right) const {
         if (UNLIKELY(!state.has_value())) {
             state.buffer.resize(right.size);
             memcpy(state.buffer.data(), right.data, right.size);
@@ -134,9 +78,9 @@ struct AnyValueElement<PT, AnyValueAggregateData<PT>, StringPTGuard<PT>> {
     }
 };
 
-template <LogicalType PT>
-struct AnyValueElement<PT, AnyValueAggregateData<PT>, JsonGuard<PT>> {
-    void operator()(AnyValueAggregateData<PT>& state, const JsonValue* right) const {
+template <LogicalType PT, typename State>
+struct AnyValueElement<PT, State, JsonGuard<PT>> {
+    void operator()(State& state, const JsonValue* right) const {
         if (UNLIKELY(!state.has_value)) {
             state.has_value = true;
             state.value = *right;

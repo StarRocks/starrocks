@@ -30,7 +30,6 @@
 #include "gen_cpp/segment.pb.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
-#include "storage/field.h"
 #include "storage/rowset/binary_plain_page.h"
 #include "util/once.h"
 #include "util/slice.h"

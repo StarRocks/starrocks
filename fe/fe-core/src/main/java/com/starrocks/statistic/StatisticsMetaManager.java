@@ -18,6 +18,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.CreateDbStmt;
@@ -40,7 +41,7 @@ public class StatisticsMetaManager extends LeaderDaemon {
     private int lossTableCount = 0;
 
     public StatisticsMetaManager() {
-        super("statistics meta manager", 60 * 1000);
+        super("statistics meta manager", 60L * 1000L);
     }
 
     private boolean checkDatabaseExist() {
@@ -114,7 +115,7 @@ public class StatisticsMetaManager extends LeaderDaemon {
             "table_id", "column_name"
     );
 
-    private boolean createSampleStatisticsTable() {
+    private boolean createSampleStatisticsTable(ConnectContext context) {
         LOG.info("create statistics table start");
         TableName tableName = new TableName(StatsConstants.STATISTICS_DB_NAME,
                 StatsConstants.SAMPLE_STATISTICS_TABLE_NAME);
@@ -134,7 +135,8 @@ public class StatisticsMetaManager extends LeaderDaemon {
                 properties,
                 null,
                 "");
-        Analyzer.analyze(stmt, StatisticUtils.buildConnectContext());
+
+        Analyzer.analyze(stmt, context);
         try {
             GlobalStateMgr.getCurrentState().createTable(stmt);
         } catch (DdlException e) {
@@ -146,7 +148,7 @@ public class StatisticsMetaManager extends LeaderDaemon {
         return checkTableExist(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME);
     }
 
-    private boolean createFullStatisticsTable() {
+    private boolean createFullStatisticsTable(ConnectContext context) {
         LOG.info("create statistics table v2 start");
         TableName tableName = new TableName(StatsConstants.STATISTICS_DB_NAME,
                 StatsConstants.FULL_STATISTICS_TABLE_NAME);
@@ -167,7 +169,7 @@ public class StatisticsMetaManager extends LeaderDaemon {
                 null,
                 "");
    
-        Analyzer.analyze(stmt, StatisticUtils.buildConnectContext());
+        Analyzer.analyze(stmt, context);
         try {
             GlobalStateMgr.getCurrentState().createTable(stmt);
         } catch (DdlException e) {
@@ -179,7 +181,7 @@ public class StatisticsMetaManager extends LeaderDaemon {
         return checkTableExist(StatsConstants.FULL_STATISTICS_TABLE_NAME);
     }
 
-    private boolean createHistogramStatisticsTable() {
+    private boolean createHistogramStatisticsTable(ConnectContext context) {
         LOG.info("create statistics table v2 start");
         TableName tableName = new TableName(StatsConstants.STATISTICS_DB_NAME,
                 StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME);
@@ -200,7 +202,7 @@ public class StatisticsMetaManager extends LeaderDaemon {
                 null,
                 "");
         
-        Analyzer.analyze(stmt, StatisticUtils.buildConnectContext());
+        Analyzer.analyze(stmt, context);
         try {
             GlobalStateMgr.getCurrentState().createTable(stmt);
         } catch (DdlException e) {
@@ -257,12 +259,15 @@ public class StatisticsMetaManager extends LeaderDaemon {
     }
 
     private boolean createTable(String tableName) {
+        ConnectContext context = StatisticUtils.buildConnectContext();
+        context.setThreadLocalInfo();
+
         if (tableName.equals(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME)) {
-            return createSampleStatisticsTable();
+            return createSampleStatisticsTable(context);
         } else if (tableName.equals(StatsConstants.FULL_STATISTICS_TABLE_NAME)) {
-            return createFullStatisticsTable();
+            return createFullStatisticsTable(context);
         } else if (tableName.equals(StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME)) {
-            return createHistogramStatisticsTable();
+            return createHistogramStatisticsTable(context);
         } else {
             throw new StarRocksPlannerException("Error table name " + tableName, ErrorType.INTERNAL_ERROR);
         }

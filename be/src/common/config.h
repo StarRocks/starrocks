@@ -253,8 +253,8 @@ CONF_mInt32(inc_rowset_expired_sec, "1800");
 // inc_rowset snapshot rs sweep time interval
 CONF_mInt32(tablet_rowset_stale_sweep_time_sec, "1800");
 // garbage sweep policy
-CONF_Int32(max_garbage_sweep_interval, "3600");
-CONF_Int32(min_garbage_sweep_interval, "180");
+CONF_mInt32(max_garbage_sweep_interval, "3600");
+CONF_mInt32(min_garbage_sweep_interval, "180");
 CONF_mInt32(snapshot_expire_time_sec, "172800");
 CONF_mInt32(trash_file_expire_time_sec, "259200");
 // check row nums for BE/CE and schema change. true is open, false is closed.
@@ -295,6 +295,7 @@ CONF_Int32(cumulative_compaction_num_threads_per_disk, "1");
 CONF_mInt32(update_compaction_check_interval_seconds, "60");
 CONF_Int32(update_compaction_num_threads_per_disk, "1");
 CONF_Int32(update_compaction_per_tablet_min_interval_seconds, "120"); // 2min
+CONF_mInt64(max_update_compaction_num_singleton_deltas, "1000");
 
 CONF_mInt32(repair_compaction_interval_seconds, "600"); // 10 min
 
@@ -883,4 +884,15 @@ CONF_Int64(query_cache_capacity, "536870912");
 
 // Used to limit buffer size of tablet send channel.
 CONF_mInt64(send_channel_buffer_limit, "67108864");
+
+// exception_stack_level controls when to print exception's stack
+// -1, enable print all exceptions' stack
+// 0, disable print exceptions' stack
+// 1, print exceptions' stack whose prefix is in the white list(default)
+// 2, print exceptions' stack whose prefix is not in the black list
+// other value means the default value
+CONF_Int32(exception_stack_level, "1");
+CONF_String(exception_stack_white_list, "std::");
+CONF_String(exception_stack_black_list, "apache::thrift::,ue2::,arangodb::");
+
 } // namespace starrocks::config

@@ -6,7 +6,7 @@
 #include <queue>
 
 #include "column/vectorized_fwd.h"
-#include "storage/field.h"
+#include "storage/olap_common.h"
 #include "storage/olap_type_infra.h"
 
 namespace starrocks {

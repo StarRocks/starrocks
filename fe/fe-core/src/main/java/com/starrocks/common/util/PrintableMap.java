@@ -38,6 +38,12 @@ public class PrintableMap<K, V> {
         SENSITIVE_KEY.add("password");
         SENSITIVE_KEY.add("kerberos_keytab_content");
         SENSITIVE_KEY.add("bos_secret_accesskey");
+        SENSITIVE_KEY.add("fs.s3a.access.key");
+        SENSITIVE_KEY.add("fs.s3a.secret.key");
+        SENSITIVE_KEY.add("fs.oss.accessKeyId");
+        SENSITIVE_KEY.add("fs.oss.accessKeySecret");
+        SENSITIVE_KEY.add("fs.cosn.userinfo.secretId");
+        SENSITIVE_KEY.add("fs.cosn.userinfo.secretKey");
     }
 
     public PrintableMap(Map<K, V> map, String keyValueSaperator,
@@ -79,7 +85,7 @@ public class PrintableMap<K, V> {
                 sb.append("\"");
             }
             if (hidePassword && SENSITIVE_KEY.contains(entry.getKey())) {
-                sb.append("*XXX");
+                sb.append("***");
             } else {
                 sb.append(entry.getValue());
             }

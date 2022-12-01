@@ -157,6 +157,7 @@ import com.starrocks.thrift.TUpdateExportTaskStatusRequest;
 import com.starrocks.thrift.TUpdateResourceUsageRequest;
 import com.starrocks.thrift.TUpdateResourceUsageResponse;
 import com.starrocks.thrift.TUserPrivDesc;
+import com.starrocks.thrift.TVerboseVariableRecord;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionNotFoundException;
@@ -257,7 +258,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
         }
         if (db != null) {
-            for (String tableName : db.getTableNamesWithLock()) {
+            for (String tableName : db.getTableNamesViewWithLock()) {
                 LOG.debug("get table: {}, wait to check", tableName);
                 if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser, params.db,
                         tableName, PrivPredicate.SHOW)) {
@@ -713,7 +714,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
             Database db = GlobalStateMgr.getCurrentState().getDb(fullName);
             if (db != null) {
-                for (String tableName : db.getTableNamesWithLock()) {
+                for (String tableName : db.getTableNamesViewWithLock()) {
                     LOG.debug("get table: {}, wait to check", tableName);
                     if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser, fullName,
                             tableName, PrivPredicate.SHOW)) {
@@ -793,10 +794,22 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         if (ctx == null) {
             return result;
         }
-        List<List<String>> rows = VariableMgr.dump(SetType.fromThrift(params.getVarType()), ctx.getSessionVariable(),
+        SetType setType = SetType.fromThrift(params.getVarType());
+        List<List<String>> rows = VariableMgr.dump(setType, ctx.getSessionVariable(),
                 null);
-        for (List<String> row : rows) {
-            map.put(row.get(0), row.get(1));
+        if (setType != SetType.VERBOSE) {
+            for (List<String> row : rows) {
+                map.put(row.get(0), row.get(1));
+            }
+        } else {
+            for (List<String> row : rows) {
+                TVerboseVariableRecord record = new TVerboseVariableRecord();
+                record.setVariable_name(row.get(0));
+                record.setValue(row.get(1));
+                record.setDefault_value(row.get(2));
+                record.setIs_changed(row.get(3).equals("1"));
+                result.addToVerbose_variables(record);
+            }
         }
         return result;
     }
@@ -1023,8 +1036,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             String timeoutInfo = GlobalStateMgr.getCurrentGlobalTransactionMgr()
                     .getTxnPublishTimeoutDebugInfo(db.getId(), request.getTxnId());
             LOG.warn("txn {} publish timeout {}", request.getTxnId(), timeoutInfo);
-            if (timeoutInfo.length() > 120) {
-                timeoutInfo = timeoutInfo.substring(0, 120) + "...";
+            if (timeoutInfo.length() > 240) {
+                timeoutInfo = timeoutInfo.substring(0, 240) + "...";
             }
             status.addToError_msgs("Publish timeout. The data will be visible after a while" + timeoutInfo);
             return;

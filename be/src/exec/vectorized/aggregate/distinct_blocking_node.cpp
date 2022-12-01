@@ -95,16 +95,16 @@ Status DistinctBlockingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool
         *eos = true;
         return Status::OK();
     }
-    int32_t chunk_size = runtime_state()->chunk_size();
+    const auto chunk_size = runtime_state()->chunk_size();
 
     _aggregator->convert_hash_set_to_chunk(chunk_size, chunk);
 
-    size_t old_size = (*chunk)->num_rows();
+    const int64_t old_size = (*chunk)->num_rows();
     eval_join_runtime_filters(chunk->get());
 
     // For having
     RETURN_IF_ERROR(ExecNode::eval_conjuncts(_conjunct_ctxs, (*chunk).get()));
-    _aggregator->update_num_rows_returned(-(old_size - (*chunk)->num_rows()));
+    _aggregator->update_num_rows_returned(-(old_size - static_cast<int64_t>((*chunk)->num_rows())));
 
     _aggregator->process_limit(chunk);
 
@@ -126,7 +126,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > DistinctBlockingNode::d
         AggrMode aggr_mode = should_cache ? (post_cache ? AM_BLOCKING_POST_CACHE : AM_BLOCKING_PRE_CACHE) : AM_DEFAULT;
         aggregator_factory->set_aggr_mode(aggr_mode);
         std::vector<ExprContext*> partition_expr_ctxs;
-        Expr::create_expr_trees(_pool, _tnode.agg_node.grouping_exprs, &partition_expr_ctxs);
+        Expr::create_expr_trees(_pool, _tnode.agg_node.grouping_exprs, &partition_expr_ctxs, runtime_state());
         Expr::prepare(partition_expr_ctxs, runtime_state());
         Expr::open(partition_expr_ctxs, runtime_state());
         auto sink_operator = std::make_shared<AggregateDistinctBlockingSinkOperatorFactory>(

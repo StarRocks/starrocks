@@ -81,8 +81,12 @@ public:
 
     void clear();
 
+    // Only include leaf node
     Status set_include_column_id(const uint64_t slot_pos, const TypeDescriptor& desc,
                                  std::list<uint64_t>* column_id_list);
+
+    // Include in slot_descriptor level, complex type's lazy load is not support now.
+    Status set_lazyload_column_id(const uint64_t slot_pos, std::list<uint64_t>* column_id_list);
 
 private:
     std::unordered_map<size_t, OrcMappingOrOrcColumnId> _mapping;
@@ -93,13 +97,25 @@ private:
 
 class OrcMappingFactory {
 public:
-    static std::unique_ptr<OrcMapping> build_mapping(const std::vector<SlotDescriptor*>& slot_descs,
-                                                     const orc::Type& root_orc_type, const bool case_sensitve);
+    // NOTICE: orc_use_column_names will only control first level behavior, but struct subfield will still use
+    // column name rather than position in table defination.
+    static StatusOr<std::unique_ptr<OrcMapping>> build_mapping(const std::vector<SlotDescriptor*>& slot_descs,
+                                                               const orc::Type& root_orc_type, const bool case_sensitve,
+                                                               const bool orc_use_column_names,
+                                                               const std::vector<std::string>* hive_column_names);
 
 private:
-    static Status _init_orc_mapping(std::unique_ptr<OrcMapping>& mapping,
-                                    const std::vector<SlotDescriptor*>& slot_descs, const orc::Type& orc_root_type,
-                                    const bool case_sensitve);
+    static Status _check_orc_type_can_converte_2_logical_type(const orc::Type& orc_source_type,
+                                                              const TypeDescriptor& slot_target_type);
+
+    static Status _init_orc_mapping_with_orc_column_names(std::unique_ptr<OrcMapping>& mapping,
+                                                          const std::vector<SlotDescriptor*>& slot_descs,
+                                                          const orc::Type& orc_root_type, const bool case_sensitve);
+
+    static Status _init_orc_mapping_with_hive_column_names(std::unique_ptr<OrcMapping>& mapping,
+                                                           const std::vector<SlotDescriptor*>& slot_descs,
+                                                           const orc::Type& orc_root_type, const bool case_sensitve,
+                                                           const std::vector<std::string>* hive_column_names);
 
     static Status _set_child_mapping(const OrcMappingPtr& mapping, const TypeDescriptor& origin_type,
                                      const orc::Type& orc_type, const bool case_sensitive);

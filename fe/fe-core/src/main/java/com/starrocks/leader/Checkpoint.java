@@ -210,7 +210,6 @@ public class Checkpoint extends LeaderDaemon {
             LOG.info("checkpoint finished save image.{}", replayedJournalId);
             return true;
         } catch (Exception e) {
-            e.printStackTrace();
             LOG.error("Exception when generate new image file", e);
             return false;
         } finally {

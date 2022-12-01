@@ -2,23 +2,42 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.authentication.AuthenticationManager;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Table;
+import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateUserStmt;
+import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
+import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
+import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
+import com.starrocks.sql.ast.ShowHistogramStatsMetaStmt;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.statistic.AnalyzeJob;
+import com.starrocks.statistic.AnalyzeManager;
+import com.starrocks.statistic.AnalyzeStatus;
+import com.starrocks.statistic.BasicStatsMeta;
+import com.starrocks.statistic.HistogramStatsMeta;
+import com.starrocks.statistic.StatsConstants;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
 
@@ -33,12 +52,18 @@ public class PrivilegeCheckerV2Test {
         UtFrameUtils.createMinStarRocksCluster();
         UtFrameUtils.addMockBackend(10002);
         UtFrameUtils.addMockBackend(10003);
-        String createTblStmtStr = "create table db1.tbl1(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) "
-                + "AGGREGATE KEY(k1, k2,k3,k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
+        String createTblStmtStr1 = "create table db1.tbl1(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) "
+                + "primary KEY(k1, k2, k3) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
+        String createTblStmtStr2 = "create table db2.tbl1(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) "
+                + "AGGREGATE KEY(k1, k2, k3, k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
+        String createTblStmtStr3 = "create table db1.tbl2(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) "
+                + "AGGREGATE KEY(k1, k2, k3, k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
         starRocksAssert = new StarRocksAssert(UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT));
         starRocksAssert.withDatabase("db1");
         starRocksAssert.withDatabase("db2");
-        starRocksAssert.withTable(createTblStmtStr);
+        starRocksAssert.withTable(createTblStmtStr1);
+        starRocksAssert.withTable(createTblStmtStr2);
+        starRocksAssert.withTable(createTblStmtStr3);
         privilegeManager = starRocksAssert.getCtx().getGlobalStateMgr().getPrivilegeManager();
         starRocksAssert.getCtx().setRemoteIP("localhost");
         privilegeManager.initBuiltinRolesAndUsers();
@@ -176,6 +201,33 @@ public class PrivilegeCheckerV2Test {
         }
     }
 
+    private static void checkOperateLoad(String sql) throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+
+        // check resoure privilege
+        StatementBase statement = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        try {
+            PrivilegeCheckerV2.check(statement, ctx);
+            Assert.fail();
+        } catch (SemanticException e) {
+            System.out.println(e.getMessage() + ", sql: " + sql);
+            Assert.assertTrue(e.getMessage().contains(
+                    "USAGE denied to user 'test'@'localhost' for resoure '[my_spark]'"
+            ));
+        }
+        ctxToRoot();
+        String grantResource = "grant USAGE on resource 'my_spark' to test;";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(grantResource, ctx), ctx);
+        ctxToTestUser();
+
+        // check table privilege
+        verifyGrantRevoke(
+                sql,
+                "grant insert on db1.tbl1 to test",
+                "revoke insert on db1.tbl1 from test",
+                "INSERT command denied to user 'test'@'localhost' for table '[tbl1]'");
+    }
+
     @Test
     public void testCatalogStatement() throws Exception {
         starRocksAssert.withCatalog("create external catalog test_ex_catalog properties (\"type\"=\"iceberg\")");
@@ -230,6 +282,240 @@ public class PrivilegeCheckerV2Test {
     }
 
     @Test
+    public void testAnalyzeStatements() throws Exception {
+        // check analyze table: SELECT + INSERT on table
+        verifyGrantRevoke(
+                "analyze table db1.tbl1",
+                "grant SELECT,INSERT on db1.tbl1 to test",
+                "revoke SELECT,INSERT on db1.tbl1 from test",
+                "SELECT command denied to user 'test'");
+
+        // check create analyze all: need SELECT + INSERT on all tables in all databases
+        verifyMultiGrantRevoke(
+                "create analyze all;",
+                Arrays.asList(
+                        "grant SELECT,INSERT on db1.tbl1 to test",
+                        "grant SELECT,INSERT on db1.tbl2 to test",
+                        "grant SELECT,INSERT on db2.tbl1 to test"
+                ),
+                Arrays.asList(
+                        "revoke SELECT,INSERT on db1.tbl1 from test",
+                        "revoke SELECT,INSERT on db1.tbl2 from test",
+                        "revoke SELECT,INSERT on db2.tbl1 from test"
+                ),
+                "SELECT command denied to user 'test'");
+
+        // check create analyze database xxx: need SELECT + INSERT on all tables in the database
+        verifyMultiGrantRevoke(
+                "create analyze database db1;",
+                Arrays.asList(
+                        "grant SELECT,INSERT on db1.tbl1 to test",
+                        "grant SELECT,INSERT on db1.tbl2 to test"
+                ),
+                Arrays.asList(
+                        "revoke SELECT,INSERT on db1.tbl1 from test",
+                        "revoke SELECT,INSERT on db1.tbl2 from test"
+                ),
+                "SELECT command denied to user 'test'");
+
+        // check create analyze table xxx: need SELECT + INSERT on the table
+        verifyMultiGrantRevoke(
+                "create analyze table db1.tbl1;",
+                Arrays.asList(
+                        "grant SELECT,INSERT on db1.tbl1 to test"
+                ),
+                Arrays.asList(
+                        "revoke SELECT,INSERT on db1.tbl1 from test"
+                ),
+                "SELECT command denied to user 'test'");
+
+        // check drop stats xxx: SELECT + INSERT on table
+        verifyGrantRevoke(
+                "drop stats db1.tbl1",
+                "grant SELECT,INSERT on db1.tbl1 to test",
+                "revoke SELECT,INSERT on db1.tbl1 from test",
+                "SELECT command denied to user 'test'");
+
+        // check analyze table xxx drop histogram on xxx_col: SELECT + INSERT on table
+        verifyGrantRevoke(
+                "analyze table db1.tbl1 drop histogram on k1",
+                "grant SELECT,INSERT on db1.tbl1 to test",
+                "revoke SELECT,INSERT on db1.tbl1 from test",
+                "SELECT command denied to user 'test'");
+    }
+
+    @Test
+    public void testShowAnalyzeJobStatement() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        ctxToRoot();
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "grant DROP on db1.tbl1 to test", ctx), ctx);
+        ctxToTestUser();
+        AnalyzeManager analyzeManager = GlobalStateMgr.getCurrentAnalyzeMgr();
+        AnalyzeJob analyzeJob = new AnalyzeJob(-1, -1, Lists.newArrayList(),
+                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE, Maps.newHashMap(),
+                StatsConstants.ScheduleStatus.FINISH, LocalDateTime.MIN);
+        List<String> showResult = ShowAnalyzeJobStmt.showAnalyzeJobs(ctx, analyzeJob);
+        System.out.println(showResult);
+        // can show result for analyze job with all type
+        Assert.assertNotNull(showResult);
+
+        analyzeJob.setId(2);
+        analyzeManager.addAnalyzeJob(analyzeJob);
+        grantRevokeSqlAsRoot("grant SELECT,INSERT on db1.tbl1 to test");
+        grantRevokeSqlAsRoot("grant SELECT,INSERT on db1.tbl2 to test");
+        try {
+            PrivilegeCheckerV2.checkPrivilegeForKillAnalyzeStmt(ctx, analyzeJob.getId());
+        } catch (SemanticException e) {
+            Assert.assertTrue(e.getMessage().contains("You need SELECT and INSERT action on db2.tbl1"));
+        }
+        grantRevokeSqlAsRoot("grant SELECT,INSERT on db2.tbl1 to test");
+        PrivilegeCheckerV2.checkPrivilegeForKillAnalyzeStmt(ctx, analyzeJob.getId());
+        grantRevokeSqlAsRoot("revoke SELECT,INSERT on db1.tbl1 from test");
+        grantRevokeSqlAsRoot("revoke SELECT,INSERT on db1.tbl2 from test");
+        grantRevokeSqlAsRoot("revoke SELECT,INSERT on db2.tbl1 from test");
+
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        Database db1 = globalStateMgr.getDb("db1");
+        analyzeJob = new AnalyzeJob(db1.getId(), -1, Lists.newArrayList(),
+                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE, Maps.newHashMap(),
+                StatsConstants.ScheduleStatus.FINISH, LocalDateTime.MIN);
+        showResult = ShowAnalyzeJobStmt.showAnalyzeJobs(ctx, analyzeJob);
+        System.out.println(showResult);
+        // can show result for analyze job with db.*
+        Assert.assertNotNull(showResult);
+
+        analyzeJob.setId(3);
+        analyzeManager.addAnalyzeJob(analyzeJob);
+        grantRevokeSqlAsRoot("grant SELECT,INSERT on db1.tbl1 to test");
+        try {
+            PrivilegeCheckerV2.checkPrivilegeForKillAnalyzeStmt(ctx, analyzeJob.getId());
+        } catch (SemanticException e) {
+            Assert.assertTrue(e.getMessage().contains("You need SELECT and INSERT action on db1.tbl2"));
+        }
+        grantRevokeSqlAsRoot("grant SELECT,INSERT on db1.tbl2 to test");
+        PrivilegeCheckerV2.checkPrivilegeForKillAnalyzeStmt(ctx, analyzeJob.getId());
+        grantRevokeSqlAsRoot("revoke SELECT,INSERT on db1.tbl1 from test");
+        grantRevokeSqlAsRoot("revoke SELECT,INSERT on db1.tbl2 from test");
+
+        Table tbl1 = db1.getTable("tbl1");
+        analyzeJob = new AnalyzeJob(db1.getId(), tbl1.getId(), Lists.newArrayList(),
+                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE, Maps.newHashMap(),
+                StatsConstants.ScheduleStatus.FINISH, LocalDateTime.MIN);
+        showResult = ShowAnalyzeJobStmt.showAnalyzeJobs(ctx, analyzeJob);
+        System.out.println(showResult);
+        // can show result for analyze job on table that user has any privilege on
+        Assert.assertNotNull(showResult);
+        Assert.assertEquals("tbl1", showResult.get(2));
+
+        analyzeJob.setId(4);
+        analyzeManager.addAnalyzeJob(analyzeJob);
+        try {
+            PrivilegeCheckerV2.checkPrivilegeForKillAnalyzeStmt(ctx, analyzeJob.getId());
+        } catch (SemanticException e) {
+            Assert.assertTrue(e.getMessage().contains("You need SELECT and INSERT action on db1.tbl1"));
+        }
+        grantRevokeSqlAsRoot("grant SELECT,INSERT on db1.tbl1 to test");
+        PrivilegeCheckerV2.checkPrivilegeForKillAnalyzeStmt(ctx, analyzeJob.getId());
+        grantRevokeSqlAsRoot("revoke SELECT,INSERT on db1.tbl1 from test");
+
+        Database db2 = globalStateMgr.getDb("db2");
+        tbl1 = db2.getTable("tbl1");
+        analyzeJob = new AnalyzeJob(db2.getId(), tbl1.getId(), Lists.newArrayList(),
+                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.ONCE, Maps.newHashMap(),
+                StatsConstants.ScheduleStatus.FINISH, LocalDateTime.MIN);
+        showResult = ShowAnalyzeJobStmt.showAnalyzeJobs(ctx, analyzeJob);
+        System.out.println(showResult);
+        // cannot show result for analyze job on table that user doesn't have any privileges on
+        Assert.assertNull(showResult);
+        grantRevokeSqlAsRoot("revoke DROP on db1.tbl1 from test");
+    }
+
+    @Test
+    public void testShowAnalyzeStatusStatement() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        ctxToRoot();
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "grant DROP on db1.tbl1 to test", ctx), ctx);
+        ctxToTestUser();
+        AnalyzeManager analyzeManager = GlobalStateMgr.getCurrentAnalyzeMgr();
+
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        Database db1 = globalStateMgr.getDb("db1");
+        Table tbl1 = db1.getTable("tbl1");
+
+        AnalyzeStatus analyzeStatus = new AnalyzeStatus(1, db1.getId(), tbl1.getId(),
+                Lists.newArrayList(), StatsConstants.AnalyzeType.FULL,
+                StatsConstants.ScheduleType.ONCE, Maps.newHashMap(),
+                LocalDateTime.of(2020, 1, 1, 1, 1));
+        analyzeStatus.setEndTime(LocalDateTime.of(2020, 1, 1, 1, 1));
+        analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FINISH);
+        analyzeStatus.setReason("Test Success");
+        List<String> showResult = ShowAnalyzeStatusStmt.showAnalyzeStatus(ctx, analyzeStatus);
+        System.out.println(showResult);
+        // can show result for analyze status on table that user has any privilege on
+        Assert.assertNotNull(showResult);
+        Assert.assertEquals("tbl1", showResult.get(2));
+
+        grantRevokeSqlAsRoot("grant SELECT,INSERT on db1.tbl1 to test");
+        analyzeManager.addAnalyzeStatus(analyzeStatus);
+        PrivilegeCheckerV2.checkPrivilegeForKillAnalyzeStmt(ctx, analyzeStatus.getId());
+        grantRevokeSqlAsRoot("revoke SELECT,INSERT on db1.tbl1 from test");
+
+        try {
+            PrivilegeCheckerV2.checkPrivilegeForKillAnalyzeStmt(ctx, analyzeStatus.getId());
+        } catch (SemanticException e) {
+            Assert.assertTrue(e.getMessage().contains("You need SELECT and INSERT action"));
+        }
+
+        BasicStatsMeta basicStatsMeta = new BasicStatsMeta(db1.getId(), tbl1.getId(), null,
+                StatsConstants.AnalyzeType.FULL,
+                LocalDateTime.of(2020, 1, 1, 1, 1), Maps.newHashMap());
+        showResult = ShowBasicStatsMetaStmt.showBasicStatsMeta(ctx, basicStatsMeta);
+        System.out.println(showResult);
+        // can show result for stats on table that user has any privilege on
+        Assert.assertNotNull(showResult);
+
+        HistogramStatsMeta histogramStatsMeta = new HistogramStatsMeta(db1.getId(), tbl1.getId(), "v1",
+                StatsConstants.AnalyzeType.HISTOGRAM,
+                LocalDateTime.of(2020, 1, 1, 1, 1),
+                Maps.newHashMap());
+        showResult = ShowHistogramStatsMetaStmt.showHistogramStatsMeta(ctx, histogramStatsMeta);
+        System.out.println(showResult);
+        // can show result for stats on table that user has any privilege on
+        Assert.assertNotNull(showResult);
+
+        Database db2 = globalStateMgr.getDb("db2");
+        tbl1 = db2.getTable("tbl1");
+        analyzeStatus = new AnalyzeStatus(1, db2.getId(), tbl1.getId(),
+                Lists.newArrayList(), StatsConstants.AnalyzeType.FULL,
+                StatsConstants.ScheduleType.ONCE, Maps.newHashMap(),
+                LocalDateTime.of(2020, 1, 1, 1, 1));
+        showResult = ShowAnalyzeStatusStmt.showAnalyzeStatus(ctx, analyzeStatus);
+        System.out.println(showResult);
+        // cannot show result for analyze status on table that user doesn't have any privileges on
+        Assert.assertNull(showResult);
+
+        basicStatsMeta = new BasicStatsMeta(db2.getId(), tbl1.getId(), null,
+                StatsConstants.AnalyzeType.FULL,
+                LocalDateTime.of(2020, 1, 1, 1, 1), Maps.newHashMap());
+        showResult = ShowBasicStatsMetaStmt.showBasicStatsMeta(ctx, basicStatsMeta);
+        System.out.println(showResult);
+        // cannot show result for stats on table that user doesn't have any privilege on
+        Assert.assertNull(showResult);
+
+        histogramStatsMeta = new HistogramStatsMeta(db2.getId(), tbl1.getId(), "v1",
+                StatsConstants.AnalyzeType.HISTOGRAM,
+                LocalDateTime.of(2020, 1, 1, 1, 1),
+                Maps.newHashMap());
+        showResult = ShowHistogramStatsMetaStmt.showHistogramStatsMeta(ctx, histogramStatsMeta);
+        System.out.println(showResult);
+        // cannot show result for stats on table that user doesn't have any privilege on
+        Assert.assertNull(showResult);
+        grantRevokeSqlAsRoot("revoke DROP on db1.tbl1 from test");
+    }
+
+    @Test
     public void testTableSelectDeleteInsert() throws Exception {
         verifyGrantRevoke(
                 "select * from db1.tbl1",
@@ -246,6 +532,11 @@ public class PrivilegeCheckerV2Test {
                 "grant delete on db1.tbl1 to test",
                 "revoke delete on db1.tbl1 from test",
                 "DELETE command denied to user 'test'");
+        verifyGrantRevoke(
+                "update db1.tbl1 set k4 = 2 where k3 = 1",
+                "grant update on db1.tbl1 to test",
+                "revoke update on db1.tbl1 from test",
+                "UPDATE command denied to user 'test'");
     }
 
     @Test
@@ -643,7 +934,7 @@ public class PrivilegeCheckerV2Test {
                 "revoke ALTER on database " + testDbName + " from test",
                 "Access denied for user 'test' to database '" + testDbName + "'");
     }
-    
+
     @Test
     public void testShowNodeStmt() throws Exception {
 
@@ -810,5 +1101,210 @@ public class PrivilegeCheckerV2Test {
         String sql = "SET PASSWORD FOR 'jack'@'192.%' = PASSWORD('123456');";
         String expectError = "Access denied; you need (at least one of) the GRANT privilege(s) for this operation";
         verifyNODEAndGRANT(sql, expectError);
+    }
+
+    @Test
+    public void testRoutineLoadStmt() throws Exception {
+
+        // CREATE ROUTINE LOAD STMT
+        String createSql = "CREATE ROUTINE LOAD db1.job_name2 ON tbl1 " +
+                           "COLUMNS(c1) FROM KAFKA " +
+                           "( 'kafka_broker_list' = 'broker1:9092', 'kafka_topic' = 'my_topic', " +
+                           " 'kafka_partitions' = '0,1,2', 'kafka_offsets' = '0,0,0');";
+        verifyGrantRevoke(
+                createSql,
+                "grant insert on db1.tbl1 to test",
+                "revoke insert on db1.tbl1 from test",
+                "INSERT command denied to user 'test'@'localhost' for table 'tbl1'");
+
+        // ALTER ROUTINE LOAD STMT
+        new MockUp<KafkaUtil>() {
+            @Mock
+            public List<Integer> getAllKafkaPartitions(String brokerList, String topic,
+                                                       ImmutableMap<String, String> properties) {
+                return Lists.newArrayList(0, 1, 2);
+            }
+        };
+        String alterSql = "ALTER ROUTINE LOAD FOR db1.job_name2 PROPERTIES ( 'desired_concurrent_number' = '1')";
+        ConnectContext ctx = starRocksAssert.getCtx();
+        StatementBase statement = UtFrameUtils.parseStmtWithNewParser(alterSql, starRocksAssert.getCtx());
+        try {
+            PrivilegeCheckerV2.check(statement, ctx);
+            Assert.fail();
+        } catch (SemanticException e) {
+            System.out.println(e.getMessage() + ", sql: " + alterSql);
+            Assert.assertTrue(e.getMessage().contains("Routine load job [job_name2] not found when checking privilege"));
+        }
+        ctxToRoot();
+        starRocksAssert.withRoutineLoad(createSql);
+        ctxToTestUser();
+        verifyGrantRevoke(
+                "ALTER ROUTINE LOAD FOR db1.job_name1 PROPERTIES ( 'desired_concurrent_number' = '1');",
+                "grant insert on db1.tbl1 to test",
+                "revoke insert on db1.tbl1 from test",
+                "INSERT command denied to user 'test'@'localhost' for table 'tbl1'");
+
+        // STOP ROUTINE LOAD STMT
+        verifyGrantRevoke(
+                "STOP ROUTINE LOAD FOR db1.job_name1;",
+                "grant insert on db1.tbl1 to test",
+                "revoke insert on db1.tbl1 from test",
+                "INSERT command denied to user 'test'@'localhost' for table 'tbl1'");
+
+        // RESUME ROUTINE LOAD STMT
+        verifyGrantRevoke(
+                "RESUME ROUTINE LOAD FOR db1.job_name1;",
+                "grant insert on db1.tbl1 to test",
+                "revoke insert on db1.tbl1 from test",
+                "INSERT command denied to user 'test'@'localhost' for table 'tbl1'");
+
+        // PAUSE ROUTINE LOAD STMT
+        verifyGrantRevoke(
+                "PAUSE ROUTINE LOAD FOR db1.job_name1;",
+                "grant insert on db1.tbl1 to test",
+                "revoke insert on db1.tbl1 from test",
+                "INSERT command denied to user 'test'@'localhost' for table 'tbl1'");
+
+        // SHOW ROUTINE LOAD stmt;
+        String showRoutineLoadSql = "SHOW ROUTINE LOAD FOR db1.job_name1;";
+        statement = UtFrameUtils.parseStmtWithNewParser(showRoutineLoadSql, starRocksAssert.getCtx());
+        PrivilegeCheckerV2.check(statement, ctx);
+
+        // SHOW ROUTINE LOAD TASK FROM DB
+        String showRoutineLoadTaskSql = "SHOW ROUTINE LOAD TASK FROM db1 WHERE JobName = 'job_name1';";
+        statement = UtFrameUtils.parseStmtWithNewParser(showRoutineLoadTaskSql, starRocksAssert.getCtx());
+        PrivilegeCheckerV2.check(statement, ctx);
+    }
+
+    @Test
+    public void testRoutineLoadShowStmt() throws Exception {
+
+        ctxToRoot();
+        String createSql = "CREATE ROUTINE LOAD db1.job_name1 ON tbl1 " +
+                           "COLUMNS(c1) FROM KAFKA " +
+                           "( 'kafka_broker_list' = 'broker1:9092', 'kafka_topic' = 'my_topic', " +
+                           " 'kafka_partitions' = '0,1,2', 'kafka_offsets' = '0,0,0');";
+        new MockUp<KafkaUtil>() {
+            @Mock
+            public List<Integer> getAllKafkaPartitions(String brokerList, String topic,
+                                                       ImmutableMap<String, String> properties) {
+                return Lists.newArrayList(0, 1, 2);
+            }
+        };
+        starRocksAssert.withRoutineLoad(createSql);
+
+        String showRoutineLoadTaskSql = "SHOW ROUTINE LOAD TASK FROM db1 WHERE JobName = 'job_name1';";
+        StatementBase statementTask = UtFrameUtils.parseStmtWithNewParser(showRoutineLoadTaskSql, starRocksAssert.getCtx());
+        ShowExecutor executor = new ShowExecutor(starRocksAssert.getCtx(), (ShowStmt) statementTask);
+        ShowResultSet set = executor.execute();
+        for (int i = 0; i < 30; i++) {
+            set = executor.execute();
+            if (set.getResultRows().size() > 0) {
+                break;
+            } else {
+                Thread.sleep(1000);
+            }
+        }
+        Assert.assertTrue(set.getResultRows().size() > 0);
+
+        ctxToTestUser();
+        // SHOW ROUTINE LOAD TASK
+        ShowExecutor executorBeforeGrant = new ShowExecutor(starRocksAssert.getCtx(), (ShowStmt) statementTask);
+        set = executorBeforeGrant.execute();
+        Assert.assertEquals(0, set.getResultRows().size());
+        ctxToRoot();
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("grant insert on db1.tbl1 to test", starRocksAssert.getCtx()),
+                                starRocksAssert.getCtx());
+        ctxToTestUser();
+        ShowExecutor executorAfterGrant = new ShowExecutor(starRocksAssert.getCtx(), (ShowStmt) statementTask);
+        set = executorAfterGrant.execute();
+        Assert.assertTrue(set.getResultRows().size() > 0);
+        ctxToRoot();
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("revoke insert on db1.tbl1 from test",
+                                                                    starRocksAssert.getCtx()),
+                                starRocksAssert.getCtx());
+        ctxToTestUser();
+    }
+
+
+    @Test
+    public void testLoadStmt() throws Exception {
+
+        // LOAD STMT
+        // create resource
+        UtFrameUtils.addBroker("broker0");
+        String createResourceStmt = "CREATE EXTERNAL RESOURCE \"my_spark\""  +
+                                    "PROPERTIES (" +
+                                    "\"type\" = \"spark\"," +
+                                    "\"spark.master\" = \"yarn\", " +
+                                    "\"spark.submit.deployMode\" = \"cluster\", " +
+                                    "\"spark.executor.memory\" = \"1g\", " +
+                                    "\"spark.yarn.queue\" = \"queue0\", " +
+                                    "\"spark.hadoop.yarn.resourcemanager.address\" = \"resourcemanager_host:8032\", " +
+                                    "\"spark.hadoop.fs.defaultFS\" = \"hdfs://namenode_host:9000\", " +
+                                    "\"working_dir\" = \"hdfs://namenode_host:9000/tmp/starrocks\", " +
+                                    "\"broker\" = \"broker0\", " +
+                                    "\"broker.username\" = \"user0\", " +
+                                    "\"broker.password\" = \"password0\"" +
+                                    ");";
+        starRocksAssert.withResource(createResourceStmt);
+        // create load & check resource privilege
+        String createSql = "LOAD LABEL db1.job_name1" +
+                           "(DATA INFILE('hdfs://test:8080/user/starrocks/data/input/example1.csv') " +
+                           "INTO TABLE tbl1) " +
+                           "WITH RESOURCE 'my_spark'" +
+                           "('username' = 'test_name','password' = 'pwd') " +
+                           "PROPERTIES ('timeout' = '3600');";
+        StatementBase statement = UtFrameUtils.parseStmtWithNewParser(createSql, starRocksAssert.getCtx());
+        ctxToTestUser();
+        ConnectContext ctx = starRocksAssert.getCtx();
+        try {
+            PrivilegeCheckerV2.check(statement, ctx);
+            Assert.fail();
+        } catch (SemanticException e) {
+            System.out.println(e.getMessage() + ", sql: " + createSql);
+            Assert.assertTrue(e.getMessage().contains(
+                    "Access denied; you need (at least one of) the USAGE privilege(s) for this operation"
+            ));
+        }
+        // create load & check table privilege
+        createSql = "LOAD LABEL db1.job_name1" +
+                    "(DATA INFILE('hdfs://test:8080/user/starrocks/data/input/example1.csv') " +
+                    "INTO TABLE tbl1) " +
+                    "WITH BROKER 'my_broker'" +
+                    "('username' = 'test_name','password' = 'pwd') " +
+                    "PROPERTIES ('timeout' = '3600');";
+        verifyGrantRevoke(
+                createSql,
+                "grant insert on db1.tbl1 to test",
+                "revoke insert on db1.tbl1 from test",
+                "INSERT command denied to user 'test'@'localhost' for table '[tbl1]'");
+
+
+        // create broker load
+        createSql = "LOAD LABEL db1.job_name1" +
+                    "(DATA INFILE('hdfs://test:8080/user/starrocks/data/input/example1.csv') " +
+                    "INTO TABLE tbl1) " +
+                    "WITH RESOURCE 'my_spark'" +
+                    "('username' = 'test_name','password' = 'pwd') " +
+                    "PROPERTIES ('timeout' = '3600');";
+        starRocksAssert.withLoad(createSql);
+
+        // ALTER LOAD STMT
+        String alterLoadSql = "ALTER LOAD FOR db1.job_name1 PROPERTIES ('priority' = 'LOW');";
+        checkOperateLoad(alterLoadSql);
+
+        // CANCEL LOAD STMT
+        ctxToRoot();
+        String revokeResource = "revoke USAGE on resource 'my_spark' from test;";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(revokeResource, ctx), ctx);
+        ctxToTestUser();
+        String cancelLoadSql = "CANCEL LOAD FROM db1 WHERE LABEL = 'job_name1'";
+        checkOperateLoad(cancelLoadSql);
+
+        // SHOW LOAD STMT
+        String showLoadSql = "SHOW LOAD FROM db1";
+        statement = UtFrameUtils.parseStmtWithNewParser(showLoadSql, starRocksAssert.getCtx());
+        PrivilegeCheckerV2.check(statement, ctx);
     }
 }

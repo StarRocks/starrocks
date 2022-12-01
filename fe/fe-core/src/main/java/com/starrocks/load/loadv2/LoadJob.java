@@ -262,7 +262,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
      *
      * @return
      */
-    abstract Set<String> getTableNames() throws MetaNotFoundException;
+    public abstract Set<String> getTableNames() throws MetaNotFoundException;
 
     // return true if the corresponding transaction is done(COMMITTED, FINISHED, CANCELLED)
     public boolean isTxnDone() {
@@ -772,7 +772,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         }
     }
 
-    protected String getResourceName() {
+    public String getResourceName() {
         return "N/A";
     }
 

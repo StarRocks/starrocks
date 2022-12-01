@@ -175,7 +175,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
                         AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.PUBLISH_VERSION, task.getSignature());
                     }
                     // clear publish version tasks to reduce memory usage when state changed to visible.
-                    transactionState.clearPublishVersionTasks();
+                    transactionState.clearAfterPublished();
 
                     // Refresh materialized view when base table update transaction has been visible if necessary
                     refreshMvIfNecessary(transactionState);
@@ -203,7 +203,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
                         AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.PUBLISH_VERSION, task.getSignature());
                     }
                     // clear publish version tasks to reduce memory usage when state changed to visible.
-                    transactionState.clearPublishVersionTasks();
+                    transactionState.clearAfterPublished();
                     // Refresh materialized view when base table update transaction has been visible if necessary
                     refreshMvIfNecessary(transactionState);
                 }

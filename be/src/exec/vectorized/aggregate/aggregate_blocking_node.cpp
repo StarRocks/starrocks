@@ -131,20 +131,20 @@ Status AggregateBlockingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
         *eos = true;
         return Status::OK();
     }
-    int32_t chunk_size = runtime_state()->chunk_size();
+    const auto chunk_size = runtime_state()->chunk_size();
 
     if (_aggregator->is_none_group_by_exprs()) {
-        _aggregator->convert_to_chunk_no_groupby(chunk);
+        RETURN_IF_ERROR(_aggregator->convert_to_chunk_no_groupby(chunk));
     } else {
-        _aggregator->convert_hash_map_to_chunk(chunk_size, chunk);
+        RETURN_IF_ERROR(_aggregator->convert_hash_map_to_chunk(chunk_size, chunk));
     }
 
-    size_t old_size = (*chunk)->num_rows();
+    const int64_t old_size = (*chunk)->num_rows();
     eval_join_runtime_filters(chunk->get());
 
     // For having
     RETURN_IF_ERROR(ExecNode::eval_conjuncts(_conjunct_ctxs, (*chunk).get()));
-    _aggregator->update_num_rows_returned(-(old_size - (*chunk)->num_rows()));
+    _aggregator->update_num_rows_returned(-(old_size - static_cast<int64_t>((*chunk)->num_rows())));
 
     _aggregator->process_limit(chunk);
 
@@ -222,7 +222,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> AggregateBlockingNode::d
 
     auto try_interpolate_local_shuffle = [this, context](auto& ops) {
         std::vector<ExprContext*> group_by_expr_ctxs;
-        Expr::create_expr_trees(_pool, _tnode.agg_node.grouping_exprs, &group_by_expr_ctxs);
+        Expr::create_expr_trees(_pool, _tnode.agg_node.grouping_exprs, &group_by_expr_ctxs, runtime_state());
         Expr::prepare(group_by_expr_ctxs, runtime_state());
         Expr::open(group_by_expr_ctxs, runtime_state());
         return context->maybe_interpolate_local_shuffle_exchange(runtime_state(), ops, group_by_expr_ctxs);

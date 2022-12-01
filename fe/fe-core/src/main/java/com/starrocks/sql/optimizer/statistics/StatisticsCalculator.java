@@ -330,7 +330,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     }
 
     public Void computeHMSTableScanNode(Operator node, ExpressionContext context, Table table,
-                                         Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
+                                        Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
         Preconditions.checkState(context.arity() == 0);
 
         ScanOperatorPredicates predicates;
@@ -666,7 +666,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                     rowCount *= cardinality;
                 } else {
                     rowCount *= cardinality * Math.pow(
-                            StatisticsEstimateCoefficient.UNKNOWN_GROUP_BY_CORRELATION_COEFFICIENT, groupByIndex + 1);
+                            StatisticsEstimateCoefficient.UNKNOWN_GROUP_BY_CORRELATION_COEFFICIENT, groupByIndex + 1D);
                     if (rowCount > inputStatistics.getOutputRowCount()) {
                         rowCount = inputStatistics.getOutputRowCount();
                     }
@@ -1301,11 +1301,12 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
         // The statistics of producer and children are equal theoretically, but statistics of children
         // plan maybe more accurate in actually
-        if (!produceStatisticsOp.isPresent() && context.getChildrenStatistics().isEmpty()) {
+        if (!produceStatisticsOp.isPresent() && (context.getChildrenStatistics().isEmpty() ||
+                context.getChildrenStatistics().stream().anyMatch(Objects::isNull))) {
             Preconditions.checkState(false, "Impossible cte statistics");
         }
 
-        if (!context.getChildrenStatistics().isEmpty()) {
+        if (!context.getChildrenStatistics().isEmpty() && context.getChildStatistics(0) != null) {
             //  use the statistics of children first
             context.setStatistics(context.getChildStatistics(0));
             Projection projection = node.getProjection();

@@ -64,12 +64,12 @@ StatusOr<vectorized::ChunkPtr> SortedAggregateStreamingSourceOperator::pull_chun
     if (chunk == nullptr) {
         return chunk;
     }
-    size_t old_size = chunk->num_rows();
+    const int64_t old_size = chunk->num_rows();
     eval_runtime_bloom_filters(chunk.get());
 
     // For having
     RETURN_IF_ERROR(eval_conjuncts_and_in_filters(_aggregator->conjunct_ctxs(), chunk.get()));
-    _aggregator->update_num_rows_returned(-(old_size - chunk->num_rows()));
+    _aggregator->update_num_rows_returned(-(old_size - static_cast<int64_t>(chunk->num_rows())));
     DCHECK_CHUNK(chunk);
 
     return chunk;

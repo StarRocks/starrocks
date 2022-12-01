@@ -180,7 +180,7 @@ Status DefaultCumulativeBaseCompactionPolicy::_pick_rowsets_to_cumulative_compac
     }
 
     *score = compaction_score;
-    if (input_rowsets->empty() && transient_rowsets.size() >= config::min_cumulative_compaction_num_singleton_deltas) {
+    if (input_rowsets->empty() && compaction_score >= config::min_cumulative_compaction_num_singleton_deltas) {
         *input_rowsets = transient_rowsets;
     }
 
