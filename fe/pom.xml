@@ -57,6 +57,21 @@ under the License.
     </properties>
 
     <profiles>
+        <profile>
+            <id>spark2</id>
+            <properties>
+                <spark.version>2.4.6</spark.version>
+            </properties>
+            <activation>
+                <activeByDefault>true</activeByDefault>
+            </activation>
+        </profile>
+        <profile>
+            <id>spark3</id>
+            <properties>
+                <spark.version>3.3.1</spark.version>
+            </properties>
+        </profile>
         <!-- for custom internal repository -->
         <profile>
             <id>custom-env</id>

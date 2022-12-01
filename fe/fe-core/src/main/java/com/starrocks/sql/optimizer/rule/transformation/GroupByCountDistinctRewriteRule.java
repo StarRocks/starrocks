@@ -23,7 +23,11 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
+<<<<<<< HEAD
 import org.apache.commons.lang.StringUtils;
+=======
+import org.jetbrains.annotations.NotNull;
+>>>>>>> 7cb704c4c ([Enhancement] spark-dpp support spark3 (#13942))
 
 import java.util.Collection;
 import java.util.List;
