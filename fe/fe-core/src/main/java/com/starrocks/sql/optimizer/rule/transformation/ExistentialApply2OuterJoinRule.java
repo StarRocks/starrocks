@@ -257,7 +257,7 @@ public class ExistentialApply2OuterJoinRule extends TransformationRule {
         aggregates.put(countRowsCol, countRowsCallOp);
         LogicalAggregationOperator aggregate =
                 new LogicalAggregationOperator(AggType.GLOBAL, new ArrayList<>(pair.second.keySet()),
-                        Maps.newHashMap());
+                        aggregates);
 
         OptExpression aggregateOptExpression = OptExpression.create(aggregate);
         rootOptExpression = aggregateOptExpression;

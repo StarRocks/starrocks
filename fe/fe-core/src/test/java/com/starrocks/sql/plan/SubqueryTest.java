@@ -534,5 +534,9 @@ public class SubqueryTest extends PlanTestBase {
                 "on t0.v2 = subt3.v10 and t0.v2 != subt3.v10 where 1 in (select t0.v2 from t0, t2 where t2.v7 in (''));";
         String plan = getFragmentPlan(sql);
         System.out.println(plan);
+        assertContains("8:NESTLOOP JOIN\n" +
+                "  |  join op: LEFT SEMI JOIN\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  other join predicates: 8: v2 = CAST(1 AS BIGINT)", plan);
     }
 }
