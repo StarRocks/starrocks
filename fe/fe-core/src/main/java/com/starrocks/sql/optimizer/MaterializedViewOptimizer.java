@@ -6,6 +6,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.MaterializedView;
@@ -155,7 +156,24 @@ public class MaterializedViewOptimizer {
             if (range.isEmpty()) {
                 continue;
             }
-            if (range.hasLowerBound() && range.hasUpperBound()) {
+            // partition range must have lower bound and upper bound
+            Preconditions.checkState(range.hasLowerBound() && range.hasUpperBound());
+            LiteralExpr lowerExpr = range.lowerEndpoint().getKeys().get(0);
+            if (lowerExpr.isMinValue() && range.upperEndpoint().isMaxValue()) {
+                continue;
+            } else if (lowerExpr.isMinValue()) {
+                ConstantOperator upperBound =
+                        (ConstantOperator) SqlToScalarOperatorTranslator.translate(range.upperEndpoint().getKeys().get(0));
+                BinaryPredicateOperator upperPredicate = new BinaryPredicateOperator(
+                        BinaryPredicateOperator.BinaryType.LT, partitionScalar, upperBound);
+                rangeParts.add(upperPredicate);
+            } else if (range.upperEndpoint().isMaxValue()) {
+                ConstantOperator lowerBound =
+                        (ConstantOperator) SqlToScalarOperatorTranslator.translate(range.lowerEndpoint().getKeys().get(0));
+                BinaryPredicateOperator lowerPredicate = new BinaryPredicateOperator(
+                        BinaryPredicateOperator.BinaryType.GE, partitionScalar, lowerBound);
+                rangeParts.add(lowerPredicate);
+            } else {
                 // close, open range
                 ConstantOperator lowerBound =
                         (ConstantOperator) SqlToScalarOperatorTranslator.translate(range.lowerEndpoint().getKeys().get(0));
@@ -170,20 +188,6 @@ public class MaterializedViewOptimizer {
                 CompoundPredicateOperator andPredicate = new CompoundPredicateOperator(
                         CompoundPredicateOperator.CompoundType.AND, lowerPredicate, upperPredicate);
                 rangeParts.add(andPredicate);
-            } else if (range.hasUpperBound()) {
-                ConstantOperator upperBound =
-                        (ConstantOperator) SqlToScalarOperatorTranslator.translate(range.upperEndpoint().getKeys().get(0));
-                BinaryPredicateOperator upperPredicate = new BinaryPredicateOperator(
-                        BinaryPredicateOperator.BinaryType.LT, partitionScalar, upperBound);
-                rangeParts.add(upperPredicate);
-            } else if (range.hasLowerBound()) {
-                ConstantOperator lowerBound =
-                        (ConstantOperator) SqlToScalarOperatorTranslator.translate(range.lowerEndpoint().getKeys().get(0));
-                BinaryPredicateOperator lowerPredicate = new BinaryPredicateOperator(
-                        BinaryPredicateOperator.BinaryType.GE, partitionScalar, lowerBound);
-                rangeParts.add(lowerPredicate);
-            } else {
-                Preconditions.checkState(false);
             }
         }
         return rangeParts;
