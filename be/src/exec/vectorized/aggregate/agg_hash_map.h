@@ -91,42 +91,45 @@ static_assert(sizeof(AggDataPtr) == sizeof(size_t));
         this->hash_map.prefetch_hash(hash_values[__prefetch_index++]); \
     }
 
-#define AGG_HASH_MAP_COMMON_METHODS()                                                                              \
-    template <typename Func>                                                                                       \
-    inline void build_hash_map(size_t chunk_size, const Columns& key_columns, MemPool* pool, Func&& allocate_func, \
-                               Buffer<AggDataPtr>* agg_states) {                                                   \
-        return compute_agg_states<Func, true, false>(chunk_size, key_columns, pool, std::move(allocate_func),      \
-                                                     agg_states, nullptr);                                         \
-    }                                                                                                              \
-    template <typename Func>                                                                                       \
-    inline void build_hash_map_with_selection(size_t chunk_size, const Columns& key_columns, MemPool* pool,        \
-                                              Func&& allocate_func, Buffer<AggDataPtr>* agg_states,                \
-                                              std::vector<uint8_t>* not_founds) {                                  \
-        return compute_agg_states<Func, false, true>(chunk_size, key_columns, pool, std::move(allocate_func),      \
-                                                     agg_states, not_founds);                                      \
-    }                                                                                                              \
-    template <typename Func>                                                                                       \
-    inline void build_hash_map_with_selection_and_allocation(                                                      \
-            size_t chunk_size, const Columns& key_columns, MemPool* pool, Func&& allocate_func,                    \
-            Buffer<AggDataPtr>* agg_states, std::vector<uint8_t>* not_founds) {                                    \
-        return compute_agg_states<Func, true, true>(chunk_size, key_columns, pool, std::move(allocate_func),       \
-                                                    agg_states, not_founds);                                       \
-    }
-
-template <typename HashMap>
+template <typename HashMap, typename Impl>
 struct AggHashMapWithKey {
     AggHashMapWithKey(int chunk_size, AggStatistics* agg_stat_) : agg_stat(agg_stat_) {}
     using HashMapType = HashMap;
     HashMap hash_map;
     AggStatistics* agg_stat;
+
+    ////// Common Methods ////////
+    template <typename Func>
+    void build_hash_map(size_t chunk_size, const Columns& key_columns, MemPool* pool, Func&& allocate_func,
+                        Buffer<AggDataPtr>* agg_states) {
+        return static_cast<Impl*>(this)->template compute_agg_states<Func, true, false>(
+                chunk_size, key_columns, pool, std::move(allocate_func), agg_states, nullptr);
+    }
+
+    template <typename Func>
+    void build_hash_map_with_selection(size_t chunk_size, const Columns& key_columns, MemPool* pool,
+                                       Func&& allocate_func, Buffer<AggDataPtr>* agg_states,
+                                       std::vector<uint8_t>* not_founds) {
+        return static_cast<Impl*>(this)->template compute_agg_states<Func, false, true>(
+                chunk_size, key_columns, pool, std::move(allocate_func), agg_states, not_founds);
+    }
+
+    template <typename Func>
+    void build_hash_map_with_selection_and_allocation(size_t chunk_size, const Columns& key_columns, MemPool* pool,
+                                                      Func&& allocate_func, Buffer<AggDataPtr>* agg_states,
+                                                      std::vector<uint8_t>* not_founds) {
+        return static_cast<Impl*>(this)->template compute_agg_states<Func, true, true>(
+                chunk_size, key_columns, pool, std::move(allocate_func), agg_states, not_founds);
+    }
 };
 
 // ==============================================================
 // TODO(kks): Remove redundant code for compute_agg_states method
 // handle one number hash key
 template <LogicalType primitive_type, typename HashMap>
-struct AggHashMapWithOneNumberKey : public AggHashMapWithKey<HashMap> {
-    using Base = AggHashMapWithKey<HashMap>;
+struct AggHashMapWithOneNumberKey
+        : public AggHashMapWithKey<HashMap, AggHashMapWithOneNumberKey<primitive_type, HashMap>> {
+    using Base = AggHashMapWithKey<HashMap, AggHashMapWithOneNumberKey<primitive_type, HashMap>>;
     using KeyType = typename HashMap::key_type;
     using Iterator = typename HashMap::iterator;
     using ColumnType = RunTimeColumnType<primitive_type>;
@@ -139,8 +142,6 @@ struct AggHashMapWithOneNumberKey : public AggHashMapWithKey<HashMap> {
     AggHashMapWithOneNumberKey(Args&&... args) : Base(std::forward<Args>(args)...) {}
 
     AggDataPtr get_null_key_data() { return nullptr; }
-
-    AGG_HASH_MAP_COMMON_METHODS()
 
     // prefetch branch better performance in case with larger hash tables
     template <typename Func, bool allocate_and_compute_state, bool compute_not_founds>
@@ -253,8 +254,6 @@ struct AggHashMapWithOneNullableNumberKey : public AggHashMapWithOneNumberKey<pr
 
     AggDataPtr get_null_key_data() { return null_key_data; }
 
-    AGG_HASH_MAP_COMMON_METHODS()
-
     // When compute_not_founds=true and allocate_and_compute_state=false:
     // Elements queried in HashMap will be added to HashMap,
     // elements that cannot be queried are not processed,
@@ -348,8 +347,8 @@ struct AggHashMapWithOneNullableNumberKey : public AggHashMapWithOneNumberKey<pr
 };
 
 template <typename HashMap>
-struct AggHashMapWithOneStringKey : public AggHashMapWithKey<HashMap> {
-    using Base = AggHashMapWithKey<HashMap>;
+struct AggHashMapWithOneStringKey : public AggHashMapWithKey<HashMap, AggHashMapWithOneStringKey<HashMap>> {
+    using Base = AggHashMapWithKey<HashMap, AggHashMapWithOneStringKey<HashMap>>;
     using KeyType = typename HashMap::key_type;
     using Iterator = typename HashMap::iterator;
     using ResultVector = typename std::vector<Slice>;
@@ -358,8 +357,6 @@ struct AggHashMapWithOneStringKey : public AggHashMapWithKey<HashMap> {
     AggHashMapWithOneStringKey(Args&&... args) : Base(std::forward<Args>(args)...) {}
 
     AggDataPtr get_null_key_data() { return nullptr; }
-
-    AGG_HASH_MAP_COMMON_METHODS()
 
     template <typename Func, bool allocate_and_compute_state, bool compute_not_founds>
     void compute_agg_prefetch(BinaryColumn* column, Buffer<AggDataPtr>* agg_states, MemPool* pool, Func&& allocate_func,
@@ -464,8 +461,6 @@ struct AggHashMapWithOneNullableStringKey : public AggHashMapWithOneStringKey<Ha
 
     AggDataPtr get_null_key_data() { return null_key_data; }
 
-    AGG_HASH_MAP_COMMON_METHODS()
-
     template <typename Func, bool allocate_and_compute_state, bool compute_not_founds>
     void compute_agg_states(size_t chunk_size, const Columns& key_columns, MemPool* pool, Func&& allocate_func,
                             Buffer<AggDataPtr>* agg_states, std::vector<uint8_t>* not_founds) {
@@ -560,8 +555,8 @@ struct AggHashMapWithOneNullableStringKey : public AggHashMapWithOneStringKey<Ha
 };
 
 template <typename HashMap>
-struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap> {
-    using Base = AggHashMapWithKey<HashMap>;
+struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMapWithSerializedKey<HashMap>> {
+    using Base = AggHashMapWithKey<HashMap, AggHashMapWithSerializedKey<HashMap>>;
     using KeyType = typename HashMap::key_type;
     using Iterator = typename HashMap::iterator;
     using ResultVector = typename std::vector<Slice>;
@@ -574,8 +569,6 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap> {
               _chunk_size(chunk_size) {}
 
     AggDataPtr get_null_key_data() { return nullptr; }
-
-    AGG_HASH_MAP_COMMON_METHODS()
 
     template <typename Func, bool allocate_and_compute_state, bool compute_not_founds>
     void compute_agg_states(size_t chunk_size, const Columns& key_columns, MemPool* pool, Func&& allocate_func,
@@ -668,8 +661,9 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap> {
 };
 
 template <typename HashMap>
-struct AggHashMapWithSerializedKeyFixedSize : public AggHashMapWithKey<HashMap> {
-    using Base = AggHashMapWithKey<HashMap>;
+struct AggHashMapWithSerializedKeyFixedSize
+        : public AggHashMapWithKey<HashMap, AggHashMapWithSerializedKeyFixedSize<HashMap>> {
+    using Base = AggHashMapWithKey<HashMap, AggHashMapWithSerializedKeyFixedSize<HashMap>>;
     using KeyType = typename HashMap::key_type;
     using Iterator = typename HashMap::iterator;
     using FixedSizeSliceKey = typename HashMap::key_type;
@@ -698,8 +692,6 @@ struct AggHashMapWithSerializedKeyFixedSize : public AggHashMapWithKey<HashMap> 
     }
 
     AggDataPtr get_null_key_data() { return nullptr; }
-
-    AGG_HASH_MAP_COMMON_METHODS()
 
     template <typename Func, bool allocate_and_compute_state, bool compute_not_founds>
     void compute_agg_prefetch(size_t chunk_size, const Columns& key_columns, Buffer<AggDataPtr>* agg_states,

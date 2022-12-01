@@ -56,30 +56,34 @@ using SliceAggTwoLevelHashSet =
 
 // ==============================================================
 
-#define AGG_HASH_SET_COMMON_METHODS()                                                                \
-    void build_hash_set(size_t chunk_size, const Columns& key_columns, MemPool* pool) {              \
-        return build_set<true>(chunk_size, key_columns, pool, nullptr);                              \
-    }                                                                                                \
-                                                                                                     \
-    void build_hash_set_with_selection(size_t chunk_size, const Columns& key_columns, MemPool* pool, \
-                                       std::vector<uint8_t>* not_founds) {                           \
-        return build_set<false>(chunk_size, key_columns, pool, not_founds);                          \
+template <typename HashSet, typename Impl>
+struct AggHashSet {
+    AggHashSet() = default;
+    using HHashSetType = HashSet;
+    HashSet hash_set;
+
+    ////// Common Methods ////////
+    void build_hash_set(size_t chunk_size, const Columns& key_columns, MemPool* pool) {
+        return static_cast<Impl*>(this)->template build_set<true>(chunk_size, key_columns, pool, nullptr);
     }
+
+    void build_hash_set_with_selection(size_t chunk_size, const Columns& key_columns, MemPool* pool,
+                                       std::vector<uint8_t>* not_founds) {
+        return static_cast<Impl*>(this)->template build_set<false>(chunk_size, key_columns, pool, not_founds);
+    }
+};
 
 // handle one number hash key
 template <LogicalType primitive_type, typename HashSet>
-struct AggHashSetOfOneNumberKey {
+struct AggHashSetOfOneNumberKey : public AggHashSet<HashSet, AggHashSetOfOneNumberKey<primitive_type, HashSet>> {
     using KeyType = typename HashSet::key_type;
     using Iterator = typename HashSet::iterator;
     using ColumnType = RunTimeColumnType<primitive_type>;
     using ResultVector = typename ColumnType::Container;
     using FieldType = RunTimeCppType<primitive_type>;
-    HashSet hash_set;
     static_assert(sizeof(FieldType) <= sizeof(KeyType), "hash set key size needs to be larger than the actual element");
 
     AggHashSetOfOneNumberKey(int32_t chunk_size) {}
-
-    AGG_HASH_SET_COMMON_METHODS()
 
     // When compute_and_allocate=false:
     // Elements queried in HashSet will be added to HashSet
@@ -97,9 +101,9 @@ struct AggHashSetOfOneNumberKey {
         auto& keys = column->get_data();
         for (size_t i = 0; i < row_num; ++i) {
             if constexpr (compute_and_allocate) {
-                hash_set.emplace(keys[i]);
+                this->hash_set.emplace(keys[i]);
             } else {
-                (*not_founds)[i] = !hash_set.contains(keys[i]);
+                (*not_founds)[i] = !this->hash_set.contains(keys[i]);
             }
         }
     }
@@ -114,19 +118,17 @@ struct AggHashSetOfOneNumberKey {
 };
 
 template <LogicalType primitive_type, typename HashSet>
-struct AggHashSetOfOneNullableNumberKey {
+struct AggHashSetOfOneNullableNumberKey
+        : public AggHashSet<HashSet, AggHashSetOfOneNullableNumberKey<primitive_type, HashSet>> {
     using KeyType = typename HashSet::key_type;
     using Iterator = typename HashSet::iterator;
     using ColumnType = RunTimeColumnType<primitive_type>;
     using ResultVector = typename ColumnType::Container;
     using FieldType = RunTimeCppType<primitive_type>;
-    HashSet hash_set;
 
     static_assert(sizeof(FieldType) <= sizeof(KeyType), "hash set key size needs to be larger than the actual element");
 
     AggHashSetOfOneNullableNumberKey(int32_t chunk_size) {}
-
-    AGG_HASH_SET_COMMON_METHODS()
 
     // When compute_and_allocate=false:
     // Elements queried in HashSet will be added to HashSet
@@ -154,18 +156,18 @@ struct AggHashSetOfOneNullableNumberKey {
                         has_null_key = true;
                     } else {
                         if constexpr (compute_and_allocate) {
-                            hash_set.emplace(keys[i]);
+                            this->hash_set.emplace(keys[i]);
                         } else {
-                            (*not_founds)[i] = !hash_set.contains(keys[i]);
+                            (*not_founds)[i] = !this->hash_set.contains(keys[i]);
                         }
                     }
                 }
             } else {
                 for (size_t i = 0; i < row_num; ++i) {
                     if constexpr (compute_and_allocate) {
-                        hash_set.emplace(keys[i]);
+                        this->hash_set.emplace(keys[i]);
                     } else {
-                        (*not_founds)[i] = !hash_set.contains(keys[i]);
+                        (*not_founds)[i] = !this->hash_set.contains(keys[i]);
                     }
                 }
             }
@@ -185,15 +187,12 @@ struct AggHashSetOfOneNullableNumberKey {
 };
 
 template <typename HashSet>
-struct AggHashSetOfOneStringKey {
+struct AggHashSetOfOneStringKey : public AggHashSet<HashSet, AggHashSetOfOneStringKey<HashSet>> {
     using Iterator = typename HashSet::iterator;
     using KeyType = typename HashSet::key_type;
     using ResultVector = typename std::vector<Slice>;
-    HashSet hash_set;
 
     AggHashSetOfOneStringKey(int32_t chunk_size) {}
-
-    AGG_HASH_SET_COMMON_METHODS()
 
     // When compute_and_allocate=false:
     // Elements queried in HashSet will be added to HashSet
@@ -213,14 +212,14 @@ struct AggHashSetOfOneStringKey {
             auto tmp = column->get_slice(i);
             if constexpr (compute_and_allocate) {
                 KeyType key(tmp);
-                hash_set.lazy_emplace(key, [&](const auto& ctor) {
+                this->hash_set.lazy_emplace(key, [&](const auto& ctor) {
                     // we must persist the slice before insert
                     uint8_t* pos = pool->allocate(key.size);
                     memcpy(pos, key.data, key.size);
                     ctor(pos, key.size, key.hash);
                 });
             } else {
-                (*not_founds)[i] = !hash_set.contains(tmp);
+                (*not_founds)[i] = !this->hash_set.contains(tmp);
             }
         }
     }
@@ -236,15 +235,12 @@ struct AggHashSetOfOneStringKey {
 };
 
 template <typename HashSet>
-struct AggHashSetOfOneNullableStringKey {
+struct AggHashSetOfOneNullableStringKey : public AggHashSet<HashSet, AggHashSetOfOneNullableStringKey<HashSet>> {
     using Iterator = typename HashSet::iterator;
     using KeyType = typename HashSet::key_type;
     using ResultVector = typename std::vector<Slice>;
-    HashSet hash_set;
 
     AggHashSetOfOneNullableStringKey(int32_t chunk_size) {}
-
-    AGG_HASH_SET_COMMON_METHODS()
 
     // When compute_and_allocate=false:
     // Elements queried in HashSet will be added to HashSet
@@ -293,7 +289,7 @@ struct AggHashSetOfOneNullableStringKey {
         auto tmp = data_column->get_slice(row);
         KeyType key(tmp);
 
-        hash_set.lazy_emplace(key, [&](const auto& ctor) {
+        this->hash_set.lazy_emplace(key, [&](const auto& ctor) {
             uint8_t* pos = pool->allocate(key.size);
             memcpy(pos, key.data, key.size);
             ctor(pos, key.size, key.hash);
@@ -302,7 +298,7 @@ struct AggHashSetOfOneNullableStringKey {
 
     void _handle_data_key_column(BinaryColumn* data_column, size_t row, std::vector<uint8_t>* not_founds) {
         auto key = data_column->get_slice(row);
-        (*not_founds)[row] = !hash_set.contains(key);
+        (*not_founds)[row] = !this->hash_set.contains(key);
     }
 
     void insert_keys_to_columns(ResultVector& keys, const Columns& key_columns, size_t chunk_size) {
@@ -320,18 +316,15 @@ struct AggHashSetOfOneNullableStringKey {
 };
 
 template <typename HashSet>
-struct AggHashSetOfSerializedKey {
+struct AggHashSetOfSerializedKey : public AggHashSet<HashSet, AggHashSetOfSerializedKey<HashSet>> {
     using Iterator = typename HashSet::iterator;
     using ResultVector = typename std::vector<Slice>;
     using KeyType = typename HashSet::key_type;
-    HashSet hash_set;
 
     AggHashSetOfSerializedKey(int32_t chunk_size)
             : _mem_pool(std::make_unique<MemPool>()),
               _buffer(_mem_pool->allocate(max_one_row_size * chunk_size)),
               _chunk_size(chunk_size) {}
-
-    AGG_HASH_SET_COMMON_METHODS()
 
     // When compute_and_allocate=false:
     // Elements queried in HashSet will be added to HashSet
@@ -362,14 +355,14 @@ struct AggHashSetOfSerializedKey {
             Slice tmp = {_buffer + i * max_one_row_size, slice_sizes[i]};
             if constexpr (compute_and_allocate) {
                 KeyType key(tmp);
-                hash_set.lazy_emplace(key, [&](const auto& ctor) {
+                this->hash_set.lazy_emplace(key, [&](const auto& ctor) {
                     // we must persist the slice before insert
                     uint8_t* pos = pool->allocate(key.size);
                     memcpy(pos, key.data, key.size);
                     ctor(pos, key.size, key.hash);
                 });
             } else {
-                (*not_founds)[i] = !hash_set.contains(tmp);
+                (*not_founds)[i] = !this->hash_set.contains(tmp);
             }
         }
     }
@@ -416,12 +409,11 @@ struct AggHashSetOfSerializedKey {
 };
 
 template <typename HashSet>
-struct AggHashSetOfSerializedKeyFixedSize {
+struct AggHashSetOfSerializedKeyFixedSize : public AggHashSet<HashSet, AggHashSetOfSerializedKeyFixedSize<HashSet>> {
     using Iterator = typename HashSet::iterator;
     using KeyType = typename HashSet::key_type;
     using FixedSizeSliceKey = typename HashSet::key_type;
     using ResultVector = typename std::vector<FixedSizeSliceKey>;
-    HashSet hash_set;
 
     bool has_null_column = false;
     int fixed_byte_size = -1; // unset state
@@ -433,8 +425,6 @@ struct AggHashSetOfSerializedKeyFixedSize {
               _chunk_size(chunk_size) {
         memset(buffer, 0x0, max_fixed_size * _chunk_size);
     }
-
-    AGG_HASH_SET_COMMON_METHODS()
 
     // When compute_and_allocate=false:
     // Elements queried in HashSet will be added to HashSet
@@ -467,9 +457,9 @@ struct AggHashSetOfSerializedKeyFixedSize {
 
         for (size_t i = 0; i < chunk_size; ++i) {
             if constexpr (compute_and_allocate) {
-                hash_set.insert(key[i]);
+                this->hash_set.insert(key[i]);
             } else {
-                (*not_founds)[i] = !hash_set.contains(key[i]);
+                (*not_founds)[i] = !this->hash_set.contains(key[i]);
             }
         }
     }
