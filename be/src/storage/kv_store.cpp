@@ -73,10 +73,8 @@ Status KVStore::init(bool read_only) {
     options.create_missing_column_families = true;
     std::string db_path = _root_path + META_POSTFIX;
 
-    rocksdb::BlockBasedTableOptions bbt_opts;
-    rocksdb::GetBlockBasedTableOptionsFromString(
-            bbt_opts, strings::Substitute("block_cache=$0M", config::rocksdb_block_cache), &bbt_opts);
-
+    ColumnFamilyOptions meta_cf_options;
+    rocksdb::GetColumnFamilyOptionsFromString(meta_cf_options, config::rocksdb_meta_cf_opts_string, &meta_cf_options);
     // The index of each column family must be consistent with the enum `ColumnFamilyIndex`
     // defined in olap_define.h
     std::vector<ColumnFamilyDescriptor> cf_descs(NUM_COLUMN_FAMILY_INDEX);
@@ -85,9 +83,7 @@ Status KVStore::init(bool read_only) {
     cf_descs[1].name = STARROCKS_COLUMN_FAMILY;
     cf_descs[1].options.compression = rocksdb::kSnappyCompression;
     cf_descs[2].name = META_COLUMN_FAMILY;
-    cf_descs[2].options.prefix_extractor.reset(NewFixedPrefixTransform(PREFIX_LENGTH));
-    cf_descs[2].options.compression = rocksdb::kSnappyCompression;
-    cf_descs[2].options.table_factory.reset(NewBlockBasedTableFactory(bbt_opts));
+    cf_descs[2].options = meta_cf_options;
     static_assert(NUM_COLUMN_FAMILY_INDEX == 3);
 
     rocksdb::Status s;
