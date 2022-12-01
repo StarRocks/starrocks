@@ -93,6 +93,7 @@
       + [REVOKE](/sql-reference/sql-statements/account-management/REVOKE.md)
       + [SET PASSWORD](/sql-reference/sql-statements/account-management/SET%20PASSWORD.md)
       + [SET PROPERTY](/sql-reference/sql-statements/account-management/SET%20PROPERTY.md)
+      + [SHOW AUTHENTICATION](/sql-reference/sql-statements/account-management/SHOW%20AUTHENTICATION.md)
       + [SHOW GRANTS](/sql-reference/sql-statements/account-management/SHOW%20GRANTS.md)
       + [SHOW ROLES](/sql-reference/sql-statements/account-management/SHOW%20ROLES.md)
     + 集群管理
@@ -153,7 +154,6 @@
       + [HLL](/sql-reference/sql-statements/data-definition/HLL.md)
       + [RECOVER](/sql-reference/sql-statements/data-definition/RECOVER.md)
       + [RESTORE](/sql-reference/sql-statements/data-definition/RESTORE.md)
-      + [SHOW AUTHENTICATION](/sql-reference/sql-statements/data-definition/SHOW%20AUTHENTICATION.md)
       + [SHOW RESOURCES](/sql-reference/sql-statements/data-definition/SHOW%20RESOURCES.md)
       + [SHOW FUNCTION](/sql-reference/sql-statements/data-definition/show-functions.md)
       + [TRUNCATE TABLE](/sql-reference/sql-statements/data-definition/TRUNCATE%20TABLE.md)
