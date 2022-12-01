@@ -17,8 +17,6 @@
 
 #include "util/stack_util.h"
 
-<<<<<<< HEAD
-=======
 #include <cxxabi.h>
 #include <fmt/format.h>
 
@@ -29,7 +27,6 @@
 #include "runtime/current_thread.h"
 #include "util/time.h"
 
->>>>>>> 234dbe483 ([Enhancement] set exception_stack_level and white/black lists (#14084))
 namespace google::glog_internal_namespace_ {
 void DumpStackTraceToString(std::string* stacktrace);
 } // namespace google::glog_internal_namespace_
@@ -42,8 +39,6 @@ std::string get_stack_trace() {
     return s;
 }
 
-<<<<<<< HEAD
-=======
 class ExceptionStackContext {
 public:
     static ExceptionStackContext* get_instance() {
@@ -139,5 +134,4 @@ void __wrap___cxa_throw(void* thrown_exception, void* info, void (*dest)(void*))
 #endif
 }
 
->>>>>>> 234dbe483 ([Enhancement] set exception_stack_level and white/black lists (#14084))
 } // namespace starrocks

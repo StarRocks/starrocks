@@ -26,8 +26,6 @@ namespace starrocks {
 // for recursive calls.
 std::string get_stack_trace();
 
-<<<<<<< HEAD
-=======
 // wrap libc's _cxa_throw to print stack trace of exceptions
 extern "C" {
 #ifdef __clang__
@@ -41,5 +39,4 @@ __attribute__((no_sanitize("address"))) void __wrap___cxa_throw(void* thrown_exc
 #endif
 }
 
->>>>>>> 234dbe483 ([Enhancement] set exception_stack_level and white/black lists (#14084))
 } // namespace starrocks
