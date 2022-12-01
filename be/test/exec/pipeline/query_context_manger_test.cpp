@@ -242,7 +242,7 @@ TEST(QueryContextManagerTest, testSetWorkgroup) {
 
     /// Case 1: When all the fragments have come and finished, wg.num_running_queries should become to zero.
     ASSERT_OK(query_ctx1->init_query_once(wg.get()));
-    ASSERT_OK(query_ctx1->init_query_once(wg.get()));    // None-first invocations have no side-effects.
+    ASSERT_OK(query_ctx1->init_query_once(wg.get()));              // None-first invocations have no side-effects.
     ASSERT_ERROR(query_ctx_overloaded->init_query_once(wg.get())); // Exceed concurrency_limit.
     ASSERT_EQ(1, wg->num_running_queries());
     ASSERT_EQ(1, wg->concurrency_overflow_count());
