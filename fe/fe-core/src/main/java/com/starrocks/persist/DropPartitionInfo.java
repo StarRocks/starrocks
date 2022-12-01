@@ -102,7 +102,7 @@ public class DropPartitionInfo implements Writable {
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(dbId, tableId, partitionName, isTempPartition, forceDrop);
+        return Objects.hashCode(dbId, tableId, partitionName);
     }
 
     @Override

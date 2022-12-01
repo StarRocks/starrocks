@@ -133,7 +133,7 @@ public class PartitionPersistInfo implements Writable {
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(dbId, tableId, partition);
+        return Objects.hashCode(dbId, tableId);
     }
 
     public boolean equals(Object obj) {

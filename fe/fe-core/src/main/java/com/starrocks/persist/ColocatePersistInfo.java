@@ -126,7 +126,7 @@ public class ColocatePersistInfo implements Writable {
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(groupId, tableId, backendsPerBucketSeq);
+        return Objects.hashCode(groupId, tableId);
     }
 
     @Override

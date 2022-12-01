@@ -22,7 +22,6 @@
 package com.starrocks.load.loadv2;
 
 import com.google.common.base.Joiner;
-import com.google.common.base.Objects;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -955,7 +954,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(id, dbId, label, state, jobType);
+        return Long.hashCode(id);
     }
 
     @Override

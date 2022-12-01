@@ -352,9 +352,7 @@ public class ReplicaPersistInfo implements Writable {
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(backendId, replicaId, tabletId, indexId,
-                partitionId, tabletId, dbId, version, minReadableVersion,
-                dataSize, rowCount, lastFailedVersion, lastSuccessVersion);
+        return Objects.hashCode(replicaId);
     }
 
     @Override

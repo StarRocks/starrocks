@@ -361,7 +361,7 @@ public class Backend extends ComputeNode {
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(getId(), getHost(), getHeartbeatPort(), getBePort(), getIsAlive());
+        return Objects.hashCode(getId());
     }
 
     @Override

@@ -107,7 +107,7 @@ public class TablePropertyInfo implements Writable {
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(tableId, groupId, propertyMap);
+        return Objects.hashCode(tableId, groupId);
     }
 
     @Override

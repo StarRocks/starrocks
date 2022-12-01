@@ -257,7 +257,7 @@ public class EtlStatus implements Writable {
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(stats, counters, state, trackingUrl);
+        return Objects.hashCode(trackingUrl);
     }
 
     @Override

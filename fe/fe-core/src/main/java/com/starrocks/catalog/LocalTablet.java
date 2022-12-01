@@ -21,7 +21,6 @@
 
 package com.starrocks.catalog;
 
-import com.google.common.base.Objects;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
@@ -399,7 +398,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(replicas, id);
+        return Long.hashCode(id);
     }
 
     @Override

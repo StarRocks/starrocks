@@ -21,7 +21,6 @@
 
 package com.starrocks.catalog;
 
-import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
@@ -696,7 +695,7 @@ public class Database extends MetaObject implements Writable {
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(id, fullQualifiedName, dataQuotaBytes, idToTable);
+        return Long.hashCode(id);
     }
 
     public boolean equals(Object obj) {

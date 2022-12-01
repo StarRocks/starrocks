@@ -330,7 +330,7 @@ public class ComputeNode implements IComputable, Writable {
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(id, host, heartbeatPort, bePort, isAlive);
+        return Objects.hashCode(id);
     }
 
     @Override

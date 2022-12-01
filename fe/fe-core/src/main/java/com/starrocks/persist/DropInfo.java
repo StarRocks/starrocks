@@ -98,7 +98,7 @@ public class DropInfo implements Writable {
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(dbId, tableId, indexId, forceDrop);
+        return Objects.hashCode(dbId, tableId);
     }
 
 

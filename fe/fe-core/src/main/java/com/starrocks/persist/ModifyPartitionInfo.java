@@ -94,7 +94,7 @@ public class ModifyPartitionInfo implements Writable {
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(dbId, tableId, dataProperty, replicationNum, isInMemory);
+        return Objects.hashCode(dbId, tableId);
     }
 
     @Override
