@@ -68,6 +68,7 @@ public class UtilsTest {
     public void testGetSuffixName() {
         Assert.assertEquals("file", Utils.getSuffixName("/path/", "/path/file"));
         Assert.assertEquals("file", Utils.getSuffixName("/path", "/path/file"));
+        Assert.assertEquals("file", Utils.getSuffixName("/dt=(a)/", "/dt=(a)/file"));
     }
 
     @Test(expected = IllegalArgumentException.class)
@@ -158,7 +159,7 @@ public class UtilsTest {
         Type resType = Utils.convertToArrayType(typeStr);
         Assert.assertEquals(arrayType, resType);
 
-        itemType = ScalarType.createDefaultString();
+        itemType = ScalarType.createDefaultExternalTableString();
         arrayType = new ArrayType(itemType);
         typeStr = "Array<string>";
         resType = Utils.convertToArrayType(typeStr);
@@ -213,7 +214,7 @@ public class UtilsTest {
         resType = HiveMetaStoreTableUtils.convertColumnType(typeStr);
         Assert.assertEquals(resType, varcharType);
 
-        Type stringType = ScalarType.createDefaultString();
+        Type stringType = ScalarType.createDefaultExternalTableString();
         typeStr = "string";
         resType = HiveMetaStoreTableUtils.convertColumnType(typeStr);
         Assert.assertEquals(resType, stringType);

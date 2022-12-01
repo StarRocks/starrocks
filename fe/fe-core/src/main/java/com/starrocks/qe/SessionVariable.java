@@ -106,8 +106,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String SQL_SAFE_UPDATES = "sql_safe_updates";
     public static final String NET_BUFFER_LENGTH = "net_buffer_length";
     public static final String CODEGEN_LEVEL = "codegen_level";
-    // mem limit can't smaller than bufferpool's default page size
-    public static final int MIN_EXEC_MEM_LIMIT = 2097152;
     public static final String BATCH_SIZE = "batch_size";
     public static final String CHUNK_SIZE = "chunk_size";
     public static final String DISABLE_STREAMING_PREAGGREGATIONS = "disable_streaming_preaggregations";
@@ -141,6 +139,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_PIPELINE = "enable_pipeline";
 
     public static final String ENABLE_PIPELINE_ENGINE = "enable_pipeline_engine";
+    public static final String ENABLE_PIPELINE_QUERY_STATISTIC = "enable_pipeline_query_statistic";
 
     // Use resource group. It will influence the CPU schedule, I/O scheduler, and
     // memory limit etc. in BE.
@@ -223,6 +222,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ALLOW_DEFAULT_PARTITION = "allow_default_partition";
 
     public static final String ENABLE_HIVE_COLUMN_STATS = "enable_hive_column_stats";
+    public static final String HIVE_PARTITION_STATS_SAMPLE_SIZE = "hive_partition_stats_sample_size";
 
     public static final String RUNTIME_FILTER_SCAN_WAIT_TIME = "runtime_filter_scan_wait_time";
     public static final String ENABLE_OPTIMIZER_TRACE_LOG = "enable_optimizer_trace_log";
@@ -230,8 +230,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String STATISTIC_COLLECT_PARALLEL = "statistic_collect_parallel";
 
+    // Limitations
+    // mem limit can't smaller than bufferpool's default page size
+    public static final int MIN_EXEC_MEM_LIMIT = 2097152;
+    // query timeout cannot greater than one month
+    public static final int MAX_QUERY_TIMEOUT = 259200;
+
     @VariableMgr.VarAttr(name = ENABLE_PIPELINE, alias = ENABLE_PIPELINE_ENGINE, show = ENABLE_PIPELINE_ENGINE)
     private boolean enablePipelineEngine = true;
+
+    @VarAttr(name = ENABLE_PIPELINE_QUERY_STATISTIC)
+    private boolean enablePipelineQueryStatistic = true;
 
     @VariableMgr.VarAttr(name = RUNTIME_FILTER_SCAN_WAIT_TIME, flag = VariableMgr.INVISIBLE)
     private long runtimeFilterScanWaitTime = 20L;
@@ -570,6 +579,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = JOIN_IMPLEMENTATION_MODE)
     private String joinImplementationMode = "hash"; // auto, merge, hash
 
+    @VariableMgr.VarAttr(name = HIVE_PARTITION_STATS_SAMPLE_SIZE)
+    private int hivePartitionStatsSampleSize = 5000;
+
     @VariableMgr.VarAttr(name = ENABLE_OPTIMIZER_TRACE_LOG, flag = VariableMgr.INVISIBLE)
     private boolean enableOptimizerTraceLog = false;
 
@@ -590,6 +602,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean enableHiveColumnStats() {
         return enableHiveColumnStats;
+    }
+
+    public int getHivePartitionStatsSampleSize() {
+        return hivePartitionStatsSampleSize;
     }
 
     public long getMaxExecMemByte() {
@@ -1087,6 +1103,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         }
 
         tResult.setEnable_tablet_internal_parallel(enableTabletInternalParallel);
+        tResult.setEnable_pipeline_query_statistic(enablePipelineQueryStatistic);
 
         return tResult;
     }

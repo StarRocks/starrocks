@@ -46,12 +46,15 @@ TxnManager::TxnManager(int32_t txn_map_shard_size, int32_t txn_shard_size, int32
     _txn_tablet_maps = std::unique_ptr<txn_tablet_map_t[]>(new txn_tablet_map_t[_txn_map_shard_size]);
     _txn_partition_maps = std::unique_ptr<txn_partition_map_t[]>(new txn_partition_map_t[_txn_map_shard_size]);
     _txn_mutex = std::unique_ptr<std::mutex[]>(new std::mutex[_txn_shard_size]);
-    auto st = ThreadPoolBuilder("meta-flush")
-                      .set_min_threads(1)
-                      .set_max_threads(store_num * 2)
-                      .set_idle_timeout(MonoDelta::FromSeconds(30))
-                      .build(&_flush_thread_pool);
-    CHECK(st.ok());
+    // we will get "store_num = 0" if it acts as cn, just ignore flush pool
+    if (store_num > 0) {
+        auto st = ThreadPoolBuilder("meta-flush")
+                          .set_min_threads(1)
+                          .set_max_threads(store_num * 2)
+                          .set_idle_timeout(MonoDelta::FromSeconds(30))
+                          .build(&_flush_thread_pool);
+        CHECK(st.ok());
+    }
 }
 
 Status TxnManager::prepare_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id,

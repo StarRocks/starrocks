@@ -17,7 +17,8 @@ QueryContext::QueryContext()
         : _fragment_mgr(new FragmentContextManager()),
           _total_fragments(0),
           _num_fragments(0),
-          _num_active_fragments(0) {
+          _num_active_fragments(0),
+          _wg_running_query_token_ptr(nullptr) {
     _sub_plan_query_statistics_recvr = std::make_shared<QueryStatisticsRecvr>();
 }
 
@@ -80,18 +81,23 @@ int64_t QueryContext::compute_query_mem_limit(int64_t parent_mem_limit, int64_t 
 void QueryContext::init_mem_tracker(int64_t bytes_limit, MemTracker* parent) {
     std::call_once(_init_mem_tracker_once, [=]() {
         _profile = std::make_shared<RuntimeProfile>("Query" + print_id(_query_id));
-        auto* mem_tracker_counter = ADD_COUNTER(_profile.get(), "MemoryLimit", TUnit::BYTES);
+        auto* mem_tracker_counter = ADD_COUNTER_SKIP_MERGE(_profile.get(), "MemoryLimit", TUnit::BYTES);
         mem_tracker_counter->set(bytes_limit);
         _mem_tracker = std::make_shared<MemTracker>(MemTracker::QUERY, bytes_limit, _profile->name(), parent);
     });
 }
 
-Status QueryContext::init_query(workgroup::WorkGroup* wg) {
+Status QueryContext::init_query_once(workgroup::WorkGroup* wg) {
     Status st = Status::OK();
     if (wg != nullptr) {
         std::call_once(_init_query_once, [this, &st, wg]() {
             this->init_query_begin_time();
-            st = wg->try_incr_num_queries();
+            auto maybe_token = wg->acquire_running_query_token();
+            if (maybe_token.ok()) {
+                _wg_running_query_token_ptr = std::move(maybe_token.value());
+            } else {
+                st = maybe_token.status();
+            }
         });
     }
 
@@ -175,7 +181,7 @@ void QueryContextManager::_clean_func(QueryContextManager* manager) {
 }
 
 size_t QueryContextManager::_slot_idx(const TUniqueId& query_id) {
-    return std::hash<size_t>()(query_id.lo) & _slot_mask;
+    return HashUtil::hash(&query_id.hi, sizeof(query_id.hi), 0) & _slot_mask;
 }
 
 QueryContextManager::~QueryContextManager() {

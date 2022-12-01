@@ -144,7 +144,6 @@ private:
     OlapScanConjunctsManager _conjuncts_manager;
     DictOptimizeParser _dict_optimize_parser;
     const Schema* _chunk_schema = nullptr;
-    ObjectPool _obj_pool;
 
     int32_t _num_scanners = 0;
     int32_t _chunks_per_scanner = 10;
@@ -192,6 +191,8 @@ private:
     RuntimeProfile::Counter* _del_vec_filter_counter = nullptr;
     RuntimeProfile::Counter* _pred_filter_timer = nullptr;
     RuntimeProfile::Counter* _chunk_copy_timer = nullptr;
+    RuntimeProfile::Counter* _get_rowsets_timer = nullptr;
+    RuntimeProfile::Counter* _get_delvec_timer = nullptr;
     RuntimeProfile::Counter* _seg_init_timer = nullptr;
     RuntimeProfile::Counter* _seg_zm_filtered_counter = nullptr;
     RuntimeProfile::Counter* _zm_filtered_counter = nullptr;

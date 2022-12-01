@@ -43,9 +43,7 @@ ExprContext::ExprContext(Expr* root)
 
 ExprContext::~ExprContext() {
     // DCHECK(!_prepared || _closed) << ". expr context address = " << this;
-    if (_prepared) {
-        close(_runtime_state);
-    }
+    close(_runtime_state);
     for (auto& _fn_context : _fn_contexts) {
         delete _fn_context;
     }
@@ -83,6 +81,9 @@ Status ExprContext::open(std::vector<ExprContext*> evals, RuntimeState* state) {
 }
 
 void ExprContext::close(RuntimeState* state) {
+    if (!_prepared) {
+        return;
+    }
     bool expected = false;
     if (!_closed.compare_exchange_strong(expected, true)) {
         return;

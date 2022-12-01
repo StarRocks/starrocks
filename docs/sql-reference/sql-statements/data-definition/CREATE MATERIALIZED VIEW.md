@@ -1,22 +1,22 @@
 # CREATE MATERIALIZED VIEW
 
-## description
+## Description
 
 This statement is used to create materialized views.
 
-Note:
+> **NOTE**
+>
+> CREATE MATERIALIZED VIEW is an asynchronous statement. Executing this statement successfully only indicates that the task to create the materialized view is successfully submitted. You can check the progress by using SHOW ALTER TABLE ROLLUP statement. After the progress is FINISHED, you can use the DESC table_name ALL statement to check the schema of the materialized view.
 
-Asynchronous syntax. After the call is successful, it only indicates that the task to create the materialized view is successfully submitted. The user needs to check the progress of the materialized view by using ``` show alter table rollup ``` .
-After the progress is FINISHED, you can use the ``` desc [table_name] all ``` command to check the schema of the materialized view.
-
-Syntax:
+## Syntax
 
 ```sql
-CREATE MATERIALIZED VIEW [MV name] as [query]
-[PROPERTIES ("key" = "value")]
+CREATE MATERIALIZED VIEW materialized_view_name AS query;
 ```
 
-1. MV name
+## Parameters
+
+1. materialized_view_name
 
     Name of the materialized view. Required.
 
@@ -28,7 +28,7 @@ CREATE MATERIALIZED VIEW [MV name] as [query]
 
     ```sql
     SELECT select_expr[, select_expr ...]
-    FROM [Base view name]
+    FROM [base_view_name]
     GROUP BY column_name[, column_name ...]
     ORDER BY column_name[, column_name ...]
     ```
@@ -41,16 +41,16 @@ CREATE MATERIALIZED VIEW [MV name] as [query]
     + Contains at least one single column.  
     + All involved columns can only appear once.
 
-    base view name: The original table name of the materialized view. Required.
+    base_view_name: The original table name of the materialized view. Required.
     + Must be a single table and not a subquery
 
-    group by: Grouped column of materialized view. Optional.
+    GROUP BY: Grouped column of materialized view. Optional.
     + The data not filled will not be grouped.
 
-    order by: sort order of materialized view. Optional.
+    ORDER BY: sort order of materialized view. Optional.
     + The order of the column sort must be the same as the column declaration order in select_expr.  
 
-    + If order by is not declared, sort columns are automatically supplemented by rules.
+    + If ORDER BY is not declared, sort columns are automatically supplemented by rules.
 
       If the materialized view is of an aggregate type, all grouped columns are automatically supplemented with sort columns.
 
@@ -60,21 +60,7 @@ CREATE MATERIALIZED VIEW [MV name] as [query]
 
     + If the query contains a grouped column, the sort order must be the same as the grouped column.
 
-3. properties
-
-    Declare some configuration of materialized view. Optional.
-
-    ```sql
-    
-    PROPERTIES ("key" = "value", "key" = "value" ...)
-    ```
-
-    The following configurations can be declared here:
-
-    short_key: the number of columns.
-    timeout: timeout for materialized view construction.
-
-## example
+## Example
 
 Base table structure is:
 

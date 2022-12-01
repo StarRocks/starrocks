@@ -219,13 +219,14 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(RuntimeState* state, const 
     if (_current_request_bytes > config::max_transmit_batched_bytes || eos) {
         _chunk_request->set_eos(eos);
         _chunk_request->set_use_pass_through(_use_pass_through);
-        auto delta_statistic = state->intermediate_query_statistic();
-        delta_statistic->to_pb(_chunk_request->mutable_query_statistics());
+        if (auto delta_statistic = state->intermediate_query_statistic()) {
+            delta_statistic->to_pb(_chunk_request->mutable_query_statistics());
+        }
         butil::IOBuf attachment;
         int64_t attachment_physical_bytes = _parent->construct_brpc_attachment(_chunk_request, attachment);
         TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub, std::move(_chunk_request), attachment,
                                   attachment_physical_bytes};
-        _parent->_buffer->add_request(info);
+        RETURN_IF_ERROR(_parent->_buffer->add_request(info));
         _current_request_bytes = 0;
         _chunk_request.reset();
         *is_real_sent = true;
@@ -243,12 +244,13 @@ Status ExchangeSinkOperator::Channel::send_chunk_request(RuntimeState* state, PT
     chunk_request->set_eos(false);
     chunk_request->set_use_pass_through(_use_pass_through);
 
-    auto delta_statistic = state->intermediate_query_statistic();
-    delta_statistic->to_pb(chunk_request->mutable_query_statistics());
+    if (auto delta_statistic = state->intermediate_query_statistic()) {
+        delta_statistic->to_pb(chunk_request->mutable_query_statistics());
+    }
 
     TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub, std::move(chunk_request), attachment,
                               attachment_physical_bytes};
-    _parent->_buffer->add_request(info);
+    RETURN_IF_ERROR(_parent->_buffer->add_request(info));
 
     return Status::OK();
 }
@@ -566,12 +568,14 @@ Status ExchangeSinkOperator::serialize_chunk(const vectorized::Chunk* src, Chunk
         SCOPED_TIMER(_serialize_chunk_timer);
         // We only serialize chunk meta for first chunk
         if (*is_first_chunk) {
-            StatusOr<ChunkPB> res = serde::ProtobufChunkSerde::serialize(*src);
+            StatusOr<ChunkPB> res = Status::OK();
+            TRY_CATCH_BAD_ALLOC(res = serde::ProtobufChunkSerde::serialize(*src));
             RETURN_IF_ERROR(res);
             res->Swap(dst);
             *is_first_chunk = false;
         } else {
-            StatusOr<ChunkPB> res = serde::ProtobufChunkSerde::serialize_without_meta(*src);
+            StatusOr<ChunkPB> res = Status::OK();
+            TRY_CATCH_BAD_ALLOC(res = serde::ProtobufChunkSerde::serialize_without_meta(*src));
             RETURN_IF_ERROR(res);
             res->Swap(dst);
         }

@@ -107,17 +107,6 @@ private:
             return Status::OK();
         }
 
-        Status read_columns(Chunk* chunk, size_t n) {
-            bool may_has_del_row = chunk->delete_state() != DEL_NOT_SATISFIED;
-            for (size_t i = 0; i < _column_iterators.size(); i++) {
-                const ColumnPtr& col = chunk->get_column_by_index(i);
-                RETURN_IF_ERROR(_column_iterators[i]->next_batch(&n, col.get()));
-                may_has_del_row |= (col->delete_state() != DEL_NOT_SATISFIED);
-            }
-            chunk->set_delete_state(may_has_del_row ? DEL_PARTIAL_SATISFIED : DEL_NOT_SATISFIED);
-            return Status::OK();
-        }
-
         Status read_columns(Chunk* chunk, const vectorized::SparseRange& range) {
             bool may_has_del_row = chunk->delete_state() != DEL_NOT_SATISFIED;
             for (size_t i = 0; i < _column_iterators.size(); i++) {
@@ -231,8 +220,6 @@ private:
 
     Status _read(Chunk* chunk, vector<rowid_t>* rowid, size_t n);
 
-    Status _read_by_column(size_t n, Chunk* result, vector<rowid_t>* rowids);
-
 private:
     using RawColumnIterators = std::vector<ColumnIterator*>;
     using ColumnDecoders = std::vector<ColumnDecoder>;
@@ -242,6 +229,7 @@ private:
     ColumnDecoders _column_decoders;
     std::vector<BitmapIndexIterator*> _bitmap_index_iterators;
 
+    Status _get_del_vec_st;
     DelVectorPtr _del_vec;
     roaring_uint32_iterator_t _roaring_iter;
 
@@ -278,6 +266,8 @@ private:
 
     int _late_materialization_ratio = 0;
 
+    int _reserve_chunk_size = 0;
+
     bool _inited = false;
     bool _has_bitmap_index = false;
 
@@ -290,19 +280,38 @@ SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, vectorized::S
           _segment(std::move(segment)),
           _opts(std::move(options)),
           _predicate_columns(_opts.predicates.size()),
-          _context_switch_next_time(false) {}
+          _context_switch_next_time(false) {
+    // For small segment file (the number of rows is less than chunk_size),
+    // the segment iterator will reserve a large amount of memory,
+    // especially when there are many columns, many small files, many versions,
+    // a compaction task or query will consume a lot of memory,
+    // increasing the burden on the memory allocator, while increasing memory consumption.
+    // Therefore, when the segment file is relatively small, we should only reserve necessary memory.
+    _reserve_chunk_size = static_cast<int32_t>(std::min(static_cast<uint32_t>(_opts.chunk_size), _segment->num_rows()));
 
-Status SegmentIterator::_init() {
-    SCOPED_RAW_TIMER(&_opts.stats->segment_init_ns);
+    // for very long queries(>30min), delvec may got GCed, to prevent this, load delvec at query start, call stack:
+    //   olap_chunk_source::prepare -> tablet_reader::open -> get_segment_iterators -> create SegmentIterator
+    SCOPED_RAW_TIMER(&_opts.stats->get_delvec_ns);
     if (_opts.is_primary_keys && _opts.version > 0) {
         TabletSegmentId tsid;
         tsid.tablet_id = _opts.tablet_id;
         tsid.segment_id = _opts.rowset_id + segment_id();
-        RETURN_IF_ERROR(
-                StorageEngine::instance()->update_manager()->get_del_vec(_opts.meta, tsid, _opts.version, &_del_vec));
-        if (_del_vec && _del_vec->empty()) {
-            _del_vec.reset();
+        _get_del_vec_st =
+                StorageEngine::instance()->update_manager()->get_del_vec(_opts.meta, tsid, _opts.version, &_del_vec);
+        if (_get_del_vec_st.ok()) {
+            if (_del_vec && _del_vec->empty()) {
+                _del_vec.reset();
+            }
         }
+    }
+}
+
+Status SegmentIterator::_init() {
+    SCOPED_RAW_TIMER(&_opts.stats->segment_init_ns);
+    if (!_get_del_vec_st.ok()) {
+        return _get_del_vec_st;
+    }
+    if (_opts.is_primary_keys && _opts.version > 0) {
         if (_del_vec) {
             if (_segment->num_rows() == _del_vec->cardinality()) {
                 return Status::EndOfFile("all rows deleted");
@@ -315,11 +324,11 @@ Status SegmentIterator::_init() {
     }
 
     if (config::enable_segment_overflow_read_chunk) {
-        _selection.resize(_opts.chunk_size + _opts.chunk_size / 4 + 1);
-        _selected_idx.resize(_opts.chunk_size + _opts.chunk_size / 4 + 1);
+        _selection.resize(_reserve_chunk_size + _reserve_chunk_size / 4 + 1);
+        _selected_idx.resize(_reserve_chunk_size + _reserve_chunk_size / 4 + 1);
     } else {
-        _selection.resize(_opts.chunk_size);
-        _selected_idx.resize(_opts.chunk_size);
+        _selection.resize(_reserve_chunk_size);
+        _selected_idx.resize(_reserve_chunk_size);
     }
 
     StarRocksMetrics::instance()->segment_read_total.increment(1);
@@ -671,7 +680,7 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
     MonotonicStopWatch sw;
     sw.start();
 
-    const uint32_t chunk_capacity = _opts.chunk_size;
+    const uint32_t chunk_capacity = _reserve_chunk_size;
     const bool has_predicate = !_opts.predicates.empty();
     const int64_t prev_raw_rows_read = _opts.stats->raw_rows_read;
 
@@ -721,9 +730,9 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
     // If _read_chunk contains more rows than its capacity, we save the overflow rows in _overflow_read_chunk.
     if (chunk_start > chunk_capacity) {
         if (_context->_overflow_read_chunk == nullptr) {
-            _context->_overflow_read_chunk = chunk->clone_empty(_opts.chunk_size / 4 + 1);
+            _context->_overflow_read_chunk = chunk->clone_empty(_reserve_chunk_size / 4 + 1);
             if (rowid != nullptr) {
-                _context->_overflow_read_chunk_rowids.reserve(_opts.chunk_size / 4 + 1);
+                _context->_overflow_read_chunk_rowids.reserve(_reserve_chunk_size / 4 + 1);
             }
         }
         DCHECK(_context->_overflow_read_chunk->is_empty());
@@ -842,15 +851,16 @@ void SegmentIterator::_switch_context(ScanContext* to) {
 
     if (to->_read_chunk == nullptr) {
         if (config::enable_segment_overflow_read_chunk) {
-            to->_read_chunk = ChunkHelper::new_chunk(to->_read_schema, _opts.chunk_size + _opts.chunk_size / 4 + 1);
+            to->_read_chunk =
+                    ChunkHelper::new_chunk(to->_read_schema, _reserve_chunk_size + _reserve_chunk_size / 4 + 1);
         } else {
-            to->_read_chunk = ChunkHelper::new_chunk(to->_read_schema, _opts.chunk_size);
+            to->_read_chunk = ChunkHelper::new_chunk(to->_read_schema, _reserve_chunk_size);
         }
     }
 
     if (to->_has_dict_column) {
         if (to->_dict_chunk == nullptr) {
-            to->_dict_chunk = ChunkHelper::new_chunk(to->_dict_decode_schema, _opts.chunk_size);
+            to->_dict_chunk = ChunkHelper::new_chunk(to->_dict_decode_schema, _reserve_chunk_size);
         }
     } else {
         to->_dict_chunk = to->_read_chunk;
@@ -868,13 +878,13 @@ void SegmentIterator::_switch_context(ScanContext* to) {
                 _encoded_schema.append(field);
             }
         }
-        to->_final_chunk = ChunkHelper::new_chunk(this->_encoded_schema, _opts.chunk_size);
+        to->_final_chunk = ChunkHelper::new_chunk(this->_encoded_schema, _reserve_chunk_size);
     } else {
-        to->_final_chunk = ChunkHelper::new_chunk(this->output_schema(), _opts.chunk_size);
+        to->_final_chunk = ChunkHelper::new_chunk(this->output_schema(), _reserve_chunk_size);
     }
 
     to->_adapt_global_dict_chunk = to->_has_force_dict_encode
-                                           ? ChunkHelper::new_chunk(this->output_schema(), _opts.chunk_size)
+                                           ? ChunkHelper::new_chunk(this->output_schema(), _reserve_chunk_size)
                                            : to->_final_chunk;
 
     _context = to;
@@ -1448,6 +1458,9 @@ Status SegmentIterator::_get_row_ranges_by_rowid_range() {
 }
 
 void SegmentIterator::close() {
+    if (_del_vec) {
+        _del_vec.reset();
+    }
     _context_list[0].close();
     _context_list[1].close();
     _obj_pool.clear();

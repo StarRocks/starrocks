@@ -19,7 +19,7 @@ This function can be used with WHERE and GROUP BY.
 
 ## Syntax
 
-~~~sql
+~~~Haskell
 COUNT(expr)
 COUNT(DISTINCT expr)`
 ~~~

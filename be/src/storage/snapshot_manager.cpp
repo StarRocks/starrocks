@@ -574,11 +574,7 @@ Status SnapshotManager::make_snapshot_on_tablet_meta(SnapshotTypePB snapshot_typ
     snapshot_meta.set_snapshot_format(snapshot_format);
     snapshot_meta.set_snapshot_type(snapshot_type);
     snapshot_meta.set_snapshot_version(snapshot_version);
-    snapshot_meta.rowset_metas().reserve(rowset_metas.size());
-    for (const auto& rowset_meta : rowset_metas) {
-        RowsetMetaPB& meta_pb = snapshot_meta.rowset_metas().emplace_back();
-        rowset_meta->to_rowset_pb(&meta_pb);
-    }
+    tablet->updates()->to_rowset_meta_pb(rowset_metas, snapshot_meta.rowset_metas());
     if (snapshot_type == SNAPSHOT_TYPE_FULL) {
         auto meta_store = tablet->data_dir()->get_meta();
         uint32_t new_rsid = 0;

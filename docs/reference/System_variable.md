@@ -116,7 +116,7 @@ Used for MySQL client compatibility. No practical usage.
 
 * enable_insert_strict
 
-Used to enable the strict mode when importing data using the INSERT statement. The default value is false, meaning strict mode is not enabled. For more information, see "Data Import" (... /loading/Loading_intro.md)".
+Used to enable the strict mode when importing data using the INSERT statement. The default value is `true`, indicating the strict mode is enabled by default. For more information, see [Load data using INSERT](../loading/InsertInto.md)".
 
 * enable_spilling
 

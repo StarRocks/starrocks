@@ -61,4 +61,11 @@ Status RepeatOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPt
     _repeat_times_last = 0;
     return Status::OK();
 }
+
+Status RepeatOperatorFactory::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state));
+    RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));
+    return Status::OK();
+}
+
 } // namespace starrocks::pipeline

@@ -176,6 +176,7 @@ std::pair<Columns, ColumnPtr> JavaUDTFFunction::process(TableFunctionState* stat
         helper.getEnv()->ExceptionClear();
     }
 
+    *eos = true;
     return std::make_pair(std::move(res), std::move(offsets_col));
 }
 

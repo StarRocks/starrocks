@@ -2,7 +2,7 @@
 
 ## Description
 
-Create a new table in StarRocks.
+Creates a new table in StarRocks.
 
 ## Syntax
 
@@ -38,37 +38,37 @@ col_type：Column type
 
 
 
-Specific column information, such as types and ranges, are as follows: 
+Specific column information, such as types and ranges: 
 
 
 
 * TINYINT（1 byte）
 
-Range ：-2^7 + 1 ~ 2^7 - 1
+Range: -2^7 + 1 ~ 2^7 - 1
 
 
 
 * SMALLINT（2 bytes）
 
-Range ：-2^15 + 1 ~ 2^15 - 1
+Range: -2^15 + 1 ~ 2^15 - 1
 
 
 
 * INT（4 bytes）
 
-Range ：-2^31 + 1 ~ 2^31 - 1
+Range: -2^31 + 1 ~ 2^31 - 1
 
 
 
 * BIGINT（8 bytes）
 
-Range ：-2^63 + 1 ~ 2^63 - 1
+Range: -2^63 + 1 ~ 2^63 - 1
 
 
 
 * LARGEINT（16 bytes）
 
-Range ：-2^127 + 1 ~ 2^127 - 1
+Range: -2^127 + 1 ~ 2^127 - 1
 
 
 
@@ -86,7 +86,7 @@ Support scientific notation
 
 * DECIMAL[(precision, scale)] (16 bytes) 
 
- Default: DECIMAL(10, 0)
+ Default value: DECIMAL(10, 0)
 
  precision: 1 ~ 38
 
@@ -100,25 +100,28 @@ Scientific notation is not supported
 
 * DATE（3 bytes）
 
-Range ：0000-01-01 ~ 9999-12-31
+Range: 0000-01-01 ~ 9999-12-31
 
 
 
 * DATETIME（8 bytes ）
 
-Range ：0000-01-01 00:00:00 ~ 9999-12-31 23:59:59
+Range: 0000-01-01 00:00:00 ~ 9999-12-31 23:59:59
 
 
 
 * CHAR[(length)]
 
-Fixed length string. Range：1 ~ 255。default: 1
+Fixed length string. Range：1 ~ 255. Default value: 1.
 
 
 
 * VARCHAR[(length)]
 
-Variable length string. Range：1 ~ 65533
+A variable-length string. The default value is 1. Unit: bytes.
+
+- In versions earlier than StarRocks 2.1, the value range of `length` is 1–65533.
+- [Preview] In StarRocks 2.1 and later versions, the value range of `length` is 1–1048576.
 
 
 
@@ -179,18 +182,11 @@ Syntax:
 INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] COMMENT 'xxxxxx'
 ```
 
-Note:
-
-index_name: Index name
-
-col_name: Column name
-
-> Note:
-> Currently only BITMAP index is supported and it only applies to single columns.
+You can only create bitmap indexes when you create tables. For more information about parameter descriptions and usage notes, see [Bitmap indexing](../../../using_starrocks/Bitmap_index.md#create-a-bitmap-index).
 
 ### ENGINE type
 
-Default: olap. Optional: mysql, elasticsearch, and hive.
+Default value: olap. Optional: mysql, elasticsearch, and hive.
 
 - For MySQL, properties should include:
 
@@ -378,7 +374,7 @@ storage_medium: SSD or HDD could be specified as the initial storage media. You 
 
 **Note**: When FE configuration item enable_strict_storage_medium_check is True and if storage medium is not set in the cluster, the statement for table creating will report an error: Failed to find enough host in all backends with storage medium is SSD|HDD.
 
-storage_cooldown_time: When the storage medium is SSD, please specify its storage cooldown time. The default time is 30 days. Format: "yyyy-MM-dd HH:mm:ss"
+storage_cooldown_time: the storage cooldown time for a partition. If the storage medium is SSD, SSD is switched to HDD after the time specified by this parameter. Format: "yyyy-MM-dd HH:mm:ss". The specified time must be later than the current time. If this parameter is not explicitly specified, auto-cooldown is not performed by default.
 
 replication_num: number of replicas in the specified partition. Default number: 3.
 
@@ -413,11 +409,11 @@ PROPERTIES (
     "dynamic_partition.buckets" = "${integer_value}"
 ```
 
-dynamic_partition.enable: It is used to specify whether dynamic partitioning at the table level is enabled. Default: true.
+dynamic_partition.enable: It is used to specify whether dynamic partitioning at the table level is enabled. Default value: true.
 
 dynamic_partition.time_unit: It is used to specify the time unit for adding partitions dynamically. Time unit could be DAY, WEEK, MONTH.
 
-dynamic_partition.start: It is used to specify how many partitions should be deleted. The value must be less than 0. Default: integer.Min_VAULE.
+dynamic_partition.start: It is used to specify how many partitions should be deleted. The value must be less than 0. Default value: integer.Min_VAULE.
 
 dynamic_partition.end: It is used to specify the how many partitions will be created in advance. The value must be more than 0.
 

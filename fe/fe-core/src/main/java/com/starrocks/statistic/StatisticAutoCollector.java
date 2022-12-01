@@ -4,7 +4,6 @@ package com.starrocks.statistic;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
@@ -22,7 +21,6 @@ import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 public class StatisticAutoCollector extends MasterDaemon {
     private static final Logger LOG = LogManager.getLogger(StatisticAutoCollector.class);
@@ -225,8 +223,7 @@ public class StatisticAutoCollector extends MasterDaemon {
             return;
         }
 
-        List<String> columns = table.getFullSchema().stream().filter(d -> !d.isAggregated()).map(Column::getName)
-                .collect(Collectors.toList());
+        List<String> columns = StatisticUtils.getCollectibleColumns(table);
         createTableJobs(tableJobs, job, db, table, columns);
     }
 

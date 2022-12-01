@@ -36,6 +36,7 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     _schedule_timer = ADD_TIMER(_runtime_profile, "ScheduleTime");
     _schedule_counter = ADD_COUNTER(_runtime_profile, "ScheduleCount", TUnit::UNIT);
     _yield_by_time_limit_counter = ADD_COUNTER(_runtime_profile, "YieldByTimeLimit", TUnit::UNIT);
+    _yield_by_preempt_counter = ADD_COUNTER(_runtime_profile, "YieldByPreempt", TUnit::UNIT);
     _block_by_precondition_counter = ADD_COUNTER(_runtime_profile, "BlockByPrecondition", TUnit::UNIT);
     _block_by_output_full_counter = ADD_COUNTER(_runtime_profile, "BlockByOutputFull", TUnit::UNIT);
     _block_by_input_empty_counter = ADD_COUNTER(_runtime_profile, "BlockByInputEmpty", TUnit::UNIT);
@@ -215,14 +216,13 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
             // exceed the designated thresholds.
             if (time_spent >= YIELD_MAX_TIME_SPENT) {
                 should_yield = true;
-                COUNTER_UPDATE(_yield_by_time_limit_counter, time_spent >= YIELD_MAX_TIME_SPENT);
+                COUNTER_UPDATE(_yield_by_time_limit_counter, 1);
                 break;
             }
-
             if (_workgroup != nullptr && time_spent >= YIELD_PREEMPT_MAX_TIME_SPENT &&
                 _workgroup->driver_sched_entity()->in_queue()->should_yield(this, time_spent)) {
                 should_yield = true;
-                COUNTER_UPDATE(_yield_by_time_limit_counter, time_spent >= YIELD_MAX_TIME_SPENT);
+                COUNTER_UPDATE(_yield_by_preempt_counter, 1);
                 break;
             }
         }
@@ -338,27 +338,15 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
     if (_fragment_ctx->count_down_drivers()) {
         _fragment_ctx->finish();
         auto status = _fragment_ctx->final_status();
-        _fragment_ctx->runtime_state()->exec_env()->driver_executor()->report_exec_state(_fragment_ctx, status, true);
+        _fragment_ctx->runtime_state()->exec_env()->driver_executor()->report_exec_state(_query_ctx, _fragment_ctx,
+                                                                                         status, true);
         _fragment_ctx->destroy_pass_through_chunk_buffer();
         auto fragment_id = _fragment_ctx->fragment_instance_id();
         if (_query_ctx->count_down_fragments()) {
             auto query_id = _query_ctx->query_id();
             DCHECK(!this->is_still_pending_finish());
 
-            auto frag_id = _fragment_ctx->fragment_instance_id();
-            int active_fragments = _query_ctx->num_active_fragments();
-            int active_drivers = _fragment_ctx->num_drivers();
-            // Acquire the pointer to avoid be released when removing query
-            auto wg = _workgroup;
-            if (ExecEnv::GetInstance()->query_context_mgr()->remove(query_id)) {
-                if (wg) {
-                    VLOG_ROW << "decrease num running queries in workgroup " << wg->id() << "query_id=" << query_id
-                             << ",fragment_ctx address=" << _fragment_ctx << ",fragment_instance_id=" << frag_id
-                             << ",active_drivers=" << active_drivers << ", active_fragments=" << active_fragments
-                             << ", query_ctx address=" << _query_ctx;
-                    wg->decr_num_queries();
-                }
-            }
+            ExecEnv::GetInstance()->query_context_mgr()->remove(query_id);
         }
     }
 }

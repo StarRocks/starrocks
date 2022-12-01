@@ -117,37 +117,41 @@ public class QueryAnalyzer {
             for (CTERelation withQuery : stmt.getCteRelations()) {
                 QueryRelation query = withQuery.getCteQueryStatement().getQueryRelation();
                 process(withQuery.getCteQueryStatement(), cteScope);
+                String cteName = withQuery.getName();
+                if (cteScope.containsCTE(cteName)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_NONUNIQ_TABLE, cteName);
+                }
 
-                /*
-                 *  Because the analysis of CTE is sensitive to order
-                 *  the latter CTE can call the previous resolved CTE,
-                 *  and the previous CTE can rewrite the existing table name.
-                 *  So here will save an increasing AnalyzeState to add cte scope
-                 */
+                if (withQuery.getColumnOutputNames() == null) {
+                    withQuery.setColumnOutputNames(new ArrayList<>(query.getColumnOutputNames()));
+                } else {
+                    if (withQuery.getColumnOutputNames().size() != query.getColumnOutputNames().size()) {
+                        ErrorReport.reportSemanticException(ErrorCode.ERR_VIEW_WRONG_LIST);
+                    }
+                }
 
                 /*
                  * use cte column name as output scope of subquery relation fields
                  */
                 ImmutableList.Builder<Field> outputFields = ImmutableList.builder();
-                ImmutableList.Builder<String> columnOutputNames = ImmutableList.builder();
                 for (int fieldIdx = 0; fieldIdx < query.getRelationFields().getAllFields().size(); ++fieldIdx) {
                     Field originField = query.getRelationFields().getFieldByIndex(fieldIdx);
 
                     String database = originField.getRelationAlias() == null ? session.getDatabase() :
                             originField.getRelationAlias().getDb();
-                    TableName tableName = new TableName(database, withQuery.getName());
-                    outputFields.add(new Field(
-                            withQuery.getColumnOutputNames() == null ? originField.getName() :
-                                    withQuery.getColumnOutputNames().get(fieldIdx),
-                            originField.getType(),
-                            tableName,
+                    TableName tableName = new TableName(database, cteName);
+                    outputFields.add(new Field(withQuery.getColumnOutputNames().get(fieldIdx), originField.getType(), tableName,
                             originField.getOriginExpression()));
-                    columnOutputNames.add(withQuery.getColumnOutputNames() == null ? originField.getName() :
-                            withQuery.getColumnOutputNames().get(fieldIdx));
                 }
-                withQuery.setColumnOutputNames(columnOutputNames.build());
+
+                /*
+                 *  Because the analysis of CTE is sensitive to order
+                 *  the later CTE can call the previous resolved CTE,
+                 *  and the previous CTE can rewrite the existing table name.
+                 *  So here will save an increasing AnalyzeState to add cte scope
+                 */
                 withQuery.setScope(new Scope(RelationId.of(withQuery), new RelationFields(outputFields.build())));
-                cteScope.addCteQueries(withQuery.getName(), withQuery);
+                cteScope.addCteQueries(cteName, withQuery);
             }
 
             return cteScope;
@@ -460,7 +464,15 @@ public class QueryAnalyzer {
             for (int i = 0; i < view.getBaseSchema().size(); ++i) {
                 Column column = view.getBaseSchema().get(i);
                 Field originField = queryOutputScope.getRelationFields().getFieldByIndex(i);
-                Field field = new Field(column.getName(), column.getType(), node.getResolveTableName(),
+                // A view can specify its column names optionally, if column names are absent,
+                // the output names of the queryRelation is used as the names of the view schema,
+                // so column names in view's schema are always correct. Using originField.getName
+                // here will gives wrong names when user-specified view column names are different
+                // from output names of the queryRelation.
+                //
+                // view created in previous use originField.getOriginExpression().type as column
+                // types in its schema, it is incorrect, so use originField.type instead.
+                Field field = new Field(column.getName(), originField.getType(), node.getResolveTableName(),
                         originField.getOriginExpression());
                 fields.add(field);
             }

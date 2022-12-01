@@ -1,14 +1,16 @@
 # ST_Contains
 
-## description
+## Description
 
-### Syntax
+Checks whether the geometric figure shape1 can fully contain shape2.
 
-`BOOL ST_Contains(GEOMETRY shape1, GEOMETRY shape2)`
+## Syntax
 
-Check whether the geometric figure shape1 can fully contain shape2.
+```Haskell
+BOOL ST_Contains(GEOMETRY shape1, GEOMETRY shape2)
+```
 
-## example
+## Examples
 
 ```Plain Text
 MySQL > SELECT ST_Contains(ST_Polygon("POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))"), ST_Point(5, 5));

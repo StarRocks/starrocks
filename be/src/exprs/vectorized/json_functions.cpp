@@ -414,31 +414,35 @@ ColumnPtr JsonFunctions::json_query(FunctionContext* context, const Columns& col
 // Convert the JSON Slice to a PrimitiveType through ColumnBuilder
 template <PrimitiveType ResultType>
 static Status _convert_json_slice(const vpack::Slice& slice, vectorized::ColumnBuilder<ResultType>& result) {
-    if (slice.isNone()) {
-        result.append_null();
-    } else if constexpr (ResultType == TYPE_JSON) {
-        JsonValue value(slice);
-        result.append(std::move(value));
-    } else if constexpr (ResultType == TYPE_VARCHAR || ResultType == TYPE_CHAR) {
-        if (LIKELY(slice.isType(vpack::ValueType::String))) {
-            vpack::ValueLength len;
-            const char* str = slice.getStringUnchecked(len);
-            result.append(Slice(str, len));
-        } else {
-            vpack::Options options = vpack::Options::Defaults;
-            options.singleLinePrettyPrint = true;
-            std::string str = slice.toJson(&options);
+    try {
+        if (slice.isNone()) {
+            result.append_null();
+        } else if constexpr (ResultType == TYPE_JSON) {
+            JsonValue value(slice);
+            result.append(std::move(value));
+        } else if (slice.isNull()) {
+            result.append_null();
+        } else if constexpr (ResultType == TYPE_VARCHAR || ResultType == TYPE_CHAR) {
+            if (LIKELY(slice.isType(vpack::ValueType::String))) {
+                vpack::ValueLength len;
+                const char* str = slice.getStringUnchecked(len);
+                result.append(Slice(str, len));
+            } else {
+                vpack::Options options = vpack::Options::Defaults;
+                options.singleLinePrettyPrint = true;
+                std::string str = slice.toJson(&options);
 
-            result.append(Slice(str));
+                result.append(Slice(str));
+            }
+        } else if constexpr (ResultType == TYPE_INT) {
+            result.append(slice.getNumber<int64_t>());
+        } else if constexpr (ResultType == TYPE_DOUBLE) {
+            result.append(slice.getNumber<double>());
+        } else {
+            CHECK(false) << "unsupported";
         }
-    } else if constexpr (ResultType == TYPE_INT) {
-        double num = slice.getNumber<int64_t>();
-        result.append(num);
-    } else if constexpr (ResultType == TYPE_DOUBLE) {
-        double num = slice.getNumber<double>();
-        result.append(num);
-    } else {
-        CHECK(false) << "unsupported";
+    } catch (const vpack::Exception& e) {
+        return Status::InvalidArgument("failed to convert json to primitive");
     }
     return Status::OK();
 }

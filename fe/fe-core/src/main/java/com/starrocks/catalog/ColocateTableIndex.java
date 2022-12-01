@@ -355,6 +355,25 @@ public class ColocateTableIndex implements Writable {
         }
     }
 
+    public int getNumOfTabletsPerBucket(GroupId groupId) {
+        List<Long> allTableIds = getAllTableIds(groupId);
+        Database db = GlobalStateMgr.getCurrentState().getDb(groupId.dbId);
+        if (!allTableIds.isEmpty() && db != null) {
+            db.readLock();
+            try {
+                OlapTable tbl = (OlapTable) db.getTable(allTableIds.get(0));
+                if (tbl != null) {
+                    return allTableIds.size() * tbl.getNumberOfPartitions();
+                } else {
+                    return -1;
+                }
+            } finally {
+                db.readUnlock();
+            }
+        }
+        return -1;
+    }
+
     public List<List<Long>> getBackendsPerBucketSeq(GroupId groupId) {
         readLock();
         try {

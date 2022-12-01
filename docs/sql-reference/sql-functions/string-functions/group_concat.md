@@ -1,16 +1,18 @@
 # group_concat
 
-## description
+## Description
 
-### Syntax
-
-`VARCHAR group_concat(VARCHAR str[, VARCHAR sep])`
-
-This is an aggregate function similar to sum(). Group_concat concatenates the data from multiple rows into one string, with the second argument sep being the separator. The second argument can also be omitted. This function usually needs to be used along with group by statement.
+This is an aggregate function similar to sum(). group_concat concatenates the data from multiple rows into one string, with the second argument sep being the separator. The second argument can also be omitted. This function usually needs to be used along with group by statement.
 
 > Please note that the multiple data may not be concatenated in sequence because it uses distributed computing.
 
-## example
+## Syntax
+
+```Haskell
+VARCHAR group_concat(VARCHAR str[, VARCHAR sep])
+```
+
+## Examples
 
 ```Plain Text
 MySQL > select value from test;

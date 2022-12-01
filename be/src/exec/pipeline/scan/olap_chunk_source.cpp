@@ -89,7 +89,10 @@ void OlapChunkSource::_init_counter(RuntimeState* state) {
     _raw_rows_counter = ADD_COUNTER(_runtime_profile, "RawRowsRead", TUnit::UNIT);
     _read_pages_num_counter = ADD_COUNTER(_runtime_profile, "ReadPagesNum", TUnit::UNIT);
     _cached_pages_num_counter = ADD_COUNTER(_runtime_profile, "CachedPagesNum", TUnit::UNIT);
-    _pushdown_predicates_counter = ADD_COUNTER(_runtime_profile, "PushdownPredicates", TUnit::UNIT);
+    _pushdown_predicates_counter = ADD_COUNTER_SKIP_MERGE(_runtime_profile, "PushdownPredicates", TUnit::UNIT);
+
+    _get_rowsets_timer = ADD_TIMER(_runtime_profile, "GetRowsets");
+    _get_delvec_timer = ADD_TIMER(_runtime_profile, "GetDelVec");
 
     // SegmentInit
     _seg_init_timer = ADD_TIMER(_runtime_profile, "SegmentInit");
@@ -263,7 +266,8 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     starrocks::vectorized::Schema child_schema =
             ChunkHelper::convert_schema_to_format_v2(tablet_schema, reader_columns);
 
-    _reader = std::make_shared<TabletReader>(_tablet, Version(0, _version), std::move(child_schema));
+    _reader =
+            std::make_shared<TabletReader>(_tablet, Version(0, _version), std::move(child_schema), _morsel->rowsets());
     if (reader_columns.size() == scanner_columns.size()) {
         _prj_iter = _reader;
     } else {
@@ -482,6 +486,8 @@ void OlapChunkSource::_update_counter() {
     COUNTER_UPDATE(_block_seek_timer, _reader->stats().block_seek_ns);
 
     COUNTER_UPDATE(_chunk_copy_timer, _reader->stats().vec_cond_chunk_copy_ns);
+    COUNTER_UPDATE(_get_rowsets_timer, _reader->stats().get_rowsets_ns);
+    COUNTER_UPDATE(_get_delvec_timer, _reader->stats().get_delvec_ns);
     COUNTER_UPDATE(_seg_init_timer, _reader->stats().segment_init_ns);
 
     COUNTER_UPDATE(_raw_rows_counter, _reader->stats().raw_rows_read);

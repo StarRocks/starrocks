@@ -96,6 +96,10 @@ public class Scope {
         return cteQueries;
     }
 
+    public boolean containsCTE(String name) {
+        return cteQueries.containsKey(name);
+    }
+
     public Scope getParent() {
         return parent;
     }

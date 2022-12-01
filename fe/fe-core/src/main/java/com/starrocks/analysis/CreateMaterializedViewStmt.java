@@ -45,6 +45,7 @@ import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.TableRelation;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -297,7 +298,6 @@ public class CreateMaterializedViewStmt extends DdlStmt {
             if (!(queryStatement.getQueryRelation() instanceof SelectRelation)) {
                 throw new SemanticException("Materialized view query statement only support select");
             }
-
             Map<TableName, Table> tables = AnalyzerUtils.collectAllTableAndViewWithAlias(queryStatement);
             if (tables.size() != 1) {
                 throw new SemanticException("The materialized view only support one table in from clause.");
@@ -313,6 +313,9 @@ public class CreateMaterializedViewStmt extends DdlStmt {
             statement.setDBName(context.getDatabase());
 
             SelectRelation selectRelation = ((SelectRelation) queryStatement.getQueryRelation());
+            if (!(selectRelation.getRelation() instanceof TableRelation)) {
+                throw new SemanticException("Materialized view query statement only support direct query from table.");
+            }
             int beginIndexOfAggregation = genColumnAndSetIntoStmt(statement, selectRelation);
             if (selectRelation.isDistinct() || selectRelation.hasAggregation()) {
                 statement.setMvKeysType(KeysType.AGG_KEYS);
@@ -507,7 +510,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
     private static void analyzeOrderByClause(CreateMaterializedViewStmt statement,
                                              SelectRelation selectRelation,
                                              int beginIndexOfAggregation) {
-        if (!selectRelation.hasOrderByClause()) {
+        if (!selectRelation.hasOrderByClause() || selectRelation.getGroupBy().size() != selectRelation.getOrderBy().size()) {
             supplyOrderColumn(statement);
             return;
         }

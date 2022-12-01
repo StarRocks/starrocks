@@ -6,7 +6,7 @@ Returns the week number for a given date. This function works in the same way as
 
 ## Syntax
 
-```Plain
+```Haskell
 INT WEEK(DATETIME|DATE date, INT mode)
 ```
 

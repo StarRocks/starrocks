@@ -110,6 +110,7 @@ Status ORCScanner::open() {
     _orc_reader->set_timezone(_state->timezone());
     _orc_reader->drop_nanoseconds_in_datetime();
     _orc_reader->set_runtime_state(_state);
+    _orc_reader->set_case_sensitive(true);
     RETURN_IF_ERROR(_open_next_orc_reader());
 
     return Status::OK();

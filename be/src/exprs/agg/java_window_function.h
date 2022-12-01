@@ -16,7 +16,7 @@
 namespace starrocks::vectorized {
 void assign_jvalue(MethodTypeDescriptor method_type_desc, Column* col, int row_num, jvalue val);
 
-class JavaWindowFunction final : public JavaUDAFAggregateFunction<true> {
+class JavaWindowFunction final : public JavaUDAFAggregateFunction {
 public:
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
         ctx->impl()->udaf_ctxs()->_func->reset(data(state).handle);

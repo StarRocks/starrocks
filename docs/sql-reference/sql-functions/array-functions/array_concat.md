@@ -10,7 +10,7 @@ Nulls are processed as normal values.
 
 ## Syntax
 
-```SQL
+```Haskell
 array_concat(input0, input1, ...)
 ```
 

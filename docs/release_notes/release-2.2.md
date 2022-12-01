@@ -1,5 +1,49 @@
 # StarRocks version 2.2
 
+## 2.2.9
+
+Release date: November 15, 2022
+
+### Improvements
+
+- Added the session variable `hive_partition_stats_sample_size` to control the number of Hive partitions from which to collect statistics. An excessive number of partitions will cause errors in obtaining Hive metadata. [#12700](https://github.com/StarRocks/starrocks/pull/12700)
+
+- Elasticsearch external tables support custom time zones. [#12662](https://github.com/StarRocks/starrocks/pull/12662)
+
+### Bug Fixes
+
+The following bugs are fixed:
+
+- The DECOMMISSION operation is stuck if an error occurs during metadata synchronization for external tables. [#12369](https://github.com/StarRocks/starrocks/pull/12368)
+
+- Compaction crashes if a column that is newly added is deleted. [#12907](https://github.com/StarRocks/starrocks/pull/12907)
+
+- SHOW CREATE VIEW does not display the comments that were added when creating the view. [#4163](https://github.com/StarRocks/starrocks/issues/4163)
+
+- Memory leak in Java UDF may cause OOM. [#12418](https://github.com/StarRocks/starrocks/pull/12418)
+
+### Behavior Change
+
+Extended the length of Hive STRING columns that can be queried by StarRocks from 64 KB to 1 MB. If a STRING column exceeds 1 MB, it will be processed as a null column during queries. [#12986](https://github.com/StarRocks/starrocks/pull/12986)
+
+## 2.2.8
+
+Release date: October 17, 2022
+
+### Bug Fixes
+
+The following bugs are fixed:
+
+- BEs may crash if an expression encounters an error in the initial stage. [#11395](https://github.com/StarRocks/starrocks/pull/11395)
+
+- BEs may crash if invalid JSON data is loaded. [#10804](https://github.com/StarRocks/starrocks/issues/10804)
+
+- Parallel writing encounters an error when the pipeline engine is enabled. [#11451](https://github.com/StarRocks/starrocks/issues/11451)
+
+- BEs crash when the ORDER BY NULL LIMIT clause is used. [#11648](https://github.com/StarRocks/starrocks/issues/11648)
+
+- BEs crash if the column type defined in the external table is different from the column type in the source Parquet file. [#11839](https://github.com/StarRocks/starrocks/issues/11839)
+
 ## 2.2.7
 
 Release date: September 23, 2022
@@ -158,7 +202,7 @@ Release date: May 22, 2022
 
 - [Preview] JSON data types and JSON functions are supported.
 
-- External tables can be used to query data from Apache Hudi. This further improves users' data lake analytics experience with StarRocks. For more information, see [External tables](../using_starrocks/External_table.md).
+- External tables can be used to query data from Apache Hudi. This further improves users' data lake analytics experience with StarRocks. For more information, see [External tables](../data_source/External_table.md).
 
 - The following functions are added:
   - ARRAY functions: [array_agg](../sql-reference/sql-functions/array-functions/array_agg.md), array_sort, array_distinct, array_join, reverse, array_slice, array_concat, array_difference, arrays_overlap, and array_intersect
@@ -169,9 +213,9 @@ Release date: May 22, 2022
 
 - The parser and analyzer of the cost-based optimizer (CBO) are restructured, the code structure is optimized, and syntaxes such as INSERT with Common Table Expression (CTE) are supported. These improvements are made to increase the performance of complex queries, such as queries that involve the reuse of CTEs.
 
-- The performance of queries on Apache Hive™ external tables that are stored in cloud object storage services such as AWS Simple Storage Service (S3), Alibaba Cloud Object Storage Service (OSS), and Tencent Cloud Object Storage (COS) is optimized. After the optimization, the performance of object storage-based queries is comparable to that of HDFS-based queries. Additionally, late materialization of ORC files is supported, and queries on small files are accelerated. For more information, see [Apache Hive™ external table](../using_starrocks/External_table.md).
+- The performance of queries on Apache Hive™ external tables that are stored in cloud object storage services such as AWS Simple Storage Service (S3), Alibaba Cloud Object Storage Service (OSS), and Tencent Cloud Object Storage (COS) is optimized. After the optimization, the performance of object storage-based queries is comparable to that of HDFS-based queries. Additionally, late materialization of ORC files is supported, and queries on small files are accelerated. For more information, see [Apache Hive™ external table](../data_source/External_table.md).
 
-- When queries from Apache Hive™ are run by using external tables, StarRocks automatically performs incremental updates to the cached metadata by consuming Hive metastore events such as data changes and partition changes. StarRocks also supports queries on data of the DECIMAL and ARRAY types from Apache Hive™. For more information, see [Apache Hive™ external table](../using_starrocks/External_table.md).
+- When queries from Apache Hive™ are run by using external tables, StarRocks automatically performs incremental updates to the cached metadata by consuming Hive metastore events such as data changes and partition changes. StarRocks also supports queries on data of the DECIMAL and ARRAY types from Apache Hive™. For more information, see [Apache Hive™ external table](../data_source/External_table.md).
 
 - The UNION ALL operator is optimized to run 2 to 25 times faster than before.
 

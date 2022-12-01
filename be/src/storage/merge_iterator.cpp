@@ -153,7 +153,9 @@ inline Status MergeIterator::init() {
     DCHECK(_chunk_size > 0);
     DCHECK_EQ(_children.size(), _chunk_pool.size());
     for (size_t i = 0; i < _children.size(); i++) {
-        _chunk_pool[i] = ChunkHelper::new_chunk(encoded_schema(), _chunk_size);
+        // No need to reserve, because it's already reserved in segment interators.
+        // If we reserve here, for small segment files, it will consume large memory then need.
+        _chunk_pool[i] = ChunkHelper::new_chunk(encoded_schema(), 0);
         RETURN_IF_ERROR(fill(i));
     }
     _inited = true;

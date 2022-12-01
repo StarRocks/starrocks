@@ -1,6 +1,6 @@
 # CREATE TABLE LIKE
 
-## description
+## Description
 
 This statement is used to create an identical empty table based on the structure of another table.
 

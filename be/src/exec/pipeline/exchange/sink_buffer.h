@@ -68,7 +68,7 @@ public:
                bool is_dest_merge, size_t num_sinkers);
     ~SinkBuffer();
 
-    void add_request(TransmitChunkInfo& request);
+    Status add_request(TransmitChunkInfo& request);
     bool is_full() const;
 
     void set_finishing();
@@ -94,7 +94,7 @@ private:
 
     // Try to send rpc if buffer is not empty and channel is not busy
     // And we need to put this function and other extra works(pre_works) together as an atomic operation
-    void _try_to_send_rpc(const TUniqueId& instance_id, std::function<void()> pre_works);
+    Status _try_to_send_rpc(const TUniqueId& instance_id, const std::function<void()>& pre_works);
 
     // Roughly estimate network time which is defined as the time between sending a and receiving a packet,
     // and the processing time of both sides are excluded
@@ -150,6 +150,9 @@ private:
     std::atomic<bool> _is_finishing = false;
     std::atomic<int32_t> _num_sending_rpc = 0;
 
+    std::atomic<int64_t> _rpc_count = 0;
+    std::atomic<int64_t> _rpc_cumulative_time = 0;
+
     // RuntimeProfile counters
     std::atomic_bool _is_profile_updated = false;
     std::atomic<int64_t> _bytes_enqueued = 0;
@@ -165,6 +168,6 @@ private:
     // Non-atomic type is enough because the concurrency inconsistency is acceptable
     int64_t _first_send_time = -1;
     int64_t _last_receive_time = -1;
-}; // namespace starrocks::pipeline
+};
 
 } // namespace starrocks::pipeline

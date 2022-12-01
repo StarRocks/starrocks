@@ -2,11 +2,11 @@
 
 ## Description
 
-Remove an element from an array.
+Removes an element from an array.
 
 ## Syntax
 
-```Plain%20Text
+```Haskell
 array_remove(any_array, any_element)
 ```
 

@@ -43,7 +43,7 @@ static void setup_profile_hierarchy(RuntimeState* runtime_state, const PipelineP
 
 static void setup_profile_hierarchy(const PipelinePtr& pipeline, const DriverPtr& driver) {
     pipeline->runtime_profile()->add_child(driver->runtime_profile(), true, nullptr);
-    auto* dop_counter = ADD_COUNTER(pipeline->runtime_profile(), "DegreeOfParallelism", TUnit::UNIT);
+    auto* dop_counter = ADD_COUNTER_SKIP_MERGE(pipeline->runtime_profile(), "DegreeOfParallelism", TUnit::UNIT);
     COUNTER_SET(dop_counter, static_cast<int64_t>(pipeline->source_operator_factory()->degree_of_parallelism()));
     auto* total_dop_counter = ADD_COUNTER(pipeline->runtime_profile(), "TotalDegreeOfParallelism", TUnit::UNIT);
     COUNTER_SET(total_dop_counter, dop_counter->value());
@@ -60,6 +60,7 @@ Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const TExecPlanFr
     const auto& params = request.params;
     const auto& query_id = params.query_id;
     const auto& fragment_instance_id = params.fragment_instance_id;
+    const auto& query_options = request.query_options;
 
     auto&& existing_query_ctx = exec_env->query_context_mgr()->get(query_id);
     if (existing_query_ctx) {
@@ -81,6 +82,13 @@ Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const TExecPlanFr
     _query_ctx->extend_delivery_lifetime();
     _query_ctx->extend_query_lifetime();
 
+    if (query_options.__isset.is_report_success && query_options.is_report_success) {
+        _query_ctx->set_report_profile();
+    }
+    if (query_options.__isset.pipeline_profile_level) {
+        _query_ctx->set_profile_level(query_options.pipeline_profile_level);
+    }
+
     return Status::OK();
 }
 
@@ -89,20 +97,12 @@ Status FragmentExecutor::_prepare_fragment_ctx(const TExecPlanFragmentParams& re
     const auto& params = request.params;
     const auto& query_id = params.query_id;
     const auto& fragment_instance_id = params.fragment_instance_id;
-    const auto& query_options = request.query_options;
 
     _fragment_ctx = std::make_shared<FragmentContext>();
 
     _fragment_ctx->set_query_id(query_id);
     _fragment_ctx->set_fragment_instance_id(fragment_instance_id);
     _fragment_ctx->set_fe_addr(coord);
-
-    if (query_options.__isset.is_report_success && query_options.is_report_success) {
-        _fragment_ctx->set_report_profile();
-    }
-    if (query_options.__isset.pipeline_profile_level) {
-        _fragment_ctx->set_profile_level(query_options.pipeline_profile_level);
-    }
 
     LOG(INFO) << "Prepare(): query_id=" << print_id(query_id)
               << " fragment_instance_id=" << print_id(params.fragment_instance_id)
@@ -123,7 +123,7 @@ Status FragmentExecutor::_prepare_workgroup(const TExecPlanFragmentParams& reque
             wg = WorkGroupManager::instance()->get_default_workgroup();
         }
         DCHECK(wg != nullptr);
-        RETURN_IF_ERROR(_query_ctx->init_query(wg.get()));
+        RETURN_IF_ERROR(_query_ctx->init_query_once(wg.get()));
         _wg = wg;
     }
     DCHECK(!_fragment_ctx->enable_resource_group() || _wg != nullptr);
@@ -143,6 +143,8 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const TExecPl
 
     _fragment_ctx->set_runtime_state(
             std::make_unique<RuntimeState>(query_id, fragment_instance_id, query_options, query_globals, exec_env));
+    auto* runtime_state = _fragment_ctx->runtime_state();
+    runtime_state->set_enable_pipeline_engine(true);
 
     if (wg != nullptr && wg->use_big_query_mem_limit()) {
         _query_ctx->init_mem_tracker(wg->big_query_mem_limit(), wg->mem_tracker());
@@ -158,8 +160,6 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const TExecPl
     auto query_mem_tracker = _query_ctx->mem_tracker();
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(query_mem_tracker.get());
 
-    auto* runtime_state = _fragment_ctx->runtime_state();
-    runtime_state->set_enable_pipeline_engine(true);
     int func_version = request.__isset.func_version ? request.func_version : 2;
     runtime_state->set_func_version(func_version);
     runtime_state->init_mem_trackers(query_mem_tracker);
@@ -256,7 +256,6 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const TExecPlanFr
     std::vector<TScanRangeParams> no_scan_ranges;
     plan->collect_scan_nodes(&scan_nodes);
 
-    int64_t sum_scan_limit = 0;
     MorselQueueMap& morsel_queues = _fragment_ctx->morsel_queues();
     for (auto& i : scan_nodes) {
         ScanNode* scan_node = down_cast<ScanNode*>(i);
@@ -265,19 +264,30 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const TExecPlanFr
         ASSIGN_OR_RETURN(MorselQueuePtr morsel_queue,
                          scan_node->convert_scan_range_to_morsel_queue(scan_ranges, scan_node->id(), request));
         morsel_queues.emplace(scan_node->id(), std::move(morsel_queue));
-        if (scan_node->limit() > 0) {
-            sum_scan_limit += scan_node->limit();
-        }
     }
 
     int dop = exec_env->calc_pipeline_dop(request.pipeline_dop);
+    int64_t logical_scan_limit = 0;
+    int64_t physical_scan_limit = 0;
+    for (auto& i : scan_nodes) {
+        auto* scan_node = down_cast<ScanNode*>(i);
+        if (scan_node->limit() > 0) {
+            // the upper bound of records we actually will scan is `limit * dop * io_parallelism`.
+            // For SQL like: select * from xxx limit 5, the underlying scan_limit should be 5 * parallelism
+            // Otherwise this SQL would exceed the bigquery_rows_limit due to underlying IO parallelization
+            logical_scan_limit += scan_node->limit();
+            physical_scan_limit += scan_node->limit() * dop * ScanOperator::MAX_IO_TASKS_PER_OP;
+        } else {
+            // Not sure how many rows will be scan.
+            logical_scan_limit = -1;
+            break;
+        }
+    }
+
     if (_wg && _wg->big_query_scan_rows_limit() > 0) {
-        // For SQL like: select * from xxx limit 5, the underlying scan_limit should be 5 * parallelism
-        // Otherwise this SQL would exceed the bigquery_rows_limit due to underlying IO parallelization
-        if (sum_scan_limit <= _wg->big_query_scan_rows_limit()) {
-            int parallelism = dop * ScanOperator::MAX_IO_TASKS_PER_OP;
-            int64_t parallel_scan_limit = sum_scan_limit * parallelism;
-            _query_ctx->set_scan_limit(parallel_scan_limit);
+        if (logical_scan_limit >= 0 && logical_scan_limit <= _wg->big_query_scan_rows_limit() &&
+            physical_scan_limit > _wg->big_query_scan_rows_limit()) {
+            _query_ctx->set_scan_limit(physical_scan_limit);
         } else {
             _query_ctx->set_scan_limit(_wg->big_query_scan_rows_limit());
         }
@@ -344,6 +354,7 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const TExec
                                                                     _fragment_ctx.get(), driver_id++);
                 driver->set_morsel_queue(morsel_queue.get());
                 if (auto* scan_operator = driver->source_scan_operator()) {
+                    scan_operator->set_query_ctx(_query_ctx->get_shared_ptr());
                     if (_wg != nullptr) {
                         // Workgroup uses scan_executor instead of pipeline_scan_io_thread_pool.
                         scan_operator->set_workgroup(_wg);
@@ -412,8 +423,8 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     DeferOp defer([this, &request, &prepare_success, &prepare_time]() {
         if (prepare_success) {
             auto fragment_ctx = _query_ctx->fragment_mgr()->get(request.params.fragment_instance_id);
-            auto* prepare_timer = fragment_ctx->runtime_state()->runtime_profile()->add_counter(
-                    "FragmentInstancePrepareTime", TUnit::TIME_NS);
+            auto* prepare_timer =
+                    ADD_TIMER(fragment_ctx->runtime_state()->runtime_profile(), "FragmentInstancePrepareTime");
             COUNTER_SET(prepare_timer, prepare_time);
         } else {
             _fail_cleanup();
@@ -468,11 +479,7 @@ void FragmentExecutor::_fail_cleanup() {
         }
         if (_query_ctx->count_down_fragments()) {
             auto query_id = _query_ctx->query_id();
-            if (ExecEnv::GetInstance()->query_context_mgr()->remove(query_id)) {
-                if (_wg) {
-                    _wg->decr_num_queries();
-                }
-            }
+            ExecEnv::GetInstance()->query_context_mgr()->remove(query_id);
         }
     }
 }

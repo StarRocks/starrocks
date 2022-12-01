@@ -146,7 +146,7 @@ Status TabletScanner::_init_reader_params(const std::vector<OlapScanRange*>* key
     }
 
     ConjunctivePredicatesRewriter not_pushdown_predicate_rewriter(_predicates, *_params.global_dictmaps);
-    not_pushdown_predicate_rewriter.rewrite_predicate(&_parent->_obj_pool);
+    not_pushdown_predicate_rewriter.rewrite_predicate(&_pool);
 
     // Range
     for (auto key_range : *key_ranges) {
@@ -223,7 +223,7 @@ Status TabletScanner::_init_unused_output_columns(const std::vector<std::string>
 // mapping a slot-column-id to schema-columnid
 Status TabletScanner::_init_global_dicts() {
     const auto& global_dict_map = _runtime_state->get_query_global_dict_map();
-    auto global_dict = _parent->_obj_pool.add(new ColumnIdToGlobalDictMap());
+    auto global_dict = _pool.add(new ColumnIdToGlobalDictMap());
     // mapping column id to storage column ids
     for (auto slot : _parent->_tuple_desc->slots()) {
         if (!slot->is_materialized()) {
@@ -314,6 +314,8 @@ void TabletScanner::update_counter() {
     _raw_rows_read += _reader->mutable_stats()->raw_rows_read;
     COUNTER_UPDATE(_parent->_chunk_copy_timer, _reader->stats().vec_cond_chunk_copy_ns);
 
+    COUNTER_UPDATE(_parent->_get_rowsets_timer, _reader->stats().get_rowsets_ns);
+    COUNTER_UPDATE(_parent->_get_delvec_timer, _reader->stats().get_delvec_ns);
     COUNTER_UPDATE(_parent->_seg_init_timer, _reader->stats().segment_init_ns);
 
     int64_t cond_evaluate_ns = 0;

@@ -4,6 +4,7 @@
 
 #include "column/column_helper.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "serde/column_array_serde.h"
 #include "util/coding.h"
@@ -83,7 +84,8 @@ StatusOr<vectorized::Chunk> ProtobufChunkSerde::deserialize(const RowDescriptor&
     }
     int64_t deserialized_size = 0;
     ProtobufChunkDeserializer deserializer(*res);
-    StatusOr<vectorized::Chunk> chunk = deserializer.deserialize(chunk_pb.data(), &deserialized_size);
+    StatusOr<vectorized::Chunk> chunk = Status::OK();
+    TRY_CATCH_BAD_ALLOC(chunk = deserializer.deserialize(chunk_pb.data(), &deserialized_size));
     if (!chunk.ok()) return chunk;
 
     // The logic is a bit confusing here.

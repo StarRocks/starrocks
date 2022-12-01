@@ -30,6 +30,7 @@ import com.google.common.collect.Queues;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.LocalTablet.TabletStatus;
 import com.starrocks.catalog.MaterializedIndex;
@@ -244,7 +245,7 @@ public class ReportHandler extends Daemon {
             if (oldTask == null) {
                 reportQueue.put(reportTask);
             } else {
-                LOG.info("update be {} report task {}", oldTask.beId, oldTask);
+                LOG.info("update be {} report task, type: {}", oldTask.beId, oldTask.type);
             }
             pendingTaskMap.get(reportTask.type).put(reportTask.beId, reportTask);
         }
@@ -552,26 +553,13 @@ public class ReportHandler extends Daemon {
                                     ((metaVersion < backendVersion) ||
                                             (metaVersion == backendVersion && replica.isBad()))) {
 
-                                // This is just a optimization for the old compatibility
-                                // The init version in FE is (1-0), in BE is (2-0)
-                                // If the BE report version is (2-0), we just update the replica's version in
-                                // Master FE,
-                                // and no need to write edit log, to save some time.
-                                // TODO(cmy): This will be removed later.
-                                boolean isInitVersion = metaVersion == 1 && backendVersion == 2;
-
-                                if (backendReportVersion < GlobalStateMgr.getCurrentSystemInfo()
-                                        .getBackendReportVersion(backendId)) {
-                                    continue;
-                                }
-
                                 // happens when
                                 // 1. PUSH finished in BE but failed or not yet report to FE
                                 // 2. repair for VERSION_INCOMPLETE finished in BE, but failed or not yet report
                                 // to FE
                                 replica.updateRowCount(backendVersion, dataSize, rowCount);
 
-                                if (replica.getLastFailedVersion() < 0 && !isInitVersion) {
+                                if (replica.getLastFailedVersion() < 0) {
                                     // last failed version < 0 means this replica becomes health after sync,
                                     // so we write an edit log to sync this operation
                                     replica.setBad(false);
@@ -614,17 +602,34 @@ public class ReportHandler extends Daemon {
         AgentBatchTask createReplicaBatchTask = new AgentBatchTask();
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        final long MAX_DB_WLOCK_HOLDING_TIME_MS = 1000L;
+        DB_TRAVERSE:
         for (Long dbId : tabletDeleteFromMeta.keySet()) {
             Database db = globalStateMgr.getDbIncludeRecycleBin(dbId);
             if (db == null) {
                 continue;
             }
             db.writeLock();
+            long lockStartTime = System.currentTimeMillis();
             try {
                 int deleteCounter = 0;
                 List<Long> tabletIds = tabletDeleteFromMeta.get(dbId);
                 List<TabletMeta> tabletMetaList = invertedIndex.getTabletMetaList(tabletIds);
                 for (int i = 0; i < tabletMetaList.size(); i++) {
+                    // Because we need to write bdb with db write lock hold,
+                    // to avoid block other threads too long, we periodically release and
+                    // acquire the db write lock (every MAX_DB_WLOCK_HOLDING_TIME_MS milliseconds).
+                    long currentTime = System.currentTimeMillis();
+                    if (currentTime - lockStartTime > MAX_DB_WLOCK_HOLDING_TIME_MS) {
+                        db.writeUnlock();
+                        db = globalStateMgr.getDbIncludeRecycleBin(dbId);
+                        if (db == null) {
+                            continue DB_TRAVERSE;
+                        }
+                        db.writeLock();
+                        lockStartTime = currentTime;
+                    }
+
                     TabletMeta tabletMeta = tabletMetaList.get(i);
                     if (tabletMeta == TabletInvertedIndex.NOT_EXIST_TABLET_META) {
                         continue;
@@ -877,6 +882,20 @@ public class ReportHandler extends Daemon {
             for (int i = 0; i < tabletMetaList.size(); i++) {
                 long tabletId = tabletIds.get(i);
                 TabletMeta tabletMeta = tabletMetaList.get(i);
+                Database db = GlobalStateMgr.getCurrentState().getDb(tabletMeta.getDbId());
+                if (db == null) {
+                    continue;
+                }
+                db.readLock();
+                try {
+                    OlapTable table = (OlapTable) db.getTable(tabletMeta.getTableId());
+                    if (table.getKeysType() == KeysType.PRIMARY_KEYS) {
+                        // Currently, primary key table doesn't support tablet migration between local disks.
+                        continue;
+                    }
+                } finally {
+                    db.readUnlock();
+                }
                 // always get old schema hash(as effective one)
                 int effectiveSchemaHash = tabletMeta.getOldSchemaHash();
                 StorageMediaMigrationTask task = new StorageMediaMigrationTask(backendId, tabletId,
@@ -1204,7 +1223,7 @@ public class ReportHandler extends Daemon {
                         + olapTable.getSchemaHashByIndexId(indexId) + "]");
             }
 
-            // colocate table will delete Replica in meta when balance
+            // colocate table will delete Replica in meta when balancing,
             // but we need to rely on MetaNotFoundException to decide whether delete the tablet in backend.
             // delete tablet from backend if colocate tablet is healthy.
             ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentColocateIndex();
@@ -1288,7 +1307,7 @@ public class ReportHandler extends Daemon {
             try {
                 task = reportQueue.take();
                 synchronized (pendingTaskMap) {
-                    // using lastest task
+                    // using the lastest task
                     task = pendingTaskMap.get(task.type).get(task.beId);
                     if (task == null) {
                         throw new Exception("pendingTaskMap not exists " + task.beId);

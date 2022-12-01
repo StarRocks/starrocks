@@ -51,7 +51,7 @@ Status TableFunctionOperator::prepare(RuntimeState* state) {
         return Status::InternalError("fn result slots not set in table function node");
     }
 
-    //Get table function from TableFunctionResolver
+    // Get table function from TableFunctionResolver
     TFunction table_fn = _tnode.table_function_node.table_function.nodes[0].fn;
     std::string table_function_name = table_fn.name.function_name;
     std::vector<PrimitiveType> arg_types;
@@ -77,7 +77,8 @@ Status TableFunctionOperator::prepare(RuntimeState* state) {
     _table_function_result_eos = false;
     _remain_repeat_times = 0;
 
-    _table_function_exec_timer = ADD_TIMER(_unique_metrics, "TableFunctionTime");
+    _table_function_exec_timer = ADD_TIMER(_unique_metrics, "TableFunctionExecTime");
+    _table_function_exec_counter = ADD_COUNTER(_unique_metrics, "TableFunctionExecCount", TUnit::UNIT);
     RETURN_IF_ERROR(_table_function->prepare(_table_function_state));
     return _table_function->open(state, _table_function_state);
 }
@@ -98,7 +99,7 @@ StatusOr<vectorized::ChunkPtr> TableFunctionOperator::pull_chunk(RuntimeState* s
         output_columns.emplace_back(_table_function_result.first[i]->clone_empty());
     }
 
-    //If _remain_repeat_times > 0, first use the remaining data of the previous chunk to construct this data
+    // If _remain_repeat_times > 0, first use the remaining data of the previous chunk to construct this data
     while (_remain_repeat_times > 0 || _input_chunk_index < _input_chunk->num_rows()) {
         bool has_remain_repeat_times = _remain_repeat_times > 0;
 
@@ -113,7 +114,7 @@ StatusOr<vectorized::ChunkPtr> TableFunctionOperator::pull_chunk(RuntimeState* s
             continue;
         }
 
-        //Build outer data, repeat multiple times
+        // Build outer data, repeat multiple times
         for (size_t i = 0; i < _outer_slots.size(); ++i) {
             vectorized::ColumnPtr& input_column_ptr = _input_chunk->get_column_by_slot_id(_outer_slots[i]);
             vectorized::Datum value = input_column_ptr->get(_input_chunk_index);
@@ -124,7 +125,7 @@ StatusOr<vectorized::ChunkPtr> TableFunctionOperator::pull_chunk(RuntimeState* s
                 output_columns[i]->append_value_multiple_times(&value, repeat_times);
             }
         }
-        //Build table function result
+        // Build table function result
         for (size_t i = 0; i < _fn_result_slots.size(); ++i) {
             uint32_t start_offset;
             if (has_remain_repeat_times) {
@@ -182,15 +183,13 @@ vectorized::ChunkPtr TableFunctionOperator::_build_chunk(const std::vector<vecto
         chunk->append_column(columns[_outer_slots.size() + i], _fn_result_slots[i]);
     }
 
-    // TODO(hcf) force annotation
-    // _num_rows_returned += (*chunk)->num_rows();
-    // COUNTER_SET(_rows_returned_counter, _num_rows_returned);
     return chunk;
 }
 
 void TableFunctionOperator::_process_table_function() {
     if (!_table_function_result_eos) {
         SCOPED_TIMER(_table_function_exec_timer);
+        COUNTER_UPDATE(_table_function_exec_counter, 1);
         _table_function_result = _table_function->process(_table_function_state, &_table_function_result_eos);
         DCHECK_EQ(_input_chunk->num_rows() + 1, _table_function_result.second->size());
     }

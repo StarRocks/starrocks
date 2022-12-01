@@ -1,14 +1,16 @@
 # bitmap_has_any
 
-## description
+## Description
 
-### Syntax
+Calculates whether there are intersecting elements between two Bitmap columns, and the return value is Boolean value.
 
-`B00LEAN BITMAP_HAS_ANY(BITMAP lhs, BITMAP rhs)`
+## Syntax
 
-Calculate whether there are intersecting elements between two Bitmap columns, and the return value is Boolean value.
+```Haskell
+B00LEAN BITMAP_HAS_ANY(BITMAP lhs, BITMAP rhs)
+```
 
-## example
+## Examples
 
 ```Plain Text
 MySQL > select bitmap_has_any(to_bitmap(1),to_bitmap(2)) cnt;
