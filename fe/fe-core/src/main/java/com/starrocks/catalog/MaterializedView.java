@@ -94,6 +94,10 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             active = false;
             return;
         }
+        if (baseTableIds == null) {
+            active = false;
+            return;
+        }
         // register materialized view to base tables
         for (long tableId : baseTableIds) {
             Table table = db.getTable(tableId);

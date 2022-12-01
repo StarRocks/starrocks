@@ -89,6 +89,7 @@
       + [REVOKE](./sql-reference/sql-statements/account-management/REVOKE.md)
       + [SET PASSWORD](./sql-reference/sql-statements/account-management/SET%20PASSWORD.md)
       + [SET PROPERTY](./sql-reference/sql-statements/account-management/SET%20PROPERTY.md)
+      + [SHOW AUTHENTICATION](./sql-reference/sql-statements/data-definition/SHOW%20AUTHENTICATION.md)
       + [SHOW GRANTS](./sql-reference/sql-statements/account-management/SHOW%20GRANTS.md)
       + [SHOW ROLES](./sql-reference/sql-statements/account-management/SHOW%20ROLES.md)
     + Cluster Management
@@ -149,7 +150,13 @@
       + [HLL](./sql-reference/sql-statements/data-definition/HLL.md)
       + [RECOVER](./sql-reference/sql-statements/data-definition/RECOVER.md)
       + [RESTORE](./sql-reference/sql-statements/data-definition/RESTORE.md)
+<<<<<<< HEAD
       + [SHOW AUTHENTICATION](./sql-reference/sql-statements/data-definition/SHOW%20AUTHENTICATION.md)
+=======
+      + [SHOW ANALYZE JOB](./sql-reference/sql-statements/data-definition/SHOW%20ANALYZE%20JOB.md)
+      + [SHOW ANALYZE STATUS](./sql-reference/sql-statements/data-definition/SHOW%20ANALYZE%20STATUS.md)
+      + [SHOW META](./sql-reference/sql-statements/data-definition/SHOW%20META.md)
+>>>>>>> ba77096cc (delete partitions settings in sample es external table (#14434))
       + [SHOW RESOURCES](./sql-reference/sql-statements/data-definition/SHOW%20RESOURCES.md)
       + [SHOW FUNCTION](./sql-reference/sql-statements/data-definition/show-functions.md)
       + [TRUNCATE TABLE](./sql-reference/sql-statements/data-definition/TRUNCATE%20TABLE.md)
@@ -339,17 +346,9 @@
         + [get_json_double](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/get_json_double.md)
         + [get_json_int](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/get_json_int.md)
         + [get_json_string](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/get_json_string.md)
-<<<<<<< HEAD
         + [JSON_EACH](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_each.md)
         + [JSON_QUERY](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_query.md)
         + [JSON_EXISTS](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_exists.md)
-=======
-        + [json_each](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_each.md)
-        + [json_exists](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_exists.md)
-        + [json_length](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_length.md)
-        + [json_keys](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_keys.md)
-        + [json_query](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_query.md)
->>>>>>> 8926c9219 ([Doc] reorder functions and fix bugs (#14305))
     + Bitmap Functions
       + [bitmap_and](./sql-reference/sql-functions/bitmap-functions/bitmap_and.md)
       + [bitmap_or](./sql-reference/sql-functions/bitmap-functions/bitmap_or.md)
