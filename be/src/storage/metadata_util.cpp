@@ -127,7 +127,7 @@ static LogicalType t_primitive_type_to_field_type(TPrimitiveType::type primitive
     case TPrimitiveType::JSON:
         return TYPE_JSON;
     case TPrimitiveType::VARBINARY:
-        return TYPE_VARCHAR;
+        return TYPE_VARBINARY;
     case TPrimitiveType::FUNCTION:
         return TYPE_UNKNOWN;
     }
