@@ -345,4 +345,171 @@ public class OrderByTest extends PlanTestBase {
                 "  |  <slot 3> : 3: v3\n" +
                 "  |  <slot 4> : 2: v2 + 1");
     }
+
+    @Test
+    public void testOrderByWithWindow() throws Exception {
+        String sql = "select sum(v1) over(partition by v1 + 1) from t0 order by v1";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "order by: <slot 4> 4: v1 ASC");
+
+        sql = "select sum(v1) over(partition by v1 + 1) from t0 order by v2";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "order by: <slot 5> 5: v2 ASC");
+
+        sql = "select v1, v2, sum(v1) over(partition by v1 + 1) as v from t0 order by v2";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "order by: <slot 5> 5: v2 ASC");
+
+        sql = "select v1, v2, sum(v1) over(partition by v1 + 1) as v from t0 order by v";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "6:SORT\n" +
+                "  |  order by: <slot 8> 8: sum(4: v1) ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  \n" +
+                "  5:Project\n" +
+                "  |  <slot 4> : 4: v1\n" +
+                "  |  <slot 5> : 5: v2\n" +
+                "  |  <slot 8> : 8: sum(4: v1)\n" +
+                "  |  \n" +
+                "  4:ANALYTIC\n" +
+                "  |  functions: [, sum(4: v1), ]\n" +
+                "  |  partition by: 7: expr");
+
+        sql = "select v1, v2, sum(v1) over(partition by v1 + 1) as v from t0 order by avg(v1) over(partition by v1 + 1)";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "6:SORT\n" +
+                "  |  order by: <slot 9> 9: avg(4: v1) ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  \n" +
+                "  5:Project\n" +
+                "  |  <slot 4> : 4: v1\n" +
+                "  |  <slot 5> : 5: v2\n" +
+                "  |  <slot 8> : 8: sum(4: v1)\n" +
+                "  |  <slot 9> : 9: avg(4: v1)\n" +
+                "  |  \n" +
+                "  4:ANALYTIC\n" +
+                "  |  functions: [, sum(4: v1), ], [, avg(4: v1), ]");
+
+        sql = "select v1, v2, sum(v1) over(partition by v1 + 1) as v from t0 order by 2";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "order by: <slot 5> 5: v2 ASC");
+
+        sql = "select v1, v2, sum(v1) over(partition by v1 + 1) as v from t0 order by 3";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "6:SORT\n" +
+                "  |  order by: <slot 8> 8: sum(4: v1) ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  \n" +
+                "  5:Project\n" +
+                "  |  <slot 4> : 4: v1\n" +
+                "  |  <slot 5> : 5: v2\n" +
+                "  |  <slot 8> : 8: sum(4: v1)\n" +
+                "  |  \n" +
+                "  4:ANALYTIC\n" +
+                "  |  functions: [, sum(4: v1), ]\n" +
+                "  |  partition by: 7: expr");
+
+        sql = "select avg(v1) over(partition by sum(v2) + 1) as v from t0 group by v1 order by v";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, " 7:SORT\n" +
+                "  |  order by: <slot 9> 9: avg(1: v1) ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  \n" +
+                "  6:Project\n" +
+                "  |  <slot 9> : 9: avg(1: v1)\n" +
+                "  |  \n" +
+                "  5:ANALYTIC\n" +
+                "  |  functions: [, avg(1: v1), ]\n" +
+                "  |  partition by: 8: expr\n" +
+                "  |  \n" +
+                "  4:SORT\n" +
+                "  |  order by: <slot 8> 8: expr ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  \n" +
+                "  3:EXCHANGE\n" +
+                "\n" +
+                "PLAN FRAGMENT 2\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 03\n" +
+                "    HASH_PARTITIONED: 8: expr\n" +
+                "\n" +
+                "  2:Project\n" +
+                "  |  <slot 1> : 1: v1\n" +
+                "  |  <slot 8> : 4: sum + 1\n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(2: v2)\n" +
+                "  |  group by: 1: v1");
+
+        sql = "select v1, avg(v1) over(partition by sum(v2) + 1) as v from t0 group by v1 order by 2,1";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "7:SORT\n" +
+                "  |  order by: <slot 9> 9: avg(1: v1) ASC, <slot 1> 1: v1 ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  \n" +
+                "  6:Project\n" +
+                "  |  <slot 1> : 1: v1\n" +
+                "  |  <slot 9> : 9: avg(1: v1)\n" +
+                "  |  \n" +
+                "  5:ANALYTIC\n" +
+                "  |  functions: [, avg(1: v1), ]\n" +
+                "  |  partition by: 8: expr\n" +
+                "  |  \n" +
+                "  4:SORT\n" +
+                "  |  order by: <slot 8> 8: expr ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  \n" +
+                "  3:EXCHANGE\n" +
+                "\n" +
+                "PLAN FRAGMENT 2\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 03\n" +
+                "    HASH_PARTITIONED: 8: expr\n" +
+                "\n" +
+                "  2:Project\n" +
+                "  |  <slot 1> : 1: v1\n" +
+                "  |  <slot 8> : 4: sum + 1");
+
+        sql = "select avg(v1) over(partition by sum(v2) + 1) as v from t0 group by v1 order by v1";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, " 7:SORT\n" +
+                "  |  order by: <slot 1> 1: v1 ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  \n" +
+                "  6:Project\n" +
+                "  |  <slot 1> : 1: v1\n" +
+                "  |  <slot 9> : 9: avg(1: v1)\n" +
+                "  |  \n" +
+                "  5:ANALYTIC\n" +
+                "  |  functions: [, avg(1: v1), ]\n" +
+                "  |  partition by: 8: expr\n" +
+                "  |  \n" +
+                "  4:SORT\n" +
+                "  |  order by: <slot 8> 8: expr ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  \n" +
+                "  3:EXCHANGE\n" +
+                "\n" +
+                "PLAN FRAGMENT 2\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 03\n" +
+                "    HASH_PARTITIONED: 8: expr\n" +
+                "\n" +
+                "  2:Project\n" +
+                "  |  <slot 1> : 1: v1\n" +
+                "  |  <slot 8> : 4: sum + 1\n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(2: v2)\n" +
+                "  |  group by: 1: v1");
+    }
 }
