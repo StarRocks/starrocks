@@ -930,7 +930,7 @@ public class CoordinatorPrepare {
                         isBucketShuffleJoin(scanNode.getFragmentId().asInt(), scanNode.getFragment().getPlanRoot());
                 boolean hasReplicated = isReplicatedFragment(scanNode.getFragment().getPlanRoot());
                 if (assignment.size() > 0 && hasReplicated && scanNode.canDoReplicatedJoin()) {
-                    BackendSelector selector = new RelicatedBackendSelector(scanNode, locations, assignment);
+                    BackendSelector selector = new ReplicatedBackendSelector(scanNode, locations, assignment);
                     selector.computeScanRangeAssignment();
                     replicateScanIds.add(scanNode.getId().asInt());
                 } else if (hasColocate || hasBucket) {
@@ -1722,8 +1722,10 @@ public class CoordinatorPrepare {
                         minLocation = location;
                     }
                 }
-                assignedBytesPerHost.put(minLocation.server,
-                        assignedBytesPerHost.get(minLocation.server) + 1);
+                if (minLocation == null) {
+                    throw new UserException("Scan range not found" + backendInfosString(false));
+                }
+                assignedBytesPerHost.put(minLocation.server, assignedBytesPerHost.get(minLocation.server) + 1);
 
                 Reference<Long> backendIdRef = new Reference<Long>();
                 TNetworkAddress execHostPort = SimpleScheduler.getHost(minLocation.backend_id,
@@ -1747,13 +1749,13 @@ public class CoordinatorPrepare {
         }
     }
 
-    private class RelicatedBackendSelector implements BackendSelector {
+    private class ReplicatedBackendSelector implements BackendSelector {
         private final ScanNode scanNode;
         private final List<TScanRangeLocations> locations;
         private final FragmentScanRangeAssignment assignment;
 
-        public RelicatedBackendSelector(ScanNode scanNode, List<TScanRangeLocations> locations,
-                                        FragmentScanRangeAssignment assignment) {
+        public ReplicatedBackendSelector(ScanNode scanNode, List<TScanRangeLocations> locations,
+                                         FragmentScanRangeAssignment assignment) {
             this.scanNode = scanNode;
             this.locations = locations;
             this.assignment = assignment;
