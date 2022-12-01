@@ -14,6 +14,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.common.UnsupportedException;
+import com.starrocks.thrift.TMVMaintenanceTasks;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -166,6 +167,10 @@ public class MVManager {
     public void onTxnPublish(MaterializedView view) {
         MVMaintenanceJob job = Preconditions.checkNotNull(getJob(view.getMvId()));
         job.onTransactionPublish();
+    }
+
+    public void onReportEpoch(TMVMaintenanceTasks request) {
+        throw UnsupportedException.unsupportedException("TODO: implement reportEpoch");
     }
 
     /**
