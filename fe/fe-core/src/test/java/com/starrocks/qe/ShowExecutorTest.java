@@ -862,4 +862,61 @@ public class ShowExecutorTest {
         // AnalysisException("There is no job named...") is expected.
         Assert.assertThrows(AnalysisException.class, () -> executor.execute());
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testShowCreateExternalCatalogTable() throws DdlException, AnalysisException {
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Database getDb(String catalogName, String dbName) {
+                return new Database();
+            }
+            @Mock
+            public Table getTable(String catalogName, String dbName, String tblName) {
+                List<Column> fullSchema = new ArrayList<>();
+                Column columnId = new Column("id", Type.INT);
+                Column columnName = new Column("name", Type.VARCHAR);
+                Column columnYear = new Column("year", Type.INT);
+                Column columnDt = new Column("dt", Type.INT);
+                fullSchema.add(columnId);
+                fullSchema.add(columnName);
+                fullSchema.add(columnYear);
+                fullSchema.add(columnDt);
+                List<String> partitions = Lists.newArrayList();
+                partitions.add("year");
+                partitions.add("dt");
+                HiveTable.Builder tableBuilder = HiveTable.builder()
+                        .setId(1)
+                        .setTableName("test_table")
+                        .setCatalogName("hive_catalog")
+                        .setResourceName(toResourceName("hive_catalog", "hive"))
+                        .setHiveDbName("hive_db")
+                        .setHiveTableName("test_table")
+                        .setPartitionColumnNames(partitions)
+                        .setFullSchema(fullSchema)
+                        .setTableLocation("hdfs://hadoop/hive/warehouse/test.db/test")
+                        .setCreateTime(10000);
+                return tableBuilder.build();
+            }
+        };
+
+
+        ShowCreateTableStmt stmt = new ShowCreateTableStmt(new TableName("hive_catalog", "hive_db", "test_table"),
+                ShowCreateTableStmt.CreateTableType.TABLE);
+        ShowExecutor executor = new ShowExecutor(ctx, stmt);
+        ShowResultSet resultSet = executor.execute();
+        Assert.assertEquals("test_table", resultSet.getResultRows().get(0).get(0));
+        Assert.assertEquals("CREATE TABLE hive_catalog.hive_db.test_table (\n" +
+                "`id` INT,\n" +
+                "`name` VARCHAR,\n" +
+                "`year` INT,\n" +
+                "`dt` INT\n" +
+                ")\n" +
+                "WITH (\n" +
+                " partitioned_by = ARRAY [ year, dt ]\n" +
+                ")\n" +
+                "LOCATION 'hdfs://hadoop/hive/warehouse/test.db/test'", resultSet.getResultRows().get(0).get(1));
+    }
+>>>>>>> eb0641886 ([Enhancement] Add location message for “show create external table” (#14343))
 }

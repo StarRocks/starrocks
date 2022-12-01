@@ -216,6 +216,10 @@ public class Table extends MetaObject implements Writable {
         return type == TableType.ICEBERG;
     }
 
+    public boolean isDeltalakeTable() {
+        return type == TableType.DELTALAKE;
+    }
+
     // for create table
     public boolean isOlapOrLakeTable() {
         return isOlapTable() || isLakeTable();

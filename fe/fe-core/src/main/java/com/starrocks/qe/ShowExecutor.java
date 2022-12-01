@@ -36,8 +36,11 @@ import com.starrocks.backup.Repository;
 import com.starrocks.backup.RestoreJob;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.DynamicPartitionProperty;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.HiveMetaStoreTable;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
@@ -671,6 +674,80 @@ public class ShowExecutor {
     // Show create table
     private void handleShowCreateTable() throws AnalysisException {
         ShowCreateTableStmt showStmt = (ShowCreateTableStmt) stmt;
+<<<<<<< HEAD
+=======
+        TableName tbl = showStmt.getTbl();
+        String catalogName = tbl.getCatalog();
+        if (catalogName == null) {
+            catalogName = ctx.getCurrentCatalog();
+        }
+        if (CatalogMgr.isInternalCatalog(catalogName)) {
+            showCreateInternalCatalogTable(showStmt);
+        } else {
+            showCreateExternalCatalogTable(tbl, catalogName);
+        }
+    }
+
+    private void showCreateExternalCatalogTable(TableName tbl, String catalogName) {
+        String dbName = tbl.getDb();
+        String tableName = tbl.getTbl();
+        MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
+        Database db = metadataMgr.getDb(catalogName, dbName);
+        if (db == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+        }
+        Table table = metadataMgr.getTable(catalogName, dbName, tableName);
+        if (table == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
+        }
+
+        // create table catalogName.dbName.tableName (
+        StringBuilder createTableSql = new StringBuilder();
+        createTableSql.append("CREATE TABLE ")
+                .append(catalogName)
+                .append(".")
+                .append(dbName)
+                .append(".")
+                .append(tableName)
+                .append(" (\n");
+
+        // Columns
+        List<String> columns = table.getFullSchema().stream().map(
+                column -> toDDL(column)).collect(Collectors.toList());
+        createTableSql.append(String.join(",\n", columns))
+                .append("\n)");
+
+        // Partition column names
+        if (table.getType() != JDBC && !table.isUnPartitioned()) {
+            createTableSql.append("\nWITH (\n partitioned_by = ARRAY [ ");
+            createTableSql.append(String.join(", ", table.getPartitionColumnNames())).append(" ]\n)");
+        }
+
+        // Location
+        String location = null;
+        if (table.isHiveTable() || table.isHudiTable()) {
+            location = ((HiveMetaStoreTable) table).getTableLocation();
+        } else if (table.isIcebergTable()) {
+            location = ((IcebergTable) table).getTableLocation();
+        } else if (table.isDeltalakeTable()) {
+            location = ((DeltaLakeTable) table).getTableLocation();
+        }
+
+        if (!Strings.isNullOrEmpty(location)) {
+            createTableSql.append("\nLOCATION ").append("'").append(location).append("'");
+        }
+
+        List<List<String>> rows = Lists.newArrayList();
+        rows.add(Lists.newArrayList(tableName, createTableSql.toString()));
+        resultSet = new ShowResultSet(stmt.getMetaData(), rows);
+    }
+
+    private String toDDL(Column column) {
+        return "`" + column.getName() + "` " + column.getType();
+    }
+
+    private void showCreateInternalCatalogTable(ShowCreateTableStmt showStmt) throws AnalysisException {
+>>>>>>> eb0641886 ([Enhancement] Add location message for “show create external table” (#14343))
         Database db = ctx.getGlobalStateMgr().getDb(showStmt.getDb());
         MetaUtils.checkDbNullAndReport(db, showStmt.getDb());
         List<List<String>> rows = Lists.newArrayList();
