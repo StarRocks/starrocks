@@ -684,13 +684,13 @@ public class ShowExecutor {
             catalogName = ctx.getCurrentCatalog();
         }
         if (CatalogMgr.isInternalCatalog(catalogName)) {
-            showCreateInternalTbl(showStmt);
+            showCreateInternalCatalogTable(showStmt);
         } else {
-            showCreateExternalTbl(tbl, catalogName);
+            showCreateExternalCatalogTable(tbl, catalogName);
         }
     }
 
-    private void showCreateExternalTbl(TableName tbl, String catalogName) {
+    private void showCreateExternalCatalogTable(TableName tbl, String catalogName) {
         String dbName = tbl.getDb();
         String tableName = tbl.getTbl();
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
@@ -748,7 +748,7 @@ public class ShowExecutor {
         return "`" + column.getName() + "` " + column.getType();
     }
 
-    private void showCreateInternalTbl(ShowCreateTableStmt showStmt) throws AnalysisException {
+    private void showCreateInternalCatalogTable(ShowCreateTableStmt showStmt) throws AnalysisException {
         Database db = ctx.getGlobalStateMgr().getDb(showStmt.getDb());
         MetaUtils.checkDbNullAndReport(db, showStmt.getDb());
         List<List<String>> rows = Lists.newArrayList();
