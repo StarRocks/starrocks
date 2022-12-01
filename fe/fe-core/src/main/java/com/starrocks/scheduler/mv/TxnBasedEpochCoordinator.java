@@ -41,7 +41,6 @@ class TxnBasedEpochCoordinator implements EpochCoordinator {
     private static final long TXN_VISIBLE_TIMEOUT_MILLIS = 100_1000;
 
     private final MVMaintenanceJob mvMaintenanceJob;
-    private Future<PMVMaintenanceTaskResult> resFuture;
 
     public TxnBasedEpochCoordinator(MVMaintenanceJob mvMaintenanceJob) {
         this.mvMaintenanceJob = mvMaintenanceJob;
@@ -56,6 +55,7 @@ class TxnBasedEpochCoordinator implements EpochCoordinator {
         if (success) {
             commitEpoch(epoch);
         } else {
+            epoch.onFailed();
             abortEpoch(epoch);
         }
     }
@@ -75,8 +75,6 @@ class TxnBasedEpochCoordinator implements EpochCoordinator {
                     .beginTransaction(dbId, tableIdList, label, txnCoordinator, loadSource, JOB_TIMEOUT);
             epoch.setTxnId(txnId);
             execute(epoch);
-            // TODO(murphy) make it async
-            resFuture.wait(JOB_TIMEOUT);
         } catch (Exception e) {
             epoch.onFailed();
             LOG.warn("Failed to begin transaction for epoch {}", epoch);
@@ -150,7 +148,7 @@ class TxnBasedEpochCoordinator implements EpochCoordinator {
             request.start_epoch = taskMsg;
             taskMsg.setEpoch(epoch.toThrift());
             try {
-                resFuture = BackendServiceClient.getInstance().submitMVMaintenanceTaskAsync(address, request);
+                results.add(BackendServiceClient.getInstance().submitMVMaintenanceTaskAsync(address, request));
             } catch (Exception e) {
                 epoch.onFailed();
                 LOG.warn("deploy job of MV {} failed: ", view.getName());
