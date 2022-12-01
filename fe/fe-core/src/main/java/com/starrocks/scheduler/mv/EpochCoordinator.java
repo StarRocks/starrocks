@@ -7,9 +7,6 @@ package com.starrocks.scheduler.mv;
  */
 public interface EpochCoordinator {
 
-    void beginEpoch(MVEpoch epoch);
+    void runEpoch(MVEpoch epoch);
 
-    void commitEpoch(MVEpoch epoch);
-
-    void abortEpoch(MVEpoch epoch);
 }

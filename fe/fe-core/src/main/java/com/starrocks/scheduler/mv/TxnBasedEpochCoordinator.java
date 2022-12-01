@@ -47,8 +47,20 @@ class TxnBasedEpochCoordinator implements EpochCoordinator {
         this.mvMaintenanceJob = mvMaintenanceJob;
     }
 
-    @Override
-    public void beginEpoch(MVEpoch epoch) {
+    /**
+     * TODO(murphy) make it event-driven instead of blocking here
+     */
+    public void runEpoch(MVEpoch epoch) {
+        beginEpoch(epoch);
+        boolean success = waitEpochFinish(epoch);
+        if (success) {
+            commitEpoch(epoch);
+        } else {
+            abortEpoch(epoch);
+        }
+    }
+
+    private void beginEpoch(MVEpoch epoch) {
         MaterializedView view = mvMaintenanceJob.getView();
         MvId mvId = view.getMvId();
         long dbId = view.getDbId();
@@ -72,8 +84,12 @@ class TxnBasedEpochCoordinator implements EpochCoordinator {
         }
     }
 
-    @Override
-    public void commitEpoch(MVEpoch epoch) {
+    private boolean waitEpochFinish(MVEpoch epoch) {
+        // TODO(murphy) wait all task finish
+        return true;
+    }
+
+    private void commitEpoch(MVEpoch epoch) {
         long dbId = mvMaintenanceJob.getView().getDbId();
         Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
         Coordinator queryCoordinator = mvMaintenanceJob.getQueryCoordinator();
@@ -100,8 +116,7 @@ class TxnBasedEpochCoordinator implements EpochCoordinator {
         }
     }
 
-    @Override
-    public void abortEpoch(MVEpoch epoch) {
+    private void abortEpoch(MVEpoch epoch) {
         long dbId = mvMaintenanceJob.getView().getDbId();
         long txnId = epoch.getTxnId();
         String failReason = "";

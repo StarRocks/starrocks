@@ -52,8 +52,6 @@ class IMTCreator {
      * 1. Columns
      * 2. Distribute by key buckets
      * 3. Duplicate Key/Primary Key
-     *
-     * Prefer user specified key, otherwise inferred key from plan
      */
     public static MaterializedView createSinkTable(CreateMaterializedViewStatement stmt, PartitionInfo partitionInfo,
                                                    long mvId, long dbId)
@@ -112,7 +110,7 @@ class IMTCreator {
                 GlobalStateMgr.getCurrentState().createTable(create);
             } catch (DdlException e) {
                 // TODO(murphy) cleanup created IMT, or make it atomic
-                LOG.info("create IMT {} failed due to ", create.getTableName(), e);
+                LOG.warn("create IMT {} failed due to ", create.getTableName(), e);
                 throw e;
             }
         }
@@ -182,7 +180,7 @@ class IMTCreator {
                 Column newColumn = new Column(refOp.getName(), refOp.getType());
                 boolean isKey = bestKey.columns.contains(refOp);
                 newColumn.setIsKey(isKey);
-                newColumn.setIsAllowNull(false);
+                newColumn.setIsAllowNull(!isKey);
                 if (isKey) {
                     keyColumns.add(newColumn);
                 }
@@ -195,7 +193,7 @@ class IMTCreator {
             }
 
             // Key type
-            KeysType keyType = property.getModify().isInsertOnly() ? KeysType.DUP_KEYS : KeysType.PRIMARY_KEYS;
+            KeysType keyType = KeysType.PRIMARY_KEYS;
             KeysDesc keyDesc =
                     new KeysDesc(keyType, keyColumns.stream().map(Column::getName).collect(Collectors.toList()));
 
@@ -218,7 +216,7 @@ class IMTCreator {
 
             // Properties
             Map<String, String> extProperties = Maps.newTreeMap();
-            String comment = "IMT for MV";
+            String comment = "IMT for MV StreamAggOperator";
 
             result.add(new CreateTableStmt(false, false, canonicalName, columnDefs,
                     CreateTableAnalyzer.EngineType.OLAP.name(), keyDesc, partitionDesc, distributionDesc, properties,
