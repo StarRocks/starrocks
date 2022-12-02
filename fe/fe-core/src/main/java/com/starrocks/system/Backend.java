@@ -484,6 +484,12 @@ public class Backend implements Writable {
         }
     }
 
+    public void setStorageMediumForAllDisks(TStorageMedium m) {
+        for (DiskInfo diskInfo : disksRef.values()) {
+            diskInfo.setStorageMedium(m);
+        }
+    }
+
     public static Backend read(DataInput in) throws IOException {
         Backend backend = new Backend();
         backend.readFields(in);
