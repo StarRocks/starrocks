@@ -332,6 +332,6 @@ public class CTEPlanTest extends PlanTestBase {
                 "FROM cte_1 a, cte_1 b";
 
         String plan = getThriftPlan(sql);
-        Assert.assertTrue(plan.contains("NULL_TYPE"));
+        Assert.assertFalse(plan.contains("NULL_TYPE"));
     }
 }
