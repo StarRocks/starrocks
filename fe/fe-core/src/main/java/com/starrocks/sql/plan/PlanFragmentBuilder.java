@@ -2067,7 +2067,7 @@ public class PlanFragmentBuilder {
             context.getFragments().add(stayFragment);
 
             stayFragment.setPlanRoot(hashJoinNode);
-            stayFragment.addChild(removeFragment.getChild(0));
+            stayFragment.addChildren(removeFragment.getChildren());
             stayFragment.mergeQueryGlobalDicts(removeFragment.getQueryGlobalDicts());
             return stayFragment;
         }
@@ -2089,7 +2089,7 @@ public class PlanFragmentBuilder {
             context.getFragments().add(stayFragment);
 
             stayFragment.setPlanRoot(hashJoinNode);
-            stayFragment.addChild(removeFragment.getChild(0));
+            stayFragment.addChildren(removeFragment.getChildren());
             stayFragment.mergeQueryGlobalDicts(removeFragment.getQueryGlobalDicts());
             return stayFragment;
         }
@@ -2625,7 +2625,7 @@ public class PlanFragmentBuilder {
                 context.getFragments().remove(leftFragment);
                 context.getFragments().add(leftFragment);
                 leftFragment.setPlanRoot(joinNode);
-                leftFragment.addChild(rightFragment.getChild(0));
+                leftFragment.addChildren(rightFragment.getChildren());
                 leftFragment.mergeQueryGlobalDicts(rightFragment.getQueryGlobalDicts());
                 return leftFragment;
             } else if (distributionMode.equals(JoinNode.DistributionMode.PARTITIONED)) {
@@ -2644,8 +2644,8 @@ public class PlanFragmentBuilder {
 
                 PlanFragment joinFragment = new PlanFragment(context.getNextFragmentId(),
                         joinNode, lhsJoinPartition);
-                joinFragment.addChild(leftFragment.getChild(0));
-                joinFragment.addChild(rightFragment.getChild(0));
+                joinFragment.addChildren(leftFragment.getChildren());
+                joinFragment.addChildren(rightFragment.getChildren());
 
                 joinFragment.mergeQueryGlobalDicts(leftFragment.getQueryGlobalDicts());
                 joinFragment.mergeQueryGlobalDicts(rightFragment.getQueryGlobalDicts());
