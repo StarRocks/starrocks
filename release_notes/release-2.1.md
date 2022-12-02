@@ -176,7 +176,7 @@
 - 修复对单 tablet 的表在做聚合操作时因无法得到合理的执行计划而导致查询失败的问题。[#3854](https://github.com/StarRocks/starrocks/issues/3854)
 - 修复 FE 在低基数全局字典优化中收集信息时可能导致死锁的问题。[#3839](https://github.com/StarRocks/starrocks/issues/3839)
 - 修复因死锁导致 BE 节点假死且查询失败的问题。
-- 修复因 `SHOW VARIABLES` 命令出错而导致 BI 工具无法连接的问题。[#3708](https://github.com/StarRocks/starrocks/issues/3708)
+- 修复因 SHOW VARIABLES 命令出错而导致 BI 工具无法连接的问题。[#3708](https://github.com/StarRocks/starrocks/issues/3708)
 
 ## 2.1.0
 
