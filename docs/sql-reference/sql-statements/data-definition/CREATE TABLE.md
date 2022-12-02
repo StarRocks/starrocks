@@ -423,7 +423,7 @@ dynamic_partition.buckets: It is used to specify the number of buckets automatic
 
 - Set write quorum for data loading
 
-If your StarRocks cluster has multiple data replicas, you can set different write quorum for tables, that is, how many replicas are required to return loading success before StarRocks can determine the loading task success. You can specify write quorum by adding the property `write_quorum` when you create a table.
+If your StarRocks cluster has multiple data replicas, you can set different write quorum for tables, that is, how many replicas are required to return loading success before StarRocks can determine the loading task is successful. You can specify write quorum by adding the property `write_quorum` when you create a table.
 
 The valid values of `write_quorum` are:
 
