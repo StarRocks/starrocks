@@ -10,9 +10,9 @@
 #include <ctime>
 #include <memory>
 
-#include "column/schema.h"
 #include "fs/fs_util.h"
 #include "runtime/exec_env.h"
+#include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
 #include "storage/compaction.h"
