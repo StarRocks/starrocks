@@ -103,7 +103,7 @@ struct AggHashMapWithKey {
     void build_hash_map(size_t chunk_size, const Columns& key_columns, MemPool* pool, Func&& allocate_func,
                         Buffer<AggDataPtr>* agg_states) {
         return static_cast<Impl*>(this)->template compute_agg_states<Func, true, false>(
-                chunk_size, key_columns, pool, std::move(allocate_func), agg_states, nullptr);
+                chunk_size, key_columns, pool, std::forward<Func>(allocate_func), agg_states, nullptr);
     }
 
     template <typename Func>
@@ -111,7 +111,7 @@ struct AggHashMapWithKey {
                                        Func&& allocate_func, Buffer<AggDataPtr>* agg_states,
                                        std::vector<uint8_t>* not_founds) {
         return static_cast<Impl*>(this)->template compute_agg_states<Func, false, true>(
-                chunk_size, key_columns, pool, std::move(allocate_func), agg_states, not_founds);
+                chunk_size, key_columns, pool, std::forward<Func>(allocate_func), agg_states, not_founds);
     }
 
     template <typename Func>
@@ -119,7 +119,7 @@ struct AggHashMapWithKey {
                                                       Func&& allocate_func, Buffer<AggDataPtr>* agg_states,
                                                       std::vector<uint8_t>* not_founds) {
         return static_cast<Impl*>(this)->template compute_agg_states<Func, true, true>(
-                chunk_size, key_columns, pool, std::move(allocate_func), agg_states, not_founds);
+                chunk_size, key_columns, pool, std::forward<Func>(allocate_func), agg_states, not_founds);
     }
 };
 
@@ -216,15 +216,16 @@ struct AggHashMapWithOneNumberKey
 
         // Assign not_founds vector when needs compute not founds.
         if constexpr (compute_not_founds) {
+            DCHECK(not_founds);
             (*not_founds).assign(chunk_size, 0);
         }
 
         if (bucket_count < prefetch_threhold) {
             this->template compute_agg_noprefetch<Func, allocate_and_compute_state, compute_not_founds>(
-                    column, agg_states, std::move(allocate_func), not_founds);
+                    column, agg_states, std::forward<Func>(allocate_func), not_founds);
         } else {
             this->template compute_agg_prefetch<Func, allocate_and_compute_state, compute_not_founds>(
-                    column, agg_states, std::move(allocate_func), not_founds);
+                    column, agg_states, std::forward<Func>(allocate_func), not_founds);
         }
     }
 
@@ -263,6 +264,7 @@ struct AggHashMapWithOneNullableNumberKey : public AggHashMapWithOneNumberKey<pr
                             Buffer<AggDataPtr>* agg_states, std::vector<uint8_t>* not_founds) {
         // Assign not_founds vector when needs compute not founds.
         if constexpr (compute_not_founds) {
+            DCHECK(not_founds);
             (*not_founds).assign(chunk_size, 0);
         }
 
@@ -283,10 +285,10 @@ struct AggHashMapWithOneNullableNumberKey : public AggHashMapWithOneNumberKey<pr
             if (!nullable_column->has_null()) {
                 if (this->hash_map.bucket_count() < prefetch_threhold) {
                     this->template compute_agg_noprefetch<Func, allocate_and_compute_state, compute_not_founds>(
-                            data_column, agg_states, std::move(allocate_func), not_founds);
+                            data_column, agg_states, std::forward<Func>(allocate_func), not_founds);
                 } else {
                     this->template compute_agg_prefetch<Func, allocate_and_compute_state, compute_not_founds>(
-                            data_column, agg_states, std::move(allocate_func), not_founds);
+                            data_column, agg_states, std::forward<Func>(allocate_func), not_founds);
                 }
                 return;
             }
@@ -300,7 +302,7 @@ struct AggHashMapWithOneNullableNumberKey : public AggHashMapWithOneNumberKey<pr
                 } else {
                     if constexpr (allocate_and_compute_state) {
                         this->template _handle_data_key_column<Func, compute_not_founds>(
-                                data_column, i, std::move(allocate_func), agg_states, not_founds);
+                                data_column, i, std::forward<Func>(allocate_func), agg_states, not_founds);
                     } else if constexpr (compute_not_founds) {
                         _handle_data_key_column_without_allocate(data_column, i, agg_states, not_founds);
                     }
@@ -427,15 +429,16 @@ struct AggHashMapWithOneStringKey : public AggHashMapWithKey<HashMap, AggHashMap
 
         // Assign not_founds vector when needs compute not founds.
         if constexpr (compute_not_founds) {
+            DCHECK(not_founds);
             (*not_founds).assign(chunk_size, 0);
         }
 
         if (this->hash_map.bucket_count() < prefetch_threhold) {
             this->template compute_agg_noprefetch<Func, allocate_and_compute_state, compute_not_founds>(
-                    column, agg_states, pool, std::move(allocate_func), not_founds);
+                    column, agg_states, pool, std::forward<Func>(allocate_func), not_founds);
         } else {
             this->template compute_agg_prefetch<Func, allocate_and_compute_state, compute_not_founds>(
-                    column, agg_states, pool, std::move(allocate_func), not_founds);
+                    column, agg_states, pool, std::forward<Func>(allocate_func), not_founds);
         }
     }
 
@@ -466,6 +469,7 @@ struct AggHashMapWithOneNullableStringKey : public AggHashMapWithOneStringKey<Ha
                             Buffer<AggDataPtr>* agg_states, std::vector<uint8_t>* not_founds) {
         // Assign not_founds vector when needs compute not founds.
         if constexpr (compute_not_founds) {
+            DCHECK(not_founds);
             (*not_founds).assign(chunk_size, 0);
         }
 
@@ -486,10 +490,10 @@ struct AggHashMapWithOneNullableStringKey : public AggHashMapWithOneStringKey<Ha
             if (!nullable_column->has_null()) {
                 if (this->hash_map.bucket_count() < prefetch_threhold) {
                     this->template compute_agg_noprefetch<Func, allocate_and_compute_state, compute_not_founds>(
-                            data_column, agg_states, pool, std::move(allocate_func), not_founds);
+                            data_column, agg_states, pool, std::forward<Func>(allocate_func), not_founds);
                 } else {
                     this->template compute_agg_prefetch<Func, allocate_and_compute_state, compute_not_founds>(
-                            data_column, agg_states, pool, std::move(allocate_func), not_founds);
+                            data_column, agg_states, pool, std::forward<Func>(allocate_func), not_founds);
                 }
                 return;
             }
@@ -503,7 +507,7 @@ struct AggHashMapWithOneNullableStringKey : public AggHashMapWithOneStringKey<Ha
                 } else {
                     if constexpr (allocate_and_compute_state) {
                         this->template _handle_data_key_column<Func, compute_not_founds>(
-                                data_column, i, pool, std::move(allocate_func), agg_states, not_founds);
+                                data_column, i, pool, std::forward<Func>(allocate_func), agg_states, not_founds);
                     } else if constexpr (compute_not_founds) {
                         DCHECK(not_founds);
                         _handle_data_key_column_without_allocate(data_column, i, agg_states, not_founds);
@@ -576,6 +580,7 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
         slice_sizes.assign(_chunk_size, 0);
         // Assign not_founds vector when needs compute not founds.
         if constexpr (compute_not_founds) {
+            DCHECK(not_founds);
             (*not_founds).assign(chunk_size, 0);
         }
 
@@ -778,6 +783,7 @@ struct AggHashMapWithSerializedKeyFixedSize
         slice_sizes.assign(chunk_size, 0);
         // Assign not_founds vector when needs compute not founds.
         if constexpr (compute_not_founds) {
+            DCHECK(not_founds);
             (*not_founds).assign(chunk_size, 0);
         }
 
@@ -788,10 +794,10 @@ struct AggHashMapWithSerializedKeyFixedSize
 
         if (this->hash_map.bucket_count() < prefetch_threhold) {
             this->template compute_agg_noprefetch<Func, allocate_and_compute_state, compute_not_founds>(
-                    chunk_size, key_columns, agg_states, std::move(allocate_func), not_founds);
+                    chunk_size, key_columns, agg_states, std::forward<Func>(allocate_func), not_founds);
         } else {
             this->template compute_agg_prefetch<Func, allocate_and_compute_state, compute_not_founds>(
-                    chunk_size, key_columns, agg_states, std::move(allocate_func), not_founds);
+                    chunk_size, key_columns, agg_states, std::forward<Func>(allocate_func), not_founds);
         }
     }
 

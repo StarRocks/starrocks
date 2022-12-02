@@ -115,9 +115,7 @@ TEST(HashMapTest, Insert) {
             key_columns.back()->append_default();
         }
         auto allocate_func = [&pool](auto& key) { return pool.allocate(16); };
-        using Func = decltype(allocate_func);
-        key.template compute_agg_states<Func, true, false>(key_columns[0]->size(), key_columns, &pool,
-                                                           std::move(allocate_func), &agg_states, nullptr);
+        key.build_hash_map(key_columns[0]->size(), key_columns, &pool, allocate_func, &agg_states);
         using TestHashMapKey = TestAggHashMap::key_type;
         std::vector<TestHashMapKey> resv;
         for (auto [key, _] : key.hash_map) {
@@ -191,23 +189,18 @@ TEST(HashMapTest, TestAllocateAndComputeNonFounds) {
             }
         };
 
+        MemPool pool;
+        auto allocate_func = [&pool](auto& key) { return pool.allocate(16); };
         {
             TestAggHashMapKey key(chunk_size, &statis);
             key.has_null_column = true;
             key.fixed_byte_size = 8;
-            MemPool pool;
-            // Test allocate_and_compute_state=false/compute_not_founds=true:
-            // not_founds are not computed.
             Buffer<AggDataPtr> agg_states(chunk_size);
             Columns key_columns;
             key_columns.emplace_back(mock_int_column_func({1, 2, 1, 1}));
 
-            auto allocate_func = [&pool](auto& key) { return pool.allocate(16); };
-            using Func = decltype(allocate_func);
             std::vector<uint8_t> not_founds;
-            // Test: allocate_and_compute_state=true/compute_not_founds=false
-            key.template compute_agg_states<Func, true, false>(key_columns[0]->size(), key_columns, &pool,
-                                                               std::move(allocate_func), &agg_states, &not_founds);
+            key.build_hash_map(key_columns[0]->size(), key_columns, &pool, allocate_func, &agg_states);
             DCHECK_EQ(not_founds.size(), 0);
             CHECK_NOT_FOUNDS_FUNC(not_founds, {});
         }
@@ -216,18 +209,14 @@ TEST(HashMapTest, TestAllocateAndComputeNonFounds) {
             TestAggHashMapKey key(chunk_size, &statis);
             key.has_null_column = true;
             key.fixed_byte_size = 8;
-            MemPool pool;
             Buffer<AggDataPtr> agg_states(chunk_size);
             Columns key_columns;
             key_columns.emplace_back(mock_int_column_func({1, 2, 1, 1}));
 
             auto allocate_func = [&pool](auto& key) { return pool.allocate(16); };
-            using Func = decltype(allocate_func);
             std::vector<uint8_t> not_founds;
-            // Test allocate_and_compute_state=true/compute_not_founds=false:
-            // not_founds are computed and not found keys are not allocated.
-            key.template compute_agg_states<Func, false, true>(key_columns[0]->size(), key_columns, &pool,
-                                                               std::move(allocate_func), &agg_states, &not_founds);
+            key.build_hash_map_with_selection(key_columns[0]->size(), key_columns, &pool, allocate_func, &agg_states,
+                                              &not_founds);
             CHECK_NOT_FOUNDS_FUNC(not_founds, {1, 1, 1, 1});
         }
 
@@ -235,18 +224,14 @@ TEST(HashMapTest, TestAllocateAndComputeNonFounds) {
             TestAggHashMapKey key(chunk_size, &statis);
             key.has_null_column = true;
             key.fixed_byte_size = 8;
-            MemPool pool;
             Buffer<AggDataPtr> agg_states(chunk_size);
             Columns key_columns;
             key_columns.emplace_back(mock_int_column_func({1, 2, 1, 1}));
 
             auto allocate_func = [&pool](auto& key) { return pool.allocate(16); };
-            using Func = decltype(allocate_func);
             std::vector<uint8_t> not_founds;
-            // Test allocate_and_compute_state=true/compute_not_founds=true:
-            // not_founds are computed and not found keys are allocated.
-            key.template compute_agg_states<Func, true, true>(key_columns[0]->size(), key_columns, &pool,
-                                                              std::move(allocate_func), &agg_states, &not_founds);
+            key.build_hash_map_with_selection_and_allocation(key_columns[0]->size(), key_columns, &pool, allocate_func,
+                                                             &agg_states, &not_founds);
             CHECK_NOT_FOUNDS_FUNC(not_founds, {1, 1, 0, 0});
         }
 
@@ -254,38 +239,31 @@ TEST(HashMapTest, TestAllocateAndComputeNonFounds) {
             TestAggHashMapKey key(chunk_size, &statis);
             key.has_null_column = true;
             key.fixed_byte_size = 8;
-            MemPool pool;
 
             Buffer<AggDataPtr> agg_states(chunk_size);
             Columns key_columns;
             key_columns.emplace_back(mock_int_column_func({1, 2, 1, 1}));
 
             auto allocate_func = [&pool](auto& key) { return pool.allocate(16); };
-            using Func = decltype(allocate_func);
             std::vector<uint8_t> not_founds;
             // Test: allocate_and_compute_state=true/compute_not_founds=false
-            key.template compute_agg_states<Func, true, false>(key_columns[0]->size(), key_columns, &pool,
-                                                               std::move(allocate_func), &agg_states, &not_founds);
+            key.build_hash_map(key_columns[0]->size(), key_columns, &pool, allocate_func, &agg_states);
             CHECK_NOT_FOUNDS_FUNC(not_founds, {});
 
-            // Test: allocate_and_compute_state=false/compute_not_founds=true
-            using Func = decltype(allocate_func);
-            key.template compute_agg_states<Func, false, true>(key_columns[0]->size(), key_columns, &pool,
-                                                               std::move(allocate_func), &agg_states, &not_founds);
+            key.build_hash_map_with_selection(key_columns[0]->size(), key_columns, &pool, allocate_func, &agg_states,
+                                              &not_founds);
             CHECK_NOT_FOUNDS_FUNC(not_founds, {0, 0, 0, 0});
 
             key_columns.clear();
             key_columns.emplace_back(mock_int_column_func({1, 2, 3, 3}));
-            // Test: allocate_and_compute_state=false/compute_not_founds=true
-            key.template compute_agg_states<decltype(allocate_func), false, true>(
-                    key_columns[0]->size(), key_columns, &pool, std::move(allocate_func), &agg_states, &not_founds);
+            key.build_hash_map_with_selection(key_columns[0]->size(), key_columns, &pool, allocate_func, &agg_states,
+                                              &not_founds);
             CHECK_NOT_FOUNDS_FUNC(not_founds, {0, 0, 1, 1});
 
             key_columns.clear();
             key_columns.emplace_back(mock_int_column_func({1, 2, 3, 3}));
-            // Test: allocate_and_compute_state=false/compute_not_founds=true
-            key.template compute_agg_states<decltype(allocate_func), true, true>(
-                    key_columns[0]->size(), key_columns, &pool, std::move(allocate_func), &agg_states, &not_founds);
+            key.build_hash_map_with_selection_and_allocation(key_columns[0]->size(), key_columns, &pool, allocate_func,
+                                                             &agg_states, &not_founds);
             CHECK_NOT_FOUNDS_FUNC(not_founds, {0, 0, 1, 0});
         }
     }
