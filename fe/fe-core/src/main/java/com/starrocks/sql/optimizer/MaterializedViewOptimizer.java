@@ -108,17 +108,17 @@ public class MaterializedViewOptimizer {
         Set<String> modifiedPartitionNames = mv.getUpdatedPartitionNamesOfTable(partitionByTable);
         List<Range<PartitionKey>> baseTableRanges = getLatestPartitionRange(partitionByTable, modifiedPartitionNames);
         List<Range<PartitionKey>> mvRanges = getLatestPartitionRange(mv, mvPartitionNamesToRefresh);
-        List<Range<PartitionKey>> uptodateBaseTableRanges = Lists.newArrayList();
+        List<Range<PartitionKey>> latestBaseTableRanges = Lists.newArrayList();
         for (Range<PartitionKey> range : baseTableRanges) {
             if (mvRanges.stream().anyMatch(mvRange -> mvRange.encloses(range))) {
-                uptodateBaseTableRanges.add(range);
+                latestBaseTableRanges.add(range);
             }
         }
-        return uptodateBaseTableRanges;
+        latestBaseTableRanges = mergeRanges(latestBaseTableRanges);
+        return latestBaseTableRanges;
     }
 
     private List<Range<PartitionKey>> getLatestPartitionRange(OlapTable table, Set<String> modifiedPartitionNames) {
-        List<Range<PartitionKey>> resultRanges = Lists.newArrayList();
         // partitions that will be excluded
         Set<Long> modifiedIds = Sets.newHashSet();
         for (Partition p : table.getPartitions()) {
@@ -128,26 +128,27 @@ public class MaterializedViewOptimizer {
         }
         RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) table.getPartitionInfo();
         List<Range<PartitionKey>> latestPartitionRanges = rangePartitionInfo.getRangeList(modifiedIds, false);
-        if (latestPartitionRanges.isEmpty()) {
-            return resultRanges;
-        }
+        return latestPartitionRanges;
+    }
 
-        for (int i = 0; i < latestPartitionRanges.size(); i++) {
-            Range<PartitionKey> currentRange = latestPartitionRanges.get(i);
+    private List<Range<PartitionKey>> mergeRanges(List<Range<PartitionKey>> ranges) {
+        List<Range<PartitionKey>> mergedRanges = Lists.newArrayList();
+        for (int i = 0; i < ranges.size(); i++) {
+            Range<PartitionKey> currentRange = ranges.get(i);
             boolean merged = false;
-            for (int j = 0; j < resultRanges.size(); j++) {
+            for (int j = 0; j < mergedRanges.size(); j++) {
                 // 1 < r < 10, 10 <= r < 20 => 1 < r < 20
-                Range<PartitionKey> resultRange = resultRanges.get(j);
+                Range<PartitionKey> resultRange = mergedRanges.get(j);
                 if (currentRange.isConnected(currentRange) && currentRange.gap(resultRange).isEmpty()) {
-                    resultRanges.set(j, resultRange.span(currentRange));
+                    mergedRanges.set(j, resultRange.span(currentRange));
                     merged = true;
                 }
             }
             if (!merged) {
-                resultRanges.add(currentRange);
+                mergedRanges.add(currentRange);
             }
         }
-        return resultRanges;
+        return mergedRanges;
     }
 
     private List<ScalarOperator> convertRanges(ScalarOperator partitionScalar, List<Range<PartitionKey>> partitionRanges) {

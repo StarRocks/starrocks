@@ -7,6 +7,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.common.TimeoutException;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.Task;
@@ -29,6 +30,7 @@ public class MvRewriteOptimizationTest {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
+        Config.dynamic_partition_check_interval_seconds = 1;
         Config.bdbje_heartbeat_timeout_second = 60;
         Config.bdbje_replica_ack_timeout_second = 60;
         Config.bdbje_lock_timeout_second = 60;
@@ -157,7 +159,9 @@ public class MvRewriteOptimizationTest {
                 " partition by range(c3) (" +
                 " partition p1 values less than (\"100\")," +
                 " partition p2 values less than (\"200\")," +
-                " partition p3 values less than (\"1000\"))" +
+                " partition p3 values less than (\"1000\")," +
+                " PARTITION p4 values less than (\"2000\")," +
+                " PARTITION p5 values less than (\"3000\"))" +
                 " distributed by hash(c1)" +
                 " properties (\"replication_num\"=\"1\");");
 
@@ -772,6 +776,7 @@ public class MvRewriteOptimizationTest {
     @Test
     public void testUnionRewrite() throws Exception {
         connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
+
         Table emps = getTable("test", "emps");
         PlanTestBase.setTableStatistics((OlapTable) emps, 1000000);
         Table depts = getTable("test", "depts");
@@ -832,6 +837,41 @@ public class MvRewriteOptimizationTest {
                 " group by v1, test_all_type.t1d";
         getFragmentPlan(query3);
         dropMv("test", "join_agg_union_mv_1");
+
+        createAndRefreshMv("test", "ttl_union_mv_1", "CREATE MATERIALIZED VIEW `ttl_union_mv_1`\n" +
+                "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                "PARTITION BY (`c3`)\n" +
+                "DISTRIBUTED BY HASH(`c1`) BUCKETS 6\n" +
+                "REFRESH MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"storage_medium\" = \"HDD\",\n" +
+                "\"partition_ttl_number\" = \"3\"\n" +
+                ")\n" +
+                "AS SELECT `test_base_part`.`c1`, `test_base_part`.`c3`, sum(`test_base_part`.`c2`) AS `c2`\n" +
+                "FROM `test_base_part`\n" +
+                "GROUP BY `test_base_part`.`c1`, `test_base_part`.`c3`;");
+        MaterializedView ttlMv1 = getMv("test", "ttl_union_mv_1");
+        Assert.assertNotNull(ttlMv1);
+        waitTtl(ttlMv1, 3, 100);
+        String query4 = "select sum(c2) from test_base_part";
+        String plan4 = getFragmentPlan(query4);
+        PlanTestBase.assertContains(plan4, "ttl_union_mv_1", "UNION", "test_base_part");
+        dropMv("test", "ttl_union_mv_1");
+    }
+
+    private void waitTtl(MaterializedView mv, int number, int maxRound) throws InterruptedException, TimeoutException {
+        int round = 0;
+        while (true) {
+            if (mv.getPartitions().size() == number) {
+                break;
+            }
+            if (round >= maxRound) {
+                throw new TimeoutException("wait ttl timeout");
+            }
+            Thread.sleep(1000);
+            round++;
+        }
     }
 
     @Test
@@ -940,8 +980,8 @@ public class MvRewriteOptimizationTest {
                 " partition by c3" +
                 " distributed by hash(c1) as" +
                 " select c1, c3, sum(c2) as c2 from test_base_part group by c1, c3;");
-        cluster.runSql("test", "alter table test_base_part add partition p4 values less than (\"2000\")");
-        cluster.runSql("test", "insert into test_base_part partition(p4) values (1, 2, 1500, 4)");
+        cluster.runSql("test", "alter table test_base_part add partition p6 values less than (\"4000\")");
+        cluster.runSql("test", "insert into test_base_part partition(p4) values (1, 2, 4500, 4)");
         String query8 = "select sum(c2) from test_base_part";
         String plan8 = getFragmentPlan(query8);
         PlanTestBase.assertContains(plan8, "partial_mv_5");
