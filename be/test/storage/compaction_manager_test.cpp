@@ -28,6 +28,7 @@ TEST(CompactionManagerTest, test_candidates) {
         tablet->set_tablet_meta(tablet_meta);
         tablet->set_data_dir(&data_dir);
         tablet->set_tablet_state(TABLET_RUNNING);
+
         // for i == 9 and i == 10, compaction scores are equal
         CompactionCandidate candidate;
         candidate.tablet = tablet;

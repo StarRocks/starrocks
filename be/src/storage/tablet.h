@@ -205,7 +205,7 @@ public:
 
     void pick_candicate_rowsets_to_cumulative_compaction(std::vector<RowsetSharedPtr>* candidate_rowsets);
     void pick_candicate_rowsets_to_base_compaction(std::vector<RowsetSharedPtr>* candidate_rowsets);
-    void pick_all_candicate_rowsets(vector<RowsetSharedPtr>* candidate_rowsets);
+    void pick_all_candicate_rowsets(std::vector<RowsetSharedPtr>* candidate_rowsets);
 
     void calculate_cumulative_point();
 
@@ -230,7 +230,7 @@ public:
     // do not do compaction
     bool need_compaction();
 
-    int64_t compaction_score();
+    double compaction_score();
     CompactionType compaction_type();
 
     void set_compaction_context(std::unique_ptr<CompactionContext>& context);

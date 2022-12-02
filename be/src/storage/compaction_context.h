@@ -16,7 +16,7 @@ namespace starrocks {
 class CompactionPolicy;
 
 struct CompactionContext {
-    int64_t score = 0;
+    double score = 0;
     CompactionType type = INVALID_COMPACTION;
     std::unique_ptr<CompactionPolicy> policy;
 };
