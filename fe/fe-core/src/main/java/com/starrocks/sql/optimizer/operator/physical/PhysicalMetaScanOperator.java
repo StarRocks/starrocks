@@ -62,9 +62,4 @@ public class PhysicalMetaScanOperator extends PhysicalScanOperator {
     public int hashCode() {
         return Objects.hash(super.hashCode(), aggColumnIdToNames);
     }
-
-    @Override
-    public boolean canUsePipeLine() {
-        return false;
-    }
 }

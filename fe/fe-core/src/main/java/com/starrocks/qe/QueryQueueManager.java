@@ -4,9 +4,8 @@ package com.starrocks.qe;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.common.UserException;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.planner.DataSink;
-import com.starrocks.planner.MysqlTableSink;
-import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.ResultSink;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.SchemaScanNode;
@@ -89,7 +88,7 @@ public class QueryQueueManager {
     }
 
     public void updateResourceUsage(long backendId, int numRunningQueries, long memLimitBytes, long memUsedBytes,
-                                       int cpuUsedPermille) {
+                                    int cpuUsedPermille) {
         Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
         if (backend == null) {
             LOG.warn("backend doesn't exist. id: {}", backendId);
@@ -130,10 +129,14 @@ public class QueryQueueManager {
             info.connectCtx.setPending(true);
             pendingQueryInfoMap.put(info.connectCtx, info);
 
+            MetricRepo.COUNTER_QUERY_QUEUE_PENDING.increase(1L);
+            MetricRepo.COUNTER_QUERY_QUEUE_TOTAL.increase(1L);
+
             while (enableCheckQueue(coord) && !canRunMore()) {
                 timeoutMs = startMs + GlobalVariable.getQueryQueuePendingTimeoutSecond() * 1000L;
                 long currentMs = System.currentTimeMillis();
                 if (currentMs >= timeoutMs) {
+                    MetricRepo.COUNTER_QUERY_QUEUE_TIMEOUT.increase(1L);
                     throw new UserException("Pending timeout");
                 }
 
@@ -147,6 +150,8 @@ public class QueryQueueManager {
             info.connectCtx.auditEventBuilder.setPendingTimeMs(System.currentTimeMillis() - startMs);
             info.connectCtx.setPending(false);
             pendingQueryInfoMap.remove(info.connectCtx);
+
+            MetricRepo.COUNTER_QUERY_QUEUE_PENDING.increase(-1L);
 
             lock.unlock();
         }
@@ -177,18 +182,16 @@ public class QueryQueueManager {
 
     public boolean enableCheckQueue(Coordinator coord) {
         if (coord.isLoadType()) {
-            return false;
+            return GlobalVariable.isEnableQueryQueueLoad();
         }
 
         DataSink sink = coord.getFragments().get(0).getSink();
-        if (sink instanceof OlapTableSink || sink instanceof MysqlTableSink) {
-            return GlobalVariable.isQueryQueueInsertEnable();
-        } else if (sink instanceof ResultSink) {
+        if (sink instanceof ResultSink) {
             ResultSink resultSink = (ResultSink) sink;
             if (resultSink.isQuerySink()) {
-                return GlobalVariable.isQueryQueueSelectEnable();
+                return GlobalVariable.isEnableQueryQueueSelect();
             } else if (resultSink.isStatisticSink()) {
-                return GlobalVariable.isQueryQueueStatisticEnable();
+                return GlobalVariable.isEnableQueryQueueStatistic();
             }
         }
 

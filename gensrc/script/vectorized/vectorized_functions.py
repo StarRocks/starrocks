@@ -769,6 +769,20 @@ vectorized_functions = [
 
     [150300, 'array_filter', 'ANY_ARRAY',   ['ANY_ARRAY', 'ARRAY_BOOLEAN'],   'ArrayFunctions::array_filter'],
 
+    [150311, 'array_sortby', 'ANY_ARRAY',  ['ANY_ARRAY', 'ARRAY_BOOLEAN'],   'ArrayFunctions::array_sortby_boolean'],
+    [150312, 'array_sortby', 'ANY_ARRAY',  ['ANY_ARRAY', 'ARRAY_TINYINT'],   'ArrayFunctions::array_sortby_tinyint'],
+    [150313, 'array_sortby', 'ANY_ARRAY',  ['ANY_ARRAY', 'ARRAY_SMALLINT'],  'ArrayFunctions::array_sortby_smallint'],
+    [150314, 'array_sortby', 'ANY_ARRAY',  ['ANY_ARRAY', 'ARRAY_INT'],       'ArrayFunctions::array_sortby_int'],
+    [150315, 'array_sortby', 'ANY_ARRAY',  ['ANY_ARRAY', 'ARRAY_BIGINT'],    'ArrayFunctions::array_sortby_bigint'],
+    [150316, 'array_sortby', 'ANY_ARRAY',  ['ANY_ARRAY', 'ARRAY_LARGEINT'],  'ArrayFunctions::array_sortby_largeint'],
+    [150317, 'array_sortby', 'ANY_ARRAY',  ['ANY_ARRAY', 'ARRAY_FLOAT'],     'ArrayFunctions::array_sortby_float'],
+    [150318, 'array_sortby', 'ANY_ARRAY',  ['ANY_ARRAY', 'ARRAY_DOUBLE'],    'ArrayFunctions::array_sortby_double'],
+    [150319, 'array_sortby', 'ANY_ARRAY',  ['ANY_ARRAY', 'ARRAY_VARCHAR'],   'ArrayFunctions::array_sortby_varchar'],
+    [150320, 'array_sortby', 'ANY_ARRAY',  ['ANY_ARRAY', 'ARRAY_DECIMALV2'], 'ArrayFunctions::array_sortby_decimalv2'],
+    [150321, 'array_sortby', 'ANY_ARRAY',  ['ANY_ARRAY', 'ARRAY_DATETIME'],  'ArrayFunctions::array_sortby_datetime'],
+    [150322, 'array_sortby', 'ANY_ARRAY',  ['ANY_ARRAY', 'ARRAY_DATE'],      'ArrayFunctions::array_sortby_date'],
+    [150323, 'array_sortby', 'ANY_ARRAY',  ['ANY_ARRAY', 'ARRAY_JSON'],      'ArrayFunctions::array_sortby_json'],
+
     # high-order functions related to lambda functions.
     [160100, 'array_map','ANY_ARRAY',['FUNCTION','ANY_ARRAY', "..."],'ArrayFunctions::array_map'],
 

@@ -323,6 +323,11 @@ CONF_Int64(vertical_compaction_max_columns_per_group, "5");
 
 CONF_Bool(enable_event_based_compaction_framework, "true");
 
+CONF_Bool(enable_size_tiered_compaction_strategy, "true");
+CONF_mInt64(size_tiered_min_level_size, "131072");
+CONF_mInt64(size_tiered_level_multiple, "5");
+CONF_mInt64(size_tiered_level_num, "7");
+
 CONF_Bool(enable_check_string_lengths, "true");
 // 5GB
 CONF_mInt64(min_cumulative_compaction_size, "5368709120");
@@ -883,4 +888,15 @@ CONF_Int64(query_cache_capacity, "536870912");
 
 // Used to limit buffer size of tablet send channel.
 CONF_mInt64(send_channel_buffer_limit, "67108864");
+
+// exception_stack_level controls when to print exception's stack
+// -1, enable print all exceptions' stack
+// 0, disable print exceptions' stack
+// 1, print exceptions' stack whose prefix is in the white list(default)
+// 2, print exceptions' stack whose prefix is not in the black list
+// other value means the default value
+CONF_Int32(exception_stack_level, "1");
+CONF_String(exception_stack_white_list, "std::");
+CONF_String(exception_stack_black_list, "apache::thrift::,ue2::,arangodb::");
+
 } // namespace starrocks::config

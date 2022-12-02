@@ -167,6 +167,12 @@ public class FunctionAnalyzer {
             }
         }
 
+        if (fnName.getFunction().equals(FunctionSet.ARRAY_SORTBY)) {
+            if (functionCallExpr.getChildren().size() != 2) {
+                throw new SemanticException("array_sortby only support 2 parameters");
+            }
+        }
+
         if (fnName.getFunction().equals(FunctionSet.RETENTION)) {
             if (!arg.getType().isArrayType()) {
                 throw new SemanticException("retention only support Array<BOOLEAN>");
