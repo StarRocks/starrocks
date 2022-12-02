@@ -22,6 +22,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.MoreObjects;
+import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.Expr;
@@ -142,6 +143,12 @@ public class ColumnStats implements Writable {
         return columnStats;
     }
 
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(numDistinctValues, avgSerializedSize, maxSize, numNulls);
+    }
+
+    @Override
     public boolean equals(Object obj) {
         if (this == obj) {
             return true;

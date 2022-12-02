@@ -22,6 +22,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Joiner;
+import com.google.common.base.Objects;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.planner.OlapScanNode;
@@ -106,6 +107,11 @@ public class HashDistributionInfo extends DistributionInfo {
         DistributionInfo distributionInfo = new HashDistributionInfo();
         distributionInfo.readFields(in);
         return distributionInfo;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(type, bucketNum, distributionColumns);
     }
 
     @Override

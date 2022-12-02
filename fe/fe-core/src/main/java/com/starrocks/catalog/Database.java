@@ -693,6 +693,11 @@ public class Database extends MetaObject implements Writable {
         }
     }
 
+    @Override
+    public int hashCode() {
+        return Long.hashCode(id);
+    }
+
     public boolean equals(Object obj) {
         if (this == obj) {
             return true;
