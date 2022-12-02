@@ -79,8 +79,8 @@ import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 
-public class CoordinatorPrepare {
-    private static final Logger LOG = LogManager.getLogger(CoordinatorPrepare.class);
+public class CoordinatorPreprocessor {
+    private static final Logger LOG = LogManager.getLogger(CoordinatorPreprocessor.class);
     private static final String LOCAL_IP = FrontendOptions.getLocalHostAddress();
     private static final int BUCKET_ABSENT = 2147483647;
 
@@ -138,9 +138,9 @@ public class CoordinatorPrepare {
     // Resource group
     private ResourceGroup resourceGroup = null;
 
-    public CoordinatorPrepare(TUniqueId queryId, ConnectContext context, List<PlanFragment> fragments,
-                              List<ScanNode> scanNodes,
-                              TQueryGlobals queryGlobals, TQueryOptions queryOptions) {
+    public CoordinatorPreprocessor(TUniqueId queryId, ConnectContext context, List<PlanFragment> fragments,
+                                   List<ScanNode> scanNodes,
+                                   TQueryGlobals queryGlobals, TQueryOptions queryOptions) {
         this.connectContext = context;
         this.queryId = queryId;
         this.fragments = fragments;

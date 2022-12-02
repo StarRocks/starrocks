@@ -161,7 +161,7 @@ public class Coordinator {
     private final ConnectContext connectContext;
     private final boolean needReport;
 
-    private final CoordinatorPrepare coordinatorPrepare;
+    private final CoordinatorPreprocessor coordinatorPreprocessor;
 
     // Used for new planner
     public Coordinator(ConnectContext context, List<PlanFragment> fragments, List<ScanNode> scanNodes,
@@ -189,8 +189,8 @@ public class Coordinator {
         }
         this.needReport = context.getSessionVariable().isEnableProfile();
 
-        this.coordinatorPrepare =
-                new CoordinatorPrepare(queryId, context, fragments, scanNodes, queryGlobals, queryOptions);
+        this.coordinatorPreprocessor =
+                new CoordinatorPreprocessor(queryId, context, fragments, scanNodes, queryGlobals, queryOptions);
     }
 
     // Used for broker export task coordinator
@@ -224,8 +224,8 @@ public class Coordinator {
         this.queryGlobals.setTime_zone(timezone);
         this.needReport = true;
 
-        this.coordinatorPrepare =
-                new CoordinatorPrepare(queryId, connectContext, fragments, scanNodes, queryGlobals, queryOptions);
+        this.coordinatorPreprocessor =
+                new CoordinatorPreprocessor(queryId, connectContext, fragments, scanNodes, queryGlobals, queryOptions);
     }
 
     // Used for broker load task coordinator
@@ -254,8 +254,8 @@ public class Coordinator {
         this.queryGlobals.setTime_zone(timezone);
         this.needReport = true;
 
-        this.coordinatorPrepare =
-                new CoordinatorPrepare(queryId, context, fragments, scanNodes, queryGlobals, queryOptions);
+        this.coordinatorPreprocessor =
+                new CoordinatorPreprocessor(queryId, context, fragments, scanNodes, queryGlobals, queryOptions);
     }
 
     public Coordinator(LoadPlanner loadPlanner) {
@@ -301,8 +301,8 @@ public class Coordinator {
 
         this.needReport = true;
 
-        this.coordinatorPrepare =
-                new CoordinatorPrepare(queryId, context, fragments, scanNodes, queryGlobals, queryOptions);
+        this.coordinatorPreprocessor =
+                new CoordinatorPreprocessor(queryId, context, fragments, scanNodes, queryGlobals, queryOptions);
     }
 
     public long getJobId() {
@@ -362,7 +362,7 @@ public class Coordinator {
     }
 
     public void addReplicateScanId(Integer scanId) {
-        this.coordinatorPrepare.getReplicateScanIds().add(scanId);
+        this.coordinatorPreprocessor.getReplicateScanIds().add(scanId);
     }
 
     public void clearExportStatus() {
@@ -389,7 +389,7 @@ public class Coordinator {
     }
 
     public boolean isUsingBackend(Long backendID) {
-        return coordinatorPrepare.getUsedBackendIDs().contains(backendID);
+        return coordinatorPreprocessor.getUsedBackendIDs().contains(backendID);
     }
 
     private void lock() {
@@ -419,7 +419,7 @@ public class Coordinator {
                     DebugUtil.printId(queryId), descTable);
         }
 
-        coordinatorPrepare.prepareExec();
+        coordinatorPreprocessor.prepareExec();
 
         // create result receiver
         prepareResultSink();
@@ -427,12 +427,12 @@ public class Coordinator {
         prepareProfile();
     }
 
-    public CoordinatorPrepare getPrepareInfo() {
-        return coordinatorPrepare;
+    public CoordinatorPreprocessor getPrepareInfo() {
+        return coordinatorPreprocessor;
     }
 
-    public Map<PlanFragmentId, CoordinatorPrepare.FragmentExecParams> getFragmentExecParamsMap() {
-        return coordinatorPrepare.getFragmentExecParamsMap();
+    public Map<PlanFragmentId, CoordinatorPreprocessor.FragmentExecParams> getFragmentExecParamsMap() {
+        return coordinatorPreprocessor.getFragmentExecParamsMap();
     }
 
     public List<PlanFragment> getFragments() {
@@ -470,25 +470,26 @@ public class Coordinator {
         // to keep things simple, make async Cancel() calls wait until plan fragment
         // execution has been initiated, otherwise we might try to cancel fragment
         // execution at backends where it hasn't even started
-        profileDoneSignal = new MarkedCountDownLatch<>(coordinatorPrepare.getInstanceIds().size());
-        for (TUniqueId instanceId : coordinatorPrepare.getInstanceIds()) {
+        profileDoneSignal = new MarkedCountDownLatch<>(coordinatorPreprocessor.getInstanceIds().size());
+        for (TUniqueId instanceId : coordinatorPreprocessor.getInstanceIds()) {
             profileDoneSignal.addMark(instanceId, -1L /* value is meaningless */);
         }
     }
 
     private void prepareResultSink() throws Exception {
         PlanFragmentId topId = fragments.get(0).getFragmentId();
-        CoordinatorPrepare.FragmentExecParams topParams = coordinatorPrepare.getFragmentExecParamsMap().get(topId);
+        CoordinatorPreprocessor.FragmentExecParams topParams =
+                coordinatorPreprocessor.getFragmentExecParamsMap().get(topId);
         if (topParams.fragment.getSink() instanceof ResultSink) {
             TNetworkAddress execBeAddr = topParams.instanceExecParams.get(0).host;
             receiver = new ResultReceiver(
                     topParams.instanceExecParams.get(0).instanceId,
-                    coordinatorPrepare.getAddressToBackendID().get(execBeAddr),
-                    coordinatorPrepare.toBrpcHost(execBeAddr),
+                    coordinatorPreprocessor.getAddressToBackendID().get(execBeAddr),
+                    coordinatorPreprocessor.toBrpcHost(execBeAddr),
                     queryOptions.query_timeout * 1000);
 
             // Select top fragment as global runtime filter merge address
-            setGlobalRuntimeFilterParams(topParams, coordinatorPrepare.toBrpcHost(execBeAddr));
+            setGlobalRuntimeFilterParams(topParams, coordinatorPreprocessor.toBrpcHost(execBeAddr));
 
             if (LOG.isDebugEnabled()) {
                 LOG.debug("dispatch query job: {} to {}", DebugUtil.printId(queryId),
@@ -509,25 +510,25 @@ public class Coordinator {
             this.queryOptions.setEnable_profile(true);
             deltaUrls = Lists.newArrayList();
             loadCounters = Maps.newHashMap();
-            List<Long> relatedBackendIds = Lists.newArrayList(coordinatorPrepare.getAddressToBackendID().values());
+            List<Long> relatedBackendIds = Lists.newArrayList(coordinatorPreprocessor.getAddressToBackendID().values());
             GlobalStateMgr.getCurrentState().getLoadManager()
-                    .initJobProgress(jobId, queryId, coordinatorPrepare.getInstanceIds(),
+                    .initJobProgress(jobId, queryId, coordinatorPreprocessor.getInstanceIds(),
                             relatedBackendIds);
             LOG.info("dispatch load job: {} to {}", DebugUtil.printId(queryId),
-                    coordinatorPrepare.getAddressToBackendID().keySet());
+                    coordinatorPreprocessor.getAddressToBackendID().keySet());
         }
     }
 
     private void deliverExecFragments() throws Exception {
         // Only pipeline uses deliver_batch_fragments.
         boolean enableDeliverBatchFragments =
-                coordinatorPrepare.isUsePipeline() &&
+                coordinatorPreprocessor.isUsePipeline() &&
                         connectContext.getSessionVariable().isEnableDeliverBatchFragments();
 
         if (enableDeliverBatchFragments) {
-            deliverExecBatchFragmentsRequests(coordinatorPrepare.isUsePipeline());
+            deliverExecBatchFragmentsRequests(coordinatorPreprocessor.isUsePipeline());
         } else {
-            deliverExecFragmentRequests(coordinatorPrepare.isUsePipeline());
+            deliverExecFragmentRequests(coordinatorPreprocessor.isUsePipeline());
         }
     }
 
@@ -543,13 +544,13 @@ public class Coordinator {
 
             Set<TNetworkAddress> firstDeliveryAddresses = new HashSet<>();
             for (PlanFragment fragment : fragments) {
-                CoordinatorPrepare.FragmentExecParams params =
-                        coordinatorPrepare.getFragmentExecParamsMap().get(fragment.getFragmentId());
+                CoordinatorPreprocessor.FragmentExecParams params =
+                        coordinatorPreprocessor.getFragmentExecParamsMap().get(fragment.getFragmentId());
 
                 // set up exec states
                 int instanceNum = params.instanceExecParams.size();
                 Preconditions.checkState(instanceNum > 0);
-                List<List<CoordinatorPrepare.FInstanceExecParam>> infightExecParamList = new LinkedList<>();
+                List<List<CoordinatorPreprocessor.FInstanceExecParam>> infightExecParamList = new LinkedList<>();
 
                 // Fragment instances' ordinals in FragmentExecParams.instanceExecParams determine
                 // shuffle partitions' ordinals in DataStreamSink. backendIds of Fragment instances that
@@ -558,14 +559,14 @@ public class Coordinator {
                 // should have the same ordinals. so here assign monotonic unique backendIds to
                 // Fragment instances to keep consistent order with Fragment instances in
                 // FragmentExecParams.instanceExecParams.
-                for (CoordinatorPrepare.FInstanceExecParam fInstanceExecParam : params.instanceExecParams) {
+                for (CoordinatorPreprocessor.FInstanceExecParam fInstanceExecParam : params.instanceExecParams) {
                     fInstanceExecParam.backendNum = backendId++;
                 }
                 if (enablePipelineEngine) {
-                    List<CoordinatorPrepare.FInstanceExecParam> firstFInstanceParamList = new ArrayList<>();
-                    List<CoordinatorPrepare.FInstanceExecParam> remainingFInstanceParamList = new ArrayList<>();
+                    List<CoordinatorPreprocessor.FInstanceExecParam> firstFInstanceParamList = new ArrayList<>();
+                    List<CoordinatorPreprocessor.FInstanceExecParam> remainingFInstanceParamList = new ArrayList<>();
 
-                    for (CoordinatorPrepare.FInstanceExecParam fInstanceExecParam : params.instanceExecParams) {
+                    for (CoordinatorPreprocessor.FInstanceExecParam fInstanceExecParam : params.instanceExecParams) {
                         if (!firstDeliveryAddresses.contains(fInstanceExecParam.host)) {
                             firstDeliveryAddresses.add(fInstanceExecParam.host);
                             firstFInstanceParamList.add(fInstanceExecParam);
@@ -586,8 +587,8 @@ public class Coordinator {
                 int tabletSinkTotalDop = 0;
                 int accTabletSinkDop = 0;
                 if (enablePipelineTableSinkDop) {
-                    for (List<CoordinatorPrepare.FInstanceExecParam> fInstanceExecParamList : infightExecParamList) {
-                        for (CoordinatorPrepare.FInstanceExecParam instanceExecParam : fInstanceExecParamList) {
+                    for (List<CoordinatorPreprocessor.FInstanceExecParam> fInstanceExecParamList : infightExecParamList) {
+                        for (CoordinatorPreprocessor.FInstanceExecParam instanceExecParam : fInstanceExecParamList) {
                             if (!forceSetTableSinkDop) {
                                 tabletSinkTotalDop += instanceExecParam.getPipelineDop();
                             } else {
@@ -603,7 +604,7 @@ public class Coordinator {
                 }
 
                 boolean isFirst = true;
-                for (List<CoordinatorPrepare.FInstanceExecParam> fInstanceExecParamList : infightExecParamList) {
+                for (List<CoordinatorPreprocessor.FInstanceExecParam> fInstanceExecParamList : infightExecParamList) {
                     TDescriptorTable descTable = new TDescriptorTable();
                     descTable.setIs_cached(true);
                     descTable.setTupleDescriptors(Collections.emptyList());
@@ -623,7 +624,7 @@ public class Coordinator {
                             params.toThrift(instanceId2Host.keySet(), descTable, dbIds, enablePipelineEngine,
                                     accTabletSinkDop, tabletSinkTotalDop);
                     if (enablePipelineTableSinkDop) {
-                        for (CoordinatorPrepare.FInstanceExecParam instanceExecParam : fInstanceExecParamList) {
+                        for (CoordinatorPreprocessor.FInstanceExecParam instanceExecParam : fInstanceExecParamList) {
                             if (!forceSetTableSinkDop) {
                                 accTabletSinkDop += instanceExecParam.getPipelineDop();
                             } else {
@@ -642,7 +643,7 @@ public class Coordinator {
                         // TODO: pool of pre-formatted BackendExecStates?
                         TNetworkAddress host = instanceId2Host.get(tParam.params.fragment_instance_id);
                         BackendExecState execState = new BackendExecState(fragment.getFragmentId(), host,
-                                profileFragmentId, tParam, coordinatorPrepare.getAddressToBackendID());
+                                profileFragmentId, tParam, coordinatorPreprocessor.getAddressToBackendID());
                         backendExecStates.put(tParam.backend_num, execState);
                         if (needCheckBackendState) {
                             needCheckBackendExecStates.add(execState);
@@ -831,8 +832,8 @@ public class Coordinator {
                 List<List<Pair<List<BackendExecState>, TExecBatchPlanFragmentsParams>>> inflightRequestsList =
                         ImmutableList.of(new ArrayList<>(), new ArrayList<>());
                 for (PlanFragment fragment : fragmentGroup) {
-                    CoordinatorPrepare.FragmentExecParams params =
-                            coordinatorPrepare.getFragmentExecParamsMap().get(fragment.getFragmentId());
+                    CoordinatorPreprocessor.FragmentExecParams params =
+                            coordinatorPreprocessor.getFragmentExecParamsMap().get(fragment.getFragmentId());
                     Preconditions.checkState(!params.instanceExecParams.isEmpty());
 
                     // Fragment instances' ordinals in FragmentExecParams.instanceExecParams determine
@@ -842,13 +843,13 @@ public class Coordinator {
                     // should have the same ordinals. so here assign monotonic unique backendIds to
                     // Fragment instances to keep consistent order with Fragment instances in
                     // FragmentExecParams.instanceExecParams.
-                    for (CoordinatorPrepare.FInstanceExecParam fInstanceExecParam : params.instanceExecParams) {
+                    for (CoordinatorPreprocessor.FInstanceExecParam fInstanceExecParam : params.instanceExecParams) {
                         fInstanceExecParam.backendNum = backendNum++;
                     }
 
-                    Map<TNetworkAddress, List<CoordinatorPrepare.FInstanceExecParam>> requestsPerHost =
+                    Map<TNetworkAddress, List<CoordinatorPreprocessor.FInstanceExecParam>> requestsPerHost =
                             params.instanceExecParams.stream()
-                                    .collect(Collectors.groupingBy(CoordinatorPrepare.FInstanceExecParam::getHost,
+                                    .collect(Collectors.groupingBy(CoordinatorPreprocessor.FInstanceExecParam::getHost,
                                             HashMap::new,
                                             Collectors.mapping(Function.identity(), Collectors.toList())));
                     // if pipeline is enable and current fragment contain olap table sink, in fe we will 
@@ -858,10 +859,10 @@ public class Coordinator {
                     int tabletSinkTotalDop = 0;
                     int accTabletSinkDop = 0;
                     if (enablePipelineTableSinkDop) {
-                        for (Map.Entry<TNetworkAddress, List<CoordinatorPrepare.FInstanceExecParam>> hostAndRequests :
+                        for (Map.Entry<TNetworkAddress, List<CoordinatorPreprocessor.FInstanceExecParam>> hostAndRequests :
                                 requestsPerHost.entrySet()) {
-                            List<CoordinatorPrepare.FInstanceExecParam> requests = hostAndRequests.getValue();
-                            for (CoordinatorPrepare.FInstanceExecParam request : requests) {
+                            List<CoordinatorPreprocessor.FInstanceExecParam> requests = hostAndRequests.getValue();
+                            for (CoordinatorPreprocessor.FInstanceExecParam request : requests) {
                                 if (!forceSetTableSinkDop) {
                                     tabletSinkTotalDop += request.getPipelineDop();
                                 } else {
@@ -876,10 +877,10 @@ public class Coordinator {
                                 "tabletSinkTotalDop = " + tabletSinkTotalDop + " should be >= 0");
                     }
 
-                    for (Map.Entry<TNetworkAddress, List<CoordinatorPrepare.FInstanceExecParam>> hostAndRequests :
+                    for (Map.Entry<TNetworkAddress, List<CoordinatorPreprocessor.FInstanceExecParam>> hostAndRequests :
                             requestsPerHost.entrySet()) {
                         TNetworkAddress host = hostAndRequests.getKey();
-                        List<CoordinatorPrepare.FInstanceExecParam> requests = hostAndRequests.getValue();
+                        List<CoordinatorPreprocessor.FInstanceExecParam> requests = hostAndRequests.getValue();
                         if (requests.isEmpty()) {
                             continue;
                         }
@@ -905,13 +906,13 @@ public class Coordinator {
                         }
 
                         Set<TUniqueId> curInstanceIds = requests.stream()
-                                .map(CoordinatorPrepare.FInstanceExecParam::getInstanceId)
+                                .map(CoordinatorPreprocessor.FInstanceExecParam::getInstanceId)
                                 .collect(Collectors.toSet());
                         TExecBatchPlanFragmentsParams tRequest =
                                 params.toThriftInBatch(curInstanceIds, host, curDescTable, enablePipelineEngine,
                                         accTabletSinkDop, tabletSinkTotalDop);
                         if (enablePipelineTableSinkDop) {
-                            for (CoordinatorPrepare.FInstanceExecParam request : requests) {
+                            for (CoordinatorPreprocessor.FInstanceExecParam request : requests) {
                                 if (!forceSetTableSinkDop) {
                                     accTabletSinkDop += request.getPipelineDop();
                                 } else {
@@ -934,7 +935,7 @@ public class Coordinator {
                             // TODO: pool of pre-formatted BackendExecStates?
                             BackendExecState execState = new BackendExecState(fragment.getFragmentId(), host,
                                     profileFragmentId, tCommonParams, tUniquePrams,
-                                    coordinatorPrepare.getAddressToBackendID());
+                                    coordinatorPreprocessor.getAddressToBackendID());
                             execStates.add(execState);
                             backendExecStates.put(tUniquePrams.backend_num, execState);
                             if (needCheckBackendState) {
@@ -1018,20 +1019,20 @@ public class Coordinator {
     }
 
     // choose at most num FInstances on difference BEs
-    private List<CoordinatorPrepare.FInstanceExecParam> pickupFInstancesOnDifferentHosts(
-            List<CoordinatorPrepare.FInstanceExecParam> instances, int num) {
+    private List<CoordinatorPreprocessor.FInstanceExecParam> pickupFInstancesOnDifferentHosts(
+            List<CoordinatorPreprocessor.FInstanceExecParam> instances, int num) {
         if (instances.size() <= num) {
             return instances;
         }
 
-        Map<TNetworkAddress, List<CoordinatorPrepare.FInstanceExecParam>> host2instances = Maps.newHashMap();
-        for (CoordinatorPrepare.FInstanceExecParam instance : instances) {
+        Map<TNetworkAddress, List<CoordinatorPreprocessor.FInstanceExecParam>> host2instances = Maps.newHashMap();
+        for (CoordinatorPreprocessor.FInstanceExecParam instance : instances) {
             host2instances.putIfAbsent(instance.host, Lists.newLinkedList());
             host2instances.get(instance.host).add(instance);
         }
-        List<CoordinatorPrepare.FInstanceExecParam> picked = Lists.newArrayList();
+        List<CoordinatorPreprocessor.FInstanceExecParam> picked = Lists.newArrayList();
         while (picked.size() < num) {
-            for (List<CoordinatorPrepare.FInstanceExecParam> instancesPerHost : host2instances.values()) {
+            for (List<CoordinatorPreprocessor.FInstanceExecParam> instancesPerHost : host2instances.values()) {
                 if (instancesPerHost.isEmpty()) {
                     continue;
                 }
@@ -1052,7 +1053,7 @@ public class Coordinator {
         ).collect(Collectors.toList());
     }
 
-    private void setGlobalRuntimeFilterParams(CoordinatorPrepare.FragmentExecParams topParams,
+    private void setGlobalRuntimeFilterParams(CoordinatorPreprocessor.FragmentExecParams topParams,
                                               TNetworkAddress mergeHost)
             throws Exception {
 
@@ -1063,17 +1064,17 @@ public class Coordinator {
         for (PlanFragment fragment : fragments) {
             fragment.collectBuildRuntimeFilters(fragment.getPlanRoot());
             fragment.collectProbeRuntimeFilters(fragment.getPlanRoot());
-            CoordinatorPrepare.FragmentExecParams params =
-                    coordinatorPrepare.getFragmentExecParamsMap().get(fragment.getFragmentId());
+            CoordinatorPreprocessor.FragmentExecParams params =
+                    coordinatorPreprocessor.getFragmentExecParamsMap().get(fragment.getFragmentId());
             for (Map.Entry<Integer, RuntimeFilterDescription> kv : fragment.getProbeRuntimeFilters().entrySet()) {
                 List<TRuntimeFilterProberParams> probeParamList = Lists.newArrayList();
-                for (final CoordinatorPrepare.FInstanceExecParam instance : params.instanceExecParams) {
+                for (final CoordinatorPreprocessor.FInstanceExecParam instance : params.instanceExecParams) {
                     TRuntimeFilterProberParams probeParam = new TRuntimeFilterProberParams();
                     probeParam.setFragment_instance_id(instance.instanceId);
-                    probeParam.setFragment_instance_address(coordinatorPrepare.toBrpcHost(instance.host));
+                    probeParam.setFragment_instance_address(coordinatorPreprocessor.toBrpcHost(instance.host));
                     probeParamList.add(probeParam);
                 }
-                if (coordinatorPrepare.isUsePipeline() && kv.getValue().isBroadcastJoin() &&
+                if (coordinatorPreprocessor.isUsePipeline() && kv.getValue().isBroadcastJoin() &&
                         kv.getValue().isHasRemoteTargets()) {
                     broadcastGRFProbersMap.computeIfAbsent(kv.getKey(), k -> new ArrayList<>()).addAll(probeParamList);
                 } else {
@@ -1091,7 +1092,7 @@ public class Coordinator {
                     if (rf.isBroadcastJoin()) {
                         // for broadcast join, we send at most 3 copy to probers, the first arrival wins.
                         topParams.runtimeFilterParams.putToRuntime_filter_builder_number(rid, 1);
-                        if (coordinatorPrepare.isUsePipeline()) {
+                        if (coordinatorPreprocessor.isUsePipeline()) {
                             rf.setBroadcastGRFSenders(broadcastGRfSenders);
                             broadcastGRFList.add(rf);
                         } else {
@@ -1122,11 +1123,11 @@ public class Coordinator {
     }
 
     public Map<Integer, TNetworkAddress> getChannelIdToBEHTTPMap() {
-        return coordinatorPrepare.getChannelIdToBEHTTPMap();
+        return coordinatorPreprocessor.getChannelIdToBEHTTPMap();
     }
 
     public Map<Integer, TNetworkAddress> getChannelIdToBEPortMap() {
-        return coordinatorPrepare.getChannelIdToBEPortMap();
+        return coordinatorPreprocessor.getChannelIdToBEPortMap();
     }
 
     void updateExportFiles(List<String> files) {
@@ -1297,7 +1298,7 @@ public class Coordinator {
             // if this query is a block query do not cancel.
             long numLimitRows = fragments.get(0).getPlanRoot().getLimit();
             boolean hasLimit = numLimitRows > 0;
-            if (!isBlockQuery && coordinatorPrepare.getInstanceIds().size() > 1 && hasLimit &&
+            if (!isBlockQuery && coordinatorPreprocessor.getInstanceIds().size() > 1 && hasLimit &&
                     numReceivedRows >= numLimitRows) {
                 LOG.debug("no block query, return num >= limit rows, need cancel");
                 cancelInternal(PPlanFragmentCancelReason.LIMIT_REACH);
@@ -1510,7 +1511,7 @@ public class Coordinator {
             return;
         }
 
-        if (!coordinatorPrepare.isUsePipeline()) {
+        if (!coordinatorPreprocessor.isUsePipeline()) {
             return;
         }
 
@@ -1579,7 +1580,7 @@ public class Coordinator {
             RuntimeProfile profile = fragmentProfiles.get(i);
 
             Set<TNetworkAddress> networkAddresses =
-                    coordinatorPrepare.getFragmentExecParamsMap()
+                    coordinatorPreprocessor.getFragmentExecParamsMap()
                             .get(fragment.getFragmentId()).instanceExecParams.stream()
                             .map(param -> param.host)
                             .collect(Collectors.toSet());
@@ -1728,10 +1729,10 @@ public class Coordinator {
             this.initiated = false;
             this.done = false;
             this.address = host;
-            this.backend = coordinatorPrepare.getIdToBackend().get(addressToBackendID.get(address));
+            this.backend = coordinatorPreprocessor.getIdToBackend().get(addressToBackendID.get(address));
             // if useComputeNode and it's olapScan now, backend is null ,need get from olapScanNodeIdToComputeNode
             if (backend == null) {
-                backend = coordinatorPrepare.getIdToComputeNode().get(addressToBackendID.get(address));
+                backend = coordinatorPreprocessor.getIdToComputeNode().get(addressToBackendID.get(address));
             }
             String name =
                     "Instance " + DebugUtil.printId(uniqueRpcParams.params.fragment_instance_id) + " (host=" + address +
@@ -1783,7 +1784,7 @@ public class Coordinator {
                     return false;
                 }
 
-                TNetworkAddress brpcAddress = coordinatorPrepare.toBrpcHost(address);
+                TNetworkAddress brpcAddress = coordinatorPreprocessor.toBrpcHost(address);
 
                 try {
                     BackendServiceClient.getInstance().cancelPlanFragmentAsync(brpcAddress,
@@ -1791,7 +1792,7 @@ public class Coordinator {
                 } catch (RpcException e) {
                     LOG.warn("cancel plan fragment get a exception, address={}:{}", brpcAddress.getHostname(),
                             brpcAddress.getPort());
-                    SimpleScheduler.addToBlacklist(coordinatorPrepare.getAddressToBackendID().get(brpcAddress));
+                    SimpleScheduler.addToBlacklist(coordinatorPreprocessor.getAddressToBackendID().get(brpcAddress));
                 }
 
                 this.hasCanceled = true;
