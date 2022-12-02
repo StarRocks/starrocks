@@ -286,6 +286,14 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 部分 BE 节点配置项为动态参数，您可以通过命令在线修改。其他配置项为静态参数，需要通过修改 **be.conf** 文件后重启 BE 服务使相关修改生效。
 
+### 查看 BE 配置项
+
+您可以通过以下命令查看 BE 配置项：
+
+```shell
+curl http://<BE_IP>:<BE_HTTP_PORT>/varz
+```
+
 ### 配置 BE 动态参数
 
 您可以通过 `curl` 命令在线修改 BE 节点动态参数。
