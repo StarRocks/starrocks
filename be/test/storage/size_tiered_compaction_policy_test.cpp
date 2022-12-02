@@ -230,6 +230,7 @@ public:
             ASSERT_TRUE(s.ok()) << s.to_string();
         }
 
+        _engine->compaction_manager()->init_max_task_num(1);
         _engine->compaction_manager()->_disable_update_tablet = true;
 
         _schema_hash_path = fmt::format("{}/data/0/12345/1111", config::storage_root_path);
