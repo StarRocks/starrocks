@@ -156,11 +156,15 @@ public class TableName implements Writable, GsonPreProcessable, GsonPostProcessa
 
     @Override
     public String toString() {
-        if (db == null) {
-            return tbl;
-        } else {
-            return db + "." + tbl;
+        StringBuilder stringBuilder = new StringBuilder();
+        if (catalog != null && !CatalogMgr.isInternalCatalog(catalog)) {
+            stringBuilder.append(catalog).append(".");
         }
+        if (db != null) {
+            stringBuilder.append(db).append(".");
+        }
+        stringBuilder.append(tbl);
+        return stringBuilder.toString();
     }
 
     public String toSql() {

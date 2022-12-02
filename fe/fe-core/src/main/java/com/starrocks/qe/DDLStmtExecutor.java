@@ -91,6 +91,7 @@ import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.UninstallPluginStmt;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.StatisticExecutor;
+import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatsConstants;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -724,9 +725,14 @@ public class DDLStmtExecutor {
 
                 context.getGlobalStateMgr().getAnalyzeManager().addAnalyzeJob(analyzeJob);
 
+                ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
+                // from current session, may execute analyze stmt
+                statsConnectCtx.getSessionVariable().setStatisticCollectParallelism(
+                        context.getSessionVariable().getStatisticCollectParallelism());
+
                 Thread thread = new Thread(() -> {
                     StatisticExecutor statisticExecutor = new StatisticExecutor();
-                    analyzeJob.run(statisticExecutor);
+                    analyzeJob.run(statsConnectCtx, statisticExecutor);
                 });
                 thread.start();
             });
