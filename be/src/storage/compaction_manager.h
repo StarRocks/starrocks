@@ -118,7 +118,7 @@ private:
 
     std::mutex _scheduler_mutex;
     std::vector<CompactionScheduler*> _schedulers;
-    int32_t _max_task_num;
+    int32_t _max_task_num = 0;
     bool _disable_update_tablet = false;
 };
 
