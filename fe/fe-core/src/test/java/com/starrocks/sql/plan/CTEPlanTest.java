@@ -748,7 +748,7 @@ public class CTEPlanTest extends PlanTestBase {
 
     @Test
     public void testMergePushdownPredicate() throws Exception {
-        String sql ="with with_t_0 as (select v1, v2, v4 from t0 join t1),\n" +
+        String sql = "with with_t_0 as (select v1, v2, v4 from t0 join t1),\n" +
                 "with_t_1 as (select v1, v2, v5 from t0 join t1)\n" +
                 "select v5, 1 from with_t_1 join with_t_0 left semi join\n" +
                 "(select v2 from with_t_0 where v4 = 123) subwith_t_0\n" +
