@@ -869,7 +869,7 @@ public class MvRewriteOptimizationTest {
             if (round >= maxRound) {
                 throw new TimeoutException("wait ttl timeout");
             }
-            Thread.sleep(1);
+            Thread.sleep(1000);
             round++;
         }
     }
