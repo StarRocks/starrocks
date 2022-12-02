@@ -92,7 +92,6 @@ public class CoordinatorPrepare {
     private final boolean usePipeline;
     private final TQueryGlobals queryGlobals;
     private final TQueryOptions queryOptions;
-    private final TUniqueId nextInstanceId;
 
     // force schedule local be for HybridBackendSelector, only for hive now
     private boolean forceScheduleLocal = false;
@@ -141,18 +140,16 @@ public class CoordinatorPrepare {
     // Resource group
     private ResourceGroup resourceGroup = null;
 
-    public CoordinatorPrepare(ConnectContext context, List<PlanFragment> fragments, List<ScanNode> scanNodes,
+    public CoordinatorPrepare(TUniqueId queryId, ConnectContext context, List<PlanFragment> fragments,
+                              List<ScanNode> scanNodes,
                               TQueryGlobals queryGlobals, TQueryOptions queryOptions) {
         this.connectContext = context;
-        this.queryId = context.getExecutionId();
+        this.queryId = queryId;
         this.fragments = fragments;
         this.scanNodes = scanNodes;
         this.queryGlobals = queryGlobals;
         this.queryOptions = queryOptions;
         this.preferComputeNode = context.getSessionVariable().isPreferComputeNode();
-        this.nextInstanceId = new TUniqueId();
-        nextInstanceId.setHi(queryId.hi);
-        nextInstanceId.setLo(queryId.lo + 1);
         this.forceScheduleLocal = context.getSessionVariable().isForceScheduleLocal();
         this.usePipeline = canUsePipeline(this.connectContext, this.fragments);
     }
@@ -183,10 +180,6 @@ public class CoordinatorPrepare {
 
     public TQueryOptions getQueryOptions() {
         return queryOptions;
-    }
-
-    public TUniqueId getNextInstanceId() {
-        return nextInstanceId;
     }
 
     public boolean isForceScheduleLocal() {

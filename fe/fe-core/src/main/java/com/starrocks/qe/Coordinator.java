@@ -189,7 +189,8 @@ public class Coordinator {
         }
         this.needReport = context.getSessionVariable().isEnableProfile();
 
-        this.coordinatorPrepare = new CoordinatorPrepare(context, fragments, scanNodes, queryGlobals, queryOptions);
+        this.coordinatorPrepare =
+                new CoordinatorPrepare(queryId, context, fragments, scanNodes, queryGlobals, queryOptions);
     }
 
     // Used for broker export task coordinator
@@ -224,7 +225,7 @@ public class Coordinator {
         this.needReport = true;
 
         this.coordinatorPrepare =
-                new CoordinatorPrepare(connectContext, fragments, scanNodes, queryGlobals, queryOptions);
+                new CoordinatorPrepare(queryId, connectContext, fragments, scanNodes, queryGlobals, queryOptions);
     }
 
     // Used for broker load task coordinator
@@ -253,7 +254,8 @@ public class Coordinator {
         this.queryGlobals.setTime_zone(timezone);
         this.needReport = true;
 
-        this.coordinatorPrepare = new CoordinatorPrepare(context, fragments, scanNodes, queryGlobals, queryOptions);
+        this.coordinatorPrepare =
+                new CoordinatorPrepare(queryId, context, fragments, scanNodes, queryGlobals, queryOptions);
     }
 
     public Coordinator(LoadPlanner loadPlanner) {
@@ -299,7 +301,8 @@ public class Coordinator {
 
         this.needReport = true;
 
-        this.coordinatorPrepare = new CoordinatorPrepare(context, fragments, scanNodes, queryGlobals, queryOptions);
+        this.coordinatorPrepare =
+                new CoordinatorPrepare(queryId, context, fragments, scanNodes, queryGlobals, queryOptions);
     }
 
     public long getJobId() {
