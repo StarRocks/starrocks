@@ -17,6 +17,7 @@
 
 package com.starrocks.load;
 
+import com.google.common.base.Objects;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 
@@ -77,6 +78,11 @@ public class ExportFailMsg implements Writable {
     public void readFields(DataInput in) throws IOException {
         cancelType = CancelType.valueOf(Text.readString(in));
         msg = Text.readString(in);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(cancelType, msg);
     }
 
     @Override

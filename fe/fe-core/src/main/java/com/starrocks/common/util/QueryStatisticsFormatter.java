@@ -25,10 +25,11 @@ public class QueryStatisticsFormatter {
 
     public static String getScanBytes(long scanBytes) {
         final Pair<Double, String> pair = DebugUtil.getByteUint(scanBytes);
-        final Formatter fmt = new Formatter();
-        final StringBuilder builder = new StringBuilder();
-        builder.append(fmt.format("%.2f", pair.first)).append(" ").append(pair.second);
-        return builder.toString();
+        try (final Formatter fmt = new Formatter()) {
+            final StringBuilder builder = new StringBuilder();
+            builder.append(fmt.format("%.2f", pair.first)).append(" ").append(pair.second);
+            return builder.toString();
+        }
     }
 
     public static String getRowsReturned(long rowsReturned) {

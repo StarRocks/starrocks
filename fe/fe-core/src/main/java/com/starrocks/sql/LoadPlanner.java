@@ -51,6 +51,7 @@ import com.starrocks.thrift.TPartitionType;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.thrift.TRoutineLoadTask;
 import com.starrocks.thrift.TUniqueId;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -396,14 +397,14 @@ public class LoadPlanner {
         Set<Long> partitionIds = Sets.newHashSet();
         OlapTable olapDestTable = (OlapTable) destTable;
         if (this.etlJobType == EtlJobType.BROKER) {
-            for (BrokerFileGroup brokerFileGroup : fileGroups) {
-                if (brokerFileGroup.getPartitionIds() != null) {
-                    partitionIds.addAll(brokerFileGroup.getPartitionIds());
-                }
+            if (CollectionUtils.isNotEmpty(fileGroups)) {
+                BrokerFileGroup brokerFileGroup = fileGroups.get(0);
                 // all file group in fileGroups should have same partitions, so only need to get
                 // partition ids
                 // from one of these file groups
-                break;
+                if (brokerFileGroup.getPartitionIds() != null) {
+                    partitionIds.addAll(brokerFileGroup.getPartitionIds());
+                }
             }
         } else if (this.etlJobType == EtlJobType.STREAM_LOAD || this.etlJobType == etlJobType.ROUTINE_LOAD) {
             PartitionNames partitionNames = streamLoadInfo.getPartitions();

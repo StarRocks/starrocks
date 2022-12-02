@@ -425,8 +425,4 @@ public class DppConfig implements Writable {
         }
     }
 
-    @Override
-    public boolean equals(Object obj) {
-        return true;
-    }
 }

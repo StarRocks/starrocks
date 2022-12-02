@@ -152,6 +152,11 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
     }
 
     @Override
+    public int hashCode() {
+        return Long.hashCode(indexId);
+    }
+
+    @Override
     public boolean equals(Object obj) {
         if (!(obj instanceof MaterializedIndexMeta)) {
             return false;

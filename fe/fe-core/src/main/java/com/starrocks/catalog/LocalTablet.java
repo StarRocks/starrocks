@@ -397,6 +397,11 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
     }
 
     @Override
+    public int hashCode() {
+        return Long.hashCode(id);
+    }
+
+    @Override
     public boolean equals(Object obj) {
         if (this == obj) {
             return true;

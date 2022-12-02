@@ -358,6 +358,11 @@ public class Table extends MetaObject implements Writable {
     }
 
     @Override
+    public int hashCode() {
+        return Long.hashCode(id);
+    }
+
+    @Override
     public boolean equals(Object other) {
         if (!(other instanceof Table)) {
             return false;

@@ -74,6 +74,20 @@ public class BetweenPredicate extends Predicate {
     }
 
     @Override
+    public boolean equals(Object obj) {
+        if (this == obj) {
+            return true;
+        }
+
+        if (!(obj instanceof BetweenPredicate)) {
+            return false;
+        }
+        BetweenPredicate that = (BetweenPredicate) obj;
+
+        return super.equals(that) && isNotBetween == that.isNotBetween;
+    }
+
+    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) throws SemanticException {
         return visitor.visitBetweenPredicate(this, context);
     }

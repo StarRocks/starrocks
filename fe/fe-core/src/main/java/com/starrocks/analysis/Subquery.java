@@ -21,6 +21,7 @@
 
 package com.starrocks.analysis;
 
+import com.google.common.base.Objects;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.analyzer.AST2SQL;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -63,6 +64,11 @@ public class Subquery extends Expr {
     @Override
     protected boolean isConstantImpl() {
         return false;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(super.hashCode(), queryStatement);
     }
 
     @Override

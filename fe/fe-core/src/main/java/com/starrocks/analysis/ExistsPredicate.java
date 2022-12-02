@@ -80,6 +80,21 @@ public class ExistsPredicate extends Predicate {
     }
 
     @Override
+    public boolean equals(Object obj) {
+        if (this == obj) {
+            return true;
+        }
+
+        if (!(obj instanceof ExistsPredicate)) {
+            return false;
+        }
+
+        ExistsPredicate that = (ExistsPredicate) obj;
+
+        return super.equals(that) && notExists == that.notExists;
+    }
+
+    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) throws SemanticException {
         return visitor.visitExistsPredicate(this, context);
     }
