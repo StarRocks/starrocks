@@ -496,9 +496,9 @@ public class ArithmeticExpr extends Expr {
         BITXOR("^", "bitxor", OperatorPosition.BINARY_INFIX, TExprOpcode.BITXOR, false),
         BITNOT("~", "bitnot", OperatorPosition.UNARY_PREFIX, TExprOpcode.BITNOT, false),
         FACTORIAL("!", "factorial", OperatorPosition.UNARY_POSTFIX, TExprOpcode.FACTORIAL, true),
-        BIT_SHIFT_LEFT("<<", "bitShiftLeft", OperatorPosition.BINARY_INFIX, TExprOpcode.BIT_SHIFT_LEFT, false),
-        BIT_SHIFT_RIGHT(">>", "bitShiftRight", OperatorPosition.BINARY_INFIX, TExprOpcode.BIT_SHIFT_RIGHT, false),
-        BIT_SHIFT_RIGHT_LOGICAL(">>>", "bitShiftRightLogical", OperatorPosition.BINARY_INFIX, TExprOpcode.BIT_SHIFT_RIGHT_LOGICAL, false);
+        BIT_SHIFT_LEFT("BITSHIFTLEFT", "bitShiftLeft", OperatorPosition.BINARY_INFIX, TExprOpcode.BIT_SHIFT_LEFT, false),
+        BIT_SHIFT_RIGHT("BITSHIFTRIGHT", "bitShiftRight", OperatorPosition.BINARY_INFIX, TExprOpcode.BIT_SHIFT_RIGHT, false),
+        BIT_SHIFT_RIGHT_LOGICAL("BITSHIFTRIGHTLOGICAL", "bitShiftRightLogical", OperatorPosition.BINARY_INFIX, TExprOpcode.BIT_SHIFT_RIGHT_LOGICAL, false);
 
         private final String description;
         private final String name;

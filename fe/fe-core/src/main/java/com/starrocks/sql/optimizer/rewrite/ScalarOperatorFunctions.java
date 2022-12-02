@@ -690,12 +690,16 @@ public class ScalarOperatorFunctions {
 
     @ConstantFunction(name = "bitShiftRightLogical", argTypes = {TINYINT, BIGINT}, returnType = TINYINT)
     public static ConstantOperator bitShiftRightLogicalTinyInt(ConstantOperator first, ConstantOperator second) {
-        return ConstantOperator.createTinyInt((byte) (first.getTinyInt() >>> second.getBigint()));
+        byte b = first.getTinyInt();
+        int i = b >= 0 ? b : (((int) b) + 256);
+        return ConstantOperator.createTinyInt((byte) (i >>> second.getBigint()));
     }
 
     @ConstantFunction(name = "bitShiftRightLogical", argTypes = {SMALLINT, BIGINT}, returnType = SMALLINT)
     public static ConstantOperator bitShiftRightLogicalSmallInt(ConstantOperator first, ConstantOperator second) {
-        return ConstantOperator.createSmallInt((short) (first.getSmallint() >>> second.getBigint()));
+        short s = first.getSmallint();
+        int i = s >= 0 ? s : (((int) s) + 65536);
+        return ConstantOperator.createSmallInt((short) (i >>> second.getBigint()));
     }
 
     @ConstantFunction(name = "bitShiftRightLogical", argTypes = {INT, BIGINT}, returnType = INT)
