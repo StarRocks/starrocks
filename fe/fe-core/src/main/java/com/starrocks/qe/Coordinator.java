@@ -646,11 +646,11 @@ public class Coordinator {
 
     public void exec() throws Exception {
         QueryQueueManager.getInstance().maybeWait(connectContext, this);
-        try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("CoordPrepareExec")) {
+        try (PlannerProfile.ScopedTimer timer = PlannerProfile.getScopedTimer("CoordPrepareExec")) {
             prepareExec();
         }
 
-        try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("CoordDeliverExec")) {
+        try (PlannerProfile.ScopedTimer timer = PlannerProfile.getScopedTimer("CoordDeliverExec")) {
             deliverExecFragments();
         }
     }
