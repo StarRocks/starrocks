@@ -44,7 +44,8 @@ TYPE_GUARD(BitNotOpGuard, is_bitnot_op, BitNotOp)
 TYPE_GUARD(BitShiftLeftOpGuard, is_bit_shift_left_op, BitShiftLeftOp)
 TYPE_GUARD(BitShiftRightOpGuard, is_bit_shift_right_op, BitShiftRightOp)
 TYPE_GUARD(BitShiftRightLogicalOpGuard, is_bit_shift_right_logical_op, BitShiftRightLogicalOp)
-TYPE_GUARD(BinaryOpGuard, is_binary_op, AddOp, SubOp, MulOp, DivOp, ModOp, BitAndOp, BitOrOp, BitXorOp, BitShiftLeftOp, BitShiftRightOp, BitShiftRightLogicalOp)
+TYPE_GUARD(BinaryOpGuard, is_binary_op, AddOp, SubOp, MulOp, DivOp, ModOp, BitAndOp, BitOrOp, BitXorOp, BitShiftLeftOp,
+           BitShiftRightOp, BitShiftRightLogicalOp)
 TYPE_GUARD(UnaryOpGuard, is_unary_op, BitNotOp)
 
 template <LogicalType Type, typename ResultType>
@@ -127,7 +128,7 @@ struct ArithmeticBinaryOperator {
                 return uint64_t(l) >> r;
             } else if constexpr (std::is_same_v<LType, __int128_t>) {
                 return uint128_t(l) >> r;
-            } 
+            }
         } else {
             static_assert(is_binary_op<Op>, "Invalid binary operators");
         }

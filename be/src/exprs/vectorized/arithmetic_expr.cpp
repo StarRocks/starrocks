@@ -193,7 +193,7 @@ public:
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {
         auto l = _children[0]->evaluate(context, ptr);
         auto r = _children[1]->evaluate(context, ptr);
-        
+
         using ArithmeticOp = ArithmeticBinaryOperator<OP, Type>;
         return VectorizedStrictBinaryFunction<ArithmeticOp>::template evaluate<Type, TYPE_BIGINT, Type>(l, r);
     }
@@ -303,7 +303,7 @@ Expr* VectorizedArithmeticExprFactory::from_thrift(const starrocks::TExprNode& n
     case TExprOpcode::BIT_SHIFT_RIGHT:
         SWITCH_INT_TYPE(BitShiftRightOp);
     case TExprOpcode::BIT_SHIFT_RIGHT_LOGICAL:
-        SWITCH_INT_TYPE(BitShiftRightLogicalOp);    
+        SWITCH_INT_TYPE(BitShiftRightLogicalOp);
 #undef CASE_FN
 
     default:
