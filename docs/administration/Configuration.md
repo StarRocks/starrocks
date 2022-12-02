@@ -108,6 +108,14 @@ This topic describes FE, BE, Broker, and system parameters. It also provides sug
 
 Some BE configuration items are dynamic parameters which you can set them by commands when BE nodes are still online. The rest of them are static parameters. You can only set the static parameters of a BE node by changing them in the corresponding configuration file **be.conf**, and restart the BE node to allow the change to take effect.
 
+### View BE configuration items
+
+You can view the BE configuration items using the following command:
+
+```shell
+curl http://<BE_IP>:<BE_HTTP_PORT>/varz
+```
+
 ### Configure BE dynamic parameters
 
 You can configure a dynamic parameter of a BE node by using `curl` command.
