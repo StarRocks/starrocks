@@ -328,7 +328,8 @@ public class AlterTableStatementAnalyzer {
         private void checkProperties(Map<String, String> properties) throws AnalysisException {
             // 1. data property
             DataProperty newDataProperty = null;
-            newDataProperty = PropertyAnalyzer.analyzeDataProperty(properties, DataProperty.DEFAULT_DATA_PROPERTY);
+            newDataProperty = PropertyAnalyzer.analyzeDataProperty(properties,
+                    DataProperty.getInferredDefaultDataProperty());
             Preconditions.checkNotNull(newDataProperty);
 
             // 2. replication num

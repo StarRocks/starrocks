@@ -269,6 +269,12 @@ public class Backend extends ComputeNode {
         }
     }
 
+    public void setStorageMediumForAllDisks(TStorageMedium m) {
+        for (DiskInfo diskInfo : disksRef.values()) {
+            diskInfo.setStorageMedium(m);
+        }
+    }
+
     public BackendStatus getBackendStatus() {
         return backendStatus;
     }
