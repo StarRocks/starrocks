@@ -82,6 +82,7 @@ import java.util.Set;
 public class CoordinatorPrepare {
     private static final Logger LOG = LogManager.getLogger(CoordinatorPrepare.class);
     private static final String LOCAL_IP = FrontendOptions.getLocalHostAddress();
+    private static final int BUCKET_ABSENT = 2147483647;
 
     private final Random random = new Random();
 
@@ -91,11 +92,7 @@ public class CoordinatorPrepare {
     private final TQueryGlobals queryGlobals;
     private final TQueryOptions queryOptions;
 
-    // Variables
-    private final boolean preferComputeNode;
     private final boolean usePipeline;
-    // force schedule local be for HybridBackendSelector, only for hive now
-    private boolean forceScheduleLocal = false;
     // if it has compute node, hasComputeNode is true
     private boolean hasComputeNode = false;
     // when use compute node, usedComputeNode is true,
@@ -130,9 +127,9 @@ public class CoordinatorPrepare {
     private final Map<TNetworkAddress, TNetworkAddress> bePortToBeWebServerPort = Maps.newHashMap();
 
     // backends which this query will use
-    private ImmutableMap<Long, Backend> idToBackend = ImmutableMap.of();
+    private ImmutableMap<Long, Backend> idToBackend;
     // compute node which this query will use
-    private ImmutableMap<Long, ComputeNode> idToComputeNode = ImmutableMap.of();
+    private ImmutableMap<Long, ComputeNode> idToComputeNode;
 
     // save of related backends of this query
     private final Set<Long> usedBackendIDs = Sets.newConcurrentHashSet();
@@ -150,8 +147,6 @@ public class CoordinatorPrepare {
         this.scanNodes = scanNodes;
         this.queryGlobals = queryGlobals;
         this.queryOptions = queryOptions;
-        this.preferComputeNode = context.getSessionVariable().isPreferComputeNode();
-        this.forceScheduleLocal = context.getSessionVariable().isForceScheduleLocal();
         this.usePipeline = canUsePipeline(this.connectContext, this.fragments);
     }
 
@@ -167,10 +162,6 @@ public class CoordinatorPrepare {
         return connectContext;
     }
 
-    public boolean isPreferComputeNode() {
-        return preferComputeNode;
-    }
-
     public boolean isUsePipeline() {
         return usePipeline;
     }
@@ -181,10 +172,6 @@ public class CoordinatorPrepare {
 
     public TQueryOptions getQueryOptions() {
         return queryOptions;
-    }
-
-    public boolean isForceScheduleLocal() {
-        return forceScheduleLocal;
     }
 
     public Set<Integer> getColocateFragmentIds() {
@@ -310,9 +297,10 @@ public class CoordinatorPrepare {
         coordAddress = new TNetworkAddress(LOCAL_IP, Config.rpc_port);
 
         this.idToBackend = GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
-        this.idToComputeNode = getIdToComputeNode();
+        this.idToComputeNode = buildComputeNodeInfo();
 
         //if it has compute node and contains hdfsScanNode,will use compute node,even though preferComputeNode is false
+        boolean preferComputeNode = connectContext.getSessionVariable().isPreferComputeNode();
         if (idToComputeNode != null && idToComputeNode.size() > 0) {
             hasComputeNode = true;
             if (preferComputeNode) {
@@ -327,6 +315,27 @@ public class CoordinatorPrepare {
                 Backend backend = entry.getValue();
                 LOG.debug("backend: {}-{}-{}", backendID, backend.getHost(), backend.getBePort());
             }
+
+            LOG.debug("idToComputeNode: {}", idToComputeNode);
+        }
+    }
+
+    private ImmutableMap<Long, ComputeNode> buildComputeNodeInfo() {
+        ImmutableMap<Long, ComputeNode> idToComputeNode
+                = ImmutableMap.copyOf(GlobalStateMgr.getCurrentSystemInfo().getIdComputeNode());
+        int useComputeNodeNumber = connectContext.getSessionVariable().getUseComputeNodes();
+        if (useComputeNodeNumber < 0 || useComputeNodeNumber >= idToComputeNode.size()) {
+            return idToComputeNode;
+        } else {
+            Map<Long, ComputeNode> computeNodes = new HashMap<>();
+            for (int i = 0; i < useComputeNodeNumber; i++) {
+                ComputeNode computeNode = SimpleScheduler.getComputeNode(idToComputeNode);
+                if (computeNode == null) {
+                    continue;
+                }
+                computeNodes.put(computeNode.getId(), computeNode);
+            }
+            return ImmutableMap.copyOf(computeNodes);
         }
     }
 
@@ -643,8 +652,6 @@ public class CoordinatorPrepare {
         return false;
     }
 
-    static final int BUCKET_ABSENT = 2147483647;
-
     public void computeBucketSeq2InstanceOrdinal(FragmentExecParams params, int numBuckets) {
         Integer[] bucketSeq2InstanceOrdinal = new Integer[numBuckets];
         // some buckets are pruned, so set the corresponding instance ordinal to BUCKET_ABSENT to indicate
@@ -884,6 +891,7 @@ public class CoordinatorPrepare {
     // Populates scan_range_assignment_.
     // <fragment, <server, nodeId>>
     private void computeScanRangeAssignment() throws Exception {
+        boolean forceScheduleLocal = connectContext.getSessionVariable().isForceScheduleLocal();
         // set scan ranges/locations for scan nodes
         for (ScanNode scanNode : scanNodes) {
             // the parameters of getScanRangeLocations may ignore, It dosn't take effect
