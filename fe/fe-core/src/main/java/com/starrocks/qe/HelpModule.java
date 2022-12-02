@@ -92,37 +92,37 @@ public class HelpModule {
     // Files in zip is not recursive, so we only need to traverse it
     public void setUpByZip(String path) throws IOException, UserException {
         initBuild();
-        ZipFile zf = new ZipFile(path);
-        Enumeration<? extends ZipEntry> entries = zf.entries();
-        while (entries.hasMoreElements()) {
-            ZipEntry entry = entries.nextElement();
-            if (entry.isDirectory()) {
-                setUpDirInZip(entry.getName());
-            } else {
-                long size = entry.getSize();
-                String line;
-                List<String> lines = Lists.newArrayList();
-                if (size > 0) {
-                    BufferedReader reader = new BufferedReader(new InputStreamReader(zf.getInputStream(entry),
-                            CHARSET_UTF_8));
-                    while ((line = reader.readLine()) != null) {
-                        lines.add(line);
-                    }
-                    reader.close();
+        try (ZipFile zf = new ZipFile(path)) {
+            Enumeration<? extends ZipEntry> entries = zf.entries();
+            while (entries.hasMoreElements()) {
+                ZipEntry entry = entries.nextElement();
+                if (entry.isDirectory()) {
+                    setUpDirInZip(entry.getName());
+                } else {
+                    long size = entry.getSize();
+                    String line;
+                    List<String> lines = Lists.newArrayList();
+                    if (size > 0) {
+                        BufferedReader reader = new BufferedReader(new InputStreamReader(zf.getInputStream(entry),
+                                CHARSET_UTF_8));
+                        while ((line = reader.readLine()) != null) {
+                            lines.add(line);
+                        }
+                        reader.close();
 
-                    // note that we only need basename
-                    String parentPathStr = null;
-                    Path pathObj = Paths.get(entry.getName());
-                    if (pathObj.getParent() != null) {
-                        parentPathStr = pathObj.getParent().getFileName().toString();
+                        // note that we only need basename
+                        String parentPathStr = null;
+                        Path pathObj = Paths.get(entry.getName());
+                        if (pathObj.getParent() != null) {
+                            parentPathStr = pathObj.getParent().getFileName().toString();
+                        }
+                        HelpObjectLoader<HelpTopic> topicLoader = HelpObjectLoader.createTopicLoader();
+                        List<HelpTopic> topics = topicLoader.loadAll(lines);
+                        updateTopic(parentPathStr, topics);
                     }
-                    HelpObjectLoader<HelpTopic> topicLoader = HelpObjectLoader.createTopicLoader();
-                    List<HelpTopic> topics = topicLoader.loadAll(lines);
-                    updateTopic(parentPathStr, topics);
                 }
             }
         }
-        zf.close();
         build();
         isloaded = true;
     }

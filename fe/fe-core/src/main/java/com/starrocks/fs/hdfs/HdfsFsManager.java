@@ -57,12 +57,12 @@ class ConfigurationWrap extends Configuration {
     ConfigurationWrap() {
     }
 
-    ConfigurationWrap(boolean loadDefaults) { 
+    ConfigurationWrap(boolean loadDefaults) {
         super(loadDefaults);
     }
 
     public void convertObjectStoreConfToProperties(String path, THdfsProperties tProperties, TObjectStoreType tObjectStoreType) {
-        Properties props =  this.getProps();
+        Properties props = this.getProps();
         Enumeration<String> enums = (Enumeration<String>) props.propertyNames();
         tProperties.setObject_store_type(tObjectStoreType);
         tProperties.setObject_store_path(path);
@@ -117,11 +117,11 @@ class HDFSConfigurationWrap extends HdfsConfiguration {
     }
 
     public HDFSConfigurationWrap(boolean loadDefaults) {
-        super(loadDefaults); 
+        super(loadDefaults);
     }
 
     public void convertHDFSConfToProperties(THdfsProperties tProperties) {
-        Properties props =  this.getProps();
+        Properties props = this.getProps();
         Enumeration<String> enums = (Enumeration<String>) props.propertyNames();
         while (enums.hasMoreElements()) {
             String key = enums.nextElement();
@@ -217,14 +217,14 @@ public class HdfsFsManager {
         writeBufferSize = Config.hdfs_write_buffer_size_kb << 10;
         handleManagementPool.schedule(new FileSystemExpirationChecker(), 0, TimeUnit.SECONDS);
     }
-    
+
     private static void convertHDFSConfToProperties(Configuration conf, THdfsProperties tProperties) {
-        ((HDFSConfigurationWrap) conf).convertHDFSConfToProperties(tProperties); 
+        ((HDFSConfigurationWrap) conf).convertHDFSConfToProperties(tProperties);
     }
 
-    private static void convertObjectStoreConfToProperties(String path, Configuration conf, THdfsProperties tProperties, 
-            TObjectStoreType tObjectStoreType) {
-        ((ConfigurationWrap) conf).convertObjectStoreConfToProperties(path, tProperties, tObjectStoreType); 
+    private static void convertObjectStoreConfToProperties(String path, Configuration conf, THdfsProperties tProperties,
+                                                           TObjectStoreType tObjectStoreType) {
+        ((ConfigurationWrap) conf).convertObjectStoreConfToProperties(path, tProperties, tObjectStoreType);
     }
 
     /**
@@ -237,8 +237,8 @@ public class HdfsFsManager {
      * @throws URISyntaxException
      * @throws Exception
      */
-    public HdfsFs getFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties) 
-        throws UserException {
+    public HdfsFs getFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
+            throws UserException {
         WildcardURI pathUri = new WildcardURI(path);
         String scheme = pathUri.getUri().getScheme();
         if (Strings.isNullOrEmpty(scheme)) {
@@ -283,8 +283,8 @@ public class HdfsFsManager {
      * @throws URISyntaxException
      * @throws Exception
      */
-    public HdfsFs getDistributedFileSystem(String scheme, String path, Map<String, String> loadProperties, 
-            THdfsProperties tProperties) throws UserException {
+    public HdfsFs getDistributedFileSystem(String scheme, String path, Map<String, String> loadProperties,
+                                           THdfsProperties tProperties) throws UserException {
         WildcardURI pathUri = new WildcardURI(path);
         String host = scheme + "://" + pathUri.getAuthority();
         if (Strings.isNullOrEmpty(pathUri.getAuthority())) {
@@ -317,7 +317,7 @@ public class HdfsFsManager {
         if (!authentication.equals("")) {
             LOG.warn("Invalid load_properties, kerberos should be set in hdfs/core-site.xml for broker " +
                     "load without broker. For broker load with broker, you can set namenode HA in the load_properties");
-            throw new UserException("invalid load_properties, kerberos should be set in hdfs/core-site.xml " + 
+            throw new UserException("invalid load_properties, kerberos should be set in hdfs/core-site.xml " +
                     "for load without broker. For broker load with broker, you can set namenode HA in the load_properties");
         }
 
@@ -399,8 +399,8 @@ public class HdfsFsManager {
      * @throws URISyntaxException
      * @throws Exception
      */
-    public HdfsFs getS3AFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties) 
-        throws UserException {
+    public HdfsFs getS3AFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
+            throws UserException {
         WildcardURI pathUri = new WildcardURI(path);
         String accessKey = loadProperties.getOrDefault(FS_S3A_ACCESS_KEY, "");
         String secretKey = loadProperties.getOrDefault(FS_S3A_SECRET_KEY, "");
@@ -482,8 +482,8 @@ public class HdfsFsManager {
      * @throws URISyntaxException
      * @throws Exception
      */
-    public HdfsFs getKS3FileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties) 
-        throws UserException {
+    public HdfsFs getKS3FileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
+            throws UserException {
         WildcardURI pathUri = new WildcardURI(path);
         String accessKey = loadProperties.getOrDefault(FS_KS3_ACCESS_KEY, "");
         String secretKey = loadProperties.getOrDefault(FS_KS3_SECRET_KEY, "");
@@ -565,8 +565,8 @@ public class HdfsFsManager {
      * @throws URISyntaxException
      * @throws Exception
      */
-    public HdfsFs getOBSFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties) 
-        throws UserException {
+    public HdfsFs getOBSFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
+            throws UserException {
         WildcardURI pathUri = new WildcardURI(path);
         String accessKey = loadProperties.getOrDefault(FS_OBS_ACCESS_KEY, "");
         String secretKey = loadProperties.getOrDefault(FS_OBS_SECRET_KEY, "");
@@ -650,8 +650,8 @@ public class HdfsFsManager {
      * @throws URISyntaxException
      * @throws Exception
      */
-    public HdfsFs getOSSFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties) 
-        throws UserException {
+    public HdfsFs getOSSFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
+            throws UserException {
         WildcardURI pathUri = new WildcardURI(path);
         String accessKey = loadProperties.getOrDefault(FS_OSS_ACCESS_KEY, "");
         String secretKey = loadProperties.getOrDefault(FS_OSS_SECRET_KEY, "");
@@ -725,10 +725,11 @@ public class HdfsFsManager {
      * file system handle is cached, the identity is endpoint + bucket +
      * accessKey_secretKey
      * for cos
+     *
      * @throws UserException
      */
-    public HdfsFs getCOSFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties) 
-        throws UserException {
+    public HdfsFs getCOSFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
+            throws UserException {
         WildcardURI pathUri = new WildcardURI(path);
         String accessKey = loadProperties.getOrDefault(FS_COS_ACCESS_KEY, "");
         String secretKey = loadProperties.getOrDefault(FS_COS_SECRET_KEY, "");
@@ -797,14 +798,14 @@ public class HdfsFsManager {
         }
     }
 
-    public void getTProperties(String path, Map<String, String> loadProperties, THdfsProperties tProperties) 
-        throws UserException {
+    public void getTProperties(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
+            throws UserException {
         getFileSystem(path, loadProperties, tProperties);
         return;
     }
 
-    public List<TBrokerFileStatus> listPath(String path, boolean fileNameOnly, Map<String, String> loadProperties) 
-        throws UserException {
+    public List<TBrokerFileStatus> listPath(String path, boolean fileNameOnly, Map<String, String> loadProperties)
+            throws UserException {
         List<TBrokerFileStatus> resultFileStatus = null;
         WildcardURI pathUri = new WildcardURI(path);
         HdfsFs fileSystem = getFileSystem(path, loadProperties, null);
@@ -874,7 +875,7 @@ public class HdfsFsManager {
             }
         } catch (IOException e) {
             LOG.error("errors while rename path from " + srcPath + " to " + destPath);
-            throw new UserException("errors while rename " + srcPath + "to " +  destPath);
+            throw new UserException("errors while rename " + srcPath + "to " + destPath);
         }
     }
 
@@ -883,8 +884,7 @@ public class HdfsFsManager {
         HdfsFs fileSystem = getFileSystem(path, loadProperties, null);
         Path filePath = new Path(pathUri.getPath());
         try {
-            boolean isPathExist = fileSystem.getDFSFileSystem().exists(filePath);
-            return isPathExist;
+            return fileSystem.getDFSFileSystem().exists(filePath);
         } catch (IOException e) {
             LOG.error("errors while check path exist: " + path);
             throw new UserException("errors while check if path " + path + " exist");
@@ -927,7 +927,7 @@ public class HdfsFsManager {
                     fsDataInputStream.seek(offset);
                 } catch (IOException e) {
                     throw new UserException("current read offset " + currentStreamOffset + " is not equal to "
-                         + offset + ", and could not seek to it");
+                            + offset + ", and could not seek to it");
                 }
             }
             byte[] buf;
@@ -1001,7 +1001,7 @@ public class HdfsFsManager {
             long currentStreamOffset = fsDataOutputStream.getPos();
             if (currentStreamOffset != offset) {
                 throw new UserException("current outputstream offset is " + currentStreamOffset
-                 + " not equal to request " + offset);
+                        + " not equal to request " + offset);
             }
             try {
                 fsDataOutputStream.write(data);
