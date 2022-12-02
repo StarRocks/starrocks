@@ -2,9 +2,7 @@
 
 ## 功能
 
-Broker Load 是一种基于 MySQL 协议的异步导入方式。您提交导入作业以后，StarRocks 会异步地执行导入作业。您需要通过 [SHOW LOAD](/sql-reference/sql-statements/data-manipulation/SHOW%20LOAD.md) 语句或者 curl 命令来查看导入作业的结果。有关 Broker Load 的前提条件、基本原理、以及支持的数据文件格式和外部存储系统等，请参见[从 HDFS 或外部云存储系统导入数据](/loading/BrokerLoad.md)。
-
-在使用 Broker Load 导入数据前，必须确保您的 StarRocks 集群中已部署 Broker。您可以通过 [SHOW BROKER](/sql-reference/sql-statements/Administration/SHOW%20BROKER.md) 语句来查看集群中已经部署的 Broker。如果集群中没有部署 Broker，请参见[部署 Broker 节点](/administration/deploy_broker.md)完成 Broker 部署。本文档假设您的 StarRocks 集群中已部署一组名为“mybroker”的 Broker。
+Broker Load 是一种基于 MySQL 协议的异步导入方式。您提交导入作业以后，StarRocks 会异步地执行导入作业。您需要通过 [SHOW LOAD](/sql-reference/sql-statements/data-manipulation/SHOW%20LOAD.md) 语句或者 curl 命令来查看导入作业的结果。有关 Broker Load 的背景信息、前提条件、基本原理、以及支持的数据文件格式和外部存储系统等，请参见[从 HDFS 或外部云存储系统导入数据](/loading/BrokerLoad.md)。
 
 ## 语法
 
@@ -13,7 +11,7 @@ LOAD LABEL [<database_name>.]<label_name>
 (
     data_desc[, data_desc ...]
 )
-WITH BROKER "<broker_name>"
+WITH BROKER
 [broker_properties]
 [opt_properties];
 ```
@@ -135,7 +133,7 @@ INTO TABLE <table_name>
 
 ### `WITH BROKER`
 
-用于指定 Broker 的名称。
+在 StarRocks v2.4 及以前版本，用于指定 Broker 的名称，格式为 WITH BROKER "<broker_name>"。自 StarRocks v2.5 起，只保留 WITH BROKER 关键字，不再需要提供 broker_name。
 
 ### `broker_properties`
 
@@ -176,7 +174,7 @@ INTO TABLE <table_name>
     | **参数名称**            | **参数说明**                                                 |
     | ----------------------- | ------------------------------------------------------------ |
     | kerberos_principal      | 用于指定 Kerberos 的用户或服务 (Principal)。每个 Principal 在 HDFS 集群内唯一，由如下三部分组成：<ul><li>`username` 或 `servicename`：HDFS 集群中用户或服务的名称。</li><li>`instance`：HDFS 集群要认证的节点所在服务器的名称，用来保证用户或服务全局唯一。比如，HDFS 集群中有多个 DataNode 节点，各节点需要各自独立认证。</li><li>`realm`：域，必须全大写。</li></ul>举例：`nn/zelda1@ZELDA.COM`。 |
-    | kerberos_keytab         | 用于指定 Kerberos 的 Key Table（简称为“keytab”）文件的路径。该文件必须在 Broker 所在服务器上。 |
+    | kerberos_keytab         | 用于指定 Kerberos 的 Key Table（简称为“keytab”）文件的路径。 |
     | kerberos_keytab_content | 用于指定 Kerberos 中 keytab 文件的内容经过 Base64 编码之后的内容。该参数跟 `kerberos_keytab` 参数二选一配置。 |
 
    使用 Kerberos 认证时，需要打开 Broker 进程的启动脚本文件 **start_broker.sh**，在文件 42 行附近修改如下信息让 Broker 进程读取 **krb5.conf** 文件信息：
@@ -381,7 +379,7 @@ LOAD LABEL test_db.label1
     DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/data/input/example1.csv")
     INTO TABLE table1
 )
-WITH BROKER "mybroker"
+WITH BROKER
 (
     "username" = "<hdfs_username>",
     "password" = "<hdfs_password>"
@@ -406,7 +404,7 @@ LOAD LABEL test_db.label2
     DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/data/input/example2.csv")
     INTO TABLE table2
 )
-WITH BROKER "mybroker"
+WITH BROKER
 (
     "username" = "<hdfs_username>",
     "password" = "<hdfs_password>"
@@ -432,7 +430,7 @@ LOAD LABEL test_db.label3
     INTO TABLE table3
     COLUMNS TERMINATED BY "\\x01"
 )
-WITH BROKER "mybroker"
+WITH BROKER
 (
     "username" = "<hdfs_username>",
     "password" = "<hdfs_password>"
@@ -453,7 +451,7 @@ LOAD LABEL test_db.label4
     DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/data/input/example4.csv")
     INTO TABLE table4
 )
-WITH BROKER "mybroker"
+WITH BROKER
 (
     "username" = "<hdfs_username>",
     "password" = "<hdfs_password>",
@@ -481,7 +479,7 @@ LOAD LABEL test_db.label5
     INTO TABLE table5
     COLUMNS TERMINATED BY "\t"
 )
-WITH BROKER "mybroker"
+WITH BROKER
 (
     "hadoop.security.authentication" = "kerberos",
     "kerberos_principal" = "starrocks@YOUR.COM",
@@ -507,7 +505,7 @@ LOAD LABEL test_db.label6
     INTO TABLE table6
     COLUMNS TERMINATED BY "\t"
 )
-WITH BROKER "mybroker"
+WITH BROKER
 (
     "hadoop.security.authentication" = "kerberos",
     "kerberos_principal" = "starrocks@YOUR.COM",
@@ -531,7 +529,7 @@ LOAD LABEL test_db.label7
     PARTITION (p1, p2)
     COLUMNS TERMINATED BY ","
 )
-WITH BROKER "mybroker"
+WITH BROKER
 (
     "username" = "<hdfs_username>",
     "password" = "<hdfs_password>"
@@ -554,7 +552,7 @@ LOAD LABEL test_db.label8
     COLUMNS TERMINATED BY ","
     (col2, col1, col3)
 )
-WITH BROKER "mybroker"
+WITH BROKER
 (
     "username" = "<hdfs_username>",
     "password" = "<hdfs_password>"
@@ -581,7 +579,7 @@ LOAD LABEL test_db.label9
     (col1, col2, col3)
     where col1 > 20180601
 )
-WITH BROKER "mybroker"
+WITH BROKER
 (
     "username" = "<hdfs_username>",
     "password" = "<hdfs_password>"
@@ -614,7 +612,7 @@ LOAD LABEL test_db.label10
         col3 = empty_hll()
     )
 )
-WITH BROKER "mybroker"
+WITH BROKER
 (
     "username" = "<hdfs_username>",
     "password" = "<hdfs_password>"
@@ -657,7 +655,7 @@ LOAD LABEL test_db.label11
     COLUMNS FROM PATH AS (city, utc_date)
     SET (uniq_id = md5sum(k1, city))
 )
-WITH BROKER "mybroker"
+WITH BROKER
 (
     "username" = "<hdfs_username>",
     "password" = "<hdfs_password>"
@@ -695,7 +693,7 @@ LOAD LABEL test_db.label12
     COLUMNS FROM PATH AS (data_time)
     SET (data_time = str_to_date(data_time, '%Y-%m-%d %H%%3A%i%%3A%s'))
 )
-WITH BROKER "mybroker"
+WITH BROKER
 (
     "username" = "<hdfs_username>",
     "password" = "<hdfs_password>"
@@ -722,7 +720,7 @@ LOAD LABEL test_db.label13
     FORMAT AS "parquet"
     (col1, col2, col3)
 )
-WITH BROKER "mybroker"
+WITH BROKER
 (
     "username" = "<hdfs_username>",
     "password" = "<hdfs_password>"
@@ -751,7 +749,7 @@ LOAD LABEL test_db.label14
     FORMAT AS "orc"
     (col1, col2, col3)
 )
-WITH BROKER "mybroker"
+WITH BROKER
 (
     "username" = "<hdfs_username>",
     "password" = "<hdfs_password>"

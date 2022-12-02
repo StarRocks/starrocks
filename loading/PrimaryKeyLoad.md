@@ -44,7 +44,11 @@ StarRocks 的主键模型目前支持 UPSERT 和 DELETE 操作，不支持区分
 
 ## 前提条件
 
-如果使用 Broker Load 导入数据，必须确保您的 StarRocks 集群中已部署 Broker。您可以通过 [SHOW BROKER](/sql-reference/sql-statements/Administration/SHOW%20BROKER.md) 语句来查看集群中已经部署的 Broker。如果集群中没有部署 Broker，请参见[部署 Broker 节点](/administration/deploy_broker.md)完成 Broker 部署。本文假设您已部署一个名为 `broker1` 的 Broker。
+### Broker Load
+
+参见[从 HDFS 或外部云存储系统导入数据](../loading/BrokerLoad.md)中的“背景信息”小节。
+
+### Routine Load
 
 如果使用 Routine Load 导入数据，必须确保您的 Apache Kafka® 集群已创建 Topic。本文假设您已部署四个 Topic，分别为 `topic1`、`topic2`、`topic3` 和 `topic4`。
 
@@ -136,7 +140,7 @@ StarRocks 的主键模型目前支持 UPSERT 和 DELETE 操作，不支持区分
         columns terminated by ","
         format as "csv"
     )
-    with broker "broker1";
+    with broker
     ```
 
   - 添加 `__op` 字段：
@@ -150,7 +154,7 @@ StarRocks 的主键模型目前支持 UPSERT 和 DELETE 操作，不支持区分
         format as "csv"
         set (__op = 'upsert')
     )
-    with broker "broker1";
+    with broker
     ```
 
 - 通过 Routine Load 导入：
@@ -280,7 +284,7 @@ MySQL [test_db]> SELECT * FROM table1;
       format as "csv"
       set (__op = 'delete')
   )
-  with broker "broker1";  
+  with broker  
   ```
 
 - 通过 Routine Load 导入：
@@ -392,7 +396,7 @@ MySQL [test_db]> SELECT * FROM table2;
       (id, name, score, temp)
       set (__op=temp)
   )
-  with broker "broker1";
+  with broker
   ```
 
 - 通过 Routine Load 导入：
@@ -502,7 +506,7 @@ MySQL [test_db]> SELECT * FROM table3;
       format as "csv"
       (id, name)
   )
-  with broker "broker1"
+  with broker
   properties
   (
       "partial_update" = "true"
