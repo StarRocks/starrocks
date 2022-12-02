@@ -210,12 +210,14 @@ public:
 
     Type type() const override { return HDFS; }
 
-    StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const std::string& path) override;
+    using FileSystem::new_sequential_file;
+    using FileSystem::new_random_access_file;
 
     StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
                                                                        const std::string& path) override;
 
-    StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const std::string& path) override;
+    StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const SequentialFileOptions& opts,
+                                                                  const std::string& path) override;
 
     StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const std::string& path) override;
 
@@ -393,7 +395,9 @@ StatusOr<std::unique_ptr<WritableFile>> HdfsFileSystem::new_writable_file(const 
     return std::make_unique<HDFSWritableFile>(handle.hdfs_fs, file, path, 0);
 }
 
-StatusOr<std::unique_ptr<SequentialFile>> HdfsFileSystem::new_sequential_file(const std::string& path) {
+StatusOr<std::unique_ptr<SequentialFile>> HdfsFileSystem::new_sequential_file(const SequentialFileOptions& opts,
+                                                                              const std::string& path) {
+    (void)opts;
     std::string namenode;
     RETURN_IF_ERROR(get_namenode_from_path(path, &namenode));
     HdfsFsHandle handle;
@@ -415,10 +419,6 @@ StatusOr<std::unique_ptr<SequentialFile>> HdfsFileSystem::new_sequential_file(co
     }
     auto stream = std::make_shared<HdfsInputStream>(handle.hdfs_fs, file, path);
     return std::make_unique<SequentialFile>(std::move(stream), path);
-}
-
-StatusOr<std::unique_ptr<RandomAccessFile>> HdfsFileSystem::new_random_access_file(const std::string& path) {
-    return HdfsFileSystem::new_random_access_file(RandomAccessFileOptions(), path);
 }
 
 StatusOr<std::unique_ptr<RandomAccessFile>> HdfsFileSystem::new_random_access_file(const RandomAccessFileOptions& opts,
