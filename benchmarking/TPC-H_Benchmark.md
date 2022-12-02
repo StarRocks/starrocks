@@ -1285,9 +1285,9 @@ insert into tpch_hive_orc.supplier  select * from supplier;
 
 ```SQL
 use tpch_sr;
---查看当前会话系统变量
+--查看当前会话系统变量。
 show variables;
---设置并行度为8
+--设置并行度为8。
 set parallel_fragment_exec_instance_num = 8;
 
 --Q1
