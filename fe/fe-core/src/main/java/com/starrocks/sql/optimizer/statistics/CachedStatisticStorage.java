@@ -50,19 +50,18 @@ public class CachedStatisticStorage implements StatisticStorage {
         if (!StatisticUtils.checkStatisticTableStateNormal()) {
             return ColumnStatistic.unknown();
         }
-
-        CompletableFuture<Optional<ColumnStatistic>> result =
-                cachedStatistics.get(new ColumnStatsCacheKey(table.getId(), column));
-        if (result.isDone()) {
-            Optional<ColumnStatistic> realResult;
-            try {
+        try {
+            CompletableFuture<Optional<ColumnStatistic>> result =
+                    cachedStatistics.get(new ColumnStatsCacheKey(table.getId(), column));
+            if (result.isDone()) {
+                Optional<ColumnStatistic> realResult;
                 realResult = result.get();
-            } catch (Exception e) {
-                LOG.warn(e);
+                return realResult.orElseGet(ColumnStatistic::unknown);
+            } else {
                 return ColumnStatistic.unknown();
             }
-            return realResult.orElseGet(ColumnStatistic::unknown);
-        } else {
+        } catch (Exception e) {
+            LOG.warn(e);
             return ColumnStatistic.unknown();
         }
     }
@@ -87,27 +86,27 @@ public class CachedStatisticStorage implements StatisticStorage {
             cacheKeys.add(new ColumnStatsCacheKey(tableId, column));
         }
 
-        CompletableFuture<Map<ColumnStatsCacheKey, Optional<ColumnStatistic>>> result = cachedStatistics.getAll(cacheKeys);
-        if (result.isDone()) {
-            List<ColumnStatistic> columnStatistics = new ArrayList<>();
-            Map<ColumnStatsCacheKey, Optional<ColumnStatistic>> realResult;
-            try {
+        try {
+            CompletableFuture<Map<ColumnStatsCacheKey, Optional<ColumnStatistic>>> result = cachedStatistics.getAll(cacheKeys);
+            if (result.isDone()) {
+                List<ColumnStatistic> columnStatistics = new ArrayList<>();
+                Map<ColumnStatsCacheKey, Optional<ColumnStatistic>> realResult;
                 realResult = result.get();
-            } catch (Exception e) {
-                LOG.warn(e);
+                for (String column : columns) {
+                    Optional<ColumnStatistic> columnStatistic =
+                            realResult.getOrDefault(new ColumnStatsCacheKey(tableId, column), Optional.empty());
+                    if (columnStatistic.isPresent()) {
+                        columnStatistics.add(columnStatistic.get());
+                    } else {
+                        columnStatistics.add(ColumnStatistic.unknown());
+                    }
+                }
+                return columnStatistics;
+            } else {
                 return getDefaultColumnStatisticList(columns);
             }
-            for (String column : columns) {
-                Optional<ColumnStatistic> columnStatistic =
-                        realResult.getOrDefault(new ColumnStatsCacheKey(tableId, column), Optional.empty());
-                if (columnStatistic.isPresent()) {
-                    columnStatistics.add(columnStatistic.get());
-                } else {
-                    columnStatistics.add(ColumnStatistic.unknown());
-                }
-            }
-            return columnStatistics;
-        } else {
+        } catch (Exception e) {
+            LOG.warn(e);
             return getDefaultColumnStatisticList(columns);
         }
     }
@@ -131,19 +130,24 @@ public class CachedStatisticStorage implements StatisticStorage {
             cacheKeys.add(new ColumnStatsCacheKey(tableId, column));
         }
 
-        Map<ColumnStatsCacheKey, Optional<ColumnStatistic>> result = cachedStatistics.synchronous().getAll(cacheKeys);
-        List<ColumnStatistic> columnStatistics = new ArrayList<>();
+        try {
+            Map<ColumnStatsCacheKey, Optional<ColumnStatistic>> result = cachedStatistics.synchronous().getAll(cacheKeys);
+            List<ColumnStatistic> columnStatistics = new ArrayList<>();
 
-        for (String column : columns) {
-            Optional<ColumnStatistic> columnStatistic =
-                    result.getOrDefault(new ColumnStatsCacheKey(tableId, column), Optional.empty());
-            if (columnStatistic.isPresent()) {
-                columnStatistics.add(columnStatistic.get());
-            } else {
-                columnStatistics.add(ColumnStatistic.unknown());
+            for (String column : columns) {
+                Optional<ColumnStatistic> columnStatistic =
+                        result.getOrDefault(new ColumnStatsCacheKey(tableId, column), Optional.empty());
+                if (columnStatistic.isPresent()) {
+                    columnStatistics.add(columnStatistic.get());
+                } else {
+                    columnStatistics.add(ColumnStatistic.unknown());
+                }
             }
+            return columnStatistics;
+        } catch (Exception e) {
+            LOG.warn("Get column statistic fail, message : " + e.getMessage());
+            return getDefaultColumnStatisticList(columns);
         }
-        return columnStatistics;
     }
 
     @Override
@@ -182,24 +186,24 @@ public class CachedStatisticStorage implements StatisticStorage {
             cacheKeys.add(new ColumnStatsCacheKey(tableId, columnName));
         }
 
-        CompletableFuture<Map<ColumnStatsCacheKey, Optional<Histogram>>> result = histogramCache.getAll(cacheKeys);
-        if (result.isDone()) {
-            Map<ColumnStatsCacheKey, Optional<Histogram>> realResult;
-            try {
+        try {
+            CompletableFuture<Map<ColumnStatsCacheKey, Optional<Histogram>>> result = histogramCache.getAll(cacheKeys);
+            if (result.isDone()) {
+                Map<ColumnStatsCacheKey, Optional<Histogram>> realResult;
                 realResult = result.get();
-            } catch (Exception e) {
-                LOG.warn(e);
+
+                Map<String, Histogram> histogramStats = new HashMap<>();
+                for (String columnName : columns) {
+                    Optional<Histogram> histogramStatistics =
+                            realResult.getOrDefault(new ColumnStatsCacheKey(tableId, columnName), Optional.empty());
+                    histogramStatistics.ifPresent(histogram -> histogramStats.put(columnName, histogram));
+                }
+                return histogramStats;
+            } else {
                 return Maps.newHashMap();
             }
-
-            Map<String, Histogram> histogramStats = new HashMap<>();
-            for (String columnName : columns) {
-                Optional<Histogram> histogramStatistics =
-                        realResult.getOrDefault(new ColumnStatsCacheKey(tableId, columnName), Optional.empty());
-                histogramStatistics.ifPresent(histogram -> histogramStats.put(columnName, histogram));
-            }
-            return histogramStats;
-        } else {
+        } catch (Exception e) {
+            LOG.warn(e);
             return Maps.newHashMap();
         }
     }

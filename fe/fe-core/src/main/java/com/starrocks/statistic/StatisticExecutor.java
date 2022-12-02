@@ -19,6 +19,7 @@ import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TResultBatch;
@@ -48,16 +49,25 @@ public class StatisticExecutor {
                 List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIds();
                 for (Long id : dbIds) {
                     Database db = GlobalStateMgr.getCurrentState().getDb(id);
-                    table = db.getTable(tableId);
-                    if (table != null) {
-                        break;
+                    if (db == null) {
+                        continue;
                     }
+                    table = db.getTable(tableId);
+                    if (table == null) {
+                        continue;
+                    }
+                    break;
                 }
             } else {
                 Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
                 table = database.getTable(tableId);
             }
-            Preconditions.checkState(table != null);
+
+            if (table == null) {
+                // Statistical information query is an unlocked operation,
+                // so it is possible for the table to be deleted while the code is running
+                return Collections.emptyList();
+            }
 
             List<Column> columns = Lists.newArrayList();
             for (String colName : columnNames) {
@@ -108,21 +118,21 @@ public class StatisticExecutor {
             return Pair.create(Collections.emptyList(), Status.OK);
         }
 
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-        Table table = db.getTable(tableId);
+        Database db = MetaUtils.getDatabase(dbId);
+        Table table = MetaUtils.getTable(dbId, tableId);
+        if (!table.isOlapOrLakeTable()) {
+            throw new SemanticException("Table '%s' is not a OLAP table or LAKE table", table.getName());
+        }
 
         OlapTable olapTable = (OlapTable) table;
         long version = olapTable.getPartitions().stream().map(Partition::getVisibleVersionTime)
                 .max(Long::compareTo).orElse(0L);
-        String dbName = db.getOriginName();
-        String tableName = db.getTable(tableId).getName();
         String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
-
         String sql = "select cast(" + StatsConstants.STATISTIC_DICT_VERSION + " as Int), " +
                 "cast(" + version + " as bigint), " +
                 "dict_merge(" + "`" + column +
                 "`) as _dict_merge_" + column +
-                " from " + catalogName + "." + dbName + "." + tableName + " [_META_]";
+                " from " + catalogName + "." + db.getOriginName() + "." + table.getName() + " [_META_]";
 
 
         ConnectContext context = StatisticUtils.buildConnectContext();
