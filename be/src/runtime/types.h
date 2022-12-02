@@ -199,7 +199,7 @@ struct TypeDescriptor {
             return true;
         }
         if (is_decimal_type()) {
-            return type == o.type && scale == o.scale;
+            return type == o.type && precision == o.precision && scale == o.scale;
         } else {
             return type == o.type;
         }

@@ -81,6 +81,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.analyzer.AST2SQL;
 import com.starrocks.sql.analyzer.PrivilegeChecker;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddSqlBlackListStmt;
@@ -1097,16 +1098,20 @@ public class StmtExecutor {
             }
         } catch (QueryStateException e) {
             if (e.getQueryState().getStateType() != MysqlStateType.OK) {
-                LOG.warn("DDL statement(" + originStmt.originStmt + ") process failed.", e);
+                String sql = AST2SQL.toString(parsedStmt);
+                if (sql.isEmpty()) {
+                    sql = originStmt.originStmt;
+                }
+                LOG.warn("DDL statement (" + sql + ") process failed.", e);
             }
             context.setState(e.getQueryState());
-        } catch (UserException e) {
-            LOG.warn("DDL statement(" + originStmt.originStmt + ") process failed.", e);
-            // Return message to info client what happened.
-            context.getState().setError(e.getMessage());
         } catch (Throwable e) {
             // Maybe our bug
-            LOG.warn("DDL statement(" + originStmt.originStmt + ") process failed.", e);
+            String sql = AST2SQL.toString(parsedStmt);
+            if (sql.isEmpty()) {
+                sql = originStmt.originStmt;
+            }
+            LOG.warn("DDL statement (" + sql + ") process failed.", e);
             context.getState().setError("Unexpected exception: " + e.getMessage());
         }
     }

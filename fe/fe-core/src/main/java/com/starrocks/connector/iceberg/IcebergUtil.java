@@ -369,7 +369,7 @@ public class IcebergUtil {
     }
 
     private static ArrayType convertToArrayType(org.apache.iceberg.types.Type icebergType) {
-        return new ArrayType(convertColumnType(icebergType.asNestedType().asListType().elementType()));
+        return new ArrayType(convertColumnType(icebergType.asNestedType().asListType().elementType()), true);
     }
 
     private static Type convertToMapType(org.apache.iceberg.types.Type icebergType) {
