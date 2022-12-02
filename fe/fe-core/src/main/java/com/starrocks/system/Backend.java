@@ -511,6 +511,19 @@ public class Backend implements Writable {
         }
     }
 
+<<<<<<< HEAD
+=======
+    public void setStorageMediumForAllDisks(TStorageMedium m) {
+        for (DiskInfo diskInfo : disksRef.values()) {
+            diskInfo.setStorageMedium(m);
+        }
+    }
+
+    public BackendStatus getBackendStatus() {
+        return backendStatus;
+    }
+
+>>>>>>> 336b33cbe ([Enhancement] Infer default storage medium when creating table (#14394))
     public static Backend read(DataInput in) throws IOException {
         Backend backend = new Backend();
         backend.readFields(in);
