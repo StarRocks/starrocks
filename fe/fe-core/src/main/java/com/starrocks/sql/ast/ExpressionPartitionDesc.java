@@ -18,8 +18,13 @@ import java.util.Map;
 
 public class ExpressionPartitionDesc extends PartitionDesc {
 
-    // must be type of SlotRef or FunctionCallRef
     private Expr expr;
+    private RangePartitionDesc rangePartitionDesc = null;
+
+    public ExpressionPartitionDesc(RangePartitionDesc rangePartitionDesc, Expr expr) {
+        this.rangePartitionDesc = rangePartitionDesc;
+        this.expr = expr;
+    }
 
     public ExpressionPartitionDesc(Expr expr) {
         Preconditions.checkState(expr != null);
