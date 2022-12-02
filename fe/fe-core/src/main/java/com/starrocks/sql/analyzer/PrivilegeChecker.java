@@ -1380,8 +1380,10 @@ public class PrivilegeChecker {
             if (node.hasWithClause()) {
                 node.getCteRelations().forEach(this::visit);
             }
-
-            return visit(node.getRelation());
+            session.getCurrentUserIdentity().setCurrentSelectList(node.getSelectList());
+            Void v = visit(node.getRelation());
+            session.getCurrentUserIdentity().setCurrentSelectList(null);
+            return v;
         }
 
         @Override

@@ -40,10 +40,10 @@ public class TablePrivTable extends PrivTable {
      * Return first priv which match current user on db.tbl The returned priv will
      * be saved in 'savedPrivs'.
      */
-    public void getPrivs(UserIdentity currentUser, String db, String tbl, PrivBitSet savedPrivs) {
+    public TablePrivEntry getPrivs(UserIdentity currentUser, String db, String tbl, PrivBitSet savedPrivs) {
         List<PrivEntry> userPrivEntryList = map.get(currentUser);
         if (userPrivEntryList == null) {
-            return;
+            return null;
         }
 
         TablePrivEntry matchedEntry = null;
@@ -64,10 +64,11 @@ public class TablePrivTable extends PrivTable {
             break;
         }
         if (matchedEntry == null) {
-            return;
+            return null;
         }
 
         savedPrivs.or(matchedEntry.getPrivSet());
+        return matchedEntry;
     }
 
     /*

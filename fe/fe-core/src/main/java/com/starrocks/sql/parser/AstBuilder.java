@@ -3982,6 +3982,30 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
+    public ParseNode visitColumnNameList(StarRocksParser.ColumnNameListContext ctx) {
+        GrantRevokePrivilegeObjects ret = new GrantRevokePrivilegeObjects();
+        List<String> columns = ctx.identifierOrString().stream().map(
+                c -> ((Identifier) visit(c)).getValue()).collect(toList());
+        System.out.println();
+        ret.setColumnNameList(columns);
+        return ret;
+    }
+
+    @Override
+    public ParseNode visitGrantColumnPrivBrief(StarRocksParser.GrantColumnPrivBriefContext context) {
+        GrantRevokePrivilegeObjects objects =
+                (GrantRevokePrivilegeObjects) visit(context.tableDbPrivilegeObjectNameList());
+        int objectTokenSize = objects.getPrivilegeObjectNameTokensList().get(0).size();
+        if (objectTokenSize != 2) {
+            throw new ParsingException("Grant column privilege must specify table name, current: " +
+                    objects.getPrivilegeObjectNameTokensList().toString());
+        }
+        objects.setColumnNameList(((GrantRevokePrivilegeObjects) visit(context.columnNameList())).getColumnNameList());
+        return newGrantRevokePrivilegeStmt(
+                "TABLE", context.privilegeActionList(), context.grantRevokeClause(), objects, true);
+    }
+
+    @Override
     public ParseNode visitRevokeTablePrivBrief(StarRocksParser.RevokeTablePrivBriefContext context) {
         GrantRevokePrivilegeObjects objects =
                 (GrantRevokePrivilegeObjects) visit(context.tableDbPrivilegeObjectNameList());

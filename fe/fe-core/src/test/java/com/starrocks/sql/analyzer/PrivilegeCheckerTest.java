@@ -503,7 +503,7 @@ public class PrivilegeCheckerTest {
         TablePattern db1TablePattern = new TablePattern("db1", "*");
         db1TablePattern.analyze();
 
-        String sql = "select count(*) from db1.tbl1 as a";
+        String sql = "select k1 from db1.tbl1 as a";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
 
         auth.grantPrivs(testUser, db1TablePattern, PrivBitSet.of(Privilege.SELECT_PRIV), true);
