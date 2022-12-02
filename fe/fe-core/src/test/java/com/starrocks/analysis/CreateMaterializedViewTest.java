@@ -1678,5 +1678,28 @@ public class CreateMaterializedViewTest {
             Assert.assertTrue(e.getMessage().contains("Materialized view query statement only support direct query from table"));
         }
     }
+
+    @Test
+    public void testCreateAsyncMv() {
+        Config.enable_experimental_mv = true;
+        String sql = "create materialized view async_mv_1 distributed by hash(c_1_9) as" +
+                " select c_1_9, c_1_4 from t1";
+        try {
+            starRocksAssert.withNewMaterializedView(sql);
+            MaterializedView mv = (MaterializedView) testDb.getTable("async_mv_1");
+            Assert.assertTrue(mv.getFullSchema().get(0).isKey());
+            Assert.assertFalse(mv.getFullSchema().get(1).isKey());
+        } catch (Exception e) {
+            Assert.assertTrue(false);
+        }
+
+        String sql2 = "create materialized view async_mv_1 distributed by hash(c_1_4) as" +
+                " select c_1_4 from t1";
+        try {
+            starRocksAssert.withNewMaterializedView(sql2);
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("Data type of first column cannot be DOUBLE"));
+        }
+    }
 }
 
