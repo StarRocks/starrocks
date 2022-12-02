@@ -21,6 +21,7 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.transaction.InsertTxnCommitAttachment;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TxnCommitAttachment;
@@ -149,14 +150,13 @@ public class AnalyzeManager implements Writable {
     }
 
     public void refreshBasicStatisticsCache(Long dbId, Long tableId, List<String> columns, boolean async) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-        if (null == db) {
+        Table table;
+        try {
+            table = MetaUtils.getTable(dbId, tableId);
+        } catch (SemanticException e) {
             return;
         }
-        Table table = db.getTable(tableId);
-        if (null == table) {
-            return;
-        }
+
         GlobalStateMgr.getCurrentStatisticStorage().expireColumnStatistics(table, columns);
         if (async) {
             GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistics(table, columns);
