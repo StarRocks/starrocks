@@ -1,14 +1,20 @@
-# Export data using brokers
+# Export data using EXPORT
 
-This topic describes how to export data from specified tables or partitions in your StarRocks cluster as CSV data files by using brokers to HDFS, Alibaba Cloud OSS, AWS S3, or other S3-compatible object storage systems.
+This topic describes how to export data from specified tables or partitions in your StarRocks cluster as CSV data files by using the [EXPORT](../sql-reference/sql-statements/data-manipulation/EXPORT.md) statement to HDFS, Alibaba Cloud OSS, AWS S3, or other S3-compatible object storage systems.
 
-## Prerequisites
+## Background information
 
-Brokers are deployed in your StarRocks cluster.
+In StarRocks v2.4 and earlier, Broker Load depends on brokers to set up connections between your StarRocks cluster and your storage system. When you export data from StarRocks, you need to input `WITH BROKER "<broker_name>"` to specify the broker group you want to use. A broker is an independent, stateless service that is integrated with a file-system interface. With brokers, StarRocks can access and read data files that are stored in your storage system, and can use its own computing resources to pre-process and load the data of these data files.
+
+From StarRocks v2.5 onwards, Broker Load no longer needs to depend on brokers to set up connections between your StarRocks cluster and your storage system. When you export data from StarRocks, you no longer need to specify a broker group, but you still need to retain the `WITH BROKER` keyword.
+
+> **NOTE**
+>
+> Unloading without brokers may not work in certain circumstances, such as when you configure multiple HA systems or have multiple Kerberos configurations. In this situation, you must export data by using brokers.
+
+If you need to use brokers to export data, make sure that brokers are deployed in your StarRocks cluster.
 
 You can use the [SHOW BROKER](../sql-reference/sql-statements/Administration/SHOW%20BROKER.md) statement to check for brokers that are deployed in your StarRocks cluster. If no brokers are deployed, you must deploy brokers by following the instructions provided in [Deploy a broker](../quick_start/Deploy.md).
-
-In this topic, assume that a group of brokers collectively named 'mybroker' are deployed in your StarRocks cluster.
 
 ## Precautions
 
@@ -26,7 +32,7 @@ In this topic, assume that a group of brokers collectively named 'mybroker' are 
 
 ## Workflow
 
-After you submit an export job, StarRocks identifies all tablets involved in the export job. Then, StarRocks divides the involved tablets into groups and generates query plans. The query plans are used to read data from the involved tablets and invoke brokers to write the data to a specified path of the destination storage system.
+After you submit an export job, StarRocks identifies all tablets involved in the export job. Then, StarRocks divides the involved tablets into groups and generates query plans. The query plans are used to read data from the involved tablets and to write the data to a specified path of the destination storage system.
 
 The following figure shows the general workflow.
 
@@ -48,9 +54,7 @@ After all data is exported, StarRocks uses the RENAME statement to save the gene
 
 ## Related parameters
 
-This section describes some export-related parameters that you can configure in the FEs and brokers.
-
-### FE parameters
+This section describes some export-related parameters that you can configure in the FEs of your StarRocks cluster.
 
 - `export_checker_interval_second`: the interval at which export jobs are scheduled. The default interval is 5 seconds. After you reconfigure this parameter for an FE, you need to restart the FE to make the new parameter setting take effect.
 
@@ -61,10 +65,6 @@ This section describes some export-related parameters that you can configure in 
 - `export_max_bytes_per_be_per_task`: the maximum amount of data as compressed that can be exported per export task from each BE. This parameter provides a policy based on which StarRocks splits export jobs into export tasks that can be concurrently run. The default maximum amount is 256 MB.
 
 - `export_task_pool_size`: the maximum number of export tasks that can be concurrently run by the thread pool. The default maximum number is 5.
-
-### Broker parameters
-
-Different brokers require different parameter configurations. For more information, see [Broker parameters](../administration/Configuration.md).
 
 ## Basic operations
 
@@ -83,7 +83,7 @@ PROPERTIES
     "load_mem_limit"="2147483648",
     "timeout" = "3600"
 )
-WITH BROKER "mybroker"
+WITH BROKER
 (
     "username" = "user",
     "password" = "passwd"
@@ -145,7 +145,7 @@ For detailed syntax and parameter descriptions, see [CANCEL EXPORT](../sql-refer
 
 ### Query plan splitting
 
-The number of query plans into which an export job is split varies depending on the number of tablets involved in the export job and on the maximum amount of data that can be processed per query plan. Export jobs are retried as query plans. If the amount of data processed by a query plan exceeds the maximum amount allowed, the query plan encounters errors such as RPC failures in brokers and jitters in remote storage. As a result, the cost of retrying the query plan increases. The maximum amount of data that can be processed per query plan by each BE is specified by the `export_max_bytes_per_be_per_task` parameter, which defaults to 256 MB. In a query plan, each BE is allocated at least one tablet and can export a data amount that does not exceed the limit specified by the `export_max_bytes_per_be_per_task` parameter.
+The number of query plans into which an export job is split varies depending on the number of tablets involved in the export job and on the maximum amount of data that can be processed per query plan. Export jobs are retried as query plans. If the amount of data processed by a query plan exceeds the maximum amount allowed, the query plan encounters errors such as jitters in remote storage. As a result, the cost of retrying the query plan increases. The maximum amount of data that can be processed per query plan by each BE is specified by the `export_max_bytes_per_be_per_task` parameter, which defaults to 256 MB. In a query plan, each BE is allocated at least one tablet and can export a data amount that does not exceed the limit specified by the `export_max_bytes_per_be_per_task` parameter.
 
 The multiple query plans of an export job are concurrently executed. You can use the FE parameter `export_task_pool_size` to specify the maximum number of export tasks that are allowed to concurrently run by the thread pool. This parameter defaults to `5`.
 
