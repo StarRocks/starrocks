@@ -82,12 +82,12 @@ public class AnalyzeExprTest {
     public void testExpressionPreceding() {
         String sql = "select v2&~v1|v3^1 from t0";
         StatementBase statementBase = analyzeSuccess(sql);
-        Assert.assertTrue(AST2SQL.toString(statementBase)
+        Assert.assertTrue(AstToStringBuilder.toString(statementBase)
                 .contains("(test.t0.v2 & (~test.t0.v1)) | (test.t0.v3 ^ 1)"));
 
         sql = "select v1 * v1 / v1 % v1 + v1 - v1 DIV v1 from t0";
         statementBase = analyzeSuccess(sql);
-        Assert.assertTrue(AST2SQL.toString(statementBase)
+        Assert.assertTrue(AstToStringBuilder.toString(statementBase)
                 .contains("((((test.t0.v1 * test.t0.v1) / test.t0.v1) % test.t0.v1) + test.t0.v1) " +
                         "- (test.t0.v1 DIV test.t0.v1)"));
     }

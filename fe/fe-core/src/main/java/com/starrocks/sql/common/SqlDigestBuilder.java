@@ -3,7 +3,7 @@ package com.starrocks.sql.common;
 
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.sql.analyzer.AST2SQL;
+import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.ast.StatementBase;
 
 //Used to build sql digests
@@ -12,7 +12,7 @@ public class SqlDigestBuilder {
         return new SqlDigestBuilderVisitor().visit(statement);
     }
 
-    private static class SqlDigestBuilderVisitor extends AST2SQL.SQLBuilder {
+    private static class SqlDigestBuilderVisitor extends AstToStringBuilder.AST2StringBuilderVisitor {
         @Override
         public String visitLiteral(LiteralExpr expr, Void context) {
             return "?";

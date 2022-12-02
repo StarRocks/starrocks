@@ -21,23 +21,29 @@ import java.util.Map;
 
 import static java.util.stream.Collectors.toList;
 
-public class ViewDefBuilder {
+/**
+ * AstToSQLBuilder inherits AstToStringBuilder and rewrites some special AST logic to
+ * ensure that the generated SQL must be a legal SQL,
+ * which can be used in some scenarios that require serialization and deserialization.
+ * Such as string serialization of views
+ */
+public class AstToSQLBuilder {
 
     public static String buildSimple(StatementBase statement) {
         Map<TableName, Table> tables = AnalyzerUtils.collectAllTableAndViewWithAlias(statement);
         boolean sameCatalogDb = tables.keySet().stream().map(TableName::getCatalogAndDb).distinct().count() == 1;
-        return new ViewDefBuilderVisitor(sameCatalogDb).visit(statement);
+        return new AST2SQLBuilderVisitor(sameCatalogDb).visit(statement);
     }
 
-    public static String build(StatementBase statement) {
-        return new ViewDefBuilderVisitor(false).visit(statement);
+    public static String toSQL(StatementBase statement) {
+        return new AST2SQLBuilderVisitor(false).visit(statement);
     }
 
-    private static class ViewDefBuilderVisitor extends AST2SQL.SQLBuilder {
+    private static class AST2SQLBuilderVisitor extends AstToStringBuilder.AST2StringBuilderVisitor {
 
         private final boolean simple;
 
-        public ViewDefBuilderVisitor(boolean simple) {
+        public AST2SQLBuilderVisitor(boolean simple) {
             this.simple = simple;
         }
 
