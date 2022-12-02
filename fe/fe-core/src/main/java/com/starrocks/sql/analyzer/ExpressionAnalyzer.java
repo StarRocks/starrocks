@@ -710,6 +710,37 @@ public class ExpressionAnalyzer {
                         Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
                 fn.setArgsType(argumentTypes); // as accepting various types
                 fn.setIsNullable(false);
+            } else if (fnName.equals(FunctionSet.TIME_SLICE) || fnName.equals(FunctionSet.DATE_SLICE)) {
+                if (!(node.getChild(1) instanceof IntLiteral)) {
+                    throw new SemanticException(
+                            fnName + " requires second parameter must be a constant interval");
+                }
+                if (((IntLiteral) node.getChild(1)).getValue() <= 0) {
+                    throw new SemanticException(
+                            fnName + " requires second parameter must be greater than 0");
+                }
+                fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            } else if (FunctionSet.decimalRoundFunctions.contains(fnName) ||
+                    Arrays.stream(argumentTypes).anyMatch(Type::isDecimalV3)) {
+                // Since the priority of decimal version is higher than double version (according functionId),
+                // and in `Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF` mode, `Expr.getBuiltinFunction` always
+                // return decimal version even if the input parameters are not decimal, such as (INT, INT),
+                // lacking of specific decimal type process defined in `getDecimalV3Function`. So we force round functions
+                // to go through `getDecimalV3Function` here
+                if (FunctionSet.varianceFunctions.contains(fnName)) {
+                    // When decimal values are too small, the stddev and variance alogrithm of decimal-version do not
+                    // work incorrectly. because we use decimal128(38,9) multiplication in this algorithm,
+                    // decimal128(38,9) * decimal128(38,9) produces a result of decimal128(38,9). if two numbers are
+                    // too small, for an example, 0.000000001 * 0.000000001 produces 0.000000000, so the algorithm
+                    // can not work. Because of this reason, stddev and variance on very small decimal numbers always
+                    // yields a zero, so we use double instead of decimal128(38,9) to compute stddev and variance of
+                    // decimal types.
+                    Type[] doubleArgTypes = Stream.of(argumentTypes).map(t -> Type.DOUBLE).toArray(Type[]::new);
+                    fn = Expr.getBuiltinFunction(fnName, doubleArgTypes,
+                            Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                } else {
+                    fn = getDecimalV3Function(node, argumentTypes);
+                }
             } else if (Arrays.stream(argumentTypes).anyMatch(arg -> arg.matchesType(Type.TIME))) {
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
                 if (fn instanceof AggregateFunction) {
@@ -747,43 +778,12 @@ public class ExpressionAnalyzer {
                             " should be an array or a lambda function.");
                 }
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-            } else if (fnName.equals(FunctionSet.TIME_SLICE) || fnName.equals(FunctionSet.DATE_SLICE)) {
-                if (!(node.getChild(1) instanceof IntLiteral)) {
-                    throw new SemanticException(
-                            fnName + " requires second parameter must be a constant interval");
-                }
-                if (((IntLiteral) node.getChild(1)).getValue() <= 0) {
-                    throw new SemanticException(
-                            fnName + " requires second parameter must be greater than 0");
-                }
-                fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             } else if (fnName.equals(FunctionSet.ARRAY_SLICE)) {
                 // Default type is TINYINT, it would match to a wrong function
                 for (int i = 1; i < argumentTypes.length; i++) {
                     argumentTypes[i] = Type.BIGINT;
                 }
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_SUPERTYPE_OF);
-            } else if (FunctionSet.decimalRoundFunctions.contains(fnName) ||
-                    Arrays.stream(argumentTypes).anyMatch(Type::isDecimalV3)) {
-                // Since the priority of decimal version is higher than double version (according functionId),
-                // and in `Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF` mode, `Expr.getBuiltinFunction` always
-                // return decimal version even if the input parameters are not decimal, such as (INT, INT),
-                // lacking of specific decimal type process defined in `getDecimalV3Function`. So we force round functions
-                // to go through `getDecimalV3Function` here
-                if (FunctionSet.varianceFunctions.contains(fnName)) {
-                    // When decimal values are too small, the stddev and variance alogrithm of decimal-version do not
-                    // work incorrectly. because we use decimal128(38,9) multiplication in this algorithm,
-                    // decimal128(38,9) * decimal128(38,9) produces a result of decimal128(38,9). if two numbers are
-                    // too small, for an example, 0.000000001 * 0.000000001 produces 0.000000000, so the algorithm
-                    // can not work. Because of this reason, stddev and variance on very small decimal numbers always
-                    // yields a zero, so we use double instead of decimal128(38,9) to compute stddev and variance of
-                    // decimal types.
-                    Type[] doubleArgTypes = Stream.of(argumentTypes).map(t -> Type.DOUBLE).toArray(Type[]::new);
-                    fn = Expr.getBuiltinFunction(fnName, doubleArgTypes,
-                            Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-                } else {
-                    fn = getDecimalV3Function(node, argumentTypes);
-                }
             } else {
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             }
