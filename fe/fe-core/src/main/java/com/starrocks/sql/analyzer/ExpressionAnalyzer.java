@@ -711,6 +711,7 @@ public class ExpressionAnalyzer {
                 fn.setArgsType(argumentTypes); // as accepting various types
                 fn.setIsNullable(false);
             } else if (fnName.equals(FunctionSet.TIME_SLICE) || fnName.equals(FunctionSet.DATE_SLICE)) {
+                // This must before test for DecimalV3.
                 if (!(node.getChild(1) instanceof IntLiteral)) {
                     throw new SemanticException(
                             fnName + " requires second parameter must be a constant interval");
