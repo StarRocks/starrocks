@@ -746,9 +746,9 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
                         empty = false;
                     }
                     Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(replica.getBackendId());
-                    sb.append(String.format("[be:%s,version:%d%s]",
+                    sb.append(String.format(" %s:%d%s",
                             backend == null ? Long.toString(replica.getBackendId()) : backend.getHost(), replicaVersion,
-                            replica.getState() == ReplicaState.ALTER ? ",ALTER" : ""));
+                            replica.getState() == ReplicaState.ALTER ? "ALTER" : ""));
                 }
             }
             if (!empty) {

@@ -889,8 +889,14 @@ public class StmtExecutor {
 
     private void executeAnalyze(AnalyzeStmt analyzeStmt, AnalyzeStatus analyzeStatus, Database db, OlapTable table) {
         StatisticExecutor statisticExecutor = new StatisticExecutor();
+
+        ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
+        // from current session, may execute analyze stmt
+        statsConnectCtx.getSessionVariable().setStatisticCollectParallelism(
+                context.getSessionVariable().getStatisticCollectParallelism());
+
         if (analyzeStmt.getAnalyzeTypeDesc() instanceof AnalyzeHistogramDesc) {
-            statisticExecutor.collectStatistics(
+            statisticExecutor.collectStatistics(statsConnectCtx,
                     new HistogramStatisticsCollectJob(db, table, analyzeStmt.getColumnNames(),
                             StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE,
                             analyzeStmt.getProperties()),
@@ -898,7 +904,7 @@ public class StmtExecutor {
                     //Sync load cache, auto-populate column statistic cache after Analyze table manually
                     false);
         } else {
-            statisticExecutor.collectStatistics(
+            statisticExecutor.collectStatistics(statsConnectCtx,
                     StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table, null,
                             analyzeStmt.getColumnNames(),
                             analyzeStmt.isSample() ? StatsConstants.AnalyzeType.SAMPLE :
@@ -917,7 +923,8 @@ public class StmtExecutor {
                 .collect(Collectors.toList());
 
         GlobalStateMgr.getCurrentAnalyzeMgr().dropAnalyzeStatus(table.getId());
-        GlobalStateMgr.getCurrentAnalyzeMgr().dropBasicStatsMetaAndData(Sets.newHashSet(table.getId()));
+        GlobalStateMgr.getCurrentAnalyzeMgr()
+                .dropBasicStatsMetaAndData(StatisticUtils.buildConnectContext(), Sets.newHashSet(table.getId()));
         GlobalStateMgr.getCurrentStatisticStorage().expireColumnStatistics(table, columns);
     }
 
@@ -928,9 +935,11 @@ public class StmtExecutor {
                 .collect(Collectors.toList());
 
         GlobalStateMgr.getCurrentAnalyzeMgr().dropAnalyzeStatus(table.getId());
-        GlobalStateMgr.getCurrentAnalyzeMgr().dropHistogramStatsMetaAndData(Sets.newHashSet(table.getId()));
+        GlobalStateMgr.getCurrentAnalyzeMgr()
+                .dropHistogramStatsMetaAndData(StatisticUtils.buildConnectContext(), Sets.newHashSet(table.getId()));
         GlobalStateMgr.getCurrentStatisticStorage().expireHistogramStatistics(table.getId(), columns);
     }
+
 
     private void handleKillAnalyzeStmt() {
         KillAnalyzeStmt killAnalyzeStmt = (KillAnalyzeStmt) parsedStmt;
@@ -1446,8 +1455,8 @@ public class StmtExecutor {
             String timeoutInfo = GlobalStateMgr.getCurrentGlobalTransactionMgr()
                     .getTxnPublishTimeoutDebugInfo(database.getId(), transactionId);
             LOG.warn("txn {} publish timeout {}", transactionId, timeoutInfo);
-            if (timeoutInfo.length() > 120) {
-                timeoutInfo = timeoutInfo.substring(0, 120) + "...";
+            if (timeoutInfo.length() > 240) {
+                timeoutInfo = timeoutInfo.substring(0, 240) + "...";
             }
             errMsg = "Publish timeout " + timeoutInfo;
         }
