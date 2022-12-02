@@ -28,16 +28,16 @@ public class MetaUtils {
 
     private static final Logger LOG = LogManager.getLogger(MetaUtils.class);
 
-    public static Database getDatabase(ConnectContext session, long dbId) {
-        Database db = session.getGlobalStateMgr().getDb(dbId);
+    public static Database getDatabase(long dbId) {
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db == null) {
             throw new SemanticException("Database %s is not find", dbId);
         }
         return db;
     }
 
-    public static Table getTable(ConnectContext session, long dbId, long tableId) {
-        Database db = session.getGlobalStateMgr().getDb(dbId);
+    public static Table getTable(long dbId, long tableId) {
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db == null) {
             throw new SemanticException("Database %s is not find", dbId);
         }
