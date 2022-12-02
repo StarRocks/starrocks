@@ -438,6 +438,10 @@ public class Coordinator {
         return fragments;
     }
 
+    public TDescriptorTable getDescTable() {
+        return descTable;
+    }
+
     public boolean isLoadType() {
         return queryOptions.getQuery_type() == TQueryType.LOAD;
     }

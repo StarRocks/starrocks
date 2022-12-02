@@ -214,7 +214,7 @@ public class MVMaintenanceJob implements Writable {
 
         this.tasks = new ArrayList<>();
         int taskId = 0;
-        for (Map.Entry<PlanFragmentId, Coordinator.FragmentExecParams> kv : fragmentExecParams.entrySet()) {
+        for (Map.Entry<PlanFragmentId, CoordinatorPreprocessor.FragmentExecParams> kv : fragmentExecParams.entrySet()) {
             PlanFragmentId fragmentId = kv.getKey();
             CoordinatorPreprocessor.FragmentExecParams execParams = kv.getValue();
             List<TExecPlanFragmentParams> tParams =
