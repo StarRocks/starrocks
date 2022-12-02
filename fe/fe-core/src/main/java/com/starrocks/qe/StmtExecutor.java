@@ -351,7 +351,7 @@ public class StmtExecutor {
             ExecPlan execPlan = null;
             boolean execPlanBuildByNewPlanner = false;
 
-            try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("Total")) {
+            try (PlannerProfile.ScopedTimer timer = PlannerProfile.getScopedTimer("Total")) {
                 redirectStatus = parsedStmt.getRedirectStatus();
                 if (!isForwardToLeader()) {
                     context.getDumpInfo().reset();
