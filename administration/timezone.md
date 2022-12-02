@@ -37,7 +37,7 @@
 如要查看时区设置，执行以下命令。
 
 ```Plain%20Text
- SHOW variables like '%time_zone%';
+ SHOW VARIABLES LIKE '%time_zone%';
 ```
 
 ## 时区设置的影响
