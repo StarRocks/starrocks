@@ -12,6 +12,7 @@ import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.jline.utils.Log;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -63,9 +64,14 @@ public class ShardDeleter extends LeaderDaemon {
         // 1.3.compute diff
         List<Long> groupIdFe = getAllPartitionId();
         List<ShardGroupInfo> shardGroupInfos = starOSAgent.listShardGroup();
+        shardGroupInfos = shardGroupInfos.stream()
+                .filter(item -> item.getGroupId() != 0L)
+                .collect(Collectors.toList());
         // for debug
         LOG.info("size of groupIdFe is {}, size of shardGroupInfos is {}",
-                groupIdFe.size(),shardGroupInfos.size());
+                groupIdFe.size(), shardGroupInfos.size());
+
+        Log.info("groupIdFe is {}", groupIdFe.get(0));
         List<Long> groupIdStaros = shardGroupInfos.stream().map(ShardGroupInfo::getGroupId).collect(Collectors.toList());
 
         if (shardGroupInfos.isEmpty()) {
@@ -83,19 +89,30 @@ public class ShardDeleter extends LeaderDaemon {
             return !groupIdFe.contains(e);
         }).collect(Collectors.toList());
 
-        diff.remove(Long.valueOf(0));
+        // for debug
+        LOG.info("diff.size is {}", diff.size());
+        LOG.info("diff is {}", diff);
 
         // 1.4.collect redundant shard groups
         List<Long> needDeleteShardGroups = new ArrayList<>();
         for (long groupId : diff) {
-            if (Long.valueOf(groupToCreateTimeMap.get(groupId)) - System.currentTimeMillis()
+            // for debug
+            LOG.info("create time for {} is {}, currentTime is {}",
+                    groupId, groupToCreateTimeMap.get(groupId), System.currentTimeMillis());
+            if (System.currentTimeMillis() - Long.valueOf(groupToCreateTimeMap.get(groupId))
                     > Config.shard_group_clean_interval) {
                 needDeleteShardGroups.add(groupId);
             }
         }
 
+        // for debug
+        LOG.info("Config.shard_group_clean_interval is {}", Config.shard_group_clean_interval);
+        LOG.info("needDeleteShardGroups.size is {}", needDeleteShardGroups.size());
+
         // delete shard group
         if (!needDeleteShardGroups.isEmpty()) {
+            // for debug
+            LOG.info("delete shard group size is {}", needDeleteShardGroups.size());
             starOSAgent.deleteShardGroup(needDeleteShardGroups);
         }
     }

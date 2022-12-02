@@ -233,7 +233,7 @@ public class StarOSAgentTest {
     }
 
     @Test
-    public void testCreateShards() throws StarClientException, DdlException {
+    public void testCreateAndListShardGroup() throws StarClientException, DdlException {
         ShardInfo shard1 = ShardInfo.newBuilder().setShardId(10L).build();
         ShardInfo shard2 = ShardInfo.newBuilder().setShardId(11L).build();
         List<ShardInfo> shards = Lists.newArrayList(shard1, shard2);
@@ -255,15 +255,41 @@ public class StarOSAgentTest {
                     throws StarClientException {
                 return groups;
             }
+
+            @Mock
+            public List<ShardGroupInfo> listShardGroup(String serviceId) throws StarClientException {
+                return groups;
+            }
         };
 
         Deencapsulation.setField(starosAgent, "serviceId", "1");
         // test create shard group
-        ExceptionChecker.expectThrowsNoException(() -> starosAgent.createShardGroup(0, 0, groupId));
+        ExceptionChecker.expectThrowsNoException(() -> starosAgent.createShardGroup(0, 0, 1));
         // test create shards
         FilePathInfo pathInfo = FilePathInfo.newBuilder().build();
         FileCacheInfo cacheInfo = FileCacheInfo.newBuilder().build();
-        Assert.assertEquals(Lists.newArrayList(10L, 11L), starosAgent.createShards(2, pathInfo, cacheInfo, 1));
+        Assert.assertEquals(Lists.newArrayList(10L, 11L), starosAgent.createShards(2, pathInfo, cacheInfo, 333));
+
+        // list shard group
+        List<ShardGroupInfo> realGroupIds = starosAgent.listShardGroup();
+        Assert.assertEquals(1, realGroupIds.size());
+        Assert.assertEquals(groupId, realGroupIds.get(0).getGroupId());
+    }
+
+    @Test
+    public void testDeleteShardGroup() throws StarClientException, DdlException {
+        new Expectations() {
+            {
+                client.deleteShardGroup("1", (List<Long>) any, true);
+                minTimes = 0;
+                result = null;
+            }
+        };
+
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+
+        // test delete shard group
+        ExceptionChecker.expectThrowsNoException(() -> starosAgent.deleteShardGroup(Lists.newArrayList(1L, 2L)));
     }
 
 
@@ -346,4 +372,5 @@ public class StarOSAgentTest {
         starosAgent.removeWorkerFromMap(5L, workerHost);
         ExceptionChecker.expectThrows(NullPointerException.class, () -> starosAgent.getWorkerId(workerHost));
     }
+
 }

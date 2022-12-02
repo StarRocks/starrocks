@@ -300,12 +300,14 @@ public class StarOSAgent {
         prepare();
         List<ShardInfo> shardInfos = null;
         try {
+            List<Long> groupIds = new ArrayList<>();
+            groupIds.add(groupId);
             List<CreateShardInfo> createShardInfos = new ArrayList<>(numShards);
             for (int i = 0; i < numShards; ++i) {
                 CreateShardInfo.Builder builder = CreateShardInfo.newBuilder();
                 builder.setReplicaCount(1);
                 builder.setShardId(GlobalStateMgr.getCurrentState().getNextId());
-                builder.setGroupIds(0, groupId);
+                builder.addAllGroupIds(groupIds);
                 builder.setPathInfo(pathInfo);
                 builder.setCacheInfo(cacheInfo);
                 createShardInfos.add(builder.build());
