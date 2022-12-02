@@ -36,4 +36,13 @@ TEST_F(ColumnHelperTest, cast_to_nullable_column) {
     ASSERT_FALSE(col->is_constant());
 }
 
+TEST_F(ColumnHelperTest, align_return_type) {
+    auto nullable_column = create_nullable_column();
+    auto not_null_column = create_column();
+    nullable_column->append(*ColumnHelper::align_return_type(
+            not_null_column, TypeDescriptor::from_primtive_type(TYPE_VARCHAR), not_null_column->size(), true));
+    ASSERT_TRUE(nullable_column->is_nullable());
+    ASSERT_FALSE(nullable_column->is_constant());
+}
+
 } // namespace starrocks::vectorized
