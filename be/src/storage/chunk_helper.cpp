@@ -82,6 +82,11 @@ struct CppColumnTraits<TYPE_JSON> {
     using ColumnType = vectorized::JsonColumn;
 };
 
+template <>
+struct CppColumnTraits<TYPE_VARBINARY> {
+    using ColumnType = vectorized::BinaryColumn;
+};
+
 vectorized::Field ChunkHelper::convert_field(ColumnId id, const TabletColumn& c) {
     TypeInfoPtr type_info = get_type_info(c);
     starrocks::vectorized::Field f(id, std::string(c.name()), type_info, c.is_nullable());

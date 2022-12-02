@@ -255,6 +255,8 @@ EncodingInfoResolver::EncodingInfoResolver() {
 
     _add_map<TYPE_PERCENTILE, PLAIN_ENCODING>();
     _add_map<TYPE_JSON, PLAIN_ENCODING>();
+
+    _add_map<TYPE_VARBINARY, PLAIN_ENCODING>();
 }
 
 EncodingInfoResolver::~EncodingInfoResolver() {
