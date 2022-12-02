@@ -61,7 +61,7 @@ public class SingleRangePartitionDesc extends PartitionDesc {
         this.partitionKeyDesc = partitionKeyDesc;
         this.properties = properties;
 
-        this.partitionDataProperty = DataProperty.DEFAULT_DATA_PROPERTY;
+        this.partitionDataProperty = DataProperty.getInferredDefaultDataProperty();
         this.replicationNum = FeConstants.default_replication_num;
     }
 
@@ -128,7 +128,7 @@ public class SingleRangePartitionDesc extends PartitionDesc {
 
         // analyze data property
         partitionDataProperty = PropertyAnalyzer.analyzeDataProperty(properties,
-                DataProperty.DEFAULT_DATA_PROPERTY);
+                DataProperty.getInferredDefaultDataProperty());
         Preconditions.checkNotNull(partitionDataProperty);
 
         // analyze replication num

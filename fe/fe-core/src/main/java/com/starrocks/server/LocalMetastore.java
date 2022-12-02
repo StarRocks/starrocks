@@ -1839,7 +1839,8 @@ public class LocalMetastore implements ConnectorMetadata {
                 if (properties != null) {
                     hasMedium = properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM);
                 }
-                dataProperty = PropertyAnalyzer.analyzeDataProperty(properties, DataProperty.DEFAULT_DATA_PROPERTY);
+                dataProperty = PropertyAnalyzer.analyzeDataProperty(properties,
+                        DataProperty.getInferredDefaultDataProperty());
                 if (hasMedium) {
                     olapTable.setStorageMedium(dataProperty.getStorageMedium());
                 }
@@ -1959,7 +1960,7 @@ public class LocalMetastore implements ConnectorMetadata {
                             hasMedium = properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM);
                         }
                         DataProperty dataProperty = PropertyAnalyzer.analyzeDataProperty(properties,
-                                DataProperty.DEFAULT_DATA_PROPERTY);
+                                DataProperty.getInferredDefaultDataProperty());
                         DynamicPartitionUtil
                                 .checkAndSetDynamicPartitionBuckets(properties, distributionDesc.getBuckets());
                         DynamicPartitionUtil.checkAndSetDynamicPartitionProperty(olapTable, properties);
@@ -2811,6 +2812,325 @@ public class LocalMetastore implements ConnectorMetadata {
             if (!db.tryWriteLock(Database.TRY_LOCK_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
                 LOG.warn("try get db {} writelock but failed when hecking backend storage medium", dbId);
                 continue;
+<<<<<<< HEAD
+=======
+            }
+            Preconditions.checkState(db.isWriteLockHeldByCurrentThread());
+            try {
+                for (Long tableId : tableIdToPartitionIds.keySet()) {
+                    Table table = db.getTable(tableId);
+                    if (table == null) {
+                        continue;
+                    }
+                    OlapTable olapTable = (OlapTable) table;
+                    PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+
+                    Collection<Long> partitionIds = tableIdToPartitionIds.get(tableId);
+                    for (Long partitionId : partitionIds) {
+                        Partition partition = olapTable.getPartition(partitionId);
+                        if (partition == null) {
+                            continue;
+                        }
+                        DataProperty dataProperty = partitionInfo.getDataProperty(partition.getId());
+                        if (dataProperty.getStorageMedium() == TStorageMedium.SSD
+                                && dataProperty.getCooldownTimeMs() < currentTimeMs) {
+                            // expire. change to HDD.
+                            DataProperty hdd = new DataProperty(TStorageMedium.HDD);
+                            partitionInfo.setDataProperty(partition.getId(), hdd);
+                            storageMediumMap.put(partitionId, TStorageMedium.HDD);
+                            LOG.debug("partition[{}-{}-{}] storage medium changed from SSD to HDD",
+                                    dbId, tableId, partitionId);
+
+                            // log
+                            ModifyPartitionInfo info =
+                                    new ModifyPartitionInfo(db.getId(), olapTable.getId(),
+                                            partition.getId(),
+                                            hdd,
+                                            (short) -1,
+                                            partitionInfo.getIsInMemory(partition.getId()));
+                            editLog.logModifyPartition(info);
+                        }
+                    } // end for partitions
+                } // end for tables
+            } finally {
+                db.writeUnlock();
+            }
+        } // end for dbs
+        return storageMediumMap;
+    }
+
+    /*
+     * used for handling AlterTableStmt (for client is the ALTER TABLE command).
+     * including SchemaChangeHandler and RollupHandler
+     */
+    @Override
+    public void alterTable(AlterTableStmt stmt) throws UserException {
+        stateMgr.getAlterInstance().processAlterTable(stmt);
+    }
+
+    /**
+     * used for handling AlterViewStmt (the ALTER VIEW command).
+     */
+    @Override
+    public void alterView(AlterViewStmt stmt) throws UserException {
+        stateMgr.getAlterInstance().processAlterView(stmt, ConnectContext.get());
+    }
+
+    @Override
+    public void createMaterializedView(CreateMaterializedViewStmt stmt)
+            throws AnalysisException, DdlException {
+        stateMgr.getAlterInstance().processCreateMaterializedView(stmt);
+    }
+
+    @Override
+    public void createMaterializedView(CreateMaterializedViewStatement stmt)
+            throws DdlException {
+        // check mv exists,name must be different from view/mv/table which exists in metadata
+        String mvName = stmt.getTableName().getTbl();
+        String dbName = stmt.getTableName().getDb();
+        LOG.debug("Begin create materialized view: {}", mvName);
+        // check if db exists
+        Database db = this.getDb(dbName);
+        if (db == null) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+        }
+        // check if table exists in db
+        db.readLock();
+        try {
+            if (db.getTable(mvName) != null) {
+                if (stmt.isIfNotExists()) {
+                    LOG.info("Create materialized view [{}] which already exists", mvName);
+                    return;
+                } else {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_TABLE_EXISTS_ERROR, mvName);
+                }
+            }
+        } finally {
+            db.readUnlock();
+        }
+        // create columns
+        List<Column> baseSchema = stmt.getMvColumnItems();
+        validateColumns(baseSchema);
+        // create partition info
+        PartitionDesc partitionDesc = stmt.getPartitionExpDesc();
+        PartitionInfo partitionInfo;
+        if (partitionDesc != null) {
+            partitionInfo = partitionDesc.toPartitionInfo(
+                    Collections.singletonList(stmt.getPartitionColumn()),
+                    Maps.newHashMap(), false);
+        } else {
+            partitionInfo = new SinglePartitionInfo();
+        }
+        // create distribution info
+        DistributionDesc distributionDesc = stmt.getDistributionDesc();
+        Preconditions.checkNotNull(distributionDesc);
+        DistributionInfo distributionInfo = distributionDesc.toDistributionInfo(baseSchema);
+        if (distributionInfo.getBucketNum() == 0) {
+            int numBucket = calBucketNumAccordingToBackends();
+            distributionInfo.setBucketNum(numBucket);
+        }
+        // create refresh scheme
+        MaterializedView.MvRefreshScheme mvRefreshScheme;
+        RefreshSchemeDesc refreshSchemeDesc = stmt.getRefreshSchemeDesc();
+        if (refreshSchemeDesc.getType() == MaterializedView.RefreshType.ASYNC) {
+            mvRefreshScheme = new MaterializedView.MvRefreshScheme();
+            AsyncRefreshSchemeDesc asyncRefreshSchemeDesc = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
+            MaterializedView.AsyncRefreshContext asyncRefreshContext = mvRefreshScheme.getAsyncRefreshContext();
+            asyncRefreshContext.setStartTime(Utils.getLongFromDateTime(asyncRefreshSchemeDesc.getStartTime()));
+            asyncRefreshContext.setDefineStartTime(asyncRefreshSchemeDesc.isDefineStartTime());
+            if (asyncRefreshSchemeDesc.getIntervalLiteral() != null) {
+                asyncRefreshContext.setStep(
+                        ((IntLiteral) asyncRefreshSchemeDesc.getIntervalLiteral().getValue()).getValue());
+                asyncRefreshContext.setTimeUnit(
+                        asyncRefreshSchemeDesc.getIntervalLiteral().getUnitIdentifier().getDescription());
+            }
+            // task which type is EVENT_TRIGGERED can not use external table as base table now.
+            if (asyncRefreshContext.getTimeUnit() == null) {
+                // asyncRefreshContext's timeUnit is null means this task's type is EVENT_TRIGGERED
+                Map<TableName, Table> tableNameTableMap = AnalyzerUtils.collectAllTable(stmt.getQueryStatement());
+                if (tableNameTableMap.values().stream().anyMatch(table -> !table.isLocalTable())) {
+                    throw new DdlException("Materialized view which type is ASYNC need to specify refresh interval for " +
+                            "external table");
+                }
+            }
+        } else if (refreshSchemeDesc.getType() == MaterializedView.RefreshType.SYNC) {
+            mvRefreshScheme = new MaterializedView.MvRefreshScheme();
+            mvRefreshScheme.setType(MaterializedView.RefreshType.SYNC);
+        } else {
+            mvRefreshScheme = new MaterializedView.MvRefreshScheme();
+            mvRefreshScheme.setType(MaterializedView.RefreshType.MANUAL);
+        }
+        // create mv
+        long mvId = GlobalStateMgr.getCurrentState().getNextId();
+        MaterializedView materializedView =
+                new MaterializedView(mvId, db.getId(), mvName, baseSchema, stmt.getKeysType(), partitionInfo,
+                        distributionInfo, mvRefreshScheme);
+        // set comment
+        materializedView.setComment(stmt.getComment());
+        // set baseTableIds
+        materializedView.setBaseTableInfos(stmt.getBaseTableInfos());
+        // set viewDefineSql
+        materializedView.setViewDefineSql(stmt.getInlineViewDef());
+        materializedView.setSimpleDefineSql(stmt.getSimpleViewDef());
+        // set partitionRefTableExprs
+        materializedView.setPartitionRefTableExprs(Lists.newArrayList(stmt.getPartitionRefTableExpr()));
+        // set base index id
+        long baseIndexId = getNextId();
+        materializedView.setBaseIndexId(baseIndexId);
+        // set base index meta
+        int schemaVersion = 0;
+        int schemaHash = Util.schemaHash(schemaVersion, baseSchema, null, 0d);
+        short shortKeyColumnCount = GlobalStateMgr.calcShortKeyColumnCount(baseSchema, null);
+        TStorageType baseIndexStorageType = TStorageType.COLUMN;
+        materializedView.setIndexMeta(baseIndexId, mvName, baseSchema, schemaVersion, schemaHash,
+                shortKeyColumnCount, baseIndexStorageType, stmt.getKeysType());
+
+        Map<String, String> properties = stmt.getProperties();
+        if (properties == null) {
+            properties = Maps.newHashMap();
+        }
+        // set replication_num
+        short replicationNum = FeConstants.default_replication_num;
+        try {
+            boolean isReplicationNumSet = properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM);
+            replicationNum = PropertyAnalyzer.analyzeReplicationNum(properties, replicationNum);
+            if (isReplicationNumSet) {
+                materializedView.setReplicationNum(replicationNum);
+            }
+        } catch (AnalysisException e) {
+            throw new DdlException(e.getMessage(), e);
+        }
+        // validate optHints
+        Map<String, String> optHints = null;
+        QueryRelation queryRelation = stmt.getQueryStatement().getQueryRelation();
+        if (queryRelation instanceof SelectRelation) {
+            SelectRelation selectRelation = (SelectRelation) queryRelation;
+            optHints = selectRelation.getSelectList().getOptHints();
+            if (optHints != null && !optHints.isEmpty()) {
+                SessionVariable sessionVariable = VariableMgr.newSessionVariable();
+                for (String key : optHints.keySet()) {
+                    VariableMgr.setVar(sessionVariable, new SetVar(key, new StringLiteral(optHints.get(key))), true);
+                }
+            }
+        }
+
+        DataProperty dataProperty;
+        try {
+            // set storage medium
+            boolean hasMedium = properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM);
+            dataProperty = PropertyAnalyzer.analyzeDataProperty(properties,
+                    DataProperty.getInferredDefaultDataProperty());
+            if (hasMedium && dataProperty.getStorageMedium() == TStorageMedium.SSD) {
+                materializedView.setStorageMedium(dataProperty.getStorageMedium());
+                // set storage cooldown time into table property,
+                // because we don't have property in MaterializedView
+                materializedView.getTableProperty().getProperties()
+                        .put(PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME,
+                                String.valueOf(dataProperty.getCooldownTimeMs()));
+            }
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)) {
+                int number = PropertyAnalyzer.analyzePartitionTimeToLive(properties);
+                materializedView.getTableProperty().getProperties()
+                        .put(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER, String.valueOf(number));
+                materializedView.getTableProperty().setPartitionTTLNumber(number);
+            }
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT)) {
+                int limit = PropertyAnalyzer.analyzeAutoRefreshPartitionsLimit(properties, materializedView);
+                materializedView.getTableProperty().getProperties()
+                        .put(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT, String.valueOf(limit));
+                materializedView.getTableProperty().setAutoRefreshPartitionsLimit(limit);
+            }
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER))  {
+                int number = PropertyAnalyzer.analyzePartitionRefreshNumber(properties);
+                materializedView.getTableProperty().getProperties()
+                        .put(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER, String.valueOf(number));
+                materializedView.getTableProperty().setPartitionRefreshNumber(number);
+            }
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES))  {
+                List<TableName> tables = PropertyAnalyzer.analyzeExcludedTriggerTables(properties, materializedView);
+                StringBuilder tableSb = new StringBuilder();
+                for (int i = 1; i <= tables.size(); i++) {
+                    TableName tableName = tables.get(i - 1);
+                    if (tableName.getDb() == null) {
+                        tableSb.append(tableName.getTbl());
+                    } else {
+                        tableSb.append(tableName.getDb()).append(".").append(tableName.getTbl());
+                    }
+                    if (i != tables.size()) {
+                        tableSb.append(",");
+                    }
+                }
+                materializedView.getTableProperty().getProperties()
+                        .put(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES, tableSb.toString());
+                materializedView.getTableProperty().setExcludedTriggerTables(tables);
+            }
+            if (!properties.isEmpty()) {
+                // here, all properties should be checked
+                throw new DdlException("Unknown properties: " + properties);
+            }
+        } catch (AnalysisException e) {
+            throw new DdlException(e.getMessage(), e);
+        }
+
+        boolean createMvSuccess;
+        Set<Long> tabletIdSet = new HashSet<>();
+        // process single partition info
+        if (partitionInfo.getType() == PartitionType.UNPARTITIONED) {
+            long partitionId = GlobalStateMgr.getCurrentState().getNextId();
+            Preconditions.checkNotNull(dataProperty);
+            partitionInfo.setDataProperty(partitionId, dataProperty);
+            partitionInfo.setReplicationNum(partitionId, replicationNum);
+            partitionInfo.setIsInMemory(partitionId, false);
+            partitionInfo.setTabletType(partitionId, TTabletType.TABLET_TYPE_DISK);
+            Long version = Partition.PARTITION_INIT_VERSION;
+            Partition partition = createPartition(db, materializedView, partitionId, mvName, version, tabletIdSet);
+            buildPartitions(db, materializedView, Collections.singletonList(partition));
+            materializedView.addPartition(partition);
+        }
+        // check database exists again, because database can be dropped when creating table
+        if (!tryLock(false)) {
+            throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
+        }
+        try {
+            if (getDb(db.getId()) == null) {
+                throw new DdlException("Database has been dropped when creating materialized view");
+            }
+            createMvSuccess = db.createMaterializedWithLock(materializedView, false);
+            if (!createMvSuccess) {
+                for (Long tabletId : tabletIdSet) {
+                    GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(tabletId);
+                }
+                if (!stmt.isIfNotExists()) {
+                    ErrorReport
+                            .reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, materializedView,
+                                    "Materialized view already exists");
+                } else {
+                    LOG.info("Create materialized view[{}] which already exists", materializedView);
+                    return;
+                }
+            }
+        } finally {
+            unlock();
+        }
+        LOG.info("Successfully create materialized view[{};{}]", mvName, mvId);
+
+        // NOTE: The materialized view has been added to the database, and the following procedure cannot throw exception.
+        createTaskForMaterializedView(dbName, materializedView, optHints);
+        DynamicPartitionUtil.registerOrRemovePartitionTTLTable(db.getId(), materializedView);
+    }
+
+    private void createTaskForMaterializedView(String dbName, MaterializedView materializedView,
+                                               Map<String, String> optHints) throws DdlException {
+        MaterializedView.RefreshType refreshType = materializedView.getRefreshScheme().getType();
+        if (refreshType != MaterializedView.RefreshType.SYNC) {
+
+            Task task = TaskBuilder.buildMvTask(materializedView, dbName);
+            TaskBuilder.updateTaskInfo(task, materializedView);
+
+            if (optHints != null) {
+                Map<String, String> taskProperties = task.getProperties();
+                taskProperties.putAll(optHints);
+>>>>>>> 336b33cbe ([Enhancement] Infer default storage medium when creating table (#14394))
             }
             Preconditions.checkState(db.isWriteLockHeldByCurrentThread());
             try {

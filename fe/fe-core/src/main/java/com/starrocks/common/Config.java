@@ -756,6 +756,7 @@ public class Config extends ConfigBase {
     public static int alter_max_worker_queue_size = 4096;
 
     /**
+<<<<<<< HEAD
      * When create a table(or partition), you can specify its storage medium(HDD or SSD).
      * If not set, this specifies the default medium when creat.
      */
@@ -769,6 +770,18 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static long storage_cooldown_second = 30 * 24 * 3600L; // 30 days
+=======
+     * If set to true, FE will check backend available capacity by storage medium when create table
+     * <p>
+     * The default value should better set to true because if user
+     * has a deployment with only SSD or HDD medium storage paths,
+     * create an incompatible table with cause balance problem(SSD tablet cannot move to HDD path, vice versa).
+     * But currently for compatible reason, we keep it to false.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_strict_storage_medium_check = false;
+
+>>>>>>> 336b33cbe ([Enhancement] Infer default storage medium when creating table (#14394))
     /**
      * After dropping database(table/partition), you can recover it by using RECOVER stmt.
      * And this specifies the maximal data retention time. After time, the data will be deleted permanently.
