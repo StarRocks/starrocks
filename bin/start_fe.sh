@@ -66,6 +66,13 @@ if [ "$JAVA_HOME" = "" ]; then
   echo "Error: JAVA_HOME is not set."
   exit 1
 fi
+
+# cannot be jre
+if [ ! -f "$JAVA_HOME/bin/javac" ]; then
+  echo "Error: JAVA_HOME can not be jre"
+  exit 1
+fi
+
 JAVA=$JAVA_HOME/bin/java
  
 # check java version and choose correct JAVA_OPTS
