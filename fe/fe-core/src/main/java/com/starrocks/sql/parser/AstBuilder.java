@@ -555,7 +555,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 partitionDescList.add(rangePartitionDesc);
             }
             Expr expr = (Expr) visit(context.partitionExpression().expression());
-            List<String> columnList = ImmutableList.of(((SlotRef) expr).getColumnName());
+            List<String> columnList;
+            if (expr instanceof SlotRef) {
+                SlotRef slotRef = (SlotRef) expr;
+                columnList = ImmutableList.of(slotRef.getColumnName());
+            } else {
+                throw new ParsingException("Unsupported partition expression: %s", expr);
+            }
             RangePartitionDesc rangePartitionDesc = new RangePartitionDesc(columnList, partitionDescList);
             return new ExpressionPartitionDesc(rangePartitionDesc, expr);
         }
