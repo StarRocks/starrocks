@@ -189,10 +189,11 @@ ColumnPtr ColumnHelper::create_const_null_column(size_t chunk_size) {
     return ConstColumn::create(nullable_column, chunk_size);
 }
 
-// expression trees' return column should align return type when some return columns may be different from
-// the required return type. e.g., concat_ws returns col from create_const_null_column(), it's type is Nullable(int8),
-// but required return type is nullable(string), so col need align return type to nullable(string).
-ColumnPtr ColumnHelper::align_return_type(const ColumnPtr& old_col, const TypeDescriptor& type_desc, size_t num_rows) {
+// expression trees' return column should align return type when some return columns maybe diff from the required
+// return type, as well the null flag. e.g., concat_ws returns col from create_const_null_column(), it's type is
+// Nullable(int8), but required return type is nullable(string), so col need align return type to nullable(string).
+ColumnPtr ColumnHelper::align_return_type(const ColumnPtr& old_col, const TypeDescriptor& type_desc, size_t num_rows,
+                                          const bool is_nullable) {
     ColumnPtr new_column = old_col;
     if (old_col->only_null()) {
         new_column = ColumnHelper::create_column(type_desc, true);
@@ -204,6 +205,9 @@ ColumnPtr ColumnHelper::align_return_type(const ColumnPtr& old_col, const TypeDe
         auto* const_column = down_cast<ConstColumn*>(old_col.get());
         new_column->append(*const_column->data_column(), 0, 1);
         new_column->assign(num_rows, 0);
+    }
+    if (is_nullable && !new_column->is_nullable()) {
+        new_column = NullableColumn::create(std::move(new_column), NullColumn::create(new_column->size(), 0));
     }
     return new_column;
 }
