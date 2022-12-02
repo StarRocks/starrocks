@@ -1217,10 +1217,18 @@ public class PrivilegeChecker {
 
         @Override
         public Void visitBackupStatement(BackupStmt statement, ConnectContext context) {
-            TableRef tableRef = statement.getTableRefs().get(0);
-            if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(ConnectContext.get(),
-                    tableRef.getName().getDb(), PrivPredicate.LOAD)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "LOAD");
+            try {
+                TableRef tableRef = statement.getTableRefs().get(0);
+                if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(ConnectContext.get(),
+                        tableRef.getName().getDb(), PrivPredicate.LOAD)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "LOAD");
+                }
+            } catch (Exception e) {
+                if (statement.getTableRefs().size() == 0) {
+                    throw new SemanticException("Table not found.");
+                } else {
+                    throw new SemanticException("BackupStatement failed");
+                }
             }
             return null;
         }
