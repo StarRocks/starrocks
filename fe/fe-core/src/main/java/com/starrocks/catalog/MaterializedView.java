@@ -350,7 +350,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
     private List<Expr> partitionRefTableExprs;
 
     // Maintenance plan for this MV
-    private ExecPlan maintenancePlan;
+    private transient ExecPlan maintenancePlan;
 
     public MaterializedView() {
         super(TableType.MATERIALIZED_VIEW);
