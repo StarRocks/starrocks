@@ -88,13 +88,20 @@ public class CoordinatorPrepare {
     private TNetworkAddress coordAddress;
     private final TUniqueId queryId;
     private final ConnectContext connectContext;
-    private final boolean preferComputeNode;
-    private final boolean usePipeline;
     private final TQueryGlobals queryGlobals;
     private final TQueryOptions queryOptions;
 
+    // Variables
+    private final boolean preferComputeNode;
+    private final boolean usePipeline;
     // force schedule local be for HybridBackendSelector, only for hive now
     private boolean forceScheduleLocal = false;
+    // if it has compute node, hasComputeNode is true
+    private boolean hasComputeNode = false;
+    // when use compute node, usedComputeNode is true,
+    // if hasComputeNode but preferComputeNode is false and no hdfsScanNode, usedComputeNode still false
+    private boolean usedComputeNode = false;
+
     private final Set<Integer> colocateFragmentIds = new HashSet<>();
     private final Set<Integer> replicateFragmentIds = new HashSet<>();
     private final Set<Integer> replicateScanIds = new HashSet<>();
@@ -114,7 +121,6 @@ public class CoordinatorPrepare {
     private final Map<PlanFragmentId, Integer> fragmentIdToBucketNumMap = Maps.newHashMap();
     // fragment_id -> < be_id -> bucket_count >
     private final Map<PlanFragmentId, Map<Long, Integer>> fragmentIdToBackendIdBucketCountMap = Maps.newHashMap();
-
     private final Map<PlanFragmentId, List<Integer>> fragmentIdToSeqToInstanceMap = Maps.newHashMap();
 
     // used only by channel stream load, records the mapping from channel id to target BE's address
@@ -127,11 +133,6 @@ public class CoordinatorPrepare {
     private ImmutableMap<Long, Backend> idToBackend = ImmutableMap.of();
     // compute node which this query will use
     private ImmutableMap<Long, ComputeNode> idToComputeNode = ImmutableMap.of();
-    // if it has compute node, hasComputeNode is true
-    private boolean hasComputeNode = false;
-    // when use compute node, usedComputeNode is true,
-    // if hasComputeNode but preferComputeNode is false and no hdfsScanNode, usedComputeNode still false
-    private boolean usedComputeNode = false;
 
     // save of related backends of this query
     private final Set<Long> usedBackendIDs = Sets.newConcurrentHashSet();
