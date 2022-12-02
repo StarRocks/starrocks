@@ -157,6 +157,7 @@ add_library(Storage STATIC
     vertical_compaction_task.cpp
     compaction_task_factory.cpp
     default_compaction_policy.cpp
+    size_tiered_compaction_policy.cpp
     cluster_id_mgr.cpp
     push_utils.cpp
     lake/async_delta_writer.cpp
