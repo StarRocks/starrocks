@@ -84,8 +84,13 @@ StatusOr<int64_t> CacheInputStream::read(void* out, int64_t count) {
         }
 
         if (!can_zero_copy) {
+<<<<<<< HEAD
             memcpy(p, src + shift, size);
             _stats.read_cache_bytes += size;
+=======
+            // memcpy(p, src + shift, size);
+            strings::memcpy_inlined(p, src + shift, size);
+>>>>>>> ca6001941 ([BugFix] fix read cache bytes (#14421))
         }
         p += size;
         _offset += size;
