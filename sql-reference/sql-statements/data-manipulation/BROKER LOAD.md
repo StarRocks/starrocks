@@ -351,6 +351,14 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 
    已经创建成功的导入作业，如果处于 **QUEUEING** 状态或者 **LOADING** 状态，那么您可以使用 [ALTER LOAD](../data-manipulation/ALTER%20LOAD.md) 语句修改该作业的优先级。
 
+- `merge_condition`
+
+   用于指定作为更新生效条件的列名。只有当导入的数据中该列的值大于当前值的时候，更新才会生效。参见[通过导入实现数据变更](../../../loading/PrimaryKeyLoad.md)。
+
+   > **说明**
+   >
+   > 指定的列必须为非主键列，且仅主键模型表支持条件更新。
+
 ## 示例
 
 本文以 HDFS 数据源为例，介绍各种导入配置。

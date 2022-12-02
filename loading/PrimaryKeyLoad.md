@@ -48,7 +48,7 @@ StarRocks 的主键模型目前支持 UPSERT 和 DELETE 操作，不支持区分
 
 如果使用 Routine Load 导入数据，必须确保您的 Apache Kafka® 集群已创建 Topic。本文假设您已部署四个 Topic，分别为 `topic1`、`topic2`、`topic3` 和 `topic4`。
 
-## 操作示例
+## 基本操作
 
 下面通过几个示例来展示具体的导入操作。有关使用 Stream Load、Broker Load 和 Routine Load 导入数据的详细语法和参数介绍，请参见 [STREAM LOAD](/sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md)、[BROKER LOAD](/sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md) 和 [CREATE ROUTINE LOAD](/sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md)。
 
@@ -552,3 +552,120 @@ MySQL [test_db]> SELECT * FROM table4;
 ```
 
 从查询结果可以看到，`example4.csv` 文件中 `id` 为 `101` 的数据已经更新到 `table4` 表中，并且 `example4.csv` 文件中 `id` 为 `102` 和 `103` 的数据已经插入到 `table4` 表中。
+
+## 条件更新
+
+自 StarRocks v2.5 起，主键模型表支持条件更新。您可以指定某一非主键列为更新条件，这样只有当导入的数据中该列的值大于当前值的时候，更新才会生效。
+
+条件更新功能用于解决数据乱序的问题。如果上游数据发生乱序，可以使用条件更新功能保证新的数据不被老的数据覆盖。
+
+> **注意**
+>
+> - 不支持给同一批导入的数据指定不同的条件。
+>
+> - 不支持删除操作。
+>
+> - 不支持同部分更新一并使用。
+
+### 数据样例
+
+1. 准备 StarRocks 表。
+
+   a. 在数据库 `test_db` 中创建一张名为 `table5` 的主键模型表。表包含 `id`、`version` 和 `score` 三列，分别代表用户 ID、版本号和用户得分，主键为 `id` 列，如下所示：
+
+      ```SQL
+      MySQL [test_db]> CREATE TABLE `table5`
+      (
+          `id` int(11) NOT NULL COMMENT "用户 ID", 
+          `version` int NOT NULL COMMENT "版本号",
+          `score` int(11) NOT NULL COMMENT "用户得分"
+      )
+      ENGINE=OLAP
+      PRIMARY KEY(`id`) DISTRIBUTED BY HASH(`id`) BUCKETS 10;
+      ```
+
+   b. 向 `table5` 表中插入两条数据，如下所示：
+
+      ```SQL
+      MySQL [test_db]> INSERT INTO table5 VALUES
+          (101, 2, 80),
+          (102, 2, 90);
+      ```
+
+2. 准备数据文件。
+
+   在本地文件系统创建一个 CSV 格式的数据文件 `example5.csv`。文件包含三列，分别代表用户 ID、版本号和用户得分，如下所示：
+
+   ```Plain
+   101,1,100
+   102,3,100
+   ```
+
+3. 把 `example5.csv` 文件中的数据上传到 Kafka 集群的 `topic5` 中。
+
+### 导入数据
+
+通过导入，把 `example5.csv` 文件中 `id` 为 `101`、`102` 的数据更新到 `table5` 表中，指定 `merge_condition` 为 `version` 列，表示只有当导入的数据中 `verion` 大于 `table5` 中对应行的`version` 值时，更新才会生效。
+
+- 通过 Stream Load 导入：
+
+  ```Bash
+  curl --location-trusted -u root: \
+      -H "label:label10" \
+      -H "column_separator:," \
+      -H "merge_condition:version" \
+      -T example5.csv -XPUT\
+      http://<fe_host>:<fe_http_port>/api/test_db/table5/_stream_load
+  ```
+
+- 通过 Broker Load 导入：
+
+  ```SQL
+  LOAD LABEL test_db.table10
+  (
+      data infile("hdfs://<hdfs_host>:<hdfs_port>/example5.csv")
+      into table table5
+      format as "csv"
+      (id, version, score)
+  )
+  with broker
+  properties
+  (
+      "merge_condition" = "version"
+  );
+  ```
+
+- 通过 Routine Load 导入：
+
+  ```SQL
+  CREATE ROUTINE LOAD test_db.table5 on table5
+  COLUMNS (id, version, score),
+  COLUMNS TERMINATED BY ','
+  PROPERTIES
+  (
+      "merge_condition" = "version"
+  )
+  FROM KAFKA
+  (
+      "kafka_broker_list" ="<kafka_broker_host>:<kafka_broker_port>",
+      "kafka_topic" = "topic5",
+      "property.kafka_default_offsets" ="OFFSET_BEGINNING"
+  );
+  ```
+
+### 查询数据
+
+导入完成后，查询 `table5` 表的数据，如下所示：
+
+```SQL
+MySQL [test_db]> SELECT * FROM table5;
++------+------+-------+
+| id   | version | score |
++------+------+-------+
+|  101 |       2 |   80 |
+|  102 |       3 |  100 |
++------+------+-------+
+2 rows in set (0.02 sec)
+```
+
+从查询结果可以看到，`example5.csv` 文件中 `id` 为 `101` 的数据并没有被更新，而 `id` 为 `102` 已经被更新。
