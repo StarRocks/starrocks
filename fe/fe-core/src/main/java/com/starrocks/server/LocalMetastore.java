@@ -2155,7 +2155,8 @@ public class LocalMetastore implements ConnectorMetadata {
                 if (properties != null) {
                     hasMedium = properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM);
                 }
-                dataProperty = PropertyAnalyzer.analyzeDataProperty(properties, DataProperty.DEFAULT_DATA_PROPERTY);
+                dataProperty = PropertyAnalyzer.analyzeDataProperty(properties,
+                        DataProperty.getInferredDefaultDataProperty());
                 if (hasMedium) {
                     olapTable.setStorageMedium(dataProperty.getStorageMedium());
                 }
@@ -2296,7 +2297,7 @@ public class LocalMetastore implements ConnectorMetadata {
                             hasMedium = properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM);
                         }
                         DataProperty dataProperty = PropertyAnalyzer.analyzeDataProperty(properties,
-                                DataProperty.DEFAULT_DATA_PROPERTY);
+                                DataProperty.getInferredDefaultDataProperty());
                         DynamicPartitionUtil
                                 .checkAndSetDynamicPartitionBuckets(properties, distributionDesc.getBuckets());
                         DynamicPartitionUtil.checkAndSetDynamicPartitionProperty(olapTable, properties);
@@ -3315,7 +3316,7 @@ public class LocalMetastore implements ConnectorMetadata {
             // set storage medium
             boolean hasMedium = properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM);
             dataProperty = PropertyAnalyzer.analyzeDataProperty(properties,
-                    DataProperty.DEFAULT_DATA_PROPERTY);
+                    DataProperty.getInferredDefaultDataProperty());
             if (hasMedium && dataProperty.getStorageMedium() == TStorageMedium.SSD) {
                 materializedView.setStorageMedium(dataProperty.getStorageMedium());
                 // set storage cooldown time into table property,
