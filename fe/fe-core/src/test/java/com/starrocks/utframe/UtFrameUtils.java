@@ -24,7 +24,9 @@ package com.starrocks.utframe;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+<<<<<<< HEAD
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.InsertStmt;
@@ -32,6 +34,9 @@ import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.SqlParser;
 import com.starrocks.analysis.SqlScanner;
 import com.starrocks.analysis.StatementBase;
+=======
+import com.google.common.collect.Sets;
+>>>>>>> 6e5bc22dc ([BugFix] Fix plan connectedness for NlJoin (#14543))
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Database;
@@ -83,6 +88,7 @@ import com.starrocks.system.Backend;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TResultSinkType;
 import org.apache.commons.codec.binary.Hex;
+import org.junit.Assert;
 
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
@@ -100,6 +106,7 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -336,6 +343,31 @@ public class UtFrameUtils {
         throw new RuntimeException("can not find valid port");
     }
 
+    /**
+     * Validate whether all the fragments belong to the fragment tree.
+     * @param plan The plan need to validate.
+     */
+    public static void validatePlanConnectedness(ExecPlan plan) {
+        PlanFragment root = plan.getTopFragment();
+
+        Queue<PlanFragment> queue = Lists.newLinkedList();
+        Set<PlanFragment> visitedFragments = Sets.newHashSet();
+        visitedFragments.add(root);
+        queue.add(root);
+        while (!queue.isEmpty()) {
+            PlanFragment fragment = queue.poll();
+            for (PlanFragment child : fragment.getChildren()) {
+                if (!visitedFragments.contains(child)) {
+                    visitedFragments.add(child);
+                    queue.add(child);
+                }
+            }
+        }
+
+        Assert.assertEquals("Some fragments do not belong to the fragment tree",
+                plan.getFragments().size(), visitedFragments.size());
+    }
+
     public static Pair<String, ExecPlan> getPlanAndFragment(ConnectContext connectContext, String originStmt)
             throws Exception {
         connectContext.setDumpInfo(new QueryDumpInfo(connectContext.getSessionVariable()));
@@ -387,8 +419,13 @@ public class UtFrameUtils {
                 }
             }
 
+<<<<<<< HEAD
             OperatorStrings operatorPrinter = new OperatorStrings();
             return new Pair<>(operatorPrinter.printOperator(execPlan.getPhysicalPlan()), execPlan);
+=======
+            validatePlanConnectedness(execPlan);
+            return new Pair<>(LogicalPlanPrinter.print(execPlan.getPhysicalPlan()), execPlan);
+>>>>>>> 6e5bc22dc ([BugFix] Fix plan connectedness for NlJoin (#14543))
         } finally {
             // before returning we have to restore session variable.
             connectContext.setSessionVariable(oldSessionVariable);
