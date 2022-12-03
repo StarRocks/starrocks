@@ -42,7 +42,10 @@ public class ScalarOperatorFunctionsTest {
     private static ConstantOperator O_DOUBLE_100;
     private static ConstantOperator O_BI_100;
     private static ConstantOperator O_BI_3;
+    private static ConstantOperator O_BI_131;
+    private static ConstantOperator O_BI_NEG_3;
     private static ConstantOperator O_LI_100;
+    private static ConstantOperator O_LI_NEG_100;
     private static ConstantOperator O_DECIMAL_100;
     private static ConstantOperator O_DECIMAL32P7S2_100;
     private static ConstantOperator O_DECIMAL32P9S0_100;
@@ -63,7 +66,10 @@ public class ScalarOperatorFunctionsTest {
         O_DOUBLE_100 = ConstantOperator.createFloat(100);
         O_BI_100 = ConstantOperator.createBigint(100);
         O_BI_3 = ConstantOperator.createBigint(3);
+        O_BI_131 = ConstantOperator.createBigint(131);
+        O_BI_NEG_3 = ConstantOperator.createBigint(-3);
         O_LI_100 = ConstantOperator.createLargeInt(new BigInteger("100"));
+        O_LI_NEG_100 = ConstantOperator.createLargeInt(new BigInteger("-100"));
         O_DECIMAL_100 = ConstantOperator.createDecimal(new BigDecimal(100), Type.DECIMALV2);
         O_DECIMAL32P7S2_100 = ConstantOperator.createDecimal(new BigDecimal(100),
                 ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL32, 7, 2));
@@ -951,6 +957,10 @@ public class ScalarOperatorFunctionsTest {
     @Test
     public void bitShiftRightLogicalLargeInt() {
         assertEquals("12", ScalarOperatorFunctions.bitShiftRightLogicalLargeInt(O_LI_100, O_BI_3).getLargeInt().toString());
+        assertEquals("800", ScalarOperatorFunctions.bitShiftRightLogicalLargeInt(O_LI_100, O_BI_NEG_3).getLargeInt().toString());
+        assertEquals("12", ScalarOperatorFunctions.bitShiftRightLogicalLargeInt(O_LI_100, O_BI_131).getLargeInt().toString());
+        assertEquals("42535295865117307932921825928971026419",
+                ScalarOperatorFunctions.bitShiftRightLogicalLargeInt(O_LI_NEG_100, O_BI_3).getLargeInt().toString());
     }
 
     @Test

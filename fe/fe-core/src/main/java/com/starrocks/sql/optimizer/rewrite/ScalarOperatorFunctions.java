@@ -784,21 +784,4 @@ public class ScalarOperatorFunctions {
         BigInteger opened = l.subtract(INT_128_OPENER);
         return opened.shiftRight(shiftBy).and(INT_128_MASK1_ARR1[shiftBy]);
     }
-
-    private static BigInteger srl(BigInteger l, int width, int shiftBy) {
-        if (shiftBy <= 0) {
-            return l.shiftRight(shiftBy);
-        }
-        if (shiftBy >= width) {
-            shiftBy = shiftBy % width;
-        }
-        if (l.signum() >= 0) {
-            return l.shiftRight(shiftBy);
-        }
-        BigInteger opener = BigInteger.ONE.shiftLeft(width + 1);
-        BigInteger opened = l.subtract(opener);
-        BigInteger mask = opener.subtract(BigInteger.ONE).shiftRight(shiftBy + 1);
-        BigInteger res = opened.shiftRight(shiftBy).and(mask);
-        return res;
-    }
 }
