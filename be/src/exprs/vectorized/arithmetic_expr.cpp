@@ -197,15 +197,6 @@ public:
         using ArithmeticOp = ArithmeticBinaryOperator<OP, Type>;
         return VectorizedStrictBinaryFunction<ArithmeticOp>::template evaluate<Type, TYPE_BIGINT, Type>(l, r);
     }
-    std::string debug_string() const override {
-        std::stringstream out;
-        auto expr_debug_string = Expr::debug_string();
-        out << "VectorizedBitShiftArithmeticExpr ("
-            << "lhs=" << _children[0]->type().debug_string() << ", rhs=" << _children[1]->type().debug_string()
-            << ", result=" << this->type().debug_string() << ", lhs_is_constant=" << _children[0]->is_constant()
-            << ", rhs_is_constant=" << _children[1]->is_constant() << ", expr (" << expr_debug_string << ") )";
-        return out.str();
-    }
 };
 
 #undef DEFINE_CLASS_CONSTRUCTOR
