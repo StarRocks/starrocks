@@ -86,6 +86,18 @@ public class PartitionPruneTest extends PlanTestBase {
     }
 
     @Test
+    public void testPredicatePrune7() throws Exception {
+        String sql = getFragmentPlan("select * from ptest where d2 = 1");
+        assertTrue(sql.contains("  0:EMPTYSET\n"));
+
+        sql = getFragmentPlan("select * from ptest where d2 >= 20200101 and d2 < 20200701;");
+        assertTrue(sql.contains("     TABLE: ptest\n"
+                + "     PREAGGREGATION: ON\n"
+                + "     partitions=2/4\n"
+                + "     rollup: ptest"));
+    }
+
+    @Test
     public void testPredicateEqPrune() throws Exception {
         String sql = getFragmentPlan("select * from ptest where d2 = '2020-07-01'");
         assertTrue(sql.contains("  0:OlapScanNode\n" +

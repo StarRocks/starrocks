@@ -56,6 +56,8 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
     private static final LocalDateTime MAX_DATETIME = LocalDateTime.of(9999, 12, 31, 23, 59, 59);
     private static final LocalDateTime MIN_DATETIME = LocalDateTime.of(0, 1, 1, 0, 0, 0);
 
+    private static final int YY_PART_YEAR = 70;
+
     public static final ConstantOperator TRUE = ConstantOperator.createBoolean(true);
     public static final ConstantOperator FALSE = ConstantOperator.createBoolean(false);
 
@@ -418,8 +420,28 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
             DateLiteral literal;
             try {
                 // DateLiteral will throw Exception if cast failed
-                // 1.try cast by format "yyyy-MM-dd HH:mm:ss"
-                if (childString.length() <= "yyyy-MM-dd HH:mm:ss".length()) {
+                // 1.try cast from numeric
+                if (type.isNumericType()) {
+                    long timestampLiteral = standardizeDate(childString);
+                    if (timestampLiteral <= 0) {
+                        return ConstantOperator.createNull(desc);
+                    }
+
+                    long date = timestampLiteral / 1000000;
+                    long time = timestampLiteral % 1000000;
+                    int year = (int) (date / 10000);
+                    int month = (int) ((date / 100) % 100);
+                    int day = (int) (date % 100);
+
+                    int hour = (int) (time / 10000);
+                    time %= 10000;
+
+                    int minute = (int) (time / 100);
+                    int second = (int) (time % 100);
+                    LocalDateTime localDateTime = LocalDateTime.of(year, month, day, hour, minute, second);
+                    return ConstantOperator.createDatetime(localDateTime, desc);
+                } else if (childString.length() <= "yyyy-MM-dd HH:mm:ss".length()) {
+                    // 2.try cast by format "yyyy-MM-dd HH:mm:ss"
                     literal = new DateLiteral(childString, Type.DATETIME);
                 } else {
                     // try cast by format "yyyy-MM-dd HH:mm:ss.SSS"
@@ -427,7 +449,7 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
                     return ConstantOperator.createDatetime(localDateTime, desc);
                 }
             } catch (Exception e) {
-                // 2.try cast by format "yyyy-MM-dd", will original operator if failed
+                // 3.try cast by format "yyyy-MM-dd", will original operator if failed
                 literal = new DateLiteral(childString, Type.DATE);
             }
 
@@ -462,5 +484,66 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
         }
 
         throw UnsupportedException.unsupportedException(this + " cast to " + desc.getPrimitiveType().toString());
+    }
+
+    // stole from be/src/runtime/time_types.cpp
+    // int64_t date::standardize_date(int64_t value)
+    private long standardizeDate(String literal) {
+        long numberLiteral = Long.parseLong(literal);
+        if (numberLiteral < 0) {
+            return 0;
+        }
+        if (numberLiteral >= 10000101000000L) {
+            // 9999-99-99 99:99:99
+            if (numberLiteral > 99999999999999L) {
+                return 0;
+            }
+
+            // between 1000-01-01 00:00:00L and 9999-99-99 99:99:99
+            // all digits exist.
+            return numberLiteral;
+        }
+        // 2000-01-01
+        if (numberLiteral < 101) {
+            return 0;
+        }
+        // two digits  year. 2000 ~ 2069
+        if (numberLiteral <= (YY_PART_YEAR - 1) * 10000L + 1231L) {
+            return (numberLiteral + 20000000L) * 1000000L;
+        }
+        // two digits year, invalid date
+        if (numberLiteral < YY_PART_YEAR * 10000L + 101) {
+            return 0;
+        }
+        // two digits year. 1970 ~ 1999
+        if (numberLiteral <= 991231L) {
+            return (numberLiteral + 19000000L) * 1000000L;
+        }
+
+        if (numberLiteral < 10000101) {
+            return 0;
+        }
+        // four digits years without hour.
+        if (numberLiteral <= 99991231L) {
+            return numberLiteral * 1000000L;
+        }
+        // below 0000-01-01
+        if (numberLiteral < 101000000) {
+            return 0;
+        }
+
+        // below is with datetime, must have hh:mm:ss
+        // 2000 ~ 2069
+        if (numberLiteral <= (YY_PART_YEAR - 1) * 10000000000L + 1231235959L) {
+            return numberLiteral + 20000000000000L;
+        }
+        if (numberLiteral < YY_PART_YEAR * 10000000000L + 101000000L) {
+            return 0;
+        }
+        // 1970 ~ 1999
+        if (numberLiteral <= 991231235959L) {
+            return numberLiteral + 19000000000000L;
+        }
+        return numberLiteral;
     }
 }
