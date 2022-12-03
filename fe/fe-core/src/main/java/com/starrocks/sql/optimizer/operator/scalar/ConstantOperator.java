@@ -402,21 +402,20 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
             return ConstantOperator.createDouble(Double.parseDouble(childString));
         } else if (desc.isDate() || desc.isDatetime()) {
             DateLiteral literal;
+            String dateStr = childString.trim();
             try {
                 // DateLiteral will throw Exception if cast failed
                 // 1.try cast by format "yyyy-MM-dd HH:mm:ss"
-                if (childString.length() <= "yyyy-MM-dd HH:mm:ss".length()) {
-                    literal = new DateLiteral(childString, Type.DATETIME);
+                if (dateStr.length() <= "yyyy-MM-dd HH:mm:ss".length()) {
+                    literal = new DateLiteral(dateStr, Type.DATETIME);
                 } else {
                     // try cast by format "yyyy-MM-dd HH:mm:ss.SSS"
-                    TemporalAccessor parse = DATE_TIME_FORMATTER_MS.parse(childString);
-                    LocalDateTime localDateTime = LocalDateTime.from(parse);
-                    ConstantOperator datetime = ConstantOperator.createDatetime(localDateTime, desc);
-                    return datetime;
+                    LocalDateTime localDateTime = LocalDateTime.from(DATE_TIME_FORMATTER_MS.parse(dateStr));
+                    return ConstantOperator.createDatetime(localDateTime, desc);
                 }
             } catch (Exception e) {
                 // 2.try cast by format "yyyy-MM-dd", will original operator if failed
-                literal = new DateLiteral(childString, Type.DATE);
+                literal = new DateLiteral(dateStr, Type.DATE);
             }
 
             if (Type.DATE.equals(desc)) {
