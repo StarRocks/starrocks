@@ -70,6 +70,8 @@ import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.OptExprBuilder;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.sql.plan.PlanFragmentBuilder;
+import com.starrocks.thrift.TResultSinkType;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.logging.log4j.util.Strings;
 
@@ -221,14 +223,14 @@ public class MaterializedViewAnalyzer {
         // TODO(murphy) implement
         // Plan the query statement and store in memory
         private void planMVQuery(CreateMaterializedViewStatement createStmt, QueryStatement query, ConnectContext ctx) {
-            if (!ctx.getSessionVariable().isEnableRealtimeRefreshMV()) {
+            if (!ctx.getSessionVariable().isEnableIncrementalRefreshMV()) {
                 return;
             }
             if (!createStmt.getRefreshSchemeDesc().getType().equals(MaterializedView.RefreshType.INCREMENTAL)) {
                 return;
             }
-            QueryRelation queryRelation = query.getQueryRelation();
 
+            QueryRelation queryRelation = query.getQueryRelation();
             ColumnRefFactory columnRefFactory = new ColumnRefFactory();
             LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, ctx).transform(queryRelation);
             Map<ColumnRefOperator, ScalarOperator> columnRefMap = new HashMap<>();
@@ -244,7 +246,6 @@ public class MaterializedViewAnalyzer {
             logicalPlan = new LogicalPlan(optExprBuilder, outputColumns, logicalPlan.getCorrelation());
             Optimizer optimizer = new Optimizer();
             PhysicalPropertySet requiredPropertySet = PhysicalPropertySet.EMPTY;
-            ExecPlan execPlan;
             try {
                 ctx.getSessionVariable().setMVPlanner(true);
                 OptExpression optimizedPlan = optimizer.optimize(
@@ -257,7 +258,14 @@ public class MaterializedViewAnalyzer {
 
                 // TODO: refine rules for mv plan
                 // TODO: infer state
+                // TODO: infer sink table information
                 // TODO: store the plan in create-mv statement and persist it at executor
+                // TODO: refine the output fragment
+                boolean hasOutputFragment = false;
+                ExecPlan execPlan = new PlanFragmentBuilder().createPhysicalPlan(
+                        optimizedPlan, ctx, logicalPlan.getOutputColumn(), columnRefFactory,
+                        queryRelation.getColumnOutputNames(), TResultSinkType.MYSQL_PROTOCAL, hasOutputFragment);
+                createStmt.setMaintenancePlan(execPlan, columnRefFactory);
             } finally {
                 ctx.getSessionVariable().setMVPlanner(false);
             }

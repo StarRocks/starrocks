@@ -142,6 +142,7 @@ import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.TaskRun;
+import com.starrocks.scheduler.mv.MVManager;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AddRollupClause;
@@ -205,6 +206,7 @@ import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
+import javax.validation.constraints.NotNull;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
@@ -224,7 +226,6 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
-import javax.validation.constraints.NotNull;
 
 import static com.starrocks.catalog.TableProperty.INVALID;
 import static com.starrocks.server.GlobalStateMgr.NEXT_ID_INIT_VALUE;
@@ -3180,6 +3181,7 @@ public class LocalMetastore implements ConnectorMetadata {
         stateMgr.getAlterInstance().processCreateMaterializedView(stmt);
     }
 
+    // TODO(murphy) refactor it into MVManager
     @Override
     public void createMaterializedView(CreateMaterializedViewStatement stmt)
             throws DdlException {
@@ -3254,15 +3256,22 @@ public class LocalMetastore implements ConnectorMetadata {
         } else if (refreshSchemeDesc.getType() == MaterializedView.RefreshType.SYNC) {
             mvRefreshScheme = new MaterializedView.MvRefreshScheme();
             mvRefreshScheme.setType(MaterializedView.RefreshType.SYNC);
-        } else {
+        } else if (refreshSchemeDesc.getType().equals(MaterializedView.RefreshType.MANUAL)) {
             mvRefreshScheme = new MaterializedView.MvRefreshScheme();
             mvRefreshScheme.setType(MaterializedView.RefreshType.MANUAL);
+        } else {
+            mvRefreshScheme = new MaterializedView.MvRefreshScheme();
+            mvRefreshScheme.setType(MaterializedView.RefreshType.INCREMENTAL);
         }
         // create mv
         long mvId = GlobalStateMgr.getCurrentState().getNextId();
-        MaterializedView materializedView =
-                new MaterializedView(mvId, db.getId(), mvName, baseSchema, stmt.getKeysType(), partitionInfo,
-                        distributionInfo, mvRefreshScheme);
+        MaterializedView materializedView;
+        if (refreshSchemeDesc.getType().equals(MaterializedView.RefreshType.INCREMENTAL)) {
+            materializedView = MVManager.getInstance().createSinkTable(stmt, mvId, db.getId());
+        } else {
+            materializedView = new MaterializedView(mvId, db.getId(), mvName, baseSchema, stmt.getKeysType(), partitionInfo,
+                    distributionInfo, mvRefreshScheme);
+        }
         // set comment
         materializedView.setComment(stmt.getComment());
         // set baseTableIds
@@ -3385,6 +3394,9 @@ public class LocalMetastore implements ConnectorMetadata {
             buildPartitions(db, materializedView, Collections.singletonList(partition));
             materializedView.addPartition(partition);
         }
+
+        MVManager.getInstance().prepareMaintenanceWork(stmt, materializedView);
+
         // check database exists again, because database can be dropped when creating table
         if (!tryLock(false)) {
             throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
@@ -3420,6 +3432,12 @@ public class LocalMetastore implements ConnectorMetadata {
     private void createTaskForMaterializedView(String dbName, MaterializedView materializedView,
                                                Map<String, String> optHints) throws DdlException {
         MaterializedView.RefreshType refreshType = materializedView.getRefreshScheme().getType();
+
+        if (refreshType.equals(MaterializedView.RefreshType.INCREMENTAL)) {
+            MVManager.getInstance().startMaintainMV(materializedView);
+            return;
+        }
+
         if (refreshType != MaterializedView.RefreshType.SYNC) {
 
             Task task = TaskBuilder.buildMvTask(materializedView, dbName);
@@ -3453,13 +3471,13 @@ public class LocalMetastore implements ConnectorMetadata {
             db.readUnlock();
         }
         if (table instanceof MaterializedView) {
+            MvId mvId = new MvId(db.getId(), table.getId());
             db.dropTable(table.getName(), stmt.isSetIfExists(), true);
             List<MaterializedView.BaseTableInfo> baseTableInfos = ((MaterializedView) table).getBaseTableInfos();
             if (baseTableInfos != null) {
                 for (MaterializedView.BaseTableInfo baseTableInfo : baseTableInfos) {
                     Table baseTable = baseTableInfo.getTable();
                     if (baseTable != null) {
-                        MvId mvId = new MvId(db.getId(), table.getId());
                         baseTable.removeRelatedMaterializedView(mvId);
                     }
                 }
@@ -3469,6 +3487,7 @@ public class LocalMetastore implements ConnectorMetadata {
             if (refreshTask != null) {
                 taskManager.dropTasks(Lists.newArrayList(refreshTask.getId()), false);
             }
+            MVManager.getInstance().stopMaintainMV(mvId);
         } else {
             stateMgr.getAlterInstance().processDropMaterializedView(stmt);
         }
@@ -3482,7 +3501,9 @@ public class LocalMetastore implements ConnectorMetadata {
     private void executeRefreshMvTask(String dbName, MaterializedView materializedView, ExecuteOption executeOption)
             throws DdlException {
         MaterializedView.RefreshType refreshType = materializedView.getRefreshScheme().getType();
-        if (refreshType != MaterializedView.RefreshType.SYNC) {
+        if (refreshType.equals(MaterializedView.RefreshType.INCREMENTAL)) {
+            MVManager.getInstance().onTxnPublish(materializedView);
+        } else if (refreshType != MaterializedView.RefreshType.SYNC) {
             TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
             final String mvTaskName = TaskBuilder.getMvTaskName(materializedView.getId());
             if (!taskManager.containTask(mvTaskName)) {

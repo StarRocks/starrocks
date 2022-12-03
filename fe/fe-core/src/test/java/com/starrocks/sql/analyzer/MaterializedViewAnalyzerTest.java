@@ -6,6 +6,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.utframe.StarRocksAssert;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -14,7 +15,8 @@ import org.junit.Test;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
-public class MaterializedViewAnalyzerTest {
+public class MaterializedViewAnalyzerTest extends PlanTestBase {
+
     @BeforeClass
     public static void beforeClass() throws Exception {
         AnalyzeTestUtil.init();

@@ -188,6 +188,8 @@ import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.scheduler.TaskManager;
+import com.starrocks.scheduler.mv.EpochCoordinator;
+import com.starrocks.scheduler.mv.MVManager;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
@@ -399,8 +401,9 @@ public class GlobalStateMgr {
     private LoadLoadingChecker loadLoadingChecker;
 
     private RoutineLoadScheduler routineLoadScheduler;
-
     private RoutineLoadTaskScheduler routineLoadTaskScheduler;
+
+    private EpochCoordinator mvEpochCoordinator;
 
     private SmallFileMgr smallFileMgr;
 
@@ -583,6 +586,7 @@ public class GlobalStateMgr {
         this.loadLoadingChecker = new LoadLoadingChecker(loadManager);
         this.routineLoadScheduler = new RoutineLoadScheduler(routineLoadManager);
         this.routineLoadTaskScheduler = new RoutineLoadTaskScheduler(routineLoadManager);
+        this.mvEpochCoordinator = new EpochCoordinator();
 
         this.smallFileMgr = new SmallFileMgr();
 
@@ -607,6 +611,7 @@ public class GlobalStateMgr {
         this.insertOverwriteJobManager = new InsertOverwriteJobManager();
         this.shardManager = new ShardManager();
         this.compactionManager = new CompactionManager();
+        MVManager.getInstance().setLocalMetastore(this.localMetastore);
 
         GlobalStateMgr gsm = this;
         this.execution = new StateChangeExecution() {

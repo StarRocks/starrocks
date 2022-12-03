@@ -292,6 +292,10 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             this.lastRefreshTime = 0;
         }
 
+        public boolean isIncremental() {
+            return this.type.equals(RefreshType.INCREMENTAL);
+        }
+
         public RefreshType getType() {
             return type;
         }
@@ -359,6 +363,10 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         this.dbId = dbId;
         this.refreshScheme = refreshScheme;
         this.active = true;
+    }
+
+    public MvId getMvId() {
+        return new MvId(getDbId(), id);
     }
 
     public long getDbId() {
