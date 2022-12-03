@@ -451,7 +451,7 @@ public class FileSystemManager {
         String accessKey = properties.getOrDefault(FS_S3A_ACCESS_KEY, "");
         String secretKey = properties.getOrDefault(FS_S3A_SECRET_KEY, "");
         String endpoint = properties.getOrDefault(FS_S3A_ENDPOINT, "");
-        String pathStyleAccess = properties.getOrDefault(FS_S3A_PATH_STYLE_ACCESS, "true");
+        String pathStyleAccess = properties.getOrDefault(FS_S3A_PATH_STYLE_ACCESS, "false");
         String disableCache = properties.getOrDefault(FS_S3A_IMPL_DISABLE_CACHE, "true");
         String connectionSSLEnabled = properties.getOrDefault(FS_S3A_CONNECTION_SSL_ENABLED, "true");
         String awsCredProvider = properties.getOrDefault(FS_S3A_AWS_CRED_PROVIDER, null);
