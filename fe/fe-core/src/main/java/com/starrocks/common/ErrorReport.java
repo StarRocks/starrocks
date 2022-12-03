@@ -82,7 +82,6 @@ public class ErrorReport {
         throw new DdlException(reportCommon(pattern, errorCode, objs));
     }
 
-<<<<<<< HEAD
     public static void reportRuntimeDdlException(ErrorCode errorCode, Object... objs) {
         throw new RuntimeException(new DdlException(reportCommon(null, errorCode, objs)));
     }
@@ -91,8 +90,6 @@ public class ErrorReport {
         throw new ValidateException(errorCode.formatErrorMsg(objs), errorType);
     }
 
-=======
->>>>>>> 89d298cc2 ([Enhancement] Fix FE sonar bugs (#14053))
     public interface DdlExecutor {
         void apply() throws UserException;
     }
