@@ -325,4 +325,43 @@ public class NestLoopJoinTest extends PlanTestBase {
         sql = "select * from t0 a join t0 b where a.v1 + b.v1 < b.v1";
         assertVerbosePlanNotContains(sql, "  |  build runtime filters:");
     }
+
+
+    @Test
+    public void testMultipleNlJoinInSingleFragment() throws Exception {
+        connectContext.getSessionVariable().disableJoinReorder();
+        String sql = "select count(1) from " +
+                "t0 a right join (" +
+                "   select d.v1 from " +
+                "       (select ba.v1 from t0 ba where false) b " +
+                "       join t0 c " +
+                "       join t0 d " +
+                ") e on a.v1 < e.v1";
+        assertPlanContains(sql, "  11:NESTLOOP JOIN\n" +
+                "  |  join op: RIGHT OUTER JOIN\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  other join predicates: 1: v1 < 10: v1\n" +
+                "  |  \n" +
+                "  |----10:Project\n" +
+                "  |    |  <slot 10> : 10: v1\n" +
+                "  |    |  \n" +
+                "  |    9:NESTLOOP JOIN\n" +
+                "  |    |  join op: CROSS JOIN\n" +
+                "  |    |  colocate: false, reason: \n" +
+                "  |    |  \n" +
+                "  |    |----8:EXCHANGE\n" +
+                "  |    |    \n" +
+                "  |    6:Project\n" +
+                "  |    |  <slot 4> : 4: v1\n" +
+                "  |    |  \n" +
+                "  |    5:NESTLOOP JOIN\n" +
+                "  |    |  join op: CROSS JOIN\n" +
+                "  |    |  colocate: false, reason: \n" +
+                "  |    |  \n" +
+                "  |    |----4:EXCHANGE\n" +
+                "  |    |    \n" +
+                "  |    2:EMPTYSET\n" +
+                "  |    \n" +
+                "  1:EXCHANGE");
+    }
 }
