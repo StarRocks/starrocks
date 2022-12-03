@@ -1802,10 +1802,7 @@ public class PlanFragmentBuilder {
             context.getFragments().add(leftFragment);
 
             leftFragment.setPlanRoot(joinNode);
-            if (!rightFragment.getChildren().isEmpty()) {
-                // right table isn't value operator
-                leftFragment.addChild(rightFragment.getChild(0));
-            }
+            leftFragment.addChildren(rightFragment.getChildren());
 
             if (!(joinNode.getChild(1) instanceof ExchangeNode)) {
                 joinNode.setReplicated(true);
@@ -2184,7 +2181,7 @@ public class PlanFragmentBuilder {
             context.getFragments().add(stayFragment);
 
             stayFragment.setPlanRoot(hashJoinNode);
-            stayFragment.addChild(removeFragment.getChild(0));
+            stayFragment.addChildren(removeFragment.getChildren());
             stayFragment.mergeQueryGlobalDicts(removeFragment.getQueryGlobalDicts());
             return stayFragment;
         }
@@ -2206,7 +2203,7 @@ public class PlanFragmentBuilder {
             context.getFragments().add(stayFragment);
 
             stayFragment.setPlanRoot(hashJoinNode);
-            stayFragment.addChild(removeFragment.getChild(0));
+            stayFragment.addChildren(removeFragment.getChildren());
             stayFragment.mergeQueryGlobalDicts(removeFragment.getQueryGlobalDicts());
             return stayFragment;
         }
