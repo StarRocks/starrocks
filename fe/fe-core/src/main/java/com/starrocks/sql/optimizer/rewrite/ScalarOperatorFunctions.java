@@ -129,14 +129,22 @@ public class ScalarOperatorFunctions {
     @FEFunction(name = "str_to_date", argTypes = {"VARCHAR", "VARCHAR"}, returnType = "DATETIME")
     public static ConstantOperator dateParse(ConstantOperator date, ConstantOperator fmtLiteral) {
         DateTimeFormatterBuilder builder = DateUtils.unixDatetimeFormatBuilder(fmtLiteral.getVarchar());
-
+        String dateStr = date.getVarchar().trim();
         if (HAS_TIME_PART.matcher(fmtLiteral.getVarchar()).matches()) {
-            LocalDateTime ldt = LocalDateTime.from(
-                    builder.toFormatter().withResolverStyle(ResolverStyle.STRICT).parse(date.getVarchar()));
+            LocalDateTime ldt;
+            try {
+                ldt = LocalDateTime.from(builder.toFormatter().withResolverStyle(ResolverStyle.STRICT).parse(dateStr));
+            } catch (DateTimeParseException e) {
+                // If parsing fails, it can be re-parsed from the position of the successful prefix string.
+                // This way datetime string can use incomplete format
+                // eg. str_to_date('2022-10-18 00:00:00','%Y-%m-%d %H:%s');
+                ldt = LocalDateTime.from(builder.toFormatter().withResolverStyle(ResolverStyle.STRICT)
+                        .parse(dateStr.substring(0, e.getErrorIndex())));
+            }
             return ConstantOperator.createDatetime(ldt, Type.DATETIME);
         } else {
             LocalDate ld = LocalDate.from(
-                    builder.toFormatter().withResolverStyle(ResolverStyle.STRICT).parse(date.getVarchar()));
+                    builder.toFormatter().withResolverStyle(ResolverStyle.STRICT).parse(dateStr));
             return ConstantOperator.createDatetime(ld.atTime(0, 0, 0), Type.DATETIME);
         }
     }
@@ -145,7 +153,7 @@ public class ScalarOperatorFunctions {
     public static ConstantOperator str2Date(ConstantOperator date, ConstantOperator fmtLiteral) {
         DateTimeFormatterBuilder builder = DateUtils.unixDatetimeFormatBuilder(fmtLiteral.getVarchar());
         LocalDate ld = LocalDate.from(
-                builder.toFormatter().withResolverStyle(ResolverStyle.STRICT).parse(date.getVarchar()));
+                builder.toFormatter().withResolverStyle(ResolverStyle.STRICT).parse(date.getVarchar().trim()));
         return ConstantOperator.createDatetime(ld.atTime(0, 0, 0), Type.DATE);
     }
 
