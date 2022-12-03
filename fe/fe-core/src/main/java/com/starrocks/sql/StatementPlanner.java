@@ -59,9 +59,9 @@ public class StatementPlanner {
                 OptimizerTraceUtil.logQueryStatement(session, "after analyze:\n%s", (QueryStatement) stmt);
             }
 
+            session.setCurrentSqlDbIds(dbs.values().stream().map(Database::getId).collect(Collectors.toSet()));
             if (stmt instanceof QueryStatement) {
                 QueryStatement queryStmt = (QueryStatement) stmt;
-                session.setCurrentSqlDbIds(dbs.values().stream().map(Database::getId).collect(Collectors.toSet()));
                 resultSinkType = queryStmt.hasOutFileClause() ? TResultSinkType.FILE : resultSinkType;
                 ExecPlan plan = createQueryPlan(queryStmt.getQueryRelation(), session, resultSinkType);
                 setOutfileSink(queryStmt, plan);
