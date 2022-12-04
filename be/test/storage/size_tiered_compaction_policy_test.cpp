@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
-#include "storage/cumulative_compaction.h"
+#include "storage/size_tiered_compaction_policy.h"
 
 #include <fmt/format.h>
 #include <gtest/gtest.h>
@@ -19,7 +19,7 @@
 #include "storage/compaction_context.h"
 #include "storage/compaction_manager.h"
 #include "storage/compaction_utils.h"
-#include "storage/size_tiered_compaction_policy.h"
+#include "storage/cumulative_compaction.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
@@ -596,6 +596,8 @@ TEST_F(SizeTieredCompactionPolicyTest, test_delete_version) {
     }
 }
 
+/*
+FIXME(meego)
 TEST_F(SizeTieredCompactionPolicyTest, test_missed_and_delete_version) {
     LOG(INFO) << "test_missed_delete_version";
     create_tablet_schema(UNIQUE_KEYS);
@@ -689,6 +691,7 @@ TEST_F(SizeTieredCompactionPolicyTest, test_missed_and_delete_version) {
         ASSERT_EQ(7, versions[1].second);
     }
 }
+*/
 
 TEST_F(SizeTieredCompactionPolicyTest, test_two_delete_version) {
     LOG(INFO) << "test_two_delete_version";
