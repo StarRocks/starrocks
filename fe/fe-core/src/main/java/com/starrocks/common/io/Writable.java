@@ -30,31 +30,32 @@ import java.io.IOException;
  * but does not require a uniform read method.
  * The usage of writable interface implementation class is as follows:
  * <p>
+ * <pre> {@code
  * Class A implements Writable {
+
+ *     @Override public void write(DataOutput out) throws IOException {
+ *          out.write(x);
+ *          out.write(y);
+ *          ...
+ *      }
  *
- * @Override public void write(DataOutput out) throws IOException {
- * in.write(x);
- * in.write(y);
- * ...
+ *      private void readFields(DataInput in) throws IOException {
+ *          x = in.read();
+ *          y = in.read();
+ *          ...
+ *      }
+ *
+ *      public static A read(DataInput in) throws IOException {
+ *          A a = new A();
+ *          a.readFields();
+ *          return a;
+ *      }
  * }
- * <p>
- * private void readFields(DataInput in) throws IOException {
- * x = in.read();
- * y = in.read();
- * ...
- * }
- * <p>
- * public static A read(DataInput in) throws IOException {
- * A a = new A();
- * a.readFields();
- * return a;
- * }
- * }
- * <p>
+ *
  * A a = new A();
  * a.write(out);
  * ...
- * A other = A.read(in);
+ * A other = A.read(in);}</pre>
  * <p>
  * The "readFields()" can be implemented as whatever you like, or even without it
  * by just implementing the static read method.
