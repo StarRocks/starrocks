@@ -160,8 +160,16 @@ public class LocalTablet extends Tablet {
         List<String> backends = new ArrayList<String>(); 
         SystemInfoService infoService = Catalog.getCurrentSystemInfo();
         for (Replica replica : replicas) {
+<<<<<<< HEAD
             Backend backend = Catalog.getCurrentSystemInfo().getBackend(replica.getBackendId());
             backends.add(backend.getHost()); 
+=======
+            Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(replica.getBackendId());
+            if (backend == null) {
+                continue;
+            }
+            backends.add(backend.getHost());
+>>>>>>> e0ecf4dfc ([BugFix] Fix Load throws NPE when force drop BE node )
         }
         return backends;
     }
