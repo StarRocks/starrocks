@@ -232,7 +232,7 @@ public class BrokerLoadJob extends BulkLoadJob {
                         brokerFileGroups, getDeadlineMs(), loadMemLimit,
                         strictMode, transactionId, this, timezone, timeoutSecond,
                         createTimestamp, partialUpdate, mergeCondition, sessionVariables,
-                        context,  TLoadJobType.BROKER, priority);
+                        context,  TLoadJobType.BROKER, priority, originStmt);
                 UUID uuid = UUID.randomUUID();
                 TUniqueId loadId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
                 task.init(loadId, attachment.getFileStatusByTable(aggKey), attachment.getFileNumByTable(aggKey));

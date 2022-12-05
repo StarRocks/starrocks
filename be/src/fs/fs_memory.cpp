@@ -95,10 +95,6 @@ public:
         }
     }
 
-    StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const butil::FilePath& path) {
-        return new_random_access_file(RandomAccessFileOptions(), path);
-    }
-
     StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
                                                                        const butil::FilePath& path) {
         auto iter = _namespace.find(path.value());
@@ -367,16 +363,12 @@ MemoryFileSystem::~MemoryFileSystem() {
     delete _impl;
 }
 
-StatusOr<std::unique_ptr<SequentialFile>> MemoryFileSystem::new_sequential_file(const std::string& path) {
+StatusOr<std::unique_ptr<SequentialFile>> MemoryFileSystem::new_sequential_file(const SequentialFileOptions& opts,
+                                                                                const std::string& path) {
+    (void)opts;
     std::string new_path;
     RETURN_IF_ERROR(canonicalize(path, &new_path));
     return _impl->new_sequential_file(butil::FilePath(new_path));
-}
-
-StatusOr<std::unique_ptr<RandomAccessFile>> MemoryFileSystem::new_random_access_file(const std::string& path) {
-    std::string new_path;
-    RETURN_IF_ERROR(canonicalize(path, &new_path));
-    return _impl->new_random_access_file(butil::FilePath(new_path));
 }
 
 StatusOr<std::unique_ptr<RandomAccessFile>> MemoryFileSystem::new_random_access_file(
@@ -537,7 +529,7 @@ Status MemoryFileSystem::append_file(const std::string& path, const Slice& conte
 }
 
 Status MemoryFileSystem::read_file(const std::string& path, std::string* content) {
-    ASSIGN_OR_RETURN(auto random_access_file, new_random_access_file(path));
+    ASSIGN_OR_RETURN(auto random_access_file, new_random_access_file(RandomAccessFileOptions(), path));
     ASSIGN_OR_RETURN(const uint64_t size, random_access_file->get_size());
     raw::make_room(content, size);
     return random_access_file->read_at_fully(0, content->data(), content->size());

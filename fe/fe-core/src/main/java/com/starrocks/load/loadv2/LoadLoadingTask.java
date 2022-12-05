@@ -28,14 +28,20 @@ import com.starrocks.common.Config;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
+import com.starrocks.common.Version;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
+import com.starrocks.common.util.ProfileManager;
+import com.starrocks.common.util.RuntimeProfile;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.FailMsg;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.Coordinator;
+import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.QeProcessorImpl;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TLoadJobType;
@@ -79,13 +85,14 @@ public class LoadLoadingTask extends LoadTask {
     private ConnectContext context;
 
     private LoadPlanner loadPlanner;
+    private final OriginStatement originStmt;
 
     public LoadLoadingTask(Database db, OlapTable table, BrokerDesc brokerDesc, List<BrokerFileGroup> fileGroups,
             long jobDeadlineMs, long execMemLimit, boolean strictMode,
             long txnId, LoadTaskCallback callback, String timezone,
             long timeoutS, long createTimestamp, boolean partialUpdate, String mergeConditionStr,
             Map<String, String> sessionVariables,
-            ConnectContext context, TLoadJobType loadJobType, int priority) {
+            ConnectContext context, TLoadJobType loadJobType, int priority, OriginStatement originStmt) {
         super(callback, TaskType.LOADING, priority);
         this.db = db;
         this.table = table;
@@ -105,6 +112,7 @@ public class LoadLoadingTask extends LoadTask {
         this.sessionVariables = sessionVariables;
         this.context = context;
         this.loadJobType = loadJobType;
+        this.originStmt = originStmt;
     }
 
     public void init(TUniqueId loadId, List<List<TBrokerFileStatus>> fileStatusList, int fileNum) throws UserException {
@@ -163,7 +171,62 @@ public class LoadLoadingTask extends LoadTask {
 
         try {
             QeProcessorImpl.INSTANCE.registerQuery(loadId, curCoordinator);
+            long beginTimeInNanoSecond = TimeUtils.getStartTime();
             actualExecute(curCoordinator);
+
+            if (context.getSessionVariable().isEnableProfile()) {
+                RuntimeProfile profile = new RuntimeProfile("Load");
+                RuntimeProfile summaryProfile = new RuntimeProfile("Summary");
+                summaryProfile.addInfoString(ProfileManager.QUERY_ID, DebugUtil.printId(context.getExecutionId()));
+                summaryProfile.addInfoString(ProfileManager.START_TIME,
+                        TimeUtils.longToTimeString(createTimestamp));
+
+                long currentTimestamp = System.currentTimeMillis();
+                long totalTimeMs = currentTimestamp - createTimestamp;
+                summaryProfile.addInfoString(ProfileManager.END_TIME, TimeUtils.longToTimeString(currentTimestamp));
+                summaryProfile.addInfoString(ProfileManager.TOTAL_TIME, DebugUtil.getPrettyStringMs(totalTimeMs));
+
+                summaryProfile.addInfoString(ProfileManager.QUERY_TYPE, "Load");
+                summaryProfile.addInfoString(ProfileManager.QUERY_STATE, context.getState().toString());
+                summaryProfile.addInfoString("StarRocks Version",
+                        String.format("%s-%s", Version.STARROCKS_VERSION, Version.STARROCKS_COMMIT_HASH));
+                summaryProfile.addInfoString(ProfileManager.USER, context.getQualifiedUser());
+                summaryProfile.addInfoString(ProfileManager.DEFAULT_DB, context.getDatabase());
+                summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT, originStmt.originStmt);
+
+                SessionVariable variables = context.getSessionVariable();
+                if (variables != null) {
+                    StringBuilder sb = new StringBuilder();
+                    sb.append("load_parallel_instance_num=").append(Config.load_parallel_instance_num).append(",");
+                    sb.append(SessionVariable.PARALLEL_FRAGMENT_EXEC_INSTANCE_NUM).append("=")
+                            .append(variables.getParallelExecInstanceNum()).append(",");
+                    sb.append(SessionVariable.PIPELINE_DOP).append("=").append(variables.getPipelineDop()).append(",");
+                    sb.append(SessionVariable.PIPELINE_SINK_DOP).append("=").append(variables.getPipelineSinkDop())
+                            .append(",");
+                    if (context.getResourceGroup() != null) {
+                        sb.append(SessionVariable.RESOURCE_GROUP).append("=")
+                                .append(context.getResourceGroup().getName())
+                                .append(",");
+                    }
+                    sb.deleteCharAt(sb.length() - 1);
+                    summaryProfile.addInfoString(ProfileManager.VARIABLES, sb.toString());
+                }
+
+                profile.addChild(summaryProfile);
+
+                curCoordinator.getQueryProfile().getCounterTotalTime()
+                        .setValue(TimeUtils.getEstimatedTime(beginTimeInNanoSecond));
+                curCoordinator.endProfile();
+                curCoordinator.mergeIsomorphicProfiles();
+                profile.addChild(curCoordinator.getQueryProfile());
+
+                StringBuilder builder = new StringBuilder();
+                profile.prettyPrint(builder, "");
+                String profileContent = ProfileManager.getInstance().pushProfile(profile);
+                if (context.getQueryDetail() != null) {
+                    context.getQueryDetail().setProfile(profileContent);
+                }
+            }
         } finally {
             QeProcessorImpl.INSTANCE.unregisterQuery(loadId);
         }

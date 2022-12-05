@@ -239,6 +239,7 @@ public class StmtExecutor {
             sb.append(SessionVariable.PARALLEL_FRAGMENT_EXEC_INSTANCE_NUM).append("=")
                     .append(variables.getParallelExecInstanceNum()).append(",");
             sb.append(SessionVariable.PIPELINE_DOP).append("=").append(variables.getPipelineDop()).append(",");
+            sb.append(SessionVariable.PIPELINE_SINK_DOP).append("=").append(variables.getPipelineSinkDop()).append(",");
             if (context.getResourceGroup() != null) {
                 sb.append(SessionVariable.RESOURCE_GROUP).append("=").append(context.getResourceGroup().getName())
                         .append(",");
@@ -351,7 +352,7 @@ public class StmtExecutor {
             ExecPlan execPlan = null;
             boolean execPlanBuildByNewPlanner = false;
 
-            try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("Total")) {
+            try (PlannerProfile.ScopedTimer timer = PlannerProfile.getScopedTimer("Total")) {
                 redirectStatus = parsedStmt.getRedirectStatus();
                 if (!isForwardToLeader()) {
                     context.getDumpInfo().reset();
@@ -1116,7 +1117,7 @@ public class StmtExecutor {
         } catch (QueryStateException e) {
             if (e.getQueryState().getStateType() != MysqlStateType.OK) {
                 String sql = AstToStringBuilder.toString(parsedStmt);
-                if (sql.isEmpty()) {
+                if (sql == null) {
                     sql = originStmt.originStmt;
                 }
                 LOG.warn("DDL statement (" + sql + ") process failed.", e);
@@ -1125,7 +1126,7 @@ public class StmtExecutor {
         } catch (Throwable e) {
             // Maybe our bug
             String sql = AstToStringBuilder.toString(parsedStmt);
-            if (sql.isEmpty()) {
+            if (sql == null) {
                 sql = originStmt.originStmt;
             }
             LOG.warn("DDL statement (" + sql + ") process failed.", e);
