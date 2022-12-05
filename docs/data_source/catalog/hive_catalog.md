@@ -102,7 +102,7 @@ After you complete the preceding configurations, you can create a Hive catalog.
 ### Syntax
 
 ```SQL
-CREATE EXTERNAL CATALOG catalog_name 
+CREATE EXTERNAL CATALOG <catalog_name> 
 PROPERTIES ("key"="value", ...);
 ```
 

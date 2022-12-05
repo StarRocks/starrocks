@@ -23,7 +23,7 @@ After you complete the preceding configurations, you can create an Iceberg catal
 ### Syntax
 
 ```SQL
-CREATE EXTERNAL CATALOG catalog_name 
+CREATE EXTERNAL CATALOG <catalog_name>
 PROPERTIES ("key"="value", ...);
 ```
 
