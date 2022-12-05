@@ -188,6 +188,14 @@ Used for MySQL client compatibility. No practical usage.
 
 Used for MySQL client compatibility. No practical usage.
 
+* enable_materialized_view_union_rewrite
+
+Boolean value to control if to enable materialized view Union query rewrite. Default: `true`.
+
+* enable_rule_based_materialized_view_rewrite
+
+Boolean value to control if to enable rule-based materialized view query rewrite. This variable is mainly used in single-table query rewrite. Default: `true`.
+
 * enable_profile
 
 Used to set whether the profile of the query needs to be viewed. The default is false, meaning no profile is required.
@@ -223,6 +231,10 @@ Used for compatibility with the JDBC connection pool C3P0. No practical usage.
 * max_pushdown_conditions_per_column
 
 This variable is set to `-1` by default, indicating that the value configured in `be.conf` is used. If this variable is set to be greater than 0, queries in the current session will use this value and ignore the configured value in `be.conf`.
+
+* nested_mv_rewrite_max_level
+
+The maximum levels of nested materialized views that can be used for query rewrite. Type: INT. Range: [1, +∞). The value of `1` indicates that only materialized views created on base tables can be used for query rewrite. Default: `3`.
 
 * net_buffer_length
 
