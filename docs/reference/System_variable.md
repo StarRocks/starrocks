@@ -271,6 +271,38 @@ Used for MySQL client compatibility. No practical use.
 
 Used for compatibility with JDBC connection pool C3P0. No practical use.
 
+* query_queue_concurrency_limit
+
+The upper limit of concurrent queries on a BE. It takes effect only after being set greater than `0`. Default: `0`.
+
+* query_queue_cpu_used_permille_limit
+
+The upper limit of CPU usage permille (CPU usage * 1000) on a BE. It takes effect only after being set greater than `0`. Default: `0`. Range: [0, 1000]
+
+* query_queue_insert_enable
+
+Boolean value to enable query queues for INSERT loading. Default: `false`.
+
+* query_queue_max_queued_queries
+
+The upper limit of queries in a queue. When this threshold is reached, incoming queries are rejected. It takes effect only after being set greater than `0`. Default: `0`.
+
+* query_queue_mem_used_pct_limit
+
+The upper limit of memory usage percentage on a BE. It takes effect only after being set greater than `0`. Default: `0`. Range: [0, 1]
+
+* query_queue_pending_timeout_second
+
+The maximum timeout of a pending query in a queue. When this threshold is reached, the corresponding query is rejected. Unit: second. Default: `300`.
+
+* query_queue_select_enable
+
+Boolean value to enable query queues for SELECT queries. Default: `false`.
+
+* query_queue_statistic_enable
+
+Boolean value to enable query queues for statistics queries.
+
 * query_timeout
 
 Used to set the query timeout in "seconds". This variable will act on all query statements in the current connection, as well as INSERT statements. The default value is 300 seconds.
