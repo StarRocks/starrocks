@@ -10,6 +10,16 @@ Spark load is an **asynchronous** import method that requires users to create Sp
 * **Broker**: Broker is an independent stateless process. It encapsulates the file system interface and provides StarRocks with the ability to read files from remote storage systems.
 * **Global Dictionary**: Saves the data structure that maps data from the original value to the encoded value. The original value can be any data type, while the encoded value is an integer. The global dictionary is mainly used in scenarios where exact count distinct is precomputed.
 
+## Background information
+
+In StarRocks v2.4 and earlier, Broker Load depends on brokers to set up connections between your StarRocks cluster and your storage system. When you create a Broker Load job, you need to input `WITH BROKER "<broker_name>"` to specify the broker group you want to use. A broker is an independent, stateless service that is integrated with a file-system interface. With brokers, StarRocks can access and read data files that are stored in your storage system, and can use its own computing resources to pre-process and load the data of these data files.
+
+From StarRocks v2.5 onwards, Broker Load no longer needs to depend on brokers to set up connections between your StarRocks cluster and your storage system. When you create a Broker Load job, you no longer need to specify a broker group, but you still need to retain the `WITH BROKER` keyword.
+
+> **NOTE**
+>
+> Loading without brokers may not work in certain circumstances, such as when you configure multiple HA systems or have multiple Kerberos configurations. In this situation, you can still load data by using brokers.
+
 ## Fundamentals
 
 The user submits a Spark type import job through the MySQL client;the FE records the metadata and returns the submission result.
@@ -20,7 +30,8 @@ The execution of the spark load task is divided into the following main phases.
 2. The FE schedules the submission of the ETL task to the Apache Spark™ cluster for execution.
 3. The Apache Spark™ cluster executes the ETL task that includes global dictionary construction (BITMAP type), partitioning, sorting, aggregation, etc.
 4. After the ETL task is completed, the FE gets the data path of each preprocessed slice and schedules the relevant BE to execute the Push task.
-5. The BE reads the data through the Broker and converts it into StarRocks storage format.
+5. The BE reads data through Broker from HDFS and converts it into StarRocks storage format.
+    > If you choose not to use Broker, the BE reads data from HDFS directly.
 6. The FE schedules the effective version and completes the import job.
 
 The following diagram illustrates the main flow of spark load.
@@ -59,6 +70,12 @@ The basic process of data pre-processing is as follows:
 
 ## Basic Operations
 
+### Prerequisites
+
+If you continue to load data through Broker, you must ensure that Broker are deployed in your StarRocks cluster.
+
+You can use the [SHOW BROKER](../sql-reference/sql-statements/Administration/SHOW%20BROKER.md) statement to check for Broker that are deployed in your StarRocks cluster. If no Broker are deployed, you must deploy Broker by following the instructions provided in [Deploy a broker](../quick_start/Deploy.md#deploy-broker).
+
 ### Configuring ETL Clusters
 
 Apache Spark™ is used as an external computational resource in StarRocks for ETL work. There may be other external resources added to StarRocks, such as Spark/GPU for query, HDFS/S3 for external storage, MapReduce for ETL, etc. Therefore, we introduce `Resource Management` to manage these external resources used by StarRocks.
@@ -90,28 +107,6 @@ REVOKE USAGE_PRIV ON RESOURCE resource_name FROM user_identityREVOKE USAGE_PRIV 
 ~~~
 
 * Create resource
-
-`resource-name` is the name of the Apache Spark™ resource configured in StarRocks.
-
-`PROPERTIES` are parameters relating to the Apache Spark™ resource, as follows:
-  
-* **type**: Resource type, required, currently only supports S     park     .
-* **spark** Related parameters are as follows.
-* `spark.master`: Required, currently supports yarn.
-* `spark.submit.deployMode`: The deployment mode of the Apache Spark™ program, required, currently supports both cluster and client.
-* `spark.hadoop.fs.defaultFS`: Required if master is yarn.
-* Parameters related to yarn resource manager, required if master is yarn.
-* Single point resource manager required
-* `spark.hadoop.yarn.resourcemanager.address`: Address of the single point resource manager.
-* HA resource manager needs to be configured, where either hostname or address is configured.
-* `spark.hadoop.yarn.resourcemanager.ha.enabled`: Enable the resource manager HA, set to true.
-* `spark.hadoop.yarn.resourcemanager.ha.rm-ids`: list of resource manager logical ids.
-* `spark.hadoop.yarn.resourcemanager.hostname.rm-id`: For each rm-id, specify the hostname corresponding to the resource manager.
-* `spark.hadoop.yarn.resourcemanager.address.rm-id`: For each rm-id, specify `host:port` for the client to submit jobs to.
-* Other parameters are optional, refer to [Spark Configuration](http://spark.apache.org/docs/latest/configuration.html)
-* **working_dir**: The directory used by ETL. Required if      Apache Spark™ is used as an ETL resource. For example: `hdfs://host:port/tmp/starrocks`.
-* **broker**: Broker name. Required if Apache Spark™ is used as an ETL resource. You need to use the `ALTER SYSTEM ADD BROKER` command to complete the configuration in advance.
-* `broker.property_key`: Information (e.g.authentication information) to be specified when the broker reads the intermediate file generated by the ETL.
 
 **For example**：
 
@@ -151,6 +146,39 @@ PROPERTIES
     "broker" = "broker1"
 );
 ~~~
+
+`resource-name` is the name of the Apache Spark™ resource configured in StarRocks.
+
+`PROPERTIES` are parameters relating to the Apache Spark™ resource, as follows:
+  
+* **type**: Resource type, required, currently only supports Spark.
+* **spark** Related parameters are as follows.
+* `spark.master`: Required, currently supports yarn.
+* `spark.submit.deployMode`: The deployment mode of the Apache Spark™ program, required, currently supports both cluster and client.
+* `spark.hadoop.fs.defaultFS`: Required if master is yarn.
+* Parameters related to yarn resource manager, required if master is yarn.
+* Single point resource manager required
+* `spark.hadoop.yarn.resourcemanager.address`: Address of the single point resource manager.
+* HA resource manager needs to be configured, where either hostname or address is configured.
+* `spark.hadoop.yarn.resourcemanager.ha.enabled`: Enable the resource manager HA, set to true.
+* `spark.hadoop.yarn.resourcemanager.ha.rm-ids`: list of resource manager logical ids.
+* `spark.hadoop.yarn.resourcemanager.hostname.rm-id`: For each rm-id, specify the hostname corresponding to the resource manager.
+* `spark.hadoop.yarn.resourcemanager.address.rm-id`: For each rm-id, specify `host:port` for the client to submit jobs to.
+* Other parameters are optional, refer to [Spark Configuration](http://spark.apache.org/docs/latest/configuration.html)
+* **working_dir**: The directory used by ETL. Required if      Apache Spark™ is used as an ETL resource. For example: `hdfs://host:port/tmp/starrocks`.
+* **broker**: Broker name. Required if Apache Spark™ is used as an ETL resource. You need to use the `ALTER SYSTEM ADD BROKER` command to complete the configuration in advance.
+* `broker.property_key`: Information (e.g.authentication information) to be specified when the broker reads the intermediate file generated by the ETL.
+
+**Precaution**:
+
+The above is a description of parameters for loading through Broker. If you intend to load data without Broker, the following should be noted.
+
+* You do not need to specify `broker`.
+* If you need to configure user authentication, and HA for NameNode nodes, you need to configure the parameters in the hdfs-site.xml file in the HDFS cluster, see [broker_properties](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md#hdfs) for descriptions of parameters. and you need to move the **hdfs-site.xml** file under **$FE_HOME/conf** for each FE and **$BE_HOME/conf** for each BE.
+
+> Note
+>
+> If the HDFS file can only be accessed by a specific user, you still need to specify the HDFS username in `broker.name` and the user password in `broker.password`.
 
 * View resources
 

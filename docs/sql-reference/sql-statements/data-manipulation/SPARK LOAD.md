@@ -119,7 +119,7 @@ The name of the spark resource used can be viewed through `SHOW RESOURCES` comma
 
 4.resource_properties
 
-When users have temporary needs, such as modifying Spark configs by increasing the resources used by the task, you can set it here. The setting only takes effect for this task and does not affect the existing configuration in the StarRocks cluster. In addition, different brokers and different access methods need to provide different information. You can view the documents used by the broker.
+When you have a temporary need, such as modifying the Spark and HDFS configurations, you can set the parameters here, which takes effect only in this specific spark loading job and not to affect the existing configurations in the StarRocks cluster.
 
 5.opt_properties
 
