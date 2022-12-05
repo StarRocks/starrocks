@@ -78,6 +78,7 @@
     + [时区](/administration/timezone.md)
     + 管理资源
       + [资源隔离](/administration/Resource_Group.md)
+      + [查询队列](/administration/query_queues.md)
       + [查询管理](/administration/Query_management.md)
       + [内存管理](/administration/Memory_management.md)
       + [负载均衡](/administration/Load_balance.md)

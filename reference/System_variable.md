@@ -270,6 +270,38 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 
    用于兼容 JDBC 连接池 C3P0。 无实际作用。
 
+* query_queue_concurrency_limit
+
+  单个 BE 节点中并发查询上限。仅在设置为大于 `0` 后生效。默认值：`0`。
+
+* query_queue_cpu_used_permille_limit
+
+  单个 BE 节点中内存使用千分比上限（即 CPU 使用率 * 1000）。仅在设置为大于 `0` 后生效。默认值：`0`。取值范围：[0, 1000]
+
+* query_queue_insert_enable
+
+  布尔值，用于控制是否为 INSERT 导入启用查询队列。默认值：`false`。
+
+* query_queue_max_queued_queries
+
+  队列中查询数量的上限。当达到此阈值时，新增查询将被拒绝执行。仅在设置为大于 `0` 后生效。默认值：`0`。
+
+* query_queue_mem_used_pct_limit
+
+  单个 BE 节点中内存使用百分比上限。仅在设置为大于 `0` 后生效。默认值：`0`。取值范围：[0, 1]
+
+* query_queue_pending_timeout_second
+
+  队列中单个查询的最大超时时间。当达到此阈值时，该查询将被拒绝执行。默认值：`300`。单位：秒。
+
+* query_queue_select_enable
+
+  布尔值，用于控制是否为 SELECT 查询启用查询队列。默认值：`false`。
+
+* query_queue_statistic_enable
+
+  布尔值，用于控制是否为统计信息查询启用查询队列。默认值：`false`。
+
 * query_timeout
 
    用于设置查询超时，单位是「秒」。该变量会作用于当前连接中所有的查询语句，以及 INSERT 语句。默认为 300 秒，即 5 分钟。
