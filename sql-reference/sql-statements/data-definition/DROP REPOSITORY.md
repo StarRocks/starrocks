@@ -2,24 +2,29 @@
 
 ## 功能
 
-该语句用于删除一个已创建的仓库。仅 root 或 superuser 用户可以删除仓库。
+删除一个仓库。仓库用于 [备份和恢复](../../../administration/Backup_and_restore.md) 数据库数据。
 
-创建 REPOSITORY 操作请参考 [CREATE REPOSITORY](../data-definition/CREATE%20REPOSITORY.md) 章节。
+> **注意**
+>
+> - 仅 root 或 superuser 用户可以删除仓库。
+> - 该操作仅删除仓库在 StarRocks 中的映射，不会删除实际的仓库数据。如需删除备份数据，您需要手动删除备份在远端存储系统的快照路径。删除后，您可以再次通过指定相同的远端存储系统路径映射到该仓库。
 
 ## 语法
 
-```sql
-DROP REPOSITORY `repo_name`;
+```SQL
+DROP REPOSITORY <repository_name>
 ```
 
-说明：
+## 参数说明
 
-删除仓库，仅仅是 **删除该仓库在 StarRocks 中的映射**，不会删除实际的仓库数据。删除后，可以再次通过指定相同的 broker 和 LOCATION 映射到该仓库。
+| **参数**        | **说明**         |
+| --------------- | ---------------- |
+| repository_name | 要删除的仓库名。 |
 
 ## 示例
 
-1. 删除名为 oss_repo 的仓库。
+示例一：删除名为 `oss_repo` 的仓库。
 
-    ```sql
-    DROP REPOSITORY `oss_repo`;
-    ```
+```SQL
+DROP REPOSITORY `oss_repo`;
+```

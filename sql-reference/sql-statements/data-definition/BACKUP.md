@@ -2,50 +2,60 @@
 
 ## 功能
 
-该语句用于备份指定数据库下的数据。该命令为 **异步** 操作。提交成功后，需通过 `SHOW BACKUP` 命令查看进度。当前，仅支持备份 OLAP 类型表，且表的数据模型需为明细模型、聚合模型或更新模型，暂不支持备份数据模型为主键模型的表。
+备份指定数据库、表或分区的数据。当前 StarRocks 仅支持备份 OLAP 类型表。
+
+数据备份为异步操作。您可以通过 [SHOW BACKUP](../data-manipulation/SHOW%20BACKUP.md) 语句查看备份作业状态，或通过 [CANCEL BACKUP](../data-definition/CANCEL%20BACKUP.md) 语句取消备份作业。
+
+> **注意**
+>
+> - 仅限拥有 ADMIN 权限的用户执行备份功能。
+> - 单一数据库内，仅可同时执行一个备份或恢复作业。
 
 ## 语法
 
-```sql
-BACKUP SNAPSHOT [db_name].{snapshot_name}
-TO `repository_name`
-ON (
-`table_name` [PARTITION (`p1`, ...)],
-...
-)
-PROPERTIES ("key"="value", ...);
+```SQL
+BACKUP SNAPSHOT <db_name>.<snapshot_name>
+TO <repository_name>
+[ON (<table_name> [PARTITION (<partition_name>, ...)], ...)]
+[PROPERTIES ("key"="value", ...)]
 ```
 
-说明：
+## 参数说明
 
-1. 同一数据库下只能有一个正在执行的 `BACKUP` 或 `RESTORE` 任务。
-2. ON 子句中标识需要备份的表和分区。如果不指定分区，则默认备份该表的所有分区。
-3. `PROPERTIES` 目前支持以下属性：
-
-    ```plain text
-    "type" = "full"：表示这是一次全量更新（默认）。
-    "timeout" = "3600"：任务超时时间，默认为一天。单位秒。
-    ```
+| **参数**        | **说明**                                                     |
+| --------------- | ------------------------------------------------------------ |
+| db_name         | 需要备份的数据所属的数据库名。                               |
+| snapshot_name   | 指定数据快照名。                                             |
+| repository_name | 仓库名。                                                     |
+| ON              | 需要备份的表名。如不指定则备份整个数据库。                   |
+| PARTITION       | 需要备份的分区名。如不指定则备份对应表的所有分区。           |
+| PROPERTIES      | 数据快照属性。现支持以下属性：`type`：备份类型。当前仅支持 `FULL`，即全量备份。默认：`FULL`。`timeout`：任务超时时间。单位：秒。默认：`86400`。 |
 
 ## 示例
 
-1. 全量备份 example_db 下的表 example_tbl 到仓库 example_repo 中。
+示例一：全量备份 `example_db` 数据库到仓库 `example_repo` 中。
 
-    ```sql
-    BACKUP SNAPSHOT example_db.snapshot_label1
-    TO example_repo
-    ON (example_tbl)
-    PROPERTIES ("type" = "full");
-    ```
+```SQL
+BACKUP SNAPSHOT example_db.snapshot_label1
+TO example_repo
+PROPERTIES ("type" = "full");
+```
 
-2. 全量备份 example_db 下，表 example_tbl 的 p1, p2 分区，以及表 example_tbl2 到仓库 example_repo 中。
+示例二：全量备份 `example_db` 数据库下的表 `example_tbl` 到仓库 `example_repo` 中。
 
-    ```sql
-    BACKUP SNAPSHOT example_db.snapshot_label2
-    TO example_repo
-    ON
-    (
-    example_tbl PARTITION (p1,p2),
+```SQL
+BACKUP SNAPSHOT example_db.snapshot_label2
+TO example_repo
+ON (example_tbl);
+```
+
+示例三：全量备份 `example_db` 数据库中表 `example_tbl` 的 `p1`、`p2` 分区和表 `example_tbl2` 到仓库 `example_repo` 中。
+
+```SQL
+BACKUP SNAPSHOT example_db.snapshot_label3
+TO example_repo
+ON(
+    example_tbl PARTITION (p1, p2),
     example_tbl2
-    );
-    ```
+);
+```

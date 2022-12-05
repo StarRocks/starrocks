@@ -2,64 +2,71 @@
 
 ## 功能
 
-该语句用于创建仓库。仓库用于 [备份恢复](/administration/Backup_and_restore.md) 数据库数据。仅 root 或 superuser 用户可以创建仓库。
+基于远端存储系统创建用于存储数据快照的仓库。仓库用于 [备份和恢复](../../../administration/Backup_and_restore.md) 数据库数据。
 
-删除 REPOSITORY 操作请参考 [DROP REPOSITORY](../data-definition/DROP%20REPOSITORY.md) 章节。
+> **注意**
+>
+> 仅 root 或 superuser 用户可以创建仓库。
+
+删除仓库操作请参考 [DROP REPOSITORY](../data-definition/DROP%20REPOSITORY.md) 章节。
 
 ## 语法
 
-```sql
-CREATE [READ ONLY] REPOSITORY `repo_name`
-WITH BROKER `broker_name`
-ON LOCATION `repo_location`
-PROPERTIES ("key"="value", ...);
+```SQL
+CREATE [READ ONLY] REPOSITORY <repository_name>
+WITH BROKER
+ON LOCATION <repository_location>
+PROPERTIES ("key"="value", ...)
 ```
 
-说明：
+## 参数说明
 
-1. 仓库的创建，依赖于已存在的 broker。broker 的详细介绍及部署方法请参考 [BROKER LOAD](/sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md) 章节。
-2. 如果是只读仓库，则只能在仓库上进行恢复。如果不是，则可以进行备份和恢复操作。
-3. 根据 broker 的不同类型，PROPERTIES 有所不同，具体见示例。
+| **参数**            | **说明**                                                     |
+| ------------------- | ------------------------------------------------------------ |
+| READ ONLY           | 创建只读仓库。请注意只读仓库只可进行恢复操作。               |
+| repository_name     | 仓库名。                                                     |
+| repository_location | 远端存储系统路径。                                           |
+| PROPERTIES          | 访问远端存储系统的节点及密钥或用户名及密码。具体使用方式见示例。 |
 
 ## 示例
 
-1. 创建名为 oss_repo 的仓库，依赖 `broker "oss_broker"`，数据根目录为：`oss://starRocks_backup`。
+示例一：基于数据根目录 `oss://starRocks_backup` 创建名为 `oss_repo` 的仓库。
 
-    ```sql
-    CREATE REPOSITORY `oss_repo`
-    WITH BROKER `oss_broker`
-    ON LOCATION "oss://starRocks_backup"
-    PROPERTIES
-    (
-        "fs.oss.accessKeyId" = "xxx",
-        "fs.oss.accessKeySecret" = "yyy",
-        "fs.oss.endpoint" = "oss-cn-beijing.aliyuncs.com"
-    );
-    ```
+```SQL
+CREATE REPOSITORY `oss_repo`
+WITH BROKER `oss_broker`
+ON LOCATION "oss://starRocks_backup"
+PROPERTIES
+(
+    "fs.oss.accessKeyId" = "xxx",
+    "fs.oss.accessKeySecret" = "yyy",
+    "fs.oss.endpoint" = "oss-cn-beijing.aliyuncs.com"
+);
+```
 
-2. 创建和示例 1 相同的仓库，但属性为只读。
+示例二：基于数据根目录 `oss://starRocks_backup` 创建名为 `oss_repo` 的只读仓库。
 
-    ```sql
-    CREATE READ ONLY REPOSITORY `oss_repo`
-    WITH BROKER `oss_broker`
-    ON LOCATION "oss://starRocks_backup"
-    PROPERTIES
-    (
-        "fs.oss.accessKeyId" = "xxx",
-        "fs.oss.accessKeySecret" = "yyy",
-        "fs.oss.endpoint" = "oss-cn-beijing.aliyuncs.com"
-    );
-    ```
+```SQL
+CREATE READ ONLY REPOSITORY `oss_repo`
+WITH BROKER `oss_broker`
+ON LOCATION "oss://starRocks_backup"
+PROPERTIES
+(
+    "fs.oss.accessKeyId" = "xxx",
+    "fs.oss.accessKeySecret" = "yyy",
+    "fs.oss.endpoint" = "oss-cn-beijing.aliyuncs.com"
+);
+```
 
-3. 创建名为 hdfs_repo 的仓库，依赖 `broker "hdfs_broker"`，数据根目录为：`hdfs://hadoop-name-node:54310/path/to/repo/`。
+示例三：基于数据根目录 `hdfs://hadoop-name-node:54310/path/to/repo/` 创建名为 `hdfs_repo` 的仓库。
 
-    ```sql
-    CREATE REPOSITORY `hdfs_repo`
-    WITH BROKER `hdfs_broker`
-    ON LOCATION "hdfs://hadoop-name-node:54310/path/to/repo/"
-    PROPERTIES
-    (
-        "username" = "user",
-        "password" = "password"
-    );
-    ```
+```SQL
+CREATE REPOSITORY `hdfs_repo`
+WITH BROKER `hdfs_broker`
+ON LOCATION "hdfs://hadoop-name-node:54310/path/to/repo/"
+PROPERTIES
+(
+"username" = "xxxx",
+"password" = "yyyy"
+);
+```

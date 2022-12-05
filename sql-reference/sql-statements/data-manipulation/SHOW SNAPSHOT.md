@@ -2,46 +2,51 @@
 
 ## 功能
 
-该语句用于查看仓库中已存在的备份。查看仓库命令请参考 [SHOW REPOSITORIES](../data-manipulation/SHOW%20REPOSITORIES.md)。详细的备份恢复操作说明请参考: [备份恢复](/administration/Backup_and_restore.md) 章节。
+查看指定仓库中的备份。
 
 ## 语法
 
-```sql
-SHOW SNAPSHOT ON `repo_name`
-[WHERE SNAPSHOT = "snapshot" [AND TIMESTAMP = "backup_timestamp"]];
+```SQL
+SHOW SNAPSHOT ON <repo_name>
+[WHERE SNAPSHOT = <snapshot_name> [AND TIMESTAMP = <backup_timestamp>]]
 ```
 
-说明：
+## 参数说明
 
-```plain text
-1. 各列含义如下：
-Snapshot：   备份的名称
-Timestamp：  对应备份的时间版本
-Status：     如果备份正常，则显示 OK，否则显示错误信息
+| **参数**         | **说明**         |
+| ---------------- | ---------------- |
+| repo_name        | 备份所属仓库名。 |
+| snapshot_nam     | 备份名。         |
+| backup_timestamp | 备份时间戳。     |
 
-2. 如果指定了 TIMESTAMP，则会额外显示如下信息：
-Database：   备份数据原属的数据库名称
-Details：    以 Json 的形式，展示整个备份的数据目录及文件结构
-```
+## 返回
+
+| **返回**  | **说明**                                    |
+| --------- | ------------------------------------------- |
+| Snapshot  | 备份名。                                    |
+| Timestamp | 备份时间戳。                                |
+| Status    | 如果备份正常，则显示 OK，否则显示错误信息。 |
+| Database  | 备份所属数据库名。                          |
+| Details   | 备份的数据目录及文件结构。JSON 格式。       |
 
 ## 示例
 
-### 查看仓库已有的备份
+示例一：查看仓库 `example_repo` 中已有的备份。
 
-```sql
+```SQL
 SHOW SNAPSHOT ON example_repo;
 ```
 
-### 根据名称查看仓库中的备份
+示例二：查看仓库 `example_repo` 中名为 `backup1` 的备份。
 
-```sql
-SHOW SNAPSHOT ON example_repo WHERE SNAPSHOT = "backup1";
+```SQL
+SHOW SNAPSHOT ON example_repo
+WHERE SNAPSHOT = "backup1";
 ```
 
-### 根据名称和时间版本查看仓库中的备份
+示例三：查看仓库 `example_repo` 中名为 `backup1` 、时间戳为 `2018-05-05-15-34-26` 的备份。
 
-查看仓库 example_repo 中名称为 backup1 的备份，时间版本为 "2018-05-05-15-34-26" 的详细信息：
-
-```sql
-SHOW SNAPSHOT ON example_repo WHERE SNAPSHOT = "backup1" AND TIMESTAMP = "2018-05-05-15-34-26";
+```SQL
+SHOW SNAPSHOT ON example_repo 
+WHERE SNAPSHOT = "backup1" AND TIMESTAMP = "2018-05-05-15-34-26";
 ```

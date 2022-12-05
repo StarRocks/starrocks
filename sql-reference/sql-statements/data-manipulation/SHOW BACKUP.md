@@ -2,45 +2,46 @@
 
 ## 功能
 
-该语句用于查看 BACKUP 任务。
+查看指定数据库中的备份任务。
+
+> **说明**
+>
+> StarRocks 中仅保存最近一次备份任务信息。
 
 ## 语法
 
-```sql
-SHOW BACKUP [FROM db_name];
+```SQL
+SHOW BACKUP [FROM <db_name>]
 ```
 
-说明：
+## 参数说明
 
-```plain text
-1. StarRocks 中仅保存最近一次 BACKUP 任务。
-2. 各列含义如下：
-JobId：                  唯一任务 id
-SnapshotName：           备份的名称
-DbName：                 所属数据库
-State：                  备份任务当前所在阶段
-    PENDING：                提交作业后的初始状态
-    SNAPSHOTING：            正在进行快照操作
-    UPLOAD_SNAPSHOT：        快照完成，准备上传
-    UPLOADING：              快照上传中
-    SAVE_META：              将作业元信息保存为本地文件
-    UPLOAD_INFO：            上传作业元信息
-    FINISHED：               备份完成，任务成功
-    CANCELLED：              作业失败
-BackupObjs：             备份的表和分区
-CreateTime：             任务提交时间
-SnapshotFinishedTime：   快照完成时间
-UploadFinishedTime：     快照上传完成时间
-FinishedTime：           作业结束时间
-UnfinishedTasks：        在 SNAPSHOTING 和 UPLOADING 阶段会显示还未完成的子任务 id，该信息在备份任务工作时会不断更新
-Status：                 如果任务失败，显示失败信息
-Timeout：                作业超时时间，单位秒
-```
+| **参数** | **说明**               |
+| -------- | ---------------------- |
+| db_name  | 备份任务所属数据库名。 |
+
+## 返回
+
+| **返回**             | **说明**                                                     |
+| -------------------- | ------------------------------------------------------------ |
+| JobId                | 本次备份作业的 ID。                                          |
+| SnapshotName         | 用户指定的本次备份作业的名称。                               |
+| DbName               | 备份作业对应的数据库。                                       |
+| State                | 备份作业当前所在阶段：<ul><li>PENDING：作业初始状态。</li><li>SNAPSHOTING：正在进行快照操作。</li><li>UPLOAD_SNAPSHOT：快照结束，准备上传。</li><li>UPLOADING：正在上传快照。</li><li>SAVE_META：正在本地生成元数据文件。</li><li>UPLOAD_INFO：上传元数据文件和本次备份作业的信息。</li><li>FINISHED：备份完成。</li><li>CANCELLED：备份失败或被取消。</li></ul> |
+| BackupObjs           | 本次备份涉及的对象。                                         |
+| CreateTime           | 作业创建时间。                                               |
+| SnapshotFinishedTime | 快照完成时间。                                               |
+| UploadFinishedTime   | 快照上传完成时间。                                           |
+| FinishedTime         | 本次作业完成时间。                                           |
+| UnfinishedTasks      | 在 SNAPSHOTTING，UPLOADING 等阶段，会有多个子任务在同时进行，这里展示的当前段，未完成子任务的 Task ID。 |
+| TaskErrMsg           | 如果有子任务执行出错，这里会显示对应子任务的错误信息。       |
+| Status               | 用于记录在整个作业过程中，可能出现的一些状态信息。           |
+| Timeout              | 作业的超时时间，单位为秒。                                   |
 
 ## 示例
 
-1. 查看数据库 example_db 下最后一次 BACKUP 任务。
+示例一：查看数据库 `example_db` 下最后一次备份任务。
 
-```sql
+```SQL
 SHOW BACKUP FROM example_db;
 ```

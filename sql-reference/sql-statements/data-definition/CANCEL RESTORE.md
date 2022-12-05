@@ -2,21 +2,28 @@
 
 ## 功能
 
-该语句用于取消一个正在进行的 [RESTORE](../data-definition/RESTORE.md) 任务。
+取消指定数据库中一个正在进行的恢复任务。
+
+> **注意**
+>
+> 如果恢复作业在 COMMIT 阶段被取消，已恢复的数据将会损坏且无法访问。这种情况下，只能通过再次执行恢复操作，并等待作业完成。
 
 ## 语法
 
-```sql
-CANCEL RESTORE FROM db_name;
+```SQL
+CANCEL RESTORE FROM <db_name>
 ```
 
-注意：
-当取消处于 `COMMIT` 或之后阶段的恢复任务时，可能导致被恢复的表无法访问。此时只能通过再次执行恢复作业进行数据恢复。
+## 参数说明
+
+| **参数** | **说明**               |
+| -------- | ---------------------- |
+| db_name  | 恢复任务所属数据库名。 |
 
 ## 示例
 
-1. 取消 example_db 下的 RESTORE 任务。
+示例一：取消 `example_db` 数据库下的恢复任务。
 
-    ```sql
-    CANCEL RESTORE FROM example_db;
-    ```
+```SQL
+CANCEL RESTORE FROM example_db;
+```

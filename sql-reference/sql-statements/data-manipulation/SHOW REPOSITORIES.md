@@ -2,32 +2,30 @@
 
 ## 功能
 
-该语句用于查看当前已创建的仓库。
-
-备份数据需要创建仓库，详细的备份恢复操作说明请参考：[备份恢复](/administration/Backup_and_restore.md)章节。
+查看当前已创建的仓库。
 
 ## 语法
 
-```sql
+```SQL
 SHOW REPOSITORIES;
 ```
 
-```plain text
-说明：
-1. 各列含义如下：
-RepoId：     唯一的仓库ID
-RepoName：   仓库名称
-CreateTime： 第一次创建该仓库的时间
-IsReadOnly： 是否为只读仓库
-Location：   仓库中用于备份数据的根目录
-Broker：     依赖的 Broker
-ErrMsg：     StarRocks 会定期检查仓库的连通性，如果出现问题，这里会显示错误信息
-```
+## 返回
+
+| **返回**   | **说明**                |
+| ---------- | ----------------------- |
+| RepoId     | 仓库 ID。               |
+| RepoName   | 仓库名。                |
+| CreateTime | 仓库创建时间。          |
+| IsReadOnly | 是否为只读仓库。        |
+| Location   | 远端存储系统路径。      |
+| Broker     | 用于创建仓库的 Broker。 |
+| ErrMsg     | 仓库连接错误信息。      |
 
 ## 示例
 
-查看已创建的仓库：  
+示例一：查看已创建的仓库。
 
-```sql
+```SQL
 SHOW REPOSITORIES;
 ```
