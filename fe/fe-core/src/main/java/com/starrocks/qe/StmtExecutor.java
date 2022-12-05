@@ -1107,7 +1107,7 @@ public class StmtExecutor {
         } catch (QueryStateException e) {
             if (e.getQueryState().getStateType() != MysqlStateType.OK) {
                 String sql = AST2SQL.toString(parsedStmt);
-                if (sql.isEmpty()) {
+                if (sql == null) {
                     sql = originStmt.originStmt;
                 }
                 LOG.warn("DDL statement (" + sql + ") process failed.", e);
@@ -1116,7 +1116,7 @@ public class StmtExecutor {
         } catch (Throwable e) {
             // Maybe our bug
             String sql = AST2SQL.toString(parsedStmt);
-            if (sql.isEmpty()) {
+            if (sql == null) {
                 sql = originStmt.originStmt;
             }
             LOG.warn("DDL statement (" + sql + ") process failed.", e);
