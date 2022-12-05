@@ -7,12 +7,18 @@ A Hive catalog is an external catalog supported in StarRocks 2.3 and later versi
 ## Usage notes
 
 - StarRocks supports querying data files of Hive in the following formats: Parquet, ORC, and CSV.
-- StarRocks support querying Hive data in the following types: TINYINT, SMALLINT, DATE, BOOLEAN, INTEGER, BIGINT, TIMESTAMP, STRING, VARCHAR, CHAR, DOUBLE, FLOAT, DECIMAL, and ARRAY. Note that an error occurs if you query Hive data in unsupported data types. The following data types are not supported: INTERVAL, BINARY, MAP, STRUCT, and UNION.
+- StarRocks support querying Hive data in the following types: TINYINT, SMALLINT, DATE, BOOLEAN, INTEGER, BIGINT, TIMESTAMP, STRING, VARCHAR, CHAR, DOUBLE, FLOAT, DECIMAL, and ARRAY, MAP, and STRUCT. The following data types are not supported: INTERVAL, BINARY, and UNION.
+
+    > **Note**
+    >
+    > - An error occurs if you query Hive data in unsupported data types.
+    > - StarRocks only supports querying data of MAP and STRUCT types in Parquet or ORC data files.
+
 - You can use the [DESC](../../sql-reference/sql-statements/Utility/DESCRIBE.md) statement to view the schema of a Hive table in StarRocks 2.4 and later versions.
 
 ## Before you begin
 
-Before you create a Hive catalog, configure your StarRocks cluster so that StarRocks can access the data storage system and metadata service of your Hive cluster. StarRocks supports two data storage systems for Hive: HDFS and Amazon S3. StarRocks supports one metadata service for Hive: Hive metastore.
+Before you create a Hive catalog, configure your StarRocks cluster so that StarRocks can access the data storage system and metadata service of your Hive cluster. StarRocks supports two data storage systems for Hive: HDFS and Amazon S3. StarRocks supports two metadata services for Hive: Hive metastore and AWS Glue.
 
 ### HDFS
 
@@ -91,30 +97,48 @@ If you use Amazon S3 as the data storage system, configure your StarRocks cluste
 
 ## Create a Hive catalog
 
-After you complete the preceding configurations, you can create a Hive catalog using the following syntax:
+After you complete the preceding configurations, you can create a Hive catalog.
+
+### Syntax
 
 ```SQL
 CREATE EXTERNAL CATALOG catalog_name 
 PROPERTIES ("key"="value", ...);
 ```
 
-The parameter description is as follows:
+### Parameters
 
 - `catalog_name`: the name of the Hive catalog. This parameter is required.<br>The naming conventions are as follows:
 
   - The name can contain letters, digits (0-9), and underscores (_). It must start with a letter.
   - The name cannot exceed 64 characters in length.
 
-- `PROPERTIES`: the properties of the Hive catalog. This parameter is required.<br>You can configure the following properties:
+- `PROPERTIES`: the properties of the Hive catalog. This parameter is required. You need to configure this parameter based on the metadata service used by your Hive cluster.
 
-    | **Property**        | **Required** | **Description**                                              |
-    | ------------------- | ------------ | ------------------------------------------------------------ |
-    | type                | Yes          | The type of the data source. Set the value to `hive`.        |
-    | hive.metastore.uris | Yes          | The URI of the Hive metastore. The parameter value is in the following format: `thrift://<IP address of Hive metastore>:<port number>`. The port number defaults to 9083. |
+#### Hive metastore
+
+If you use Hive metastore for your Hive cluster, configure the following properties for the Hive catalog.
+
+| **Property**        | **Required** | **Description**                                              |
+| ------------------- | ------------ | ------------------------------------------------------------ |
+| type                | Yes          | The type of the data source. Set the value to `hive`.        |
+| hive.metastore.uris | Yes          | The URI of the Hive metastore. The parameter value is in the following format: `thrift://<IP address of Hive metastore>:<port number>`. The port number defaults to 9083. |
 
 > **Note**
 >
 > Before querying Hive data, you must add the mapping between the domain name and IP address of the Hive metastore node to the **/etc/hosts** path. Otherwise, StarRocks may fail to access Hive metastore when you start a query.
+
+#### [Preview] AWS Glue
+
+If you use AWS Glue for your Hive cluster, configure the following properties for the Hive catalog.
+
+| **Property**                           | **Required** | **Description**                                              |
+| -------------------------------------- | ------------ | ------------------------------------------------------------ |
+| type                                   | Yes          | The type of the data source. Set the value to `hive`.        |
+| hive.metastore.type                    | Yes          | The metadata service used by your Hive cluster. Set the value to `glue`. |
+| aws.hive.metastore.glue.aws-access-key | Yes          | The access key ID of the AWS Glue user.                      |
+| aws.hive.metastore.glue.aws-secret-key | Yes          | The secret access key of the AWS Glue user.                  |
+| aws.hive.metastore.glue.endpoint       | Yes          | The regional endpoint of your AWS Glue service. For information about how to obtain your regional endpoint, see [AWS Glue endpoints and quotas](https://docs.aws.amazon.com/general/latest/gr/glue.html). |
 
 ## Caching strategy of Hive metadata
 
