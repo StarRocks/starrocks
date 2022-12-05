@@ -219,8 +219,10 @@ public:
 
         if (_key_reader != nullptr) {
             _key_reader->get_levels(&def_levels, &rep_levels, &num_levels);
-        } else {
+        } else if (_value_reader != nullptr) {
             _value_reader->get_levels(&def_levels, &rep_levels, &num_levels);
+        } else {
+            DCHECK(false) << "Unreachable!";
         }
 
         auto& offsets = map_column->offsets_column()->get_data();
