@@ -179,6 +179,12 @@ public:
         _field = field;
         _key_reader = std::move(key_reader);
         _value_reader = std::move(value_reader);
+
+        // Check must has one valid column reader
+        if (_key_reader == nullptr && _value_reader == nullptr) {
+            return Status::InternalError("No avaliable parquet subfield column reader in MapColumn");
+        }
+
         return Status::OK();
     }
 
@@ -223,7 +229,6 @@ public:
             _value_reader->get_levels(&def_levels, &rep_levels, &num_levels);
         } else {
             DCHECK(false) << "Unreachable!";
-            return Status::InternalError("No avaliable parquet column reader in MapColumn");
         }
 
         auto& offsets = map_column->offsets_column()->get_data();
@@ -283,6 +288,19 @@ public:
     Status init(const ParquetField* field, std::vector<std::unique_ptr<ColumnReader>>&& child_readers) {
         _field = field;
         _child_readers = std::move(child_readers);
+
+        // Check must has one valid column reader
+        bool has_valid_reader = false;
+        for (const auto& reader : _child_readers) {
+            if (reader != nullptr) {
+                has_valid_reader = true;
+                break;
+            }
+        }
+        if (!has_valid_reader) {
+            return Status::InternalError("No avaliable parquet subfield column reader in StructColumn");
+        }
+
         return Status::OK();
     }
 
