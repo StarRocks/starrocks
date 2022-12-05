@@ -117,6 +117,8 @@ public class ThriftServer {
                 .newDaemonFixedThreadPool(Config.thrift_server_max_worker_threads,
                         Config.thrift_server_queue_size,
                         "thrift-server-pool", true);
+        // allow core thread time out so that the thread can be released
+        // if not used for ThreadPoolManager.KEEP_ALIVE_TIME
         threadPoolExecutor.allowCoreThreadTimeOut(true);
         serverArgs.executorService(threadPoolExecutor);
         server = new SRTThreadPoolServer(serverArgs);
