@@ -416,7 +416,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 |serialize_batch|FALSE|BE 之间 rpc 通信是否序列化 RowBatch，用于查询层之间的数据传输|
 |max_unpacked_row_block_size|104857600|单个 block 最大的字节数，100MB|
 |file_descriptor_cache_clean_interval|3600|文件句柄缓存清理的间隔，用于清理长期不用的文件句柄|
-|storage_root_path|${STARROCKS_HOME}/storage|存储数据的目录，多块盘配置使用分号 `;` 隔开，例如：/data1,medium:hdd;/data2,medium:ssd。如果为 SSD 磁盘，需在路径后添加 `ssd`，如果为 HDD 磁盘，需在路径后添加 `hdd`。|
+|storage_root_path|${STARROCKS_HOME}/storage|存储数据的目录以及存储介质类型，多块盘配置使用分号 `;` 隔开。如果为 SSD 磁盘，需在路径后添加 `,medium:ssd`，如果为 HDD 磁盘，需在路径后添加 `,medium:hdd`。例如：`/data1,medium:hdd;/data2,medium:ssd`。|
 |max_percentage_of_error_disk|0|磁盘错误达到一定比例，BE 退出|
 |default_num_rows_per_data_block|1024|每个 block 的数据行数|
 |max_tablet_num_per_shard|1024|每个 shard 的 tablet 数目，用于划分 tablet，防止单个目录下 tablet 子目录过多|
