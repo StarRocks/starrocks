@@ -198,12 +198,14 @@ public:
 
     Type type() const override { return S3; }
 
-    StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const std::string& path) override;
+    using FileSystem::new_sequential_file;
+    using FileSystem::new_random_access_file;
 
     StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
                                                                        const std::string& path) override;
 
-    StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const std::string& path) override;
+    StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const SequentialFileOptions& opts,
+                                                                  const std::string& path) override;
 
     // FIXME: `new_writable_file()` will not truncate an already-exist file/object, which does not satisfy
     // the API requirement.
@@ -262,10 +264,6 @@ private:
     FSOptions _options;
 };
 
-StatusOr<std::unique_ptr<RandomAccessFile>> S3FileSystem::new_random_access_file(const std::string& path) {
-    return S3FileSystem::new_random_access_file(RandomAccessFileOptions(), path);
-}
-
 StatusOr<std::unique_ptr<RandomAccessFile>> S3FileSystem::new_random_access_file(const RandomAccessFileOptions& opts,
                                                                                  const std::string& path) {
     S3URI uri;
@@ -277,7 +275,9 @@ StatusOr<std::unique_ptr<RandomAccessFile>> S3FileSystem::new_random_access_file
     return std::make_unique<RandomAccessFile>(std::move(input_stream), path);
 }
 
-StatusOr<std::unique_ptr<SequentialFile>> S3FileSystem::new_sequential_file(const std::string& path) {
+StatusOr<std::unique_ptr<SequentialFile>> S3FileSystem::new_sequential_file(const SequentialFileOptions& opts,
+                                                                            const std::string& path) {
+    (void)opts;
     S3URI uri;
     if (!uri.parse(path)) {
         return Status::InvalidArgument(fmt::format("Invalid S3 URI: {}", path));

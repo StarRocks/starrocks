@@ -261,7 +261,8 @@ private:
     int _timeout_ms = DEFAULT_TIMEOUT_MS;
 };
 
-StatusOr<std::unique_ptr<SequentialFile>> BrokerFileSystem::new_sequential_file(const std::string& path) {
+StatusOr<std::unique_ptr<SequentialFile>> BrokerFileSystem::new_sequential_file(const SequentialFileOptions& opts,
+                                                                                const std::string& path) {
     TBrokerOpenReaderRequest request;
     TBrokerOpenReaderResponse response;
     request.__set_path(path);
@@ -284,10 +285,6 @@ StatusOr<std::unique_ptr<SequentialFile>> BrokerFileSystem::new_sequential_file(
     ASSIGN_OR_RETURN(const uint64_t file_size, get_file_size(path));
     auto stream = std::make_shared<BrokerInputStream>(_broker_addr, response.fd, file_size);
     return std::make_unique<SequentialFile>(std::move(stream), path);
-}
-
-StatusOr<std::unique_ptr<RandomAccessFile>> BrokerFileSystem::new_random_access_file(const std::string& path) {
-    return new_random_access_file(RandomAccessFileOptions(), path);
 }
 
 StatusOr<std::unique_ptr<RandomAccessFile>> BrokerFileSystem::new_random_access_file(

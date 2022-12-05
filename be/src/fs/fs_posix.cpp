@@ -311,7 +311,12 @@ public:
 
     Type type() const override { return POSIX; }
 
-    StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const string& fname) override {
+    using FileSystem::new_sequential_file;
+    using FileSystem::new_random_access_file;
+
+    StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const SequentialFileOptions& opts,
+                                                                  const string& fname) override {
+        (void)opts;
         int fd;
         RETRY_ON_EINTR(fd, ::open(fname.c_str(), O_RDONLY));
         if (fd < 0) {
@@ -320,11 +325,6 @@ public:
         auto stream = std::make_shared<io::FdInputStream>(fd);
         stream->set_close_on_delete(true);
         return std::make_unique<SequentialFile>(std::move(stream), fname);
-    }
-
-    // get a RandomAccessFile pointer without file cache
-    StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const std::string& fname) override {
-        return new_random_access_file(RandomAccessFileOptions(), fname);
     }
 
     StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
