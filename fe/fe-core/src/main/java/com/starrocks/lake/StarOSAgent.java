@@ -253,16 +253,14 @@ public class StarOSAgent {
     public long createShardGroup(long dbId, long tableId, long partitionId) throws DdlException {
         prepare();
         List<ShardGroupInfo> shardGroupInfos = null;
-        Map<String, String> propertyMap = new HashMap<>();
-        propertyMap.put("dbId", String.valueOf(dbId));
-        propertyMap.put("tableId", String.valueOf(tableId));
-        propertyMap.put("partitionId", String.valueOf(partitionId));
         try {
             List<CreateShardGroupInfo> createShardGroupInfos = new ArrayList<>();
             createShardGroupInfos.add(CreateShardGroupInfo.newBuilder()
                     .setPolicy(PlacementPolicy.SPREAD)
-                    .putLabels("createTime", String.valueOf(System.currentTimeMillis()))
-                    .putAllProperties(propertyMap)
+                    .putLabels("dbId", String.valueOf(dbId))
+                    .putLabels("tableId", String.valueOf(tableId))
+                    .putLabels("partitionId", String.valueOf(partitionId))
+                    .putProperties("createTime", String.valueOf(System.currentTimeMillis()))
                     .build());
             shardGroupInfos = client.createShardGroup(serviceId, createShardGroupInfos);
             LOG.debug("Create shard group success. shard group infos: {}", shardGroupInfos);

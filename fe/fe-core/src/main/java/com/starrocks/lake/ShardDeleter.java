@@ -81,7 +81,7 @@ public class ShardDeleter extends LeaderDaemon {
         Map<Long, String> groupToCreateTimeMap =
                 shardGroupInfos.stream().collect(Collectors.toMap(
                         obj -> obj.getGroupId(),
-                        obj -> obj.getLabelsMap().get("createTime"),
+                        obj -> obj.getPropertiesMap().get("createTime"),
                         (key1, key2) -> key1
                 ));
 

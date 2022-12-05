@@ -1573,11 +1573,6 @@ public class LocalMetastore implements ConnectorMetadata {
             } else {
                 olapTable.dropPartition(info.getDbId(), info.getPartitionName(), info.isForceDrop());
             }
-            if (olapTable.isLakeTable()) {
-                List<Long> shardGroupIds = new ArrayList<>();
-                shardGroupIds.add(partition.getShardGroupId());
-                stateMgr.getStarOSAgent().deleteShardGroup(shardGroupIds);
-            }
         } finally {
             db.writeUnlock();
         }
