@@ -37,6 +37,7 @@ import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.mysql.privilege.Privilege;
 import com.starrocks.sql.ast.AstVisitor;
@@ -45,6 +46,7 @@ import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.DefaultValueExpr;
+import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
@@ -62,6 +64,7 @@ import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.SetQualifier;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetType;
+import com.starrocks.sql.ast.SetUserPropertyStmt;
 import com.starrocks.sql.ast.SetVar;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableFunctionRelation;
@@ -98,6 +101,37 @@ public class AST2SQL {
                 sb.append(setVar.getVariable() + " = " + setVar.getExpression().toSql());
                 idx++;
             }
+            return sb.toString();
+        }
+
+        @Override
+        public String visitSetUserPropertyStatement(SetUserPropertyStmt stmt, Void context) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("SET PROPERTY FOR ").append('\'').append(stmt.getUser()).append('\'');
+            int idx = 0;
+            for (Pair<String, String> stringStringPair : stmt.getPropertyPairList()) {
+                if (idx != 0) {
+                    sb.append(", ");
+                }
+                sb.append(stringStringPair.first + " = " + stringStringPair.second);
+                idx++;
+            }
+            return sb.toString();
+        }
+
+        @Override
+        public String visitDropMaterializedViewStatement(DropMaterializedViewStmt stmt, Void context) {
+            StringBuilder sb = new StringBuilder();
+            if (stmt.isExplain()) {
+                sb.append("EXPLAIN ");
+            }
+
+            sb.append("DROP MATERIALIZED VIEW ");
+            if (stmt.isSetIfExists()) {
+                sb.append("IF EXISTS ");
+            }
+
+            sb.append(stmt.getMvName());
             return sb.toString();
         }
 
