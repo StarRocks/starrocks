@@ -36,6 +36,9 @@ import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.operator.TopNType;
 import com.starrocks.thrift.TExchangeNode;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.TNormalExchangeNode;
+import com.starrocks.thrift.TNormalPlanNode;
+import com.starrocks.thrift.TNormalSortInfo;
 import com.starrocks.thrift.TPartitionType;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
@@ -282,4 +285,22 @@ public class ExchangeNode extends PlanNode {
         return false;
     }
 
+    @Override
+    protected void toNormalForm(TNormalPlanNode planNode, FragmentNormalizer normalizer) {
+        TNormalExchangeNode exchangeNode = new TNormalExchangeNode();
+        exchangeNode.setInput_row_tuples(normalizer.remapTupleIds(tupleIds));
+        if (mergeInfo != null) {
+            TNormalSortInfo sortInfo = new TNormalSortInfo();
+            sortInfo.setOrdering_exprs(normalizer.normalizeOrderedExprs(mergeInfo.getOrderingExprs()));
+            sortInfo.setIs_asc_order(mergeInfo.getIsAscOrder());
+            sortInfo.setNulls_first(mergeInfo.getNullsFirst());
+            exchangeNode.setSort_info(sortInfo);
+        }
+        exchangeNode.setOffset(offset);
+        exchangeNode.setPartition_type(partitionType);
+        planNode.setExchange_node(exchangeNode);
+        planNode.setNode_type(TPlanNodeType.EXCHANGE_NODE);
+        normalizeConjuncts(normalizer, planNode, conjuncts);
+        super.toNormalForm(planNode, normalizer);
+    }
 }

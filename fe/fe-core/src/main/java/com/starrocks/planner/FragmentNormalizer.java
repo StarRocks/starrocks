@@ -156,8 +156,16 @@ public class FragmentNormalizer {
         return slotIdRemapping.computeIfAbsent(slotId, arg -> slotIdGen.getNextId());
     }
 
+    public Integer remapSlotId(Integer slotId) {
+        return slotIdRemapping.computeIfAbsent(new SlotId(slotId), arg -> slotIdGen.getMaxId()).asInt();
+    }
+
     public List<Integer> remapSlotIds(List<SlotId> slotIds) {
         return slotIds.stream().map(this::remapSlotId).map(SlotId::asInt).collect(Collectors.toList());
+    }
+
+    public List<Integer> remapIntegerSlotIds(List<Integer> slotIds) {
+        return slotIds.stream().map(this::remapSlotId).collect(Collectors.toList());
     }
 
     public boolean containsAllSlotIds(List<SlotId> slotIds) {
@@ -194,6 +202,13 @@ public class FragmentNormalizer {
             return Collections.emptyList();
         }
         return exprList.stream().map(this::normalizeExpr).sorted(ByteBuffer::compareTo).collect(Collectors.toList());
+    }
+
+    public List<ByteBuffer> normalizeOrderedExprs(List<Expr> exprList) {
+        if (exprList == null || exprList.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return exprList.stream().map(this::normalizeExpr).collect(Collectors.toList());
     }
 
     public boolean computeDigest(PlanNode cachePointNode) {
