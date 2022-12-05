@@ -77,6 +77,7 @@
     + [升级 DorisDB 到 StarRocks](/administration/update_from_dorisdb.md)
     + [升级 Apache Doris 到 StarRocks](/administration/update_from_doris.md)
     + [时区](/administration/timezone.md)
+    + [Information Schema](/administration/information_schema.md)
     + 管理资源
       + [资源隔离](/administration/Resource_Group.md)
       + [查询队列](/administration/query_queues.md)
