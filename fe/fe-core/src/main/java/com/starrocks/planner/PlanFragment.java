@@ -124,9 +124,6 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     protected int pipelineDop = 1;
     protected boolean dopEstimated = false;
 
-    // Enable shared_scan for this fragment: OlapScanOperator could share the output data to avoid data skew
-    protected boolean enableSharedScan = true;
-
     // Whether to assign scan ranges to each driver sequence of pipeline,
     // for the normal backend assignment (not colocate, bucket, and replicated join).
     protected boolean assignScanRangesPerDriverSeq = false;
@@ -237,14 +234,6 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
     public void setForceSetTableSinkDop() {
         this.forceSetTableSinkDop = true;
-    }
-
-    public void setEnableSharedScan(boolean enable) {
-        this.enableSharedScan = enable;
-    }
-
-    public boolean isEnableSharedScan() {
-        return enableSharedScan;
     }
 
     public boolean isAssignScanRangesPerDriverSeq() {
