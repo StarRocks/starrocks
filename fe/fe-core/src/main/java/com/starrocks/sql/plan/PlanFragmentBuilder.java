@@ -1278,13 +1278,14 @@ public class PlanFragmentBuilder {
             aggregationNode.setHasNullableGenerateChild();
             aggregationNode.computeStatistics(optExpr.getStatistics());
 
-            boolean notNeedLocalShuffle = aggregationNode.isNeedsFinalize() &&
+            boolean notNeedLocalShuffle = (node.isOnePhaseAgg() || node.isMergedLocalAgg()) &&
                     hasNoExchangeNodes(inputFragment.getPlanRoot());
             boolean pipelineDopEnabled = ConnectContext.get() != null &&
                     ConnectContext.get().getSessionVariable().isPipelineDopAdaptionEnabled() &&
                     inputFragment.getPlanRoot().canUsePipeLine();
             if (pipelineDopEnabled && notNeedLocalShuffle) {
                 inputFragment.setNeedsLocalShuffle(false);
+                estimateDopOfOnePhaseLocalAgg(inputFragment);
             }
 
             inputFragment.setPlanRoot(aggregationNode);
@@ -1530,6 +1531,15 @@ public class PlanFragmentBuilder {
             }
             fragment.setPipelineDop(fragment.getParallelExecNum());
             fragment.setParallelExecNum(1);
+            fragment.setDopEstimated();
+        }
+
+        private void estimateDopOfOnePhaseLocalAgg(PlanFragment fragment) {
+            if (!isDopAutoEstimate() || fragment.isDopEstimated()) {
+                return;
+            }
+            fragment.setPipelineDop(1);
+            fragment.setParallelExecNum(fragment.getParallelExecNum());
             fragment.setDopEstimated();
         }
 
