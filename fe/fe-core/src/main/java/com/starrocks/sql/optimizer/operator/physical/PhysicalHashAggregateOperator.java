@@ -83,7 +83,7 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
     }
 
     /**
-     *  Whether it is the first phase in three/four-phase agg whose second phase is pruned.
+     * Whether it is the first phase in three/four-phase agg whose second phase is pruned.
      */
     public boolean isMergedLocalAgg() {
         return type.isLocal() && !useStreamingPreAgg;
