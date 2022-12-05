@@ -1142,7 +1142,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "  0:OlapScanNode");
 
         // For the none-pruned four-phase aggregation, need local shuffle.
-        ConnectContext.get().getSessionVariable().setNewPlanerAggStage(0);
+        ConnectContext.get().getSessionVariable().setNewPlanerAggStage(4);
         sql = "select count(distinct C_ADDRESS) from customer group by C_NAME";
         plan = getExecPlan(sql);
         fragment = plan.getFragments().get(2);
@@ -1154,6 +1154,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "  0:OlapScanNode");
 
         // For the none-pruned three-phase aggregation, need local shuffle.
+        ConnectContext.get().getSessionVariable().setNewPlanerAggStage(3);
         sql = "select count(distinct C_ADDRESS) from customer";
         plan = getExecPlan(sql);
         fragment = plan.getFragments().get(2);
