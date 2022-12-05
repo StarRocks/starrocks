@@ -1875,10 +1875,6 @@ public class PlanFragmentBuilder {
 
                     leftFragment.mergeQueryGlobalDicts(rightFragment.getQueryGlobalDicts());
 
-                    if (distributionMode.equals(HashJoinNode.DistributionMode.COLOCATE)) {
-                        leftFragment.setEnableSharedScan(false);
-                    }
-
                     return leftFragment;
                 } else if (distributionMode.equals(JoinNode.DistributionMode.SHUFFLE_HASH_BUCKET)) {
                     setJoinPushDown(joinNode);
@@ -1917,8 +1913,6 @@ public class PlanFragmentBuilder {
                         leftFragment = computeBucketShufflePlanFragment(context, leftFragment,
                                 rightFragment, joinNode);
                     }
-
-                    leftFragment.setEnableSharedScan(false);
 
                     return leftFragment;
                 }
