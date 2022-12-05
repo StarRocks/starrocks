@@ -229,7 +229,7 @@ public class SelectAnalyzer {
                 if (item.getExpr() instanceof SlotRef) {
                     name = item.getAlias() == null ? ((SlotRef) item.getExpr()).getColumnName() : item.getAlias();
                 } else {
-                    name = item.getAlias() == null ? AST2SQL.toString(item.getExpr()) : item.getAlias();
+                    name = item.getAlias() == null ? AstToStringBuilder.toString(item.getExpr()) : item.getAlias();
                 }
 
 

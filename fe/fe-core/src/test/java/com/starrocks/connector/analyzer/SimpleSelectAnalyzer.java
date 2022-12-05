@@ -16,9 +16,9 @@ import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.TreeNode;
-import com.starrocks.sql.analyzer.AST2SQL;
 import com.starrocks.sql.analyzer.AnalyzeState;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
@@ -108,7 +108,7 @@ public class SimpleSelectAnalyzer {
 
                 // We need get column name after analyzerExpression, because StructType's col name maybe a wrong value.
                 // The name here only refer to column name.
-                String name = item.getAlias() == null ? AST2SQL.toString(item.getExpr()) : item.getAlias();
+                String name = item.getAlias() == null ? AstToStringBuilder.toString(item.getExpr()) : item.getAlias();
 
                 if (item.getExpr() instanceof SlotRef) {
                     outputFields.add(new Field(name, item.getExpr().getType(),
