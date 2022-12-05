@@ -1408,7 +1408,10 @@ public class AggregateTest extends PlanTestBase {
                 "  |  <slot 21> : 3: t1c");
         assertContains(plan, " 9:AGGREGATE (update serialize)\n" +
                 "  |  output: multi_distinct_count(NULL)");
+<<<<<<< HEAD
         connectContext.getSessionVariable().setCboCteReuse(false);
+=======
+>>>>>>> 1caaca622 ([BugFix] Need local shuffle for the merged local agg (#14599))
     }
 
     @Test

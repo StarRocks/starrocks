@@ -131,6 +131,13 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     protected int pipelineDop = 1;
     protected boolean dopEstimated = false;
 
+<<<<<<< HEAD
+=======
+    // Whether to assign scan ranges to each driver sequence of pipeline,
+    // for the normal backend assignment (not colocate, bucket, and replicated join).
+    protected boolean assignScanRangesPerDriverSeq = false;
+
+>>>>>>> 1caaca622 ([BugFix] Need local shuffle for the merged local agg (#14599))
     protected final Map<Integer, RuntimeFilterDescription> buildRuntimeFilters = Maps.newTreeMap();
     protected final Map<Integer, RuntimeFilterDescription> probeRuntimeFilters = Maps.newTreeMap();
 
@@ -246,6 +253,45 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         return pipelineDop;
     }
 
+<<<<<<< HEAD
+=======
+    public void setPipelineDop(int dop) {
+        this.pipelineDop = dop;
+    }
+
+    public boolean hasOlapTableSink() {
+        return this.hasOlapTableSink;
+    }
+
+    public void setHasOlapTableSink() {
+        this.hasOlapTableSink = true;
+    }
+
+    public boolean forceSetTableSinkDop() {
+        return this.forceSetTableSinkDop;
+    }
+
+    public void setForceSetTableSinkDop() {
+        this.forceSetTableSinkDop = true;
+    }
+
+    public boolean isAssignScanRangesPerDriverSeq() {
+        return assignScanRangesPerDriverSeq;
+    }
+
+    public void setAssignScanRangesPerDriverSeq(boolean assignScanRangesPerDriverSeq) {
+        this.assignScanRangesPerDriverSeq = assignScanRangesPerDriverSeq;
+    }
+
+    public boolean isForceAssignScanRangesPerDriverSeq() {
+        return forceAssignScanRangesPerDriverSeq;
+    }
+
+    public void setForceAssignScanRangesPerDriverSeq() {
+        this.forceAssignScanRangesPerDriverSeq = true;
+    }
+
+>>>>>>> 1caaca622 ([BugFix] Need local shuffle for the merged local agg (#14599))
     public void computeLocalRfWaitingSet(PlanNode root, boolean clearGlobalRuntimeFilter) {
         root.fillLocalRfWaitingSet(runtimeFilterBuildNodeIds);
         if (root instanceof RuntimeFilterBuildNode) {
