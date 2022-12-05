@@ -40,8 +40,7 @@ struct OrphanSegmentHandler {
         std::string_view name(str, length);
         VLOG(2) << "Dropping disk cache of " << name;
         auto path = join_path(dir, name);
-        // TODO: Add a new interface for dropping disk cache
-        auto st = fs->delete_file(path);
+        auto st = fs->drop_local_cache(path);
         LOG_IF(ERROR, !st.ok() && !st.is_not_found()) << "Fail to drop disk cache of " << name << ": " << st;
         return true;
     }
@@ -149,7 +148,8 @@ static Status drop_disk_cache(std::string_view root_location) {
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_location));
     auto segment_root_location = join_path(root_location, kSegmentDirectoryName);
     auto orphan_list_location = join_path(root_location, kGCFileName);
-    auto file_or = fs->new_random_access_file(orphan_list_location);
+    auto options = RandomAccessFileOptions{.skip_fill_local_cache = true};
+    auto file_or = fs->new_random_access_file(options, orphan_list_location);
     if (file_or.status().is_not_found()) {
         return Status::OK();
     } else if (!file_or.ok()) {
