@@ -426,6 +426,15 @@ public:
         return Status::NotSupported("StarletFileSystem::link_file");
     }
 
+    Status drop_local_cache(const std::string& path) override {
+        ASSIGN_OR_RETURN(auto pair, parse_starlet_uri(path));
+        auto fs_st = get_shard_filesystem(pair.second);
+        if (!fs_st.ok()) {
+            return to_status(fs_st.status());
+        }
+        return to_status((*fs_st)->drop_cache(pair.first));
+    }
+
 private:
     absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>> get_shard_filesystem(int64_t shard_id) {
         return g_worker->get_shard_filesystem(shard_id, _conf);
