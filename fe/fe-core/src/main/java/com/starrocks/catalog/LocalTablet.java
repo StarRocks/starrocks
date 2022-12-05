@@ -184,6 +184,9 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
         for (Replica replica : replicas) {
             Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(replica.getBackendId());
+            if (backend == null) {
+                continue;
+            }
             backends.add(backend.getHost());
         }
         return backends;
