@@ -144,6 +144,14 @@ Whether strict mode is on or off by default. If turned on, column type transform
 
 Specify the time zone used by the import job. The default is to use the timezone parameter of Session. This parameter affects the results of all time zone related functions involved in importing.
 
+- `merge_condition`
+
+Specifies the name of the column you want to use as the condition to determine whether updates can take effect. The update from a source record to a destination record takes effect only when the source data record has a larger value than the destination data record in the specified column. For more information, see [Change data through loading](../../../loading/Load_to_Primary_Key_tables.md).
+
+> NOTE
+>
+> The column that you specify cannot be a primary key column. Additionally, only tables that use the Primary Key model support conditional updates."
+
 - `format`
 
 Specify the time zone used by the import job. The default is to use the timezone parameter of Session. This parameter affects the results of all time zone related functions involved in importing.
