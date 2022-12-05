@@ -440,10 +440,6 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 |mem_limit|90%|BE 进程内存上限。可设为比例上限（如 "80%"）或物理上限（如 "100GB"）。|
 |flush_thread_num_per_store|2|每个 Store 用以 Flush MemTable 的线程数。|
 
-## Broker 配置项
-
-Broker 配置项暂不支持在线修改，您需要在 **broker.conf** 中修改并重启 BE 服务。具体配置项参考 [Broker load 导入](../loading/BrokerLoad.md)。
-
 ## 系统参数
 
 ### Linux Kernel

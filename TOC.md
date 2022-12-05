@@ -64,7 +64,6 @@
     + [通过 Docker 镜像部署](/administration/deploy_with_docker.md)
     + [通过源码编译](/administration/Build_in_docker.md)
     + [部署 FE 高可用集群](/administration/Deployment.md)
-    + [部署 Broker](/administration/deploy_broker.md)
     + [手动部署 CN](/administration/deploy_cn.md)
     + [通过 StarRocks Operator 在 Kubernetes 部署和管理 CN](/administration/k8s_operator_cn.md)
   + 运维集群
