@@ -71,6 +71,7 @@
     + [Configure a time zone](./administration/timezone.md)
     + Resource Management
       + [Resource group](./administration/resource_group.md)
+      + [Query queue](./administration/query_queues.md)
       + [Query management](./administration/Query_management.md)
       + [Memory management](./administration/Memory_management.md)
       + [Load balance](./administration/Load_balance.md)
