@@ -8,12 +8,9 @@ import com.starrocks.planner.PlanFragment;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.MockTpchStatisticStorage;
-import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
-import mockit.Mock;
-import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -998,21 +995,11 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
 
     @Test
     public void testPruneAggNode() throws Exception {
-        int numCores = 8;
-        int expectedParallelism = numCores / 2;
-        new MockUp<BackendCoreStat>() {
-            @Mock
-            public int getAvgNumOfHardwareCoresOfBe() {
-                return numCores;
-            }
-        };
-
         ConnectContext.get().getSessionVariable().setNewPlanerAggStage(3);
         String sql = "select count(distinct C_NAME) from customer group by C_CUSTKEY;";
         ExecPlan plan = getExecPlan(sql);
         PlanFragment fragment = plan.getFragments().get(1);
-        Assert.assertEquals(1, fragment.getPipelineDop());
-        Assert.assertEquals(expectedParallelism, fragment.getParallelExecNum());
+        Assert.assertTrue(fragment.isAssignScanRangesPerDriverSeq());
         assertContains(plan.getExplainString(TExplainLevel.NORMAL), "2:AGGREGATE (update finalize)\n" +
                 "  |  output: count(2: C_NAME)\n" +
                 "  |  group by: 1: C_CUSTKEY\n" +
@@ -1024,8 +1011,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         sql = "select count(distinct C_CUSTKEY) from customer;";
         plan = getExecPlan(sql);
         fragment = plan.getFragments().get(1);
-        Assert.assertEquals(1, fragment.getPipelineDop());
-        Assert.assertEquals(expectedParallelism, fragment.getParallelExecNum());
+        Assert.assertTrue(fragment.isAssignScanRangesPerDriverSeq());
         assertContains(plan.getExplainString(TExplainLevel.NORMAL), " 2:AGGREGATE (update serialize)\n" +
                 "  |  output: count(1: C_CUSTKEY)\n" +
                 "  |  group by: \n" +
@@ -1038,8 +1024,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         sql = "select count(distinct C_CUSTKEY, C_NAME) from customer;";
         plan = getExecPlan(sql);
         fragment = plan.getFragments().get(1);
-        Assert.assertEquals(1, fragment.getPipelineDop());
-        Assert.assertEquals(expectedParallelism, fragment.getParallelExecNum());
+        Assert.assertTrue(fragment.isAssignScanRangesPerDriverSeq());
         assertContains(plan.getExplainString(TExplainLevel.NORMAL), " 2:AGGREGATE (update serialize)\n" +
                 "  |  output: count(if(1: C_CUSTKEY IS NULL, NULL, 2: C_NAME))\n" +
                 "  |  group by: \n" +
@@ -1050,8 +1035,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         sql = "select count(distinct C_CUSTKEY, C_NAME) from customer group by C_CUSTKEY;";
         plan = getExecPlan(sql);
         fragment = plan.getFragments().get(1);
-        Assert.assertEquals(1, fragment.getPipelineDop());
-        Assert.assertEquals(expectedParallelism, fragment.getParallelExecNum());
+        Assert.assertTrue(fragment.isAssignScanRangesPerDriverSeq());
         assertContains(plan.getExplainString(TExplainLevel.NORMAL), "  2:AGGREGATE (update finalize)\n" +
                 "  |  output: count(if(1: C_CUSTKEY IS NULL, NULL, 2: C_NAME))\n" +
                 "  |  group by: 1: C_CUSTKEY\n" +
@@ -1062,47 +1046,35 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
 
     @Test
     public void testAggNodeAndBucketDistribution() throws Exception {
-        int numCores = 8;
-        int expectedParallelism = numCores / 2;
-        new MockUp<BackendCoreStat>() {
-            @Mock
-            public int getAvgNumOfHardwareCoresOfBe() {
-                return numCores;
-            }
-        };
-
-        // For the local one-phase aggregation, prefer instance parallel.
+        // For the local one-phase aggregation, enable AssignScanRangesPerDriverSeq.
         String sql = "select count(1) from customer group by C_CUSTKEY";
         ExecPlan plan = getExecPlan(sql);
         PlanFragment fragment = plan.getFragments().get(1);
-        Assert.assertEquals(1, fragment.getPipelineDop());
-        Assert.assertEquals(expectedParallelism, fragment.getParallelExecNum());
+        Assert.assertTrue(fragment.isAssignScanRangesPerDriverSeq());
         assertContains(fragment.getExplainString(TExplainLevel.NORMAL), "  1:AGGREGATE (update finalize)\n" +
                 "  |  output: count(1)\n" +
                 "  |  group by: 1: C_CUSTKEY\n" +
                 "  |  \n" +
                 "  0:OlapScanNode");
 
-        // For the none-local one-phase aggregation, prefer pipeline parallel.
+        // For the none-local one-phase aggregation, disable AssignScanRangesPerDriverSeq.
         ConnectContext.get().getSessionVariable().setNewPlanerAggStage(1);
         sql = "select count(1) from customer group by C_NAME";
         plan = getExecPlan(sql);
         fragment = plan.getFragments().get(2);
-        Assert.assertEquals(expectedParallelism, fragment.getPipelineDop());
-        Assert.assertEquals(1, fragment.getParallelExecNum());
+        Assert.assertFalse(fragment.isAssignScanRangesPerDriverSeq());
         assertContains(fragment.getExplainString(TExplainLevel.NORMAL), "  STREAM DATA SINK\n" +
                 "    EXCHANGE ID: 01\n" +
                 "    HASH_PARTITIONED: 2: C_NAME\n" +
                 "\n" +
                 "  0:OlapScanNode");
 
-        // For the two-phase aggregation, prefer pipeline parallel.
+        // For the two-phase aggregation, disable AssignScanRangesPerDriverSeq.
         ConnectContext.get().getSessionVariable().setNewPlanerAggStage(2);
         sql = "select count(1) from customer group by C_NAME";
         plan = getExecPlan(sql);
         fragment = plan.getFragments().get(2);
-        Assert.assertEquals(expectedParallelism, fragment.getPipelineDop());
-        Assert.assertEquals(1, fragment.getParallelExecNum());
+        Assert.assertFalse(fragment.isAssignScanRangesPerDriverSeq());
         assertContains(fragment.getExplainString(TExplainLevel.NORMAL), "  1:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
                 "  |  output: count(1)\n" +
@@ -1110,25 +1082,23 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "  |  \n" +
                 "  0:OlapScanNode");
 
-        // For the none-pruned four-phase aggregation, prefer pipeline parallel.
+        // For the none-pruned four-phase aggregation, disable AssignScanRangesPerDriverSeq.
         ConnectContext.get().getSessionVariable().setNewPlanerAggStage(0);
         sql = "select count(distinct C_ADDRESS) from customer group by C_NAME";
         plan = getExecPlan(sql);
         fragment = plan.getFragments().get(2);
-        Assert.assertEquals(expectedParallelism, fragment.getPipelineDop());
-        Assert.assertEquals(1, fragment.getParallelExecNum());
+        Assert.assertFalse(fragment.isAssignScanRangesPerDriverSeq());
         assertContains(fragment.getExplainString(TExplainLevel.NORMAL), "  1:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
                 "  |  group by: 2: C_NAME, 3: C_ADDRESS\n" +
                 "  |  \n" +
                 "  0:OlapScanNode");
 
-        // For the none-pruned three-phase aggregation, prefer pipeline parallel.
+        // For the none-pruned three-phase aggregation, disable AssignScanRangesPerDriverSeq.
         sql = "select count(distinct C_ADDRESS) from customer";
         plan = getExecPlan(sql);
         fragment = plan.getFragments().get(2);
-        Assert.assertEquals(expectedParallelism, fragment.getPipelineDop());
-        Assert.assertEquals(1, fragment.getParallelExecNum());
+        Assert.assertFalse(fragment.isAssignScanRangesPerDriverSeq());
         assertContains(fragment.getExplainString(TExplainLevel.NORMAL), "  1:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
                 "  |  group by: 3: C_ADDRESS\n" +
