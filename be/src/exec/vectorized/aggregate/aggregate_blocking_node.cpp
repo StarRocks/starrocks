@@ -230,11 +230,11 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> AggregateBlockingNode::d
 
     if (!sorted_streaming_aggregate) {
         // 1. Finalize aggregation:
-        //   - Without group by clause, it cannot be paralized and need local passthough.
-        //   - With group by clause, it can be paralized and need local shuffle when could_local_shuffle is true.
+        //   - Without group by clause, it cannot be parallelized and need local passthough.
+        //   - With group by clause, it can be parallelized and need local shuffle when could_local_shuffle is true.
         // 2. Non-finalize aggregation:
-        //   - Without group by clause, it can be paralized and needn't local shuffle.
-        //   - With group by clause, it can be paralized and need local shuffle when could_local_shuffle is true.
+        //   - Without group by clause, it can be parallelized and needn't local shuffle.
+        //   - With group by clause, it can be parallelized and need local shuffle when could_local_shuffle is true.
         if (agg_node.need_finalize) {
             if (!has_group_by_keys) {
                 ops_with_sink = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), ops_with_sink);
