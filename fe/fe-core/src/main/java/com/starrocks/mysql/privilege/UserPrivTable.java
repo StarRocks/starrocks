@@ -22,21 +22,33 @@
 package com.starrocks.mysql.privilege;
 
 import com.starrocks.analysis.UserIdentity;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.common.io.Text;
+import org.apache.commons.collections.map.HashedMap;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 
 /*
  * UserPrivTable saves all global privs and also password for users
  */
 public class UserPrivTable extends PrivTable {
     private static final Logger LOG = LogManager.getLogger(UserPrivTable.class);
+
+    // Used for lock on multiple failed attempts
+    // user -> the first time that login failed
+    private Map<String, Long> firstFailedAttemptMap = new HashMap<>();
+    // user -> how many failed attempts
+    private Map<String, Integer> continuouslyFailedAttemptMap = new HashedMap();
 
     public UserPrivTable() {
     }
@@ -173,6 +185,65 @@ public class UserPrivTable extends PrivTable {
             }
         }
         return false;
+    }
+
+    /**
+     * check login is allowed
+     **/
+    public boolean allowLoginAttempt(String remoteUser, String remoteHost) {
+        // unlimited attempt
+        if (Config.max_failed_login_attempts < 0) {
+            return true;
+        }
+
+        // no failed attempt found, allow login attempt
+        if (!firstFailedAttemptMap.containsKey(remoteUser)) {
+            return true;
+        }
+
+        long now = System.currentTimeMillis();
+        long firstFailedAttempt = firstFailedAttemptMap.get(remoteUser);
+        long remainingSeconds = Config.password_lock_interval_seconds - (now - firstFailedAttempt) / 1000;
+        if (remainingSeconds <= 0) {
+            LOG.debug("user {} has been allowed to login since {} seconds ago.", remoteUser, 0 - remainingSeconds);
+            // failed attempt timeout, clear record and allow attempt
+            clearFailedAttemptRecords(remoteUser);
+            return true;
+        }
+
+        // failed attempt too many times
+        int failedAttemptTimes = continuouslyFailedAttemptMap.get(remoteUser);
+        if (failedAttemptTimes >= Config.max_failed_login_attempts) {
+            ErrorReport.report(ErrorCode.ERR_FAILED_ATTEMPT, remoteUser, remoteHost,
+                    Config.password_lock_interval_seconds, remainingSeconds, Config.max_failed_login_attempts);
+            LOG.debug("user {} is not allowed to login until {} seconds later", remoteUser, remainingSeconds);
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * If login fails, call this method to record it.
+     **/
+    public void recordFailedAttempt(String remoteUser) {
+        if (!firstFailedAttemptMap.containsKey(remoteUser)) {
+            firstFailedAttemptMap.put(remoteUser, System.currentTimeMillis());
+            continuouslyFailedAttemptMap.put(remoteUser, 1);
+        } else {
+            int failedAttemptTimes = continuouslyFailedAttemptMap.get(remoteUser);
+            continuouslyFailedAttemptMap.put(remoteUser, failedAttemptTimes + 1);
+        }
+    }
+
+    /**
+     * Clear failed attempt records upon login success.
+     **/
+    public void clearFailedAttemptRecords(String remoteUser) {
+        if (firstFailedAttemptMap.containsKey(remoteUser)) {
+            firstFailedAttemptMap.remove(remoteUser);
+            continuouslyFailedAttemptMap.remove(remoteUser);
+        }
     }
 
     @Override
