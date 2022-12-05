@@ -7,6 +7,7 @@
 #include <atomic>
 
 #include "service/brpc.h"
+#include "util/time.h"
 
 namespace starrocks {
 
@@ -18,12 +19,16 @@ public:
 
     int count() { return _refs.load(); }
 
-    void ref() { _refs.fetch_add(1); }
+    void ref() {
+        _start_timestamp = MonotonicNanos();
+        _refs.fetch_add(1);
+    }
 
     // If unref() returns true, this object should be delete
     bool unref() { return _refs.fetch_sub(1) == 1; }
 
     void Run() override {
+        _latency = MonotonicNanos() - _start_timestamp;
         if (unref()) {
             delete this;
         }
@@ -50,12 +55,16 @@ public:
         cid = cntl.call_id();
     }
 
+    int64_t latency() { return _latency; }
+
     brpc::Controller cntl;
     T result;
 
 private:
     brpc::CallId cid;
     std::atomic<int> _refs;
+    int64_t _start_timestamp;
+    int64_t _latency;
 };
 
 } // namespace starrocks
