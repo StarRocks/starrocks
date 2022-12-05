@@ -152,6 +152,22 @@ Specifies the name of the column you want to use as the condition to determine w
 >
 > The column that you specify cannot be a primary key column. Additionally, only tables that use the Primary Key model support conditional updates."
 
+```sql
+CREATE ROUTINE LOAD test_db.table5 on table5
+COLUMNS (id, version, score),
+COLUMNS TERMINATED BY ','
+PROPERTIES
+(
+    "merge_condition" = "version"
+)
+FROM KAFKA
+(
+    "kafka_broker_list" ="<kafka_broker_host>:<kafka_broker_port>",
+    "kafka_topic" = "topic5",
+    "property.kafka_default_offsets" ="OFFSET_BEGINNING"
+);
+```
+
 - `format`
 
 Specify the time zone used by the import job. The default is to use the timezone parameter of Session. This parameter affects the results of all time zone related functions involved in importing.
