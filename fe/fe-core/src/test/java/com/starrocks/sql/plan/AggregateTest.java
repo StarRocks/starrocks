@@ -1462,7 +1462,7 @@ public class AggregateTest extends PlanTestBase {
             connectContext.getSessionVariable().setNewPlanerAggStage(3);
             sql = "select count(distinct t1b) from test_all_type";
 
-            ExecPlan execPlan = UtFrameUtils.getPlanAndFragment(connectContext, sql).second;
+            ExecPlan execPlan = getExecPlan(sql);
             assertContains(execPlan.getFragments().get(1).getExplainString(TExplainLevel.NORMAL),
                     "  4:AGGREGATE (update serialize)\n" +
                             "  |  output: count(2: t1b)\n" +
@@ -1471,7 +1471,7 @@ public class AggregateTest extends PlanTestBase {
                             "  3:AGGREGATE (merge serialize)\n" +
                             "  |  group by: 2: t1b\n" +
                             "  |  ");
-            Assert.assertFalse(execPlan.getFragments().get(1).isEnableSharedScan());
+            Assert.assertTrue(execPlan.getFragments().get(1).isEnableSharedScan());
         } finally {
             connectContext.getSessionVariable().setNewPlanerAggStage(prevAggStage);
         }
