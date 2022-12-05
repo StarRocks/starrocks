@@ -227,7 +227,84 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateBlockingNode::
     // Aggregator must be used by a pair of sink and source operators,
     // so operators_with_source's degree of parallelism must be equal with operators_with_sink's
     source_operator->set_degree_of_parallelism(degree_of_parallelism);
+<<<<<<< HEAD
     operators_with_source.push_back(std::move(source_operator));
+=======
+
+    source_operator->set_could_local_shuffle(
+            down_cast<pipeline::SourceOperatorFactory*>(ops_with_sink[0].get())->could_local_shuffle());
+
+    ops_with_source.push_back(std::move(source_operator));
+    if (should_cache) {
+        ops_with_source = context->interpolate_cache_operator(ops_with_sink, ops_with_source, operators_generator);
+    }
+    context->add_pipeline(ops_with_sink);
+
+    return ops_with_source;
+}
+
+std::vector<std::shared_ptr<pipeline::OperatorFactory>> AggregateBlockingNode::decompose_to_pipeline(
+        pipeline::PipelineBuilderContext* context) {
+    using namespace pipeline;
+    context->has_aggregation = true;
+    OpFactories ops_with_sink = _children[0]->decompose_to_pipeline(context);
+    auto& agg_node = _tnode.agg_node;
+
+    bool sorted_streaming_aggregate = _tnode.agg_node.__isset.use_sort_agg && _tnode.agg_node.use_sort_agg;
+    bool has_group_by_keys = agg_node.__isset.grouping_exprs && !_tnode.agg_node.grouping_exprs.empty();
+    bool could_local_shuffle = context->could_local_shuffle(ops_with_sink);
+
+    auto try_interpolate_local_shuffle = [this, context](auto& ops) {
+        std::vector<ExprContext*> group_by_expr_ctxs;
+        Expr::create_expr_trees(_pool, _tnode.agg_node.grouping_exprs, &group_by_expr_ctxs, runtime_state());
+        Expr::prepare(group_by_expr_ctxs, runtime_state());
+        Expr::open(group_by_expr_ctxs, runtime_state());
+        return context->maybe_interpolate_local_shuffle_exchange(runtime_state(), ops, group_by_expr_ctxs);
+    };
+
+    if (!sorted_streaming_aggregate) {
+        // 1. Finalize aggregation:
+        //   - Without group by clause, it cannot be parallelized and need local passthough.
+        //   - With group by clause, it can be parallelized and need local shuffle when could_local_shuffle is true.
+        // 2. Non-finalize aggregation:
+        //   - Without group by clause, it can be parallelized and needn't local shuffle.
+        //   - With group by clause, it can be parallelized and need local shuffle when could_local_shuffle is true.
+        if (agg_node.need_finalize) {
+            if (!has_group_by_keys) {
+                ops_with_sink = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), ops_with_sink);
+            } else if (could_local_shuffle) {
+                ops_with_sink = try_interpolate_local_shuffle(ops_with_sink);
+            }
+        } else {
+            if (!has_group_by_keys) {
+                // Do nothing.
+            } else if (could_local_shuffle) {
+                ops_with_sink = try_interpolate_local_shuffle(ops_with_sink);
+            }
+        }
+    }
+
+    OpFactories ops_with_source;
+    if (sorted_streaming_aggregate) {
+        ops_with_source =
+                _decompose_to_pipeline<StreamingAggregatorFactory, SortedAggregateStreamingSourceOperatorFactory,
+                                       SortedAggregateStreamingSinkOperatorFactory>(ops_with_sink, context);
+    } else {
+        ops_with_source = _decompose_to_pipeline<AggregatorFactory, AggregateBlockingSourceOperatorFactory,
+                                                 AggregateBlockingSinkOperatorFactory>(ops_with_sink, context);
+    }
+
+    // insert local shuffle after sorted streaming aggregate
+    if (_tnode.agg_node.need_finalize && sorted_streaming_aggregate && could_local_shuffle && has_group_by_keys) {
+        ops_with_source = try_interpolate_local_shuffle(ops_with_source);
+    }
+
+    if (!_tnode.conjuncts.empty() || ops_with_source.back()->has_runtime_filters()) {
+        ops_with_source.emplace_back(
+                std::make_shared<ChunkAccumulateOperatorFactory>(context->next_operator_id(), id()));
+    }
+
+>>>>>>> 1caaca622 ([BugFix] Need local shuffle for the merged local agg (#14599))
     if (limit() != -1) {
         operators_with_source.emplace_back(
                 std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));

@@ -78,6 +78,20 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
         return type;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isOnePhaseAgg() {
+        return type.isGlobal() && !isSplit;
+    }
+
+    /**
+     * Whether it is the first phase in three/four-phase agg whose second phase is pruned.
+     */
+    public boolean isMergedLocalAgg() {
+        return type.isLocal() && !useStreamingPreAgg;
+    }
+
+>>>>>>> 1caaca622 ([BugFix] Need local shuffle for the merged local agg (#14599))
     public List<ColumnRefOperator> getPartitionByColumns() {
         return partitionByColumns;
     }
