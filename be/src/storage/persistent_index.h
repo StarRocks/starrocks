@@ -60,9 +60,21 @@ static_assert(sizeof(IndexValue) == kIndexValueSize);
 uint64_t key_index_hash(const void* data, size_t len);
 
 struct KeysInfo {
-    std::vector<uint32_t> key_idxes;
-    std::vector<uint64_t> hashes;
-    size_t size() const { return key_idxes.size(); }
+    //std::vector<uint32_t> key_idxes;
+    //std::vector<uint64_t> hashes;
+    std::vector<std::pair<uint32_t, uint64_t>> key_infos;
+    size_t size() const { return key_infos.size(); }
+
+    void set_difference(KeysInfo& input) {
+        std::vector<std::pair<uint32_t, uint64_t>> infos;
+        std::set_difference(key_infos.begin(), key_infos.end(), input.key_infos.begin(), input.key_infos.end(), std::back_inserter(infos),
+                            [](auto& a, auto& b) { return a.first < b.first});
+         key_infos.swap(infos);
+    }
+
+    void swap(KeysInfo& input ) {
+        key_infos.swap(input.key_infos);
+    }
 };
 
 struct KVRef {
@@ -285,7 +297,7 @@ public:
     std::vector<std::vector<size_t>> split_keys_by_shard(size_t nshard, const Slice* keys,
                                                          const std::vector<size_t>& idxes);
 
-    Status flush_to_immutable_index(const std::string& dir, const EditVersion& version);
+    Status flush_to_immutable_index(const std::string& dir, const EditVersion& version, bool write_tmp_l1 = false);
 
     // get the number of entries in the index (including NullIndexValue)
     size_t size();
@@ -411,7 +423,7 @@ class ImmutableIndexWriter {
 public:
     ~ImmutableIndexWriter();
 
-    Status init(const string& dir, const EditVersion& version);
+    Status init(const string& idx_file_path, const EditVersion& version);
 
     // write_shard() must be called serially in the order of key_size and it is caller's duty to guarantee this.
     Status write_shard(size_t key_size, size_t npage_hint, size_t nbucket, const std::vector<KVRef>& kvs);
@@ -536,6 +548,8 @@ public:
     Status try_replace(size_t n, const Slice* keys, const IndexValue* values, const uint32_t max_src_rssid,
                        std::vector<uint32_t>* failed);
 
+    Status flush_tmp_l1();
+
     std::vector<int8_t> test_get_move_buckets(size_t target, const uint8_t* bucket_packs_in_page);
 
     Status test_flush_varlen_to_immutable_index(const std::string& dir, const EditVersion& version, size_t num_entry,
@@ -573,6 +587,7 @@ private:
     EditVersion _l1_version;
     std::unique_ptr<ShardByLengthMutableIndex> _l0;
     std::unique_ptr<ImmutableIndex> _l1;
+    std::vector<std::unique_ptr<ImmutableIndex>> _tmp_l1;
     std::shared_ptr<FileSystem> _fs;
 
     bool _dump_snapshot = false;
