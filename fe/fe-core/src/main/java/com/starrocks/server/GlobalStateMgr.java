@@ -2199,6 +2199,14 @@ public class GlobalStateMgr {
                 sb.append(WriteQuorum.writeQuorumToName(olapTable.writeQuorum())).append("\"");
             }
 
+            // write quorum
+            if (olapTable.getMacAccessLabel() != "") {
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                        .append(PropertyAnalyzer.PROPERTIES_XC_MAC_ACCESS_LABEL)
+                        .append("\" = \"");
+                sb.append(olapTable.getMacAccessLabel()).append("\"");
+            }
+
             // compression type
             sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_COMPRESSION)
                     .append("\" = \"");

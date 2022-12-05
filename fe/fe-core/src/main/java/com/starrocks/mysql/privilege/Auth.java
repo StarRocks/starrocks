@@ -25,6 +25,7 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.StarRocksFE;
@@ -34,7 +35,10 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TablePattern;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.AuthorizationInfo;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InfoSchemaDb;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -43,6 +47,7 @@ import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.persist.ImpersonatePrivInfo;
 import com.starrocks.persist.PrivInfo;
 import com.starrocks.persist.gson.GsonUtils;
@@ -78,6 +83,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -417,14 +423,50 @@ public class Auth implements Writable {
         }
 
         PrivBitSet savedPrivs = PrivBitSet.of();
+        boolean authorized = false;
         if (checkGlobalInternal(currentUser, wanted, savedPrivs)
                 || checkDbInternal(currentUser, db, wanted, savedPrivs)
                 || checkTblInternal(currentUser, db, tbl, wanted, savedPrivs)) {
-            return true;
+            authorized = true;
+        }
+
+        // check mac here for xc purpose only
+        Database dbObj = GlobalStateMgr.getCurrentState().getDb(db);
+        if (dbObj != null) {
+            Table t = dbObj.getTable(tbl);
+            if ((t != null && !t.isOlapTable()) || currentUser.equals(UserIdentity.ROOT)) {
+                return authorized;
+            }
+            OlapTable tblObj = (OlapTable) t;
+            Map<String, Integer> labelToLevel = Maps.newHashMap();
+            labelToLevel.put("top_secret", 3);
+            labelToLevel.put("secret", 2);
+            labelToLevel.put("normal", 1);
+            if (tblObj != null && !tblObj.getMacAccessLabel().isEmpty()) {
+                Integer requiredLevel = labelToLevel.getOrDefault(
+                        tblObj.getMacAccessLabel().toLowerCase(Locale.ROOT), -1);
+                PrivBitSet macPrivs = PrivBitSet.of();
+                dbPrivTable.getPrivs(currentUser, PropertyAnalyzer.PROPERTIES_XC_MAC_ACCESS_LABEL, macPrivs);
+                String authorizedMacPriv = "";
+                if (macPrivs.containsPrivs(Privilege.DROP_PRIV)) {
+                    authorizedMacPriv = "top_secret";
+                } else if (macPrivs.containsPrivs(Privilege.ALTER_PRIV)) {
+                    authorizedMacPriv = "secret";
+                } else if (macPrivs.containsPrivs(Privilege.CREATE_PRIV)) {
+                    authorizedMacPriv = "normal";
+                }
+                Integer authorizedLevel = labelToLevel.getOrDefault(
+                        authorizedMacPriv.toLowerCase(Locale.ROOT), -1);
+                if (requiredLevel > authorizedLevel) {
+                    return false;
+                } else {
+                    return true;
+                }
+            }
         }
 
         LOG.debug("failed to get wanted privs: {}, ganted: {}", wanted, savedPrivs);
-        return false;
+        return authorized;
     }
 
     public boolean checkResourcePriv(ConnectContext ctx, String resourceName, PrivPredicate wanted) {

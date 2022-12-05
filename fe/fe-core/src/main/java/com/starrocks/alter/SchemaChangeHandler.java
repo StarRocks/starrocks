@@ -1122,6 +1122,8 @@ public class SchemaChangeHandler extends AlterHandler {
                     return null;
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE)) {
                     return null;
+                } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_XC_MAC_ACCESS_LABEL)) {
+                    return null;
                 }
             }
 
@@ -1245,6 +1247,11 @@ public class SchemaChangeHandler extends AlterHandler {
         } else if (metaType == TTabletMetaType.REPLICATED_STORAGE) {
             metaValue = Boolean.parseBoolean(properties.get(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE));
             if (metaValue == olapTable.enableReplicatedStorage()) {
+                return;
+            }
+        } else if (metaType == TTabletMetaType.MAC_ACCESS_LABEL) {
+            if (properties.get(PropertyAnalyzer.PROPERTIES_XC_MAC_ACCESS_LABEL).equalsIgnoreCase(
+                    olapTable.getMacAccessLabel())) {
                 return;
             }
         } else {

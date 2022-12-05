@@ -1683,6 +1683,23 @@ public class OlapTable extends Table implements GsonPostProcessable {
         tableProperty.buildWriteQuorum();
     }
 
+    public String getMacAccessLabel() {
+        if (tableProperty != null) {
+            return tableProperty.getMacAccessLabel();
+        }
+        return "";
+    }
+
+    public void setMacAccessLabel(String macAccessLabel) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        tableProperty
+                .modifyTableProperties(PropertyAnalyzer.PROPERTIES_XC_MAC_ACCESS_LABEL,
+                        macAccessLabel);
+        tableProperty.buildMacAccessLabel();
+    }
+
     public void setStorageMedium(TStorageMedium storageMedium) {
         if (tableProperty == null) {
             tableProperty = new TableProperty(new HashMap<>());

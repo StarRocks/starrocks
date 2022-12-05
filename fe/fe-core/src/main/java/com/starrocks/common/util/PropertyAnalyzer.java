@@ -119,6 +119,8 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_PARTITION_REFRESH_NUMBER  = "partition_refresh_number";
     public static final String PROPERTIES_EXCLUDED_TRIGGER_TABLES = "excluded_trigger_tables";
 
+    public static final String PROPERTIES_XC_MAC_ACCESS_LABEL = "mac_access_label";
+
     public static DataProperty analyzeDataProperty(Map<String, String> properties, DataProperty oldDataProperty)
             throws AnalysisException {
         if (properties == null) {
@@ -551,6 +553,23 @@ public class PropertyAnalyzer {
             return writeQuorum;
         } else {
             throw new AnalysisException("unknown write quorum: " + writeQuorum);
+        }
+    }
+
+    public static String analyzeMacAccessLabel(Map<String, String> properties) throws AnalysisException {
+        String macAccessLabel;
+        if (properties == null || !properties.containsKey(PROPERTIES_XC_MAC_ACCESS_LABEL)) {
+            return "";
+        }
+
+        macAccessLabel = properties.get(PROPERTIES_XC_MAC_ACCESS_LABEL);
+        properties.remove(PROPERTIES_XC_MAC_ACCESS_LABEL);
+        if (!macAccessLabel.equalsIgnoreCase("secret") &&
+                !macAccessLabel.equalsIgnoreCase("top_secret") &&
+                !macAccessLabel.equalsIgnoreCase("normal")) {
+            throw new AnalysisException("unknown access label: " + macAccessLabel);
+        } else {
+            return macAccessLabel;
         }
     }
 
