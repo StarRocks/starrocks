@@ -28,6 +28,7 @@ include "PlanNodes.thrift"
 include "AgentService.thrift"
 include "InternalService.thrift"
 include "StarrocksExternalService.thrift"
+include "MVMaintenance.thrift"
 
 struct TExportTaskRequest {
     1: required InternalService.TExecPlanFragmentParams params
@@ -130,8 +131,7 @@ service BackendService {
 
     AgentService.TAgentResult submit_etl_task(1:AgentService.TMiniLoadEtlTaskRequest request);
 
-    AgentService.TMiniLoadEtlStatusResult get_etl_status(
-            1:AgentService.TMiniLoadEtlStatusRequest request);
+    AgentService.TMiniLoadEtlStatusResult get_etl_status(1:AgentService.TMiniLoadEtlStatusRequest request);
 
     AgentService.TAgentResult delete_etl_files(1:AgentService.TDeleteEtlFilesRequest request);
 

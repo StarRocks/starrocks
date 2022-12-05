@@ -27,6 +27,7 @@
 
 #include "common/status.h"
 #include "gen_cpp/BackendService.h"
+#include "gen_cpp/MVMaintenance_types.h"
 
 namespace starrocks {
 

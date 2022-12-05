@@ -53,10 +53,12 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.Explain;
 import com.starrocks.sql.InsertPlanner;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryStatement;
@@ -328,6 +330,44 @@ public class UtFrameUtils {
                 plan.getFragments().size(), visitedFragments.size());
     }
 
+    /*
+     * Return analyzed statement and execution plan for MV maintenance
+     */
+    public static Pair<CreateMaterializedViewStatement, ExecPlan> planMVMaintenance(ConnectContext connectContext, String sql)
+            throws DdlException, CloneNotSupportedException {
+        connectContext.setDumpInfo(new QueryDumpInfo(connectContext.getSessionVariable()));
+
+        List<StatementBase> statements =
+                com.starrocks.sql.parser.SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode());
+        connectContext.getDumpInfo().setOriginStmt(sql);
+        SessionVariable oldSessionVariable = connectContext.getSessionVariable();
+        StatementBase statementBase = statements.get(0);
+
+        try {
+            // update session variable by adding optional hints.
+            if (statementBase instanceof QueryStatement &&
+                    ((QueryStatement) statementBase).getQueryRelation() instanceof SelectRelation) {
+                SelectRelation selectRelation = (SelectRelation) ((QueryStatement) statementBase).getQueryRelation();
+                Map<String, String> optHints = selectRelation.getSelectList().getOptHints();
+                if (optHints != null) {
+                    SessionVariable sessionVariable = (SessionVariable) oldSessionVariable.clone();
+                    for (String key : optHints.keySet()) {
+                        VariableMgr.setVar(sessionVariable, new SetVar(key, new StringLiteral(optHints.get(key))), true);
+                    }
+                    connectContext.setSessionVariable(sessionVariable);
+                }
+            }
+
+            ExecPlan execPlan = StatementPlanner.plan(statementBase, connectContext);
+            Assert.assertTrue(statementBase instanceof CreateMaterializedViewStatement);
+            CreateMaterializedViewStatement createMVStmt = (CreateMaterializedViewStatement) statementBase;
+            return Pair.create(createMVStmt, createMVStmt.getMaintenancePlan());
+        } finally {
+            // before returning we have to restore session variable.
+            connectContext.setSessionVariable(oldSessionVariable);
+        }
+    }
+
     public static Pair<String, ExecPlan> getPlanAndFragment(ConnectContext connectContext, String originStmt)
             throws Exception {
         connectContext.setDumpInfo(new QueryDumpInfo(connectContext.getSessionVariable()));
@@ -385,6 +425,10 @@ public class UtFrameUtils {
             // before returning we have to restore session variable.
             connectContext.setSessionVariable(oldSessionVariable);
         }
+    }
+
+    public static String printPlan(ExecPlan plan) {
+        return Explain.toString(plan.getPhysicalPlan(), plan.getOutputColumns());
     }
 
     public static String getStmtDigest(ConnectContext connectContext, String originStmt) throws Exception {

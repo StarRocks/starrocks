@@ -600,6 +600,19 @@ void PInternalServiceImplBase<T>::_get_pulsar_info_impl(
     Status::OK().to_protobuf(response->mutable_status());
 }
 
+template <typename T>
+void PInternalServiceImplBase<T>::submit_mv_maintenance_task(google::protobuf::RpcController* controller,
+                                                             const PMVMaintenanceTaskRequest* request,
+                                                             PMVMaintenanceTaskResult* response,
+                                                             google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    auto* cntl = static_cast<brpc::Controller*>(controller);
+    cntl->SetFailed(brpc::EINTERNAL, "Not implemented");
+    Status st = Status::NotSupported("Not implemented");
+    st.to_protobuf(response->mutable_status());
+    return;
+}
+
 template class PInternalServiceImplBase<PInternalService>;
 template class PInternalServiceImplBase<doris::PBackendService>;
 

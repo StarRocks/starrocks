@@ -1338,7 +1338,7 @@ public class CoordinatorPreprocessor {
     // execution parameters for a single fragment,
     // per-fragment can have multiple FInstanceExecParam,
     // used to assemble TPlanFragmentExecParas
-    protected class FragmentExecParams {
+    public class FragmentExecParams {
         public PlanFragment fragment;
         public List<TPlanFragmentDestination> destinations = Lists.newArrayList();
         public Map<Integer, Integer> perExchNumSenders = Maps.newHashMap();
@@ -1549,10 +1549,10 @@ public class CoordinatorPreprocessor {
             }
         }
 
-        List<TExecPlanFragmentParams> toThrift(Set<TUniqueId> inFlightInstanceIds,
-                                               TDescriptorTable descTable, Set<Long> dbIds,
-                                               boolean enablePipelineEngine, int accTabletSinkDop,
-                                               int tabletSinkTotalDop) throws Exception {
+        public List<TExecPlanFragmentParams> toThrift(Set<TUniqueId> inFlightInstanceIds,
+                                                      TDescriptorTable descTable, Set<Long> dbIds,
+                                                      boolean enablePipelineEngine, int accTabletSinkDop,
+                                                      int tabletSinkTotalDop) throws Exception {
             boolean forceSetTableSinkDop = fragment.forceSetTableSinkDop();
             setBucketSeqToInstanceForRuntimeFilters();
 

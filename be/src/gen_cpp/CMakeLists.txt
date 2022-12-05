@@ -59,6 +59,8 @@ set(SRC_FILES
     ${GEN_CPP_DIR}/MasterService_types.cpp
     ${GEN_CPP_DIR}/Metrics_constants.cpp
     ${GEN_CPP_DIR}/Metrics_types.cpp
+    ${GEN_CPP_DIR}/MVMaintenance_constants.cpp
+    ${GEN_CPP_DIR}/MVMaintenance_types.cpp
     ${GEN_CPP_DIR}/Opcodes_constants.cpp
     ${GEN_CPP_DIR}/Opcodes_types.cpp
     ${GEN_CPP_DIR}/PlanNodes_constants.cpp

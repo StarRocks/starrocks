@@ -299,14 +299,16 @@ public class OlapTable extends Table implements GsonPostProcessable {
 
     public void setName(String newName) {
         // change name in indexNameToId
-        long baseIndexId = indexNameToId.remove(this.name);
-        indexNameToId.put(newName, baseIndexId);
+        if (this.name != null) {
+            long baseIndexId = indexNameToId.remove(this.name);
+            indexNameToId.put(newName, baseIndexId);
+        }
 
         // change name
         this.name = newName;
 
         // change single partition name
-        if (this.partitionInfo.getType() == PartitionType.UNPARTITIONED) {
+        if (this.partitionInfo != null && this.partitionInfo.getType() == PartitionType.UNPARTITIONED) {
             if (getPartitions().stream().findFirst().isPresent()) {
                 Partition partition = getPartitions().stream().findFirst().get();
                 partition.setName(newName);
