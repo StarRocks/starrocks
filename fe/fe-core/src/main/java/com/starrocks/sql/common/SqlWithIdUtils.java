@@ -11,8 +11,8 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.AST2SQL;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CTERelation;
@@ -96,7 +96,7 @@ public class SqlWithIdUtils {
         return SqlParser.parse(sql, context.getSessionVariable()).get(0);
     }
 
-    private static class SqlEncoderVisitor extends AST2SQL.SQLBuilder {
+    private static class SqlEncoderVisitor extends AstToStringBuilder.AST2StringBuilderVisitor {
 
         private final Map<TableName, Table> tableMap;
         Map<String, Database> databaseMap;
