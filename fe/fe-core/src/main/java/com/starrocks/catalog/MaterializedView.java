@@ -40,6 +40,7 @@ import com.starrocks.sql.common.PartitionDiff;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
@@ -292,6 +293,10 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             this.lastRefreshTime = 0;
         }
 
+        public boolean isIncremental() {
+            return this.type.equals(RefreshType.INCREMENTAL);
+        }
+
         public RefreshType getType() {
             return type;
         }
@@ -344,6 +349,9 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
     @SerializedName(value = "partitionRefTableExprs")
     private List<Expr> partitionRefTableExprs;
 
+    // Maintenance plan for this MV
+    private transient ExecPlan maintenancePlan;
+
     public MaterializedView() {
         super(TableType.MATERIALIZED_VIEW);
         this.tableProperty = null;
@@ -361,8 +369,16 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         this.active = true;
     }
 
+    public MvId getMvId() {
+        return new MvId(getDbId(), id);
+    }
+
     public long getDbId() {
         return dbId;
+    }
+
+    public void setDbId(long dbId) {
+        this.dbId = dbId;
     }
 
     public boolean isActive() {
@@ -387,6 +403,14 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
     public void setSimpleDefineSql(String simple) {
         this.simpleDefineSql = simple;
+    }
+
+    public Set<Long> getBaseTableIds() {
+        return baseTableIds;
+    }
+
+    public void setBaseTableIds(Set<Long> baseTableIds) {
+        this.baseTableIds = baseTableIds;
     }
 
     public List<BaseTableInfo> getBaseTableInfos() {
@@ -868,5 +892,13 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             }
         }
         return null;
+    }
+
+    public ExecPlan getMaintenancePlan() {
+        return maintenancePlan;
+    }
+
+    public void setMaintenancePlan(ExecPlan maintenancePlan) {
+        this.maintenancePlan = maintenancePlan;
     }
 }
