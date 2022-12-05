@@ -24,9 +24,12 @@ namespace starrocks::lake {
 
 static const char* const kOrphanSegmentKey = "orphan_segments";
 
+namespace {
 struct OrphanSegmentHandler {
     FileSystem* fs;
     std::string dir;
+    std::string curr_key;
+    int array_level = 0;
 
     bool Null() { return true; }
     bool Bool(bool b) { return true; }
@@ -36,20 +39,35 @@ struct OrphanSegmentHandler {
     bool Uint64(uint64_t u) { return true; }
     bool Double(double d) { return true; }
     bool RawNumber(const char* str, rapidjson::SizeType length, bool copy) { return true; }
-    bool String(const char* str, rapidjson::SizeType length, bool copy) {
-        std::string_view name(str, length);
-        VLOG(2) << "Dropping disk cache of " << name;
-        auto path = join_path(dir, name);
-        auto st = fs->drop_local_cache(path);
-        LOG_IF(ERROR, !st.ok() && !st.is_not_found()) << "Fail to drop disk cache of " << name << ": " << st;
+    bool StartObject() { return true; }
+    bool Key(const char* str, rapidjson::SizeType length, bool copy) {
+        curr_key.assign(str, length);
         return true;
     }
-    bool StartObject() { return true; }
-    bool Key(const char* str, rapidjson::SizeType length, bool copy) { return true; }
-    bool EndObject(rapidjson::SizeType memberCount) { return true; }
-    bool StartArray() { return true; }
-    bool EndArray(rapidjson::SizeType elementCount) { return true; }
+    bool EndObject(rapidjson::SizeType memberCount) {
+        curr_key.clear();
+        return true;
+    }
+    bool StartArray() {
+        ++array_level;
+        return true;
+    }
+    bool EndArray(rapidjson::SizeType elementCount) {
+        --array_level;
+        return true;
+    }
+    bool String(const char* str, rapidjson::SizeType length, bool copy) {
+        if (curr_key == kOrphanSegmentKey && array_level == 1) {
+            std::string_view name(str, length);
+            VLOG(2) << "Dropping disk cache of " << name;
+            auto path = join_path(dir, name);
+            auto st = fs->drop_local_cache(path);
+            LOG_IF(ERROR, !st.ok() && !st.is_not_found()) << "Fail to drop disk cache of " << name << ": " << st;
+        }
+        return true;
+    }
 };
+} // namespace
 
 static Status write_orphan_list_file(const std::set<std::string>& orphans, WritableFile* file) {
     raw::RawVector<char> buffer(4096);
