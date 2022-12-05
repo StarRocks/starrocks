@@ -223,6 +223,7 @@ public:
             _value_reader->get_levels(&def_levels, &rep_levels, &num_levels);
         } else {
             DCHECK(false) << "Unreachable!";
+            return Status::InternalError("No avaliable parquet column reader in MapColumn");
         }
 
         auto& offsets = map_column->offsets_column()->get_data();
@@ -301,6 +302,7 @@ public:
 
         DCHECK_EQ(fields_column.size(), _child_readers.size());
 
+        // Fill data for selected subfield
         for (size_t i = 0; i < fields_column.size(); i++) {
             vectorized::Column* child_column = fields_column[i].get();
             if (_child_readers[i] != nullptr) {
@@ -308,6 +310,7 @@ public:
             }
         }
 
+        // Append default value for not selected subfield
         for (size_t i = 0; i < fields_column.size(); i++) {
             vectorized::Column* child_column = fields_column[i].get();
             if (_child_readers[i] == nullptr) {
@@ -330,6 +333,8 @@ public:
 
     void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) override {
         for (const auto& reader : _child_readers) {
+            // Considering not selected subfield, we will not create its ColumnReader
+            // So we should pick up the first created column reader
             if (reader != nullptr) {
                 reader->get_levels(def_levels, rep_levels, num_levels);
                 return;
@@ -400,7 +405,8 @@ Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField*
                         ColumnReader::create(opts, &field->children[parquet_pos], col_type.children[i], &child_reader));
                 children_readers.emplace_back(std::move(child_reader));
             } else {
-                // Don't create column reader
+                // Don't create column reader, because this subfield is not be selected, so it will not load
+                // from parquet.
                 children_readers.emplace_back(nullptr);
             }
         }

@@ -264,7 +264,7 @@ ColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool null
         Columns columns;
         BinaryColumn::Ptr field_names = BinaryColumn::create();
         for (size_t i = 0; i < field_size; i++) {
-            // TODO(SmithCruise): We still create not selected column, but will append_default instead.
+            // TODO(SmithCruise): We still create not selected column, but do append_default instead.
             // We should optimize it in future.
             // if (!type_desc.selected_fields.at(i)) {
             //     continue;

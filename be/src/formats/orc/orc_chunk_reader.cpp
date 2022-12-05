@@ -1035,6 +1035,7 @@ static void fill_struct_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size
             fn_fill_elements(field_cvb, field_columns[i], from, size, field_type,
                              mapping->get_column_id_or_child_mapping(i).orc_mapping, ctx);
         } else {
+            // Append default value for not selected subfield
             field_columns[i]->append_default(size);
         }
     }
