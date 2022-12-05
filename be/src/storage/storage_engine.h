@@ -329,8 +329,6 @@ private:
     // threads to run tablet checkpoint
     std::vector<std::thread> _tablet_checkpoint_threads;
 
-    std::thread _compaction_scheduler;
-
     std::thread _compaction_checker_thread;
     std::mutex _checker_mutex;
     std::condition_variable _checker_cv;
@@ -362,6 +360,8 @@ private:
     std::unique_ptr<UpdateManager> _update_manager;
 
     std::unique_ptr<CompactionManager> _compaction_manager;
+
+    std::thread _compaction_scheduler; // compaction scheduler should destruct before compaction manager
 
     HeartbeatFlags* _heartbeat_flags = nullptr;
 
