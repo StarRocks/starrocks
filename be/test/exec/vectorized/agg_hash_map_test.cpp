@@ -163,110 +163,154 @@ TEST(HashMapTest, TwoLevelConvert) {
     }
 }
 
-TEST(HashMapTest, TestAllocateAndComputeNonFounds) {
-    // Test AggHashMapWithSerializedKeyFixedSize
-    {
-        using TestAggHashMap = FixedSize16SliceAggHashMap<PhmapSeed1>;
-        using TestAggHashMapKey = AggHashMapWithSerializedKeyFixedSize<TestAggHashMap>;
+class AggHashMapKeyNotFoundsTest : public ::testing::Test {
+public:
+    template <typename HashMapWithKey>
+    struct TestAllocateState {
+        TestAllocateState(MemPool* pool) : _pool(pool) {}
+        AggDataPtr operator()(const typename HashMapWithKey::KeyType& key) { return _pool->allocate(16); }
+        AggDataPtr operator()(std::nullptr_t) { return _pool->allocate(16); }
+        MemPool* _pool;
+    };
 
-        RuntimeProfile profile("dummy");
+    template <typename CppType>
+    ColumnPtr CreateColumnWithType(LogicalType type, const std::vector<CppType>& datas, bool nullable) {
+        auto col = ColumnHelper::create_column(TypeDescriptor(type), nullable);
+        for (auto& data : datas) {
+            if (type == LogicalType::TYPE_INT) {
+                col->append_datum(data);
+            } else if (type == LogicalType::TYPE_VARCHAR) {
+                col->append_datum(data);
+            } else {
+                throw std::runtime_error("Unsupported type:" + std::to_string(type));
+            }
+        }
+        return col;
+    };
+
+    void CheckNotFounds(const std::vector<uint8_t>& not_founds, const std::vector<uint8_t>& exp_datas) {
+        DCHECK_EQ(not_founds.size(), exp_datas.size());
+        for (auto i = 0; i < not_founds.size(); i++) {
+            VLOG_ROW << "i:" << i << ", not_found:" << (int)not_founds[i] << ", expect:" << (int)exp_datas[i];
+            DCHECK_EQ(not_founds[i], exp_datas[i]);
+        }
+    };
+
+    template <typename TestAggHashMapKey, typename CppType>
+    void TestAggHashMapAllocateAndComputeNonFounds(LogicalType type, bool nullable,
+                                                   std::vector<std::vector<CppType>> test_datas,
+                                                   std::vector<std::vector<uint8_t>> expect_not_founds) {
+        RuntimeProfile profile("TestAggHashMapAllocateAndComputeNonFounds");
         AggStatistics statis(&profile);
 
         const auto chunk_size = 4;
-
-        auto mock_int_column_func = [=](std::vector<int32_t> datas) {
-            auto col = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
-            for (auto data : datas) {
-                col->append_datum(data);
-            }
-            return col;
-        };
-        auto CHECK_NOT_FOUNDS_FUNC = [=](const std::vector<uint8_t>& not_founds,
-                                         const std::vector<uint8_t>& exp_datas) {
-            DCHECK_EQ(not_founds.size(), exp_datas.size());
-            for (auto i = 0; i < not_founds.size(); i++) {
-                DCHECK_EQ(not_founds[i], exp_datas[i]);
-            }
-        };
-
+        TestAggHashMapKey key(chunk_size, &statis);
+        Buffer<AggDataPtr> agg_states(chunk_size);
         MemPool pool;
-        auto allocate_func = [&pool](auto& key) { return pool.allocate(16); };
-        {
-            TestAggHashMapKey key(chunk_size, &statis);
-            key.has_null_column = true;
-            key.fixed_byte_size = 8;
-            Buffer<AggDataPtr> agg_states(chunk_size);
-            Columns key_columns;
-            key_columns.emplace_back(mock_int_column_func({1, 2, 1, 1}));
+        std::vector<uint8_t> not_founds;
+        // For fixed size key, need set key's fixed size
+        if constexpr (std::is_same_v<TestAggHashMapKey,
+                                     AggHashMapWithSerializedKeyFixedSize<FixedSize16SliceAggHashMap<PhmapSeed1>>>) {
+            key.fixed_byte_size = sizeof(CppType);
+            key.has_null_column = nullable;
+        }
 
-            std::vector<uint8_t> not_founds;
-            key.build_hash_map(key_columns[0]->size(), key_columns, &pool, allocate_func, &agg_states);
+        {
+            Columns key_columns;
+            key_columns.emplace_back(CreateColumnWithType<CppType>(type, test_datas[0], nullable));
+            key.build_hash_map(key_columns[0]->size(), key_columns, &pool, TestAllocateState<TestAggHashMapKey>(&pool),
+                               &agg_states);
             DCHECK_EQ(not_founds.size(), 0);
-            CHECK_NOT_FOUNDS_FUNC(not_founds, {});
+            CheckNotFounds(not_founds, {});
         }
 
         {
-            TestAggHashMapKey key(chunk_size, &statis);
-            key.has_null_column = true;
-            key.fixed_byte_size = 8;
-            Buffer<AggDataPtr> agg_states(chunk_size);
             Columns key_columns;
-            key_columns.emplace_back(mock_int_column_func({1, 2, 1, 1}));
-
-            auto allocate_func = [&pool](auto& key) { return pool.allocate(16); };
-            std::vector<uint8_t> not_founds;
-            key.build_hash_map_with_selection(key_columns[0]->size(), key_columns, &pool, allocate_func, &agg_states,
-                                              &not_founds);
-            CHECK_NOT_FOUNDS_FUNC(not_founds, {1, 1, 1, 1});
+            key_columns.emplace_back(CreateColumnWithType<CppType>(type, test_datas[1], nullable));
+            key.build_hash_map_with_selection(key_columns[0]->size(), key_columns, &pool,
+                                              TestAllocateState<TestAggHashMapKey>(&pool), &agg_states, &not_founds);
+            CheckNotFounds(not_founds, expect_not_founds[1]);
         }
 
         {
-            TestAggHashMapKey key(chunk_size, &statis);
-            key.has_null_column = true;
-            key.fixed_byte_size = 8;
-            Buffer<AggDataPtr> agg_states(chunk_size);
             Columns key_columns;
-            key_columns.emplace_back(mock_int_column_func({1, 2, 1, 1}));
-
-            auto allocate_func = [&pool](auto& key) { return pool.allocate(16); };
-            std::vector<uint8_t> not_founds;
-            key.build_hash_map_with_selection_and_allocation(key_columns[0]->size(), key_columns, &pool, allocate_func,
-                                                             &agg_states, &not_founds);
-            CHECK_NOT_FOUNDS_FUNC(not_founds, {1, 1, 0, 0});
+            key_columns.emplace_back(CreateColumnWithType<CppType>(type, test_datas[2], nullable));
+            key.build_hash_map_with_selection_and_allocation(key_columns[0]->size(), key_columns, &pool,
+                                                             TestAllocateState<TestAggHashMapKey>(&pool), &agg_states,
+                                                             &not_founds);
+            CheckNotFounds(not_founds, expect_not_founds[2]);
         }
 
         {
-            TestAggHashMapKey key(chunk_size, &statis);
-            key.has_null_column = true;
-            key.fixed_byte_size = 8;
-
-            Buffer<AggDataPtr> agg_states(chunk_size);
             Columns key_columns;
-            key_columns.emplace_back(mock_int_column_func({1, 2, 1, 1}));
+            key_columns.emplace_back(CreateColumnWithType<CppType>(type, test_datas[3], nullable));
+            key.build_hash_map_with_selection(key_columns[0]->size(), key_columns, &pool,
+                                              TestAllocateState<TestAggHashMapKey>(&pool), &agg_states, &not_founds);
+            CheckNotFounds(not_founds, expect_not_founds[3]);
+        }
 
-            auto allocate_func = [&pool](auto& key) { return pool.allocate(16); };
-            std::vector<uint8_t> not_founds;
-            // Test: allocate_and_compute_state=true/compute_not_founds=false
-            key.build_hash_map(key_columns[0]->size(), key_columns, &pool, allocate_func, &agg_states);
-            CHECK_NOT_FOUNDS_FUNC(not_founds, {});
-
-            key.build_hash_map_with_selection(key_columns[0]->size(), key_columns, &pool, allocate_func, &agg_states,
-                                              &not_founds);
-            CHECK_NOT_FOUNDS_FUNC(not_founds, {0, 0, 0, 0});
-
-            key_columns.clear();
-            key_columns.emplace_back(mock_int_column_func({1, 2, 3, 3}));
-            key.build_hash_map_with_selection(key_columns[0]->size(), key_columns, &pool, allocate_func, &agg_states,
-                                              &not_founds);
-            CHECK_NOT_FOUNDS_FUNC(not_founds, {0, 0, 1, 1});
-
-            key_columns.clear();
-            key_columns.emplace_back(mock_int_column_func({1, 2, 3, 3}));
-            key.build_hash_map_with_selection_and_allocation(key_columns[0]->size(), key_columns, &pool, allocate_func,
-                                                             &agg_states, &not_founds);
-            CHECK_NOT_FOUNDS_FUNC(not_founds, {0, 0, 1, 0});
+        {
+            Columns key_columns;
+            key_columns.emplace_back(CreateColumnWithType<CppType>(type, test_datas[4], nullable));
+            key.build_hash_map_with_selection_and_allocation(key_columns[0]->size(), key_columns, &pool,
+                                                             TestAllocateState<TestAggHashMapKey>(&pool), &agg_states,
+                                                             &not_founds);
+            CheckNotFounds(not_founds, expect_not_founds[4]);
         }
     }
+
+    template <typename TestAggHashMapKey>
+    void TestAggHashMapKeyWithIntType(int nullable) {
+        TestAggHashMapAllocateAndComputeNonFounds<TestAggHashMapKey, int32_t>(LogicalType::TYPE_INT, nullable,
+                                                                              Int32TestData, ExpectNotFoundsData);
+    }
+
+    template <typename TestAggHashMapKey>
+    void TestAggHashMapKeyWithStringType(int nullable) {
+        TestAggHashMapAllocateAndComputeNonFounds<TestAggHashMapKey, Slice>(LogicalType::TYPE_VARCHAR, nullable,
+                                                                            StringTestData, ExpectNotFoundsData);
+    }
+
+protected:
+    std::vector<std::vector<int32_t>> Int32TestData{
+            {1, 2, 1, 1}, {1, 2, 1, 1}, {1, 2, 3, 3}, {4, 4, 4, 4}, {5, 5, 5, 5}};
+    std::vector<std::vector<Slice>> StringTestData{{"1", "2", "1", "1"},
+                                                   {"1", "2", "1", "1"},
+                                                   {"1", "2", "3", "3"},
+                                                   {"4", "4", "4", "4"},
+                                                   {"5", "5", "5", "5"}};
+    std::vector<std::vector<uint8_t>> ExpectNotFoundsData{{}, {0, 0, 0, 0}, {0, 0, 1, 0}, {1, 1, 1, 1}, {1, 0, 0, 0}};
+};
+
+TEST_F(AggHashMapKeyNotFoundsTest, TestAllocateAndComputeNonFounds_Int32AggHashMapWithOneNumberKey) {
+    using TestAggHashMapKey = Int32AggHashMapWithOneNumberKey<PhmapSeed1>;
+    TestAggHashMapKeyWithIntType<TestAggHashMapKey>(false);
+}
+
+TEST_F(AggHashMapKeyNotFoundsTest, TestAllocateAndComputeNonFounds_NullInt32AggHashMapWithOneNumberKey) {
+    using TestAggHashMapKey = NullInt32AggHashMapWithOneNumberKey<PhmapSeed1>;
+    TestAggHashMapKeyWithIntType<TestAggHashMapKey>(true);
+}
+
+TEST_F(AggHashMapKeyNotFoundsTest, TestAllocateAndComputeNonFounds_OneStringAggHashMap) {
+    using TestAggHashMapKey = OneStringAggHashMap<PhmapSeed1>;
+    TestAggHashMapKeyWithStringType<TestAggHashMapKey>(false);
+}
+
+TEST_F(AggHashMapKeyNotFoundsTest, TestAllocateAndComputeNonFounds_NullOneStringAggHashMap) {
+    using TestAggHashMapKey = NullOneStringAggHashMap<PhmapSeed2>;
+    TestAggHashMapKeyWithStringType<TestAggHashMapKey>(true);
+}
+
+TEST_F(AggHashMapKeyNotFoundsTest, TestAllocateAndComputeNonFounds_AggHashMapWithSerializedKey) {
+    using TestAggHashMapKey = SerializedKeyAggHashMap<PhmapSeed1>;
+    TestAggHashMapKeyWithStringType<TestAggHashMapKey>(true);
+}
+
+TEST_F(AggHashMapKeyNotFoundsTest, TestAllocateAndComputeNonFounds_FixedSize16SliceAggHashMap) {
+    using TestAggHashMap = FixedSize16SliceAggHashMap<PhmapSeed1>;
+    using TestAggHashMapKey = AggHashMapWithSerializedKeyFixedSize<TestAggHashMap>;
+    TestAggHashMapKeyWithIntType<TestAggHashMapKey>(true);
 }
 
 } // namespace starrocks::vectorized
