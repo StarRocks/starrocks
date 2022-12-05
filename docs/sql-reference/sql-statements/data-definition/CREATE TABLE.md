@@ -358,7 +358,8 @@ If partition data cannot be evenly distributed into each tablet by using one buc
 - **When  a table is created, you must specify the bucketing columns**.
 - The values of bucketing columns cannot be updated.
 - Modification is not supported after the bucketing columns is specified.
-- Since StarRocks 2.5, you do not need to set the number of buckets when a table is created, and StarRocks sets the number of buckets automatically. If you want to set the number of buckets, see [etermine-the-number-of-tablets](../../../table_design/Data_distribution.md#determine-the-number-of-tablets).
+- Since StarRocks 2.5, you do not need to set the number of buckets when a table is created, and StarRocks sets the number of buckets automatically. If you want to set the number of buckets, see [determine the number of tablets](../../../table_design/Data_distribution.md#determine-the-number-of-tablets).
+
 Syntax:
 
 ```SQL
