@@ -2,18 +2,24 @@
 
 ## Description
 
-This statement is used to cancel an ongoing BACKUP task.
+Cancels an on-going BACKUP task in a specified database.
 
-Syntax:
+## Syntax
 
-```sql
-CANCEL BACKUP FROM db_name;
+```SQL
+CANCEL BACKUP FROM <db_name>
 ```
+
+## Parameters
+
+| **Parameter** | **Description**                                       |
+| ------------- | ----------------------------------------------------- |
+| db_name       | Name of the database that the BACKUP task belongs to. |
 
 ## Examples
 
-1. Cancel BACKUP task from example_db.
+Example 1: Cancels the BACKUP task under the database `example_db`.
 
-    ```sql
-    CANCEL BACKUP FROM example_db;
-    ```
+```SQL
+CANCEL BACKUP FROM example_db;
+```

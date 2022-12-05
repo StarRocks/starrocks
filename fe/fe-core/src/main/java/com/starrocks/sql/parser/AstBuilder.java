@@ -528,10 +528,46 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                                 .stream().map(Identifier::getValue).collect(toList()));
     }
 
+    @Override
+    public ParseNode visitPartitionExpression(StarRocksParser.PartitionExpressionContext context) {
+        Expr expr = (Expr) visit(context.expression());
+        if (context.DAY() != null) {
+            return new FunctionCallExpr(FunctionSet.DATE_TRUNC,
+                    ImmutableList.of(new StringLiteral("day"), expr));
+        } else if (context.HOUR() != null) {
+            return new FunctionCallExpr(FunctionSet.DATE_TRUNC,
+                    ImmutableList.of(new StringLiteral("hour"), expr));
+        } else if (context.MONTH() != null) {
+            return new FunctionCallExpr(FunctionSet.DATE_TRUNC,
+                    ImmutableList.of(new StringLiteral("month"), expr));
+        } else if (context.YEAR() != null) {
+            return new FunctionCallExpr(FunctionSet.DATE_TRUNC,
+                    ImmutableList.of(new StringLiteral("year"), expr));
+        }
+        throw new ParsingException("No matching function with signature: %s(%s).", context.getText(), expr);
+    }
+
     private PartitionDesc getPartitionDesc(StarRocksParser.PartitionDescContext context) {
-        final List<Identifier> identifierList = visit(context.identifierList().identifier(), Identifier.class);
-        final List<String> columnList = identifierList.stream().map(Identifier::getValue).collect(toList());
         List<PartitionDesc> partitionDescList = new ArrayList<>();
+        if (context.partitionExpression() != null) {
+            for (StarRocksParser.RangePartitionDescContext rangePartitionDescContext : context.rangePartitionDesc()) {
+                final PartitionDesc rangePartitionDesc = (PartitionDesc) visit(rangePartitionDescContext);
+                partitionDescList.add(rangePartitionDesc);
+            }
+            Expr expr = (Expr) visit(context.partitionExpression().expression());
+            List<String> columnList;
+            if (expr instanceof SlotRef) {
+                SlotRef slotRef = (SlotRef) expr;
+                columnList = ImmutableList.of(slotRef.getColumnName());
+            } else {
+                throw new ParsingException("Unsupported partition expression: %s", expr);
+            }
+            RangePartitionDesc rangePartitionDesc = new RangePartitionDesc(columnList, partitionDescList);
+            return new ExpressionPartitionDesc(rangePartitionDesc, expr);
+        }
+
+        List<Identifier> identifierList = visit(context.identifierList().identifier(), Identifier.class);
+        List<String> columnList = identifierList.stream().map(Identifier::getValue).collect(toList());
         PartitionDesc partitionDesc = null;
         if (context.RANGE() != null) {
             for (StarRocksParser.RangePartitionDescContext rangePartitionDescContext : context.rangePartitionDesc()) {

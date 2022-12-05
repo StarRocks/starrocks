@@ -73,6 +73,12 @@ public class ScanOperatorPredicates {
 
     @Override
     public boolean equals(Object o) {
+        if (o == null) {
+            return false;
+        }
+        if (o == this) {
+            return true;
+        }
         ScanOperatorPredicates targetPredicts = (ScanOperatorPredicates) o;
         return Objects.equal(getSelectedPartitionIds(), targetPredicts.getSelectedPartitionIds()) &&
                 Objects.equal(getIdToPartitionKey(), targetPredicts.getIdToPartitionKey()) &&

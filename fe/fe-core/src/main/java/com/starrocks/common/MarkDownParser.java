@@ -22,6 +22,7 @@
 package com.starrocks.common;
 
 import com.google.common.collect.Maps;
+import com.google.re2j.Pattern;
 
 import java.util.List;
 import java.util.Map;
@@ -45,6 +46,8 @@ public class MarkDownParser {
         PARSED_H1,
         PARSED_H2
     }
+
+    private static final Pattern MULTI_LINE_P = Pattern.compile("\\s+$");
 
     private Map<String, Map<String, String>> documents;
     private List<String> lines;
@@ -149,7 +152,7 @@ public class MarkDownParser {
         // Note that multiple line breaks at content's end will be merged to be one,
         // and other whitespace characters will be deleted.
         return Maps.immutableEntry(key.substring(headLevel).trim(),
-                sb.toString().replaceAll("\\s+$", "\n"));
+                MULTI_LINE_P.matcher(sb.toString()).replaceAll("\n"));
     }
 }
 

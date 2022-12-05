@@ -6,6 +6,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.MaterializedView;
@@ -107,17 +108,17 @@ public class MaterializedViewOptimizer {
         Set<String> modifiedPartitionNames = mv.getUpdatedPartitionNamesOfTable(partitionByTable);
         List<Range<PartitionKey>> baseTableRanges = getLatestPartitionRange(partitionByTable, modifiedPartitionNames);
         List<Range<PartitionKey>> mvRanges = getLatestPartitionRange(mv, mvPartitionNamesToRefresh);
-        List<Range<PartitionKey>> uptodateBaseTableRanges = Lists.newArrayList();
+        List<Range<PartitionKey>> latestBaseTableRanges = Lists.newArrayList();
         for (Range<PartitionKey> range : baseTableRanges) {
             if (mvRanges.stream().anyMatch(mvRange -> mvRange.encloses(range))) {
-                uptodateBaseTableRanges.add(range);
+                latestBaseTableRanges.add(range);
             }
         }
-        return uptodateBaseTableRanges;
+        latestBaseTableRanges = mergeRanges(latestBaseTableRanges);
+        return latestBaseTableRanges;
     }
 
     private List<Range<PartitionKey>> getLatestPartitionRange(OlapTable table, Set<String> modifiedPartitionNames) {
-        List<Range<PartitionKey>> resultRanges = Lists.newArrayList();
         // partitions that will be excluded
         Set<Long> modifiedIds = Sets.newHashSet();
         for (Partition p : table.getPartitions()) {
@@ -127,26 +128,27 @@ public class MaterializedViewOptimizer {
         }
         RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) table.getPartitionInfo();
         List<Range<PartitionKey>> latestPartitionRanges = rangePartitionInfo.getRangeList(modifiedIds, false);
-        if (latestPartitionRanges.isEmpty()) {
-            return resultRanges;
-        }
+        return latestPartitionRanges;
+    }
 
-        for (int i = 0; i < latestPartitionRanges.size(); i++) {
-            Range<PartitionKey> currentRange = latestPartitionRanges.get(i);
+    private List<Range<PartitionKey>> mergeRanges(List<Range<PartitionKey>> ranges) {
+        List<Range<PartitionKey>> mergedRanges = Lists.newArrayList();
+        for (int i = 0; i < ranges.size(); i++) {
+            Range<PartitionKey> currentRange = ranges.get(i);
             boolean merged = false;
-            for (int j = 0; j < resultRanges.size(); j++) {
+            for (int j = 0; j < mergedRanges.size(); j++) {
                 // 1 < r < 10, 10 <= r < 20 => 1 < r < 20
-                Range<PartitionKey> resultRange = resultRanges.get(j);
+                Range<PartitionKey> resultRange = mergedRanges.get(j);
                 if (currentRange.isConnected(currentRange) && currentRange.gap(resultRange).isEmpty()) {
-                    resultRanges.set(j, resultRange.span(currentRange));
+                    mergedRanges.set(j, resultRange.span(currentRange));
                     merged = true;
                 }
             }
             if (!merged) {
-                resultRanges.add(currentRange);
+                mergedRanges.add(currentRange);
             }
         }
-        return resultRanges;
+        return mergedRanges;
     }
 
     private List<ScalarOperator> convertRanges(ScalarOperator partitionScalar, List<Range<PartitionKey>> partitionRanges) {
@@ -155,7 +157,24 @@ public class MaterializedViewOptimizer {
             if (range.isEmpty()) {
                 continue;
             }
-            if (range.hasLowerBound() && range.hasUpperBound()) {
+            // partition range must have lower bound and upper bound
+            Preconditions.checkState(range.hasLowerBound() && range.hasUpperBound());
+            LiteralExpr lowerExpr = range.lowerEndpoint().getKeys().get(0);
+            if (lowerExpr.isMinValue() && range.upperEndpoint().isMaxValue()) {
+                continue;
+            } else if (lowerExpr.isMinValue()) {
+                ConstantOperator upperBound =
+                        (ConstantOperator) SqlToScalarOperatorTranslator.translate(range.upperEndpoint().getKeys().get(0));
+                BinaryPredicateOperator upperPredicate = new BinaryPredicateOperator(
+                        BinaryPredicateOperator.BinaryType.LT, partitionScalar, upperBound);
+                rangeParts.add(upperPredicate);
+            } else if (range.upperEndpoint().isMaxValue()) {
+                ConstantOperator lowerBound =
+                        (ConstantOperator) SqlToScalarOperatorTranslator.translate(range.lowerEndpoint().getKeys().get(0));
+                BinaryPredicateOperator lowerPredicate = new BinaryPredicateOperator(
+                        BinaryPredicateOperator.BinaryType.GE, partitionScalar, lowerBound);
+                rangeParts.add(lowerPredicate);
+            } else {
                 // close, open range
                 ConstantOperator lowerBound =
                         (ConstantOperator) SqlToScalarOperatorTranslator.translate(range.lowerEndpoint().getKeys().get(0));
@@ -170,20 +189,6 @@ public class MaterializedViewOptimizer {
                 CompoundPredicateOperator andPredicate = new CompoundPredicateOperator(
                         CompoundPredicateOperator.CompoundType.AND, lowerPredicate, upperPredicate);
                 rangeParts.add(andPredicate);
-            } else if (range.hasUpperBound()) {
-                ConstantOperator upperBound =
-                        (ConstantOperator) SqlToScalarOperatorTranslator.translate(range.upperEndpoint().getKeys().get(0));
-                BinaryPredicateOperator upperPredicate = new BinaryPredicateOperator(
-                        BinaryPredicateOperator.BinaryType.LT, partitionScalar, upperBound);
-                rangeParts.add(upperPredicate);
-            } else if (range.hasLowerBound()) {
-                ConstantOperator lowerBound =
-                        (ConstantOperator) SqlToScalarOperatorTranslator.translate(range.lowerEndpoint().getKeys().get(0));
-                BinaryPredicateOperator lowerPredicate = new BinaryPredicateOperator(
-                        BinaryPredicateOperator.BinaryType.GE, partitionScalar, lowerBound);
-                rangeParts.add(lowerPredicate);
-            } else {
-                Preconditions.checkState(false);
             }
         }
         return rangeParts;

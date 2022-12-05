@@ -1095,7 +1095,7 @@ TEST_F(OrcChunkReaderTest, TestReadArrayDecimal) {
     type_array.children.emplace_back(TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, 9, 9));
 
     SlotDesc slot_descs[] = {
-            {"id",  TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT)},
+            {"id", TypeDescriptor::from_primtive_type(LogicalType::TYPE_INT)},
             {"arr", type_array},
             {""},
     };

@@ -633,6 +633,7 @@ ValueColumnAggregatorPtr create_value_aggregator(LogicalType type, FieldAggregat
             CASE_REPLACE(TYPE_DATETIME, TimestampColumn, TimestampValue)
             CASE_REPLACE(TYPE_CHAR, BinaryColumn, SliceState)
             CASE_REPLACE(TYPE_VARCHAR, BinaryColumn, SliceState)
+            CASE_REPLACE(TYPE_VARBINARY, BinaryColumn, SliceState)
             CASE_REPLACE(TYPE_BOOLEAN, BooleanColumn, uint8_t)
             CASE_REPLACE(TYPE_ARRAY, ArrayColumn, ArrayState)
             CASE_REPLACE(TYPE_HLL, HyperLogLogColumn, HyperLogLog)

@@ -1,4 +1,4 @@
-# Use Flink connector to read data from StarRocks
+# Read data from StarRocks using Flink connector
 
 This topic describes how to use the source function of flink-connector-starrocks to read data from StarRocks.
 

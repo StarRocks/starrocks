@@ -433,14 +433,13 @@ public class SmallFileMgr implements Writable {
                 LOG.warn("Failed to create file, filepath={}", file.getAbsolutePath());
             }
             byte[] decoded = Base64.getDecoder().decode(smallFile.content);
-            FileOutputStream outputStream = new FileOutputStream(file);
-            outputStream.write(decoded);
-            outputStream.flush();
-            outputStream.close();
-
-            if (!checkMd5(file, smallFile.md5)) {
-                throw new DdlException(
-                        "write file " + fileName + " failed. md5 is invalid. expected: " + smallFile.md5);
+            try (FileOutputStream outputStream = new FileOutputStream(file)) {
+                outputStream.write(decoded);
+                outputStream.flush();
+                if (!checkMd5(file, smallFile.md5)) {
+                    throw new DdlException(
+                            "write file " + fileName + " failed. md5 is invalid. expected: " + smallFile.md5);
+                }
             }
         } catch (IOException e) {
             LOG.warn("failed to write file: {}", fileName, e);
@@ -525,8 +524,7 @@ public class SmallFileMgr implements Writable {
             try {
                 smallFiles.addFile(smallFile.name, smallFile);
             } catch (DdlException e) {
-                // should not happen
-                e.printStackTrace();
+                LOG.warn(e);
             }
         }
     }

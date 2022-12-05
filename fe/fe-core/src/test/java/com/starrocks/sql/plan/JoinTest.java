@@ -2628,4 +2628,31 @@ public class JoinTest extends PlanTestBase {
                 "  |  equal join conjunct: 11: N_NAME = 16: cast\n" +
                 "  |  equal join conjunct: 11: N_NAME = CAST(1: C_CUSTKEY AS VARCHAR(1048576))");
     }
+
+    @Test
+    public void testComplexProjectionJoin() throws Exception {
+        connectContext.getSessionVariable().disableDPJoinReorder();
+        connectContext.getSessionVariable().disableGreedyJoinReorder();
+        connectContext.getSessionVariable().setMaxTransformReorderJoins(3);
+
+        String sql = "select * from t4 join (   \n" +
+                "    select abs(xx1) as xxx1 from t3 join (       \n" +
+                "        select abs(x1) as xx1 from t2 join (          \n" +
+                "            select abs(t0.v1) as x1 from t0 join t1 \n" +
+                "            on v1 = t1.v4) y1        \n" +
+                "        on t2.v7 = x1) y2    \n" +
+                "    on t3.v10 = xx1) y3  \n" +
+                "on t4.v13 = xxx1";
+
+        String plan = getFragmentPlan(sql);
+        connectContext.getSessionVariable().enableDPJoinReorder();
+        connectContext.getSessionVariable().enableGreedyJoinReorder();
+        connectContext.getSessionVariable().setMaxTransformReorderJoins(4);
+
+        assertContains(plan, "  13:Project\n" +
+                "  |  <slot 17> : abs(16: abs)\n" +
+                "  |  \n" +
+                "  12:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)");
+    }
 }

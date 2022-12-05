@@ -151,6 +151,11 @@ public class MysqlCapability {
     }
 
     @Override
+    public int hashCode() {
+        return flags;
+    }
+
+    @Override
     public boolean equals(Object obj) {
         if (obj == null || !(obj instanceof MysqlCapability)) {
             return false;

@@ -21,7 +21,10 @@
 
 package com.starrocks.metric;
 
-// starrocks_fe_job {job="load", type="hadoop", state="total"} 
+import com.google.common.base.Objects;
+import org.apache.commons.lang3.StringUtils;
+
+// starrocks_fe_job {job="load", type="hadoop", state="total"}
 public class MetricLabel {
     private String key;
     private String value;
@@ -37,6 +40,11 @@ public class MetricLabel {
 
     public String getValue() {
         return value;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(StringUtils.upperCase(key), value);
     }
 
     @Override

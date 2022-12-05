@@ -1186,7 +1186,7 @@ void PrimaryIndex::_upsert_into_persistent_index(uint32_t rssid, uint32_t rowid_
     std::vector<uint64_t> old_values(n, NullIndexValue);
     const Slice* vkeys = _build_persistent_keys(pks, idx_begin, idx_end, &keys);
     _build_persistent_values(rssid, rowid_start, idx_begin, idx_end, &values);
-    _persistent_index->upsert(pks.size(), vkeys, reinterpret_cast<IndexValue*>(values.data()),
+    _persistent_index->upsert(n, vkeys, reinterpret_cast<IndexValue*>(values.data()),
                               reinterpret_cast<IndexValue*>(old_values.data()));
     for (unsigned long old : old_values) {
         if ((old != NullIndexValue) && (old >> 32) == rssid) {

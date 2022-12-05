@@ -1,6 +1,6 @@
 # Parameter configuration
 
-This topic describes how to configure parameters for the FE, BE, broker, and system. After the service is started, you can also adjust the configuration parameters to better suit your business requirements.
+This topic describes FE, BE, Broker, and system parameters. It also provides suggestions on how to configure and tune these parameters.
 
 ## FE configuration items
 
@@ -118,9 +118,17 @@ This topic describes how to configure parameters for the FE, BE, broker, and sys
 |enable_strict_storage_medium_check|TRUE|Whether the FE checks available storage space.|
 |storage_cooldown_second|-1|The delay of cooldown from HDD storage to SSD storage. Unit: seconds. The default value indicates to disable the auto-cooldown.|
 
-## Configure BE
+## BE configuration items
 
 Some BE configuration items are dynamic parameters which you can set them by commands when BE nodes are still online. The rest of them are static parameters. You can only set the static parameters of a BE node by changing them in the corresponding configuration file **be.conf**, and restart the BE node to allow the change to take effect.
+
+### View BE configuration items
+
+You can view the BE configuration items using the following command:
+
+```shell
+curl http://<BE_IP>:<BE_HTTP_PORT>/varz
+```
 
 ### Configure BE dynamic parameters
 
@@ -143,7 +151,7 @@ BE dynamic parameters are as follows:
 | report_workgroup_interval_seconds | 5 | Second | The time interval at which to report the most updated version of all workgroups. |
 | max_download_speed_kbps | 50000 | KB/s | The maximum download speed of each HTTP request. This value affects the performance of data replica synchronization across BE nodes. |
 | download_low_speed_limit_kbps | 50 | KB/s | The download speed lower limit of each HTTP request. An HTTP request aborts when it constantly runs with a lower speed than this value within the time span specified in the configuration item download_low_speed_time. |
-| download_low_speed_time | 300 | Second | The maximum time that an HTTP request can run with a download speed lower than the limit. An HTTP request aborts when it constantly runs with a lower speed than the value of download_low_speed_limit_kbps within the time span specified in this cinfiguration item. |
+| download_low_speed_time | 300 | Second | The maximum time that an HTTP request can run with a download speed lower than the limit. An HTTP request aborts when it constantly runs with a lower speed than the value of download_low_speed_limit_kbps within the time span specified in this configuration item. |
 | status_report_interval | 5 | Second | The time interval at which a query reports its profile, which can be used for query statistics collection by FE. |
 | scanner_thread_pool_thread_num | 48 | N/A | The number of threads which the storage engine used for concurrent storage volume scanning. All threads are managed in the thread pool. |
 | thrift_client_retry_interval_ms | 100 | ms | The time interval at which a thrift client retries. |
@@ -233,7 +241,7 @@ BE static parameters are as follows:
 | num_threads_per_core | 3 | N/A | The number threads started in each CPU core. |
 | compress_rowbatches | TRUE | N/A | The boolean value to control if to compress the row batches in RPCs between BEs. This configuration item is used for the data transmission between query layers. The value true indicates to compress the row batches. The value false indicates not to compress the row batches. |
 | serialize_batch | FALSE | N/A | The boolean value to control if to serialize the row batches in RPCs between BEs. This configuration item is used for the data transmission between query layers. The value true indicates to serialize the row batches. The value false indicates not to serialize the row batches. |
-| storage_root_path | ${STARROCKS_HOME}/storage | N/A | The directory of the storage volume. Multiple volumes can be separated by ;, for example, /data1/starrocks;/data2/starrocks. If the storage medium is SSD, add .SSD at the end of the directory. If the storage medium is HDD, add .HDD at the end of the directory. |
+| storage_root_path | ${STARROCKS_HOME}/storage | N/A | The directory and medium of the storage volume. Multiple volumes are separated by semicolon (;). If the storage medium is SSD, add `,medium:ssd` at the end of the directory. If the storage medium is HDD, add `,medium:hdd` at the end of the directory. Example: `/data1,medium:hdd;/data2,medium:ssd`. |
 | max_tablet_num_per_shard | 1024 | N/A | The maximum number of tablets in each shard. This configuration item is used to restrict the number of tablet child directories under each storage directory. |
 | max_garbage_sweep_interval | 3600 | Second | The maximum time interval for garbage collection on storage volumes. |
 | min_garbage_sweep_interval | 180 | Second | The minimum time interval for garbage collection on storage volumes. |
@@ -448,26 +456,6 @@ BE static parameters are as follows:
 | vector_chunk_size | 4096 | N/A | |
 | vertical_compaction_max_columns_per_group | 5 | N/A | |
 | web_log_bytes | 1048576 | N/A | |-->
-
-## Configure broker
-
-You can only set the configuration items of a broker by changing them in the corresponding configuration file **broker.conf**, and restart the broker to allow the change to take effect.
-
-| Configuration item | Default | Unit | Description |
-| ------------------------- | ------------------ | ------ | ------------------------------------------------------------ |
-| hdfs_read_buffer_size_kb | 8192 | KB | Size of the buffer that is used to read data from HDFS. |
-| hdfs_write_buffer_size_kb | 1024 | KB | Size of the buffer that is used to write data into HDFS. |
-| client_expire_seconds | 300 | Second | Client sessions will be deleted if they do not receive any ping after the specified time. |
-| broker_ipc_port | 8000 | N/A | The HDFS thrift RPC port. |
-| sys_log_dir | ${BROKER_HOME}/log | N/A | The directory used to store system logs (including INFO, WARNING, ERROR, and FATAL). |
-| sys_log_level | INFO | N/A | The log level. Valid values include INFO, WARNING, ERROR, and FATAL. |
-| sys_log_roll_mode | SIZE-MB-1024 | N/A | The mode how system logs are segmented into log rolls. Valid values include TIME-DAY, TIME-HOUR, and SIZE-MB-nnn. The default value indicates that logs are segmented into rolls which are 1 GB each. |
-| sys_log_roll_num | 30 | N/A | The number of log rolls to reserve. |
-| audit_log_dir | ${BROKER_HOME}/log | N/A | The directory that stores audit log files. |
-| audit_log_modules | Empty string | N/A | The modules for which StarRocks generates audit log entries. By default, StarRocks generates audit logs for the slow_query module and the query module. You can specify multiple modules, whose names must be separated by a comma (,) and a space. |
-| audit_log_roll_mode | TIME-DAY | N/A | Valid values include `TIME-DAY`, `TIME-HOUR`, and `SIZE-MB-<size>`. |
-| audit_log_roll_num | 10 | N/A | This configuration does not work if the audit_log_roll_mode is set to `SIZE-MB-<size>`. |
-| sys_log_verbose_modules | com.starrocks | N/A | The modules for which StarRocks generates system logs. Valid values are namespaces in BE, including `starrocks`, `starrocks::vectorized`, and `pipeline`. |
 
 ## Set system configurations
 

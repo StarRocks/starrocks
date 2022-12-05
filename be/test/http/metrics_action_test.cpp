@@ -27,6 +27,9 @@
 #include "http/http_request.h"
 #include "http/http_response.h"
 #include "util/metrics.h"
+#ifdef USE_STAROS
+#include "metrics/metrics.h"
+#endif
 
 namespace starrocks {
 
@@ -41,7 +44,14 @@ class MetricsActionTest : public testing::Test {
 public:
     MetricsActionTest() = default;
     ~MetricsActionTest() override = default;
-    void SetUp() override { _evhttp_req = evhttp_request_new(nullptr, nullptr); }
+    void SetUp() override {
+        _evhttp_req = evhttp_request_new(nullptr, nullptr);
+#ifdef USE_STAROS
+        // clear staros metrics to avoid confusing the test result.
+        staros::starlet::metrics::MetricsSystem::instance()->clear();
+#endif
+    }
+
     void TearDown() override {
         if (_evhttp_req != nullptr) {
             evhttp_request_free(_evhttp_req);

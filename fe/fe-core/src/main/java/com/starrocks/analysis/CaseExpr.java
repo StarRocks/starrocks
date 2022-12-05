@@ -21,6 +21,7 @@
 
 package com.starrocks.analysis;
 
+import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -94,6 +95,11 @@ public class CaseExpr extends Expr {
     @Override
     public Expr clone() {
         return new CaseExpr(this);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(super.hashCode(), hasCaseExpr, hasElseExpr);
     }
 
     @Override

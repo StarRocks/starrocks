@@ -374,7 +374,7 @@ storage_medium: SSD or HDD could be specified as the initial storage media. You 
 
 **Note**: When FE configuration item enable_strict_storage_medium_check is True and if storage medium is not set in the cluster, the statement for table creating will report an error: Failed to find enough host in all backends with storage medium is SSD|HDD.
 
-storage_cooldown_time: When the storage medium is SSD, please specify its storage cooldown time. The default time is 30 days. Format: "yyyy-MM-dd HH:mm:ss"
+storage_cooldown_time: the storage cooldown time for a partition. If the storage medium is SSD, SSD is switched to HDD after the time specified by this parameter. Format: "yyyy-MM-dd HH:mm:ss". The specified time must be later than the current time. If this parameter is not explicitly specified, storage cooldown is not performed by default.
 
 replication_num: number of replicas in the specified partition. Default number: 3.
 
@@ -420,6 +420,34 @@ dynamic_partition.end: It is used to specify the how many partitions will be cre
 dynamic_partition.prefix: It is used to specify the prefix of the created partition. For instance, if the prefix is p, the partition will be named p20200108 automatically.
 
 dynamic_partition.buckets: It is used to specify the number of buckets automatically created in partitions.
+
+- You can set a data compression algorithm when creating a table.
+
+You can specify a data compression algorithm for a table by adding property `compression` when you create a table.
+
+The valid values of `compression` are:
+
+- `LZ4`: the LZ4 algorithm.
+- `ZSTD`: the Zstandard algorithm.
+- `ZLIB`: the zlib algorithm.
+- `SNAPPY`: the Snappy algorithm.
+
+For more information about how to choose a suitable data compression algorithm, see [Data compression](../../../table_design/data_compression.md).
+
+- You can set write quorum for data loading.
+
+If your StarRocks cluster has multiple data replicas, you can set different write quorum for tables, that is, how many replicas are required to return loading success before StarRocks can determine the loading task is successful. You can specify write quorum by adding the property `write_quorum` when you create a table.
+
+The valid values of `write_quorum` are:
+
+- `MAJORITY`：Default value. When the **majority** of data replicas return loading success, StarRocks returns loading task success. Otherwise, StarRocks returns loading task failed.
+- `ONE`：When **one** of the data replicas returns loading success, StarRocks returns loading task success. Otherwise, StarRocks returns loading task failed.
+- `ALL`：When **all** of the data replicas return loading success, StarRocks returns loading task success. Otherwise, StarRocks returns loading task failed.
+
+> **CAUTION**
+>
+> - Setting a low write quorum for loading increases the risk of data inaccessibility and even loss. For example, you load data into a table with one write quorum in a StarRocks cluster of two replicas, and the data was successfully loaded into only one replica. Despite that StarRocks determines the loading task succeeded, there is only one surviving replica of the data. If the server which stores the tablets of loaded data goes down, the data in these tablets becomes inaccessible. And if the disk of the server is damaged, the data is lost.
+> - StarRocks returns the loading task status only after all data replicas have returned the status. StarRocks will not return the loading task status when there are replicas whose loading status is unknown. In a replica, loading timeout is also considered as loading failed.
 
 - When building tables, Rollup can be created in bulk.
 

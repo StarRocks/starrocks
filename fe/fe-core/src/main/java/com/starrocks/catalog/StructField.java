@@ -21,6 +21,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.base.Objects;
 import com.google.common.base.Strings;
 import com.starrocks.thrift.TStructField;
 import com.starrocks.thrift.TTypeDesc;
@@ -106,6 +107,11 @@ public class StructField {
         }
         node.struct_fields.add(field);
         type.toThrift(container);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(name, type);
     }
 
     @Override

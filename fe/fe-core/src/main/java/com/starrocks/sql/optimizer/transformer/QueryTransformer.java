@@ -69,34 +69,36 @@ class QueryTransformer {
         builder = aggregate(builder, queryBlock.getGroupBy(), queryBlock.getAggregate(),
                 queryBlock.getGroupingSetsList(), queryBlock.getGroupingFunctionCallExprs());
         builder = filter(builder, queryBlock.getHaving());
-        builder = window(builder, queryBlock.getOutputAnalytic());
+
+        List<AnalyticExpr> analyticExprList = new ArrayList<>(queryBlock.getOutputAnalytic());
+        analyticExprList.addAll(queryBlock.getOrderByAnalytic());
+        builder = window(builder, analyticExprList);
 
         if (queryBlock.hasOrderByClause()) {
             if (!queryBlock.hasAggregation()) {
                 //requires both output and source fields to be visible if there are no aggregations
                 builder = projectForOrder(builder,
-                        queryBlock.getOutputExpression(),
+                        Iterables.concat(queryBlock.getOutputExpression(), queryBlock.getOrderByAnalytic()),
                         queryBlock.getOutputExprInOrderByScope(),
                         queryBlock.getColumnOutputNames(),
                         builder.getFieldMappings(),
                         queryBlock.getOrderScope(), false);
             } else {
                 //requires output fields, groups and translated aggregations to be visible for queries with aggregation
-
                 List<String> outputNames = new ArrayList<>(queryBlock.getColumnOutputNames());
                 for (int i = 0; i < queryBlock.getOrderSourceExpressions().size(); ++i) {
                     outputNames.add(queryBlock.getOrderSourceExpressions().get(i).toString());
                 }
 
                 builder = projectForOrder(builder,
-                        Iterables.concat(queryBlock.getOutputExpr(), queryBlock.getOrderSourceExpressions()),
+                        Iterables.concat(queryBlock.getOutputExpr(),
+                                queryBlock.getOrderSourceExpressions(),
+                                queryBlock.getOrderByAnalytic()),
                         queryBlock.getOutputExprInOrderByScope(),
                         outputNames,
                         builder.getFieldMappings(),
                         queryBlock.getOrderScope(), true);
             }
-
-            builder = window(builder, queryBlock.getOrderByAnalytic());
         }
 
         builder = distinct(builder, queryBlock.isDistinct(), queryBlock.getOutputExpr());
@@ -271,31 +273,30 @@ class QueryTransformer {
             ExpressionMapping outputTranslations = new ExpressionMapping(subOpt.getScope());
             List<ColumnRefOperator> fieldMappings = new ArrayList<>();
             Map<ColumnRefOperator, ScalarOperator> projections = Maps.newHashMap();
+
             for (ColumnRefOperator expression : subOpt.getFieldMappings()) {
                 ColumnRefOperator variable =
                         columnRefFactory.create(expression, expression.getType(), expression.isNullable());
                 projections.put(variable, expression);
                 fieldMappings.add(variable);
             }
+            outputTranslations.setFieldMappings(fieldMappings);
 
             // child output expressions
             for (Expr expression : subOpt.getExpressionMapping().getAllExpressions()) {
                 ColumnRefOperator columnRef = findOrCreateColumnRefForExpr(expression,
                         subOpt.getExpressionMapping(), projections, columnRefFactory);
-                fieldMappings.add(columnRef);
                 outputTranslations.put(expression, columnRef);
             }
 
             for (Expr expression : projectExpressions) {
                 ColumnRefOperator columnRef = findOrCreateColumnRefForExpr(expression,
                         subOpt.getExpressionMapping(), projections, columnRefFactory);
-                fieldMappings.add(columnRef);
                 outputTranslations.put(expression, columnRef);
             }
 
             LogicalProjectOperator projectOperator = new LogicalProjectOperator(projections);
             subOpt.setExpressionMapping(outputTranslations);
-            subOpt.getExpressionMapping().setFieldMappings(fieldMappings);
             subOpt = subOpt.withNewRoot(projectOperator);
         }
 

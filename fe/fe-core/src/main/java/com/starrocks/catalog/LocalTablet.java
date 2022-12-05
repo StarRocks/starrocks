@@ -184,6 +184,9 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
         for (Replica replica : replicas) {
             Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(replica.getBackendId());
+            if (backend == null) {
+                continue;
+            }
             backends.add(backend.getHost());
         }
         return backends;
@@ -394,6 +397,11 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         // we need to update immutableReplicas, because replicas after deserialization from a json string
         // will be different from the replicas initiated in the constructor
         immutableReplicas = Collections.unmodifiableList(replicas);
+    }
+
+    @Override
+    public int hashCode() {
+        return Long.hashCode(id);
     }
 
     @Override

@@ -209,7 +209,8 @@ set(EXEC_FILES
         ./storage/update_manager_test.cpp
         ./storage/compaction_utils_test.cpp
         ./storage/compaction_manager_test.cpp
-	./storage/default_compaction_policy_test.cpp
+        ./storage/default_compaction_policy_test.cpp
+        ./storage/size_tiered_compaction_policy_test.cpp
         ./storage/aggregate_iterator_test.cpp
         ./storage/chunk_aggregator_test.cpp
         ./storage/chunk_helper_test.cpp
@@ -218,7 +219,7 @@ set(EXEC_FILES
         ./storage/conjunctive_predicates_test.cpp
         ./storage/convert_helper_test.cpp
         ./storage/merge_iterator_test.cpp
-	    ./storage/memtable_flush_executor_test.cpp
+        ./storage/memtable_flush_executor_test.cpp
         ./storage/memtable_test.cpp
         ./storage/projection_iterator_test.cpp
         ./storage/push_handler_test.cpp

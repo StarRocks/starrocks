@@ -211,9 +211,8 @@ public:
 
     Type type() const override { return STARLET; }
 
-    StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const std::string& path) override {
-        return new_random_access_file(RandomAccessFileOptions(), path);
-    }
+    using FileSystem::new_sequential_file;
+    using FileSystem::new_random_access_file;
 
     StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
                                                                        const std::string& path) override {
@@ -223,7 +222,7 @@ public:
             return to_status(fs_st.status());
         }
 
-        auto file_st = (*fs_st)->open(pair.first, ReadOptions());
+        auto file_st = (*fs_st)->open(pair.first, ReadOptions{.skip_fill_local_cache = opts.skip_fill_local_cache});
 
         if (!file_st.ok()) {
             return to_status(file_st.status());
@@ -232,14 +231,15 @@ public:
         return std::make_unique<RandomAccessFile>(std::move(istream), path);
     }
 
-    StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const std::string& path) override {
+    StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const SequentialFileOptions& opts,
+                                                                  const std::string& path) override {
         ASSIGN_OR_RETURN(auto pair, parse_starlet_uri(path));
 
         auto fs_st = get_shard_filesystem(pair.second);
         if (!fs_st.ok()) {
             return to_status(fs_st.status());
         }
-        auto file_st = (*fs_st)->open(pair.first, ReadOptions());
+        auto file_st = (*fs_st)->open(pair.first, ReadOptions{.skip_fill_local_cache = opts.skip_fill_local_cache});
 
         if (!file_st.ok()) {
             return to_status(file_st.status());
@@ -424,6 +424,15 @@ public:
 
     Status link_file(const std::string& old_path, const std::string& new_path) override {
         return Status::NotSupported("StarletFileSystem::link_file");
+    }
+
+    Status drop_local_cache(const std::string& path) override {
+        ASSIGN_OR_RETURN(auto pair, parse_starlet_uri(path));
+        auto fs_st = get_shard_filesystem(pair.second);
+        if (!fs_st.ok()) {
+            return to_status(fs_st.status());
+        }
+        return to_status((*fs_st)->drop_cache(pair.first));
     }
 
 private:
