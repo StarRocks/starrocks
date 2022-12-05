@@ -74,7 +74,8 @@ Status KVStore::init(bool read_only) {
     std::string db_path = _root_path + META_POSTFIX;
 
     ColumnFamilyOptions meta_cf_options;
-    rocksdb::GetColumnFamilyOptionsFromString(meta_cf_options, config::rocksdb_meta_cf_opts_string, &meta_cf_options);
+    RETURN_IF_ERROR(rocksdb::GetColumnFamilyOptionsFromString(meta_cf_options, config::rocksdb_cf_options_string,
+                                                              &meta_cf_options));
     // The index of each column family must be consistent with the enum `ColumnFamilyIndex`
     // defined in olap_define.h
     std::vector<ColumnFamilyDescriptor> cf_descs(NUM_COLUMN_FAMILY_INDEX);
@@ -84,6 +85,8 @@ Status KVStore::init(bool read_only) {
     cf_descs[1].options.compression = rocksdb::kSnappyCompression;
     cf_descs[2].name = META_COLUMN_FAMILY;
     cf_descs[2].options = meta_cf_options;
+    cf_descs[2].options.prefix_extractor.reset(NewFixedPrefixTransform(PREFIX_LENGTH));
+    cf_descs[2].options.compression = rocksdb::kSnappyCompression;
     static_assert(NUM_COLUMN_FAMILY_INDEX == 3);
 
     rocksdb::Status s;
