@@ -96,7 +96,7 @@ protected:
 private:
     // This method is only invoked when current morsel is reached eof
     // and all cached chunk of this morsel has benn read out
-    Status _pickup_morsel(RuntimeState* state, int chunk_source_index);
+    virtual Status _pickup_morsel(RuntimeState* state, int chunk_source_index);
     Status _trigger_next_scan(RuntimeState* state, int chunk_source_index);
     Status _try_to_trigger_next_scan(RuntimeState* state);
     void _close_chunk_source_unlocked(RuntimeState* state, int index);

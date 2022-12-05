@@ -44,6 +44,7 @@ include "RuntimeFilter.thrift"
 
 enum TPlanNodeType {
   OLAP_SCAN_NODE,
+  BINLOG_SCAN_NODE,
   MYSQL_SCAN_NODE,
   CSV_SCAN_NODE,
   SCHEMA_SCAN_NODE,
@@ -1092,6 +1093,7 @@ struct TPlanNode {
   70: optional TStreamScanNode stream_scan_node;
   71: optional TStreamJoinNode stream_join_node;
   72: optional TStreamAggregationNode stream_agg_node;
+  73: optional TBinlogScanNode binlog_scan_node;
 }
 
 // A flattened representation of a tree of PlanNodes, obtained by depth-first

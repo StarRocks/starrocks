@@ -34,7 +34,7 @@ public:
             ActiveInputKey, typename phmap::Hash<ActiveInputKey>, typename phmap::EqualTo<ActiveInputKey>,
             typename std::allocator<ActiveInputKey>, NUM_LOCK_SHARD_LOG, std::mutex, true>;
 
-    ConnectorScanOperatorFactory(int32_t id, ScanNode* scan_node, size_t dop, ChunkBufferLimiterPtr buffer_limiter);
+    ConnectorScanOperatorFactory(int32_t id, ScanNode* scan_node, size_t dop, ChunkBufferLimiterPtr buffer_limiter, bool stream);
 
     ~ConnectorScanOperatorFactory() override = default;
 
@@ -48,9 +48,10 @@ private:
     // TODO: refactor the OlapScanContext, move them into the context
     BalancedChunkBuffer _chunk_buffer;
     ActiveInputSet _active_inputs;
+    bool _is_stream = false;
 };
 
-class ConnectorScanOperator final : public ScanOperator {
+class ConnectorScanOperator : public ScanOperator {
 public:
     ConnectorScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, int32_t dop,
                           ScanNode* scan_node);
@@ -86,14 +87,24 @@ public:
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
-private:
+    Status set_stream_offset(int64_t table_version, int64_t changelog_id) override;
+    void set_epoch_limit(int64_t read_limit, int64_t epoch_time_limit) override;
+
+    void reset_status() override {
+        _status = Status::OK();
+        _time_spent = 0;
+        _rows_read = 0;
+    }
+
+protected:
     Status _read_chunk(RuntimeState* state, ChunkPtr* chunk) override;
 
     const workgroup::WorkGroupScanSchedEntity* _scan_sched_entity(const workgroup::WorkGroup* wg) const override;
 
     connector::DataSourcePtr _data_source;
     [[maybe_unused]] vectorized::ConnectorScanNode* _scan_node;
-    const int64_t _limit; // -1: no limit
+    int64_t _limit; // -1: no limit
+    int64_t _time_limit; // -1: not limit;
     const std::vector<ExprContext*>& _runtime_in_filters;
     const vectorized::RuntimeFilterProbeCollector* _runtime_bloom_filters;
 
@@ -107,6 +118,7 @@ private:
     bool _opened = false;
     bool _closed = false;
     uint64_t _rows_read = 0;
+    uint64_t _time_spent = 0;
 };
 
 } // namespace pipeline

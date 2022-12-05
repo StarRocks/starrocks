@@ -47,12 +47,17 @@ public:
     // Return true if eos is not reached
     // Return false if eos is reached or error occurred
     bool has_next_chunk() const { return _status.ok(); }
+    virtual void reset_status () { _status = Status::OK(); }
+    virtual Status set_stream_offset(int64_t table_version, int64_t changelog_id) { return Status::OK(); }
+
+    virtual void set_epoch_limit(int64_t read_limit, int64_t time_limit) {}
     bool has_output() const;
     bool has_shared_output() const;
 
     StatusOr<vectorized::ChunkPtr> get_next_chunk_from_buffer();
     Status buffer_next_batch_chunks_blocking(RuntimeState* state, size_t batch_size,
                                              const workgroup::WorkGroup* running_wg);
+
 
     // Counters of scan
     int64_t get_cpu_time_spent() const { return _cpu_time_spent_ns; }

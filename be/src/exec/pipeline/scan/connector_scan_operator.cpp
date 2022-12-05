@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "exec/pipeline/scan/connector_scan_operator.h"
+#include "exec/pipeline/scan/stream_scan_operator.h"
 
 #include "column/chunk.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
@@ -26,10 +27,10 @@ namespace starrocks::pipeline {
 // ==================== ConnectorScanOperatorFactory ====================
 
 ConnectorScanOperatorFactory::ConnectorScanOperatorFactory(int32_t id, ScanNode* scan_node, size_t dop,
-                                                           ChunkBufferLimiterPtr buffer_limiter)
+                                                           ChunkBufferLimiterPtr buffer_limiter, bool is_stream)
         : ScanOperatorFactory(id, scan_node),
           _chunk_buffer(scan_node->is_shared_scan_enabled() ? BalanceStrategy::kRoundRobin : BalanceStrategy::kDirect,
-                        dop, std::move(buffer_limiter)) {}
+                        dop, std::move(buffer_limiter)), _is_stream(is_stream) {}
 
 Status ConnectorScanOperatorFactory::do_prepare(RuntimeState* state) {
     const auto& conjunct_ctxs = _scan_node->conjunct_ctxs();
@@ -45,6 +46,9 @@ void ConnectorScanOperatorFactory::do_close(RuntimeState* state) {
 }
 
 OperatorPtr ConnectorScanOperatorFactory::do_create(int32_t dop, int32_t driver_sequence) {
+    if (_is_stream) {
+        return std::make_shared<StreamScanOperator>(this, _id, driver_sequence, dop, _scan_node);
+    }
     return std::make_shared<ConnectorScanOperator>(this, _id, driver_sequence, dop, _scan_node);
 }
 
@@ -192,6 +196,15 @@ void ConnectorChunkSource::close(RuntimeState* state) {
     _data_source->close(state);
 }
 
+Status ConnectorChunkSource::set_stream_offset(int64_t table_version, int64_t changelog_id) {
+    return _data_source->set_offset(table_version, changelog_id);
+}
+
+void ConnectorChunkSource::set_epoch_limit(int64_t read_limit, int64_t epoch_time_limit) {
+    _limit = read_limit;
+    _time_limit = epoch_time_limit;
+}
+
 Status ConnectorChunkSource::_read_chunk(RuntimeState* state, vectorized::ChunkPtr* chunk) {
     if (!_opened) {
         RETURN_IF_ERROR(_data_source->open(state));
@@ -203,7 +216,7 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, vectorized::ChunkP
     }
 
     // Improve for select * from table limit x, x is small
-    if (_limit != -1 && _rows_read >= _limit) {
+    if ((_limit != -1 && _rows_read >= _limit) || (_time_limit != -1 && _time_spent >= _time_limit)) {
         return Status::EndOfFile("limit reach");
     }
 
@@ -237,6 +250,7 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, vectorized::ChunkP
     _scan_rows_num = _data_source->raw_rows_read();
     _scan_bytes = _data_source->num_bytes_read();
     _cpu_time_spent_ns = _data_source->cpu_time_spent();
+    _time_spent += _cpu_time_spent_ns;
     if (_ck_acc.has_output()) {
         *chunk = std::move(_ck_acc.pull());
         _rows_read += (*chunk)->num_rows();

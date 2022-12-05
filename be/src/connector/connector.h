@@ -64,6 +64,8 @@ public:
     }
     void set_read_limit(const uint64_t limit) { _read_limit = limit; }
     Status parse_runtime_filters(RuntimeState* state);
+    // for stream seek offset
+    virtual Status set_offset(int64_t table_version, int64_t changelog_id) { return Status::OK(); }
 
 protected:
     int64_t _read_limit = -1; // no limit
@@ -109,6 +111,7 @@ enum ConnectorType {
     MYSQL = 3,
     FILE = 4,
     LAKE = 5,
+    BINLOG = 6
 };
 
 class Connector {
@@ -120,6 +123,7 @@ public:
     static const std::string MYSQL;
     static const std::string FILE;
     static const std::string LAKE;
+    static const std::string BINLOG;
 
     virtual ~Connector() = default;
     // First version we use TPlanNode to construct data source provider.
