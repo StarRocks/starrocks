@@ -95,7 +95,7 @@ StatusOr<ChunkIteratorPtr> Rowset::read(const vectorized::VectorizedSchema& sche
         return vectorized::new_empty_iterator(schema, options.chunk_size);
     } else if (segment_iterators.size() == 1) {
         return segment_iterators[0];
-    } else if (options.sorted) {
+    } else if (options.sorted && is_overlapped()) {
         return vectorized::new_heap_merge_iterator(segment_iterators);
     } else {
         return vectorized::new_union_iterator(segment_iterators);
