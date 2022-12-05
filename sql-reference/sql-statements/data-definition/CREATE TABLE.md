@@ -372,6 +372,21 @@ dynamic_partition.prefix: 用于指定创建的分区名前缀，例如分区名
 
 dynamic_partition.buckets: 用于指定自动创建的分区分桶数量。
 
+#### 设置数据压缩算法
+
+您可以在建表时通过增加属性 `compression` 为该表指定数据压缩算法。
+
+`compression` 有效值包括：
+
+* `LZ4`：LZ4 算法。
+* `ZSTD`：Zstandard 算法。
+* `ZLIB`：zlib 算法。
+* `SNAPPY`：Snappy 算法。
+
+如不指定数据压缩算法，StarRocks 默认使用 LZ4。
+
+关于如何选择合适的数据压缩算法，请参阅[数据压缩](../../../table_design/data_compression.md)。
+
 #### 设置数据导入安全等级
 
 如果您的 StarRocks 集群有多数据副本，您可以在建表时通过增加属性（PROPERTIES） `write_quorum` 指定数据导入安全等级，即设置需要多少数据副本导入成功后 StarRocks 可返回导入成功。

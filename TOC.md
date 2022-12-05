@@ -18,6 +18,7 @@
     + [数据分布](/table_design/Data_distribution.md)
     + [动态分区](/table_design/dynamic_partitioning.md)
     + [临时分区](/table_design/Temporary_partition.md)
+  + [数据压缩](/table_design/data_compression.md)
   + [排序键和前缀索引](/table_design/Sort_key.md)
 + 导入数据
   + [导入总览](/loading/Loading_intro.md)
