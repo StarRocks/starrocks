@@ -194,13 +194,13 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateBlockingNode::
     if (agg_node.need_finalize) {
         if (!has_group_by_keys) {
             ops_with_sink = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), ops_with_sink);
-        } else {
+        } else if (could_local_shuffle) {
             ops_with_sink = try_interpolate_local_shuffle(ops_with_sink);
         }
     } else {
         if (!has_group_by_keys) {
             // Do nothing.
-        } else {
+        } else if (could_local_shuffle) {
             ops_with_sink = try_interpolate_local_shuffle(ops_with_sink);
         }
     }
