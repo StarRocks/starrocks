@@ -17,6 +17,7 @@
   + Data distribution
     + [Data distribution](./table_design/Data_distribution.md)
     + [Dynamic partitioning](./table_design/dynamic_partitioning.md)
+  + [Data compression](./table_design/data_compression.md)
   + [Sort keys and prefix indexes](./table_design/Sort_key.md)
 + Data Loading
   + [Overview of data loading](./loading/Loading_intro.md)
