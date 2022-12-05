@@ -121,7 +121,7 @@ public class ShardDeleterTest {
         for (long groupId : allShardGroupId) {
             ShardGroupInfo info = ShardGroupInfo.newBuilder()
                             .setGroupId(groupId)
-                            .putLabels("createTime", String.valueOf(System.currentTimeMillis()))
+                            .putProperties("createTime", String.valueOf(System.currentTimeMillis()))
                             .build();
             shardGroupInfos.add(info);
         }
