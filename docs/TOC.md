@@ -70,6 +70,7 @@
     + [Manage a cluster](./administration/Cluster_administration.md)
     + [Enable FQDN access](./administration/enable_fqdn.md)
     + [Configure a time zone](./administration/timezone.md)
+    + [Information Schema](./administration/information_schema.md)
     + Resource Management
       + [Resource group](./administration/resource_group.md)
       + [Query queue](./administration/query_queues.md)
