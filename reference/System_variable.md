@@ -120,6 +120,14 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 
   用于设置通过 INSERT 语句进行数据导入时，是否开启 strict 模式。默认为 true，即开启 strict 模式。关于该模式的介绍，可以参阅[数据导入](../loading/Loading_intro.md)章节。
 
+* enable_materialized_view_union_rewrite
+
+  是否开启物化视图 Union 改写。默认值：`true`。
+
+* enable_rule_based_materialized_view_rewrite
+
+  是否开启基于规则的物化视图查询改写功能，主要用于处理单表查询改写。默认值：`true`。
+
 * enable_spilling
 
   用于设置是否开启大数据量落盘排序。默认为 false，即关闭该功能。当用户未指定 ORDER BY 子句的 LIMIT 条件，同时设置 enable_spilling 为 true 时，才会开启落盘排序。该功能启用后，会使用 BE 数据目录下 starrocks-scratch/ 目录存放临时的落盘数据，并在查询结束后清空临时数据。
@@ -225,6 +233,10 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 * max_scan_key_num
 
   该变量的具体含义请参阅 BE 配置项中 `starrocks_max_scan_key_num` 的说明。该变量默认置为 -1，表示使用 be.conf 中的配置值。如果设置大于 0，则当前会话中的查询会使用该变量值，而忽略 be.conf 中的配置值。
+
+* nested_mv_rewrite_max_level
+
+  可用于查询改写的嵌套物化视图的最大层数。类型：INT。取值范围：[1, +∞)。默认值：`3`。取值为 `1` 表示只可使用基于基表创建的物化视图用于查询改写。
 
 * net_buffer_length
 

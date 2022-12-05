@@ -54,7 +54,9 @@ StarRocks 中的物化视图是一种特殊的物理表，其中保存着基于�
 
   假设您的基表中包含大量原始数据，查询需要进行复杂的 ETL 操作，您可以通过对数据建立多层物化视图实现数仓分层。如此可以将复杂查询分解为多层简单查询，既可以减少重复计算，又能够帮助维护人员快速定位问题。除此之外，数仓分层还可以将原始数据与统计数据解耦，从而保护敏感性原始数据。
 
-## 使用物化视图加速查询
+## 使用单表同步刷新物化视图加速查询
+
+StarRocks 支持为单张表构建同步刷新的物化视图。
 
 如果您的数据仓库中存在大量复杂或重复的查询，您可以通过创建物化视图加速查询。
 
@@ -157,14 +159,7 @@ GROUP BY store_id;
 
 ### 创建物化视图
 
-您可以通过以下命令为特定查询语句创建物化视图。
-
-```SQL
-CREATE MATERIALIZED VIEW [IF NOT EXISTS] [database.]mv_name
-AS (query)
-```
-
-详细操作指南请见 [SQL 参考 - CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/CREATE%20MATERIALIZED%20VIEW.md)。
+您可以通过 [CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/CREATE%20MATERIALIZED%20VIEW.md) 语句为特定查询语句创建物化视图。
 
 以下示例根据上述查询语句，为表 `sales_records` 创建一个”以售卖门店为分组，对每一个售卖门店里的所有交易额求和”的物化视图。
 
@@ -300,6 +295,14 @@ MySQL > DESC sales_records ALL;
 8 rows in set (0.00 sec)
 ```
 
+### 查看单表同步物化视图刷新任务
+
+您可以通过 SHOW ALTER MATERIALIZED VIEW 命令查看当前数据仓库中所有单表同步物化视图刷新任务。
+
+```SQL
+SHOW ALTER MATERIALIZED VIEW;
+```
+
 ### 删除物化视图
 
 在以下三种情况下，您需要删除物化视图:
@@ -408,17 +411,13 @@ FROM tableA
 
 - 为一张表创建过多的物化视图会影响导入的效率。导入数据时，物化视图和基表数据将同步更新，如果一张基表包含 n 个物化视图，向基表导入数据时，其导入效率大约等同于导入 n 张表，数据导入的速度会变慢。
 
-## 使用物化视图进行数仓建模
+## 使用多表异步刷新物化视图为数仓建模
 
-> **注意**
->
-> StarRocks 2.4 之前版本不支持以下功能。
+2.4 版本中，StarRocks 进一步支持多表异步刷新物化视图，方便您通过创建物化视图的方式为数据仓库进行建模。
 
-2.4 版本中，StarRocks 进一步支持异步多表物化视图，方便您通过创建物化视图的方式为数据仓库进行建模。异步物化视图支持所有[数据模型](../table_design/Data_model.md)。
+目前，StarRocks 多表物化视图支持以下刷新方式：
 
-目前，StarRocks 支持以下两种多表物化视图刷新方式：
-
-- **异步刷新**：这种刷新方式通过异步刷新任务实现物化视图数据的刷新，不保证物化视图与源表之间的数据强一致。该方式支持从多张表构建物化视图。
+- **异步刷新**：这种刷新方式通过异步刷新任务实现物化视图数据的刷新，不保证物化视图与源表之间的数据强一致。
 
 - **手动刷新**：这种刷新方式通过用户手动调用刷新命令，来实现物化视图的刷新，不保证物化视图与源表之间的数据强一致。
 
@@ -486,19 +485,7 @@ GROUP BY order_id;
 
 ### 创建物化视图
 
-您可以通过以下命令为特定查询语句创建物化视图。
-
-```SQL
-CREATE MATERIALIZED VIEW [IF NOT EXISTS] [database.]mv_name
-[distribution_desc]
-[REFRESH refresh_scheme_desc]
-[partition_expression]
-[COMMENT ""]
-[PROPERTIES ("key"="value", ...)]
-AS (query);
-```
-
-详细操作指南请见 [SQL 参考 - CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/CREATE%20MATERIALIZED%20VIEW.md)。
+您可以通过 [CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/CREATE%20MATERIALIZED%20VIEW.md) 语句为特定查询语句创建物化视图。
 
 以下示例根据上述查询语句，基于表 `order_list` 和表 `goods` 创建一个“以订单 ID 为分组，对订单中所有商品价格求和”的物化视图，并设定其刷新方式为异步，以相隔一天的频率自动刷新。
 
@@ -512,6 +499,33 @@ AS SELECT
 FROM order_list INNER JOIN goods ON goods.item_id1 = order_list.item_id2
 GROUP BY order_id;
 ```
+
+#### 关于多表异步物化视图刷新策略
+
+StarRocks 2.5 版本中，多表异步刷新物化视图支持多种异步刷新机制。您可以在创建物化视图时添加下列属性（PROPERTIES）以赋予物化视图不同的刷新机制，或通过 ALTER MATERIALIZED VIEW 语句修改已有物化视图的属性。
+
+| **属性**                      | **默认值** | **描述**                                                     |
+| ----------------------------- | ---------- | ------------------------------------------------------------ |
+| partition_ttl_number          | -1         | 需要保留的最近的物化视图分区数量。分区数量超过该值后，过期分区将被删除。StarRocks 将根据 FE 配置项 `dynamic_partition_enable` 中的时间间隔定期检查物化视图分区，并自动删除过期分区。当值为 `-1` 时，将保留物化视图所有分区。 |
+| partition_refresh_number      | -1         | 单次刷新中，最多刷新的分区数量。如果需要刷新的分区数量超过该值，StarRocks 将拆分这次刷新任务，并分批完成。仅当前一批分区刷新成功时，StarRocks 会继续刷新下一批分区，直至所有分区刷新完成。如果其中有分区刷新失败，将不会产生后续的刷新任务。当值为 `-1` 时，将不会拆分刷新任务。 |
+| excluded_trigger_tables       | 空字符串   | 在此项属性中列出的基表，其数据产生变化时不会触发对应物化视图自动刷新。该参数仅针对导入触发式刷新，通常需要与属性 `auto_refresh_partitions_limit` 搭配使用。形式：`[db_name.]table_name`。当值为空字符串时，任意的基表数据变化都将触发对应物化视图刷新。 |
+| auto_refresh_partitions_limit | -1         | 当触发物化视图刷新时，需要刷新的最近的物化视图分区数量。您可以通过该属性限制刷新的范围，降低刷新代价，但因为仅有部分分区刷新，有可能导致物化视图数据与基表无法保持一致。当值为 `-1` 时，将刷新所有分区。 |
+
+#### 关于嵌套物化视图
+
+StarRocks 2.5 版本中，多表异步刷新物化视图支持嵌套物化视图，即基于物化视图构建物化视图。每个物化视图的刷新方式仅影响当前物化视图。当前 StarRocks 不对嵌套层数进行限制。生产环境中建议嵌套层数不超过三层。
+
+#### 关于外部数据目录物化视图
+
+StarRocks 2.5 版本中，多表异步刷新物化视图支持基于 Hive catalog、Hudi catalog 以及 Iceberg catalog 构建物化视图。外部数据目录物化视图的创建方式与异步刷新物化视图相同，但有以下使用限制：
+
+- 外部数据目录物化视图仅支持异步定时刷新和手动刷新。
+
+- 物化视图中的数据不保证与外部数据目录的数据强一致。
+
+- 目前暂不支持基于资源（Resource）构建物化视图。
+
+- StarRocks 目前无法感知外部数据目录基表数据是否发生变动，所以每次刷新会默认刷新所有分区。您可以通过手动刷新方式指定刷新部分分区。
 
 ### 使用物化视图查询
 
@@ -527,6 +541,80 @@ MySQL > SELECT * FROM order_mv;
 |    10003 |  8.700000047683716 |
 +----------+--------------------+
 3 rows in set (0.01 sec)
+```
+
+### （可选）使用多表物化视图查询改写
+
+StarRocks 2.5 版本中，多表异步刷新物化视图支持 SPJG类型的物化视图查询的自动透明改写。SPJG 类型的物化视图是指在物化视图 Plan 中只包含 Scan、Filter、Project 以及 Aggregate 类型的算子。其查询改写包括单表改写，Join 改写，聚合改写，Union 改写和嵌套物化视图的改写。
+
+当查询内部表数据时，StarRocks 通过排除数据与基表不一致的物化视图，来保证改写之后的查询与原始查询结果的强一致性。当物化视图数据过期的时候，不会作为候选的物化视图。
+
+> **注意**
+>
+> StarRocks 当前暂不支持基于外部数据目录物化视图的查询改写。
+
+#### 候选物化视图
+
+查询改写时，StarRocks 会从众多的物化视图中粗选出可能符合改写条件的候选物化视图，排除不符合条件的物化视图，以降低改写的代价。
+
+候选物化视图需满足以下条件：
+
+1. 物化视图状态为 active。
+2. 物化视图的基表和查询中涉及的表必须有交集。
+3. 如果是非分区物化视图，物化视图数据必须为最新的才能作为候选。
+4. 如果是分区物化视图，物化视图的部分分区为最新的才能作为候选。
+5. 物化视图必须只包含 Select、Filter、Join、Projection 以及 Aggregate 类型算子。
+6. 嵌套物化视图如果符合条件 1、3 以及 4，也会作为候选。
+
+#### 启用多表物化视图查询改写
+
+StarRocks 默认开启物化视图查询改写。您可以通过 Session 变量 `enable_materialized_view_rewrite` 开启或关闭该功能。
+
+```SQL
+SET GLOBAL enable_materialized_view_rewrite = { true | false };
+```
+
+#### 设置多表物化视图查询改写
+
+您可以通过以下 Session 变量设置多表物化视图查询改写。
+
+| **变量**                                    | **默认值** | **描述**                                                     |
+| ------------------------------------------- | ---------- | ------------------------------------------------------------ |
+| enable_materialized_view_union_rewrite      | true       | 是否开启物化视图 Union 改写。                                |
+| enable_rule_based_materialized_view_rewrite | true       | 是否开启基于规则的物化视图查询改写功能，主要用于处理单表查询改写。 |
+| nested_mv_rewrite_max_level                 | 3          | 可用于查询改写的嵌套物化视图的最大层数。类型：INT。取值范围：[1, +∞)。取值为 `1` 表示只可使用基于基表创建的物化视图用于查询改写。 |
+
+#### 验证查询改写是否生效
+
+您可以使用 EXPLAIN 语句查看对应 Query Plan。如果其中 `OlapScanNode` 项目下的 `TABLE` 为对应物化视图名称，则表示该查询已基于物化视图改写。
+
+```Plain
+mysql> EXPLAIN SELECT order_id, sum(goods.price) as total FROM order_list INNER JOIN goods ON goods.item_id1 = order_list.item_id2 GROUP BY order_id;
++------------------------------------+
+| Explain String                     |
++------------------------------------+
+| PLAN FRAGMENT 0                    |
+|  OUTPUT EXPRS:1: order_id | 8: sum |
+|   PARTITION: RANDOM                |
+|                                    |
+|   RESULT SINK                      |
+|                                    |
+|   1:Project                        |
+|   |  <slot 1> : 9: order_id        |
+|   |  <slot 8> : 10: total          |
+|   |                                |
+|   0:OlapScanNode                   |
+|      TABLE: order_mv               |
+|      PREAGGREGATION: ON            |
+|      partitions=1/1                |
+|      rollup: order_mv              |
+|      tabletRatio=0/12              |
+|      tabletList=                   |
+|      cardinality=3                 |
+|      avgRowSize=4.0                |
+|      numNodes=0                    |
++------------------------------------+
+20 rows in set (0.01 sec)
 ```
 
 ### 修改物化视图名称
@@ -581,17 +669,9 @@ SELECT * FROM information_schema.materialized_views;
 SHOW CREATE MATERIALIZED VIEW order_mv;
 ```
 
-### 查看单表同步物化视图刷新任务
-
-您可以通过 SHOW ALTER MATERIALIZED VIEW 命令查看当前数据仓库中所有单表同步物化视图刷新任务。
-
-```SQL
-SHOW ALTER MATERIALIZED VIEW;
-```
-
 ### 手动刷新物化视图
 
-您可以通过 REFRESH MATERIALIZED VIEW 命令手动刷新特定物化视图。
+您可以通过 [REFRESH MATERIALIZED VIEW](../sql-reference/sql-statements/data-manipulation/REFRESH%20MATERIALIZED%20VIEW.md) 命令手动刷新特定物化视图。StarRocks 2.5 版本中，多表异步刷新物化视图支持手动刷新部分分区。
 
 ```SQL
 REFRESH MATERIALIZED VIEW order_mv;
