@@ -37,6 +37,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Describes a STRUCT type. STRUCT types have a list of named struct fields.
@@ -80,6 +81,32 @@ public class StructType extends Type {
             size += structField.getType().getTypeSize();
         }
         return size;
+    }
+
+    @Override
+    public boolean matchesType(Type t) {
+        if (t.isPseudoType()) {
+            return t.matchesType(this);
+        }
+        if (!t.isStructType()) {
+            return false;
+        }
+
+        if (((StructType) t).getFields().size() != fields.size()) {
+            return false;
+        }
+
+        for (Map.Entry<String, StructField> field : fieldMap.entrySet()) {
+            StructField tField = ((StructType) t).getField(field.getValue().getName());
+            if (tField == null) {
+                return false;
+            }
+            if (!tField.getType().matchesType(field.getValue().getType())) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     @Override
