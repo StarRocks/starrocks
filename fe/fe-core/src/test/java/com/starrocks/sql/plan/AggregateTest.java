@@ -1456,25 +1456,6 @@ public class AggregateTest extends PlanTestBase {
                 "  |  <slot 21> : 3: t1c");
         assertContains(plan, "4:AGGREGATE (update serialize)\n" +
                 "  |  output: multi_distinct_count(NULL)");
-
-        int prevAggStage = connectContext.getSessionVariable().getNewPlannerAggStage();
-        try {
-            connectContext.getSessionVariable().setNewPlanerAggStage(3);
-            sql = "select count(distinct t1b) from test_all_type";
-
-            ExecPlan execPlan = getExecPlan(sql);
-            assertContains(execPlan.getFragments().get(1).getExplainString(TExplainLevel.NORMAL),
-                    "  4:AGGREGATE (update serialize)\n" +
-                            "  |  output: count(2: t1b)\n" +
-                            "  |  group by: \n" +
-                            "  |  \n" +
-                            "  3:AGGREGATE (merge serialize)\n" +
-                            "  |  group by: 2: t1b\n" +
-                            "  |  ");
-            Assert.assertTrue(execPlan.getFragments().get(1).isEnableSharedScan());
-        } finally {
-            connectContext.getSessionVariable().setNewPlanerAggStage(prevAggStage);
-        }
     }
 
     @Test

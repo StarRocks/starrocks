@@ -1016,7 +1016,6 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         ConnectContext.get().getSessionVariable().setNewPlanerAggStage(3);
         String sql = "select count(distinct C_NAME) from customer group by C_CUSTKEY;";
         ExecPlan plan = getExecPlan(sql);
-        Assert.assertFalse(plan.getFragments().get(1).isEnableSharedScan());
         Assert.assertTrue(plan.getFragments().get(1).isAssignScanRangesPerDriverSeq());
         assertContains(plan.getExplainString(TExplainLevel.NORMAL), "2:AGGREGATE (update finalize)\n" +
                 "  |  output: count(2: C_NAME)\n" +
@@ -1028,7 +1027,6 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         ConnectContext.get().getSessionVariable().setNewPlanerAggStage(4);
         sql = "select count(distinct C_CUSTKEY) from customer;";
         plan = getExecPlan(sql);
-        Assert.assertFalse(plan.getFragments().get(1).isEnableSharedScan());
         Assert.assertTrue(plan.getFragments().get(1).isAssignScanRangesPerDriverSeq());
         assertContains(plan.getExplainString(TExplainLevel.NORMAL), " 2:AGGREGATE (update serialize)\n" +
                 "  |  output: count(1: C_CUSTKEY)\n" +
@@ -1041,7 +1039,6 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
 
         sql = "select count(distinct C_CUSTKEY, C_NAME) from customer;";
         plan = getExecPlan(sql);
-        Assert.assertFalse(plan.getFragments().get(1).isEnableSharedScan());
         Assert.assertTrue(plan.getFragments().get(1).isAssignScanRangesPerDriverSeq());
         assertContains(plan.getExplainString(TExplainLevel.NORMAL), " 2:AGGREGATE (update serialize)\n" +
                 "  |  output: count(if(1: C_CUSTKEY IS NULL, NULL, 2: C_NAME))\n" +
@@ -1052,7 +1049,6 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
 
         sql = "select count(distinct C_CUSTKEY, C_NAME) from customer group by C_CUSTKEY;";
         plan = getExecPlan(sql);
-        Assert.assertFalse(plan.getFragments().get(1).isEnableSharedScan());
         Assert.assertTrue(plan.getFragments().get(1).isAssignScanRangesPerDriverSeq());
         assertContains(plan.getExplainString(TExplainLevel.NORMAL), "  2:AGGREGATE (update finalize)\n" +
                 "  |  output: count(if(1: C_CUSTKEY IS NULL, NULL, 2: C_NAME))\n" +
@@ -1069,7 +1065,6 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         String sql = "select count(1) from customer group by C_CUSTKEY";
         ExecPlan plan = getExecPlan(sql);
         PlanFragment fragment = plan.getFragments().get(1);
-        Assert.assertFalse(fragment.isEnableSharedScan());
         Assert.assertTrue(fragment.isAssignScanRangesPerDriverSeq());
         assertContains(fragment.getExplainString(TExplainLevel.NORMAL), "  1:AGGREGATE (update finalize)\n" +
                 "  |  output: count(1)\n" +
@@ -1082,7 +1077,6 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         sql = "select count(1) from customer group by C_NAME";
         plan = getExecPlan(sql);
         fragment = plan.getFragments().get(2);
-        Assert.assertTrue(fragment.isEnableSharedScan());
         Assert.assertFalse(fragment.isAssignScanRangesPerDriverSeq());
         assertContains(fragment.getExplainString(TExplainLevel.NORMAL), "  STREAM DATA SINK\n" +
                 "    EXCHANGE ID: 01\n" +
@@ -1095,7 +1089,6 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         sql = "select count(1) from customer group by C_NAME";
         plan = getExecPlan(sql);
         fragment = plan.getFragments().get(2);
-        Assert.assertTrue(fragment.isEnableSharedScan());
         Assert.assertFalse(fragment.isAssignScanRangesPerDriverSeq());
         assertContains(fragment.getExplainString(TExplainLevel.NORMAL), "  1:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
@@ -1109,7 +1102,6 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         sql = "select count(distinct C_ADDRESS) from customer group by C_NAME";
         plan = getExecPlan(sql);
         fragment = plan.getFragments().get(2);
-        Assert.assertTrue(fragment.isEnableSharedScan());
         Assert.assertFalse(fragment.isAssignScanRangesPerDriverSeq());
         assertContains(fragment.getExplainString(TExplainLevel.NORMAL), "  1:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
@@ -1122,7 +1114,6 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         plan = getExecPlan(sql);
         System.out.println(plan.getExplainString(TExplainLevel.NORMAL));
         fragment = plan.getFragments().get(2);
-        Assert.assertTrue(fragment.isEnableSharedScan());
         Assert.assertFalse(fragment.isAssignScanRangesPerDriverSeq());
         assertContains(fragment.getExplainString(TExplainLevel.NORMAL), "  1:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
