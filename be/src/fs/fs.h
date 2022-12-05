@@ -242,6 +242,10 @@ public:
 
     // Determines the information about the filesystem on which the pathname 'path' is located.
     virtual StatusOr<SpaceInfo> space(const std::string& path) { return Status::NotSupported("FileSystem::space()"); }
+
+    // Given the path to a remote file, delete the file's cache on the local file system, if any.
+    // On success, Status::OK is returned. If there is no cache, Status::NotFound is returned.
+    virtual Status drop_local_cache(const std::string& path) { return Status::NotFound(path); }
 };
 
 // Creation-time options for WritableFile
