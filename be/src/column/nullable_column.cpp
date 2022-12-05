@@ -212,9 +212,13 @@ Status NullableColumn::update_rows(const Column& src, const uint32_t* indexes) {
 
 size_t NullableColumn::filter_range(const Column::Filter& filter, size_t from, size_t to) {
     auto s1 = _data_column->filter_range(filter, from, to);
-    auto s2 = _null_column->filter_range(filter, from, to);
-    update_has_null();
-    DCHECK_EQ(s1, s2);
+    if (!_has_null) {
+        _null_column->resize(s1);
+    } else {
+        auto s2 = _null_column->filter_range(filter, from, to);
+        DCHECK_EQ(s1, s2);
+        update_has_null();
+    }
     return s1;
 }
 
