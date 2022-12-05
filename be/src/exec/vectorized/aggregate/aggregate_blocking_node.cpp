@@ -170,7 +170,7 @@ Status AggregateBlockingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
 std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateBlockingNode::decompose_to_pipeline(
         pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
-    OpFactories operators_with_sink = _children[0]->decompose_to_pipeline(context);
+    OpFactories ops_with_sink = _children[0]->decompose_to_pipeline(context);
     auto& agg_node = _tnode.agg_node;
     bool has_group_by_keys = agg_node.__isset.grouping_exprs && !_tnode.agg_node.grouping_exprs.empty();
 
@@ -223,8 +223,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateBlockingNode::
 
     // We cannot get degree of parallelism from PipelineBuilderContext, of which is only a suggest value
     // and we may set other parallelism for source operator in many special cases
-    size_t degree_of_parallelism =
-            down_cast<SourceOperatorFactory*>(operators_with_sink[0].get())->degree_of_parallelism();
+    size_t degree_of_parallelism = down_cast<SourceOperatorFactory*>(ops_with_sink[0].get())->degree_of_parallelism();
 
     // shared by sink operator and source operator
     AggregatorFactoryPtr aggregator_factory = std::make_shared<AggregatorFactory>(_tnode);
@@ -235,8 +234,8 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateBlockingNode::
                                                                                 aggregator_factory);
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(sink_operator.get(), context, rc_rf_probe_collector);
-    operators_with_sink.push_back(std::move(sink_operator));
-    context->add_pipeline(operators_with_sink);
+    ops_with_sink.push_back(std::move(sink_operator));
+    context->add_pipeline(ops_with_sink);
 
     OpFactories operators_with_source;
     auto source_operator = std::make_shared<AggregateBlockingSourceOperatorFactory>(context->next_operator_id(), id(),
@@ -244,7 +243,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateBlockingNode::
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(source_operator.get(), context, rc_rf_probe_collector);
     // Aggregator must be used by a pair of sink and source operators,
-    // so operators_with_source's degree of parallelism must be equal with operators_with_sink's
+    // so operators_with_source's degree of parallelism must be equal with ops_with_sink's
     source_operator->set_degree_of_parallelism(degree_of_parallelism);
     operators_with_source.push_back(std::move(source_operator));
     if (limit() != -1) {
