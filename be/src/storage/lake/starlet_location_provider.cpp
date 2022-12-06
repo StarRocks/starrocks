@@ -54,5 +54,16 @@ Status StarletLocationProvider::list_root_locations(std::set<std::string>* roots
     return Status::OK();
 }
 
+std::set<int64_t> StarletLocationProvider::owned_tablets() const {
+    std::set<int64_t> ret;
+    if (g_worker != nullptr) {
+        auto shards = g_worker->shards();
+        for (const auto& s : shards) {
+            ret.insert(s.id);
+        }
+    }
+    return ret;
+}
+
 } // namespace starrocks::lake
 #endif // USE_STAROS

@@ -85,7 +85,7 @@ absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::get_shard_files
         std::shared_lock l(_mtx);
         auto it = _shards.find(id);
         if (it == _shards.end()) {
-            return absl::NotFoundError(fmt::format("failed to get shardinfo {}", id));
+            return absl::InternalError(fmt::format("failed to get shardinfo {}", id));
         }
         if (it->second.fs) {
             return it->second.fs;
@@ -97,7 +97,7 @@ absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::get_shard_files
         auto shard_iter = _shards.find(id);
         // could be possibly shards removed or fs get created during unlock-lock
         if (shard_iter == _shards.end()) {
-            return absl::NotFoundError(fmt::format("failed to get shardinfo {}", id));
+            return absl::InternalError(fmt::format("failed to get shardinfo {}", id));
         }
         if (shard_iter->second.fs) {
             return shard_iter->second.fs;
