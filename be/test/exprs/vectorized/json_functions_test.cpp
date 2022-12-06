@@ -615,13 +615,13 @@ TEST_P(JsonArrayTestFixture, json_array) {
 INSTANTIATE_TEST_SUITE_P(
         JsonArrayTest, JsonArrayTestFixture,
         ::testing::Values(std::make_tuple(std::vector<std::string>{}, "[]"),
-                          std::make_tuple(std::vector<std::string>{"1", "2"}, "[1, 2]"),
-                          std::make_tuple(std::vector<std::string>{"1", "\"1\""}, "[1, \"1\"]"),
-                          std::make_tuple(std::vector<std::string>{"1", R"({"a":1})"}, R"([1, {"a": 1}])"),
-                          std::make_tuple(std::vector<std::string>{"null", R"(1)"}, R"([null, 1])"),
-                          std::make_tuple(std::vector<std::string>{"null", R"(null)"}, R"([null, null])"),
-                          std::make_tuple(std::vector<std::string>{"1", "1", "1"}, "[1, 1, 1]"),
-                          std::make_tuple(std::vector<std::string>{"1.1", "1.2"}, R"([1.1, 1.2])")));
+                          std::make_tuple(std::vector<std::string>{"1", "2"}, R"(["1", "2"])"),
+                          std::make_tuple(std::vector<std::string>{"1", "\"1\""}, R"(["1", "1"])"),
+                          std::make_tuple(std::vector<std::string>{"1", R"({"a":1})"}, R"(["1", {"a": 1}])"),
+                          std::make_tuple(std::vector<std::string>{"null", R"(1)"}, R"(["null", "1"])"),
+                          std::make_tuple(std::vector<std::string>{"null", R"(null)"}, R"(["null", "null"])"),
+                          std::make_tuple(std::vector<std::string>{"1", "1", "1"}, R"(["1", "1", "1"])"),
+                          std::make_tuple(std::vector<std::string>{"1.1", "1.2"}, R"(["1.1", "1.2"])")));
 
 using JsonObjectTestParam = std::tuple<std::vector<std::string>, std::string>;
 
@@ -664,24 +664,29 @@ TEST_P(JsonObjectTestFixture, json_object) {
 }
 
 INSTANTIATE_TEST_SUITE_P(JsonObjectTest, JsonObjectTestFixture,
-                         ::testing::Values(JsonObjectTestParam(std::vector<std::string>{}, "{}"),
-                                           JsonObjectTestParam({R"("a")", "1", R"("b")", ""}, R"( {"a": 1, "b": ""} )"),
-                                           JsonObjectTestParam({R"("a")"}, R"({"a": null})"),
-                                           JsonObjectTestParam({R"("a")", R"("a")", R"("a")"},
-                                                               R"({"a": "a", "a": null})"),
-                                           JsonObjectTestParam({R"("a")", R"("a")"}, R"({"a": "a"})"),
-                                           JsonObjectTestParam({R"("a")", "1"}, R"({"a": 1})"),
-                                           JsonObjectTestParam({R"("a")", "1.234"}, R"({"a": 1.234})"),
-                                           JsonObjectTestParam({R"("a")", "null"}, R"({"a": null})"),
-                                           JsonObjectTestParam({R"("a")", "true"}, R"({"a": true})"),
-                                           JsonObjectTestParam({R"("a")", "1", R"("b")", "2"}, R"({"a": 1, "b": 2})"),
-                                           JsonObjectTestParam({R"("a")", "[1,2]"}, R"({"a": [1, 2]})"),
-                                           JsonObjectTestParam({R"("a")", R"({"b": 2})"}, R"({"a": {"b": 2}})"),
+                         ::testing::Values(
+                                 // clang-format off
+                          JsonObjectTestParam(std::vector<std::string>{}, "{}"),
+                          JsonObjectTestParam({R"("a")", "1", R"("b")", ""}, R"( {"a": "1", "b": ""} )"),
+                          JsonObjectTestParam({R"("a")"}, R"({"a": null})"),
+                          JsonObjectTestParam({R"("a")", R"("a")", R"("a")"}, R"({"a": "a", "a": null})"),
+                          JsonObjectTestParam({R"("a")", R"("a")"}, R"({"a": "a"})"),
+                          JsonObjectTestParam({R"("a")", "1"}, R"({"a": "1"})"),
+                          JsonObjectTestParam({R"("a")", "1.234"}, R"({"a": "1.234"})"),
+                          JsonObjectTestParam({R"("a")", "null"}, R"({"a": "null"})"),
+                          JsonObjectTestParam({R"("a")", "true"}, R"({"a": "true"})"),
+                          JsonObjectTestParam({R"("a")", "1", R"("b")", "2"}, R"({"a": "1", "b": "2"})"),
+                          JsonObjectTestParam({R"("a")", "[1,2]"}, R"({"a": [1, 2]})"),
+                          JsonObjectTestParam({R"("a")", R"({"b": 2})"}, R"({"a": {"b": 2}})"),
 
-                                           // illegal object
-                                           JsonObjectTestParam({"1", "1"}, "NULL"), JsonObjectTestParam({"1"}, "NULL"),
-                                           JsonObjectTestParam({R"("a")", "1", "1"}, R"(NULL)"),
-                                           JsonObjectTestParam({R"("")"}, R"(NULL)")));
+                          // illegal object
+                          JsonObjectTestParam({"1", "1"}, R"({"1": "1"})"), 
+                          JsonObjectTestParam({"1"}, R"({"1": null})"),
+                          JsonObjectTestParam({R"("a")", "1", "1"}, R"({"1": null, "a": "1"})"),
+                          JsonObjectTestParam({R"("")"}, R"(NULL)")
+
+                                 // clang-format on
+                                 ));
 
 TEST_F(JsonFunctionsTest, extract_from_object_test) {
     std::string output;
