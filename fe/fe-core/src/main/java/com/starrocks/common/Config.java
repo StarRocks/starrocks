@@ -1483,7 +1483,7 @@ public class Config extends ConfigBase {
      * Enable pipeline engine load.
      */
     @ConfField(mutable = true)
-    public static boolean enable_pipeline_load = false;
+    public static boolean enable_pipeline_load = true;
 
     /**
      * Unused config field, leave it here for backward compatibility
