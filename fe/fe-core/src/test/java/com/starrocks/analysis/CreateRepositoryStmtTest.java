@@ -4,7 +4,7 @@ package com.starrocks.analysis;
 
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.analyzer.AST2SQL;
+import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.ast.CreateRepositoryStmt;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -40,6 +40,6 @@ public class CreateRepositoryStmtTest {
                         " PROPERTIES ( \"username\" = \"username1\", \"password\" = \"password1\" )";
         CreateRepositoryStmt stmt = (CreateRepositoryStmt) com.starrocks.sql.parser.SqlParser.parse(sql, connectContext.getSessionVariable()).get(0);
         Assert.assertEquals("CREATE REPOSITORY hdfs_repo WITH BROKER hdfs_broker ON LOCATION \"hdfs://hadoop-name-node:54310/path/to/repo/\" " +
-                "PROPERTIES (\"password\" = \"*XXX\", \"username\" = \"username1\" )", AST2SQL.toString(stmt));
+                "PROPERTIES (\"password\" = \"***\", \"username\" = \"username1\" )", AstToStringBuilder.toString(stmt));
     }
 }
