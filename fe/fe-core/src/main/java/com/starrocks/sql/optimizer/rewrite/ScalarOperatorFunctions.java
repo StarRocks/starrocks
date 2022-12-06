@@ -33,6 +33,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.rewrite.FEFunction;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import org.apache.commons.lang.StringUtils;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -162,8 +163,13 @@ public class ScalarOperatorFunctions {
 
     @FEFunction(name = "str_to_date", argTypes = {"VARCHAR", "VARCHAR"}, returnType = "DATETIME")
     public static ConstantOperator dateParse(ConstantOperator date, ConstantOperator fmtLiteral) {
+<<<<<<< HEAD
         DateTimeFormatterBuilder builder = DateUtils.unixDatetimeFormatBuilder(fmtLiteral.getVarchar());
 
+=======
+        DateTimeFormatterBuilder builder = DateUtils.unixDatetimeFormatBuilder(fmtLiteral.getVarchar(), false);
+        String dateStr = StringUtils.strip(date.getVarchar(), "\r\n\t ");
+>>>>>>> 9c1c75692 ([Enhancement] replace str_to_date trim (#14598))
         if (HAS_TIME_PART.matcher(fmtLiteral.getVarchar()).matches()) {
             LocalDateTime ldt = LocalDateTime.from(
                     builder.toFormatter().withResolverStyle(ResolverStyle.STRICT).parse(date.getVarchar()));
@@ -177,9 +183,15 @@ public class ScalarOperatorFunctions {
 
     @FEFunction(name = "str2date", argTypes = {"VARCHAR", "VARCHAR"}, returnType = "DATE")
     public static ConstantOperator str2Date(ConstantOperator date, ConstantOperator fmtLiteral) {
+<<<<<<< HEAD
         DateTimeFormatterBuilder builder = DateUtils.unixDatetimeFormatBuilder(fmtLiteral.getVarchar());
         LocalDate ld = LocalDate.from(
                 builder.toFormatter().withResolverStyle(ResolverStyle.STRICT).parse(date.getVarchar()));
+=======
+        DateTimeFormatterBuilder builder = DateUtils.unixDatetimeFormatBuilder(fmtLiteral.getVarchar(), false);
+        LocalDate ld = LocalDate.from(builder.toFormatter().withResolverStyle(ResolverStyle.STRICT).parse(
+                StringUtils.strip(date.getVarchar(), "\r\n\t ")));
+>>>>>>> 9c1c75692 ([Enhancement] replace str_to_date trim (#14598))
         return ConstantOperator.createDatetime(ld.atTime(0, 0, 0), Type.DATE);
     }
 
