@@ -293,6 +293,9 @@ public class FunctionSet {
     public static final String BITNOT = "bitnot";
     public static final String BITOR = "bitor";
     public static final String BITXOR = "bitxor";
+    public static final String BIT_SHIFT_LEFT = "bit_shift_left";
+    public static final String BIT_SHIFT_RIGHT = "bit_shift_right";
+    public static final String BIT_SHIFT_RIGHT_LOGICAL = "bit_shift_right_logical";
 
     // Hash functions:
     public static final String MURMUR_HASH3_32 = "murmur_hash3_32";

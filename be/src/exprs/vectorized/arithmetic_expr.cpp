@@ -185,6 +185,19 @@ public:
     }
 };
 
+template <PrimitiveType Type, typename OP>
+class VectorizedBitShiftArithmeticExpr final : public Expr {
+public:
+    DEFINE_CLASS_CONSTRUCTOR(VectorizedBitShiftArithmeticExpr);
+    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
+        auto l = _children[0]->evaluate(context, ptr);
+        auto r = _children[1]->evaluate(context, ptr);
+
+        using ArithmeticOp = ArithmeticBinaryOperator<OP, Type>;
+        return VectorizedStrictBinaryFunction<ArithmeticOp>::template evaluate<Type, TYPE_BIGINT, Type>(l, r);
+    }
+};
+
 #undef DEFINE_CLASS_CONSTRUCTOR
 
 #define CASE_TYPE(TYPE, OP) \
@@ -272,6 +285,15 @@ Expr* VectorizedArithmeticExprFactory::from_thrift(const starrocks::TExprNode& n
 #define CASE_FN(TYPE, OP) return new VectorizedBitNotArithmeticExpr<TYPE>(node);
     case TExprOpcode::BITNOT:
         SWITCH_INT_TYPE(TYPE_NULL);
+#undef CASE_FN
+
+#define CASE_FN(TYPE, OP) return new VectorizedBitShiftArithmeticExpr<TYPE, OP>(node);
+    case TExprOpcode::BIT_SHIFT_LEFT:
+        SWITCH_INT_TYPE(BitShiftLeftOp);
+    case TExprOpcode::BIT_SHIFT_RIGHT:
+        SWITCH_INT_TYPE(BitShiftRightOp);
+    case TExprOpcode::BIT_SHIFT_RIGHT_LOGICAL:
+        SWITCH_INT_TYPE(BitShiftRightLogicalOp);
 #undef CASE_FN
 
     default:
