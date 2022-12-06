@@ -871,15 +871,6 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
         for (int i = 0; i < _tablet.tablet_schema().columns().size(); ++i) {
             if (_tablet.tablet_schema().column(i).name() == txn_meta.merge_condition()) {
                 conditional_column = i;
-                if (!state.deletes().empty()) {
-                    std::string msg = strings::Substitute(
-                            "_apply_rowset_commit error: apply rowset update state failed:"
-                            " delete with condition column $0.",
-                            txn_meta.merge_condition());
-                    LOG(ERROR) << msg;
-                    _set_error(msg);
-                    return;
-                }
                 break;
             }
         }
