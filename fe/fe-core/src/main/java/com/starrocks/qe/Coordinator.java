@@ -300,7 +300,6 @@ public class Coordinator {
         }
 
         this.needReport = true;
-
         this.coordinatorPreprocessor =
                 new CoordinatorPreprocessor(queryId, context, fragments, scanNodes, queryGlobals, queryOptions);
     }
@@ -437,6 +436,10 @@ public class Coordinator {
 
     public List<PlanFragment> getFragments() {
         return fragments;
+    }
+
+    public TDescriptorTable getDescTable() {
+        return descTable;
     }
 
     public boolean isLoadType() {
@@ -1932,6 +1935,5 @@ public class Coordinator {
         public void setInitiated(boolean initiated) {
             this.initiated = initiated;
         }
-
     }
 }

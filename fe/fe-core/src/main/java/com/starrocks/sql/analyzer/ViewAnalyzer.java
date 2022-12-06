@@ -65,7 +65,7 @@ public class ViewAnalyzer {
             }
         }
 
-        String viewSql = ViewDefBuilder.build(stmt.getQueryStatement());
+        String viewSql = AstToSQLBuilder.toSQL(stmt.getQueryStatement());
         stmt.setInlineViewDef(viewSql);
     }
 }

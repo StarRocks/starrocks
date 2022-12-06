@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -8,12 +20,16 @@
 
 #include "gutil/strings/util.h"
 #include "util/string_parser.hpp"
+#include "util/uid_util.h"
 
 namespace starrocks::lake {
 
 constexpr static const int kTabletMetadataFilenameLength = 38;
 constexpr static const int kTxnLogFilenameLength = 37;
 constexpr static const int kTabletMetadataLockFilenameLength = 55;
+constexpr static const int kSegmentFileNameLength = 40;
+
+constexpr static const char* const kGCFileName = "GC.json";
 
 inline bool is_segment(std::string_view file_name) {
     return HasSuffixString(file_name, ".dat");
@@ -49,6 +65,12 @@ inline std::string txn_vlog_filename(int64_t tablet_id, int64_t version) {
 
 inline std::string tablet_metadata_lock_filename(int64_t tablet_id, int64_t version, int64_t expire_time) {
     return fmt::format("{:016X}_{:016X}_{:016X}.lock", tablet_id, version, expire_time);
+}
+
+inline std::string random_segment_filename() {
+    auto name = fmt::format("{}.dat", generate_uuid_string());
+    DCHECK_EQ(kSegmentFileNameLength, name.size());
+    return name;
 }
 
 // Return value: <tablet id, tablet version>
