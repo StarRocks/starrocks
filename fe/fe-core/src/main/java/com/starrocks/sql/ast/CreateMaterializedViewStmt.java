@@ -417,7 +417,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
             }
         }
         if (beginIndexOfAggregation == 0) {
-            throw new SemanticException("only %s found in the select list. " +
+            throw new SemanticException("Only %s found in the select list. " +
                     "Please add group by clause and at least one group by column in the select list", joiner);
         }
         statement.setMvColumnItemList(mvColumnItemList);
