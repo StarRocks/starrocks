@@ -134,11 +134,11 @@ pipeline::OpFactories ConnectorScanNode::decompose_to_pipeline(pipeline::Pipelin
     size_t dop = context->dop_of_source_operator(id());
     std::shared_ptr<pipeline::ConnectorScanOperatorFactory> scan_op = nullptr;
 
-    if (config::connector_dynamic_chunk_buffer_limiter_enable) {
+    int64_t mem_limit = runtime_state()->query_mem_tracker_ptr()->limit() * config::scan_use_query_mem_ratio;
+    if (config::connector_dynamic_chunk_buffer_limiter_enable && mem_limit > 0) {
         // port from olap scan node.
         size_t max_buffer_capacity = pipeline::ScanOperator::max_buffer_capacity() * dop;
         size_t default_buffer_capacity = max_buffer_capacity;
-        int64_t mem_limit = runtime_state()->query_mem_tracker_ptr()->limit() * config::scan_use_query_mem_ratio;
         pipeline::ChunkBufferLimiterPtr buffer_limiter = std::make_unique<pipeline::DynamicChunkBufferLimiter>(
                 max_buffer_capacity, default_buffer_capacity, mem_limit, runtime_state()->chunk_size());
         scan_op = std::make_shared<pipeline::ConnectorScanOperatorFactory>(context->next_operator_id(), this, dop,
