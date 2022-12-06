@@ -21,6 +21,9 @@ Status OlapTableSinkOperator::prepare(RuntimeState* state) {
 }
 
 void OlapTableSinkOperator::close(RuntimeState* state) {
+    _unique_metrics->copy_all_info_strings_from(_sink->profile());
+    _unique_metrics->copy_all_counters_from(_sink->profile());
+
     Operator::close(state);
 }
 
