@@ -1833,24 +1833,21 @@ public class PlanFragmentBuilder {
 
             List<PlanFragment> nullablePlanFragments = new ArrayList<>();
             JoinOperator joinOperator = node.getJoinType();
+            Set<TupleId> nullableTupleIds = new HashSet<>();
+            nullableTupleIds.addAll(leftFragment.getPlanRoot().getNullableTupleIds());
+            nullableTupleIds.addAll(rightFragment.getPlanRoot().getNullableTupleIds());
             if (joinOperator.isLeftOuterJoin()) {
-                nullablePlanFragments.add(rightFragment);
+                nullableTupleIds.addAll(rightFragment.getPlanRoot().getTupleIds());
             } else if (joinOperator.isRightOuterJoin()) {
-                nullablePlanFragments.add(leftFragment);
+                nullableTupleIds.addAll(leftFragment.getPlanRoot().getTupleIds());
             } else if (joinOperator.isFullOuterJoin()) {
-                nullablePlanFragments.add(leftFragment);
-                nullablePlanFragments.add(rightFragment);
+                nullableTupleIds.addAll(leftFragment.getPlanRoot().getTupleIds());
+                nullableTupleIds.addAll(rightFragment.getPlanRoot().getTupleIds());
             }
-            for (PlanFragment planFragment : nullablePlanFragments) {
-                for (TupleId tupleId : planFragment.getPlanRoot().getTupleIds()) {
-                    context.getDescTbl().getTupleDesc(tupleId).getSlots().forEach(slot -> slot.setIsNullable(true));
-                }
-            }
-            for (TupleId tupleId : leftFragment.getPlanRoot().getNullableTupleIds()) {
-                context.getDescTbl().getTupleDesc(tupleId).getSlots().forEach(slot -> slot.setIsNullable(true));
-            }
-            for (TupleId tupleId : rightFragment.getPlanRoot().getNullableTupleIds()) {
-                context.getDescTbl().getTupleDesc(tupleId).getSlots().forEach(slot -> slot.setIsNullable(true));
+            for (TupleId tupleId : nullableTupleIds) {
+                TupleDescriptor tupleDescriptor = context.getDescTbl().getTupleDesc(tupleId);
+                tupleDescriptor.getSlots().forEach(slot -> slot.setIsNullable(true));
+                tupleDescriptor.computeMemLayout();
             }
 
             NestLoopJoinNode joinNode = new NestLoopJoinNode(context.getNextNodeId(),
