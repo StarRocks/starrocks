@@ -60,11 +60,6 @@ public:
         size_t second_size = *reinterpret_cast<size_t*>(slice.data + sizeof(double));
         auto data_ptr = slice.data + sizeof(double) + sizeof(size_t);
 
-<<<<<<< HEAD
-        vector<InputCppType> res;
-        vector<InputCppType>& vec = this->data(state).items;
-        res.resize(vec.size() + items_size);
-=======
         auto second_start = reinterpret_cast<InputCppType*>(data_ptr);
         auto second_end = reinterpret_cast<InputCppType*>(data_ptr + second_size * sizeof(InputCppType));
 
@@ -76,7 +71,6 @@ public:
         std::copy(second_start, second_end, first_end);
         // TODO: optimize it with SIMD bitonic merge
         std::inplace_merge(output.begin(), first_end, output.end());
->>>>>>> 4e3418cab ([Enhancement] optimize performance of percentile_cont function (#14609))
 
         this->data(state).rate = rate;
     }
