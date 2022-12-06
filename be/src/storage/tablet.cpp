@@ -43,6 +43,7 @@
 #include "storage/olap_define.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_meta_manager.h"
+#include "storage/size_tiered_compaction_policy.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_meta_manager.h"
@@ -82,7 +83,11 @@ Status Tablet::_init_once_action() {
     SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
 
     _compaction_context = std::make_unique<CompactionContext>();
-    _compaction_context->policy = std::make_unique<vectorized::DefaultCumulativeBaseCompactionPolicy>(this);
+    if (config::enable_size_tiered_compaction_strategy) {
+        _compaction_context->policy = std::make_unique<vectorized::SizeTieredCompactionPolicy>(this);
+    } else {
+        _compaction_context->policy = std::make_unique<vectorized::DefaultCumulativeBaseCompactionPolicy>(this);
+    }
 
     VLOG(3) << "begin to load tablet. tablet=" << full_name() << ", version_size=" << _tablet_meta->version_count();
     if (keys_type() == PRIMARY_KEYS) {
@@ -1192,7 +1197,7 @@ CompactionType Tablet::compaction_type() {
     return _compaction_context ? _compaction_context->type : INVALID_COMPACTION;
 }
 
-int64_t Tablet::compaction_score() {
+double Tablet::compaction_score() {
     std::lock_guard lock(_compaction_task_lock);
     return _compaction_context ? _compaction_context->score : 0;
 }

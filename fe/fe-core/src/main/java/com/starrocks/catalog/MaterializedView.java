@@ -853,6 +853,9 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
     }
 
     public Pair<Table, Column> getPartitionTableAndColumn() {
+        if (!(partitionInfo instanceof ExpressionRangePartitionInfo)) {
+            return null;
+        }
         Expr partitionExpr = getPartitionRefTableExprs().get(0);
         List<SlotRef> slotRefs = Lists.newArrayList();
         partitionExpr.collect(SlotRef.class, slotRefs);

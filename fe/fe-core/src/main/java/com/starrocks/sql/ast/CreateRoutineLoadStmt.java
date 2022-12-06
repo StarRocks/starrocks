@@ -340,6 +340,14 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         return loadPropertyList;
     }
 
+    public final Map<String, String> getJobProperties() {
+        return jobProperties;
+    }
+
+    public final Map<String, String> getDataSourceProperties() {
+        return dataSourceProperties;
+    }
+
     public static RoutineLoadDesc getLoadDesc(OriginStatement origStmt, Map<String, String> sessionVariables) {
 
         // parse the origin stmt to get routine load desc
@@ -795,5 +803,10 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) throws RuntimeException {
         return visitor.visitCreateRoutineLoadStatement(this, context);
+    }
+
+    @Override
+    public boolean needAuditEncryption() {
+        return true;
     }
 }

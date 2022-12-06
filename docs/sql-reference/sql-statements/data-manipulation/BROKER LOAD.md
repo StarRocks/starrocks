@@ -2,9 +2,7 @@
 
 ## Description
 
-StarRocks provides the MySQL-based loading method Broker Load. After you submit a load job, StarRocks asynchronously runs the job. You need to use [SHOW LOAD](../../../sql-reference/sql-statements/data-manipulation/SHOW%20LOAD.md) or `curl` to check the job result. For more information about the prerequisites, principles, and supported data file formats of Broker Load, see [Load data from HDFS or cloud storage](../../../loading/BrokerLoad.md).
-
-Before you use Broker Load, make sure that brokers are deployed in your StarRocks cluster. You can use [SHOW BROKER](../../../sql-reference/sql-statements/Administration/SHOW%20BROKER.md) to check for brokers that are deployed in your StarRocks cluster. If no brokers are deployed, you must deploy brokers by following the instructions provided in [Deploy a broker](../../../quick_start/Deploy.md). In this topic, assume that a group of brokers collectively named 'mybroker' are deployed in your StarRocks cluster.
+StarRocks provides the MySQL-based loading method Broker Load. After you submit a load job, StarRocks asynchronously runs the job. You need to use [SHOW LOAD](../../../sql-reference/sql-statements/data-manipulation/SHOW%20LOAD.md) or `curl` to check the job result. For more information about the background information, prerequisites, principles, and supported data file formats of Broker Load, see [Load data from HDFS or cloud storage](../../../loading/BrokerLoad.md).
 
 ## Syntax
 
@@ -13,10 +11,12 @@ LOAD LABEL [<database_name>.]<label_name>
 (
     data_desc[, data_desc ...]
 )
-WITH BROKER "<broker_name>"
+WITH BROKER
 [broker_properties]
 [opt_properties];
 ```
+
+Note that in StarRocks some literals are used as reserved keywords by the SQL language. Do not directly use these keywords in SQL statements. If you want to use such a keyword in an SQL statement, enclose it in a pair of backticks (`). See [Parameter configuration](../sql-reference/sql-statements/keywords.md).
 
 ## Parameters
 
@@ -133,7 +133,7 @@ DATA INFILE ("<file_path>"[, "<file_path>" ...])
 
 ### `WITH BROKER`
 
-The name of the broker group.
+In StarRocks v2.4 and earlier, input `WITH BROKER "<broker_name>"` to specify the broker group you want to use. From StarRocks v2.5 onwards, you no longer need to specify a broker group, but you still need to retain the `WITH BROKER` keyword.
 
 ### `broker_properties`
 
@@ -174,7 +174,7 @@ Open-source HDFS supports two authentication methods: simple authentication and 
     | Parameter               | Description                                                  |
     | ----------------------- | ------------------------------------------------------------ |
     | kerberos_principal      | The Kerberos principal to be authenticated. Each principal consists of the following three parts to ensure that it is unique across the HDFS cluster:<ul><li>`username` or `servicename`: The name of the principal.</li><li>`instance`: the name of the server that hosts the node to be authenticated in the HDFS cluster. The server name helps ensure that the principal is unique, for example, when the HDFS cluster consists of multiple DataNodes that each are independently authenticated.</li><li>`realm`: The name of the realm. The realm name must be capitalized. Example: `nn/[zelda1@ZELDA.COM](mailto:zelda1@ZELDA.COM)`.</li></ul> |
-    | kerberos_keytab         | The save path of the Kerberos keytab file, which must be stored on the server in which brokers are deployed. |
+    | kerberos_keytab         | The save path of the Kerberos keytab file. |
     | kerberos_keytab_content | The Base64-encoded content of the the Kerberos keytab file. You can choose to specify either `kerberos_keytab` or `kerberos_keytab_content`. |
 
     If you use Kerberos authentication, you must open the broker startup script file **start_broker.sh** and modify line 42 of the file to enable the Broker process to read the **krb5.conf** file. Example:
@@ -323,6 +323,14 @@ The following parameters are supported:
 
   Specifies the priority of the load job. Valid values: `LOWEST`, `LOW`, `NORMAL`, `HIGH`, and `HIGHEST`. Default value: `NORMAL`. Broker Load provides the [FE parameter](../../../administration/Configuration.md#fe-configuration-items) `async_load_task_pool_size`, which specifies the task pool size. The task pool size determines the maximum number of tasks that can be concurrently run for Broker Load within a specific time period. If the number of tasks to run for jobs that are submitted within the specified time period exceeds the maximum number, the jobs in the task pool will be waiting to be scheduled based on their priorities.
 
+- `merge_condition`
+
+  Specifies the name of the column you want to use as the condition to determine whether updates can take effect. The update from a source record to a destination record takes effect only when the source data record has a larger value than the destination data record in the specified column. For more information, see [Change data through loading](../../../loading/Load_to_Primary_Key_tables.md).
+
+  > **NOTE**
+  >
+  > The column that you specify cannot be a primary key column. Additionally, only tables that use the Primary Key model support conditional updates.
+
 ## Examples
 
 This section uses HDFS as an example to describe various load configurations.
@@ -345,7 +353,7 @@ LOAD LABEL test_db.label1
     DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/data/input/example1.csv")
     INTO TABLE table1
 )
-WITH BROKER "mybroker"
+WITH BROKER
 (
     "username" = "<hdfs_username>",
     "password" = "<hdfs_password>"
@@ -371,7 +379,7 @@ LOAD LABEL test_db.label2
     INTO TABLE table2
 
 )
-WITH BROKER "mybroker"
+WITH BROKER
 (
     "username" = "<hdfs_username>",
     "password" = "<hdfs_password>"
@@ -397,7 +405,7 @@ LOAD LABEL test_db.label3
     INTO TABLE table3
     COLUMNS TERMINATED BY "\\x01"
 )
-WITH BROKER "mybroker"
+WITH BROKER
 (
     "username" = "<hdfs_username>",
     "password" = "<hdfs_password>"
@@ -418,7 +426,7 @@ LOAD LABEL test_db.label4
     DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/data/input/example4.csv")
     INTO TABLE table4
 )
-WITH BROKER "mybroker"
+WITH BROKER
 (
     "username" = "<hdfs_username>",
     "password" = "<hdfs_password>",
@@ -445,7 +453,7 @@ LOAD LABEL test_db.label5
     INTO TABLE table5
     COLUMNS TERMINATED BY "\t"
 )
-WITH BROKER "mybroker"
+WITH BROKER
 (
     "hadoop.security.authentication" = "kerberos",
     "kerberos_principal" = "starrocks@YOUR.COM",
@@ -471,7 +479,7 @@ LOAD LABEL test_db.label6
     INTO TABLE table6
     COLUMNS TERMINATED BY "\t"
 )
-WITH BROKER "mybroker"
+WITH BROKER
 (
     "hadoop.security.authentication" = "kerberos",
     "kerberos_principal" = "starrocks@YOUR.COM",
@@ -495,7 +503,7 @@ LOAD LABEL test_db.label7
     PARTITION (p1, p2)
     COLUMNS TERMINATED BY ","
 )
-WITH BROKER "mybroker"
+WITH BROKER
 (
     "username" = "<hdfs_username>",
     "password" = "<hdfs_password>"
@@ -518,7 +526,7 @@ LOAD LABEL test_db.label8
     COLUMNS TERMINATED BY ","
     (col2, col1, col3)
 )
-WITH BROKER "mybroker"
+WITH BROKER
 (
     "username" = "<hdfs_username>",
     "password" = "<hdfs_password>"
@@ -545,7 +553,7 @@ LOAD LABEL test_db.label9
     (col1, col2, col3)
     where col1 > 20180601
 )
-WITH BROKER "mybroker"
+WITH BROKER
 (
     "username" = "<hdfs_username>",
     "password" = "<hdfs_password>"
@@ -578,7 +586,7 @@ LOAD LABEL test_db.label10
         col3 = empty_hll()
      )
  )
- WITH BROKER "mybroker"
+ WITH BROKER
  (
      "username" = "<hdfs_username>",
      "password" = "<hdfs_password>"
@@ -621,7 +629,7 @@ LOAD LABEL test_db.label11
     COLUMNS FROM PATH AS (city, utc_date)
     SET (uniq_id = md5sum(k1, city))
 )
-WITH BROKER "mybroker"
+WITH BROKER
 (
     "username" = "<hdfs_username>",
     "password" = "<hdfs_password>"
@@ -659,7 +667,7 @@ LOAD LABEL test_db.label12
     COLUMNS FROM PATH AS (data_time)
     SET (data_time = str_to_date(data_time, '%Y-%m-%d %H%%3A%i%%3A%s'))
 )
-WITH BROKER "mybroker"
+WITH BROKER
 (
     "username" = "<hdfs_username>",
     "password" = "<hdfs_password>"
@@ -688,7 +696,7 @@ LOAD LABEL test_db.label13
     FORMAT AS "parquet"
     (col1, col2, col3)
 )
-WITH BROKER "mybroker"
+WITH BROKER
 (
     "username" = "<hdfs_username>",
     "password" = "<hdfs_password>"
@@ -717,7 +725,7 @@ LOAD LABEL test_db.label14
     FORMAT AS "orc"
     (col1, col2, col3)
 )
-WITH BROKER "mybroker"
+WITH BROKER
 (
     "username" = "<hdfs_username>",
     "password" = "<hdfs_password>"

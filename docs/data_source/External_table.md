@@ -120,7 +120,6 @@ CREATE EXTERNAL TABLE elastic_search_external_table
     k5 DATETIME
 )
 ENGINE=ELASTICSEARCH
-PARTITION BY RANGE(k1)
 ()
 PROPERTIES (
     "hosts" = "http://192.168.0.1:8200,http://192.168.0.2:8200",
@@ -134,20 +133,43 @@ PROPERTIES (
 
 Parameters
 
-* **host**: The connection address of the Elasticsearch cluster. You can specify one or more addresses. StarRocks can parse the Elasticsearch version and index shard allocation from this address.
+* **host**: The connection address of the Elasticsearch cluster. You can specify one or more addresses. StarRocks can parse the Elasticsearch version and index shard allocation from this address. StarRocks communicates with your Elasticsearch cluster based on the address returned by the `GET /_nodes/http` API. Therefore, the value of the `host` parameter must be the same as the address returned by the `GET /_nodes/http` API. Otherwise, BE may not be able to communicate with your Elasticsearch cluster.
 * **user**: The username of the Elasticsearch cluster with **basic authentication** enabled. Make sure you have the access to `/*cluster/state/*nodes/http` and the index.
 * **password**: The password of the Elasticsearch cluster.
 * **index**: The name of the Elasticsearch index that corresponds to the table in StarRocks. It can be an alias.
-* **type**: the type of the index. Default value: doc.
+* **type**: the type of the index. Default value: `_doc`. If you want to query data in Elasticsearch 8 and later versions, you do not need to configure this parameter because the mapping types have been removed in Elasticsearch 8 and later versions.
 * **transport**: This parameter is reserved. Default value: http.
 * **es.nodes.wan.only**: indicates whether StarRocks only uses the addresses specified by `hosts` to access the Elasticsearch cluster and fetch data.
 
   * true: StarRocks only uses the addresses specified by `hosts` to access the Elasticsearch cluster and fetch data and does not sniff data nodes which shards of the Elasticsearch index reside in. If StarRocks cannot access the addresses of the data nodes inside the Elasticsearch cluster, you need to set this parameter to `true`.
   * false: default value. StarRocks uses the addresses specified by `host` to sniff data nodes on which the shards of the Elasticsearch cluster indexes are located. After StarRocks generates a query execution plan, the relevant BEs directly access the data nodes inside the Elasticsearch cluster to fetch data from the shards of indexes. If StarRocks can access the addresses of the data nodes inside the Elasticsearch cluster, we recommend that you retain the default value `false`.
-**es.net.ssl**: Whether the HTTPS protocol can be used to access your Elasticsearch cluster. Only StarRocks 2.4 and later versions suppprt configuring this parameter.
+**es.net.ssl**: Whether the HTTPS protocol can be used to access your Elasticsearch cluster. Only StarRocks 2.4 and later versions support configuring this parameter.
 
-  * `true`: The HTTPS protocol can be used to access your Elasticsearch cluster (Additionaly, the HTTP protocol is supported).
+  * `true`: The HTTPS protocol can be used to access your Elasticsearch cluster (Additionally, the HTTP protocol is supported).
   * `false`: The HTTPS protocol cannot be used to access your Elasticsearch cluster. Only the HTTP protocol is supported.
+
+When you create an external table, you need to specify the data types of columns in the external table based on the data types of columns in the Elasticsearch table. The following table shows the mapping of column data types.
+
+| **Elasticsearch** | **StarRocks**               |
+| ----------------- | --------------------------- |
+| BOOLEAN           | BOOLEAN                     |
+| BYTE              | TINYINT/SMALLINT/INT/BIGINT |
+| SHORT             | SMALLINT/INT/BIGINT         |
+| INTEGER           | INT/BIGINT                  |
+| LONG              | BIGINT                      |
+| FLOAT             | FLOAT                       |
+| DOUBLE            | DOUBLE                      |
+| KEYWORD           | CHAR/VARCHAR                |
+| TEXT              | CHAR/VARCHAR                |
+| DATE              | DATE/DATETIME               |
+| NESTED            | CHAR/VARCHAR                |
+| OBJECT            | CHAR/VARCHAR                |
+| ARRAY             | ARRAY                       |
+
+> **Note**
+>
+> * StarRocks reads the data of the NESTED type by using JSON-related functions.
+> * Elasticsearch automatically flattens multi-dimensional arrays into one-dimensional arrays. StarRocks does the same.
 
 ### Predicate pushdown
 
@@ -164,7 +186,7 @@ StarRocks supports predicate pushdown. Filters can be pushed down to Elasticsear
 |  not in   |  bool.must_not + terms   |
 |  esquery   |  ES Query DSL  |
 
-### Example
+### Examples
 
 The **esquery function** is used to push down queries **that cannot be expressed in SQL** (such as match and geoshape) to Elasticsearch for filtering. The first parameter in the esquery function is used to associate an index. The second parameter is a JSON expression of basic Query DSL, which is enclosed in brackets {}. **The JSON expression must have but only one root key**, such as match, geo_shape, or bool.
 
@@ -229,7 +251,7 @@ select * from es_table where esquery(k4, ' {
   }');
 ~~~
 
-### Note
+### Usage notes
 
 * Elasticsearch earlier than 5.x scans data in a different way than that later than 5.x. Currently, **only versions later than 5.x** are supported.
 * Elasticsearch clusters with HTTP basic authentication enabled are supported.
@@ -789,11 +811,9 @@ Make sure that your StarRocks cluster is granted access to the Hive metastore, H
 ### Precautions
 
 * Hudi external tables for Hudi are read-only and can be used only for queries.
-
-* StarRocks supports Hudi Copy on Write (CoW) tables but not Hudi Merge on Read (MoR) tables. For information about the differences between CoW and MoR, see [Table & Query Types](https://hudi.apache.org/docs/table_types/).
-
+* StarRocks supports querying Copy on Write and Merge On Read tables. For the differences between these two types of tables, see [Table & Query Types](https://hudi.apache.org/docs/table_types/).
+* StarRocks supports the following two query types of Hudi: Snapshot Queries and Read Optimized Queries (Hudi only supports performing Read Optimized Queries on Merge On Read tables). Incremental Queries are not supported. For more information about the query types of Hudi, see [Table & Query Types](https://hudi.apache.org/docs/next/table_types/#query-types).
 * StarRocks supports the following compression formats for Hudi files: gzip, zstd, LZ4, and Snappy. The default compression format for Hudi files is gzip.
-
 * StarRocks cannot synchronize schema changes from Hudi managed tables. For more information, see [Schema Evolution](https://hudi.apache.org/docs/schema_evolution/). If the schema of a Hudi managed table is changed, you must delete the associated Hudi external table from your StarRocks cluster and then re-create that external table.
 
 ### Procedure
@@ -821,7 +841,7 @@ The following table describes the parameters.
 | type                | The type of the Hudi resource. Set the vaue to hudi.         |
 | hive.metastore.uris | The Thrift URI of the Hive metastore to which the Hudi resource connects. After connecting the Hudi resource to a Hive metastore, you can create and manage Hudi tables by using Hive. The Thrift URI is in the <IP address of the Hive metastore\>:<Port number of the Hive metastore\> format. The default port number is 9083. |
 
-From v2.3 onwards, StarRocks allows changing the `hive.metastore.uris` value of a Hudi resource. For more information, see [ALTER RESOURCE](<https://docs.starrocks.com/en-us/2.3/sql-reference/sql-statements/data-definition/ALTER> RESOURCE).
+From v2.3 onwards, StarRocks allows changing the `hive.metastore.uris` value of a Hudi resource. For more information, see [ALTER RESOURCE](../sql-reference/sql-statements/data-definition/ALTER%20RESOURCE.md).
 
 ##### View Hudi resources
 
@@ -889,20 +909,23 @@ The following table describes the parameters.
 >
 > * You can select some or all columns from the associated Hudi managed table and create only the selected columns in the Hudi external table. The following table lists the mapping between the data types supported by Hudi and the data types supported by StarRocks.
 
-| Data types supported by Hudi | Data types supported by StarRocks |
-| ---------------------------- | --------------------------------- |
-| BOOLEAN                      | BOOLEAN                           |
-| INT                          | TINYINT/SMALLINT/INT              |
-| DATE                         | DATE                              |
-| TimeMillis/TimeMicros        | TIME                              |
-| LONG                         | BIGINT                            |
-| FLOAT                        | FLOAT                             |
-| DOUBLE                       | DOUBLE                            |
-| STRING                       | CHAR/VARCHAR                      |
-| ARRAY                        | ARRAY                             |
-| DECIMAL                      | DECIMAL                           |
+| Data types supported by Hudi   | Data types supported by StarRocks |
+| ----------------------------   | --------------------------------- |
+| BOOLEAN                        | BOOLEAN                           |
+| INT                            | TINYINT/SMALLINT/INT              |
+| DATE                           | DATE                              |
+| TimeMillis/TimeMicros          | TIME                              |
+| TimestampMillis/TimestampMicros| DATETIME                          |
+| LONG                           | BIGINT                            |
+| FLOAT                          | FLOAT                             |
+| DOUBLE                         | DOUBLE                            |
+| STRING                         | CHAR/VARCHAR                      |
+| ARRAY                          | ARRAY                             |
+| DECIMAL                        | DECIMAL                           |
 
-> If some columns of a Hudi managed table are any of the FIXED, ENUM, UNION, MAP, and BYTES data types, you cannot access these columns by creating a Hudi external table associated with that Hudi managed table.
+> **Note**
+>
+> StarRocks does not support querying data of the STRUCT or MAP type, nor does it support querying data of the ARRAY type in Merge On Read tables.
 
 #### Step 4: Query data from a Hudi external table
 

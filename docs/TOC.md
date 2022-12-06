@@ -17,6 +17,7 @@
   + Data distribution
     + [Data distribution](./table_design/Data_distribution.md)
     + [Dynamic partitioning](./table_design/dynamic_partitioning.md)
+  + [Data compression](./table_design/data_compression.md)
   + [Sort keys and prefix indexes](./table_design/Sort_key.md)
 + Data Loading
   + [Overview of data loading](./loading/Loading_intro.md)
@@ -31,9 +32,9 @@
   + [Change data through loading](./loading/Load_to_Primary_Key_tables.md)
   + [Transform data at loading](./loading/Etl_in_loading.md)
 + Data Unloading
-  + [Overview of data unloading](./unloading/Export.md)
-  + [Use Spark connector to read data from StarRocks](./unloading/Spark_connector.md)
-  + [Use Flink connector to read data from StarRocks](./unloading/Flink_connector.md)
+  + [Export data using EXPORT](./unloading/Export.md)
+  + [Read data from StarRocks using Spark connector](./unloading/Spark_connector.md)
+  + [Read data from StarRocks using Flink connector](./unloading/Flink_connector.md)
 + Query Data Sources
   + Catalog
     + [Overview](./data_source/catalog/catalog_overview.md)
@@ -60,7 +61,6 @@
     + [Build in Docker](./administration/Build_in_docker.md)
     + [Deploy and manage CN on Kubernetes with StarRocks Operator](./administration/k8s_operator_cn.md)
     + [Deploy CN](./administration/deploy_cn.md)
-    + [Deploy Broker](./administration/deploy_broker.md)
     + [Deploy FE cluster with high availability](./administration/Deployment.md)
   + Management
     + [Scale in and out](./administration/Scale_up_down.md)
@@ -70,8 +70,10 @@
     + [Manage a cluster](./administration/Cluster_administration.md)
     + [Enable FQDN access](./administration/enable_fqdn.md)
     + [Configure a time zone](./administration/timezone.md)
+    + [Information Schema](./administration/information_schema.md)
     + Resource Management
       + [Resource group](./administration/resource_group.md)
+      + [Query queue](./administration/query_queues.md)
       + [Query management](./administration/Query_management.md)
       + [Memory management](./administration/Memory_management.md)
       + [Load balance](./administration/Load_balance.md)
@@ -101,6 +103,7 @@
       + [REVOKE](./sql-reference/sql-statements/account-management/REVOKE.md)
       + [SET PASSWORD](./sql-reference/sql-statements/account-management/SET%20PASSWORD.md)
       + [SET PROPERTY](./sql-reference/sql-statements/account-management/SET%20PROPERTY.md)
+      + [SHOW AUTHENTICATION](./sql-reference/sql-statements/data-definition/SHOW%20AUTHENTICATION.md)
       + [SHOW GRANTS](./sql-reference/sql-statements/account-management/SHOW%20GRANTS.md)
       + [SHOW ROLES](./sql-reference/sql-statements/account-management/SHOW%20ROLES.md)
     + Cluster Management
@@ -174,7 +177,6 @@
       + [RESTORE](./sql-reference/sql-statements/data-definition/RESTORE.md)
       + [SHOW ANALYZE JOB](./sql-reference/sql-statements/data-definition/SHOW%20ANALYZE%20JOB.md)
       + [SHOW ANALYZE STATUS](./sql-reference/sql-statements/data-definition/SHOW%20ANALYZE%20STATUS.md)
-      + [SHOW AUTHENTICATION](./sql-reference/sql-statements/data-definition/SHOW%20AUTHENTICATION.md)
       + [SHOW META](./sql-reference/sql-statements/data-definition/SHOW%20META.md)
       + [SHOW RESOURCES](./sql-reference/sql-statements/data-definition/SHOW%20RESOURCES.md)
       + [SHOW FUNCTION](./sql-reference/sql-statements/data-definition/show-functions.md)

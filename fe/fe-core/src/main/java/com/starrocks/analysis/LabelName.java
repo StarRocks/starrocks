@@ -83,6 +83,12 @@ public class LabelName implements Writable {
         return new HashCodeBuilder().append(dbName).append(labelName).toHashCode();
     }
 
+    public String toString() {
+        StringBuilder stringBuilder = new StringBuilder();
+        stringBuilder.append("`").append(dbName).append("`.`").append(labelName).append("`");
+        return stringBuilder.toString();
+    }
+
     @Override
     public void write(DataOutput out) throws IOException {
         // compatible with old version

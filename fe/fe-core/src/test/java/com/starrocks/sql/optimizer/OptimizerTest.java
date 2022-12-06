@@ -4,7 +4,6 @@ package com.starrocks.sql.optimizer;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
@@ -21,9 +20,10 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
-import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleSetType;
@@ -266,8 +266,10 @@ public class OptimizerTest {
         Assert.assertTrue(scalarOperator3 instanceof CompoundPredicateOperator);
         Assert.assertTrue(((CompoundPredicateOperator) scalarOperator3).isAnd());
         Assert.assertTrue(scalarOperator3.getChild(0) instanceof BinaryPredicateOperator);
-        Assert.assertTrue(scalarOperator3.getChild(0).getChild(0) instanceof CallOperator);
-        CallOperator callOperator = (CallOperator) scalarOperator3.getChild(0).getChild(0);
-        Assert.assertEquals(FunctionSet.DATE_TRUNC, callOperator.getFnName());
+        Assert.assertTrue(scalarOperator3.getChild(0).getChild(0) instanceof ColumnRefOperator);
+        ColumnRefOperator columnRef = (ColumnRefOperator) scalarOperator3.getChild(0).getChild(0);
+        Assert.assertEquals("k1", columnRef.getName());
+        LogicalOlapScanOperator scanOperator = (LogicalOlapScanOperator) materializationContext3.getScanMvOperator();
+        Assert.assertEquals(1, scanOperator.getSelectedPartitionId().size());
     }
 }
