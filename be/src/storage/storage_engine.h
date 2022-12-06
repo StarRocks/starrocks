@@ -183,6 +183,8 @@ public:
 
     MemTracker* tablet_meta_mem_tracker() { return _options.tablet_meta_mem_tracker; }
 
+    void do_manual_compact(bool force_compact);
+
 private:
     // Instance should be inited from `static open()`
     // MUST NOT be called in other circumstances.
@@ -202,8 +204,6 @@ private:
     void _clean_unused_txns();
 
     void _clean_unused_rowset_metas();
-
-    void _do_manual_compact();
 
     Status _do_sweep(const std::string& scan_root, const time_t& local_tm_now, const int32_t expire);
 

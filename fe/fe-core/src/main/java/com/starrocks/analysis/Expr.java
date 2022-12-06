@@ -30,6 +30,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
@@ -925,6 +926,10 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         msg.output_scale = getOutputScale();
         msg.setIs_monotonic(isMonotonic());
         toThrift(msg);
+        // Echoes the above hack process
+        if (PrimitiveType.NULL_TYPE.toThrift().equals(msg.child_type)) {
+            msg.child_type = PrimitiveType.BOOLEAN.toThrift();
+        }
         container.addToNodes(msg);
         for (Expr child : children) {
             child.treeToThriftHelper(container);
