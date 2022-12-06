@@ -159,7 +159,9 @@ public class OlapTableSink extends DataSink {
 
     public void complete(String mergeCondition) throws UserException {
         TOlapTableSink tSink = tDataSink.getOlap_table_sink();
-        tSink.setMerge_condition(mergeCondition);
+        if (mergeCondition != null && !mergeCondition.isEmpty()) {
+            tSink.setMerge_condition(mergeCondition);
+        }
         complete();
     }
 
