@@ -162,7 +162,8 @@ public class InsertPlanner {
                 // because tablet writing needs to know the number of senders in advance
                 // and guaranteed order of data writing
                 // It can be parallel only in some scenes, for easy use 1 dop now.
-            execPlan.getFragments().get(0).setPipelineDop(1);
+                execPlan.getFragments().get(0).setPipelineDop(1);
+                execPlan.getFragments().get(0).setParallelExecNum(session.getSessionVariable().getDegreeOfParallelism());
             } else if (insertStmt.getTargetTable() instanceof MysqlTable) {
                 dataSink = new MysqlTableSink((MysqlTable) insertStmt.getTargetTable());
             } else {

@@ -88,6 +88,7 @@ public class UpdatePlanner {
             // and guaranteed order of data writing
             // It can be parallel only in some scenes, for easy use 1 dop now.
             execPlan.getFragments().get(0).setPipelineDop(1);
+            execPlan.getFragments().get(0).setParallelExecNum(session.getSessionVariable().getDegreeOfParallelism());
             execPlan.getFragments().get(0).setLoadGlobalDicts(globalDicts);
             return execPlan;
         } finally {

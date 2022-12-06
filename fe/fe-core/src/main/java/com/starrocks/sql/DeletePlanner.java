@@ -92,6 +92,7 @@ public class DeletePlanner {
             // and guaranteed order of data writing
             // It can be parallel only in some scenes, for easy use 1 dop now.
             execPlan.getFragments().get(0).setPipelineDop(1);
+            execPlan.getFragments().get(0).setParallelExecNum(session.getSessionVariable().getDegreeOfParallelism());
             return execPlan;
         } finally {
             if (forceDisablePipeline) {
