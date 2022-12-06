@@ -34,6 +34,8 @@ import com.starrocks.thrift.TExceptNode;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TIntersectNode;
+import com.starrocks.thrift.TNormalPlanNode;
+import com.starrocks.thrift.TNormalSetOperationNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TUnionNode;
@@ -320,5 +322,29 @@ public abstract class SetOperationNode extends PlanNode {
             return true;
         }
         return false;
+    }
+
+    @Override
+    protected void toNormalForm(TNormalPlanNode planNode, FragmentNormalizer normalizer) {
+        TNormalSetOperationNode setOperationNode = new TNormalSetOperationNode();
+        setOperationNode.setTuple_id(normalizer.remapTupleId(tupleId_).asInt());
+        setOperationNode.setResult_expr_lists(
+                materializedConstExprLists_.stream().map(normalizer::normalizeOrderedExprs)
+                        .collect(Collectors.toList()));
+        setOperationNode.setConst_expr_lists(
+                constExprLists_.stream().map(normalizer::normalizeOrderedExprs).collect(Collectors.toList()));
+        setOperationNode.setFirst_materialized_child_idx(firstMaterializedChildIdx_);
+        if (this instanceof UnionNode) {
+            planNode.setNode_type(TPlanNodeType.UNION_NODE);
+        } else if (this instanceof ExceptNode) {
+            planNode.setNode_type(TPlanNodeType.EXCEPT_NODE);
+        } else if (this instanceof IntersectNode) {
+            planNode.setNode_type(TPlanNodeType.INTERSECT_NODE);
+        } else {
+            Preconditions.checkState(false);
+        }
+        planNode.setSet_operation_node(setOperationNode);
+        normalizeConjuncts(normalizer, planNode, conjuncts);
+        super.toNormalForm(planNode, normalizer);
     }
 }

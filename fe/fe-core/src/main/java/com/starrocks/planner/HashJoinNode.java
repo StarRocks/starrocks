@@ -28,10 +28,14 @@ import com.starrocks.analysis.TableRef;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.thrift.TEqJoinCondition;
 import com.starrocks.thrift.THashJoinNode;
+import com.starrocks.thrift.TNormalHashJoinNode;
+import com.starrocks.thrift.TNormalPlanNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * Hash join between left child and right child.
@@ -109,4 +113,18 @@ public class HashJoinNode extends JoinNode {
         }
     }
 
+    @Override
+    protected void toNormalForm(TNormalPlanNode planNode, FragmentNormalizer normalizer) {
+        TNormalHashJoinNode hashJoinNode = new TNormalHashJoinNode();
+        hashJoinNode.setJoin_op(getJoinOp().toThrift());
+        hashJoinNode.setDistribution_mode(getDistrMode().toThrift());
+        hashJoinNode.setEq_join_conjuncts(normalizer.normalizeExprs(new ArrayList<>(eqJoinConjuncts)));
+        hashJoinNode.setOther_join_conjuncts(normalizer.normalizeExprs(otherJoinConjuncts));
+        hashJoinNode.setIs_rewritten_from_not_in(innerRef != null && innerRef.isJoinRewrittenFromNotIn());
+        hashJoinNode.setPartition_exprs(normalizer.normalizeOrderedExprs(partitionExprs));
+        hashJoinNode.setOutput_columns(normalizer.remapIntegerSlotIds(outputSlots));
+        planNode.setHash_join_node(hashJoinNode);
+        planNode.setNode_type(TPlanNodeType.HASH_JOIN_NODE);
+        normalizeConjuncts(normalizer, planNode, conjuncts);
+    }
 }

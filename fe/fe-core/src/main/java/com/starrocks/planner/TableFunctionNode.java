@@ -6,6 +6,8 @@ import com.starrocks.catalog.TableFunction;
 import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
+import com.starrocks.thrift.TNormalPlanNode;
+import com.starrocks.thrift.TNormalTableFunctionNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TTableFunctionNode;
@@ -58,5 +60,17 @@ public class TableFunctionNode extends PlanNode {
     @Override
     public boolean canUsePipeLine() {
         return getChildren().stream().allMatch(PlanNode::canUsePipeLine);
+    }
+
+    @Override
+    protected void toNormalForm(TNormalPlanNode planNode, FragmentNormalizer normalizer) {
+        TNormalTableFunctionNode tableFunctionNode = new TNormalTableFunctionNode();
+        tableFunctionNode.setTable_function(tableFunction.toThrift());
+        tableFunctionNode.setParam_columns(normalizer.remapIntegerSlotIds(paramSlots));
+        tableFunctionNode.setOuter_columns(normalizer.remapIntegerSlotIds(outerSlots));
+        tableFunctionNode.setFn_result_columns(normalizer.remapIntegerSlotIds(fnResultSlots));
+        planNode.setTable_function_node(tableFunctionNode);
+        planNode.setNode_type(TPlanNodeType.TABLE_FUNCTION_NODE);
+        normalizeConjuncts(normalizer, planNode, conjuncts);
     }
 }

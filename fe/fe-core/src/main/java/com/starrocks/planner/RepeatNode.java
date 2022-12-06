@@ -30,6 +30,8 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.common.UserException;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.TNormalPlanNode;
+import com.starrocks.thrift.TNormalRepeatNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TRepeatNode;
@@ -165,5 +167,21 @@ public class RepeatNode extends PlanNode {
         if (!description.getEqualForNull() && slotRefWithNullValue) {
             filter_null_value_columns.add(slotId.asInt());
         }
+    }
+    @Override
+    protected void toNormalForm(TNormalPlanNode planNode, FragmentNormalizer normalizer) {
+        TNormalRepeatNode repeatNode = new TNormalRepeatNode();
+        repeatNode.setOutput_tuple_id(normalizer.remapTupleId(outputTupleDesc.getId()).asInt());
+        List<List<Integer>> slotIdSetList = repeatSlotIdList.stream()
+                .map(s -> normalizer.remapIntegerSlotIds(s.stream().sorted().collect(Collectors.toList())))
+                .collect(Collectors.toList());
+        repeatNode.setSlot_id_set_list(slotIdSetList);
+        repeatNode.setRepeat_id_list(groupingList.get(0));
+        repeatNode.setGrouping_list(groupingList);
+        List<Integer> allSlotIds = allSlotId.stream().sorted().collect(Collectors.toList());
+        repeatNode.setAll_slot_ids(normalizer.remapIntegerSlotIds(allSlotIds));
+        planNode.setRepeat_node(repeatNode);
+        planNode.setNode_type(TPlanNodeType.REPEAT_NODE);
+        normalizeConjuncts(normalizer, planNode, conjuncts);
     }
 }

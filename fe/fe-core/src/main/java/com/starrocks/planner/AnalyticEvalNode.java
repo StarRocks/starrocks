@@ -36,6 +36,8 @@ import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.common.UserException;
 import com.starrocks.thrift.TAnalyticNode;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.TNormalAnalyticNode;
+import com.starrocks.thrift.TNormalPlanNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 
@@ -289,5 +291,36 @@ public class AnalyticEvalNode extends PlanNode {
     @Override
     public boolean canUsePipeLine() {
         return getChildren().stream().allMatch(PlanNode::canUsePipeLine);
+    }
+
+    @Override
+    protected void toNormalForm(TNormalPlanNode planNode, FragmentNormalizer normalizer) {
+        TNormalAnalyticNode analyticNode = new TNormalAnalyticNode();
+        analyticNode.setPartition_exprs(normalizer.normalizeOrderedExprs(substitutedPartitionExprs));
+        analyticNode.setOrder_by_exprs(
+                normalizer.normalizeOrderedExprs(OrderByElement.getOrderByExprs(orderByElements)));
+        analyticNode.setAnalytic_functions(normalizer.normalizeExprs(analyticFnCalls));
+        if (analyticWindow != null) {
+            analyticNode.setWindow(analyticWindow.toThrift());
+        }
+        if (intermediateTupleDesc != null) {
+            analyticNode.setIntermediate_tuple_id(normalizer.remapTupleId(intermediateTupleDesc.getId()).asInt());
+        }
+        if (outputTupleDesc != null) {
+            analyticNode.setOutput_tuple_id(normalizer.remapTupleId(outputTupleDesc.getId()).asInt());
+        }
+        if (bufferedTupleDesc != null) {
+            analyticNode.setBuffered_tuple_id(normalizer.remapTupleId(bufferedTupleDesc.getId()).asInt());
+        }
+        if (partitionByEq != null) {
+            analyticNode.setPartition_by_eq(normalizer.normalizeExpr(partitionByEq));
+        }
+        if (orderByEq != null) {
+            analyticNode.setOrder_by_eq(normalizer.normalizeExpr(orderByEq));
+        }
+        analyticNode.setHas_outer_join_child(hasNullableGenerateChild);
+        planNode.setAnalytic_node(analyticNode);
+        planNode.setNode_type(TPlanNodeType.ANALYTIC_EVAL_NODE);
+        normalizeConjuncts(normalizer, planNode, conjuncts);
     }
 }
