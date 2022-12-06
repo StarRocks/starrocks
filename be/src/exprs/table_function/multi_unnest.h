@@ -63,6 +63,7 @@ public:
                 }
             }
             compacted_offset_column->append(offset + max_length_array_size);
+            offset += max_length_array_size;
 
             for (int col_idx = 0; col_idx < state->get_columns().size(); ++col_idx) {
                 Column* column = state->get_columns()[col_idx].get();
