@@ -78,6 +78,10 @@ public class HashDistributionInfo extends DistributionInfo {
         return colList;
     }
 
+    public void setDistributionColumns(List<Column> columns) {
+        this.distributionColumns = columns;
+    }
+
     @Override
     public void setBucketNum(int bucketNum) {
         this.bucketNum = bucketNum;

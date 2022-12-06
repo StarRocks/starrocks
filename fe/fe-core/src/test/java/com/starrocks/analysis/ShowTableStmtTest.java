@@ -22,7 +22,7 @@
 package com.starrocks.analysis;
 
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.analyzer.AST2SQL;
+import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.ShowTableStmt;
@@ -72,7 +72,7 @@ public class ShowTableStmtTest {
         String expect = "SELECT information_schema.tables.TABLE_NAME AS Tables_in_testDb, " +
                 "information_schema.tables.TABLE_TYPE AS Table_type FROM " +
                 "information_schema.tables WHERE (information_schema.tables.TABLE_SCHEMA = 'testDb') AND (information_schema.tables.TABLE_TYPE != 'VIEW')";
-        Assert.assertEquals(expect, AST2SQL.toString(queryStatement));
+        Assert.assertEquals(expect, AstToStringBuilder.toString(queryStatement));
     }
 
     @Test(expected = SemanticException.class)

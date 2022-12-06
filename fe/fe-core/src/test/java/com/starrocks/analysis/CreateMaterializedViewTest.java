@@ -2163,15 +2163,11 @@ public class CreateMaterializedViewTest {
     @Test
     public void testCreateRealtimeMV() throws Exception {
         String sql = "create materialized view rtmv \n" +
-                "refresh incremental as " +
-                "select l_shipdate, l_orderkey, l_quantity, l_linestatus, s_name from " +
+                "refresh incremental " +
+                "distributed by hash(l_shipdate) " +
+                " as select l_shipdate, l_orderkey, l_quantity, l_linestatus, s_name from " +
                 "hive0.partitioned_db.lineitem_par join hive0.tpch.supplier where l_suppkey = s_suppkey\n";
-        try {
-            UtFrameUtils.getPlanAndFragment(connectContext, sql);
-            Assert.fail();
-        } catch (IllegalArgumentException e) {
-            Assert.assertEquals("Realtime materialized view is not supported", e.getMessage());
-        }
+        UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
     }
 
     @Test

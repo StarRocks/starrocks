@@ -81,7 +81,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.StatementPlanner;
-import com.starrocks.sql.analyzer.AST2SQL;
+import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.PrivilegeChecker;
 import com.starrocks.sql.analyzer.PrivilegeCheckerV2;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -1116,7 +1116,7 @@ public class StmtExecutor {
             }
         } catch (QueryStateException e) {
             if (e.getQueryState().getStateType() != MysqlStateType.OK) {
-                String sql = AST2SQL.toString(parsedStmt);
+                String sql = AstToStringBuilder.toString(parsedStmt);
                 if (sql == null) {
                     sql = originStmt.originStmt;
                 }
@@ -1125,7 +1125,7 @@ public class StmtExecutor {
             context.setState(e.getQueryState());
         } catch (Throwable e) {
             // Maybe our bug or wrong input parematers
-            String sql = AST2SQL.toString(parsedStmt);
+            String sql = AstToStringBuilder.toString(parsedStmt);
             if (sql == null || sql.isEmpty()) {
                 sql = originStmt.originStmt;
             }

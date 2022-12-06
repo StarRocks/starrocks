@@ -3,7 +3,7 @@
 package com.starrocks.sql.optimizer.operator.scalar;
 
 import com.starrocks.catalog.Type;
-import com.starrocks.sql.analyzer.AST2SQL;
+import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -62,7 +62,7 @@ public class SubqueryOperator extends ScalarOperator {
 
     @Override
     public String toString() {
-        return "(" + AST2SQL.toString(queryStatement) + ")";
+        return "(" + AstToStringBuilder.toString(queryStatement) + ")";
     }
 
     @Override

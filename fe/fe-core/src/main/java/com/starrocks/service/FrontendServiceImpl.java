@@ -76,6 +76,7 @@ import com.starrocks.qe.VariableMgr;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
+import com.starrocks.scheduler.mv.MVManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
@@ -84,6 +85,7 @@ import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.FrontendService;
 import com.starrocks.thrift.FrontendServiceVersion;
+import com.starrocks.thrift.MVTaskType;
 import com.starrocks.thrift.TAbortRemoteTxnRequest;
 import com.starrocks.thrift.TAbortRemoteTxnResponse;
 import com.starrocks.thrift.TAuthenticateParams;
@@ -129,6 +131,8 @@ import com.starrocks.thrift.TLoadTxnCommitRequest;
 import com.starrocks.thrift.TLoadTxnCommitResult;
 import com.starrocks.thrift.TLoadTxnRollbackRequest;
 import com.starrocks.thrift.TLoadTxnRollbackResult;
+import com.starrocks.thrift.TMVMaintenanceTasks;
+import com.starrocks.thrift.TMVReportEpochResponse;
 import com.starrocks.thrift.TMasterOpRequest;
 import com.starrocks.thrift.TMasterOpResult;
 import com.starrocks.thrift.TMasterResult;
@@ -182,8 +186,8 @@ import static com.starrocks.thrift.TStatusCode.NOT_IMPLEMENTED_ERROR;
 // thrift protocol
 public class FrontendServiceImpl implements FrontendService.Iface {
     private static final Logger LOG = LogManager.getLogger(LeaderImpl.class);
-    private LeaderImpl leaderImpl;
-    private ExecuteEnv exeEnv;
+    private final LeaderImpl leaderImpl;
+    private final ExecuteEnv exeEnv;
 
     public FrontendServiceImpl(ExecuteEnv exeEnv) {
         leaderImpl = new LeaderImpl();
@@ -1442,5 +1446,14 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         TStatus status = new TStatus(TStatusCode.OK);
         res.setStatus(status);
         return res;
+    }
+
+    @Override
+    public TMVReportEpochResponse mvReport(TMVMaintenanceTasks request) throws TException {
+        if (!request.getTask_type().equals(MVTaskType.REPORT_EPOCH)) {
+            throw new TException("Only support report_epoch task");
+        }
+        MVManager.getInstance().onReportEpoch(request);
+        return new TMVReportEpochResponse();
     }
 }

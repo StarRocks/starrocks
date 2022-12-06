@@ -50,4 +50,7 @@ service PBackendService {
     rpc tablet_writer_add_chunks(starrocks.PTabletWriterAddChunksRequest) returns (starrocks.PTabletWriterAddBatchResult);
     rpc tablet_writer_add_segment(starrocks.PTabletWriterAddSegmentRequest) returns (starrocks.PTabletWriterAddSegmentResult);
     rpc transmit_runtime_filter(starrocks.PTransmitRuntimeFilterParams) returns (starrocks.PTransmitRuntimeFilterResult);
+
+    // NOTE(murphy) check if it's really necessary
+    rpc submit_mv_maintenance_task(starrocks.PMVMaintenanceTaskRequest) returns (starrocks.PMVMaintenanceTaskResult);
 };

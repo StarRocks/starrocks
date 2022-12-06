@@ -23,7 +23,7 @@ package com.starrocks.analysis;
 
 import com.google.common.base.Objects;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.sql.analyzer.AST2SQL;
+import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.QueryStatement;
@@ -100,7 +100,7 @@ public class Subquery extends Expr {
 
     @Override
     public String toSqlImpl() {
-        return "(" + AST2SQL.toString(queryStatement) + ")";
+        return "(" + AstToStringBuilder.toString(queryStatement) + ")";
     }
 
     @Override

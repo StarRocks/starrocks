@@ -35,6 +35,7 @@ include "RuntimeProfile.thrift"
 include "MasterService.thrift"
 include "AgentService.thrift"
 include "ResourceUsage.thrift"
+include "MVMaintenance.thrift"
 
 // These are supporting structs for JniFrontend.java, which serves as the glue
 // between our C++ execution environment and the Java frontend.
@@ -1127,5 +1128,8 @@ service FrontendService {
     TSetConfigResponse setConfig(1: TSetConfigRequest request)
 
     TUpdateResourceUsageResponse updateResourceUsage(1: TUpdateResourceUsageRequest request)
+    
+    // For Materialized View
+    MVMaintenance.TMVReportEpochResponse mvReport(1: MVMaintenance.TMVMaintenanceTasks request)
 }
 

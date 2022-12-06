@@ -1205,9 +1205,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             throw new IllegalArgumentException("The experimental mv is disabled, " +
                     "you can set FE config enable_experimental_mv=true to enable it.");
         }
-        if (refreshSchemeDesc instanceof IncrementalRefreshSchemeDesc) {
-            throw new IllegalArgumentException("Realtime materialized view is not supported");
-        }
 
         return new CreateMaterializedViewStatement(tableName, ifNotExist, comment,
                 refreshSchemeDesc, expressionPartitionDesc, distributionDesc, properties, queryStatement);
