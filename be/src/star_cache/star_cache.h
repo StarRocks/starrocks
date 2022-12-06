@@ -12,8 +12,6 @@
 
 namespace starrocks {
 
-class AccessIndex;
-
 struct CacheOptions {
     // Cache Space (Required)
     uint64_t mem_quota_bytes;
@@ -31,52 +29,59 @@ struct CacheOptions {
     // bool checksum;
 };
 
+class AccessIndex;
+class AdmissionPolicy;
+class PromotionPolicy;
+
 class StarCache {
 public:
     StarCache();
     ~StarCache();
 
-	Status init(const CacheOptions& options);
+    Status init(const CacheOptions& options);
 
-	Status set(const std::string& cache_key, const IOBuf& buf, 
+    Status set(const std::string& cache_key, const IOBuf& buf, 
                uint64_t ttl_seconds=0);
 
-	Status get(const std::string& cache_key, IOBuf* buf);
+    Status get(const std::string& cache_key, IOBuf* buf);
             
-	Status read(const std::string& cache_key, off_t offset, size_t size,
+    Status read(const std::string& cache_key, off_t offset, size_t size,
                 IOBuf* buf);
 
-    Status remove(const std::string& cache_key) { return Status::OK(); }
+    Status remove(const std::string& cache_key);
 
     Status set_ttl(const std::string& cache_key, uint64_t ttl_seconds) { return Status::OK(); }
 
-
     Status pin(const std::string& cache_key) { return Status::OK(); }
-
 
     Status unpin(const std::string& cache_key) { return Status::OK(); }
 
 private:
     Status _read_cache_item(const CacheId& cache_id, CacheItemPtr cache_item, off_t offset, size_t size, IOBuf* buf);
-    void _free_cache_item(const CacheId& cache_id);
+    void _remove_cache_item(const CacheId& cache_id, CacheItemPtr cache_item);
 
-    Status _read_block(const BlockKey& block_key, BlockItem* block, off_t offset, size_t size,
+    BlockItem* _get_block(const BlockKey& block_key);
+    Status _write_block(CacheItemPtr cache_item, const BlockKey& block_key, const IOBuf& buf);
+    Status _read_block(CacheItemPtr cache_item, const BlockKey& block_key, off_t offset, size_t size,
                        IOBuf* buf);
+
     Status _flush_block(const BlockKey& block_key, BlockItem* block);
     void _promote_block_segments(const BlockKey& block_key, BlockItem* block,
                                  const std::vector<BlockSegment>& segments);
+
     void _evict_for_mem_block(const BlockKey& block_key);
     void _evict_for_disk_block(const CacheId& cache_id);
-    void _clean_disk_cache(CacheItemPtr cache);
+
     BlockSegment* _alloc_block_segment(const BlockKey& block_key, off_t offset, const IOBuf& buf);
     DiskBlockItem* _alloc_disk_block(const BlockKey& block_key);
-
-    BlockItem* _get_block(const BlockKey& block_key);
-    BlockItem* _get_block(const std::string& cache_key, off_t offset);
+    bool _set_mem_block(CacheItemPtr cache_item, uint32_t block_index, MemBlockItem* mem_block);
+    bool _set_disk_block(CacheItemPtr cache_item, uint32_t block_index, DiskBlockItem* disk_block);
 
     std::unique_ptr<MemCache> _mem_cache = nullptr;
     std::unique_ptr<DiskCache> _disk_cache = nullptr;
     AccessIndex* _access_index = nullptr;
+    AdmissionPolicy* _admission_policy = nullptr;
+    PromotionPolicy* _promotion_policy = nullptr;
 };
 
 } // namespace starrocks

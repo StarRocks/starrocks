@@ -882,6 +882,10 @@ CONF_Bool(star_cache_checksum_enable, "true");
 CONF_Int64(star_cache_mem_evict_batch, "50");
 CONF_Int64(star_cache_disk_evict_batch, "50");
 CONF_Int64(star_cache_max_retry_when_allocate, "5");
+CONF_Int64(star_cache_admission_max_check_size, "65536"); // 64KB
+CONF_Double(star_cache_admission_flush_probability, "1.0");
+CONF_Double(star_cache_admission_delete_probability, "1.0");
+CONF_Double(star_cache_promotion_mem_threshold, "0.8");
 
 CONF_mInt64(l0_l1_merge_ratio, "10");
 CONF_mInt64(l0_max_file_size, "209715200"); // 200MB

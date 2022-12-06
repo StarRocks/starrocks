@@ -30,18 +30,22 @@ public:
 
 	Status init(const MemCacheOptions& options);
 
-    Status write_block(const BlockKey& key, MemBlockItem* block, const std::vector<BlockSegment*>& segments);
+    Status write_block(const BlockKey& key, MemBlockItem* block,
+                       const std::vector<BlockSegment*>& segments) const;
     Status read_block(const BlockKey& key, MemBlockItem* block, off_t offset, size_t size,
-                      std::vector<BlockSegment>* segments);
+                      std::vector<BlockSegment>* segments) const;
 
-    MemBlockItem* new_block_item(const BlockKey& key, BlockState state);
-    void free_block_item(MemBlockItem* block);
+    MemBlockItem* new_block_item(const BlockKey& key, BlockState state) const;
+    void free_block_item(MemBlockItem* block) const;
 
-    BlockSegment* new_block_segment(off_t offset, const IOBuf& buf);
+    BlockSegment* new_block_segment(off_t offset, const IOBuf& buf) const;
     void set_block_segment(MemBlockItem* block, int start_slice_index, int end_slice_index,
-                           BlockSegment* segment);
+                           BlockSegment* segment) const;
+    void free_block_segment(BlockSegment* segment) const;
 
-    Status evict_for(const BlockKey& key, size_t count, std::vector<BlockKey>* evicted);
+    void evict_track(const BlockKey& key) const;
+    void evict_untrack(const BlockKey& key) const;
+    void evict_for(const BlockKey& key, size_t count, std::vector<BlockKey>* evicted) const;
 
 private:
     MemSpaceManager* _space_manager = nullptr;

@@ -15,6 +15,8 @@ set(CACHE_FILES
   mem_space_manager.cpp
   star_cache.cpp
   util.cpp
+  size_based_admission_policy.cpp
+  capacity_based_promotion_policy.cpp
 )
 
 add_library(StarCache STATIC

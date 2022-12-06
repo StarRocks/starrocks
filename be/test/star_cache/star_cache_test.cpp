@@ -42,7 +42,7 @@ IOBuf gen_iobuf(size_t size, char ch) {
 class StarCacheTest : public ::testing::Test {
 protected:
     void SetUp() override { ASSERT_TRUE(fs::create_directories("./ut_dir/star_disk_cache").ok()); }
-    void TearDown() override { ASSERT_TRUE(fs::remove_all("./ut_dir").ok()); }
+    void TearDown() override { /*ASSERT_TRUE(fs::remove_all("./ut_dir").ok());*/ }
 };
 
 TEST_F(StarCacheTest, hybrid_cache) {
@@ -51,7 +51,7 @@ TEST_F(StarCacheTest, hybrid_cache) {
     CacheOptions options;
     options.mem_quota_bytes = 20 * 1024 * 1024;
     size_t quota = 500 * 1024 * 1024;
-    options.disk_dir_spaces.push_back({.path = "./ut_dir/block_disk_cache", .quota_bytes = quota});
+    options.disk_dir_spaces.push_back({.path = "./ut_dir/star_disk_cache", .quota_bytes = quota});
     Status status = cache->init(options);
     ASSERT_TRUE(status.ok());
 
@@ -64,9 +64,6 @@ TEST_F(StarCacheTest, hybrid_cache) {
         char ch = 'a' + i % 26;
         IOBuf buf = gen_iobuf(obj_size, ch);
         Status st = cache->set(cache_key + std::to_string(i), buf);
-        if (!st.ok()) {
-            LOG(ERROR) << "err: " << st.get_error_msg();
-        }
         ASSERT_TRUE(st.ok()) << st.get_error_msg();
     }
 
@@ -93,11 +90,12 @@ TEST_F(StarCacheTest, hybrid_cache) {
     }
 
     // remove cache
-    status = cache->remove(cache_key + std::to_string(0));
+    std::string key_to_remove = cache_key + std::to_string(0);
+    status = cache->remove(key_to_remove);
     ASSERT_TRUE(status.ok());
 
     IOBuf buf;
-    status = cache->get(cache_key, &buf);
+    status = cache->get(key_to_remove, &buf);
     ASSERT_TRUE(status.is_not_found());
 }
 } // namespace starrocks

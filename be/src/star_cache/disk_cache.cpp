@@ -30,7 +30,6 @@ Status DiskCache::init(const DiskCacheOptions& options) {
 
 Status DiskCache::write_block(const CacheId& cache_id, DiskBlockItem* block, off_t offset_in_block,
                               const IOBuf& buf) const {
-    _eviction_policy->touch(cache_id);
     if (UNLIKELY(offset_in_block % config::star_cache_slice_size != 0)) {
         return Status::InvalidArgument(
                 strings::Substitute("offset must be aligned by slice size $0", config::star_cache_slice_size));
@@ -127,11 +126,6 @@ DiskBlockItem* DiskCache::new_block_item(const CacheId& cache_id) const {
         LOG(ERROR) << "allocate block failed";
         return nullptr;
     }
-    // If the cache has been added to eviction component before, the `add` operation will do nothing.
-    if (!_eviction_policy->add(cache_id)) {
-        LOG(ERROR) << "add cache to eviction component failed, cache_id: " << cache_id;
-        return nullptr;
-    }
     DiskBlockItem* block_item = new DiskBlockItem(block_id.dir_index, block_id.block_index);
     return block_item;
 }
@@ -139,6 +133,14 @@ DiskBlockItem* DiskCache::new_block_item(const CacheId& cache_id) const {
 Status DiskCache::free_block_item(DiskBlockItem* block) {
     BlockId block_id = { .dir_index = block->dir_index, .block_index = block->block_index };
     return _space_manager->free_block(block_id);
+}
+
+void DiskCache::evict_track(const CacheId& id) const {
+    _eviction_policy->add(id);
+}
+
+void DiskCache::evict_untrack(const CacheId& id) const {
+    _eviction_policy->remove(id);
 }
 
 Status DiskCache::evict_for(const CacheId& id, size_t count, std::vector<CacheId>* evicted) const {

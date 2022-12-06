@@ -21,8 +21,7 @@ Status MemCache::init(const MemCacheOptions& options) {
     return Status::OK();
 }
 
-Status MemCache::write_block(const BlockKey& key, MemBlockItem* block, const std::vector<BlockSegment*>& segments) {
-    _eviction_policy->touch(key);
+Status MemCache::write_block(const BlockKey& key, MemBlockItem* block, const std::vector<BlockSegment*>& segments) const {
     for (auto& seg : segments) {
         if (seg->buf.size() == 0) {
             continue;
@@ -35,7 +34,7 @@ Status MemCache::write_block(const BlockKey& key, MemBlockItem* block, const std
 }
 
 Status MemCache::read_block(const BlockKey& key, MemBlockItem* block, off_t offset, size_t size,
-                            std::vector<BlockSegment>* segments) {
+                            std::vector<BlockSegment>* segments) const {
     if (!block || size == 0) {
         return Status::OK();
     }
@@ -74,15 +73,11 @@ Status MemCache::read_block(const BlockKey& key, MemBlockItem* block, off_t offs
     return Status::OK();
 }
 
-MemBlockItem* MemCache::new_block_item(const BlockKey& key, BlockState state) {
-    if (!_eviction_policy->add(key)) {
-        LOG(ERROR) << "add block to eviction component failed, block: " << key.str();
-        return nullptr;
-    }
+MemBlockItem* MemCache::new_block_item(const BlockKey& key, BlockState state) const {
     return new MemBlockItem(state);
 }
 
-void MemCache::free_block_item(MemBlockItem* block) {
+void MemCache::free_block_item(MemBlockItem* block) const {
     std::vector<BlockSegment*> segments;
     block->list_segments(&segments);
     for (auto seg : segments) {
@@ -92,7 +87,7 @@ void MemCache::free_block_item(MemBlockItem* block) {
     delete block;
 }
 
-BlockSegment* MemCache::new_block_segment(off_t offset, const IOBuf& buf) {
+BlockSegment* MemCache::new_block_segment(off_t offset, const IOBuf& buf) const {
     auto segment = _space_manager->alloc_segment(buf.size());
     if (segment) {
         segment->offset = offset;
@@ -102,15 +97,26 @@ BlockSegment* MemCache::new_block_segment(off_t offset, const IOBuf& buf) {
 }
 
 void MemCache::set_block_segment(MemBlockItem* block, int start_slice_index, int end_slice_index,
-                                 BlockSegment* segment) {
+                                 BlockSegment* segment) const {
     for (int index = start_slice_index; index <= end_slice_index; ++index) {
         block->slices[index] = segment;
     }
 }
 
-Status MemCache::evict_for(const BlockKey& key, size_t count, std::vector<BlockKey>* evicted) {
+void MemCache::free_block_segment(BlockSegment* segment) const {
+    _space_manager->free_segment(segment);
+}
+
+void MemCache::evict_track(const BlockKey& key) const {
+    _eviction_policy->add(key);
+}
+
+void MemCache::evict_untrack(const BlockKey& key) const {
+    _eviction_policy->remove(key);
+}
+
+void MemCache::evict_for(const BlockKey& key, size_t count, std::vector<BlockKey>* evicted) const {
     _eviction_policy->evict_for(key, count, evicted);
-    return Status::OK();
 }
 
 } // namespace starrocks

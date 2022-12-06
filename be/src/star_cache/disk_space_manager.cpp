@@ -103,7 +103,7 @@ Status CacheDir::init_block_files() {
     size_t free_bytes = _quota_bytes;
     size_t file_count = free_bytes / config::star_cache_block_file_size;
     for (size_t i = 0; i < file_count; ++i) {
-        std::string file_path = fmt::format("{}_{}", BLOCK_FILE_PREFIX, i);
+        std::string file_path = fmt::format("{}/{}_{}", _path, BLOCK_FILE_PREFIX, i);
         size_t file_size = std::min(free_bytes, static_cast<size_t>(config::star_cache_block_file_size));
         BlockFilePtr file(new BlockFile(file_path, file_size));
         RETURN_IF_ERROR(file->open(config::star_cache_block_file_pre_allocate));
@@ -113,7 +113,7 @@ Status CacheDir::init_block_files() {
 
     // The last block file
     if (free_bytes > 0) {
-        std::string file_path = fmt::format("{}_{}", BLOCK_FILE_PREFIX, file_count);
+        std::string file_path = fmt::format("{}/{}_{}", _path, BLOCK_FILE_PREFIX, file_count);
         BlockFilePtr file(new BlockFile(file_path, free_bytes));
         RETURN_IF_ERROR(file->open(config::star_cache_block_file_pre_allocate));
         _block_files.push_back(file);

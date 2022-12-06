@@ -71,7 +71,7 @@ struct CacheItem {
         return _state & (1ul << RELEASED);
     }
 
-    bool set_mem_block_item(BlockItem& block, MemBlockItem* mem_block) {
+    bool set_mem_block(uint32_t block_index, MemBlockItem* mem_block, MemBlockItem** old_mem_block) {
         std::unique_lock<std::shared_mutex> write_lock(_mutex);
         if (mem_block) {
             if (_state & (1ul << RELEASED)) {
@@ -79,11 +79,12 @@ struct CacheItem {
             }
             _state |= (1ul << IN_MEM);
         }
-        block.mem_block_item = mem_block;
+        *old_mem_block = blocks[block_index].mem_block_item;
+        blocks[block_index].mem_block_item = mem_block;
         return true;
     }
 
-    bool set_disk_block_item(BlockItem& block, DiskBlockItem* disk_block) {
+    bool set_disk_block(uint32_t block_index, DiskBlockItem* disk_block, DiskBlockItem** old_disk_block) {
         std::unique_lock<std::shared_mutex> write_lock(_mutex);
         if (disk_block) {
             if (_state & (1ul << RELEASED)) {
@@ -91,14 +92,14 @@ struct CacheItem {
             }
             _state |= (1ul << IN_DISK);
         }
-        block.disk_block_item = disk_block;
+        *old_disk_block = blocks[block_index].disk_block_item;
+        blocks[block_index].disk_block_item = disk_block;
         return true;
     }
 
     bool release() {
         std::unique_lock<std::shared_mutex> write_lock(_mutex);
-        // if ((_state & (1ul << IN_MEM)) || (_state & (1ul << IN_MEM))) {
-        if (_state & (1ul << IN_MEM)) {
+        if (_state & (1ul << RELEASED)) {
             return false;
         }
         _state |= (1ul << RELEASED);
@@ -106,7 +107,7 @@ struct CacheItem {
     }
 
 private:
-    // Indate current state
+    // Indicate current state
     uint8_t _state;
     std::shared_mutex _mutex;
 };

@@ -128,11 +128,6 @@ list(APPEND CMAKE_PREFIX_PATH ${THIRDPARTY_DIR}/lib/cmake)
 list(APPEND CMAKE_PREFIX_PATH ${THIRDPARTY_DIR}/lib64/cmake)
 link_directories(${THIRDPARTY_DIR}/lib ${THIRDPARTY_DIR}/lib64)
 
-if (${WITH_BLOCK_CACHE} STREQUAL "ON")
-    LINK_LIBRARIES(${THIRDPARTY_DIR}/cachelib/deps/lib64/libunwind.so)
-    LINK_LIBRARIES(${THIRDPARTY_DIR}/cachelib/deps/lib64/liblzma.so)
-endif()
-
 # Set Boost
 set(Boost_DEBUG FALSE)
 set(Boost_USE_MULTITHREADED ON)
@@ -143,9 +138,9 @@ set(BOOST_ROOT ${THIRDPARTY_DIR})
 set(Boost_NO_WARN_NEW_VERSIONS ON)
 
 if (NOT APPLE)
-    find_package(Boost 1.75.0 REQUIRED COMPONENTS thread regex program_options filesystem context)
+    find_package(Boost 1.75.0 REQUIRED COMPONENTS thread regex program_options)
 else()
-    find_package(Boost 1.75.0 COMPONENTS thread regex program_options filesystem context)
+    find_package(Boost 1.75.0 COMPONENTS thread regex program_options)
 endif()
 include_directories(${Boost_INCLUDE_DIRS})
 message(STATUS ${Boost_LIBRARIES})
@@ -153,9 +148,14 @@ message(STATUS ${Boost_LIBRARIES})
 set(GPERFTOOLS_HOME "${THIRDPARTY_DIR}/gperftools")
 
 # Set all libraries
-
-add_library(gflags STATIC IMPORTED)
-set_target_properties(gflags PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libgflags.a)
+if (${WITH_BLOCK_CACHE} STREQUAL "ON")
+    set(CACHELIB_DIR "$ENV{CACHELIB_DIR}")
+    add_library(gflags STATIC IMPORTED)
+    set_target_properties(gflags PROPERTIES IMPORTED_LOCATION ${CACHELIB_DIR}/lib/libgflags_debug.a)
+else()
+    add_library(gflags STATIC IMPORTED)
+    set_target_properties(gflags PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libgflags.a)
+endif()
 
 add_library(glog STATIC IMPORTED)
 set_target_properties(glog PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libglog.a)
@@ -323,73 +323,6 @@ set_target_properties(opentelemetry_resources PROPERTIES IMPORTED_LOCATION ${THI
 
 add_library(opentelemetry_exporter_jaeger_trace STATIC IMPORTED GLOBAL)
 set_target_properties(opentelemetry_exporter_jaeger_trace PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libopentelemetry_exporter_jaeger_trace.a)
-
-# cachelib
-
-if (${WITH_BLOCK_CACHE} STREQUAL "ON")
-    add_library(cachelib_common STATIC IMPORTED)
-    set_target_properties(cachelib_common PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/cachelib/lib/libcachelib_common.a)
-
-    add_library(cachelib_allocator STATIC IMPORTED)
-    set_target_properties(cachelib_allocator PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/cachelib/lib/libcachelib_allocator.a)
-
-    add_library(cachelib_datatype STATIC IMPORTED)
-    set_target_properties(cachelib_datatype PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/cachelib/lib/libcachelib_datatype.a)
-
-    add_library(cachelib_navy STATIC IMPORTED)
-    set_target_properties(cachelib_navy PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/cachelib/lib/libcachelib_navy.a)
-
-    add_library(cachelib_shm STATIC IMPORTED)
-    set_target_properties(cachelib_shm PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/cachelib/lib/libcachelib_shm.a)
-
-    add_library(folly STATIC IMPORTED)
-    set_target_properties(folly PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/cachelib/lib/libfolly.a)
-
-    add_library(libfmtd STATIC IMPORTED)
-    set_target_properties(libfmtd PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/cachelib/lib64/libfmtd.a)
-
-    add_library(libthriftcpp2 STATIC IMPORTED)
-    set_target_properties(libthriftcpp2 PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/cachelib/lib/libthriftcpp2.a)
-
-    add_library(libthrift-core STATIC IMPORTED)
-    set_target_properties(libthrift-core PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/cachelib/lib/libthrift-core.a)
-
-    add_library(libthriftmetadata STATIC IMPORTED)
-    set_target_properties(libthriftmetadata PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/cachelib/lib/libthriftmetadata.a)
-
-    add_library(libthriftfrozen2 STATIC IMPORTED)
-    set_target_properties(libthriftfrozen2 PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/cachelib/lib/libthriftfrozen2.a)
-
-    add_library(libthriftprotocol STATIC IMPORTED)
-    set_target_properties(libthriftprotocol PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/cachelib/lib/libthriftprotocol.a)
-
-    add_library(libthrifttype STATIC IMPORTED)
-    set_target_properties(libthrifttype PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/cachelib/lib/libthrifttype.a)
-
-    add_library(libtransport STATIC IMPORTED)
-    set_target_properties(libtransport PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/cachelib/lib/libtransport.a)
-
-    add_library(librpcmetadata STATIC IMPORTED)
-    set_target_properties(librpcmetadata PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/cachelib/lib/librpcmetadata.a)
-
-    add_library(libthriftanyrep STATIC IMPORTED)
-    set_target_properties(libthriftanyrep PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/cachelib/lib/libthriftanyrep.a)
-
-    add_library(libthrifttyperep STATIC IMPORTED)
-    set_target_properties(libthrifttyperep PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/cachelib/lib/libthrifttyperep.a)
-
-    add_library(libthriftannotation STATIC IMPORTED)
-    set_target_properties(libthriftannotation PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/cachelib/lib/libthriftannotation.a)
-
-    add_library(libconcurrency STATIC IMPORTED)
-    set_target_properties(libconcurrency PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/cachelib/lib/libconcurrency.a)
-
-    add_library(libasync STATIC IMPORTED)
-    set_target_properties(libasync PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/cachelib/lib/libasync.a)
-
-    add_library(libwangle STATIC IMPORTED)
-    set_target_properties(libwangle PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/cachelib/lib/libwangle.a)
-endif()
 
 if ("${USE_STAROS}" STREQUAL "ON")
      find_package(protobuf CONFIG REQUIRED)
@@ -720,37 +653,6 @@ set(STARROCKS_DEPENDENCIES
     opentelemetry_exporter_jaeger_trace
     ${WL_END_GROUP}
 )
-
-if (${WITH_BLOCK_CACHE} STREQUAL "ON")
-    set(STARROCKS_DEPENDENCIES
-        ${STARROCKS_DEPENDENCIES}
-        ${WL_START_GROUP}
-        cachelib_common
-        cachelib_allocator
-        cachelib_datatype
-        cachelib_navy
-        cachelib_shm
-        folly
-        libfmtd
-        libthriftcpp2
-        libthrift-core
-        libthriftmetadata
-        libthriftfrozen2
-        libthriftprotocol
-        libthrifttype
-        libtransport
-        librpcmetadata
-
-        libthriftanyrep
-        libthrifttyperep
-        libthriftannotation
-
-        libconcurrency
-        libasync
-        libwangle
-        ${WL_END_GROUP}
-    )
-endif()
 
 if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
     set(STARROCKS_DEPENDENCIES

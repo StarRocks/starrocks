@@ -29,7 +29,7 @@ public:
         delete _eviction_policy;
     }
 
-	Status init(const DiskCacheOptions& options);
+    Status init(const DiskCacheOptions& options);
 
     Status write_block(const CacheId& cache_id, DiskBlockItem* block, off_t offset_in_block,
                        const IOBuf& buf) const;
@@ -43,6 +43,8 @@ public:
     DiskBlockItem* new_block_item(const CacheId& cache_id) const;
     Status free_block_item(DiskBlockItem* block);
 
+    void evict_track(const CacheId& id) const;
+    void evict_untrack(const CacheId& id) const;
     Status evict_for(const CacheId& id, size_t count, std::vector<CacheId>* evicted) const;
 
 private:

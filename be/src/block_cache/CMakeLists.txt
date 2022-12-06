@@ -15,14 +15,32 @@ add_library(BlockCache STATIC
     ${CACHE_FILES}
 )
 
-set(CACHELIB_DIR ${THIRDPARTY_DIR}/cachelib)
+set(CACHELIB_DIR "$ENV{CACHELIB_DIR}")
+message(STATUS "cachelib dir: ${CACHELIB_DIR}")
+
+add_library(Glog STATIC IMPORTED)
+set_target_properties(Glog PROPERTIES IMPORTED_LOCATION ${CACHELIB_DIR}/lib64/libglogd.a)
+LINK_LIBRARIES(${CACHELIB_DIR}/lib64/libfmtd.so)
+
 link_directories(${CACHELIB_DIR}/deps/lib64)
-LINK_LIBRARIES(${CACHELIB_DIR}/deps/lib64/libunwind.so)
-LINK_LIBRARIES(${CACHELIB_DIR}/deps/lib64/liblzma.so)
 
-include_directories(AFTER ${CACHELIB_DIR}/include)
-include_directories(AFTER ${CACHELIB_DIR}/deps/include)
+list(INSERT CMAKE_PREFIX_PATH 0 ${CACHELIB_DIR}/lib/cmake)
+list(INSERT CMAKE_PREFIX_PATH 0 ${CACHELIB_DIR}/lib64/cmake)
+list(INSERT CMAKE_PREFIX_PATH 0 ${CACHELIB_DIR}/cmake)
+message(STATUS "cmake prefix path: ${CMAKE_PREFIX_PATH}")
 
-#target_link_libraries(BlockCache )
-#target_link_options(BlockCache PRIVATE ${CACHELIB_LINK_LIBS} "LINKER:--copy-dt-needed-entries --no-as-needed")
-#target_link_options(BlockCache PRIVATE ${CACHELIB_LINK_LIBS} "LINKER:--allow-shlib-undefined")
+set(CMAKE_MODULE_PATH ${CMAKE_PREFIX_PATH})
+message(STATUS "cmake module path: ${CMAKE_MODULE_PATH}")
+
+#find_package(gflags CONFIG nothreads_static)
+#target_link_libraries(BlockCache gflags::gflags)
+
+find_package(cachelib CONFIG REQUIRED PATHS /tmp/cachelib/deps)
+
+set(CACHELIB_INCLUDE_DIR ${CACHELIB_DIR}/include)
+include_directories(BEFORE ${CACHELIB_INCLUDE_DIR})
+include_directories(BEFORE ${CACHELIB_DIR}/deps/include)
+message(STATUS "cachelib include path: ${CACHELIB_INCLUDE_DIR}")
+
+target_link_libraries(BlockCache cachelib)
+#target_link_options(BlockCache PUBLIC "LINKER:--copy-dt-needed-entries")

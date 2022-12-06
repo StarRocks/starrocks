@@ -8,6 +8,7 @@
 
 namespace starrocks {
 
+// TODO: A more effective data structure is needed
 template <typename K, typename V>
 class ThreadSafeHashMap{
 public:

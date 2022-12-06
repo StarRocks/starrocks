@@ -19,11 +19,11 @@ public:
     static const size_t BLOCK_COUNT_IN_SPACE;
 
     using BlockFilePtr = std::shared_ptr<BlockFile>;
-	struct BlockSpace {
-		uint64_t start_block_index;
-		boost::dynamic_bitset<> free_bits;
-		uint32_t free_count = 0; 
-	};
+    struct BlockSpace {
+        uint64_t start_block_index;
+        boost::dynamic_bitset<> free_bits;
+        uint32_t free_count = 0; 
+    };
 
     CacheDir(uint8_t index, size_t quota_bytes, const std::string& path)
         : _index(index)
@@ -77,7 +77,7 @@ private:
 
     uint32_t _total_block_count;
     uint32_t _used_block_count;
-	
+    
     BlockSpace* _block_spaces;
     // store free space index
     std::list<uint32_t> _free_space_list;
