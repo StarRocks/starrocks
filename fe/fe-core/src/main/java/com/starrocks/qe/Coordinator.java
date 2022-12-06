@@ -1448,7 +1448,13 @@ public class Coordinator {
         // wait for all backends
         if (needReport) {
             try {
-                int timeout = connectContext.getSessionVariable().getProfileTimeout();
+                int timeout;
+                // connectContext can be null for broker export task coordinator
+                if (connectContext != null) {
+                    timeout = connectContext.getSessionVariable().getProfileTimeout();
+                } else {
+                    timeout = 2;
+                }
                 // Waiting for other fragment instances to finish execution
                 // Ideally, it should wait indefinitely, but out of defense, set timeout
                 if (!profileDoneSignal.await(timeout, TimeUnit.SECONDS)) {
