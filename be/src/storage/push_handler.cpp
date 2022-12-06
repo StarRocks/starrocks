@@ -14,6 +14,7 @@
 
 #include "storage/push_handler.h"
 
+#include "storage/compaction_manager.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_id_generator.h"
 #include "storage/rowset/rowset_meta_manager.h"
@@ -160,6 +161,7 @@ Status PushHandler::_do_streaming_ingestion(TabletSharedPtr tablet, const TPushR
                          << ", txn_id: " << request.transaction_id;
             st = Status::InternalError("Fail to commit txn");
         }
+        StorageEngine::instance()->compaction_manager()->update_tablet_async(tablet_var.tablet);
     }
     return st;
 }
