@@ -441,8 +441,8 @@ void WriterImpl::writeStripe() {
     proto::StripeStatistics* stripeStats = metadata.add_stripestats();
     std::vector<proto::ColumnStatistics> colStats;
     columnWriter->getStripeStatistics(colStats);
-    for (uint32_t i = 0; i != colStats.size(); ++i) {
-        *stripeStats->add_colstats() = colStats[i];
+    for (auto& colStat : colStats) {
+        *stripeStats->add_colstats() = colStat;
     }
     // merge stripe stats into file stats and clear stripe stats
     columnWriter->mergeStripeStatsIntoFileStats();
@@ -493,8 +493,8 @@ void WriterImpl::writeFileFooter() {
     // update file statistics
     std::vector<proto::ColumnStatistics> colStats;
     columnWriter->getFileStatistics(colStats);
-    for (uint32_t i = 0; i != colStats.size(); ++i) {
-        *fileFooter.add_statistics() = colStats[i];
+    for (auto& colStat : colStats) {
+        *fileFooter.add_statistics() = colStat;
     }
 
     if (!fileFooter.SerializeToZeroCopyStream(compressionStream.get())) {
@@ -507,7 +507,7 @@ void WriterImpl::writePostscript() {
     if (!postScript.SerializeToZeroCopyStream(bufferedStream.get())) {
         throw std::logic_error("Failed to write post script.");
     }
-    unsigned char psLength = static_cast<unsigned char>(bufferedStream->flush());
+    auto psLength = static_cast<unsigned char>(bufferedStream->flush());
     outStream->write(&psLength, sizeof(unsigned char));
 }
 

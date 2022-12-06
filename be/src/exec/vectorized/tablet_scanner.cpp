@@ -1,5 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "exec/vectorized/tablet_scanner.h"
 
 #include <memory>
@@ -39,12 +51,12 @@ Status TabletScanner::init(RuntimeState* runtime_state, const TabletScannerParam
     RETURN_IF_ERROR(_init_global_dicts());
     RETURN_IF_ERROR(_init_reader_params(params.key_ranges));
     const TabletSchema& tablet_schema = _tablet->tablet_schema();
-    Schema child_schema = ChunkHelper::convert_schema_to_format_v2(tablet_schema, _reader_columns);
+    VectorizedSchema child_schema = ChunkHelper::convert_schema_to_format_v2(tablet_schema, _reader_columns);
     _reader = std::make_shared<TabletReader>(_tablet, Version(0, _version), std::move(child_schema));
     if (_reader_columns.size() == _scanner_columns.size()) {
         _prj_iter = _reader;
     } else {
-        Schema output_schema = ChunkHelper::convert_schema_to_format_v2(tablet_schema, _scanner_columns);
+        VectorizedSchema output_schema = ChunkHelper::convert_schema_to_format_v2(tablet_schema, _scanner_columns);
         _prj_iter = new_projection_iterator(output_schema, _reader);
     }
 
@@ -146,7 +158,7 @@ Status TabletScanner::_init_reader_params(const std::vector<OlapScanRange*>* key
     }
 
     ConjunctivePredicatesRewriter not_pushdown_predicate_rewriter(_predicates, *_params.global_dictmaps);
-    not_pushdown_predicate_rewriter.rewrite_predicate(&_parent->_obj_pool);
+    not_pushdown_predicate_rewriter.rewrite_predicate(&_pool);
 
     // Range
     for (auto key_range : *key_ranges) {
@@ -225,7 +237,7 @@ Status TabletScanner::_init_unused_output_columns(const std::vector<std::string>
 // mapping a slot-column-id to schema-columnid
 Status TabletScanner::_init_global_dicts() {
     const auto& global_dict_map = _runtime_state->get_query_global_dict_map();
-    auto global_dict = _parent->_obj_pool.add(new ColumnIdToGlobalDictMap());
+    auto global_dict = _pool.add(new ColumnIdToGlobalDictMap());
     // mapping column id to storage column ids
     for (auto slot : _parent->_tuple_desc->slots()) {
         if (!slot->is_materialized()) {
@@ -323,6 +335,8 @@ void TabletScanner::update_counter() {
     _raw_rows_read += _reader->mutable_stats()->raw_rows_read;
     COUNTER_UPDATE(_parent->_chunk_copy_timer, _reader->stats().vec_cond_chunk_copy_ns);
 
+    COUNTER_UPDATE(_parent->_get_rowsets_timer, _reader->stats().get_rowsets_ns);
+    COUNTER_UPDATE(_parent->_get_delvec_timer, _reader->stats().get_delvec_ns);
     COUNTER_UPDATE(_parent->_seg_init_timer, _reader->stats().segment_init_ns);
 
     int64_t cond_evaluate_ns = 0;

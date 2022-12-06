@@ -4,7 +4,7 @@ package com.starrocks.sql.parser;
 import static java.lang.String.format;
 
 public class ParsingException extends RuntimeException {
-    //TODO: we shourd add more message in parsing exception
+    //TODO: we should add more message in parsing exception
     //eg. line, offset
     public ParsingException(String message) {
         super(message, null);

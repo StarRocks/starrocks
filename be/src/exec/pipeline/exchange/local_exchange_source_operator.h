@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -59,7 +71,7 @@ private:
     bool _is_finished = false;
     std::queue<vectorized::ChunkPtr> _full_chunk_queue;
     std::queue<PartitionChunk> _partition_chunk_queue;
-    size_t _partition_rows_num = 0;
+    int64_t _partition_rows_num = 0;
 
     // TODO(KKS): make it lock free
     mutable std::mutex _chunk_lock;

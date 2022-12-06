@@ -1,5 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "exec/vectorized/hash_join_node.h"
 
 #include <runtime/runtime_state.h>
@@ -60,9 +72,9 @@ Status HashJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
     for (const auto& eq_join_conjunct : eq_join_conjuncts) {
         ExprContext* left = nullptr;
         ExprContext* right = nullptr;
-        RETURN_IF_ERROR(Expr::create_expr_tree(_pool, eq_join_conjunct.left, &left));
+        RETURN_IF_ERROR(Expr::create_expr_tree(_pool, eq_join_conjunct.left, &left, state));
         _probe_expr_ctxs.push_back(left);
-        RETURN_IF_ERROR(Expr::create_expr_tree(_pool, eq_join_conjunct.right, &right));
+        RETURN_IF_ERROR(Expr::create_expr_tree(_pool, eq_join_conjunct.right, &right, state));
         _build_expr_ctxs.push_back(right);
         if (!left->root()->type().support_join() || !right->root()->type().support_join()) {
             return Status::NotSupported(fmt::format("join on type {}={} is not supported",
@@ -99,12 +111,12 @@ Status HashJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
         }
     }
 
-    RETURN_IF_ERROR(
-            Expr::create_expr_trees(_pool, tnode.hash_join_node.other_join_conjuncts, &_other_join_conjunct_ctxs));
+    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, tnode.hash_join_node.other_join_conjuncts,
+                                            &_other_join_conjunct_ctxs, state));
 
     for (const auto& desc : tnode.hash_join_node.build_runtime_filters) {
         auto* rf_desc = _pool->add(new RuntimeFilterBuildDescriptor());
-        RETURN_IF_ERROR(rf_desc->init(_pool, desc));
+        RETURN_IF_ERROR(rf_desc->init(_pool, desc, state));
         _build_runtime_filters.emplace_back(rf_desc);
     }
     _runtime_join_filter_pushdown_limit = 1024000;
@@ -412,31 +424,21 @@ pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuil
 
     auto rhs_operators = child(1)->decompose_to_pipeline(context);
     auto lhs_operators = child(0)->decompose_to_pipeline(context);
-    size_t num_right_partitions;
-    size_t num_left_partitions;
     if (_distribution_mode == TJoinDistributionMode::BROADCAST) {
-        num_right_partitions = 1;
         // Broadcast join need only create one hash table, because all the HashJoinProbeOperators
         // use the same hash table with their own different probe states.
         rhs_operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), rhs_operators);
-
-        num_left_partitions = context->degree_of_parallelism();
-        bool force_local_passthrough = false;
-        lhs_operators = context->maybe_interpolate_local_passthrough_exchange(
-                runtime_state(), lhs_operators, num_left_partitions, force_local_passthrough);
+        lhs_operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), lhs_operators,
+                                                                              context->degree_of_parallelism());
     } else {
         // "col NOT IN (NULL, val1, val2)" always returns false, so hash join should
         // return empty result in this case. Hash join cannot be divided into multiple
         // partitions in this case. Otherwise, NULL value in right table will only occur
         // in some partition hash table, and other partition hash table can output chunk.
         if (_join_type == TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN) {
-            num_left_partitions = num_right_partitions = 1;
-
             rhs_operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), rhs_operators);
             lhs_operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), lhs_operators);
         } else {
-            num_left_partitions = num_right_partitions = context->degree_of_parallelism();
-
             // Both HashJoin{Build, Probe}Operator are parallelized
             // There are two ways of shuffle
             // 1. If previous op is ExchangeSourceOperator and its partition type is HASH_PARTITIONED or BUCKET_SHUFFLE_HASH_PARTITIONED
@@ -448,7 +450,7 @@ pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuil
                     down_cast<SourceOperatorFactory*>(rhs_operators[0].get())->partition_type();
 
             // Make sure that local shuffle use the same hash function as the remote exchange sink do
-            if (context->need_local_shuffle(rhs_operators)) {
+            if (context->could_local_shuffle(rhs_operators)) {
                 if (part_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
                     DCHECK(!_build_equivalence_partition_expr_ctxs.empty());
                     rhs_operators = context->maybe_interpolate_local_shuffle_exchange(
@@ -458,7 +460,7 @@ pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuil
                                                                                       _build_expr_ctxs, part_type);
                 }
             }
-            if (context->need_local_shuffle(lhs_operators)) {
+            if (context->could_local_shuffle(lhs_operators)) {
                 if (part_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
                     DCHECK(!_probe_equivalence_partition_expr_ctxs.empty());
                     lhs_operators = context->maybe_interpolate_local_shuffle_exchange(
@@ -471,12 +473,18 @@ pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuil
         }
     }
 
+    size_t num_right_partitions = down_cast<SourceOperatorFactory*>(rhs_operators[0].get())->degree_of_parallelism();
+    size_t num_left_partitions = down_cast<SourceOperatorFactory*>(lhs_operators[0].get())->degree_of_parallelism();
+    // For non-broadcast join, the number of left and right partitions must be the same.
+    DCHECK(_distribution_mode == TJoinDistributionMode::BROADCAST || num_right_partitions == num_left_partitions);
+
     auto* pool = context->fragment_context()->runtime_state()->obj_pool();
     HashJoinerParam param(pool, _hash_join_node, _id, _type, _is_null_safes, _build_expr_ctxs, _probe_expr_ctxs,
                           _other_join_conjunct_ctxs, _conjunct_ctxs, child(1)->row_desc(), child(0)->row_desc(),
                           _row_descriptor, child(1)->type(), child(0)->type(), child(1)->conjunct_ctxs().empty(),
                           _build_runtime_filters, _output_slots, _distribution_mode);
-    auto hash_joiner_factory = std::make_shared<starrocks::pipeline::HashJoinerFactory>(param, num_left_partitions);
+    auto hash_joiner_factory = std::make_shared<starrocks::pipeline::HashJoinerFactory>(
+            param, std::max(num_left_partitions, num_right_partitions));
 
     // add placeholder into RuntimeFilterHub, HashJoinBuildOperator will generate runtime filters and fill it,
     // Operators consuming the runtime filters will inspect this placeholder.
@@ -902,7 +910,7 @@ Status HashJoinNode::_do_publish_runtime_filters(RuntimeState* state, int64_t li
         if (!rf_desc->has_consumer()) continue;
         // skip if ht.size() > limit and it's only for local.
         if (!rf_desc->has_remote_targets() && _ht.get_row_count() > limit) continue;
-        PrimitiveType build_type = rf_desc->build_expr_type();
+        LogicalType build_type = rf_desc->build_expr_type();
         JoinRuntimeFilter* filter = RuntimeFilterHelper::create_runtime_bloom_filter(_pool, build_type);
         if (filter == nullptr) continue;
         filter->set_join_mode(rf_desc->join_mode());

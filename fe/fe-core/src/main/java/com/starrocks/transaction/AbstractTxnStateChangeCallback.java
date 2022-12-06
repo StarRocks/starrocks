@@ -60,4 +60,19 @@ public abstract class AbstractTxnStateChangeCallback implements TxnStateChangeCa
     public void replayOnVisible(TransactionState txnState) {
 
     }
+
+    @Override
+    public void beforePrepared(TransactionState txnState) throws TransactionException {
+
+    }
+
+    @Override
+    public void afterPrepared(TransactionState txnState, boolean txnOperated) throws UserException {
+
+    }
+
+    @Override
+    public void replayOnPrepared(TransactionState txnState) {
+
+    }
 }

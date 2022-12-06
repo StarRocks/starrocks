@@ -5,6 +5,7 @@ package com.starrocks.sql.ast;
 // DROP DB Statement
 public class DropDbStmt extends DdlStmt {
     private final boolean ifExists;
+    private String catalog;
     private String dbName;
     private final boolean forceDrop;
 
@@ -16,6 +17,14 @@ public class DropDbStmt extends DdlStmt {
 
     public boolean isSetIfExists() {
         return ifExists;
+    }
+
+    public String getCatalogName() {
+        return this.catalog;
+    }
+
+    public void setCatalogName(String catalogName) {
+        this.catalog = catalogName;
     }
 
     public String getDbName() {

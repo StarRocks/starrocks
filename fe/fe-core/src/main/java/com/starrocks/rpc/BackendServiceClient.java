@@ -25,9 +25,11 @@ import com.google.common.base.Preconditions;
 import com.starrocks.common.Config;
 import com.starrocks.proto.PCancelPlanFragmentRequest;
 import com.starrocks.proto.PCancelPlanFragmentResult;
+import com.starrocks.proto.PCollectQueryStatisticsResult;
 import com.starrocks.proto.PExecBatchPlanFragmentsResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
 import com.starrocks.proto.PFetchDataResult;
+import com.starrocks.proto.PMVMaintenanceTaskResult;
 import com.starrocks.proto.PPlanFragmentCancelReason;
 import com.starrocks.proto.PProxyRequest;
 import com.starrocks.proto.PProxyResult;
@@ -37,6 +39,7 @@ import com.starrocks.proto.PTriggerProfileReportResult;
 import com.starrocks.proto.PUniqueId;
 import com.starrocks.thrift.TExecBatchPlanFragmentsParams;
 import com.starrocks.thrift.TExecPlanFragmentParams;
+import com.starrocks.thrift.TMVMaintenanceTasks;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TUniqueId;
 import org.apache.logging.log4j.LogManager;
@@ -182,6 +185,18 @@ public class BackendServiceClient {
         }
     }
 
+    public Future<PCollectQueryStatisticsResult> collectQueryStatisticsAsync(
+            TNetworkAddress address, PCollectQueryStatisticsRequest request) throws RpcException {
+        try {
+            final PBackendService service = BrpcProxy.getBackendService(address);
+            return service.collectQueryStatistics(request);
+        } catch (Throwable e) {
+            LOG.warn("collect query statistics catch an exception, address={}:{}",
+                    address.getHostname(), address.getPort(), e);
+            throw new RpcException(address.hostname, e.getMessage());
+        }
+    }
+
     public Future<PProxyResult> getInfo(TNetworkAddress address, PProxyRequest request) throws RpcException {
         try {
             final PBackendService service = BrpcProxy.getBackendService(address);
@@ -201,6 +216,40 @@ public class BackendServiceClient {
             LOG.warn("failed to get info, address={}:{}", address.getHostname(), address.getPort(), e);
             throw new RpcException(address.hostname, e.getMessage());
         }
+    }
+
+    public Future<PMVMaintenanceTaskResult> submitMVMaintenanceTaskAsync(
+            TNetworkAddress address, TMVMaintenanceTasks tRequest)
+            throws TException, RpcException {
+        PMVMaintenanceTaskRequest pRequest = new PMVMaintenanceTaskRequest();
+        pRequest.setRequest(tRequest);
+
+        Future<PMVMaintenanceTaskResult> resultFuture = null;
+        for (int i = 1; i <= Config.max_query_retry_time && resultFuture == null; ++i) {
+            try {
+                final PBackendService service = BrpcProxy.getBackendService(address);
+                resultFuture = service.submitMVMaintenanceTaskAsync(pRequest);
+            } catch (NoSuchElementException e) {
+                // Retry `RETRY_TIMES`, when NoSuchElementException occurs.
+                if (i >= Config.max_query_retry_time) {
+                    LOG.warn("Submit MV Maintenance Task failed, address={}:{}",
+                            address.getHostname(), address.getPort(), e);
+                    throw new RpcException(address.hostname, e.getMessage());
+                }
+                try {
+                    Thread.sleep(10);
+                } catch (InterruptedException interruptedException) {
+                    Thread.currentThread().interrupt();
+                }
+            } catch (Throwable e) {
+                LOG.warn("Submit MV Maintenance Task got an exception, address={}:{}",
+                        address.getHostname(), address.getPort(), e);
+                throw new RpcException(address.hostname, e.getMessage());
+            }
+        }
+
+        Preconditions.checkState(resultFuture != null);
+        return resultFuture;
     }
 
     private static class SingletonHolder {

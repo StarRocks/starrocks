@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -34,6 +46,7 @@ using DatumArray = std::vector<Datum>;
 using DatumKey = std::variant<int8_t, uint8_t, int16_t, uint16_t, uint24_t, int32_t, uint32_t, int64_t, uint64_t,
                               int96_t, int128_t, Slice, decimal12_t, DecimalV2Value, float, double>;
 using DatumMap = std::map<DatumKey, Datum>;
+using DatumStruct = std::vector<Datum>;
 
 template <class... Ts>
 struct overloaded : Ts... {
@@ -70,6 +83,7 @@ public:
     const decimal12_t& get_decimal12() const { return get<decimal12_t>(); }
     const DecimalV2Value& get_decimal() const { return get<DecimalV2Value>(); }
     const DatumArray& get_array() const { return get<DatumArray>(); }
+    const DatumStruct& get_struct() const { return get<DatumStruct>(); }
     const HyperLogLog* get_hyperloglog() const { return get<HyperLogLog*>(); }
     const BitmapValue* get_bitmap() const { return get<BitmapValue*>(); }
     const PercentileValue* get_percentile() const { return get<PercentileValue*>(); }

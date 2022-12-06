@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -61,7 +73,7 @@ struct RowSourceMask {
 //
 class RowSourceMaskBuffer {
 public:
-    explicit RowSourceMaskBuffer(int64_t tablet_id, const std::string& storage_root_path);
+    explicit RowSourceMaskBuffer(int64_t tablet_id, std::string storage_root_path);
     ~RowSourceMaskBuffer();
 
     Status write(const std::vector<RowSourceMask>& source_masks);
@@ -69,7 +81,7 @@ public:
     bool has_same_source(uint16_t source, size_t count) const;
     size_t max_same_source_count(uint16_t source, size_t upper_bound) const;
 
-    RowSourceMask current() const { return RowSourceMask(_mask_column->get(_current_index).get_uint16()); }
+    RowSourceMask current() const { return {_mask_column->get(_current_index).get_uint16()}; }
     void advance() { ++_current_index; }
 
     Status flip_to_read();

@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -17,7 +29,7 @@ namespace starrocks::vectorized {
  * ARGS_TYPE: ALL TYPE
  * SERIALIZED_TYPE: TYPE_VARCHAR
  */
-template <PrimitiveType PT, bool IsOutputHLL, typename T = RunTimeCppType<PT>>
+template <LogicalType PT, bool IsOutputHLL, typename T = RunTimeCppType<PT>>
 class HllNdvAggregateFunction final
         : public AggregateFunctionBatchHelper<HyperLogLog, HllNdvAggregateFunction<PT, IsOutputHLL, T>> {
 public:
@@ -32,7 +44,7 @@ public:
         uint64_t value = 0;
         const ColumnType* column = down_cast<const ColumnType*>(columns[0]);
 
-        if constexpr (pt_is_binary<PT>) {
+        if constexpr (pt_is_string<PT>) {
             Slice s = column->get_slice(row_num);
             value = HashUtil::murmur_hash64A(s.data, s.size, HashUtil::MURMUR_SEED);
         } else {
@@ -50,7 +62,7 @@ public:
                                               int64_t frame_end) const override {
         const ColumnType* column = down_cast<const ColumnType*>(columns[0]);
 
-        if constexpr (pt_is_binary<PT>) {
+        if constexpr (pt_is_string<PT>) {
             uint64_t value = 0;
             for (size_t i = frame_start; i < frame_end; ++i) {
                 Slice s = column->get_slice(i);
@@ -76,7 +88,7 @@ public:
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         DCHECK(column->is_binary());
 
-        const BinaryColumn* hll_column = down_cast<const BinaryColumn*>(column);
+        const auto* hll_column = down_cast<const BinaryColumn*>(column);
         HyperLogLog hll(hll_column->get(row_num).get_slice());
         this->data(state).merge(hll);
     }
@@ -84,7 +96,7 @@ public:
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
                     size_t end) const override {
         DCHECK_GT(end, start);
-        Int64Column* column = down_cast<Int64Column*>(dst);
+        auto* column = down_cast<Int64Column*>(dst);
         int64_t result = this->data(state).estimate_cardinality();
 
         for (size_t i = start; i < end; ++i) {
@@ -117,7 +129,7 @@ public:
         uint64_t value = 0;
         for (size_t i = 0; i < chunk_size; ++i) {
             HyperLogLog hll;
-            if constexpr (pt_is_binary<PT>) {
+            if constexpr (pt_is_string<PT>) {
                 Slice s = column->get_slice(i);
                 value = HashUtil::murmur_hash64A(s.data, s.size, HashUtil::MURMUR_SEED);
             } else {

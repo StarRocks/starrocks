@@ -9,6 +9,7 @@ import com.google.gson.Gson;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
@@ -24,7 +25,7 @@ import java.util.List;
  */
 public class LakeTabletsProcNode implements ProcNodeInterface {
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
-            .add("TabletId").add("BackendIds").add("DataSize").add("RowCount")
+            .add("TabletId").add("BackendId").add("DataSize").add("RowCount")
             .build();
 
     private final Database db;
@@ -35,6 +36,16 @@ public class LakeTabletsProcNode implements ProcNodeInterface {
         this.db = db;
         this.table = table;
         this.index = index;
+    }
+
+    public static int analyzeColumn(String columnName) throws AnalysisException {
+        for (String title : TITLE_NAMES) {
+            if (title.equalsIgnoreCase(columnName)) {
+                return TITLE_NAMES.indexOf(title);
+            }
+        }
+
+        throw new AnalysisException("Title name[" + columnName + "] does not exist");
     }
 
     public List<List<Comparable>> fetchComparableResult() {

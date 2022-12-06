@@ -62,7 +62,7 @@ public class PreAggregateTurnOnRule implements TreeRewriteRule {
 
         @Override
         public Void visit(OptExpression opt, PreAggregationContext context) {
-            opt.getInputs().forEach(o -> process(o, context.clone()));
+            opt.getInputs().forEach(o -> process(o, context.copy()));
             return null;
         }
 
@@ -71,7 +71,7 @@ public class PreAggregateTurnOnRule implements TreeRewriteRule {
                 rewriteProject(opt, context);
             }
 
-            opt.getOp().accept(this, opt, context.clone());
+            opt.getOp().accept(this, opt, context.copy());
             return null;
         }
 
@@ -331,7 +331,7 @@ public class PreAggregateTurnOnRule implements TreeRewriteRule {
                 context.aggregations.clear();
                 process(optExpression.inputAt(0), context);
                 // Avoid left child modify context will effect right child
-                process(optExpression.inputAt(1), context.clone());
+                process(optExpression.inputAt(1), context.copy());
                 return null;
             }
 
@@ -383,26 +383,21 @@ public class PreAggregateTurnOnRule implements TreeRewriteRule {
         }
     }
 
-    public static class PreAggregationContext implements Cloneable {
+    public static class PreAggregationContext {
         // Indicates that a pre-aggregation can not be turned on below the join
         public boolean notPreAggregationJoin = false;
         public List<ScalarOperator> aggregations = Lists.newArrayList();
         public List<ScalarOperator> groupings = Lists.newArrayList();
         public List<ScalarOperator> joinPredicates = Lists.newArrayList();
 
-        @Override
-        public PreAggregationContext clone() {
-            try {
-                PreAggregationContext context = (PreAggregationContext) super.clone();
-                // Just shallow copy
-                context.aggregations = Lists.newArrayList(aggregations);
-                context.groupings = Lists.newArrayList(groupings);
-                context.joinPredicates = Lists.newArrayList(joinPredicates);
-                return context;
-            } catch (CloneNotSupportedException ignored) {
-            }
-
-            return null;
+        public PreAggregationContext copy() {
+            PreAggregationContext context = new PreAggregationContext();
+            context.notPreAggregationJoin = this.notPreAggregationJoin;
+            // Just shallow copy
+            context.aggregations = Lists.newArrayList(aggregations);
+            context.groupings = Lists.newArrayList(groupings);
+            context.joinPredicates = Lists.newArrayList(joinPredicates);
+            return context;
         }
     }
 }

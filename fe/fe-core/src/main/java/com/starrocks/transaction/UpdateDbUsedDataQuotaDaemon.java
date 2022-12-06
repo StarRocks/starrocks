@@ -35,7 +35,7 @@ public class UpdateDbUsedDataQuotaDaemon extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(UpdateDbUsedDataQuotaDaemon.class);
 
     public UpdateDbUsedDataQuotaDaemon() {
-        super("UpdateDbUsedDataQuota", Config.db_used_data_quota_update_interval_secs * 1000);
+        super("UpdateDbUsedDataQuota", Config.db_used_data_quota_update_interval_secs * 1000L);
     }
 
     @Override

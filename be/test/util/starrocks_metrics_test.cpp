@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/test/util/doris_metrics_test.cpp
 
@@ -32,8 +45,8 @@ namespace starrocks {
 
 class StarRocksMetricsTest : public testing::Test {
 public:
-    StarRocksMetricsTest() {}
-    virtual ~StarRocksMetricsTest() {}
+    StarRocksMetricsTest() = default;
+    ~StarRocksMetricsTest() override = default;
 
 protected:
     void SetUp() override {
@@ -48,8 +61,8 @@ protected:
 
 class TestMetricsVisitor : public MetricsVisitor {
 public:
-    virtual ~TestMetricsVisitor() {}
-    void visit(const std::string& prefix, const std::string& name, MetricCollector* collector) {
+    ~TestMetricsVisitor() override = default;
+    void visit(const std::string& prefix, const std::string& name, MetricCollector* collector) override {
         for (auto& it : collector->metrics()) {
             Metric* metric = it.second;
             auto& labels = it.first;
@@ -259,7 +272,7 @@ TEST_F(StarRocksMetricsTest, PageCacheMetrics) {
     auto metrics = instance->metrics();
     metrics->collect(&visitor);
     LOG(INFO) << "\n" << visitor.to_string();
-    
+
     auto lookup_metric = metrics->get_metric("page_cache_lookup_count");
     ASSERT_TRUE(lookup_metric != nullptr);
     auto hit_metric = metrics->get_metric("page_cache_hit_count");
@@ -285,7 +298,7 @@ TEST_F(StarRocksMetricsTest, PageCacheMetrics) {
     metrics->collect(&visitor);
     ASSERT_STREQ("1025", lookup_metric->to_string().c_str());
     ASSERT_STREQ("1", hit_metric->to_string().c_str());
-    ASSERT_STREQ(std::to_string(cache->get_capacity()).c_str(), capacity_metric->to_string().c_str());   
+    ASSERT_STREQ(std::to_string(cache->get_capacity()).c_str(), capacity_metric->to_string().c_str());
 }
 
 } // namespace starrocks

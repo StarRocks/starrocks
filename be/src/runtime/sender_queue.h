@@ -1,6 +1,22 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
+
+#include <condition_variable>
+#include <utility>
+
 #include "column/vectorized_fwd.h"
 #include "runtime/data_stream_recvr.h"
 #include "serde/protobuf_serde.h"
@@ -171,7 +187,7 @@ private:
         // Time in nano of saving closure
         int64_t queue_enter_time = -1;
 
-        ChunkItem() {}
+        ChunkItem() = default;
 
         ChunkItem(int64_t chunk_bytes, int32_t driver_sequence, google::protobuf::Closure* closure,
                   ChunkUniquePtr&& chunk_ptr)
@@ -180,9 +196,11 @@ private:
                   closure(closure),
                   chunk_ptr(std::move(chunk_ptr)) {}
 
-        ChunkItem(int64_t chunk_bytes, int32_t driver_sequence, google::protobuf::Closure* closure,
-                  const ChunkPB& pchunk)
-                : chunk_bytes(chunk_bytes), driver_sequence(driver_sequence), closure(closure), pchunk(pchunk) {}
+        ChunkItem(int64_t chunk_bytes, int32_t driver_sequence, google::protobuf::Closure* closure, ChunkPB pchunk)
+                : chunk_bytes(chunk_bytes),
+                  driver_sequence(driver_sequence),
+                  closure(closure),
+                  pchunk(std::move(pchunk)) {}
     };
 
     typedef std::list<ChunkItem> ChunkList;

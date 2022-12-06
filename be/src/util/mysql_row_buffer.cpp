@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/util/mysql_row_buffer.cpp
 
@@ -40,7 +53,7 @@ namespace starrocks {
 // = 252: the next two byte is length
 // = 253: the next three byte is length
 // = 254: the next eighth byte is length
-static char* pack_vlen(char* packet, uint64_t length) {
+static uint8_t* pack_vlen(uint8_t* packet, uint64_t length) {
     if (length < 251ULL) {
         int1store(packet, length);
         return packet + 1;
@@ -220,7 +233,7 @@ char* MysqlRowBuffer::_escape(char* dst, const char* src, size_t length, char es
 
 void MysqlRowBuffer::_push_string_normal(const char* str, size_t length) {
     char* pos = _resize_extra(9 + length);
-    pos = pack_vlen(pos, length);
+    pos = reinterpret_cast<char*>(pack_vlen(reinterpret_cast<uint8_t*>(pos), length));
     strings::memcpy_inlined(pos, str, length);
     pos += length;
     DCHECK(pos >= _data.data() && pos <= _data.data() + _data.size());

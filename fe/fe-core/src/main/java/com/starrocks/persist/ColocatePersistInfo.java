@@ -26,6 +26,7 @@ import com.starrocks.catalog.ColocateTableIndex.GroupId;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Writable;
 import com.starrocks.server.GlobalStateMgr;
+import org.spark_project.guava.base.Objects;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -121,6 +122,11 @@ public class ColocatePersistInfo implements Writable {
             }
             backendsPerBucketSeq.add(beLists);
         }
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(groupId, tableId);
     }
 
     @Override

@@ -1,11 +1,24 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 // #include "exec/vectorized/file_scan_node.h"
 #include <gtest/gtest.h>
 
 #include <memory>
 #include <mutex>
 #include <random>
+#include <utility>
 
 #include "column/chunk.h"
 #include "column/column_helper.h"
@@ -94,8 +107,8 @@ private:
 
     void execute_pipeline();
 
-    void generate_morse_queue(std::vector<starrocks::vectorized::ConnectorScanNode*> scan_nodes,
-                              std::vector<TScanRangeParams> scan_ranges);
+    void generate_morse_queue(const std::vector<starrocks::vectorized::ConnectorScanNode*>& scan_nodes,
+                              const std::vector<TScanRangeParams>& scan_ranges);
 
     RuntimeState* _runtime_state = nullptr;
     OlapTableDescriptor* _table_desc = nullptr;
@@ -234,6 +247,7 @@ void PipeLineFileScanNodeTest::prepare_pipeline() {
                         std::make_shared<PipelineDriver>(std::move(operators), _query_ctx, _fragment_ctx, driver_id++);
                 driver->set_morsel_queue(morsel_queue_factory->create(i));
                 if (auto* scan_operator = driver->source_scan_operator()) {
+                    scan_operator->set_query_ctx(_query_ctx->get_shared_ptr());
                     if (dynamic_cast<starrocks::pipeline::ConnectorScanOperator*>(scan_operator) != nullptr) {
                         scan_operator->set_scan_executor(_exec_env->connector_scan_executor_without_workgroup());
                     } else {
@@ -266,14 +280,15 @@ void PipeLineFileScanNodeTest::execute_pipeline() {
     }
 }
 
-void PipeLineFileScanNodeTest::generate_morse_queue(std::vector<starrocks::vectorized::ConnectorScanNode*> scan_nodes,
-                                                    std::vector<TScanRangeParams> scan_ranges) {
+void PipeLineFileScanNodeTest::generate_morse_queue(
+        const std::vector<starrocks::vectorized::ConnectorScanNode*>& scan_nodes,
+        const std::vector<TScanRangeParams>& scan_ranges) {
     std::vector<TScanRangeParams> no_scan_ranges;
     MorselQueueFactoryMap& morsel_queue_factories = _fragment_ctx->morsel_queue_factories();
 
     std::map<int32_t, std::vector<TScanRangeParams>> no_scan_ranges_per_driver_seq;
     for (auto& i : scan_nodes) {
-        ScanNode* scan_node = (ScanNode*)(i);
+        auto* scan_node = (ScanNode*)(i);
         auto morsel_queue_factory = scan_node->convert_scan_range_to_morsel_queue_factory(
                 scan_ranges, no_scan_ranges_per_driver_seq, scan_node->id(), degree_of_parallelism, true,
                 TTabletInternalParallelMode::type::AUTO);
@@ -342,7 +357,7 @@ class TestFileScanSinkOperator : public Operator {
 public:
     TestFileScanSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                              CounterPtr counter)
-            : Operator(factory, id, "test_sink", plan_node_id, driver_sequence), _counter(counter) {}
+            : Operator(factory, id, "test_sink", plan_node_id, driver_sequence), _counter(std::move(counter)) {}
     ~TestFileScanSinkOperator() override = default;
 
     Status prepare(RuntimeState* state) override {
@@ -385,7 +400,7 @@ StatusOr<vectorized::ChunkPtr> TestFileScanSinkOperator::pull_chunk(RuntimeState
 class TestFileScanSinkOperatorFactory final : public OperatorFactory {
 public:
     TestFileScanSinkOperatorFactory(int32_t id, int32_t plan_node_id, CounterPtr counter)
-            : OperatorFactory(id, "test_sink", plan_node_id), _counter(counter) {}
+            : OperatorFactory(id, "test_sink", plan_node_id), _counter(std::move(counter)) {}
 
     ~TestFileScanSinkOperatorFactory() override = default;
 

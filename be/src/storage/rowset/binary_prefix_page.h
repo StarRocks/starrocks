@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/olap/rowset/segment_v2/binary_prefix_page.h
 
@@ -51,7 +64,7 @@ public:
 
     bool is_page_full() override { return size() >= _options.data_page_size; }
 
-    size_t add(const uint8_t* vals, size_t add_count) override;
+    uint32_t add(const uint8_t* vals, uint32_t add_count) override;
 
     faststring* finish() override;
 
@@ -71,7 +84,7 @@ public:
         }
     }
 
-    size_t count() const override { return _count; }
+    uint32_t count() const override { return _count; }
 
     Status get_first_value(void* value) const override {
         DCHECK(_finished);
@@ -96,36 +109,34 @@ private:
     std::vector<uint32_t> _restart_points_offset;
     faststring _first_entry;
     faststring _last_entry;
-    size_t _count = 0;
+    uint32_t _count = 0;
     bool _finished = false;
     faststring _buffer;
     // This is a empirical value, Kudu and LevelDB use this default value
     static const uint8_t RESTART_POINT_INTERVAL = 16;
 };
 
-template <FieldType Type>
+template <LogicalType Type>
 class BinaryPrefixPageDecoder final : public PageDecoder {
 public:
     BinaryPrefixPageDecoder(Slice data, const PageDecoderOptions& options) : _data(data) {}
 
     Status init() override;
 
-    Status seek_to_position_in_page(size_t pos) override;
+    Status seek_to_position_in_page(uint32_t pos) override;
 
     Status seek_at_or_after_value(const void* value, bool* exact_match) override;
-
-    Status next_batch(size_t* n, ColumnBlockView* dst) override;
 
     Status next_batch(size_t* n, vectorized::Column* dst) override;
 
     Status next_batch(const vectorized::SparseRange& range, vectorized::Column* dst) override;
 
-    size_t count() const override {
+    uint32_t count() const override {
         DCHECK(_parsed);
         return _num_values;
     }
 
-    size_t current_index() const override {
+    uint32_t current_index() const override {
         DCHECK(_parsed);
         return _cur_pos;
     }
@@ -151,7 +162,7 @@ private:
     Status _read_next_value();
 
     // seek to the first value at the given restart point
-    Status _seek_to_restart_point(size_t restart_point_index);
+    Status _seek_to_restart_point(uint32_t restart_point_index);
 
     Status _read_next_value_to_output(Slice prev, MemPool* mem_pool, Slice* output);
 
@@ -161,7 +172,7 @@ private:
 
     Slice _data;
     bool _parsed = false;
-    size_t _num_values = 0;
+    uint32_t _num_values = 0;
     uint8_t _restart_point_internal = 0;
     uint32_t _num_restarts = 0;
     // pointer to _footer start

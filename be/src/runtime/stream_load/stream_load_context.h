@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/runtime/stream_load/stream_load_context.h
 
@@ -129,7 +142,11 @@ public:
         start_nanos = MonotonicNanos();
     }
 
-    ~StreamLoadContext() {
+    explicit StreamLoadContext(ExecEnv* exec_env, UniqueId id) : id(id), _exec_env(exec_env), _refs(0) {
+        start_nanos = MonotonicNanos();
+    }
+
+    ~StreamLoadContext() noexcept {
         if (need_rollback) {
             _exec_env->stream_load_executor()->rollback_txn(this);
             need_rollback = false;
@@ -224,6 +241,7 @@ public:
     std::unique_ptr<PulsarLoadInfo> pulsar_info;
 
     std::vector<TTabletCommitInfo> commit_infos;
+    std::vector<TTabletFailInfo> fail_infos;
 
     std::mutex lock;
 
@@ -237,6 +255,7 @@ public:
     Status status;
 
     int32_t idle_timeout_sec = -1;
+    int channel_id = -1;
 
     // buffer for reading data from ev_buffer
     static constexpr size_t kDefaultBufferSize = 64 * 1024;
@@ -247,6 +266,7 @@ public:
     TStreamLoadPutRequest request;
 
 public:
+    bool is_channel_stream_load_context() { return channel_id != -1; }
     ExecEnv* exec_env() { return _exec_env; }
 
 private:

@@ -4,6 +4,7 @@ package com.starrocks.connector;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.common.DdlException;
+import com.starrocks.connector.delta.DeltaLakeConnectorFactory;
 import com.starrocks.connector.hive.HiveConnectorFactory;
 import com.starrocks.connector.hudi.HudiConnectorFactory;
 import com.starrocks.connector.iceberg.IcebergConnectorFactory;
@@ -12,6 +13,8 @@ import com.starrocks.server.MetadataMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -23,6 +26,8 @@ public class ConnectorMgr {
     private final ConcurrentHashMap<String, ConnectorFactory> connectorFactories = new ConcurrentHashMap<>();
     private final ReadWriteLock connectorLock = new ReentrantReadWriteLock();
 
+    public static final Set<String> SUPPORT_CONNECTOR_TYPE = new HashSet<>();
+
     public ConnectorMgr() {
         init();
     }
@@ -33,10 +38,12 @@ public class ConnectorMgr {
         addConnectorFactory(new IcebergConnectorFactory());
         addConnectorFactory(new HudiConnectorFactory());
         addConnectorFactory(new JDBCConnectorFactory());
+        addConnectorFactory(new DeltaLakeConnectorFactory());
     }
 
     public void addConnectorFactory(ConnectorFactory connectorFactory) {
         Preconditions.checkNotNull(connectorFactory, "connectorFactory is null");
+        SUPPORT_CONNECTOR_TYPE.add(connectorFactory.name());
         ConnectorFactory existingConnectorFactory = connectorFactories.putIfAbsent(
                 connectorFactory.name(), connectorFactory);
         Preconditions.checkArgument(existingConnectorFactory == null,

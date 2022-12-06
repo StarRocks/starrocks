@@ -1,6 +1,8 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.analysis.KeysDesc;
+import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
@@ -322,6 +324,19 @@ public class CTASAnalyzerTest {
         String ctasSql3 = "CREATE TABLE json_kv as select * from test, lateral json_each(parse_json(c1));";
         CreateTableAsSelectStmt createTableStmt3 =
                 (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(ctasSql3, ctx);
+    }
+
+    @Test
+    public void testPKTable() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String sql = "CREATE table test123\n" +
+                "PRIMARY KEY(`a`,`b`) \n" +
+                "as select 1 as a,2 as b,\"\" as d,\"null\" as c;";
+        CreateTableAsSelectStmt createTableStmt =
+                (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        KeysDesc keysDesc
+                = createTableStmt.getCreateTableStmt().getKeysDesc();
+        Assert.assertEquals(KeysType.PRIMARY_KEYS, keysDesc.getKeysType());
     }
 
     @Test

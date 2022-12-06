@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -32,6 +44,7 @@ namespace starrocks {
     M(TYPE_DATETIME)                 \
     M(TYPE_TIME)                     \
     M(TYPE_JSON)                     \
+    M(TYPE_VARBINARY)                \
     M(TYPE_BOOLEAN)
 
 #define APPLY_FOR_ALL_SCALAR_TYPE_WITH_NULL(M) \
@@ -53,7 +66,6 @@ namespace starrocks {
     M(DOUBLE)                           \
     M(DATE)                             \
     M(DATETIME)                         \
-    M(BINARY)                           \
     M(DECIMAL)                          \
     M(CHAR)                             \
     M(LARGEINT)                         \
@@ -67,15 +79,32 @@ namespace starrocks {
     M(DECIMAL64)                        \
     M(DECIMAL128)                       \
     M(FUNCTION)                         \
+    M(BINARY)                           \
+    M(VARBINARY)                        \
     M(JSON)
 
 #define _TYPE_DISPATCH_CASE(type) \
     case type:                    \
         return fun.template operator()<type>(args...);
 
+// Aggregate types
+template <class Functor, class... Args>
+auto type_dispatch_aggregate(LogicalType ptype, Functor fun, Args... args) {
+    switch (ptype) {
+        APPLY_FOR_ALL_NUMBER_TYPE(_TYPE_DISPATCH_CASE)
+        _TYPE_DISPATCH_CASE(TYPE_BOOLEAN)
+        _TYPE_DISPATCH_CASE(TYPE_DATE)
+        _TYPE_DISPATCH_CASE(TYPE_DATETIME)
+        _TYPE_DISPATCH_CASE(TYPE_DECIMALV2)
+    default:
+        CHECK(false) << "Unknown type: " << ptype;
+        __builtin_unreachable();
+    }
+}
+
 // type_dispatch_*:
 template <class Functor, class... Args>
-auto type_dispatch_basic(PrimitiveType ptype, Functor fun, Args... args) {
+auto type_dispatch_basic(LogicalType ptype, Functor fun, Args... args) {
     switch (ptype) {
         APPLY_FOR_ALL_SCALAR_TYPE_WITH_NULL(_TYPE_DISPATCH_CASE)
     default:
@@ -85,7 +114,7 @@ auto type_dispatch_basic(PrimitiveType ptype, Functor fun, Args... args) {
 }
 
 template <class Functor, class... Args>
-auto type_dispatch_all(PrimitiveType ptype, Functor fun, Args... args) {
+auto type_dispatch_all(LogicalType ptype, Functor fun, Args... args) {
     switch (ptype) {
         APPLY_FOR_ALL_SCALAR_TYPE_WITH_NULL(_TYPE_DISPATCH_CASE)
         _TYPE_DISPATCH_CASE(TYPE_ARRAY)
@@ -100,7 +129,7 @@ auto type_dispatch_all(PrimitiveType ptype, Functor fun, Args... args) {
 
 // Types could build into columns
 template <class Functor, class... Args>
-auto type_dispatch_column(PrimitiveType ptype, Functor fun, Args... args) {
+auto type_dispatch_column(LogicalType ptype, Functor fun, Args... args) {
     switch (ptype) {
         APPLY_FOR_ALL_SCALAR_TYPE_WITH_NULL(_TYPE_DISPATCH_CASE)
         _TYPE_DISPATCH_CASE(TYPE_HLL)
@@ -114,7 +143,7 @@ auto type_dispatch_column(PrimitiveType ptype, Functor fun, Args... args) {
 
 // Types which are sortable
 template <class Functor, class... Args>
-auto type_dispatch_sortable(PrimitiveType ptype, Functor fun, Args... args) {
+auto type_dispatch_sortable(LogicalType ptype, Functor fun, Args... args) {
     switch (ptype) {
         APPLY_FOR_ALL_SCALAR_TYPE(_TYPE_DISPATCH_CASE)
     default:
@@ -124,7 +153,7 @@ auto type_dispatch_sortable(PrimitiveType ptype, Functor fun, Args... args) {
 }
 
 template <class Ret, class Functor, class... Args>
-Ret type_dispatch_predicate(PrimitiveType ptype, bool assert, Functor fun, Args... args) {
+Ret type_dispatch_predicate(LogicalType ptype, bool assert, Functor fun, Args... args) {
     switch (ptype) {
         APPLY_FOR_ALL_SCALAR_TYPE(_TYPE_DISPATCH_CASE)
     default:
@@ -138,7 +167,7 @@ Ret type_dispatch_predicate(PrimitiveType ptype, bool assert, Functor fun, Args.
 }
 
 template <class Functor, class Ret, class... Args>
-auto type_dispatch_filter(PrimitiveType ptype, Ret default_value, Functor fun, Args... args) {
+auto type_dispatch_filter(LogicalType ptype, Ret default_value, Functor fun, Args... args) {
     switch (ptype) {
         APPLY_FOR_ALL_SCALAR_TYPE(_TYPE_DISPATCH_CASE)
     default:

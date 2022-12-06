@@ -1,6 +1,6 @@
 # CREATE VIEW
 
-## description
+## Description
 
 This statement is used to create a logical view.
 

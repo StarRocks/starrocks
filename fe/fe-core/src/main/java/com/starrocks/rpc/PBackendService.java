@@ -4,9 +4,11 @@ package com.starrocks.rpc;
 import com.baidu.jprotobuf.pbrpc.ProtobufRPC;
 import com.starrocks.proto.PCancelPlanFragmentRequest;
 import com.starrocks.proto.PCancelPlanFragmentResult;
+import com.starrocks.proto.PCollectQueryStatisticsResult;
 import com.starrocks.proto.PExecBatchPlanFragmentsResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
 import com.starrocks.proto.PFetchDataResult;
+import com.starrocks.proto.PMVMaintenanceTaskResult;
 import com.starrocks.proto.PProxyRequest;
 import com.starrocks.proto.PProxyResult;
 import com.starrocks.proto.PPulsarProxyRequest;
@@ -36,10 +38,18 @@ public interface PBackendService {
             attachmentHandler = ThriftClientAttachmentHandler.class, onceTalkTimeout = 10000)
     Future<PTriggerProfileReportResult> triggerProfileReport(PTriggerProfileReportRequest request);
 
+    @ProtobufRPC(serviceName = "PBackendService", methodName = "collect_query_statistics",
+            attachmentHandler = ThriftClientAttachmentHandler.class, onceTalkTimeout = 10000)
+    Future<PCollectQueryStatisticsResult> collectQueryStatistics(PCollectQueryStatisticsRequest request);
+
     @ProtobufRPC(serviceName = "PBackendService", methodName = "get_info", onceTalkTimeout = 10000)
     Future<PProxyResult> getInfo(PProxyRequest request);
 
     @ProtobufRPC(serviceName = "PBackendService", methodName = "get_pulsar_info", onceTalkTimeout = 10000)
     Future<PPulsarProxyResult> getPulsarInfo(PPulsarProxyRequest request);
+
+    @ProtobufRPC(serviceName = "PBackendService", methodName = "submit_mv_maintenance_task", onceTalkTimeout = 60000,
+            attachmentHandler = ThriftClientAttachmentHandler.class)
+    Future<PMVMaintenanceTaskResult> submitMVMaintenanceTaskAsync(PMVMaintenanceTaskRequest request);
 }
 

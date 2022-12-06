@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -23,6 +35,9 @@ class HdfsScannerContext;
 } // namespace starrocks
 
 namespace starrocks::parquet {
+
+constexpr static const uint64_t FOOTER_BUFFER_SIZE = 16 * 1024;
+constexpr static const char* PARQUET_MAGIC_NUMBER = "PAR1";
 
 class FileMetaData;
 
@@ -95,10 +110,10 @@ private:
     uint64_t _file_size = 0;
 
     std::shared_ptr<FileMetaData> _file_metadata;
-    vector<std::shared_ptr<GroupReader>> _row_group_readers;
+    std::vector<std::shared_ptr<GroupReader>> _row_group_readers;
     size_t _cur_row_group_idx = 0;
     size_t _row_group_size = 0;
-    vectorized::Schema _schema;
+    vectorized::VectorizedSchema _schema;
 
     std::vector<GroupReaderParam::Column> _read_cols;
     size_t _total_row_count = 0;

@@ -10,8 +10,8 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.Map;
 
-import static com.starrocks.catalog.IcebergTable.ICEBERG_CATALOG;
 import static com.starrocks.catalog.IcebergTable.ICEBERG_CATALOG_LEGACY;
+import static com.starrocks.catalog.IcebergTable.ICEBERG_CATALOG_TYPE;
 
 public class IcebergConnector implements Connector {
     private static final Logger LOG = LogManager.getLogger(IcebergConnector.class);
@@ -28,11 +28,11 @@ public class IcebergConnector implements Connector {
     @Override
     public ConnectorMetadata getMetadata() {
         if (metadata == null) {
-            if (null == properties.get(ICEBERG_CATALOG) || properties.get(ICEBERG_CATALOG).length() == 0) {
-                properties.put(ICEBERG_CATALOG, properties.get(ICEBERG_CATALOG_LEGACY));
+            if (null == properties.get(ICEBERG_CATALOG_TYPE) || properties.get(ICEBERG_CATALOG_TYPE).length() == 0) {
+                properties.put(ICEBERG_CATALOG_TYPE, properties.get(ICEBERG_CATALOG_LEGACY));
             }
             try {
-                metadata = new IcebergMetadata(properties);
+                metadata = new IcebergMetadata(catalogName, properties);
             } catch (Exception e) {
                 LOG.error("Failed to create iceberg metadata on [catalog : {}]", catalogName, e);
                 throw e;

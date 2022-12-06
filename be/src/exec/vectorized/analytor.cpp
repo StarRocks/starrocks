@@ -1,5 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "exec/vectorized/analytor.h"
 
 #include <cmath>
@@ -112,7 +124,7 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
             ++node_idx;
             Expr* expr = nullptr;
             ExprContext* ctx = nullptr;
-            RETURN_IF_ERROR(Expr::create_tree_from_thrift(_pool, desc.nodes, nullptr, &node_idx, &expr, &ctx));
+            RETURN_IF_ERROR(Expr::create_tree_from_thrift(_pool, desc.nodes, nullptr, &node_idx, &expr, &ctx, state));
             _agg_expr_ctxs[i].emplace_back(ctx);
         }
 
@@ -208,7 +220,7 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
         }
     }
 
-    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, analytic_node.partition_exprs, &_partition_ctxs));
+    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, analytic_node.partition_exprs, &_partition_ctxs, state));
     _partition_columns.resize(_partition_ctxs.size());
     for (size_t i = 0; i < _partition_ctxs.size(); i++) {
         _partition_columns[i] = vectorized::ColumnHelper::create_column(
@@ -216,7 +228,7 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
                 _partition_ctxs[i]->root()->is_constant(), 0);
     }
 
-    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, analytic_node.order_by_exprs, &_order_ctxs));
+    RETURN_IF_ERROR(Expr::create_expr_trees(_pool, analytic_node.order_by_exprs, &_order_ctxs, state));
     _order_columns.resize(_order_ctxs.size());
     for (size_t i = 0; i < _order_ctxs.size(); i++) {
         _order_columns[i] = vectorized::ColumnHelper::create_column(
@@ -432,8 +444,8 @@ void Analytor::create_agg_result_columns(int64_t chunk_size) {
                                                                                 _agg_fn_types[i].has_nullable_child);
             // binary column cound't call resize method like Numeric Column,
             // so we only reserve it.
-            if (_agg_fn_types[i].result_type.type == PrimitiveType::TYPE_CHAR ||
-                _agg_fn_types[i].result_type.type == PrimitiveType::TYPE_VARCHAR) {
+            if (_agg_fn_types[i].result_type.type == LogicalType::TYPE_CHAR ||
+                _agg_fn_types[i].result_type.type == LogicalType::TYPE_VARCHAR) {
                 _result_window_columns[i]->reserve(chunk_size);
             } else {
                 _result_window_columns[i]->resize(chunk_size);
@@ -484,7 +496,7 @@ void Analytor::_append_column(size_t chunk_size, vectorized::Column* dst_column,
     if (src_column->only_null()) {
         static_cast<void>(dst_column->append_nulls(chunk_size));
     } else if (src_column->is_constant()) {
-        vectorized::ConstColumn* const_column = static_cast<vectorized::ConstColumn*>(src_column.get());
+        auto* const_column = static_cast<vectorized::ConstColumn*>(src_column.get());
         const_column->data_column()->assign(chunk_size, 0);
         dst_column->append(*const_column->data_column(), 0, chunk_size);
     } else {

@@ -1,5 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "formats/parquet/file_reader.h"
 
 #include "column/column_helper.h"
@@ -21,8 +33,6 @@
 
 namespace starrocks::parquet {
 
-static constexpr uint32_t kFooterSize = 8;
-
 FileReader::FileReader(int chunk_size, RandomAccessFile* file, uint64_t file_size)
         : _chunk_size(chunk_size), _file(file), _file_size(file_size) {}
 
@@ -33,7 +43,7 @@ Status FileReader::init(vectorized::HdfsScannerContext* ctx) {
     RETURN_IF_ERROR(_parse_footer());
 
     std::unordered_set<std::string> names;
-    _file_metadata->schema().get_field_names(&names);
+    _file_metadata->schema().get_field_names(&names, _scanner_ctx->case_sensitive);
     _scanner_ctx->set_columns_from_file(names);
     ASSIGN_OR_RETURN(_is_file_filtered, _scanner_ctx->should_skip_by_evaluating_not_existed_slots());
     if (_is_file_filtered) {
@@ -46,8 +56,7 @@ Status FileReader::init(vectorized::HdfsScannerContext* ctx) {
 
 Status FileReader::_parse_footer() {
     // try with buffer on stack
-    constexpr uint64_t footer_buf_size = 16 * 1024;
-    uint8_t local_buf[footer_buf_size];
+    uint8_t local_buf[FOOTER_BUFFER_SIZE];
     uint8_t* footer_buf = local_buf;
     // we may allocate on heap if local_buf is not large enough.
     DeferOp deferop([&] {
@@ -56,7 +65,7 @@ Status FileReader::_parse_footer() {
         }
     });
 
-    uint64_t to_read = std::min(_file_size, footer_buf_size);
+    uint64_t to_read = std::min(_file_size, FOOTER_BUFFER_SIZE);
     {
         SCOPED_RAW_TIMER(&_scanner_ctx->stats->footer_read_ns);
         RETURN_IF_ERROR(_file->read_at_fully(_file_size - to_read, footer_buf, to_read));
@@ -69,7 +78,7 @@ Status FileReader::_parse_footer() {
     // if local buf is not large enough, we have to allocate on heap and re-read.
     // 4 bytes magic number, 4 bytes for footer_size, so total size is footer_size + 8.
     if ((footer_size + 8) > to_read) {
-        VLOG_FILE << "parquet file has large footer. name = " << _file->filename() << ", footer_size = " << footer_size;
+        // VLOG_FILE << "parquet file has large footer. name = " << _file->filename() << ", footer_size = " << footer_size;
         to_read = footer_size + 8;
         if (_file_size < to_read) {
             return Status::Corruption(strings::Substitute("Invalid parquet file: name=$0, file_size=$1, footer_size=$2",
@@ -82,6 +91,8 @@ Status FileReader::_parse_footer() {
         }
     }
 
+    _scanner_ctx->stats->request_bytes_read += footer_size + 8;
+
     tparquet::FileMetaData t_metadata;
     // deserialize footer
     RETURN_IF_ERROR(deserialize_thrift_msg(footer_buf + to_read - 8 - footer_size, &footer_size, TProtocolType::COMPACT,
@@ -93,8 +104,7 @@ Status FileReader::_parse_footer() {
 }
 
 Status FileReader::_check_magic(const uint8_t* file_magic) {
-    static const char* s_magic = "PAR1";
-    if (!memequal(reinterpret_cast<const char*>(file_magic), 4, s_magic, 4)) {
+    if (!memequal(reinterpret_cast<const char*>(file_magic), 4, PARQUET_MAGIC_NUMBER, 4)) {
         return Status::Corruption("Parquet file magic not match");
     }
     return Status::OK();
@@ -256,16 +266,17 @@ Status FileReader::_decode_min_max_column(const ParquetField& field, const std::
         std::unique_ptr<ColumnConverter> converter;
         RETURN_IF_ERROR(ColumnConverterFactory::create_converter(field, type, timezone, &converter));
 
+        [[maybe_unused]] size_t ret = 0;
         if (!converter->need_convert) {
-            (*min_column)->append_numbers(&min_value, sizeof(int32_t));
-            (*max_column)->append_numbers(&max_value, sizeof(int32_t));
+            ret = (*min_column)->append_numbers(&min_value, sizeof(int32_t));
+            ret = (*max_column)->append_numbers(&max_value, sizeof(int32_t));
         } else {
             vectorized::ColumnPtr min_scr_column = converter->create_src_column();
-            min_scr_column->append_numbers(&min_value, sizeof(int32_t));
+            ret = min_scr_column->append_numbers(&min_value, sizeof(int32_t));
             converter->convert(min_scr_column, min_column->get());
 
             vectorized::ColumnPtr max_scr_column = converter->create_src_column();
-            max_scr_column->append_numbers(&max_value, sizeof(int32_t));
+            ret = max_scr_column->append_numbers(&max_value, sizeof(int32_t));
             converter->convert(max_scr_column, max_column->get());
         }
         break;
@@ -283,16 +294,17 @@ Status FileReader::_decode_min_max_column(const ParquetField& field, const std::
         std::unique_ptr<ColumnConverter> converter;
         RETURN_IF_ERROR(ColumnConverterFactory::create_converter(field, type, timezone, &converter));
 
+        [[maybe_unused]] size_t ret = 0;
         if (!converter->need_convert) {
-            (*min_column)->append_numbers(&min_value, sizeof(int64_t));
-            (*max_column)->append_numbers(&max_value, sizeof(int64_t));
+            ret = (*min_column)->append_numbers(&min_value, sizeof(int64_t));
+            ret = (*max_column)->append_numbers(&max_value, sizeof(int64_t));
         } else {
             vectorized::ColumnPtr min_scr_column = converter->create_src_column();
-            min_scr_column->append_numbers(&min_value, sizeof(int64_t));
+            ret = min_scr_column->append_numbers(&min_value, sizeof(int64_t));
             converter->convert(min_scr_column, min_column->get());
 
             vectorized::ColumnPtr max_scr_column = converter->create_src_column();
-            max_scr_column->append_numbers(&max_value, sizeof(int64_t));
+            ret = max_scr_column->append_numbers(&max_value, sizeof(int64_t));
             converter->convert(max_scr_column, max_column->get());
         }
         break;
@@ -310,16 +322,17 @@ Status FileReader::_decode_min_max_column(const ParquetField& field, const std::
         std::unique_ptr<ColumnConverter> converter;
         RETURN_IF_ERROR(ColumnConverterFactory::create_converter(field, type, timezone, &converter));
 
+        [[maybe_unused]] bool ret = false;
         if (!converter->need_convert) {
-            (*min_column)->append_strings(std::vector<Slice>{min_slice});
-            (*max_column)->append_strings(std::vector<Slice>{max_slice});
+            ret = (*min_column)->append_strings(std::vector<Slice>{min_slice});
+            ret = (*max_column)->append_strings(std::vector<Slice>{max_slice});
         } else {
             vectorized::ColumnPtr min_scr_column = converter->create_src_column();
-            min_scr_column->append_strings(std::vector<Slice>{min_slice});
+            ret = min_scr_column->append_strings(std::vector<Slice>{min_slice});
             converter->convert(min_scr_column, min_column->get());
 
             vectorized::ColumnPtr max_scr_column = converter->create_src_column();
-            max_scr_column->append_strings(std::vector<Slice>{max_slice});
+            ret = max_scr_column->append_strings(std::vector<Slice>{max_slice});
             converter->convert(max_scr_column, max_column->get());
         }
         break;

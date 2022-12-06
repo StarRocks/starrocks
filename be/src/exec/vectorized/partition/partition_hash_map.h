@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -242,7 +254,7 @@ protected:
     }
 };
 
-template <PrimitiveType primitive_type, typename HashMap>
+template <LogicalType primitive_type, typename HashMap>
 struct PartitionHashMapWithOneNumberKey : public PartitionHashMapBase {
     using Iterator = typename HashMap::iterator;
     using ColumnType = RunTimeColumnType<primitive_type>;
@@ -262,7 +274,7 @@ struct PartitionHashMapWithOneNumberKey : public PartitionHashMapBase {
     }
 };
 
-template <PrimitiveType primitive_type, typename HashMap>
+template <LogicalType primitive_type, typename HashMap>
 struct PartitionHashMapWithOneNullableNumberKey : public PartitionHashMapBase {
     using Iterator = typename HashMap::iterator;
     using ColumnType = RunTimeColumnType<primitive_type>;
@@ -338,7 +350,7 @@ struct PartitionHashMapWithSerializedKey {
     HashMap hash_map;
 
     PartitionHashMapWithSerializedKey(int32_t chunk_size) {}
-    bool append_chunk(ChunkPtr chunk, const Columns& key_columns, MemPool* mem_pool, ObjectPool* obj_pool) {
+    bool append_chunk(const ChunkPtr& chunk, const Columns& key_columns, MemPool* mem_pool, ObjectPool* obj_pool) {
         return false;
     }
 };
@@ -352,7 +364,7 @@ struct PartitionHashMapWithSerializedKeyFixedSize {
     int fixed_byte_size = -1; // unset state
 
     PartitionHashMapWithSerializedKeyFixedSize(int32_t chunk_size) {}
-    bool append_chunk(ChunkPtr chunk, const Columns& key_columns, MemPool* mem_pool, ObjectPool* obj_pool) {
+    bool append_chunk(const ChunkPtr& chunk, const Columns& key_columns, MemPool* mem_pool, ObjectPool* obj_pool) {
         return false;
     }
 };

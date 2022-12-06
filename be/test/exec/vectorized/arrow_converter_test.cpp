@@ -1,5 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include <arrow/builder.h>
 #include <arrow/memory_pool.h>
 #include <arrow/testing/gtest_util.h>
@@ -7,6 +19,8 @@
 #include <gtest/gtest.h>
 #include <testutil/parallel_test.h>
 #include <util/guard.h>
+
+#include <utility>
 
 #include "arrow/array/builder_base.h"
 #include "arrow/type_fwd.h"
@@ -24,7 +38,7 @@ namespace starrocks::vectorized {
 
 class ArrowConverterTest : public ::testing::Test {
 public:
-    void SetUp() { vectorized::date::init_date_cache(); }
+    void SetUp() override { vectorized::date::init_date_cache(); }
 };
 
 template <typename ArrowType, bool is_nullable = false, typename CType = typename arrow::TypeTraits<ArrowType>::CType,
@@ -49,7 +63,7 @@ static inline std::shared_ptr<arrow::Array> create_constant_array(int64_t num_el
     return array;
 }
 
-template <ArrowTypeId AT, PrimitiveType PT, typename ArrowType,
+template <ArrowTypeId AT, LogicalType PT, typename ArrowType,
           typename ArrowCppType = typename arrow::TypeTraits<ArrowType>::CType>
 void add_arrow_to_column(Column* column, size_t num_elements, ArrowCppType value, size_t& counter) {
     ASSERT_EQ(column->size(), counter);
@@ -69,7 +83,7 @@ void add_arrow_to_column(Column* column, size_t num_elements, ArrowCppType value
     }
 }
 
-template <ArrowTypeId AT, PrimitiveType PT, typename ArrowType,
+template <ArrowTypeId AT, LogicalType PT, typename ArrowType,
           typename ArrowCppType = typename arrow::TypeTraits<ArrowType>::CType>
 void add_arrow_to_nullable_column(Column* column, size_t num_elements, ArrowCppType value, size_t& counter) {
     ASSERT_TRUE(column->is_nullable());
@@ -217,7 +231,7 @@ static inline std::shared_ptr<arrow::Array> create_constant_binary_array(int64_t
     return std::static_pointer_cast<arrow::Array>(array);
 }
 
-template <ArrowTypeId AT, PrimitiveType PT, typename ArrowType, typename ArrowCppType>
+template <ArrowTypeId AT, LogicalType PT, typename ArrowType, typename ArrowCppType>
 void add_arrow_to_binary_column(Column* column, size_t num_elements, ArrowCppType value, size_t& counter,
                                 bool strict_mode, bool fail) {
     ASSERT_EQ(column->size(), counter);
@@ -248,7 +262,7 @@ void add_arrow_to_binary_column(Column* column, size_t num_elements, ArrowCppTyp
 template <typename T>
 using TestCaseArray = std::vector<std::tuple<size_t, T, bool>>;
 
-template <ArrowTypeId AT, PrimitiveType PT, typename ArrowType, typename ArrowCppType>
+template <ArrowTypeId AT, LogicalType PT, typename ArrowType, typename ArrowCppType>
 void test_binary(const TestCaseArray<ArrowCppType>& test_cases, bool strict_mode) {
     using ColumnType = RunTimeColumnType<PT>;
     auto col = ColumnType::create();
@@ -263,7 +277,7 @@ void test_binary(const TestCaseArray<ArrowCppType>& test_cases, bool strict_mode
     }
 }
 
-template <ArrowTypeId AT, PrimitiveType PT, typename ArrowType, typename ArrowCppType>
+template <ArrowTypeId AT, LogicalType PT, typename ArrowType, typename ArrowCppType>
 void add_arrow_to_nullable_binary_column(Column* column, size_t num_elements, ArrowCppType value, size_t& counter,
                                          bool strict_mode, bool fail) {
     ASSERT_EQ(column->size(), counter);
@@ -302,7 +316,7 @@ void add_arrow_to_nullable_binary_column(Column* column, size_t num_elements, Ar
     }
 }
 
-template <ArrowTypeId AT, PrimitiveType PT, typename ArrowType, typename ArrowCppType>
+template <ArrowTypeId AT, LogicalType PT, typename ArrowType, typename ArrowCppType>
 void test_nullable_binary(const TestCaseArray<ArrowCppType>& test_cases, bool strict_mode) {
     using ColumnType = RunTimeColumnType<PT>;
     auto binary_column = ColumnType::create();
@@ -392,7 +406,7 @@ PARALLEL_TEST(ArrowConverterTest, test_nullable_binary_nonstrict) {
     test_nullable_binary_with_strict_mode(test_cases, false);
 }
 
-template <PrimitiveType PT>
+template <LogicalType PT>
 void convert_binary_fail(size_t limit, bool strict_mode) {
     auto test_cases_pass = TestCaseArray<std::string>{
             {7, std::string(limit, 'x'), false},
@@ -457,7 +471,7 @@ static inline std::shared_ptr<arrow::Array> create_constant_fixed_size_binary_ar
     return std::static_pointer_cast<arrow::Array>(array);
 }
 
-template <int bytes_width, PrimitiveType PT>
+template <int bytes_width, LogicalType PT>
 void add_fixed_size_binary_array_to_binary_column(Column* column, size_t num_elements, const std::string& value,
                                                   size_t& counter, bool fail) {
     ASSERT_EQ(column->size(), counter);
@@ -487,7 +501,7 @@ void add_fixed_size_binary_array_to_binary_column(Column* column, size_t num_ele
     }
 }
 
-template <int bytes_width, PrimitiveType PT>
+template <int bytes_width, LogicalType PT>
 void add_fixed_size_binary_array_to_nullable_binary_column(Column* column, size_t num_elements,
                                                            const std::string& value, size_t& counter, bool fail) {
     ASSERT_EQ(column->size(), counter);
@@ -527,7 +541,7 @@ void add_fixed_size_binary_array_to_nullable_binary_column(Column* column, size_
     }
 }
 
-template <int bytes_width, PrimitiveType PT>
+template <int bytes_width, LogicalType PT>
 void PARALLEL_TESTixed_size_binary(const TestCaseArray<std::string>& test_cases) {
     using ColumnType = RunTimeColumnType<PT>;
     auto col = ColumnType::create();
@@ -541,7 +555,7 @@ void PARALLEL_TESTixed_size_binary(const TestCaseArray<std::string>& test_cases)
     }
 }
 
-template <int bytes_width, PrimitiveType PT>
+template <int bytes_width, LogicalType PT>
 void test_nullable_fixed_size_binary(const TestCaseArray<std::string>& test_cases) {
     using ColumnType = RunTimeColumnType<PT>;
     auto binary_column = ColumnType::create();
@@ -588,7 +602,8 @@ PARALLEL_TEST(ArrowConverterTest, PARALLEL_TESTixed_size_binary_fail) {
 
 template <typename ArrowType, bool is_nullable, typename ArrowCppType = typename arrow::TypeTraits<ArrowType>::CType>
 std::shared_ptr<arrow::Array> create_constant_datetime_array(size_t num_elements, ArrowCppType value,
-                                                             std::shared_ptr<arrow::DataType> type, size_t& counter) {
+                                                             const std::shared_ptr<arrow::DataType>& type,
+                                                             size_t& counter) {
     std::vector<std::shared_ptr<arrow::Buffer>> buffers;
     buffers.resize(2);
     size_t null_bitmap_in_bytes = (num_elements + 7) / 8;
@@ -658,7 +673,7 @@ ArrowCppType string_to_arrow_datetime(std::shared_ptr<ArrowType> type, const std
     return datetime_value;
 }
 
-template <PrimitiveType PT, typename CppType = RunTimeCppType<PT>>
+template <LogicalType PT, typename CppType = RunTimeCppType<PT>>
 CppType string_to_datetime(const std::string& value) {
     if constexpr (pt_is_date<PT>) {
         DateValue dv;
@@ -673,7 +688,7 @@ CppType string_to_datetime(const std::string& value) {
     }
 }
 
-template <ArrowTypeId AT, PrimitiveType PT, typename ArrowType,
+template <ArrowTypeId AT, LogicalType PT, typename ArrowType,
           typename ArrowCppType = typename arrow::TypeTraits<ArrowType>::CType, typename CppType = RunTimeCppType<PT>>
 void add_arrow_to_datetime_column(std::shared_ptr<ArrowType> type, Column* column, size_t num_elements,
                                   ArrowCppType arrow_datetime, CppType datetime, size_t& counter, bool fail) {
@@ -699,7 +714,7 @@ void add_arrow_to_datetime_column(std::shared_ptr<ArrowType> type, Column* colum
     }
 }
 
-template <ArrowTypeId AT, PrimitiveType PT, typename ArrowType,
+template <ArrowTypeId AT, LogicalType PT, typename ArrowType,
           typename ArrowCppType = typename arrow::TypeTraits<ArrowType>::CType, typename CppType = RunTimeCppType<PT>>
 void add_arrow_to_nullable_datetime_column(std::shared_ptr<ArrowType> type, Column* column, size_t num_elements,
                                            ArrowCppType arrow_datetime, CppType datetime, size_t& counter, bool fail) {
@@ -737,7 +752,7 @@ void add_arrow_to_nullable_datetime_column(std::shared_ptr<ArrowType> type, Colu
     }
 }
 
-template <ArrowTypeId AT, PrimitiveType PT, typename ArrowType>
+template <ArrowTypeId AT, LogicalType PT, typename ArrowType>
 void test_datetime(std::shared_ptr<ArrowType> type, const TestCaseArray<std::string>& test_cases) {
     using CppType = RunTimeCppType<PT>;
     using ColumnType = RunTimeColumnType<PT>;
@@ -755,7 +770,7 @@ void test_datetime(std::shared_ptr<ArrowType> type, const TestCaseArray<std::str
     }
 }
 
-template <ArrowTypeId AT, PrimitiveType PT, typename ArrowType>
+template <ArrowTypeId AT, LogicalType PT, typename ArrowType>
 void test_nullable_datetime(std::shared_ptr<ArrowType> type, const TestCaseArray<std::string>& test_cases) {
     using CppType = RunTimeCppType<PT>;
     using ColumnType = RunTimeColumnType<PT>;
@@ -870,8 +885,8 @@ PARALLEL_TEST(ArrowConverterTest, test_timestamp_to_datetime) {
 
 template <bool is_nullable>
 std::shared_ptr<arrow::Array> create_const_decimal_array(size_t num_elements,
-                                                         std::shared_ptr<arrow::Decimal128Type> type, int128_t decimal,
-                                                         size_t& counter) {
+                                                         const std::shared_ptr<arrow::Decimal128Type>& type,
+                                                         int128_t decimal, size_t& counter) {
     std::vector<std::shared_ptr<arrow::Buffer>> buffers;
     buffers.resize(2);
     auto byte_width = type->byte_width();
@@ -894,12 +909,13 @@ std::shared_ptr<arrow::Array> create_const_decimal_array(size_t num_elements,
     counter += num_elements;
     return array;
 }
-template <PrimitiveType PT, typename CppType = RunTimeCppType<PT>>
-void add_arrow_to_decimal_column(std::shared_ptr<arrow::Decimal128Type> type, Column* column, size_t num_elements,
-                                 int128_t value, CppType expect_value, size_t& counter, bool fail) {
+template <LogicalType PT, typename CppType = RunTimeCppType<PT>>
+void add_arrow_to_decimal_column(const std::shared_ptr<arrow::Decimal128Type>& type, Column* column,
+                                 size_t num_elements, int128_t value, CppType expect_value, size_t& counter,
+                                 bool fail) {
     using ColumnType = RunTimeColumnType<PT>;
     ASSERT_EQ(column->size(), counter);
-    auto array = create_const_decimal_array<false>(num_elements, type, value, counter);
+    auto array = create_const_decimal_array<false>(num_elements, std::move(type), value, counter);
     auto conv_func = get_arrow_converter(ArrowTypeId::DECIMAL, PT, false, false);
     ASSERT_TRUE(conv_func != nullptr);
     Column::Filter filter;
@@ -920,13 +936,13 @@ void add_arrow_to_decimal_column(std::shared_ptr<arrow::Decimal128Type> type, Co
     }
 }
 
-template <PrimitiveType PT, typename CppType = RunTimeCppType<PT>>
-void add_arrow_to_nullable_decimal_column(std::shared_ptr<arrow::Decimal128Type> type, Column* column,
+template <LogicalType PT, typename CppType = RunTimeCppType<PT>>
+void add_arrow_to_nullable_decimal_column(const std::shared_ptr<arrow::Decimal128Type>& type, Column* column,
                                           size_t num_elements, int128_t value, CppType expect_value, size_t& counter,
                                           bool fail) {
     using ColumnType = RunTimeColumnType<PT>;
     ASSERT_EQ(column->size(), counter);
-    auto array = create_const_decimal_array<true>(num_elements, type, value, counter);
+    auto array = create_const_decimal_array<true>(num_elements, std::move(type), value, counter);
     auto conv_func = get_arrow_converter(ArrowTypeId::DECIMAL, PT, true, false);
     ASSERT_TRUE(conv_func != nullptr);
     auto* nullable_column = down_cast<NullableColumn*>(column);
@@ -953,7 +969,7 @@ void add_arrow_to_nullable_decimal_column(std::shared_ptr<arrow::Decimal128Type>
     }
 }
 
-template <PrimitiveType FromPT, PrimitiveType ToPT, typename FromCppType = RunTimeCppType<FromPT>,
+template <LogicalType FromPT, LogicalType ToPT, typename FromCppType = RunTimeCppType<FromPT>,
           typename ToCppType = RunTimeCppType<ToPT>>
 bool decimal_to_decimal(FromCppType from_value, ToCppType* to_value, int adjust_scale) {
     if (adjust_scale == 0) {
@@ -969,7 +985,7 @@ bool decimal_to_decimal(FromCppType from_value, ToCppType* to_value, int adjust_
     }
 }
 
-template <PrimitiveType PT>
+template <LogicalType PT>
 void test_decimal(std::shared_ptr<arrow::Decimal128Type> type, const TestCaseArray<std::string>& test_cases,
                   int precision, int scale) {
     using ColumnType = RunTimeColumnType<PT>;
@@ -1002,7 +1018,7 @@ void test_decimal(std::shared_ptr<arrow::Decimal128Type> type, const TestCaseArr
     }
 }
 
-template <PrimitiveType PT>
+template <LogicalType PT>
 void test_nullable_decimal(std::shared_ptr<arrow::Decimal128Type> type, const TestCaseArray<std::string>& test_cases,
                            int precision, int scale) {
     using ColumnType = RunTimeColumnType<PT>;

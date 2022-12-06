@@ -37,11 +37,11 @@ public:
     using VSlice = vpack::Slice;
     using VBuilder = vpack::Builder;
 
-    JsonValue() {}
+    JsonValue() = default;
 
     JsonValue(const JsonValue& rhs) : binary_(rhs.binary_.data(), rhs.binary_.size()) {}
 
-    JsonValue(JsonValue&& rhs) : binary_(std::move(rhs.binary_)) {}
+    JsonValue(JsonValue&& rhs) noexcept : binary_(std::move(rhs.binary_)) {}
 
     JsonValue& operator=(const JsonValue& rhs) {
         if (this != &rhs) {
@@ -50,7 +50,7 @@ public:
         return *this;
     }
 
-    JsonValue& operator=(JsonValue&& rhs) {
+    JsonValue& operator=(JsonValue&& rhs) noexcept {
         if (this != &rhs) {
             binary_ = std::move(rhs.binary_);
         }
@@ -157,6 +157,10 @@ inline vpack::Slice noneJsonSlice() {
 
 inline vpack::Slice nullJsonSlice() {
     return vpack::Slice::nullSlice();
+}
+
+inline vpack::Slice emptyStringJsonSlice() {
+    return vpack::Slice::emptyStringSlice();
 }
 
 template <class Ret, class Fn>

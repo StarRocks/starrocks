@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -13,54 +25,19 @@
 
 namespace starrocks::vectorized {
 
-template <PrimitiveType PT, typename = guard::Guard>
+template <LogicalType PT, typename = guard::Guard>
 struct MaxAggregateData {};
 
-template <PrimitiveType PT>
-struct MaxAggregateData<PT, IntegralPTGuard<PT>> {
+template <LogicalType PT>
+struct MaxAggregateData<PT, AggregatePTGuard<PT>> {
     using T = RunTimeCppType<PT>;
-    T result = std::numeric_limits<T>::lowest();
+    T result = RunTimeTypeLimits<PT>::min_value();
 
-    void reset() { result = std::numeric_limits<T>::lowest(); }
+    void reset() { result = RunTimeTypeLimits<PT>::min_value(); }
 };
 
-template <PrimitiveType PT>
-struct MaxAggregateData<PT, FloatPTGuard<PT>> {
-    using T = RunTimeCppType<PT>;
-    T result = std::numeric_limits<T>::lowest();
-    void reset() { result = std::numeric_limits<T>::lowest(); }
-};
-
-template <>
-struct MaxAggregateData<TYPE_DECIMALV2, guard::Guard> {
-    DecimalV2Value result = DecimalV2Value::get_min_decimal();
-
-    void reset() { result = DecimalV2Value::get_min_decimal(); }
-};
-
-template <PrimitiveType PT>
-struct MaxAggregateData<PT, DecimalPTGuard<PT>> {
-    using T = RunTimeCppType<PT>;
-    T result = get_min_decimal<T>();
-    void reset() { result = get_min_decimal<T>(); }
-};
-
-template <>
-struct MaxAggregateData<TYPE_DATETIME, guard::Guard> {
-    TimestampValue result = TimestampValue::MIN_TIMESTAMP_VALUE;
-
-    void reset() { result = TimestampValue::MIN_TIMESTAMP_VALUE; }
-};
-
-template <>
-struct MaxAggregateData<TYPE_DATE, guard::Guard> {
-    DateValue result = DateValue::MIN_DATE_VALUE;
-
-    void reset() { result = DateValue::MIN_DATE_VALUE; }
-};
-
-template <PrimitiveType PT>
-struct MaxAggregateData<PT, BinaryPTGuard<PT>> {
+template <LogicalType PT>
+struct MaxAggregateData<PT, StringPTGuard<PT>> {
     int32_t size = -1;
     raw::RawVector<uint8_t> buffer;
 
@@ -74,54 +51,19 @@ struct MaxAggregateData<PT, BinaryPTGuard<PT>> {
     }
 };
 
-template <PrimitiveType PT, typename = guard::Guard>
+template <LogicalType PT, typename = guard::Guard>
 struct MinAggregateData {};
 
-template <PrimitiveType PT>
-struct MinAggregateData<PT, IntegralPTGuard<PT>> {
+template <LogicalType PT>
+struct MinAggregateData<PT, AggregatePTGuard<PT>> {
     using T = RunTimeCppType<PT>;
-    T result = std::numeric_limits<T>::max();
+    T result = RunTimeTypeLimits<PT>::max_value();
 
-    void reset() { result = std::numeric_limits<T>::max(); }
+    void reset() { result = RunTimeTypeLimits<PT>::max_value(); }
 };
 
-template <PrimitiveType PT>
-struct MinAggregateData<PT, FloatPTGuard<PT>> {
-    using T = RunTimeCppType<PT>;
-    T result = std::numeric_limits<T>::max();
-
-    void reset() { result = std::numeric_limits<T>::max(); }
-};
-
-template <>
-struct MinAggregateData<TYPE_DECIMALV2, guard::Guard> {
-    DecimalV2Value result = DecimalV2Value::get_max_decimal();
-
-    void reset() { result = DecimalV2Value::get_max_decimal(); }
-};
-
-template <PrimitiveType PT>
-struct MinAggregateData<PT, DecimalPTGuard<PT>> {
-    using T = RunTimeCppType<PT>;
-    T result = get_max_decimal<T>();
-    void reset() { result = get_max_decimal<T>(); }
-};
-template <>
-struct MinAggregateData<TYPE_DATETIME, guard::Guard> {
-    TimestampValue result = TimestampValue::MAX_TIMESTAMP_VALUE;
-
-    void reset() { result = TimestampValue::MAX_TIMESTAMP_VALUE; }
-};
-
-template <>
-struct MinAggregateData<TYPE_DATE, guard::Guard> {
-    DateValue result = DateValue::MAX_DATE_VALUE;
-
-    void reset() { result = DateValue::MAX_DATE_VALUE; }
-};
-
-template <PrimitiveType PT>
-struct MinAggregateData<PT, BinaryPTGuard<PT>> {
+template <LogicalType PT>
+struct MinAggregateData<PT, StringPTGuard<PT>> {
     int32_t size = -1;
     Buffer<uint8_t> buffer;
 
@@ -135,21 +77,21 @@ struct MinAggregateData<PT, BinaryPTGuard<PT>> {
     }
 };
 
-template <PrimitiveType PT, typename State, typename = guard::Guard>
+template <LogicalType PT, typename State, typename = guard::Guard>
 struct MaxElement {
     using T = RunTimeCppType<PT>;
     void operator()(State& state, const T& right) const { state.result = std::max<T>(state.result, right); }
 };
 
-template <PrimitiveType PT, typename State, typename = guard::Guard>
+template <LogicalType PT, typename State, typename = guard::Guard>
 struct MinElement {
     using T = RunTimeCppType<PT>;
     void operator()(State& state, const T& right) const { state.result = std::min<T>(state.result, right); }
 };
 
-template <PrimitiveType PT>
-struct MaxElement<PT, MaxAggregateData<PT>, BinaryPTGuard<PT>> {
-    void operator()(MaxAggregateData<PT>& state, const Slice& right) const {
+template <LogicalType PT, typename State>
+struct MaxElement<PT, State, StringPTGuard<PT>> {
+    void operator()(State& state, const Slice& right) const {
         if (!state.has_value() || state.slice().compare(right) < 0) {
             state.buffer.resize(right.size);
             memcpy(state.buffer.data(), right.data, right.size);
@@ -158,9 +100,9 @@ struct MaxElement<PT, MaxAggregateData<PT>, BinaryPTGuard<PT>> {
     }
 };
 
-template <PrimitiveType PT>
-struct MinElement<PT, MinAggregateData<PT>, BinaryPTGuard<PT>> {
-    void operator()(MinAggregateData<PT>& state, const Slice& right) const {
+template <LogicalType PT, typename State>
+struct MinElement<PT, State, StringPTGuard<PT>> {
+    void operator()(State& state, const Slice& right) const {
         if (!state.has_value() || state.slice().compare(right) > 0) {
             state.buffer.resize(right.size);
             memcpy(state.buffer.data(), right.data, right.size);
@@ -169,7 +111,7 @@ struct MinElement<PT, MinAggregateData<PT>, BinaryPTGuard<PT>> {
     }
 };
 
-template <PrimitiveType PT, typename State, class OP, typename T = RunTimeCppType<PT>, typename = guard::Guard>
+template <LogicalType PT, typename State, class OP, typename T = RunTimeCppType<PT>, typename = guard::Guard>
 class MaxMinAggregateFunction final
         : public AggregateFunctionBatchHelper<State, MaxMinAggregateFunction<PT, State, OP, T>> {
 public:
@@ -229,8 +171,8 @@ public:
     std::string get_name() const override { return "maxmin"; }
 };
 
-template <PrimitiveType PT, typename State, class OP>
-class MaxMinAggregateFunction<PT, State, OP, RunTimeCppType<PT>, BinaryPTGuard<PT>> final
+template <LogicalType PT, typename State, class OP>
+class MaxMinAggregateFunction<PT, State, OP, RunTimeCppType<PT>, StringPTGuard<PT>> final
         : public AggregateFunctionBatchHelper<State, MaxMinAggregateFunction<PT, State, OP, RunTimeCppType<PT>>> {
 public:
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
@@ -260,7 +202,7 @@ public:
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         DCHECK(to->is_binary());
-        BinaryColumn* column = down_cast<BinaryColumn*>(to);
+        auto* column = down_cast<BinaryColumn*>(to);
         column->append(this->data(state).slice());
     }
 
@@ -271,14 +213,14 @@ public:
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         DCHECK(to->is_binary());
-        BinaryColumn* column = down_cast<BinaryColumn*>(to);
+        auto* column = down_cast<BinaryColumn*>(to);
         column->append(this->data(state).slice());
     }
 
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
                     size_t end) const override {
         DCHECK_GT(end, start);
-        BinaryColumn* column = down_cast<BinaryColumn*>(dst);
+        auto* column = down_cast<BinaryColumn*>(dst);
         for (size_t i = start; i < end; ++i) {
             column->append(this->data(state).slice());
         }

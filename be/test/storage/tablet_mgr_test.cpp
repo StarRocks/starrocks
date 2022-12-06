@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/test/olap/tablet_mgr_test.cpp
 
@@ -20,6 +33,7 @@
 // under the License.
 
 #include <filesystem>
+#include <memory>
 #include <string>
 
 #include "fs/fs_util.h"
@@ -53,7 +67,8 @@ namespace starrocks {
 
 class TabletMgrTest : public testing::Test {
 public:
-    virtual void SetUp() {
+    void SetUp() override {
+        config::enable_event_based_compaction_framework = false;
         config::tablet_map_shard_size = 1;
         config::txn_map_shard_size = 1;
         config::txn_shard_size = 1;
@@ -80,10 +95,10 @@ public:
         _schema_hash = 368169781;
         _tablet_data_path = tmp_data_path + "/" + std::to_string(0) + "/" + std::to_string(_tablet_id) + "/" +
                             std::to_string(_schema_hash);
-        _tablet_mgr.reset(new TabletManager(1));
+        _tablet_mgr = std::make_unique<TabletManager>(1);
     }
 
-    virtual void TearDown() {
+    void TearDown() override {
         delete _data_dir;
         if (std::filesystem::exists(_engine_data_path)) {
             ASSERT_TRUE(std::filesystem::remove_all(_engine_data_path));
@@ -371,15 +386,15 @@ TEST_F(TabletMgrTest, RsVersionMapTest) {
 
     // create rowset <2, 2>, <3, 3>, <3, 4>, <4, 4>, <4, 5>, <5, 5>, <5, 6>
     std::vector<Version> ver_list;
-    ver_list.push_back(Version(2, 2));
-    ver_list.push_back(Version(3, 3));
-    ver_list.push_back(Version(4, 4));
-    ver_list.push_back(Version(3, 4));
-    ver_list.push_back(Version(5, 5));
-    ver_list.push_back(Version(4, 5));
-    ver_list.push_back(Version(5, 6));
-    ver_list.push_back(Version(2, 4));
-    ver_list.push_back(Version(3, 5));
+    ver_list.emplace_back(2, 2);
+    ver_list.emplace_back(3, 3);
+    ver_list.emplace_back(4, 4);
+    ver_list.emplace_back(3, 4);
+    ver_list.emplace_back(5, 5);
+    ver_list.emplace_back(4, 5);
+    ver_list.emplace_back(5, 6);
+    ver_list.emplace_back(2, 4);
+    ver_list.emplace_back(3, 5);
     std::vector<Version> tmp_list;
     tablet->list_versions(&tmp_list);
     std::string debug = "";

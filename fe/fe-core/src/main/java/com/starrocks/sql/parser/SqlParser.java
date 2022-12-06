@@ -3,6 +3,7 @@ package com.starrocks.sql.parser;
 
 import com.clearspring.analytics.util.Lists;
 import com.starrocks.analysis.Expr;
+import com.starrocks.common.Config;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.ImportColumnsStmt;
@@ -74,7 +75,7 @@ public class SqlParser {
         parser.removeErrorListeners();
         parser.addErrorListener(new ErrorHandler());
         parser.removeParseListeners();
-        parser.addParseListener(new TokenNumberListener(sessionVariable.getParseTokensLimit()));
+        parser.addParseListener(new TokenNumberListener(sessionVariable.getParseTokensLimit(), Config.expr_children_limit));
 
         return parser;
     }

@@ -7,6 +7,9 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SqlModeHelper;
@@ -26,22 +29,28 @@ public class MetaUtils {
 
     private static final Logger LOG = LogManager.getLogger(MVUtils.class);
 
-    public static Database getDatabase(ConnectContext session, long dbId) {
-        Database db = session.getGlobalStateMgr().getDb(dbId);
+    public static void checkDbNullAndReport(Database db, String name) throws AnalysisException {
         if (db == null) {
-            throw new SemanticException("Database %s is not find", dbId);
+            ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_DB_ERROR, name);
+        }
+    }
+
+    public static Database getDatabase(long dbId) {
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        if (db == null) {
+            throw new SemanticException("Database %s is not found", dbId);
         }
         return db;
     }
 
-    public static Table getTable(ConnectContext session, long dbId, long tableId) {
-        Database db = session.getGlobalStateMgr().getDb(dbId);
+    public static Table getTable(long dbId, long tableId) {
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db == null) {
-            throw new SemanticException("Database %s is not find", dbId);
+            throw new SemanticException("Database %s is not found", dbId);
         }
         Table table = db.getTable(tableId);
         if (table == null) {
-            throw new SemanticException("Unknown table: %s", tableId);
+            throw new SemanticException("Table %s is not found", tableId);
         }
         return table;
     }
@@ -49,7 +58,7 @@ public class MetaUtils {
     public static Database getDatabase(ConnectContext session, TableName tableName) {
         Database db = session.getGlobalStateMgr().getDb(tableName.getDb());
         if (db == null) {
-            throw new SemanticException("Database %s is not find", tableName.getDb());
+            throw new SemanticException("Database %s is not found", tableName.getDb());
         }
         return db;
     }
@@ -57,11 +66,11 @@ public class MetaUtils {
     public static Table getTable(TableName tableName) {
         Database db = GlobalStateMgr.getCurrentState().getDb(tableName.getDb());
         if (db == null) {
-            throw new SemanticException("Database %s is not find", tableName.getDb());
+            throw new SemanticException("Database %s is not found", tableName.getDb());
         }
         Table table = db.getTable(tableName.getTbl());
         if (table == null) {
-            throw new SemanticException("Unknown table '%s", tableName.getTbl());
+            throw new SemanticException("Table %s is not found", tableName.getTbl());
         }
         return table;
     }
@@ -69,11 +78,11 @@ public class MetaUtils {
     public static Table getTable(ConnectContext session, TableName tableName) {
         Database db = session.getGlobalStateMgr().getDb(tableName.getDb());
         if (db == null) {
-            throw new SemanticException("Database %s is not find", tableName.getDb());
+            throw new SemanticException("Database %s is not found", tableName.getDb());
         }
         Table table = db.getTable(tableName.getTbl());
         if (table == null) {
-            throw new SemanticException("Unknown table %s", tableName.getTbl());
+            throw new SemanticException("Table %s is not found", tableName.getTbl());
         }
         return table;
     }

@@ -66,7 +66,9 @@ public class StringLiteral extends LiteralExpr {
         if (expr instanceof NullLiteral) {
             return 1;
         }
-
+        if (expr == MaxLiteral.MAX_VALUE) {
+            return -1;
+        }
         // compare string with utf-8 byte array, same with DM,BE,StorageEngine
         byte[] thisBytes = null;
         byte[] otherBytes = null;
@@ -100,7 +102,7 @@ public class StringLiteral extends LiteralExpr {
     }
 
     @Override
-    public Object getRealValue() {
+    public Object getRealObjectValue() {
         return value;
     }
 
@@ -116,8 +118,11 @@ public class StringLiteral extends LiteralExpr {
     @Override
     public String toSqlImpl() {
         String sql = value;
-        if (value != null && value.contains("\\")) {
-            sql = value.replace("\\", "\\\\");
+        if (value != null) {
+            if (value.contains("\\")) {
+                sql = value.replace("\\", "\\\\");
+            }
+            sql = sql.replace("'", "\\'");
         }
         return "'" + sql + "'";
     }
@@ -158,7 +163,7 @@ public class StringLiteral extends LiteralExpr {
      * @throws AnalysisException when entire given string cannot be transformed into a date
      */
     private LiteralExpr convertToDate(Type targetType) throws AnalysisException {
-        LiteralExpr newLiteral = null;
+        LiteralExpr newLiteral;
         try {
             newLiteral = new DateLiteral(value, targetType);
         } catch (AnalysisException e) {
@@ -218,14 +223,6 @@ public class StringLiteral extends LiteralExpr {
         return super.uncheckedCastTo(targetType);
     }
 
-    public Expr castToNontypedNumericLiteral() throws AnalysisException {
-        try {
-            return new DecimalLiteral(this.getValue());
-        } catch (Throwable e) {
-            return uncheckedCastTo(Type.DOUBLE);
-        }
-    }
-
     @Override
     public void write(DataOutput out) throws IOException {
         super.write(out);
@@ -246,5 +243,10 @@ public class StringLiteral extends LiteralExpr {
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), value);
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        return super.equals(obj);
     }
 }

@@ -1,3 +1,5 @@
+# CREATE MATERIALIZED VIEW
+
 ## Description
 
 Creates a materialized view. Creating a materialized view is asynchronous operation. Running this command successfully indicates that the task of creating the materialized view is submitted successfully. You can view the building status of the materialized view in a database via [SHOW ALTER](..//data-manipulation/SHOW%20ALTER.md) command. For usage information about materialized views, see [materialized view](../../../using_starrocks/Materialized_view.md).
@@ -13,16 +15,18 @@ StarRocks supports multi-table materialized views from v2.4. The major differenc
 | **Single-table materialized view** | No (Materialized view in v2.3 and earlier only supports SYNC refresh)| No | No  | No |
 | **Multi-table materialized view** | Yes | Yes | Yes  | Yes  |
 
+In StarRocks v2.5, multi-table async refresh materialized views support query rewrite, nested materialized views, and creating materialized views based on Hive catalog, Hudi catalog, and Iceberg catalog.
+
 ## Syntax
 
 ```SQL
 CREATE MATERIALIZED VIEW [IF NOT EXISTS] [database.]mv_name
-AS (query)
 [distribution_desc]
 [REFRESH refresh_scheme_desc]
 [partition_expression]
 [COMMENT ""]
-[PROPERTIES ("key"="value", ...)];
+[PROPERTIES ("key"="value", ...)]
+AS (query);
 ```
 
 Parameters in brackets [] is optional.
@@ -74,7 +78,7 @@ SELECT select_expr[, select_expr ...]
   - If this parameter is not specified, the system will automatically supplement the ORDER BY column according to relevant rules. If the materialized view is created with the AGGREGATE KEY model, all GROUP BY columns are automatically used as sort columns. If the materialized view is not created with the AGGREGATE KEY model, the first 36 bytes are automatically used as the ORDER BY columns. If the number of auto-assigned ORDER BY columns is less than 3, the first three columns are used as ORDER BY columns.
   - If the query statement contains a GROUP BY clause, the ORDER BY columns must be identical to the GROUP BY columns.
 
-**distribution_desc** (optional)
+**distribution_desc** (**required** when creating async refresh materialized view)
 
 The bucketing strategy of the materialized view, in the form of `DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]`.
 
@@ -82,7 +86,7 @@ The bucketing strategy of the materialized view, in the form of `DISTRIBUTED BY 
 
 The refresh strategy of the materialized view. This parameter supports the following values:
 
-- `ASYNC`: Asynchronous refresh mode. You can specify the refresh start time, refresh interval, or refresh task trigger mechanism for async refresh mode. The refresh interval supports the following units: `DAY`, `HOUR`, `MINUTE`, and `SECOND`.
+- `ASYNC`: Asynchronous refresh mode. For fixed-interval automatic refresh, you need to specify the refresh start time, refresh interval using the following units: `DAY`, `HOUR`, `MINUTE`, and `SECOND`. If you do not specify the interval, the materialized view refreshes each time the data in the base tables changes.
 - `MANUAL`: Manual refresh mode.
 
 If this parameter is not specified, the default value `MANUAL` is used.
@@ -104,10 +108,12 @@ Comment on the materialized view.
 
 Properties of the materialized view.
 
-- `short_key`: the number of ORDER BY columns.
-- `timeout`: The timeout for building the materialized view. The unit is second.
 - `replication_num`: The number of materialized view replicas to create.
 - `storage_medium`: Storage medium type. `HDD` and `SSD` are supported.
+- `partition_ttl_number`: The number of most recent materialized view partitions to keep. After the number of partitions exceeds this value, expired partitions will be deleted. StarRocks will periodically check materialized view partitions according to the time interval specified in the FE configuration item `dynamic_partition_enable`, and automatically delete expired partitions. When the value is `-1`, all partitions of the materialized view will be preserved. Default: `-1`.
+- `partition_refresh_number`: In a single refresh, the maximum number of partitions to refresh. If the number of partitions to be refreshed exceeds this value, StarRocks will split the refresh task and complete it in batches. Only when the previous batch of partitions is refreshed successfully, StarRocks will continue to refresh the next batch of partitions until all partitions are refreshed. If any of the partitions fails to be refreshed, no subsequent refresh tasks will be generated. When the value is `-1`, the refresh task will not be split. Default: `-1`.
+- `excluded_trigger_tables`: If a base table of the materialized view is listed here, automatic refresh task will not be triggered when the data in the base table is changed. This parameter only applies to load-triggered refresh strategy, and is usually used together with the property `auto_refresh_partitions_limit`. Format: `[db_name.]table_name`. When the value is an empty string, any data change in all base tables triggers the refresh of the corresponding materialized view. Default is an empty string.
+- `auto_refresh_partitions_limit`: The number of most recent materialized view partitions that need to be refreshed when a materialized view refresh is triggered. You can use this property to limit the refresh range and reduce the refresh cost. However, because not all the partitions are refreshed, the data in the materialized view may not be consistent with the base table. When the value is `-1`, all partitions will be flushed. Default: `-1`.
 
 ### Correspondence of aggregate functions
 
@@ -135,6 +141,18 @@ When a query is executed with a materialized view, the original query statement 
 - When using ALTER TABLE DROP COLUMN to drop a specific column in a base table, you need to ensure that all materialized views of the base table contain the dropped column, otherwise the drop operation cannot be performed. If you have to drop the column, you need to first drop all materialized views that do not contain the column, and then drop the column.
 
 - Creating too many materialized views for a table will affect the data load efficiency. When data is being loaded to the base table, the data in materialized view and base table will be updated synchronously. If a base table contains `n` materialized views, the efficiency of loading data into the base table is about the same as the efficiency of loading data into `n` tables.
+
+- About nested materialized views:
+
+  - The refresh strategy for each materialized view only applies to the corresponding materialized view.
+  - Currently, StarRocks does not limit the number of nesting levels. In a production environment, we recommend that the number of nesting layers not exceed THREE.
+
+- About external catalog materialized views:
+
+  - External catalog materialized view only support async fixed-interval refresh and manual refresh.
+  - Strict consistency is not guaranteed between the materialized view and the base tables in the external catalog.
+  - Currently, building materialized views based on external resources is not supported.
+  - Currently, StarRocks cannot perceive if the base table data in the external catalog has changed, so all partitions will be refreshed by default every time the base table is refreshed. You can manually refresh only some of partitions using [REFRESH MATERIALIZED VIEW](../data-manipulation/REFRESH%20MATERIALIZED%20VIEW.md).
 
 ## Example
 

@@ -1,5 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "runtime/runtime_filter_worker.h"
 
 #include <random>
@@ -535,8 +547,7 @@ static inline Status receive_total_runtime_filter_pipeline(
     }
 
     auto& probe_finst_ids = params.probe_finst_ids();
-    for (auto finst_id_it = probe_finst_ids.begin(); finst_id_it != probe_finst_ids.end(); finst_id_it++) {
-        auto& pb_finst_id = *finst_id_it;
+    for (const auto& pb_finst_id : probe_finst_ids) {
         TUniqueId finst_id;
         finst_id.hi = pb_finst_id.hi();
         finst_id.lo = pb_finst_id.lo();
@@ -759,7 +770,7 @@ void RuntimeFilterWorker::_deliver_broadcast_runtime_filter_local(PTransmitRunti
 
 void RuntimeFilterWorker::execute() {
     LOG(INFO) << "RuntimeFilterWorker start working.";
-    RuntimeFilterRpcClosure* rpc_closure = new RuntimeFilterRpcClosure();
+    auto* rpc_closure = new RuntimeFilterRpcClosure();
     rpc_closure->ref();
     DeferOp deferop([&] { rpc_closure->Run(); });
 

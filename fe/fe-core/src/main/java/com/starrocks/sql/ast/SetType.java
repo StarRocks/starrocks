@@ -9,7 +9,8 @@ public enum SetType {
     DEFAULT("DEFAULT"),
     GLOBAL("GLOBAL"),
     SESSION("SESSION"),
-    USER("USER");
+    USER("USER"),
+    VERBOSE("VERBOSE");
 
     private final String desc;
 
@@ -27,6 +28,10 @@ public enum SetType {
     public static SetType fromThrift(TVarType tType) {
         if (tType == TVarType.GLOBAL) {
             return SetType.GLOBAL;
+        }
+
+        if (tType == TVarType.VERBOSE) {
+            return SetType.VERBOSE;
         }
         return SetType.SESSION;
     }

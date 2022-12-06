@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -50,10 +62,11 @@ public:
     const ConjunctivePredicates& operator[](size_t idx) const { return _preds[idx]; }
     ConjunctivePredicates& operator[](size_t idx) { return _preds[idx]; }
 
-    Status convert_to(DisjunctivePredicates* dst, const std::vector<FieldType>& new_types, ObjectPool* obj_pool) const {
-        int num_preds = _preds.size();
+    Status convert_to(DisjunctivePredicates* dst, const std::vector<LogicalType>& new_types,
+                      ObjectPool* obj_pool) const {
+        size_t num_preds = _preds.size();
         dst->_preds.resize(num_preds);
-        for (int i = 0; i < num_preds; ++i) {
+        for (size_t i = 0; i < num_preds; ++i) {
             RETURN_IF_ERROR(_preds[i].convert_to(&dst->_preds[i], new_types, obj_pool));
         }
         return Status::OK();

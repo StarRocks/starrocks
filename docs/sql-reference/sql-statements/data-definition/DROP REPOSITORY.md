@@ -1,23 +1,30 @@
 # DROP REPOSITORY
 
-## description
+## Description
 
-This statement is used to drop an established repository. Only root or superuser can drop the repositories.
+Deletes a repository. Repositories are used to store data snapshots for [data backup and restoration](../../../administration/Backup_and_restore.md).
 
-Syntax:
+> **CAUTION**
+>
+> - Only root user and superuser can delete a repository.
+> - This operation only deletes the mapping of the repository in StarRocks, and does not delete the actual data. You need to delete it manually in the remote storage system. After deletion, you can map to that repository again by specifying the same remote storage system path.
 
-```sql
-DROP REPOSITORY `repo_name`;
+## Syntax
+
+```SQL
+DROP REPOSITORY <repository_name>
 ```
 
-Note:
+## Parameters
 
-To drop the repository is just to drop the mapping of the repository in StarRocks, and the actual repository data won't be dropped. After deletion, you can map to the repository again by specifying the same broker and LOCATION.
+| **Parameter**   | **Description**                       |
+| --------------- | ------------------------------------- |
+| repository_name | Name of the repository to be deleted. |
 
-## example
+## Example
 
-1. Delete the repository named bos_repo:
+Example 1: deletes a repository named `oss_repo`.
 
-    ```sql
-    DROP REPOSITORY `bos_repo`;
-    ```
+```SQL
+DROP REPOSITORY `oss_repo`;
+```

@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -6,9 +18,7 @@
 #include "connector/connector.h"
 #include "exec/vectorized/hdfs_scanner.h"
 
-namespace starrocks {
-
-namespace connector {
+namespace starrocks::connector {
 
 class HiveConnector final : public Connector {
 public:
@@ -67,6 +77,7 @@ private:
     RuntimeState* _runtime_state = nullptr;
     vectorized::HdfsScanner* _scanner = nullptr;
     bool _use_block_cache = false;
+    bool _enable_populate_block_cache = false;
 
     // ============ conjuncts =================
     std::vector<ExprContext*> _min_max_conjunct_ctxs;
@@ -111,5 +122,4 @@ private:
     vectorized::HdfsScanProfile _profile;
 };
 
-} // namespace connector
-} // namespace starrocks
+} // namespace starrocks::connector

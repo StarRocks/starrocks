@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/test/olap/storage_types_test.cpp
 
@@ -22,7 +35,7 @@
 #include <gtest/gtest.h>
 
 #include "runtime/mem_pool.h"
-#include "storage/field.h"
+#include "storage/type_traits.h"
 #include "storage/types.h"
 #include "util/slice.h"
 
@@ -30,11 +43,11 @@ namespace starrocks {
 
 class StorageLayerTypesTest : public testing::Test {
 public:
-    StorageLayerTypesTest() {}
-    virtual ~StorageLayerTypesTest() {}
+    StorageLayerTypesTest() = default;
+    ~StorageLayerTypesTest() override = default;
 };
 
-template <FieldType field_type>
+template <LogicalType field_type>
 void common_test(typename TypeTraits<field_type>::CppType src_val) {
     TypeInfoPtr type = get_type_info(field_type);
 
@@ -70,13 +83,11 @@ void common_test(typename TypeTraits<field_type>::CppType src_val) {
     }
 }
 
-template <FieldType fieldType>
+template <LogicalType fieldType>
 void test_char(Slice src_val) {
-    Field* field = FieldFactory::create_by_type(fieldType);
-    field->_length = src_val.size;
-    TypeInfoPtr type = field->type_info();
+    TypeInfoPtr type = get_type_info(TYPE_VARCHAR);
 
-    ASSERT_EQ(field->type(), fieldType);
+    ASSERT_EQ(type->type(), fieldType);
     ASSERT_EQ(sizeof(src_val), type->size());
     {
         char buf[64];
@@ -97,7 +108,7 @@ void test_char(Slice src_val) {
     {
         char buf[64];
         Slice dst_val(buf, sizeof(buf));
-        field->set_to_min((char*)&dst_val);
+        dst_val.size = 0;
 
         ASSERT_FALSE(type->equal((char*)&src_val, (char*)&dst_val));
         ASSERT_TRUE(type->cmp((char*)&src_val, (char*)&dst_val) > 0);
@@ -106,44 +117,43 @@ void test_char(Slice src_val) {
     {
         char buf[64];
         Slice dst_val(buf, sizeof(buf));
-        field->set_to_max((char*)&dst_val);
+        memset(buf, 0xFF, 64);
 
         ASSERT_FALSE(type->equal((char*)&src_val, (char*)&dst_val));
         ASSERT_TRUE(type->cmp((char*)&src_val, (char*)&dst_val) < 0);
     }
-    delete field;
 }
 
 template <>
-void common_test<OLAP_FIELD_TYPE_CHAR>(Slice src_val) {
-    test_char<OLAP_FIELD_TYPE_VARCHAR>(src_val);
+void common_test<TYPE_CHAR>(Slice src_val) {
+    test_char<TYPE_VARCHAR>(src_val);
 }
 
 template <>
-void common_test<OLAP_FIELD_TYPE_VARCHAR>(Slice src_val) {
-    test_char<OLAP_FIELD_TYPE_VARCHAR>(src_val);
+void common_test<TYPE_VARCHAR>(Slice src_val) {
+    test_char<TYPE_VARCHAR>(src_val);
 }
 
 TEST(StorageLayerTypesTest, copy_and_equal) {
-    common_test<OLAP_FIELD_TYPE_BOOL>(true);
-    common_test<OLAP_FIELD_TYPE_TINYINT>(112);
-    common_test<OLAP_FIELD_TYPE_SMALLINT>(54321);
-    common_test<OLAP_FIELD_TYPE_INT>(-123454321);
-    common_test<OLAP_FIELD_TYPE_UNSIGNED_INT>(1234543212L);
-    common_test<OLAP_FIELD_TYPE_BIGINT>(123454321123456789L);
+    common_test<TYPE_BOOLEAN>(true);
+    common_test<TYPE_TINYINT>(112);
+    common_test<TYPE_SMALLINT>(54321);
+    common_test<TYPE_INT>(-123454321);
+    common_test<TYPE_UNSIGNED_INT>(1234543212L);
+    common_test<TYPE_BIGINT>(123454321123456789L);
     __int128 int128_val = 1234567899L;
-    common_test<OLAP_FIELD_TYPE_LARGEINT>(int128_val);
-    common_test<OLAP_FIELD_TYPE_FLOAT>(1.11);
-    common_test<OLAP_FIELD_TYPE_DOUBLE>(12221.11);
+    common_test<TYPE_LARGEINT>(int128_val);
+    common_test<TYPE_FLOAT>(1.11);
+    common_test<TYPE_DOUBLE>(12221.11);
     decimal12_t decimal_val(123, 2345);
-    common_test<OLAP_FIELD_TYPE_DECIMAL>(decimal_val);
+    common_test<TYPE_DECIMAL>(decimal_val);
 
-    common_test<OLAP_FIELD_TYPE_DATE>((1988 << 9) | (2 << 5) | 1);
-    common_test<OLAP_FIELD_TYPE_DATETIME>(19880201010203L);
+    common_test<TYPE_DATE_V1>((1988 << 9) | (2 << 5) | 1);
+    common_test<TYPE_DATETIME_V1>(19880201010203L);
 
     Slice slice("12345abcde");
-    common_test<OLAP_FIELD_TYPE_CHAR>(slice);
-    common_test<OLAP_FIELD_TYPE_VARCHAR>(slice);
+    common_test<TYPE_CHAR>(slice);
+    common_test<TYPE_VARCHAR>(slice);
 }
 
 } // namespace starrocks

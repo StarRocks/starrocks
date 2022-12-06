@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -15,13 +27,13 @@
 namespace starrocks::vectorized {
 
 // AvgResultPT for final result
-template <PrimitiveType PT, typename = guard::Guard>
-inline constexpr PrimitiveType PercentileResultPT = PT;
+template <LogicalType PT, typename = guard::Guard>
+inline constexpr LogicalType PercentileResultPT = PT;
 
-template <PrimitiveType PT>
-inline constexpr PrimitiveType PercentileResultPT<PT, ArithmeticPTGuard<PT>> = TYPE_DOUBLE;
+template <LogicalType PT>
+inline constexpr LogicalType PercentileResultPT<PT, ArithmeticPTGuard<PT>> = TYPE_DOUBLE;
 
-template <PrimitiveType PT, typename = guard::Guard>
+template <LogicalType PT, typename = guard::Guard>
 struct PercentileContState {
     using CppType = RunTimeCppType<PT>;
     void update(CppType item) { items.emplace_back(item); }
@@ -30,7 +42,7 @@ struct PercentileContState {
     double rate = 0.0;
 };
 
-template <PrimitiveType PT>
+template <LogicalType PT>
 class PercentileContAggregateFunction final
         : public AggregateFunctionBatchHelper<PercentileContState<PT>, PercentileContAggregateFunction<PT>> {
 public:
@@ -59,8 +71,8 @@ public:
         size_t items_size = *reinterpret_cast<size_t*>(slice.data + sizeof(double));
         auto data_ptr = slice.data + sizeof(double) + sizeof(size_t);
 
-        vector<InputCppType> res;
-        vector<InputCppType>& vec = this->data(state).items;
+        std::vector<InputCppType> res;
+        std::vector<InputCppType>& vec = this->data(state).items;
         res.resize(vec.size() + items_size);
 
         std::merge(vec.begin(), vec.end(), reinterpret_cast<InputCppType*>(data_ptr),

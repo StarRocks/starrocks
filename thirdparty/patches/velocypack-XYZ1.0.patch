@@ -1,0 +1,11 @@
+diff -rupN velocypack-XYZ1.0.orig/include/velocypack/Slice.h velocypack-XYZ1.0/include/velocypack/Slice.h
+--- velocypack-XYZ1.0.orig/include/velocypack/Slice.h	2022-10-27 18:22:53.050941619 +0000
++++ velocypack-XYZ1.0/include/velocypack/Slice.h	2022-10-27 18:23:53.518866674 +0000
+@@ -36,6 +36,7 @@
+ #include <functional>
+ #include <tuple>
+ #include <type_traits>
++#include <limits>
+ 
+ #if __cplusplus >= 201703L
+ #include <string_view>

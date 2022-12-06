@@ -6,6 +6,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.LeaderDaemon;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.StatsConstants.AnalyzeType;
 import com.starrocks.statistic.StatsConstants.ScheduleStatus;
@@ -58,13 +59,17 @@ public class StatisticAutoCollector extends LeaderDaemon {
                 analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
                 GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
 
-                STATISTIC_EXECUTOR.collectStatistics(statsJob, analyzeStatus, true);
+                ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
+                statsConnectCtx.setThreadLocalInfo();
+                STATISTIC_EXECUTOR.collectStatistics(statsConnectCtx, statsJob, analyzeStatus, true);
             }
         } else {
             List<AnalyzeJob> allAnalyzeJobs = GlobalStateMgr.getCurrentAnalyzeMgr().getAllAnalyzeJobList();
             allAnalyzeJobs.sort((o1, o2) -> Long.compare(o2.getId(), o1.getId()));
             for (AnalyzeJob analyzeJob : allAnalyzeJobs) {
-                analyzeJob.run(STATISTIC_EXECUTOR);
+                ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
+                statsConnectCtx.setThreadLocalInfo();
+                analyzeJob.run(statsConnectCtx, STATISTIC_EXECUTOR);
             }
         }
     }

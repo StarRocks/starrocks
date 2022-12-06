@@ -9,6 +9,9 @@ public class MvTaskRunContext extends TaskRunContext {
     Map<String, Set<String>> baseToMvNameRef;
     Map<String, Set<String>> mvToBaseNameRef;
 
+    String nextPartitionStart = null;
+    String nextPartitionEnd = null;
+
     public MvTaskRunContext(TaskRunContext context) {
         this.ctx = context.ctx;
         this.definition = context.definition;
@@ -30,5 +33,25 @@ public class MvTaskRunContext extends TaskRunContext {
 
     public void setMvToBaseNameRef(Map<String, Set<String>> mvToBaseNameRef) {
         this.mvToBaseNameRef = mvToBaseNameRef;
+    }
+
+    public boolean hasNextBatchPartition() {
+        return nextPartitionStart != null && nextPartitionEnd != null;
+    }
+
+    public String getNextPartitionStart() {
+        return nextPartitionStart;
+    }
+
+    public void setNextPartitionStart(String nextPartitionStart) {
+        this.nextPartitionStart = nextPartitionStart;
+    }
+
+    public String getNextPartitionEnd() {
+        return nextPartitionEnd;
+    }
+
+    public void setNextPartitionEnd(String nextPartitionEnd) {
+        this.nextPartitionEnd = nextPartitionEnd;
     }
 }

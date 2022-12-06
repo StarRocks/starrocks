@@ -359,6 +359,9 @@ public class ExportJob implements Writable {
             default:
                 break;
         }
+        if (fragment == null) {
+            throw new UserException("invalid table type:" + exportTable.getType());
+        }
         fragment.setOutputExprs(createOutputExprs());
 
         scanNode.setFragmentId(fragment.getFragmentId());
@@ -855,6 +858,11 @@ public class ExportJob implements Writable {
      */
     public void setTableName(TableName tableName) {
         this.tableName = tableName;
+    }
+
+    @Override
+    public int hashCode() {
+        return Long.hashCode(id);
     }
 
     @Override

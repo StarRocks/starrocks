@@ -1,24 +1,17 @@
-# This file is made available under Elastic License 2.0.
-# This file is based on code available under the Apache license here:
-#   https://github.com/apache/incubator-doris/blob/master/be/src/exec/CMakeLists.txt
-
-# Licensed to the Apache Software Foundation (ASF) under one
-# or more contributor license agreements.  See the NOTICE file
-# distributed with this work for additional information
-# regarding copyright ownership.  The ASF licenses this file
-# to you under the Apache License, Version 2.0 (the
-# "License"); you may not use this file except in compliance
-# with the License.  You may obtain a copy of the License at
+# Copyright 2021-present StarRocks, Inc. All rights reserved.
 #
-#   http://www.apache.org/licenses/LICENSE-2.0
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
 #
-# Unless required by applicable law or agreed to in writing,
-# software distributed under the License is distributed on an
-# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-# KIND, either express or implied.  See the License for the
-# specific language governing permissions and limitations
-# under the License.
-
+#      https:#www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
 cmake_minimum_required(VERSION 2.8.12)
 
 # where to put generated libraries
@@ -46,9 +39,10 @@ set(EXEC_FILES
     es/es_scroll_parser.cpp
     local_file_writer.cpp
     broker_writer.cpp
-    parquet_builder.cpp
     plain_text_builder.cpp
     vectorized/aggregator.cpp
+    vectorized/sorted_streaming_aggregator.cpp
+    vectorized/aggregate/agg_hash_variant.cpp
     vectorized/aggregate/aggregate_base_node.cpp
     vectorized/aggregate/aggregate_blocking_node.cpp
     vectorized/aggregate/distinct_blocking_node.cpp
@@ -61,8 +55,11 @@ set(EXEC_FILES
     vectorized/tablet_scanner.cpp
     vectorized/olap_scan_node.cpp
     vectorized/olap_scan_prepare.cpp
+    vectorized/meta_scan_node.cpp
     vectorized/olap_meta_scanner.cpp
     vectorized/olap_meta_scan_node.cpp
+    vectorized/lake_meta_scanner.cpp
+    vectorized/lake_meta_scan_node.cpp
     vectorized/hash_joiner.cpp
     vectorized/hash_join_node.cpp
     vectorized/join_hash_map.cpp
@@ -150,9 +147,20 @@ set(EXEC_FILES
     pipeline/scan/olap_scan_prepare_operator.cpp
     pipeline/scan/olap_scan_context.cpp
     pipeline/scan/connector_scan_operator.cpp
+    pipeline/scan/meta_chunk_source.cpp
+    pipeline/scan/meta_scan_operator.cpp
+    pipeline/scan/meta_scan_prepare_operator.cpp
+    pipeline/scan/olap_meta_scan_prepare_operator.cpp
+    pipeline/scan/lake_meta_scan_prepare_operator.cpp
+    pipeline/scan/olap_schema_chunk_source.cpp
+    pipeline/scan/olap_schema_scan_operator.cpp
+    pipeline/scan/olap_schema_scan_context.cpp
     pipeline/scan/morsel.cpp
     pipeline/scan/chunk_buffer_limiter.cpp
     pipeline/sink/file_sink_operator.cpp
+    pipeline/sink/export_sink_operator.cpp
+    pipeline/sink/mysql_table_sink_operator.cpp
+    pipeline/sink/memory_scratch_sink_operator.cpp
     pipeline/select_operator.cpp
     pipeline/nljoin/nljoin_context.cpp
     pipeline/nljoin/nljoin_build_operator.cpp
@@ -179,6 +187,8 @@ set(EXEC_FILES
     pipeline/aggregate/aggregate_distinct_blocking_source_operator.cpp
     pipeline/aggregate/aggregate_distinct_streaming_sink_operator.cpp
     pipeline/aggregate/aggregate_distinct_streaming_source_operator.cpp
+    pipeline/aggregate/sorted_aggregate_streaming_sink_operator.cpp
+    pipeline/aggregate/sorted_aggregate_streaming_source_operator.cpp
     pipeline/aggregate/repeat/repeat_operator.cpp
     pipeline/analysis/analytic_sink_operator.cpp
     pipeline/analysis/analytic_source_operator.cpp
@@ -205,7 +215,8 @@ set(EXEC_FILES
     query_cache/cache_operator.cpp
     query_cache/cache_manager.cpp
     query_cache/lane_arbiter.cpp
-    query_cache/conjugate_operator.cpp)
+    query_cache/conjugate_operator.cpp
+    query_cache/ticket_checker.cpp)
 
 # simdjson Runtime Implement Dispatch: https://github.com/simdjson/simdjson/blob/master/doc/implementation-selection.md#runtime-cpu-detection
 # Unset architecture-specific flags to avoid breaking implement runtime dispatch.

@@ -1,5 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "exec/pipeline/olap_table_sink_operator.h"
 
 #include "exec/tablet_sink.h"
@@ -13,12 +25,19 @@ namespace starrocks::pipeline {
 Status OlapTableSinkOperator::prepare(RuntimeState* state) {
     Operator::prepare(state);
 
+    state->set_per_fragment_instance_idx(_sender_id);
+
+    RETURN_IF_ERROR(_sink->prepare(state));
+
     RETURN_IF_ERROR(_sink->try_open(state));
 
     return Status::OK();
 }
 
 void OlapTableSinkOperator::close(RuntimeState* state) {
+    _unique_metrics->copy_all_info_strings_from(_sink->profile());
+    _unique_metrics->copy_all_counters_from(_sink->profile());
+
     Operator::close(state);
 }
 
@@ -108,14 +127,17 @@ Status OlapTableSinkOperator::push_chunk(RuntimeState* state, const vectorized::
 }
 
 OperatorPtr OlapTableSinkOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
-    DCHECK_EQ(degree_of_parallelism, 1);
-    return std::make_shared<OlapTableSinkOperator>(this, _id, _plan_node_id, driver_sequence, _sink, _fragment_ctx);
+    if (driver_sequence == 0) {
+        return std::make_shared<OlapTableSinkOperator>(this, _id, _plan_node_id, driver_sequence, _cur_sender_id++,
+                                                       _sink0, _fragment_ctx);
+    } else {
+        return std::make_shared<OlapTableSinkOperator>(this, _id, _plan_node_id, driver_sequence, _cur_sender_id++,
+                                                       _sinks[driver_sequence - 1].get(), _fragment_ctx);
+    }
 }
 
 Status OlapTableSinkOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
-
-    RETURN_IF_ERROR(_sink->prepare(state));
 
     return Status::OK();
 }

@@ -86,8 +86,8 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
 
     private static final Logger LOG = LogManager.getLogger(LoadJob.class);
 
-    protected static final String DPP_NORMAL_ALL = "dpp.norm.ALL";
-    protected static final String DPP_ABNORMAL_ALL = "dpp.abnorm.ALL";
+    public static final String DPP_NORMAL_ALL = "dpp.norm.ALL";
+    public static final String DPP_ABNORMAL_ALL = "dpp.abnorm.ALL";
     public static final String UNSELECTED_ROWS = "unselected.rows";
     public static final String LOADED_BYTES = "loaded.bytes";
 
@@ -129,6 +129,10 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     // 99: all of tasks have been finished
     // 100: txn status is visible and load has been finished
     protected int progress;
+
+    public int getProgress() {
+        return this.progress;
+    }
 
     // non-persistence
     // This param is set true during txn is committing.
@@ -258,7 +262,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
      *
      * @return
      */
-    abstract Set<String> getTableNames() throws MetaNotFoundException;
+    public abstract Set<String> getTableNames() throws MetaNotFoundException;
 
     // return true if the corresponding transaction is done(COMMITTED, FINISHED, CANCELLED)
     public boolean isTxnDone() {
@@ -768,7 +772,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         }
     }
 
-    protected String getResourceName() {
+    public String getResourceName() {
         return "N/A";
     }
 
@@ -946,6 +950,11 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     // So, the re-analyze must be invoked between the replay is finished and LoadJobScheduler is started.
     // Only, the PENDING load job need to be analyzed.
     public void analyze() {
+    }
+
+    @Override
+    public int hashCode() {
+        return Long.hashCode(id);
     }
 
     @Override

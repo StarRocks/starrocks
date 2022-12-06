@@ -82,6 +82,8 @@ public class CoordinatorMonitor {
                 }
 
                 deadBackendIDs.clear();
+
+                QueryQueueManager.getInstance().maybeNotify();
             }
         }
     }

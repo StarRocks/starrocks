@@ -1,5 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "exec/vectorized/olap_scan_node.h"
 
 #include <chrono>
@@ -45,6 +57,10 @@ Status OlapScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     // init filtered_output_columns
     for (const auto& col_name : tnode.olap_scan_node.unused_output_column_name) {
         _unused_output_columns.emplace_back(col_name);
+    }
+
+    if (tnode.olap_scan_node.__isset.sorted_by_keys_per_tablet) {
+        _sorted_by_keys_per_tablet = tnode.olap_scan_node.sorted_by_keys_per_tablet;
     }
 
     _estimate_scan_and_output_row_bytes();
@@ -198,6 +214,10 @@ Status OlapScanNode::close(RuntimeState* state) {
     if (runtime_state() != nullptr) {
         // Reduce the memory usage if the the average string size is greater than 512.
         release_large_columns<BinaryColumn>(runtime_state()->chunk_size() * 512);
+    }
+
+    for (const auto& rowsets_per_tablet : _tablet_rowsets) {
+        Rowset::release_readers(rowsets_per_tablet);
     }
 
     return ScanNode::close(state);
@@ -436,7 +456,7 @@ Status OlapScanNode::_start_scan(RuntimeState* state) {
     OlapScanConjunctsManager& cm = _conjuncts_manager;
     cm.conjunct_ctxs_ptr = &_conjunct_ctxs;
     cm.tuple_desc = _tuple_desc;
-    cm.obj_pool = &_obj_pool;
+    cm.obj_pool = _pool;
     cm.key_column_names = &_olap_scan_node.key_column_name;
     cm.runtime_filters = &_runtime_filter_collector;
     cm.runtime_state = state;
@@ -473,6 +493,9 @@ void OlapScanNode::_init_counter(RuntimeState* state) {
     _read_pages_num_counter = ADD_COUNTER(_scan_profile, "ReadPagesNum", TUnit::UNIT);
     _cached_pages_num_counter = ADD_COUNTER(_scan_profile, "CachedPagesNum", TUnit::UNIT);
     _pushdown_predicates_counter = ADD_COUNTER(_scan_profile, "PushdownPredicates", TUnit::UNIT);
+
+    _get_rowsets_timer = ADD_TIMER(_scan_profile, "GetRowsets");
+    _get_delvec_timer = ADD_TIMER(_scan_profile, "GetDelVec");
 
     /// SegmentInit
     _seg_init_timer = ADD_TIMER(_scan_profile, "SegmentInit");
@@ -605,7 +628,7 @@ Status OlapScanNode::_start_scan_thread(RuntimeState* state) {
             scanner_params.skip_aggregation = _olap_scan_node.is_preaggregation;
             scanner_params.need_agg_finalize = true;
             scanner_params.unused_output_columns = &_unused_output_columns;
-            auto* scanner = _obj_pool.add(new TabletScanner(this));
+            auto* scanner = _pool->add(new TabletScanner(this));
             RETURN_IF_ERROR(scanner->init(state, scanner_params));
             // Assume all scanners have the same schema.
             _chunk_schema = &scanner->chunk_schema();
@@ -673,13 +696,14 @@ Status OlapScanNode::_capture_tablet_rowsets() {
         {
             std::shared_lock l(tablet->get_header_lock());
             RETURN_IF_ERROR(tablet->capture_consistent_rowsets(Version(0, version), &_tablet_rowsets[i]));
+            Rowset::acquire_readers(_tablet_rowsets[i]);
         }
     }
 
     return Status::OK();
 }
 
-size_t _estimate_type_bytes(PrimitiveType ptype) {
+size_t _estimate_type_bytes(LogicalType ptype) {
     switch (ptype) {
     case TYPE_VARCHAR:
     case TYPE_CHAR:

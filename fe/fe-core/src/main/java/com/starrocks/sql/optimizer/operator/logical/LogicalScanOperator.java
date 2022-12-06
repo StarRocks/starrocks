@@ -139,7 +139,7 @@ public abstract class LogicalScanOperator extends LogicalOperator {
         return Objects.hash(super.hashCode(), table.getId(), colRefToColumnMetaMap.keySet());
     }
 
-    abstract static class Builder<O extends LogicalScanOperator, B extends LogicalScanOperator.Builder>
+    public abstract static class Builder<O extends LogicalScanOperator, B extends LogicalScanOperator.Builder>
             extends Operator.Builder<O, B> {
         protected Table table;
         protected ImmutableMap<ColumnRefOperator, Column> colRefToColumnMetaMap;
@@ -154,6 +154,16 @@ public abstract class LogicalScanOperator extends LogicalOperator {
             this.colRefToColumnMetaMap = scanOperator.colRefToColumnMetaMap;
             this.columnMetaToColRefMap = scanOperator.columnMetaToColRefMap;
             this.columnFilters = scanOperator.columnFilters;
+            return (B) this;
+        }
+
+        public B setColRefToColumnMetaMap(ImmutableMap<ColumnRefOperator, Column> colRefToColumnMetaMap) {
+            this.colRefToColumnMetaMap = colRefToColumnMetaMap;
+            return (B) this;
+        }
+
+        public B setColumnMetaToColRefMap(ImmutableMap<Column, ColumnRefOperator> columnMetaToColRefMap) {
+            this.columnMetaToColRefMap = columnMetaToColRefMap;
             return (B) this;
         }
 

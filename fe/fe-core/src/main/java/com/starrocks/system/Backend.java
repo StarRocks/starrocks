@@ -21,6 +21,7 @@
 
 package com.starrocks.system;
 
+import com.google.common.base.Objects;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -269,6 +270,12 @@ public class Backend extends ComputeNode {
         }
     }
 
+    public void setStorageMediumForAllDisks(TStorageMedium m) {
+        for (DiskInfo diskInfo : disksRef.values()) {
+            diskInfo.setStorageMedium(m);
+        }
+    }
+
     public BackendStatus getBackendStatus() {
         return backendStatus;
     }
@@ -350,6 +357,11 @@ public class Backend extends ComputeNode {
         if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_40) {
             setBrpcPort(in.readInt());
         }
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(getId());
     }
 
     @Override

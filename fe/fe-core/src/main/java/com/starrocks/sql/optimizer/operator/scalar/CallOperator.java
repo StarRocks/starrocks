@@ -147,11 +147,6 @@ public class CallOperator extends ScalarOperator {
         }
         CallOperator other = (CallOperator) obj;
 
-        //Non-deterministic functions cannot be equal by default, and expression reuse is disabled
-        if (FunctionSet.nonDeterministicFunctions.contains(fnName)) {
-            return false;
-        }
-
         return isDistinct == other.isDistinct &&
                 Objects.equals(fnName, other.fnName) &&
                 Objects.equals(type, other.type) &&

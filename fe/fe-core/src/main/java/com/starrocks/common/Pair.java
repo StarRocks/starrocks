@@ -51,11 +51,28 @@ public class Pair<F, S> {
      * A pair is equal if both parts are equal().
      */
     public boolean equals(Object o) {
-        if (o instanceof Pair) {
-            Pair<F, S> other = (Pair<F, S>) o;
-            return this.first.equals(other.first) && this.second.equals(other.second);
+        if (!(o instanceof Pair)) {
+            return false;
         }
-        return false;
+        Pair<F, S> other = (Pair<F, S>) o;
+
+        // compare first
+        if (this.first == null) {
+            if (other.first != null) {
+                return false;
+            }
+        } else {
+            if (! this.first.equals(other.first)) {
+                return false;
+            }
+        }
+
+        // compare second
+        if (this.second == null) {
+            return other.second == null;
+        } else {
+            return this.second.equals(other.second);
+        }
     }
 
     @Override

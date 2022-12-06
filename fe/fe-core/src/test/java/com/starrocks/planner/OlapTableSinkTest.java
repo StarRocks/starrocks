@@ -20,6 +20,7 @@ package com.starrocks.planner;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
 import com.starrocks.analysis.DescriptorTable;
+import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
@@ -47,6 +48,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TOlapTableLocationParam;
 import com.starrocks.thrift.TStorageMedium;
@@ -125,7 +127,7 @@ public class OlapTableSinkTest {
             result = partition;
         }};
 
-        OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(2L), TWriteQuorumType.MAJORITY);
+        OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(2L), TWriteQuorumType.MAJORITY, false);
         sink.init(new TUniqueId(1, 2), 3, 4, 1000);
         sink.complete();
         LOG.info("sink is {}", sink.toThrift());
@@ -162,7 +164,7 @@ public class OlapTableSinkTest {
             result = p1;
         }};
 
-        OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(p1.getId()), TWriteQuorumType.MAJORITY);
+        OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(p1.getId()), TWriteQuorumType.MAJORITY, false);
         sink.init(new TUniqueId(1, 2), 3, 4, 1000);
         try {
             sink.complete();
@@ -185,7 +187,8 @@ public class OlapTableSinkTest {
             result = null;
         }};
 
-        OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(unknownPartId), TWriteQuorumType.MAJORITY);
+        OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(unknownPartId),
+                TWriteQuorumType.MAJORITY, false);
         sink.init(new TUniqueId(1, 2), 3, 4, 1000);
         sink.complete();
         LOG.info("sink is {}", sink.toThrift());
@@ -258,7 +261,8 @@ public class OlapTableSinkTest {
             }
         };
 
-        OlapTableSink sink = new OlapTableSink(table, null, Lists.newArrayList(partitionId), TWriteQuorumType.MAJORITY);
+        OlapTableSink sink = new OlapTableSink(table, null, Lists.newArrayList(partitionId), TWriteQuorumType.MAJORITY,
+                false);
         TOlapTableLocationParam param = (TOlapTableLocationParam) Deencapsulation.invoke(sink, "createLocation", table);
         System.out.println(param);
 
@@ -341,7 +345,7 @@ public class OlapTableSinkTest {
             }
         };
 
-        OlapTableSink sink = new OlapTableSink(table, null, Lists.newArrayList(partitionId), TWriteQuorumType.MAJORITY);
+        OlapTableSink sink = new OlapTableSink(table, null, Lists.newArrayList(partitionId), TWriteQuorumType.MAJORITY, true);
         TOlapTableLocationParam param = (TOlapTableLocationParam) Deencapsulation.invoke(sink, "createLocation", table);
         System.out.println(param);
 
@@ -360,5 +364,71 @@ public class OlapTableSinkTest {
         for (Integer v : beCount.values()) {
             Assert.assertEquals(3, v.longValue());
         }
+    }
+
+    @Test
+    public void testSingleListPartition() throws UserException{
+        TupleDescriptor tuple = getTuple();
+        ListPartitionInfo listPartitionInfo = new ListPartitionInfo(PartitionType.LIST,
+                Lists.newArrayList(new Column("province",Type.STRING)));
+        listPartitionInfo.setValues(1,Lists.newArrayList("beijing","shanghai"));
+        listPartitionInfo.setReplicationNum(1, (short) 3);
+        MaterializedIndex index = new MaterializedIndex(1, MaterializedIndex.IndexState.NORMAL);
+        HashDistributionInfo distInfo = new HashDistributionInfo(
+                3, Lists.newArrayList(new Column("id", Type.BIGINT)));
+        Partition partition = new Partition(1, "p1", index, distInfo);
+
+        new Expectations() {{
+            dstTable.getId();
+            result = 1;
+            dstTable.getPartitions();
+            result = Lists.newArrayList(partition);
+            dstTable.getPartition(1L);
+            result = partition;
+            dstTable.getPartitionInfo();
+            result = listPartitionInfo;
+        }};
+
+        OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(1L), TWriteQuorumType.MAJORITY,
+                false);
+        sink.init(new TUniqueId(1, 2), 3, 4, 1000);
+        sink.complete();
+
+        Assert.assertTrue(sink.toThrift() instanceof TDataSink);
+    }
+
+    @Test
+    public void testMultiListPartition() throws UserException{
+        TupleDescriptor tuple = getTuple();
+        ListPartitionInfo listPartitionInfo = new ListPartitionInfo(PartitionType.LIST,
+                Lists.newArrayList(new Column("dt",Type.STRING), new Column("province",Type.STRING)));
+        List<String> multiItems = Lists.newArrayList("dt","shanghai");
+        List<List<String>> multiValues = new ArrayList<>();
+        multiValues.add(multiItems);
+
+        listPartitionInfo.setMultiValues(1,multiValues);
+        listPartitionInfo.setReplicationNum(1, (short) 3);
+        MaterializedIndex index = new MaterializedIndex(1, MaterializedIndex.IndexState.NORMAL);
+        HashDistributionInfo distInfo = new HashDistributionInfo(
+                3, Lists.newArrayList(new Column("id", Type.BIGINT)));
+        Partition partition = new Partition(1, "p1", index, distInfo);
+
+        new Expectations() {{
+            dstTable.getId();
+            result = 1;
+            dstTable.getPartitions();
+            result = Lists.newArrayList(partition);
+            dstTable.getPartition(1L);
+            result = partition;
+            dstTable.getPartitionInfo();
+            result = listPartitionInfo;
+        }};
+
+        OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(1L), TWriteQuorumType.MAJORITY,
+                false);
+        sink.init(new TUniqueId(1, 2), 3, 4, 1000);
+        sink.complete();
+
+        Assert.assertTrue(sink.toThrift() instanceof TDataSink);
     }
 }

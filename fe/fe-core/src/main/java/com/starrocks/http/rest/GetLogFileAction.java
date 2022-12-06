@@ -92,7 +92,7 @@ public class GetLogFileAction extends RestBaseAction {
         } else if (method.equals(HttpMethod.GET)) {
             File log = getLogFile(logType, logFile);
             if (log == null || !log.exists() || !log.isFile()) {
-                response.appendContent("Log file not exist: " + log.getName());
+                response.appendContent("Log file not exist: " + logFile);
                 writeResponse(request, response, HttpResponseStatus.NOT_FOUND);
                 return;
             }

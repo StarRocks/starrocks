@@ -9,8 +9,8 @@
 #include "gutil/strings/ascii_ctype.h" // for ascii_tolower
 
 int memcasecmp(const char* s1, const char* s2, size_t len) {
-    const unsigned char* us1 = reinterpret_cast<const unsigned char*>(s1);
-    const unsigned char* us2 = reinterpret_cast<const unsigned char*>(s2);
+    const auto* us1 = reinterpret_cast<const unsigned char*>(s1);
+    const auto* us2 = reinterpret_cast<const unsigned char*>(s2);
 
     for (int i = 0; i < len; i++) {
         const int diff = static_cast<int>(static_cast<unsigned char>(ascii_tolower(us1[i]))) -
@@ -74,10 +74,10 @@ const char* int_memmatch(const char* phaystack, size_t haylen, const char* pneed
     if (0 == neelen) {
         return phaystack; // even if haylen is 0
     }
-    const unsigned char* haystack = (const unsigned char*)phaystack;
+    const auto* haystack = (const unsigned char*)phaystack;
     const unsigned char* hayend = (const unsigned char*)phaystack + haylen;
-    const unsigned char* needlestart = (const unsigned char*)pneedle;
-    const unsigned char* needle = (const unsigned char*)pneedle;
+    const auto* needlestart = (const unsigned char*)pneedle;
+    const auto* needle = (const unsigned char*)pneedle;
     const unsigned char* needleend = (const unsigned char*)pneedle + neelen;
 
     for (; haystack < hayend; ++haystack) {

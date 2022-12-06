@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/olap/rowset/segment_v2/indexed_column_reader.cpp
 
@@ -35,7 +48,7 @@ Status IndexedColumnReader::load(bool use_page_cache, bool kept_in_memory) {
     _use_page_cache = use_page_cache;
     _kept_in_memory = kept_in_memory;
 
-    _type_info = get_type_info((FieldType)_meta.data_type());
+    _type_info = get_type_info((LogicalType)_meta.data_type());
     if (_type_info == nullptr) {
         return Status::NotSupported(strings::Substitute("unsupported type=$0", _meta.data_type()));
     }
@@ -135,7 +148,7 @@ Status IndexedColumnIterator::seek_to_ordinal(ordinal_t idx) {
         // need to read the data page containing row at idx
         if (_reader->_has_index_page) {
             std::string key;
-            KeyCoderTraits<OLAP_FIELD_TYPE_UNSIGNED_BIGINT>::full_encode_ascending(&idx, &key);
+            KeyCoderTraits<TYPE_UNSIGNED_BIGINT>::full_encode_ascending(&idx, &key);
             RETURN_IF_ERROR(_ordinal_iter.seek_at_or_before(key));
             RETURN_IF_ERROR(_read_data_page(_ordinal_iter.current_page_pointer()));
             _current_iter = &_ordinal_iter;
@@ -192,7 +205,7 @@ Status IndexedColumnIterator::seek_at_or_after(const void* key, bool* exact_matc
     return Status::OK();
 }
 
-Status IndexedColumnIterator::next_batch(size_t* n, ColumnBlockView* column_view) {
+Status IndexedColumnIterator::next_batch(size_t* n, vectorized::Column* column) {
     DCHECK(_seeked);
     if (_current_ordinal == _reader->num_values()) {
         *n = 0;
@@ -215,10 +228,9 @@ Status IndexedColumnIterator::next_batch(size_t* n, ColumnBlockView* column_view
 
         size_t rows_to_read = std::min(_data_page->remaining(), remaining);
         size_t rows_read = rows_to_read;
-        RETURN_IF_ERROR(_data_page->read(column_view, &rows_read));
+        RETURN_IF_ERROR(_data_page->read(column, &rows_read));
         DCHECK(rows_to_read == rows_read);
         _current_ordinal += rows_read;
-        column_view->advance(rows_read);
         remaining -= rows_read;
     }
     *n -= remaining;

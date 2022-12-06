@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/olap/tablet_meta_manager.cpp
 
@@ -21,14 +34,9 @@
 
 #include "storage/tablet_meta_manager.h"
 
-#include "common/compiler_util.h"
-DIAGNOSTIC_PUSH
-DIAGNOSTIC_IGNORE("-Wclass-memaccess")
-#include <rapidjson/writer.h>
-DIAGNOSTIC_POP
-
 #include <json2pb/json_to_pb.h>
 #include <json2pb/pb_to_json.h>
+#include <rapidjson/writer.h>
 #include <rocksdb/write_batch.h>
 
 #include <boost/algorithm/string/trim.hpp>
@@ -37,6 +45,7 @@ DIAGNOSTIC_POP
 #include <string>
 #include <vector>
 
+#include "common/compiler_util.h"
 #include "common/logging.h"
 #include "common/tracer.h"
 #include "gen_cpp/olap_file.pb.h"
@@ -808,7 +817,8 @@ Status TabletMetaManager::rowset_iterate(DataDir* store, TTabletId tablet_id, co
 Status TabletMetaManager::apply_rowset_commit(DataDir* store, TTabletId tablet_id, int64_t logid,
                                               const EditVersion& version,
                                               vector<std::pair<uint32_t, DelVectorPtr>>& delvecs,
-                                              const PersistentIndexMetaPB& index_meta, bool enable_persistent_index) {
+                                              const PersistentIndexMetaPB& index_meta, bool enable_persistent_index,
+                                              const RowsetMetaPB* rowset_meta) {
     auto span = Tracer::Instance().start_trace_tablet("apply_save_meta", tablet_id);
     span->SetAttribute("version", version.to_string());
     WriteBatch batch;
@@ -848,6 +858,16 @@ Status TabletMetaManager::apply_rowset_commit(DataDir* store, TTabletId tablet_i
         auto meta_key = encode_persistent_index_key(tsid.tablet_id);
         auto meta_value = index_meta.SerializeAsString();
         st = batch.Put(handle, meta_key, meta_value);
+        if (!st.ok()) {
+            LOG(WARNING) << "rowset_commit failed, rocksdb.batch.put failed";
+            return to_status(st);
+        }
+    }
+
+    if (rowset_meta != nullptr) {
+        string rowset_key = encode_meta_rowset_key(tablet_id, rowset_meta->rowset_seg_id());
+        auto rowset_value = rowset_meta->SerializeAsString();
+        st = batch.Put(handle, rowset_key, rowset_value);
         if (!st.ok()) {
             LOG(WARNING) << "rowset_commit failed, rocksdb.batch.put failed";
             return to_status(st);
@@ -984,21 +1004,21 @@ StatusOr<size_t> TabletMetaManager::delete_del_vector_before_version(KVStore* me
         auto& versions = segment.second;
         bool del = false;
         bool added = false;
-        for (size_t i = 0; i < versions.size(); i++) {
+        for (long i : versions) {
             if (del) {
-                std::string key = encode_del_vector_key(tablet_id, segment.first, versions[i]);
+                std::string key = encode_del_vector_key(tablet_id, segment.first, i);
                 rocksdb::Status st = batch.Delete(cf_handle, key);
                 if (!st.ok()) {
                     return to_status(st);
                 }
                 num_delete++;
                 if (!added) {
-                    vlog_delvec_maplist << " " << segment.first << ":" << versions[i];
+                    vlog_delvec_maplist << " " << segment.first << ":" << i;
                     added = true;
                 } else {
-                    vlog_delvec_maplist << "," << versions[i];
+                    vlog_delvec_maplist << "," << i;
                 }
-            } else if (versions[i] <= version) {
+            } else if (i <= version) {
                 // versions after this version can be deleted
                 del = true;
             }
@@ -1243,6 +1263,25 @@ Status TabletMetaManager::get_stats(DataDir* store, MetaStoreStats* stats, bool 
     return Status::OK();
 }
 
+Status TabletMetaManager::remove_primary_key_meta(DataDir* store, WriteBatch* batch, TTabletId tablet_id) {
+    if (!clear_log(store, batch, tablet_id).ok()) {
+        LOG(WARNING) << "clear_log add to batch failed";
+    }
+    if (!clear_del_vector(store, batch, tablet_id).ok()) {
+        LOG(WARNING) << "clear delvec add to batch failed";
+    }
+    if (!clear_rowset(store, batch, tablet_id).ok()) {
+        LOG(WARNING) << "clear rowset add to batch failed";
+    }
+    if (!clear_pending_rowset(store, batch, tablet_id).ok()) {
+        LOG(WARNING) << "clear rowset add to batch failed";
+    }
+    if (!clear_persistent_index(store, batch, tablet_id).ok()) {
+        LOG(WARNING) << "clear persistent index add to batch failed";
+    }
+    return Status::OK();
+}
+
 Status TabletMetaManager::remove(DataDir* store, TTabletId tablet_id) {
     KVStore* meta = store->get_meta();
     WriteBatch batch;
@@ -1275,19 +1314,57 @@ Status TabletMetaManager::remove(DataDir* store, TTabletId tablet_id) {
     string prefix = strings::Substitute("$0$1_", HEADER_PREFIX, tablet_id);
     RETURN_IF_ERROR(meta->iterate(META_COLUMN_FAMILY_INDEX, prefix, traverse_tabletmeta_func));
     if (is_primary) {
-        if (!clear_log(store, &batch, tablet_id).ok()) {
-            LOG(WARNING) << "clear_log add to batch failed";
-        }
-        if (!clear_del_vector(store, &batch, tablet_id).ok()) {
-            LOG(WARNING) << "clear delvec add to batch failed";
-        }
-        if (!clear_rowset(store, &batch, tablet_id).ok()) {
-            LOG(WARNING) << "clear rowset add to batch failed";
-        }
-        if (!clear_pending_rowset(store, &batch, tablet_id).ok()) {
-            LOG(WARNING) << "clear rowset add to batch failed";
-        }
+        remove_primary_key_meta(store, &batch, tablet_id);
     }
+    return meta->write_batch(&batch);
+}
+
+Status TabletMetaManager::remove_table_meta(DataDir* store, TTableId table_id) {
+    KVStore* meta = store->get_meta();
+    WriteBatch batch;
+    bool is_primary = false;
+    std::vector<int64_t> delete_tablet;
+    rocksdb::ColumnFamilyHandle* cf = store->get_meta()->handle(META_COLUMN_FAMILY_INDEX);
+    auto traverse_tabletmeta_func = [&](std::string_view key, std::string_view value) -> bool {
+        TabletMetaPB tablet_meta_pb;
+        bool parsed = tablet_meta_pb.ParseFromArray(value.data(), value.size());
+        if (!parsed) {
+            LOG(WARNING) << "bad tablet meta pb data, tablet_meta key: " << key;
+        } else {
+            is_primary = tablet_meta_pb.schema().keys_type() == KeysType::PRIMARY_KEYS;
+            if (tablet_meta_pb.table_id() == table_id) {
+                auto st = batch.Delete(cf, string(key));
+                if (!st.ok()) {
+                    LOG(WARNING) << "batch.Delete failed, key:" << key;
+                } else if (is_primary) {
+                    remove_primary_key_meta(store, &batch, tablet_meta_pb.tablet_id());
+                }
+            }
+        }
+        return true;
+    };
+    meta->iterate(META_COLUMN_FAMILY_INDEX, HEADER_PREFIX, traverse_tabletmeta_func);
+    return meta->write_batch(&batch);
+}
+
+Status TabletMetaManager::remove_table_persistent_index_meta(DataDir* store, TTableId table_id) {
+    KVStore* meta = store->get_meta();
+    WriteBatch batch;
+    auto traverse_tabletmeta_func = [&](std::string_view key, std::string_view value) -> bool {
+        TabletMetaPB tablet_meta_pb;
+        bool parsed = tablet_meta_pb.ParseFromArray(value.data(), value.size());
+        if (!parsed) {
+            LOG(WARNING) << "bad tablet meta pb data, tablet_meta key: " << key;
+        } else {
+            if (tablet_meta_pb.table_id() == table_id) {
+                if (!clear_persistent_index(store, &batch, tablet_meta_pb.tablet_id()).ok()) {
+                    LOG(WARNING) << "clear persistent index add to batch failed";
+                }
+            }
+        }
+        return true;
+    };
+    meta->iterate(META_COLUMN_FAMILY_INDEX, HEADER_PREFIX, traverse_tabletmeta_func);
     return meta->write_batch(&batch);
 }
 

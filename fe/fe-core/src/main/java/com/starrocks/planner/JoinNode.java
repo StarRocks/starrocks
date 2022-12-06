@@ -308,6 +308,10 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
         return joinOp;
     }
 
+    public DistributionMode getDistrMode() {
+        return distrMode;
+    }
+
     public void setDistributionMode(DistributionMode distrMode) {
         this.distrMode = distrMode;
     }
@@ -436,6 +440,10 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
         @Override
         public String toString() {
             return description;
+        }
+
+        public boolean areBothSidesShuffled() {
+            return this == SHUFFLE_HASH_BUCKET || this == PARTITIONED;
         }
 
         public TJoinDistributionMode toThrift() {

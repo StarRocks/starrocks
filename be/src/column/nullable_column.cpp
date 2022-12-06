@@ -1,5 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "column/nullable_column.h"
 
 #include "column/column_helper.h"
@@ -36,6 +48,13 @@ size_t NullableColumn::null_count() const {
         return 0;
     }
     return SIMD::count_nonzero(_null_column->get_data());
+}
+
+size_t NullableColumn::null_count(size_t offset, size_t count) const {
+    if (!_has_null) {
+        return 0;
+    }
+    return SIMD::count_nonzero(_null_column->raw_data() + offset, count);
 }
 
 void NullableColumn::append_datum(const Datum& datum) {
@@ -113,7 +132,9 @@ ColumnPtr NullableColumn::replicate(const std::vector<uint32_t>& offsets) {
 }
 
 bool NullableColumn::append_nulls(size_t count) {
-    DCHECK_GT(count, 0u);
+    if (count == 0) {
+        return true;
+    }
     _data_column->append_default(count);
     null_column_data().insert(null_column_data().end(), count, 1);
     DCHECK_EQ(_null_column->size(), _data_column->size());
@@ -214,7 +235,7 @@ int NullableColumn::compare_at(size_t left, size_t right, const Column& rhs, int
         return rhs.is_null(right) ? 0 : nan_direction_hint;
     }
     if (rhs.is_nullable()) {
-        const NullableColumn& nullable_rhs = down_cast<const NullableColumn&>(rhs);
+        const auto& nullable_rhs = down_cast<const NullableColumn&>(rhs);
         if (nullable_rhs.immutable_null_column_data()[right]) {
             return -nan_direction_hint;
         }

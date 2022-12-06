@@ -24,8 +24,8 @@ namespace starrocks {
 
 class ByteBufferTest : public testing::Test {
 public:
-    ByteBufferTest() {}
-    virtual ~ByteBufferTest() {}
+    ByteBufferTest() = default;
+    ~ByteBufferTest() override = default;
 };
 
 TEST_F(ByteBufferTest, normal) {

@@ -1,5 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "storage/lake/tablet_manager.h"
 
 #include <fmt/format.h>
@@ -23,7 +35,7 @@ namespace starrocks {
 
 class LakeTabletManagerTest : public testing::Test {
 public:
-    LakeTabletManagerTest() : _tablet_manager(nullptr), _test_dir(), _location_provider(nullptr){};
+    LakeTabletManagerTest() : _test_dir(){};
 
     ~LakeTabletManagerTest() override = default;
 
@@ -44,9 +56,9 @@ public:
         (void)FileSystem::Default()->delete_dir_recursive(_test_dir);
     }
 
-    starrocks::lake::TabletManager* _tablet_manager;
+    starrocks::lake::TabletManager* _tablet_manager{nullptr};
     std::string _test_dir;
-    lake::LocationProvider* _location_provider;
+    lake::LocationProvider* _location_provider{nullptr};
 };
 
 // NOLINTNEXTLINE

@@ -1,6 +1,20 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
+
+#include <utility>
 
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
@@ -11,6 +25,7 @@
 #include "exprs/expr_context.h"
 #include "jni.h"
 #include "runtime/descriptors.h"
+#include "runtime/mem_tracker.h"
 #include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
 #include "udf/java/java_udf.h"
@@ -36,11 +51,8 @@ struct JDBCScannerProfile {
 
 class JDBCScanner {
 public:
-    JDBCScanner(const JDBCScanContext& context, const TupleDescriptor* tuple_desc, RuntimeProfile* runtime_profile)
-            : _scan_ctx(context),
-              _tuple_desc(tuple_desc),
-              _slot_descs(tuple_desc->slots()),
-              _runtime_profile(runtime_profile) {}
+    JDBCScanner(JDBCScanContext context, const TupleDescriptor* tuple_desc, RuntimeProfile* runtime_profile)
+            : _scan_ctx(std::move(context)), _slot_descs(tuple_desc->slots()), _runtime_profile(runtime_profile) {}
 
     ~JDBCScanner() = default;
 
@@ -53,7 +65,7 @@ public:
 private:
     void _init_profile();
 
-    StatusOr<PrimitiveType> _precheck_data_type(const std::string& java_class, SlotDescriptor* slot_desc);
+    StatusOr<LogicalType> _precheck_data_type(const std::string& java_class, SlotDescriptor* slot_desc);
 
     Status _init_jdbc_bridge();
 
@@ -61,7 +73,7 @@ private:
 
     Status _init_jdbc_scanner();
 
-    Status _init_column_class_name();
+    Status _init_column_class_name(RuntimeState* state);
 
     Status _init_jdbc_util();
 
@@ -74,13 +86,11 @@ private:
     Status _close_jdbc_scanner();
 
     JDBCScanContext _scan_ctx;
-    // result tuple desc
-    const TupleDescriptor* _tuple_desc;
     // result column slot desc
     std::vector<SlotDescriptor*> _slot_descs;
     // java class name for each result column
     std::vector<std::string> _column_class_names;
-    std::vector<PrimitiveType> _result_column_types;
+    std::vector<LogicalType> _result_column_types;
     std::vector<ExprContext*> _cast_exprs;
     ChunkPtr _result_chunk;
 
@@ -111,5 +121,8 @@ private:
     static constexpr const char* JDBC_SCAN_CONTEXT_CLASS_NAME = "com/starrocks/jdbcbridge/JDBCScanContext";
     static constexpr const char* JDBC_SCANNER_CLASS_NAME = "com/starrocks/jdbcbridge/JDBCScanner";
     static constexpr const char* JDBC_UTIL_CLASS_NAME = "com/starrocks/jdbcbridge/JDBCUtil";
+
+    static const int32_t DEFAULT_JDBC_CONNECTION_POOL_SIZE = 8;
+    static const int32_t MINIMUM_ALLOWED_JDBC_CONNECTION_IDLE_TIMEOUT_MS = 10000;
 };
 } // namespace starrocks::vectorized

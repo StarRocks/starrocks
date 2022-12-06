@@ -251,7 +251,9 @@ public class BrokerUtil {
                         LOG.warn("Broker close reader failed. path={}, address={}", path, address, ex);
                     }
                 }
-                if (tOperationStatus == null || tOperationStatus.getStatusCode() != TBrokerOperationStatusCode.OK) {
+                if (tOperationStatus == null) {
+                    LOG.warn("Broker close reader failed: operation status is null. path={}, address={}", path, address);
+                } else if  (tOperationStatus.getStatusCode() != TBrokerOperationStatusCode.OK) {
                     LOG.warn("Broker close reader failed. path={}, address={}, error={}", path, address,
                             tOperationStatus.getMessage());
                 } else {
@@ -293,14 +295,10 @@ public class BrokerUtil {
      */
     public static void writeFile(String srcFilePath, String destFilePath,
                                  BrokerDesc brokerDesc) throws UserException {
-        FileInputStream fis = null;
-        FileChannel channel = null;
         BrokerWriter writer = new BrokerWriter(destFilePath, brokerDesc);
         ByteBuffer byteBuffer = ByteBuffer.allocate(READ_BUFFER_SIZE_B);
-        try {
+        try (FileInputStream fis = new FileInputStream(srcFilePath); FileChannel channel = fis.getChannel()) {
             writer.open();
-            fis = new FileInputStream(srcFilePath);
-            channel = fis.getChannel();
             while (true) {
                 int readSize = channel.read(byteBuffer);
                 if (readSize == -1) {
@@ -319,16 +317,6 @@ public class BrokerUtil {
         } finally {
             // close broker file writer and local file input stream
             writer.close();
-            try {
-                if (channel != null) {
-                    channel.close();
-                }
-                if (fis != null) {
-                    fis.close();
-                }
-            } catch (IOException e) {
-                LOG.warn("Close local file failed. srcPath={}", srcFilePath, e);
-            }
         }
     }
 

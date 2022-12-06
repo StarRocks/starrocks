@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include <column/column_helper.h>
 #include <column/decimalv3_column.h>
 #include <column/type_traits.h>
@@ -16,7 +29,7 @@ class DecimalBinaryFunctionTest : public ::testing::Test {};
 using DecimalTestCase = std::tuple<std::string, std::string, std::string>;
 using DecimalTestCaseArray = std::vector<DecimalTestCase>;
 
-template <PrimitiveType LhsType, PrimitiveType RhsType>
+template <LogicalType LhsType, LogicalType RhsType>
 Columns prepare_vector_vector(DecimalTestCaseArray const& test_cases, int lhs_precision, int lhs_scale,
                               int rhs_precision, int rhs_scale, size_t front_fill_size, size_t rear_fill_size) {
     using LhsCppType = RunTimeCppType<LhsType>;
@@ -63,14 +76,14 @@ Columns prepare_vector_vector(DecimalTestCaseArray const& test_cases, int lhs_pr
     return columns;
 }
 
-template <PrimitiveType Type>
+template <LogicalType Type>
 Columns prepare_vector_vector(DecimalTestCaseArray const& test_cases, int lhs_precision, int lhs_scale,
                               int rhs_precision, int rhs_scale, size_t front_fill_size, size_t rear_fill_size) {
     return prepare_vector_vector<Type, Type>(test_cases, lhs_precision, lhs_scale, rhs_precision, rhs_scale,
                                              front_fill_size, rear_fill_size);
 }
 
-template <PrimitiveType LhsType, PrimitiveType RhsType>
+template <LogicalType LhsType, LogicalType RhsType>
 Columns prepare_const_vector(const DecimalTestCase& test_case, int lhs_precision, int lhs_scale, int rhs_precision,
                              int rhs_scale, size_t front_fill_size, size_t rear_fill_size) {
     auto& lhs_datum = std::get<0>(test_case);
@@ -112,14 +125,14 @@ Columns prepare_const_vector(const DecimalTestCase& test_case, int lhs_precision
     return columns;
 }
 
-template <PrimitiveType Type>
+template <LogicalType Type>
 Columns prepare_const_vector(const DecimalTestCase& test_case, int lhs_precision, int lhs_scale, int rhs_precision,
                              int rhs_scale, size_t front_fill_size, size_t rear_fill_size) {
     return prepare_const_vector<Type, Type>(test_case, lhs_precision, lhs_scale, rhs_precision, rhs_scale,
                                             front_fill_size, rear_fill_size);
 }
 
-template <PrimitiveType LhsType, PrimitiveType RhsType>
+template <LogicalType LhsType, LogicalType RhsType>
 Columns prepare_vector_const(const DecimalTestCase& test_case, int lhs_precision, int lhs_scale, int rhs_precision,
                              int rhs_scale, size_t front_fill_size, size_t rear_fill_size) {
     DecimalTestCase const_vector_test_case = {std::get<1>(test_case), std::get<0>(test_case), std::get<2>(test_case)};
@@ -129,7 +142,7 @@ Columns prepare_vector_const(const DecimalTestCase& test_case, int lhs_precision
     return Columns{const_vector_columns[1], const_vector_columns[0]};
 }
 
-template <PrimitiveType Type>
+template <LogicalType Type>
 Columns prepare_vector_const(const DecimalTestCase& test_case, int lhs_precision, int lhs_scale, int rhs_precision,
                              int rhs_scale, size_t front_fill_size, size_t rear_fill_size) {
     return prepare_vector_const<Type, Type>(test_case, lhs_precision, lhs_scale, rhs_precision, rhs_scale,
@@ -145,7 +158,7 @@ ColumnPtr add_null_column(ColumnPtr&& column) {
     return NullableColumn::create(std::move(column), std::move(null_column));
 }
 
-template <PrimitiveType LhsType, PrimitiveType RhsType>
+template <LogicalType LhsType, LogicalType RhsType>
 Columns prepare_nullable_vector_const(const DecimalTestCase& test_case, int lhs_precision, int lhs_scale,
                                       int rhs_precision, int rhs_scale, size_t front_fill_size, size_t rear_fill_size) {
     auto columns = prepare_vector_const<LhsType, RhsType>(test_case, lhs_precision, lhs_scale, rhs_precision, rhs_scale,
@@ -153,14 +166,14 @@ Columns prepare_nullable_vector_const(const DecimalTestCase& test_case, int lhs_
     return Columns{add_null_column(std::move(columns[0])), columns[1]};
 }
 
-template <PrimitiveType Type>
+template <LogicalType Type>
 Columns prepare_nullable_vector_const(const DecimalTestCase& test_case, int lhs_precision, int lhs_scale,
                                       int rhs_precision, int rhs_scale, size_t front_fill_size, size_t rear_fill_size) {
     return prepare_nullable_vector_const<Type, Type>(test_case, lhs_precision, rhs_scale, rhs_precision, rhs_scale,
                                                      front_fill_size, rear_fill_size);
 }
 
-template <PrimitiveType LhsType, PrimitiveType RhsType>
+template <LogicalType LhsType, LogicalType RhsType>
 Columns prepare_const_nullable_vector(const DecimalTestCase& test_case, int lhs_precision, int lhs_scale,
                                       int rhs_precision, int rhs_scale, size_t front_fill_size, size_t rear_fill_size) {
     auto columns = prepare_const_vector<LhsType, RhsType>(test_case, lhs_precision, lhs_scale, rhs_precision, rhs_scale,
@@ -168,14 +181,14 @@ Columns prepare_const_nullable_vector(const DecimalTestCase& test_case, int lhs_
     return Columns{columns[0], add_null_column(std::move(columns[1]))};
 }
 
-template <PrimitiveType Type>
+template <LogicalType Type>
 Columns prepare_const_nullable_vector(const DecimalTestCase& test_case, int lhs_precision, int lhs_scale,
                                       int rhs_precision, int rhs_scale, size_t front_fill_size, size_t rear_fill_size) {
     return prepare_const_nullable_vector<Type, Type>(test_case, lhs_precision, lhs_scale, rhs_precision, rhs_scale,
                                                      front_fill_size, rear_fill_size);
 }
 
-template <PrimitiveType LhsType, PrimitiveType RhsType>
+template <LogicalType LhsType, LogicalType RhsType>
 Columns prepare_nullable_vector_nullable_vector(const DecimalTestCaseArray& test_case, int lhs_precision, int lhs_scale,
                                                 int rhs_precision, int rhs_scale, size_t front_fill_size,
                                                 size_t rear_fill_size) {
@@ -184,7 +197,7 @@ Columns prepare_nullable_vector_nullable_vector(const DecimalTestCaseArray& test
     return Columns{add_null_column(std::move(columns[0])), add_null_column(std::move(columns[1]))};
 }
 
-template <PrimitiveType Type>
+template <LogicalType Type>
 Columns prepare_nullable_vector_nullable_vector(const DecimalTestCaseArray& test_case, int lhs_precision, int lhs_scale,
                                                 int rhs_precision, int rhs_scale, size_t front_fill_size,
                                                 size_t rear_fill_size) {
@@ -192,7 +205,7 @@ Columns prepare_nullable_vector_nullable_vector(const DecimalTestCaseArray& test
                                                                rhs_scale, front_fill_size, rear_fill_size);
 }
 
-template <PrimitiveType LhsType, PrimitiveType RhsType>
+template <LogicalType LhsType, LogicalType RhsType>
 Columns prepare_const_const(const DecimalTestCase& test_case, int lhs_precision, int lhs_scale, int rhs_precision,
                             int rhs_scale) {
     using LhsCppType = RunTimeCppType<LhsType>;
@@ -214,7 +227,7 @@ Columns prepare_const_const(const DecimalTestCase& test_case, int lhs_precision,
     return Columns{ConstColumn::create(lhs_column, 1), ConstColumn::create(rhs_column, 1)};
 }
 
-template <PrimitiveType Type>
+template <LogicalType Type>
 Columns prepare_const_const(const DecimalTestCase& test_case, int lhs_precision, int lhs_scale, int rhs_precision,
                             int rhs_scale) {
     return prepare_const_const<Type, Type>(test_case, lhs_precision, lhs_scale, rhs_precision, rhs_scale);
@@ -222,7 +235,7 @@ Columns prepare_const_const(const DecimalTestCase& test_case, int lhs_precision,
 
 using Func = std::function<ColumnPtr(ColumnPtr const&, ColumnPtr const&)>;
 
-template <PrimitiveType LhsType, PrimitiveType RhsType, PrimitiveType ResultType, typename Op, bool check_overflow,
+template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType, typename Op, bool check_overflow,
           bool assert_overflow = false>
 void test_decimal_binary_functions(DecimalTestCaseArray const& test_cases, Columns columns, int result_precision,
                                    int result_scale, size_t off, [[maybe_unused]] const std::vector<bool>& overflows) {
@@ -240,7 +253,7 @@ void test_decimal_binary_functions(DecimalTestCaseArray const& test_cases, Colum
         if (result->only_null()) {
             ASSERT_TRUE(check_overflow);
         } else {
-            ColumnType* decimal_column = (ColumnType*)(ColumnHelper::get_data_column(result.get()));
+            auto* decimal_column = (ColumnType*)(ColumnHelper::get_data_column(result.get()));
             ASSERT_EQ(result_precision, decimal_column->precision());
             ASSERT_EQ(result_scale, decimal_column->scale());
             CppType value = decimal_column->get_data()[0];
@@ -309,7 +322,7 @@ void test_decimal_binary_functions(DecimalTestCaseArray const& test_cases, Colum
     }
 }
 
-template <PrimitiveType LhsType, PrimitiveType RhsType, PrimitiveType ResultType, typename Op, bool check_overflow,
+template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType, typename Op, bool check_overflow,
           bool assert_overflow = false>
 void test_decimal_binary_functions_with_nullable_columns(DecimalTestCaseArray const& test_cases, Columns columns,
                                                          int result_precision, int result_scale, size_t off,
@@ -368,7 +381,7 @@ void test_decimal_binary_functions_with_nullable_columns(DecimalTestCaseArray co
     }
 }
 
-template <PrimitiveType LhsType, PrimitiveType RhsType, PrimitiveType ResultType, typename Op, bool check_overflow>
+template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType, typename Op, bool check_overflow>
 void test_vector_vector(DecimalTestCaseArray const& test_cases, int lhs_precision, int lhs_scale, int rhs_precision,
                         int rhs_scale, int result_precision, int result_scale) {
     Columns columns = prepare_vector_vector<LhsType, RhsType>(test_cases, lhs_precision, lhs_scale, rhs_precision,
@@ -377,14 +390,14 @@ void test_vector_vector(DecimalTestCaseArray const& test_cases, int lhs_precisio
             test_cases, columns, result_precision, result_scale, 0, std::vector<bool>());
 }
 
-template <PrimitiveType Type, typename Op, bool check_overflow>
+template <LogicalType Type, typename Op, bool check_overflow>
 void test_vector_vector(DecimalTestCaseArray const& test_cases, int lhs_precision, int lhs_scale, int rhs_precision,
                         int rhs_scale, int result_precision, int result_scale) {
     test_vector_vector<Type, Type, Type, Op, check_overflow>(test_cases, lhs_precision, lhs_scale, rhs_precision,
                                                              rhs_scale, result_precision, result_scale);
 }
 
-template <PrimitiveType LhsType, PrimitiveType RhsType, PrimitiveType ResultType, typename Op, bool check_overflow>
+template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType, typename Op, bool check_overflow>
 void test_vector_vector_assert_overflow(DecimalTestCaseArray const& test_cases, int lhs_precision, int lhs_scale,
                                         int rhs_precision, int rhs_scale, int result_precision, int result_scale,
                                         const std::vector<bool>& overflows) {
@@ -394,7 +407,7 @@ void test_vector_vector_assert_overflow(DecimalTestCaseArray const& test_cases, 
             test_cases, columns, result_precision, result_scale, 0, overflows);
 }
 
-template <PrimitiveType Type, typename Op, bool check_overflow>
+template <LogicalType Type, typename Op, bool check_overflow>
 void test_vector_vector_assert_overflow(DecimalTestCaseArray const& test_cases, int lhs_precision, int lhs_scale,
                                         int rhs_precision, int rhs_scale, int result_precision, int result_scale,
                                         const std::vector<bool>& overflows) {
@@ -402,7 +415,7 @@ void test_vector_vector_assert_overflow(DecimalTestCaseArray const& test_cases, 
             test_cases, lhs_precision, lhs_scale, rhs_precision, rhs_scale, result_precision, result_scale, overflows);
 }
 
-template <PrimitiveType LhsType, PrimitiveType RhsType, PrimitiveType ResultType, typename Op, bool check_overflow>
+template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType, typename Op, bool check_overflow>
 void test_const_vector(DecimalTestCaseArray const& test_cases, int lhs_precision, int lhs_scale, int rhs_precision,
                        int rhs_scale, int result_precision, int result_scale) {
     std::random_device rd;
@@ -419,14 +432,14 @@ void test_const_vector(DecimalTestCaseArray const& test_cases, int lhs_precision
     }
 }
 
-template <PrimitiveType Type, typename Op, bool check_overflow>
+template <LogicalType Type, typename Op, bool check_overflow>
 void test_const_vector(DecimalTestCaseArray const& test_cases, int lhs_precision, int lhs_scale, int rhs_precision,
                        int rhs_scale, int result_precision, int result_scale) {
     test_const_vector<Type, Type, Type, Op, check_overflow>(test_cases, lhs_precision, lhs_scale, rhs_precision,
                                                             rhs_scale, result_precision, result_scale);
 }
 
-template <PrimitiveType LhsType, PrimitiveType RhsType, PrimitiveType ResultType, typename Op, bool check_overflow>
+template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType, typename Op, bool check_overflow>
 void test_vector_const(DecimalTestCaseArray const& test_cases, int lhs_precision, int lhs_scale, int rhs_precision,
                        int rhs_scale, int result_precision, int result_scale) {
     std::random_device rd;
@@ -443,14 +456,14 @@ void test_vector_const(DecimalTestCaseArray const& test_cases, int lhs_precision
     }
 }
 
-template <PrimitiveType Type, typename Op, bool check_overflow>
+template <LogicalType Type, typename Op, bool check_overflow>
 void test_vector_const(DecimalTestCaseArray const& test_cases, int lhs_precision, int lhs_scale, int rhs_precision,
                        int rhs_scale, int result_precision, int result_scale) {
     return test_vector_const<Type, Type, Type, Op, check_overflow>(test_cases, lhs_precision, lhs_scale, rhs_precision,
                                                                    rhs_scale, result_precision, result_scale);
 }
 
-template <PrimitiveType LhsType, PrimitiveType RhsType, PrimitiveType ResultType, typename Op, bool check_overflow>
+template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType, typename Op, bool check_overflow>
 void test_const_const(DecimalTestCaseArray const& test_cases, int lhs_precision, int lhs_scale, int rhs_precision,
                       int rhs_scale, int result_precision, int result_scale) {
     for (auto& tc : test_cases) {
@@ -460,14 +473,14 @@ void test_const_const(DecimalTestCaseArray const& test_cases, int lhs_precision,
     }
 }
 
-template <PrimitiveType Type, typename Op, bool check_overflow>
+template <LogicalType Type, typename Op, bool check_overflow>
 void test_const_const(DecimalTestCaseArray const& test_cases, int lhs_precision, int lhs_scale, int rhs_precision,
                       int rhs_scale, int result_precision, int result_scale) {
     test_const_const<Type, Type, Type, Op, check_overflow>(test_cases, lhs_precision, lhs_scale, rhs_precision,
                                                            rhs_scale, result_precision, result_scale);
 }
 
-template <PrimitiveType LhsType, PrimitiveType RhsType, PrimitiveType ResultType, typename Op, bool check_overflow>
+template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType, typename Op, bool check_overflow>
 void test_nullable_vector_const(DecimalTestCaseArray const& test_cases, int lhs_precision, int lhs_scale,
                                 int rhs_precision, int rhs_scale, int result_precision, int result_scale) {
     std::random_device rd;
@@ -479,17 +492,18 @@ void test_nullable_vector_const(DecimalTestCaseArray const& test_cases, int lhs_
         Columns columns = prepare_nullable_vector_const<LhsType, RhsType>(tc, lhs_precision, lhs_scale, rhs_precision,
                                                                           rhs_scale, front_fill_size, rear_fill_size);
         test_decimal_binary_functions_with_nullable_columns<LhsType, RhsType, ResultType, Op, check_overflow>(
-                DecimalTestCaseArray{tc}, columns, result_precision, result_scale, front_fill_size, std::vector<bool>());
+                DecimalTestCaseArray{tc}, columns, result_precision, result_scale, front_fill_size,
+                std::vector<bool>());
     }
 }
-template <PrimitiveType Type, typename Op, bool check_overflow>
+template <LogicalType Type, typename Op, bool check_overflow>
 void test_nullable_vector_const(DecimalTestCaseArray const& test_cases, int lhs_precision, int lhs_scale,
                                 int rhs_precision, int rhs_scale, int result_precision, int result_scale) {
     test_nullable_vector_const<Type, Type, Type, Op, check_overflow>(
             test_cases, lhs_precision, lhs_scale, rhs_precision, rhs_scale, result_precision, result_scale);
 }
 
-template <PrimitiveType LhsType, PrimitiveType RhsType, PrimitiveType ResultType, typename Op, bool check_overflow>
+template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType, typename Op, bool check_overflow>
 void test_const_nullable_vector(DecimalTestCaseArray const& test_cases, int lhs_precision, int lhs_scale,
                                 int rhs_precision, int rhs_scale, int result_precision, int result_scale) {
     std::random_device rd;
@@ -501,17 +515,18 @@ void test_const_nullable_vector(DecimalTestCaseArray const& test_cases, int lhs_
         Columns columns = prepare_const_nullable_vector<LhsType, RhsType>(tc, lhs_precision, lhs_scale, rhs_precision,
                                                                           rhs_scale, front_fill_size, rear_fill_size);
         test_decimal_binary_functions_with_nullable_columns<LhsType, RhsType, ResultType, Op, check_overflow>(
-                DecimalTestCaseArray{tc}, columns, result_precision, result_scale, front_fill_size, std::vector<bool>());
+                DecimalTestCaseArray{tc}, columns, result_precision, result_scale, front_fill_size,
+                std::vector<bool>());
     }
 }
-template <PrimitiveType Type, typename Op, bool check_overflow>
+template <LogicalType Type, typename Op, bool check_overflow>
 void test_const_nullable_vector(DecimalTestCaseArray const& test_cases, int lhs_precision, int lhs_scale,
                                 int rhs_precision, int rhs_scale, int result_precision, int result_scale) {
     test_const_nullable_vector<Type, Type, Type, Op, check_overflow>(
             test_cases, lhs_precision, lhs_scale, rhs_precision, rhs_scale, result_precision, result_scale);
 }
 
-template <PrimitiveType LhsType, PrimitiveType RhsType, PrimitiveType ResultType, typename Op, bool check_overflow>
+template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType, typename Op, bool check_overflow>
 void test_nullable_vector_nullable_vector(DecimalTestCaseArray const& test_cases, int lhs_precision, int lhs_scale,
                                           int rhs_precision, int rhs_scale, int result_precision, int result_scale) {
     Columns columns = prepare_nullable_vector_nullable_vector<LhsType, RhsType>(test_cases, lhs_precision, lhs_scale,
@@ -519,7 +534,7 @@ void test_nullable_vector_nullable_vector(DecimalTestCaseArray const& test_cases
     test_decimal_binary_functions_with_nullable_columns<LhsType, RhsType, ResultType, Op, check_overflow>(
             test_cases, columns, result_precision, result_scale, 0, std::vector<bool>());
 }
-template <PrimitiveType Type, typename Op, bool check_overflow>
+template <LogicalType Type, typename Op, bool check_overflow>
 void test_nullable_vector_nullable_vector(DecimalTestCaseArray const& test_cases, int lhs_precision, int lhs_scale,
                                           int rhs_precision, int rhs_scale, int result_precision, int result_scale) {
     return test_nullable_vector_nullable_vector<Type, Type, Type, Op, check_overflow>(
@@ -2956,7 +2971,7 @@ TEST_F(DecimalBinaryFunctionTest, test_decimal128p38s14_div_decimal128p38s14_eq_
                                                                      overflows);
 }
 
-template <PrimitiveType LhsType, PrimitiveType RhsType, PrimitiveType ResultType, typename Op>
+template <LogicalType LhsType, LogicalType RhsType, LogicalType ResultType, typename Op>
 void test_decimal_fast_mul_help(const DecimalTestCaseArray& test_cases, int lhs_precision, int lhs_scale,
                                 int rhs_precision, int rhs_scale, int result_precision, int result_scale) {
     test_vector_vector<LhsType, RhsType, ResultType, Op, false>(test_cases, lhs_precision, lhs_scale, rhs_precision,
@@ -3008,7 +3023,7 @@ TEST_F(DecimalBinaryFunctionTest, test_decimal_fast_mul_32x32) {
     test_decimal_fast_mul_help<TYPE_DECIMAL32, TYPE_DECIMAL32, TYPE_DECIMAL128, MulOp32x32_128>(test_cases, 9, 2, 9, 2,
                                                                                                 38, 4);
     test_decimal_fast_mul_help<TYPE_DECIMAL32, TYPE_DECIMAL64, TYPE_DECIMAL128, MulOp32x64_128>(test_cases, 9, 2, 9, 2,
-                                                                                               38, 4);
+                                                                                                38, 4);
 }
 
 TEST_F(DecimalBinaryFunctionTest, test_decimal_fast_mul_32x64) {

@@ -1,9 +1,20 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "storage/compaction_utils.h"
 
 #include "common/config.h"
-#include "storage/base_and_cumulative_compaction_policy.h"
 #include "storage/row_source_mask.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_writer.h"
@@ -78,20 +89,22 @@ uint32_t CompactionUtils::get_segment_max_rows(int64_t max_segment_file_size, in
     return max_segment_rows;
 }
 
-void CompactionUtils::split_column_into_groups(size_t num_columns, size_t num_key_columns,
+void CompactionUtils::split_column_into_groups(size_t num_columns, const std::vector<ColumnId>& sort_key_idxes,
                                                int64_t max_columns_per_group,
                                                std::vector<std::vector<uint32_t>>* column_groups) {
-    std::vector<uint32_t> key_columns;
-    for (size_t i = 0; i < num_key_columns; ++i) {
-        key_columns.emplace_back(i);
+    column_groups->emplace_back(sort_key_idxes);
+    std::vector<ColumnId> all_columns;
+    for (ColumnId i = 0; i < num_columns; ++i) {
+        all_columns.push_back(i);
     }
-    column_groups->emplace_back(std::move(key_columns));
-
-    for (size_t i = num_key_columns; i < num_columns; ++i) {
-        if ((i - num_key_columns) % max_columns_per_group == 0) {
+    std::vector<ColumnId> non_sort_columns;
+    std::set_difference(all_columns.begin(), all_columns.end(), sort_key_idxes.begin(), sort_key_idxes.end(),
+                        std::back_inserter(non_sort_columns));
+    for (auto i = 0; i < non_sort_columns.size(); ++i) {
+        if (i % max_columns_per_group == 0) {
             column_groups->emplace_back();
         }
-        column_groups->back().emplace_back(i);
+        column_groups->back().emplace_back(non_sort_columns[i]);
     }
 }
 
@@ -110,11 +123,6 @@ CompactionAlgorithm CompactionUtils::choose_compaction_algorithm(size_t num_colu
     }
 
     return VERTICAL_COMPACTION;
-}
-
-std::unique_ptr<CompactionPolicy> CompactionUtils::create_compaction_policy(CompactionContext* context) {
-    // now only support BaseAndCumulativeCompactionPolicy
-    return std::make_unique<BaseAndCumulativeCompactionPolicy>(context);
 }
 
 } // namespace starrocks

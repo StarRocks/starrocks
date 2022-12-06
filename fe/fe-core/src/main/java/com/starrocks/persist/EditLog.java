@@ -21,6 +21,7 @@
 
 package com.starrocks.persist;
 
+import com.google.common.collect.Lists;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.BatchAlterJobPersistInfo;
 import com.starrocks.analysis.UserIdentity;
@@ -58,6 +59,7 @@ import com.starrocks.load.MultiDeleteInfo;
 import com.starrocks.load.loadv2.LoadJob.LoadJobStateUpdateInfo;
 import com.starrocks.load.loadv2.LoadJobFinalOperation;
 import com.starrocks.load.routineload.RoutineLoadJob;
+import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.privilege.UserPropertyInfo;
@@ -66,8 +68,11 @@ import com.starrocks.privilege.RolePrivilegeCollection;
 import com.starrocks.privilege.UserPrivilegeCollection;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.scheduler.Task;
+import com.starrocks.scheduler.mv.MVEpoch;
+import com.starrocks.scheduler.mv.MVMaintenanceJob;
 import com.starrocks.scheduler.persist.DropTaskRunsLog;
 import com.starrocks.scheduler.persist.DropTasksLog;
+import com.starrocks.scheduler.persist.TaskRunPeriodStatusChange;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.server.GlobalStateMgr;
@@ -82,12 +87,12 @@ import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.transaction.TransactionState;
-import jersey.repackaged.com.google.common.collect.Lists;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutionException;
@@ -279,6 +284,12 @@ public class EditLog {
                     globalStateMgr.replayChangeMaterializedViewRefreshScheme(log);
                     break;
                 }
+                case OperationType.OP_ALTER_MATERIALIZED_VIEW_PROPERTIES: {
+                    ModifyTablePropertyOperationLog log =
+                            (ModifyTablePropertyOperationLog) journal.getData();
+                    globalStateMgr.replayAlterMaterializedViewProperties(opCode, log);
+                    break;
+                }
                 case OperationType.OP_RENAME_MATERIALIZED_VIEW: {
                     RenameMaterializedViewLog log = (RenameMaterializedViewLog) journal.getData();
                     globalStateMgr.replayRenameMaterializedView(log);
@@ -415,54 +426,19 @@ public class EditLog {
                     globalStateMgr.replayUpdateFrontend(fe);
                     break;
                 }
-                case OperationType.OP_CREATE_USER: {
-                    PrivInfo privInfo = (PrivInfo) journal.getData();
-                    globalStateMgr.getAuth().replayCreateUser(privInfo);
-                    break;
-                }
-                case OperationType.OP_NEW_DROP_USER: {
-                    UserIdentity userIdent = (UserIdentity) journal.getData();
-                    globalStateMgr.getAuth().replayDropUser(userIdent);
-                    break;
-                }
-                case OperationType.OP_GRANT_PRIV: {
-                    PrivInfo privInfo = (PrivInfo) journal.getData();
-                    globalStateMgr.getAuth().replayGrant(privInfo);
-                    break;
-                }
-                case OperationType.OP_REVOKE_PRIV: {
-                    PrivInfo privInfo = (PrivInfo) journal.getData();
-                    globalStateMgr.getAuth().replayRevoke(privInfo);
-                    break;
-                }
-                case OperationType.OP_SET_PASSWORD: {
-                    PrivInfo privInfo = (PrivInfo) journal.getData();
-                    globalStateMgr.getAuth().replaySetPassword(privInfo);
-                    break;
-                }
-                case OperationType.OP_CREATE_ROLE: {
-                    PrivInfo privInfo = (PrivInfo) journal.getData();
-                    globalStateMgr.getAuth().replayCreateRole(privInfo);
-                    break;
-                }
-                case OperationType.OP_DROP_ROLE: {
-                    PrivInfo privInfo = (PrivInfo) journal.getData();
-                    globalStateMgr.getAuth().replayDropRole(privInfo);
-                    break;
-                }
-                case OperationType.OP_GRANT_ROLE: {
-                    PrivInfo privInfo = (PrivInfo) journal.getData();
-                    globalStateMgr.getAuth().replayGrantRole(privInfo);
-                    break;
-                }
-                case OperationType.OP_REVOKE_ROLE: {
-                    PrivInfo privInfo = (PrivInfo) journal.getData();
-                    globalStateMgr.getAuth().replayRevokeRole(privInfo);
-                    break;
-                }
-                case OperationType.OP_UPDATE_USER_PROPERTY: {
-                    UserPropertyInfo propertyInfo = (UserPropertyInfo) journal.getData();
-                    globalStateMgr.getAuth().replayUpdateUserProperty(propertyInfo);
+                case OperationType.OP_CREATE_USER:
+                case OperationType.OP_NEW_DROP_USER:
+                case OperationType.OP_GRANT_PRIV:
+                case OperationType.OP_REVOKE_PRIV:
+                case OperationType.OP_SET_PASSWORD:
+                case OperationType.OP_CREATE_ROLE:
+                case OperationType.OP_DROP_ROLE:
+                case OperationType.OP_GRANT_ROLE:
+                case OperationType.OP_REVOKE_ROLE:
+                case OperationType.OP_UPDATE_USER_PROPERTY:
+                case OperationType.OP_GRANT_IMPERSONATE:
+                case OperationType.OP_REVOKE_IMPERSONATE: {
+                    GlobalStateMgr.getCurrentState().replayOldAuthJournal(opCode, journal.getData());
                     break;
                 }
                 case OperationType.OP_TIMESTAMP: {
@@ -632,6 +608,11 @@ public class EditLog {
                     globalStateMgr.getRoutineLoadManager().replayRemoveOldRoutineLoad(operation);
                     break;
                 }
+                case OperationType.OP_CREATE_STREAM_LOAD_TASK: {
+                    StreamLoadTask streamLoadTask = (StreamLoadTask) journal.getData();
+                    globalStateMgr.getStreamLoadManager().replayCreateLoadTask(streamLoadTask);
+                    break;
+                }
                 case OperationType.OP_CREATE_LOAD_JOB: {
                     com.starrocks.load.loadv2.LoadJob loadJob =
                             (com.starrocks.load.loadv2.LoadJob) journal.getData();
@@ -689,6 +670,11 @@ public class EditLog {
                     globalStateMgr.getTaskManager().replayDropTaskRuns(dropTaskRunsLog.getQueryIdList());
                     break;
                 }
+                case OperationType.OP_UPDATE_TASK_RUN_STATE:
+                    TaskRunPeriodStatusChange taskRunPeriodStatusChange = (TaskRunPeriodStatusChange) journal.getData();
+                    globalStateMgr.getTaskManager().replayAlterRunningTaskRunProgress(
+                            taskRunPeriodStatusChange.getTaskRunProgressMap());
+                    break;
                 case OperationType.OP_CREATE_SMALL_FILE: {
                     SmallFile smallFile = (SmallFile) journal.getData();
                     globalStateMgr.getSmallFileMgr().replayCreateFile(smallFile);
@@ -730,6 +716,7 @@ public class EditLog {
                 case OperationType.OP_SET_FORBIT_GLOBAL_DICT:
                 case OperationType.OP_MODIFY_REPLICATION_NUM:
                 case OperationType.OP_MODIFY_WRITE_QUORUM:
+                case OperationType.OP_MODIFY_REPLICATED_STORAGE:
                 case OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX: {
                     ModifyTablePropertyOperationLog modifyTablePropertyOperationLog =
                             (ModifyTablePropertyOperationLog) journal.getData();
@@ -857,16 +844,7 @@ public class EditLog {
                     globalStateMgr.getCatalogMgr().replayDropCatalog(dropCatalogLog);
                     break;
                 }
-                case OperationType.OP_GRANT_IMPERSONATE: {
-                    ImpersonatePrivInfo info = (ImpersonatePrivInfo) journal.getData();
-                    globalStateMgr.getAuth().replayGrantImpersonate(info);
-                    break;
-                }
-                case OperationType.OP_REVOKE_IMPERSONATE: {
-                    ImpersonatePrivInfo info = (ImpersonatePrivInfo) journal.getData();
-                    globalStateMgr.getAuth().replayRevokeImpersonate(info);
-                    break;
-                }
+
                 case OperationType.OP_CREATE_INSERT_OVERWRITE: {
                     CreateInsertOverwriteJobLog jobInfo = (CreateInsertOverwriteJobLog) journal.getData();
                     globalStateMgr.getInsertOverwriteJobManager().replayCreateInsertOverwrite(jobInfo);
@@ -925,14 +903,17 @@ public class EditLog {
                 }
                 case OperationType.OP_UPDATE_ROLE_PRIVILEGE_V2: {
                     RolePrivilegeCollectionInfo info = (RolePrivilegeCollectionInfo) journal.getData();
-                    globalStateMgr.getPrivilegeManager().replayUpdateRolePrivilegeCollection(
-                            info.getRoleId(), info.getPrivilegeCollection(), info.getPluginId(), info.getPluginVersion());
+                    globalStateMgr.getPrivilegeManager().replayUpdateRolePrivilegeCollection(info);
                     break;
                 }
                 case OperationType.OP_DROP_ROLE_V2: {
                     RolePrivilegeCollectionInfo info = (RolePrivilegeCollectionInfo) journal.getData();
-                    globalStateMgr.getPrivilegeManager().replayDropRole(
-                            info.getRoleId(), info.getPrivilegeCollection(), info.getPluginId(), info.getPluginVersion());
+                    globalStateMgr.getPrivilegeManager().replayDropRole(info);
+                    break;
+                }
+                case OperationType.OP_AUTH_UPGRDE_V2: {
+                    AuthUpgradeInfo info = (AuthUpgradeInfo) journal.getData();
+                    globalStateMgr.replayAuthUpgrade(info);
                     break;
                 }
                 default: {
@@ -1083,6 +1064,10 @@ public class EditLog {
 
     public void logUpdateTaskRun(TaskRunStatusChange statusChange) {
         logEdit(OperationType.OP_UPDATE_TASK_RUN, statusChange);
+    }
+
+    public void logAlterRunningTaskRunProgress(TaskRunPeriodStatusChange info) {
+        logEdit(OperationType.OP_UPDATE_TASK_RUN_STATE, info);
     }
 
     public void logAddPartition(PartitionPersistInfoV2 info) {
@@ -1400,6 +1385,10 @@ public class EditLog {
         logEdit(OperationType.OP_REMOVE_ROUTINE_LOAD_JOB, operation);
     }
 
+    public void logCreateStreamLoadJob(StreamLoadTask streamLoadTask) {
+        logEdit(OperationType.OP_CREATE_STREAM_LOAD_TASK, streamLoadTask);
+    }
+
     public void logCreateLoadJob(com.starrocks.load.loadv2.LoadJob loadJob) {
         logEdit(OperationType.OP_CREATE_LOAD_JOB, loadJob);
     }
@@ -1462,6 +1451,10 @@ public class EditLog {
 
     public void logModifyWriteQuorum(ModifyTablePropertyOperationLog info) {
         logEdit(OperationType.OP_MODIFY_WRITE_QUORUM, info);
+    }
+
+    public void logModifyReplicatedStorage(ModifyTablePropertyOperationLog info) {
+        logEdit(OperationType.OP_MODIFY_REPLICATED_STORAGE, info);
     }
 
     public void logReplaceTempPartition(ReplacePartitionOperationLog info) {
@@ -1560,6 +1553,10 @@ public class EditLog {
         logEdit(OperationType.OP_CHANGE_MATERIALIZED_VIEW_REFRESH_SCHEME, log);
     }
 
+    public void logAlterMaterializedViewProperties(ModifyTablePropertyOperationLog log) {
+        logEdit(OperationType.OP_ALTER_MATERIALIZED_VIEW_PROPERTIES, log);
+    }
+
     public void logAddUnusedShard(Set<Long> shardIds) {
         logEdit(OperationType.OP_ADD_UNUSED_SHARD, new ShardInfo(shardIds));
     }
@@ -1610,6 +1607,10 @@ public class EditLog {
             short pluginVersion) {
         RolePrivilegeCollectionInfo info = new RolePrivilegeCollectionInfo(
                 roleId, privilegeCollection, pluginId, pluginVersion);
+        logUpdateRolePrivilege(info);
+    }
+
+    public void logUpdateRolePrivilege(RolePrivilegeCollectionInfo info) {
         logEdit(OperationType.OP_UPDATE_ROLE_PRIVILEGE_V2, info);
     }
 
@@ -1621,5 +1622,17 @@ public class EditLog {
         RolePrivilegeCollectionInfo info = new RolePrivilegeCollectionInfo(
                 roleId, privilegeCollection, pluginId, pluginVersion);
         logEdit(OperationType.OP_DROP_ROLE_V2, info);
+    }
+
+    public void logAuthUpgrade(Map<String, Long> roleNameToId) {
+        logEdit(OperationType.OP_AUTH_UPGRDE_V2, new AuthUpgradeInfo(roleNameToId));
+    }
+
+    public void logMVJobState(MVMaintenanceJob job) {
+        logEdit(OperationType.OP_MV_JOB_STATE, job);
+    }
+
+    public void logMVEpochChange(MVEpoch epoch) {
+        logEdit(OperationType.OP_MV_EPOCH_UPDATE, epoch);
     }
 }

@@ -465,10 +465,8 @@ public class LoadManager implements Writable {
      */
     public List<List<Comparable>> getLoadJobInfosByDb(long dbId, String labelValue,
                                                       boolean accurateMatch, Set<String> statesValue) {
-        LinkedList<List<Comparable>> loadJobInfos = new LinkedList<List<Comparable>>();
-        if (!dbIdToLabelToLoadJobs.containsKey(dbId)) {
-            return loadJobInfos;
-        }
+
+        LinkedList<List<Comparable>> loadJobInfos = new LinkedList<>();
 
         Set<JobState> states = Sets.newHashSet();
         if (statesValue == null || statesValue.size() == 0) {
@@ -483,10 +481,32 @@ public class LoadManager implements Writable {
             }
         }
 
+        List<LoadJob> loadJobList = getLoadJobsByDb(dbId, labelValue, accurateMatch);
+        // check state
+        for (LoadJob loadJob : loadJobList) {
+            try {
+                if (!states.contains(loadJob.getState())) {
+                    continue;
+                }
+                // add load job info
+                loadJobInfos.add(loadJob.getShowInfo());
+            } catch (DdlException ignored) {
+                // ignored
+            }
+        }
+        return loadJobInfos;
+    }
+
+    public List<LoadJob> getLoadJobsByDb(long dbId, String labelValue, boolean accurateMatch) {
+
+        List<LoadJob> loadJobList = Lists.newArrayList();
+        if (!dbIdToLabelToLoadJobs.containsKey(dbId)) {
+            return loadJobList;
+        }
         readLock();
         try {
             Map<String, List<LoadJob>> labelToLoadJobs = dbIdToLabelToLoadJobs.get(dbId);
-            List<LoadJob> loadJobList = Lists.newArrayList();
+
             if (Strings.isNullOrEmpty(labelValue)) {
                 loadJobList.addAll(labelToLoadJobs.values()
                         .stream().flatMap(Collection::stream).collect(Collectors.toList()));
@@ -494,7 +514,7 @@ public class LoadManager implements Writable {
                 // check label value
                 if (accurateMatch) {
                     if (!labelToLoadJobs.containsKey(labelValue)) {
-                        return loadJobInfos;
+                        return loadJobList;
                     }
                     loadJobList.addAll(labelToLoadJobs.get(labelValue));
                 } else {
@@ -506,20 +526,7 @@ public class LoadManager implements Writable {
                     }
                 }
             }
-
-            // check state
-            for (LoadJob loadJob : loadJobList) {
-                try {
-                    if (!states.contains(loadJob.getState())) {
-                        continue;
-                    }
-                    // add load job info
-                    loadJobInfos.add(loadJob.getShowInfo());
-                } catch (DdlException e) {
-                    continue;
-                }
-            }
-            return loadJobInfos;
+            return loadJobList;
         } finally {
             readUnlock();
         }
@@ -645,7 +652,6 @@ public class LoadManager implements Writable {
 
     public void updateJobPrgress(Long jobId, Long beId, TUniqueId loadId, TUniqueId fragmentId,
                                  long sinkRows, long sinkBytes, long sourceRows, long sourceBytes, boolean isDone) {
-        // LOG.warn("jobId: {} beId: {}, scannedRows: {}, scannedBytes: {}", jobId, beId, scannedRows, scannedBytes);
         LoadJob job = idToLoadJob.get(jobId);
         if (job != null) {
             job.updateProgess(beId, loadId, fragmentId, sinkRows, sinkBytes, sourceRows, sourceBytes, isDone);

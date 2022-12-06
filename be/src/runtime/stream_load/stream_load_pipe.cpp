@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/runtime/stream_load/stream_load_pipe.h
 
@@ -26,6 +39,9 @@ namespace starrocks {
 Status StreamLoadPipe::append(ByteBufferPtr&& buf) {
     if (buf != nullptr && buf->has_remaining()) {
         std::unique_lock<std::mutex> l(_lock);
+        if (_cancelled) {
+            return _err_st;
+        }
         // if _buf_queue is empty, we append this buf without size check
         _put_cond.wait(l, [&]() {
             return _cancelled || _buf_queue.empty() || _buffered_bytes + buf->remaining() <= _max_buffered_bytes;

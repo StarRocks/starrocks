@@ -16,10 +16,19 @@ public class ShowCreateDbStmt extends ShowStmt {
                     .addColumn(new Column("Create Database", ScalarType.createVarchar(30)))
                     .build();
 
+    private String catalog;
     private String db;
 
     public ShowCreateDbStmt(String db) {
         this.db = db;
+    }
+
+    public String getCatalogName() {
+        return this.catalog;
+    }
+
+    public void setCatalogName(String catalogName) {
+        this.catalog = catalogName;
     }
 
     public String getDb() {

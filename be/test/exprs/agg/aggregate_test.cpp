@@ -1,9 +1,21 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include <gtest/gtest.h>
-#include <math.h>
 
 #include <algorithm>
+#include <cmath>
 
 #include "column/array_column.h"
 #include "column/column_builder.h"
@@ -76,7 +88,7 @@ ColumnPtr gen_input_column1() {
     return column;
 }
 
-template <PrimitiveType PT>
+template <LogicalType PT>
 ColumnPtr gen_input_decimal_column1(const FunctionContext::TypeDesc* type_desc) {
     auto column = RunTimeColumnType<PT>::create(type_desc->precision, type_desc->scale);
     for (int i = 0; i < 1024; i++) {
@@ -175,7 +187,7 @@ ColumnPtr gen_input_column2<DateValue>() {
     return column;
 }
 
-template <PrimitiveType PT>
+template <LogicalType PT>
 ColumnPtr gen_input_decimal_column2(const FunctionContext::TypeDesc* type_desc) {
     auto column = RunTimeColumnType<PT>::create(type_desc->precision, type_desc->scale);
     for (int i = 2000; i < 3000; i++) {
@@ -221,7 +233,7 @@ void test_agg_function(FunctionContext* ctx, const AggregateFunction* func, TRes
     ASSERT_EQ(merge_result, result_column->get_data()[2]);
 }
 
-template <PrimitiveType PT, typename TResult = RunTimeCppType<TYPE_DECIMAL128>, typename = DecimalPTGuard<PT>>
+template <LogicalType PT, typename TResult = RunTimeCppType<TYPE_DECIMAL128>, typename = DecimalPTGuard<PT>>
 void test_decimal_agg_function(FunctionContext* ctx, const AggregateFunction* func, TResult update_result1,
                                TResult update_result2, TResult merge_result) {
     using ResultColumn = RunTimeColumnType<TYPE_DECIMAL128>;
@@ -284,7 +296,7 @@ void test_agg_variance_function(FunctionContext* ctx, const AggregateFunction* f
     func->serialize_to_column(ctx, state->state(), serde_column.get());
     func->merge(ctx, serde_column.get(), state2->state(), 0);
     func->finalize_to_column(ctx, state2->state(), result_column.get());
-    ASSERT_TRUE(abs(merge_result - result_column->get_data()[2]) < 1e-8);
+    ASSERT_TRUE(std::abs(merge_result - result_column->get_data()[2]) < 1e-8);
 }
 
 TEST_F(AggregateTest, test_count) {
@@ -1442,6 +1454,44 @@ TEST_F(AggregateTest, test_any_value) {
 
     func = get_aggregate_function("any_value", TYPE_DATE, TYPE_DATE, false);
     test_non_deterministic_agg_function<DateValue, DateValue>(ctx, func);
+}
+
+TEST_F(AggregateTest, test_exchange_bytes) {
+    std::vector<FunctionContext::TypeDesc> arg_types = {
+            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_VARCHAR)),
+            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_BIGINT))};
+
+    auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_BIGINT));
+    std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
+
+    const AggregateFunction* exchange_bytes_function =
+            get_aggregate_function("exchange_bytes", TYPE_BIGINT, TYPE_BIGINT, false);
+    auto state = ManagedAggrState::create(ctx, exchange_bytes_function);
+
+    auto data_column = BinaryColumn::create();
+
+    data_column->append("abc");
+    data_column->append("bcd");
+    data_column->append("cde");
+
+    auto data_column_bigint = Int64Column::create();
+    data_column_bigint->append(21023);
+    data_column_bigint->append(410223);
+    data_column_bigint->append(710233);
+
+    std::vector<const Column*> raw_columns;
+    raw_columns.resize(2);
+    raw_columns[0] = data_column.get();
+    raw_columns[1] = data_column_bigint.get();
+
+    // test update
+    exchange_bytes_function->update_batch_single_state(local_ctx.get(), data_column->size(), raw_columns.data(),
+                                                       state->state());
+
+    auto result_column = Int64Column::create();
+    exchange_bytes_function->finalize_to_column(local_ctx.get(), state->state(), result_column.get());
+
+    ASSERT_EQ(data_column_bigint->byte_size() + data_column->byte_size(), result_column->get_data()[0]);
 }
 
 } // namespace starrocks::vectorized

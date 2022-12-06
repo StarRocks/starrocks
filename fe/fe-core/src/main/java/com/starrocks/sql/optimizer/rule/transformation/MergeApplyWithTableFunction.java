@@ -1,6 +1,8 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.google.common.collect.Lists;
+import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -10,7 +12,6 @@ import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
-import jersey.repackaged.com.google.common.collect.Lists;
 
 import java.util.HashMap;
 import java.util.List;
@@ -41,11 +42,12 @@ public class MergeApplyWithTableFunction extends TransformationRule {
         LogicalTableFunctionOperator tableFunctionOperator = (LogicalTableFunctionOperator) expression.getOp();
 
         OptExpression childOptExpression = input.inputAt(0);
-        Map<ColumnRefOperator, ScalarOperator> projectMap =
-                new HashMap<>(tableFunctionOperator.getFnParamColumnProjectMap());
 
-        if (!tableFunctionOperator.getFnParamColumnProjectMap().values().stream()
-                .allMatch(ScalarOperator::isColumnRef)) {
+        Map<ColumnRefOperator, ScalarOperator> projectMap = new HashMap<>();
+        for (Pair<ColumnRefOperator, ScalarOperator> pair : tableFunctionOperator.getFnParamColumnProject()) {
+            projectMap.put(pair.first, pair.second);
+        }
+        if (!projectMap.values().stream().allMatch(ScalarOperator::isColumnRef)) {
             for (int columnId : childOptExpression.getOutputColumns().getColumnIds()) {
                 ColumnRefOperator columnRefOperator = context.getColumnRefFactory().getColumnRef(columnId);
                 projectMap.put(columnRefOperator, columnRefOperator);
@@ -57,7 +59,7 @@ public class MergeApplyWithTableFunction extends TransformationRule {
 
         LogicalTableFunctionOperator newTableFunctionOperator =
                 new LogicalTableFunctionOperator(tableFunctionOperator.getFnResultColumnRefSet(),
-                        tableFunctionOperator.getFn(), tableFunctionOperator.getFnParamColumnProjectMap(),
+                        tableFunctionOperator.getFn(), tableFunctionOperator.getFnParamColumnProject(),
                         input.inputAt(0).getOutputColumns());
         newTableFunctionOperator.setLimit(tableFunctionOperator.getLimit());
 

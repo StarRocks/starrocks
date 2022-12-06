@@ -165,28 +165,3 @@ logical project (-1 * col)
                 logical project (col,col,col)
                     logical scan
 [end]
-
-[sql]
-select distinct v1, v2 from t0 order by v2
-[result]
-logical sort (col)
-    logical project (col,col)
-        logical aggregate (col,col) ()
-            logical project (col,col)
-                logical project (col,col,col)
-                    logical project (col,col,col)
-                        logical scan
-[end]
-
-[sql]
-select distinct v1, v2 from t0 order by v1 + 1
-[result]
-logical project (col,col)
-    logical sort (col)
-        logical project (col,col,col + 1)
-            logical aggregate (col,col) ()
-                logical project (col,col)
-                    logical project (col,col,col)
-                        logical project (col,col,col)
-                            logical scan
-[end]

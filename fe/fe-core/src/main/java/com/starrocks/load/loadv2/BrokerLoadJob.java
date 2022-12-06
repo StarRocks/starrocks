@@ -226,11 +226,13 @@ public class BrokerLoadJob extends BulkLoadJob {
                             + tableId + " not found");
                 }
 
+                String mergeCondition = (brokerDesc == null) ? "" : brokerDesc.getMergeConditionStr();
                 // Generate loading task and init the plan of task
                 LoadLoadingTask task = new LoadLoadingTask(db, table, brokerDesc,
                         brokerFileGroups, getDeadlineMs(), loadMemLimit,
-                        strictMode, transactionId, this, timezone, timeoutSecond, createTimestamp, partialUpdate,
-                        sessionVariables, context, TLoadJobType.Broker, priority);
+                        strictMode, transactionId, this, timezone, timeoutSecond,
+                        createTimestamp, partialUpdate, mergeCondition, sessionVariables,
+                        context,  TLoadJobType.BROKER, priority, originStmt);
                 UUID uuid = UUID.randomUUID();
                 TUniqueId loadId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
                 task.init(loadId, attachment.getFileStatusByTable(aggKey), attachment.getFileNumByTable(aggKey));
@@ -322,7 +324,7 @@ public class BrokerLoadJob extends BulkLoadJob {
                     .add("msg", "Load job try to commit txn")
                     .build());
             GlobalStateMgr.getCurrentGlobalTransactionMgr().commitTransaction(
-                    dbId, transactionId, commitInfos,
+                    dbId, transactionId, commitInfos, failInfos,
                     new LoadJobFinalOperation(id, loadingStatus, progress, loadStartTimestamp,
                             finishTimestamp, state, failMsg));
             MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
@@ -365,6 +367,7 @@ public class BrokerLoadJob extends BulkLoadJob {
             loadingStatus.setTrackingUrl(attachment.getTrackingUrl());
         }
         commitInfos.addAll(attachment.getCommitInfoList());
+        failInfos.addAll(attachment.getFailInfoList());
         progress = (int) ((double) finishedTaskIds.size() / idToTasks.size() * 100);
         if (progress == 100) {
             loadingStatus.getLoadStatistic().setLoadFinish();

@@ -170,6 +170,15 @@ public class AlterTableStatementAnalyzer {
                 }
                 clause.setNeedTableStable(false);
                 clause.setOpType(AlterOpType.MODIFY_TABLE_PROPERTY_SYNC);
+            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE)) {
+                if (!properties.get(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE).equalsIgnoreCase("true") &&
+                        !properties.get(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE).equalsIgnoreCase("false")) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                            "Property " + PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE +
+                                    " must be bool type(false/true)");
+                }
+                clause.setNeedTableStable(false);
+                clause.setOpType(AlterOpType.MODIFY_TABLE_PROPERTY_SYNC);
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_TABLET_TYPE)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Alter tablet type not supported");
             } else {
@@ -341,7 +350,8 @@ public class AlterTableStatementAnalyzer {
         private void checkProperties(Map<String, String> properties) throws AnalysisException {
             // 1. data property
             DataProperty newDataProperty = null;
-            newDataProperty = PropertyAnalyzer.analyzeDataProperty(properties, DataProperty.DEFAULT_DATA_PROPERTY);
+            newDataProperty = PropertyAnalyzer.analyzeDataProperty(properties,
+                    DataProperty.getInferredDefaultDataProperty());
             Preconditions.checkNotNull(newDataProperty);
 
             // 2. replication num

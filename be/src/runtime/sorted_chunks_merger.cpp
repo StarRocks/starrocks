@@ -1,9 +1,24 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "runtime/sorted_chunks_merger.h"
 
 #include "column/chunk.h"
 #include "exec/sort_exec_exprs.h"
+#include "exec/vectorized/sorting/sorting.h"
+#include "runtime/chunk_cursor.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::vectorized {
 
@@ -95,7 +110,7 @@ void SortedChunksMerger::init_for_min_heap() {
         _min_heap.reserve(_cursors.size());
         for (auto& cursor_ptr : _cursors) {
             ChunkCursor* cursor = cursor_ptr.get();
-            cursor->reset_with_next_chunk_for_pipeline();
+            cursor->next_chunk_for_pipeline();
             cursor->next_for_pipeline();
             if (cursor->is_valid()) {
                 _min_heap.push_back(cursor);
@@ -284,6 +299,47 @@ void SortedChunksMerger::collect_merged_chunks(ChunkPtr* chunk) {
     _result_chunk->set_num_rows(_row_number); // set constant column in chunk with right size.
     (*chunk) = std::move(_result_chunk);
     _row_number = 0;
+}
+
+CascadeChunkMerger::CascadeChunkMerger(RuntimeState* state, RuntimeProfile* profile)
+        : _state(state), _profile(profile), _sort_exprs(nullptr) {}
+
+Status CascadeChunkMerger::init(const std::vector<ChunkProvider>& providers,
+                                const std::vector<ExprContext*>* sort_exprs, const std::vector<bool>* sort_orders,
+                                const std::vector<bool>* null_firsts) {
+    std::vector<std::unique_ptr<SimpleChunkSortCursor>> cursors;
+    for (int i = 0; i < providers.size(); i++) {
+        cursors.push_back(std::make_unique<SimpleChunkSortCursor>(providers[i], sort_exprs));
+    }
+    _sort_exprs = sort_exprs;
+    _sort_desc = SortDescs(*sort_orders, *null_firsts);
+
+    _merger = std::make_unique<MergeCursorsCascade>();
+    RETURN_IF_ERROR(_merger->init(_sort_desc, std::move(cursors)));
+    return Status::OK();
+}
+
+bool CascadeChunkMerger::is_data_ready() {
+    return _merger->is_data_ready();
+}
+
+Status CascadeChunkMerger::get_next(ChunkPtr* output, std::atomic<bool>* eos, bool* should_exit) {
+    if (_merger->is_eos()) {
+        *eos = true;
+        *should_exit = true;
+        return Status::OK();
+    }
+    if (_current_chunk.empty()) {
+        ChunkUniquePtr chunk = _merger->try_get_next();
+        if (!chunk) {
+            *should_exit = true;
+            return Status::OK();
+        }
+        _current_chunk.reset(std::move(chunk));
+    }
+    *output = _current_chunk.cutoff(_state->chunk_size());
+
+    return Status::OK();
 }
 
 } // namespace starrocks::vectorized

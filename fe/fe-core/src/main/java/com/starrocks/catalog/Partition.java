@@ -21,6 +21,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -427,6 +428,11 @@ public class Partition extends MetaObject implements Writable {
         } else {
             throw new IOException("invalid distribution type: " + distriType);
         }
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(visibleVersion, baseIndex, distributionInfo);
     }
 
     @Override

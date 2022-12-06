@@ -1,6 +1,20 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "exec/vectorized/chunks_sorter.h"
+
+#include <utility>
 
 #include "column/column_helper.h"
 #include "column/type_traits.h"
@@ -124,11 +138,11 @@ Status DataSegment::get_filter_array(std::vector<DataSegment>& data_segments, si
 
 ChunksSorter::ChunksSorter(RuntimeState* state, const std::vector<ExprContext*>* sort_exprs,
                            const std::vector<bool>* is_asc, const std::vector<bool>* is_null_first,
-                           const std::string& sort_keys, const bool is_topn)
+                           std::string sort_keys, const bool is_topn)
         : _state(state),
           _sort_exprs(sort_exprs),
           _sort_desc(*is_asc, *is_null_first),
-          _sort_keys(sort_keys),
+          _sort_keys(std::move(sort_keys)),
           _is_topn(is_topn) {
     DCHECK(_sort_exprs != nullptr);
     DCHECK(is_asc != nullptr);
@@ -137,7 +151,7 @@ ChunksSorter::ChunksSorter(RuntimeState* state, const std::vector<ExprContext*>*
     DCHECK_EQ(is_asc->size(), is_null_first->size());
 }
 
-ChunksSorter::~ChunksSorter() {}
+ChunksSorter::~ChunksSorter() = default;
 
 void ChunksSorter::setup_runtime(RuntimeProfile* profile) {
     _build_timer = ADD_TIMER(profile, "BuildingTime");

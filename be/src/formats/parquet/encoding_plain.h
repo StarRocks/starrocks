@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -27,7 +39,7 @@ public:
         return Status::OK();
     }
 
-    Slice build() override { return Slice(_buffer.data(), _buffer.size()); }
+    Slice build() override { return {_buffer.data(), _buffer.size()}; }
 
 private:
     enum { SIZE_OF_TYPE = sizeof(T) };
@@ -42,7 +54,7 @@ public:
     ~PlainEncoder() override = default;
 
     Status append(const uint8_t* vals, size_t count) override {
-        const Slice* slices = (const Slice*)vals;
+        const auto* slices = (const Slice*)vals;
         for (int i = 0; i < count; ++i) {
             put_fixed32_le(&_buffer, static_cast<uint32_t>(slices[i].size));
             _buffer.append(slices[i].data, slices[i].size);
@@ -50,7 +62,7 @@ public:
         return Status::OK();
     }
 
-    Slice build() override { return Slice(_buffer.data(), _buffer.size()); }
+    Slice build() override { return {_buffer.data(), _buffer.size()}; }
 
 private:
     faststring _buffer;
@@ -163,7 +175,7 @@ public:
             return Status::InternalError(strings::Substitute(
                     "going to read out-of-bounds data, offset=$0,count=$1,size=$2", _offset, count, _data.size));
         }
-        dst->append_strings(slices);
+        [[maybe_unused]] auto ret = dst->append_strings(slices);
         return Status::OK();
     }
 
@@ -292,7 +304,7 @@ public:
     Status append(const uint8_t* vals, size_t count) override {
         if (count == 0) return Status::OK();
 
-        const Slice* slices = (const Slice*)vals;
+        const auto* slices = (const Slice*)vals;
         _buffer.reserve(_buffer.size() + count * slices[0].size);
         for (int i = 0; i < count; ++i) {
             DCHECK_EQ(slices[0].size, slices[i].size);
@@ -301,7 +313,7 @@ public:
         return Status::OK();
     }
 
-    Slice build() override { return Slice(_buffer.data(), _buffer.size()); }
+    Slice build() override { return {_buffer.data(), _buffer.size()}; }
 
 private:
     faststring _buffer;
@@ -331,7 +343,8 @@ public:
             return Status::InternalError(strings::Substitute(
                     "going to read out-of-bounds data, offset=$0,count=$1,size=$2", _offset, count, _data.size));
         }
-        dst->append_continuous_fixed_length_strings(_data.data + _offset, count, _type_length);
+        [[maybe_unused]] auto ret =
+                dst->append_continuous_fixed_length_strings(_data.data + _offset, count, _type_length);
         _offset += count * _type_length;
         return Status::OK();
     }

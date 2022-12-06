@@ -1,8 +1,24 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "formats/parquet/column_reader.h"
 
+#include <boost/algorithm/string.hpp>
+
 #include "column/array_column.h"
+#include "column/map_column.h"
+#include "column/struct_column.h"
 #include "exec/vectorized/hdfs_scanner.h"
 #include "formats/parquet/column_converter.h"
 #include "formats/parquet/stored_column_reader.h"
@@ -106,7 +122,7 @@ private:
 
 class ListColumnReader : public ColumnReader {
 public:
-    explicit ListColumnReader(const ColumnReaderOptions& opts) : _opts(opts) {}
+    explicit ListColumnReader(const ColumnReaderOptions& opts) {}
     ~ListColumnReader() override = default;
 
     Status init(const ParquetField* field, std::unique_ptr<ColumnReader> element_reader) {
@@ -161,22 +177,272 @@ public:
     }
 
 private:
-    const ColumnReaderOptions& _opts;
-
     const ParquetField* _field = nullptr;
     std::unique_ptr<ColumnReader> _element_reader;
 };
 
+class MapColumnReader : public ColumnReader {
+public:
+    explicit MapColumnReader(const ColumnReaderOptions& opts) {}
+    ~MapColumnReader() override = default;
+
+    Status init(const ParquetField* field, std::unique_ptr<ColumnReader> key_reader,
+                std::unique_ptr<ColumnReader> value_reader) {
+        _field = field;
+        _key_reader = std::move(key_reader);
+        _value_reader = std::move(value_reader);
+
+        // Check must has one valid column reader
+        if (_key_reader == nullptr && _value_reader == nullptr) {
+            return Status::InternalError("No avaliable parquet subfield column reader in MapColumn");
+        }
+
+        return Status::OK();
+    }
+
+    Status prepare_batch(size_t* num_records, ColumnContentType content_type, vectorized::Column* dst) override {
+        vectorized::NullableColumn* nullable_column = nullptr;
+        vectorized::MapColumn* map_column = nullptr;
+        if (dst->is_nullable()) {
+            nullable_column = down_cast<vectorized::NullableColumn*>(dst);
+            DCHECK(nullable_column->mutable_data_column()->is_map());
+            map_column = down_cast<vectorized::MapColumn*>(nullable_column->mutable_data_column());
+        } else {
+            DCHECK(dst->is_map());
+            map_column = down_cast<vectorized::MapColumn*>(dst);
+        }
+        auto* key_column = map_column->keys_column().get();
+        auto* value_column = map_column->values_column().get();
+        Status st;
+        if (_key_reader != nullptr) {
+            st = _key_reader->prepare_batch(num_records, content_type, key_column);
+            if (!st.ok() && !st.is_end_of_file()) {
+                return st;
+            }
+        }
+
+        if (_value_reader != nullptr) {
+            st = _value_reader->prepare_batch(num_records, content_type, value_column);
+            if (!st.ok() && !st.is_end_of_file()) {
+                return st;
+            }
+        }
+
+        // if neither key_reader not value_reader is nullptr , check the value_column size is the same with key_column
+        DCHECK((_key_reader == nullptr) || (_value_reader == nullptr) || (value_column->size() == key_column->size()));
+
+        level_t* def_levels = nullptr;
+        level_t* rep_levels = nullptr;
+        size_t num_levels = 0;
+
+        if (_key_reader != nullptr) {
+            _key_reader->get_levels(&def_levels, &rep_levels, &num_levels);
+        } else if (_value_reader != nullptr) {
+            _value_reader->get_levels(&def_levels, &rep_levels, &num_levels);
+        } else {
+            DCHECK(false) << "Unreachable!";
+        }
+
+        auto& offsets = map_column->offsets_column()->get_data();
+        offsets.resize(num_levels + 1);
+        vectorized::NullColumn null_column(num_levels);
+        auto& is_nulls = null_column.get_data();
+        size_t num_offsets = 0;
+        bool has_null = false;
+
+        // ParquetFiled Map -> Map<Struct<key,value>>
+        def_rep_to_offset(_field->level_info, def_levels, rep_levels, num_levels, &offsets[0], &is_nulls[0],
+                          &num_offsets, &has_null);
+        offsets.resize(num_offsets + 1);
+        is_nulls.resize(num_offsets);
+
+        // fill with default
+        if (_key_reader == nullptr) {
+            key_column->append_default(offsets.back());
+        }
+        if (_value_reader == nullptr) {
+            value_column->append_default(offsets.back());
+        }
+
+        if (dst->is_nullable()) {
+            DCHECK(nullable_column != nullptr);
+            nullable_column->mutable_null_column()->swap_column(null_column);
+            nullable_column->set_has_null(has_null);
+        }
+
+        return st;
+    }
+
+    Status finish_batch() override { return Status::OK(); }
+
+    void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) override {
+        // check _value_reader
+        if (_key_reader != nullptr) {
+            _key_reader->get_levels(def_levels, rep_levels, num_levels);
+        } else if (_value_reader != nullptr) {
+            _value_reader->get_levels(def_levels, rep_levels, num_levels);
+        } else {
+            DCHECK(false) << "Unreachable!";
+        }
+    }
+
+private:
+    const ParquetField* _field = nullptr;
+    std::unique_ptr<ColumnReader> _key_reader;
+    std::unique_ptr<ColumnReader> _value_reader;
+};
+
+class StructColumnReader : public ColumnReader {
+public:
+    explicit StructColumnReader(const ColumnReaderOptions& opts) {}
+    ~StructColumnReader() override = default;
+
+    Status init(const ParquetField* field, std::vector<std::unique_ptr<ColumnReader>>&& child_readers) {
+        _field = field;
+        _child_readers = std::move(child_readers);
+
+        // Check must has one valid column reader
+        bool has_valid_reader = false;
+        for (const auto& reader : _child_readers) {
+            if (reader != nullptr) {
+                has_valid_reader = true;
+                break;
+            }
+        }
+        if (!has_valid_reader) {
+            return Status::InternalError("No avaliable parquet subfield column reader in StructColumn");
+        }
+
+        return Status::OK();
+    }
+
+    Status prepare_batch(size_t* num_records, ColumnContentType content_type, vectorized::Column* dst) override {
+        vectorized::NullableColumn* nullable_column = nullptr;
+        vectorized::StructColumn* struct_column = nullptr;
+        if (dst->is_nullable()) {
+            nullable_column = down_cast<vectorized::NullableColumn*>(dst);
+            DCHECK(nullable_column->mutable_data_column()->is_struct());
+            struct_column = down_cast<vectorized::StructColumn*>(nullable_column->mutable_data_column());
+        } else {
+            DCHECK(dst->is_struct());
+            struct_column = down_cast<vectorized::StructColumn*>(dst);
+        }
+
+        vectorized::Columns fields_column = struct_column->fields_column();
+
+        DCHECK_EQ(fields_column.size(), _child_readers.size());
+
+        // Fill data for selected subfield
+        for (size_t i = 0; i < fields_column.size(); i++) {
+            vectorized::Column* child_column = fields_column[i].get();
+            if (_child_readers[i] != nullptr) {
+                RETURN_IF_ERROR(_child_readers[i]->prepare_batch(num_records, content_type, child_column));
+            }
+        }
+
+        // Append default value for not selected subfield
+        for (size_t i = 0; i < fields_column.size(); i++) {
+            vectorized::Column* child_column = fields_column[i].get();
+            if (_child_readers[i] == nullptr) {
+                child_column->append_default(*num_records);
+            }
+        }
+
+        if (dst->is_nullable()) {
+            DCHECK(nullable_column != nullptr);
+            // Assume all rows are not null in struct level.
+            // Use subfield's NullableColumn instead.
+            vectorized::NullColumn null_column(fields_column[0]->size(), 0);
+            nullable_column->mutable_null_column()->swap_column(null_column);
+            nullable_column->set_has_null(false);
+        }
+        return Status::OK();
+    }
+
+    Status finish_batch() override { return Status::OK(); }
+
+    void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) override {
+        for (const auto& reader : _child_readers) {
+            // Considering not selected subfield, we will not create its ColumnReader
+            // So we should pick up the first created column reader
+            if (reader != nullptr) {
+                reader->get_levels(def_levels, rep_levels, num_levels);
+                return;
+            }
+        }
+    }
+
+private:
+    // _field is generated by parquet format, so it's child order may different from _child_readers.
+    const ParquetField* _field = nullptr;
+    // _children_readers order is the same as TypeDescriptor children order.
+    std::vector<std::unique_ptr<ColumnReader>> _child_readers;
+};
+
 Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField* field, const TypeDescriptor& col_type,
                             std::unique_ptr<ColumnReader>* output) {
-    if (field->type.type == TYPE_MAP || field->type.type == TYPE_STRUCT) {
-        return Status::InternalError("not supported type");
-    }
-    if (field->type.type == TYPE_ARRAY) {
+    if (field->type.type == LogicalType::TYPE_ARRAY) {
         std::unique_ptr<ColumnReader> child_reader;
         RETURN_IF_ERROR(ColumnReader::create(opts, &field->children[0], col_type.children[0], &child_reader));
         std::unique_ptr<ListColumnReader> reader(new ListColumnReader(opts));
         RETURN_IF_ERROR(reader->init(field, std::move(child_reader)));
+        *output = std::move(reader);
+    } else if (field->type.type == LogicalType::TYPE_MAP) {
+        std::unique_ptr<ColumnReader> key_reader;
+        // ParquetFiled Map -> Map<Struct<key,value>>
+        DCHECK(field->children[0].type.type == TYPE_STRUCT);
+        DCHECK(field->children[0].children.size() == 2);
+        if (col_type.selected_fields[0]) {
+            RETURN_IF_ERROR(
+                    ColumnReader::create(opts, &(field->children[0].children[0]), col_type.children[0], &key_reader));
+        }
+        std::unique_ptr<ColumnReader> value_reader;
+        if (col_type.selected_fields[1]) {
+            RETURN_IF_ERROR(
+                    ColumnReader::create(opts, &(field->children[0].children[1]), col_type.children[1], &value_reader));
+        }
+        std::unique_ptr<MapColumnReader> reader(new MapColumnReader(opts));
+        RETURN_IF_ERROR(reader->init(field, std::move(key_reader), std::move(value_reader)));
+        *output = std::move(reader);
+    } else if (field->type.type == LogicalType::TYPE_STRUCT) {
+        // build tmp mapping for ParquetField
+        std::unordered_map<std::string, size_t> field_name_2_pos;
+        for (size_t i = 0; i < field->children.size(); i++) {
+            if (opts.case_sensitive) {
+                field_name_2_pos.emplace(field->children[i].name, i);
+            } else {
+                field_name_2_pos.emplace(boost::algorithm::to_lower_copy(field->children[i].name), i);
+            }
+        }
+
+        std::vector<std::unique_ptr<ColumnReader>> children_readers;
+        for (size_t i = 0; i < col_type.children.size(); i++) {
+            if (col_type.selected_fields[i]) {
+                const std::string& subfield_name = col_type.field_names[i];
+
+                std::string required_subfield_name =
+                        opts.case_sensitive ? subfield_name : boost::algorithm::to_lower_copy(subfield_name);
+
+                auto it = field_name_2_pos.find(required_subfield_name);
+                if (it == field_name_2_pos.end()) {
+                    return Status::NotFound("Struct subfield name: " + required_subfield_name + " not found.");
+                }
+
+                size_t parquet_pos = it->second;
+
+                std::unique_ptr<ColumnReader> child_reader;
+                RETURN_IF_ERROR(
+                        ColumnReader::create(opts, &field->children[parquet_pos], col_type.children[i], &child_reader));
+                children_readers.emplace_back(std::move(child_reader));
+            } else {
+                // Don't create column reader, because this subfield is not be selected, so it will not load
+                // from parquet.
+                children_readers.emplace_back(nullptr);
+            }
+        }
+
+        std::unique_ptr<StructColumnReader> reader(new StructColumnReader(opts));
+        RETURN_IF_ERROR(reader->init(field, std::move(children_readers)));
         *output = std::move(reader);
     } else {
         std::unique_ptr<ScalarColumnReader> reader(new ScalarColumnReader(opts));

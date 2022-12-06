@@ -4,11 +4,11 @@
 
 Creates an external catalog. You can use external catalogs to query data in external data sources without loading data into StarRocks or creating external tables. Currently, you can create the following types of external catalogs:
 
-- Hive catalog: used for querying data in Apache Hive™.
-- Iceberg catalog: used for querying data in Apache Iceberg.
-- Hudi catalog: used for querying data in Apache Hudi.
+- [Hive catalog](../../../data_source/catalog/hive_catalog.md): used for querying data from Apache Hive™.
+- [Iceberg catalog](../../../data_source/catalog/iceberg_catalog.md): used for querying data from Apache Iceberg.
+- [Hudi catalog](../../../data_source/catalog/hudi_catalog.md): used for querying data from Apache Hudi.
 
-Before you create external catalogs, configure your StarRocks cluster to meet the requirements of the data storage system (such as Amazon S3), metadata service (such as Hive metastore), and authenticating service (such as Kerberos) of external data sources. For more information, see [Hive catalog](../../../using_starrocks/catalog/hive_catalog.md#before-you-begin)、[Iceberg catalog](../../../using_starrocks/catalog/iceberg_catalog.md#before-you-begin) and [Hudi catalog](../../../using_starrocks/catalog/hudi_catalog.md#before-you-begin)。
+This statement requires no privileges for execution. Before you create external catalogs, configure your StarRocks cluster to meet the requirements of the data storage system (such as Amazon S3), metadata service (such as Hive metastore), and authenticating service (such as Kerberos) of external data sources. For more information, see the "Before you begin" section in each external catalog topic.
 
 ## Syntax
 

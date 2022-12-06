@@ -22,9 +22,11 @@ import com.starrocks.common.ClientPool;
 import com.starrocks.leader.LeaderImpl;
 import com.starrocks.proto.PCancelPlanFragmentRequest;
 import com.starrocks.proto.PCancelPlanFragmentResult;
+import com.starrocks.proto.PCollectQueryStatisticsResult;
 import com.starrocks.proto.PExecBatchPlanFragmentsResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
 import com.starrocks.proto.PFetchDataResult;
+import com.starrocks.proto.PMVMaintenanceTaskResult;
 import com.starrocks.proto.PProxyRequest;
 import com.starrocks.proto.PProxyResult;
 import com.starrocks.proto.PPulsarProxyRequest;
@@ -34,9 +36,11 @@ import com.starrocks.proto.PTriggerProfileReportResult;
 import com.starrocks.proto.StatusPB;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.PBackendService;
+import com.starrocks.rpc.PCollectQueryStatisticsRequest;
 import com.starrocks.rpc.PExecBatchPlanFragmentsRequest;
 import com.starrocks.rpc.PExecPlanFragmentRequest;
 import com.starrocks.rpc.PFetchDataRequest;
+import com.starrocks.rpc.PMVMaintenanceTaskRequest;
 import com.starrocks.rpc.PTriggerProfileReportRequest;
 import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.HeartbeatService;
@@ -79,6 +83,7 @@ import com.starrocks.thrift.TTransmitDataResult;
 import com.starrocks.thrift.TUniqueId;
 import mockit.Mock;
 import mockit.MockUp;
+import org.apache.commons.lang3.NotImplementedException;
 
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
@@ -382,6 +387,11 @@ public class MockedBackend {
         }
 
         @Override
+        public Future<PCollectQueryStatisticsResult> collectQueryStatistics(PCollectQueryStatisticsRequest request) {
+            return null;
+        }
+
+        @Override
         public Future<PProxyResult> getInfo(PProxyRequest request) {
             return null;
         }
@@ -389,6 +399,11 @@ public class MockedBackend {
         @Override
         public Future<PPulsarProxyResult> getPulsarInfo(PPulsarProxyRequest request) {
             return null;
+        }
+
+        @Override
+        public Future<PMVMaintenanceTaskResult> submitMVMaintenanceTaskAsync(PMVMaintenanceTaskRequest request) {
+            throw new NotImplementedException("TODO");
         }
     }
 }

@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/runtime/mem_pool.h
 
@@ -33,7 +46,7 @@
 #include "common/logging.h"
 #include "common/status.h"
 #include "gutil/dynamic_annotations.h"
-#include "runtime/memory/chunk.h"
+#include "runtime/memory/mem_chunk.h"
 #include "storage/olap_define.h"
 #include "util/bit_util.h"
 
@@ -93,12 +106,7 @@ class MemTracker;
 ///    delete p;
 class MemPool {
 public:
-    MemPool()
-            : current_chunk_idx_(-1),
-              next_chunk_size_(INITIAL_CHUNK_SIZE),
-              total_allocated_bytes_(0),
-              total_reserved_bytes_(0),
-              peak_allocated_bytes_(0) {}
+    MemPool() : next_chunk_size_(INITIAL_CHUNK_SIZE) {}
 
     /// Frees all chunks of memory and subtracts the total allocated bytes
     /// from the registered limits.
@@ -153,11 +161,11 @@ private:
     static const int MAX_CHUNK_SIZE = 512 * 1024;
 
     struct ChunkInfo {
-        Chunk chunk;
+        MemChunk chunk;
         /// bytes allocated via Allocate() in this chunk
         int64_t allocated_bytes{0};
-        explicit ChunkInfo(const Chunk& chunk);
-        ChunkInfo() {}
+        explicit ChunkInfo(const MemChunk& chunk);
+        ChunkInfo() = default;
     };
 
     /// A static field used as non-NULL pointer for zero length allocations. NULL is
@@ -229,19 +237,19 @@ private:
     /// (chunks_[i].allocated_bytes > 0 for i: 0..current_chunk_idx_ - 1);
     /// chunks after 'current_chunk_idx_' are "free chunks" that contain no data.
     /// -1 if no chunks present
-    int current_chunk_idx_;
+    int current_chunk_idx_{-1};
 
     /// The size of the next chunk to allocate.
     int next_chunk_size_;
 
     /// sum of allocated_bytes_
-    int64_t total_allocated_bytes_;
+    int64_t total_allocated_bytes_{0};
 
     /// sum of all bytes allocated in chunks_
-    int64_t total_reserved_bytes_;
+    int64_t total_reserved_bytes_{0};
 
     /// Maximum number of bytes allocated from this pool at one time.
-    int64_t peak_allocated_bytes_;
+    int64_t peak_allocated_bytes_{0};
 
     std::vector<ChunkInfo> chunks_;
 };

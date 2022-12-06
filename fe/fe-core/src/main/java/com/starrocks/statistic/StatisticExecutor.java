@@ -18,6 +18,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TResultBatch;
@@ -37,7 +38,8 @@ import java.util.List;
 public class StatisticExecutor {
     private static final Logger LOG = LogManager.getLogger(StatisticExecutor.class);
 
-    public List<TStatisticData> queryStatisticSync(Long dbId, Long tableId, List<String> columnNames) throws Exception {
+    public List<TStatisticData> queryStatisticSync(ConnectContext context,
+                                                   Long dbId, Long tableId, List<String> columnNames) {
         String sql;
         BasicStatsMeta meta = GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(tableId);
         if (meta != null && meta.getType().equals(StatsConstants.AnalyzeType.FULL)) {
@@ -46,16 +48,25 @@ public class StatisticExecutor {
                 List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIds();
                 for (Long id : dbIds) {
                     Database db = GlobalStateMgr.getCurrentState().getDb(id);
-                    table = db.getTable(tableId);
-                    if (table != null) {
-                        break;
+                    if (db == null) {
+                        continue;
                     }
+                    table = db.getTable(tableId);
+                    if (table == null) {
+                        continue;
+                    }
+                    break;
                 }
             } else {
                 Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
                 table = database.getTable(tableId);
             }
-            Preconditions.checkState(table != null);
+
+            if (table == null) {
+                // Statistical information query is an unlocked operation,
+                // so it is possible for the table to be deleted while the code is running
+                return Collections.emptyList();
+            }
 
             List<Column> columns = Lists.newArrayList();
             for (String colName : columnNames) {
@@ -69,40 +80,38 @@ public class StatisticExecutor {
             sql = StatisticSQLBuilder.buildQuerySampleStatisticsSQL(dbId, tableId, columnNames);
         }
 
-        return executeDQL(sql);
+        return executeDQL(context, sql);
     }
 
-    public void dropTableStatistics(Long tableIds, StatsConstants.AnalyzeType analyzeType) {
+    public void dropTableStatistics(ConnectContext statsConnectCtx, Long tableIds, StatsConstants.AnalyzeType analyzeType) {
         String sql = StatisticSQLBuilder.buildDropStatisticsSQL(tableIds, analyzeType);
         LOG.debug("Expire statistic SQL: {}", sql);
 
-        ConnectContext context = StatisticUtils.buildConnectContext();
         StatementBase parsedStmt;
         try {
-            parsedStmt = SqlParser.parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
-            StmtExecutor executor = new StmtExecutor(context, parsedStmt);
+            parsedStmt = SqlParser.parseFirstStatement(sql, statsConnectCtx.getSessionVariable().getSqlMode());
+            StmtExecutor executor = new StmtExecutor(statsConnectCtx, parsedStmt);
             executor.execute();
         } catch (Exception e) {
             LOG.warn("Execute statistic table expire fail.", e);
         }
     }
 
-    public List<TStatisticData> queryHistogram(Long tableId, List<String> columnNames) {
+    public List<TStatisticData> queryHistogram(ConnectContext statsConnectCtx, Long tableId, List<String> columnNames) {
         String sql = StatisticSQLBuilder.buildQueryHistogramStatisticsSQL(tableId, columnNames);
-        return executeDQL(sql);
+        return executeDQL(statsConnectCtx, sql);
     }
 
-    public List<TStatisticData> queryMCV(String sql) {
-        return executeDQL(sql);
+    public List<TStatisticData> queryMCV(ConnectContext statsConnectCtx, String sql) {
+        return executeDQL(statsConnectCtx, sql);
     }
 
-    public void dropHistogram(Long tableId, List<String> columnNames) {
+    public void dropHistogram(ConnectContext statsConnectCtx, Long tableId, List<String> columnNames) {
         String sql = StatisticSQLBuilder.buildDropHistogramSQL(tableId, columnNames);
-        ConnectContext context = StatisticUtils.buildConnectContext();
         StatementBase parsedStmt;
         try {
-            parsedStmt = SqlParser.parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
-            StmtExecutor executor = new StmtExecutor(context, parsedStmt);
+            parsedStmt = SqlParser.parseFirstStatement(sql, statsConnectCtx.getSessionVariable().getSqlMode());
+            StmtExecutor executor = new StmtExecutor(statsConnectCtx, parsedStmt);
             executor.execute();
         } catch (Exception e) {
             LOG.warn("Execute statistic table expire fail.", e);
@@ -116,28 +125,25 @@ public class StatisticExecutor {
             return Pair.create(Collections.emptyList(), Status.OK);
         }
 
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-        Table table = db.getTable(tableId);
-
-        if (!table.isOlapTable()) {
-            throw new SemanticException("Table '%s' is not a OLAP table", table.getName());
+        Database db = MetaUtils.getDatabase(dbId);
+        Table table = MetaUtils.getTable(dbId, tableId);
+        if (!table.isOlapOrLakeTable()) {
+            throw new SemanticException("Table '%s' is not a OLAP table or LAKE table", table.getName());
         }
 
         OlapTable olapTable = (OlapTable) table;
         long version = olapTable.getPartitions().stream().map(Partition::getVisibleVersionTime)
                 .max(Long::compareTo).orElse(0L);
-        String dbName = db.getOriginName();
-        String tableName = db.getTable(tableId).getName();
         String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
-
         String sql = "select cast(" + StatsConstants.STATISTIC_DICT_VERSION + " as Int), " +
                 "cast(" + version + " as bigint), " +
                 "dict_merge(" + "`" + column +
                 "`) as _dict_merge_" + column +
-                " from " + catalogName + "." + dbName + "." + tableName + " [_META_]";
+                " from " + catalogName + "." + db.getOriginName() + "." + table.getName() + " [_META_]";
 
 
         ConnectContext context = StatisticUtils.buildConnectContext();
+        context.setThreadLocalInfo();
         StatementBase parsedStmt = SqlParser.parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
 
         ExecPlan execPlan = StatementPlanner.plan(parsedStmt, context, false, TResultSinkType.STATISTIC);
@@ -180,7 +186,10 @@ public class StatisticExecutor {
         return statistics;
     }
 
-    public AnalyzeStatus collectStatistics(StatisticsCollectJob statsJob, AnalyzeStatus analyzeStatus, boolean refreshAsync) {
+    public AnalyzeStatus collectStatistics(ConnectContext statsConnectCtx,
+                                           StatisticsCollectJob statsJob,
+                                           AnalyzeStatus analyzeStatus,
+                                           boolean refreshAsync) {
         Database db = statsJob.getDb();
         Table table = statsJob.getTable();
 
@@ -189,9 +198,8 @@ public class StatisticExecutor {
         GlobalStateMgr.getCurrentAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
 
         try {
-            ConnectContext context = StatisticUtils.buildConnectContext();
-            GlobalStateMgr.getCurrentAnalyzeMgr().registerConnection(analyzeStatus.getId(), context);
-            statsJob.collect(context, analyzeStatus);
+            GlobalStateMgr.getCurrentAnalyzeMgr().registerConnection(analyzeStatus.getId(), statsConnectCtx);
+            statsJob.collect(statsConnectCtx, analyzeStatus);
         } catch (Exception e) {
             LOG.warn("Collect statistics error ", e);
             analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
@@ -226,8 +234,7 @@ public class StatisticExecutor {
         return analyzeStatus;
     }
 
-    private List<TStatisticData> executeDQL(String sql) {
-        ConnectContext context = StatisticUtils.buildConnectContext();
+    private List<TStatisticData> executeDQL(ConnectContext context, String sql) {
         StatementBase parsedStmt = SqlParser.parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
         ExecPlan execPlan = StatementPlanner.plan(parsedStmt, context, true, TResultSinkType.STATISTIC);
         StmtExecutor executor = new StmtExecutor(context, parsedStmt);

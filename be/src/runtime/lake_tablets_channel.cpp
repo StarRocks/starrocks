@@ -1,13 +1,20 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
-#include "common/compiler_util.h"
-#include "runtime/tablets_channel.h"
-DIAGNOSTIC_PUSH
-DIAGNOSTIC_IGNORE("-Wclass-memaccess")
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include <brpc/controller.h>
 #include <bthread/condition_variable.h>
 #include <bthread/mutex.h>
-DIAGNOSTIC_POP
 #include <fmt/format.h>
 
 #include <chrono>
@@ -17,13 +24,16 @@ DIAGNOSTIC_POP
 
 #include "column/chunk.h"
 #include "common/closure_guard.h"
+#include "common/compiler_util.h"
 #include "common/statusor.h"
 #include "exec/tablet_info.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "gutil/macros.h"
 #include "runtime/descriptors.h"
 #include "runtime/load_channel.h"
+#include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/tablets_channel.h"
 #include "serde/protobuf_serde.h"
 #include "service/backend_options.h"
 #include "storage/lake/async_delta_writer.h"
@@ -75,7 +85,7 @@ private:
             if (status.ok()) {
                 return;
             }
-            std::string msg = fmt::format("{}: {}", BackendOptions::get_localhost(), status.message());
+            std::string msg = strings::Substitute("$0: $1", BackendOptions::get_localhost(), status.get_error_msg());
             std::lock_guard l(_mtx);
             if (_response->status().status_code() == TStatusCode::OK) {
                 _response->mutable_status()->set_status_code(status.code());
@@ -137,12 +147,21 @@ private:
 
     std::unordered_map<int64_t, uint32_t> _tablet_id_to_sorted_indexes;
     std::unordered_map<int64_t, std::unique_ptr<AsyncDeltaWriter>> _delta_writers;
+
+    vectorized::GlobalDictByNameMaps _global_dicts;
+    std::unique_ptr<MemPool> _mem_pool;
 };
 
 LakeTabletsChannel::LakeTabletsChannel(LoadChannel* load_channel, const TabletsChannelKey& key, MemTracker* mem_tracker)
-        : TabletsChannel(), _load_channel(load_channel), _key(key), _mem_tracker(mem_tracker) {}
+        : TabletsChannel(),
+          _load_channel(load_channel),
+          _key(key),
+          _mem_tracker(mem_tracker),
+          _mem_pool(std::make_unique<MemPool>()) {}
 
-LakeTabletsChannel::~LakeTabletsChannel() = default;
+LakeTabletsChannel::~LakeTabletsChannel() {
+    _mem_pool.reset();
+}
 
 Status LakeTabletsChannel::open(const PTabletWriterOpenRequest& params, std::shared_ptr<OlapTableSchemaParam> schema) {
     _txn_id = params.txn_id();
@@ -274,7 +293,7 @@ void LakeTabletsChannel::add_chunk(vectorized::Chunk* chunk, const PTabletWriter
                     count_down_latch.count_down();
                     continue;
                 }
-                dw->finish([&, id = tablet_id](Status st) {
+                dw->finish([&, id = tablet_id](const Status& st) {
                     if (st.ok()) {
                         context->add_finished_tablet(id);
                         VLOG(5) << "Finished tablet " << id;
@@ -324,6 +343,21 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
     }
     if (slots == nullptr) {
         return Status::InvalidArgument(fmt::format("Unknown index_id: {}", _key.to_string()));
+    }
+    // init global dict info if needed
+    for (auto& slot : params.schema().slot_descs()) {
+        vectorized::GlobalDictMap global_dict;
+        if (slot.global_dict_words_size()) {
+            for (size_t i = 0; i < slot.global_dict_words_size(); i++) {
+                const std::string& dict_word = slot.global_dict_words(i);
+                auto* data = _mem_pool->allocate(dict_word.size());
+                RETURN_IF_UNLIKELY_NULL(data, Status::MemoryAllocFailed("alloc mem for global dict failed"));
+                memcpy(data, dict_word.data(), dict_word.size());
+                Slice slice(data, dict_word.size());
+                global_dict.emplace(slice, i);
+            }
+            _global_dicts.insert(std::make_pair(slot.col_name(), std::move(global_dict)));
+        }
     }
 
     std::vector<int64_t> tablet_ids;

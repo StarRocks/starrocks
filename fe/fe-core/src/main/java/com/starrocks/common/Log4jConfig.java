@@ -103,6 +103,21 @@ public class Log4jConfig extends XmlConfiguration {
             "        </Delete>\n" +
             "      </DefaultRolloverStrategy>\n" +
             "    </RollingFile>\n" +
+            "    <RollingFile name=\"BigQueryFile\" fileName=\"${big_query_log_dir}/fe.big_query.log\" filePattern=\"${big_query_log_dir}/fe.big_query.log.${big_query_file_pattern}-%i\">\n" +
+            "      <PatternLayout charset=\"UTF-8\">\n" +
+            "        <Pattern>%d{yyyy-MM-dd HH:mm:ss,SSS} [%c{1}] %m%n</Pattern>\n" +
+            "      </PatternLayout>\n" +
+            "      <Policies>\n" +
+            "        <TimeBasedTriggeringPolicy/>\n" +
+            "        <SizeBasedTriggeringPolicy size=\"${big_query_roll_maxsize}MB\"/>\n" +
+            "      </Policies>\n" +
+            "      <DefaultRolloverStrategy max=\"${sys_roll_num}\" fileIndex=\"min\">\n" +
+            "        <Delete basePath=\"${big_query_log_dir}/\" maxDepth=\"1\">\n" +
+            "          <IfFileName glob=\"fe.big_query.log.*\" />\n" +
+            "          <IfLastModified age=\"${big_query_log_delete_age}\" />\n" +
+            "        </Delete>\n" +
+            "      </DefaultRolloverStrategy>\n" +
+            "    </RollingFile>\n" +
             "  </Appenders>\n" +
             "  <Loggers>\n" +
             "    <Root level=\"${sys_log_level}\">\n" +
@@ -114,6 +129,9 @@ public class Log4jConfig extends XmlConfiguration {
             "    </Logger>\n" +
             "    <Logger name=\"dump\" level=\"ERROR\" additivity=\"false\">\n" +
             "      <AppenderRef ref=\"dumpFile\"/>\n" +
+            "    </Logger>\n" +
+            "    <Logger name=\"big_query\" level=\"ERROR\" additivity=\"false\">\n" +
+            "      <AppenderRef ref=\"BigQueryFile\"/>\n" +
             "    </Logger>\n" +
             "    <Logger name=\"org.apache.thrift\" level=\"DEBUG\"> \n" +
             "      <AppenderRef ref=\"Sys\"/>\n" +
@@ -136,6 +154,7 @@ public class Log4jConfig extends XmlConfiguration {
     private static String[] verboseModules;
     private static String[] auditModules;
     private static String[] dumpModules;
+    private static String[] bigQueryModules;
 
     private static void reconfig() throws IOException {
         String newXmlConfTemplate = xmlConfTemplate;
@@ -191,6 +210,20 @@ public class Log4jConfig extends XmlConfiguration {
             throw new IOException("dump_log_roll_interval config error: " + Config.dump_log_roll_interval);
         }
 
+        // big query log config
+        String bigQueryLogDir = Config.big_query_log_dir;
+        String bigQueryLogRollPattern = "%d{yyyyMMdd}";
+        String bigQueryLogRollNum = String.valueOf(Config.big_query_log_roll_num);
+        String bigQueryLogRollMaxSize = String.valueOf(Config.log_roll_size_mb);
+        String bigQueryLogDeleteAge = String.valueOf(Config.big_query_log_delete_age);
+        if (Config.big_query_log_roll_interval.equals("HOUR")) {
+            bigQueryLogRollPattern = "%d{yyyyMMddHH}";
+        } else if (Config.big_query_log_roll_interval.equals("DAY")) {
+            bigQueryLogRollPattern = "%d{yyyyMMdd}";
+        } else {
+            throw new IOException("big_query_log_roll_interval config error: " + Config.big_query_log_roll_interval);
+        }
+
         // verbose modules and audit log modules
         StringBuilder sb = new StringBuilder();
         for (String s : verboseModules) {
@@ -201,6 +234,9 @@ public class Log4jConfig extends XmlConfiguration {
         }
         for (String s : dumpModules) {
             sb.append("<Logger name='dump." + s + "' level='INFO'/>");
+        }
+        for (String s : bigQueryModules) {
+            sb.append("<Logger name='big_query." + s + "' level='INFO'/>");
         }
 
         newXmlConfTemplate = newXmlConfTemplate.replaceAll("<!--REPLACED BY AUDIT AND VERBOSE MODULE NAMES-->",
@@ -225,6 +261,12 @@ public class Log4jConfig extends XmlConfiguration {
         properties.put("dump_roll_maxsize", dumpRollMaxSize);
         properties.put("dump_roll_num", dumpRollNum);
         properties.put("dump_log_delete_age", dumpDeleteAge);
+
+        properties.put("big_query_log_dir", bigQueryLogDir);
+        properties.put("big_query_file_pattern", bigQueryLogRollPattern);
+        properties.put("big_query_roll_maxsize", bigQueryLogRollMaxSize);
+        properties.put("big_query_roll_num", bigQueryLogRollNum);
+        properties.put("big_query_log_delete_age", bigQueryLogDeleteAge);
 
         strSub = new StrSubstitutor(new Interpolator(properties));
         newXmlConfTemplate = strSub.replace(newXmlConfTemplate);
@@ -269,6 +311,7 @@ public class Log4jConfig extends XmlConfiguration {
         verboseModules = Config.sys_log_verbose_modules;
         auditModules = Config.audit_log_modules;
         dumpModules = Config.dump_log_modules;
+        bigQueryModules = Config.big_query_log_modules;
         reconfig();
     }
 

@@ -1,23 +1,35 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "exprs/vectorized/runtime_filter.h"
 
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
 #include <random>
+#include <utility>
 
 #include "column/column_helper.h"
 #include "exprs/vectorized/runtime_filter_bank.h"
 #include "simd/simd.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 class RuntimeFilterTest : public ::testing::Test {
 public:
-    void SetUp() {}
-    void TearDown() {}
+    void SetUp() override {}
+    void TearDown() override {}
 
 public:
 };
@@ -371,8 +383,8 @@ typedef std::function<void(JoinRuntimeFilter*, JoinRuntimeFilter::RunningContext
 using TestHelper = std::function<void(size_t, size_t, PartitionByFunc, GrfConfigFunc)>;
 
 template <bool compatibility>
-void test_grf_helper_template(size_t num_rows, size_t num_partitions, PartitionByFunc part_func,
-                              GrfConfigFunc grf_config_func) {
+void test_grf_helper_template(size_t num_rows, size_t num_partitions, const PartitionByFunc& part_func,
+                              const GrfConfigFunc& grf_config_func) {
     std::vector<RuntimeBloomFilter<TYPE_VARCHAR>> bfs(num_partitions);
     std::vector<JoinRuntimeFilter*> rfs(num_partitions);
     for (auto p = 0; p < num_partitions; ++p) {
@@ -467,13 +479,13 @@ void test_colocate_or_bucket_shuffle_grf_helper(size_t num_rows, size_t num_part
 
 void test_colocate_grf_helper(size_t num_rows, size_t num_partitions, size_t num_buckets,
                               std::vector<int> bucketseq_to_partition) {
-    test_colocate_or_bucket_shuffle_grf_helper(num_rows, num_partitions, num_buckets, bucketseq_to_partition,
+    test_colocate_or_bucket_shuffle_grf_helper(num_rows, num_partitions, num_buckets, std::move(bucketseq_to_partition),
                                                TRuntimeFilterBuildJoinMode::COLOCATE);
 }
 
 void test_bucket_shuffle_grf_helper(size_t num_rows, size_t num_partitions, size_t num_buckets,
                                     std::vector<int> bucketseq_to_partition) {
-    test_colocate_or_bucket_shuffle_grf_helper(num_rows, num_partitions, num_buckets, bucketseq_to_partition,
+    test_colocate_or_bucket_shuffle_grf_helper(num_rows, num_partitions, num_buckets, std::move(bucketseq_to_partition),
                                                TRuntimeFilterBuildJoinMode::LOCAL_HASH_BUCKET);
 }
 
@@ -729,5 +741,4 @@ TEST_F(RuntimeFilterTest, TestMultiColumnsOnRuntimeFilter_ShuffleJoin) {
                                            {});
 }
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

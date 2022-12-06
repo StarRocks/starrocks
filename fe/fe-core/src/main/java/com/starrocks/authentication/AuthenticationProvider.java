@@ -3,6 +3,7 @@
 package com.starrocks.authentication;
 
 import com.starrocks.analysis.UserIdentity;
+import com.starrocks.mysql.privilege.Password;
 
 public interface AuthenticationProvider {
 
@@ -24,4 +25,10 @@ public interface AuthenticationProvider {
             byte[] password,
             byte[] randomString,
             UserAuthenticationInfo authenticationInfo) throws AuthenticationException;
+
+    /**
+     * upgraded from 2.x
+     **/
+    UserAuthenticationInfo upgradedFromPassword(UserIdentity userIdentity, Password password)
+            throws AuthenticationException;
 }

@@ -36,7 +36,7 @@ public class ExportRelativeStmtTest {
         FsBroker fsBroker = new FsBroker("127.0.0.1", 8118);
         long time = System.currentTimeMillis();
         BrokerHbResponse hbResponse = new BrokerHbResponse("broker", "127.0.0.1", 8118, time);
-        fsBroker.handleHbResponse(hbResponse);
+        fsBroker.handleHbResponse(hbResponse, false);
         GlobalStateMgr.getCurrentState().getBrokerMgr().replayAddBrokers("broker", Lists.newArrayList(fsBroker));
         String originStmt = "EXPORT TABLE tall TO \"hdfs://hdfs_host:port/a/b/c/\" " +
                 "WITH BROKER \"broker\" (\"username\"=\"test\", \"password\"=\"test\");";
@@ -48,7 +48,7 @@ public class ExportRelativeStmtTest {
         Assert.assertEquals("EXPORT TABLE `test`.`tall`\n" +
                 " TO 'hdfs://hdfs_host:port/a/b/c/'\n" +
                 "PROPERTIES (\"load_mem_limit\" = \"2147483648\", \"timeout\" = \"7200\")\n" +
-                " WITH BROKER 'broker' (\"password\" = \"*XXX\", \"username\" = \"test\")", stmt.toString());
+                " WITH BROKER 'broker' (\"password\" = \"***\", \"username\" = \"test\")", stmt.toString());
         Assert.assertEquals(stmt.getPath(), "hdfs://hdfs_host:port/a/b/c/");
 
         // partition data
@@ -59,7 +59,7 @@ public class ExportRelativeStmtTest {
         Assert.assertEquals("EXPORT TABLE `test`.`tp` PARTITION (p1, p2)\n" +
                 " TO 'hdfs://hdfs_host:port/a/b/c/'\n" +
                 "PROPERTIES (\"load_mem_limit\" = \"2147483648\", \"timeout\" = \"7200\")\n" +
-                " WITH BROKER 'broker' (\"password\" = \"*XXX\", \"username\" = \"test\")", stmt.toString());
+                " WITH BROKER 'broker' (\"password\" = \"***\", \"username\" = \"test\")", stmt.toString());
         Assert.assertEquals(",", stmt.getColumnSeparator());
         Assert.assertEquals("test_data_", stmt.getFileNamePrefix());
 

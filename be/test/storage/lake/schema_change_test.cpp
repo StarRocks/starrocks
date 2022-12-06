@@ -1,5 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "storage/lake/schema_change.h"
 
 #include <gtest/gtest.h>
@@ -22,7 +34,7 @@ namespace starrocks::lake {
 
 using namespace starrocks::vectorized;
 
-using VSchema = starrocks::vectorized::Schema;
+using VSchema = starrocks::vectorized::VectorizedSchema;
 using VChunk = starrocks::vectorized::Chunk;
 
 class LinkedSchemaChangeTest : public testing::Test {
@@ -183,7 +195,7 @@ TEST_F(LinkedSchemaChangeTest, test_add_column) {
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
-        ASSERT_OK(_tablet_manager->publish_version(base_tablet_id, version, version + 1, &txn_id, 1));
+        ASSERT_OK(_tablet_manager->publish_version(base_tablet_id, version, version + 1, &txn_id, 1).status());
         version++;
         txn_id++;
     }
@@ -193,7 +205,7 @@ TEST_F(LinkedSchemaChangeTest, test_add_column) {
         ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
-        ASSERT_OK(_tablet_manager->publish_version(base_tablet_id, version, version + 1, &txn_id, 1));
+        ASSERT_OK(_tablet_manager->publish_version(base_tablet_id, version, version + 1, &txn_id, 1).status());
         version++;
         txn_id++;
     }
@@ -209,7 +221,7 @@ TEST_F(LinkedSchemaChangeTest, test_add_column) {
 
     SchemaChangeHandler handler;
     ASSERT_OK(handler.process_alter_tablet(request));
-    ASSERT_OK(_tablet_manager->publish_version(new_tablet_id, 1, version + 1, &txn_id, 1));
+    ASSERT_OK(_tablet_manager->publish_version(new_tablet_id, 1, version + 1, &txn_id, 1).status());
     version++;
     txn_id++;
 
@@ -389,7 +401,7 @@ TEST_F(DirectSchemaChangeTest, test_alter_column_type) {
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
-        ASSERT_OK(_tablet_manager->publish_version(base_tablet_id, version, version + 1, &txn_id, 1));
+        ASSERT_OK(_tablet_manager->publish_version(base_tablet_id, version, version + 1, &txn_id, 1).status());
         version++;
         txn_id++;
     }
@@ -399,7 +411,7 @@ TEST_F(DirectSchemaChangeTest, test_alter_column_type) {
         ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
-        ASSERT_OK(_tablet_manager->publish_version(base_tablet_id, version, version + 1, &txn_id, 1));
+        ASSERT_OK(_tablet_manager->publish_version(base_tablet_id, version, version + 1, &txn_id, 1).status());
         version++;
         txn_id++;
     }
@@ -415,7 +427,7 @@ TEST_F(DirectSchemaChangeTest, test_alter_column_type) {
 
     SchemaChangeHandler handler;
     ASSERT_OK(handler.process_alter_tablet(request));
-    ASSERT_OK(_tablet_manager->publish_version(new_tablet_id, 1, version + 1, &txn_id, 1));
+    ASSERT_OK(_tablet_manager->publish_version(new_tablet_id, 1, version + 1, &txn_id, 1).status());
     version++;
     txn_id++;
 
@@ -619,7 +631,7 @@ TEST_F(SortedSchemaChangeTest, test_alter_key_order) {
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
-        ASSERT_OK(_tablet_manager->publish_version(base_tablet_id, version, version + 1, &txn_id, 1));
+        ASSERT_OK(_tablet_manager->publish_version(base_tablet_id, version, version + 1, &txn_id, 1).status());
         version++;
         txn_id++;
     }
@@ -629,7 +641,7 @@ TEST_F(SortedSchemaChangeTest, test_alter_key_order) {
         ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
-        ASSERT_OK(_tablet_manager->publish_version(base_tablet_id, version, version + 1, &txn_id, 1));
+        ASSERT_OK(_tablet_manager->publish_version(base_tablet_id, version, version + 1, &txn_id, 1).status());
         version++;
         txn_id++;
     }
@@ -645,7 +657,7 @@ TEST_F(SortedSchemaChangeTest, test_alter_key_order) {
 
     SchemaChangeHandler handler;
     ASSERT_OK(handler.process_alter_tablet(request));
-    ASSERT_OK(_tablet_manager->publish_version(new_tablet_id, 1, version + 1, &txn_id, 1));
+    ASSERT_OK(_tablet_manager->publish_version(new_tablet_id, 1, version + 1, &txn_id, 1).status());
     version++;
     txn_id++;
 

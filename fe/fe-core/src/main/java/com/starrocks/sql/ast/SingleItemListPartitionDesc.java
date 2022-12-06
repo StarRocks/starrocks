@@ -131,7 +131,7 @@ public class SingleItemListPartitionDesc extends PartitionDesc {
 
         // analyze data property
         this.partitionDataProperty = PropertyAnalyzer.analyzeDataProperty(allProperties,
-                DataProperty.DEFAULT_DATA_PROPERTY);
+                DataProperty.getInferredDefaultDataProperty());
 
         // analyze replication num
         this.replicationNum =

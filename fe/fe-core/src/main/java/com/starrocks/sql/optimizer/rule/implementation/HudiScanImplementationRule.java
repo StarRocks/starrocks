@@ -23,7 +23,7 @@ public class HudiScanImplementationRule extends ImplementationRule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         OptExpression result = null;
         LogicalHudiScanOperator scan = (LogicalHudiScanOperator) input.getOp();
-        if (scan.getTableType() == Table.TableType.HUDI) {
+        if (scan.getTable().getType() == Table.TableType.HUDI) {
             PhysicalHudiScanOperator physicalHudiScan = new PhysicalHudiScanOperator(scan.getTable(),
                     scan.getColRefToColumnMetaMap(),
                     scan.getScanOperatorPredicates(),

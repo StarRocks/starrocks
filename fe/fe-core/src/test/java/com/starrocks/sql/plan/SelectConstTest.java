@@ -90,7 +90,7 @@ public class SelectConstTest extends PlanTestBase {
         assertPlanContains("select * from t0 where exists (select 9,10)", "  1:UNION\n" +
                 "     constant exprs: \n" +
                 "         NULL");
-        assertPlanContains("select * from t0 where not exists (select 9)", "  1:UNION\n" +
+        assertPlanContains("select * from t0 where not exists (select 9)", ":UNION\n" +
                 "     constant exprs: \n" +
                 "         NULL");
         assertPlanContains("select * from t0 where v3 = (select 6)", "  5:Project\n" +

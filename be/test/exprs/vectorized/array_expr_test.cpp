@@ -1,5 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "exprs/vectorized/array_expr.h"
 
 #include <glog/logging.h>
@@ -69,7 +81,7 @@ protected:
     void SetUp() override {}
     void TearDown() override { _objpool.clear(); }
 
-    MockExpr* new_mock_expr(ColumnPtr value, const PrimitiveType& type) {
+    MockExpr* new_mock_expr(ColumnPtr value, const LogicalType& type) {
         return new_mock_expr(std::move(value), TypeDescriptor(type));
     }
 
@@ -89,14 +101,14 @@ private:
 // NOLINTNEXTLINE
 TEST_F(ArrayExprTest, test_evaluate) {
     TypeDescriptor type_arr_int;
-    type_arr_int.type = PrimitiveType::TYPE_ARRAY;
+    type_arr_int.type = LogicalType::TYPE_ARRAY;
     type_arr_int.children.emplace_back();
-    type_arr_int.children.back().type = PrimitiveType::TYPE_INT;
+    type_arr_int.children.back().type = LogicalType::TYPE_INT;
 
     TypeDescriptor type_arr_str;
-    type_arr_str.type = PrimitiveType::TYPE_ARRAY;
+    type_arr_str.type = LogicalType::TYPE_ARRAY;
     type_arr_str.children.emplace_back();
-    type_arr_str.children.back().type = PrimitiveType::TYPE_VARCHAR;
+    type_arr_str.children.back().type = LogicalType::TYPE_VARCHAR;
     type_arr_str.children.back().len = 10;
 
     // []
@@ -113,9 +125,9 @@ TEST_F(ArrayExprTest, test_evaluate) {
     // [6, 8, 12]
     {
         std::unique_ptr<Expr> expr(create_array_expr(type_arr_int));
-        expr->add_child(new_mock_expr(build_int_column({1, 3, 6}), PrimitiveType::TYPE_INT));
-        expr->add_child(new_mock_expr(build_int_column({2, 4, 8}), PrimitiveType::TYPE_INT));
-        expr->add_child(new_mock_expr(build_int_column({4, 8, 12}), PrimitiveType::TYPE_INT));
+        expr->add_child(new_mock_expr(build_int_column({1, 3, 6}), LogicalType::TYPE_INT));
+        expr->add_child(new_mock_expr(build_int_column({2, 4, 8}), LogicalType::TYPE_INT));
+        expr->add_child(new_mock_expr(build_int_column({4, 8, 12}), LogicalType::TYPE_INT));
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_EQ(3, result->size());
 
@@ -140,9 +152,9 @@ TEST_F(ArrayExprTest, test_evaluate) {
     // [6, 8, 12]
     {
         std::unique_ptr<Expr> expr(create_array_expr(type_arr_int));
-        expr->add_child(new_mock_expr(build_int_column({1, 3, 6}), PrimitiveType::TYPE_INT));
-        expr->add_child(new_mock_expr(build_int_column({2, 4, 8}), PrimitiveType::TYPE_INT));
-        expr->add_child(new_mock_expr(build_int_column({4, 0, 12}, {0, 1, 0}), PrimitiveType::TYPE_INT));
+        expr->add_child(new_mock_expr(build_int_column({1, 3, 6}), LogicalType::TYPE_INT));
+        expr->add_child(new_mock_expr(build_int_column({2, 4, 8}), LogicalType::TYPE_INT));
+        expr->add_child(new_mock_expr(build_int_column({4, 0, 12}, {0, 1, 0}), LogicalType::TYPE_INT));
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_EQ(3, result->size());
 
@@ -166,7 +178,7 @@ TEST_F(ArrayExprTest, test_evaluate) {
     // ["ab", "bcd", NULL]
     // ["", "xyz", "x"]
     {
-        TypeDescriptor type_varchar(PrimitiveType::TYPE_VARCHAR);
+        TypeDescriptor type_varchar(LogicalType::TYPE_VARCHAR);
         type_varchar.len = 10;
         std::unique_ptr<Expr> expr(create_array_expr(type_arr_str));
         expr->add_child(new_mock_expr(build_string_column({"a", "ab", ""}), type_varchar));

@@ -60,7 +60,7 @@ public class UnitTestUtil {
     public static final int SCHEMA_HASH = 0;
 
     public static Database createDb(long dbId, long tableId, long partitionId, long indexId,
-                                    long tabletId, long backendId, long version) {
+                                    long tabletId, long backendId, long version, KeysType type) {
         // GlobalStateMgr.getCurrentInvertedIndex().clear();
 
         // replica
@@ -110,11 +110,11 @@ public class UnitTestUtil {
         partitionInfo.setIsInMemory(partitionId, false);
         partitionInfo.setTabletType(partitionId, TTabletType.TABLET_TYPE_DISK);
         OlapTable table = new OlapTable(tableId, TABLE_NAME, columns,
-                KeysType.AGG_KEYS, partitionInfo, distributionInfo);
+                type, partitionInfo, distributionInfo);
         Deencapsulation.setField(table, "baseIndexId", indexId);
         table.addPartition(partition);
         table.setIndexMeta(indexId, TABLE_NAME, columns, 0, SCHEMA_HASH, (short) 1, TStorageType.COLUMN,
-                KeysType.AGG_KEYS);
+                type);
 
         // db
         Database db = new Database(dbId, DB_NAME);

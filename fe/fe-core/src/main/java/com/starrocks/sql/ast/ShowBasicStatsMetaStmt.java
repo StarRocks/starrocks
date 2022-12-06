@@ -9,9 +9,12 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.privilege.PrivilegeManager;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.BasicStatsMeta;
+import com.starrocks.statistic.StatisticUtils;
 
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -32,7 +35,8 @@ public class ShowBasicStatsMetaStmt extends ShowStmt {
                     .addColumn(new Column("Healthy", ScalarType.createVarchar(5)))
                     .build();
 
-    public static List<String> showBasicStatsMeta(BasicStatsMeta basicStatsMeta) throws MetaNotFoundException {
+    public static List<String> showBasicStatsMeta(ConnectContext context,
+                                                  BasicStatsMeta basicStatsMeta) throws MetaNotFoundException {
         List<String> row = Lists.newArrayList("", "", "ALL", "", "", "", "");
         long dbId = basicStatsMeta.getDbId();
         long tableId = basicStatsMeta.getTableId();
@@ -49,7 +53,13 @@ public class ShowBasicStatsMetaStmt extends ShowStmt {
         }
         row.set(1, table.getName());
 
-        long totalCollectColumnsSize = table.getBaseSchema().stream().filter(column -> !column.isAggregated()).count();
+        // In new privilege framework(RBAC), user needs any action on the table to show analysis status for it.
+        if (context.getGlobalStateMgr().isUsingNewPrivilege() &&
+                !PrivilegeManager.checkAnyActionOnTable(context, db.getOriginName(), table.getName())) {
+            return null;
+        }
+
+        long totalCollectColumnsSize = StatisticUtils.getCollectibleColumns(table).size();
         if (null != columns && !columns.isEmpty() && (columns.size() != totalCollectColumnsSize)) {
             row.set(2, String.join(",", columns));
         }

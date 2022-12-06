@@ -365,7 +365,8 @@ public class OlapDeleteJob extends DeleteJob {
                 tabletCommitInfos.add(new TabletCommitInfo(tabletId, replica.getBackendId()));
             }
         }
-        return globalTransactionMgr.commitAndPublishTransaction(db, transactionId, tabletCommitInfos, timeoutMs,
+        return globalTransactionMgr.commitAndPublishTransaction(db, transactionId, tabletCommitInfos,
+                Lists.newArrayList(), timeoutMs,
                 new InsertTxnCommitAttachment());
     }
 }

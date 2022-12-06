@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -63,7 +75,7 @@ Status illegal_converting_error(const std::string& arrow_type_name, const std::s
 
 // A triple [at, pt, is_nullable] can determine a optimized converter from converting at -> pt,
 // is_nullable means original data has null slots.
-ConvertFunc get_arrow_converter(ArrowTypeId at, PrimitiveType pt, bool is_nullable, bool is_strict);
+ConvertFunc get_arrow_converter(ArrowTypeId at, LogicalType pt, bool is_nullable, bool is_strict);
 
 // get list converter, it is used to convert a ListArray in arrow to ArrayColumn in StarRocks.
 ListConvertFunc get_arrow_list_converter();
@@ -72,6 +84,6 @@ ListConvertFunc get_arrow_list_converter();
 // strict pt0, and converting is decomposed into two phases:
 // phase1: convert at->pt0 by converter determined by the triple [at, pt0, is_nullable]
 // phase2: convert pt0->pt by VectorCastExpr.
-PrimitiveType get_strict_type(ArrowTypeId at);
+LogicalType get_strict_type(ArrowTypeId at);
 
 } // namespace starrocks::vectorized

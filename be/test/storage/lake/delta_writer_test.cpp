@@ -1,5 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "storage/lake/delta_writer.h"
 
 #include <gtest/gtest.h>
@@ -9,8 +21,8 @@
 #include "column/chunk.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
-#include "column/schema.h"
 #include "column/vectorized_fwd.h"
+#include "column/vectorized_schema.h"
 #include "common/logging.h"
 #include "fs/fs_util.h"
 #include "runtime/mem_tracker.h"
@@ -32,7 +44,7 @@ namespace starrocks::lake {
 
 using namespace starrocks::vectorized;
 
-using VSchema = starrocks::vectorized::Schema;
+using VSchema = starrocks::vectorized::VectorizedSchema;
 using VChunk = starrocks::vectorized::Chunk;
 
 class DeltaWriterTest : public testing::Test {
@@ -193,7 +205,7 @@ TEST_F(DeltaWriterTest, test_write) {
     opts.stats = &statistics;
     opts.chunk_size = 1024;
 
-    auto check_segment = [&](SegmentSharedPtr segment) {
+    auto check_segment = [&](const SegmentSharedPtr& segment) {
         ASSIGN_OR_ABORT(auto seg_iter, segment->new_iterator(*_schema, opts));
         auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
         ASSERT_OK(seg_iter->get_next(read_chunk_ptr.get()));

@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.plan;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
@@ -20,6 +21,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 public class ExecPlan {
     private final ConnectContext connectContext;
@@ -37,6 +39,15 @@ public class ExecPlan {
 
     private final IdGenerator<PlanNodeId> nodeIdGenerator = PlanNodeId.createGenerator();
     private final IdGenerator<PlanFragmentId> fragmentIdGenerator = PlanFragmentId.createGenerator();
+
+    @VisibleForTesting
+    public ExecPlan() {
+        connectContext = new ConnectContext();
+        connectContext.setQueryId(new UUID(1, 2));
+        colNames = new ArrayList<>();
+        physicalPlan = new OptExpression();
+        outputColumns = new ArrayList<>();
+    }
 
     public ExecPlan(ConnectContext connectContext, List<String> colNames,
                     OptExpression physicalPlan, List<ColumnRefOperator> outputColumns) {

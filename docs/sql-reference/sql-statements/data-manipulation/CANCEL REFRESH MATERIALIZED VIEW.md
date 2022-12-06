@@ -17,7 +17,7 @@ CANCEL REFRESH MATERIALIZED VIEW [database_name.]materialized_view_name;
 | database_name          | No           | Name of the database where the materialized view resides. If this parameter is not specified, the current database is used. |
 | materialized_view_name | Yes          | Name of the materialized view.                               |
 
-## Example
+## Examples
 
 Example 1: Cancel the refresh task for the ASYNC refresh materialized view `lo_mv1`.
 

@@ -48,7 +48,7 @@ public class SimplifiedCompoundRuleTest {
 
         ScalarOperator result = rule.apply(root, null);
 
-        assertEquals(result, result);
+        assertEquals(root, result);
     }
 
     @Test
@@ -87,7 +87,7 @@ public class SimplifiedCompoundRuleTest {
 
         ScalarOperator result = rule.apply(root, null);
 
-        assertEquals(result, result);
+        assertEquals(root, result);
     }
 
     @Test
@@ -99,7 +99,7 @@ public class SimplifiedCompoundRuleTest {
 
         ScalarOperator result = rule.apply(root, null);
 
-        assertEquals(result, result);
+        assertEquals(root, result);
     }
 
     @Test

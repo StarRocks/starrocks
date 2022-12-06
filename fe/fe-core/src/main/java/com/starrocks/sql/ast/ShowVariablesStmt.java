@@ -8,6 +8,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.InfoSchemaDb;
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
 
@@ -15,10 +16,20 @@ import com.starrocks.qe.ShowResultSetMetaData;
 public class ShowVariablesStmt extends ShowStmt {
     private static final String NAME_COL = "Variable_name";
     private static final String VALUE_COL = "Value";
+    private static final String DEFAULT_VALUE = "Default_value";
+    private static final String IS_CHANGED = "Is_changed";
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
                     .addColumn(new Column(NAME_COL, ScalarType.createVarchar(20)))
                     .addColumn(new Column(VALUE_COL, ScalarType.createVarchar(20)))
+                    .build();
+
+    private static final ShowResultSetMetaData VERBOSE_META_DATA =
+            ShowResultSetMetaData.builder()
+                    .addColumn(new Column(NAME_COL, ScalarType.createVarchar(20)))
+                    .addColumn(new Column(VALUE_COL, ScalarType.createVarchar(20)))
+                    .addColumn(new Column(DEFAULT_VALUE, ScalarType.createVarchar(20)))
+                    .addColumn(new Column(IS_CHANGED, ScalarType.createType(PrimitiveType.BOOLEAN)))
                     .build();
 
     private SetType type;
@@ -62,6 +73,8 @@ public class ShowVariablesStmt extends ShowStmt {
         TableName tableName;
         if (type == SetType.GLOBAL) {
             tableName = new TableName(InfoSchemaDb.DATABASE_NAME, "GLOBAL_VARIABLES");
+        } else if (type == SetType.VERBOSE) {
+            tableName = new TableName(InfoSchemaDb.DATABASE_NAME, "VERBOSE_SESSION_VARIABLES");
         } else {
             tableName = new TableName(InfoSchemaDb.DATABASE_NAME, "SESSION_VARIABLES");
         }
@@ -73,7 +86,17 @@ public class ShowVariablesStmt extends ShowStmt {
         item = new SelectListItem(new SlotRef(tableName, "VARIABLE_VALUE"), VALUE_COL);
         selectList.addItem(item);
         aliasMap.put(new SlotRef(null, VALUE_COL), item.getExpr().clone(null));
-        // change
+        if (type == SetType.VERBOSE) {
+            // default_value
+            item = new SelectListItem(new SlotRef(tableName, DEFAULT_VALUE), DEFAULT_VALUE);
+            selectList.addItem(item);
+            aliasMap.put(new SlotRef(null, DEFAULT_VALUE), item.getExpr().clone(null));
+            // is_changed
+            item = new SelectListItem(new SlotRef(tableName, IS_CHANGED), IS_CHANGED);
+            selectList.addItem(item);
+            aliasMap.put(new SlotRef(null, IS_CHANGED), item.getExpr().clone(null));
+        }
+
         where = where.substitute(aliasMap);
 
         return new QueryStatement(new SelectRelation(selectList, new TableRelation(tableName),
@@ -82,7 +105,7 @@ public class ShowVariablesStmt extends ShowStmt {
 
     @Override
     public ShowResultSetMetaData getMetaData() {
-        return META_DATA;
+        return type != SetType.VERBOSE ? META_DATA : VERBOSE_META_DATA;
     }
 
     @Override

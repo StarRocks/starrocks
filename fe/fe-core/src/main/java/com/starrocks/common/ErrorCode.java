@@ -266,7 +266,27 @@ public enum ErrorCode {
     ERR_UNSUPPORTED_SQL_PATTERN(5081, new byte[] {'4', '2', '0', '0', '0'},
             "Only support like 'function_pattern' syntax."),
     ERR_WRONG_LABEL_NAME(5082, new byte[] {'4', '2', '0', '0', '0'},
-            "Incorrect label name '%s'");
+            "Incorrect label name '%s'"),
+    ERR_CHANGE_TO_SSL_CONNECTION_FAILED(5083, new byte[] {'4', '2', '0', '0', '0'},
+            "Change to ssl connection failed"),
+    ERR_CATALOG_ACCESS_DENIED(5084, new byte[] {'4', '2', '0', '0', '0'},
+            "Access denied for user '%s' to catalog '%s'"),
+    ERR_PRIVILEGE_TABLE_NOT_FOUND(5085, new byte[] {'4', '2', '0', '0', '0'},
+            "Table not found when checking privilege"),
+    ERR_PRIVILEGE_DB_NOT_FOUND(5086, new byte[] {'4', '2', '0', '0', '0'},
+            "Db [%s] not found when checking privilege"),
+    ERR_PRIVILEGE_ACCESS_RESOURCE_DENIED(5087, new byte[] {'4', '2', '0', '0', '0'},
+            "%s denied to user '%s'@'%s' for resoure '%s' when checking privilege"),
+    ERR_PRIVILEGE_ACCESS_TABLE_DENIED(5088, new byte[] {'4', '2', '0', '0', '0'},
+            "Access denied for user '%s' to table '%s' when checking privilege"),
+    ERR_PRIVILEGE_ROUTINELODE_JOB_NOT_FOUND(5089, new byte[] {'4', '2', '0', '0', '0'},
+            "Routine load job [%s] not found when checking privilege"),
+
+    ERR_PLAN_VALIDATE_ERROR(6000, new byte[] {'0', '7', '0', '0', '0'},
+            "Incorrect logical plan found in operator: %s. Invalid reason: %s"),
+    ERR_INVALID_DATE_ERROR(6001, new byte[] {'2', '2', '0', '0', '0'}, "Incorrect %s value %s");
+
+
 
     ErrorCode(int code, byte[] sqlState, String errorMsg) {
         this.code = code;

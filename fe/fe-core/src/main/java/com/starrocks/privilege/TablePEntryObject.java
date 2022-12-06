@@ -40,7 +40,7 @@ public class TablePEntryObject implements PEntryObject {
             throws PrivilegeException {
         if (allTypes.size() == 1) {
             if (StringUtils.isEmpty(restrictType)
-                    || !restrictType.equals(PrivilegeTypes.DATABASE.toString())
+                    || !restrictType.equals(PrivilegeType.DATABASE.toString())
                     || StringUtils.isEmpty(restrictName)) {
                 throw new PrivilegeException("ALL TABLES must be restricted with database!");
             }
@@ -51,7 +51,7 @@ public class TablePEntryObject implements PEntryObject {
             }
             return new TablePEntryObject(database.getId(), ALL_TABLES_ID);
         } else if (allTypes.size() == 2) {
-            if (!allTypes.get(1).equals(PrivilegeTypes.DATABASE.getPlural())) {
+            if (!allTypes.get(1).equals(PrivilegeType.DATABASE.getPlural())) {
                 throw new PrivilegeException(
                         "ALL TABLES must be restricted with ALL DATABASES instead of ALL " + allTypes.get(1));
             }
@@ -66,16 +66,23 @@ public class TablePEntryObject implements PEntryObject {
         this.databaseId = databaseId;
     }
 
+    /**
+     * if the current table matches other table, including fuzzy matching.
+     *
+     * this(db1.tbl1), other(db1.tbl1) -> true
+     * this(db1.tbl1), other(db1.ALL) -> true
+     * this(db1.ALL), other(db1.tbl1) -> false
+     */
     @Override
     public boolean match(Object obj) {
         if (!(obj instanceof TablePEntryObject)) {
             return false;
         }
         TablePEntryObject other = (TablePEntryObject) obj;
-        if (databaseId == ALL_DATABASE_ID || other.databaseId == ALL_DATABASE_ID) {
+        if (other.databaseId == ALL_DATABASE_ID) {
             return true;
         }
-        if (tableId == ALL_TABLES_ID || other.tableId == ALL_TABLES_ID) {
+        if (other.tableId == ALL_TABLES_ID) {
             return databaseId == other.databaseId;
         }
         return other.databaseId == databaseId && other.tableId == tableId;
@@ -127,5 +134,10 @@ public class TablePEntryObject implements PEntryObject {
     @Override
     public int hashCode() {
         return Objects.hash(databaseId, tableId);
+    }
+
+    @Override
+    public PEntryObject clone() {
+        return new TablePEntryObject(databaseId, tableId);
     }
 }

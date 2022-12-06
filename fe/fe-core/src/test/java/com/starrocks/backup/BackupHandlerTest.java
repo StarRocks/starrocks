@@ -55,6 +55,7 @@ import com.starrocks.task.DownloadTask;
 import com.starrocks.task.SnapshotTask;
 import com.starrocks.task.UploadTask;
 import com.starrocks.thrift.TFinishTaskRequest;
+import com.starrocks.thrift.TSnapshotRequest;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.utframe.UtFrameUtils;
@@ -307,19 +308,63 @@ public class BackupHandlerTest {
             Assert.fail();
         }
 
-        {
-            // process backup for primary key, will be forbidden
-            List<TableRef> tblRefs1 = Lists.newArrayList();
-            tblRefs1.add(new TableRef(new TableName(CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL3_NAME), null));
-            BackupStmt backupStmt1 =
-                    new BackupStmt(new LabelName(CatalogMocker.TEST_DB_NAME, "label2"), "repo", tblRefs1,
-                            null);
-            try {
-                handler.process(backupStmt1);
-            } catch (DdlException e1) {
-                Assert.assertEquals(e1.toString(),
-                        "com.starrocks.common.DdlException: backup do not support primary key table: test_tbl3");
-            }
+        // process primary key table backup
+        List<TableRef> tblRefs1 = Lists.newArrayList();
+        tblRefs1.add(new TableRef(new TableName(CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL3_NAME), null));
+        BackupStmt backupStmt1 =
+                new BackupStmt(new LabelName(CatalogMocker.TEST_DB_NAME, "label2"), "repo", tblRefs1,
+                        null);
+        try {
+            handler.process(backupStmt1);
+        } catch (DdlException e1) {
+            e1.printStackTrace();
+            Assert.fail();
+        }
+
+        // handleFinishedSnapshotTask
+        BackupJob backupJob1 = (BackupJob) handler.getJob(CatalogMocker.TEST_DB_ID);
+        SnapshotTask snapshotTask1 = new SnapshotTask(null, 0, 0, backupJob1.getJobId(), CatalogMocker.TEST_DB_ID,
+                0, 0, 0, 0, 0, 0, 1, false);
+        TFinishTaskRequest request1 = new TFinishTaskRequest();
+        List<String> snapshotFiles1 = Lists.newArrayList();
+        request1.setSnapshot_files(snapshotFiles1);
+        request1.setSnapshot_path("./snapshot/path1");
+        request1.setTask_status(new TStatus(TStatusCode.OK));
+        handler.handleFinishedSnapshotTask(snapshotTask1, request1);
+
+        // handleFinishedSnapshotUploadTask
+        Map<String, String> srcToDestPath1 = Maps.newHashMap();
+        UploadTask uploadTask1 = new UploadTask(null, 0, 0, backupJob1.getJobId(), CatalogMocker.TEST_DB_ID,
+                srcToDestPath1, null, null);
+        request1 = new TFinishTaskRequest();
+        Map<Long, List<String>> tabletFiles1 = Maps.newHashMap();
+        request1.setTablet_files(tabletFiles1);
+        request1.setTask_status(new TStatus(TStatusCode.OK));
+        handler.handleFinishedSnapshotUploadTask(uploadTask1, request1);
+
+        // test file persist
+        File tmpFile1 = new File("./tmp1" + System.currentTimeMillis());
+        try {
+            DataOutputStream out = new DataOutputStream(new FileOutputStream(tmpFile1));
+            handler.write(out);
+            out.flush();
+            out.close();
+            DataInputStream in = new DataInputStream(new FileInputStream(tmpFile1));
+            BackupHandler.read(in);
+            in.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+            Assert.fail();
+        } finally {
+            tmpFile1.delete();
+        }
+
+        // cancel backup
+        try {
+            handler.cancel(new CancelBackupStmt(CatalogMocker.TEST_DB_NAME, false));
+        } catch (DdlException e1) {
+            e1.printStackTrace();
+            Assert.fail();
         }
 
         // process restore
@@ -399,6 +444,79 @@ public class BackupHandlerTest {
         };
         // cancel restore
         handler.cancel(new CancelBackupStmt(CatalogMocker.TEST_DB_NAME, true));
+
+        // process primary key table restore
+        List<TableRef> tblRefs3 = Lists.newArrayList();
+        tblRefs3.add(new TableRef(new TableName(CatalogMocker.TEST_DB_NAME, CatalogMocker.TEST_TBL_NAME), null));
+        Map<String, String> properties1 = Maps.newHashMap();
+        properties1.put("backup_timestamp", "2018-08-08-08-08-08");
+        RestoreStmt restoreStmt1 = new RestoreStmt(new LabelName(CatalogMocker.TEST_DB_NAME, "label2"), "repo", tblRefs3,
+                properties1);
+        try {
+            BackupRestoreAnalyzer.analyze(restoreStmt1, new ConnectContext());
+        } catch (SemanticException e2) {
+            e2.printStackTrace();
+            Assert.fail();
+        }
+
+        try {
+            handler.process(restoreStmt1);
+        } catch (DdlException e1) {
+            e1.printStackTrace();
+            Assert.fail();
+        }
+
+        // handleFinishedSnapshotTask
+        RestoreJob restoreJob1 = (RestoreJob) handler.getJob(CatalogMocker.TEST_DB_ID);
+        snapshotTask1 = new SnapshotTask(null, 0, 0, restoreJob1.getJobId(), CatalogMocker.TEST_DB_ID,
+                0, 0, 0, 0, 0, 0, 1, true);
+        request1 = new TFinishTaskRequest();
+        request1.setSnapshot_path("./snapshot/path1");
+        request1.setTask_status(new TStatus(TStatusCode.OK));
+        handler.handleFinishedSnapshotTask(snapshotTask1, request1);
+
+        // handleDownloadSnapshotTask
+        DownloadTask downloadTask1 = new DownloadTask(null, 0, 0, restoreJob1.getJobId(), CatalogMocker.TEST_DB_ID,
+                srcToDestPath1, null, null);
+        request1 = new TFinishTaskRequest();
+        List<Long> downloadedTabletIds1 = Lists.newArrayList();
+        request1.setDownloaded_tablet_ids(downloadedTabletIds1);
+        request1.setTask_status(new TStatus(TStatusCode.OK));
+        handler.handleDownloadSnapshotTask(downloadTask1, request1);
+
+        // handleDirMoveTask
+        DirMoveTask dirMoveTask1 = new DirMoveTask(null, 0, 0, restoreJob1.getJobId(), CatalogMocker.TEST_DB_ID, 0, 0, 0,
+                0, "", 0, true);
+        request1 = new TFinishTaskRequest();
+        request1.setTask_status(new TStatus(TStatusCode.OK));
+        handler.handleDirMoveTask(dirMoveTask1, request1);
+
+        // test file persist
+        tmpFile1 = new File("./tmp1" + System.currentTimeMillis());
+        try {
+            DataOutputStream out = new DataOutputStream(new FileOutputStream(tmpFile1));
+            handler.write(out);
+            out.flush();
+            out.close();
+            DataInputStream in = new DataInputStream(new FileInputStream(tmpFile1));
+            BackupHandler.read(in);
+            in.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+            Assert.fail();
+        } finally {
+            tmpFile1.delete();
+        }
+
+        // cancel restore
+        try {
+            handler.cancel(new CancelBackupStmt(CatalogMocker.TEST_DB_NAME, true));
+        } catch (DdlException e1) {
+            e1.printStackTrace();
+            Assert.fail();
+        }
+
+        TSnapshotRequest requestSnapshot = snapshotTask1.toThrift();
 
         // drop repo
         DDLStmtExecutor.execute(new DropRepositoryStmt("repo"), new ConnectContext());

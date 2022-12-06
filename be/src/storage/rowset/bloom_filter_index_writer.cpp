@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/olap/rowset/segment_v2/bloom_filter_index_writer.cpp
 
@@ -50,18 +63,18 @@ struct BloomFilterTraits<Slice> {
     using ValueDict = std::set<Slice, Slice::Comparator>;
 };
 
-// supported slice types are: OLAP_FIELD_TYPE_CHAR|OLAP_FIELD_TYPE_VARCHAR
-template <FieldType type>
+// supported slice types are: TYPE_CHAR|TYPE_VARCHAR
+template <LogicalType type>
 constexpr bool is_slice_type() {
-    return type == OLAP_FIELD_TYPE_VARCHAR || type == OLAP_FIELD_TYPE_CHAR;
+    return type == TYPE_VARCHAR || type == TYPE_CHAR;
 }
 
-template <FieldType type>
+template <LogicalType type>
 constexpr bool is_int128() {
-    return type == OLAP_FIELD_TYPE_LARGEINT || type == OLAP_FIELD_TYPE_DECIMAL_V2;
+    return type == TYPE_LARGEINT || type == TYPE_DECIMALV2;
 }
 
-template <FieldType type>
+template <LogicalType type>
 inline typename CppTypeTraits<type>::CppType get_value(const typename CppTypeTraits<type>::CppType* v,
                                                        const TypeInfoPtr& type_info, MemPool* pool) {
     using CppType = typename CppTypeTraits<type>::CppType;
@@ -74,11 +87,11 @@ inline typename CppTypeTraits<type>::CppType get_value(const typename CppTypeTra
     }
 }
 
-template <FieldType type>
+template <LogicalType type>
 inline void update_bf(BloomFilter* bf, const typename CppTypeTraits<type>::CppType& v) {
     using CppType = typename CppTypeTraits<type>::CppType;
     if constexpr (is_slice_type<type>()) {
-        const Slice* s = reinterpret_cast<const Slice*>(&v);
+        const auto* s = reinterpret_cast<const Slice*>(&v);
         bf->add_bytes(s->data, s->size);
     } else {
         bf->add_bytes(reinterpret_cast<const char*>(&v), sizeof(CppType));
@@ -91,19 +104,19 @@ inline void update_bf(BloomFilter* bf, const typename CppTypeTraits<type>::CppTy
 // This builder builds a bloom filter page by every data page, with a page id index.
 // Meanswhile, It adds an ordinal index to load bloom filter index according to requirement.
 //
-template <FieldType field_type>
+template <LogicalType field_type>
 class BloomFilterIndexWriterImpl : public BloomFilterIndexWriter {
 public:
     using CppType = typename CppTypeTraits<field_type>::CppType;
     using ValueDict = typename BloomFilterTraits<CppType>::ValueDict;
 
     explicit BloomFilterIndexWriterImpl(const BloomFilterOptions& bf_options, TypeInfoPtr typeinfo)
-            : _bf_options(bf_options), _typeinfo(std::move(typeinfo)), _has_null(false), _bf_buffer_size(0) {}
+            : _bf_options(bf_options), _typeinfo(std::move(typeinfo)) {}
 
     ~BloomFilterIndexWriterImpl() override = default;
 
     void add_values(const void* values, size_t count) override {
-        const CppType* v = (const CppType*)values;
+        const auto* v = (const CppType*)values;
         for (int i = 0; i < count; ++i) {
             if (_values.find(unaligned_load<CppType>(v)) == _values.end()) {
                 _values.insert(get_value<field_type>(v, _typeinfo, &_pool));
@@ -138,7 +151,7 @@ public:
         meta->set_algorithm(BLOCK_BLOOM_FILTER);
 
         // write bloom filters
-        TypeInfoPtr bf_typeinfo = get_type_info(OLAP_FIELD_TYPE_VARCHAR);
+        TypeInfoPtr bf_typeinfo = get_type_info(TYPE_VARCHAR);
         IndexedColumnWriterOptions options;
         options.write_ordinal_index = true;
         options.write_value_index = false;
@@ -163,8 +176,8 @@ private:
     BloomFilterOptions _bf_options;
     TypeInfoPtr _typeinfo;
     MemPool _pool;
-    bool _has_null;
-    uint64_t _bf_buffer_size;
+    bool _has_null{false};
+    uint64_t _bf_buffer_size{0};
     // distinct values
     ValueDict _values;
     std::vector<std::unique_ptr<BloomFilter>> _bfs;
@@ -173,7 +186,7 @@ private:
 } // namespace
 
 struct BloomFilterBuilderFunctor {
-    template <FieldType ftype>
+    template <LogicalType ftype>
     Status operator()(std::unique_ptr<BloomFilterIndexWriter>* res, const BloomFilterOptions& bf_options,
                       const TypeInfoPtr& typeinfo) {
         *res = std::make_unique<BloomFilterIndexWriterImpl<ftype>>(bf_options, typeinfo);

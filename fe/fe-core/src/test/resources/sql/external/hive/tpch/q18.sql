@@ -32,12 +32,12 @@ order by
     o_totalprice desc,
     o_orderdate limit 100;
 [fragment statistics]
-PLAN FRAGMENT 0(F08)
+PLAN FRAGMENT 0(F10)
 Output Exprs:2: c_name | 1: c_custkey | 9: o_orderkey | 13: o_orderdate | 12: o_totalprice | 52: sum
 Input Partition: UNPARTITIONED
 RESULT SINK
 
-19:MERGING-EXCHANGE
+20:MERGING-EXCHANGE
 limit: 100
 cardinality: 100
 column statistics:
@@ -48,13 +48,13 @@ column statistics:
 * o_orderdate-->[6.941952E8, 9.019872E8, 0.0, 4.0, 2412.0] ESTIMATE
 * sum-->[1.0, 6.000379019995813E8, 0.0, 8.0, 50.0] ESTIMATE
 
-PLAN FRAGMENT 1(F07)
+PLAN FRAGMENT 1(F09)
 
 Input Partition: HASH_PARTITIONED: 34: l_orderkey
 OutPut Partition: UNPARTITIONED
-OutPut Exchange Id: 19
+OutPut Exchange Id: 20
 
-18:TOP-N
+19:TOP-N
 |  order by: [12, DECIMAL64(15,2), true] DESC, [13, DATE, true] ASC
 |  offset: 0
 |  limit: 100
@@ -67,7 +67,7 @@ OutPut Exchange Id: 19
 |  * o_orderdate-->[6.941952E8, 9.019872E8, 0.0, 4.0, 2412.0] ESTIMATE
 |  * sum-->[1.0, 6.000379019995813E8, 0.0, 8.0, 50.0] ESTIMATE
 |
-17:AGGREGATE (update finalize)
+18:AGGREGATE (update finalize)
 |  aggregate: sum[([22: l_quantity, DECIMAL64(15,2), true]); args: DECIMAL64; result: DECIMAL128(38,2); args nullable: true; result nullable: true]
 |  group by: [2: c_name, VARCHAR, true], [1: c_custkey, INT, true], [9: o_orderkey, INT, true], [13: o_orderdate, DATE, true], [12: o_totalprice, DECIMAL64(15,2), true]
 |  cardinality: 600037902
@@ -79,7 +79,7 @@ OutPut Exchange Id: 19
 |  * o_orderdate-->[6.941952E8, 9.019872E8, 0.0, 4.0, 2412.0] ESTIMATE
 |  * sum-->[1.0, 6.000379019995813E8, 0.0, 8.0, 50.0] ESTIMATE
 |
-16:Project
+17:Project
 |  output columns:
 |  1 <-> [1: c_custkey, INT, true]
 |  2 <-> [2: c_name, VARCHAR, true]
@@ -96,7 +96,7 @@ OutPut Exchange Id: 19
 |  * o_orderdate-->[6.941952E8, 9.019872E8, 0.0, 4.0, 2412.0] ESTIMATE
 |  * l_quantity-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
 |
-15:HASH JOIN
+16:HASH JOIN
 |  join op: INNER JOIN (BUCKET_SHUFFLE(S))
 |  equal join conjunct: [18: l_orderkey, INT, true] = [9: o_orderkey, INT, true]
 |  build runtime filters:
@@ -112,7 +112,7 @@ OutPut Exchange Id: 19
 |  * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.4999999999989533E8] ESTIMATE
 |  * l_quantity-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
 |
-|----14:Project
+|----15:Project
 |    |  output columns:
 |    |  1 <-> [1: c_custkey, INT, true]
 |    |  2 <-> [2: c_name, VARCHAR, true]
@@ -127,7 +127,7 @@ OutPut Exchange Id: 19
 |    |  * o_totalprice-->[811.73, 591036.15, 0.0, 8.0, 3.469658E7] ESTIMATE
 |    |  * o_orderdate-->[6.941952E8, 9.019872E8, 0.0, 4.0, 2412.0] ESTIMATE
 |    |
-|    13:HASH JOIN
+|    14:HASH JOIN
 |    |  join op: LEFT SEMI JOIN (BUCKET_SHUFFLE(S))
 |    |  equal join conjunct: [9: o_orderkey, INT, true] = [34: l_orderkey, INT, true]
 |    |  build runtime filters:
@@ -142,14 +142,14 @@ OutPut Exchange Id: 19
 |    |  * o_orderdate-->[6.941952E8, 9.019872E8, 0.0, 4.0, 2412.0] ESTIMATE
 |    |  * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.4999999999989533E8] ESTIMATE
 |    |
-|    |----12:Project
+|    |----13:Project
 |    |    |  output columns:
 |    |    |  34 <-> [34: l_orderkey, INT, true]
 |    |    |  cardinality: 150000000
 |    |    |  column statistics:
 |    |    |  * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.4999999999989533E8] ESTIMATE
 |    |    |
-|    |    11:AGGREGATE (merge finalize)
+|    |    12:AGGREGATE (merge finalize)
 |    |    |  aggregate: sum[([50: sum, DECIMAL128(38,2), true]); args: DECIMAL64; result: DECIMAL128(38,2); args nullable: true; result nullable: true]
 |    |    |  group by: [34: l_orderkey, INT, true]
 |    |    |  having: [50: sum, DECIMAL128(38,2), true] > 315
@@ -158,10 +158,10 @@ OutPut Exchange Id: 19
 |    |    |  * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.4999999999989533E8] ESTIMATE
 |    |    |  * sum-->[315.0, 4.5E14, 0.0, 8.0, 50.0] ESTIMATE
 |    |    |
-|    |    10:EXCHANGE
+|    |    11:EXCHANGE
 |    |       cardinality: 150000000
 |    |
-|    7:EXCHANGE
+|    8:EXCHANGE
 |       cardinality: 150000000
 |       probe runtime filters:
 |       - filter_id = 1, probe_expr = (9: o_orderkey)
@@ -171,13 +171,13 @@ cardinality: 600037902
 probe runtime filters:
 - filter_id = 2, probe_expr = (18: l_orderkey)
 
-PLAN FRAGMENT 2(F06)
+PLAN FRAGMENT 2(F08)
 
 Input Partition: RANDOM
 OutPut Partition: HASH_PARTITIONED: 34: l_orderkey
-OutPut Exchange Id: 10
+OutPut Exchange Id: 11
 
-9:AGGREGATE (update serialize)
+10:AGGREGATE (update serialize)
 |  STREAMING
 |  aggregate: sum[([38: l_quantity, DECIMAL64(15,2), true]); args: DECIMAL64; result: DECIMAL128(38,2); args nullable: true; result nullable: true]
 |  group by: [34: l_orderkey, INT, true]
@@ -186,7 +186,7 @@ OutPut Exchange Id: 10
 |  * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
 |  * sum-->[1.0, 1.5E8, 0.0, 8.0, 50.0] ESTIMATE
 |
-8:HdfsScanNode
+9:HdfsScanNode
 TABLE: lineitem
 NON-PARTITION PREDICATES: 34: l_orderkey IS NOT NULL
 partitions=1/1
@@ -197,13 +197,13 @@ column statistics:
 * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
 * l_quantity-->[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE
 
-PLAN FRAGMENT 3(F02)
+PLAN FRAGMENT 3(F06)
 
-Input Partition: RANDOM
+Input Partition: HASH_PARTITIONED: 10: o_custkey
 OutPut Partition: HASH_PARTITIONED: 9: o_orderkey
-OutPut Exchange Id: 07
+OutPut Exchange Id: 08
 
-6:Project
+7:Project
 |  output columns:
 |  1 <-> [1: c_custkey, INT, true]
 |  2 <-> [2: c_name, VARCHAR, true]
@@ -218,11 +218,11 @@ OutPut Exchange Id: 07
 |  * o_totalprice-->[811.73, 591036.15, 0.0, 8.0, 3.469658E7] ESTIMATE
 |  * o_orderdate-->[6.941952E8, 9.019872E8, 0.0, 4.0, 2412.0] ESTIMATE
 |
-5:HASH JOIN
-|  join op: INNER JOIN (BROADCAST)
+6:HASH JOIN
+|  join op: INNER JOIN (PARTITIONED)
 |  equal join conjunct: [10: o_custkey, INT, true] = [1: c_custkey, INT, true]
 |  build runtime filters:
-|  - filter_id = 0, build_expr = (1: c_custkey), remote = false
+|  - filter_id = 0, build_expr = (1: c_custkey), remote = true
 |  output columns: 1, 2, 9, 12, 13
 |  cardinality: 150000000
 |  column statistics:
@@ -233,9 +233,35 @@ OutPut Exchange Id: 07
 |  * o_totalprice-->[811.73, 591036.15, 0.0, 8.0, 3.469658E7] ESTIMATE
 |  * o_orderdate-->[6.941952E8, 9.019872E8, 0.0, 4.0, 2412.0] ESTIMATE
 |
-|----4:EXCHANGE
+|----5:EXCHANGE
 |       cardinality: 15000000
 |
+3:EXCHANGE
+cardinality: 150000000
+
+PLAN FRAGMENT 4(F04)
+
+Input Partition: RANDOM
+OutPut Partition: HASH_PARTITIONED: 1: c_custkey
+OutPut Exchange Id: 05
+
+4:HdfsScanNode
+TABLE: customer
+NON-PARTITION PREDICATES: 1: c_custkey IS NOT NULL
+partitions=1/1
+avgRowSize=33.0
+numNodes=0
+cardinality: 15000000
+column statistics:
+* c_custkey-->[1.0, 1.5E7, 0.0, 8.0, 1.5E7] ESTIMATE
+* c_name-->[-Infinity, Infinity, 0.0, 25.0, 1.5E7] ESTIMATE
+
+PLAN FRAGMENT 5(F02)
+
+Input Partition: RANDOM
+OutPut Partition: HASH_PARTITIONED: 10: o_custkey
+OutPut Exchange Id: 03
+
 2:HdfsScanNode
 TABLE: orders
 NON-PARTITION PREDICATES: 10: o_custkey IS NOT NULL
@@ -251,24 +277,7 @@ column statistics:
 * o_totalprice-->[811.73, 591036.15, 0.0, 8.0, 3.469658E7] ESTIMATE
 * o_orderdate-->[6.941952E8, 9.019872E8, 0.0, 4.0, 2412.0] ESTIMATE
 
-PLAN FRAGMENT 4(F03)
-
-Input Partition: RANDOM
-OutPut Partition: UNPARTITIONED
-OutPut Exchange Id: 04
-
-3:HdfsScanNode
-TABLE: customer
-NON-PARTITION PREDICATES: 1: c_custkey IS NOT NULL
-partitions=1/1
-avgRowSize=33.0
-numNodes=0
-cardinality: 15000000
-column statistics:
-* c_custkey-->[1.0, 1.5E7, 0.0, 8.0, 1.5E7] ESTIMATE
-* c_name-->[-Infinity, Infinity, 0.0, 25.0, 1.5E7] ESTIMATE
-
-PLAN FRAGMENT 5(F00)
+PLAN FRAGMENT 6(F00)
 
 Input Partition: RANDOM
 OutPut Partition: HASH_PARTITIONED: 18: l_orderkey

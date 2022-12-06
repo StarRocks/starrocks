@@ -1,5 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "exec/pipeline/sort/partition_sort_sink_operator.h"
 
 #include "exec/vectorized/chunks_sorter.h"
@@ -68,12 +80,12 @@ OperatorPtr PartitionSortSinkOperatorFactory::create(int32_t dop, int32_t driver
         if (_topn_type == TTopNType::ROW_NUMBER && _limit <= ChunksSorter::USE_HEAP_SORTER_LIMIT_SZ) {
             chunks_sorter = std::make_unique<ChunksSorterHeapSort>(
                     runtime_state(), &(_sort_exec_exprs.lhs_ordering_expr_ctxs()), &_is_asc_order, &_is_null_first,
-                    _sort_keys, _offset, _limit);
+                    _sort_keys, 0, _limit + _offset);
         } else {
             size_t max_buffered_chunks = ChunksSorterTopn::tunning_buffered_chunks(_limit);
             chunks_sorter = std::make_unique<ChunksSorterTopn>(
                     runtime_state(), &(_sort_exec_exprs.lhs_ordering_expr_ctxs()), &_is_asc_order, &_is_null_first,
-                    _sort_keys, _offset, _limit, _topn_type, max_buffered_chunks);
+                    _sort_keys, 0, _limit + _offset, _topn_type, max_buffered_chunks);
         }
     } else {
         chunks_sorter = std::make_unique<vectorized::ChunksSorterFullSort>(runtime_state(),
@@ -83,9 +95,9 @@ OperatorPtr PartitionSortSinkOperatorFactory::create(int32_t dop, int32_t driver
     auto sort_context = _sort_context_factory->create(driver_sequence);
 
     sort_context->add_partition_chunks_sorter(chunks_sorter);
-    auto ope = std::make_shared<PartitionSortSinkOperator>(
-            this, _id, _plan_node_id, driver_sequence, chunks_sorter, _sort_exec_exprs, _order_by_types,
-            _materialized_tuple_desc, _parent_node_row_desc, _parent_node_child_row_desc, sort_context.get());
+    auto ope = std::make_shared<PartitionSortSinkOperator>(this, _id, _plan_node_id, driver_sequence, chunks_sorter,
+                                                           _sort_exec_exprs, _order_by_types, _materialized_tuple_desc,
+                                                           sort_context.get());
     return ope;
 }
 

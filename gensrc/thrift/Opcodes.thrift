@@ -84,3 +84,11 @@ enum TExprOpcode {
     LAST_OPCODE,
     EQ_FOR_NULL,
 }
+
+// Stream Operation Types
+enum TStreamOpType {
+    INSERT = 0,
+    UPDATE_BEFORE = 1,
+    UPDATE_AFTER = 2,
+    DELETE = 3,
+}

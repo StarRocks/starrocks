@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/olap/storage_engine.h
 
@@ -255,6 +268,8 @@ private:
 
     void* _tablet_checkpoint_callback(void* arg);
 
+    void* _adjust_pagecache_callback(void* arg);
+
     void _start_clean_fd_cache();
     Status _perform_cumulative_compaction(DataDir* data_dir, std::pair<int32_t, int32_t> tablet_shards_range);
     Status _perform_base_compaction(DataDir* data_dir, std::pair<int32_t, int32_t> tablet_shards_range);
@@ -280,11 +295,11 @@ private:
 
     struct CompactionDiskStat {
         CompactionDiskStat(std::string path, uint32_t index, bool used)
-                : storage_path(std::move(path)), disk_index(index), task_running(0), task_remaining(0), is_used(used) {}
+                : storage_path(std::move(path)), disk_index(index), is_used(used) {}
         const std::string storage_path;
         const uint32_t disk_index;
-        uint32_t task_running;
-        uint32_t task_remaining;
+        uint32_t task_running{0};
+        uint32_t task_remaining{0};
         bool is_used;
     };
 
@@ -320,13 +335,12 @@ private:
     std::vector<std::pair<int64_t, std::vector<std::pair<uint32_t, std::string>>>> _executed_repair_compaction_tasks;
     // threads to clean all file descriptor not actively in use
     std::thread _fd_cache_clean_thread;
+    std::thread _adjust_cache_thread;
     std::vector<std::thread> _path_gc_threads;
     // threads to scan disk paths
     std::vector<std::thread> _path_scan_threads;
     // threads to run tablet checkpoint
     std::vector<std::thread> _tablet_checkpoint_threads;
-
-    std::thread _compaction_scheduler;
 
     std::thread _compaction_checker_thread;
     std::mutex _checker_mutex;
@@ -360,6 +374,8 @@ private:
 
     std::unique_ptr<CompactionManager> _compaction_manager;
 
+    std::thread _compaction_scheduler; // compaction scheduler should destruct before compaction manager
+
     HeartbeatFlags* _heartbeat_flags = nullptr;
 
     StorageEngine(const StorageEngine&) = delete;
@@ -376,6 +392,39 @@ public:
     static Status open(const EngineOptions& options, StorageEngine** engine_ptr);
     Status set_cluster_id(int32_t cluster_id) override;
     Status start_bg_threads() override { return Status::OK(); };
+};
+
+/// Load min_garbage_sweep_interval and max_garbage_sweep_interval from config,
+/// and calculate a proper sweep interval according to the disk usage and min/max interval.
+///
+/// *maybe_interval_updated* can be used to check and update min/max interval from config.
+/// All the methods are not thread-safe.
+class GarbageSweepIntervalCalculator {
+public:
+    GarbageSweepIntervalCalculator();
+
+    DISALLOW_COPY(GarbageSweepIntervalCalculator);
+    DISALLOW_MOVE(GarbageSweepIntervalCalculator);
+
+    double& mutable_disk_usage() { return _disk_usage; }
+
+    // Return true and update min and max interval, if the value from config is changed.
+    bool maybe_interval_updated();
+    // Calculate the interval according to the disk usage and min/max interval.
+    int32_t curr_interval() const;
+
+private:
+    void _normalize_min_max();
+
+    // The value read from config.
+    int32_t _original_min_interval;
+    int32_t _original_max_interval;
+    // The value after normalized.
+    int32_t _min_interval;
+    int32_t _max_interval;
+
+    // Value is in [0, 1].
+    double _disk_usage = 1.0;
 };
 
 } // namespace starrocks

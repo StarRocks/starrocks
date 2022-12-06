@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -17,7 +29,7 @@ namespace starrocks {
 
 class Tablet;
 namespace vectorized {
-class Schema;
+class VectorizedSchema;
 class Column;
 } // namespace vectorized
 
@@ -47,8 +59,6 @@ struct IndexValue {
 static constexpr size_t kIndexValueSize = 8;
 static_assert(sizeof(IndexValue) == kIndexValueSize);
 
-class ImmutableIndexShard;
-
 uint64_t key_index_hash(const void* data, size_t len);
 
 struct KeysInfo {
@@ -61,10 +71,11 @@ struct KVRef {
     const uint8_t* kv_pos;
     uint64_t hash;
     uint16_t size;
-    KVRef() {}
+    KVRef() = default;
     KVRef(const uint8_t* kv_pos, uint64_t hash, uint16_t size) : kv_pos(kv_pos), hash(hash), size(size) {}
 };
 
+struct ImmutableIndexShard;
 class PersistentIndex;
 class ImmutableIndexWriter;
 
@@ -177,9 +188,9 @@ public:
 
 class ShardByLengthMutableIndex {
 public:
-    ShardByLengthMutableIndex() {}
+    ShardByLengthMutableIndex() = default;
 
-    ShardByLengthMutableIndex(const size_t key_size, const std::string& path)
+    ShardByLengthMutableIndex(const size_t key_size, const std::string& path) // NOLINT
             : _fixed_key_size(key_size), _path(path) {}
 
     ~ShardByLengthMutableIndex() {
@@ -189,6 +200,14 @@ public:
     }
 
     Status init();
+
+    uint64_t file_size() {
+        if (_index_file != nullptr) {
+            return _index_file->size();
+        } else {
+            return 0;
+        }
+    }
 
     // batch get
     // |n|: size of key/value array
@@ -318,11 +337,13 @@ public:
     Status check_not_exist(size_t n, const Slice* keys, size_t key_size);
 
     // get Immutable index file size;
-    void file_size(uint64_t* file_size) {
+    uint64_t file_size() {
         if (_file != nullptr) {
             auto res = _file->get_size();
             CHECK(res.ok()) << res.status(); // FIXME: no abort
-            *file_size = *res;
+            return *res;
+        } else {
+            return 0;
         }
     }
 
@@ -372,8 +393,6 @@ private:
     std::unique_ptr<RandomAccessFile> _file;
     EditVersion _version;
     size_t _size = 0;
-    size_t _fixed_key_size = 0;
-    size_t _fixed_value_size = 0;
 
     struct ShardInfo {
         uint64_t offset;
@@ -436,7 +455,7 @@ private:
 class PersistentIndex {
 public:
     // |path|: directory that contains index files
-    PersistentIndex(const std::string& path);
+    PersistentIndex(std::string path);
     ~PersistentIndex();
 
     bool loaded() const { return (bool)_l0; }
@@ -532,8 +551,6 @@ private:
 
     Status _delete_expired_index_file(const EditVersion& l0_version, const EditVersion& l1_version);
 
-    Status _check_and_flush_l0();
-
     Status _flush_l0();
 
     // merge l0 and l1 into new l1, then clear l0
@@ -546,8 +563,9 @@ private:
     Status _build_commit(Tablet* tablet, PersistentIndexMetaPB& index_meta);
 
     // insert rowset data into persistent index
-    Status _insert_rowsets(Tablet* tablet, std::vector<RowsetSharedPtr>& rowsets, const vectorized::Schema& pkey_schema,
-                           int64_t apply_version, std::unique_ptr<vectorized::Column> pk_column);
+    Status _insert_rowsets(Tablet* tablet, std::vector<RowsetSharedPtr>& rowsets,
+                           const vectorized::VectorizedSchema& pkey_schema, int64_t apply_version,
+                           std::unique_ptr<vectorized::Column> pk_column);
 
     // index storage directory
     std::string _path;

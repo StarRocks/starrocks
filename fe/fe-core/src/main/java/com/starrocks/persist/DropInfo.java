@@ -21,6 +21,7 @@
 
 package com.starrocks.persist;
 
+import com.google.common.base.Objects;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Writable;
 import com.starrocks.server.GlobalStateMgr;
@@ -95,6 +96,13 @@ public class DropInfo implements Writable {
         return dropInfo;
     }
 
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(dbId, tableId);
+    }
+
+
+    @Override
     public boolean equals(Object obj) {
         if (this == obj) {
             return true;

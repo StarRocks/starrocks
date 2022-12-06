@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "storage/task/engine_storage_migration_task.h"
 
 #include <gtest/gtest.h>
@@ -14,7 +27,6 @@
 #include "runtime/descriptor_helper.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
-#include "runtime/memory/chunk_allocator.h"
 #include "runtime/time_types.h"
 #include "runtime/user_function_cache.h"
 #include "storage/chunk_helper.h"
@@ -134,10 +146,10 @@ public:
         ASSERT_TRUE(st.ok()) << st.to_string() << ", version:" << writer->version();
     }
 
-    TSlotDescriptor _create_slot_desc(PrimitiveType type, const std::string& col_name, int col_pos) {
+    TSlotDescriptor _create_slot_desc(LogicalType type, const std::string& col_name, int col_pos) {
         TSlotDescriptorBuilder builder;
 
-        if (type == PrimitiveType::TYPE_VARCHAR || type == PrimitiveType::TYPE_CHAR) {
+        if (type == LogicalType::TYPE_VARCHAR || type == LogicalType::TYPE_CHAR) {
             return builder.string_type(1024).column_name(col_name).column_pos(col_pos).nullable(false).build();
         } else {
             return builder.type(type).column_name(col_name).column_pos(col_pos).nullable(false).build();
@@ -209,7 +221,7 @@ public:
     }
 
 private:
-    PrimitiveType _primitive_type[3] = {PrimitiveType::TYPE_INT, PrimitiveType::TYPE_VARCHAR, PrimitiveType::TYPE_INT};
+    LogicalType _primitive_type[3] = {LogicalType::TYPE_INT, LogicalType::TYPE_VARCHAR, LogicalType::TYPE_INT};
 
     std::string _names[3] = {"k1", "k2", "v1"};
     RuntimeState _runtime_state;

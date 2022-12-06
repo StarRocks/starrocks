@@ -1,5 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #ifdef USE_JEMALLOC
 #include "jemalloc/jemalloc.h"
 #else
@@ -11,6 +23,9 @@
 #include <iostream>
 
 #include "common/compiler_util.h"
+#include "common/config.h"
+#include "glog/logging.h"
+#include "util/stack_util.h"
 
 #ifndef BE_TEST
 #include "runtime/current_thread.h"
@@ -241,9 +256,29 @@ std::atomic<int64_t> g_mem_usage(0);
 #define IS_BAD_ALLOC_CATCHED() false
 #endif
 
+#ifdef USE_JEMALLOC
+const size_t large_memory_alloc_report_threshold = 1073741824;
+inline thread_local bool skip_report = false;
+inline void report_large_memory_alloc(size_t size) {
+    if (size > large_memory_alloc_report_threshold && !skip_report) {
+        skip_report = true; // to avoid recursive output log
+        try {
+            LOG(WARNING) << "large memory alloc: " << size << " bytes, stack:\n" << starrocks::get_stack_trace();
+        } catch (...) {
+            // do nothing
+        }
+        skip_report = false;
+    }
+}
+#define STARROCKS_REPORT_LARGE_MEM_ALLOC(size) report_large_memory_alloc(size)
+#else
+#define STARROCKS_REPORT_LARGE_MEM_ALLOC(size) (void)0
+#endif
+
 extern "C" {
 // malloc
 void* my_malloc(size_t size) __THROW {
+    STARROCKS_REPORT_LARGE_MEM_ALLOC(size);
     if (IS_BAD_ALLOC_CATCHED()) {
         // NOTE: do NOT call `tc_malloc_size` here, it may call the new operator, which in turn will
         // call the `my_malloc`, and result in a deadloop.
@@ -267,12 +302,16 @@ void* my_malloc(size_t size) __THROW {
 
 // free
 void my_free(void* p) __THROW {
+    if (UNLIKELY(p == nullptr)) {
+        return;
+    }
     MEMORY_RELEASE_PTR(p);
     STARROCKS_FREE(p);
 }
 
 // realloc
 void* my_realloc(void* p, size_t size) __THROW {
+    STARROCKS_REPORT_LARGE_MEM_ALLOC(size);
     // If new_size is zero, the behavior is implementation defined
     // (null pointer may be returned (in which case the old memory block may or may not be freed),
     // or some non-null pointer may be returned that may not be used to access storage)
@@ -303,6 +342,7 @@ void* my_realloc(void* p, size_t size) __THROW {
 
 // calloc
 void* my_calloc(size_t n, size_t size) __THROW {
+    STARROCKS_REPORT_LARGE_MEM_ALLOC(n * size);
     // If size is zero, the behavior is implementation defined (null pointer may be returned
     // or some non-null pointer may be returned that may not be used to access storage)
     if (UNLIKELY(size == 0)) {
@@ -327,12 +367,16 @@ void* my_calloc(size_t n, size_t size) __THROW {
 }
 
 void my_cfree(void* ptr) __THROW {
+    if (UNLIKELY(ptr == nullptr)) {
+        return;
+    }
     MEMORY_RELEASE_PTR(ptr);
     STARROCKS_CFREE(ptr);
 }
 
 // memalign
 void* my_memalign(size_t align, size_t size) __THROW {
+    STARROCKS_REPORT_LARGE_MEM_ALLOC(size);
     if (IS_BAD_ALLOC_CATCHED()) {
         TRY_MEM_CONSUME(size, nullptr);
         void* ptr = STARROCKS_ALIGNED_ALLOC(align, size);
@@ -352,6 +396,7 @@ void* my_memalign(size_t align, size_t size) __THROW {
 
 // aligned_alloc
 void* my_aligned_alloc(size_t align, size_t size) __THROW {
+    STARROCKS_REPORT_LARGE_MEM_ALLOC(size);
     if (IS_BAD_ALLOC_CATCHED()) {
         TRY_MEM_CONSUME(size, nullptr);
         void* ptr = STARROCKS_ALIGNED_ALLOC(align, size);
@@ -371,6 +416,7 @@ void* my_aligned_alloc(size_t align, size_t size) __THROW {
 
 // valloc
 void* my_valloc(size_t size) __THROW {
+    STARROCKS_REPORT_LARGE_MEM_ALLOC(size);
     if (IS_BAD_ALLOC_CATCHED()) {
         TRY_MEM_CONSUME(size, nullptr);
         void* ptr = STARROCKS_VALLOC(size);
@@ -390,6 +436,7 @@ void* my_valloc(size_t size) __THROW {
 
 // pvalloc
 void* my_pvalloc(size_t size) __THROW {
+    STARROCKS_REPORT_LARGE_MEM_ALLOC(size);
     if (IS_BAD_ALLOC_CATCHED()) {
         TRY_MEM_CONSUME(size, nullptr);
         void* ptr = STARROCKS_VALLOC(size);
@@ -409,6 +456,7 @@ void* my_pvalloc(size_t size) __THROW {
 
 // posix_memalign
 int my_posix_memalign(void** r, size_t align, size_t size) __THROW {
+    STARROCKS_REPORT_LARGE_MEM_ALLOC(size);
     if (IS_BAD_ALLOC_CATCHED()) {
         TRY_MEM_CONSUME(size, ENOMEM);
         int ret = STARROCKS_POSIX_MEMALIGN(r, align, size);

@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/exec/data_sink.cpp
 
@@ -49,9 +62,12 @@ static std::unique_ptr<DataStreamSender> create_data_stream_sink(
             params.__isset.send_query_statistics_with_every_batch && params.send_query_statistics_with_every_batch;
     bool enable_exchange_pass_through =
             params.__isset.enable_exchange_pass_through && params.enable_exchange_pass_through;
+    bool enable_exchange_perf = params.__isset.enable_exchange_perf && params.enable_exchange_perf;
+
     // TODO: figure out good buffer size based on size of output row
     auto ret = std::make_unique<DataStreamSender>(state, sender_id, row_desc, data_stream_sink, destinations, 16 * 1024,
-                                                  send_query_statistics_with_every_batch, enable_exchange_pass_through);
+                                                  send_query_statistics_with_every_batch, enable_exchange_pass_through,
+                                                  enable_exchange_perf);
     return ret;
 }
 
@@ -64,8 +80,8 @@ Status DataSink::create_data_sink(RuntimeState* state, const TDataSink& thrift_s
         if (!thrift_sink.__isset.stream_sink) {
             return Status::InternalError("Missing data stream sink.");
         }
-        *sink = std::move(create_data_stream_sink(state, thrift_sink.stream_sink, row_desc, params, sender_id,
-                                                  params.destinations));
+        *sink = create_data_stream_sink(state, thrift_sink.stream_sink, row_desc, params, sender_id,
+                                        params.destinations);
         break;
     }
     case TDataSinkType::RESULT_SINK:
@@ -101,7 +117,7 @@ Status DataSink::create_data_sink(RuntimeState* state, const TDataSink& thrift_s
     case TDataSinkType::OLAP_TABLE_SINK: {
         Status status;
         DCHECK(thrift_sink.__isset.olap_table_sink);
-        *sink = std::make_unique<stream_load::OlapTableSink>(state->obj_pool(), output_exprs, &status);
+        *sink = std::make_unique<stream_load::OlapTableSink>(state->obj_pool(), output_exprs, &status, state);
         RETURN_IF_ERROR(status);
         break;
     }
@@ -135,13 +151,13 @@ Status DataSink::create_data_sink(RuntimeState* state, const TDataSink& thrift_s
     }
 
     if (*sink != nullptr) {
-        RETURN_IF_ERROR((*sink)->init(thrift_sink));
+        RETURN_IF_ERROR((*sink)->init(thrift_sink, state));
     }
 
     return Status::OK();
 }
 
-Status DataSink::init(const TDataSink& thrift_sink) {
+Status DataSink::init(const TDataSink& thrift_sink, RuntimeState* state) {
     return Status::OK();
 }
 

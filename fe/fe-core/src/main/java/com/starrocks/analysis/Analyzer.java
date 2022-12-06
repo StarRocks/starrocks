@@ -40,6 +40,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.MetaUtils;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -258,9 +259,7 @@ public class Analyzer {
         }
 
         Database database = globalState.globalStateMgr.getDb(dbName);
-        if (database == null) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
-        }
+        MetaUtils.checkDbNullAndReport(database, dbName);
 
         Table table = database.getTable(tableName.getTbl());
         if (table == null) {

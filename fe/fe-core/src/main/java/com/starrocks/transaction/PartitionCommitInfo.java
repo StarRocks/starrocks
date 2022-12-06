@@ -26,6 +26,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 
@@ -33,6 +34,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
+import javax.annotation.Nullable;
 
 public class PartitionCommitInfo implements Writable {
 
@@ -59,6 +61,10 @@ public class PartitionCommitInfo implements Writable {
     private List<String> invalidDictCacheColumns = Lists.newArrayList();
     @SerializedName(value = "validColumns")
     private List<String> validDictCacheColumns = Lists.newArrayList();
+
+    // compaction score quantiles of lake table
+    @SerializedName(value = "compactionScore")
+    private Quantiles compactionScore;
 
     public PartitionCommitInfo() {
 
@@ -126,6 +132,15 @@ public class PartitionCommitInfo implements Writable {
 
     public List<String> getValidDictCacheColumns() {
         return validDictCacheColumns;
+    }
+
+    public void setCompactionScore(Quantiles compactionScore) {
+        this.compactionScore = compactionScore;
+    }
+
+    @Nullable
+    public Quantiles getCompactionScore() {
+        return compactionScore;
     }
 
     @Override

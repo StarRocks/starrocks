@@ -203,10 +203,9 @@ public class DynamicPluginLoader extends PluginLoader {
 
         // create a child to load the plugin in this bundle
         ClassLoader parentLoader = PluginClassLoader.createLoader(getClass().getClassLoader(), Collections.EMPTY_LIST);
-        ClassLoader loader = URLClassLoader.newInstance(jarList.toArray(new URL[0]), parentLoader);
 
         Class<? extends Plugin> pluginClass;
-        try {
+        try (URLClassLoader loader = URLClassLoader.newInstance(jarList.toArray(new URL[0]), parentLoader)) {
             pluginClass = loader.loadClass(pluginInfo.getClassName()).asSubclass(Plugin.class);
         } catch (ClassNotFoundException | NoClassDefFoundError t) {
             throw new UserException("Could not find plugin class [" + pluginInfo.getClassName() + "]", t);

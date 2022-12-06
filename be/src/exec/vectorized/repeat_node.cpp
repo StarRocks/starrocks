@@ -1,5 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "exec/vectorized/repeat_node.h"
 
 #include "exec/pipeline/aggregate/repeat/repeat_operator.h"
@@ -200,8 +212,8 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > RepeatNode::decompose_t
     operators.emplace_back(std::make_shared<RepeatOperatorFactory>(
             context->next_operator_id(), id(), std::move(_slot_id_set_list), std::move(_all_slot_ids),
             std::move(_null_slot_ids), std::move(_repeat_id_list), _repeat_times_required, _repeat_times_last,
-            std::move(_column_null), std::move(_grouping_columns), std::move(_grouping_list),
-            std::move(_output_tuple_id), _tuple_desc, std::move(_conjunct_ctxs)));
+            std::move(_column_null), std::move(_grouping_columns), std::move(_grouping_list), _output_tuple_id,
+            _tuple_desc, std::move(_conjunct_ctxs)));
     // Create a shared RefCountedRuntimeFilterCollector
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(1, std::move(this->runtime_filter_collector()));
     // Initialize OperatorFactory's fields involving runtime filters.

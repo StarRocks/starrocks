@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/runtime/client_cache.h
 
@@ -93,10 +106,9 @@ private:
     template <class T>
     friend class ClientCache;
     // Private constructor so that only ClientCache can instantiate this class.
-    ClientCacheHelper() {}
+    ClientCacheHelper() = default;
 
-    explicit ClientCacheHelper(int max_cache_size_per_host)
-            : _metrics_enabled(false), _max_cache_size_per_host(max_cache_size_per_host) {}
+    explicit ClientCacheHelper(int max_cache_size_per_host) : _max_cache_size_per_host(max_cache_size_per_host) {}
 
     // Protects all member variables
     // TODO: have more fine-grained locks or use lock-free data structures,
@@ -254,7 +266,7 @@ private:
 
     // Factory method to produce a new ThriftClient<T> for the wrapped cache
     ThriftClientImpl* make_client(const TNetworkAddress& hostport, void** client_key) {
-        Client* client = new Client(hostport.hostname, hostport.port);
+        auto* client = new Client(hostport.hostname, hostport.port);
         *client_key = reinterpret_cast<void*>(client->iface());
         return client;
     }

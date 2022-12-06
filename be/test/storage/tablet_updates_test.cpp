@@ -1,5 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "storage/tablet_updates.h"
 
 #include <gtest/gtest.h>
@@ -31,7 +43,6 @@
 #include "storage/tablet_reader.h"
 #include "storage/union_iterator.h"
 #include "storage/update_manager.h"
-#include "storage/wrapper_field.h"
 #include "testutil/assert.h"
 #include "util/defer_op.h"
 #include "util/path_util.h"
@@ -48,7 +59,8 @@ enum PartialUpdateCloneCase {
 class TabletUpdatesTest : public testing::Test {
 public:
     RowsetSharedPtr create_rowset(const TabletSharedPtr& tablet, const vector<int64_t>& keys,
-                                  vectorized::Column* one_delete = nullptr, bool empty = false) {
+                                  vectorized::Column* one_delete = nullptr, bool empty = false,
+                                  bool has_merge_condition = false) {
         RowsetWriterContext writer_context;
         RowsetId rowset_id = StorageEngine::instance()->next_rowset_id();
         writer_context.rowset_id = rowset_id;
@@ -61,6 +73,9 @@ public:
         writer_context.version.first = 0;
         writer_context.version.second = 0;
         writer_context.segments_overlap = NONOVERLAPPING;
+        if (has_merge_condition) {
+            writer_context.merge_condition = "v2";
+        }
         std::unique_ptr<RowsetWriter> writer;
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
         if (empty) {
@@ -99,7 +114,7 @@ public:
 
     RowsetSharedPtr create_partial_rowset(const TabletSharedPtr& tablet, const vector<int64_t>& keys,
                                           std::vector<int32_t>& column_indexes,
-                                          std::shared_ptr<TabletSchema> partial_schema) {
+                                          const std::shared_ptr<TabletSchema>& partial_schema) {
         // create partial rowset
         RowsetWriterContext writer_context;
         RowsetId rowset_id = StorageEngine::instance()->next_rowset_id();
@@ -123,9 +138,9 @@ public:
             auto chunk = ChunkHelper::new_chunk(schema, keys.size());
             EXPECT_TRUE(2 == chunk->num_columns());
             auto& cols = chunk->columns();
-            for (size_t i = 0; i < keys.size(); i++) {
-                cols[0]->append_datum(vectorized::Datum(keys[i]));
-                cols[1]->append_datum(vectorized::Datum((int16_t)(keys[i] % 100 + 3)));
+            for (long key : keys) {
+                cols[0]->append_datum(vectorized::Datum(key));
+                cols[1]->append_datum(vectorized::Datum((int16_t)(key % 100 + 3)));
             }
             CHECK_OK(writer->flush_chunk(*chunk));
         }
@@ -198,6 +213,38 @@ public:
             k1.column_type.type = TPrimitiveType::BIGINT;
             request.tablet_schema.columns.push_back(k1);
         }
+
+        TColumn k2;
+        k2.column_name = "v1";
+        k2.__set_is_key(false);
+        k2.column_type.type = TPrimitiveType::SMALLINT;
+        request.tablet_schema.columns.push_back(k2);
+
+        TColumn k3;
+        k3.column_name = "v2";
+        k3.__set_is_key(false);
+        k3.column_type.type = TPrimitiveType::INT;
+        request.tablet_schema.columns.push_back(k3);
+        auto st = StorageEngine::instance()->create_tablet(request);
+        CHECK(st.ok()) << st.to_string();
+        return StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id, false);
+    }
+
+    TabletSharedPtr create_tablet_with_sort_key(int64_t tablet_id, int32_t schema_hash) {
+        TCreateTabletReq request;
+        request.tablet_id = tablet_id;
+        request.__set_version(1);
+        request.tablet_schema.schema_hash = schema_hash;
+        request.tablet_schema.short_key_column_count = 1;
+        request.tablet_schema.keys_type = TKeysType::PRIMARY_KEYS;
+        request.tablet_schema.storage_type = TStorageType::COLUMN;
+        request.tablet_schema.sort_key_idxes = {1};
+
+        TColumn k1;
+        k1.column_name = "pk";
+        k1.__set_is_key(true);
+        k1.column_type.type = TPrimitiveType::BIGINT;
+        request.tablet_schema.columns.push_back(k1);
 
         TColumn k2;
         k2.column_name = "v1";
@@ -315,7 +362,7 @@ public:
         RETURN_IF_ERROR(SnapshotManager::instance()->assign_new_rowset_id(&(*snapshot_meta), meta_dir));
 
         std::set<std::string> files;
-        auto st = fs::list_dirs_files(meta_dir, NULL, &files);
+        auto st = fs::list_dirs_files(meta_dir, nullptr, &files);
         CHECK(st.ok()) << st;
         files.erase("meta");
 
@@ -339,7 +386,7 @@ public:
         }
 
         st = dest_tablet->updates()->load_snapshot(*snapshot_meta);
-        dest_tablet->updates()->remove_expired_versions(time(NULL));
+        dest_tablet->updates()->remove_expired_versions(time(nullptr));
         return st;
     }
 
@@ -370,7 +417,7 @@ public:
         CHECK(std::filesystem::create_directories(new_tablet_path));
 
         std::set<std::string> files;
-        CHECK(fs::list_dirs_files(meta_dir, NULL, &files).ok());
+        CHECK(fs::list_dirs_files(meta_dir, nullptr, &files).ok());
         for (const auto& f : files) {
             std::string src = meta_dir + "/" + f;
             std::string dst = new_tablet_path + "/" + f;
@@ -397,7 +444,7 @@ public:
     void test_noncontinous_meta_save_load(bool enable_persistent_index);
     void test_save_meta(bool enable_persistent_index);
     void test_remove_expired_versions(bool enable_persistent_index);
-    void test_apply(bool enable_persistent_index);
+    void test_apply(bool enable_persistent_index, bool has_merge_condition);
     void test_concurrent_write_read_and_gc(bool enable_persistent_index);
     void test_compaction_score_not_enough(bool enable_persistent_index);
     void test_compaction_score_enough_duplicate(bool enable_persistent_index);
@@ -433,13 +480,13 @@ public:
                                                    const std::vector<int64_t>& expect_rowset_versions, bool gc,
                                                    bool expect_error);
 
-    void tablets_prepare(TabletSharedPtr tablet0, TabletSharedPtr tablet1, std::vector<int32_t>& column_indexes,
-                         const std::shared_ptr<TabletSchema>& partial_schema);
+    void tablets_prepare(const TabletSharedPtr& tablet0, const TabletSharedPtr& tablet1,
+                         std::vector<int32_t>& column_indexes, const std::shared_ptr<TabletSchema>& partial_schema);
     void snapshot_prepare(const TabletSharedPtr& tablet, const std::vector<int64_t>& delta_versions,
                           std::string* snapshot_id_path, std::string* snapshot_dir,
                           std::vector<RowsetSharedPtr>* snapshot_rowsets,
                           std::vector<RowsetMetaSharedPtr>* snapshot_rowset_metas,
-                          TabletMetaSharedPtr snapshot_tablet_meta);
+                          const TabletMetaSharedPtr& snapshot_tablet_meta);
     void load_snapshot(const std::string& meta_dir, const TabletSharedPtr& tablet, SegmentFooterPB* footer);
 
 protected:
@@ -472,7 +519,7 @@ static TabletSharedPtr load_same_tablet_from_store(const TabletSharedPtr& tablet
 }
 
 static vectorized::ChunkIteratorPtr create_tablet_iterator(vectorized::TabletReader& reader,
-                                                           vectorized::Schema& schema) {
+                                                           vectorized::VectorizedSchema& schema) {
     vectorized::TabletReaderParams params;
     if (!reader.prepare().ok()) {
         LOG(ERROR) << "reader prepare failed";
@@ -493,10 +540,10 @@ static ssize_t read_and_compare(const vectorized::ChunkIteratorPtr& iter, const 
     auto chunk = ChunkHelper::new_chunk(iter->schema(), 100);
     auto full_chunk = ChunkHelper::new_chunk(iter->schema(), keys.size());
     auto& cols = full_chunk->columns();
-    for (size_t i = 0; i < keys.size(); i++) {
-        cols[0]->append_datum(vectorized::Datum(keys[i]));
-        cols[1]->append_datum(vectorized::Datum((int16_t)(keys[i] % 100 + 1)));
-        cols[2]->append_datum(vectorized::Datum((int32_t)(keys[i] % 1000 + 2)));
+    for (long key : keys) {
+        cols[0]->append_datum(vectorized::Datum(key));
+        cols[1]->append_datum(vectorized::Datum((int16_t)(key % 100 + 1)));
+        cols[2]->append_datum(vectorized::Datum((int32_t)(key % 1000 + 2)));
     }
     size_t count = 0;
     while (true) {
@@ -535,7 +582,7 @@ static ssize_t read_until_eof(const vectorized::ChunkIteratorPtr& iter) {
 }
 
 static ssize_t read_tablet(const TabletSharedPtr& tablet, int64_t version) {
-    vectorized::Schema schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
+    vectorized::VectorizedSchema schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
     vectorized::TabletReader reader(tablet, Version(0, version), schema);
     auto iter = create_tablet_iterator(reader, schema);
     if (iter == nullptr) {
@@ -545,7 +592,7 @@ static ssize_t read_tablet(const TabletSharedPtr& tablet, int64_t version) {
 }
 
 static ssize_t read_tablet_and_compare(const TabletSharedPtr& tablet, int64_t version, const vector<int64_t>& keys) {
-    vectorized::Schema schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
+    vectorized::VectorizedSchema schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
     vectorized::TabletReader reader(tablet, Version(0, version), schema);
     auto iter = create_tablet_iterator(reader, schema);
     if (iter == nullptr) {
@@ -556,7 +603,7 @@ static ssize_t read_tablet_and_compare(const TabletSharedPtr& tablet, int64_t ve
 
 static ssize_t read_tablet_and_compare_schema_changed(const TabletSharedPtr& tablet, int64_t version,
                                                       const vector<int64_t>& keys) {
-    vectorized::Schema schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
+    vectorized::VectorizedSchema schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
     vectorized::TabletReader reader(tablet, Version(0, version), schema);
     auto iter = create_tablet_iterator(reader, schema);
     if (iter == nullptr) {
@@ -564,10 +611,10 @@ static ssize_t read_tablet_and_compare_schema_changed(const TabletSharedPtr& tab
     }
     auto full_chunk = ChunkHelper::new_chunk(iter->schema(), keys.size());
     auto& cols = full_chunk->columns();
-    for (size_t i = 0; i < keys.size(); i++) {
-        cols[0]->append_datum(vectorized::Datum((int64_t)keys[i]));
-        cols[1]->append_datum(vectorized::Datum((int16_t)(keys[i] % 100 + 1)));
-        auto v = std::to_string((int64_t)(keys[i] % 1000 + 2));
+    for (long key : keys) {
+        cols[0]->append_datum(vectorized::Datum((int64_t)key));
+        cols[1]->append_datum(vectorized::Datum((int16_t)(key % 100 + 1)));
+        auto v = std::to_string((int64_t)(key % 1000 + 2));
         cols[2]->append_datum(vectorized::Datum(Slice{v}));
     }
     auto chunk = ChunkHelper::new_chunk(iter->schema(), 100);
@@ -605,7 +652,7 @@ void TabletUpdatesTest::test_writeread(bool enable_persistent_index) {
     auto rs1 = create_rowset(_tablet, keys);
     ASSERT_TRUE(_tablet->rowset_commit(3, rs1).ok());
     ASSERT_EQ(3, _tablet->updates()->max_version());
-    auto rs2 = create_rowset(_tablet, keys, NULL, true);
+    auto rs2 = create_rowset(_tablet, keys, nullptr, true);
     ASSERT_TRUE(_tablet->rowset_commit(4, rs2).ok());
     ASSERT_EQ(4, _tablet->updates()->max_version());
 
@@ -621,6 +668,31 @@ TEST_F(TabletUpdatesTest, writeread) {
 
 TEST_F(TabletUpdatesTest, writeread_with_persistent_index) {
     test_writeread(true);
+}
+
+TEST_F(TabletUpdatesTest, writeread_with_sort_key) {
+    srand(GetCurrentTimeMicros());
+    _tablet = create_tablet_with_sort_key(rand(), rand());
+    // write
+    const int N = 8000;
+    std::vector<int64_t> keys;
+    for (int i = 0; i < N; i++) {
+        keys.push_back(i);
+    }
+    auto rs0 = create_rowset(_tablet, keys);
+    ASSERT_TRUE(_tablet->rowset_commit(2, rs0).ok());
+    ASSERT_EQ(2, _tablet->updates()->max_version());
+    auto rs1 = create_rowset(_tablet, keys);
+    ASSERT_TRUE(_tablet->rowset_commit(3, rs1).ok());
+    ASSERT_EQ(3, _tablet->updates()->max_version());
+    auto rs2 = create_rowset(_tablet, keys, nullptr, true);
+    ASSERT_TRUE(_tablet->rowset_commit(4, rs2).ok());
+    ASSERT_EQ(4, _tablet->updates()->max_version());
+
+    // read
+    ASSERT_EQ(N, read_tablet(_tablet, 4));
+    ASSERT_EQ(N, read_tablet(_tablet, 3));
+    ASSERT_EQ(N, read_tablet(_tablet, 2));
 }
 
 void TabletUpdatesTest::test_writeread_with_delete(bool enable_persistent_index) {
@@ -660,6 +732,36 @@ TEST_F(TabletUpdatesTest, writeread_with_delete) {
 
 TEST_F(TabletUpdatesTest, writeread_with_delete_with_persistent_index) {
     test_writeread_with_delete(true);
+}
+
+TEST_F(TabletUpdatesTest, writeread_with_delete_with_sort_key) {
+    _tablet = create_tablet_with_sort_key(rand(), rand());
+    // write
+    const int N = 8000;
+    std::vector<int64_t> keys;
+    for (int i = 0; i < N; i++) {
+        keys.push_back(i);
+    }
+    // Insert [0, 1, 2 ... N)
+    ASSERT_TRUE(_tablet->rowset_commit(2, create_rowset(_tablet, keys)).ok());
+    ASSERT_EQ(2, _tablet->updates()->max_version());
+
+    // Delete [0, 1, 2 ... N/2)
+    vectorized::Int64Column deletes;
+    deletes.append_numbers(keys.data(), sizeof(int64_t) * keys.size() / 2);
+    ASSERT_TRUE(_tablet->rowset_commit(3, create_rowset(_tablet, {}, &deletes)).ok());
+    ASSERT_EQ(3, _tablet->updates()->max_version());
+    ASSERT_EQ(N / 2, read_tablet(_tablet, 3));
+
+    // Delete [0, 1, 2 ... N) and insert [N, N+1, N+2 ... 2*N)
+    deletes.resize(0);
+    deletes.append_numbers(keys.data(), sizeof(int64_t) * keys.size());
+    for (int i = 0; i < N; i++) {
+        keys[i] = N + i;
+    }
+    ASSERT_TRUE(_tablet->rowset_commit(4, create_rowset(_tablet, keys, &deletes)).ok());
+    ASSERT_EQ(4, _tablet->updates()->max_version());
+    ASSERT_EQ(N, read_tablet(_tablet, 4));
 }
 
 TEST_F(TabletUpdatesTest, writeread_with_overlapping_deletes_only_batches) {
@@ -847,7 +949,7 @@ void TabletUpdatesTest::test_remove_expired_versions(bool enable_persistent_inde
     ASSERT_EQ(0, read_tablet(_tablet, 1));
 
     // Create iterators before remove expired version, but read them after removal.
-    vectorized::Schema schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
+    vectorized::VectorizedSchema schema = ChunkHelper::convert_schema_to_format_v2(_tablet->tablet_schema());
     vectorized::TabletReader reader1(_tablet, Version(0, 1), schema);
     vectorized::TabletReader reader2(_tablet, Version(0, 2), schema);
     vectorized::TabletReader reader3(_tablet, Version(0, 3), schema);
@@ -858,7 +960,7 @@ void TabletUpdatesTest::test_remove_expired_versions(bool enable_persistent_inde
     auto iter_v4 = create_tablet_iterator(reader4, schema);
 
     // Remove all but the last version.
-    _tablet->updates()->remove_expired_versions(time(NULL));
+    _tablet->updates()->remove_expired_versions(time(nullptr));
     ASSERT_EQ(1, _tablet->updates()->version_history_count());
     ASSERT_EQ(4, _tablet->updates()->max_version());
 
@@ -866,9 +968,10 @@ void TabletUpdatesTest::test_remove_expired_versions(bool enable_persistent_inde
     EXPECT_EQ(N, read_until_eof(iter_v4));
     EXPECT_EQ(0, read_until_eof(iter_v1)); // iter_v1 is empty iterator
 
+    // read already opened iterator/reader should succeed
+    EXPECT_EQ(N, read_until_eof(iter_v3));
+    EXPECT_EQ(N, read_until_eof(iter_v2));
     // Read expired versions should fail.
-    EXPECT_EQ(-1, read_until_eof(iter_v3));
-    EXPECT_EQ(-1, read_until_eof(iter_v2));
     EXPECT_EQ(-1, read_tablet(_tablet, 3));
     EXPECT_EQ(-1, read_tablet(_tablet, 2));
     EXPECT_EQ(-1, read_tablet(_tablet, 1));
@@ -891,7 +994,7 @@ TEST_F(TabletUpdatesTest, remove_expired_versions_with_persistent_index) {
 }
 
 // NOLINTNEXTLINE
-void TabletUpdatesTest::test_apply(bool enable_persistent_index) {
+void TabletUpdatesTest::test_apply(bool enable_persistent_index, bool has_merge_condition = false) {
     const int N = 10;
     _tablet = create_tablet(rand(), rand());
     _tablet->set_enable_persistent_index(enable_persistent_index);
@@ -904,7 +1007,7 @@ void TabletUpdatesTest::test_apply(bool enable_persistent_index) {
     std::vector<RowsetSharedPtr> rowsets;
     rowsets.reserve(64);
     for (int i = 0; i < 64; i++) {
-        rowsets.emplace_back(create_rowset(_tablet, keys));
+        rowsets.emplace_back(create_rowset(_tablet, keys, nullptr, false, has_merge_condition));
     }
     auto pool = StorageEngine::instance()->update_manager()->apply_thread_pool();
     for (int i = 0; i < rowsets.size(); i++) {
@@ -939,6 +1042,10 @@ TEST_F(TabletUpdatesTest, apply_with_persistent_index) {
     test_apply(true);
 }
 
+TEST_F(TabletUpdatesTest, apply_with_merge_condition) {
+    test_apply(false, true);
+}
+
 // NOLINTNEXTLINE
 void TabletUpdatesTest::test_concurrent_write_read_and_gc(bool enable_persistent_index) {
     const int N = 2000;
@@ -969,7 +1076,7 @@ void TabletUpdatesTest::test_concurrent_write_read_and_gc(bool enable_persistent
     auto version_gc_thread = [&]() {
         wait_start();
         while (!stopped) {
-            _tablet->updates()->remove_expired_versions(time(NULL));
+            _tablet->updates()->remove_expired_versions(time(nullptr));
             std::this_thread::sleep_for(std::chrono::milliseconds(5));
         }
     };
@@ -999,7 +1106,7 @@ void TabletUpdatesTest::test_concurrent_write_read_and_gc(bool enable_persistent
     }
     std::cout << "version count=" << version.load() << std::endl;
     EXPECT_EQ(N, read_tablet(_tablet, version.load()));
-    _tablet->updates()->remove_expired_versions(time(NULL));
+    _tablet->updates()->remove_expired_versions(time(nullptr));
     EXPECT_EQ(1, _tablet->updates()->version_history_count());
     EXPECT_EQ(version.load(), _tablet->updates()->max_version());
 
@@ -1143,6 +1250,39 @@ TEST_F(TabletUpdatesTest, horizontal_compaction_with_persistent_index) {
     test_horizontal_compaction(true);
 }
 
+TEST_F(TabletUpdatesTest, horizontal_compaction_with_sort_key) {
+    auto orig = config::vertical_compaction_max_columns_per_group;
+    config::vertical_compaction_max_columns_per_group = 5;
+    DeferOp unset_config([&] { config::vertical_compaction_max_columns_per_group = orig; });
+
+    int N = 100;
+    srand(GetCurrentTimeMicros());
+    _tablet = create_tablet_with_sort_key(rand(), rand());
+    std::vector<int64_t> keys;
+    for (int i = 0; i < N; i++) {
+        keys.push_back(i);
+    }
+    ASSERT_TRUE(_tablet->rowset_commit(2, create_rowset(_tablet, keys)).ok());
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    ASSERT_TRUE(_tablet->rowset_commit(3, create_rowset(_tablet, keys)).ok());
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    ASSERT_TRUE(_tablet->rowset_commit(4, create_rowset(_tablet, keys)).ok());
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    ASSERT_EQ(_tablet->updates()->version_history_count(), 4);
+    ASSERT_EQ(N, read_tablet(_tablet, 4));
+    const auto& best_tablet =
+            StorageEngine::instance()->tablet_manager()->find_best_tablet_to_do_update_compaction(_tablet->data_dir());
+    EXPECT_EQ(best_tablet->tablet_id(), _tablet->tablet_id());
+    EXPECT_GT(best_tablet->updates()->get_compaction_score(), 0);
+    ASSERT_TRUE(best_tablet->updates()->compaction(_compaction_mem_tracker.get()).ok());
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+    EXPECT_EQ(100, read_tablet_and_compare(best_tablet, 3, keys));
+    ASSERT_EQ(best_tablet->updates()->num_rowsets(), 1);
+    ASSERT_EQ(best_tablet->updates()->version_history_count(), 5);
+    // the time interval is not enough after last compaction
+    EXPECT_EQ(best_tablet->updates()->get_compaction_score(), -1);
+}
+
 void TabletUpdatesTest::test_vertical_compaction(bool enable_persistent_index) {
     auto orig = config::vertical_compaction_max_columns_per_group;
     config::vertical_compaction_max_columns_per_group = 1;
@@ -1183,6 +1323,39 @@ TEST_F(TabletUpdatesTest, vertical_compaction) {
 
 TEST_F(TabletUpdatesTest, vertical_compaction_with_persistent_index) {
     test_vertical_compaction(true);
+}
+
+TEST_F(TabletUpdatesTest, vertical_compaction_with_sort_key) {
+    auto orig = config::vertical_compaction_max_columns_per_group;
+    config::vertical_compaction_max_columns_per_group = 1;
+    DeferOp unset_config([&] { config::vertical_compaction_max_columns_per_group = orig; });
+
+    int N = 100;
+    srand(GetCurrentTimeMicros());
+    _tablet = create_tablet_with_sort_key(rand(), rand());
+    std::vector<int64_t> keys;
+    for (int i = 0; i < N; i++) {
+        keys.push_back(i);
+    }
+    ASSERT_TRUE(_tablet->rowset_commit(2, create_rowset(_tablet, keys)).ok());
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    ASSERT_TRUE(_tablet->rowset_commit(3, create_rowset(_tablet, keys)).ok());
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    ASSERT_TRUE(_tablet->rowset_commit(4, create_rowset(_tablet, keys)).ok());
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    ASSERT_EQ(_tablet->updates()->version_history_count(), 4);
+    ASSERT_EQ(N, read_tablet(_tablet, 4));
+    const auto& best_tablet =
+            StorageEngine::instance()->tablet_manager()->find_best_tablet_to_do_update_compaction(_tablet->data_dir());
+    EXPECT_EQ(best_tablet->tablet_id(), _tablet->tablet_id());
+    EXPECT_GT(best_tablet->updates()->get_compaction_score(), 0);
+    ASSERT_TRUE(best_tablet->updates()->compaction(_compaction_mem_tracker.get()).ok());
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+    EXPECT_EQ(N, read_tablet_and_compare(best_tablet, 3, keys));
+    ASSERT_EQ(best_tablet->updates()->num_rowsets(), 1);
+    ASSERT_EQ(best_tablet->updates()->version_history_count(), 5);
+    // the time interval is not enough after last compaction
+    EXPECT_EQ(best_tablet->updates()->get_compaction_score(), -1);
 }
 
 void TabletUpdatesTest::test_compaction_with_empty_rowset(bool enable_persistent_index, bool vertical,
@@ -1297,16 +1470,6 @@ void TabletUpdatesTest::test_convert_from(bool enable_persistent_index) {
         auto column_mapping = chunk_changer->get_mutable_column_mapping(i);
         if (column_index >= 0) {
             column_mapping->ref_column = column_index;
-        } else {
-            column_mapping->default_value = WrapperField::create(new_column);
-
-            ASSERT_FALSE(column_mapping->default_value == nullptr) << "init column mapping failed: malloc error";
-
-            if (new_column.is_nullable() && new_column.default_value().length() == 0) {
-                column_mapping->default_value->set_null();
-            } else {
-                column_mapping->default_value->from_string(new_column.default_value());
-            }
         }
     }
     ASSERT_TRUE(tablet_to_schema_change->updates()->convert_from(_tablet, 4, chunk_changer.get()).ok());
@@ -1341,16 +1504,6 @@ void TabletUpdatesTest::test_convert_from_with_pending(bool enable_persistent_in
         auto column_mapping = chunk_changer->get_mutable_column_mapping(i);
         if (column_index >= 0) {
             column_mapping->ref_column = column_index;
-        } else {
-            column_mapping->default_value = WrapperField::create(new_column);
-
-            ASSERT_FALSE(column_mapping->default_value == nullptr) << "init column mapping failed: malloc error";
-
-            if (new_column.is_nullable() && new_column.default_value().length() == 0) {
-                column_mapping->default_value->set_null();
-            } else {
-                column_mapping->default_value->from_string(new_column.default_value());
-            }
         }
     }
     ASSERT_TRUE(tablet_to_schema_change->rowset_commit(3, create_rowset(tablet_to_schema_change, keys3)).ok());
@@ -1416,7 +1569,7 @@ void TabletUpdatesTest::test_load_snapshot_incremental(bool enable_persistent_in
     ASSERT_TRUE(snapshot_meta.ok()) << snapshot_meta.status();
 
     std::set<std::string> files;
-    auto st = fs::list_dirs_files(meta_dir, NULL, &files);
+    auto st = fs::list_dirs_files(meta_dir, nullptr, &files);
     ASSERT_TRUE(st.ok()) << st;
     files.erase("meta");
 
@@ -1490,7 +1643,7 @@ void TabletUpdatesTest::test_load_snapshot_incremental_ignore_already_committed_
     ASSERT_TRUE(snapshot_meta.ok()) << snapshot_meta.status();
 
     std::set<std::string> files;
-    auto st = fs::list_dirs_files(meta_dir, NULL, &files);
+    auto st = fs::list_dirs_files(meta_dir, nullptr, &files);
     ASSERT_TRUE(st.ok()) << st;
     files.erase("meta");
 
@@ -1564,7 +1717,7 @@ void TabletUpdatesTest::test_load_snapshot_incremental_mismatched_tablet_id(bool
     ASSERT_TRUE(snapshot_meta.ok()) << snapshot_meta.status();
 
     std::set<std::string> files;
-    auto st = fs::list_dirs_files(meta_dir, NULL, &files);
+    auto st = fs::list_dirs_files(meta_dir, nullptr, &files);
     ASSERT_TRUE(st.ok()) << st;
     files.erase("meta");
 
@@ -1625,7 +1778,7 @@ void TabletUpdatesTest::test_load_snapshot_incremental_data_file_not_exist(bool 
     ASSERT_TRUE(snapshot_meta.ok()) << snapshot_meta.status();
 
     std::set<std::string> files;
-    auto st = fs::list_dirs_files(meta_dir, NULL, &files);
+    auto st = fs::list_dirs_files(meta_dir, nullptr, &files);
     ASSERT_TRUE(st.ok()) << st;
     files.erase("meta");
 
@@ -1688,7 +1841,7 @@ void TabletUpdatesTest::test_load_snapshot_incremental_incorrect_version(bool en
     ASSERT_TRUE(snapshot_meta.ok()) << snapshot_meta.status();
 
     std::set<std::string> files;
-    auto st = fs::list_dirs_files(meta_dir, NULL, &files);
+    auto st = fs::list_dirs_files(meta_dir, nullptr, &files);
     ASSERT_TRUE(st.ok()) << st;
     files.erase("meta");
 
@@ -1718,7 +1871,7 @@ TEST_F(TabletUpdatesTest, load_snapshot_incremental_incorrect_version_with_persi
     test_load_snapshot_incremental_incorrect_version(true);
 }
 
-void TabletUpdatesTest::tablets_prepare(TabletSharedPtr tablet0, TabletSharedPtr tablet1,
+void TabletUpdatesTest::tablets_prepare(const TabletSharedPtr& tablet0, const TabletSharedPtr& tablet1,
                                         std::vector<int32_t>& column_indexes,
                                         const std::shared_ptr<TabletSchema>& partial_schema) {
     std::vector<int64_t> keys0 = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
@@ -1753,7 +1906,7 @@ void TabletUpdatesTest::snapshot_prepare(const TabletSharedPtr& tablet, const st
                                          std::string* snapshot_id_path, std::string* snapshot_dir,
                                          std::vector<RowsetSharedPtr>* snapshot_rowsets,
                                          std::vector<RowsetMetaSharedPtr>* snapshot_rowset_metas,
-                                         TabletMetaSharedPtr snapshot_tablet_meta) {
+                                         const TabletMetaSharedPtr& snapshot_tablet_meta) {
     std::shared_lock rdlock(tablet->get_header_lock());
     for (int64_t v : delta_versions) {
         auto rowset = tablet->get_inc_rowset_by_version(Version{v, v});
@@ -1788,7 +1941,7 @@ void TabletUpdatesTest::load_snapshot(const std::string& meta_dir, const TabletS
     ASSERT_TRUE(snapshot_meta.ok()) << snapshot_meta.status();
 
     std::set<std::string> files;
-    ASSERT_TRUE(fs::list_dirs_files(meta_dir, NULL, &files).ok());
+    ASSERT_TRUE(fs::list_dirs_files(meta_dir, nullptr, &files).ok());
     files.erase("meta");
 
     for (const auto& f : files) {
@@ -2095,7 +2248,7 @@ void TabletUpdatesTest::test_load_snapshot_full_file_not_exist(bool enable_persi
     ASSERT_TRUE(snapshot_meta.ok()) << snapshot_meta.status();
 
     std::set<std::string> files;
-    auto st = fs::list_dirs_files(meta_dir, NULL, &files);
+    auto st = fs::list_dirs_files(meta_dir, nullptr, &files);
     ASSERT_TRUE(st.ok()) << st;
     files.erase("meta");
 
@@ -2165,7 +2318,7 @@ void TabletUpdatesTest::test_load_snapshot_full_mismatched_tablet_id(bool enable
     ASSERT_TRUE(snapshot_meta.ok()) << snapshot_meta.status();
 
     std::set<std::string> files;
-    auto st = fs::list_dirs_files(meta_dir, NULL, &files);
+    auto st = fs::list_dirs_files(meta_dir, nullptr, &files);
     ASSERT_TRUE(st.ok()) << st;
     files.erase("meta");
 
@@ -2563,7 +2716,7 @@ void TabletUpdatesTest::test_load_snapshot_primary(int64_t max_version, const st
     ASSERT_TRUE(snapshot_meta.ok()) << snapshot_meta.status();
 
     std::set<std::string> files;
-    auto st = fs::list_dirs_files(meta_dir, NULL, &files);
+    auto st = fs::list_dirs_files(meta_dir, nullptr, &files);
     ASSERT_TRUE(st.ok()) << st;
     files.erase("meta");
 

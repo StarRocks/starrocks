@@ -1,5 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "http/action/runtime_filter_cache_action.h"
 
 #include <rapidjson/document.h>
@@ -50,7 +62,7 @@ void RuntimeFilterCacheAction::handle(HttpRequest* req) {
                       strings::Substitute("Not support $0 method: '$1'", to_method_desc(req->method()), req->uri()));
     }
 }
-void RuntimeFilterCacheAction::_handle(HttpRequest* req, std::function<void(rapidjson::Document&)> func) {
+void RuntimeFilterCacheAction::_handle(HttpRequest* req, const std::function<void(rapidjson::Document&)>& func) {
     rapidjson::Document root;
     root.SetObject();
     func(root);
@@ -78,13 +90,13 @@ void RuntimeFilterCacheAction::_handle_trace(HttpRequest* req) {
         auto& allocator = root.GetAllocator();
         rapidjson::Document traces_obj;
         traces_obj.SetArray();
-        for (auto it = events.begin(); it != events.end(); ++it) {
+        for (auto& event : events) {
             rapidjson::Document query_obj;
             query_obj.SetObject();
-            query_obj.AddMember("query_id", rapidjson::Value(it->first.c_str(), it->first.size()), allocator);
+            query_obj.AddMember("query_id", rapidjson::Value(event.first.c_str(), event.first.size()), allocator);
             rapidjson::Document query_events;
             query_events.SetArray();
-            for (auto& s : it->second) {
+            for (auto& s : event.second) {
                 query_events.PushBack(rapidjson::Value(s.c_str(), s.size()), allocator);
             }
             query_obj.AddMember("events", query_events, allocator);

@@ -129,7 +129,7 @@ OutPut Exchange Id: 12
 |  * c_acctbal-->[-999.99, 9999.99, 0.0, 8.0, 1086564.0] ESTIMATE
 |
 10:NESTLOOP JOIN
-|  join op: CROSS JOIN
+|  join op: INNER JOIN
 |  other join predicates: cast([6: c_acctbal, DECIMAL64(15,2), true] as DECIMAL128(38,8)) > [17: avg, DECIMAL128(38,8), true]
 |  cardinality: 3750000
 |  column statistics:

@@ -4,17 +4,17 @@
 
 namespace starrocks {
 
-template <FieldType Type>
+template <LogicalType Type>
 Status BinaryPlainPageDecoder<Type>::next_batch(size_t* count, vectorized::Column* dst) {
     vectorized::SparseRange read_range;
-    size_t begin = current_index();
+    uint32_t begin = current_index();
     read_range.add(vectorized::Range(begin, begin + *count));
     RETURN_IF_ERROR(next_batch(read_range, dst));
     *count = current_index() - begin;
     return Status::OK();
 }
 
-template <FieldType Type>
+template <LogicalType Type>
 Status BinaryPlainPageDecoder<Type>::next_batch(const vectorized::SparseRange& range, vectorized::Column* dst) {
     DCHECK(_parsed);
     if (PREDICT_FALSE(_cur_idx >= _num_elems)) {
@@ -25,7 +25,7 @@ Status BinaryPlainPageDecoder<Type>::next_batch(const vectorized::SparseRange& r
     std::vector<Slice> strs;
     strs.reserve(to_read);
     vectorized::SparseRangeIterator iter = range.new_iterator();
-    if constexpr (Type == OLAP_FIELD_TYPE_CHAR) {
+    if constexpr (Type == TYPE_CHAR) {
         while (to_read > 0) {
             _cur_idx = iter.begin();
             vectorized::Range r = iter.next(to_read);
@@ -61,11 +61,12 @@ Status BinaryPlainPageDecoder<Type>::next_batch(const vectorized::SparseRange& r
     return Status::InvalidArgument("Column::append_strings() not supported");
 }
 
-template class BinaryPlainPageDecoder<OLAP_FIELD_TYPE_CHAR>;
-template class BinaryPlainPageDecoder<OLAP_FIELD_TYPE_VARCHAR>;
-template class BinaryPlainPageDecoder<OLAP_FIELD_TYPE_HLL>;
-template class BinaryPlainPageDecoder<OLAP_FIELD_TYPE_OBJECT>;
-template class BinaryPlainPageDecoder<OLAP_FIELD_TYPE_PERCENTILE>;
-template class BinaryPlainPageDecoder<OLAP_FIELD_TYPE_JSON>;
+template class BinaryPlainPageDecoder<TYPE_CHAR>;
+template class BinaryPlainPageDecoder<TYPE_VARCHAR>;
+template class BinaryPlainPageDecoder<TYPE_HLL>;
+template class BinaryPlainPageDecoder<TYPE_OBJECT>;
+template class BinaryPlainPageDecoder<TYPE_PERCENTILE>;
+template class BinaryPlainPageDecoder<TYPE_JSON>;
+template class BinaryPlainPageDecoder<TYPE_VARBINARY>;
 
 } // namespace starrocks

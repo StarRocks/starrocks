@@ -3,6 +3,7 @@
 package com.starrocks.sql.common;
 
 import com.google.common.base.Joiner;
+import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
@@ -11,8 +12,8 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.AST2SQL;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CTERelation;
@@ -23,7 +24,6 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.parser.SqlParser;
-import org.spark_project.guava.collect.Maps;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -96,7 +96,7 @@ public class SqlWithIdUtils {
         return SqlParser.parse(sql, context.getSessionVariable()).get(0);
     }
 
-    private static class SqlEncoderVisitor extends AST2SQL.SQLBuilder {
+    private static class SqlEncoderVisitor extends AstToStringBuilder.AST2StringBuilderVisitor {
 
         private final Map<TableName, Table> tableMap;
         Map<String, Database> databaseMap;
@@ -169,7 +169,7 @@ public class SqlWithIdUtils {
 
             if (relation.isResolvedInFromClause()) {
                 if (relation.getAlias() != null) {
-                    sqlBuilder.append(" AS ").append(relation.getAlias());
+                    sqlBuilder.append(" AS ").append(relation.getAlias().getTbl());
                 }
                 return sqlBuilder.toString();
             }
@@ -190,7 +190,7 @@ public class SqlWithIdUtils {
             sqlBuilder.append(getTableId(node.getName()));
             if (node.getAlias() != null) {
                 sqlBuilder.append(" AS ");
-                sqlBuilder.append("`").append(node.getAlias()).append("`");
+                sqlBuilder.append("`").append(node.getAlias().getTbl()).append("`");
             }
             return sqlBuilder.toString();
         }
@@ -201,7 +201,7 @@ public class SqlWithIdUtils {
             sqlBuilder.append(getTableId(node.getName()));
             if (node.getAlias() != null) {
                 sqlBuilder.append(" AS ");
-                sqlBuilder.append("`").append(node.getAlias()).append("`");
+                sqlBuilder.append("`").append(node.getAlias().getTbl()).append("`");
             }
             return sqlBuilder.toString();
         }

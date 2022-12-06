@@ -18,12 +18,16 @@ public abstract class ScalarOperatorVisitor<R, C> {
         return visit(variable, context);
     }
 
+    public R visitSubfield(SubfieldOperator subfieldOperator, C context) {
+        return visit(subfieldOperator, context);
+    }
+
     public R visitArray(ArrayOperator array, C context) {
         return visit(array, context);
     }
 
-    public R visitArrayElement(ArrayElementOperator array, C context) {
-        return visit(array, context);
+    public R visitCollectionElement(CollectionElementOperator collectionElementOp, C context) {
+        return visit(collectionElementOp, context);
     }
 
     public R visitArraySlice(ArraySliceOperator array, C context) {

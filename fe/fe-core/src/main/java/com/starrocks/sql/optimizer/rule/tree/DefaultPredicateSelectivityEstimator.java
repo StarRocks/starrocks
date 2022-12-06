@@ -80,7 +80,7 @@ public class DefaultPredicateSelectivityEstimator {
             } else if (binaryType.equals(BinaryPredicateOperator.BinaryType.NE)) {
                 Optional<Double> op = computeEquals(BinaryPredicateOperator.BinaryType.EQ,
                         leftChild, rightChild, leftChildStatistic, rightChildStatistic);
-                return op.isPresent() ? Optional.of(1 - op.get()) : Optional.empty();
+                return op.map(aDouble -> 1 - aDouble);
             } else if (binaryType.equals(BinaryPredicateOperator.BinaryType.LT)) {
                 return computeLessOrGreat(binaryType, leftChild, rightChild, leftChildStatistic, rightChildStatistic);
             } else if (binaryType.equals(BinaryPredicateOperator.BinaryType.LE)) {
@@ -102,7 +102,7 @@ public class DefaultPredicateSelectivityEstimator {
                 Optional<Double> leftSelectivity = predicate.getChild(0).accept(this, null);
                 Optional<Double> rightSelectivity = predicate.getChild(1).accept(this, null);
                 if (leftSelectivity.isPresent() && rightSelectivity.isPresent()) {
-                    Optional.of(leftSelectivity.get() * rightSelectivity.get());
+                    return Optional.of(leftSelectivity.get() * rightSelectivity.get());
                 }
                 return Optional.empty();
             } else if (predicate.isOr()) {

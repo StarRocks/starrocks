@@ -1,5 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "exec/vectorized/assert_num_rows_node.h"
 
 #include "exec/pipeline/assert_num_rows_operator.h"
@@ -113,7 +125,7 @@ Status AssertNumRowsNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* e
 
         if (!assert_res) {
             auto to_string_lamba = [](TAssertion::type assertion) {
-                std::map<int, const char*>::const_iterator it = _TAssertion_VALUES_TO_NAMES.find(assertion);
+                auto it = _TAssertion_VALUES_TO_NAMES.find(assertion);
 
                 if (it == _TAggregationOp_VALUES_TO_NAMES.end()) {
                     return "NULL";
@@ -156,7 +168,7 @@ pipeline::OpFactories AssertNumRowsNode::decompose_to_pipeline(pipeline::Pipelin
             runtime_state(), operator_before_assert_num_rows_source);
 
     auto source_factory = std::make_shared<AssertNumRowsOperatorFactory>(
-            context->next_operator_id(), id(), _desired_num_rows, _subquery_string, std::move(_assertion));
+            context->next_operator_id(), id(), _desired_num_rows, _subquery_string, _assertion);
     operator_before_assert_num_rows_source.emplace_back(std::move(source_factory));
 
     // Create a shared RefCountedRuntimeFilterCollector

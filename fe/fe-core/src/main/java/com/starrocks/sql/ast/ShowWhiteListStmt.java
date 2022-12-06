@@ -7,6 +7,8 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
 
 //SHOW WHITELIST;
+// this statement is unmaintained since 2.0.
+@Deprecated
 public class ShowWhiteListStmt extends ShowStmt {
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()

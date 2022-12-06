@@ -150,7 +150,7 @@ public class SystemAction extends WebBaseAction {
                     buffer.append("URL");
                     buffer.append("</a>");
                 } else {
-                    buffer.append(str.replaceAll("\\n", "<br/>"));
+                    buffer.append(str != null ? str.replaceAll("\\n", "<br/>") : "");
                 }
                 buffer.append("</td>");
                 ++columnIndex;

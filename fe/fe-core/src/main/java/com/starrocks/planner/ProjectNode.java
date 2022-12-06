@@ -180,6 +180,8 @@ public class ProjectNode extends PlanNode {
     @Override
     protected void toNormalForm(TNormalPlanNode planNode, FragmentNormalizer normalizer) {
         TNormalProjectNode projectNode = new TNormalProjectNode();
+        normalizer.addSlotsUseAggColumns(commonSlotMap);
+        normalizer.addSlotsUseAggColumns(slotMap);
         Pair<List<Integer>, List<ByteBuffer>> cseSlotIdsAndExprs = normalizer.normalizeSlotIdsAndExprs(commonSlotMap);
         projectNode.setCse_slot_ids(cseSlotIdsAndExprs.first);
         projectNode.setCse_exprs(cseSlotIdsAndExprs.second);

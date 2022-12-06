@@ -43,12 +43,15 @@ import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateRoleStmt;
+import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.ast.DropDbStmt;
+import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.ShowResourceGroupStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -145,6 +148,28 @@ public class StarRocksAssert {
         return this;
     }
 
+
+    // When you want use this func, you need write mock method 'getAllKafkaPartitions' before call this func.
+    // example:
+    // new MockUp<KafkaUtil>() {
+    //     @Mock
+    //     public List<Integer> getAllKafkaPartitions(String brokerList, String topic,
+    //                                                ImmutableMap<String, String> properties) {
+    //         return Lists.newArrayList(0, 1, 2);
+    //     }
+    // };
+    public StarRocksAssert withRoutineLoad(String sql) throws Exception {
+        CreateRoutineLoadStmt createRoutineLoadStmt = (CreateRoutineLoadStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        GlobalStateMgr.getCurrentState().getRoutineLoadManager().createRoutineLoadJob(createRoutineLoadStmt);
+        return this;
+    }
+
+    public StarRocksAssert withLoad(String sql) throws Exception {
+        LoadStmt loadStmt = (LoadStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        GlobalStateMgr.getCurrentState().getLoadManager().createLoadJobFromStmt(loadStmt, ctx);
+        return this;
+    }
+
     public StarRocksAssert withTable(String sql) throws Exception {
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
@@ -178,10 +203,26 @@ public class StarRocksAssert {
         return this;
     }
 
-    // Add materialized view to the schema
+    public StarRocksAssert dropMaterializedView(String materializedViewName) throws Exception {
+        DropMaterializedViewStmt dropMaterializedViewStmt = (DropMaterializedViewStmt) UtFrameUtils.
+                parseStmtWithNewParser("drop materialized view " + materializedViewName + ";", ctx);
+        GlobalStateMgr.getCurrentState().dropMaterializedView(dropMaterializedViewStmt);
+        return this;
+    }
+
+    // Add materialized view to the schema (use cup)
     public StarRocksAssert withMaterializedView(String sql) throws Exception {
         CreateMaterializedViewStmt createMaterializedViewStmt =
                 (CreateMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        GlobalStateMgr.getCurrentState().createMaterializedView(createMaterializedViewStmt);
+        checkAlterJob();
+        return this;
+    }
+
+    // Add materialized view to the schema (use antlr)
+    public StarRocksAssert withMaterializedStatementView(String sql) throws Exception {
+        CreateMaterializedViewStatement createMaterializedViewStmt =
+                (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         GlobalStateMgr.getCurrentState().createMaterializedView(createMaterializedViewStmt);
         checkAlterJob();
         return this;

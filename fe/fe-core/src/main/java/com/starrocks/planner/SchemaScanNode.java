@@ -139,4 +139,9 @@ public class SchemaScanNode extends ScanNode {
         return 1;
     }
 
+    @Override
+    public boolean canUsePipeLine() {
+        return true;
+    }
+
 }

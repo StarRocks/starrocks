@@ -1,5 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "exprs/vectorized/binary_predicate.h"
 
 #include "column/column_builder.h"
@@ -12,7 +24,7 @@
 
 namespace starrocks::vectorized {
 
-template <PrimitiveType ptype>
+template <LogicalType ptype>
 struct PredicateCmpType {
     using CmpType = RunTimeCppType<ptype>;
 };
@@ -22,18 +34,18 @@ struct PredicateCmpType<TYPE_JSON> {
     using CmpType = JsonValue;
 };
 
-// The evaluator for PrimitiveType
-template <PrimitiveType ptype>
+// The evaluator for LogicalType
+template <LogicalType ptype>
 using EvalEq = std::equal_to<typename PredicateCmpType<ptype>::CmpType>;
-template <PrimitiveType ptype>
+template <LogicalType ptype>
 using EvalNe = std::not_equal_to<typename PredicateCmpType<ptype>::CmpType>;
-template <PrimitiveType ptype>
+template <LogicalType ptype>
 using EvalLt = std::less<typename PredicateCmpType<ptype>::CmpType>;
-template <PrimitiveType ptype>
+template <LogicalType ptype>
 using EvalLe = std::less_equal<typename PredicateCmpType<ptype>::CmpType>;
-template <PrimitiveType ptype>
+template <LogicalType ptype>
 using EvalGt = std::greater<typename PredicateCmpType<ptype>::CmpType>;
-template <PrimitiveType ptype>
+template <LogicalType ptype>
 using EvalGe = std::greater_equal<typename PredicateCmpType<ptype>::CmpType>;
 
 // A wrapper for evaluator, to fit in the Expression framework
@@ -45,7 +57,7 @@ struct BinaryPredFunc {
     }
 };
 
-template <PrimitiveType Type, typename OP>
+template <LogicalType Type, typename OP>
 class VectorizedBinaryPredicate final : public Predicate {
 public:
     explicit VectorizedBinaryPredicate(const TExprNode& node) : Predicate(node) {}
@@ -53,14 +65,14 @@ public:
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new VectorizedBinaryPredicate(*this)); }
 
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
-        auto l = _children[0]->evaluate(context, ptr);
-        auto r = _children[1]->evaluate(context, ptr);
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {
+        ASSIGN_OR_RETURN(auto l, _children[0]->evaluate_checked(context, ptr));
+        ASSIGN_OR_RETURN(auto r, _children[1]->evaluate_checked(context, ptr));
         return VectorizedStrictBinaryFunction<OP>::template evaluate<Type, TYPE_BOOLEAN>(l, r);
     }
 };
 
-template <PrimitiveType Type, typename OP>
+template <LogicalType Type, typename OP>
 class VectorizedNullSafeEqPredicate final : public Predicate {
 public:
     explicit VectorizedNullSafeEqPredicate(const TExprNode& node) : Predicate(node) {}
@@ -72,9 +84,9 @@ public:
     // if v1 null and v2 not null = false
     // if v1 not null and v2 null = false
     // if v1 not null and v2 not null = v1 OP v2
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
-        auto l = _children[0]->evaluate(context, ptr);
-        auto r = _children[1]->evaluate(context, ptr);
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {
+        ASSIGN_OR_RETURN(auto l, _children[0]->evaluate_checked(context, ptr));
+        ASSIGN_OR_RETURN(auto r, _children[1]->evaluate_checked(context, ptr));
 
         ColumnViewer<Type> v1(l);
         ColumnViewer<Type> v2(r);
@@ -104,7 +116,7 @@ public:
 };
 
 struct BinaryPredicateBuilder {
-    template <PrimitiveType data_type>
+    template <LogicalType data_type>
     Expr* operator()(const TExprNode& node) {
         switch (node.opcode) {
         case TExprOpcode::EQ:
@@ -129,7 +141,7 @@ struct BinaryPredicateBuilder {
 };
 
 Expr* VectorizedBinaryPredicateFactory::from_thrift(const TExprNode& node) {
-    PrimitiveType type = thrift_to_type(node.child_type);
+    LogicalType type = thrift_to_type(node.child_type);
 
     return type_dispatch_predicate<Expr*>(type, true, BinaryPredicateBuilder(), node);
 }

@@ -23,6 +23,11 @@ public class PhysicalFilterOperator extends PhysicalOperator {
     }
 
     @Override
+    public int hashCode() {
+        return System.identityHashCode(this);
+    }
+
+    @Override
     public boolean equals(Object o) {
         return this == o;
     }

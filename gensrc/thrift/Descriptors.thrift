@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/gensrc/thrift/Descriptors.thrift
 
@@ -114,6 +127,7 @@ enum TSchemaTableType {
     SCH_VIEWS,
     SCH_TASKS,
     SCH_TASK_RUNS,
+    SCH_VERBOSE_SESSION_VARIABLES,
     SCH_INVALID
 }
 
@@ -180,6 +194,8 @@ struct TOlapTablePartition {
 
     6: optional list<Exprs.TExprNode> start_keys
     7: optional list<Exprs.TExprNode> end_keys
+
+    8: optional list<list<Exprs.TExprNode>> in_keys
 }
 
 struct TOlapTablePartitionParam {
@@ -311,6 +327,14 @@ struct THdfsTable {
     5: optional list<string> partition_prefixes
 }
 
+struct TFileTable {
+    // File table base dir
+    1: optional string location
+
+    // Schema columns
+    2: optional list<TColumn> columns
+}
+
 struct TIcebergTable {
     // table location
     1: optional string location
@@ -354,6 +378,23 @@ struct THudiTable {
     11: optional bool is_mor_table
 }
 
+struct TDeltaLakeTable {
+    // table location
+    1: optional string location
+
+    // Schema columns, except partition columns
+    2: optional list<TColumn> columns
+
+    // Partition columns
+    3: optional list<TColumn> partition_columns
+
+    // Map from partition id to partition metadata.
+    4: optional map<i64, THdfsPartition> partitions
+
+    // The prefixes of locations of partitions in this table
+    5: optional list<string> partition_prefixes
+}
+
 struct TJDBCTable {
     1: optional string jdbc_driver_name
     2: optional string jdbc_driver_url
@@ -392,6 +433,12 @@ struct TTableDescriptor {
 
   // Hudi Table schema
   32: optional THudiTable hudiTable
+
+  // Delta Lake schema
+  33: optional TDeltaLakeTable deltaLakeTable
+
+  // File Table
+  34: optional TFileTable fileTable
 }
 
 struct TDescriptorTable {
@@ -401,4 +448,31 @@ struct TDescriptorTable {
   // all table descriptors referenced by tupleDescriptors
   3: optional list<TTableDescriptor> tableDescriptors;
   4: optional bool is_cached;
+}
+
+// Describe route info of a Olap Table
+struct TOlapTableRouteInfo {
+  1: optional TOlapTableSchemaParam schema
+  2: optional TOlapTablePartitionParam partition
+  3: optional TOlapTableLocationParam location
+  5: optional i32 num_replicas
+  6: optional string db_name
+  7: optional string table_name
+  8: optional TNodesInfo nodes_info
+  9: optional Types.TKeysType keys_type
+}
+
+enum TIMTType {
+  OLAP_TABLE,
+  ROWSTORE_TABLE, // Not implemented
+}
+
+struct TIMTDescriptor {
+  1: optional TIMTType imt_type
+  2: optional TOlapTableRouteInfo olap_table
+  3: optional bool need_maintain // Not implemented
+
+  // For maintained IMT, some extra information are necessary
+  11: optional Types.TUniqueId load_id
+  12: optional i64 txn_id
 }

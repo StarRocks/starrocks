@@ -7,6 +7,8 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.analysis.UserIdentity;
+import com.starrocks.catalog.AggregateType;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.Partition;
@@ -28,6 +30,7 @@ import org.apache.logging.log4j.Logger;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -41,18 +44,13 @@ public class StatisticUtils {
             .add("starrocks_monitor")
             .add("information_schema").build();
 
+
     public static ConnectContext buildConnectContext() {
         ConnectContext context = new ConnectContext();
         // Note: statistics query does not register query id to QeProcessorImpl::coordinatorMap,
         // but QeProcessorImpl::reportExecStatus will check query id,
         // So we must disable report query status from BE to FE
-        context.getSessionVariable().setReportSuccess(false);
-        if (null != ConnectContext.get()) {
-            // from current session, may execute analyze stmt
-            context.getSessionVariable().setStatisticCollectParallelism(
-                    ConnectContext.get().getSessionVariable().getStatisticCollectParallelism());
-        }
-
+        context.getSessionVariable().setEnableProfile(false);
         context.getSessionVariable().setParallelExecInstanceNum(1);
         context.getSessionVariable().setQueryTimeoutS((int) Config.statistic_collect_query_timeout);
         context.getSessionVariable().setEnablePipelineEngine(true);
@@ -62,8 +60,8 @@ public class StatisticUtils {
         context.setQualifiedUser(UserIdentity.ROOT.getQualifiedUser());
         context.setQueryId(UUIDUtil.genUUID());
         context.setExecutionId(UUIDUtil.toTUniqueId(context.getQueryId()));
-        context.setThreadLocalInfo();
         context.setStartTime();
+
         return context;
     }
 
@@ -235,5 +233,21 @@ public class StatisticUtils {
                     type.toSql(), statistic, e.getMessage()));
             return Optional.empty();
         }
+    }
+
+    // Get all the columns in the table that can be collected.
+    // The list will only contain aggregated and non-aggregated columns of the "replace" type.
+    // This is because in aggregate type tables, metric columns generally do not participate in predicate.
+    // Collecting these columns is not meaningful but time-consuming, so we exclude them.
+    public static List<String> getCollectibleColumns(Table table) {
+        List<String> columns = new ArrayList<>();
+        for (Column column : table.getBaseSchema()) {
+            if (!column.isAggregated()) {
+                columns.add(column.getName());
+            } else if (column.getAggregationType().equals(AggregateType.REPLACE)) {
+                columns.add(column.getName());
+            }
+        }
+        return columns;
     }
 }

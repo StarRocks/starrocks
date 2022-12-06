@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/gensrc/thrift/Types.thrift
 
@@ -54,7 +67,8 @@ enum TStorageMedium {
 
 enum TVarType {
     SESSION,
-    GLOBAL
+    GLOBAL,
+    VERBOSE
 }
 
 enum TPrimitiveType {
@@ -84,7 +98,8 @@ enum TPrimitiveType {
   DECIMAL64,
   DECIMAL128,
   JSON,
-  FUNCTION
+  FUNCTION,
+  VARBINARY
 }
 
 enum TTypeNodeType {
@@ -108,7 +123,7 @@ struct TScalarType {
 // Represents a field in a STRUCT type.
 // TODO: Model column stats for struct fields.
 struct TStructField {
-    1: required string name
+    1: optional string name
     2: optional string comment
 }
 
@@ -120,6 +135,9 @@ struct TTypeNode {
 
     // only used for structs; has struct_fields.size() corresponding child types
     3: optional list<TStructField> struct_fields
+
+    // Marking which subfield will be used, this value will be set in FE. Used for MapType and StructType.
+    4: optional list<bool> selected_fields;
 }
 
 // A flattened representation of a tree of column types obtained by depth-first
@@ -357,9 +375,11 @@ enum TTableType {
     HDFS_TABLE,
     ICEBERG_TABLE,
     HUDI_TABLE,
+    DELTALAKE_TABLE,
     JDBC_TABLE,
     VIEW = 20,
-    MATERIALIZED_VIEW
+    MATERIALIZED_VIEW,
+    FILE_TABLE
 }
 
 enum TKeysType {
@@ -403,6 +423,11 @@ struct TTabletCommitInfo {
     2: required i64 backendId
     3: optional list<string> invalid_dict_cache_columns
     4: optional list<string> valid_dict_cache_columns
+}
+
+struct TTabletFailInfo {
+    1: optional i64 tabletId
+    2: optional i64 backendId
 }
 
 enum TLoadType {

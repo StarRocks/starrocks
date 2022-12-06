@@ -126,8 +126,8 @@ public class DatabaseTest {
         Assert.assertEquals(1, db.getTables().size());
         Assert.assertEquals(table, db.getTables().get(0));
 
-        Assert.assertEquals(1, db.getTableNamesWithLock().size());
-        for (String tableFamilyGroupName : db.getTableNamesWithLock()) {
+        Assert.assertEquals(1, db.getTableNamesViewWithLock().size());
+        for (String tableFamilyGroupName : db.getTableNamesViewWithLock()) {
             Assert.assertEquals(table.getName(), tableFamilyGroupName);
         }
 

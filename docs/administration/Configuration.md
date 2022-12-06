@@ -1,6 +1,6 @@
 # Parameter configuration
 
-This topic describes how to configure parameters for the FE, BE, broker, and system. After the service is started, you can also adjust the configuration parameters to better suit your business requirements.
+This topic describes FE, BE, Broker, and system parameters. It also provides suggestions on how to configure and tune these parameters.
 
 ## FE configuration items
 
@@ -30,7 +30,7 @@ This topic describes how to configure parameters for the FE, BE, broker, and sys
 |edit_log_roll_num|50000| Split size of image log |
 |meta_delay_toleration_second|300| Maximum metadata lag time tolerated by non-leader nodes |
 |master_sync_policy|SYNC| Swipe method for leader’s log, SYNC by default |
-|replica_sync_policy|SYNC| Swipe method for follower’s log,  SYNC by default |
+|replica_sync_policy|SYNC| Swipe method for follower’s log, SYNC by default |
 |replica_ack_policy|SIMPLE_MAJORITY| The form in which logs are considered valid. The default is for the majority to return a confirmation message, which is considered to be in effect |
 |bdbje_heartbeat_timeout_second|30|The interval for BDBJE heartbeat timeout|
 |bdbje_lock_timeout_second|1| The interval for BDBJE lock timeout |
@@ -111,236 +111,425 @@ This topic describes how to configure parameters for the FE, BE, broker, and sys
 |statistic_collect_concurrency|3|The maximum number of manual collection tasks that can run in parallel. The value defaults to 3, which means you can run a maximum of three manual collections tasks in parallel. If the value is exceeded, incoming tasks will be in the PENDING state, waiting to be scheduled. You can only modify this parameter in the **fe.conf** file. You must restart the FE for the modification to take effect.|
 |max_routine_load_job_num|100| maximum number of routine load jobs |
 |max_routine_load_task_concurrent_num|5| Maximum number of concurrent execution tasks per routine load job |
-|max_routine_load_task_num_per_be|5| Maximum number of concurrent  routine load tasks per BE, which needs to be less than or equal to the number specified in the configuration |
+|max_routine_load_task_num_per_be|5| Maximum number of concurrent routine load tasks per BE, which needs to be less than or equal to the number specified in the configuration |
 |max_routine_load_batch_size|524288000| The maximum amount of data to import per routine load task, default by 500M |
 |routine_load_task_consume_second|3|Maximum time to consume data per routine load task, default by 3s|
-|routine_load_task_timeout_second|15|Timeout for  routine load task, default by 15s|
+|routine_load_task_timeout_second|15|Timeout for routine load task, default by 15s|
 |enable_strict_storage_medium_check|TRUE|Whether the FE checks available storage space.|
 |storage_cooldown_second|-1|The delay of cooldown from HDD storage to SSD storage. Unit: seconds. The default value indicates to disable the auto-cooldown.|
 
 ## BE configuration items
 
-|Configuration item|Default|Role|
-|---|---|---|
-|be_port|9060|Port of thrift server on BE, used to receive requests from FE|
-|brpc_port|8060|Port of BRPC to view some network statistics of BRPC|
-|brpc_num_threads|-1|The number of threads of BRPC, -1 means the same as the number of CPU cores|
-|priority_networks|empty string|Specify BE IP address in the form of CIDR 10.10.10.0/24 for machines with multiple IPs|
-|heartbeat_service_port|9050|The heartbeat service port (thrift) where users receive heartbeats from FE|
-|heartbeat_service_thread_count|1|The number of heartbeat threads|
-|create_tablet_worker_count|3|The number of threads creating a tablet|
-|drop_tablet_worker_count|3| The number of threads deleting a tablet |
-|push_worker_count_normal_priority|3| The number of threads importing and processing NORMAL priority tasks |
-|push_worker_count_high_priority|3|The number of threads importing and processing HIGH priority tasks|
-|publish_version_worker_count|2|The number of threads taking effect|
-|clear_transaction_task_worker_count|1|The number of threads cleaning up transactions|
-|alter_tablet_worker_count|3|The number of threads processing schema change|
-|clone_worker_count|3|The number of threads cloning|
-|storage_medium_migrate_count|1|Then number of threads migrating SATA to SSD|
-|check_consistency_worker_count|1|Calculate checksum for tablet (checksum) |
-|report_task_interval_seconds|10|The interval of reporting individual tasks, including table creation, table deletion, import, and schema change |
-|report_disk_state_interval_seconds|60| The interval of reporting the state of each disk, the amount of data on it, etc. |
-|report_tablet_interval_seconds|60| The interval of reporting the state of each tablet. Report the latest version of each tablet |
-|alter_tablet_timeout_seconds|86400|Timeout of schema change |
-|sys_log_dir|${STARROCKS_HOME}/log| The directory where logs, including INFO, WARNING, ERROR, FATAL, etc. are stored |
-|user_function_dir|${STARROKCS_HOME}/lib/udf| The directory where UDF programs are stored |
-|sys_log_level|INFO| log level，INFO < WARNING < ERROR < FATAL|
-|sys_log_roll_mode|SIZE-MB-1024| The size of the log split, per GB |
-|sys_log_roll_num|10| The number of logs to keep |
-|sys_log_verbose_modules|*|Modules for log printing, write olap to print only the logs that are under olap modules|
-|sys_log_verbose_level|10|The level of the log display, used to control log output starting with VLOG in the code|
-|log_buffer_level|empty string|Policy for log flushing. The default is to keep it in memory|
-|num_threads_per_core|3|Number of threads started per CPU core|
-|compress_rowbatches|true|Whether to compress RowBatch (which supports data transfer between query layers) for RPC communication between BEs|
-|serialize_batch|false| Whether to serialize batches for RPC communication between BEss|
-|status_report_interval|5|Interval for reporting query profile, used by FE to collect query statistics|
-|starrocks_scanner_thread_pool_thread_num|48| The number of threads in the storage engine that concurrently scan the disk. Threads are uniformly managed in the thread pool |
-| starrocks _scanner_thread_pool_queue_size|102400|The maximum number of tasks received by the storage engine|
-| starrocks _scan_range_row_count|524288|The granularity of the storage engine to split query tasks, default by 512K|
-| starrocks _scanner_queue_size|1024|The number of scan tasks supported by the storage engine|
-| starrocks _scanner_row_num|16384|The maximum number of data rows to be returned in a single execution per scan thread|
-| starrocks _max_scan_key_num|1024|The maximum number of scan keys that can be split by a query|
-|column_dictionary_key_ratio_threshold|0|The ratio of string type, less than which the dictionary compression algorithm will be applied|
-|column_dictionary_key_size_threshold|0| The size of the column, less than which the dictionary compression algorithm will be applied |
-|memory_limitation_per_thread_for_schema_change|2| The maximum amount of memory allowed for a single schema change task |
-|max_unpacked_row_block_size|104857600| The maximum number of bytes for a single block, default by 100MB |
-|file_descriptor_cache_clean_interval|3600| Interval for the file descriptor to clean up cache |
-|disk_stat_monitor_interval|5|Interval for disk status detection|
-|unused_rowset_monitor_interval|30|Interval for expired Rowset cleanup|
-|storage_root_path|empty string|Directory where data is stored|
-|max_percentage_of_error_disk|0|Disk errors reach a certain percentage then BE exits|
-|default_num_rows_per_data_block|1024|Number of data rows per block|
-|max_tablet_num_per_shard|1024|Number of tablets per shard, used to divide tablets and prevent too many tablet subdirectories in a single directory|
-|pending_data_expire_time_sec|1800|The maximum amount of time that pending data can be kept in the storage engine|
-|inc_rowset_expired_sec|1800|The maximum amount of time that valid data can be kept in the storage engine for incremental cloning |
-|max_garbage_sweep_interval|3600|Maximum interval for disk to perform garbage cleanup|
-|min_garbage_sweep_interval|180|Minimum interval for disk to perform garbage cleanup|
-|snapshot_expire_time_sec|172800|Interval for snapshot file cleanup, default by 48 hours|
-|trash_file_expire_time_sec|259200|Interval for recycle bin cleanup, default by 72 hours|
-|row_nums_check|true| Comparison of Rowset rows that are before and after compaction |
-|file_descriptor_cache_capacity|32768| Cache capacity of the file descriptor|
-|min_file_descriptor_number|60000| The lower limit requirement of the file descriptor for the BE process |
-|index_stream_cache_capacity|10737418240| Cache capacity of BloomFilter/Min/Max statistics |
-|storage_page_cache_limit|20G| Capacity of PageCache |
-|disable_storage_page_cache|false|Whether PageCache is enabled|
-|base_compaction_start_hour|20| Start time of BaseCompaction |
-|base_compaction_end_hour|7| End time of BaseCompaction|
-|base_compaction_check_interval_seconds|60|Interval of BaseCompaction thread polling|
-|base_compaction_num_cumulative_deltas|5|BaseCompaction trigger: the number of Cumulative files needed to be reached|
-|base_compaction_num_threads_per_disk|1|Number of BaseCompaction threads per disk|
-|base_cumulative_delta_ratio|0.3|BaseCompaction trigger: The target ratio between cumulative and base files |
-|base_compaction_interval_seconds_since_last_operation|86400|BaseCompaction trigger: The interval for triggering the next BaseCompaction|
-|cumulative_compaction_check_interval_seconds|10| Interval of CumulativeCompaction thread polling |
-|min_cumulative_compaction_num_singleton_deltas|5| CumulativeCompaction trigger: the lower limit on the number of Singleton files to be reached |
-|max_cumulative_compaction_num_singleton_deltas|1000| CumulativeCompaction trigger: the upper limit on the number of Singleton files to be reached |
-|cumulative_compaction_write_mbytes_per_sec|100| Speed limit of CumulativeCompaction to write disk |
-|min_compaction_failure_interval_sec|600| Interval for Tablet Compaction to be scheduled again after a failure |
-|max_compaction_concurrency|4| Maximum concurrency for BaseCompaction and CumulativeCompaction. -1 indicates no limit |
-|compaction_trace_threshold|60|Time threshold for each compaction to print the trace. System will print trace log once a compaction exceeds this threshold. Unit: seconds |
-|webserver_port|8040| Http Server port |
-|webserver_num_workers|5| Number of Http Server threads |
-|periodic_counter_update_period_ms|500| Interval for getting counter statistics |
-|load_data_reserve_hours|4|Length of time to retain files generated by small batch import|
-|load_error_log_reserve_hours|48|Length of time to retain imported data information|
-|number_tablet_writer_threads|16|Number of threads for streaming imports|
-|streaming_load_max_mb|10240|The maximum size of a single file for stream load|
-|streaming_load_rpc_max_alive_time_sec|1200|Timeout for RPC of stream load |
-|tablet_writer_rpc_timeout_sec|600| Timeout for RPC of TabletWriter |
-|fragment_pool_thread_num|64| Number of query threads. Default by 64 threads, subsequent queries will dynamically create threads |
-|fragment_pool_queue_size|1024|The maximum number of queries that can be processed on a single node |
-|enable_partitioned_hash_join|false|Use PartitionHashJoin |
-|enable_partitioned_aggregation|true|Use PartitionAggregation|
-|enable_token_check|true|Token check is enabled |
-|enable_prefetch|true|Query prefetching |
-|load_process_max_memory_limit_bytes|107374182400|The maximum amount of memory occupied by all import threads on a single node, 100GB by default |
-|load_process_max_memory_limit_percent|30|The maximum percentage  of the memory occupied by all import threads on a single node |
-|sync_tablet_meta|false|Whether the storage engine is on sync retention to disk. |
-|thrift_rpc_timeout_ms|5000| Timeout of Thrift|
-|txn_commit_rpc_timeout_ms|10000|Number of thread pools routinely imported|
-|routine_load_thread_pool_size|10|Number of thread pools of routine load |
-|tablet_meta_checkpoint_min_new_rowsets_num|10|Minimum number of Rowsets for TabletMeta Checkpoint|
-|tablet_meta_checkpoint_min_interval_secs|600|Interval of TabletMeta Checkpoint thread polling |
-|default_rowset_type|ALPHA|The format of the storage engine, ALPHA by default, will be replaced with BETA|
-|brpc_max_body_size|209715200|The maximum packet size of BRPC, 200MB by default|
-|max_runnings_transactions|2000|The maximum number of transactions supported by the storage engine|
-|tablet_map_shard_size|1|Size of tablet map shard|
-|enable_bitmap_union_disk_format_with_set | False | New storage format for Bitmap, which can optimize the performance of `bitmap_union`|
+Some BE configuration items are dynamic parameters which you can set them by commands when BE nodes are still online. The rest of them are static parameters. You can only set the static parameters of a BE node by changing them in the corresponding configuration file **be.conf**, and restart the BE node to allow the change to take effect.
 
-## Broker configuration parameters
+### View BE configuration items
 
-Reference [Broker load import](... /loading/BrokerLoad.md)
+You can view the BE configuration items using the following command:
 
-## System parameters
+```shell
+curl http://<BE_IP>:<BE_HTTP_PORT>/varz
+```
 
-Linux Kernel
+### Configure BE dynamic parameters
 
-Recommended kernel is 3.10 or higher.
+You can configure a dynamic parameter of a BE node by using `curl` command.
 
-CPU
+```Shell
+curl -XPOST http://be_host:http_port/api/update_config?<configuration_item>=<value>
+```
 
-`Scaling governor` is used to control the CPU consumption. The default mode is `on-demand`. The `performance` mode has the highest consumption rate and the best performance, which is recommended for StarRocks deployment.
+BE dynamic parameters are as follows:
 
-~~~shell
-echo 'performance' | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor
-~~~
+| Configuration item | Default | Unit | Description |
+| ------------------ | ------- | ---- | ----------- |
+| tc_use_memory_min | 0 | Byte | The minimum size of the TCMalloc-reserved memory. StarRocks does not return the released memory resource to the operating system if the size of the memory resource is less than this value. |
+| tc_free_memory_rate | 0 | % | The maximum ratio of the TCMalloc-reserved memory size to the total memory size occupied by TCMalloc. StarRocks does not return the released memory resource to the operating system if the size ratio of the released memory to the total memory used by TCMalloc is less than this value. Range: [0,100]. |
+| tc_gc_period | 60 | Second | The duration of a TCMalloc garbage collection (GC) cycle. |
+| report_task_interval_seconds | 10 | Second | The time interval at which to report the state of a task. A task can be creating a table, dropping a table, loading data, or changing a table schema. |
+| report_disk_state_interval_seconds | 60 | Second | The time interval at which to report the storage volume state, which includes the size of data within the volume. |
+| report_tablet_interval_seconds | 60 | Second | The time interval at which to report the most updated version of all tablets. |
+| report_workgroup_interval_seconds | 5 | Second | The time interval at which to report the most updated version of all workgroups. |
+| max_download_speed_kbps | 50000 | KB/s | The maximum download speed of each HTTP request. This value affects the performance of data replica synchronization across BE nodes. |
+| download_low_speed_limit_kbps | 50 | KB/s | The download speed lower limit of each HTTP request. An HTTP request aborts when it constantly runs with a lower speed than this value within the time span specified in the configuration item download_low_speed_time. |
+| download_low_speed_time | 300 | Second | The maximum time that an HTTP request can run with a download speed lower than the limit. An HTTP request aborts when it constantly runs with a lower speed than the value of download_low_speed_limit_kbps within the time span specified in this configuration item. |
+| status_report_interval | 5 | Second | The time interval at which a query reports its profile, which can be used for query statistics collection by FE. |
+| scanner_thread_pool_thread_num | 48 | N/A | The number of threads which the storage engine used for concurrent storage volume scanning. All threads are managed in the thread pool. |
+| thrift_client_retry_interval_ms | 100 | ms | The time interval at which a thrift client retries. |
+| scanner_thread_pool_queue_size | 102400 | N/A | The number of scan tasks supported by the storage engine. |
+| scanner_row_num | 16384 | N/A | The maximum row count returned by each scan thread in a scan. |
+| max_scan_key_num | 1024 | N/A | The maximum number of scan key segmented by each query. |
+| max_pushdown_conditions_per_column | 1024 | N/A | The maximum number of conditions that allow pushdown in each column. If the number of conditions exceeds this limit, the predicates are not pushed down to the storage layer. |
+| exchg_node_buffer_size_bytes | 10485760 | Byte | The maximum buffer size on the receiver end of an exchange node for each query. This configuration item is a soft limit. A backpressure is triggered when data is sent to the receiver end with an excessive speed. |
+| memory_limitation_per_thread_for_schema_change | 2 | GB | The maximum memory size allowed for each schema change task. |
+| update_cache_expire_sec | 360 | Second | The expiration time of Update Cache. |
+| file_descriptor_cache_clean_interval | 3600 | Second | The time interval at which to clean file descriptors that have not been used for a certain period of time. |
+| disk_stat_monitor_interval | 5 | Second | The time interval at which to monitor health status of disks. |
+| unused_rowset_monitor_interval | 30 | Second | The time interval at which to clean the expired rowsets. |
+| max_percentage_of_error_disk | 0 | % | The maximum percentage of error that is tolerable in a storage volume before the corresponding BE node quits. |
+| default_num_rows_per_column_file_block | 1024 | N/A | The maximum number of rows that can be stored in each row block. |
+| pending_data_expire_time_sec | 1800 | Second | The expiration time of the pending data in the storage engine. |
+| inc_rowset_expired_sec | 1800 | Second | The expiration time of the incoming data. This configuration item is used in incremental clone. |
+| tablet_rowset_stale_sweep_time_sec | 1800 | Second | The time interval at which to sweep the stale rowsets in tablets. |
+| snapshot_expire_time_sec | 172800 | Second | The expiration time of snapshot files. |
+| trash_file_expire_time_sec | 259200 | Second | The time interval at which to clean trash files. |
+| base_compaction_check_interval_seconds | 60 | Second | The time interval of thread polling for a Base Compaction. |
+| min_base_compaction_num_singleton_deltas | 5 | N/A | The minimum number of segments that trigger a Base Compaction. |
+| max_base_compaction_num_singleton_deltas | 100 | N/A | The maximum number of segments that can be compacted in each Base Compaction. |
+| base_compaction_interval_seconds_since_last_operation | 86400 | Second | The time interval since the last Base Compaction. This configuration item is one of the conditions that trigger a Base Compaction. |
+| cumulative_compaction_check_interval_seconds | 1 | Second | The time interval of thread polling for a Cumulative Compaction. |
+| update_compaction_check_interval_seconds | 60 | Second | The time interval at which to check the Update Compaction of the Primary Key data model. |
+| min_compaction_failure_interval_sec | 120 | Second | The minimum time interval that a Tablet Compaction can be scheduled since the last compaction failure. |
+| periodic_counter_update_period_ms | 500 | ms | The time interval at which to collect the Counter statistics. |
+| load_error_log_reserve_hours | 48 | Hour | The time for which data loading logs are reserved. |
+| streaming_load_max_mb | 10240 | MB | The maximum size of a file that can be streamed into StarRocks. |
+| streaming_load_max_batch_size_mb | 100 | MB | The maximum size of a JSON file that can be streamed into StarRocks. |
+| | | | |
+| memory_maintenance_sleep_time_s | 10 | Second | The time interval at which TCMalloc GC is triggered. StarRocks executes GC periodically, and returns the released memory memory to the operating system. |
+| write_buffer_size | 104857600 | Byte | The buffer size of MemTable in the memory. This configuration item is the threshold to trigger a flush. |
+| tablet_stat_cache_update_interval_second | 300 | Second | The time interval at which to update Tablet Stat Cache. |
+| result_buffer_cancelled_interval_time | 300 | Second | The wait time before BufferControlBlock release data. |
+| thrift_rpc_timeout_ms | 5000 | ms | The timeout for a thrift RPC. |
+| txn_commit_rpc_timeout_ms | 20000 | ms | The timeout for a transaction commit RPC. |
+| max_consumer_num_per_group | 3 | N/A | The maximum number of consumers in a consumer group of Routine Load. |
+| max_memory_sink_batch_count | 20 | N/A | The maximum number of Scan Cache batches. |
+| scan_context_gc_interval_min | 5 | Minute | The time interval at which to clean the Scan Context. |
+| path_gc_check_step | 1000 | N/A | The maximum number of files that can be scanned continuously each time. |
+| path_gc_check_step_interval_ms | 10 | ms | The time interval between file scans. |
+| path_scan_interval_second | 86400 | Second | The time interval at which GC cleans expired data. |
+| storage_flood_stage_usage_percent | 95 | % | The storage usage threshold (in percentage) that can trigger the rejection of a Load or Restore job if it is reached. |
+| storage_flood_stage_left_capacity_bytes | 1073741824 | Byte | The minimum left capacity of the storage before the rejection of a Load or Restore job is triggered. |
+| tablet_meta_checkpoint_min_new_rowsets_num | 10 | N/A | The minimum number of rowsets to create since the last TabletMeta Checkpoint. |
+| tablet_meta_checkpoint_min_interval_secs | 600 | Second | The time interval of thread polling for a TabletMeta Checkpoint. |
+| max_runnings_transactions_per_txn_map | 100 | N/A | The maximum number of transactions that can run concurrently in each partition. |
+| tablet_max_pending_versions | 1000 | N/A | The maximum number of pending versions that are tolerable in a Primary Key table. Pending versions refer to versions that are committed but not applied yet. |
+| max_hdfs_file_handle | 1000 | N/A | The maximum number of HDFS file descriptors that can be opened. |
+| parquet_buffer_stream_reserve_size | 1048576 | Byte | The size of buffer that Parquet reader reserves for each column while reading data. |
 
-memory
+### Configure BE static parameters
 
-* **Overcommit**
+You can only set the static parameters of a BE node by changing them in the corresponding configuration file **be.conf**, and restart the BE node to allow the change to take effect.
 
-It is recommended to use `Overcommit`.
-It is recommended to set `cat /proc/sys/vm/overcommit_memory` to 1.
+BE static parameters are as follows:
 
-~~~shell
-echo 1 | sudo tee /proc/sys/vm/overcommit_memory
-~~~
+| Configuration item | Default | Unit | Description |
+| -------------------------------------------------- | ------------------------------------------------------------ | ------ | ------------------------------------------------------------ |
+| be_port | 9060 | N/A | The BE thrift server port, which is used to receive requests from FEs. |
+| brpc_port | 8060 | N/A | The BE BRPC port, which is used to view the network statistics of BRPCs. |
+| brpc_num_threads | -1 | N/A | The number of bthreads of a BRPC. The value -1 indicates the same number with the CPU threads. |
+| priority_networks | Empty string | N/A | The CIDR-formatted IP address that is used to specify the priority IP address of a BE node if the machine that hosts the BE node has multiple IP addresses. |
+| heartbeat_service_port | 9050 | N/A | The BE heartbeat service port, which is used to receive heartbeats from FEs. |
+| heartbeat_service_thread_count | 1 | N/A | The thread count of the BE heartbeat service. |
+| create_tablet_worker_count | 3 | N/A | The number of threads used to create a tablet. |
+| drop_tablet_worker_count | 3 | N/A | The number of threads used to drop a tablet. |
+| push_worker_count_normal_priority | 3 | N/A | The number of threads used to handle a load task with NORMAL priority. |
+| push_worker_count_high_priority | 3 | N/A | The number of threads used to handle a load task with HIGH priority. |
+| transaction_publish_version_worker_count | 8 | N/A | The number of threads used to publish a version. |
+| clear_transaction_task_worker_count | 1 | N/A | The number of threads used for clearing transaction. |
+| alter_tablet_worker_count | 3 | N/A | The number of threads used for schema change. |
+| clone_worker_count | 3 | N/A | The number of threads used for clone. |
+| storage_medium_migrate_count | 1 | N/A | The number of threads used for storage medium migration (from SATA to SSD). |
+| check_consistency_worker_count | 1 | N/A | The number of threads used for check the consistency of tablets. |
+| sys_log_dir | ${STARROCKS_HOME}/log | N/A | The directory that stores system logs (including INFO, WARNING, ERROR, and FATAL). |
+| user_function_dir | ${STARROCKS_HOME}/lib/udf | N/A | The directory used to store the User-defined Functions (UDFs). |
+| small_file_dir | ${STARROCKS_HOME}/lib/small_file | N/A | The directory used to store the files downloaded by the file manager. |
+| sys_log_level | INFO | N/A | The severity levels into which system log entries are classified. Valid values: INFO, WARN, ERROR, and FATAL. |
+| sys_log_roll_mode | SIZE-MB-1024 | N/A | The mode how system logs are segmented into log rolls. Valid values include `TIME-DAY`, `TIME-HOUR`, and `SIZE-MB-<size>`. The default value indicates that logs are segmented into rolls which are 1 GB each. |
+| sys_log_roll_num | 10 | N/A | The number of log rolls to reserve. |
+| sys_log_verbose_modules | Empty string | N/A | The module of the logs to be printed. For example, if you set this configuration item to OLAP, StarRocks only prints the logs of the OLAP module. Valid values are namespaces in BE, including `starrocks`, `starrocks::vectorized`, and `pipeline`. |
+| sys_log_verbose_level | 10 | N/A | The level of the logs to be printed. This configuration item is used to control the ouput of logs initiated with VLOG in codes. |
+| log_buffer_level | Empty string | N/A | The strategy how logs are flushed. The default value indicates that logs are buffered in memory. Valid values are `-1` and `0`. `-1` indicates that logs are not buffering in memory. |
+| num_threads_per_core | 3 | N/A | The number threads started in each CPU core. |
+| compress_rowbatches | TRUE | N/A | The boolean value to control if to compress the row batches in RPCs between BEs. This configuration item is used for the data transmission between query layers. The value true indicates to compress the row batches. The value false indicates not to compress the row batches. |
+| serialize_batch | FALSE | N/A | The boolean value to control if to serialize the row batches in RPCs between BEs. This configuration item is used for the data transmission between query layers. The value true indicates to serialize the row batches. The value false indicates not to serialize the row batches. |
+| storage_root_path | ${STARROCKS_HOME}/storage | N/A | The directory and medium of the storage volume. Multiple volumes are separated by semicolon (;). If the storage medium is SSD, add `,medium:ssd` at the end of the directory. If the storage medium is HDD, add `,medium:hdd` at the end of the directory. Example: `/data1,medium:hdd;/data2,medium:ssd`. |
+| max_tablet_num_per_shard | 1024 | N/A | The maximum number of tablets in each shard. This configuration item is used to restrict the number of tablet child directories under each storage directory. |
+| max_garbage_sweep_interval | 3600 | Second | The maximum time interval for garbage collection on storage volumes. |
+| min_garbage_sweep_interval | 180 | Second | The minimum time interval for garbage collection on storage volumes. |
+| row_nums_check | TRUE | N/A | The boolean value to control if to check the row counts before and after the compaction. The value true indicates to enable the row count check. The value false indicates disable the row count check. |
+| file_descriptor_cache_capacity | 16384 | N/A | The number of file descriptors that can be cached. |
+| min_file_descriptor_number | 60000 | N/A | The minimum number of file descriptors in the BE process. |
+| index_stream_cache_capacity | 10737418240 | Byte | The cache capacity for the statistical information of BloomFilter, Min, and Max. |
+| storage_page_cache_limit | 0 | | The capacity of page cache. You can set it as a percentage ("20%") or a physical value ("100MB"). |
+| disable_storage_page_cache | TRUE | N/A | The boolean value to control if to disable the Page Cache. The value true indicates to disable the Page Cache. The value false indicates to enable the Page Cache. |
+| base_compaction_num_threads_per_disk | 1 | N/A | The number of threads used for Base Compaction on each storage volume. |
+| base_cumulative_delta_ratio | 0.3 | N/A | The ratio of cumulative file size to base file size. The ratio reaching this value is one of the conditions that trigger the Base Compaction. |
+| max_compaction_concurrency | -1 | N/A | The maximum concurrency of compactions (both Base Compaction and Cumulative Compaction). The value -1 indicates that no limit is imposed on the concurrency. |
+| compaction_trace_threshold | 60 | Second | The time threshold for each compaction. If a compaction takes more time than the time threshold, StarRocks prints the corresponding trace. |
+| webserver_port | 8040 | N/A | The HTTP server port. |
+| webserver_num_workers | 48 | N/A | The number of threads used by the HTTP server. |
+| load_data_reserve_hours | 4 | Hour | The reservation time for the files produced by small-scale loadings. |
+| number_tablet_writer_threads | 16 | N/A | The number of threads used for Stream Load. |
+| streaming_load_rpc_max_alive_time_sec | 1200 | Second | The RPC timeout for Stream Load. |
+| fragment_pool_thread_num_min | 64 | N/A | The minimum number of threads used for query. |
+| fragment_pool_thread_num_max | 4096 | N/A | The maximum number of threads used for query. |
+| fragment_pool_queue_size | 2048 | N/A | The upper limit of query number that can be processed on each BE node. |
+| enable_partitioned_aggregation | TRUE | N/A | The boolean value to control if to enable the Partition Aggregation. The value true indicates to enable the Partition Aggregation. The value false indicates to disable the Partition Aggregation. |
+| enable_token_check | TRUE | N/A | The boolean value to control if to enable the token check. The value true indicates to enable the token check. The value false indicates to disable the token check. |
+| enable_prefetch | TRUE | N/A | The boolean value to control if to enable the pre-fetch of the query. The value true indicates to enable the pre-fetch. The value false indicates to disable the pre-fetch. |
+| load_process_max_memory_limit_bytes | 107374182400 | Byte | The maximum size limit of memory resources can be taken up by all load process on a BE node. |
+| load_process_max_memory_limit_percent | 30 | % | The maximum percentage limit of memory resources can be taken up by all load process on a BE node. |
+| sync_tablet_meta | FALSE | N/A | The boolean value to control if to enable the synchronization of the tablet metadata. The value true indicates to enable the synchronization. The value false indicates to disable the synchronization. |
+| routine_load_thread_pool_size | 10 | N/A | The thread pool size of Routine Load. |
+| brpc_max_body_size | 2147483648 | Byte | The maximum body size of a BRPC. |
+| tablet_map_shard_size | 32 | N/A | The tablet map shard size. The value must be the power of two. |
+| enable_bitmap_union_disk_format_with_set | FALSE | N/A | The boolean value to control if to enable the new storage format of the BITMAP type, which can improve the performance of bitmap_union. The value true indicates to enable the new storage format. The value false indicates to disable the new storage format. |
+| mem_limit | 90% | N/A | BE process memory upper limit. You can set it as a percentage ("80%") or a physical limit ("100GB"). |
+| flush_thread_num_per_store | 2 | N/A | Number of threads that are used for flushing MemTable in each store. |
 
-* **Huge Pages**
+<!--| aws_sdk_logging_trace_enabled | 0 | N/A | |
+| be_exit_after_disk_write_hang_second | 60 | N/A | |
+| be_service_threads | 64 | N/A | |
+| bitmap_filter_enable_not_equal | 0 | N/A | |
+| bitmap_max_filter_items | 30 | N/A | |
+| bitmap_max_filter_ratio | 1000 | N/A | |
+| bitmap_serialize_version | 1 | N/A | |
+| block_cache_block_size | 1048576 | N/A | |
+| block_cache_disk_path |  | N/A | |
+| block_cache_disk_size | 21474836480 | N/A | |
+| block_cache_enable | 0 | N/A | |
+| block_cache_mem_size | 2147483648 | N/A | |
+| broker_write_timeout_seconds | 30 | N/A | |
+| brpc_socket_max_unwritten_bytes | 1073741824 | N/A | |
+| cardinality_of_inject | 10 | N/A | |
+| chunk_reserved_bytes_limit | 2147483648 | N/A | |
+| cluster_id | -1 | N/A | |
+| column_dictionary_key_size_threshold | 0 | N/A | |
+| compact_thread_pool_queue_size | 100 | N/A | |
+| compact_threads | 4 | N/A | |
+| compaction_max_memory_limit | -1 | N/A | |
+| compaction_max_memory_limit_percent | 100 | N/A | |
+| compaction_memory_limit_per_worker | 2147483648 | N/A | |
+| connector_io_tasks_per_scan_operator | 16 | N/A | |
+| consistency_max_memory_limit | 10G | N/A | |
+| consistency_max_memory_limit_percent | 20 | N/A | |
+| cumulative_compaction_num_threads_per_disk | 1 | N/A | |
+| default_query_options | | N/A | |
+| delete_worker_count_high_priority | 1 | N/A | |
+| delete_worker_count_normal_priority | 2 | N/A | |
+| deliver_broadcast_rf_passthrough_bytes_limit | 131072 | N/A | |
+| deliver_broadcast_rf_passthrough_inflight_num | 10 | N/A | |
+| dependency_librdkafka_debug | all | N/A | |
+| dependency_librdkafka_debug_enable | 0 | N/A | |
+| dictionary_encoding_ratio | 0.7 | N/A | |
+| dictionary_speculate_min_chunk_size | 10000 | N/A | |
+| directory_of_inject |  | N/A | |
+| disable_column_pool | 0 | N/A | |
+| disable_mem_pools | 0 | N/A | |
+| download_worker_count | 1 | N/A | |
+| enable_check_string_lengths | 1 | N/A | |
+| enable_event_based_compaction_framework | 0 | N/A | |
+| enable_load_colocate_mv | 0 | N/A | |
+| enable_metric_calculator | 0 | N/A | |
+| enable_new_load_on_memory_limit_exceeded | 0 | N/A | |
+| enable_orc_late_materialization | 1 | N/A | |
+| enable_quadratic_probing | 0 | N/A | |
+| enable_schema_change_v2 | 1 | N/A | |
+| enable_segment_overflow_read_chunk | 1 | N/A | |
+| enable_system_metrics | 1 | N/A | |
+| es_http_timeout_ms | 5000 | N/A | |
+| es_index_max_result_window | 10000 | N/A | |
+| es_scroll_keepalive | 5m | N/A | |
+| etl_thread_pool_queue_size | 256 | N/A | |
+| etl_thread_pool_size | 8 | N/A | |
+| experimental_s3_max_single_part_size | 16777216 | N/A | |
+| experimental_s3_min_upload_part_size | 16777216 | N/A | |
+| ignore_broken_disk | 0 | N/A | |
+| ignore_load_tablet_failure | 0 | N/A | |
+| ignore_rowset_stale_unconsistent_delete | 0 | N/A | |
+| internal_service_async_thread_num | 10 | N/A | |
+| io_coalesce_read_max_buffer_size | 8388608 | N/A | |
+| io_coalesce_read_max_distance_size | 1048576 | N/A | |
+| jaeger_endpoint | | N/A | |
+| jdbc_connection_pool_size | 8 | N/A | |
+| l0_l1_merge_ratio | 10 | N/A | |
+| lake_gc_metadata_check_interval | 1800 | N/A | |
+| lake_gc_metadata_max_versions | 10 | N/A | |
+| lake_gc_segment_check_interval | 3600 | N/A | |
+| lake_gc_segment_expire_seconds | 259200 | N/A | |
+| lake_metadata_cache_limit | 2147483648 | N/A | |
+| late_materialization_ratio | 10 | N/A | |
+| local_library_dir |  | N/A | |
+| loop_count_wait_fragments_finish | 0 | N/A | |
+| madvise_huge_pages | 0 | N/A | |
+| make_snapshot_rpc_timeout_ms | 20000 | N/A | |
+| make_snapshot_worker_count | 5 | N/A | |
+| manual_compact_before_data_dir_load | 0 | N/A | |
+| max_batch_publish_latency_ms | 100 | N/A | |
+| max_client_cache_size_per_host | 10 | N/A | |
+| max_cumulative_compaction_num_singleton_deltas | 1000 | N/A | |
+| max_free_io_buffers | 128 | N/A | |
+| max_hdfs_scanner_num | 50 | N/A | |
+| max_length_for_bitmap_function | 1000000 | N/A | |
+| max_length_for_to_base64 | 200000 | N/A | |
+| max_load_dop | 16 | N/A | |
+| max_pulsar_consumer_num_per_group | 10 | N/A | |
+| max_row_source_mask_memory_bytes | 209715200 | N/A | |
+| max_segment_file_size | 1073741824 | N/A | |
+| max_transmit_batched_bytes | 262144 | N/A | |
+| memory_max_alignment | 16 | N/A | |
+| memory_ratio_for_sorting_schema_change | 0.8 | N/A | |
+| meta_threshold_to_manual_compact | 10737418240 | N/A | |
+| metric_late_materialization_ratio | 1000 | N/A | |
+| min_base_compaction_size | 21474836480 | N/A | |
+| min_cmumulative_compaction_failure_interval_sec | 30 | N/A | |
+| min_cumulative_compaction_num_singleton_deltas | 5 | N/A | |
+| min_cumulative_compaction_size | 5368709120 | N/A | |
+| mmap_buffers | 0 | N/A | |
+| null_encoding | 0 | N/A | |
+| num_cores | 0 | N/A | |
+| num_disks | 0 | N/A | |
+| num_threads_per_disk | 0 | N/A | |
+| object_storage_access_key_id |  | N/A | |
+| object_storage_endpoint |  | N/A | |
+| object_storage_endpoint_path_style_access | 0 | N/A | |
+| object_storage_endpoint_use_https | 0 | N/A | |
+| object_storage_max_connection | 102400 | N/A | |
+| object_storage_region | | N/A | |
+| object_storage_secret_access_key |  | N/A | |
+| orc_coalesce_read_enable | 1 | N/A | |
+| orc_file_cache_max_size | 8388608 | N/A | |
+| orc_natural_read_size | 8388608 | N/A | |
+| parallel_clone_task_per_path | 2 | N/A | |
+| parquet_coalesce_read_enable | 1 | N/A | |
+| parquet_header_max_size | 16384 | N/A | |
+| parquet_late_materialization_enable | 1 | N/A | |
+| path_gc_check | 1 | N/A | |
+| path_gc_check_interval_second | 86400 | N/A | |
+| pipeline_exec_thread_pool_thread_num | 0 | N/A | |
+| pipeline_hdfs_scan_thread_pool_thread_num | 48 | N/A | |
+| pipeline_max_num_drivers_per_exec_thread | 10240 | N/A | |
+| pipeline_prepare_thread_pool_queue_size | 102400 | N/A | |
+| pipeline_prepare_thread_pool_thread_num | 0 | N/A | |
+| pipeline_print_profile | 0 | N/A | |
+| pipeline_scan_thread_pool_queue_size | 102400 | N/A | |
+| pipeline_scan_thread_pool_thread_num | 0 | N/A | |
+| pipeline_sink_brpc_dop | 64 | N/A | |
+| pipeline_sink_buffer_size | 64 | N/A | |
+| pipeline_sink_io_thread_pool_queue_size | 102400 | N/A | |
+| pipeline_sink_io_thread_pool_thread_num | 0 | N/A | |
+| plugin_path |  | N/A | |
+| port | 20001 | N/A | |
+| pprof_profile_dir |  | N/A | |
+| pre_aggregate_factor | 80 | N/A | |
+| priority_queue_remaining_tasks_increased_frequency | 512 | N/A | |
+| profile_report_interval | 30 | N/A | |
+| pull_load_task_dir |  | N/A | |
+| query_cache_capacity | 536870912 | N/A | |
+| query_debug_trace_dir |  | N/A | |
+| query_scratch_dirs |  | N/A | |
+| read_size | 8388608 | N/A | |
+| release_snapshot_worker_count | 5 | N/A | |
+| repair_compaction_interval_seconds | 600 | N/A | |
+| rewrite_partial_segment | 1 | N/A | |
+| routine_load_kafka_timeout_second | 10 | N/A | |
+| routine_load_pulsar_timeout_second | 10 | N/A | |
+| rpc_compress_ratio_threshold | 1.1 | N/A | |
+| scan_use_query_mem_ratio | 0.25 | N/A | |
+| scratch_dirs | /tmp | N/A | |
+| send_rpc_runtime_filter_timeout_ms | 1000 | N/A | |
+| sleep_five_seconds | 5 | N/A | |
+| sleep_one_second | 1 | N/A | |
+| sorter_block_size | 8388608 | N/A | |
+| storage_format_version | 2 | N/A | |
+| sys_minidump_dir |  | N/A | |
+| sys_minidump_enable | 0 | N/A | |
+| sys_minidump_interval | 600 | N/A | |
+| sys_minidump_limit | 20480 | N/A | |
+| sys_minidump_max_files | 16 | N/A | |
+| tablet_internal_parallel_max_splitted_scan_bytes | 536870912 | N/A | |
+| tablet_internal_parallel_max_splitted_scan_rows | 1048576 | N/A | |
+| tablet_internal_parallel_min_scan_dop | 4 | N/A | |
+| tablet_internal_parallel_min_splitted_scan_rows | 16384 | N/A | |
+| tablet_max_versions | 15000 | N/A | |
+| tablet_writer_open_rpc_timeout_sec | 60 | N/A | |
+| tc_max_total_thread_cache_bytes | 1073741824 | N/A | |
+| thrift_connect_timeout_seconds | 3 | N/A | |
+| thrift_port | 9060 | N/A | |
+| txn_map_shard_size | 128 | N/A | |
+| txn_shard_size | 1024 | N/A | |
+| udf_thread_pool_size | 1 | N/A | |
+| update_compaction_num_threads_per_disk | 1 | N/A | |
+| update_compaction_per_tablet_min_interval_seconds | 120 | N/A | |
+| update_memory_limit_percent | 60 | N/A | |
+| upload_worker_count | 1 | N/A | |
+| use_mmap_allocate_chunk | 0 | N/A | |
+| vector_chunk_size | 4096 | N/A | |
+| vertical_compaction_max_columns_per_group | 5 | N/A | |
+| web_log_bytes | 1048576 | N/A | |-->
 
-Do not transparent huge pages, which will interfere with the memory allocator and cause performance degradation.
+## Set system configurations
 
-~~~shell
-echo 'madvise' | sudo tee /sys/kernel/mm/transparent_hugepage/enabled
-~~~
+### Linux Kernel
 
-* **Swappiness**
+Linux kernel 3.10 or later is recommended.
 
-Turn off the swap area to eliminate performance disturbances when swapping memory to virtual memory.
+### CPU configurations
 
-~~~shell
-echo 0 | sudo tee /proc/sys/vm/swappiness
-~~~
+| Configuration item | Description | Recommended value | How to set |
+| ------------------ | ------------------------------------------------------------ | ----------------- | ------------------------------------------------------------ |
+| scaling_governor | The parameter scaling_governor is used to control the CPU power mode. The default value is on-demand. The performance mode consumes more energy, produces better performance, and thereby is recommended in the deployment of StarRocks. | performance | echo 'performance' \| sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor |
 
-Disk
+### Memory configurations
 
-* **SATA**
+| Configuration item | Description | Recommended value | How to set |
+| -------------------- | ------------------------------------------------------------ | ----------------- | ------------------------------------------------------------ |
+| overcommit_memory | Memory Overcommit allows the operating system to overcommit memory resource to processes. We recommend you enable Memory Overcommit. | 1 | echo 1 \| sudo tee /proc/sys/vm/overcommit_memory |
+| transparent_hugepage | Transparent Huge Pages is enabled by default. We recommend you disable this feature because it can interfere the memory allocator, and thereby lead to a drop in performance. | madvise | echo 'madvise' \| sudo tee /sys/kernel/mm/transparent_hugepage/enabled |
+| swappiness | We recommend you disable the swappiness to eliminate its affects on the performance. | 0 | echo 0 \| sudo tee /proc/sys/vm/swappiness |
 
-The mq-deadline scheduling algorithm will sort and merge I/O requests, which is suitable for SATA disks.
+### Storage configurations
 
-~~~shell
-echo mq-deadline | sudo tee /sys/block/vdb/queue/scheduler
-~~~
+We recommend you set different scheduler algorithms in accordance with the medium of your storage volumes.
 
-* **SSD/NVME**
+| Configuration item | Description | Recommended value | How to set |
+| ------------------ | ------------------------------------------------------------ | ----------------- | ----------------------------------------------------------- |
+| scheduler | mq-deadline scheduler algorithm suits SATA disks. | mq-deadline | echo mq-deadline \| sudo tee /sys/block/vdb/queue/scheduler |
+| scheduler | kyber scheduler algorithm suits NVME or SSD disks. | kyber | echo kyber \| sudo tee /sys/block/vdb/queue/scheduler |
+| scheduler | If your system does not support kyber scheduler algorithm, we recommend you use none scheduler algorithm. | none | echo none \| sudo tee /sys/block/vdb/queue/scheduler |
 
-The kyber scheduling algorithm is suitable for devices with low latency, such as NVME/SSD.
+### Network configurations
 
-~~~shell
-echo kyber | sudo tee /sys/block/vdb/queue/scheduler
-~~~
+We recommend you use 10GB network in your StarRocks cluster. Otherwise, StarRocks will fail to achieve the expected performance. You can use iPerf to check the bandwidth of your cluster.
 
-If the system does not support kyber, it is recommended to use the none scheduling algorithm
+### File system configurations
 
-~~~shell
-echo none | sudo tee /sys/block/vdb/queue/scheduler
-~~~
+We recommend you use the ext4 journaling file system. You can run the following command to check the mount type:
 
-Network
-
-Please use at least a 10 GB network. A 1 GB network will work but won’t achieve expected performance. You can use iperf to test the system bandwidth.
-
-File System
-
-It is recommended to use the Ext4 file system. You can check the mount type with relevant commands.
-
-~~~shell
+```Shell
 df -Th
-Filesystem Type Size Used Avail Use% Mounted on
-/dev/vdb1 ext4 1008G 903G 55G 95% /home/disk1
-~~~
+```
 
-Other System Configuration
+### High concurrency configurations
 
-* **tcp abort on overflow**
+If your StarRocks cluster has a high load concurrency, we recommend you set the following configurations.
 
-~~~shell
-echo 1 | sudo tee /proc/sys/net/ipv4/tcp_abort_on_overflow
-~~~
-
-* **somaxconn**
-
-~~~shell
-echo 1024 | sudo tee /proc/sys/net/core/somaxconn
-~~~
-
-System resources
-
-System resources are the maximum resources the system can use. It’s configured in `/etc/security/limits.conf`. The resources include file descriptors, maximum number of processes, maximum memory usage, etc.
-
-* **File descriptors**
-
-Run `ulimit -n 65535` on the deployed machine to set the file descriptor to 65535. If the ulimit value fails after login, change `UsePAM yes` in `/etc/ssh/sshd_config` and restart the sshd service.
-
-High concurrency configuration
-
-If the cluster load is highly concurrent, it is recommended to add the following configuration
-
-~~~shell
+```Shell
 echo 120000 > /proc/sys/kernel/threads-max
 echo 60000 > /proc/sys/vm/max_map_count
 echo 200000 > /proc/sys/kernel/pid_max
-~~~
+```
 
-* **max user processes**
+### User process configuration
 
+You can set the maximum number of user processes by running the following command:
+
+```Shell
 ulimit -u 40960
+```
+
+### File descriptor configuration
+
+Run the following command to the maximum number of file descriptors to `65535`.
+
+```Shell
+ulimit -n 65535
+```
+
+If this configuration becomes invalid after you re-connect to the cluster, you can set the `UsePAM` configuration item under **/etc/ssh/sshd_config** to `yes`, and restart the SSHD service.
+
+### Others
+
+| Configuration item | Recommended value | How to set |
+| --------------------- | ----------------- | ----------------------------------------------------------- |
+| tcp abort on overflow | 1 | echo 1 \| sudo tee /proc/sys/net/ipv4/tcp_abort_on_overflow |
+| somaxconn | 1024 | echo 1024 \| sudo tee /proc/sys/net/core/somaxconn |

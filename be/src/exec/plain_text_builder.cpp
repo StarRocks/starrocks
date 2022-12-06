@@ -1,5 +1,3 @@
-// This file_builder is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
 #include "plain_text_builder.h"
 
 #include "column/chunk.h"
@@ -9,6 +7,7 @@
 #include "formats/csv/converter.h"
 #include "formats/csv/output_stream.h"
 #include "formats/csv/output_stream_file.h"
+#include "gutil/strings/substitute.h"
 #include "util/date_func.h"
 #include "util/mysql_row_buffer.h"
 

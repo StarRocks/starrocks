@@ -74,6 +74,7 @@ public class LoadStmt extends DdlStmt {
     public static final String TIMEZONE = "timezone";
     public static final String PARTIAL_UPDATE = "partial_update";
     public static final String PRIORITY = "priority";
+    public static final String MERGE_CONDITION = "merge_condition";
 
     // for load data from Baidu Object Store(BOS)
     public static final String BOS_ENDPOINT = "bos_endpoint";

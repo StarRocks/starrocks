@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/tools/meta_tool.cpp
 
@@ -95,13 +108,16 @@ std::string get_usage(const std::string& progname) {
           "--json_meta_path=path\n";
     ss << "./meta_tool --operation=delete_meta "
           "--root_path=/path/to/storage/path --tablet_id=tabletid "
-          "[--schema_hash=schemahash]\n";
+          "[--schema_hash=schemahash] | ./meta_tool --operation=delete_meta "
+          "--root_path=/path/to/storage/path --table_id=tableid\n";
     ss << "./meta_tool --operation=delete_meta --tablet_file=file_path\n";
     ss << "./meta_tool --operation=delete_rowset_meta "
           "--root_path=/path/to/storage/path --tablet_uid=tablet_uid "
           "--rowset_id=rowset_id\n";
     ss << "./meta_tool --operation=delete_persistent_index_meta "
-          "--root_path=/path/to/storage/path --tablet_id=tabletid\n";
+          "--root_path=/path/to/storage/path --tablet_id=tabletid | "
+          "./meta_tool --operation=delete_persistent_index_meta "
+          "--root_path=/path/to/storage/path --table_id=tableid\n";
     ss << "./meta_tool --operation=compact_meta --root_path=/path/to/storage/path\n";
     ss << "./meta_tool --operation=get_meta_stats --root_path=/path/to/storage/path\n";
     ss << "./meta_tool --operation=ls --root_path=/path/to/storage/path\n";
@@ -167,7 +183,13 @@ void load_meta(DataDir* data_dir) {
 }
 
 void delete_meta(DataDir* data_dir) {
-    if (FLAGS_schema_hash != 0) {
+    if (FLAGS_table_id != 0) {
+        auto st = TabletMetaManager::remove_table_meta(data_dir, FLAGS_table_id);
+        if (!st.ok()) {
+            std::cout << "delete table meta failed for table_id:" << FLAGS_table_id << ", status:" << st << std::endl;
+            return;
+        }
+    } else if (FLAGS_schema_hash != 0) {
         auto st = TabletMetaManager::remove(data_dir, FLAGS_tablet_id, FLAGS_schema_hash);
         if (!st.ok()) {
             std::cout << "delete tablet meta failed for tablet_id:" << FLAGS_tablet_id
@@ -197,14 +219,24 @@ void delete_rowset_meta(DataDir* data_dir) {
 }
 
 void delete_persistent_index_meta(DataDir* data_dir) {
-    std::string key = "tpi_";
-    starrocks::put_fixed64_le(&key, BigEndian::FromHost64(FLAGS_tablet_id));
-    Status st = data_dir->get_meta()->remove(starrocks::META_COLUMN_FAMILY_INDEX, key);
-    if (st.ok()) {
-        std::cout << "delete tablet persistent index meta success, tablet_id: " << FLAGS_tablet_id << std::endl;
+    if (FLAGS_table_id != 0) {
+        auto st = TabletMetaManager::remove_table_persistent_index_meta(data_dir, FLAGS_table_id);
+        if (!st.ok()) {
+            std::cout << "delete table persistent index meta failed for table_id:" << FLAGS_table_id
+                      << " status:" << st.to_string() << std::endl;
+            return;
+        }
+        std::cout << "delete table persistent index meta successfully" << std::endl;
     } else {
-        std::cout << "delete tablet persistent index meta failed, tablet_id: " << FLAGS_tablet_id
-                  << ", status: " << st.to_string() << std::endl;
+        std::string key = "tpi_";
+        starrocks::put_fixed64_le(&key, BigEndian::FromHost64(FLAGS_tablet_id));
+        Status st = data_dir->get_meta()->remove(starrocks::META_COLUMN_FAMILY_INDEX, key);
+        if (st.ok()) {
+            std::cout << "delete tablet persistent index meta success, tablet_id: " << FLAGS_tablet_id << std::endl;
+        } else {
+            std::cout << "delete tablet persistent index meta failed, tablet_id: " << FLAGS_tablet_id
+                      << ", status: " << st.to_string() << std::endl;
+        }
     }
 }
 
@@ -501,9 +533,9 @@ void check_meta_consistency(DataDir* data_dir) {
                     const auto& column_pb = footer.columns(ordinal);
                     columns_in_footer.emplace(column_pb.unique_id(), std::make_pair(ordinal, column_pb.type()));
                 }
-                for (uint32_t col_id = 0; col_id < columns.size(); ++col_id) {
-                    uint32_t unique_id = columns[col_id].unique_id();
-                    starrocks::FieldType type = columns[col_id].type();
+                for (const auto& column : columns) {
+                    uint32_t unique_id = column.unique_id();
+                    starrocks::LogicalType type = column.type();
                     auto iter = columns_in_footer.find(unique_id);
                     if (iter == columns_in_footer.end()) {
                         continue;
@@ -516,9 +548,9 @@ void check_meta_consistency(DataDir* data_dir) {
                     }
 
                     // if type is varchar, check length
-                    if (type == starrocks::FieldType::OLAP_FIELD_TYPE_VARCHAR) {
+                    if (type == starrocks::LogicalType::TYPE_VARCHAR) {
                         const auto& column_pb = footer.columns(iter->second.first);
-                        if (columns[col_id].length() != column_pb.length()) {
+                        if (column.length() != column_pb.length()) {
                             tablet_ids.emplace_back(tablet_id);
                             return true;
                         }
@@ -532,8 +564,8 @@ void check_meta_consistency(DataDir* data_dir) {
     if (tablet_ids.size() > 0) {
         std::cout << "inconsistency tablet:";
     }
-    for (size_t i = 0; i < tablet_ids.size(); ++i) {
-        std::cout << "," << tablet_ids[i];
+    for (long tablet_id : tablet_ids) {
+        std::cout << "," << tablet_id;
     }
     return;
 }

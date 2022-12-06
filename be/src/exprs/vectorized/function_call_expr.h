@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -6,8 +18,7 @@
 #include "exprs/expr.h"
 #include "exprs/vectorized/builtin_functions.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 class VectorizedFunctionCallExpr final : public Expr {
 public:
@@ -26,7 +37,7 @@ protected:
 
     bool is_constant() const override;
 
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override;
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override;
 
 private:
     const FunctionDescriptor* _fn_desc;
@@ -34,5 +45,4 @@ private:
     bool _is_returning_random_value = false;
 };
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

@@ -1,5 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "runtime/stream_load/transaction_mgr.h"
 
 #include <deque>
@@ -98,11 +110,11 @@ std::string TransactionMgr::_build_reply(const std::string& label, const std::st
 }
 
 Status TransactionMgr::list_transactions(const HttpRequest* req, std::string* resp) {
-    auto ids = std::move(_exec_env->stream_context_mgr()->get_ids());
+    auto ids = _exec_env->stream_context_mgr()->get_ids();
 
     rapidjson::StringBuffer s;
     rapidjson::PrettyWriter<rapidjson::StringBuffer> writer(s);
-    for (auto id : ids) {
+    for (const auto& id : ids) {
         std::string txn_resp;
         auto ctx = _exec_env->stream_context_mgr()->get(id);
         if (ctx != nullptr) {
@@ -377,9 +389,9 @@ Status TransactionMgr::_rollback_transaction(StreamLoadContext* ctx) {
 }
 
 void TransactionMgr::_clean_stream_context() {
-    auto ids = std::move(_exec_env->stream_context_mgr()->get_ids());
+    auto ids = _exec_env->stream_context_mgr()->get_ids();
 
-    for (auto id : ids) {
+    for (const auto& id : ids) {
         auto ctx = _exec_env->stream_context_mgr()->get(id);
         if (ctx != nullptr) {
             int64_t now = UnixSeconds();

@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -9,11 +21,11 @@
 
 namespace starrocks::vectorized {
 
-UNION_VALUE_GUARD(PrimitiveType, FixedNonDecimalTypeGuard, pt_is_fixed_non_decimal, pt_is_boolean_struct,
+UNION_VALUE_GUARD(LogicalType, FixedNonDecimalTypeGuard, pt_is_fixed_non_decimal, pt_is_boolean_struct,
                   pt_is_integer_struct, pt_is_float_struct, pt_is_date_struct, pt_is_datetime_struct,
                   pt_is_decimalv2_struct, pt_is_time_struct)
 
-template <bool check_overflow, PrimitiveType Type, PrimitiveType ResultType>
+template <bool check_overflow, LogicalType Type, LogicalType ResultType>
 struct DecimalDecimalCast {
     static inline ColumnPtr evaluate(const ColumnPtr& column, int to_precision, int to_scale) {
         using FromCppType = RunTimeCppType<Type>;
@@ -96,11 +108,11 @@ struct DecimalDecimalCast {
         }
     }
 };
-template <bool check_overflow, PrimitiveType, PrimitiveType, typename = guard::Guard, typename = guard::Guard>
+template <bool check_overflow, LogicalType, LogicalType, typename = guard::Guard, typename = guard::Guard>
 struct DecimalNonDecimalCast {};
 
 // cast: bool,integer,float,datetime,date, time <-> decimal
-template <bool check_overflow, PrimitiveType DecimalType, PrimitiveType NonDecimalType>
+template <bool check_overflow, LogicalType DecimalType, LogicalType NonDecimalType>
 struct DecimalNonDecimalCast<check_overflow, DecimalType, NonDecimalType, DecimalPTGuard<DecimalType>,
                              FixedNonDecimalTypeGuard<NonDecimalType>> {
     using DecimalCppType = RunTimeCppType<DecimalType>;
@@ -147,12 +159,12 @@ struct DecimalNonDecimalCast<check_overflow, DecimalType, NonDecimalType, Decima
                                                                                                 &result_data[i]);
             } else if constexpr (pt_is_datetime<NonDecimalType>) {
                 static_assert(std::is_same_v<NonDecimalCppType, TimestampValue>, "TimestampValue type is required");
-                int64_t datum = (int64_t)(((TimestampValue&)data[i]).to_timestamp_literal());
+                auto datum = (int64_t)(((TimestampValue&)data[i]).to_timestamp_literal());
                 overflow = DecimalV3Cast::from_integer<int64_t, DecimalCppType, check_overflow>(datum, scale_factor,
                                                                                                 &result_data[i]);
             } else if constexpr (pt_is_decimalv2<NonDecimalType>) {
                 static_assert(std::is_same_v<NonDecimalCppType, DecimalV2Value>, "TimestampValue type is required");
-                int128_t datum = (int128_t)(((DecimalV2Value&)data[i]).value());
+                auto datum = (int128_t)(((DecimalV2Value&)data[i]).value());
                 if (scale == DecimalV2Value::SCALE) {
                     overflow = DecimalV3Cast::to_decimal_trivial<int128_t, DecimalCppType, check_overflow>(
                             datum, &result_data[i]);
@@ -231,7 +243,7 @@ struct DecimalNonDecimalCast<check_overflow, DecimalType, NonDecimalType, Decima
                 int64_t datum;
                 overflow = DecimalV3Cast::to_integer<DecimalCppType, int64_t, check_overflow>(data[i], scale_factor,
                                                                                               &datum);
-                DateValue& date_value = (DateValue&)result_data[i];
+                auto& date_value = (DateValue&)result_data[i];
                 if constexpr (check_overflow) {
                     overflow = overflow || !date_value.from_date_literal_with_check(datum);
                 } else {
@@ -242,7 +254,7 @@ struct DecimalNonDecimalCast<check_overflow, DecimalType, NonDecimalType, Decima
                 int64_t datum;
                 overflow = DecimalV3Cast::to_integer<DecimalCppType, int64_t, check_overflow>(data[i], scale_factor,
                                                                                               &datum);
-                TimestampValue& timestamp_value = (TimestampValue&)result_data[i];
+                auto& timestamp_value = (TimestampValue&)result_data[i];
                 if constexpr (check_overflow) {
                     overflow = overflow || !timestamp_value.from_timestamp_literal_with_check((uint64_t)datum);
                 } else {
@@ -288,13 +300,13 @@ struct DecimalNonDecimalCast<check_overflow, DecimalType, NonDecimalType, Decima
 };
 
 // cast: char/varchar <-> decimal
-template <bool check_overflow, PrimitiveType DecimalType, PrimitiveType BinaryType>
-struct DecimalNonDecimalCast<check_overflow, DecimalType, BinaryType, DecimalPTGuard<DecimalType>,
-                             BinaryPTGuard<BinaryType>> {
+template <bool check_overflow, LogicalType DecimalType, LogicalType StringType>
+struct DecimalNonDecimalCast<check_overflow, DecimalType, StringType, DecimalPTGuard<DecimalType>,
+                             StringPTGuard<StringType>> {
     using DecimalCppType = RunTimeCppType<DecimalType>;
     using DecimalColumnType = RunTimeColumnType<DecimalType>;
-    using BinaryCppType = RunTimeCppType<BinaryType>;
-    using BinaryColumnType = RunTimeColumnType<BinaryType>;
+    using StringCppType = RunTimeCppType<StringType>;
+    using StringColumnType = RunTimeColumnType<StringType>;
 
     static inline ColumnPtr decimal_from(const ColumnPtr& column, int precision, int scale) {
         const auto num_rows = column->size();
@@ -308,7 +320,7 @@ struct DecimalNonDecimalCast<check_overflow, DecimalType, BinaryType, DecimalPTG
             null_column->resize(num_rows);
             nulls = &null_column->get_data().front();
         }
-        const auto binary_data = ColumnHelper::cast_to_raw<BinaryType>(column);
+        const auto binary_data = ColumnHelper::cast_to_raw<StringType>(column);
         for (auto i = 0; i < num_rows; ++i) {
             auto slice = binary_data->get_slice(i);
             auto overflow = DecimalV3Cast::from_string<DecimalCppType>(
@@ -356,7 +368,7 @@ struct DecimalNonDecimalCast<check_overflow, DecimalType, BinaryType, DecimalPTG
 
 template <bool check_overflow>
 struct DecimalToDecimal {
-    template <PrimitiveType Type, PrimitiveType ResultType, typename... Args>
+    template <LogicalType Type, LogicalType ResultType, typename... Args>
     static inline ColumnPtr evaluate(const ColumnPtr& column, Args&&... args) {
         return DecimalDecimalCast<check_overflow, Type, ResultType>::evaluate(column, std::forward<Args>(args)...);
     }
@@ -365,7 +377,7 @@ struct DecimalToDecimal {
 // cast: convert to decimal type from other types
 template <bool check_overflow>
 struct DecimalFrom {
-    template <PrimitiveType Type, PrimitiveType ResultType, typename... Args>
+    template <LogicalType Type, LogicalType ResultType, typename... Args>
     static inline ColumnPtr evaluate(const ColumnPtr& column, Args&&... args) {
         return DecimalNonDecimalCast<check_overflow, ResultType, Type>::decimal_from(column,
                                                                                      std::forward<Args>(args)...);
@@ -375,7 +387,7 @@ struct DecimalFrom {
 // cast: convert to other types from decimal type
 template <bool check_overflow>
 struct DecimalTo {
-    template <PrimitiveType Type, PrimitiveType ResultType>
+    template <LogicalType Type, LogicalType ResultType>
     static inline ColumnPtr evaluate(const ColumnPtr& column) {
         return DecimalNonDecimalCast<check_overflow, Type, ResultType>::decimal_to(column);
     }

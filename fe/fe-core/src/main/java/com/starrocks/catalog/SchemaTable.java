@@ -200,6 +200,16 @@ public class SchemaTable extends Table {
                                     .column("VARIABLE_NAME", ScalarType.createVarchar(64))
                                     .column("VARIABLE_VALUE", ScalarType.createVarchar(1024))
                                     .build()))
+                    .put("verbose_session_variables", new SchemaTable(
+                            SystemId.VERBOSE_SESSION_VARIABLES_ID,
+                            "verbose_session_variables",
+                            TableType.SCHEMA,
+                            builder()
+                                    .column("VARIABLE_NAME", ScalarType.createVarchar(64))
+                                    .column("VARIABLE_VALUE", ScalarType.createVarchar(1024))
+                                    .column("DEFAULT_VALUE", ScalarType.createVarchar(1024))
+                                    .column("IS_CHANGED", ScalarType.createType(PrimitiveType.BOOLEAN))
+                                    .build()))
                     .put("columns", new SchemaTable(
                             SystemId.COLUMNS_ID,
                             "columns",
@@ -439,6 +449,7 @@ public class SchemaTable extends Table {
                                             .column("EXPIRE_TIME", ScalarType.createType(PrimitiveType.DATETIME))
                                             .column("ERROR_CODE", ScalarType.createType(PrimitiveType.BIGINT))
                                             .column("ERROR_MESSAGE", ScalarType.createVarchar(MAX_FIELD_VARCHARLENGTH))
+                                            .column("PROGRESS", ScalarType.createVarchar(64))
                                             .build()))
                     .put("materialized_views",
                             new SchemaTable(
@@ -555,6 +566,8 @@ public class SchemaTable extends Table {
         SCH_CREATE_TABLE("CREATE_TABLE", "CREATE_TABLE", TSchemaTableType.SCH_CREATE_TABLE),
         SCH_TASKS("TASKS", "TASKS", TSchemaTableType.SCH_TASKS),
         SCH_TASK_RUNS("TASK_RUNS", "TASK_RUNS", TSchemaTableType.SCH_TASK_RUNS),
+        SCH_VERBOSE_SESSION_VARIABLES("VERBOSE_SESSION_VARIABLES", "VERBOSE_SESSION_VARIABLES",
+                TSchemaTableType.SCH_VERBOSE_SESSION_VARIABLES),
         SCH_INVALID("NULL", "NULL", TSchemaTableType.SCH_INVALID);
 
         private final String description;

@@ -1,5 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "exec/vectorized/schema_scanner/schema_task_runs_scanner.h"
 
 #include "exec/vectorized/schema_scanner/schema_helper.h"
@@ -20,7 +32,8 @@ SchemaScanner::ColumnDesc SchemaTaskRunsScanner::_s_tbls_columns[] = {
         {"DEFINITION", TYPE_VARCHAR, sizeof(StringValue), false},
         {"EXPIRE_TIME", TYPE_DATETIME, sizeof(StringValue), true},
         {"ERROR_CODE", TYPE_BIGINT, sizeof(StringValue), true},
-        {"ERROR_MESSAGE", TYPE_VARCHAR, sizeof(StringValue), true}};
+        {"ERROR_MESSAGE", TYPE_VARCHAR, sizeof(StringValue), true},
+        {"PROGRESS", TYPE_VARCHAR, sizeof(StringValue), true}};
 
 SchemaTaskRunsScanner::SchemaTaskRunsScanner()
         : SchemaScanner(_s_tbls_columns, sizeof(_s_tbls_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
@@ -178,6 +191,21 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(10);
                 if (task_run_info.__isset.error_message) {
                     const std::string* str = &task_run_info.error_message;
+                    Slice value(str->c_str(), str->length());
+                    fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                } else {
+                    auto* nullable_column = down_cast<NullableColumn*>(column.get());
+                    nullable_column->append_nulls(1);
+                }
+            }
+            break;
+        }
+        case 11: {
+            // progress
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(11);
+                if (task_run_info.__isset.progress) {
+                    const std::string* str = &task_run_info.progress;
                     Slice value(str->c_str(), str->length());
                     fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
                 } else {

@@ -29,6 +29,7 @@ class DiskMetrics;
 class NetMetrics;
 class FileDescriptorMetrics;
 class SnmpMetrics;
+class QueryCacheMetrics;
 
 class MemoryMetrics {
 public:
@@ -134,7 +135,12 @@ private:
     void _update_fd_metrics();
 
     void _install_snmp_metrics(MetricRegistry* registry);
+
     void _update_snmp_metrics();
+
+    void _install_query_cache_metrics(MetricRegistry* registry);
+
+    void _update_query_cache_metrics();
 
 private:
     static const char* const _s_hook_name;
@@ -144,6 +150,7 @@ private:
     std::map<std::string, DiskMetrics*> _disk_metrics;
     std::map<std::string, NetMetrics*> _net_metrics;
     std::unique_ptr<FileDescriptorMetrics> _fd_metrics;
+    std::unique_ptr<QueryCacheMetrics> _query_cache_metrics;
     int _proc_net_dev_version = 0;
     std::unique_ptr<SnmpMetrics> _snmp_metrics;
 

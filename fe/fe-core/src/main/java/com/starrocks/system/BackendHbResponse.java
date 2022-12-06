@@ -42,6 +42,7 @@ public class BackendHbResponse extends HeartbeatResponse implements Writable {
     @SerializedName(value = "brpcPort")
     private int brpcPort;
 
+    @SerializedName(value = "starletPort")
     private int starletPort;
     @SerializedName(value = "version")
     private String version = "";

@@ -9,6 +9,7 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -48,6 +49,19 @@ public class PruneProjectColumnsRule extends TransformationRule {
                 }
             }
         }));
+
+        if (newMap.isEmpty()) {
+            OptExpression child = input.inputAt(0);
+            LogicalOperator childOp = (LogicalOperator) child.getOp();
+            ColumnRefOperator smallestColumn = childOp.getSmallestColumn(context.getColumnRefFactory(), child);
+            if (smallestColumn != null) {
+                ScalarOperator expr = projectOperator.getColumnRefMap().get(smallestColumn);
+                if (expr != null && !smallestColumn.equals(expr) && !expr.isVariable()) {
+                    newMap.put(smallestColumn, expr);
+                    requiredInputColumns.union(smallestColumn);
+                }
+            }
+        }
 
         // Change the requiredOutputColumns in context
         requiredOutputColumns.union(requiredInputColumns);

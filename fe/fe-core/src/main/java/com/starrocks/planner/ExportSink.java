@@ -117,4 +117,9 @@ public class ExportSink extends DataSink {
     public DataPartition getOutputPartition() {
         return DataPartition.RANDOM;
     }
+
+    @Override
+    public boolean canUsePipeLine() {
+        return true;
+    }
 }

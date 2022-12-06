@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include <exprs/vectorized/arithmetic_operation.h>
 #include <gtest/gtest.h>
 namespace starrocks::vectorized {
@@ -54,7 +67,7 @@ TEST_F(ArithmeticOperationTest, test_decimal_div_integer) {
         auto& s_expect_quotient = std::get<2>(tc);
         int64_t dividend = 0;
         DecimalV3Cast::from_string<int64_t>(&dividend, 7, 2, s_dividend.c_str(), s_dividend.size());
-        int128_t quotient = decimal_div_integer<int128_t>(int128_t(dividend), int128_t(divisor), 2);
+        auto quotient = decimal_div_integer<int128_t>(int128_t(dividend), int128_t(divisor), 2);
         auto s_actual_quotient = DecimalV3Cast::to_string<int128_t>(quotient, 38, 8);
         ASSERT_EQ(s_expect_quotient, s_actual_quotient);
     }
@@ -65,7 +78,7 @@ TEST_F(ArithmeticOperationTest, test_decimal_div_integer) {
         auto& s_expect_quotient = std::get<2>(tc);
         int128_t dividend = 0;
         DecimalV3Cast::from_string<int128_t>(&dividend, 7, 2, s_dividend.c_str(), s_dividend.size());
-        int128_t quotient = decimal_div_integer<int128_t>(int128_t(dividend), int128_t(divisor), 2);
+        auto quotient = decimal_div_integer<int128_t>(int128_t(dividend), int128_t(divisor), 2);
         auto s_actual_quotient = DecimalV3Cast::to_string<int128_t>(quotient, 38, 8);
         ASSERT_EQ(s_expect_quotient, s_actual_quotient);
     }

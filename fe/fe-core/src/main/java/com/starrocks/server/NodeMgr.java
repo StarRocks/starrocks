@@ -54,10 +54,13 @@ import com.starrocks.system.Frontend;
 import com.starrocks.system.HeartbeatMgr;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TResourceUsage;
 import com.starrocks.thrift.TSetConfigRequest;
 import com.starrocks.thrift.TSetConfigResponse;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
+import com.starrocks.thrift.TUpdateResourceUsageRequest;
+import com.starrocks.thrift.TUpdateResourceUsageResponse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.codehaus.jackson.map.ObjectMapper;
@@ -273,7 +276,7 @@ public class NodeMgr {
                         Thread.sleep(5000);
                         continue;
                     } catch (InterruptedException e) {
-                        e.printStackTrace();
+                        LOG.warn(e);
                         System.exit(-1);
                     }
                 }
@@ -719,6 +722,12 @@ public class NodeMgr {
             if (preUpdateFe == null) {
                 throw new DdlException(String.format("frontend [%s] not found", toBeModifyHost));
             }
+
+            Frontend existFe = getFeByHost(fqdn);
+            if (null != existFe) {
+                throw new DdlException("frontend with host [" + fqdn + "] already exists ");
+            }
+
             // step 1 update the fe information stored in bdb
             BDBHA bdbha = (BDBHA) stateMgr.getHaProtocol();
             bdbha.updateFrontendHostAndPort(preUpdateFe.getNodeName(), fqdn, preUpdateFe.getEditLogPort());
@@ -789,10 +798,11 @@ public class NodeMgr {
             }
             frontends.put(fe.getNodeName(), fe);
             if (fe.getRole() == FrontendNodeType.FOLLOWER) {
-                // DO NOT add helper sockets here, cause BDBHA is not instantiated yet.
-                // helper sockets will be added after start BDBHA
-                // But add to helperNodes, just for show
                 helperNodes.add(Pair.create(fe.getHost(), fe.getEditLogPort()));
+                if (!GlobalStateMgr.isCheckpointThread()) {
+                    BDBHA ha = (BDBHA) stateMgr.getHaProtocol();
+                    ha.addHelperSocket(fe.getHost(), fe.getEditLogPort());
+                }
             }
         } finally {
             unlock();
@@ -825,6 +835,10 @@ public class NodeMgr {
             }
             if (removedFe.getRole() == FrontendNodeType.FOLLOWER) {
                 helperNodes.remove(Pair.create(removedFe.getHost(), removedFe.getEditLogPort()));
+                if (!GlobalStateMgr.isCheckpointThread()) {
+                    BDBHA ha = (BDBHA) stateMgr.getHaProtocol();
+                    ha.removeHelperSocket(removedFe.getHost(), removedFe.getEditLogPort());
+                }
             }
 
             removedFrontends.add(removedFe.getNodeName());
@@ -948,6 +962,32 @@ public class NodeMgr {
         this.leaderIp = info.getIp();
         this.leaderHttpPort = info.getHttpPort();
         this.leaderRpcPort = info.getRpcPort();
+    }
+
+    public void updateResourceUsage(long backendId, TResourceUsage usage) {
+        List<Frontend> allFrontends = getFrontends(null);
+        for (Frontend fe : allFrontends) {
+            if (fe.getHost().equals(getSelfNode().first)) {
+                continue;
+            }
+
+            TUpdateResourceUsageRequest request = new TUpdateResourceUsageRequest();
+            request.setBackend_id(backendId);
+            request.setResource_usage(usage);
+
+            try {
+                TUpdateResourceUsageResponse response = FrontendServiceProxy
+                        .call(new TNetworkAddress(fe.getHost(), fe.getRpcPort()),
+                                Config.thrift_rpc_timeout_ms,
+                                Config.thrift_rpc_retry_times,
+                                client -> client.updateResourceUsage(request));
+                if (response.getStatus().getStatus_code() != TStatusCode.OK) {
+                    LOG.warn("UpdateResourceUsage to remote fe: {} failed", fe.getHost());
+                }
+            } catch (Exception e) {
+                LOG.warn("UpdateResourceUsage to remote fe: {} failed", fe.getHost(), e);
+            }
+        }
     }
 
     public void setConfig(AdminSetConfigStmt stmt) throws DdlException {

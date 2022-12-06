@@ -33,7 +33,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.UserException;
-import com.starrocks.task.StreamLoadTask;
+import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TFileType;
 import com.starrocks.thrift.TStreamLoadPutRequest;
@@ -97,9 +97,9 @@ public class StreamLoadPlannerTest {
         request.setFileType(TFileType.FILE_STREAM);
         request.setFormatType(TFileFormatType.FORMAT_CSV_PLAIN);
         request.setLoad_dop(2);
-        StreamLoadTask streamLoadTask = StreamLoadTask.fromTStreamLoadPutRequest(request, db);
-        StreamLoadPlanner planner = new StreamLoadPlanner(db, destTable, streamLoadTask);
-        planner.plan(streamLoadTask.getId());
+        StreamLoadInfo streamLoadInfo = StreamLoadInfo.fromTStreamLoadPutRequest(request, db);
+        StreamLoadPlanner planner = new StreamLoadPlanner(db, destTable, streamLoadInfo);
+        planner.plan(streamLoadInfo.getId());
     }
 
     @Test
@@ -140,9 +140,9 @@ public class StreamLoadPlannerTest {
         request.setFormatType(TFileFormatType.FORMAT_CSV_PLAIN);
         request.setPartial_update(true);
         request.setColumns("c1");
-        StreamLoadTask streamLoadTask = StreamLoadTask.fromTStreamLoadPutRequest(request, db);
-        StreamLoadPlanner planner = new StreamLoadPlanner(db, destTable, streamLoadTask);
-        planner.plan(streamLoadTask.getId());
+        StreamLoadInfo streamLoadInfo = StreamLoadInfo.fromTStreamLoadPutRequest(request, db);
+        StreamLoadPlanner planner = new StreamLoadPlanner(db, destTable, streamLoadInfo);
+        planner.plan(streamLoadInfo.getId());
     }
 
     @Test

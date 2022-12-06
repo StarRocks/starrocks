@@ -1,5 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "storage/async_delta_writer.h"
 
 #include <fmt/format.h>
@@ -29,22 +41,24 @@ int AsyncDeltaWriter::_execute(void* meta, bthread::TaskIterator<AsyncDeltaWrite
         if (iter->chunk != nullptr && iter->indexes_size > 0) {
             st = writer->write(*iter->chunk, iter->indexes, 0, iter->indexes_size);
         }
+        FailedRowsetInfo failed_info{.tablet_id = writer->tablet()->tablet_id(),
+                                     .replicate_token = writer->replicate_token()};
         if (st.ok() && iter->commit_after_write) {
             if (st = writer->close(); !st.ok()) {
-                iter->write_cb->run(st, nullptr);
+                iter->write_cb->run(st, nullptr, &failed_info);
                 continue;
             }
             if (st = writer->commit(); !st.ok()) {
-                iter->write_cb->run(st, nullptr);
+                iter->write_cb->run(st, nullptr, &failed_info);
                 continue;
             }
             CommittedRowsetInfo info{.tablet = writer->tablet(),
                                      .rowset = writer->committed_rowset(),
                                      .rowset_writer = writer->committed_rowset_writer(),
                                      .replicate_token = writer->replicate_token()};
-            iter->write_cb->run(st, &info);
+            iter->write_cb->run(st, &info, nullptr);
         } else {
-            iter->write_cb->run(st, nullptr);
+            iter->write_cb->run(st, nullptr, &failed_info);
         }
         // Do NOT touch |iter->commit_cb| since here, it may have been deleted.
         LOG_IF(ERROR, !st.ok()) << "Fail to write or commit. txn_id=" << writer->txn_id()
@@ -76,8 +90,7 @@ Status AsyncDeltaWriter::_init() {
     if (int r = bthread::execution_queue_start(&_queue_id, &opts, _execute, _writer.get()); r != 0) {
         return Status::InternalError(fmt::format("fail to create bthread execution queue: {}", r));
     }
-    _segment_flush_executor =
-            std::move(StorageEngine::instance()->segment_flush_executor()->create_flush_token(_writer));
+    _segment_flush_executor = StorageEngine::instance()->segment_flush_executor()->create_flush_token(_writer);
     if (_segment_flush_executor == nullptr) {
         return Status::InternalError("SegmentFlushExecutor init failed");
     }
@@ -95,7 +108,8 @@ void AsyncDeltaWriter::write(const AsyncDeltaWriterRequest& req, AsyncDeltaWrite
     int r = bthread::execution_queue_execute(_queue_id, task);
     if (r != 0) {
         LOG(WARNING) << "Fail to execution_queue_execute: " << r;
-        task.write_cb->run(Status::InternalError("fail to call execution_queue_execute"), nullptr);
+        FailedRowsetInfo failed_info{.tablet_id = _writer->tablet()->tablet_id(), .replicate_token = nullptr};
+        task.write_cb->run(Status::InternalError("fail to call execution_queue_execute"), nullptr, &failed_info);
     }
 }
 
@@ -117,7 +131,8 @@ void AsyncDeltaWriter::commit(AsyncDeltaWriterCallback* cb) {
     int r = bthread::execution_queue_execute(_queue_id, task);
     if (r != 0) {
         LOG(WARNING) << "Fail to execution_queue_execute: " << r;
-        task.write_cb->run(Status::InternalError("fail to call execution_queue_execute"), nullptr);
+        FailedRowsetInfo failed_info{.tablet_id = _writer->tablet()->tablet_id(), .replicate_token = nullptr};
+        task.write_cb->run(Status::InternalError("fail to call execution_queue_execute"), nullptr, &failed_info);
     }
 }
 

@@ -1,6 +1,20 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "exec/pipeline/sort/local_partition_topn_source.h"
+
+#include <utility>
 
 namespace starrocks::pipeline {
 
@@ -23,9 +37,9 @@ StatusOr<vectorized::ChunkPtr> LocalPartitionTopnSourceOperator::pull_chunk(Runt
 }
 
 LocalPartitionTopnSourceOperatorFactory::LocalPartitionTopnSourceOperatorFactory(
-        int32_t id, int32_t plan_node_id, const LocalPartitionTopnContextFactoryPtr& partition_topn_ctx_factory)
+        int32_t id, int32_t plan_node_id, LocalPartitionTopnContextFactoryPtr partition_topn_ctx_factory)
         : SourceOperatorFactory(id, "local_partition_topn_source", plan_node_id),
-          _partition_topn_ctx_factory(partition_topn_ctx_factory) {}
+          _partition_topn_ctx_factory(std::move(partition_topn_ctx_factory)) {}
 OperatorPtr LocalPartitionTopnSourceOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
     return std::make_shared<LocalPartitionTopnSourceOperator>(this, _id, _plan_node_id, driver_sequence,
                                                               _partition_topn_ctx_factory->create(driver_sequence));

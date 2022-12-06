@@ -10,6 +10,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.MetaUtils;
 import org.apache.velocity.VelocityContext;
 
 import java.io.StringWriter;
@@ -66,8 +67,7 @@ public class SampleStatisticsCollectJob extends StatisticsCollectJob {
     }
 
     private String buildSampleInsertSQL(Long dbId, Long tableId, List<String> columnNames, long rows) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-        Table table = db.getTable(tableId);
+        Table table = MetaUtils.getTable(dbId, tableId);
 
         long hitRows = 1;
         long totalRows = 0;

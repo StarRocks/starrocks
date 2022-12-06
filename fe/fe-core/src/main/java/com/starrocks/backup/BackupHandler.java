@@ -30,7 +30,6 @@ import com.starrocks.backup.AbstractJob.JobType;
 import com.starrocks.backup.BackupJob.BackupJobState;
 import com.starrocks.backup.BackupJobInfo.BackupTableInfo;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -311,10 +310,6 @@ public class BackupHandler extends LeaderDaemon implements Writable {
                 }
 
                 OlapTable olapTbl = (OlapTable) tbl;
-                if (olapTbl.getKeysType() == KeysType.PRIMARY_KEYS) {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
-                            "backup do not support primary key table: " + tblName);
-                }
                 if (olapTbl.existTempPartitions()) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
                             "Do not support backup table with temp partitions");

@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/olap/tablet_manager.cpp
 
@@ -21,18 +34,17 @@
 
 #include "storage/tablet_manager.h"
 
-DIAGNOSTIC_PUSH
-DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 #include <bvar/bvar.h>
-DIAGNOSTIC_POP
 #include <fmt/format.h>
 #include <re2/re2.h>
 
 #include <ctime>
 #include <memory>
 
+#include "common/config.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
+#include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "storage/compaction_manager.h"
 #include "storage/data_dir.h"
@@ -69,11 +81,10 @@ static void get_shutdown_tablets(std::ostream& os, void*) {
 
 bvar::PassiveStatus<std::string> g_shutdown_tablets("starrocks_shutdown_tablets", get_shutdown_tablets, nullptr);
 
-TabletManager::TabletManager(int32_t tablet_map_lock_shard_size)
+TabletManager::TabletManager(int64_t tablet_map_lock_shard_size)
         : _tablets_shards(tablet_map_lock_shard_size),
           _tablets_shards_mask(tablet_map_lock_shard_size - 1),
-          _last_update_stat_ms(0),
-          _cur_shard(0) {
+          _last_update_stat_ms(0) {
     CHECK_GT(_tablets_shards.size(), 0) << "tablets shard count greater than 0";
     CHECK_EQ(_tablets_shards.size() & _tablets_shards_mask, 0) << "tablets shard count must be power of two";
 }
@@ -148,8 +159,8 @@ Status TabletManager::create_tablet(const TCreateTabletReq& request, std::vector
     // the shard where the target tablet is located need to be locked.
     // In order to prevent deadlock, the order of locking needs to be fixed.
     if (request.__isset.base_tablet_id && request.base_tablet_id > 0) {
-        int shard_idx = _get_tablets_shard_idx(tablet_id);
-        int base_shard_idx = _get_tablets_shard_idx(request.base_tablet_id);
+        int64_t shard_idx = _get_tablets_shard_idx(tablet_id);
+        int64_t base_shard_idx = _get_tablets_shard_idx(request.base_tablet_id);
 
         if (shard_idx == base_shard_idx) {
             wlock.lock();
@@ -326,6 +337,22 @@ TabletSharedPtr TabletManager::_create_tablet_meta_and_dir_unlocked(const TCreat
             LOG(WARNING) << "Fail to create " << new_tablet->schema_hash_path() << ": " << st.to_string();
             continue;
         }
+
+        if (config::sync_tablet_meta) {
+            std::filesystem::path schema_hash_path(new_tablet->schema_hash_path());
+            std::filesystem::path tablet_id_path = schema_hash_path.parent_path();
+            Status st = fs::sync_dir(tablet_id_path.string());
+            if (!st.ok()) {
+                LOG(WARNING) << "Fail to sync " << tablet_id_path.string() << ": " << st.to_string();
+                continue;
+            }
+            std::filesystem::path shard_id_path = tablet_id_path.parent_path();
+            st = fs::sync_dir(shard_id_path.string());
+            if (!st.ok()) {
+                LOG(WARNING) << "Fail to sync " << shard_id_path.string() << ": " << st.to_string();
+                continue;
+            }
+        }
         return new_tablet;
     }
     return nullptr;
@@ -378,7 +405,7 @@ StatusOr<TabletAndRowsets> TabletManager::capture_tablet_and_rowsets(TTabletId t
     std::shared_lock rlock(tablet->get_header_lock());
     std::vector<RowsetSharedPtr> rowsets;
     RETURN_IF_ERROR(tablet->capture_consistent_rowsets(Version{from_version, to_version}, &rowsets));
-    return std::make_tuple(std::move(tablet), std::move(rowsets));
+    return std::make_tuple(std::move(tablet), std::move(rowsets), std::make_shared<RowsetsAcqRel>(rowsets));
 }
 
 TabletSharedPtr TabletManager::_get_tablet_unlocked(TTabletId tablet_id, bool include_deleted, std::string* err) {
@@ -584,9 +611,9 @@ TabletSharedPtr TabletManager::find_best_tablet_to_compaction(CompactionType com
     }
 
     if (best_tablet != nullptr) {
-        LOG(INFO) << "Found the best tablet to compact. "
-                  << "compaction_type=" << compaction_type_str << " tablet_id=" << best_tablet->tablet_id()
-                  << " highest_score=" << highest_score;
+        VLOG(1) << "Found the best tablet to compact. "
+                << "compaction_type=" << compaction_type_str << " tablet_id=" << best_tablet->tablet_id()
+                << " highest_score=" << highest_score;
         // TODO(lingbin): Remove 'max' from metric name, it would be misunderstood as the
         // biggest in history(like peak), but it is really just the value at current moment.
         if (compaction_type == CompactionType::BASE_COMPACTION) {
@@ -711,7 +738,7 @@ Status TabletManager::load_tablet_from_meta(DataDir* data_dir, TTabletId tablet_
     LOG_IF(WARNING, !st.ok()) << "Fail to add tablet " << tablet->full_name();
     // no concurrent access here
     if (config::enable_event_based_compaction_framework) {
-        StorageEngine::instance()->compaction_manager()->update_tablet_async(tablet, true, false);
+        StorageEngine::instance()->compaction_manager()->update_tablet_async(tablet);
     }
 
     return st;
@@ -1234,7 +1261,10 @@ Status TabletManager::_drop_tablet_unlocked(TTabletId tablet_id, TabletDropFlag 
     TabletSharedPtr dropped_tablet = it->second;
     tablet_map.erase(it);
     _remove_tablet_from_partition(*dropped_tablet);
-    dropped_tablet->stop_compaction();
+    if (config::enable_event_based_compaction_framework) {
+        dropped_tablet->stop_compaction();
+        StorageEngine::instance()->compaction_manager()->remove_candidate(dropped_tablet->tablet_id());
+    }
 
     DroppedTabletInfo drop_info{.tablet = dropped_tablet, .flag = flag};
 
@@ -1330,8 +1360,8 @@ Status TabletManager::create_tablet_from_meta_snapshot(DataDir* store, TTabletId
     if (snapshot_meta->tablet_meta().updates().next_log_id() != 0) {
         return Status::InternalError("non-zero log id in tablet meta");
     }
-    LOG(INFO) << Substitute("create tablet from snapshot tablet:$0 version:$1 path:$2", tablet_id,
-                            snapshot_meta->snapshot_version(), schema_hash_path);
+    LOG(INFO) << strings::Substitute("create tablet from snapshot tablet:$0 version:$1 path:$2", tablet_id,
+                                     snapshot_meta->snapshot_version(), schema_hash_path);
 
     // Set of rowset id collected from rowset meta.
     std::set<uint32_t> set1;

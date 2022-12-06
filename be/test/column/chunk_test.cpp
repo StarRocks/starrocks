@@ -1,12 +1,24 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "column/chunk.h"
 
 #include <gtest/gtest.h>
 
 #include "column/binary_column.h"
-#include "column/field.h"
 #include "column/fixed_length_column.h"
+#include "column/vectorized_field.h"
 #include "column/vectorized_fwd.h"
 
 namespace starrocks::vectorized {
@@ -18,21 +30,21 @@ public:
 
     std::string make_string(size_t i) { return std::string("c").append(std::to_string(static_cast<int32_t>(i))); }
 
-    FieldPtr make_field(size_t i) {
-        return std::make_shared<Field>(i, make_string(i), get_type_info(OLAP_FIELD_TYPE_INT), false);
+    VectorizedFieldPtr make_field(size_t i) {
+        return std::make_shared<VectorizedField>(i, make_string(i), get_type_info(TYPE_INT), false);
     }
 
-    Fields make_fields(size_t size) {
-        Fields fields;
+    VectorizedFields make_fields(size_t size) {
+        VectorizedFields fields;
         for (size_t i = 0; i < size; i++) {
             fields.emplace_back(make_field(i));
         }
         return fields;
     }
 
-    SchemaPtr make_schema(size_t i) {
-        Fields fields = make_fields(i);
-        return std::make_shared<Schema>(fields);
+    VectorizedSchemaPtr make_schema(size_t i) {
+        VectorizedFields fields = make_fields(i);
+        return std::make_shared<VectorizedSchema>(fields);
     }
 
     ColumnPtr make_column(size_t start) {

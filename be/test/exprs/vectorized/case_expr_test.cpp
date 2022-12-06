@@ -1,5 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "exprs/vectorized/case_expr.h"
 
 #include <glog/logging.h>
@@ -17,10 +29,9 @@
 #include "runtime/mem_pool.h"
 #include "runtime/primitive_type.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
-template <PrimitiveType child_type>
+template <LogicalType child_type>
 struct VectorizedCaseExprTestBuilder {
     VectorizedCaseExprTestBuilder(bool has_else, bool has_case) {
         _has_else = has_else;
@@ -28,14 +39,14 @@ struct VectorizedCaseExprTestBuilder {
         _expr.reset(VectorizedCaseExprFactory::from_thrift(case_when_node()));
     }
 
-    template <template <PrimitiveType Type> typename T, typename... Args>
+    template <template <LogicalType Type> typename T, typename... Args>
     VectorizedCaseExprTestBuilder& add_then(Args&&... args) {
         _then_expr_sz++;
         _expr->add_child(_obj_pool.add(new T<child_type>(mock_node(child_type), std::forward<Args>(args)...)));
         return *this;
     }
 
-    template <template <PrimitiveType Type> typename T, typename... Args>
+    template <template <LogicalType Type> typename T, typename... Args>
     VectorizedCaseExprTestBuilder& add_when(Args&&... args) {
         _when_expr_sz++;
         _expr->add_child(_obj_pool.add(new T<TYPE_BOOLEAN>(mock_node(TYPE_BOOLEAN), std::forward<Args>(args)...)));
@@ -64,7 +75,7 @@ private:
         return expr_node;
     }
 
-    TExprNode mock_node(PrimitiveType type) {
+    TExprNode mock_node(LogicalType type) {
         TExprNode expr_node;
         expr_node.opcode = TExprOpcode::ADD;
         expr_node.child_type = to_thrift(type);
@@ -89,7 +100,7 @@ private:
 
 class VectorizedCaseExprTest : public ::testing::Test {
 public:
-    void SetUp() {
+    void SetUp() override {
         expr_node.opcode = TExprOpcode::ADD;
         expr_node.child_type = TPrimitiveType::INT;
         expr_node.node_type = TExprNodeType::BINARY_PRED;
@@ -554,5 +565,4 @@ TEST_F(VectorizedCaseExprTest, NoCaseWhenNullReturnIntElse) {
     }
 }
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

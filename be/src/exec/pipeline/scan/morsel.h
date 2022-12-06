@@ -1,15 +1,29 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
 #include <optional>
 
+#include "exec/query_cache/ticket_checker.h"
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/mem_pool.h"
 #include "storage/olap_common.h"
 #include "storage/range.h"
 #include "storage/rowset/segment_group.h"
 #include "storage/seek_range.h"
+#include "storage/tablet.h"
 #include "storage/tablet_reader_params.h"
 #include "storage/tuple.h"
 
@@ -24,7 +38,7 @@ class Segment;
 using SegmentSharedPtr = std::shared_ptr<Segment>;
 
 namespace vectorized {
-class TabletReaderParams;
+struct TabletReaderParams;
 class SeekTuple;
 struct RowidRangeOption;
 using RowidRangeOptionPtr = std::shared_ptr<RowidRangeOption>;
@@ -32,8 +46,8 @@ struct ShortKeyRangeOption;
 using ShortKeyRangeOptionPtr = std::shared_ptr<ShortKeyRangeOption>;
 struct ShortKeyOption;
 using ShortKeyOptionPtr = std::unique_ptr<vectorized::ShortKeyOption>;
-class Schema;
-using SchemaPtr = std::shared_ptr<Schema>;
+class VectorizedSchema;
+using VectorizedSchemaPtr = std::shared_ptr<VectorizedSchema>;
 class Range;
 } // namespace vectorized
 
@@ -52,7 +66,7 @@ using MorselQueueFactoryMap = std::unordered_map<int32_t, MorselQueueFactoryPtr>
 /// Morsel.
 class Morsel {
 public:
-    Morsel(int32_t plan_node_id) : _plan_node_id(plan_node_id) {}
+    explicit Morsel(int32_t plan_node_id) : _plan_node_id(plan_node_id) {}
     virtual ~Morsel() = default;
 
     int32_t get_plan_node_id() const { return _plan_node_id; }
@@ -70,15 +84,26 @@ public:
     void set_from_version(int64_t from_version) { _from_version = from_version; }
     int64_t from_version() { return _from_version; }
 
+    void set_rowsets(std::vector<RowsetSharedPtr> rowsets) { _rowsets = std::move(rowsets); }
+    const std::vector<RowsetSharedPtr>& rowsets() const { return _rowsets; }
+
 private:
     int32_t _plan_node_id;
     int64_t _from_version = 0;
+
+    std::vector<RowsetSharedPtr> _rowsets;
 };
 
 class ScanMorsel : public Morsel {
 public:
     ScanMorsel(int32_t plan_node_id, const TScanRange& scan_range)
-            : Morsel(plan_node_id), _scan_range(std::make_unique<TScanRange>(scan_range)) {}
+            : Morsel(plan_node_id), _scan_range(std::make_unique<TScanRange>(scan_range)) {
+        if (_scan_range->__isset.internal_scan_range) {
+            _tablet_id = _scan_range->internal_scan_range.tablet_id;
+            auto str_version = _scan_range->internal_scan_range.version;
+            _version = strtol(str_version.c_str(), nullptr, 10);
+        }
+    }
 
     ScanMorsel(int32_t plan_node_id, const TScanRangeParams& scan_range)
             : ScanMorsel(plan_node_id, scan_range.scan_range) {}
@@ -88,18 +113,13 @@ public:
     TInternalScanRange* get_olap_scan_range() { return &(_scan_range->internal_scan_range); }
 
     std::tuple<int64_t, int64_t> get_lane_owner_and_version() const override {
-        if (_scan_range->__isset.internal_scan_range) {
-            auto tablet_id = _scan_range->internal_scan_range.tablet_id;
-            auto str_version = _scan_range->internal_scan_range.version;
-            auto version = strtol(str_version.c_str(), nullptr, 10);
-            return std::tuple<int64_t, int64_t>{tablet_id, version};
-        } else {
-            return std::tuple<int64_t, int64_t>{0L, 0L};
-        }
+        return std::tuple<int64_t, int64_t>{_tablet_id, _version};
     }
 
 private:
     std::unique_ptr<TScanRange> _scan_range;
+    int64_t _tablet_id = 0;
+    int64_t _version = 0;
 };
 
 class PhysicalSplitScanMorsel final : public ScanMorsel {
@@ -136,7 +156,7 @@ public:
     virtual size_t num_original_morsels() const = 0;
 
     virtual bool is_shared() const = 0;
-    virtual bool need_local_shuffle() const = 0;
+    virtual bool could_local_shuffle() const = 0;
 };
 
 class SharedMorselQueueFactory final : public MorselQueueFactory {
@@ -149,7 +169,7 @@ public:
     size_t num_original_morsels() const override;
 
     bool is_shared() const override { return true; }
-    bool need_local_shuffle() const override { return true; }
+    bool could_local_shuffle() const override { return true; }
 
 private:
     MorselQueuePtr _queue;
@@ -158,7 +178,7 @@ private:
 
 class IndividualMorselQueueFactory final : public MorselQueueFactory {
 public:
-    IndividualMorselQueueFactory(std::map<int, MorselQueuePtr>&& queue_per_driver_seq, bool need_local_shuffle);
+    IndividualMorselQueueFactory(std::map<int, MorselQueuePtr>&& queue_per_driver_seq, bool could_local_shuffle);
     ~IndividualMorselQueueFactory() override = default;
 
     MorselQueue* create(int driver_sequence) override {
@@ -171,11 +191,11 @@ public:
     size_t num_original_morsels() const override;
 
     bool is_shared() const override { return false; }
-    bool need_local_shuffle() const override { return _need_local_shuffle; }
+    bool could_local_shuffle() const override { return _could_local_shuffle; }
 
 private:
     std::vector<MorselQueuePtr> _queue_per_driver_seq;
-    const bool _need_local_shuffle;
+    const bool _could_local_shuffle;
 };
 
 /// MorselQueue.
@@ -210,6 +230,10 @@ public:
 
     std::vector<TInternalScanRange*> olap_scan_ranges() const override;
 
+    void set_tablet_rowsets(const std::vector<std::vector<RowsetSharedPtr>>& tablet_rowsets) override {
+        _tablet_rowsets = tablet_rowsets;
+    }
+
     size_t num_original_morsels() const override { return _num_morsels; }
     size_t max_degree_of_parallelism() const override { return _num_morsels; }
     bool empty() const override { return _unget_morsel == nullptr && _pop_index >= _num_morsels; }
@@ -221,21 +245,52 @@ private:
     Morsels _morsels;
     const size_t _num_morsels;
     std::atomic<size_t> _pop_index;
+    std::vector<std::vector<RowsetSharedPtr>> _tablet_rowsets;
 };
 
-class PhysicalSplitMorselQueue final : public MorselQueue {
+class SplitMorselQueue : public MorselQueue {
 public:
-    explicit PhysicalSplitMorselQueue(Morsels&& morsels, int64_t degree_of_parallelism, int64_t splitted_scan_rows)
+    SplitMorselQueue(Morsels&& morsels, int64_t degree_of_parallelism, int64_t splitted_scan_rows)
             : _morsels(std::move(morsels)),
               _num_original_morsels(_morsels.size()),
               _degree_of_parallelism(degree_of_parallelism),
               _splitted_scan_rows(splitted_scan_rows) {}
+    void set_tablets(const std::vector<TabletSharedPtr>& tablets) override { _tablets = tablets; }
+
+    void set_ticket_checker(const query_cache::TicketCheckerPtr& ticket_checker) { _ticket_checker = ticket_checker; }
+
+protected:
+    void _inc_num_splits(bool is_last) {
+        if (_ticket_checker == nullptr) {
+            return;
+        }
+        DCHECK(0 <= _tablet_idx && _tablet_idx < _tablets.size());
+        auto tablet_id = _tablets[_tablet_idx]->tablet_id();
+        _ticket_checker->enter(tablet_id, is_last);
+    }
+
+    ScanMorsel* _cur_scan_morsel() { return down_cast<ScanMorsel*>(_morsels[_tablet_idx].get()); }
+
+    const Morsels _morsels;
+    // The number of the morsels before split them to pieces.
+    const size_t _num_original_morsels;
+    const int64_t _degree_of_parallelism;
+    // The minimum number of rows picked up from a segment at one time.
+    const int64_t _splitted_scan_rows;
+
+    std::vector<TabletSharedPtr> _tablets;
+    std::atomic<size_t> _tablet_idx = 0;
+    query_cache::TicketCheckerPtr _ticket_checker;
+};
+
+class PhysicalSplitMorselQueue final : public SplitMorselQueue {
+public:
+    using SplitMorselQueue::SplitMorselQueue;
     ~PhysicalSplitMorselQueue() override = default;
 
     std::vector<TInternalScanRange*> olap_scan_ranges() const override;
 
     void set_key_ranges(const std::vector<std::unique_ptr<OlapScanRange>>& key_ranges) override;
-    void set_tablets(const std::vector<TabletSharedPtr>& tablets) override { _tablets = tablets; }
     void set_tablet_rowsets(const std::vector<std::vector<RowsetSharedPtr>>& tablet_rowsets) override {
         _tablet_rowsets = tablet_rowsets;
     }
@@ -250,8 +305,8 @@ public:
 private:
     rowid_t _lower_bound_ordinal(Segment* segment, const vectorized::SeekTuple& key, bool lower) const;
     rowid_t _upper_bound_ordinal(Segment* segment, const vectorized::SeekTuple& key, bool lower, rowid_t end) const;
+    bool _is_last_split_of_current_morsel();
 
-    ScanMorsel* _cur_scan_morsel();
     Rowset* _cur_rowset();
     // Return nullptr, when _segment_idx exceeds the segments of the current rowset.
     Segment* _cur_segment();
@@ -265,13 +320,6 @@ private:
 private:
     std::mutex _mutex;
 
-    const Morsels _morsels;
-    // The number of the morsels before split them to pieces.
-    const size_t _num_original_morsels;
-    const int64_t _degree_of_parallelism;
-    // The minimum number of rows picked up from a segment at one time.
-    const int64_t _splitted_scan_rows;
-
     /// Key ranges passed to the storage layer.
     vectorized::TabletReaderParams::RangeStartOperation _range_start_op =
             vectorized::TabletReaderParams::RangeStartOperation::GT;
@@ -281,11 +329,11 @@ private:
     std::vector<OlapTuple> _range_end_key;
 
     // _tablets[i] and _tablet_rowsets[i] represent the i-th tablet and its rowsets.
-    std::vector<TabletSharedPtr> _tablets;
+
     std::vector<std::vector<RowsetSharedPtr>> _tablet_rowsets;
 
     bool _has_init_any_segment = false;
-    std::atomic<size_t> _tablet_idx = 0;
+
     size_t _rowset_idx = 0;
     size_t _segment_idx = 0;
     std::vector<vectorized::SeekRange> _tablet_seek_ranges;
@@ -297,13 +345,9 @@ private:
     MemPool _mempool;
 };
 
-class LogicalSplitMorselQueue final : public MorselQueue {
+class LogicalSplitMorselQueue final : public SplitMorselQueue {
 public:
-    explicit LogicalSplitMorselQueue(Morsels&& morsels, int64_t degree_of_parallelism, int64_t splitted_scan_rows)
-            : _morsels(std::move(morsels)),
-              _num_original_morsels(_morsels.size()),
-              _degree_of_parallelism(degree_of_parallelism),
-              _splitted_scan_rows(splitted_scan_rows) {}
+    using SplitMorselQueue::SplitMorselQueue;
     ~LogicalSplitMorselQueue() override = default;
 
     std::vector<TInternalScanRange*> olap_scan_ranges() const override;
@@ -336,16 +380,10 @@ private:
 
     ShortKeyIndexGroupIterator _lower_bound_ordinal(const vectorized::SeekTuple& key, bool lower) const;
     ShortKeyIndexGroupIterator _upper_bound_ordinal(const vectorized::SeekTuple& key, bool lower) const;
+    bool _is_last_split_of_current_morsel();
 
 private:
     std::mutex _mutex;
-
-    Morsels _morsels;
-    // The number of the morsels before split them to pieces.
-    const size_t _num_original_morsels;
-    const int64_t _degree_of_parallelism;
-    // The minimum number of rows picked up from a segment at one time.
-    const int64_t _splitted_scan_rows;
 
     /// Key ranges passed to the storage layer.
     vectorized::TabletReaderParams::RangeStartOperation _range_start_op =
@@ -356,18 +394,16 @@ private:
     std::vector<OlapTuple> _range_end_key;
 
     // _tablets[i] and _tablet_rowsets[i] represent the i-th tablet and its rowsets.
-    std::vector<TabletSharedPtr> _tablets;
     std::vector<std::vector<RowsetSharedPtr>> _tablet_rowsets;
 
     bool _has_init_any_tablet = false;
-    std::atomic<size_t> _tablet_idx = 0;
 
     // Used to allocate memory for _tablet_seek_ranges.
     MemPool _mempool;
     std::vector<vectorized::SeekRange> _tablet_seek_ranges;
     Rowset* _largest_rowset = nullptr;
     SegmentGroupPtr _segment_group = nullptr;
-    vectorized::SchemaPtr _short_key_schema = nullptr;
+    vectorized::VectorizedSchemaPtr _short_key_schema = nullptr;
     int64_t _sample_splitted_scan_blocks = 0;
 
     std::vector<std::pair<ShortKeyIndexGroupIterator, ShortKeyIndexGroupIterator>> _block_ranges_per_seek_range;

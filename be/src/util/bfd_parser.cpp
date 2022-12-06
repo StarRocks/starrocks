@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/util/bfd_parser.cpp
 
@@ -31,22 +44,21 @@
 namespace starrocks {
 
 struct BfdFindCtx {
-    BfdFindCtx(bfd_symbol** syms_, bfd_vma pc_)
-            : found(false), syms(syms_), pc(pc_), file_name(nullptr), func_name(nullptr), lineno(0) {}
+    BfdFindCtx(bfd_symbol** syms_, bfd_vma pc_) : syms(syms_), pc(pc_) {}
 
-    bool found;
+    bool found{false};
     bfd_symbol** syms;
     bfd_vma pc;
-    const char* file_name;
-    const char* func_name;
-    unsigned int lineno;
+    const char* file_name{nullptr};
+    const char* func_name{nullptr};
+    unsigned int lineno{0};
 };
 
 std::mutex BfdParser::_bfd_mutex;
 bool BfdParser::_is_bfd_inited = false;
 
 static void find_addr_in_section(bfd* abfd, asection* sec, void* arg) {
-    BfdFindCtx* ctx = (BfdFindCtx*)arg;
+    auto* ctx = (BfdFindCtx*)arg;
     if (ctx->found) {
         return;
     }
@@ -80,7 +92,7 @@ static void find_addr_in_section(bfd* abfd, asection* sec, void* arg) {
 }
 
 static void section_print(bfd* bfd, asection* sec, void* arg) {
-    std::string* str = (std::string*)arg;
+    auto* str = (std::string*)arg;
     str->append(sec->name);
     str->push_back('\n');
 }

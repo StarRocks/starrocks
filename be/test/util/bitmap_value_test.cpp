@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/test/util/bitmap_value_test.cpp
 
@@ -33,8 +46,7 @@
 #include "udf/udf.h"
 #include "util/phmap/phmap.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 TEST(BitmapValueTest, bitmap_union) {
     BitmapValue empty;
@@ -259,7 +271,7 @@ TEST(BitmapValueTest, Roaring64Map) {
 
     // we can also go in reverse and go from arrays to bitmaps
     uint64_t card1 = r1.cardinality();
-    uint64_t* arr1 = new uint64_t[card1];
+    auto* arr1 = new uint64_t[card1];
     ASSERT_TRUE(arr1 != nullptr);
     r1.toUint64Array(arr1);
     Roaring64Map r1f(card1, arr1);
@@ -304,8 +316,8 @@ TEST(BitmapValueTest, Roaring64Map) {
 
     // we can also iterate the C++ way
     sum = 0;
-    for (Roaring64Map::const_iterator i = t.begin(); i != t.end(); i++) {
-        sum += *i;
+    for (unsigned long i : t) {
+        sum += i;
     }
     ASSERT_EQ(r1_sum, sum);
 }
@@ -351,7 +363,7 @@ TEST(BitmapValueTest, bitmap_max) {
     auto s = BitmapColumn::create();
     s->append(&bitmap);
     columns.push_back(s);
-    auto column = BitmapFunctions::bitmap_max(ctx, columns);
+    auto column = BitmapFunctions::bitmap_max(ctx, columns).value();
     ASSERT_TRUE(column->is_null(0));
 
     bitmap.add(0);
@@ -375,7 +387,7 @@ TEST(BitmapValueTest, bitmap_min) {
     auto s = BitmapColumn::create();
     s->append(&bitmap);
     columns.push_back(s);
-    auto column = BitmapFunctions::bitmap_min(ctx, columns);
+    auto column = BitmapFunctions::bitmap_min(ctx, columns).value();
     ASSERT_TRUE(column->is_null(0));
 
     bitmap.add(std::numeric_limits<uint64_t>::max());
@@ -407,5 +419,4 @@ TEST(BitmapValueTest, bitmap_xor) {
     }
 }
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

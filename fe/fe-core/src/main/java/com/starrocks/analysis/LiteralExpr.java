@@ -26,6 +26,8 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -109,36 +111,16 @@ public abstract class LiteralExpr extends Expr implements Comparable<LiteralExpr
         }
     }
 
-    public static LiteralExpr createMaxValue(Type type) throws AnalysisException {
-        Preconditions.checkArgument(type.isValid());
-        switch (type.getPrimitiveType()) {
-            case TINYINT:
-            case SMALLINT:
-            case INT:
-            case BIGINT:
-                return IntLiteral.createMaxValue(type);
-            case LARGEINT:
-                return LargeIntLiteral.createMaxValue();
-            case DATE:
-            case DATETIME:
-                return DateLiteral.createMaxValue(type);
-            default:
-                throw new AnalysisException("Invalid data type for creating infinity: " + type);
-        }
-    }
-
     @Override
     protected void analyzeImpl(Analyzer analyzer) throws AnalysisException {
         // Literals require no analysis.
     }
 
     /*
-     * return real value
+     * return real object value
      */
-    public Object getRealValue() {
-        // implemented: TINYINT/SMALLINT/INT/BIGINT/LARGEINT/DATE/DATETIME
-        Preconditions.checkState(false, "should implement this in derived class. " + this.type.toSql());
-        return null;
+    public Object getRealObjectValue() {
+        throw new StarRocksPlannerException("Not implement getRealObjectValue in derived class. ", ErrorType.INTERNAL_ERROR);
     }
 
     public abstract boolean isMinValue();
@@ -190,6 +172,11 @@ public abstract class LiteralExpr extends Expr implements Comparable<LiteralExpr
     }
 
     public void readFields(DataInput in) throws IOException {
+    }
+
+    @Override
+    public int hashCode() {
+        return super.hashCode();
     }
 
     @Override

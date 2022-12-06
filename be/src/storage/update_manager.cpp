@@ -1,5 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "storage/update_manager.h"
 
 #include <limits>
@@ -152,22 +164,23 @@ void UpdateManager::expire_cache() {
         _index_cache.clear_expired();
         ssize_t size = _index_cache.size();
         ssize_t obj_size = _index_cache.object_size();
-        LOG(INFO) << Substitute("index cache expire: before:($0 $1) after:($2 $3) expire: ($4 $5)", orig_obj_size,
-                                PrettyPrinter::print_bytes(orig_size), obj_size, PrettyPrinter::print_bytes(size),
-                                orig_obj_size - obj_size, PrettyPrinter::print_bytes(orig_size - size));
+        LOG(INFO) << strings::Substitute("index cache expire: before:($0 $1) after:($2 $3) expire: ($4 $5)",
+                                         orig_obj_size, PrettyPrinter::print_bytes(orig_size), obj_size,
+                                         PrettyPrinter::print_bytes(size), orig_obj_size - obj_size,
+                                         PrettyPrinter::print_bytes(orig_size - size));
 
         _last_clear_expired_cache_millis = MonotonicMillis();
     }
 }
 
 string UpdateManager::memory_stats() {
-    return Substitute("index:$0 rowset:$1 compaction:$2 delvec:$3 total:$4/$5",
-                      PrettyPrinter::print_bytes(_index_cache_mem_tracker->consumption()),
-                      PrettyPrinter::print_bytes(_update_state_mem_tracker->consumption()),
-                      PrettyPrinter::print_bytes(_compaction_state_mem_tracker->consumption()),
-                      PrettyPrinter::print_bytes(_del_vec_cache_mem_tracker->consumption()),
-                      PrettyPrinter::print_bytes(_update_mem_tracker->consumption()),
-                      PrettyPrinter::print_bytes(_update_mem_tracker->limit()));
+    return strings::Substitute("index:$0 rowset:$1 compaction:$2 delvec:$3 total:$4/$5",
+                               PrettyPrinter::print_bytes(_index_cache_mem_tracker->consumption()),
+                               PrettyPrinter::print_bytes(_update_state_mem_tracker->consumption()),
+                               PrettyPrinter::print_bytes(_compaction_state_mem_tracker->consumption()),
+                               PrettyPrinter::print_bytes(_del_vec_cache_mem_tracker->consumption()),
+                               PrettyPrinter::print_bytes(_update_mem_tracker->consumption()),
+                               PrettyPrinter::print_bytes(_update_mem_tracker->limit()));
 }
 
 string UpdateManager::detail_memory_stats() {
@@ -249,6 +262,7 @@ Status UpdateManager::on_rowset_finished(Tablet* tablet, Rowset* rowset) {
         // if rowset is empty or tablet is in schemachange, we can skip preparing updatestates and pre-loading primary index
         return Status::OK();
     }
+
     string rowset_unique_id = rowset->rowset_id().to_string();
     VLOG(1) << "UpdateManager::on_rowset_finished start tablet:" << tablet->tablet_id()
             << " rowset:" << rowset_unique_id;
@@ -256,7 +270,8 @@ Status UpdateManager::on_rowset_finished(Tablet* tablet, Rowset* rowset) {
     // so apply can run faster. Since those resources are in cache, they can get evicted
     // before used in apply process, in that case, these will be loaded again in apply
     // process.
-    auto state_entry = _update_state_cache.get_or_create(Substitute("$0_$1", tablet->tablet_id(), rowset_unique_id));
+    auto state_entry =
+            _update_state_cache.get_or_create(strings::Substitute("$0_$1", tablet->tablet_id(), rowset_unique_id));
     auto st = state_entry->value().load(tablet, rowset);
     state_entry->update_expire_time(MonotonicMillis() + _cache_expire_ms);
     _update_state_cache.update_object_size(state_entry, state_entry->value().memory_usage());
@@ -287,7 +302,7 @@ void UpdateManager::on_rowset_cancel(Tablet* tablet, Rowset* rowset) {
     string rowset_unique_id = rowset->rowset_id().to_string();
     VLOG(1) << "UpdateManager::on_rowset_error remove state tablet:" << tablet->tablet_id()
             << " rowset:" << rowset_unique_id;
-    auto state_entry = _update_state_cache.get(Substitute("$0_$1", tablet->tablet_id(), rowset_unique_id));
+    auto state_entry = _update_state_cache.get(strings::Substitute("$0_$1", tablet->tablet_id(), rowset_unique_id));
     if (state_entry != nullptr) {
         _update_state_cache.remove(state_entry);
     }

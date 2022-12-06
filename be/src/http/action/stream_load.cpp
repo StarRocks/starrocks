@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/http/action/stream_load.cpp
 
@@ -123,7 +136,7 @@ StreamLoadAction::StreamLoadAction(ExecEnv* exec_env) : _exec_env(exec_env) {
 StreamLoadAction::~StreamLoadAction() = default;
 
 void StreamLoadAction::handle(HttpRequest* req) {
-    StreamLoadContext* ctx = (StreamLoadContext*)req->handler_ctx();
+    auto* ctx = (StreamLoadContext*)req->handler_ctx();
     if (ctx == nullptr) {
         return;
     }
@@ -193,7 +206,7 @@ Status StreamLoadAction::_handle(StreamLoadContext* ctx) {
 int StreamLoadAction::on_header(HttpRequest* req) {
     streaming_load_current_processing.increment(1);
 
-    StreamLoadContext* ctx = new StreamLoadContext(_exec_env);
+    auto* ctx = new StreamLoadContext(_exec_env);
     ctx->ref();
     req->set_handler_ctx(ctx);
 
@@ -304,7 +317,7 @@ Status StreamLoadAction::_on_header(HttpRequest* http_req, StreamLoadContext* ct
 }
 
 void StreamLoadAction::on_chunk_data(HttpRequest* req) {
-    StreamLoadContext* ctx = (StreamLoadContext*)req->handler_ctx();
+    auto* ctx = (StreamLoadContext*)req->handler_ctx();
     if (ctx == nullptr || !ctx->status.ok()) {
         return;
     }
@@ -360,7 +373,7 @@ void StreamLoadAction::on_chunk_data(HttpRequest* req) {
 }
 
 void StreamLoadAction::free_handler_ctx(void* param) {
-    StreamLoadContext* ctx = (StreamLoadContext*)param;
+    auto* ctx = (StreamLoadContext*)param;
     if (ctx == nullptr) {
         return;
     }
@@ -477,6 +490,9 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
         } else {
             return Status::InvalidArgument("Invalid partial update flag format. Must be bool type");
         }
+    }
+    if (!http_req->header(HTTP_MERGE_CONDITION).empty()) {
+        request.__set_merge_condition(http_req->header(HTTP_MERGE_CONDITION));
     }
     if (!http_req->header(HTTP_TRANSMISSION_COMPRESSION_TYPE).empty()) {
         request.__set_transmission_compression_type(http_req->header(HTTP_TRANSMISSION_COMPRESSION_TYPE));

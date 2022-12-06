@@ -10,7 +10,17 @@ Broker Load also supports data transformation at data loading. For more informat
 
 ## Background information
 
-Broker Load requires a broker to set up a connection between your StarRocks cluster and your storage system. A broker is an independent, stateless service that is integrated with a file-system interface. With a broker, StarRocks can access and read data files that are stored in your storage system, and can use its own computing resources to pre-process and load the data of these data files.
+In StarRocks v2.4 and earlier, Broker Load depends on brokers to set up connections between your StarRocks cluster and your storage system. When you create a Broker Load job, you need to input `WITH BROKER "<broker_name>"` to specify the broker group you want to use. A broker is an independent, stateless service that is integrated with a file-system interface. With brokers, StarRocks can access and read data files that are stored in your storage system, and can use its own computing resources to pre-process and load the data of these data files.
+
+From StarRocks v2.5 onwards, Broker Load no longer needs to depend on brokers to set up connections between your StarRocks cluster and your storage system. When you create a Broker Load job, you no longer need to specify a broker group, but you still need to retain the `WITH BROKER` keyword.
+
+> **NOTE**
+>
+> Loading without brokers may not work in certain circumstances, such as when you configure multiple HA systems or have multiple Kerberos configurations. In this situation, you can still load data by using brokers.
+
+If you need to load data by using brokers, make sure that brokers are deployed in your StarRocks cluster.
+
+You can use the [SHOW BROKER](../sql-reference/sql-statements/Administration/SHOW%20BROKER.md) statement to check for brokers that are deployed in your StarRocks cluster. If no brokers are deployed, you must deploy brokers by following the instructions provided in [Deploy a broker](../administration/deploy_broker.md).
 
 ## Supported data file formats
 
@@ -22,6 +32,10 @@ Broker Load supports the following data file formats:
 
 - ORC
 
+> **NOTE**
+>
+> For CSV data, you can use a UTF-8 string, such as a comma (,), tab, or pipe (|), whose length does not exceed 50 bytes as a text delimiter.
+
 ## Supported storage systems
 
 Broker Load supports the following storage systems:
@@ -32,27 +46,21 @@ Broker Load supports the following storage systems:
 
 - Google GCS
 
-## Prerequisites
-
-Brokers are deployed in your StarRocks cluster.
-
-You can use the [SHOW BROKER](../sql-reference/sql-statements/Administration/SHOW%20BROKER.md) statement to check for brokers that are deployed in your StarRocks cluster. If no brokers are deployed, you must deploy brokers by following the instructions provided in [Deploy a broker](../quick_start/Deploy.md#deploy-broker).
-
-In this topic, assume that a group of brokers collectively named 'mybroker' are deployed in your StarRocks cluster.
-
 ## Principles
 
 After you submit a load job to an FE, the FE generates a query plan, splits the query plan into portions based on the number of BEs and the size of the data file you want to load, and then assigns each portion of the query plan to a specific BE. During the load, each BE pulls the data of the data file by using the broker, pre-processes the data, and then loads the data into your StarRocks cluster. After all BEs finish their portions of the query plan, the FE determines whether the load job is successful.
 
 The following figure shows the workflow of a Broker Load job.
 
-![Workflow of Broker Load](../assets/4.3-1.png)
+![Workflow of Broker Load](../assets/4.3-1-en.png)
 
 ## Basic operations
 
 ### Create a load job
 
 This topic uses CSV as an example to describe how to load data. For information about how to load data in other file formats and about the syntax and parameter descriptions for Broker Load, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
+
+Note that in StarRocks some literals are used as reserved keywords by the SQL language. Do not directly use these keywords in SQL statements. If you want to use such a keyword in an SQL statement, enclose it in a pair of backticks (`). See [Parameter configuration](../sql-reference/sql-statements/keywords.md).
 
 #### Data examples
 
@@ -114,14 +122,14 @@ LOAD LABEL test_db.label1
     DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/file1.csv")
     INTO TABLE table1
     COLUMNS TERMINATED BY ","
-    (id, city)
+    (id, name, score)
 
     DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/file2.csv")
     INTO TABLE table2
     COLUMNS TERMINATED BY ","
-    (id, name, score)
+    (id, city)
 )
-WITH BROKER "mybroker"
+WITH BROKER
 (
     "username" = "hdfs_username",
     "password" = "hdfs_password"
@@ -141,21 +149,23 @@ LOAD LABEL test_db.label2
 (
     DATA INFILE("s3a://bucket_s3/input/file1.csv")
     INTO TABLE table1
-    (id, city)
+    (id, name, score)
     
     DATA INFILE("s3a://bucket_s3/input/file2.csv")
     INTO TABLE table2
-    (id, name, score)
+    (id, city)
 )
-WITH BROKER "mybroker"
+WITH BROKER
 (
     "fs.s3a.access.key" = "xxxxxxxxxxxxxxxxxxxx",
     "fs.s3a.secret.key" = "yyyyyyyyyyyyyyyyyyyy",
-    "fs.s3a.endpoint" = "s3-ap-northeast-1.amazonaws.com"
+    "fs.s3a.endpoint" = "s3.ap-northeast-1.amazonaws.com"
 )
 ```
 
-> Note: S3A is used for data loads from Amazon S3. Therefore, the file paths that you specify must start with the prefix `s3a://`.
+> **NOTE**
+>
+> S3A is used for data loads from Amazon S3. Therefore, the file paths that you specify must start with the prefix `s3a://`.
 
 #### Load data from Google GCS
 
@@ -166,13 +176,13 @@ LOAD LABEL test_db.label3
 (
     DATA INFILE("s3a://bucket_gcs/input/file1.csv")
     INTO TABLE table1
-    (id, city)
+    (id, name, score)
     
     DATA INFILE("s3a://bucket_gcs/input/file2.csv")
     INTO TABLE table2
-    (id, name, score)
+    (id, city)
 )
-WITH BROKER "mybroker"
+WITH BROKER
 (
     "fs.s3a.access.key" = "xxxxxxxxxxxxxxxxxxxx",
     "fs.s3a.secret.key" = "yyyyyyyyyyyyyyyyyyyy",
@@ -180,7 +190,9 @@ WITH BROKER "mybroker"
 )
 ```
 
-> Note: S3A is used for data loads from Amazon S3. Therefore, the file paths that you specify must start with the prefix `s3a://`.
+> **NOTE**
+>
+> S3A is used for data loads from Amazon S3. Therefore, the file paths that you specify must start with the prefix `s3a://`.
 
 ### Query data
 
@@ -289,3 +301,11 @@ Additionally, each task can be further split into one or more instances, which a
   **Number of instances in an individual task = min(Amount of data to be loaded by an individual task/`min_bytes_per_broker_scanner`,`max_broker_concurrency`,`load_parallel_instance_num` x Number of BEs)**
 
 In most cases, only one `data_desc` is declared for each load job, each load job is split into only one task, and the task is split into the same number of instances as the number of BEs.
+
+## Usage notes
+
+The [FE configuration item](../administration/Configuration.md#fe-configuration-items) `async_load_task_pool_size` specifies the task pool size, namely, the maximum number of tasks that can be concurrently run for Broker Load within a specific time period in your StarRocks cluster.
+
+In StarRocks v2.4 and earlier, if the total number of tasks generated for Broker Load jobs that are submitted within a specific period of time exceeds the maximum number, excessive jobs are queued and scheduled based on their submission time.
+
+Since StarRocks v2.5,  if the total number of tasks generated for Broker Load jobs that are submitted within a specific period of time exceeds the maximum number, excessive jobs are queued and scheduled based on their priorities. You can specify a priority for a job by using the `priority` parameter at job creation. See [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md#opt_properties). You can also use [ALTER LOAD](../sql-reference/sql-statements/data-manipulation/ALTER%20LOAD.md) to modify the priority of an existing job that is in the **QUEUEING** or **LOADING** state.

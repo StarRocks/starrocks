@@ -115,6 +115,7 @@ import com.starrocks.thrift.TTabletInfo;
 import com.starrocks.thrift.TTabletMeta;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.transaction.TabletCommitInfo;
+import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.LoadJobSourceType;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
@@ -1141,6 +1142,7 @@ public class LeaderImpl {
             boolean ret = GlobalStateMgr.getCurrentGlobalTransactionMgr().commitAndPublishTransaction(
                     db, request.getTxn_id(),
                     TabletCommitInfo.fromThrift(request.getCommit_infos()),
+                    TabletFailInfo.fromThrift(request.getFail_infos()),
                     timeoutMs, attachment);
             if (!ret) {
                 TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);

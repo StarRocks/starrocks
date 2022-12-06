@@ -1,5 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "exec/pipeline/pipeline_builder.h"
 
 #include "exec/exec_node.h"
@@ -175,8 +187,8 @@ MorselQueueFactory* PipelineBuilderContext::morsel_queue_factory_of_source_opera
     return morsel_queue_factory_of_source_operator(source_op->plan_node_id());
 }
 
-bool PipelineBuilderContext::need_local_shuffle(OpFactories ops) const {
-    return down_cast<SourceOperatorFactory*>(ops[0].get())->need_local_shuffle();
+bool PipelineBuilderContext::could_local_shuffle(OpFactories ops) const {
+    return down_cast<SourceOperatorFactory*>(ops[0].get())->could_local_shuffle();
 }
 
 bool PipelineBuilderContext::should_interpolate_cache_operator(OpFactoryPtr& source_op, int32_t plan_node_id) {
@@ -192,7 +204,7 @@ bool PipelineBuilderContext::should_interpolate_cache_operator(OpFactoryPtr& sou
 
 OpFactories PipelineBuilderContext::interpolate_cache_operator(
         OpFactories& upstream_pipeline, OpFactories& downstream_pipeline,
-        std::function<std::tuple<OpFactoryPtr, SourceOperatorFactoryPtr>(bool)> merge_operators_generator) {
+        const std::function<std::tuple<OpFactoryPtr, SourceOperatorFactoryPtr>(bool)>& merge_operators_generator) {
     DCHECK(should_interpolate_cache_operator(upstream_pipeline[0], downstream_pipeline[0]->plan_node_id()));
 
     const auto& cache_param = _fragment_context->cache_param();

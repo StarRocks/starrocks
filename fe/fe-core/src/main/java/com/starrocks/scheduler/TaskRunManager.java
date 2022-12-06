@@ -72,7 +72,6 @@ public class TaskRunManager {
         return new SubmitResult(queryId, SubmitResult.SubmitStatus.SUBMITTED);
     }
 
-
     public boolean killTaskRun(Long taskId) {
         TaskRun taskRun = runningTaskRunMap.get(taskId);
         if (taskRun == null) {
@@ -119,7 +118,9 @@ public class TaskRunManager {
                     }
                 }
             }
-            taskRuns.offer(taskRun);
+            if (!taskRuns.offer(taskRun)) {
+                LOG.warn("failed to offer task");
+            }
         } finally {
             taskRunUnlock();
         }
@@ -208,7 +209,6 @@ public class TaskRunManager {
         }
         return false;
     }
-
 
     public void taskRunUnlock() {
         this.taskRunLock.unlock();

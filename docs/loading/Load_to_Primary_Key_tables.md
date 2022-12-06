@@ -1,12 +1,14 @@
 # Change data through loading
 
-The [Primary Key](../table_design/Data_model.md#primary-key-model) model provided by StarRocks allows you to make data changes to StarRocks tables by running [Stream Load](../loading/StreamLoad.md), [Broker Load](../loading/BrokerLoad.md), or [Routine Load](../loading/RoutineLoad.md) jobs. These data changes include inserts, updates, and deletions.
+The [Primary Key](../table_design/Data_model.md#primary-key-model) model provided by StarRocks allows you to make data changes to StarRocks tables by running [Stream Load](../loading/StreamLoad.md), [Broker Load](../loading/BrokerLoad.md), or [Routine Load](../loading/RoutineLoad.md) jobs. These data changes include inserts, updates, and deletions. However, the Primary Key model does not support changing data by using [Spark Load](../loading/SparkLoad.md) or [INSERT](../loading/InsertInto.md).
 
 StarRocks also supports partial updates. This feature is in preview.
 
 This topic uses CSV data as an example to describe how to make data changes to a StarRocks table through loading. The data file formats that are supported vary depending on the loading method of your choice.
 
-> Note: For CSV data, you can use a UTF-8 string, such as a comma (,), tab, or pipe (|), whose length does not exceed 50 bytes as a text delimiter.
+> **NOTE**
+>
+> For CSV data, you can use a UTF-8 string, such as a comma (,), tab, or pipe (|), whose length does not exceed 50 bytes as a text delimiter.
 
 ## Implementation
 
@@ -14,7 +16,9 @@ The Primary Key model of StarRocks supports UPSERT and DELETE operations and doe
 
 When you create a load job, StarRocks supports adding a field named `__op` to the job creation statement or command. The `__op` field is used to specify the type of operation you want to perform.
 
-> Note: When you create a table, you do not need to add a column named `__op` to that table.
+> **NOTE**
+>
+> When you create a table, you do not need to add a column named `__op` to that table.
 
 The method of defining the `__op` field varies depending on the loading method of your choice:
 
@@ -40,7 +44,11 @@ You can decide whether to add the `__op` field based on the data changes you wan
 
 ## Prerequisites
 
-If you choose Broker Load, make sure that a broker is deployed in your StarRocks cluster. You can use the [SHOW BROKER](../sql-reference/sql-statements/Administration/SHOW%20BROKER.md) statement to check for brokers that are deployed in your StarRocks cluster. If no broker is deployed, you must deploy a broker by following the instructions provided in [Deploy a broker](../quick_start/Deploy.md#deploy-broker). Assume that you have deployed a broker named `broker1`.
+### Broker Load
+
+See the "Background information" section in [Load data from HDFS or cloud storage](../loading/BrokerLoad.md).
+
+### Routine load
 
 If you choose Routine Load, make sure that topics are created in your Apache Kafka® cluster. Assume that you have created four topics: `topic1`, `topic2`, `topic3`, and `topic4`.
 
@@ -52,7 +60,7 @@ This section provides examples of how to make data changes to a StarRocks table 
 
 If the data file you want to load involves only UPSERT operations, you do not need to add the `__op` field.
 
-> Note:
+> **NOTE**
 >
 > If you add the `__op` field:
 >
@@ -375,7 +383,9 @@ Run a load job to delete the record whose `id` is `101` in `example3.csv` from `
       http://<fe_host>:<fe_http_port>/api/test_db/table3/_stream_load
   ```
 
-  > Note: In the preceding example, the fourth column that represents the operation type in `example3.csv` is temporarily named as `temp` and the `__op` field is mapped onto the `temp` column by using the `columns` parameter. As such, StarRocks can decide whether to perform an UPSERT or DELETE operation depending on the value in the fourth column of `example3.csv` is `0` or `1`.
+  > **NOTE**
+  >
+  > In the preceding example, the fourth column that represents the operation type in `example3.csv` is temporarily named as `temp` and the `__op` field is mapped onto the `temp` column by using the `columns` parameter. As such, StarRocks can decide whether to perform an UPSERT or DELETE operation depending on the value in the fourth column of `example3.csv` is `0` or `1`.
 
 - Run a Broker Load job:
 
@@ -485,7 +495,9 @@ Run a load to update the data in the two columns of `example4.csv` to the `id` a
       http://<fe_host>:<fe_http_port>/api/test_db/table4/_stream_load
   ```
 
-  > Note: If you choose Stream Load, you must set the `partial_update` parameter to `true` to enable the partial update feature. Additionally, you must use the `columns` parameter to specify the columns you want to update.
+  > **NOTE**
+  >
+  > If you choose Stream Load, you must set the `partial_update` parameter to `true` to enable the partial update feature. Additionally, you must use the `columns` parameter to specify the columns you want to update.
 
 - Run a Broker Load job:
 
@@ -504,7 +516,9 @@ Run a load to update the data in the two columns of `example4.csv` to the `id` a
   );
   ```
 
-  > Note: If you choose Broker Load, you must set the `partial_update` parameter to `true` to enable the partial update feature. Additionally, you must use the `column_list` parameter to specify the columns you want to update.
+  > **NOTE**
+  >
+  > If you choose Broker Load, you must set the `partial_update` parameter to `true` to enable the partial update feature. Additionally, you must use the `column_list` parameter to specify the columns you want to update.
 
 - Run a Routine Load job:
 
@@ -524,7 +538,9 @@ Run a load to update the data in the two columns of `example4.csv` to the `id` a
   );
   ```
 
-  > Note: If you choose Broker Load, you must set the `partial_update` parameter to `true` to enable the partial update feature. Additionally, you must use the `COLUMNS` parameter to specify the columns you want to update.
+  > **NOTE**
+  >
+  > If you choose Broker Load, you must set the `partial_update` parameter to `true` to enable the partial update feature. Additionally, you must use the `COLUMNS` parameter to specify the columns you want to update.
 
 ### Query data
 
@@ -543,3 +559,117 @@ MySQL [test_db]> SELECT * FROM table4;
 ```
 
 As shown in the preceding query result, the record whose `id` is `101` in `example4.csv` has been updated to `table4`, and the records whose `id` are `102` and `103` in `example4.csv` have been Inserted into `table4`.
+
+## Conditional updates
+
+From StarRocks v2.5 onwards, tables of the Primary Key model support conditional updates. You can specify a non-primary key column as the condition to determine whether updates can take effect. As such, the update from a source record to a destination record takes effect only when the source data record has a larger value than the destination data record in the specified column.
+
+The conditional update feature is designed to resolve data disorder. If the source data is disordered, you can use this feature to ensure that new data will not be overwritten by old data.
+
+> **NOTICE**
+>
+> - You cannot specify different columns as update conditions for the same batch of data.
+> - DELETE operations do not support conditional updates.
+> - Partial updates and conditional updates cannot be used simultaneously.
+
+### Data examples
+
+1. Create a StarRocks table in your StarRocks database `test_db`.
+
+   a. Create a table named `table5` that uses the Primary Key model. The table consists of three columns: `id`, `version`, and `score`, of which `id` is the primary key.
+
+      ```SQL
+      MySQL [test_db]> CREATE TABLE `table5`
+      (
+          `id` int(11) NOT NULL COMMENT "user ID", 
+          `version` int NOT NULL COMMENT "version",
+          `score` int(11) NOT NULL COMMENT "user score"
+      ) ENGINE=OLAP
+      PRIMARY KEY(`id`) DISTRIBUTED BY HASH(`id`) BUCKETS 10;
+      ```
+
+   b. Insert a record into `table5`.
+
+      ```SQL
+      MySQL [test_db]> INSERT INTO table5 VALUES
+          (101, 2, 80),
+          (102, 2, 90);
+      ```
+
+2. Create a data file in your local file system.
+
+   Create a CSV file named `example5.csv`. The file consists of three columns, which represent user ID, version, and user score in sequence.
+
+   ```Plain
+   101,1,100
+   102,3,100
+   ```
+
+3. Publish the data of `example5.csv` to `topic5` of your Kafka cluster.
+
+### Load data
+
+Run a load to update the records whose `id` values are `101` and `102`, respectively, from `example5.csv` into `table5`, and specify that the updates take effect only when the `verion` value in each of the two records is greater than their current `version` values.
+
+- Run a Stream Load job:
+
+  ```Bash
+  curl --location-trusted -u root: \
+      -H "label:label10" \
+      -H "column_separator:," \
+      -H "merge_condition:version" \
+      -T example5.csv -XPUT\
+      http://<fe_host>:<fe_http_port>/api/test_db/table5/_stream_load
+  ```
+
+- Run a Broker Load job:
+
+  ```SQL
+  LOAD LABEL test_db.table10
+  (
+      data infile("hdfs://<hdfs_host>:<hdfs_port>/example5.csv")
+      into table table5
+      format as "csv"
+      (id, version, score)
+  )
+  with broker
+  properties
+  (
+      "merge_condition" = "version"
+  );
+  ```
+
+- Run a Routine Load job:
+
+  ```SQL
+  CREATE ROUTINE LOAD test_db.table5 on table5
+  COLUMNS (id, version, score),
+  COLUMNS TERMINATED BY ','
+  PROPERTIES
+  (
+      "merge_condition" = "version"
+  )
+  FROM KAFKA
+  (
+      "kafka_broker_list" ="<kafka_broker_host>:<kafka_broker_port>",
+      "kafka_topic" = "topic5",
+      "property.kafka_default_offsets" ="OFFSET_BEGINNING"
+  );
+  ```
+
+### Query data
+
+After the load is complete, query the data of `table5` to verify that the load is successful:
+
+```SQL
+MySQL [test_db]> SELECT * FROM table5;
++------+------+-------+
+| id   | version | score |
++------+------+-------+
+|  101 |       2 |   80 |
+|  102 |       3 |  100 |
++------+------+-------+
+2 rows in set (0.02 sec)
+```
+
+As shown in the preceding query result, the record whose `id` is `101` in `example5.csv` is not updated to `table5`, and the record whose `id` is `102` in `example5.csv` has been Inserted into `table5`.

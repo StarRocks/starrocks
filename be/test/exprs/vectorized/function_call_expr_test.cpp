@@ -1,10 +1,23 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "exprs/vectorized/function_call_expr.h"
 
 #include <glog/logging.h>
 #include <gtest/gtest.h>
-#include <math.h>
+
+#include <cmath>
 
 #include "butil/time.h"
 #include "column/column_helper.h"
@@ -15,12 +28,11 @@
 #include "runtime/runtime_state.h"
 #include "testutil/assert.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 class VectorizedFunctionCallExprTest : public ::testing::Test {
 public:
-    void SetUp() {
+    void SetUp() override {
         expr_node.opcode = TExprOpcode::ADD;
         expr_node.child_type = TPrimitiveType::INT;
         expr_node.node_type = TExprNodeType::BINARY_PRED;
@@ -111,8 +123,8 @@ TEST_F(VectorizedFunctionCallExprTest, mathModExprTest) {
     {
         auto value = ColumnHelper::cast_to<TYPE_INT>(ColumnHelper::as_column<NullableColumn>(result)->data_column());
 
-        for (int j = 0; j < value->get_data().size(); ++j) {
-            ASSERT_EQ(1, value->get_data()[j]);
+        for (int& j : value->get_data()) {
+            ASSERT_EQ(1, j);
         }
     }
 
@@ -168,8 +180,8 @@ TEST_F(VectorizedFunctionCallExprTest, mathLeastExprTest) {
     {
         auto value = ColumnHelper::cast_to<TYPE_INT>(result);
 
-        for (int j = 0; j < value->get_data().size(); ++j) {
-            ASSERT_EQ(1, value->get_data()[j]);
+        for (int& j : value->get_data()) {
+            ASSERT_EQ(1, j);
         }
     }
 
@@ -232,8 +244,8 @@ TEST_F(VectorizedFunctionCallExprTest, mathNullGreatestExprTest) {
             }
         }
 
-        for (int j = 0; j < value->get_data().size(); ++j) {
-            ASSERT_EQ(20, value->get_data()[j]);
+        for (int& j : value->get_data()) {
+            ASSERT_EQ(20, j);
         }
     }
 
@@ -268,5 +280,4 @@ TEST_F(VectorizedFunctionCallExprTest, prepareFaileCase) {
     exprContext.close(nullptr);
 }
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

@@ -1,5 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "exprs/vectorized/function_call_expr.h"
 
 #include "column/chunk.h"
@@ -82,7 +94,7 @@ Status VectorizedFunctionCallExpr::open(starrocks::RuntimeState* state, starrock
     //  output in row engine, but we need set output scale in vectorized engine?
     if (_fn.name.function_name == "round" && _type.type == TYPE_DOUBLE) {
         if (_children[1]->is_constant()) {
-            ColumnPtr ptr = _children[1]->evaluate(context, nullptr);
+            ASSIGN_OR_RETURN(ColumnPtr ptr, _children[1]->evaluate_checked(context, nullptr));
             _output_scale =
                     std::static_pointer_cast<Int32Column>(std::static_pointer_cast<ConstColumn>(ptr)->data_column())
                             ->get_data()[0];
@@ -114,7 +126,8 @@ bool VectorizedFunctionCallExpr::is_constant() const {
     return Expr::is_constant();
 }
 
-ColumnPtr VectorizedFunctionCallExpr::evaluate(starrocks::ExprContext* context, vectorized::Chunk* ptr) {
+StatusOr<ColumnPtr> VectorizedFunctionCallExpr::evaluate_checked(starrocks::ExprContext* context,
+                                                                 vectorized::Chunk* ptr) {
     FunctionContext* fn_ctx = context->fn_context(_fn_context_index);
 
     Columns args;
@@ -142,17 +155,18 @@ ColumnPtr VectorizedFunctionCallExpr::evaluate(starrocks::ExprContext* context, 
     }
 #endif
 
-    ColumnPtr result;
+    StatusOr<ColumnPtr> result;
     if (_fn_desc->exception_safe) {
         result = _fn_desc->scalar_function(fn_ctx, args);
     } else {
         SCOPED_SET_CATCHED(false);
         result = _fn_desc->scalar_function(fn_ctx, args);
     }
+    RETURN_IF_ERROR(result);
 
     // For no args function call (pi, e)
-    if (result->is_constant() && ptr != nullptr) {
-        result->resize(ptr->num_rows());
+    if (result.value()->is_constant() && ptr != nullptr) {
+        result.value()->resize(ptr->num_rows());
     }
     return result;
 }

@@ -2,6 +2,7 @@
 
 package com.starrocks.sql.optimizer;
 
+import com.google.common.collect.Lists;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
@@ -12,6 +13,8 @@ import com.starrocks.sql.optimizer.rule.RuleSet;
 import com.starrocks.sql.optimizer.task.SeriallyTaskScheduler;
 import com.starrocks.sql.optimizer.task.TaskContext;
 import com.starrocks.sql.optimizer.task.TaskScheduler;
+
+import java.util.List;
 
 public class OptimizerContext {
     private final Memo memo;
@@ -24,6 +27,8 @@ public class OptimizerContext {
     private CTEContext cteContext;
     private TaskContext currentTaskContext;
     private OptimizerTraceInfo traceInfo;
+    private OptimizerConfig optimizerConfig;
+    private List<MaterializationContext> candidateMvs;
 
     public OptimizerContext(Memo memo, ColumnRefFactory columnRefFactory) {
         this.memo = memo;
@@ -32,9 +37,16 @@ public class OptimizerContext {
         this.taskScheduler = SeriallyTaskScheduler.create();
         this.columnRefFactory = columnRefFactory;
         this.sessionVariable = VariableMgr.newSessionVariable();
+        this.optimizerConfig = new OptimizerConfig();
+        this.candidateMvs = Lists.newArrayList();
     }
 
     public OptimizerContext(Memo memo, ColumnRefFactory columnRefFactory, ConnectContext connectContext) {
+        this(memo, columnRefFactory, connectContext, OptimizerConfig.defaultConfig());
+    }
+
+    public OptimizerContext(Memo memo, ColumnRefFactory columnRefFactory, ConnectContext connectContext,
+                            OptimizerConfig optimizerConfig) {
         this.memo = memo;
         this.ruleSet = new RuleSet();
         this.globalStateMgr = GlobalStateMgr.getCurrentState();
@@ -47,6 +59,8 @@ public class OptimizerContext {
         this.cteContext.setEnableCTE(sessionVariable.isCboCteReuse());
         this.cteContext.setInlineCTERatio(sessionVariable.getCboCTERuseRatio());
         this.cteContext.setMaxCTELimit(sessionVariable.getCboCTEMaxLimit());
+        this.optimizerConfig = optimizerConfig;
+        this.candidateMvs = Lists.newArrayList();
     }
 
     public Memo getMemo() {
@@ -99,5 +113,17 @@ public class OptimizerContext {
 
     public OptimizerTraceInfo getTraceInfo() {
         return traceInfo;
+    }
+
+    public OptimizerConfig getOptimizerConfig() {
+        return optimizerConfig;
+    }
+
+    public List<MaterializationContext> getCandidateMvs() {
+        return candidateMvs;
+    }
+
+    public void addCandidateMvs(MaterializationContext candidateMv) {
+        this.candidateMvs.add(candidateMv);
     }
 }

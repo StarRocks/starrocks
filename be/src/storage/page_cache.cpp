@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/olap/page_cache.cpp
 
@@ -72,7 +85,7 @@ StoragePageCache::StoragePageCache(MemTracker* mem_tracker, size_t capacity)
     init_metrics();
 }
 
-StoragePageCache::~StoragePageCache() {}
+StoragePageCache::~StoragePageCache() = default;
 
 void StoragePageCache::set_capacity(size_t capacity) {
 #ifndef BE_TEST
@@ -93,6 +106,10 @@ uint64_t StoragePageCache::get_lookup_count() {
 
 uint64_t StoragePageCache::get_hit_count() {
     return _cache->get_hit_count();
+}
+
+bool StoragePageCache::adjust_capacity(int64_t delta, size_t min_capacity) {
+    return _cache->adjust_capacity(delta, min_capacity);
 }
 
 bool StoragePageCache::lookup(const CacheKey& key, PageCacheHandle* handle) {

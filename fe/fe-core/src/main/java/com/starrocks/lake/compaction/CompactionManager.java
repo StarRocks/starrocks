@@ -14,19 +14,21 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
-import java.util.HashMap;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
+import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
 
 public class CompactionManager {
     private static final Logger LOG = LogManager.getLogger(CompactionManager.class);
 
     @SerializedName(value = "partitionStatisticsHashMap")
-    private final Map<PartitionIdentifier, PartitionStatistics> partitionStatisticsHashMap = new HashMap<>();
+    private final ConcurrentHashMap<PartitionIdentifier, PartitionStatistics> partitionStatisticsHashMap =
+            new ConcurrentHashMap<>();
 
     private Selector selector;
     private Sorter sorter;
@@ -50,7 +52,7 @@ public class CompactionManager {
         sorter = (Sorter) sorterClazz.getConstructor().newInstance();
     }
 
-    public synchronized void start() {
+    public void start() {
         if (compactionScheduler == null) {
             compactionScheduler = new CompactionScheduler(this, GlobalStateMgr.getCurrentSystemInfo(),
                     GlobalStateMgr.getCurrentGlobalTransactionMgr(), GlobalStateMgr.getCurrentState());
@@ -58,69 +60,98 @@ public class CompactionManager {
         }
     }
 
-    public synchronized void handleLoadingFinished(PartitionIdentifier partition, long version, long versionTime) {
-        PartitionStatistics statistics = partitionStatisticsHashMap.computeIfAbsent(partition, PartitionStatistics::new);
+    public void handleLoadingFinished(PartitionIdentifier partition, long version, long versionTime,
+                                      Quantiles compactionScore) {
         PartitionVersion currentVersion = new PartitionVersion(version, versionTime);
-        statistics.setCurrentVersion(currentVersion);
-        if (statistics.getLastCompactionVersion() == null) {
-            // Set version-1 as last compaction version
-            statistics.setLastCompactionVersion(new PartitionVersion(version - 1, versionTime));
-        }
+        PartitionStatistics statistics = partitionStatisticsHashMap.compute(partition, (k, v) -> {
+            if (v == null) {
+                v = new PartitionStatistics(partition);
+            }
+            v.setCurrentVersion(currentVersion);
+            v.setCompactionScore(compactionScore);
+            if (v.getCompactionVersion() == null) {
+                // Set version-1 as last compaction version
+                v.setCompactionVersion(new PartitionVersion(version - 1, versionTime));
+            }
+            return v;
+        });
         if (LOG.isDebugEnabled()) {
             LOG.debug("Finished loading: {}", statistics);
         }
     }
 
-    public synchronized void handleCompactionFinished(PartitionIdentifier partition, long version, long versionTime) {
-        PartitionStatistics statistics = partitionStatisticsHashMap.computeIfAbsent(partition, PartitionStatistics::new);
+    public void handleCompactionFinished(PartitionIdentifier partition, long version, long versionTime,
+                                         Quantiles compactionScore) {
         PartitionVersion compactionVersion = new PartitionVersion(version, versionTime);
-        statistics.setCurrentVersion(compactionVersion);
-        statistics.setLastCompactionVersion(compactionVersion);
+        PartitionStatistics statistics = partitionStatisticsHashMap.compute(partition, (k, v) -> {
+            if (v == null) {
+                v = new PartitionStatistics(partition);
+            }
+            v.setCurrentVersion(compactionVersion);
+            v.setCompactionVersion(compactionVersion);
+            v.setCompactionScore(compactionScore);
+            return v;
+        });
         if (LOG.isDebugEnabled()) {
             LOG.debug("Finished compaction: {}", statistics);
         }
     }
 
     @NotNull
-    synchronized List<PartitionIdentifier> choosePartitionsToCompact(@NotNull Set<PartitionIdentifier> excludes) {
+    List<PartitionIdentifier> choosePartitionsToCompact(@NotNull Set<PartitionIdentifier> excludes) {
         return choosePartitionsToCompact().stream().filter(p -> !excludes.contains(p)).collect(Collectors.toList());
     }
 
     @NotNull
-    synchronized List<PartitionIdentifier> choosePartitionsToCompact() {
+    List<PartitionIdentifier> choosePartitionsToCompact() {
         List<PartitionStatistics> selection = sorter.sort(selector.select(partitionStatisticsHashMap.values()));
         return selection.stream().map(PartitionStatistics::getPartition).collect(Collectors.toList());
     }
 
     @NotNull
-    synchronized Set<PartitionIdentifier> getAllPartitions() {
+    Set<PartitionIdentifier> getAllPartitions() {
         return new HashSet<>(partitionStatisticsHashMap.keySet());
     }
 
-    synchronized void enableCompactionAfter(PartitionIdentifier partition, long delayMs) {
-        PartitionStatistics statistics = partitionStatisticsHashMap.get(partition);
-        if (statistics != null) {
+    @NotNull
+    public Collection<PartitionStatistics> getAllStatistics() {
+        return partitionStatisticsHashMap.values();
+    }
+
+    @Nullable
+    public PartitionStatistics getStatistics(PartitionIdentifier identifier) {
+        return partitionStatisticsHashMap.get(identifier);
+    }
+
+    void enableCompactionAfter(PartitionIdentifier partition, long delayMs) {
+        PartitionStatistics statistics = partitionStatisticsHashMap.computeIfPresent(partition, (k, v) -> {
             // FE's follower nodes may have a different timestamp with the leader node.
-            statistics.setNextCompactionTime(System.currentTimeMillis() + delayMs);
-            if (LOG.isDebugEnabled()) {
-                LOG.debug("Enable partition to do compaction: {}", statistics);
-            }
+            v.setNextCompactionTime(System.currentTimeMillis() + delayMs);
+            return v;
+        });
+        if (statistics != null && LOG.isDebugEnabled()) {
+            LOG.debug("Enable compaction after {}ms: {}", delayMs, statistics);
         }
     }
 
-    synchronized void removePartition(PartitionIdentifier partition) {
+    void removePartition(PartitionIdentifier partition) {
         partitionStatisticsHashMap.remove(partition);
     }
 
-    public synchronized long saveCompactionManager(DataOutput out, long checksum) throws IOException {
+    public long saveCompactionManager(DataOutput out, long checksum) throws IOException {
         String json = GsonUtils.GSON.toJson(this);
         Text.writeString(out, json);
         checksum ^= getChecksum();
         return checksum;
     }
 
-    public synchronized long getChecksum() {
+    public long getChecksum() {
         return partitionStatisticsHashMap.size();
+    }
+
+    @NotNull
+    public ConcurrentHashMap<PartitionIdentifier, CompactionContext> getRunningCompactions() {
+        return compactionScheduler.getRunningCompactions();
     }
 
     public static CompactionManager loadCompactionManager(DataInput in) throws IOException {

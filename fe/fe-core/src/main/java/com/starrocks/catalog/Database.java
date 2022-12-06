@@ -52,7 +52,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.HashSet;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -60,6 +60,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 import java.util.zip.Adler32;
 
 /**
@@ -567,10 +568,10 @@ public class Database extends MetaObject implements Writable {
         return materializedViews;
     }
 
-    public Set<String> getTableNamesWithLock() {
+    public Set<String> getTableNamesViewWithLock() {
         readLock();
         try {
-            return new HashSet<>(this.nameToTable.keySet());
+            return Collections.unmodifiableSet(this.nameToTable.keySet());
         } finally {
             readUnlock();
         }
@@ -690,6 +691,11 @@ public class Database extends MetaObject implements Writable {
         } else {
             replicaQuotaSize = FeConstants.default_db_replica_quota_size;
         }
+    }
+
+    @Override
+    public int hashCode() {
+        return Long.hashCode(id);
     }
 
     public boolean equals(Object obj) {
@@ -845,5 +851,9 @@ public class Database extends MetaObject implements Writable {
     // the invoker should hold db's writeLock
     public void setExist(boolean exist) {
         this.exist = exist;
+    }
+
+    public List<Table> getHiveTables() {
+        return idToTable.values().stream().filter(Table::isHiveTable).collect(Collectors.toList());
     }
 }

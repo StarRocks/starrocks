@@ -1,5 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "exec/query_cache/lane_arbiter.h"
 
 #include <glog/logging.h>
@@ -7,8 +19,7 @@
 #include <algorithm>
 #include <limits>
 
-namespace starrocks {
-namespace query_cache {
+namespace starrocks::query_cache {
 
 LaneArbiter::LaneArbiter(int num_lanes)
         : _passthrough_mode(false), _num_lanes(num_lanes), _assignments(num_lanes, LANE_UNASSIGNED) {}
@@ -84,9 +95,9 @@ size_t LaneArbiter::must_acquire_lane(LaneOwnerType lane_owner) {
 
 void LaneArbiter::release_lane(LaneOwnerType lane_owner) {
     _processed.insert(lane_owner);
-    for (auto i = 0; i < _assignments.size(); ++i) {
-        if (_assignments[i].lane_owner == lane_owner) {
-            _assignments[i] = LANE_UNASSIGNED;
+    for (auto& _assignment : _assignments) {
+        if (_assignment.lane_owner == lane_owner) {
+            _assignment = LANE_UNASSIGNED;
         }
     }
 }
@@ -95,5 +106,4 @@ void LaneArbiter::mark_processed(LaneOwnerType lane_owner) {
     _processed.insert(lane_owner);
 }
 
-} // namespace query_cache
-} // namespace starrocks
+} // namespace starrocks::query_cache

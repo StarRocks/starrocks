@@ -4,32 +4,29 @@ package com.starrocks.lake.compaction;
 
 import com.starrocks.common.Config;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.Test;
 
 import java.util.Collections;
 import java.util.List;
 
 public class CompactionManagerTest {
-    private CompactionManager compactionManager;
-
-    @Before
-    public void init() {
-        compactionManager = new CompactionManager();
-    }
 
     @Test
     public void testChoosePartitionsToCompact() {
+        Config.lake_compaction_selector = "SimpleSelector";
+        Config.lake_compaction_sorter = "RandomSorter";
+        CompactionManager compactionManager = new CompactionManager();
+
         PartitionIdentifier partition1 = new PartitionIdentifier(1, 2, 3);
         PartitionIdentifier partition2 = new PartitionIdentifier(1, 2, 4);
 
         for (int i = 1; i <= Config.lake_compaction_simple_selector_threshold_versions - 1; i++) {
-            compactionManager.handleLoadingFinished(partition1, i, System.currentTimeMillis());
-            compactionManager.handleLoadingFinished(partition2, i, System.currentTimeMillis());
+            compactionManager.handleLoadingFinished(partition1, i, System.currentTimeMillis(), null);
+            compactionManager.handleLoadingFinished(partition2, i, System.currentTimeMillis(), null);
             Assert.assertEquals(0, compactionManager.choosePartitionsToCompact().size());
         }
         compactionManager.handleLoadingFinished(partition1, Config.lake_compaction_simple_selector_threshold_versions,
-                System.currentTimeMillis());
+                System.currentTimeMillis(), null);
         List<PartitionIdentifier> compactionList = compactionManager.choosePartitionsToCompact();
         Assert.assertEquals(1, compactionList.size());
         Assert.assertSame(partition1, compactionList.get(0));
@@ -37,7 +34,7 @@ public class CompactionManagerTest {
         Assert.assertEquals(compactionList, compactionManager.choosePartitionsToCompact());
 
         compactionManager.handleLoadingFinished(partition2, Config.lake_compaction_simple_selector_threshold_versions,
-                System.currentTimeMillis());
+                System.currentTimeMillis(), null);
 
         compactionList = compactionManager.choosePartitionsToCompact();
         Assert.assertEquals(2, compactionList.size());

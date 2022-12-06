@@ -1,25 +1,32 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
-
-#include "common/compiler_util.h"
-DIAGNOSTIC_PUSH
-DIAGNOSTIC_IGNORE("-Wclass-memaccess")
-
-#include <utility>
-DIAGNOSTIC_POP
 
 #include <re2/re2.h>
 #include <simdjson.h>
 #include <velocypack/vpack.h>
 
+#include <utility>
+
 #include "column/column_builder.h"
+#include "common/compiler_util.h"
 #include "exprs/vectorized/function_helper.h"
 #include "exprs/vectorized/jsonpath.h"
 #include "udf/udf.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 enum JsonFunctionType {
     JSON_FUN_INT = 0,
@@ -29,7 +36,7 @@ enum JsonFunctionType {
     JSON_FUN_UNKOWN //The last
 };
 
-template <PrimitiveType primitive_type>
+template <LogicalType primitive_type>
 struct JsonTypeTraits {};
 
 template <>
@@ -218,8 +225,8 @@ public:
     }
 
 private:
-    template <PrimitiveType ResultType>
-    static ColumnPtr _json_query_impl(starrocks_udf::FunctionContext* context, const Columns& columns);
+    template <LogicalType ResultType>
+    static StatusOr<ColumnPtr> _json_query_impl(starrocks_udf::FunctionContext* context, const Columns& columns);
 
     /**
      * Parse string column as json column
@@ -263,5 +270,4 @@ private:
                                     std::vector<SimpleJsonPath>* parsed_paths);
 };
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

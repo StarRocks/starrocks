@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/test/olap/rowset/segment_v2/bitmap_index_test.cpp
 
@@ -58,7 +71,7 @@ protected:
         ASSERT_OK((*reader)->new_iterator(iter));
     }
 
-    template <FieldType type>
+    template <LogicalType type>
     void write_index_file(std::string& filename, const void* values, size_t value_count, size_t null_count,
                           ColumnIndexMetaPB* meta) {
         TypeInfoPtr type_info = get_type_info(type);
@@ -89,7 +102,7 @@ TEST_F(BitmapIndexTest, test_invert) {
 
     std::string file_name = kTestDir + "/invert";
     ColumnIndexMetaPB meta;
-    write_index_file<OLAP_FIELD_TYPE_INT>(file_name, val, num_uint8_rows, 0, &meta);
+    write_index_file<TYPE_INT>(file_name, val, num_uint8_rows, 0, &meta);
     {
         std::unique_ptr<RandomAccessFile> rfile;
         BitmapIndexReader* reader = nullptr;
@@ -143,7 +156,7 @@ TEST_F(BitmapIndexTest, test_invert_2) {
 
     std::string file_name = kTestDir + "/invert2";
     ColumnIndexMetaPB meta;
-    write_index_file<OLAP_FIELD_TYPE_INT>(file_name, val, num_uint8_rows, 0, &meta);
+    write_index_file<TYPE_INT>(file_name, val, num_uint8_rows, 0, &meta);
 
     {
         BitmapIndexReader* reader = nullptr;
@@ -170,7 +183,7 @@ TEST_F(BitmapIndexTest, test_invert_2) {
 
 TEST_F(BitmapIndexTest, test_multi_pages) {
     size_t num_uint8_rows = 1024 * 1024;
-    int64_t* val = new int64_t[num_uint8_rows];
+    auto* val = new int64_t[num_uint8_rows];
     for (int i = 0; i < num_uint8_rows; ++i) {
         val[i] = random() + 10000;
     }
@@ -178,7 +191,7 @@ TEST_F(BitmapIndexTest, test_multi_pages) {
 
     std::string file_name = kTestDir + "/mul";
     ColumnIndexMetaPB meta;
-    write_index_file<OLAP_FIELD_TYPE_BIGINT>(file_name, val, num_uint8_rows, 0, &meta);
+    write_index_file<TYPE_BIGINT>(file_name, val, num_uint8_rows, 0, &meta);
     {
         BitmapIndexReader* reader = nullptr;
         BitmapIndexIterator* iter = nullptr;
@@ -202,14 +215,14 @@ TEST_F(BitmapIndexTest, test_multi_pages) {
 
 TEST_F(BitmapIndexTest, test_null) {
     size_t num_uint8_rows = 1024;
-    int64_t* val = new int64_t[num_uint8_rows];
+    auto* val = new int64_t[num_uint8_rows];
     for (int i = 0; i < num_uint8_rows; ++i) {
         val[i] = i;
     }
 
     std::string file_name = kTestDir + "/null";
     ColumnIndexMetaPB meta;
-    write_index_file<OLAP_FIELD_TYPE_BIGINT>(file_name, val, num_uint8_rows, 30, &meta);
+    write_index_file<TYPE_BIGINT>(file_name, val, num_uint8_rows, 30, &meta);
     {
         BitmapIndexReader* reader = nullptr;
         BitmapIndexIterator* iter = nullptr;
@@ -227,14 +240,14 @@ TEST_F(BitmapIndexTest, test_null) {
 
 TEST_F(BitmapIndexTest, test_concurrent_load) {
     size_t num_uint8_rows = 1024;
-    int64_t* val = new int64_t[num_uint8_rows];
+    auto* val = new int64_t[num_uint8_rows];
     for (int i = 0; i < num_uint8_rows; ++i) {
         val[i] = i;
     }
 
     std::string file_name = kTestDir + "/null";
     ColumnIndexMetaPB meta;
-    write_index_file<OLAP_FIELD_TYPE_BIGINT>(file_name, val, num_uint8_rows, 30, &meta);
+    write_index_file<TYPE_BIGINT>(file_name, val, num_uint8_rows, 30, &meta);
 
     auto reader = std::make_unique<BitmapIndexReader>();
     std::atomic<int> count{0};

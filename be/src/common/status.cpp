@@ -22,8 +22,8 @@ inline const char* assemble_state(TStatusCode::type code, Slice msg, Slice ctx) 
     msg.size = std::min<size_t>(msg.size, std::numeric_limits<uint16_t>::max());
     ctx.size = std::min<size_t>(ctx.size, std::numeric_limits<uint16_t>::max());
 
-    const uint16_t len1 = msg.size;
-    const uint16_t len2 = ctx.size;
+    const auto len1 = static_cast<uint16_t>(msg.size);
+    const auto len2 = static_cast<uint16_t>(ctx.size);
     const uint32_t size = static_cast<uint32_t>(len1) + len2;
     auto result = new char[size + 5];
     memcpy(result, &len1, sizeof(len1));
@@ -34,7 +34,7 @@ inline const char* assemble_state(TStatusCode::type code, Slice msg, Slice ctx) 
     return result;
 }
 
-const char* Status::copy_state(const char* state) const {
+const char* Status::copy_state(const char* state) {
     uint16_t len1;
     uint16_t len2;
     strings::memcpy_inlined(&len1, state, sizeof(len1));
@@ -45,23 +45,23 @@ const char* Status::copy_state(const char* state) const {
     return result;
 }
 
-const char* Status::copy_state_with_extra_ctx(const char* state, Slice ctx) const {
+const char* Status::copy_state_with_extra_ctx(const char* state, Slice ctx) {
     uint16_t len1;
     uint16_t len2;
     strings::memcpy_inlined(&len1, state, sizeof(len1));
     strings::memcpy_inlined(&len2, state + sizeof(len1), sizeof(len2));
     uint32_t old_length = static_cast<uint32_t>(len1) + len2 + 5;
     ctx.size = std::min<size_t>(ctx.size, std::numeric_limits<uint16_t>::max() - len2);
-    uint32_t new_length = old_length + ctx.size;
+    auto new_length = static_cast<uint32_t>(old_length + ctx.size);
     auto result = new char[new_length];
     strings::memcpy_inlined(result, state, old_length);
     strings::memcpy_inlined(result + old_length, ctx.data, ctx.size);
-    uint16_t new_len2 = len2 + ctx.size;
+    auto new_len2 = static_cast<uint16_t>(len2 + ctx.size);
     memcpy(result + 2, &new_len2, sizeof(new_len2));
     return result;
 }
 
-Status::Status(const TStatus& s) : _state(nullptr) {
+Status::Status(const TStatus& s) {
     if (s.status_code != TStatusCode::OK) {
         if (s.error_msgs.empty()) {
             _state = assemble_state(s.status_code, Slice(), Slice());
@@ -71,8 +71,8 @@ Status::Status(const TStatus& s) : _state(nullptr) {
     }
 }
 
-Status::Status(const StatusPB& s) : _state(nullptr) {
-    TStatusCode::type code = (TStatusCode::type)s.status_code();
+Status::Status(const StatusPB& s) {
+    auto code = (TStatusCode::type)s.status_code();
     if (code != TStatusCode::OK) {
         if (s.error_msgs_size() == 0) {
             _state = assemble_state(code, Slice(), Slice());
@@ -219,7 +219,7 @@ std::string Status::code_as_string() const {
         return tmp;
     }
     }
-    return std::string();
+    return {};
 }
 
 std::string Status::to_string() const {
@@ -236,17 +236,17 @@ std::string Status::to_string() const {
 
 Slice Status::message() const {
     if (_state == nullptr) {
-        return Slice();
+        return {};
     }
 
     uint16_t len1;
     memcpy(&len1, _state, sizeof(len1));
-    return Slice(_state + 5, len1);
+    return {_state + 5, len1};
 }
 
 Slice Status::detailed_message() const {
     if (_state == nullptr) {
-        return Slice();
+        return {};
     }
 
     uint16_t len1;
@@ -254,7 +254,7 @@ Slice Status::detailed_message() const {
     memcpy(&len1, _state, sizeof(len1));
     memcpy(&len2, _state + 2, sizeof(len2));
     uint32_t length = static_cast<uint32_t>(len1) + len2;
-    return Slice(_state + 5, length);
+    return {_state + 5, length};
 }
 Status Status::clone_and_prepend(const Slice& msg) const {
     if (ok()) {
@@ -263,7 +263,7 @@ Status Status::clone_and_prepend(const Slice& msg) const {
     auto msg2 = message();
     std::string_view msg_view(reinterpret_cast<const char*>(msg.data), msg.size);
     std::string_view msg_view2(reinterpret_cast<const char*>(msg2.data), msg2.size);
-    return Status(code(), fmt::format("{}:{}", msg_view, msg_view2));
+    return {code(), fmt::format("{}:{}", msg_view, msg_view2)};
 }
 
 Status Status::clone_and_append(const Slice& msg) const {
@@ -273,7 +273,7 @@ Status Status::clone_and_append(const Slice& msg) const {
     auto msg2 = message();
     std::string_view msg_view(reinterpret_cast<const char*>(msg.data), msg.size);
     std::string_view msg_view2(reinterpret_cast<const char*>(msg2.data), msg2.size);
-    return Status(code(), fmt::format("{}:{}", msg_view2, msg_view));
+    return {code(), fmt::format("{}:{}", msg_view2, msg_view)};
 }
 
 Status Status::clone_and_append_context(const char* filename, int line, const char* expr) const {

@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/olap/version_graph.cpp
 
@@ -145,7 +158,7 @@ Status TimestampedVersionTracker::capture_consistent_versions(const Version& spe
 
 void TimestampedVersionTracker::capture_expired_paths(int64_t stale_sweep_endtime,
                                                       std::vector<int64_t>* path_version_vec) const {
-    std::map<int64_t, PathVersionListSharedPtr>::const_iterator iter = _stale_version_path_map.begin();
+    auto iter = _stale_version_path_map.begin();
 
     while (iter != _stale_version_path_map.end()) {
         int64_t max_create_time = iter->second->max_create_time();
@@ -186,11 +199,11 @@ std::string TimestampedVersionTracker::_get_current_path_map_str() {
     std::stringstream tracker_info;
     tracker_info << "current expired next_path_id " << _next_path_id << std::endl;
 
-    std::map<int64_t, PathVersionListSharedPtr>::const_iterator iter = _stale_version_path_map.begin();
+    auto iter = _stale_version_path_map.begin();
     while (iter != _stale_version_path_map.end()) {
         tracker_info << "current expired path_version " << iter->first;
         std::vector<TimestampedVersionSharedPtr>& timestamped_versions = iter->second->timestamped_versions();
-        std::vector<TimestampedVersionSharedPtr>::iterator version_path_iter = timestamped_versions.begin();
+        auto version_path_iter = timestamped_versions.begin();
         int64_t max_create_time = -1;
         while (version_path_iter != timestamped_versions.end()) {
             if (max_create_time < (*version_path_iter)->get_create_time()) {
@@ -264,7 +277,7 @@ void VersionGraph::add_version_to_graph(const Version& version) {
         // 2. We create a new tablet B releated A, and we will create a initial rowset and _max_continuous_version
         //    will be updated to 1
         // 3. Tablet A has a rowset R with version (0, m)
-        // 4. Schema change will try convert R
+        // 4. VectorizedSchema change will try convert R
         // 5. The start version of R (0) is not equal to `_max_continuous_version + 1`, and the _max_continuous_version
         //    will not update
         _max_continuous_version = _get_max_continuous_version_from(0);

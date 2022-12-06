@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -16,6 +28,7 @@
 #include "exec/pipeline/operator.h"
 #include "gen_cpp/data.pb.h"
 #include "gen_cpp/internal_service.pb.h"
+#include "serde/protobuf_serde.h"
 #include "util/raw_container.h"
 #include "util/runtime_profile.h"
 
@@ -37,7 +50,8 @@ public:
                          const std::vector<TPlanFragmentDestination>& destinations, bool is_pipeline_level_shuffle,
                          const int32_t num_shuffles_per_channel, int32_t sender_id, PlanNodeId dest_node_id,
                          const std::vector<ExprContext*>& partition_expr_ctxs, bool enable_exchange_pass_through,
-                         FragmentContext* const fragment_ctx, const std::vector<int32_t>& output_columns);
+                         bool enable_exchange_perf, FragmentContext* const fragment_ctx,
+                         const std::vector<int32_t>& output_columns);
 
     ~ExchangeSinkOperator() override = default;
 
@@ -66,7 +80,7 @@ public:
     Status serialize_chunk(const vectorized::Chunk* chunk, ChunkPB* dst, bool* is_first_chunk, int num_receivers = 1);
 
     // Return the physical bytes of attachment.
-    int64_t construct_brpc_attachment(PTransmitChunkParamsPtr _chunk_request, butil::IOBuf& attachment);
+    int64_t construct_brpc_attachment(const PTransmitChunkParamsPtr& _chunk_request, butil::IOBuf& attachment);
 
 private:
     bool _is_large_chunk(size_t sz) const {
@@ -127,7 +141,7 @@ private:
     // Sender instance id, unique within a fragment.
     const int32_t _sender_id;
     const PlanNodeId _dest_node_id;
-
+    int32_t _encode_level = 0;
     // Will set in prepare
     int32_t _be_number = 0;
     phmap::flat_hash_map<int64_t, std::unique_ptr<Channel>> _instance_id2channel;
@@ -187,6 +201,8 @@ private:
     const std::vector<int32_t>& _output_columns;
 
     std::unique_ptr<Shuffler> _shuffler;
+
+    std::shared_ptr<serde::EncodeContext> _encode_context = nullptr;
 };
 
 class ExchangeSinkOperatorFactory final : public OperatorFactory {
@@ -196,8 +212,8 @@ public:
                                 const std::vector<TPlanFragmentDestination>& destinations,
                                 bool is_pipeline_level_shuffle, int32_t num_shuffles_per_channel, int32_t sender_id,
                                 PlanNodeId dest_node_id, std::vector<ExprContext*> partition_expr_ctxs,
-                                bool enable_exchange_pass_through, FragmentContext* const fragment_ctx,
-                                const std::vector<int32_t>& output_columns);
+                                bool enable_exchange_pass_through, bool enable_exchange_perf,
+                                FragmentContext* const fragment_ctx, std::vector<int32_t> output_columns);
 
     ~ExchangeSinkOperatorFactory() override = default;
 
@@ -221,6 +237,7 @@ private:
     std::vector<ExprContext*> _partition_expr_ctxs; // compute per-row partition values
 
     bool _enable_exchange_pass_through;
+    bool _enable_exchange_perf;
 
     FragmentContext* const _fragment_ctx;
 

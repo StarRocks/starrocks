@@ -8,6 +8,9 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.LogicalProperty;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.rule.mv.KeyInference;
+import com.starrocks.sql.optimizer.rule.mv.MVOperatorProperty;
+import com.starrocks.sql.optimizer.rule.mv.ModifyInference;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 
 import java.util.List;
@@ -35,8 +38,10 @@ public class OptExpression {
     // For easily convert a GroupExpression to OptExpression when pattern match
     // we just use OptExpression to wrap GroupExpression
     private GroupExpression groupExpression;
-    // required properties for children.
+    // Required properties for children.
     private List<PhysicalPropertySet> requiredProperties;
+    // MV Operator property, inferred from best plan
+    private MVOperatorProperty mvOperatorProperty;
 
     public OptExpression() {
         this.inputs = Lists.newArrayList();
@@ -127,6 +132,16 @@ public class OptExpression {
         setLogicalProperty(context.getRootProperty());
     }
 
+    public void deriveMVProperty() {
+        KeyInference.KeyPropertySet keyPropertySet = KeyInference.infer(this, null);
+        ModifyInference.ModifyOp modifyOp = ModifyInference.infer(this);
+        this.mvOperatorProperty = new MVOperatorProperty(keyPropertySet, modifyOp);
+    }
+
+    public MVOperatorProperty getMvOperatorProperty() {
+        return this.mvOperatorProperty;
+    }
+
     public Statistics getStatistics() {
         return statistics;
     }
@@ -170,9 +185,5 @@ public class OptExpression {
             sb.append(input.explain(childHeadlinePrefix, childDetailPrefix));
         }
         return sb.toString();
-    }
-
-    public boolean canUsePipeLine() {
-        return op.canUsePipeLine() && inputs.stream().allMatch(OptExpression::canUsePipeLine);
     }
 }

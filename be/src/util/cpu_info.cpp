@@ -100,7 +100,6 @@ static struct {
         {"ssse3", CpuInfo::SSSE3},   {"sse4_1", CpuInfo::SSE4_1}, {"sse4_2", CpuInfo::SSE4_2},
         {"popcnt", CpuInfo::POPCNT}, {"avx", CpuInfo::AVX},       {"avx2", CpuInfo::AVX2},
 };
-static const long num_flags = sizeof(flag_mappings) / sizeof(flag_mappings[0]);
 
 // Helper function to parse for hardware flags.
 // values contains a list of space-seperated flags.  check to see if the flags we

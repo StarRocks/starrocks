@@ -1,6 +1,8 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.google.common.collect.Lists;
+import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -10,11 +12,9 @@ import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
-import jersey.repackaged.com.google.common.collect.Lists;
 
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 
 public class PruneTableFunctionColumnRule extends TransformationRule {
     public PruneTableFunctionColumnRule() {
@@ -35,15 +35,14 @@ public class PruneTableFunctionColumnRule extends TransformationRule {
             }
         }
 
-        for (Map.Entry<ColumnRefOperator, ScalarOperator> entry :
-                logicalTableFunctionOperator.getFnParamColumnProjectMap().entrySet()) {
-            requiredOutputColumns.union(entry.getKey());
+        for (Pair<ColumnRefOperator, ScalarOperator> pair : logicalTableFunctionOperator.getFnParamColumnProject()) {
+            requiredOutputColumns.union(pair.first);
         }
 
         LogicalTableFunctionOperator newOperator = new LogicalTableFunctionOperator(
                 logicalTableFunctionOperator.getFnResultColumnRefSet(),
                 logicalTableFunctionOperator.getFn(),
-                logicalTableFunctionOperator.getFnParamColumnProjectMap(),
+                logicalTableFunctionOperator.getFnParamColumnProject(),
                 newOuterColumnRefSet);
         newOperator.setLimit(logicalTableFunctionOperator.getLimit());
 

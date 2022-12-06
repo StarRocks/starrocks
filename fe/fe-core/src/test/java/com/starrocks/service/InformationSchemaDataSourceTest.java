@@ -2,120 +2,36 @@
 
 package com.starrocks.service;
 
+import com.google.gson.Gson;
 import com.starrocks.analysis.UserIdentity;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Database;
-import com.starrocks.catalog.HashDistributionInfo;
-import com.starrocks.catalog.KeysType;
-import com.starrocks.catalog.MaterializedIndex;
-import com.starrocks.catalog.MaterializedIndex.IndexState;
-import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table.TableType;
-import com.starrocks.catalog.TableProperty;
-import com.starrocks.catalog.Type;
-import com.starrocks.catalog.View;
-import com.starrocks.common.PatternMatcher;
-import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.common.Config;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TAuthInfo;
-import com.starrocks.thrift.TGetTablesInfoRequest;
-import com.starrocks.thrift.TGetTablesInfoResponse;
-import com.starrocks.thrift.TTableInfo;
+import com.starrocks.thrift.TGetTablesConfigRequest;
+import com.starrocks.thrift.TGetTablesConfigResponse;
+import com.starrocks.thrift.TTableConfigInfo;
+import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
-import mockit.Mocked;   
-import org.apache.thrift.TException;
+import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Test;
 
-import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 public class InformationSchemaDataSourceTest {
     
     @Mocked
     ExecuteEnv exeEnv;
-
-    @Mocked
-    GlobalStateMgr globalStateMgr;
-
-    @Mocked
-    Auth auth;
     
     @Test
-    public void testGenerateTablesInfo() throws TException, NoSuchFieldException, 
-        SecurityException, IllegalArgumentException, IllegalAccessException {
-
-        
-        Database db = new Database(1, "test_db");
-
-        List<Column> partitionsColumns = new ArrayList<>();
-        partitionsColumns.add(new Column("p_c1", Type.ARRAY_BOOLEAN));
-        partitionsColumns.add(new Column("p_c2", Type.ARRAY_BOOLEAN));
-
-        List<Column> dColumns = new ArrayList<>();
-        dColumns.add(new Column("d_c1", Type.ARRAY_BOOLEAN));
-        dColumns.add(new Column("d_c2", Type.ARRAY_BOOLEAN));
-    
-        List<Column> keyColumns = new ArrayList<>();
-        Column keyC1 = new Column("key_c1", Type.ARRAY_BOOLEAN);
-        keyC1.setIsKey(true);
-        Column keyC2 = new Column("key_c2", Type.ARRAY_BOOLEAN);            
-        keyC2.setIsKey(true);
-        keyColumns.add(keyC1);
-        keyColumns.add(keyC2);
-    
-        Map<String, String> properties = new HashMap<>();
-        properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_TYPE, "test_type");
-        TableProperty tProperties = new TableProperty(properties);
-    
-    
-        // OlapTable
-        RangePartitionInfo partitionInfo = new RangePartitionInfo(partitionsColumns);
-        HashDistributionInfo distributionInfo = new HashDistributionInfo(10, dColumns);
-    
-        // PK
-        OlapTable tablePk = new OlapTable(1, "test_table_pk", keyColumns, KeysType.PRIMARY_KEYS, partitionInfo, distributionInfo);
-        MaterializedIndex index = new MaterializedIndex(2, IndexState.NORMAL);
-        index.setRowCount(2000L);
-        Partition partition = new Partition(1, "test_p", index, distributionInfo);
-        
-        Field pvisibleVersionTime = partition.getClass().getDeclaredField("visibleVersionTime");
-        pvisibleVersionTime.setAccessible(true);
-        pvisibleVersionTime.set(partition, 4000L);
-
-        tablePk.addPartition(partition);
-        tablePk.setTableProperty(tProperties);
-        tablePk.setColocateGroup("test_group");
-        tablePk.setComment("test_comment");
-        tablePk.setLastCheckTime(2000L);
-        
-        // View
-        View view = new View(2, "test_view", keyColumns); 
-        db.createTable(tablePk);
-        db.createTable(view);
-
-    
-        Field field = globalStateMgr.getClass().getDeclaredField("auth");
-        field.setAccessible(true);
-        field.set(globalStateMgr, auth);
-
-        new MockUp<GlobalStateMgr>() {
-            @Mock
-            public List<String> getDbNames() {
-                return Arrays.asList("test_db");
-            }
-        };
+    public void testGetTablesConfig() throws Exception {
 
         new MockUp<Auth>() {
             @Mock
@@ -124,66 +40,54 @@ public class InformationSchemaDataSourceTest {
             }
         };
 
-        new MockUp<PatternMatcher>() {
-            @Mock
-            public boolean match(String candidate) {
-                return true;
-            }
-        };
+        UtFrameUtils.createMinStarRocksCluster();
+        UtFrameUtils.addMockBackend(10002);
+        UtFrameUtils.addMockBackend(10003);
 
-        new MockUp<GlobalStateMgr>() {
-            @Mock
-            public Database getDb(String name) {
-                return db;
-            }
-        };
+        StarRocksAssert starRocksAssert = new StarRocksAssert(UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT));
+        starRocksAssert.withEnableMV().withDatabase("db1").useDatabase("db1");
+        Config.enable_experimental_mv = true;
+        String createTblStmtStr = "CREATE TABLE db1.tbl1 (`k1` int,`k2` int,`k3` int,`v1` int,`v2` int,`v3` int) " +
+                                  "ENGINE=OLAP " + "PRIMARY KEY(`k1`, `k2`, `k3`) " +
+                                  "COMMENT \"OLAP\" " +
+                                  "DISTRIBUTED BY HASH(`k1`, `k2`, `k3`) BUCKETS 3 " +
+                                  "ORDER BY(`v2`, `v3`) " +
+                                  "PROPERTIES ('replication_num' = '1');";
+        starRocksAssert.withTable(createTblStmtStr);
 
-        new MockUp<MaterializedIndex>() {
-            @Mock
-            public long getDataSize() {
-                return 4000L;
-            }
-        };
+        String createMvStmtStr = "CREATE MATERIALIZED VIEW db1.mv1 " +
+                                 "DISTRIBUTED BY HASH(k1) BUCKETS 10 " +
+                                 "REFRESH ASYNC " +
+                                 "AS SELECT k1, k2 " +
+                                 "FROM db1.tbl1 ";
         
-        TGetTablesInfoRequest request = new TGetTablesInfoRequest();
+        starRocksAssert.withMaterializedStatementView(createMvStmtStr);
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TGetTablesConfigRequest req = new TGetTablesConfigRequest();
         TAuthInfo authInfo = new TAuthInfo();
-        authInfo.setPattern("test parttern");
-        request.setAuth_info(authInfo);
-        TGetTablesInfoResponse response = InformationSchemaDataSource.generateTablesInfoResponse(request);
-        
-        List<TTableInfo> infos = response.getTables_infos();
-        infos.forEach(info -> {
-            if (info.getTable_name().equals("test_table_pk")) {
-                Assert.assertTrue(info.getTable_catalog().equals("def"));
-                Assert.assertTrue(info.getTable_schema().equals("test_db"));
-                Assert.assertTrue(info.getTable_name().equals("test_table_pk"));
-                Assert.assertTrue(info.getTable_type().equals("BASE TABLE"));
-                Assert.assertTrue(info.getEngine().equals("StarRocks"));
-                Assert.assertTrue(info.getVersion() == -1L);
-                Assert.assertTrue(info.getRow_format().equals("NULL"));
-                Assert.assertTrue(info.getTable_rows() == 2000L);
-                Assert.assertTrue(info.getAvg_row_length() == 2L);
-                Assert.assertTrue(info.getData_length() == 4000L);
-                Assert.assertTrue(info.getMax_data_length() == -1L);
-                Assert.assertTrue(info.getIndex_length() == -1L);
-                Assert.assertTrue(info.getData_free() == -1L);
-                Assert.assertTrue(info.getAuto_increment() == -1L);
-                // create time
-                Assert.assertTrue(info.getUpdate_time() == 4L);
-                Assert.assertTrue(info.getCheck_time() == 2000L);
-                Assert.assertTrue(info.getTable_collation().equals("utf8_general_ci"));
-                Assert.assertTrue(info.getChecksum() == -1L);
-                Assert.assertTrue(info.getCreate_options().equals("NULL"));
-                Assert.assertTrue(info.getTable_comment().equals("test_comment"));
-            } 
-            if (info.getTable_name().equals("test_view")) {
-                Assert.assertTrue(info.getTable_type().equals("VIEW"));
-                Assert.assertTrue(info.getTable_rows() == -1L);
-                Assert.assertTrue(info.getAvg_row_length() == -1L);
-                Assert.assertTrue(info.getData_length() == -1L);
-                Assert.assertTrue(info.getUpdate_time() == -1L);
-            }
-        });
+        authInfo.setPattern("db1");
+        req.setAuth_info(authInfo);
+        TGetTablesConfigResponse response = impl.getTablesConfig(req);
+        TTableConfigInfo tableConfig = response.getTables_config_infos().get(0);
+        Assert.assertEquals("db1", tableConfig.getTable_schema());
+        Assert.assertEquals("tbl1", tableConfig.getTable_name());
+        Assert.assertEquals("OLAP", tableConfig.getTable_engine());
+        Assert.assertEquals("PRIMARY_KEYS", tableConfig.getTable_model());
+        Assert.assertEquals("`k1`, `k2`, `k3`", tableConfig.getPrimary_key());
+        Assert.assertEquals("NULL", tableConfig.getPartition_key());
+        Assert.assertEquals("`k1`, `k2`, `k3`", tableConfig.getDistribute_key());
+        Assert.assertEquals("HASH", tableConfig.getDistribute_type());
+        Assert.assertEquals(3, tableConfig.getDistribute_bucket());
+        Assert.assertEquals("`v2`, `v3`", tableConfig.getSort_key());
+
+        TTableConfigInfo mvConfig = response.getTables_config_infos().get(1);
+        Assert.assertEquals("MATERIALIZED_VIEW", mvConfig.getTable_engine());
+        Map<String, String> propsMap = new HashMap<>();
+        propsMap = new Gson().fromJson(mvConfig.getProperties(), propsMap.getClass());
+        Assert.assertEquals("1", propsMap.get("replication_num"));
+        Assert.assertEquals("HDD", propsMap.get("storage_medium"));
+
     }
 
     @Test
@@ -197,33 +101,19 @@ public class InformationSchemaDataSourceTest {
         Class<?> clazz = Class.forName(InformationSchemaDataSource.class.getName());
         Method m = clazz.getDeclaredMethod("transferTableTypeToAdaptMysql", TableType.class);
         m.setAccessible(true);
-        Assert.assertTrue(((String) m.invoke(InformationSchemaDataSource.class, TableType.MYSQL)).
-                equals("EXTERNAL TABLE"));
-        Assert.assertTrue(((String) m.invoke(InformationSchemaDataSource.class, TableType.HIVE)).
-                equals("EXTERNAL TABLE"));
-        Assert.assertTrue(((String) m.invoke(InformationSchemaDataSource.class, TableType.ICEBERG)).
-                equals("EXTERNAL TABLE"));
-        Assert.assertTrue(((String) m.invoke(InformationSchemaDataSource.class, TableType.HUDI)).
-                equals("EXTERNAL TABLE"));
-        Assert.assertTrue(((String) m.invoke(InformationSchemaDataSource.class, TableType.LAKE)).
-                equals("EXTERNAL TABLE"));
-        Assert.assertTrue(((String) m.invoke(InformationSchemaDataSource.class, TableType.ELASTICSEARCH)).
-                equals("EXTERNAL TABLE"));
-        Assert.assertTrue(((String) m.invoke(InformationSchemaDataSource.class, TableType.JDBC)).
-                equals("EXTERNAL TABLE"));
-        Assert.assertTrue(((String) m.invoke(InformationSchemaDataSource.class, TableType.OLAP)).
-                equals("BASE TABLE"));
-        Assert.assertTrue(((String) m.invoke(InformationSchemaDataSource.class, TableType.OLAP_EXTERNAL)).
-                equals("BASE TABLE"));
-        Assert.assertTrue(((String) m.invoke(InformationSchemaDataSource.class, TableType.MATERIALIZED_VIEW)).
-                equals("MATERIALIZED VIEW"));
-        Assert.assertTrue(((String) m.invoke(InformationSchemaDataSource.class, TableType.VIEW)).
-                equals("VIEW"));
-        Assert.assertTrue(((String) m.invoke(InformationSchemaDataSource.class, TableType.SCHEMA)).
-                equals("BASE TABLE"));
-        Assert.assertTrue(((String) m.invoke(InformationSchemaDataSource.class, TableType.INLINE_VIEW)).
-                equals("BASE TABLE"));
-        Assert.assertTrue(((String) m.invoke(InformationSchemaDataSource.class, TableType.BROKER)).
-                equals("BASE TABLE"));
+        Assert.assertEquals("EXTERNAL TABLE", m.invoke(InformationSchemaDataSource.class, TableType.MYSQL));
+        Assert.assertEquals("EXTERNAL TABLE", m.invoke(InformationSchemaDataSource.class, TableType.HIVE));
+        Assert.assertEquals("EXTERNAL TABLE", m.invoke(InformationSchemaDataSource.class, TableType.ICEBERG));
+        Assert.assertEquals("EXTERNAL TABLE", m.invoke(InformationSchemaDataSource.class, TableType.HUDI));
+        Assert.assertEquals("EXTERNAL TABLE", m.invoke(InformationSchemaDataSource.class, TableType.LAKE));
+        Assert.assertEquals("EXTERNAL TABLE", m.invoke(InformationSchemaDataSource.class, TableType.ELASTICSEARCH));
+        Assert.assertEquals("EXTERNAL TABLE", m.invoke(InformationSchemaDataSource.class, TableType.JDBC));
+        Assert.assertEquals("BASE TABLE", m.invoke(InformationSchemaDataSource.class, TableType.OLAP));
+        Assert.assertEquals("BASE TABLE", m.invoke(InformationSchemaDataSource.class, TableType.OLAP_EXTERNAL));
+        Assert.assertEquals("VIEW", m.invoke(InformationSchemaDataSource.class, TableType.MATERIALIZED_VIEW));
+        Assert.assertEquals("VIEW", m.invoke(InformationSchemaDataSource.class, TableType.VIEW));
+        Assert.assertEquals("BASE TABLE", m.invoke(InformationSchemaDataSource.class, TableType.SCHEMA));
+        Assert.assertEquals("BASE TABLE", m.invoke(InformationSchemaDataSource.class, TableType.INLINE_VIEW));
+        Assert.assertEquals("BASE TABLE", m.invoke(InformationSchemaDataSource.class, TableType.BROKER));
     }
 }

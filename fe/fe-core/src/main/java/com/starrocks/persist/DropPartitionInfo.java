@@ -21,6 +21,7 @@
 
 package com.starrocks.persist;
 
+import com.google.common.base.Objects;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
@@ -97,6 +98,11 @@ public class DropPartitionInfo implements Writable {
     public void write(DataOutput out) throws IOException {
         String json = GsonUtils.GSON.toJson(this);
         Text.writeString(out, json);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(dbId, tableId, partitionName);
     }
 
     @Override

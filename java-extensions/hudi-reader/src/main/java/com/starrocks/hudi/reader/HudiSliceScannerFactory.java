@@ -25,7 +25,7 @@ public class HudiSliceScannerFactory implements ScannerFactory {
                         throw new RuntimeException("Cannot init hudi slice classloader.", e);
                     }
                 }).toArray(URL[]::new);
-        classLoader = new ChildFirstClassLoader(jars, ClassLoader.getSystemClassLoader());
+        classLoader = new ChildFirstClassLoader(jars, Thread.currentThread().getContextClassLoader());
     }
 
     /**
@@ -34,9 +34,8 @@ public class HudiSliceScannerFactory implements ScannerFactory {
      */
     @Override
     public Class getScannerClass() throws ClassNotFoundException {
-        Thread.currentThread().setContextClassLoader(classLoader);
         try {
-            return classLoader.loadClass(HudiSliceScanner.class.getName());
+            return classLoader.loadClass("com.starrocks.hudi.reader.HudiSliceScanner");
         } catch (ClassNotFoundException e) {
             e.printStackTrace();
             throw e;

@@ -68,8 +68,7 @@ void __lsan_do_leak_check();
 int __lsan_do_recoverable_leak_check();
 } // extern "C"
 
-namespace starrocks {
-namespace debug {
+namespace starrocks::debug {
 
 class ScopedLSANDisabler {
 public:
@@ -77,5 +76,4 @@ public:
     ~ScopedLSANDisabler() { __lsan_enable(); }
 };
 
-} // namespace debug
-} // namespace starrocks
+} // namespace starrocks::debug

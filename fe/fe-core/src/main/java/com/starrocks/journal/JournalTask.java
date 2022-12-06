@@ -13,7 +13,7 @@ import java.util.concurrent.TimeoutException;
 
 public class JournalTask implements Future<Boolean> {
     // serialized JournalEntity
-    private DataOutputBuffer buffer;
+    private final DataOutputBuffer buffer;
     // write result
     private Boolean isSucceed = null;
     // count down latch, the producer which called logEdit() will wait on it.
@@ -48,7 +48,7 @@ public class JournalTask implements Future<Boolean> {
 
     public long estimatedSizeByte() {
         // journal id + buffer
-        return Long.SIZE / 8 + buffer.getLength();
+        return Long.SIZE / 8 + (long) buffer.getLength();
     }
 
     public DataOutputBuffer getBuffer() {
@@ -69,7 +69,9 @@ public class JournalTask implements Future<Boolean> {
     @Override
     public Boolean get(long timeout, @NotNull TimeUnit unit)
             throws InterruptedException, ExecutionException, TimeoutException {
-        latch.await(timeout, unit);
+        if (!latch.await(timeout, unit)) {
+            return false;
+        }
         return isSucceed;
     }
 

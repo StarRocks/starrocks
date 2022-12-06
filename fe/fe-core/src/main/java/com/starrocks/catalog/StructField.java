@@ -21,6 +21,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.base.Objects;
 import com.google.common.base.Strings;
 import com.starrocks.thrift.TStructField;
 import com.starrocks.thrift.TTypeDesc;
@@ -31,10 +32,10 @@ import com.starrocks.thrift.TTypeNode;
  * comments of struct fields. We set comment to null to avoid compatibility issues.
  */
 public class StructField {
-    protected final String name;
-    protected final Type type;
-    protected final String comment;
-    protected int position;  // in struct
+    private final String name;
+    private final Type type;
+    private final String comment;
+    private int position;  // in struct
 
     public StructField(String name, Type type, String comment) {
         this.name = name;
@@ -109,12 +110,22 @@ public class StructField {
     }
 
     @Override
+    public int hashCode() {
+        return Objects.hashCode(name, type);
+    }
+
+    @Override
     public boolean equals(Object other) {
         if (!(other instanceof StructField)) {
             return false;
         }
         StructField otherStructField = (StructField) other;
         return otherStructField.name.equals(name) && otherStructField.type.equals(type);
+    }
+
+    @Override
+    public StructField clone() {
+        return new StructField(name, type.clone(), comment);
     }
 }
 

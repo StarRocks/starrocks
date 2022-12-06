@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/gensrc/thrift/FrontendService.thrift
 
@@ -34,6 +47,8 @@ include "Exprs.thrift"
 include "RuntimeProfile.thrift"
 include "MasterService.thrift"
 include "AgentService.thrift"
+include "ResourceUsage.thrift"
+include "MVMaintenance.thrift"
 
 // These are supporting structs for JniFrontend.java, which serves as the glue
 // between our C++ execution environment and the Java frontend.
@@ -95,6 +110,14 @@ struct TShowVariableRequest {
 // Results of a call to describeTable()
 struct TShowVariableResult {
     1: required map<string, string> variables
+    2: optional list<TVerboseVariableRecord> verbose_variables
+}
+
+struct TVerboseVariableRecord {
+    1: optional string variable_name
+    2: optional string value
+    3: optional string default_value
+    4: optional bool is_changed
 }
 
 // Valid table file formats
@@ -367,6 +390,7 @@ struct TTaskRunInfo {
     8: optional i64 expire_time
     9: optional i32 error_code
     10: optional string error_message
+    11: optional string progress
 }
 
 struct TGetTaskRunInfoResult {
@@ -448,6 +472,10 @@ struct TReportExecStatusParams {
   18: optional i64 source_load_rows
 
   19: optional i64 source_load_bytes
+
+  20: optional InternalService.TLoadJobType load_type
+
+  21: optional list<Types.TTabletFailInfo> failInfos
 }
 
 struct TFeResult {
@@ -591,6 +619,8 @@ struct TStreamLoadPutRequest {
     27: optional bool partial_update
     28: optional string transmission_compression_type
     29: optional i32 load_dop
+    30: optional bool enable_replicated_storage
+    31: optional string merge_condition
     // only valid when file type is CSV
     50: optional string rowDelimiter
 }
@@ -658,6 +688,7 @@ struct TLoadTxnCommitRequest {
     10: optional i64 auth_code
     11: optional TTxnCommitAttachment txnCommitAttachment
     12: optional i64 thrift_rpc_timeout_ms
+    13: optional list<Types.TTabletFailInfo> failInfos
 }
 
 struct TLoadTxnCommitResult {
@@ -675,6 +706,7 @@ struct TLoadTxnRollbackRequest {
     8: optional string reason
     9: optional i64 auth_code
     10: optional TTxnCommitAttachment txnCommitAttachment
+    11: optional list<Types.TTabletFailInfo> failInfos
 }
 
 struct TLoadTxnRollbackResult {
@@ -955,6 +987,7 @@ struct TCommitRemoteTxnRequest {
     4: optional i32 commit_timeout_ms
     5: optional list<Types.TTabletCommitInfo> commit_infos
     6: optional TTxnCommitAttachment commit_attachment
+    7: optional list<Types.TTabletFailInfo> fail_infos
 }
 
 struct TCommitRemoteTxnResponse {
@@ -1017,6 +1050,15 @@ struct TGetTablesInfoRequest {
 
 struct TGetTablesInfoResponse {
     1: optional list<TTableInfo> tables_infos
+}
+
+struct TUpdateResourceUsageRequest {
+    1: optional i64 backend_id 
+    2: optional ResourceUsage.TResourceUsage resource_usage
+}
+
+struct TUpdateResourceUsageResponse {
+    1: optional Status.TStatus status
 }
 
 struct TTableInfo {
@@ -1097,5 +1139,10 @@ service FrontendService {
     TAbortRemoteTxnResponse  abortRemoteTxn(1: TAbortRemoteTxnRequest request)
 
     TSetConfigResponse setConfig(1: TSetConfigRequest request)
+
+    TUpdateResourceUsageResponse updateResourceUsage(1: TUpdateResourceUsageRequest request)
+    
+    // For Materialized View
+    MVMaintenance.TMVReportEpochResponse mvReport(1: MVMaintenance.TMVMaintenanceTasks request)
 }
 

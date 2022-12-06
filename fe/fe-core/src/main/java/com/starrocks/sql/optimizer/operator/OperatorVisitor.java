@@ -6,8 +6,10 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEProduceOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalDeltaLakeScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalExceptOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalFileScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHudiScanOperator;
@@ -34,9 +36,11 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperato
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEProduceOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalDeltaLakeScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalExceptOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalFileScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
@@ -60,6 +64,9 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
+import com.starrocks.sql.optimizer.operator.physical.stream.PhysicalStreamAggOperator;
+import com.starrocks.sql.optimizer.operator.physical.stream.PhysicalStreamJoinOperator;
+import com.starrocks.sql.optimizer.operator.physical.stream.PhysicalStreamScanOperator;
 
 /**
  * OperatorVisitor is used to traverse Operator
@@ -90,7 +97,15 @@ public abstract class OperatorVisitor<R, C> {
         return visitLogicalTableScan(node, context);
     }
 
+    public R visitLogicalFileScan(LogicalFileScanOperator node, C context) {
+        return visitLogicalTableScan(node, context);
+    }
+
     public R visitLogicalIcebergScan(LogicalIcebergScanOperator node, C context) {
+        return visitLogicalTableScan(node, context);
+    }
+
+    public R visitLogicalDeltaLakeScan(LogicalDeltaLakeScanOperator node, C context) {
         return visitLogicalTableScan(node, context);
     }
 
@@ -225,11 +240,19 @@ public abstract class OperatorVisitor<R, C> {
         return visitOperator(node, context);
     }
 
+    public R visitPhysicalFileScan(PhysicalFileScanOperator node, C context) {
+        return visitOperator(node, context);
+    }
+
     public R visitPhysicalIcebergScan(PhysicalIcebergScanOperator node, C context) {
         return visitOperator(node, context);
     }
 
     public R visitPhysicalHudiScan(PhysicalHudiScanOperator node, C context) {
+        return visitOperator(node, context);
+    }
+
+    public R visitPhysicalDeltaLakeScan(PhysicalDeltaLakeScanOperator node, C context) {
         return visitOperator(node, context);
     }
 
@@ -313,4 +336,15 @@ public abstract class OperatorVisitor<R, C> {
         return visitOperator(node, context);
     }
 
+    public R visitPhysicalStreamScan(PhysicalStreamScanOperator node, C context) {
+        return visitOperator(node, context);
+    }
+
+    public R visitPhysicalStreamJoin(PhysicalStreamJoinOperator node, C context) {
+        return visitOperator(node, context);
+    }
+
+    public R visitPhysicalStreamAgg(PhysicalStreamAggOperator node, C context) {
+        return visitOperator(node, context);
+    }
 }

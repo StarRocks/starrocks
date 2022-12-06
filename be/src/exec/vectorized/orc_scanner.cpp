@@ -1,5 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "exec/vectorized/orc_scanner.h"
 
 #include <memory>
@@ -74,6 +86,7 @@ Status ORCScanner::open() {
     _orc_reader->set_timezone(_state->timezone());
     _orc_reader->drop_nanoseconds_in_datetime();
     _orc_reader->set_runtime_state(_state);
+    _orc_reader->set_case_sensitive(true);
     RETURN_IF_ERROR(_open_next_orc_reader());
 
     return Status::OK();
@@ -96,7 +109,7 @@ StatusOr<ChunkPtr> ORCScanner::get_next() {
             break;
         }
     }
-    auto cast_chunk = _transfer_chunk(tmp_chunk);
+    ASSIGN_OR_RETURN(auto cast_chunk, _transfer_chunk(tmp_chunk));
     // use base class implementation. they are the SAME!!!
     return materialize(tmp_chunk, cast_chunk);
 }
@@ -123,9 +136,9 @@ StatusOr<ChunkPtr> ORCScanner::_next_orc_chunk() {
     return Status::InternalError("unreachable path");
 }
 
-ChunkPtr ORCScanner::_transfer_chunk(starrocks::vectorized::ChunkPtr& src) {
+StatusOr<ChunkPtr> ORCScanner::_transfer_chunk(starrocks::vectorized::ChunkPtr& src) {
     SCOPED_RAW_TIMER(&_counter->cast_chunk_ns);
-    ChunkPtr cast_chunk = _orc_reader->cast_chunk(&src);
+    ASSIGN_OR_RETURN(ChunkPtr cast_chunk, _orc_reader->cast_chunk_checked(&src));
     auto range = _scan_range.ranges.at(_next_range - 1);
     if (range.__isset.num_of_columns_from_file) {
         for (int i = 0; i < range.columns_from_path.size(); ++i) {

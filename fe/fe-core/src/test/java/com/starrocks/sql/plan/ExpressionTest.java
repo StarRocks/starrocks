@@ -413,10 +413,10 @@ public class ExpressionTest extends PlanTestBase {
     public void testDateTypeReduceCast() throws Exception {
         String sql = "select * from test_all_type_distributed_by_datetime " +
                 "where cast(cast(id_datetime as date) as datetime) >= '1970-01-01 12:00:00' " +
-                        "and cast(cast(id_datetime as date) as datetime) <= '1970-01-01 18:00:00'";
+                        "and cast(cast(id_datetime as date) as datetime) <= '1970-01-02 18:00:00'";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(
-                plan.contains("8: id_datetime >= '1970-01-02 00:00:00', 8: id_datetime < '1970-01-02 00:00:00'"));
+                plan.contains("8: id_datetime >= '1970-01-02 00:00:00', 8: id_datetime < '1970-01-03 00:00:00'"));
     }
 
     @Test
@@ -494,6 +494,17 @@ public class ExpressionTest extends PlanTestBase {
     public void testPlanContains(String sql, String content) throws Exception {
         String plan = getFragmentPlan(sql);
         Assert.assertTrue("plan is " + plan, plan.contains(content));
+    }
+
+    @Test
+    public void testLambdaPredicateOnScan() throws Exception {
+        starRocksAssert.withTable("create table test_lambda_on_scan" +
+                "(c0 INT, c2 array<int>) " +
+                " duplicate key(c0) distributed by hash(c0) buckets 1 " +
+                "properties('replication_num'='1');");
+        String sql = "select * from test_lambda_on_scan where array_map(x -> x, c2) is not null";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("array_map"));
     }
 
     @Test
@@ -984,6 +995,59 @@ public class ExpressionTest extends PlanTestBase {
         String sql = "select cast(t1a as BITMAP) from test_all_type;";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "CAST(1: t1a AS BITMAP)");
+    }
+
+    @Test
+    public void testTimeSlicePlan() throws Exception {
+        String sql = "select time_slice(th, interval 1 year) from tall;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "time_slice(8: th, 1, 'year', 'floor')");
+
+        sql = "select time_slice(th, interval 1 year, CEIL) from tall;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "time_slice(8: th, 1, 'year', 'ceil')");
+    }
+
+    @Test
+    public void testQualifyForWindowFunction() throws Exception {
+        // for '='
+        String sql = "select tc from tall qualify row_number() OVER(PARTITION by ta order by tg) = 1;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "predicates: 11: row_number() = 1");
+
+        sql = "select tc from tall qualify rank() OVER(PARTITION by ta order by tg) = 1;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "predicates: 11: rank() = 1");
+
+        sql = "select tc from tall qualify dense_rank() OVER(PARTITION by ta order by tg) = 1;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "predicates: 11: dense_rank() = 1");
+
+        // for '<'
+        sql = "select tc from tall qualify row_number() OVER(PARTITION by ta order by tg) < 1;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "predicates: 11: row_number() < 1");
+
+        sql = "select tc from tall qualify rank() OVER(PARTITION by ta order by tg) < 1;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "predicates: 11: rank() < 1");
+
+        sql = "select tc from tall qualify dense_rank() OVER(PARTITION by ta order by tg) < 1;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "predicates: 11: dense_rank() < 1");
+
+        // for '>'
+        sql = "select tc from tall qualify row_number() OVER(PARTITION by ta order by tg) > 1;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "predicates: 11: row_number() > 1");
+
+        sql = "select tc from tall qualify rank() OVER(PARTITION by ta order by tg) > 1;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "predicates: 11: rank() > 1");
+
+        sql = "select tc from tall qualify dense_rank() OVER(PARTITION by ta order by tg) > 1;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "predicates: 11: dense_rank() > 1");
     }
 
     @Test

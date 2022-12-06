@@ -4,7 +4,6 @@ package com.starrocks.sql.plan;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.ArithmeticExpr;
-import com.starrocks.analysis.ArrayElementExpr;
 import com.starrocks.analysis.ArrayExpr;
 import com.starrocks.analysis.ArraySliceExpr;
 import com.starrocks.analysis.BetweenPredicate;
@@ -14,6 +13,7 @@ import com.starrocks.analysis.CaseExpr;
 import com.starrocks.analysis.CaseWhenClause;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CloneExpr;
+import com.starrocks.analysis.CollectionElementExpr;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.DecimalLiteral;
@@ -35,11 +35,12 @@ import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.Subquery;
+import com.starrocks.analysis.VarBinaryLiteral;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
-import com.starrocks.sql.optimizer.operator.scalar.ArrayElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ArraySliceOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BetweenPredicateOperator;
@@ -48,6 +49,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CloneOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -60,6 +62,7 @@ import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
+import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
 import com.starrocks.thrift.TExprOpcode;
 import com.starrocks.thrift.TFunctionBinaryType;
@@ -131,14 +134,19 @@ public class ScalarOperatorToExpr {
         }
 
         @Override
+        public Expr visitSubfield(SubfieldOperator node, FormatterContext context) {
+            return new SubfieldExpr(buildExpr.build(node.getChild(0), context), node.getType(), node.getFieldName());
+        }
+
+        @Override
         public Expr visitArray(ArrayOperator node, FormatterContext context) {
             return new ArrayExpr(node.getType(),
                     node.getChildren().stream().map(e -> buildExpr.build(e, context)).collect(Collectors.toList()));
         }
 
         @Override
-        public Expr visitArrayElement(ArrayElementOperator node, FormatterContext context) {
-            return new ArrayElementExpr(node.getType(), buildExpr.build(node.getChild(0), context),
+        public Expr visitCollectionElement(CollectionElementOperator node, FormatterContext context) {
+            return new CollectionElementExpr(node.getType(), buildExpr.build(node.getChild(0), context),
                     buildExpr.build(node.getChild(1), context));
         }
 
@@ -182,17 +190,19 @@ public class ScalarOperatorToExpr {
                     LocalDateTime ldt = literal.getDate();
                     return new DateLiteral(ldt.getYear(), ldt.getMonthValue(), ldt.getDayOfMonth());
                 } else if (type.isDatetime()) {
-                    LocalDateTime ldt = literal.getDate();
+                    LocalDateTime ldt = literal.getDatetime();
                     return new DateLiteral(ldt.getYear(), ldt.getMonthValue(), ldt.getDayOfMonth(), ldt.getHour(),
                             ldt.getMinute(), ldt.getSecond());
                 } else if (type.isTime()) {
-                    return new FloatLiteral((double) literal.getTime(), Type.TIME);
+                    return new FloatLiteral(literal.getTime(), Type.TIME);
                 } else if (type.isDecimalOfAnyVersion()) {
                     DecimalLiteral d = new DecimalLiteral(literal.getDecimal());
                     d.uncheckedCastTo(type);
                     return d;
                 } else if (type.isVarchar() || type.isChar()) {
                     return new StringLiteral(literal.getVarchar());
+                } else if (type.isBinaryType()) {
+                    return new VarBinaryLiteral(literal.getBinary());
                 } else {
                     throw new UnsupportedOperationException("nonsupport constant type: " + type.toSql());
                 }

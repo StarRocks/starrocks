@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/http/ev_http_server.cpp
 
@@ -45,12 +58,12 @@
 namespace starrocks {
 
 static void on_chunked(struct evhttp_request* ev_req, void* param) {
-    HttpRequest* request = (HttpRequest*)ev_req->on_free_cb_arg;
+    auto* request = (HttpRequest*)ev_req->on_free_cb_arg;
     request->handler()->on_chunk_data(request);
 }
 
 static void on_free(struct evhttp_request* ev_req, void* arg) {
-    HttpRequest* request = (HttpRequest*)arg;
+    auto* request = (HttpRequest*)arg;
     delete request;
 }
 
@@ -64,7 +77,7 @@ static void on_request(struct evhttp_request* ev_req, void* arg) {
 }
 
 static int on_header(struct evhttp_request* ev_req, void* param) {
-    EvHttpServer* server = (EvHttpServer*)ev_req->on_complete_cb_arg;
+    auto* server = (EvHttpServer*)ev_req->on_complete_cb_arg;
     return server->on_header(ev_req);
 }
 
@@ -98,7 +111,7 @@ Status EvHttpServer::start() {
     // bind to
     RETURN_IF_ERROR(_bind());
     for (int i = 0; i < _num_workers; ++i) {
-        auto worker = [this, i]() {
+        auto worker = [this]() {
             struct event_base* base = event_base_new();
             if (base == nullptr) {
                 LOG(WARNING) << "Couldn't create an event_base.";

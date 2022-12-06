@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -49,8 +61,8 @@ public:
 
     // Only used as a underlying type for other column type(i.e. DecimalV3Column), C++
     // is weak to implement delegation for composite type like golang, so we have to use
-    // inheritance to wrap a underlying type. When constructing a wrapper object, we must
-    // constructor the wrapped object first, move constructor is used to prevent the unnecessary
+    // inheritance to wrap an underlying type. When constructing a wrapper object, we must
+    // construct the wrapped object first, move constructor is used to prevent the unnecessary
     // time-consuming copy operation.
     FixedLengthColumnBase(FixedLengthColumnBase&& src) noexcept : _data(std::move(src._data)) {}
 

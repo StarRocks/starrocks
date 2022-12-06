@@ -1,16 +1,16 @@
 # regexp_replace
 
-## description
+## Description
 
-### Syntax
+This function uses repl to replace a sequence of characters in str that matches a regular expression pattern.
+
+## Syntax
 
 ```Haskell
 VARCHAR regexp_replace(VARCHAR str, VARCHAR pattern, VARCHAR repl)
 ```
 
-This function uses repl to replace a sequence of characters in str that matches a regular expression pattern.
-
-## example
+## Examples
 
 ```Plain Text
 MySQL > SELECT regexp_replace('a b c', " ", "-");

@@ -19,16 +19,17 @@
 
 #include <fcntl.h>
 #include <gtest/gtest.h>
-#include <stdio.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+
+#include <cstdio>
 
 namespace starrocks {
 
 class MessageBodySinkTest : public testing::Test {
 public:
-    MessageBodySinkTest() {}
-    virtual ~MessageBodySinkTest() {}
+    MessageBodySinkTest() = default;
+    ~MessageBodySinkTest() override = default;
 
     void SetUp() override {}
 

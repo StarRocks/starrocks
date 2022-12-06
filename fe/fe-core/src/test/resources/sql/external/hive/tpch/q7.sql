@@ -39,12 +39,12 @@ order by
     cust_nation,
     l_year ;
 [fragment statistics]
-PLAN FRAGMENT 0(F14)
+PLAN FRAGMENT 0(F16)
 Output Exprs:42: n_name | 46: n_name | 49: year | 51: sum
 Input Partition: UNPARTITIONED
 RESULT SINK
 
-26:MERGING-EXCHANGE
+27:MERGING-EXCHANGE
 cardinality: 250
 column statistics:
 * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
@@ -52,13 +52,13 @@ column statistics:
 * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
 * sum-->[810.9, 104949.5, 0.0, 16.0, 250.28228759765625] ESTIMATE
 
-PLAN FRAGMENT 1(F13)
+PLAN FRAGMENT 1(F15)
 
 Input Partition: HASH_PARTITIONED: 42: n_name, 46: n_name, 49: year
 OutPut Partition: UNPARTITIONED
-OutPut Exchange Id: 26
+OutPut Exchange Id: 27
 
-25:SORT
+26:SORT
 |  order by: [42, VARCHAR, true] ASC, [46, VARCHAR, true] ASC, [49, SMALLINT, true] ASC
 |  offset: 0
 |  cardinality: 250
@@ -68,7 +68,7 @@ OutPut Exchange Id: 26
 |  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
 |  * sum-->[810.9, 104949.5, 0.0, 16.0, 250.28228759765625] ESTIMATE
 |
-24:AGGREGATE (merge finalize)
+25:AGGREGATE (merge finalize)
 |  aggregate: sum[([51: sum, DECIMAL128(38,4), true]); args: DECIMAL128; result: DECIMAL128(38,4); args nullable: true; result nullable: true]
 |  group by: [42: n_name, VARCHAR, true], [46: n_name, VARCHAR, true], [49: year, SMALLINT, true]
 |  cardinality: 250
@@ -78,16 +78,16 @@ OutPut Exchange Id: 26
 |  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
 |  * sum-->[810.9, 104949.5, 0.0, 16.0, 250.28228759765625] ESTIMATE
 |
-23:EXCHANGE
+24:EXCHANGE
 cardinality: 297
 
-PLAN FRAGMENT 2(F06)
+PLAN FRAGMENT 2(F08)
 
 Input Partition: HASH_PARTITIONED: 8: l_orderkey
 OutPut Partition: HASH_PARTITIONED: 42: n_name, 46: n_name, 49: year
-OutPut Exchange Id: 23
+OutPut Exchange Id: 24
 
-22:AGGREGATE (update serialize)
+23:AGGREGATE (update serialize)
 |  STREAMING
 |  aggregate: sum[([50: expr, DECIMAL128(33,4), true]); args: DECIMAL128; result: DECIMAL128(38,4); args nullable: true; result nullable: true]
 |  group by: [42: n_name, VARCHAR, true], [46: n_name, VARCHAR, true], [49: year, SMALLINT, true]
@@ -98,7 +98,7 @@ OutPut Exchange Id: 23
 |  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
 |  * sum-->[810.9, 104949.5, 0.0, 16.0, 296.630859375] ESTIMATE
 |
-21:Project
+22:Project
 |  output columns:
 |  42 <-> [42: n_name, VARCHAR, true]
 |  46 <-> [46: n_name, VARCHAR, true]
@@ -111,7 +111,7 @@ OutPut Exchange Id: 23
 |  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
 |  * expr-->[810.9, 104949.5, 0.0, 16.0, 277562.0869449505] ESTIMATE
 |
-20:HASH JOIN
+21:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
 |  equal join conjunct: [36: c_nationkey, INT, true] = [45: n_nationkey, INT, true]
 |  other join predicates: ((42: n_name = 'CANADA') AND (46: n_name = 'IRAN')) OR ((42: n_name = 'IRAN') AND (46: n_name = 'CANADA'))
@@ -130,10 +130,10 @@ OutPut Exchange Id: 23
 |  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
 |  * expr-->[810.9, 104949.5, 0.0, 16.0, 277562.0869449505] ESTIMATE
 |
-|----19:EXCHANGE
+|----20:EXCHANGE
 |       cardinality: 25
 |
-17:Project
+18:Project
 |  output columns:
 |  13 <-> [13: l_extendedprice, DECIMAL64(15,2), true]
 |  14 <-> [14: l_discount, DECIMAL64(15,2), true]
@@ -148,7 +148,7 @@ OutPut Exchange Id: 23
 |  * c_nationkey-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
 |  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |
-16:HASH JOIN
+17:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
 |  equal join conjunct: [10: l_suppkey, INT, true] = [1: s_suppkey, INT, true]
 |  build runtime filters:
@@ -164,10 +164,10 @@ OutPut Exchange Id: 23
 |  * c_nationkey-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
 |  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |
-|----15:EXCHANGE
+|----16:EXCHANGE
 |       cardinality: 1000000
 |
-9:Project
+10:Project
 |  output columns:
 |  10 <-> [10: l_suppkey, INT, true]
 |  13 <-> [13: l_extendedprice, DECIMAL64(15,2), true]
@@ -182,7 +182,7 @@ OutPut Exchange Id: 23
 |  * l_shipdate-->[7.888896E8, 8.519616E8, 0.0, 4.0, 2526.0] ESTIMATE
 |  * c_nationkey-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
 |
-8:HASH JOIN
+9:HASH JOIN
 |  join op: INNER JOIN (PARTITIONED)
 |  equal join conjunct: [8: l_orderkey, INT, true] = [24: o_orderkey, INT, true]
 |  output columns: 10, 13, 14, 18, 36
@@ -196,7 +196,7 @@ OutPut Exchange Id: 23
 |  * o_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
 |  * c_nationkey-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
 |
-|----7:EXCHANGE
+|----8:EXCHANGE
 |       cardinality: 150000000
 |       probe runtime filters:
 |       - filter_id = 3, probe_expr = (36: c_nationkey)
@@ -206,13 +206,13 @@ cardinality: 173476304
 probe runtime filters:
 - filter_id = 2, probe_expr = (10: l_suppkey)
 
-PLAN FRAGMENT 3(F11)
+PLAN FRAGMENT 3(F13)
 
 Input Partition: RANDOM
 OutPut Partition: UNPARTITIONED
-OutPut Exchange Id: 19
+OutPut Exchange Id: 20
 
-18:HdfsScanNode
+19:HdfsScanNode
 TABLE: nation
 NON-PARTITION PREDICATES: 46: n_name IN ('IRAN', 'CANADA')
 MIN/MAX PREDICATES: 52: n_name >= 'CANADA', 53: n_name <= 'IRAN'
@@ -224,13 +224,13 @@ column statistics:
 * n_nationkey-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
 * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 
-PLAN FRAGMENT 4(F07)
+PLAN FRAGMENT 4(F09)
 
 Input Partition: RANDOM
 OutPut Partition: UNPARTITIONED
-OutPut Exchange Id: 15
+OutPut Exchange Id: 16
 
-14:Project
+15:Project
 |  output columns:
 |  1 <-> [1: s_suppkey, INT, true]
 |  42 <-> [42: n_name, VARCHAR, true]
@@ -239,7 +239,7 @@ OutPut Exchange Id: 15
 |  * s_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
 |  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |
-13:HASH JOIN
+14:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
 |  equal join conjunct: [4: s_nationkey, INT, true] = [41: n_nationkey, INT, true]
 |  build runtime filters:
@@ -252,10 +252,10 @@ OutPut Exchange Id: 15
 |  * n_nationkey-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
 |  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |
-|----12:EXCHANGE
+|----13:EXCHANGE
 |       cardinality: 25
 |
-10:HdfsScanNode
+11:HdfsScanNode
 TABLE: supplier
 NON-PARTITION PREDICATES: 1: s_suppkey IS NOT NULL
 partitions=1/1
@@ -268,13 +268,13 @@ column statistics:
 * s_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE
 * s_nationkey-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
 
-PLAN FRAGMENT 5(F08)
+PLAN FRAGMENT 5(F10)
 
 Input Partition: RANDOM
 OutPut Partition: UNPARTITIONED
-OutPut Exchange Id: 12
+OutPut Exchange Id: 13
 
-11:HdfsScanNode
+12:HdfsScanNode
 TABLE: nation
 NON-PARTITION PREDICATES: 42: n_name IN ('CANADA', 'IRAN')
 MIN/MAX PREDICATES: 54: n_name >= 'CANADA', 55: n_name <= 'IRAN'
@@ -286,13 +286,13 @@ column statistics:
 * n_nationkey-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
 * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 
-PLAN FRAGMENT 6(F02)
+PLAN FRAGMENT 6(F06)
 
-Input Partition: RANDOM
+Input Partition: HASH_PARTITIONED: 25: o_custkey
 OutPut Partition: HASH_PARTITIONED: 24: o_orderkey
-OutPut Exchange Id: 07
+OutPut Exchange Id: 08
 
-6:Project
+7:Project
 |  output columns:
 |  24 <-> [24: o_orderkey, INT, true]
 |  36 <-> [36: c_nationkey, INT, true]
@@ -301,11 +301,11 @@ OutPut Exchange Id: 07
 |  * o_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
 |  * c_nationkey-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
 |
-5:HASH JOIN
-|  join op: INNER JOIN (BROADCAST)
+6:HASH JOIN
+|  join op: INNER JOIN (PARTITIONED)
 |  equal join conjunct: [25: o_custkey, INT, true] = [33: c_custkey, INT, true]
 |  build runtime filters:
-|  - filter_id = 0, build_expr = (33: c_custkey), remote = false
+|  - filter_id = 0, build_expr = (33: c_custkey), remote = true
 |  output columns: 24, 36
 |  cardinality: 150000000
 |  column statistics:
@@ -314,9 +314,37 @@ OutPut Exchange Id: 07
 |  * c_custkey-->[1.0, 1.5E7, 0.0, 8.0, 1.0031873E7] ESTIMATE
 |  * c_nationkey-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
 |
-|----4:EXCHANGE
+|----5:EXCHANGE
 |       cardinality: 15000000
 |
+3:EXCHANGE
+cardinality: 150000000
+
+PLAN FRAGMENT 7(F04)
+
+Input Partition: RANDOM
+OutPut Partition: HASH_PARTITIONED: 33: c_custkey
+OutPut Exchange Id: 05
+
+4:HdfsScanNode
+TABLE: customer
+NON-PARTITION PREDICATES: 33: c_custkey IS NOT NULL
+partitions=1/1
+avgRowSize=12.0
+numNodes=0
+cardinality: 15000000
+probe runtime filters:
+- filter_id = 3, probe_expr = (36: c_nationkey)
+column statistics:
+* c_custkey-->[1.0, 1.5E7, 0.0, 8.0, 1.5E7] ESTIMATE
+* c_nationkey-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
+
+PLAN FRAGMENT 8(F02)
+
+Input Partition: RANDOM
+OutPut Partition: HASH_PARTITIONED: 25: o_custkey
+OutPut Exchange Id: 03
+
 2:HdfsScanNode
 TABLE: orders
 NON-PARTITION PREDICATES: 24: o_orderkey IS NOT NULL
@@ -330,26 +358,7 @@ column statistics:
 * o_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 1.5E8] ESTIMATE
 * o_custkey-->[1.0, 1.5E8, 0.0, 8.0, 1.0031873E7] ESTIMATE
 
-PLAN FRAGMENT 7(F03)
-
-Input Partition: RANDOM
-OutPut Partition: UNPARTITIONED
-OutPut Exchange Id: 04
-
-3:HdfsScanNode
-TABLE: customer
-NON-PARTITION PREDICATES: 33: c_custkey IS NOT NULL
-partitions=1/1
-avgRowSize=12.0
-numNodes=0
-cardinality: 15000000
-probe runtime filters:
-- filter_id = 3, probe_expr = (36: c_nationkey)
-column statistics:
-* c_custkey-->[1.0, 1.5E7, 0.0, 8.0, 1.5E7] ESTIMATE
-* c_nationkey-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
-
-PLAN FRAGMENT 8(F00)
+PLAN FRAGMENT 9(F00)
 
 Input Partition: RANDOM
 OutPut Partition: HASH_PARTITIONED: 8: l_orderkey

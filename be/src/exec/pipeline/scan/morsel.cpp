@@ -1,5 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "exec/pipeline/scan/morsel.h"
 
 #include "exec/olap_utils.h"
@@ -12,8 +24,7 @@
 #include "storage/tablet_reader.h"
 #include "storage/tablet_reader_params.h"
 
-namespace starrocks {
-namespace pipeline {
+namespace starrocks::pipeline {
 
 /// Morsel.
 void PhysicalSplitScanMorsel::init_tablet_reader_params(vectorized::TabletReaderParams* params) {
@@ -38,8 +49,8 @@ size_t IndividualMorselQueueFactory::num_original_morsels() const {
 }
 
 IndividualMorselQueueFactory::IndividualMorselQueueFactory(std::map<int, MorselQueuePtr>&& queue_per_driver_seq,
-                                                           bool need_local_shuffle)
-        : _need_local_shuffle(need_local_shuffle) {
+                                                           bool could_local_shuffle)
+        : _could_local_shuffle(could_local_shuffle) {
     if (queue_per_driver_seq.empty()) {
         _queue_per_driver_seq.emplace_back(pipeline::create_empty_morsel_queue());
         return;
@@ -88,6 +99,9 @@ StatusOr<MorselPtr> FixedMorselQueue::try_get() {
     }
     idx = _pop_index.fetch_add(1);
     if (idx < _num_morsels) {
+        if (!_tablet_rowsets.empty()) {
+            _morsels[idx]->set_rowsets(std::move(_tablet_rowsets[idx]));
+        }
         return std::move(_morsels[idx]);
     } else {
         return nullptr;
@@ -115,14 +129,13 @@ void PhysicalSplitMorselQueue::set_key_ranges(const std::vector<std::unique_ptr<
 }
 
 StatusOr<MorselPtr> PhysicalSplitMorselQueue::try_get() {
+    std::lock_guard<std::mutex> lock(_mutex);
     if (_unget_morsel != nullptr) {
         return std::move(_unget_morsel);
     }
     DCHECK(!_tablets.empty());
     DCHECK(!_tablet_rowsets.empty());
     DCHECK_EQ(_tablets.size(), _tablet_rowsets.size());
-
-    std::lock_guard<std::mutex> lock(_mutex);
 
     if (_tablet_idx >= _tablets.size()) {
         return nullptr;
@@ -158,9 +171,11 @@ StatusOr<MorselPtr> PhysicalSplitMorselQueue::try_get() {
     auto* rowset = _cur_rowset();
     auto rowid_range = std::make_shared<vectorized::RowidRangeOption>(
             rowset->rowset_id(), rowset->segments()[_segment_idx]->id(), std::move(taken_range));
+
     MorselPtr morsel = std::make_unique<PhysicalSplitScanMorsel>(
             scan_morsel->get_plan_node_id(), *(scan_morsel->get_scan_range()), std::move(rowid_range));
-
+    morsel->set_rowsets(_tablet_rowsets[_tablet_idx]);
+    _inc_num_splits(_is_last_split_of_current_morsel());
     return morsel;
 }
 
@@ -200,10 +215,6 @@ rowid_t PhysicalSplitMorselQueue::_upper_bound_ordinal(Segment* segment, const v
     return end;
 }
 
-ScanMorsel* PhysicalSplitMorselQueue::_cur_scan_morsel() {
-    return down_cast<ScanMorsel*>(_morsels[_tablet_idx].get());
-}
-
 Rowset* PhysicalSplitMorselQueue::_cur_rowset() {
     return _tablet_rowsets[_tablet_idx][_rowset_idx].get();
 }
@@ -211,6 +222,11 @@ Rowset* PhysicalSplitMorselQueue::_cur_rowset() {
 Segment* PhysicalSplitMorselQueue::_cur_segment() {
     const auto& segments = _cur_rowset()->segments();
     return _segment_idx >= segments.size() ? nullptr : segments[_segment_idx].get();
+}
+
+bool PhysicalSplitMorselQueue::_is_last_split_of_current_morsel() {
+    return _has_init_any_segment && _cur_segment() != nullptr && _cur_segment()->num_rows() != 0 &&
+           !_segment_range_iter.has_more();
 }
 
 bool PhysicalSplitMorselQueue::_next_segment() {
@@ -306,14 +322,13 @@ void LogicalSplitMorselQueue::set_key_ranges(const std::vector<std::unique_ptr<O
 }
 
 StatusOr<MorselPtr> LogicalSplitMorselQueue::try_get() {
+    std::lock_guard<std::mutex> lock(_mutex);
     if (_unget_morsel != nullptr) {
         return std::move(_unget_morsel);
     }
     DCHECK(!_tablets.empty());
     DCHECK(!_tablet_rowsets.empty());
     DCHECK_EQ(_tablets.size(), _tablet_rowsets.size());
-
-    std::lock_guard<std::mutex> lock(_mutex);
 
     if (_tablet_idx >= _tablets.size()) {
         return nullptr;
@@ -421,6 +436,8 @@ StatusOr<MorselPtr> LogicalSplitMorselQueue::try_get() {
     auto* scan_morsel = down_cast<ScanMorsel*>(_morsels[_tablet_idx].get());
     auto morsel = std::make_unique<LogicalSplitScanMorsel>(
             scan_morsel->get_plan_node_id(), *(scan_morsel->get_scan_range()), std::move(short_key_ranges));
+    morsel->set_rowsets(_tablet_rowsets[_tablet_idx]);
+    _inc_num_splits(_is_last_split_of_current_morsel());
     return morsel;
 }
 
@@ -565,7 +582,7 @@ Status LogicalSplitMorselQueue::_init_tablet() {
     RETURN_IF_ERROR(_largest_rowset->load());
     ASSIGN_OR_RETURN(_segment_group, _create_segment_group(_largest_rowset));
 
-    _short_key_schema = std::make_shared<vectorized::Schema>(
+    _short_key_schema = std::make_shared<vectorized::VectorizedSchema>(
             ChunkHelper::get_short_key_schema_with_format_v2(_tablets[_tablet_idx]->tablet_schema()));
     _sample_splitted_scan_blocks =
             _splitted_scan_rows * _segment_group->num_blocks() / _tablets[_tablet_idx]->num_rows();
@@ -630,9 +647,12 @@ ShortKeyIndexGroupIterator LogicalSplitMorselQueue::_upper_bound_ordinal(const v
     return end_iter;
 }
 
+bool LogicalSplitMorselQueue::_is_last_split_of_current_morsel() {
+    return _has_init_any_tablet && _segment_group != nullptr && _cur_tablet_finished();
+}
+
 MorselQueuePtr create_empty_morsel_queue() {
     return std::make_unique<FixedMorselQueue>(std::vector<MorselPtr>{});
 }
 
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline

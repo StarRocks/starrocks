@@ -1,8 +1,21 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 #include <memory>
 #include <mutex>
+#include <utility>
 
 #include "common/statusor.h"
 #include "exec/vectorized/hash_join_node.h"
@@ -10,8 +23,7 @@
 #include "exprs/predicate.h"
 #include "exprs/vectorized/runtime_filter_bank.h"
 
-namespace starrocks {
-namespace pipeline {
+namespace starrocks::pipeline {
 class RuntimeFilterHolder;
 using RuntimeFilterHolderPtr = std::unique_ptr<RuntimeFilterHolder>;
 // TODO: rename RuntimeInFilter
@@ -34,7 +46,7 @@ struct RuntimeBloomFilterBuildParam;
 using OptRuntimeBloomFilterBuildParams = std::vector<std::optional<RuntimeBloomFilterBuildParam>>;
 // Parameters used to build runtime bloom-filters.
 struct RuntimeBloomFilterBuildParam {
-    RuntimeBloomFilterBuildParam(bool eq_null, const ColumnPtr& column) : eq_null(eq_null), column(column) {}
+    RuntimeBloomFilterBuildParam(bool eq_null, ColumnPtr column) : eq_null(eq_null), column(std::move(column)) {}
     bool eq_null;
     ColumnPtr column;
 };
@@ -310,7 +322,7 @@ public:
             if (!desc->has_consumer()) continue;
             // skip if ht.size() > limit, and it's only for local.
             if (!desc->has_remote_targets() && row_count > _limit) continue;
-            PrimitiveType build_type = desc->build_expr_type();
+            LogicalType build_type = desc->build_expr_type();
             vectorized::JoinRuntimeFilter* filter =
                     vectorized::RuntimeFilterHelper::create_runtime_bloom_filter(_pool, build_type);
             if (filter == nullptr) continue;
@@ -383,5 +395,4 @@ private:
     RuntimeBloomFilters _bloom_filter_descriptors;
 };
 
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline

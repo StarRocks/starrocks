@@ -1,5 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "storage/lake/compaction_policy.h"
 
 #include <gtest/gtest.h>
@@ -130,36 +142,6 @@ TEST_F(CompactionPolicyTest, test_base_by_segment_num) {
     // input rowsets: [1, 2, 3, 4, 5, 6]
     ASSERT_EQ(6, input_rowsets.size());
     for (int i = 0; i < 6; ++i) {
-        EXPECT_EQ(i + 1, input_rowsets[i]->id());
-    }
-}
-
-// rowsets: [1, 2, 3, 4, 5, 6]
-// rowsets data size: [10, 20, 30, 40, 50, 60]
-// cumulative point: 3
-TEST_F(CompactionPolicyTest, test_base_by_data_size) {
-    _tablet_metadata->set_cumulative_point(3);
-    _tablet_metadata->set_version(2);
-    for (int i = 1; i < 7; ++i) {
-        auto* rowset_metadata = _tablet_metadata->mutable_rowsets()->Add();
-        rowset_metadata->mutable_segments()->Add("file");
-        if (i <= 6) {
-            rowset_metadata->set_overlapped(false);
-        } else {
-            rowset_metadata->set_overlapped(true);
-        }
-        rowset_metadata->set_data_size(i * 10);
-        rowset_metadata->set_id(i);
-    }
-    CHECK_OK(_tablet_manager->put_tablet_metadata(*_tablet_metadata));
-
-    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(_tablet_metadata->id()));
-    auto tablet_ptr = std::make_shared<Tablet>(tablet);
-    ASSIGN_OR_ABORT(auto compaction_policy, CompactionPolicy::create_compaction_policy(tablet_ptr));
-    ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets(2));
-    // input rowsets: [1, 2, 3]
-    ASSERT_EQ(3, input_rowsets.size());
-    for (int i = 0; i < 3; ++i) {
         EXPECT_EQ(i + 1, input_rowsets[i]->id());
     }
 }

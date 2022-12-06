@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -34,7 +46,7 @@ public:
     // character is found.
     char* find(char c, size_t pos = 0) { return (char*)memchr(position() + pos, c, available() - pos); }
 
-    char* find(const string& str, size_t pos = 0) {
+    char* find(const std::string& str, size_t pos = 0) {
         return (char*)memmem(position() + pos, available() - pos, str.c_str(), str.size());
     }
 
@@ -71,7 +83,7 @@ public:
     using Field = Slice;
     using Fields = std::vector<Field>;
 
-    CSVReader(const string& row_delimiter, const string& column_separator)
+    CSVReader(const std::string& row_delimiter, const std::string& column_separator)
             : _row_delimiter(row_delimiter),
               _column_separator(column_separator),
               _storage(kMinBufferSize),
@@ -80,7 +92,7 @@ public:
         _column_separator_length = column_separator.size();
     }
 
-    virtual ~CSVReader() {}
+    virtual ~CSVReader() = default;
 
     Status next_record(Record* record);
 
@@ -89,8 +101,8 @@ public:
     void split_record(const Record& record, Fields* fields) const;
 
 protected:
-    string _row_delimiter;
-    string _column_separator;
+    std::string _row_delimiter;
+    std::string _column_separator;
     size_t _row_delimiter_length;
     size_t _column_separator_length;
     raw::RawVector<char> _storage;
@@ -103,7 +115,6 @@ private:
 
     size_t _parsed_bytes = 0;
     size_t _limit = 0;
-    size_t _offset = 0;
 };
 
 } // namespace starrocks::vectorized

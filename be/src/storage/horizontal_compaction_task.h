@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -15,18 +27,18 @@ class RowsetWriter;
 
 namespace vectorized {
 class TabletReader;
-class Schema;
+class VectorizedSchema;
 } // namespace vectorized
 class HorizontalCompactionTask : public CompactionTask {
 public:
     HorizontalCompactionTask() : CompactionTask(HORIZONTAL_COMPACTION) {}
-    ~HorizontalCompactionTask() = default;
+    ~HorizontalCompactionTask() override = default;
     Status run_impl() override;
 
 private:
     Status _horizontal_compact_data(Statistics* statistics);
     StatusOr<size_t> _compact_data(int32_t chunk_size, vectorized::TabletReader& reader,
-                                   const vectorized::Schema& schema, RowsetWriter* output_rs_writer);
+                                   const vectorized::VectorizedSchema& schema, RowsetWriter* output_rs_writer);
     void _failure_callback();
     void _success_callback();
 };

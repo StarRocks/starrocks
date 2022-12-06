@@ -23,7 +23,7 @@ import java.util.Map;
 import static com.google.common.collect.ImmutableMap.toImmutableMap;
 
 public class ScalarOperatorsReuseRule implements TreeRewriteRule {
-    public static final ReuseVisitor HANDLER = new ReuseVisitor();
+    private static final ReuseVisitor HANDLER = new ReuseVisitor();
 
     @Override
     public OptExpression rewrite(OptExpression root, TaskContext taskContext) {

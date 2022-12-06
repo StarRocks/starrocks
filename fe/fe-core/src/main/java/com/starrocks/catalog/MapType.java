@@ -21,22 +21,26 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.starrocks.thrift.TTypeDesc;
 import com.starrocks.thrift.TTypeNode;
 import com.starrocks.thrift.TTypeNodeType;
 
+import java.util.Arrays;
+
 /**
  * Describes a MAP type. MAP types have a scalar key and an arbitrarily-typed value.
  */
 public class MapType extends Type {
-    private final Type keyType;
-    private final Type valueType;
+    private Type keyType;
+    private Type valueType;
 
     public MapType(Type keyType, Type valueType) {
         Preconditions.checkNotNull(keyType);
         Preconditions.checkNotNull(valueType);
+        selectedFields = new Boolean[] { false, false };
         this.keyType = keyType;
         this.valueType = valueType;
     }
@@ -50,6 +54,31 @@ public class MapType extends Type {
     }
 
     @Override
+    public void setSelectedField(int pos, boolean needSetChildren) {
+        if (pos == -1) {
+            Arrays.fill(selectedFields, true);
+        } else {
+            selectedFields[pos] = true;
+        }
+        if (needSetChildren && (pos == 1 || pos == -1) && valueType.isComplexType()) {
+            valueType.selectAllFields();
+        }
+    }
+
+    @Override
+    public void selectAllFields() {
+        Arrays.fill(selectedFields, true);
+        if (valueType.isComplexType()) {
+            valueType.selectAllFields();
+        }
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(keyType, valueType);
+    }
+
+    @Override
     public boolean equals(Object other) {
         if (!(other instanceof MapType)) {
             return false;
@@ -60,12 +89,27 @@ public class MapType extends Type {
     }
 
     @Override
+    public boolean matchesType(Type t) {
+        if (t.isPseudoType()) {
+            return t.matchesType(this);
+        }
+        return t.isMapType()
+                && keyType.matchesType(((MapType) t).keyType) && valueType.matchesType(((MapType) t).getValueType());
+    }
+
+    @Override
     public String toSql(int depth) {
         if (depth >= MAX_NESTING_DEPTH) {
             return "MAP<...>";
         }
         return String.format("MAP<%s,%s>",
                 keyType.toSql(depth + 1), valueType.toSql(depth + 1));
+    }
+
+    @Override
+    public String toString() {
+        return String.format("MAP<%s,%s>",
+                keyType.toString(), valueType.toString());
     }
 
     @Override
@@ -88,8 +132,18 @@ public class MapType extends Type {
         Preconditions.checkNotNull(keyType);
         Preconditions.checkNotNull(valueType);
         node.setType(TTypeNodeType.MAP);
+        node.setSelected_fields(Arrays.asList(selectedFields));
         keyType.toThrift(container);
         valueType.toThrift(container);
+    }
+
+    @Override
+    public MapType clone() {
+        MapType clone = (MapType) super.clone();
+        clone.keyType = this.keyType.clone();
+        clone.valueType = this.valueType.clone();
+        clone.selectedFields = this.selectedFields.clone();
+        return clone;
     }
 }
 

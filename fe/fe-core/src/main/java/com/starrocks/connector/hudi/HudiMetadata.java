@@ -7,29 +7,34 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveMetaStoreTable;
+import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.DdlException;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.RemoteFileOperations;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.CacheUpdateProcessor;
-import com.starrocks.external.PartitionUtil;
-import com.starrocks.external.RemoteFileInfo;
-import com.starrocks.external.RemoteFileOperations;
-import com.starrocks.external.hive.HiveMetastoreOperations;
-import com.starrocks.external.hive.HiveStatisticsProvider;
-import com.starrocks.external.hive.Partition;
+import com.starrocks.connector.hive.HiveMetastoreOperations;
+import com.starrocks.connector.hive.HiveStatisticsProvider;
+import com.starrocks.connector.hive.Partition;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
-import org.apache.hadoop.hive.common.FileUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+
+import static com.starrocks.connector.PartitionUtil.toHivePartitionName;
+import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
 
 public class HudiMetadata implements ConnectorMetadata {
     private static final Logger LOG = LogManager.getLogger(HudiMetadata.class);
@@ -72,7 +77,7 @@ public class HudiMetadata implements ConnectorMetadata {
         try {
             database = hmsOps.getDb(dbName);
         } catch (Exception e) {
-            LOG.error("Failed to get hudi database [{}.{}]", catalogName, dbName);
+            LOG.error("Failed to get hudi database [{}.{}]", catalogName, dbName, e);
             return null;
         }
 
@@ -85,7 +90,7 @@ public class HudiMetadata implements ConnectorMetadata {
         try {
             table = hmsOps.getTable(dbName, tblName);
         } catch (Exception e) {
-            LOG.error("Failed to get hudi table [{}.{}.{}]", catalogName, dbName, tblName);
+            LOG.error("Failed to get hudi table [{}.{}.{}]", catalogName, dbName, tblName, e);
             return null;
         }
 
@@ -101,8 +106,7 @@ public class HudiMetadata implements ConnectorMetadata {
         } else {
             Map<String, Partition> existingPartitions = hmsOps.getPartitionByNames(table, partitionKeys);
             for (PartitionKey partitionKey : partitionKeys) {
-                String hivePartitionName = FileUtils.makePartName(hmsTbl.getPartitionColumnNames(),
-                        PartitionUtil.fromPartitionKey(partitionKey));
+                String hivePartitionName = toHivePartitionName(hmsTbl.getPartitionColumnNames(), partitionKey);
                 Partition partition = existingPartitions.get(hivePartitionName);
                 if (partition != null) {
                     partitions.add(partition);
@@ -148,11 +152,21 @@ public class HudiMetadata implements ConnectorMetadata {
         return statistics;
     }
 
-    public void refreshTable(String dbName, String tableName, Table table, List<String> partitionNames) {
-        if (partitionNames != null && partitionNames.size() > 1) {
+    public void refreshTable(String srDbName, Table table, List<String> partitionNames) {
+        if (partitionNames != null && partitionNames.size() > 0) {
             cacheUpdateProcessor.ifPresent(processor -> processor.refreshPartition(table, partitionNames));
         } else {
-            cacheUpdateProcessor.ifPresent(processor -> processor.refreshTable(dbName, tableName, table));
+            cacheUpdateProcessor.ifPresent(processor -> processor.refreshTable(srDbName, table));
+        }
+    }
+
+    public void dropTable(DropTableStmt stmt) throws DdlException {
+        String dbName = stmt.getDbName();
+        String tableName = stmt.getTableName();
+        if (isResourceMappingCatalog(catalogName)) {
+            HudiTable hudiTable = (HudiTable) GlobalStateMgr.getCurrentState().getMetadata().getTable(dbName, tableName);
+            cacheUpdateProcessor.ifPresent(processor -> processor.invalidateTable(
+                    hudiTable.getDbName(), hudiTable.getTableName(), hudiTable.getTableLocation()));
         }
     }
 

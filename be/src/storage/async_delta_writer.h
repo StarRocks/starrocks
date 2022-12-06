@@ -1,17 +1,25 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
+
+#include <bthread/execution_queue.h>
+#include <google/protobuf/service.h>
 
 #include <atomic>
 
 #include "common/compiler_util.h"
-DIAGNOSTIC_PUSH
-DIAGNOSTIC_IGNORE("-Wclass-memaccess")
-#include <bthread/execution_queue.h>
-DIAGNOSTIC_POP
-
-#include <google/protobuf/service.h>
-
 #include "storage/delta_writer.h"
 
 namespace brpc {
@@ -31,6 +39,7 @@ namespace starrocks::vectorized {
 
 class AsyncDeltaWriterRequest;
 class CommittedRowsetInfo;
+class FailedRowsetInfo;
 class AsyncDeltaWriterCallback;
 class AsyncDeltaWriterSegmentRequest;
 
@@ -115,6 +124,12 @@ public:
     const ReplicateToken* replicate_token;
 };
 
+class FailedRowsetInfo {
+public:
+    const int64_t tablet_id;
+    const ReplicateToken* replicate_token;
+};
+
 class AsyncDeltaWriterRequest {
 public:
     // nullptr means no record to write
@@ -139,7 +154,7 @@ public:
     // st != Status::OK means either the writes or the commit failed.
     // st == Status::OK && info != nullptr means commit succeeded.
     // st == Status::OK && info == nullptr means the writes succeeded with no commit.
-    virtual void run(const Status& st, const CommittedRowsetInfo* info) = 0;
+    virtual void run(const Status& st, const CommittedRowsetInfo* info, const FailedRowsetInfo* failed_info) = 0;
 };
 
 } // namespace starrocks::vectorized

@@ -18,7 +18,6 @@
 #include <boost/static_assert.hpp>
 
 #include "runtime/datetime_value.h"
-#include "runtime/decimal_value.h"
 #include "runtime/string_value.h"
 
 namespace starrocks {
@@ -31,8 +30,6 @@ private:
     BOOST_STATIC_ASSERT(offsetof(StringValue, len) == 8);
     // Datetime value
     BOOST_STATIC_ASSERT(sizeof(DateTimeValue) == 16);
-    // BOOST_STATIC_ASSERT(offsetof(DateTimeValue, _year) == 8);
-    BOOST_STATIC_ASSERT(sizeof(DecimalValue) == 40);
 };
 
 } // namespace starrocks

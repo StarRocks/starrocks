@@ -3,6 +3,7 @@
 package com.starrocks.sql.ast;
 
 public class RecoverDbStmt extends DdlStmt {
+    private String catalog;
     private String dbName;
 
     public RecoverDbStmt(String dbName) {
@@ -15,6 +16,14 @@ public class RecoverDbStmt extends DdlStmt {
 
     public void setDbName(String dbname) {
         this.dbName = dbname;
+    }
+
+    public String getCatalogName() {
+        return this.catalog;
+    }
+
+    public void setCatalogName(String catalogName) {
+        this.catalog = catalogName;
     }
 
     @Override

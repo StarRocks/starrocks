@@ -1,5 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "exec/vectorized/except_node.h"
 
 #include "column/column_helper.h"
@@ -27,7 +39,7 @@ Status ExceptNode::init(const TPlanNode& tnode, RuntimeState* state) {
     auto& result_texpr_lists = tnode.except_node.result_expr_lists;
     for (auto& texprs : result_texpr_lists) {
         std::vector<ExprContext*> ctxs;
-        RETURN_IF_ERROR(Expr::create_expr_trees(_pool, texprs, &ctxs));
+        RETURN_IF_ERROR(Expr::create_expr_trees(_pool, texprs, &ctxs, state));
         _child_expr_lists.push_back(ctxs);
     }
     return Status::OK();
@@ -44,9 +56,9 @@ Status ExceptNode::prepare(RuntimeState* state) {
     _erase_duplicate_row_timer = ADD_TIMER(runtime_profile(), "EraseDuplicateRowTime");
     _get_result_timer = ADD_TIMER(runtime_profile(), "GetResultTime");
 
-    for (size_t i = 0; i < _child_expr_lists.size(); ++i) {
-        RETURN_IF_ERROR(Expr::prepare(_child_expr_lists[i], state));
-        DCHECK_EQ(_child_expr_lists[i].size(), _tuple_desc->slots().size());
+    for (auto& _child_expr_list : _child_expr_lists) {
+        RETURN_IF_ERROR(Expr::prepare(_child_expr_list, state));
+        DCHECK_EQ(_child_expr_list.size(), _tuple_desc->slots().size());
     }
 
     size_t size_column_type = _tuple_desc->slots().size();

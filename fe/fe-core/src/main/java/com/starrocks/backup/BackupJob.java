@@ -623,7 +623,7 @@ public class BackupJob extends AbstractJob {
                             .forEach(File::delete);
                 }
             }
-            if (!jobDir.mkdir()) {
+            if (!jobDir.mkdirs()) {
                 status = new Status(ErrCode.COMMON_ERROR, "Failed to create tmp dir: " + localJobDirPath);
                 return;
             }

@@ -8,7 +8,8 @@ import java.util.List;
 // Used to check if a transaction can be committed and save some information in the TransactionState.
 public interface TransactionStateListener {
     // This method is called by the FE master before changing the in-memory TransactionState to COMMITTED.
-    void preCommit(TransactionState txnState, List<TabletCommitInfo> finishedTablets) throws TransactionException;
+    void preCommit(TransactionState txnState, List<TabletCommitInfo> finishedTablets,
+            List<TabletFailInfo> failedTablets) throws TransactionException;
 
     // This method is called by the FE master after changing the in-memory TransactionState to COMMITTED and before writing
     // the edit log.
@@ -20,5 +21,5 @@ public interface TransactionStateListener {
     // This method is called by the FE master after changed the TransactionState to ABORTED and *AFTER* released the writer
     // lock of the DatabaseTransactionMgr.
     // It's *unsafe* to access mutable fields of txnState inside this function.
-    void postAbort(TransactionState txnState);
+    void postAbort(TransactionState txnState, List<TabletFailInfo> failedTablets);
 }

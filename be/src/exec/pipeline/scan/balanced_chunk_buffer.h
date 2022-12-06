@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -32,8 +44,18 @@ public:
     void set_finished(int buffer_index);
 
     ChunkBufferLimiter* limiter() { return _limiter.get(); }
+    void update_limiter(vectorized::Chunk* chunk);
 
 private:
+    struct LimiterContext {
+        // ========================
+        // Local counters for row-size estimation, will be reset after a batch
+        size_t local_sum_row_bytes = 0;
+        size_t local_num_rows = 0;
+        size_t local_sum_chunks = 0;
+        size_t local_max_chunk_rows = 0;
+    };
+
     using ChunkWithToken = std::pair<vectorized::ChunkPtr, ChunkBufferTokenPtr>;
     using QueueT = UnboundedBlockingQueue<ChunkWithToken>;
     using SubBuffer = std::unique_ptr<QueueT>;
@@ -47,6 +69,7 @@ private:
     std::atomic_int64_t _output_index = 0;
 
     ChunkBufferLimiterPtr _limiter;
+    LimiterContext _limiter_context;
 };
 
 } // namespace starrocks::pipeline

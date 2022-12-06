@@ -23,8 +23,8 @@ namespace starrocks {
 
 class Md5Test : public testing::Test {
 public:
-    Md5Test() {}
-    virtual ~Md5Test() {}
+    Md5Test() = default;
+    ~Md5Test() override = default;
 };
 
 TEST_F(Md5Test, empty) {

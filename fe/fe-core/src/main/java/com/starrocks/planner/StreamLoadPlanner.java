@@ -25,6 +25,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.DescriptorTable;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
@@ -42,10 +43,10 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.load.Load;
+import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
-import com.starrocks.task.StreamLoadTask;
 import com.starrocks.thrift.InternalServiceVersion;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TPlanFragmentExecParams;
@@ -78,15 +79,15 @@ public class StreamLoadPlanner {
     // Data will load to this table
     private Database db;
     private OlapTable destTable;
-    private StreamLoadTask streamLoadTask;
+    private StreamLoadInfo streamLoadInfo;
 
     private Analyzer analyzer;
     private DescriptorTable descTable;
 
-    public StreamLoadPlanner(Database db, OlapTable destTable, StreamLoadTask streamLoadTask) {
+    public StreamLoadPlanner(Database db, OlapTable destTable, StreamLoadInfo streamLoadInfo) {
         this.db = db;
         this.destTable = destTable;
-        this.streamLoadTask = streamLoadTask;
+        this.streamLoadInfo = streamLoadInfo;
     }
 
     private void resetAnalyzer() {
@@ -105,20 +106,20 @@ public class StreamLoadPlanner {
         resetAnalyzer();
         // construct tuple descriptor, used for scanNode and dataSink
         TupleDescriptor tupleDesc = descTable.createTupleDescriptor("DstTableTuple");
-        boolean negative = streamLoadTask.getNegative();
+        boolean negative = streamLoadInfo.getNegative();
         if (isPrimaryKey) {
             if (negative) {
                 throw new DdlException("Primary key table does not support negative load");
             }
         } else {
-            if (streamLoadTask.isPartialUpdate()) {
+            if (streamLoadInfo.isPartialUpdate()) {
                 throw new DdlException("Only primary key table support partial update");
             }
         }
         List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
         List<Column> destColumns;
-        if (streamLoadTask.isPartialUpdate()) {
-            destColumns = Load.getPartialUpateColumns(destTable, streamLoadTask.getColumnExprDescs());
+        if (streamLoadInfo.isPartialUpdate()) {
+            destColumns = Load.getPartialUpateColumns(destTable, streamLoadInfo.getColumnExprDescs());
         } else {
             destColumns = destTable.getFullSchema();
         }
@@ -148,7 +149,7 @@ public class StreamLoadPlanner {
 
         // create scan node
         StreamLoadScanNode scanNode =
-                new StreamLoadScanNode(loadId, new PlanNodeId(0), tupleDesc, destTable, streamLoadTask);
+                new StreamLoadScanNode(loadId, new PlanNodeId(0), tupleDesc, destTable, streamLoadInfo);
         scanNode.setUseVectorizedLoad(true);
         scanNode.init(analyzer);
         scanNode.finalizeStats(analyzer);
@@ -159,9 +160,11 @@ public class StreamLoadPlanner {
         TWriteQuorumType writeQuorum = destTable.writeQuorum();
 
         List<Long> partitionIds = getAllPartitionIds();
-        OlapTableSink olapTableSink = new OlapTableSink(destTable, tupleDesc, partitionIds, writeQuorum);
-        olapTableSink.init(loadId, streamLoadTask.getTxnId(), db.getId(), streamLoadTask.getTimeout());
-        olapTableSink.complete();
+        OlapTableSink olapTableSink = new OlapTableSink(destTable, tupleDesc, partitionIds, writeQuorum,
+                destTable.enableReplicatedStorage());
+        olapTableSink.init(loadId, streamLoadInfo.getTxnId(), db.getId(), streamLoadInfo.getTimeout());
+        Load.checkMergeCondition(streamLoadInfo.getMergeConditionStr(), destTable);
+        olapTableSink.complete(streamLoadInfo.getMergeConditionStr());
 
         // for stream load, we only need one fragment, ScanNode -> DataSink.
         // OlapTableSink can dispatch data to corresponding node.
@@ -185,7 +188,7 @@ public class StreamLoadPlanner {
         params.setDesc_tbl(analyzer.getDescTbl().toThrift());
 
         TPlanFragmentExecParams execParams = new TPlanFragmentExecParams();
-        // user load id (streamLoadTask.id) as query id
+        // user load id (streamLoadInfo.id) as query id
         execParams.setQuery_id(loadId);
         execParams.setFragment_instance_id(new TUniqueId(loadId.hi, loadId.lo + 1));
         execParams.per_exch_num_senders = Maps.newHashMap();
@@ -203,34 +206,34 @@ public class StreamLoadPlanner {
         params.setParams(execParams);
         TQueryOptions queryOptions = new TQueryOptions();
         queryOptions.setQuery_type(TQueryType.LOAD);
-        queryOptions.setQuery_timeout(streamLoadTask.getTimeout());
-        queryOptions.setLoad_transmission_compression_type(streamLoadTask.getTransmisionCompressionType());
-        queryOptions.setEnable_replicated_storage(streamLoadTask.getEnableReplicatedStorage());
+        queryOptions.setQuery_timeout(streamLoadInfo.getTimeout());
+        queryOptions.setLoad_transmission_compression_type(streamLoadInfo.getTransmisionCompressionType());
 
         // Disable load_dop for LakeTable temporary, because BE's `LakeTabletsChannel` does not support
         // parallel send from a single sender.
-        if (streamLoadTask.getLoadParallelRequestNum() != 0 && !destTable.isLakeTable()) {
+        if (streamLoadInfo.getLoadParallelRequestNum() != 0 && !destTable.isLakeTable()) {
             // only dup_keys can use parallel write since other table's the order of write is important
             if (destTable.getKeysType() == KeysType.DUP_KEYS) {
-                queryOptions.setLoad_dop(streamLoadTask.getLoadParallelRequestNum());
+                queryOptions.setLoad_dop(streamLoadInfo.getLoadParallelRequestNum());
             } else {
                 queryOptions.setLoad_dop(1);
             }
         }
         // for stream load, we use exec_mem_limit to limit the memory usage of load channel.
-        queryOptions.setMem_limit(streamLoadTask.getExecMemLimit());
-        queryOptions.setLoad_mem_limit(streamLoadTask.getLoadMemLimit());
+        queryOptions.setMem_limit(streamLoadInfo.getExecMemLimit());
+        queryOptions.setLoad_mem_limit(streamLoadInfo.getLoadMemLimit());
         params.setQuery_options(queryOptions);
         TQueryGlobals queryGlobals = new TQueryGlobals();
         queryGlobals.setNow_string(DATE_FORMAT.format(new Date()));
         queryGlobals.setTimestamp_ms(new Date().getTime());
-        queryGlobals.setTime_zone(streamLoadTask.getTimezone());
+        queryGlobals.setTime_zone(streamLoadInfo.getTimezone());
         params.setQuery_globals(queryGlobals);
 
-        LOG.info("load job id: {} tx id {} parallel {} compress {} replicated {} quorum {}", loadId,
-                streamLoadTask.getTxnId(),
+
+        LOG.info("load job id: {} tx id {} parallel {} compress {} replicated {} quorum {}", DebugUtil.printId(loadId),
+                streamLoadInfo.getTxnId(),
                 queryOptions.getLoad_dop(),
-                queryOptions.getLoad_transmission_compression_type(), streamLoadTask.getEnableReplicatedStorage(),
+                queryOptions.getLoad_transmission_compression_type(), destTable.enableReplicatedStorage(),
                 writeQuorum);
         return params;
     }
@@ -240,7 +243,7 @@ public class StreamLoadPlanner {
     private List<Long> getAllPartitionIds() throws DdlException {
         List<Long> partitionIds = Lists.newArrayList();
 
-        PartitionNames partitionNames = streamLoadTask.getPartitions();
+        PartitionNames partitionNames = streamLoadInfo.getPartitions();
         if (partitionNames != null) {
             for (String partName : partitionNames.getPartitionNames()) {
                 Partition part = destTable.getPartition(partName, partitionNames.isTemp());

@@ -1,6 +1,20 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "formats/parquet/schema.h"
+
+#include <boost/algorithm/string.hpp>
 
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
@@ -190,7 +204,9 @@ Status SchemaDescriptor::map_to_field(const std::vector<tparquet::SchemaElement>
         return Status::InvalidArgument("key_value in map group must be a repeated group");
     }
     auto& key_schema = t_schemas[pos + 2];
-    if (!is_required(key_schema)) {
+    // when key type is char or varchar in hive, not string
+    // the real type is BYTE_ARRAY which is OPTIONAL
+    if ((!is_required(key_schema)) && (key_schema.type != tparquet::Type::type::BYTE_ARRAY)) {
         return Status::InvalidArgument("key in map group must be required");
     }
 
@@ -365,10 +381,11 @@ int SchemaDescriptor::get_column_index(const std::string& column, bool case_sens
     return -1;
 }
 
-void SchemaDescriptor::get_field_names(std::unordered_set<std::string>* names) const {
+void SchemaDescriptor::get_field_names(std::unordered_set<std::string>* names, bool case_sensitive) const {
     names->clear();
     for (const ParquetField& f : _fields) {
-        names->emplace(f.name);
+        std::string name = case_sensitive ? f.name : boost::algorithm::to_lower_copy(f.name);
+        names->emplace(std::move(name));
     }
 }
 

@@ -9,6 +9,7 @@ public class TaskRunContext {
     ConnectContext ctx;
     String definition;
     String remoteIp;
+    int priority;
     Map<String, String> properties;
 
     public ConnectContext getCtx() {
@@ -33,6 +34,14 @@ public class TaskRunContext {
 
     public void setRemoteIp(String remoteIp) {
         this.remoteIp = remoteIp;
+    }
+
+    public int getPriority() {
+        return priority;
+    }
+
+    public void setPriority(int priority) {
+        this.priority = priority;
     }
 
     public Map<String, String> getProperties() {

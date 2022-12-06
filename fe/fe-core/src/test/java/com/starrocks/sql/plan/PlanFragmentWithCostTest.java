@@ -827,6 +827,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         {
             String unionPlan = plans.get(0);
             assertContains(unionPlan, "  0:UNION\n" +
+                    "  |  output exprs:\n" +
+                    "  |      [9, BIGINT, true] | [10, BIGINT, true] | [11, BIGINT, true]\n" +
                     "  |  child exprs:\n" +
                     "  |      [4, BIGINT, true] | [2, BIGINT, true] | [3, BIGINT, true]\n" +
                     "  |      [8, BIGINT, true] | [6, BIGINT, true] | [7, BIGINT, true]\n" +
@@ -855,10 +857,12 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         // === check except plan ===
         {
             String exceptPlan = plans.get(1);
-            Assert.assertTrue(exceptPlan.contains("  0:EXCEPT\n" +
+            assertContains(exceptPlan, "  0:EXCEPT\n" +
+                    "  |  output exprs:\n" +
+                    "  |      [9, BIGINT, true] | [10, BIGINT, true] | [11, BIGINT, true]\n" +
                     "  |  child exprs:\n" +
                     "  |      [4, BIGINT, true] | [2, BIGINT, true] | [3, BIGINT, true]\n" +
-                    "  |      [8, BIGINT, true] | [6, BIGINT, true] | [7, BIGINT, true]\n"));
+                    "  |      [8, BIGINT, true] | [6, BIGINT, true] | [7, BIGINT, true]\n");
             Assert.assertTrue(exceptPlan.contains("     probe runtime filters:\n" +
                     "     - filter_id = 0, probe_expr = (5: v4 + 2)"));
             Assert.assertTrue(exceptPlan.contains("     probe runtime filters:\n" +
@@ -867,10 +871,12 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         // === check intersect plan ====
         {
             String intersectPlan = plans.get(2);
-            Assert.assertTrue(intersectPlan.contains("  0:INTERSECT\n" +
+            assertContains(intersectPlan, "  0:INTERSECT\n" +
+                    "  |  output exprs:\n" +
+                    "  |      [9, BIGINT, true] | [10, BIGINT, true] | [11, BIGINT, true]\n" +
                     "  |  child exprs:\n" +
                     "  |      [4, BIGINT, true] | [2, BIGINT, true] | [3, BIGINT, true]\n" +
-                    "  |      [8, BIGINT, true] | [6, BIGINT, true] | [7, BIGINT, true]\n"));
+                    "  |      [8, BIGINT, true] | [6, BIGINT, true] | [7, BIGINT, true]\n");
             Assert.assertTrue(intersectPlan.contains("     probe runtime filters:\n" +
                     "     - filter_id = 0, probe_expr = (5: v4 + 2)"));
             Assert.assertTrue(intersectPlan.contains("     probe runtime filters:\n" +
@@ -1568,5 +1574,174 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         } finally {
             connectContext.getSessionVariable().setEnableLocalShuffleAgg(prevEnableLocalShuffleAgg);
         }
+    }
+
+    @Test
+    public void testExcessiveOR() throws Exception {
+        String sql = "SELECT\n" +
+                "  *\n" +
+                "FROM t0\n" +
+                "WHERE\n" +
+                "  (\n" +
+                "    (v1 >= 27)\n" +
+                "    AND (v1 < 28)\n" +
+                "  )\n" +
+                "  OR (\n" +
+                "    (\n" +
+                "      (v1 >= 26)\n" +
+                "      AND (v1 < 27)\n" +
+                "    )\n" +
+                "    OR (\n" +
+                "      (\n" +
+                "        (v1 >= 25)\n" +
+                "        AND (v1 < 26)\n" +
+                "      )\n" +
+                "      OR (\n" +
+                "        (\n" +
+                "          (v1 >= 24)\n" +
+                "          AND (v1 < 25)\n" +
+                "        )\n" +
+                "        OR (\n" +
+                "          (\n" +
+                "            (v1 >= 23)\n" +
+                "            AND (v1 < 24)\n" +
+                "          )\n" +
+                "          OR (\n" +
+                "            (\n" +
+                "              (v1 >= 22)\n" +
+                "              AND (v1 < 23)\n" +
+                "            )\n" +
+                "            OR (\n" +
+                "              (\n" +
+                "                (v1 >= 21)\n" +
+                "                AND (v1 < 22)\n" +
+                "              )\n" +
+                "              OR (\n" +
+                "                (\n" +
+                "                  (v1 >= 20)\n" +
+                "                  AND (v1 < 21)\n" +
+                "                )\n" +
+                "                OR (\n" +
+                "                  (\n" +
+                "                    (v1 >= 19)\n" +
+                "                    AND (v1 < 20)\n" +
+                "                  )\n" +
+                "                  OR (\n" +
+                "                    (\n" +
+                "                      (v1 >= 18)\n" +
+                "                      AND (v1 < 19)\n" +
+                "                    )\n" +
+                "                    OR (\n" +
+                "                      (\n" +
+                "                        (v1 >= 17)\n" +
+                "                        AND (v1 < 18)\n" +
+                "                      )\n" +
+                "                      OR (\n" +
+                "                        (\n" +
+                "                          (v1 >= 16)\n" +
+                "                          AND (v1 < 17)\n" +
+                "                        )\n" +
+                "                        OR (\n" +
+                "                          (\n" +
+                "                            (v1 >= 15)\n" +
+                "                            AND (v1 < 16)\n" +
+                "                          )\n" +
+                "                          OR (\n" +
+                "                            (\n" +
+                "                              (v1 >= 14)\n" +
+                "                              AND (v1 < 15)\n" +
+                "                            )\n" +
+                "                            OR (\n" +
+                "                              (\n" +
+                "                                (v1 >= 13)\n" +
+                "                                AND (v1 < 14)\n" +
+                "                              )\n" +
+                "                              OR (\n" +
+                "                                (\n" +
+                "                                  (v1 >= 12)\n" +
+                "                                  AND (v1 < 13)\n" +
+                "                                )\n" +
+                "                                OR (\n" +
+                "                                  (\n" +
+                "                                    (v1 >= 11)\n" +
+                "                                    AND (v1 < 12)\n" +
+                "                                  )\n" +
+                "                                  OR (\n" +
+                "                                    (\n" +
+                "                                      (v1 >= 10)\n" +
+                "                                      AND (v1 < 11)\n" +
+                "                                    )\n" +
+                "                                    OR (\n" +
+                "                                      (\n" +
+                "                                        (v1 >= 09)\n" +
+                "                                        AND (v1 < 10)\n" +
+                "                                      )\n" +
+                "                                      OR (\n" +
+                "                                        (\n" +
+                "                                          (v1 >= 08)\n" +
+                "                                          AND (v1 < 09)\n" +
+                "                                        )\n" +
+                "                                        OR (\n" +
+                "                                          (\n" +
+                "                                            (v1 >= 07)\n" +
+                "                                            AND (v1 < 08)\n" +
+                "                                          )\n" +
+                "                                          OR (\n" +
+                "                                            (\n" +
+                "                                              (v1 >= 06)\n" +
+                "                                              AND (v1 < 07)\n" +
+                "                                            )\n" +
+                "                                            OR (\n" +
+                "                                              (\n" +
+                "                                                (v1 >= 05)\n" +
+                "                                                AND (v1 < 06)\n" +
+                "                                              )\n" +
+                "                                              OR (\n" +
+                "                                                (\n" +
+                "                                                  (v1 >= 04)\n" +
+                "                                                  AND (v1 < 05)\n" +
+                "                                                )\n" +
+                "                                                OR (\n" +
+                "                                                  (\n" +
+                "                                                    (v1 >= 03)\n" +
+                "                                                    AND (v1 < 04)\n" +
+                "                                                  )\n" +
+                "                                                  OR (\n" +
+                "                                                    (\n" +
+                "                                                      (v1 >= 02)\n" +
+                "                                                      AND (v1 < 03)\n" +
+                "                                                    )\n" +
+                "                                                    OR (\n" +
+                "                                                      (v1 >= 01)\n" +
+                "                                                      AND (v1 < 02)\n" +
+                "                                                    )\n" +
+                "                                                  )\n" +
+                "                                                )\n" +
+                "                                              )\n" +
+                "                                            )\n" +
+                "                                          )\n" +
+                "                                        )\n" +
+                "                                      )\n" +
+                "                                    )\n" +
+                "                                  )\n" +
+                "                                )\n" +
+                "                              )\n" +
+                "                            )\n" +
+                "                          )\n" +
+                "                        )\n" +
+                "                      )\n" +
+                "                    )\n" +
+                "                  )\n" +
+                "                )\n" +
+                "              )\n" +
+                "            )\n" +
+                "          )\n" +
+                "        )\n" +
+                "      )\n" +
+                "    )\n" +
+                "  )";
+
+        //Test excessive recursion and optimizer timeout due to too many OR
+        getFragmentPlan(sql);
     }
 }

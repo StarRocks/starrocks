@@ -8,7 +8,7 @@ import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.proc.BaseProcResult;
-import com.starrocks.external.iceberg.IcebergCatalogType;
+import com.starrocks.connector.iceberg.IcebergCatalogType;
 import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;

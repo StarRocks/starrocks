@@ -1,0 +1,19 @@
+# This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+
+fixed:
+  type: starrocks
+prompts:
+  host:
+    hint: 'hostname for the instance'
+  port:
+    default: 9030
+    type: 'int'
+  schema:
+    hint: 'default schema that dbt will build objects in'
+  username:
+    hint: 'username'
+  password:
+    hint: 'password'
+    hide_input: true
+    default: ''
+

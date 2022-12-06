@@ -21,6 +21,7 @@
 
 package com.starrocks.load.routineload;
 
+import com.google.common.base.Objects;
 import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.common.UserException;
@@ -225,6 +226,11 @@ public abstract class RoutineLoadTaskInfo {
     }
 
     abstract String getTaskDataSourceProperties();
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(id);
+    }
 
     @Override
     public boolean equals(Object obj) {

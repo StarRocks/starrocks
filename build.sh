@@ -42,21 +42,9 @@ export STARROCKS_HOME=${ROOT}
 
 . ${STARROCKS_HOME}/env.sh
 
-#build thirdparty libraries if necessary
-if [[ ! -f ${STARROCKS_THIRDPARTY}/installed/lib64/libbenchmark.a ]]; then
-    echo "Thirdparty libraries need to be build ..."
-    ${STARROCKS_THIRDPARTY}/build-thirdparty.sh
-fi
-
 if [[ ! -f ${STARROCKS_THIRDPARTY}/installed/include/fast_float/fast_float.h ]]; then
     echo "Thirdparty libraries need to be build ..."
     ${STARROCKS_THIRDPARTY}/build-thirdparty.sh
-fi
-
-WITH_BLOCK_CACHE=OFF
-if [[ "${WITH_BLOCK_CACHE}" == "ON" && ! -f ${STARROCKS_THIRDPARTY}/installed/cachelib/lib/libcachelib_allocator.a ]]; then
-    echo "Thirdparty libraries need to be build ..."
-    ${STARROCKS_HOME}/thirdparty/build-thirdparty.sh
 fi
 
 PARALLEL=$[$(nproc)/4+1]
@@ -73,6 +61,7 @@ Usage: $0 <options>
      --use-staros       build Backend with staros
      --with-gcov        build Backend with gcov, has an impact on performance
      --without-gcov     build Backend without gcov(default)
+     --with-bench       build Backend with bench(default without bench)
      -j                 build Backend parallel
 
   Eg.
@@ -95,6 +84,7 @@ OPTS=$(getopt \
   -l 'spark-dpp' \
   -l 'clean' \
   -l 'with-gcov' \
+  -l 'with-bench' \
   -l 'without-gcov' \
   -l 'use-staros' \
   -o 'j:' \
@@ -113,6 +103,7 @@ BUILD_SPARK_DPP=
 CLEAN=
 RUN_UT=
 WITH_GCOV=OFF
+WITH_BENCH=OFF
 USE_STAROS=OFF
 if [[ -z ${USE_AVX2} ]]; then
     USE_AVX2=ON
@@ -129,20 +120,39 @@ if [[ -z $(grep -o 'sse[^ ]*' /proc/cpuinfo) ]]; then
     USE_SSE4_2=OFF
 fi
 
+if [[ -z ${WITH_BLOCK_CACHE} ]]; then
+	WITH_BLOCK_CACHE=OFF
+fi
+
+if [[ "${WITH_BLOCK_CACHE}" == "ON" && ! -f ${STARROCKS_THIRDPARTY}/installed/cachelib/lib/libcachelib_allocator.a ]]; then
+    echo "WITH_BLOCK_CACHE=ON but missing depdency libraries(cachelib)"
+    exit 1
+fi
+
 if [[ -z ${ENABLE_QUERY_DEBUG_TRACE} ]]; then
 	ENABLE_QUERY_DEBUG_TRACE=OFF
 fi
 
-USE_JEMALLOC=ON
+if [[ -z ${USE_JEMALLOC} ]]; then
+    USE_JEMALLOC=ON
+fi
 
 HELP=0
-if [[ $OPTS =~ "-j" ]] && [ $# == 3 ] || [ $# == 1 ] ; then
+if [ $# == 1 ] ; then
     # default
     BUILD_BE=1
     BUILD_FE=1
     BUILD_SPARK_DPP=1
     CLEAN=0
     RUN_UT=0
+elif [[ $OPTS =~ "-j" ]] && [ $# == 3 ]; then
+    # default
+    BUILD_BE=1
+    BUILD_FE=1
+    BUILD_SPARK_DPP=1
+    CLEAN=0
+    RUN_UT=0
+    PARALLEL=$2
 else
     BUILD_BE=0
     BUILD_FE=0
@@ -159,6 +169,7 @@ else
             --with-gcov) WITH_GCOV=ON; shift ;;
             --without-gcov) WITH_GCOV=OFF; shift ;;
             --use-staros) USE_STAROS=ON; shift ;;
+            --with-bench) WITH_BENCH=ON; shift ;;
             -h) HELP=1; shift ;;
             --help) HELP=1; shift ;;
             -j) PARALLEL=$2; shift 2 ;;
@@ -186,10 +197,13 @@ echo "Get params:
     CLEAN               -- $CLEAN
     RUN_UT              -- $RUN_UT
     WITH_GCOV           -- $WITH_GCOV
+    WITH_BENCH          -- $WITH_BENCH
     USE_STAROS          -- $USE_STAROS
     USE_AVX2            -- $USE_AVX2
     PARALLEL            -- $PARALLEL
     ENABLE_QUERY_DEBUG_TRACE -- $ENABLE_QUERY_DEBUG_TRACE
+    WITH_BLOCK_CACHE    -- $WITH_BLOCK_CACHE
+    USE_JEMALLOC        -- $USE_JEMALLOC
 "
 
 # Clean and build generated code
@@ -240,6 +254,7 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                     -DUSE_JEMALLOC=$USE_JEMALLOC \
                     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
                     -DUSE_STAROS=${USE_STAROS} \
+                    -DWITH_BENCH=${WITH_BENCH} \
                     -DWITH_BLOCK_CACHE=${WITH_BLOCK_CACHE} \
                     -Dprotobuf_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/protobuf \
                     -Dabsl_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/absl \
@@ -256,6 +271,7 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                     -DUSE_AVX2=$USE_AVX2 -DUSE_SSE4_2=$USE_SSE4_2 \
                     -DENABLE_QUERY_DEBUG_TRACE=$ENABLE_QUERY_DEBUG_TRACE \
                     -DUSE_JEMALLOC=$USE_JEMALLOC \
+                    -DWITH_BENCH=${WITH_BENCH} \
                     -DWITH_BLOCK_CACHE=${WITH_BLOCK_CACHE} \
                     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON  ..
     fi
@@ -336,18 +352,17 @@ if [ ${BUILD_BE} -eq 1 ]; then
                ${STARROCKS_OUTPUT}/be/lib/hadoop \
                ${STARROCKS_OUTPUT}/be/lib/jvm \
                ${STARROCKS_OUTPUT}/be/www  \
-               ${STARROCKS_OUTPUT}/udf/lib \
-               ${STARROCKS_OUTPUT}/udf/include
 
     cp -r -p ${STARROCKS_HOME}/be/output/bin/* ${STARROCKS_OUTPUT}/be/bin/
     cp -r -p ${STARROCKS_HOME}/be/output/conf/be.conf ${STARROCKS_OUTPUT}/be/conf/
     cp -r -p ${STARROCKS_HOME}/be/output/conf/cn.conf ${STARROCKS_OUTPUT}/be/conf/
     cp -r -p ${STARROCKS_HOME}/be/output/conf/hadoop_env.sh ${STARROCKS_OUTPUT}/be/conf/
     cp -r -p ${STARROCKS_HOME}/be/output/conf/log4j.properties ${STARROCKS_OUTPUT}/be/conf/
+    if [ "${BUILD_TYPE}" == "ASAN" ]; then
+        cp -r -p ${STARROCKS_HOME}/be/output/conf/asan_suppressions.conf ${STARROCKS_OUTPUT}/be/conf/
+    fi
     cp -r -p ${STARROCKS_HOME}/be/output/lib/* ${STARROCKS_OUTPUT}/be/lib/
     cp -r -p ${STARROCKS_HOME}/be/output/www/* ${STARROCKS_OUTPUT}/be/www/
-    cp -r -p ${STARROCKS_HOME}/be/output/udf/*.a ${STARROCKS_OUTPUT}/udf/lib/
-    cp -r -p ${STARROCKS_HOME}/be/output/udf/include/* ${STARROCKS_OUTPUT}/udf/include/
     cp -r -p ${STARROCKS_HOME}/java-extensions/jdbc-bridge/target/starrocks-jdbc-bridge-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
     cp -r -p ${STARROCKS_HOME}/java-extensions/udf-extensions/target/udf-extensions-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
     cp -r -p ${STARROCKS_HOME}/java-extensions/java-utils/target/starrocks-java-utils.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages

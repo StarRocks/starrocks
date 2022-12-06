@@ -63,5 +63,18 @@ public class AnalyzeCTETest {
                 + "select a.*, tbl2.* from tbl1 a join tbl2 on a.v1 = tbl2.v4")).getQueryRelation();
         Assert.assertEquals("v1,v2,v4,v5", String.join(",", query.getColumnOutputNames()));
     }
+
+    @Test
+    public void testNamedQuery() {
+        analyzeSuccess("with cte1 as ( with cte1 as (select * from t0) select * from cte1) select * from cte1");
+        analyzeSuccess("with cte1 as (select * from test.t0), cte2 as (select * from cte1) select * from cte1");
+        analyzeFail("with cte1 as (select * from test.t0), cte1 as (select * from cte1) select * from cte1",
+                "Not unique table/alias: 'cte1'");
+        analyzeFail("with cte1(c1,c2) as (select * from test.t0) select * from cte1",
+                "View's SELECT and view's field list have different column counts");
+        analyzeFail("with cte1(c1,c2) as (select * from test.t0) select c1,c2 from cte1",
+                "View's SELECT and view's field list have different column counts");
+        analyzeSuccess("with cte1(c1,c2) as (select v1,v2 from test.t0) select c1,c2 from cte1");
+    }
 }
 

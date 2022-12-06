@@ -63,6 +63,14 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
         return outputColumns;
     }
 
+    public List<ColumnRefOperator> getRealOutputColumns() {
+        if (projection != null) {
+            return projection.getOutputColumns();
+        } else {
+            return outputColumns;
+        }
+    }
+
     public Map<ColumnRefOperator, Column> getColRefToColumnMetaMap() {
         return colRefToColumnMetaMap;
     }

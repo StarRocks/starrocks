@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -11,6 +23,7 @@
 #include "exec/pipeline/pipeline_fwd.h"
 #include "gen_cpp/InternalService_types.h" // for TQueryOptions
 #include "gen_cpp/Types_types.h"           // for TUniqueId
+#include "gen_cpp/internal_service.pb.h"
 #include "runtime/profile_report_worker.h"
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_state.h"
@@ -18,21 +31,21 @@
 #include "util/hash_util.hpp"
 #include "util/time.h"
 
-namespace starrocks {
-namespace pipeline {
+namespace starrocks::pipeline {
 
 using std::chrono::seconds;
 using std::chrono::milliseconds;
 using std::chrono::steady_clock;
 using std::chrono::duration_cast;
+
 // The context for all fragment of one query in one BE
-class QueryContext {
+class QueryContext : public std::enable_shared_from_this<QueryContext> {
 public:
     QueryContext();
-    ~QueryContext();
+    ~QueryContext() noexcept;
     void set_exec_env(ExecEnv* exec_env) { _exec_env = exec_env; }
     void set_query_id(const TUniqueId& query_id) { _query_id = query_id; }
-    TUniqueId query_id() { return _query_id; }
+    TUniqueId query_id() const { return _query_id; }
     void set_total_fragments(size_t total_fragments) { _total_fragments = total_fragments; }
 
     void increment_num_fragments() {
@@ -61,7 +74,7 @@ public:
         return now > _query_deadline;
     }
 
-    bool is_dead() { return _num_active_fragments == 0 && _num_fragments == _total_fragments; }
+    bool is_dead() const { return _num_active_fragments == 0 && _num_fragments == _total_fragments; }
     // add expired seconds to deadline
     void extend_delivery_lifetime() {
         _delivery_deadline =
@@ -71,6 +84,10 @@ public:
         _query_deadline =
                 duration_cast<milliseconds>(steady_clock::now().time_since_epoch() + _query_expire_seconds).count();
     }
+    void set_report_profile() { _is_report_profile = true; }
+    bool is_report_profile() { return _is_report_profile; }
+    void set_profile_level(const TPipelineProfileLevel::type& profile_level) { _profile_level = profile_level; }
+    const TPipelineProfileLevel::type& profile_level() { return _profile_level; }
 
     FragmentContextManager* fragment_mgr();
 
@@ -96,7 +113,7 @@ public:
     void init_mem_tracker(int64_t bytes_limit, MemTracker* parent);
     std::shared_ptr<MemTracker> mem_tracker() { return _mem_tracker; }
 
-    Status init_query(workgroup::WorkGroup* wg);
+    Status init_query_once(workgroup::WorkGroup* wg);
 
     // Some statistic about the query, including cpu, scan_rows, scan_bytes
     int64_t mem_cost_bytes() const { return _mem_tracker->peak_consumption(); }
@@ -137,6 +154,8 @@ public:
     bool is_result_sink() const { return _is_result_sink; }
     void set_result_sink(bool value) { _is_result_sink = value; }
 
+    QueryContextPtr get_shared_ptr() { return shared_from_this(); }
+
 public:
     static constexpr int DEFAULT_EXPIRE_SECONDS = 300;
 
@@ -154,6 +173,8 @@ private:
     bool _is_runtime_filter_coordinator = false;
     std::once_flag _init_mem_tracker_once;
     std::shared_ptr<RuntimeProfile> _profile;
+    bool _is_report_profile = false;
+    TPipelineProfileLevel::type _profile_level;
     std::shared_ptr<MemTracker> _mem_tracker;
     ObjectPool _object_pool;
     DescriptorTbl* _desc_tbl = nullptr;
@@ -172,6 +193,7 @@ private:
     std::shared_ptr<QueryStatisticsRecvr> _sub_plan_query_statistics_recvr; // For receive
 
     int64_t _scan_limit = 0;
+    workgroup::RunningQueryTokenPtr _wg_running_query_token_ptr;
 };
 
 class QueryContextManager {
@@ -193,6 +215,9 @@ public:
             std::vector<bool>& reported, const TNetworkAddress& last_coord_addr,
             std::vector<TReportExecStatusParams>& report_exec_status_params_vector,
             std::vector<int32_t>& cur_batch_report_indexes);
+
+    void collect_query_statistics(const PCollectQueryStatisticsRequest* request,
+                                  PCollectQueryStatisticsResult* response);
 
 private:
     static void _clean_func(QueryContextManager* manager);
@@ -216,5 +241,4 @@ private:
     std::unique_ptr<UIntGauge> _query_ctx_cnt;
 };
 
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline

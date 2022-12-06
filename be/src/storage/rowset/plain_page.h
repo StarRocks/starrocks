@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/olap/rowset/segment_v2/plain_page.h
 
@@ -36,7 +49,7 @@ namespace starrocks {
 
 static const size_t PLAIN_PAGE_HEADER_SIZE = sizeof(uint32_t);
 
-template <FieldType Type>
+template <LogicalType Type>
 class PlainPageBuilder final : public PageBuilder {
 public:
     PlainPageBuilder(const PageBuilderOptions& options) : _options(options) {
@@ -49,12 +62,12 @@ public:
 
     bool is_page_full() override { return _buffer.size() > _options.data_page_size; }
 
-    size_t add(const uint8_t* vals, size_t count) override {
+    uint32_t add(const uint8_t* vals, uint32_t count) override {
         if (is_page_full()) {
             return 0;
         }
         size_t old_size = _buffer.size();
-        size_t to_add = std::min(_max_count - _count, count);
+        uint32_t to_add = std::min(_max_count - _count, count);
         _buffer.resize(old_size + to_add * SIZE_OF_TYPE);
         memcpy(&_buffer[old_size], vals, to_add * SIZE_OF_TYPE);
         _count += to_add;
@@ -77,7 +90,7 @@ public:
         _buffer.resize(PLAIN_PAGE_HEADER_SIZE);
     }
 
-    size_t count() const override { return _count; }
+    uint32_t count() const override { return _count; }
 
     uint64_t size() const override { return _buffer.size(); }
 
@@ -100,19 +113,18 @@ public:
 private:
     faststring _buffer;
     PageBuilderOptions _options;
-    size_t _count;
-    size_t _max_count;
+    uint32_t _count;
+    uint32_t _max_count;
     typedef typename TypeTraits<Type>::CppType CppType;
     enum { SIZE_OF_TYPE = TypeTraits<Type>::size };
     faststring _first_value;
     faststring _last_value;
 };
 
-template <FieldType Type>
+template <LogicalType Type>
 class PlainPageDecoder : public PageDecoder {
 public:
-    PlainPageDecoder(Slice data, const PageDecoderOptions& options)
-            : _data(data), _options(options), _parsed(false), _num_elems(0), _cur_idx(0) {}
+    PlainPageDecoder(Slice data, const PageDecoderOptions& options) : _data(data), _options(options) {}
 
     Status init() override {
         CHECK(!_parsed);
@@ -139,7 +151,7 @@ public:
         return Status::OK();
     }
 
-    Status seek_to_position_in_page(size_t pos) override {
+    Status seek_to_position_in_page(uint32_t pos) override {
         CHECK(_parsed) << "Must call init()";
 
         if (PREDICT_FALSE(_num_elems == 0)) {
@@ -191,24 +203,9 @@ public:
         return Status::OK();
     }
 
-    Status next_batch(size_t* n, ColumnBlockView* dst) override {
-        DCHECK(_parsed);
-
-        if (PREDICT_FALSE(*n == 0 || _cur_idx >= _num_elems)) {
-            *n = 0;
-            return Status::OK();
-        }
-
-        size_t max_fetch = std::min(*n, static_cast<size_t>(_num_elems - _cur_idx));
-        memcpy(dst->data(), &_data[PLAIN_PAGE_HEADER_SIZE + _cur_idx * SIZE_OF_TYPE], max_fetch * SIZE_OF_TYPE);
-        _cur_idx += max_fetch;
-        *n = max_fetch;
-        return Status::OK();
-    }
-
     Status next_batch(size_t* count, vectorized::Column* dst) override {
         vectorized::SparseRange read_range;
-        size_t begin = current_index();
+        uint32_t begin = current_index();
         read_range.add(vectorized::Range(begin, begin + *count));
         RETURN_IF_ERROR(next_batch(read_range, dst));
         *count = current_index() - begin;
@@ -227,7 +224,7 @@ public:
         while (iter.has_more() && _cur_idx < _num_elems) {
             _cur_idx = iter.begin();
             vectorized::Range r = iter.next(to_read);
-            size_t max_fetch = std::min(r.span_size(), _num_elems - _cur_idx);
+            uint32_t max_fetch = std::min(r.span_size(), _num_elems - _cur_idx);
             int n = dst->append_numbers(&_data[PLAIN_PAGE_HEADER_SIZE + _cur_idx * SIZE_OF_TYPE],
                                         max_fetch * SIZE_OF_TYPE);
             DCHECK_EQ(max_fetch, n);
@@ -236,12 +233,12 @@ public:
         return Status::OK();
     }
 
-    size_t count() const override {
+    uint32_t count() const override {
         DCHECK(_parsed);
         return _num_elems;
     }
 
-    size_t current_index() const override {
+    uint32_t current_index() const override {
         DCHECK(_parsed);
         return _cur_idx;
     }
@@ -251,9 +248,9 @@ public:
 private:
     Slice _data;
     PageDecoderOptions _options;
-    bool _parsed;
-    uint32_t _num_elems;
-    uint32_t _cur_idx;
+    bool _parsed{false};
+    uint32_t _num_elems{0};
+    uint32_t _cur_idx{0};
     typedef typename TypeTraits<Type>::CppType CppType;
     enum { SIZE_OF_TYPE = TypeTraits<Type>::size };
 };

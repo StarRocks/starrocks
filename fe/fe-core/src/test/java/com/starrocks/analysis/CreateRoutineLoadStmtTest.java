@@ -30,7 +30,9 @@ import com.starrocks.common.UserException;
 import com.starrocks.load.routineload.KafkaProgress;
 import com.starrocks.load.routineload.LoadDataSourceType;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.CreateRoutineLoadAnalyzer;
+import com.starrocks.sql.ast.ColumnSeparator;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.PartitionNames;
@@ -398,6 +400,31 @@ public class CreateRoutineLoadStmtTest {
         Assert.assertEquals(KafkaProgress.OFFSET_BEGINNING_VAL, (long) partitionOffsets.get(0).second);
         Assert.assertEquals(KafkaProgress.OFFSET_END_VAL, (long) partitionOffsets.get(1).second);
         Assert.assertEquals(11, (long) partitionOffsets.get(2).second);
+    }
+
+    @Test
+    public void testToString() {
+        String sql = "CREATE ROUTINE LOAD testdb.routine_name ON table1\n"
+                + "WHERE k1 > 100 and k2 like \"%starrocks%\",\n"
+                + "COLUMNS(k1, k2, k3 = k1 + k2),\n"
+                + "COLUMNS TERMINATED BY \"\\t\",\n"
+                + "PARTITION(p1,p2) \n"
+                + "PROPERTIES\n"
+                + "(\n"
+                + "\"desired_concurrent_number\"=\"3\",\n"
+                + "\"max_batch_interval\" = \"20\",\n"
+                + "\"strict_mode\" = \"false\",\n"
+                + "\"timezone\" = \"Asia/Shanghai\"\n"
+                + ")\n"
+                + "FROM KAFKA\n"
+                + "(\n"
+                + "\"kafka_broker_list\" = \"kafkahost1:9092,kafkahost2:9092\",\n"
+                + "\"kafka_topic\" = \"topictest\"\n"
+                + ");";
+        ConnectContext ctx = starRocksAssert.getCtx();
+        CreateRoutineLoadStmt stmt = (CreateRoutineLoadStmt) com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable()).get(0);
+        Assert.assertEquals("CREATE ROUTINE LOAD null.null ON table1PROPERTIES ( \"desired_concurrent_number\" = \"3\", \"timezone\" = \"Asia/Shanghai\", \"strict_mode\" = \"false\", \"max_batch_interval\" = \"20\" ) " +
+                "FROM KAFKA ( \"kafka_broker_list\" = \"kafkahost1:9092,kafkahost2:9092\", \"kafka_topic\" = \"topictest\" )", AstToStringBuilder.toString(stmt));
     }
 
     private Map<String, String> getCustomProperties() {

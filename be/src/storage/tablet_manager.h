@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/olap/tablet_manager.h
 
@@ -35,6 +48,7 @@
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/BackendService_types.h"
 #include "gen_cpp/MasterService_types.h"
+#include "gutil/macros.h"
 #include "storage/kv_store.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
@@ -46,7 +60,24 @@ namespace starrocks {
 
 class Tablet;
 class DataDir;
-using TabletAndRowsets = std::tuple<TabletSharedPtr, std::vector<RowsetSharedPtr>>;
+
+// RowsetsAcqRel is a RAII wrapper for invocation of Rowset::acquire_readers and Rowset::release_readers
+class RowsetsAcqRel;
+using RowsetsAcqRelPtr = std::shared_ptr<RowsetsAcqRel>;
+class RowsetsAcqRel {
+private:
+public:
+    explicit RowsetsAcqRel(const std::vector<RowsetSharedPtr>& rowsets) : _rowsets(rowsets) {
+        Rowset::acquire_readers(_rowsets);
+    }
+    ~RowsetsAcqRel() { Rowset::release_readers(_rowsets); }
+
+private:
+    DISALLOW_COPY_AND_MOVE(RowsetsAcqRel);
+    std::vector<RowsetSharedPtr> _rowsets;
+};
+
+using TabletAndRowsets = std::tuple<TabletSharedPtr, std::vector<RowsetSharedPtr>, RowsetsAcqRelPtr>;
 
 enum TabletDropFlag {
     kMoveFilesToTrash = 0,
@@ -59,7 +90,7 @@ enum TabletDropFlag {
 // please uniformly name the method in "xxx_unlocked()" mode
 class TabletManager {
 public:
-    explicit TabletManager(int32_t tablet_map_lock_shard_size);
+    explicit TabletManager(int64_t tablet_map_lock_shard_size);
     ~TabletManager() = default;
 
     // The param stores holds all candidate data_dirs for this tablet.
@@ -179,7 +210,7 @@ private:
     private:
         constexpr static int kNumShard = 128;
 
-        int _shard(int64_t tablet_id) { return tablet_id % kNumShard; }
+        int64_t _shard(int64_t tablet_id) { return tablet_id % kNumShard; }
 
         SpinLock _latches[kNumShard];
         std::unordered_set<int64_t> _locks[kNumShard];
@@ -222,14 +253,14 @@ private:
 
     TabletsShard& _get_tablets_shard(TTabletId tabletId);
 
-    int32_t _get_tablets_shard_idx(TTabletId tabletId) const { return tabletId & _tablets_shards_mask; }
+    int64_t _get_tablets_shard_idx(TTabletId tabletId) const { return tabletId & _tablets_shards_mask; }
 
     static Status _remove_tablet_meta(const TabletSharedPtr& tablet);
     static Status _remove_tablet_directories(const TabletSharedPtr& tablet);
     static Status _move_tablet_directories_to_trash(const TabletSharedPtr& tablet);
 
     std::vector<TabletsShard> _tablets_shards;
-    const int32_t _tablets_shards_mask;
+    const int64_t _tablets_shards_mask;
     LockTable _schema_change_lock_tbl;
 
     // Protect _partition_tablet_map, should not be obtained before _tablet_map_lock to avoid deadlock

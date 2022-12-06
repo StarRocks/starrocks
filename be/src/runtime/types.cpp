@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/runtime/types.cpp
 
@@ -25,7 +38,6 @@
 
 #include "gutil/strings/substitute.h"
 #include "runtime/datetime_value.h"
-#include "runtime/decimal_value.h"
 #include "runtime/primitive_type.h"
 #include "runtime/string_value.h"
 #include "storage/array_type_info.h"
@@ -33,7 +45,7 @@
 
 namespace starrocks {
 
-TypeDescriptor::TypeDescriptor(const std::vector<TTypeNode>& types, int* idx) : len(-1), precision(-1), scale(-1) {
+TypeDescriptor::TypeDescriptor(const std::vector<TTypeNode>& types, int* idx) {
     DCHECK_GE(*idx, 0);
     DCHECK_LT(*idx, types.size());
     const TTypeNode& node = types[*idx];
@@ -57,22 +69,27 @@ TypeDescriptor::TypeDescriptor(const std::vector<TTypeNode>& types, int* idx) : 
     case TTypeNodeType::STRUCT:
         type = TYPE_STRUCT;
         ++(*idx);
+        DCHECK(node.__isset.selected_fields);
+        selected_fields = node.selected_fields;
         for (const auto& struct_field : node.struct_fields) {
             field_names.push_back(struct_field.name);
             children.push_back(TypeDescriptor(types, idx));
         }
+        DCHECK_EQ(selected_fields.size(), children.size());
         break;
     case TTypeNodeType::ARRAY:
         DCHECK(!node.__isset.scalar_type);
         DCHECK_LT(*idx, types.size() - 1);
-        ++(*idx);
         type = TYPE_ARRAY;
+        ++(*idx);
         children.push_back(TypeDescriptor(types, idx));
         break;
     case TTypeNodeType::MAP:
         DCHECK(!node.__isset.scalar_type);
         DCHECK_LT(*idx, types.size() - 2);
         type = TYPE_MAP;
+        DCHECK_EQ(2, node.selected_fields.size());
+        selected_fields = node.selected_fields;
         ++(*idx);
         children.push_back(TypeDescriptor(types, idx));
         children.push_back(TypeDescriptor(types, idx));
@@ -90,6 +107,8 @@ void TypeDescriptor::to_thrift(TTypeDesc* thrift_type) const {
         children[0].to_thrift(thrift_type);
     } else if (type == TYPE_MAP) {
         curr_node.__set_type(TTypeNodeType::MAP);
+        DCHECK_EQ(2, selected_fields.size());
+        curr_node.__set_selected_fields(selected_fields);
         DCHECK_EQ(2, children.size());
         children[0].to_thrift(thrift_type);
         children[1].to_thrift(thrift_type);
@@ -101,6 +120,8 @@ void TypeDescriptor::to_thrift(TTypeDesc* thrift_type) const {
             curr_node.struct_fields.emplace_back();
             curr_node.struct_fields.back().__set_name(field_name);
         }
+        curr_node.__set_selected_fields(selected_fields);
+        DCHECK_EQ(children.size(), selected_fields.size());
         for (const TypeDescriptor& child : children) {
             child.to_thrift(thrift_type);
         }
@@ -129,13 +150,18 @@ void TypeDescriptor::to_protobuf(PTypeDesc* proto_type) const {
         children[0].to_protobuf(proto_type);
     } else if (type == TYPE_MAP) {
         node->set_type(TTypeNodeType::MAP);
+        DCHECK_EQ(2, selected_fields.size());
+        node->add_selected_fields(selected_fields[0]);
+        node->add_selected_fields(selected_fields[1]);
         DCHECK_EQ(2, children.size());
         children[0].to_protobuf(proto_type);
         children[1].to_protobuf(proto_type);
     } else if (type == TYPE_STRUCT) {
         node->set_type(TTypeNodeType::STRUCT);
-        for (const auto& field_name : field_names) {
-            node->add_struct_fields()->set_name(field_name);
+        DCHECK_EQ(field_names.size(), selected_fields.size());
+        for (size_t i = 0; i < field_names.size(); i++) {
+            node->add_struct_fields()->set_name(field_names[i]);
+            node->add_selected_fields(selected_fields[i]);
         }
         for (const TypeDescriptor& child : children) {
             child.to_protobuf(proto_type);
@@ -156,13 +182,12 @@ void TypeDescriptor::to_protobuf(PTypeDesc* proto_type) const {
     }
 }
 
-TypeDescriptor::TypeDescriptor(const google::protobuf::RepeatedPtrField<PTypeNode>& types, int* idx)
-        : len(-1), precision(-1), scale(-1) {
+TypeDescriptor::TypeDescriptor(const google::protobuf::RepeatedPtrField<PTypeNode>& types, int* idx) {
     DCHECK_GE(*idx, 0);
     DCHECK_LT(*idx, types.size());
 
     const PTypeNode& node = types.Get(*idx);
-    TTypeNodeType::type node_type = static_cast<TTypeNodeType::type>(node.type());
+    auto node_type = static_cast<TTypeNodeType::type>(node.type());
     switch (node_type) {
     case TTypeNodeType::SCALAR: {
         DCHECK(node.has_scalar_type());
@@ -187,6 +212,7 @@ TypeDescriptor::TypeDescriptor(const google::protobuf::RepeatedPtrField<PTypeNod
         for (int i = 0; i < node.struct_fields().size(); ++i) {
             children.push_back(TypeDescriptor(types, idx));
             field_names.push_back(node.struct_fields(i).name());
+            selected_fields.push_back(node.selected_fields(i));
         }
         break;
     case TTypeNodeType::ARRAY:
@@ -201,6 +227,8 @@ TypeDescriptor::TypeDescriptor(const google::protobuf::RepeatedPtrField<PTypeNod
         DCHECK_LT(*idx, types.size() - 2);
         ++(*idx);
         type = TYPE_MAP;
+        selected_fields.push_back(node.selected_fields(0));
+        selected_fields.push_back(node.selected_fields(1));
         children.push_back(TypeDescriptor(types, idx));
         children.push_back(TypeDescriptor(types, idx));
         break;
@@ -213,6 +241,8 @@ std::string TypeDescriptor::debug_string() const {
         return strings::Substitute("CHAR($0)", len);
     case TYPE_VARCHAR:
         return strings::Substitute("VARCHAR($0)", len);
+    case TYPE_VARBINARY:
+        return strings::Substitute("VARBINARY($0)", len);
     case TYPE_DECIMAL:
         return strings::Substitute("DECIMAL($0, $1)", precision, scale);
     case TYPE_DECIMALV2:
@@ -232,9 +262,19 @@ std::string TypeDescriptor::debug_string() const {
         ss << "STRUCT{";
         for (size_t i = 0; i < field_names.size(); i++) {
             ss << field_names[i] << " " << children[i].debug_string();
-            if (i + 1 < field_names.size()) ss << ", ";
+            if (i + 1 < field_names.size()) {
+                ss << ", ";
+            }
         }
         ss << "}";
+        ss << ", Selected fields: [";
+        for (size_t i = 0; i < selected_fields.size(); i++) {
+            ss << selected_fields[i];
+            if (i + 1 < selected_fields.size()) {
+                ss << ", ";
+            }
+        }
+        ss << "]";
         return ss.str();
     }
     default:
@@ -258,17 +298,17 @@ bool TypeDescriptor::support_groupby() const {
 }
 
 TypeDescriptor TypeDescriptor::from_storage_type_info(TypeInfo* type_info) {
-    FieldType ftype = type_info->type();
+    LogicalType ftype = type_info->type();
 
     bool is_array = false;
-    if (ftype == OLAP_FIELD_TYPE_ARRAY) {
+    if (ftype == TYPE_ARRAY) {
         is_array = true;
         type_info = get_item_type_info(type_info).get();
         ftype = type_info->type();
     }
 
-    PrimitiveType ptype = scalar_field_type_to_primitive_type(ftype);
-    DCHECK(ptype != INVALID_TYPE);
+    LogicalType ptype = scalar_field_type_to_primitive_type(ftype);
+    DCHECK(ptype != TYPE_UNKNOWN);
     int len = TypeDescriptor::MAX_VARCHAR_LENGTH;
     int precision = type_info->precision();
     int scale = type_info->scale();
@@ -292,6 +332,7 @@ int TypeDescriptor::get_slot_size() const {
     case TYPE_OBJECT:
     case TYPE_PERCENTILE:
     case TYPE_JSON:
+    case TYPE_VARBINARY:
         return sizeof(StringValue);
 
     case TYPE_NULL:
@@ -319,19 +360,34 @@ int TypeDescriptor::get_slot_size() const {
         return sizeof(DateTimeValue);
 
     case TYPE_DECIMAL:
-        return sizeof(DecimalValue);
+        return 40;
 
     case TYPE_LARGEINT:
     case TYPE_DECIMALV2:
     case TYPE_DECIMAL128:
         return 16;
     case TYPE_ARRAY:
-        return sizeof(void*); // sizeof(Collection*)
-    case INVALID_TYPE:
-    case TYPE_BINARY:
-    case TYPE_STRUCT:
     case TYPE_MAP:
+        return sizeof(void*); // sizeof(Collection*)
+    case TYPE_STRUCT: {
+        int struct_size = 0;
+        for (const TypeDescriptor& type_descriptor : children) {
+            struct_size += type_descriptor.get_slot_size();
+        }
+        return struct_size;
+    }
+    case TYPE_UNKNOWN:
+    case TYPE_BINARY:
     case TYPE_FUNCTION:
+    case TYPE_UNSIGNED_TINYINT:
+    case TYPE_UNSIGNED_SMALLINT:
+    case TYPE_UNSIGNED_INT:
+    case TYPE_UNSIGNED_BIGINT:
+    case TYPE_DISCRETE_DOUBLE:
+    case TYPE_DATE_V1:
+    case TYPE_DATETIME_V1:
+    case TYPE_NONE:
+    case TYPE_MAX_VALUE:
         DCHECK(false);
         break;
     }

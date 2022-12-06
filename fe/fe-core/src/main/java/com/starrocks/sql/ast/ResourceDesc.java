@@ -58,7 +58,7 @@ public class ResourceDesc {
         }
     }
 
-    public String toSql() {
+    public String toString() {
         StringBuilder sb = new StringBuilder();
         sb.append("WITH RESOURCE '").append(name).append("'");
         if (properties != null && !properties.isEmpty()) {

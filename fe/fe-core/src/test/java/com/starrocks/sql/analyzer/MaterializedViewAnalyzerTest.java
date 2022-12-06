@@ -1,4 +1,5 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.catalog.Database;
@@ -6,7 +7,6 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.utframe.StarRocksAssert;
-import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -15,9 +15,9 @@ import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class MaterializedViewAnalyzerTest {
+
     @BeforeClass
     public static void beforeClass() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
     }
 

@@ -139,7 +139,7 @@ OutPut Exchange Id: 12
 |  * C_ACCTBAL-->[-999.99, 9999.99, 0.0, 8.0, 137439.0] ESTIMATE
 |
 10:NESTLOOP JOIN
-|  join op: CROSS JOIN
+|  join op: INNER JOIN
 |  other join predicates: [6: C_ACCTBAL, DOUBLE, false] > [19: avg, DOUBLE, true]
 |  build runtime filters:
 |  - filter_id = 0, build_expr = (19: avg), remote = false

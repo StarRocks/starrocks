@@ -42,9 +42,10 @@ public class CurrentQueryStatisticsProcDir implements ProcDirInterface {
     private static final Logger LOG = LogManager.getLogger(CurrentQueryStatisticsProcDir.class);
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("QueryId").add("ConnectionId").add("Database").add("User")
-            .add("ScanBytes").add("ProcessRows").add("ExecTime").build();
+            .add("ScanBytes").add("ProcessRows").add("CPUCostSeconds")
+            .add("ExecTime").build();
 
-    private static final int EXEC_TIME_INDEX = 6;
+    private static final int EXEC_TIME_INDEX = 7;
 
     @Override
     public boolean register(String name, ProcNodeInterface node) {
@@ -76,17 +77,20 @@ public class CurrentQueryStatisticsProcDir implements ProcDirInterface {
         final Map<String, CurrentQueryInfoProvider.QueryStatistics> statisticsMap
                 = provider.getQueryStatistics(statistic.values());
         for (QueryStatisticsItem item : statistic.values()) {
+            final CurrentQueryInfoProvider.QueryStatistics statistics = statisticsMap.get(item.getQueryId());
+            if (statistics == null) {
+                continue;
+            }
             final List<String> values = Lists.newArrayList();
             values.add(item.getQueryId());
             values.add(item.getConnId());
             values.add(item.getDb());
             values.add(item.getUser());
-            final CurrentQueryInfoProvider.QueryStatistics statistics
-                    = statisticsMap.get(item.getQueryId());
             values.add(QueryStatisticsFormatter.getScanBytes(
                     statistics.getScanBytes()));
             values.add(QueryStatisticsFormatter.getRowsReturned(
-                    statistics.getRowsReturned()));
+                    statistics.getScanRows()));
+            values.add(QueryStatisticsFormatter.getCPUCostSeconds(statistics.getCpuCostNs()));
             values.add(item.getQueryExecTime());
             sortedRowData.add(values);
         }

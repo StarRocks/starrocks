@@ -1,16 +1,16 @@
 # right
 
-## description
+## Description
 
-### Syntax
+This function returns a specified length of characters from the right side of a given string. Length unit: utf8 character.
+
+## Syntax
 
 ```Haskell
 VARCHAR right(VARCHAR str)
 ```
 
-This function returns a specified length of characters from the right side of a given string. Length unit: utf8 character.
-
-## example
+## Examples
 
 ```Plain Text
 MySQL > select right("Hello starrocks",5);

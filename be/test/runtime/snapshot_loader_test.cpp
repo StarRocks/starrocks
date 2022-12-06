@@ -31,7 +31,7 @@ namespace starrocks {
 
 class SnapshotLoaderTest : public testing::Test {
 public:
-    SnapshotLoaderTest() {}
+    SnapshotLoaderTest() = default;
 
 private:
     ExecEnv* _exec_env;

@@ -28,19 +28,13 @@ public class ScalarTypeTest {
         Assert.assertEquals(
                 ScalarType.createUnifiedDecimalType(27, 3),
                 ScalarType.createDecimalV2Type(27, 3));
-        try {
-            ScalarType.createUnifiedDecimalType(28, 9);
-            Assert.fail("should throw an exception");
-        } catch (Error ex) {
+        Assert.assertEquals(
+                ScalarType.createUnifiedDecimalType(28, 9),
+                ScalarType.createDecimalV2Type(28, 9));
+        Assert.assertEquals(
+                ScalarType.createUnifiedDecimalType(18, 10),
+                ScalarType.createUnifiedDecimalType(18, 10));
 
-        }
-
-        try {
-            ScalarType.createUnifiedDecimalType(18, 10);
-            Assert.fail("should throw an exception");
-        } catch (Error ex) {
-
-        }
         Config.enable_decimal_v3 = true;
         Assert.assertEquals(
                 ScalarType.createUnifiedDecimalType(9, 3),
@@ -70,26 +64,8 @@ public class ScalarTypeTest {
                 ScalarType.createUnifiedDecimalType(38, 38),
                 ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 38));
 
-        try {
-            ScalarType.createUnifiedDecimalType(39, 38);
-            Assert.fail("should throw an error");
-        } catch (Throwable ex) {
-
-        }
-
-        try {
-            ScalarType.createUnifiedDecimalType(0, 0);
-            Assert.fail("should throw an error");
-        } catch (Throwable ex) {
-
-        }
-
-        try {
-            ScalarType.createUnifiedDecimalType(10, 11);
-            Assert.fail("should throw an error");
-        } catch (Throwable ex) {
-
-        }
+        Assert.assertThrows(Throwable.class, () -> ScalarType.createUnifiedDecimalType(39, 38));
+        Assert.assertThrows(Throwable.class, () -> ScalarType.createUnifiedDecimalType(10, 11));
     }
 
     @Test

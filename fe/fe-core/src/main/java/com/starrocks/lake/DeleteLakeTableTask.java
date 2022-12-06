@@ -46,6 +46,9 @@ class DeleteLakeTableTask implements Runnable {
         if (tabletIds.isEmpty()) {
             return;
         }
+        if (anyTablet == null) {
+            return;
+        }
 
         DropTableRequest request = new DropTableRequest();
         request.tabletId = anyTablet.getId();

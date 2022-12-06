@@ -80,7 +80,7 @@ Status HttpClient::init(const std::string& url) {
     }
 
     curl_write_callback callback = [](char* buffer, size_t size, size_t nmemb, void* param) {
-        HttpClient* client = (HttpClient*)param;
+        auto* client = (HttpClient*)param;
         return client->on_response_data(buffer, size * nmemb);
     };
 

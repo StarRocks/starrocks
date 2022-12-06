@@ -46,4 +46,20 @@ public class AnalyzeUpdateTest {
 
         analyzeSuccess("update tprimary set v3 = [231,4321,42] where pk = 1");
     }
+
+    @Test
+    public void testMulti() {
+        analyzeSuccess("update tprimary set v2 = tp2.v2 from tprimary2 tp2 where tprimary.pk = tp2.pk");
+
+        analyzeSuccess(
+                "update tprimary set v2 = tp2.v2 from tprimary2 tp2 join t0 where tprimary.pk = tp2.pk " +
+                        "and tp2.pk = t0.v1 and t0.v2 > 0");
+    }
+
+    @Test
+    public void testCTE() {
+        analyzeSuccess(
+                "with tp2cte as (select * from tprimary2 where v2 < 10) update tprimary set v2 = tp2cte.v2 " +
+                        "from tp2cte where tprimary.pk = tp2cte.pk");
+    }
 }

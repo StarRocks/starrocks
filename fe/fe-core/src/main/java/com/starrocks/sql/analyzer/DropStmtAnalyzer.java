@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
+import com.google.common.base.Strings;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FunctionSearchDesc;
@@ -82,6 +83,13 @@ public class DropStmtAnalyzer {
 
         @Override
         public Void visitDropDbStatement(DropDbStmt statement, ConnectContext context) {
+            if (Strings.isNullOrEmpty(statement.getCatalogName())) {
+                if (Strings.isNullOrEmpty(context.getCurrentCatalog())) {
+                    throw new SemanticException("No catalog selected");
+                }
+                statement.setCatalogName(context.getCurrentCatalog());
+            }
+
             String dbName = statement.getDbName();
             if (dbName.equalsIgnoreCase(InfoSchemaDb.DATABASE_NAME)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, context.getQualifiedUser(), dbName);

@@ -6,7 +6,7 @@ Computes the percentile value of `expr` with linear interpolation.
 
 ## Syntax
 
-```SQL
+```Haskell
 PERCENTILE_CONT (expr, percentile) 
 ```
 

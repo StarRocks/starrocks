@@ -1,12 +1,23 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #pragma once
 
-#include <exec/olap_common.h>
 #include <gen_cpp/Descriptors_types.h>
 
-#include "exec/scan_node.h"
+#include "exec/vectorized/meta_scan_node.h"
 #include "exec/vectorized/olap_meta_scanner.h"
-#include "runtime/descriptors.h"
 
 namespace starrocks {
 
@@ -14,44 +25,25 @@ class RuntimeState;
 
 namespace vectorized {
 
-class OlapMetaScanNode final : public starrocks::ScanNode {
+class OlapMetaScanNode final : public MetaScanNode {
 public:
     OlapMetaScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
-    ~OlapMetaScanNode();
+    ~OlapMetaScanNode() override = default;
+    ;
 
-    Status init(const TPlanNode& tnode, RuntimeState* state) override;
-    Status prepare(RuntimeState* state) override;
     Status open(RuntimeState* state) override;
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
-    Status close(RuntimeState* state) override;
-    Status set_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) override;
 
     void debug_string(int indentation_level, std::stringstream* out) const override {
         *out << "vectorized:OlapMetaScanNode";
     }
 
+    std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
+            pipeline::PipelineBuilderContext* context) override;
+
 private:
-    void _init_counter(RuntimeState* state);
     friend class OlapMetaScanner;
-
-    // params
-    std::vector<std::unique_ptr<TInternalScanRange>> _scan_ranges;
-
     std::vector<OlapMetaScanner*> _scanners;
-    size_t _cursor_idx = 0;
-
-    bool _is_init;
-    TupleId _tuple_id;
-    TMetaScanNode _meta_scan_node;
-    DescriptorTbl _desc_tbl;
-    const TupleDescriptor* _tuple_desc = nullptr;
-    ObjectPool _obj_pool;
-
-    // profile
-    RuntimeProfile* _meta_scan_profile = nullptr;
-    RuntimeProfile::Counter* _scan_timer = nullptr;
-    RuntimeProfile::Counter* _io_timer = nullptr;
-    RuntimeProfile::Counter* _tablet_counter = nullptr;
 };
 
 } // namespace vectorized

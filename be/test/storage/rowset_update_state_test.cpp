@@ -1,5 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "storage/rowset_update_state.h"
 
 #include <gtest/gtest.h>
@@ -61,10 +73,10 @@ public:
         auto schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
         auto chunk = ChunkHelper::new_chunk(schema, keys.size());
         auto& cols = chunk->columns();
-        for (size_t i = 0; i < keys.size(); i++) {
-            cols[0]->append_datum(vectorized::Datum(keys[i]));
-            cols[1]->append_datum(vectorized::Datum((int16_t)(keys[i] % 100 + 1)));
-            cols[2]->append_datum(vectorized::Datum((int32_t)(keys[i] % 1000 + 2)));
+        for (long key : keys) {
+            cols[0]->append_datum(vectorized::Datum(key));
+            cols[1]->append_datum(vectorized::Datum((int16_t)(key % 100 + 1)));
+            cols[2]->append_datum(vectorized::Datum((int32_t)(key % 1000 + 2)));
         }
         if (one_delete == nullptr && !keys.empty()) {
             CHECK_OK(writer->flush_chunk(*chunk));
@@ -110,7 +122,7 @@ public:
 
     RowsetSharedPtr create_partial_rowset(const TabletSharedPtr& tablet, const vector<int64_t>& keys,
                                           std::vector<int32_t>& column_indexes,
-                                          std::shared_ptr<TabletSchema> partial_schema) {
+                                          const std::shared_ptr<TabletSchema>& partial_schema) {
         // create partial rowset
         RowsetWriterContext writer_context;
         RowsetId rowset_id = StorageEngine::instance()->next_rowset_id();
@@ -134,9 +146,9 @@ public:
         auto chunk = ChunkHelper::new_chunk(schema, keys.size());
         EXPECT_TRUE(2 == chunk->num_columns());
         auto& cols = chunk->columns();
-        for (size_t i = 0; i < keys.size(); i++) {
-            cols[0]->append_datum(vectorized::Datum(keys[i]));
-            cols[1]->append_datum(vectorized::Datum((int16_t)(keys[i] % 100 + 3)));
+        for (long key : keys) {
+            cols[0]->append_datum(vectorized::Datum(key));
+            cols[1]->append_datum(vectorized::Datum((int16_t)(key % 100 + 3)));
         }
         CHECK_OK(writer->flush_chunk(*chunk));
         RowsetSharedPtr partial_rowset = *writer->build();
@@ -151,7 +163,7 @@ protected:
 };
 
 static vectorized::ChunkIteratorPtr create_tablet_iterator(vectorized::TabletReader& reader,
-                                                           vectorized::Schema& schema) {
+                                                           vectorized::VectorizedSchema& schema) {
     vectorized::TabletReaderParams params;
     if (!reader.prepare().ok()) {
         LOG(ERROR) << "reader prepare failed";
@@ -187,7 +199,7 @@ static ssize_t read_until_eof(const vectorized::ChunkIteratorPtr& iter) {
 }
 
 static ssize_t read_tablet(const TabletSharedPtr& tablet, int64_t version) {
-    vectorized::Schema schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
+    vectorized::VectorizedSchema schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
     vectorized::TabletReader reader(tablet, Version(0, version), schema);
     auto iter = create_tablet_iterator(reader, schema);
     if (iter == nullptr) {

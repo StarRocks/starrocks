@@ -22,6 +22,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Joiner;
+import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.FunctionName;
@@ -215,6 +216,10 @@ public class Function implements Writable {
 
     public void setUserVisible(boolean userVisible) {
         this.userVisible = userVisible;
+    }
+
+    public void setArgsType(Type[] newTypes) {
+        argTypes = newTypes;
     }
 
     public Type getVarArgsType() {
@@ -589,7 +594,7 @@ public class Function implements Writable {
             return code;
         }
 
-        public static FunctionType fromCode(int code) {
+        public static FunctionType fromCode(int code) throws IOException {
             switch (code) {
                 case 0:
                     return ORIGIN;
@@ -599,8 +604,9 @@ public class Function implements Writable {
                     return AGGREGATE;
                 case 3:
                     return TABLE;
+                default:
+                    throw new IOException("invalid function type code:" + code);
             }
-            return null;
         }
 
         public void write(DataOutput output) throws IOException {
@@ -664,6 +670,9 @@ public class Function implements Writable {
     public static Function read(DataInput input) throws IOException {
         Function function;
         FunctionType functionType = FunctionType.read(input);
+        if (functionType == null) {
+            throw new Error("Function type is null.");
+        }
         switch (functionType) {
             case SCALAR:
                 function = new ScalarFunction();
@@ -733,6 +742,11 @@ public class Function implements Writable {
             row.add(functionName());
         }
         return row;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(name, hasVarArgs, argTypes.length);
     }
 
     @Override

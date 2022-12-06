@@ -10,9 +10,12 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.privilege.PrivilegeManager;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.AnalyzeStatus;
+import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatsConstants;
 
 import java.time.format.DateTimeFormatter;
@@ -38,7 +41,8 @@ public class ShowAnalyzeStatusStmt extends ShowStmt {
                     .addColumn(new Column("Reason", ScalarType.createVarchar(100)))
                     .build();
 
-    public static List<String> showAnalyzeStatus(AnalyzeStatus analyzeStatus) throws MetaNotFoundException {
+    public static List<String> showAnalyzeStatus(ConnectContext context,
+                                                 AnalyzeStatus analyzeStatus) throws MetaNotFoundException {
         List<String> row = Lists.newArrayList("", "", "", "ALL", "", "", "", "", "", "", "");
         long dbId = analyzeStatus.getDbId();
         long tableId = analyzeStatus.getTableId();
@@ -56,8 +60,13 @@ public class ShowAnalyzeStatusStmt extends ShowStmt {
         }
         row.set(2, table.getName());
 
-        long totalCollectColumnsSize = table.getBaseSchema().stream().filter(column -> !column.isAggregated()).count();
+        // In new privilege framework(RBAC), user needs any action on the table to show analysis status for it.
+        if (context.getGlobalStateMgr().isUsingNewPrivilege() &&
+                !PrivilegeManager.checkAnyActionOnTable(context, db.getOriginName(), table.getName())) {
+            return null;
+        }
 
+        long totalCollectColumnsSize = StatisticUtils.getCollectibleColumns(table).size();
         if (null != columns && !columns.isEmpty() && (columns.size() != totalCollectColumnsSize)) {
             String str = String.join(",", columns);
             row.set(3, str);

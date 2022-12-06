@@ -49,6 +49,7 @@ import com.starrocks.load.MultiDeleteInfo;
 import com.starrocks.load.loadv2.LoadJob.LoadJobStateUpdateInfo;
 import com.starrocks.load.loadv2.LoadJobFinalOperation;
 import com.starrocks.load.routineload.RoutineLoadJob;
+import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.mysql.privilege.UserPropertyInfo;
 import com.starrocks.persist.AddPartitionsInfo;
 import com.starrocks.persist.AddPartitionsInfoV2;
@@ -56,6 +57,7 @@ import com.starrocks.persist.AlterLoadJobOperationLog;
 import com.starrocks.persist.AlterRoutineLoadJobOperationLog;
 import com.starrocks.persist.AlterUserInfo;
 import com.starrocks.persist.AlterViewInfo;
+import com.starrocks.persist.AuthUpgradeInfo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.BackendTabletsInfo;
 import com.starrocks.persist.BatchDropInfo;
@@ -105,6 +107,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.persist.DropTaskRunsLog;
 import com.starrocks.scheduler.persist.DropTasksLog;
+import com.starrocks.scheduler.persist.TaskRunPeriodStatusChange;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.staros.StarMgrJournal;
@@ -278,6 +281,10 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_CHANGE_MATERIALIZED_VIEW_REFRESH_SCHEME:
                 data = ChangeMaterializedViewRefreshSchemeLog.read(in);
+                isRead = true;
+                break;
+            case OperationType.OP_ALTER_MATERIALIZED_VIEW_PROPERTIES:
+                data = ModifyTablePropertyOperationLog.read(in);
                 isRead = true;
                 break;
             case OperationType.OP_RENAME_MATERIALIZED_VIEW:
@@ -493,6 +500,11 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
+            case OperationType.OP_CREATE_STREAM_LOAD_TASK: {
+                data = StreamLoadTask.read(in);
+                isRead = true;
+                break;
+            }
             case OperationType.OP_CREATE_LOAD_JOB: {
                 data = com.starrocks.load.loadv2.LoadJob.read(in);
                 isRead = true;
@@ -539,6 +551,11 @@ public class JournalEntity implements Writable {
                 data = TaskRunStatusChange.read(in);
                 isRead = true;
                 break;
+                // only update the progress of task run
+            case OperationType.OP_UPDATE_TASK_RUN_STATE:
+                data = TaskRunPeriodStatusChange.read(in);
+                isRead = true;
+                break;
             case OperationType.OP_DROP_TASK_RUNS:
                 data = DropTaskRunsLog.read(in);
                 isRead = true;
@@ -574,6 +591,7 @@ public class JournalEntity implements Writable {
             case OperationType.OP_SET_FORBIT_GLOBAL_DICT:
             case OperationType.OP_MODIFY_REPLICATION_NUM:
             case OperationType.OP_MODIFY_WRITE_QUORUM:
+            case OperationType.OP_MODIFY_REPLICATED_STORAGE:
             case OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX: {
                 data = ModifyTablePropertyOperationLog.read(in);
                 isRead = true;
@@ -732,6 +750,11 @@ public class JournalEntity implements Writable {
             case OperationType.OP_DROP_ROLE_V2:
             case OperationType.OP_UPDATE_ROLE_PRIVILEGE_V2: {
                 data = RolePrivilegeCollectionInfo.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_AUTH_UPGRDE_V2: {
+                data = AuthUpgradeInfo.read(in);
                 isRead = true;
                 break;
             }

@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -20,15 +32,15 @@ public:
     SchemaScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
     ~SchemaScanNode() override;
 
-    // Prepare conjuncts, create Schema columns to slots mapping
+    // Prepare conjuncts, create VectorizedSchema columns to slots mapping
     // initialize _schema_scanner
     Status init(const TPlanNode& tnode, RuntimeState* state = nullptr) override;
 
-    // Prepare conjuncts, create Schema columns to slots mapping
+    // Prepare conjuncts, create VectorizedSchema columns to slots mapping
     // initialize _schema_scanner
     Status prepare(RuntimeState* state) override;
 
-    // Start Schema scan using _schema_scanner.
+    // Start VectorizedSchema scan using _schema_scanner.
     Status open(RuntimeState* state) override;
 
     // Fill the next chunk by calling next() on the _schema_scanner,
@@ -40,10 +52,16 @@ public:
     // this is no use in this class
     Status set_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) override;
 
+    std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
+            pipeline::PipelineBuilderContext* context) override;
+
+    bool accept_empty_scan_ranges() const override { return false; }
+
 private:
     // Write debug string of this into out.
     void debug_string(int indentation_level, std::stringstream* out) const override;
 
+    const TPlanNode _tnode;
     bool _is_init;
     bool _is_finished = false;
     const std::string _table_name;

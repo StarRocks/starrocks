@@ -2,8 +2,11 @@
 
 package com.starrocks.alter;
 
-import com.staros.proto.ObjectStorageInfo;
-import com.staros.proto.ShardStorageInfo;
+import com.staros.proto.FileCacheInfo;
+import com.staros.proto.FilePathInfo;
+import com.staros.proto.FileStoreInfo;
+import com.staros.proto.FileStoreType;
+import com.staros.proto.S3FileStoreInfo;
 import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.AggregateType;
@@ -72,7 +75,8 @@ public class LakeTableSchemaChangeJobTest {
     public void before() throws Exception {
         new MockUp<LakeTableAlterJobV2Builder>() {
             @Mock
-            public List<Long> createShards(int shardCount, ShardStorageInfo storageInfo) throws DdlException {
+            public List<Long> createShards(int shardCount, FilePathInfo path, FileCacheInfo cache, long groupId)
+                throws DdlException {
                 for (int i = 0; i < shardCount; i++) {
                     shadowTabletIds.add(GlobalStateMgr.getCurrentState().getNextId());
                 }
@@ -111,11 +115,24 @@ public class LakeTableSchemaChangeJobTest {
         table.setIndexMeta(index.getId(), "t0", Collections.singletonList(c0), 0, 0, (short) 1, TStorageType.COLUMN, keysType);
         table.setBaseIndexId(index.getId());
 
-        ShardStorageInfo.Builder builder = ShardStorageInfo.newBuilder();
-        ObjectStorageInfo.Builder osib = builder.getObjectStorageInfoBuilder();
-        ObjectStorageInfo osi = osib.setObjectUri("s3://test").setAccessKey("zzz").setAccessKeySecret("yyy").build();
-        ShardStorageInfo shardStorageInfo = ShardStorageInfo.newBuilder().setObjectStorageInfo(osi).build();
-        table.setStorageInfo(shardStorageInfo, false, 0, false);
+        FilePathInfo.Builder builder = FilePathInfo.newBuilder();
+        FileStoreInfo.Builder fsBuilder = builder.getFsInfoBuilder();
+
+        S3FileStoreInfo.Builder s3FsBuilder = fsBuilder.getS3FsInfoBuilder();
+        s3FsBuilder.setBucket("test-bucket");
+        s3FsBuilder.setRegion("test-region");
+        S3FileStoreInfo s3FsInfo = s3FsBuilder.build();
+
+        fsBuilder.setFsType(FileStoreType.S3);
+        fsBuilder.setFsKey("test-bucket");
+        fsBuilder.setS3FsInfo(s3FsInfo);
+        FileStoreInfo fsInfo = fsBuilder.build();
+
+        builder.setFsInfo(fsInfo);
+        builder.setFullPath("s3://test-bucket/object-1");
+        FilePathInfo pathInfo = builder.build();
+
+        table.setStorageInfo(pathInfo, false, 0, false);
         StorageCacheInfo storageCacheInfo = new StorageCacheInfo(false, 0, false);
         partitionInfo.setStorageCacheInfo(partitionId, storageCacheInfo);
 

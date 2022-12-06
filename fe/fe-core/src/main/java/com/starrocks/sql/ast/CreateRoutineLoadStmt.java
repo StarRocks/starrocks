@@ -6,10 +6,8 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.ColumnSeparator;
 import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.ParseNode;
-import com.starrocks.analysis.RowDelimiter;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
@@ -125,6 +123,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
             .add(LoadStmt.STRICT_MODE)
             .add(LoadStmt.TIMEZONE)
             .add(LoadStmt.PARTIAL_UPDATE)
+            .add(LoadStmt.MERGE_CONDITION)
             .build();
 
     private static final ImmutableSet<String> KAFKA_PROPERTIES_SET = new ImmutableSet.Builder<String>()
@@ -161,6 +160,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     private boolean strictMode = true;
     private String timezone = TimeUtils.DEFAULT_TIME_ZONE;
     private boolean partialUpdate = false;
+    private String mergeConditionStr;
     /**
      * RoutineLoad support json data.
      * Require Params:
@@ -276,6 +276,10 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         return partialUpdate;
     }
 
+    public String getMergeConditionStr() {
+        return mergeConditionStr;
+    }
+
     public String getFormat() {
         return format;
     }
@@ -336,6 +340,14 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         return loadPropertyList;
     }
 
+    public final Map<String, String> getJobProperties() {
+        return jobProperties;
+    }
+
+    public final Map<String, String> getDataSourceProperties() {
+        return dataSourceProperties;
+    }
+
     public static RoutineLoadDesc getLoadDesc(OriginStatement origStmt, Map<String, String> sessionVariables) {
 
         // parse the origin stmt to get routine load desc
@@ -374,14 +386,12 @@ public class CreateRoutineLoadStmt extends DdlStmt {
                     throw new AnalysisException("repeat setting of column separator");
                 }
                 columnSeparator = (ColumnSeparator) parseNode;
-                columnSeparator.analyze(null);
             } else if (parseNode instanceof RowDelimiter) {
                 // check row delimiter
                 if (rowDelimiter != null) {
                     throw new AnalysisException("repeat setting of row delimiter");
                 }
                 rowDelimiter = (RowDelimiter) parseNode;
-                rowDelimiter.analyze(null);
             } else if (parseNode instanceof ImportColumnsStmt) {
                 // check columns info
                 if (importColumnsStmt != null) {
@@ -439,6 +449,8 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         partialUpdate = Util.getBooleanPropertyOrDefault(jobProperties.get(LoadStmt.PARTIAL_UPDATE),
                 false,
                 LoadStmt.PARTIAL_UPDATE + " should be a boolean");
+
+        mergeConditionStr = jobProperties.get(LoadStmt.MERGE_CONDITION);
 
         if (ConnectContext.get() != null) {
             timezone = ConnectContext.get().getSessionVariable().getTimeZone();
@@ -791,5 +803,10 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) throws RuntimeException {
         return visitor.visitCreateRoutineLoadStatement(this, context);
+    }
+
+    @Override
+    public boolean needAuditEncryption() {
+        return true;
     }
 }

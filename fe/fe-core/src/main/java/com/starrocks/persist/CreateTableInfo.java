@@ -21,6 +21,7 @@
 
 package com.starrocks.persist;
 
+import com.google.common.base.Objects;
 import com.starrocks.catalog.Table;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.FeMetaVersion;
@@ -79,6 +80,12 @@ public class CreateTableInfo implements Writable {
         return createTableInfo;
     }
 
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(dbName, table);
+    }
+
+    @Override
     public boolean equals(Object obj) {
         if (this == obj) {
             return true;

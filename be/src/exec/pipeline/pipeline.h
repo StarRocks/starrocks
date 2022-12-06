@@ -1,15 +1,27 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
 #include <ctime>
+#include <utility>
 
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/source_operator.h"
 #include "gutil/strings/substitute.h"
-namespace starrocks {
-namespace pipeline {
+namespace starrocks::pipeline {
 
 class Pipeline;
 using PipelinePtr = std::shared_ptr<Pipeline>;
@@ -17,7 +29,7 @@ using Pipelines = std::vector<PipelinePtr>;
 class Pipeline {
 public:
     Pipeline() = delete;
-    Pipeline(uint32_t id, const OpFactories& op_factories) : _id(id), _op_factories(op_factories) {
+    Pipeline(uint32_t id, OpFactories op_factories) : _id(id), _op_factories(std::move(op_factories)) {
         _runtime_profile = std::make_shared<RuntimeProfile>(strings::Substitute("Pipeline (id=$0)", _id));
     }
 
@@ -75,5 +87,4 @@ private:
     OpFactories _op_factories;
 };
 
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline

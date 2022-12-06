@@ -1,8 +1,20 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "storage/lake/tablet.h"
 
-#include "column/schema.h"
+#include "column/vectorized_schema.h"
 #include "fs/fs.h"
 #include "runtime/exec_env.h"
 #include "storage/lake/general_tablet_writer.h"
@@ -67,7 +79,7 @@ StatusOr<std::unique_ptr<TabletWriter>> Tablet::new_writer() {
     return std::make_unique<GeneralTabletWriter>(*this);
 }
 
-StatusOr<std::shared_ptr<TabletReader>> Tablet::new_reader(int64_t version, vectorized::Schema schema) {
+StatusOr<std::shared_ptr<TabletReader>> Tablet::new_reader(int64_t version, vectorized::VectorizedSchema schema) {
     return std::make_shared<TabletReader>(*this, version, std::move(schema));
 }
 

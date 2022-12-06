@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -12,6 +24,7 @@
 #include <type_traits>
 #include <utility>
 
+#include "column/column_hash.h"
 #include "glog/logging.h"
 namespace starrocks::vectorized {
 
@@ -19,7 +32,7 @@ namespace starrocks::vectorized {
 // Key: KeyType integer type eg: uint8 uint16
 // value shouldn't be nullptr
 
-template <typename KeyType, typename ValueType>
+template <typename KeyType, typename ValueType, PhmapSeed seed>
 class SmallFixedSizeHashMap {
 public:
     static_assert(std::is_integral_v<KeyType>);
@@ -123,7 +136,7 @@ private:
     ValueType _hash_table[hash_table_size + 1];
 };
 
-template <typename KeyType>
+template <typename KeyType, PhmapSeed seed>
 class SmallFixedSizeHashSet {
 public:
     static_assert(std::is_integral_v<KeyType>);

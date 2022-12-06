@@ -132,7 +132,7 @@ public class PrivilegeCheckerTest {
         FsBroker fsBroker = new FsBroker("127.0.0.1", 8118);
         long time = System.currentTimeMillis();
         BrokerHbResponse hbResponse = new BrokerHbResponse("broker", "127.0.0.1", 8118, time);
-        fsBroker.handleHbResponse(hbResponse);
+        fsBroker.handleHbResponse(hbResponse, false);
         GlobalStateMgr.getCurrentState().getBrokerMgr().replayAddBrokers("broker", Lists.newArrayList(fsBroker));
 
         TablePattern db1TablePattern = new TablePattern("*", "*");

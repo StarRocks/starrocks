@@ -10,7 +10,7 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
 
-// admin show replica distribution from tbl [partition(p1, p2, ...)]
+// ADMIN SHOW REPLICA DISTRIBUTION FROM db1.tbl1 PARTITION(p1, p2);
 public class AdminShowReplicaDistributionStmt extends ShowStmt {
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("BackendId").add("ReplicaNum").add("Graph").add("Percent").build();

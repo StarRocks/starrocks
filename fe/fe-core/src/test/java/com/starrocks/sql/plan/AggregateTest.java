@@ -18,6 +18,7 @@ import org.junit.rules.ExpectedException;
 public class AggregateTest extends PlanTestBase {
     @Rule
     public ExpectedException expectedException = ExpectedException.none();
+
     @Test
     public void testHaving() throws Exception {
         String sql = "select v2 from t0 group by v2 having v2 > 0";
@@ -706,11 +707,11 @@ public class AggregateTest extends PlanTestBase {
     @Test
     public void testVarianceStddevAnalyze() throws Exception {
         String sql = "select stddev_pop(1222) from (select 1) t;";
-        String plan = getFragmentPlan(sql);
-        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+        assertPlanContains(sql, "  1:AGGREGATE (update finalize)\n" +
                 "  |  output: stddev_pop(1222)\n" +
-                "  |  group by: ");
-        assertContains(plan, "  0:UNION\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  0:UNION\n" +
                 "     constant exprs: \n" +
                 "         NULL");
     }
@@ -858,7 +859,8 @@ public class AggregateTest extends PlanTestBase {
                 + "= 0) then 'A' when ((((cast(lo_orderdate as BIGINT)) + 1) % 3) = 1) then 'B' else 'C' end) = 'A', "
                 + "(case when ((((cast(lo_orderdate as BIGINT)) + 1) % 3) = 0) then 'A' when ((((cast(lo_orderdate  "
                 + "as BIGINT)) + 1) % 3) = 1) then 'B' else 'C' end) = 'B',(case when ((((cast(lo_orderdate as "
-                + "BIGINT)) + 1) % 3) = 0) then 'A' when ((((cast(lo_orderdate as BIGINT)) + 1) % 3) = 1) then 'B' else "
+                +
+                "BIGINT)) + 1) % 3) = 0) then 'A' when ((((cast(lo_orderdate as BIGINT)) + 1) % 3) = 1) then 'B' else "
                 + "'C' end) = 'C'])) as __col_4, (count(distinct lo_orderdate)) "
                 + "as __col_18 from lineorder_flat_for_mv group by 1,2";
         String plan = getFragmentPlan(sql);
@@ -874,7 +876,8 @@ public class AggregateTest extends PlanTestBase {
                 + "= 0) then 'A' when ((((cast(lo_orderdate as BIGINT)) + 1) % 3) = 1) then 'B' else 'C' end) = 'A', "
                 + "(case when ((((cast(lo_orderdate as BIGINT)) + 1) % 3) = 0) then 'A' when ((((cast(lo_orderdate  "
                 + "as BIGINT)) + 1) % 3) = 1) then 'B' else 'C' end) = 'B',(case when ((((cast(lo_orderdate as "
-                + "BIGINT)) + 1) % 3) = 0) then 'A' when ((((cast(lo_orderdate as BIGINT)) + 1) % 3) = 1) then 'B' else "
+                +
+                "BIGINT)) + 1) % 3) = 0) then 'A' when ((((cast(lo_orderdate as BIGINT)) + 1) % 3) = 1) then 'B' else "
                 + "'C' end) = 'C'])) as __col_4, (count(distinct lo_orderdate)) "
                 + "as __col_18 from lineorder_flat_for_mv";
         String plan = getFragmentPlan(sql);
@@ -907,7 +910,7 @@ public class AggregateTest extends PlanTestBase {
         expectedException.expectMessage("mode argument's range must be [0-7]");
         String sql =
                 "select L_ORDERKEY,window_funnel(1800, L_SHIPDATE, 8, [L_PARTKEY = 1]) from lineitem_partition_colocate" +
-                " group by L_ORDERKEY;";
+                        " group by L_ORDERKEY;";
         try {
             getFragmentPlan(sql);
         } finally {
@@ -941,11 +944,21 @@ public class AggregateTest extends PlanTestBase {
         sql = "select count(distinct L_ORDERKEY) " +
                 "from lineitem_partition_colocate where L_ORDERKEY = 59633893 group by L_ORDERKEY;";
         plan = getExecPlan(sql);
-        Assert.assertTrue(plan.getFragments().get(1).getPlanRoot().getChildren().get(0).isColocate());
+        Assert.assertTrue(plan.getFragments().get(1).getPlanRoot().getChild(0).isColocate());
+
+        sql = "select count(distinct L_ORDERKEY) from lineitem_partition_colocate";
+        plan = getExecPlan(sql);
+        Assert.assertTrue(plan.getFragments().get(1).getPlanRoot().getChild(0).isColocate());
+
+        sql = "select count(*) from lineitem_partition_colocate";
+        plan = getExecPlan(sql);
+        Assert.assertFalse(plan.getFragments().get(1).getPlanRoot().isColocate());
 
         connectContext.getSessionVariable().setNewPlanerAggStage(2);
+        sql = "select count(distinct L_ORDERKEY) " +
+                "from lineitem_partition_colocate where L_ORDERKEY = 59633893 group by L_ORDERKEY;";
         plan = getExecPlan(sql);
-        Assert.assertTrue(plan.getFragments().get(1).getPlanRoot().getChildren().get(0).isColocate());
+        Assert.assertTrue(plan.getFragments().get(1).getPlanRoot().getChild(0).isColocate());
 
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
         FeConstants.runningUnitTest = false;
@@ -1443,25 +1456,6 @@ public class AggregateTest extends PlanTestBase {
                 "  |  <slot 21> : 3: t1c");
         assertContains(plan, "4:AGGREGATE (update serialize)\n" +
                 "  |  output: multi_distinct_count(NULL)");
-
-        int prevAggStage = connectContext.getSessionVariable().getNewPlannerAggStage();
-        try {
-            connectContext.getSessionVariable().setNewPlanerAggStage(3);
-            sql = "select count(distinct t1b) from test_all_type";
-
-            ExecPlan execPlan = UtFrameUtils.getPlanAndFragment(connectContext, sql).second;
-            assertContains(execPlan.getFragments().get(1).getExplainString(TExplainLevel.NORMAL),
-                    "  4:AGGREGATE (update serialize)\n" +
-                            "  |  output: count(2: t1b)\n" +
-                            "  |  group by: \n" +
-                            "  |  \n" +
-                            "  3:AGGREGATE (merge serialize)\n" +
-                            "  |  group by: 2: t1b\n" +
-                            "  |  ");
-            Assert.assertFalse(execPlan.getFragments().get(1).isEnableSharedScan());
-        } finally {
-            connectContext.getSessionVariable().setNewPlanerAggStage(prevAggStage);
-        }
     }
 
     @Test
@@ -1661,8 +1655,48 @@ public class AggregateTest extends PlanTestBase {
                 "from supplier having avg(distinct s_suppkey) > 3 ;";
         String plan = getFragmentPlan(sql);
         assertContains(plan, " 28:NESTLOOP JOIN\n" +
-                "  |  join op: CROSS JOIN\n" +
+                "  |  join op: INNER JOIN\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  other join predicates: CAST(12: sum AS DOUBLE) / CAST(14: count AS DOUBLE) > 3.0");
+    }
+
+    @Test
+    public void testSortedStreamingAggregate() throws Exception {
+        connectContext.getSessionVariable().setEnableSortAggregate(true);
+        String sql;
+        String plan;
+        {
+            sql = "select v1, sum(v3) from t0 group by v1";
+            plan = getCostExplain(sql);
+            assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                    "  |  aggregate: sum[([3: v3, BIGINT, true]); args: BIGINT; result: BIGINT;" +
+                    " args nullable: true; result nullable: true]\n" +
+                    "  |  group by: [1: v1, BIGINT, true]\n" +
+                    "  |  sorted streaming: true");
+        }
+        {
+            sql = "select count(l) from (select sum(length(v3)) l from t0 group by v1) tx";
+            plan = getCostExplain(sql);
+            assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                    "  |  aggregate: sum[([4: length, INT, true]); args: INT; result: BIGINT; args nullable: true;" +
+                    " result nullable: true]\n" +
+                    "  |  group by: [1: v1, BIGINT, true]\n" +
+                    "  |  sorted streaming: true");
+        }
+        connectContext.getSessionVariable().setEnableSortAggregate(false);
+    }
+
+    @Test
+    public void testMergeAggPruneColumnPruneWindow() throws Exception {
+        String sql = "select v2 " +
+                "from ( " +
+                "   select v2, x3 " +
+                "   from (select v2, sum(v1) over (partition by v3) as x3 from t0) as tt0 " +
+                "   group by v2, x3 " +
+                ") ttt0 " +
+                "group by v2";
+        String plan = getFragmentPlan(sql);
+        Assert.assertFalse(plan.contains("ANALYTIC"));
+        Assert.assertEquals(1, StringUtils.countMatches(plan, ":AGGREGATE"));
     }
 }

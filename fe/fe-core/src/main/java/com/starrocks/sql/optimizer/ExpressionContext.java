@@ -95,10 +95,6 @@ public class ExpressionContext {
         return childrenProperty.get(index).getOutputColumns();
     }
 
-    public int getChildLeftMostScanTabletsNum(int index) {
-        return childrenProperty.get(index).getLeftMostScanTabletsNum();
-    }
-
     public boolean isExecuteInOneTablet(int index) {
         return childrenProperty.get(index).isExecuteInOneTablet();
     }

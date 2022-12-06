@@ -62,11 +62,6 @@ public class BoolLiteral extends LiteralExpr {
     }
 
     @Override
-    public Object getRealValue() {
-        return value;
-    }
-
-    @Override
     public Expr clone() {
         return new BoolLiteral(this);
     }
@@ -111,8 +106,13 @@ public class BoolLiteral extends LiteralExpr {
     }
 
     @Override
+    public Object getRealObjectValue() {
+        return value;
+    }
+
+    @Override
     public String getStringValue() {
-        return value ? "1" : "0";
+        return value ? "TRUE" : "FALSE";
     }
 
     @Override
@@ -151,5 +151,10 @@ public class BoolLiteral extends LiteralExpr {
     @Override
     public int hashCode() {
         return 31 * super.hashCode() + Boolean.hashCode(value);
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        return super.equals(obj);
     }
 }

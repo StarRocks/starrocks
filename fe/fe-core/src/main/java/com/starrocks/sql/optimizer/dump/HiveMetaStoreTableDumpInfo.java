@@ -29,4 +29,11 @@ public interface HiveMetaStoreTableDumpInfo {
     default List<String> getDataColumnNames() {
         return null;
     }
+
+    default double getScanRowCount() {
+        return 1;
+    }
+
+    default void setScanRowCount(double rowCount) {
+    }
 }

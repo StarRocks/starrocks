@@ -194,7 +194,7 @@ public class DeleteHandler implements Writable {
         }
 
         // get partitions
-        List<String> partitionNames = stmt.getPartitionNames();
+        List<String> partitionNames = stmt.getPartitionNamesList();
         Preconditions.checkState(partitionNames != null);
         boolean noPartitionSpecified = partitionNames.isEmpty();
         if (noPartitionSpecified) {
@@ -461,6 +461,9 @@ public class DeleteHandler implements Writable {
         }
         for (Predicate condition : conditions) {
             SlotRef slotRef = getSlotRef(condition);
+            if (slotRef == null) {
+                throw new DdlException("unsupported delete condition:" + condition);
+            }
             String columnName = slotRef.getColumnName();
             if (!nameToColumn.containsKey(columnName)) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_FIELD_ERROR, columnName, table.getName());

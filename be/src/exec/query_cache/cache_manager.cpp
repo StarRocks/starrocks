@@ -1,9 +1,21 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "exec/query_cache/cache_manager.h"
 
 #include "util/defer_op.h"
-namespace starrocks {
-namespace query_cache {
+namespace starrocks::query_cache {
 
 CacheManager::CacheManager(size_t capacity) : _cache(capacity) {}
 static void delete_cache_entry(const CacheKey& key, void* value) {
@@ -12,12 +24,9 @@ static void delete_cache_entry(const CacheKey& key, void* value) {
 }
 
 Status CacheManager::populate(const std::string& key, const CacheValue& value) {
-    CacheValue* cache_value = new CacheValue(value);
+    auto* cache_value = new CacheValue(value);
     auto* handle = _cache.insert(key, cache_value, cache_value->size(), &delete_cache_entry, CachePriority::NORMAL);
     DeferOp defer([this, handle]() { _cache.release(handle); });
-    if (_cache.get_memory_usage() > _cache.get_capacity()) {
-        _cache.prune();
-    }
     return handle != nullptr ? Status::OK() : Status::InternalError("Insert failure");
 }
 
@@ -29,7 +38,7 @@ StatusOr<CacheValue> CacheManager::probe(const std::string& key) {
         return CACHE_MISS;
     }
     DeferOp defer([this, handle]() { _cache.release(handle); });
-    CacheValue cache_value = *reinterpret_cast<CacheValue*>(_cache.value(handle));
+    CacheValue cache_value(*reinterpret_cast<CacheValue*>(_cache.value(handle)));
     return cache_value;
 }
 
@@ -41,5 +50,19 @@ size_t CacheManager::capacity() {
     return _cache.get_capacity();
 }
 
-} // namespace query_cache
-} // namespace starrocks
+size_t CacheManager::lookup_count() {
+    return _cache.get_lookup_count();
+}
+
+size_t CacheManager::hit_count() {
+    return _cache.get_hit_count();
+}
+
+void CacheManager::invalidate_all() {
+    auto old_capacity = _cache.get_capacity();
+    // set capacity of cache to zero, the cache shall prune all cache entries.
+    _cache.set_capacity(0);
+    _cache.set_capacity(old_capacity);
+}
+
+} // namespace starrocks::query_cache

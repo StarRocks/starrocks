@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/olap/rowset/segment_v2/column_reader.h
 
@@ -47,11 +60,7 @@
 namespace starrocks {
 
 class BlockCompressionCodec;
-class ColumnBlock;
-class ColumnBlockView;
-class ColumnVectorBatch;
 class MemTracker;
-class WrapperField;
 
 namespace vectorized {
 class ColumnPredicate;
@@ -62,7 +71,7 @@ class ZoneMapDetail;
 class BitmapIndexIterator;
 class BitmapIndexReader;
 class ColumnIterator;
-class ColumnIteratorOptions;
+struct ColumnIteratorOptions;
 class EncodingInfo;
 class PageDecoder;
 class PagePointer;
@@ -121,7 +130,7 @@ public:
     ZoneMapPB* segment_zone_map() const { return _segment_zone_map.get(); }
 
     PagePointer get_dict_page_pointer() const { return _dict_page_pointer; }
-    FieldType column_type() const { return _column_type; }
+    LogicalType column_type() const { return _column_type; }
     bool has_all_dict_encoded() const { return _flags & kHasAllDictEncodedMask; }
     bool all_dict_encoded() const { return _flags & kAllDictEncodedMask; }
 
@@ -181,7 +190,7 @@ private:
     // ColumnReader will be resident in memory. When there are many columns in the table,
     // the meta in ColumnReader takes up a lot of memory,
     // and now the content that is not needed in Meta is not saved to ColumnReader
-    FieldType _column_type = OLAP_FIELD_TYPE_UNKNOWN;
+    LogicalType _column_type = TYPE_UNKNOWN;
     PagePointer _dict_page_pointer;
     uint64_t _total_mem_footprint = 0;
 

@@ -1,5 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "connector/connector.h"
 
 #include "connector/es_connector.h"
@@ -9,8 +21,7 @@
 #include "connector/lake_connector.h"
 #include "connector/mysql_connector.h"
 
-namespace starrocks {
-namespace connector {
+namespace starrocks::connector {
 
 static ConnectorManager _global_default_instance;
 
@@ -50,5 +61,25 @@ public:
 
 static ConnectorManagerInit _init;
 
-} // namespace connector
-} // namespace starrocks
+Status DataSource::parse_runtime_filters(RuntimeState* state) {
+    if (_runtime_filters == nullptr || _runtime_filters->size() == 0) return Status::OK();
+    for (const auto& item : _runtime_filters->descriptors()) {
+        vectorized::RuntimeFilterProbeDescriptor* probe = item.second;
+        const vectorized::JoinRuntimeFilter* filter = probe->runtime_filter();
+        if (filter == nullptr) continue;
+        SlotId slot_id;
+        if (!probe->is_probe_slot_ref(&slot_id)) continue;
+        LogicalType slot_type = probe->probe_expr_type();
+        Expr* min_max_predicate = nullptr;
+        vectorized::RuntimeFilterHelper::create_min_max_value_predicate(state->obj_pool(), slot_id, slot_type, filter,
+                                                                        &min_max_predicate);
+        if (min_max_predicate != nullptr) {
+            ExprContext* ctx = state->obj_pool()->add(new ExprContext(min_max_predicate));
+            RETURN_IF_ERROR(ctx->prepare(state));
+            RETURN_IF_ERROR(ctx->open(state));
+            _conjunct_ctxs.insert(_conjunct_ctxs.begin(), ctx);
+        }
+    }
+    return Status::OK();
+}
+} // namespace starrocks::connector

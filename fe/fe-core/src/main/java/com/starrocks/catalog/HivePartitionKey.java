@@ -2,7 +2,7 @@
 
 package com.starrocks.catalog;
 
-import com.starrocks.external.hive.HiveMetaClient;
+import com.starrocks.connector.hive.HiveMetaClient;
 
 public class HivePartitionKey extends PartitionKey implements NullablePartitionKey {
     public HivePartitionKey() {

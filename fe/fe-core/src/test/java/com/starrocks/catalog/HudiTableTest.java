@@ -5,9 +5,9 @@ package com.starrocks.catalog;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.DdlException;
-import com.starrocks.external.ColumnTypeConverter;
-import com.starrocks.external.hive.HiveMetaClient;
-import com.starrocks.external.hive.HiveMetastoreTest;
+import com.starrocks.connector.ColumnTypeConverter;
+import com.starrocks.connector.hive.HiveMetaClient;
+import com.starrocks.connector.hive.HiveMetastoreTest;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -166,13 +166,13 @@ public class HudiTableTest {
                 Schema.createArray(Schema.create(Schema.Type.INT))),
                 new ArrayType(ScalarType.createType(PrimitiveType.INT)));
         Assert.assertEquals(ColumnTypeConverter.fromHudiType(
-                Schema.createFixed("FIXED", "FIXED", "F", 1)),
+                        Schema.createFixed("FIXED", "FIXED", "F", 1)),
                 ScalarType.createType(PrimitiveType.VARCHAR));
         Assert.assertEquals(ColumnTypeConverter.fromHudiType(
-                Schema.createMap(Schema.create(Schema.Type.INT))),
-                ScalarType.createType(PrimitiveType.UNKNOWN_TYPE));
+                        Schema.createMap(Schema.create(Schema.Type.INT))),
+                new MapType(ScalarType.createDefaultString(), ScalarType.createType(PrimitiveType.INT)));
         Assert.assertEquals(ColumnTypeConverter.fromHudiType(
-                Schema.createUnion(Schema.create(Schema.Type.INT))),
+                        Schema.createUnion(Schema.create(Schema.Type.INT))),
                 ScalarType.createType(PrimitiveType.INT));
     }
 }

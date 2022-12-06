@@ -26,6 +26,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
+import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.TraceManager;
@@ -198,12 +199,12 @@ public abstract class AlterJobV2 implements Writable {
     }
 
     /**
-     * should be call before executing the job.
+     * should be called before executing the job.
      * return false if table is not stable.
      */
     protected boolean checkTableStable(Database db) throws AlterCancelException {
         OlapTable tbl;
-        boolean isStable;
+        long unHealthyTabletId = TabletInvertedIndex.NOT_EXIST_VALUE;
         db.readLock();
         try {
             tbl = (OlapTable) db.getTable(tableId);
@@ -211,7 +212,7 @@ public abstract class AlterJobV2 implements Writable {
                 throw new AlterCancelException("Table " + tableId + " does not exist");
             }
 
-            isStable = tbl.isStable(GlobalStateMgr.getCurrentSystemInfo(),
+            unHealthyTabletId = tbl.checkAndGetUnhealthyTablet(GlobalStateMgr.getCurrentSystemInfo(),
                     GlobalStateMgr.getCurrentState().getTabletScheduler());
         } finally {
             db.readUnlock();
@@ -219,8 +220,8 @@ public abstract class AlterJobV2 implements Writable {
 
         db.writeLock();
         try {
-            if (!isStable) {
-                errMsg = "table is unstable";
+            if (unHealthyTabletId != TabletInvertedIndex.NOT_EXIST_VALUE) {
+                errMsg = "table is unstable, unhealthy (or doing balance) tablet id: " + unHealthyTabletId;
                 LOG.warn("wait table {} to be stable before doing {} job", tableId, type);
                 tbl.setState(OlapTableState.WAITING_STABLE);
                 return false;

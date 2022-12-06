@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/util/thread.h
 
@@ -26,6 +39,7 @@
 
 #include <atomic>
 #include <thread>
+#include <utility>
 
 #include "common/status.h"
 #include "gutil/ref_counted.h"
@@ -149,17 +163,11 @@ private:
 
     // User function to be executed by this thread.
     typedef std::function<void()> ThreadFunctor;
-    Thread(const std::string& category, const std::string& name, ThreadFunctor functor)
-            : _thread(0),
-              _tid(INVALID_TID),
-              _functor(std::move(functor)),
-              _category(category),
-              _name(name),
-              _done(1),
-              _joinable(false) {}
+    Thread(std::string category, std::string name, ThreadFunctor functor)
+            : _functor(std::move(functor)), _category(std::move(category)), _name(std::move(name)), _done(1) {}
 
     // Library-specific thread ID.
-    pthread_t _thread;
+    pthread_t _thread{0};
 
     // OS-specific thread ID. Once the constructor finishes start_thread(),
     // guaranteed to be set either to a non-negative integer, or to INVALID_TID.
@@ -170,7 +178,7 @@ private:
     //    thread has not yet begun running. Therefore the TID is not yet known
     //    but it will be set once the thread starts.
     // 3. <positive value>: the thread is running.
-    int64_t _tid;
+    int64_t _tid{INVALID_TID};
 
     const ThreadFunctor _functor;
 
@@ -184,7 +192,7 @@ private:
     // alive when a Joiner finishes.
     CountDownLatch _done;
 
-    bool _joinable;
+    bool _joinable{false};
 
     // Thread local pointer to the current thread of execution. Will be NULL if the current
     // thread is not a Thread.

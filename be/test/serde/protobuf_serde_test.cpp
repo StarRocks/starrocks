@@ -1,13 +1,25 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "serde/protobuf_serde.h"
 
 #include <gtest/gtest.h>
 
 #include "column/chunk.h"
-#include "column/field.h"
 #include "column/fixed_length_column.h"
-#include "column/schema.h"
+#include "column/vectorized_field.h"
+#include "column/vectorized_schema.h"
 #include "runtime/types.h"
 #include "testutil/parallel_test.h"
 
@@ -19,21 +31,21 @@ std::string make_string(size_t i) {
     return std::string("c").append(std::to_string(static_cast<int32_t>(i)));
 }
 
-vectorized::FieldPtr make_field(size_t i) {
-    return std::make_shared<vectorized::Field>(i, make_string(i), get_type_info(OLAP_FIELD_TYPE_INT), false);
+vectorized::VectorizedFieldPtr make_field(size_t i) {
+    return std::make_shared<vectorized::VectorizedField>(i, make_string(i), get_type_info(TYPE_INT), false);
 }
 
-vectorized::Fields make_fields(size_t size) {
-    vectorized::Fields fields;
+vectorized::VectorizedFields make_fields(size_t size) {
+    vectorized::VectorizedFields fields;
     for (size_t i = 0; i < size; i++) {
         fields.emplace_back(make_field(i));
     }
     return fields;
 }
 
-vectorized::SchemaPtr make_schema(size_t i) {
-    vectorized::Fields fields = make_fields(i);
-    return std::make_shared<vectorized::Schema>(fields);
+vectorized::VectorizedSchemaPtr make_schema(size_t i) {
+    vectorized::VectorizedFields fields = make_fields(i);
+    return std::make_shared<vectorized::VectorizedSchema>(fields);
 }
 
 vectorized::ColumnPtr make_column(size_t start) {
@@ -67,8 +79,8 @@ PARALLEL_TEST(ProtobufChunkSerde, test_serde) {
     meta.is_nulls.resize(2, false);
     meta.is_consts.resize(2, false);
     meta.types.resize(2);
-    meta.types[0] = TypeDescriptor(PrimitiveType::TYPE_INT);
-    meta.types[1] = TypeDescriptor(PrimitiveType::TYPE_INT);
+    meta.types[0] = TypeDescriptor(LogicalType::TYPE_INT);
+    meta.types[1] = TypeDescriptor(LogicalType::TYPE_INT);
 
     ProtobufChunkDeserializer deserializer(meta);
     auto chunk_or = deserializer.deserialize(serialized_data);

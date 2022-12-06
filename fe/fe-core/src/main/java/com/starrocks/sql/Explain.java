@@ -53,13 +53,16 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ArrayElementOperator;
+import com.starrocks.sql.optimizer.operator.physical.stream.PhysicalStreamAggOperator;
+import com.starrocks.sql.optimizer.operator.physical.stream.PhysicalStreamJoinOperator;
+import com.starrocks.sql.optimizer.operator.physical.stream.PhysicalStreamScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BetweenPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -638,6 +641,64 @@ public class Explain {
             return new OperatorStr(sb.toString(), context.step,
                     buildChildOperatorStr(optExpression, context.step));
         }
+
+        @Override
+        public OperatorStr visitPhysicalStreamAgg(OptExpression optExpression, ExplainContext context) {
+            OperatorStr child = visit(optExpression.inputAt(0), new ExplainContext(context.step + 1));
+            PhysicalStreamAggOperator aggregate = (PhysicalStreamAggOperator) optExpression.getOp();
+            StringBuilder sb = new StringBuilder();
+            sb.append("- StreamAgg[").append(aggregate.getGroupBys().stream().map(c -> new ExpressionPrinter().print(c))
+                    .collect(Collectors.joining(", "))).append("]");
+            sb.append(buildOutputColumns(aggregate, ""));
+            sb.append("\n");
+
+            buildCostEstimate(sb, optExpression, context.step);
+
+            for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggregate.getAggregations().entrySet()) {
+                String analyticCallString =
+                        new ExpressionPrinter().print(entry.getKey()) + " := " +
+                                new ExpressionPrinter().print(entry.getValue());
+                buildOperatorProperty(sb, analyticCallString, context.step);
+            }
+
+            buildCommonProperty(sb, aggregate, context.step);
+            return new OperatorStr(sb.toString(), context.step, Collections.singletonList(child));
+        }
+
+        @Override
+        public OperatorStr visitPhysicalStreamJoin(OptExpression optExpression, ExplainContext context) {
+            OperatorStr left = visit(optExpression.getInputs().get(0), new ExplainContext(context.step + 1));
+            OperatorStr right = visit(optExpression.getInputs().get(1), new ExplainContext(context.step + 1));
+
+            PhysicalStreamJoinOperator join = (PhysicalStreamJoinOperator) optExpression.getOp();
+            StringBuilder sb = new StringBuilder("- StreamJoin/").append(join.getJoinType());
+            if (!join.getJoinType().isCrossJoin()) {
+                sb.append(" [").append(new ExpressionPrinter().print(join.getOnPredicate())).append("]");
+            }
+            sb.append(buildOutputColumns(join, ""));
+            sb.append("\n");
+            buildCostEstimate(sb, optExpression, context.step);
+            buildCommonProperty(sb, join, context.step);
+            return new OperatorStr(sb.toString(), context.step, Arrays.asList(left, right));
+        }
+
+        @Override
+        public OperatorStr visitPhysicalStreamScan(OptExpression optExpression, ExplainContext context) {
+            PhysicalStreamScanOperator scan = (PhysicalStreamScanOperator) optExpression.getOp();
+
+            StringBuilder sb = new StringBuilder("- SCAN [")
+                    .append(((OlapTable) scan.getTable()).getName())
+                    .append("]")
+                    .append(buildOutputColumns(scan,
+                            "[" + scan.getOutputColumns().stream().map(new ExpressionPrinter()::print)
+                                    .collect(Collectors.joining(", ")) + "]"))
+                    .append("\n");
+
+            buildCostEstimate(sb, optExpression, context.step);
+            buildCommonProperty(sb, scan, context.step);
+
+            return new OperatorStr(sb.toString(), context.step, Collections.emptyList());
+        }
     }
 
     public static class ExpressionPrinter
@@ -680,8 +741,8 @@ public class Explain {
         }
 
         @Override
-        public String visitArrayElement(ArrayElementOperator array, Void context) {
-            return array.getChildren().stream().map(this::print).collect(Collectors.joining(", "));
+        public String visitCollectionElement(CollectionElementOperator collectSubOp, Void context) {
+            return collectSubOp.getChildren().stream().map(this::print).collect(Collectors.joining(", "));
         }
 
         @Override

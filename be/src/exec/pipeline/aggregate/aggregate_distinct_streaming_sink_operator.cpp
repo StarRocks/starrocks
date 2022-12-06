@@ -1,6 +1,20 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "aggregate_distinct_streaming_sink_operator.h"
+
+#include <variant>
 
 #include "runtime/current_thread.h"
 #include "simd/simd.h"
@@ -59,18 +73,8 @@ Status AggregateDistinctStreamingSinkOperator::_push_chunk_by_force_streaming() 
 
 Status AggregateDistinctStreamingSinkOperator::_push_chunk_by_force_preaggregation(const size_t chunk_size) {
     SCOPED_TIMER(_aggregator->agg_compute_timer());
-    if (false) {
-    }
-#define HASH_MAP_METHOD(NAME)                                                                                          \
-    else if (_aggregator->hash_set_variant().type == vectorized::AggHashSetVariant::Type::NAME) {                      \
-        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_set<decltype(_aggregator->hash_set_variant().NAME)::element_type>( \
-                *_aggregator->hash_set_variant().NAME, chunk_size));                                                   \
-    }
-    APPLY_FOR_AGG_VARIANT_ALL(HASH_MAP_METHOD)
-#undef HASH_MAP_METHOD
-    else {
-        DCHECK(false);
-    }
+
+    _aggregator->build_hash_set(chunk_size);
 
     COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_set_variant().size());
 
@@ -91,19 +95,7 @@ Status AggregateDistinctStreamingSinkOperator::_push_chunk_by_auto(const size_t 
                                                       _aggregator->hash_set_variant().size())) {
         // hash table is not full or allow expand the hash table according reduction rate
         SCOPED_TIMER(_aggregator->agg_compute_timer());
-        if (false) {
-        }
-#define HASH_MAP_METHOD(NAME)                                                                                          \
-    else if (_aggregator->hash_set_variant().type == vectorized::AggHashSetVariant::Type::NAME) {                      \
-        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_set<decltype(_aggregator->hash_set_variant().NAME)::element_type>( \
-                *_aggregator->hash_set_variant().NAME, chunk_size));                                                   \
-    }
-        APPLY_FOR_AGG_VARIANT_ALL(HASH_MAP_METHOD)
-#undef HASH_MAP_METHOD
-        else {
-            DCHECK(false);
-        }
-
+        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_set(chunk_size));
         COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_set_variant().size());
 
         _mem_tracker->set(_aggregator->hash_set_variant().reserved_memory_usage(_aggregator->mem_pool()));
@@ -111,19 +103,7 @@ Status AggregateDistinctStreamingSinkOperator::_push_chunk_by_auto(const size_t 
     } else {
         {
             SCOPED_TIMER(_aggregator->agg_compute_timer());
-            if (false) {
-            }
-#define HASH_MAP_METHOD(NAME)                                                                     \
-    else if (_aggregator->hash_set_variant().type == vectorized::AggHashSetVariant::Type::NAME) { \
-        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_set_with_selection<typename decltype(         \
-                                    _aggregator->hash_set_variant().NAME)::element_type>(         \
-                *_aggregator->hash_set_variant().NAME, chunk_size));                              \
-    }
-            APPLY_FOR_AGG_VARIANT_ALL(HASH_MAP_METHOD)
-#undef HASH_MAP_METHOD
-            else {
-                DCHECK(false);
-            }
+            TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_set_with_selection(chunk_size));
         }
 
         {

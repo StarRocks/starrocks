@@ -46,6 +46,17 @@ public final class GlobalVariable {
     public static final String DEFAULT_ROWSET_TYPE = "default_rowset_type";
     public static final String CHARACTER_SET_DATABASE = "character_set_database";
 
+    public static final String ENABLE_QUERY_QUEUE_SELECT = "enable_query_queue_select";
+    public static final String ENABLE_QUERY_QUEUE_STATISTIC = "enable_query_queue_statistic";
+    public static final String ENABLE_QUERY_QUEUE_LOAD = "enable_query_queue_load";
+    public static final String QUERY_QUEUE_FRESH_RESOURCE_USAGE_INTERVAL_MS =
+            "query_queue_fresh_resource_usage_interval_ms";
+    public static final String QUERY_QUEUE_CONCURRENCY_LIMIT = "query_queue_concurrency_limit";
+    public static final String QUERY_QUEUE_MEM_USED_PCT_LIMIT = "query_queue_mem_used_pct_limit";
+    public static final String QUERY_QUEUE_CPU_USED_PERMILLE_LIMIT = "query_queue_cpu_used_permille_limit";
+    public static final String QUERY_QUEUE_PENDING_TIMEOUT_SECOND = "query_queue_pending_timeout_second";
+    public static final String QUERY_QUEUE_MAX_QUEUED_QUERIES = "query_queue_max_queued_queries";
+
     @VariableMgr.VarAttr(name = VERSION_COMMENT, flag = VariableMgr.READ_ONLY)
     public static String versionComment = "StarRocks version " + Version.STARROCKS_VERSION;
 
@@ -86,6 +97,135 @@ public final class GlobalVariable {
     // Compatible with jdbc that version > 8.0.15
     @VariableMgr.VarAttr(name = "performance_schema", flag = VariableMgr.READ_ONLY)
     private static boolean performanceSchema = false;
+
+    /**
+     * Query will be pending when BE is overloaded, if `enableQueryQueueXxx` is true.
+     * <p>
+     * If the number of running queries of any BE `exceeds queryQueueConcurrencyLimit`,
+     * or memory usage rate of any BE exceeds `queryQueueMemUsedPctLimit`,
+     * the current query will be pending or failed:
+     * - if the number of pending queries in this FE exceeds `queryQueueMaxQueuedQueries`,
+     * the query will be failed.
+     * - otherwise, the query will be pending until all the BEs aren't overloaded anymore
+     * or timeout `queryQueuePendingTimeoutSecond`.
+     * <p>
+     * Every BE reports at interval the resources containing the number of running queries and memory usage rate
+     * to the FE leader. And the FE leader synchronizes the resource usage info to FE followers by RPC.
+     * <p>
+     * The queries only using schema meta will never been queued, because a MySQL client will
+     * query schema meta after the connection is established.
+     */
+    @VariableMgr.VarAttr(name = ENABLE_QUERY_QUEUE_SELECT, flag = VariableMgr.GLOBAL)
+    private static boolean enableQueryQueueSelect = false;
+    @VariableMgr.VarAttr(name = ENABLE_QUERY_QUEUE_STATISTIC, flag = VariableMgr.GLOBAL)
+    private static boolean enableQueryQueueStatistic = false;
+    @VariableMgr.VarAttr(name = ENABLE_QUERY_QUEUE_LOAD, flag = VariableMgr.GLOBAL)
+    private static boolean enableQueryQueueLoad = false;
+    // Use the resource usage, only when the duration from the last report is within this interval.
+    @VariableMgr.VarAttr(name = QUERY_QUEUE_FRESH_RESOURCE_USAGE_INTERVAL_MS, flag = VariableMgr.GLOBAL)
+    private static long queryQueueResourceUsageIntervalMs = 5000;
+    // Effective iff it is positive.
+    @VariableMgr.VarAttr(name = QUERY_QUEUE_CONCURRENCY_LIMIT, flag = VariableMgr.GLOBAL)
+    private static int queryQueueConcurrencyLimit = 0;
+    // Effective iff it is positive.
+    @VariableMgr.VarAttr(name = QUERY_QUEUE_MEM_USED_PCT_LIMIT, flag = VariableMgr.GLOBAL)
+    private static double queryQueueMemUsedPctLimit = 0;
+    // Effective iff it is positive.
+    @VariableMgr.VarAttr(name = QUERY_QUEUE_CPU_USED_PERMILLE_LIMIT, flag = VariableMgr.GLOBAL)
+    private static int queryQueueCpuUsedPermilleLimit = 0;
+    @VariableMgr.VarAttr(name = QUERY_QUEUE_PENDING_TIMEOUT_SECOND, flag = VariableMgr.GLOBAL)
+    private static int queryQueuePendingTimeoutSecond = 300;
+    // Unlimited iff it is non-positive.
+    @VariableMgr.VarAttr(name = QUERY_QUEUE_MAX_QUEUED_QUERIES, flag = VariableMgr.GLOBAL)
+    private static int queryQueueMaxQueuedQueries = 1024;
+
+    public static boolean isEnableQueryQueueSelect() {
+        return enableQueryQueueSelect;
+    }
+
+    public static void setEnableQueryQueueSelect(boolean enableQueryQueueSelect) {
+        GlobalVariable.enableQueryQueueSelect = enableQueryQueueSelect;
+    }
+
+    public static boolean isEnableQueryQueueStatistic() {
+        return enableQueryQueueStatistic;
+    }
+
+    public static void setEnableQueryQueueStatistic(boolean enableQueryQueueStatistic) {
+        GlobalVariable.enableQueryQueueStatistic = enableQueryQueueStatistic;
+    }
+
+    public static boolean isEnableQueryQueueLoad() {
+        return enableQueryQueueLoad;
+    }
+
+    public static void setEnableQueryQueueLoad(boolean enableQueryQueueLoad) {
+        GlobalVariable.enableQueryQueueLoad = enableQueryQueueLoad;
+    }
+
+    public static long getQueryQueueResourceUsageIntervalMs() {
+        return queryQueueResourceUsageIntervalMs;
+    }
+
+    public static void setQueryQueueResourceUsageIntervalMs(long queryQueueResourceUsageIntervalMs) {
+        GlobalVariable.queryQueueResourceUsageIntervalMs = queryQueueResourceUsageIntervalMs;
+    }
+
+    public static boolean isQueryQueueConcurrencyLimitEffective() {
+        return queryQueueConcurrencyLimit > 0;
+    }
+
+    public static int getQueryQueueConcurrencyLimit() {
+        return queryQueueConcurrencyLimit;
+    }
+
+    public static void setQueryQueueConcurrencyLimit(int queryQueueConcurrencyLimit) {
+        GlobalVariable.queryQueueConcurrencyLimit = queryQueueConcurrencyLimit;
+    }
+
+    public static boolean isQueryQueueMemUsedPctLimitEffective() {
+        return queryQueueMemUsedPctLimit > 0;
+    }
+
+    public static double getQueryQueueMemUsedPctLimit() {
+        return queryQueueMemUsedPctLimit;
+    }
+
+    public static void setQueryQueueMemUsedPctLimit(double queryQueueMemUsedPctLimit) {
+        GlobalVariable.queryQueueMemUsedPctLimit = queryQueueMemUsedPctLimit;
+    }
+
+    public static boolean isQueryQueueCpuUsedPermilleLimitEffective() {
+        return queryQueueCpuUsedPermilleLimit > 0;
+    }
+
+    public static int getQueryQueueCpuUsedPermilleLimit() {
+        return queryQueueCpuUsedPermilleLimit;
+    }
+
+    public static void setQueryQueueCpuUsedPermilleLimit(int queryQueueCpuUsedPermilleLimit) {
+        GlobalVariable.queryQueueCpuUsedPermilleLimit = queryQueueCpuUsedPermilleLimit;
+    }
+
+    public static int getQueryQueuePendingTimeoutSecond() {
+        return queryQueuePendingTimeoutSecond;
+    }
+
+    public static void setQueryQueuePendingTimeoutSecond(int queryQueuePendingTimeoutSecond) {
+        GlobalVariable.queryQueuePendingTimeoutSecond = queryQueuePendingTimeoutSecond;
+    }
+
+    public static boolean isQueryQueueMaxQueuedQueriesEffective() {
+        return queryQueueMaxQueuedQueries > 0;
+    }
+
+    public static int getQueryQueueMaxQueuedQueries() {
+        return queryQueueMaxQueuedQueries;
+    }
+
+    public static void setQueryQueueMaxQueuedQueries(int queryQueueMaxQueuedQueries) {
+        GlobalVariable.queryQueueMaxQueuedQueries = queryQueueMaxQueuedQueries;
+    }
 
     // Don't allow create instance.
     private GlobalVariable() {

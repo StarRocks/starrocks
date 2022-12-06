@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/orc/tree/main/c++/src/Vector.cc
 
@@ -340,10 +353,14 @@ uint32_t build_filter_on_offsets(uint8_t* f_data, uint32_t f_size, DataBuffer<in
     p->assign(total_size, 0);
     uint8_t* filter = p->data();
     int64_t true_size = 0;
+    int32_t cur_select = 1;
     for (uint32_t i = 0; i < f_size; i++) {
         if (f_data[i] == 0) continue;
         memset(filter + offsets[i], 0x1, offsets[i + 1] - offsets[i]);
         true_size += offsets[i + 1] - offsets[i];
+        // update the offsets
+        offsets[cur_select] = offsets[cur_select - 1] + offsets[i + 1] - offsets[i];
+        cur_select++;
     }
     return static_cast<uint32_t>(true_size);
 }
@@ -352,7 +369,7 @@ void ListVectorBatch::filter(uint8_t* f_data, uint32_t f_size, uint32_t true_siz
     ColumnVectorBatch::filter(f_data, f_size, true_size);
     std::vector<uint8_t> p;
     uint32_t true_count = build_filter_on_offsets(f_data, f_size, offsets, &p);
-    uint32_t size = static_cast<uint32_t>(p.size());
+    auto size = static_cast<uint32_t>(p.size());
     elements->filter(p.data(), size, true_count);
 }
 
@@ -398,7 +415,7 @@ void MapVectorBatch::filter(uint8_t* f_data, uint32_t f_size, uint32_t true_size
     ColumnVectorBatch::filter(f_data, f_size, true_size);
     std::vector<uint8_t> p;
     uint32_t true_count = build_filter_on_offsets(f_data, f_size, offsets, &p);
-    uint32_t size = static_cast<uint32_t>(p.size());
+    auto size = static_cast<uint32_t>(p.size());
     keys->filter(p.data(), size, true_count);
     elements->filter(p.data(), size, true_count);
 }

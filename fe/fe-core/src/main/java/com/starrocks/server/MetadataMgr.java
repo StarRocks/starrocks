@@ -5,15 +5,18 @@ package com.starrocks.server;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.DdlException;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMgr;
+import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
-import com.starrocks.external.RemoteFileInfo;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
@@ -39,7 +42,7 @@ public class MetadataMgr {
         this.connectorMgr = connectorMgr;
     }
 
-    private Optional<ConnectorMetadata> getOptionalMetadata(String catalogName) {
+    protected Optional<ConnectorMetadata> getOptionalMetadata(String catalogName) {
         if (CatalogMgr.isInternalCatalog(catalogName)) {
             return Optional.of(localMetastore);
         } else {
@@ -144,9 +147,23 @@ public class MetadataMgr {
         return ImmutableList.copyOf(files.build());
     }
 
-    public void refreshTable(String catalogName, String dbName, String tableName, Table table, List<String> partitionNames) {
+    public void dropTable(String catalogName, String dbName, String tblName) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
-        connectorMetadata.ifPresent(metadata -> metadata.refreshTable(dbName, tableName, table, partitionNames));
+        connectorMetadata.ifPresent(metadata -> {
+            TableName tableName = new TableName(catalogName, dbName, tblName);
+            DropTableStmt dropTableStmt = new DropTableStmt(false, tableName, false);
+            try {
+                metadata.dropTable(dropTableStmt);
+            } catch (DdlException e) {
+                LOG.error("Failed to drop table {}.{}.{}", catalogName, dbName, tblName, e);
+                throw new StarRocksConnectorException("Failed to drop table {}.{}.{}", catalogName, dbName, tblName);
+            }
+        });
+    }
+
+    public void refreshTable(String catalogName, String srDbName, Table table, List<String> partitionNames) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+        connectorMetadata.ifPresent(metadata -> metadata.refreshTable(srDbName, table, partitionNames));
     }
 
     private class QueryMetadatas {

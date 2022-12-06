@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -28,7 +40,7 @@ public:
     using tablet_rowid_t = uint64_t;
 
     PrimaryIndex();
-    PrimaryIndex(const vectorized::Schema& pk_schema);
+    PrimaryIndex(const vectorized::VectorizedSchema& pk_schema);
     ~PrimaryIndex();
 
     // Fetch all primary keys from the tablet associated with this index into memory
@@ -54,6 +66,9 @@ public:
     //
     // [not thread-safe]
     void upsert(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks, DeletesMap* deletes);
+
+    void upsert(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks, uint32_t idx_begin,
+                uint32_t idx_end, DeletesMap* deletes);
 
     // TODO(qzc): maybe unused, remove it or refactor it with the methods in use by template after a period of time
     // used for compaction, try replace input rowsets' rowid with output segment's rowid, if
@@ -117,7 +132,7 @@ public:
     size_t key_size() { return _key_size; }
 
 private:
-    void _set_schema(const vectorized::Schema& pk_schema);
+    void _set_schema(const vectorized::VectorizedSchema& pk_schema);
 
     Status _do_load(Tablet* tablet);
 
@@ -127,12 +142,13 @@ private:
     Status _build_persistent_values(uint32_t rssid, const vector<uint32_t>& rowids, uint32_t idx_begin,
                                     uint32_t idx_end, std::vector<uint64_t>* values) const;
 
-    const Slice* _build_persistent_keys(const vectorized::Column& pks, std::vector<Slice>* key_slices) const;
+    const Slice* _build_persistent_keys(const vectorized::Column& pks, uint32_t idx_begin, uint32_t idx_end,
+                                        std::vector<Slice>* key_slices) const;
 
     Status _insert_into_persistent_index(uint32_t rssid, const vector<uint32_t>& rowids, const vectorized::Column& pks);
 
     void _upsert_into_persistent_index(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks,
-                                       DeletesMap* deletes);
+                                       uint32_t idx_begin, uint32_t idx_end, DeletesMap* deletes);
 
     void _erase_persistent_index(const vectorized::Column& key_col, DeletesMap* deletes);
 
@@ -150,8 +166,8 @@ private:
     size_t _key_size = 0;
     int64_t _table_id = 0;
     int64_t _tablet_id = 0;
-    vectorized::Schema _pk_schema;
-    FieldType _enc_pk_type = OLAP_FIELD_TYPE_UNKNOWN;
+    vectorized::VectorizedSchema _pk_schema;
+    LogicalType _enc_pk_type = TYPE_UNKNOWN;
     std::unique_ptr<HashIndex> _pkey_to_rssid_rowid;
     std::unique_ptr<PersistentIndex> _persistent_index;
 };
@@ -161,6 +177,6 @@ inline std::ostream& operator<<(std::ostream& os, const PrimaryIndex& o) {
     return os;
 }
 
-std::unique_ptr<PrimaryIndex> TEST_create_primary_index(const vectorized::Schema& pk_schema);
+std::unique_ptr<PrimaryIndex> TEST_create_primary_index(const vectorized::VectorizedSchema& pk_schema);
 
 } // namespace starrocks

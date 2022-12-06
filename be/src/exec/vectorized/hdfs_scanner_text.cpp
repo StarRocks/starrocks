@@ -1,5 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "exec/vectorized/hdfs_scanner_text.h"
 
 #include "column/column_helper.h"
@@ -92,20 +104,24 @@ Status HdfsScannerCSVReader::_fill_buffer() {
     ASSIGN_OR_RETURN(s.size, _file->read(s.data, s.size));
     _offset += s.size;
     _buff.add_limit(s.size);
-
     if (s.size == 0) {
         size_t n = _buff.available();
         _should_stop_scan = true;
+        // if there is no linger data in buff at all, then we don't need to add a row delimiter. Otherwise we will add a new record.
+        // For example, a single column table like "a\nb\nc\n". if we add a trailing row delimiter, then there will be a "" at last.
+        if (n == 0) return Status::EndOfFile("");
+
         // Has reached the end of file but still no record delimiter found, which
         // is valid, according the RFC, add the record delimiter ourself, ONLY IF we have space.
         // But if we don't have any space, which means a single csv record size has exceed buffer max size.
-        if (n < _row_delimiter_length || _buff.find(_row_delimiter, n - _row_delimiter_length) == nullptr) {
+        if (n >= _row_delimiter_length && _buff.find(_row_delimiter, n - _row_delimiter_length) == nullptr) {
             if (_buff.free_space() >= _row_delimiter_length) {
                 for (char ch : _row_delimiter) {
                     _buff.append(ch);
                 }
             } else {
-                return Status::InternalError("CSV line length exceed limit " + std::to_string(_buff.capacity()));
+                return Status::InternalError("CSV line length exceed limit " + std::to_string(_buff.capacity()) +
+                                             " when padding row delimiter");
             }
         }
     }
@@ -221,6 +237,7 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
     options.array_hive_collection_delimiter = _collection_delimiter;
     options.array_hive_mapkey_delimiter = _mapkey_delimiter;
     options.array_hive_nested_level = 1;
+    options.invalid_field_as_null = true;
 
     for (size_t num_rows = chunk->get()->num_rows(); num_rows < chunk_size; /**/) {
         status = down_cast<HdfsScannerCSVReader*>(_reader.get())->next_record(&record);
@@ -237,9 +254,6 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
         } else if (!status.ok()) {
             LOG(WARNING) << "Status is not ok " << status.get_error_msg();
             return status;
-        } else if (record.empty()) {
-            // always skip blank lines.
-            continue;
         }
 
         fields.clear();
@@ -250,6 +264,7 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
         }
 
         bool has_error = false;
+        std::string error_msg;
         int num_materialize_columns = _scanner_params.materialize_slots.size();
         int field_size = fields.size();
         if (_scanner_params.hive_column_names->size() != field_size) {
@@ -270,6 +285,8 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
                 if (!_converters[j]->read_string(column, field, options)) {
                     LOG(WARNING) << "Converter encountered an error for field " << field.to_string() << ", index "
                                  << index << ", column " << _scanner_params.materialize_slots[j]->debug_string();
+                    error_msg = strings::Substitute("CSV parse column [$0] failed, more details please see be log.",
+                                                    _scanner_params.materialize_slots[j]->debug_string());
                     chunk->get()->set_num_rows(num_rows);
                     has_error = true;
                     break;
@@ -294,13 +311,15 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
                 ColumnPtr partition_value = _scanner_ctx.partition_values[p];
                 DCHECK(partition_value->is_constant());
                 auto* const_column = vectorized::ColumnHelper::as_raw_column<vectorized::ConstColumn>(partition_value);
-                ColumnPtr data_column = const_column->data_column();
+                const ColumnPtr& data_column = const_column->data_column();
                 if (data_column->is_nullable()) {
                     column->append_nulls(1);
                 } else {
                     column->append(*data_column, 0, 1);
                 }
             }
+        } else {
+            return Status::InternalError(error_msg);
         }
     }
     return chunk->get()->num_rows() > 0 ? Status::OK() : Status::EndOfFile("");
@@ -323,7 +342,7 @@ Status HdfsTextScanner::_create_or_reinit_reader() {
         // set current range index to the last one, so next time we reach EOF.
         _current_range_index = _scanner_params.scan_ranges.size() - 1;
         // we don't know real stream size in adavance, so we set a very large stream size
-        size_t file_size = static_cast<size_t>(-1);
+        auto file_size = static_cast<size_t>(-1);
         _reader = std::make_unique<HdfsScannerCSVReader>(_file.get(), _record_delimiter, _field_delimiter, file_size);
         return Status::OK();
     }
@@ -335,7 +354,7 @@ Status HdfsTextScanner::_create_or_reinit_reader() {
                                                          scan_range->file_length);
     }
     {
-        HdfsScannerCSVReader* reader = down_cast<HdfsScannerCSVReader*>(_reader.get());
+        auto* reader = down_cast<HdfsScannerCSVReader*>(_reader.get());
         RETURN_IF_ERROR(reader->reset(scan_range->offset, scan_range->length));
         if (scan_range->offset != 0) {
             // Always skip first record of scan range with non-zero offset.

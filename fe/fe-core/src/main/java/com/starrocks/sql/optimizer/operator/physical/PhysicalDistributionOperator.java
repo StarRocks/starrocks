@@ -48,4 +48,9 @@ public class PhysicalDistributionOperator extends PhysicalOperator {
     public boolean couldApplyStringDict(Set<Integer> childDictColumns) {
         return true;
     }
+
+    @Override
+    public String toString() {
+        return String.format("[optType: %s, distributionSpec: %s]", opType, distributionSpec);
+    }
 }

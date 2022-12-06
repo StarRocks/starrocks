@@ -1,5 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "connector/es_connector.h"
 
 #include "exec/es/es_predicate.h"
@@ -11,8 +23,7 @@
 #include "exprs/expr.h"
 #include "storage/chunk_helper.h"
 
-namespace starrocks {
-namespace connector {
+namespace starrocks::connector {
 using namespace vectorized;
 
 // ================================
@@ -93,7 +104,8 @@ Status ESDataSource::_build_conjuncts() {
     _predicate_idx.reserve(conjunct_sz);
 
     for (int i = 0; i < _conjunct_ctxs.size(); ++i) {
-        EsPredicate* predicate = _pool->add(new EsPredicate(_conjunct_ctxs[i], _tuple_desc, _pool));
+        EsPredicate* predicate =
+                _pool->add(new EsPredicate(_conjunct_ctxs[i], _tuple_desc, _runtime_state->timezone(), _pool));
         predicate->set_field_context(_fields_context);
         status = predicate->build_disjuncts_list(true);
         if (status.ok()) {
@@ -248,5 +260,4 @@ Status ESDataSource::get_next(RuntimeState* state, vectorized::ChunkPtr* chunk) 
     return Status::OK();
 }
 
-} // namespace connector
-} // namespace starrocks
+} // namespace starrocks::connector

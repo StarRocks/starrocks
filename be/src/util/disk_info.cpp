@@ -74,7 +74,7 @@ void DiskInfo::get_device_names() {
         DCHECK(_s_device_id_to_disk_id.find(dev) == _s_device_id_to_disk_id.end());
 
         int disk_id = -1;
-        std::map<std::string, int>::iterator it = _s_disk_name_to_disk_id.find(name);
+        auto it = _s_disk_name_to_disk_id.find(name);
 
         if (it == _s_disk_name_to_disk_id.end()) {
             // First time seeing this disk
@@ -127,7 +127,7 @@ void DiskInfo::init() {
 int DiskInfo::disk_id(const char* path) {
     struct stat s;
     stat(path, &s);
-    std::map<dev_t, int>::iterator it = _s_device_id_to_disk_id.find(s.st_dev);
+    auto it = _s_device_id_to_disk_id.find(s.st_dev);
 
     if (it == _s_device_id_to_disk_id.end()) {
         return -1;

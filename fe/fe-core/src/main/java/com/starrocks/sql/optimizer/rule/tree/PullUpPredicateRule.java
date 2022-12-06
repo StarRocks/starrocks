@@ -18,9 +18,11 @@ import com.starrocks.sql.optimizer.task.TaskContext;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Pulls the predicate up to a position where it cannot go any further, and generates a LogicalFilter there.
@@ -54,7 +56,9 @@ public class PullUpPredicateRule implements TreeRewriteRule {
                 OptExpression c = handleLegacyPredicate(optExpression.getOutputColumns(), child, rewriteContext);
                 optExpression.setChild(childIdx, c);
 
-                context.columnRefToConstant.putAll(rewriteContext.columnRefToConstant);
+                for (BinaryPredicateOperator scalarOperator : rewriteContext.operatorSet) {
+                    context.put(scalarOperator);
+                }
             }
 
             return null;
@@ -64,16 +68,16 @@ public class PullUpPredicateRule implements TreeRewriteRule {
                                                    RewriteContext context) {
             OptExpression root = optExpression;
             if (parentInputColumns != null) {
-                Iterator<Map.Entry<ColumnRefOperator, ScalarOperator>> iterator =
-                        context.columnRefToConstant.entrySet().iterator();
-                while (iterator.hasNext()) {
-                    Map.Entry<ColumnRefOperator, ScalarOperator> entry = iterator.next();
-                    if (!parentInputColumns.contains(entry.getKey())) {
 
+                Iterator<BinaryPredicateOperator> iterator = context.operatorSet.iterator();
+
+                while (iterator.hasNext()) {
+                    BinaryPredicateOperator scalarOperator = iterator.next();
+                    ColumnRefOperator columnRefOperator = (ColumnRefOperator) scalarOperator.getChild(0);
+                    if (!parentInputColumns.contains(columnRefOperator.getId())) {
                         // If the output columns does not contain this predicate,
                         // leave the predicate under this node to provide more possibilities for subsequent predicate push down
-                        root = OptExpression.create(new LogicalFilterOperator(
-                                BinaryPredicateOperator.eq(entry.getKey(), entry.getValue())), root);
+                        root = OptExpression.create(new LogicalFilterOperator(scalarOperator), root);
                         iterator.remove();
                     }
                 }
@@ -89,8 +93,12 @@ public class PullUpPredicateRule implements TreeRewriteRule {
             LogicalFilterOperator filterOperator = (LogicalFilterOperator) optExpression.getOp();
             List<ScalarOperator> inputPredicates = Utils.extractConjuncts(filterOperator.getPredicate());
             for (ScalarOperator scalar : inputPredicates) {
-                if (Utils.isConstantEqualPredicate(scalar)) {
-                    context.columnRefToConstant.put((ColumnRefOperator) scalar.getChild(0), scalar.getChild(1));
+                if (scalar instanceof BinaryPredicateOperator) {
+                    BinaryPredicateOperator binaryPredicateOperator = (BinaryPredicateOperator) scalar;
+                    if (binaryPredicateOperator.getChild(0) instanceof ColumnRefOperator &&
+                            binaryPredicateOperator.getChild(1) instanceof ConstantOperator) {
+                        context.put((BinaryPredicateOperator) scalar);
+                    }
                 }
             }
 
@@ -105,7 +113,7 @@ public class PullUpPredicateRule implements TreeRewriteRule {
             LogicalProjectOperator projectOperator = (LogicalProjectOperator) optExpression.getOp();
             for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projectOperator.getColumnRefMap().entrySet()) {
                 if (entry.getValue() instanceof ConstantOperator && !((ConstantOperator) entry.getValue()).isNull()) {
-                    context.columnRefToConstant.put(entry.getKey(), entry.getValue());
+                    context.put(BinaryPredicateOperator.eq(entry.getKey(), entry.getValue()));
                 }
             }
 
@@ -141,13 +149,11 @@ public class PullUpPredicateRule implements TreeRewriteRule {
             RewriteContext leftChildRewriteContext = new RewriteContext();
             leftChild.getOp().accept(this, leftChild, leftChildRewriteContext);
             if (logicalJoinOperator.getJoinType().isRightOuterJoin()) {
-                for (Map.Entry<ColumnRefOperator, ScalarOperator> entry :
-                        leftChildRewriteContext.columnRefToConstant.entrySet()) {
-                    leftChild = OptExpression.create(
-                            new LogicalFilterOperator(BinaryPredicateOperator.eq(entry.getKey(), entry.getValue())), leftChild);
+                for (BinaryPredicateOperator binaryOp : leftChildRewriteContext.operatorSet) {
+                    leftChild = OptExpression.create(new LogicalFilterOperator(binaryOp), leftChild);
                     optExpression.setChild(0, leftChild);
                 }
-                leftChildRewriteContext.columnRefToConstant.clear();
+                leftChildRewriteContext.clear();
             } else {
                 OptExpression c = handleLegacyPredicate(optExpression.getOutputColumns(), leftChild, leftChildRewriteContext);
                 optExpression.setChild(0, c);
@@ -157,20 +163,26 @@ public class PullUpPredicateRule implements TreeRewriteRule {
             RewriteContext rightChildRewriteContext = new RewriteContext();
             rightChild.getOp().accept(this, rightChild, rightChildRewriteContext);
             if (logicalJoinOperator.getJoinType().isLeftOuterJoin()) {
-                for (Map.Entry<ColumnRefOperator, ScalarOperator> entry :
-                        rightChildRewriteContext.columnRefToConstant.entrySet()) {
-                    rightChild = OptExpression.create(
-                            new LogicalFilterOperator(BinaryPredicateOperator.eq(entry.getKey(), entry.getValue())), rightChild);
+                for (BinaryPredicateOperator binaryOp : rightChildRewriteContext.operatorSet) {
+                    rightChild = OptExpression.create(new LogicalFilterOperator(binaryOp), rightChild);
                     optExpression.setChild(1, rightChild);
                 }
-                rightChildRewriteContext.columnRefToConstant.clear();
+                rightChildRewriteContext.clear();
             } else {
                 OptExpression c = handleLegacyPredicate(optExpression.getOutputColumns(), rightChild, rightChildRewriteContext);
                 optExpression.setChild(1, c);
             }
 
-            context.columnRefToConstant.putAll(leftChildRewriteContext.columnRefToConstant);
-            context.columnRefToConstant.putAll(rightChildRewriteContext.columnRefToConstant);
+            for (BinaryPredicateOperator binaryPredicateOperator : leftChildRewriteContext.operatorSet) {
+                context.put(binaryPredicateOperator);
+            }
+
+            for (BinaryPredicateOperator binaryPredicateOperator : rightChildRewriteContext.operatorSet) {
+                context.put(binaryPredicateOperator);
+            }
+
+            //context.columnRefToConstant.putAll(leftChildRewriteContext.columnRefToConstant);
+            //context.columnRefToConstant.putAll(rightChildRewriteContext.columnRefToConstant);
 
             return null;
         }
@@ -215,18 +227,40 @@ public class PullUpPredicateRule implements TreeRewriteRule {
         }
     }
 
-    static class RewriteContext {
-        public Map<ColumnRefOperator, ScalarOperator> columnRefToConstant = new HashMap<>();
+    private static class RewriteContext {
+        private final Map<ColumnRefOperator, ConstantOperator> columnRefToConstant = new HashMap<>();
+        public Set<BinaryPredicateOperator> operatorSet = new HashSet<>();
+
+
+        public Map<ColumnRefOperator, ConstantOperator> getColumnRefToConstant() {
+            return columnRefToConstant;
+        }
+
+        void put(BinaryPredicateOperator scalarOperator) {
+            operatorSet.add(scalarOperator);
+            if (!(scalarOperator.getChild(1) instanceof ConstantOperator)) {
+                return;
+            }
+
+            if (scalarOperator.getBinaryType().isEqual()) {
+                columnRefToConstant.put((ColumnRefOperator) scalarOperator.getChild(0),
+                        (ConstantOperator) scalarOperator.getChild(1));
+            }
+        }
+
+        void clear() {
+            columnRefToConstant.clear();
+            operatorSet.clear();
+        }
     }
 
     static void convertPredicateToLogicalFilter(OptExpression root, RewriteContext context) {
         //Convert all remaining predicates to LogicalFilter
         OptExpression child = root.inputAt(0);
-        for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : context.columnRefToConstant.entrySet()) {
-            child = OptExpression.create(
-                    new LogicalFilterOperator(BinaryPredicateOperator.eq(entry.getKey(), entry.getValue())), child);
+        for (ScalarOperator scalarOperator : context.operatorSet) {
+            child = OptExpression.create(new LogicalFilterOperator(scalarOperator), child);
             root.setChild(0, child);
         }
-        context.columnRefToConstant.clear();
+        context.clear();
     }
 }

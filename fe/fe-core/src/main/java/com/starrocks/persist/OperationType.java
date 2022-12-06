@@ -199,6 +199,7 @@ public class OperationType {
     public static final short OP_ERASE_MULTI_TABLES = 10004;
     public static final short OP_MODIFY_ENABLE_PERSISTENT_INDEX = 10005;
     public static final short OP_MODIFY_WRITE_QUORUM = 10006;
+    public static final short OP_MODIFY_REPLICATED_STORAGE = 10007;
 
     // statistic 10010 ~ 10020
     public static final short OP_ADD_ANALYZER_JOB = 10010;
@@ -236,10 +237,12 @@ public class OperationType {
     public static final short OP_CREATE_TASK_RUN = 10081;
     public static final short OP_UPDATE_TASK_RUN = 10082;
     public static final short OP_DROP_TASK_RUNS = 10083;
+    public static final short OP_UPDATE_TASK_RUN_STATE = 10084;
 
     // materialized view 10091 ~ 10100
     public static final short OP_RENAME_MATERIALIZED_VIEW = 10091;
     public static final short OP_CHANGE_MATERIALIZED_VIEW_REFRESH_SCHEME = 10092;
+    public static final short OP_ALTER_MATERIALIZED_VIEW_PROPERTIES = 10093;
     public static final short OP_CREATE_MATERIALIZED_VIEW = 10094;
     public static final short OP_CREATE_INSERT_OVERWRITE = 10095;
     public static final short OP_INSERT_OVERWRITE_STATE_CHANGE = 10096;
@@ -262,13 +265,14 @@ public class OperationType {
     // only used in lake table currently
     public static final short OP_ADD_PARTITIONS_V2 = 10242;
 
-    // new privilege, all endswith V2
+    // new privilege, all ends with V2
     public static final short OP_CREATE_USER_V2 = 10261;
     public static final short OP_UPDATE_USER_PRIVILEGE_V2 = 10262;
     public static final short OP_ALTER_USER_V2 = 10263;
     public static final short OP_DROP_USER_V2 = 10264;
     public static final short OP_UPDATE_ROLE_PRIVILEGE_V2 = 10265;
     public static final short OP_DROP_ROLE_V2 = 10266;
+    public static final short OP_AUTH_UPGRDE_V2 = 10267;
 
     // integrate with starmgr
     public static final short OP_STARMGR = 11000;
@@ -276,4 +280,10 @@ public class OperationType {
     // alter load
     public static final short OP_ALTER_LOAD_JOB = 11100;
 
+    // stream load
+    public static final short OP_CREATE_STREAM_LOAD_TASK = 11020;
+
+    // MaterializedView Maintenance
+    public static final short OP_MV_EPOCH_UPDATE = 11030;
+    public static final short OP_MV_JOB_STATE = 11031;
 }

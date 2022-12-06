@@ -1,5 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "column/bytes.h"
 
 #include <gtest/gtest.h>
@@ -120,7 +132,7 @@ TEST(BytesTest, test_alloc_without_init) {
 
 // NOLINTNEXTLINE
 TEST(BytesTest, test_hook_malloc) {
-    srand((int)time(NULL));
+    srand((int)time(nullptr));
 
     void* ptr;
     int before;
@@ -146,7 +158,7 @@ TEST(BytesTest, test_hook_malloc) {
 
 // NOLINTNEXTLINE
 TEST(BytesTest, test_hook_realloc) {
-    srand((int)time(NULL));
+    srand((int)time(nullptr));
 
     void* ptr;
     void* new_ptr;
@@ -184,7 +196,7 @@ TEST(BytesTest, test_hook_realloc) {
 
 // NOLINTNEXTLINE
 TEST(BytesTest, test_hook_calloc) {
-    srand((int)time(NULL));
+    srand((int)time(nullptr));
 
     void* ptr;
     int before;
@@ -216,7 +228,7 @@ TEST(BytesTest, test_hook_calloc) {
 
 // NOLINTNEXTLINE
 TEST(BytesTest, test_hook_memalign) {
-    srand((int)time(NULL));
+    srand((int)time(nullptr));
 
     void* ptr;
     int before;
@@ -244,7 +256,7 @@ TEST(BytesTest, test_hook_memalign) {
 
 // NOLINTNEXTLINE
 TEST(BytesTest, test_hook_aligned_alloc) {
-    srand((int)time(NULL));
+    srand((int)time(nullptr));
 
     void* ptr;
     int before;
@@ -272,7 +284,7 @@ TEST(BytesTest, test_hook_aligned_alloc) {
 
 // NOLINTNEXTLINE
 TEST(BytesTest, test_hook_valloc) {
-    srand((int)time(NULL));
+    srand((int)time(nullptr));
 
     void* ptr;
     int before;
@@ -298,7 +310,7 @@ TEST(BytesTest, test_hook_valloc) {
 
 // NOLINTNEXTLINE
 TEST(BytesTest, test_hook_pvalloc) {
-    srand((int)time(NULL));
+    srand((int)time(nullptr));
 
     void* ptr;
     int before;
@@ -324,7 +336,7 @@ TEST(BytesTest, test_hook_pvalloc) {
 
 // NOLINTNEXTLINE
 TEST(BytesTest, test_hook_posix_memalign) {
-    srand((int)time(NULL));
+    srand((int)time(nullptr));
 
     void* ptr = nullptr;
     int before;

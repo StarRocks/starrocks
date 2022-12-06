@@ -11,6 +11,8 @@ import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 public class PhysicalProjectOperator extends PhysicalOperator {
@@ -68,4 +70,9 @@ public class PhysicalProjectOperator extends PhysicalOperator {
         commonSubOperatorMap.values().forEach(d -> set.union(d.getUsedColumns()));
         return set;
     }
+
+    public List<ColumnRefOperator> getOutputColumns() {
+        return new ArrayList<>(columnRefMap.keySet());
+    }
+
 }

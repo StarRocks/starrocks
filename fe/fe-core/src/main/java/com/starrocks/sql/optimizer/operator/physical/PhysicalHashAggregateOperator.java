@@ -48,6 +48,8 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
     // flg for this aggregate operator could use streaming pre-aggregation
     private boolean useStreamingPreAgg = true;
 
+    private boolean useSortAgg = false;
+
     public PhysicalHashAggregateOperator(AggType type,
                                          List<ColumnRefOperator> groupBys,
                                          List<ColumnRefOperator> partitionByColumns,
@@ -85,6 +87,13 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
         return type.isGlobal() && !isSplit;
     }
 
+    /**
+     * Whether it is the first phase in three/four-phase agg whose second phase is pruned.
+     */
+    public boolean isMergedLocalAgg() {
+        return type.isLocal() && !useStreamingPreAgg;
+    }
+
     public List<ColumnRefOperator> getPartitionByColumns() {
         return partitionByColumns;
     }
@@ -107,6 +116,14 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
 
     public boolean isUseStreamingPreAgg() {
         return this.useStreamingPreAgg;
+    }
+
+    public boolean isUseSortAgg() {
+        return useSortAgg;
+    }
+
+    public void setUseSortAgg(boolean useSortAgg) {
+        this.useSortAgg = useSortAgg;
     }
 
     @Override

@@ -1,10 +1,23 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "exprs/vectorized/arithmetic_expr.h"
 
 #include <optional>
 
 #include "common/object_pool.h"
+#include "common/statusor.h"
 #include "exprs/vectorized/arithmetic_operation.h"
 #include "exprs/vectorized/binary_function.h"
 #include "exprs/vectorized/decimal_binary_function.h"
@@ -21,7 +34,11 @@ namespace starrocks::vectorized {
                                                       \
     virtual Expr* clone(ObjectPool* pool) const override { return pool->add(new CLASS_NAME(*this)); }
 
-static std::optional<PrimitiveType> eliminate_trivial_cast_for_decimal_mul(const Expr* e) {
+static std::optional<LogicalType> eliminate_trivial_cast_for_decimal_mul(const Expr* e) {
+    DIAGNOSTIC_PUSH
+#if defined(__GNUC__) && !defined(__clang__)
+    DIAGNOSTIC_IGNORE("-Wmaybe-uninitialized")
+#endif
     if (!e->is_cast_expr()) {
         return {};
     }
@@ -33,58 +50,59 @@ static std::optional<PrimitiveType> eliminate_trivial_cast_for_decimal_mul(const
     } else {
         return {};
     }
+    DIAGNOSTIC_POP
 }
 
-template <PrimitiveType Type, typename OP>
+template <LogicalType Type, typename OP>
 class VectorizedArithmeticExpr final : public Expr {
 public:
     DEFINE_CLASS_CONSTRUCTOR(VectorizedArithmeticExpr);
 
-    std::optional<ColumnPtr> evaluate_decimal_fast_mul(ExprContext* context, vectorized::Chunk* chunk) {
+    StatusOr<ColumnPtr> evaluate_decimal_fast_mul(ExprContext* context, vectorized::Chunk* chunk) {
         auto lhs_pt_opt = eliminate_trivial_cast_for_decimal_mul(_children[0]);
         auto rhs_pt_opt = eliminate_trivial_cast_for_decimal_mul(_children[1]);
         if (lhs_pt_opt.has_value() && rhs_pt_opt.has_value()) {
             auto lhs_pt = lhs_pt_opt.value();
             auto rhs_pt = rhs_pt_opt.value();
             if (lhs_pt == TYPE_DECIMAL64 && rhs_pt == TYPE_DECIMAL64 && Type == TYPE_DECIMAL128) {
-                auto l = _children[0]->get_child(0)->evaluate(context, chunk);
-                auto r = _children[1]->get_child(0)->evaluate(context, chunk);
+                ASSIGN_OR_RETURN(auto l, _children[0]->get_child(0)->evaluate_checked(context, chunk));
+                ASSIGN_OR_RETURN(auto r, _children[1]->get_child(0)->evaluate_checked(context, chunk));
                 return VectorizedStrictDecimalBinaryFunction<MulOp64x64_128, false>::template evaluate<
                         TYPE_DECIMAL64, TYPE_DECIMAL64, Type>(l, r);
             }
             if (lhs_pt == TYPE_DECIMAL32 && rhs_pt == TYPE_DECIMAL64 && Type == TYPE_DECIMAL128) {
-                auto l = _children[0]->get_child(0)->evaluate(context, chunk);
-                auto r = _children[1]->get_child(0)->evaluate(context, chunk);
+                ASSIGN_OR_RETURN(auto l, _children[0]->get_child(0)->evaluate_checked(context, chunk));
+                ASSIGN_OR_RETURN(auto r, _children[1]->get_child(0)->evaluate_checked(context, chunk));
                 return VectorizedStrictDecimalBinaryFunction<MulOp32x64_128, false>::template evaluate<
                         TYPE_DECIMAL32, TYPE_DECIMAL64, Type>(l, r);
             }
             if (lhs_pt == TYPE_DECIMAL64 && rhs_pt == TYPE_DECIMAL32 && Type == TYPE_DECIMAL128) {
-                auto l = _children[0]->get_child(0)->evaluate(context, chunk);
-                auto r = _children[1]->get_child(0)->evaluate(context, chunk);
+                ASSIGN_OR_RETURN(auto l, _children[0]->get_child(0)->evaluate_checked(context, chunk));
+                ASSIGN_OR_RETURN(auto r, _children[1]->get_child(0)->evaluate_checked(context, chunk));
                 return VectorizedStrictDecimalBinaryFunction<MulOp32x64_128, false>::template evaluate<
                         TYPE_DECIMAL32, TYPE_DECIMAL64, Type>(r, l);
             }
             if (lhs_pt == TYPE_DECIMAL32 && rhs_pt == TYPE_DECIMAL32 && Type == TYPE_DECIMAL128) {
-                auto l = _children[0]->get_child(0)->evaluate(context, chunk);
-                auto r = _children[1]->get_child(0)->evaluate(context, chunk);
+                ASSIGN_OR_RETURN(auto l, _children[0]->get_child(0)->evaluate_checked(context, chunk));
+                ASSIGN_OR_RETURN(auto r, _children[1]->get_child(0)->evaluate_checked(context, chunk));
                 return VectorizedStrictDecimalBinaryFunction<MulOp32x32_128, false>::template evaluate<
                         TYPE_DECIMAL32, TYPE_DECIMAL32, Type>(r, l);
             }
         }
-        return {};
+        return nullptr;
     }
 
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {
 #if defined(__x86_64__) && defined(__GNUC__)
         if constexpr (is_mul_op<OP> && pt_is_decimal<Type>) {
-            auto opt_result = evaluate_decimal_fast_mul(context, ptr);
-            if (opt_result.has_value()) {
-                return opt_result.value();
+            ASSIGN_OR_RETURN(auto opt_result, evaluate_decimal_fast_mul(context, ptr));
+            if (opt_result != nullptr) {
+                return opt_result;
             }
         }
 #endif
-        auto l = _children[0]->evaluate(context, ptr);
-        auto r = _children[1]->evaluate(context, ptr);
+        ASSIGN_OR_RETURN(auto l, _children[0]->evaluate_checked(context, ptr));
+        ASSIGN_OR_RETURN(auto r, _children[1]->evaluate_checked(context, ptr));
         if constexpr (pt_is_decimal<Type>) {
             // Enable overflow checking in decimal arithmetic
             return VectorizedStrictDecimalBinaryFunction<OP, true>::template evaluate<Type>(l, r);
@@ -104,25 +122,25 @@ public:
     }
 };
 
-template <PrimitiveType Type, typename Op>
+template <LogicalType Type, typename Op>
 class VectorizedDivArithmeticExpr final : public Expr {
 public:
     DEFINE_CLASS_CONSTRUCTOR(VectorizedDivArithmeticExpr);
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {
         if constexpr (is_intdiv_op<Op> && pt_is_bigint<Type>) {
             using CastFunction = VectorizedUnaryFunction<DecimalTo<true>>;
             switch (_children[0]->type().type) {
             case TYPE_DECIMAL32: {
-                auto column = evaluate_internal<TYPE_DECIMAL32>(context, ptr);
-                return CastFunction::evaluate<TYPE_DECIMAL32, PrimitiveType::TYPE_BIGINT>(column);
+                ASSIGN_OR_RETURN(auto column, evaluate_internal<TYPE_DECIMAL32>(context, ptr));
+                return CastFunction::evaluate<TYPE_DECIMAL32, LogicalType::TYPE_BIGINT>(column);
             }
             case TYPE_DECIMAL64: {
-                auto column = evaluate_internal<TYPE_DECIMAL64>(context, ptr);
-                return CastFunction::evaluate<TYPE_DECIMAL64, PrimitiveType::TYPE_BIGINT>(column);
+                ASSIGN_OR_RETURN(auto column, evaluate_internal<TYPE_DECIMAL64>(context, ptr));
+                return CastFunction::evaluate<TYPE_DECIMAL64, LogicalType::TYPE_BIGINT>(column);
             }
             case TYPE_DECIMAL128: {
-                auto column = evaluate_internal<TYPE_DECIMAL128>(context, ptr);
-                return CastFunction::evaluate<TYPE_DECIMAL128, PrimitiveType::TYPE_BIGINT>(column);
+                ASSIGN_OR_RETURN(auto column, evaluate_internal<TYPE_DECIMAL128>(context, ptr));
+                return CastFunction::evaluate<TYPE_DECIMAL128, LogicalType::TYPE_BIGINT>(column);
             }
             default:
                 return evaluate_internal<Type>(context, ptr);
@@ -133,10 +151,10 @@ public:
     }
 
 private:
-    template <PrimitiveType LType>
-    ColumnPtr evaluate_internal(ExprContext* context, vectorized::Chunk* ptr) {
-        auto l = _children[0]->evaluate(context, ptr);
-        auto r = _children[1]->evaluate(context, ptr);
+    template <LogicalType LType>
+    StatusOr<ColumnPtr> evaluate_internal(ExprContext* context, vectorized::Chunk* ptr) {
+        ASSIGN_OR_RETURN(auto l, _children[0]->evaluate_checked(context, ptr));
+        ASSIGN_OR_RETURN(auto r, _children[1]->evaluate_checked(context, ptr));
         if constexpr (pt_is_decimal<LType>) {
             using VectorizedDiv = VectorizedUnstrictDecimalBinaryFunction<LType, DivOp, true>;
             return VectorizedDiv::template evaluate<LType>(l, r);
@@ -149,13 +167,13 @@ private:
     }
 };
 
-template <PrimitiveType Type>
+template <LogicalType Type>
 class VectorizedModArithmeticExpr final : public Expr {
 public:
     DEFINE_CLASS_CONSTRUCTOR(VectorizedModArithmeticExpr);
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
-        auto l = _children[0]->evaluate(context, ptr);
-        auto r = _children[1]->evaluate(context, ptr);
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {
+        ASSIGN_OR_RETURN(auto l, _children[0]->evaluate_checked(context, ptr));
+        ASSIGN_OR_RETURN(auto r, _children[1]->evaluate_checked(context, ptr));
 
         if constexpr (pt_is_decimal<Type>) {
             using VectorizedDiv = VectorizedUnstrictDecimalBinaryFunction<Type, ModOp, true>;
@@ -169,12 +187,12 @@ public:
     }
 };
 
-template <PrimitiveType Type>
+template <LogicalType Type>
 class VectorizedBitNotArithmeticExpr final : public Expr {
 public:
     DEFINE_CLASS_CONSTRUCTOR(VectorizedBitNotArithmeticExpr);
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
-        auto l = _children[0]->evaluate(context, ptr);
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {
+        ASSIGN_OR_RETURN(auto l, _children[0]->evaluate_checked(context, ptr));
         using ArithmeticBitNot = ArithmeticUnaryOperator<BitNotOp, Type>;
         return VectorizedStrictUnaryFunction<ArithmeticBitNot>::template evaluate<Type>(l);
     }
@@ -234,7 +252,7 @@ public:
     }
 
 Expr* VectorizedArithmeticExprFactory::from_thrift(const starrocks::TExprNode& node) {
-    PrimitiveType resultType = TypeDescriptor::from_thrift(node.type).type;
+    LogicalType resultType = TypeDescriptor::from_thrift(node.type).type;
     switch (node.opcode) {
 #define CASE_FN(TYPE, OP) return new VectorizedArithmeticExpr<TYPE, OP>(node);
     case TExprOpcode::ADD:

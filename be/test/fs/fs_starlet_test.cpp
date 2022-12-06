@@ -1,5 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "fs/fs_starlet.h"
 
 #include <fmt/format.h>
@@ -18,7 +30,7 @@ namespace starrocks {
 
 class StarletFileSystemTest : public ::testing::TestWithParam<std::string> {
 public:
-    StarletFileSystemTest() { srand(time(NULL)); }
+    StarletFileSystemTest() { srand(time(nullptr)); }
     ~StarletFileSystemTest() override = default;
     void SetUp() override {
         std::string test_type = GetParam();
@@ -26,24 +38,28 @@ public:
         staros::starlet::fslib::register_builtin_filesystems();
         staros::starlet::ShardInfo shard_info;
         shard_info.id = 10086;
-        shard_info.obj_store_info.s3_obj_store.uri =
-                fmt::format("s3://starrocks-test-bucket/{}.{}/", time(NULL), rand());
-        shard_info.obj_store_info.s3_obj_store.access_key = "5LXNPOQY3KB1LH4X4UQ6";
-        shard_info.obj_store_info.s3_obj_store.access_key_secret = "EhniJDQcMAFQwpulH1jLomfu1b+VaJboCJO+Cytb";
-        shard_info.obj_store_info.s3_obj_store.endpoint = "172.26.92.205:39000";
-        shard_info.obj_store_info.s3_obj_store.region = "us-east-1";
+        auto fs_info = shard_info.path_info.mutable_fs_info();
+        fs_info->set_fs_type(staros::FileStoreType::S3);
+        auto s3_fs_info = fs_info->mutable_s3_fs_info();
+        s3_fs_info->set_bucket("starrocks-test-bucket");
+        s3_fs_info->set_access_key("5LXNPOQY3KB1LH4X4UQ6");
+        s3_fs_info->set_access_key_secret("EhniJDQcMAFQwpulH1jLomfu1b+VaJboCJO+Cytb");
+        s3_fs_info->set_endpoint("172.26.92.205:39000");
+        s3_fs_info->set_region("us-east-1");
+        // set full path
+        shard_info.path_info.set_full_path(absl::StrFormat("s3://%s/%d/", s3_fs_info->bucket(), time(NULL)));
 
         // cache settings
-        shard_info.cache_setting.enable_cache = false;
-        shard_info.cache_setting.cache_entry_ttl_sec = 10;
-        shard_info.cache_setting.allow_async_write_back = false;
+        shard_info.cache_info.set_enable_cache(false);
+        shard_info.cache_info.set_ttl_seconds(10);
+        shard_info.cache_info.set_async_write_back(false);
 
         shard_info.properties["storageGroup"] = "10010";
 
         if (test_type == "cachefs") {
-            shard_info.cache_setting.enable_cache = true;
+            shard_info.cache_info.set_enable_cache(true);
             std::string tmpl("/tmp/sr_starlet_ut_XXXXXX");
-            EXPECT_TRUE(::mkdtemp(tmpl.data()) != NULL);
+            EXPECT_TRUE(::mkdtemp(tmpl.data()) != nullptr);
             config::starlet_cache_dir = tmpl;
         }
 

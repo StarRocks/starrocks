@@ -9,22 +9,34 @@ import com.starrocks.server.GlobalStateMgr;
  * For example, `GRANT SELECT ON TABLE db1.tbl1 TO user1` will create an object like (db1, tbl1)
  * Thus when user1 executes `SELECT * FROM db1.tbl1`, `PrivilegeChecker` will try to find a matching one in all the table
  * object and check if SELECT action is granted on it.
+ *
  * If the GRANT statement contains `ALL`, for example, `GRANT SELECT ON ALL TABLES IN DATABASE db1 TO user1`, a slightly
  * different object like (db1, ALL) will be created to represent fuzzy matching.
+ *
  * Another scenario that will take usage of this fuzzy matching is when user1 execute statement like `USE DATABASE db1`.
  * We shall create a (db1, ALL) to check if there's any table in the database db1 that user1 have any privilege on.
+ *
+ * But things will get a bit confused on fuzzy matching when checking allow grant. For example, if we execute
+ *   GRANT SELECT ON db1.tbl1 TO userx with grant option
+ * Then `userx` should be denied to execute
+ *   GRANT SELECT ON *.* TO usery
+ * In other words, fuzzy matching should be one-way matching.
  *
  * The matching rule on the above description can be simplified as this:
  * (db1, tbl1) matches (db1, tbl1)
  * (db1, ALL) matches (db1, tbl1)
- * (db1, tbl1) matches (db1, ALL)
+ * (db1, tbl1) doesn't match (db1, ALL)
  **/
 public interface PEntryObject extends Comparable<PEntryObject> {
 
     /**
-     * if the specific object matches current object, including fuzzy matching.
+     * if the current object matches other object, including fuzzy matching.
+     *
+     * this(db1.tbl1), other(db1.tbl1) -> true
+     * this(db1.tbl1), other(db1.ALL) -> true
+     * this(db1.ALL), other(db1.tbl1) -> false
      */
-    boolean match(Object obj);
+    boolean match(Object other);
 
     /**
      * return true if current object can be used for fuzzy matching
@@ -49,4 +61,9 @@ public interface PEntryObject extends Comparable<PEntryObject> {
     boolean equals(Object o);
 
     int hashCode();
+
+    /**
+     * used to deep copy when merging Privilege collections
+     **/
+    PEntryObject clone();
 }

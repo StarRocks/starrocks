@@ -33,6 +33,11 @@ public class PushDownMinMaxConjunctsRule extends TransformationRule {
             new PushDownMinMaxConjunctsRule(OperatorType.LOGICAL_HUDI_SCAN);
     public static final PushDownMinMaxConjunctsRule ICEBERG_SCAN =
             new PushDownMinMaxConjunctsRule(OperatorType.LOGICAL_ICEBERG_SCAN);
+    public static final PushDownMinMaxConjunctsRule DELTALAKE_SCAN =
+            new PushDownMinMaxConjunctsRule(OperatorType.LOGICAL_DELTALAKE_SCAN);
+    public static final PushDownMinMaxConjunctsRule FILE_SCAN =
+            new PushDownMinMaxConjunctsRule(OperatorType.LOGICAL_FILE_SCAN);
+
 
     public PushDownMinMaxConjunctsRule(OperatorType logicalOperatorType) {
         super(RuleType.TF_PUSH_DOWN_PREDICATE_SCAN, Pattern.create(logicalOperatorType));

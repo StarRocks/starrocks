@@ -5,7 +5,7 @@ package com.starrocks.mysql.privilege;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.sql.analyzer.AST2SQL;
+import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 
 public class ImpersonateUserPrivEntry extends PrivEntry {
@@ -61,6 +61,6 @@ public class ImpersonateUserPrivEntry extends PrivEntry {
         GrantPrivilegeStmt stmt = new GrantPrivilegeStmt(null, "USER", getUserIdent());
         stmt.setUserPrivilegeObject(securedUserIdentity);
         stmt.setPrivBitSet(PrivBitSet.of(Privilege.IMPERSONATE_PRIV));
-        return AST2SQL.toString(stmt);
+        return AstToStringBuilder.toString(stmt);
     }
 }

@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -46,20 +58,13 @@ Status sort_vertical_chunks(const std::atomic<bool>& cancel, const std::vector<C
 // Compare the column with the `rhs_value`, which must have the some type with column.
 // @param cmp_result compare result is written into this array, value must within -1,0,1
 // @param rhs_value the compare value
-int compare_column(const ColumnPtr column, std::vector<int8_t>& cmp_result, Datum rhs_value, const SortDesc& desc);
-void compare_columns(const Columns columns, std::vector<int8_t>& cmp_result, const std::vector<Datum>& rhs_values,
+int compare_column(const ColumnPtr& column, std::vector<int8_t>& cmp_result, Datum rhs_value, const SortDesc& desc);
+void compare_columns(const Columns& columns, std::vector<int8_t>& cmp_result, const std::vector<Datum>& rhs_values,
                      const SortDescs& sort_desc);
 
 // Build tie by comparison of adjacent rows in column.
 // Tie(i) is set to 1 only if row(i-1) is equal to row(i), otherwise is set to 0.
-void build_tie_for_column(const ColumnPtr column, Tie* tie, const NullColumnPtr null_column = nullptr);
-
-// Append rows from permutation
-void append_by_permutation(Column* dst, const Columns& columns, const Permutation& perm);
-void append_by_permutation(Chunk* dst, const std::vector<ChunkPtr>& chunks, const Permutation& perm);
-void append_by_permutation(Chunk* dst, const std::vector<ChunkPtr>& chunks, const Permutation& perm, size_t start,
-                           size_t end);
-void append_by_permutation(Chunk* dst, const std::vector<const Chunk*>& chunks, const Permutation& perm);
+void build_tie_for_column(const ColumnPtr& column, Tie* tie, const NullColumnPtr& null_column = nullptr);
 
 struct SortDesc {
     int sort_order;
@@ -95,7 +100,7 @@ struct SortDescs {
         DCHECK_EQ(orders.size(), nulls.size());
         descs.reserve(orders.size());
         for (int i = 0; i < orders.size(); i++) {
-            descs.push_back(SortDesc(orders[i], nulls[i]));
+            descs.emplace_back(orders[i], nulls[i]);
         }
     }
 

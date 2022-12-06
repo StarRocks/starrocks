@@ -25,8 +25,12 @@ public class ArrayType extends Type {
         this.itemType = itemType;
     }
 
-    public ArrayType(Type itemType, boolean fromSubQuery) {
-        this.itemType = itemType;
+    public ArrayType(Type itemType, boolean fromDlaEnableDecimalV3) {
+        if (!fromDlaEnableDecimalV3 && itemType.isDecimalV3()) {
+            this.itemType = Type.UNKNOWN_TYPE;
+        } else {
+            this.itemType = itemType;
+        }
     }
 
     public Type getItemType() {
@@ -101,6 +105,13 @@ public class ArrayType extends Type {
         ArrayType clone = (ArrayType) super.clone();
         clone.itemType = this.itemType.clone();
         return clone;
+    }
+
+    @Override
+    public void selectAllFields() {
+        if (itemType.isComplexType()) {
+            itemType.selectAllFields();
+        }
     }
 
     /**

@@ -43,8 +43,10 @@ public class AuditEvent {
     }
 
     @Retention(RetentionPolicy.RUNTIME)
-    public static @interface AuditField {
+    public @interface AuditField {
         String value() default "";
+
+        boolean ignore_zero() default false;
     }
 
     public EventType type;
@@ -63,7 +65,7 @@ public class AuditEvent {
     @AuditField(value = "AuthorizedUser")
     public String authorizedUser = "";
     @AuditField(value = "ResourceGroup")
-    public String resourceGroup = "default_wg";
+    public String resourceGroup = "";
     @AuditField(value = "Catalog")
     public String catalog = "";
     @AuditField(value = "Db")
@@ -80,10 +82,10 @@ public class AuditEvent {
     public long scanRows = -1;
     @AuditField(value = "ReturnRows")
     public long returnRows = -1;
-    @AuditField(value = "CpuCostNs")
+    @AuditField(value = "CpuCostNs", ignore_zero = true)
     public long cpuCostNs = -1;
-    @AuditField(value = "MemCostBytes")
-    public long memCostBytes = 0;
+    @AuditField(value = "MemCostBytes", ignore_zero = true)
+    public long memCostBytes = -1;
     @AuditField(value = "StmtId")
     public long stmtId = -1;
     @AuditField(value = "QueryId")
@@ -97,9 +99,17 @@ public class AuditEvent {
     @AuditField(value = "Digest")
     public String digest = "";
     @AuditField(value = "PlanCpuCost")
-    public double planCpuCosts = 0.0;
+    public double planCpuCosts = -1;
     @AuditField(value = "PlanMemCost")
-    public double planMemCosts = 0.0;
+    public double planMemCosts = -1;
+    @AuditField(value = "PendingTimeMs")
+    public long pendingTimeMs = -1;
+    @AuditField(value = "BigQueryLogCPUSecondThreshold")
+    public long bigQueryLogCPUSecondThreshold = -1;
+    @AuditField(value = "BigQueryLogScanBytesThreshold")
+    public long bigQueryLogScanBytesThreshold = -1;
+    @AuditField(value = "BigQueryLogScanRowsThreshold")
+    public long bigQueryLogScanRowsThreshold = -1;
 
     public static class AuditEventBuilder {
 
@@ -232,6 +242,26 @@ public class AuditEvent {
 
         public AuditEventBuilder setPlanMemCosts(double memCosts) {
             auditEvent.planMemCosts = memCosts;
+            return this;
+        }
+
+        public AuditEventBuilder setPendingTimeMs(long pendingTimeMs) {
+            auditEvent.pendingTimeMs = pendingTimeMs;
+            return this;
+        }
+
+        public AuditEventBuilder setBigQueryLogCPUSecondThreshold(long bigQueryLogCPUSecondThreshold) {
+            auditEvent.bigQueryLogCPUSecondThreshold = bigQueryLogCPUSecondThreshold;
+            return this;
+        }
+
+        public AuditEventBuilder setBigQueryLogScanBytesThreshold(long bigQueryLogScanBytesThreshold) {
+            auditEvent.bigQueryLogScanBytesThreshold = bigQueryLogScanBytesThreshold;
+            return this;
+        }
+
+        public AuditEventBuilder setBigQueryLogScanRowsThreshold(long bigQueryLogScanRowsThreshold) {
+            auditEvent.bigQueryLogScanRowsThreshold = bigQueryLogScanRowsThreshold;
             return this;
         }
 

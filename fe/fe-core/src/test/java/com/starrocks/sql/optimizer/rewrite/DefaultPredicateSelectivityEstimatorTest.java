@@ -661,7 +661,7 @@ public class DefaultPredicateSelectivityEstimatorTest {
                 intLt0);
         ScalarOperator notGt = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.NOT,
                 doubleGt0);
-        assertEquals(defaultPredicateSelectivityEstimator.estimate(and, statistics), 1.0, 0.0);
+        assertEquals(defaultPredicateSelectivityEstimator.estimate(and, statistics), 0.0, 0.0);
         assertEquals(defaultPredicateSelectivityEstimator.estimate(or, statistics), 1.0, 0.0);
         assertEquals(defaultPredicateSelectivityEstimator.estimate(notLt, statistics), 1.0, 0.0);
         assertEquals(defaultPredicateSelectivityEstimator.estimate(notGt, statistics), 0.0, 0.0);

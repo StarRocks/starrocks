@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -137,11 +149,15 @@ public:
 
     void remove_first_n_values(size_t count) override;
 
+    // No complain about the overloaded-virtual for this function
+    DIAGNOSTIC_PUSH
+    DIAGNOSTIC_IGNORE("-Woverloaded-virtual")
     void append(const Slice& str) {
         _bytes.insert(_bytes.end(), str.data, str.data + str.size);
         _offsets.emplace_back(_bytes.size());
         _slices_cache = false;
     }
+    DIAGNOSTIC_POP
 
     void append_datum(const Datum& datum) override {
         append(datum.get_slice());
@@ -285,9 +301,13 @@ public:
 
     std::string debug_string() const override {
         std::stringstream ss;
-        ss << "[";
         size_t size = this->size();
-        for (int i = 0; i < size - 1; ++i) {
+        if (size == 0) {
+            return "[]";
+        }
+
+        ss << "[";
+        for (size_t i = 0; i < size - 1; i++) {
             ss << debug_item(i) << ", ";
         }
         if (size > 0) {

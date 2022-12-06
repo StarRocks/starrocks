@@ -73,11 +73,6 @@ public class LogicalMetaScanOperator extends LogicalScanOperator {
         return Objects.hash(super.hashCode(), aggColumnIdToNames);
     }
 
-    @Override
-    public boolean canUsePipeLine() {
-        return false;
-    }
-
     public static class Builder
             extends LogicalScanOperator.Builder<LogicalMetaScanOperator, LogicalMetaScanOperator.Builder> {
         private Map<Integer, String> aggColumnIdToNames;

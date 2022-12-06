@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/test/http/metrics_action_test.cpp
 
@@ -27,21 +40,31 @@
 #include "http/http_request.h"
 #include "http/http_response.h"
 #include "util/metrics.h"
+#ifdef USE_STAROS
+#include "metrics/metrics.h"
+#endif
 
 namespace starrocks {
 
 // Mock part
 const char* s_expect_response = nullptr;
 
-void HttpChannel::send_reply(HttpRequest* request, HttpStatus status, const std::string& content) {
+void mock_send_reply(const std::string& content) {
     ASSERT_STREQ(s_expect_response, content.c_str());
 }
 
 class MetricsActionTest : public testing::Test {
 public:
-    MetricsActionTest() {}
-    virtual ~MetricsActionTest() {}
-    void SetUp() override { _evhttp_req = evhttp_request_new(nullptr, nullptr); }
+    MetricsActionTest() = default;
+    ~MetricsActionTest() override = default;
+    void SetUp() override {
+        _evhttp_req = evhttp_request_new(nullptr, nullptr);
+#ifdef USE_STAROS
+        // clear staros metrics to avoid confusing the test result.
+        staros::starlet::metrics::MetricsSystem::instance()->clear();
+#endif
+    }
+
     void TearDown() override {
         if (_evhttp_req != nullptr) {
             evhttp_request_free(_evhttp_req);
@@ -67,7 +90,7 @@ TEST_F(MetricsActionTest, prometheus_output) {
             "# TYPE test_requests_total counter\n"
             "test_requests_total{path=\"/sports\",type=\"put\"} 2345\n";
     HttpRequest request(_evhttp_req);
-    MetricsAction action(&registry);
+    MetricsAction action(&registry, &mock_send_reply);
     action.handle(&request);
 }
 
@@ -80,7 +103,7 @@ TEST_F(MetricsActionTest, prometheus_no_prefix) {
             "# TYPE cpu_idle gauge\n"
             "cpu_idle 50\n";
     HttpRequest request(_evhttp_req);
-    MetricsAction action(&registry);
+    MetricsAction action(&registry, &mock_send_reply);
     action.handle(&request);
 }
 
@@ -91,7 +114,7 @@ TEST_F(MetricsActionTest, prometheus_no_name) {
     registry.register_metric("", &cpu_idle);
     s_expect_response = "";
     HttpRequest request(_evhttp_req);
-    MetricsAction action(&registry);
+    MetricsAction action(&registry, &mock_send_reply);
     action.handle(&request);
 }
 

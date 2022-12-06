@@ -1,9 +1,22 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
 #include <fmt/format.h>
 
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -75,8 +88,8 @@ public:
         // [b/2] == r means round half to up.
         // carry depends on sign of a^b.
         Type carry = ((a ^ b) >> (sizeof(Type) * 8 - 1)) | 1;
-        Type abs_b = abs(b);
-        Type abs_r = abs(r);
+        Type abs_b = std::abs(b);
+        Type abs_r = std::abs(r);
         bool need_carry = ((abs_b >> 1) + (abs_b & 1)) <= abs_r;
         *c += carry & -Type(need_carry);
         return false;
@@ -119,7 +132,7 @@ public:
             return true;
         }
         if (UNLIKELY(StringParser::PARSE_OVERFLOW == result)) {
-            double double_value = StringParser::string_to_float<double>(s, n, &result);
+            auto double_value = StringParser::string_to_float<double>(s, n, &result);
             if (result != StringParser::PARSE_SUCCESS) {
                 return true;
             }
@@ -211,9 +224,9 @@ public:
             return (*dec_value == float_lower_overflow_indicator<To>) ||
                    (*dec_value == float_upper_overflow_indicator<To>);
         } else if constexpr (is_decimal128<To>) {
-            // abs(value)<1.0 -> 0: Acceptable
-            // abs(value)>=1.0 -> 0 or different sign: Overflow!!
-            return abs(value) >= From(1) && (*dec_value == To(0) || ((value < From(0)) ^ (*dec_value < To(0))));
+            // std::abs(value)<1.0 -> 0: Acceptable
+            // std::abs(value)>=1.0 -> 0 or different sign: Overflow!!
+            return std::abs(value) >= From(1) && (*dec_value == To(0) || ((value < From(0)) ^ (*dec_value < To(0))));
         } else {
             static_assert(is_decimal<To>, "invalid decimal type");
         }
@@ -272,7 +285,7 @@ public:
 
         if constexpr (rule == ROUND_HALF_UP || rule == ROUND_HALF_EVEN) {
             //TODO(by satanson): ROUND_HALF_UP is different from ROUND_HALF_EVEN
-            need_round = abs(remainder) >= (divisor >> 1);
+            need_round = std::abs(remainder) >= (divisor >> 1);
         } else if constexpr (rule == ROUND_FLOOR) {
             need_round = remainder > 0 && quotient > 0;
         } else if constexpr (rule == ROUND_CEILING) {

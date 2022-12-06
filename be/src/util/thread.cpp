@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/util/thread.cpp
 
@@ -61,7 +74,7 @@ static GoogleOnceType once = GOOGLE_ONCE_INIT;
 // auditing. Used only by Thread.
 class ThreadMgr {
 public:
-    ThreadMgr() {}
+    ThreadMgr() = default;
 
     ~ThreadMgr() {
         std::lock_guard lock(_lock);
@@ -296,7 +309,7 @@ Status Thread::start_thread(const std::string& category, const std::string& name
 }
 
 void* Thread::supervise_thread(void* arg) {
-    Thread* t = static_cast<Thread*>(arg);
+    auto* t = static_cast<Thread*>(arg);
     int64_t system_tid = Thread::current_thread_id();
     PCHECK(system_tid != -1);
 
@@ -330,7 +343,7 @@ void* Thread::supervise_thread(void* arg) {
 }
 
 void Thread::finish_thread(void* arg) {
-    Thread* t = static_cast<Thread*>(arg);
+    auto* t = static_cast<Thread*>(arg);
 
     // We're here either because of the explicit pthread_cleanup_pop() in
     // SuperviseThread() or through pthread_exit(). In either case,

@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -11,8 +23,7 @@
 #include "common/object_pool.h"
 #include "gen_cpp/PlanNodes_types.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 // Modify from https://github.com/FastFilter/fastfilter_cpp/blob/master/src/bloom/simd-block.h
 // This is avx2 simd implementation for paper <<Cache-, Hash- and Space-Efficient Bloom Filters>>
@@ -72,7 +83,7 @@ public:
         if (n == 0) return;
         const uint32_t bucket_idx = hash_values[0] & _directory_mask;
 #ifdef __AVX2__
-        __m256i* addr = reinterpret_cast<__m256i*>(_directory + bucket_idx);
+        auto* addr = reinterpret_cast<__m256i*>(_directory + bucket_idx);
         __m256i now = _mm256_load_si256(addr);
         for (size_t i = 0; i < n; i++) {
             const __m256i mask = make_mask(hash_values[i] >> _log_num_buckets);
@@ -245,7 +256,7 @@ protected:
 };
 
 // The join runtime filter implement by bloom filter
-template <PrimitiveType Type>
+template <LogicalType Type>
 class RuntimeBloomFilter final : public JoinRuntimeFilter {
 public:
     using CppType = RunTimeCppType<Type>;
@@ -347,8 +358,8 @@ public:
                                             std::vector<uint32_t>& hash_values) const {
         typedef void (Column::*HashFuncType)(uint32_t*, uint32_t, uint32_t) const;
 
-        auto compute_hash = [&columns, &num_rows, &hash_values, this](HashFuncType hash_func,
-                                                                      size_t num_hash_partitions, bool fast_reduce) {
+        auto compute_hash = [&columns, &num_rows, &hash_values](HashFuncType hash_func, size_t num_hash_partitions,
+                                                                bool fast_reduce) {
             for (Column* input_column : columns) {
                 (input_column->*hash_func)(hash_values.data(), 0, num_rows);
             }
@@ -527,7 +538,7 @@ public:
     }
 
     std::string debug_string() const override {
-        PrimitiveType ptype = Type;
+        LogicalType ptype = Type;
         std::stringstream ss;
         ss << "RuntimeBF(type = " << ptype << ", bfsize = " << _size << ", has_null = " << _has_null;
         if constexpr (std::is_integral_v<CppType> || std::is_floating_point_v<CppType>) {
@@ -562,7 +573,7 @@ public:
     }
 
     size_t serialize(uint8_t* data) const override {
-        PrimitiveType ptype = Type;
+        LogicalType ptype = Type;
         size_t offset = 0;
         memcpy(data + offset, &ptype, sizeof(ptype));
         offset += sizeof(ptype);
@@ -595,7 +606,7 @@ public:
     }
 
     size_t deserialize(const uint8_t* data) override {
-        PrimitiveType ptype = Type;
+        LogicalType ptype = Type;
         size_t offset = 0;
         memcpy(&ptype, data + offset, sizeof(ptype));
         offset += sizeof(ptype);
@@ -668,5 +679,4 @@ private:
     bool _has_min_max = true;
 };
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

@@ -75,6 +75,8 @@ option(WITH_COMPRESS "Build binary with compresss debug section" ON)
 
 option(WITH_BLOCK_CACHE "Build binary with block cache feature" OFF)
 
+option(WITH_BENCH "Build binary with bench" OFF)
+
 option(USE_STAROS "Use StarOS to manager tablet info" OFF)
 
 # Check gcc
@@ -136,9 +138,9 @@ set(BOOST_ROOT ${THIRDPARTY_DIR})
 set(Boost_NO_WARN_NEW_VERSIONS ON)
 
 if (NOT APPLE)
-    find_package(Boost 1.75.0 REQUIRED COMPONENTS thread regex filesystem system date_time program_options)
+    find_package(Boost 1.75.0 REQUIRED COMPONENTS thread regex program_options)
 else()
-    find_package(Boost 1.75.0 COMPONENTS thread regex filesystem system date_time program_options)
+    find_package(Boost 1.75.0 COMPONENTS thread regex program_options)
 endif()
 include_directories(${Boost_INCLUDE_DIRS})
 message(STATUS ${Boost_LIBRARIES})
@@ -241,6 +243,9 @@ set_target_properties(brotlienc PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/l
 add_library(zstd STATIC IMPORTED)
 set_target_properties(zstd PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libzstd.a)
 
+add_library(streamvbyte STATIC IMPORTED)
+set_target_properties(streamvbyte PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libstreamvbyte_static.a)
+
 add_library(arrow STATIC IMPORTED)
 set_target_properties(arrow PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libarrow.a)
 
@@ -328,13 +333,13 @@ if ("${USE_STAROS}" STREQUAL "ON")
      find_package(gRPC CONFIG REQUIRED)
      message(STATUS "Using gRPC ${gRPC_VERSION}")
      get_target_property(gRPC_INCLUDE_DIR gRPC::grpc INTERFACE_INCLUDE_DIRECTORIES)
-     include_directories(${gRPC_INCLUDE_DIR})
+     include_directories(SYSTEM ${gRPC_INCLUDE_DIR})
 
      find_package(starlet CONFIG REQUIRED)
      message(STATUS "Using starlet ${starlet_VERSION}")
      message(STATUS "starlet inc dir: ${STARLET_INCLUDE_DIRS}")
      message(STATUS "starlet lib dir: ${STARLET_LIBS}")
-     include_directories(${STARLET_INCLUDE_DIRS})
+     include_directories(SYSTEM ${STARLET_INCLUDE_DIRS})
      add_library(starlet STATIC IMPORTED)
      set_target_properties(starlet PROPERTIES IMPORTED_LOCATION ${STARLET_LIBS}/libstarlet.a)
 
@@ -342,7 +347,7 @@ if ("${USE_STAROS}" STREQUAL "ON")
      get_target_property(prometheus-cpp_INCLUDE_DIR prometheus-cpp::core INTERFACE_INCLUDE_DIRECTORIES)
      message(STATUS "Using prometheus-cpp")
      message(STATUS "  include: ${prometheus-cpp_INCLUDE_DIR}")
-     include_directories(${prometheus-cpp_INCLUDE_DIR})
+     include_directories(SYSTEM ${prometheus-cpp_INCLUDE_DIR})
 
      add_library(starlet_fslib_all STATIC IMPORTED GLOBAL)
      set_target_properties(starlet_fslib_all PROPERTIES IMPORTED_LOCATION ${STARLET_LIBS}/libstarlet_fslib_all.a)
@@ -366,6 +371,9 @@ check_function_exists(sched_getcpu HAVE_SCHED_GETCPU)
 
 # support to pass cxx flags from environment.
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} $ENV{STARROCKS_CXX_COMMON_FLAGS}")
+
+# -no-pie: Disable Position Independent Executables (PIE) as certain libraries cannot be linked against PIE executables.
+set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -no-pie")
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} $ENV{STARROCKS_CXX_LINKER_FLAGS}")
 
 # compiler flags that are common across debug/release builds
@@ -384,6 +392,17 @@ set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wall -Wno-sign-compare -Wno-unknown-p
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-strict-aliasing -fno-omit-frame-pointer")
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -std=gnu++17 -D__STDC_FORMAT_MACROS")
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-deprecated -Wno-vla -Wno-comment")
+
+if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-unused-parameter -Wno-documentation -Wno-weak-vtables")
+    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-reserved-identifier -Wno-suggest-destructor-override")
+    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-documentation-unknown-command -Wno-old-style-cast")
+    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-c++20-designator -Wno-mismatched-tags")
+    if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "14.0.0")
+        set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-bitwise-instead-of-logical")
+    endif()
+endif()
+
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DBOOST_DATE_TIME_POSIX_TIME_STD_CONFIG")
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DBOOST_SYSTEM_NO_DEPRECATED -DBOOST_UUID_RANDOM_PROVIDER_FORCE_POSIX")
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Werror=return-type -Werror=switch")
@@ -501,10 +520,10 @@ include_directories(
     ${SRC_DIR}/
     ${TEST_DIR}/
     ${GENSRC_DIR}/
-    ${THIRDPARTY_DIR}/include
-    ${GPERFTOOLS_HOME}/include
-    ${THIRDPARTY_DIR}/include/thrift/
-    ${THIRDPARTY_DIR}/include/event/
+    SYSTEM ${THIRDPARTY_DIR}/include
+    SYSTEM ${GPERFTOOLS_HOME}/include
+    SYSTEM ${THIRDPARTY_DIR}/include/thrift/
+    SYSTEM ${THIRDPARTY_DIR}/include/event/
 )
 
 
@@ -608,6 +627,7 @@ set(STARROCKS_DEPENDENCIES
     brotlidec
     brotlienc
     zstd
+    streamvbyte
     arrow
     parquet
     orc
@@ -654,7 +674,11 @@ if ("${CMAKE_BUILD_TYPE}" STREQUAL "DEBUG" OR "${CMAKE_BUILD_TYPE}" STREQUAL "RE
         set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} tcmalloc)
     endif()
 elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "ASAN")
-    set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libasan)
+    if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+        set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libsan)
+    else()
+        set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libasan)
+    endif()
 elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "LSAN")
     set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-liblsan)
 elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "UBSAN")
@@ -673,7 +697,7 @@ else()
 endif()
 
 set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS}
-    -lrt -lbfd -liberty -lc -lm -ldl -rdynamic -pthread
+    -lrt -lbfd -liberty -lc -lm -ldl -rdynamic -pthread -Wl,-wrap=__cxa_throw
 )
 
 # link gcov if WITH_GCOV is on
@@ -721,32 +745,28 @@ FUNCTION(ADD_BE_TEST TEST_NAME)
 ENDFUNCTION()
 
 # Add a benchmark to BE
-FUNCTION(ADD_BE_BENCH TEST_NAME)
-
-    if (WITH_BENCH STREQUAL "OFF")
-        return()
-    endif()
-
+FUNCTION(ADD_BE_BENCH BENCH_NAME)
+    message(STATUS "Add Be Bench")
     set(BUILD_OUTPUT_ROOT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/")
     # This gets the directory where the test is from (e.g. 'exprs' or 'runtime')
     get_filename_component(DIR_NAME ${CMAKE_CURRENT_SOURCE_DIR} NAME)
-    get_filename_component(TEST_DIR_NAME ${TEST_NAME} PATH)
-    get_filename_component(TEST_FILE_NAME ${TEST_NAME} NAME)
-
+    get_filename_component(BENCH_DIR_NAME ${BENCH_NAME} PATH)
+    set(BENCH_OUTPUT_DIR_NAME "output")
+    get_filename_component(BENCH_FILE_NAME ${BENCH_NAME} NAME)
+    
     find_package(benchmark REQUIRED)
-    ADD_EXECUTABLE(${TEST_FILE_NAME} ${TEST_NAME}.cpp)
-    TARGET_LINK_LIBRARIES(${TEST_FILE_NAME} ${TEST_LINK_LIBS} benchmark benchmark_main)
+    ADD_EXECUTABLE(${BENCH_FILE_NAME} ${BENCH_NAME}.cpp)
+    TARGET_LINK_LIBRARIES(${BENCH_FILE_NAME} ${TEST_LINK_LIBS} benchmark benchmark_main)
 
-    SET_TARGET_PROPERTIES(${TEST_FILE_NAME} PROPERTIES COMPILE_FLAGS "-fno-access-control")
-    SET_TARGET_PROPERTIES(${TEST_FILE_NAME} PROPERTIES COMPILE_FLAGS ${CXX_FLAGS_RELEASE})
-    if (NOT "${TEST_DIR_NAME}" STREQUAL "")
-        SET_TARGET_PROPERTIES(${TEST_FILE_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${BUILD_OUTPUT_ROOT_DIRECTORY}/${TEST_DIR_NAME}")
+    SET_TARGET_PROPERTIES(${BENCH_FILE_NAME} PROPERTIES COMPILE_FLAGS "-fno-access-control")
+    SET_TARGET_PROPERTIES(${BENCH_FILE_NAME} PROPERTIES COMPILE_FLAGS ${CXX_FLAGS_RELEASE})
+    if (NOT "${BENCH_OUTPUT_DIR_NAME}" STREQUAL "")
+        SET_TARGET_PROPERTIES(${BENCH_FILE_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${BUILD_OUTPUT_ROOT_DIRECTORY}/${BENCH_OUTPUT_DIR_NAME}")
     endif()
-    ADD_TEST(${TEST_FILE_NAME} "${BUILD_OUTPUT_ROOT_DIRECTORY}/${TEST_NAME}")
+    ADD_TEST(${BENCH_FILE_NAME} "${BUILD_OUTPUT_ROOT_DIRECTORY}/${BENCH_NAME}")
 ENDFUNCTION()
 
 add_subdirectory(${SRC_DIR}/agent)
-add_subdirectory(${SRC_DIR}/bench)
 add_subdirectory(${SRC_DIR}/common)
 add_subdirectory(${SRC_DIR}/connector)
 add_subdirectory(${SRC_DIR}/column)
@@ -769,6 +789,11 @@ add_subdirectory(${SRC_DIR}/udf)
 
 add_subdirectory(${SRC_DIR}/tools)
 add_subdirectory(${SRC_DIR}/util)
+
+if (WITH_BENCH STREQUAL "ON")
+     message(STATUS "Build binary with bench")
+    add_subdirectory(${SRC_DIR}/bench)
+endif()
 
 if (${WITH_BLOCK_CACHE} STREQUAL "ON")
     add_subdirectory(${SRC_DIR}/block_cache)
@@ -803,6 +828,12 @@ install(FILES
     ${BASE_DIR}/../conf/hadoop_env.sh
     ${BASE_DIR}/../conf/log4j.properties
     DESTINATION ${OUTPUT_DIR}/conf)
+
+if ("${CMAKE_BUILD_TYPE}" STREQUAL "ASAN" OR "${CMAKE_BUILD_TYPE}" STREQUAL "LSAN")
+install(FILES
+    ${BASE_DIR}/../conf/asan_suppressions.conf
+    DESTINATION ${OUTPUT_DIR}/conf)
+endif()
 
 install(DIRECTORY
     ${BASE_DIR}/../webroot/be/

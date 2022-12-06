@@ -1,25 +1,17 @@
-# This file is made available under Elastic License 2.0.
-# This file is based on code available under the Apache license here:
-#   https://github.com/apache/incubator-doris/blob/master/be/src/olap/CMakeLists.txt
-
-# Licensed to the Apache Software Foundation (ASF) under one
-# or more contributor license agreements.  See the NOTICE file
-# distributed with this work for additional information
-# regarding copyright ownership.  The ASF licenses this file
-# to you under the Apache License, Version 2.0 (the
-# "License"); you may not use this file except in compliance
-# with the License.  You may obtain a copy of the License at
+# Copyright 2021-present StarRocks, Inc. All rights reserved.
 #
-#   http://www.apache.org/licenses/LICENSE-2.0
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
 #
-# Unless required by applicable law or agreed to in writing,
-# software distributed under the License is distributed on an
-# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-# KIND, either express or implied.  See the License for the
-# specific language governing permissions and limitations
-# under the License.
-
-# where to put generated libraries
+#      https:#www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/storage")
 
 # where to put generated binaries
@@ -67,7 +59,6 @@ add_library(Storage STATIC
     types.cpp
     update_manager.cpp
     utils.cpp
-    wrapper_field.cpp
     compaction_utils.cpp
     rowset/array_column_iterator.cpp
     rowset/binary_plain_page.cpp
@@ -111,7 +102,6 @@ add_library(Storage STATIC
     task/engine_clone_task.cpp
     task/engine_storage_migration_task.cpp
     task/engine_alter_tablet_task.cpp
-    column_vector.cpp
     aggregate_iterator.cpp
     async_delta_writer.cpp
     chunk_helper.cpp
@@ -137,6 +127,8 @@ add_library(Storage STATIC
     tablet_reader.cpp
     tablet_reader_params.cpp
     meta_reader.cpp
+    lake_meta_reader.cpp
+    olap_meta_reader.cpp
     seek_tuple.cpp
     union_iterator.cpp
     unique_iterator.cpp
@@ -150,7 +142,6 @@ add_library(Storage STATIC
     rowset_merger.cpp
     column_predicate_rewriter.cpp
     column_predicate_dict_conjuct.cpp
-    compaction_context.cpp
     compaction_task.cpp
     compaction_utils.cpp
     compaction_manager.cpp
@@ -158,7 +149,8 @@ add_library(Storage STATIC
     horizontal_compaction_task.cpp
     vertical_compaction_task.cpp
     compaction_task_factory.cpp
-    base_and_cumulative_compaction_policy.cpp
+    default_compaction_policy.cpp
+    size_tiered_compaction_policy.cpp
     cluster_id_mgr.cpp
     push_utils.cpp
     lake/async_delta_writer.cpp

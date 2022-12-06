@@ -72,7 +72,7 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
     private static final Logger LOG = LogManager.getLogger(CatalogRecycleBin.class);
     // erase meta at least after MIN_ERASE_LATENCY milliseconds
     // to avoid erase log ahead of drop log
-    private static final long MIN_ERASE_LATENCY = 10 * 60 * 1000;  // 10 min
+    private static final long MIN_ERASE_LATENCY = 10L * 60L * 1000L;  // 10 min
     // Maximum value of a batch of operations for actually delete database(table/partition)
     // The erase operation will be locked, so one batch can not be too many.
     private static final int MAX_ERASE_OPERATIONS_PER_CYCLE = 500;
@@ -511,6 +511,9 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
     }
 
     private void recoverAllTables(RecycleDatabaseInfo dbInfo) throws DdlException {
+        if (dbInfo == null) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_NO_DB_ERROR);
+        }
         Database db = dbInfo.getDb();
         Set<String> tableNames = Sets.newHashSet(dbInfo.getTableNames());
         long dbId = db.getId();

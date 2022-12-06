@@ -1,0 +1,3 @@
+Aggregate functions are implemented in C++ template, and instantiated at factory, which would take a long time to compile.
+
+So we break down all aggregate functions and group them into multiple resolvers, to make it compile parallel. 

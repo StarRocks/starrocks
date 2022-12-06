@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 /*
  * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
@@ -17,14 +30,13 @@
 
 #include "util/compression/compression_context_pool_singletons.h"
 
-#include <stdlib.h>
-
+#include <cstdlib>
 #include <memory>
 
 namespace starrocks::compression {
 
 StatusOr<ZSTDCompressionContext*> ZSTD_CCtx_Creator::operator()() const noexcept {
-    ZSTDCompressionContext* context = new (std::nothrow) ZSTDCompressionContext();
+    auto* context = new (std::nothrow) ZSTDCompressionContext();
     if (context == nullptr) {
         return Status::InvalidArgument("Fail to init ZSTD compress context");
     }
@@ -38,7 +50,7 @@ StatusOr<ZSTDCompressionContext*> ZSTD_CCtx_Creator::operator()() const noexcept
 }
 
 StatusOr<ZSTDDecompressContext*> ZSTD_DCtx_Creator::operator()() const noexcept {
-    ZSTDDecompressContext* context = new (std::nothrow) ZSTDDecompressContext();
+    auto* context = new (std::nothrow) ZSTDDecompressContext();
     if (context == nullptr) {
         return Status::InvalidArgument("Fail to init ZSTD decompress context");
     }
@@ -106,7 +118,7 @@ StatusOr<ZSTD_DCtx_Pool::Ref> getZSTD_DCtx() {
 // ==============================================================
 
 StatusOr<LZ4FCompressContext*> LZ4F_CCtx_Creator::operator()() const noexcept {
-    LZ4FCompressContext* context = new (std::nothrow) LZ4FCompressContext();
+    auto* context = new (std::nothrow) LZ4FCompressContext();
     if (context == nullptr) {
         return Status::InvalidArgument("Fail to init LZ4FRAME compression context");
     }
@@ -120,7 +132,7 @@ StatusOr<LZ4FCompressContext*> LZ4F_CCtx_Creator::operator()() const noexcept {
 }
 
 StatusOr<LZ4FDecompressContext*> LZ4F_DCtx_Creator::operator()() const noexcept {
-    LZ4FDecompressContext* context = new (std::nothrow) LZ4FDecompressContext();
+    auto* context = new (std::nothrow) LZ4FDecompressContext();
     if (context == nullptr) {
         return Status::InvalidArgument("Fail to init LZ4FRAME decompression context");
     }
@@ -196,7 +208,7 @@ StatusOr<LZ4F_DCtx_Pool::Ref> getLZ4F_DCtx() {
 // ==============================================================
 
 StatusOr<LZ4CompressContext*> LZ4_CCtx_Creator::operator()() const noexcept {
-    LZ4CompressContext* context = new (std::nothrow) LZ4CompressContext();
+    auto* context = new (std::nothrow) LZ4CompressContext();
     if (context == nullptr) {
         return Status::InvalidArgument("Fail to init LZ4 compression context");
     }

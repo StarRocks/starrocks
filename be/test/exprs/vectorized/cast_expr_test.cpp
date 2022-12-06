@@ -1,5 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "exprs/vectorized/cast_expr.h"
 
 #include <glog/logging.h>
@@ -17,12 +29,11 @@
 #include "runtime/time_types.h"
 #include "util/json.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 class VectorizedCastExprTest : public ::testing::Test {
 public:
-    void SetUp() {
+    void SetUp() override {
         expr_node.opcode = TExprOpcode::ADD;
         expr_node.child_type = TPrimitiveType::INT;
         expr_node.node_type = TExprNodeType::BINARY_PRED;
@@ -1625,8 +1636,8 @@ TEST_F(VectorizedCastExprTest, timeToVarchar) {
     }
 }
 
-template <PrimitiveType toType>
-static typename RunTimeColumnType<toType>::Ptr evaluateCastFromJson(TExprNode& cast_expr, std::string json_str) {
+template <LogicalType toType>
+static typename RunTimeColumnType<toType>::Ptr evaluateCastFromJson(TExprNode& cast_expr, const std::string& json_str) {
     TPrimitiveType::type t_type = to_thrift(toType);
     cast_expr.type = gen_type_desc(t_type);
 
@@ -1647,8 +1658,8 @@ static typename RunTimeColumnType<toType>::Ptr evaluateCastFromJson(TExprNode& c
     return ColumnHelper::cast_to<toType>(ptr);
 }
 
-template <PrimitiveType toType>
-static ColumnPtr evaluateCastJsonNullable(TExprNode& cast_expr, std::string json_str) {
+template <LogicalType toType>
+static ColumnPtr evaluateCastJsonNullable(TExprNode& cast_expr, const std::string& json_str) {
     std::cerr << "evaluate castCast: " << json_str << std::endl;
     TPrimitiveType::type t_type = to_thrift(toType);
     cast_expr.type = gen_type_desc(t_type);
@@ -1736,7 +1747,7 @@ TEST_F(VectorizedCastExprTest, jsonToValue) {
     EXPECT_EQ(nullptr, evaluateCastJsonNullable<TYPE_HLL>(cast_expr, "1"));
 }
 
-template <PrimitiveType fromType>
+template <LogicalType fromType>
 static std::string evaluateCastToJson(TExprNode& cast_expr, RunTimeCppType<fromType> value) {
     cast_expr.child_type = to_thrift(fromType);
     cast_expr.type = gen_type_desc(to_thrift(TYPE_JSON));
@@ -1824,7 +1835,7 @@ TEST_F(VectorizedCastExprTest, sqlToJson) {
     }
 }
 
-static std::string cast_string_to_array(TExprNode& cast_expr, PrimitiveType element_type, const std::string& str) {
+static std::string cast_string_to_array(TExprNode& cast_expr, LogicalType element_type, const std::string& str) {
     cast_expr.child_type = to_thrift(TYPE_VARCHAR);
     cast_expr.type = gen_array_type_desc(to_thrift(element_type));
 
@@ -1865,7 +1876,7 @@ TEST_F(VectorizedCastExprTest, string_to_array) {
     EXPECT_EQ(R"(['1', '2'])", cast_string_to_array(cast_expr, TYPE_VARCHAR, R"([1, 2])"));
 }
 
-static std::string cast_json_to_array(TExprNode& cast_expr, PrimitiveType element_type, const std::string& str) {
+static std::string cast_json_to_array(TExprNode& cast_expr, LogicalType element_type, const std::string& str) {
     cast_expr.child_type = to_thrift(TYPE_JSON);
     cast_expr.type = gen_array_type_desc(to_thrift(element_type));
 
@@ -1912,5 +1923,4 @@ TEST_F(VectorizedCastExprTest, json_to_array) {
     EXPECT_EQ(R"([])", cast_json_to_array(cast_expr, TYPE_JSON, R"( {"a": 1} )"));
 }
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

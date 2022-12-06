@@ -1,5 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "storage/tablet_meta_manager.h"
 
 #include <gtest/gtest.h>
@@ -73,7 +85,7 @@ TEST_F(TabletMetaManagerTest, test_save_load_tablet_meta) {
     ASSERT_EQ(DUP_KEYS, load_meta->tablet_schema().keys_type());
     ASSERT_EQ("c0", load_meta->tablet_schema().column(0).name());
     ASSERT_EQ(true, load_meta->tablet_schema().column(0).is_key());
-    ASSERT_EQ(OLAP_FIELD_TYPE_INT, load_meta->tablet_schema().column(0).type());
+    ASSERT_EQ(TYPE_INT, load_meta->tablet_schema().column(0).type());
 
     load_meta.reset(new TabletMeta());
     auto visit_func = [&](long tablet_id, long schema_hash, std::string_view meta) -> bool {
@@ -92,7 +104,7 @@ TEST_F(TabletMetaManagerTest, test_save_load_tablet_meta) {
     ASSERT_EQ(DUP_KEYS, load_meta->tablet_schema().keys_type());
     ASSERT_EQ("c0", load_meta->tablet_schema().column(0).name());
     ASSERT_EQ(true, load_meta->tablet_schema().column(0).is_key());
-    ASSERT_EQ(OLAP_FIELD_TYPE_INT, load_meta->tablet_schema().column(0).type());
+    ASSERT_EQ(TYPE_INT, load_meta->tablet_schema().column(0).type());
 }
 
 // NOLINTNEXTLINE
@@ -319,7 +331,7 @@ protected:
                 auto t0 = std::chrono::steady_clock::now();
                 for (int i = 0; i < kMaxRowset; i++) {
                     RowsetMetaPB rowset_meta_pb;
-                    rowset_meta_pb.set_creation_time(time(NULL));
+                    rowset_meta_pb.set_creation_time(time(nullptr));
                     rowset_meta_pb.set_start_version(i);
                     rowset_meta_pb.set_end_version(i);
                     rowset_meta_pb.set_num_rows(10000);
@@ -336,7 +348,7 @@ protected:
                     auto v = edit.mutable_version();
                     v->set_major(i + 1);
                     v->set_minor(0);
-                    edit.set_creation_time(time(NULL));
+                    edit.set_creation_time(time(nullptr));
                     edit.add_rowsets_add(rowset_meta_pb.rowset_seg_id());
                     edit.add_deltas(rowset_meta_pb.rowset_seg_id());
                     edit.set_rowsetid_add(1);

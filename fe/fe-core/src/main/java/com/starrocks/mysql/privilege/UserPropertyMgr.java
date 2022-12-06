@@ -91,13 +91,13 @@ public class UserPropertyMgr implements Writable {
         }
     }
 
-    public void updateUserProperty(String user, List<Pair<String, String>> properties) throws DdlException {
+    public void updateUserProperty(String user, List<Pair<String, String>> properties, boolean isReplay) throws DdlException {
         UserProperty property = propertyMap.get(user);
         if (property == null) {
             throw new DdlException("Unknown user(" + user + ")");
         }
 
-        property.update(properties);
+        property.update(properties, isReplay);
     }
 
     public long getMaxConn(String qualifiedUser) {

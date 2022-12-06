@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/runtime/stream_load/stream_load_executor.cpp
 
@@ -63,6 +76,7 @@ Status StreamLoadExecutor::execute_plan_fragment(StreamLoadContext* ctx) {
             },
             [ctx](PlanFragmentExecutor* executor) {
                 ctx->commit_infos = std::move(executor->runtime_state()->tablet_commit_infos());
+                ctx->fail_infos = std::move(executor->runtime_state()->tablet_fail_infos());
                 Status status = executor->status();
                 if (status.ok()) {
                     ctx->number_total_rows = executor->runtime_state()->num_rows_load_from_sink();
@@ -175,6 +189,7 @@ Status StreamLoadExecutor::commit_txn(StreamLoadContext* ctx) {
     request.txnId = ctx->txn_id;
     request.sync = true;
     request.commitInfos = std::move(ctx->commit_infos);
+    request.failInfos = std::move(ctx->fail_infos);
     request.__isset.commitInfos = true;
     request.__set_thrift_rpc_timeout_ms(config::txn_commit_rpc_timeout_ms);
 
@@ -227,6 +242,7 @@ Status StreamLoadExecutor::prepare_txn(StreamLoadContext* ctx) {
     request.txnId = ctx->txn_id;
     request.sync = true;
     request.commitInfos = std::move(ctx->commit_infos);
+    request.failInfos = std::move(ctx->fail_infos);
     request.__isset.commitInfos = true;
     request.__set_thrift_rpc_timeout_ms(config::txn_commit_rpc_timeout_ms);
 
@@ -267,6 +283,7 @@ Status StreamLoadExecutor::rollback_txn(StreamLoadContext* ctx) {
     set_request_auth(&request, ctx->auth);
     request.db = ctx->db;
     request.txnId = ctx->txn_id;
+    request.failInfos = std::move(ctx->fail_infos);
     request.__set_reason(ctx->status.get_error_msg());
 
     // set attachment if has

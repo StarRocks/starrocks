@@ -115,7 +115,7 @@ public class FloatLiteral extends LiteralExpr {
     }
 
     private void checkValue(Double value) throws AnalysisException {
-        if (value.isInfinite()||value.isNaN()) {
+        if (value.isInfinite() || value.isNaN()) {
             throw new AnalysisException("Invalid literal:" + value);
         }
     }
@@ -154,7 +154,7 @@ public class FloatLiteral extends LiteralExpr {
     }
 
     @Override
-    public Object getRealValue() {
+    public Object getRealObjectValue() {
         return value;
     }
 
@@ -214,6 +214,11 @@ public class FloatLiteral extends LiteralExpr {
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), value);
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        return super.equals(obj);
     }
 }
 

@@ -29,6 +29,8 @@ import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.thrift.TDateLiteral;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
@@ -65,13 +67,13 @@ public class DateLiteral extends LiteralExpr {
     private static final DateTimeFormatter DATE_FORMATTER_TWO_DIGIT;
 
     static {
-        DATE_TIME_FORMATTER = DateUtils.unixDatetimeFormatBuilder("%Y-%m-%e %H:%i:%s")
+        DATE_TIME_FORMATTER = DateUtils.unixDatetimeFormatBuilder("%Y-%m-%e %H:%i:%s", false)
                 .toFormatter().withResolverStyle(ResolverStyle.STRICT);
-        DATE_FORMATTER = DateUtils.unixDatetimeFormatBuilder("%Y-%m-%e")
+        DATE_FORMATTER = DateUtils.unixDatetimeFormatBuilder("%Y-%m-%e", false)
                 .toFormatter().withResolverStyle(ResolverStyle.STRICT);
-        DATE_TIME_FORMATTER_TWO_DIGIT = DateUtils.unixDatetimeFormatBuilder("%y-%m-%e %H:%i:%s")
+        DATE_TIME_FORMATTER_TWO_DIGIT = DateUtils.unixDatetimeFormatBuilder("%y-%m-%e %H:%i:%s", false)
                 .toFormatter().withResolverStyle(ResolverStyle.STRICT);
-        DATE_FORMATTER_TWO_DIGIT = DateUtils.unixDatetimeFormatBuilder("%y-%m-%e")
+        DATE_FORMATTER_TWO_DIGIT = DateUtils.unixDatetimeFormatBuilder("%y-%m-%e", false)
                 .toFormatter().withResolverStyle(ResolverStyle.STRICT);
         DATE_NO_SPLIT_FORMATTER = DateUtils.unixDatetimeFormatBuilder("%Y%m%e")
                 .toFormatter().withResolverStyle(ResolverStyle.STRICT);
@@ -183,6 +185,8 @@ public class DateLiteral extends LiteralExpr {
             if (type.isDate()) {
                 if (s.split("-")[0].length() == 2) {
                     dateTime = DateUtils.parseStringWithDefaultHSM(s, DATE_FORMATTER_TWO_DIGIT);
+                } else if (s.split("-").length == 3) {
+                    dateTime = DateUtils.parseStringWithDefaultHSM(s, DATE_FORMATTER);
                 } else if (s.length() == 8) {
                     // 20200202
                     dateTime = DateUtils.parseStringWithDefaultHSM(s, DATE_NO_SPLIT_FORMATTER);
@@ -237,18 +241,6 @@ public class DateLiteral extends LiteralExpr {
         }
     }
 
-    @Override
-    public Object getRealValue() {
-        if (type.isDate()) {
-            return year * 16 * 32L + month * 32 + day;
-        } else if (type.isDatetime()) {
-            return (year * 10000 + month * 100 + day) * 1000000L + hour * 10000 + minute * 100 + second;
-        } else {
-            Preconditions.checkState(false, "invalid date type: " + type);
-            return -1L;
-        }
-    }
-
     // Date column and Datetime column's hash value is not same.
     @Override
     public ByteBuffer getHashValue(Type type) {
@@ -278,6 +270,18 @@ public class DateLiteral extends LiteralExpr {
     @Override
     public String toSqlImpl() {
         return "'" + getStringValue() + "'";
+    }
+
+    @Override
+    public Object getRealObjectValue() {
+        if (type.isDate()) {
+            return LocalDateTime.of((int) getYear(), (int) getMonth(), (int) getDay(), 0, 0);
+        } else if (type.isDatetime()) {
+            return LocalDateTime.of((int) getYear(), (int) getMonth(), (int) getDay(),
+                    (int) getHour(), (int) getMinute(), (int) getSecond());
+        } else {
+            throw new StarRocksPlannerException("Invalid date type: " + type, ErrorType.INTERNAL_ERROR);
+        }
     }
 
     @Override
@@ -450,6 +454,11 @@ public class DateLiteral extends LiteralExpr {
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), Objects.hashCode(unixTimestamp(TimeZone.getDefault())));
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        return super.equals(obj);
     }
 
     @Override

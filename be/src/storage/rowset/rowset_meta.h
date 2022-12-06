@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/olap/rowset/rowset_meta.h
 
@@ -96,8 +109,8 @@ public:
     }
 
     // return semgent_footer position and size if rowset is partial_rowset
-    const FooterPointerPB* partial_rowset_footer(size_t segment_id) const {
-        if (!_rowset_meta_pb->has_txn_meta()) {
+    const FooterPointerPB* partial_rowset_footer(uint32_t segment_id) const {
+        if (!_rowset_meta_pb->has_txn_meta() || _rowset_meta_pb->txn_meta().has_merge_condition()) {
             return nullptr;
         }
         return &_rowset_meta_pb->txn_meta().partial_rowset_footers(segment_id);

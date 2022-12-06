@@ -146,6 +146,15 @@ public class MysqlCapability {
         return (flags & Flag.CLIENT_SESSION_TRACK.getFlagBit()) != 0;
     }
 
+    public boolean isSSL() {
+        return (flags & Flag.CLIENT_SSL.getFlagBit()) != 0;
+    }
+
+    @Override
+    public int hashCode() {
+        return flags;
+    }
+
     @Override
     public boolean equals(Object obj) {
         if (obj == null || !(obj instanceof MysqlCapability)) {

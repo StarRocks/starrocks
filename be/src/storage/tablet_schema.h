@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/olap/tablet_schema.h
 
@@ -58,9 +71,9 @@ public:
     using ColumnScale = uint8_t;
 
     TabletColumn();
-    TabletColumn(FieldAggregationMethod agg, FieldType type);
-    TabletColumn(FieldAggregationMethod agg, FieldType type, bool is_nullable);
-    TabletColumn(FieldAggregationMethod agg, FieldType type, bool is_nullable, int32_t unique_id, size_t length);
+    TabletColumn(FieldAggregationMethod agg, LogicalType type);
+    TabletColumn(FieldAggregationMethod agg, LogicalType type, bool is_nullable);
+    TabletColumn(FieldAggregationMethod agg, LogicalType type, bool is_nullable, int32_t unique_id, size_t length);
 
     ~TabletColumn();
 
@@ -81,8 +94,8 @@ public:
     std::string_view name() const { return {_col_name.data(), _col_name.size()}; }
     void set_name(std::string_view name) { _col_name.assign(name.data(), name.size()); }
 
-    FieldType type() const { return _type; }
-    void set_type(FieldType type) { _type = type; }
+    LogicalType type() const { return _type; }
+    void set_type(LogicalType type) { _type = type; }
 
     bool is_key() const { return _check_flag(kIsKeyShift); }
     void set_is_key(bool value) { _set_flag(kIsKeyShift, value); }
@@ -135,12 +148,10 @@ public:
     friend bool operator==(const TabletColumn& a, const TabletColumn& b);
     friend bool operator!=(const TabletColumn& a, const TabletColumn& b);
 
-    static std::string get_string_by_field_type(FieldType type);
     static std::string get_string_by_aggregation_type(FieldAggregationMethod aggregation_type);
-    static FieldType get_field_type_by_string(const std::string& str);
     static FieldAggregationMethod get_aggregation_type_by_string(const std::string& str);
     size_t estimate_field_size(size_t variable_length) const;
-    static uint32_t get_field_length_by_type(FieldType type, uint32_t string_length);
+    static uint32_t get_field_length_by_type(LogicalType type, uint32_t string_length);
 
     std::string debug_string() const;
 
@@ -190,7 +201,7 @@ private:
     ColumnUID _unique_id = 0;
     ColumnLength _length = 0;
     FieldAggregationMethod _aggregation = OLAP_FIELD_AGGREGATION_NONE;
-    FieldType _type = OLAP_FIELD_TYPE_UNKNOWN;
+    LogicalType _type = TYPE_UNKNOWN;
 
     ColumnIndexLength _index_length = 0;
     ColumnPrecision _precision = 0;
@@ -233,6 +244,7 @@ public:
     size_t field_index(std::string_view field_name) const;
     const TabletColumn& column(size_t ordinal) const;
     const std::vector<TabletColumn>& columns() const;
+    const std::vector<ColumnId> sort_key_idxes() const { return _sort_key_idxes; }
     size_t num_columns() const { return _cols.size(); }
     size_t num_key_columns() const { return _num_key_columns; }
     size_t num_short_key_columns() const { return _num_short_key_columns; }
@@ -264,7 +276,7 @@ public:
 
     bool shared() const { return _schema_map != nullptr; }
 
-    vectorized::Schema* schema() const;
+    vectorized::VectorizedSchema* schema() const;
 
 private:
     friend class SegmentReaderWriterTest;
@@ -289,13 +301,14 @@ private:
 
     uint16_t _num_key_columns = 0;
     uint16_t _num_short_key_columns = 0;
+    std::vector<ColumnId> _sort_key_idxes;
 
     uint8_t _keys_type = static_cast<uint8_t>(DUP_KEYS);
     CompressionTypePB _compression_type = CompressionTypePB::LZ4_FRAME;
 
     bool _has_bf_fpp = false;
 
-    mutable std::unique_ptr<starrocks::vectorized::Schema> _schema;
+    mutable std::unique_ptr<starrocks::vectorized::VectorizedSchema> _schema;
     mutable std::once_flag _init_schema_once_flag;
 };
 

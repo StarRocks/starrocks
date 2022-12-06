@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/exec/decompressor.cpp
 
@@ -230,8 +243,7 @@ class Lz4FrameStreamCompression : public StreamCompression {
 public:
     Lz4FrameStreamCompression()
             : StreamCompression(CompressionTypePB::LZ4_FRAME),
-              _decompress_context(std::move(compression::LZ4F_DCtx_Pool::get_default())),
-              _expect_dec_buf_size(-1) {}
+              _decompress_context(compression::LZ4F_DCtx_Pool::get_default()) {}
 
     ~Lz4FrameStreamCompression() override { _decompress_context.reset(); }
 
@@ -242,7 +254,7 @@ public:
         return ss.str();
     }
 
-    size_t get_block_size(const LZ4F_frameInfo_t* info) {
+    ssize_t get_block_size(const LZ4F_frameInfo_t* info) {
         switch (info->blockSizeID) {
         case LZ4F_default:
         case LZ4F_max64KB:
@@ -266,7 +278,7 @@ public:
 
 private:
     compression::LZ4F_DCtx_Pool::Ref _decompress_context;
-    size_t _expect_dec_buf_size;
+    ssize_t _expect_dec_buf_size{-1};
 
     const static unsigned STARROCKS_LZ4F_VERSION;
 };
@@ -359,7 +371,7 @@ class ZstandardStreamCompression : public StreamCompression {
 public:
     ZstandardStreamCompression()
             : StreamCompression(CompressionTypePB::ZSTD),
-              _decompress_context(std::move(compression::ZSTD_DCtx_Pool::get_default())) {}
+              _decompress_context(compression::ZSTD_DCtx_Pool::get_default()) {}
 
     ~ZstandardStreamCompression() override { _decompress_context.reset(); }
 

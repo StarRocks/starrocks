@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -15,8 +27,8 @@
 #include "util/bitmap_intersect.h"
 
 namespace starrocks::vectorized {
-template <PrimitiveType PT, typename = guard::Guard>
-inline constexpr PrimitiveType IntersectCountResultPT = TYPE_BIGINT;
+template <LogicalType PT, typename = guard::Guard>
+inline constexpr LogicalType IntersectCountResultPT = TYPE_BIGINT;
 
 template <typename T>
 struct BitmapIntersectAggregateState {
@@ -24,7 +36,7 @@ struct BitmapIntersectAggregateState {
     bool initial = false;
 };
 
-template <PrimitiveType PT>
+template <LogicalType PT>
 struct BitmapIntersectInternalKey {
     using InternalKeyType = RunTimeCppType<PT>;
 };
@@ -39,10 +51,10 @@ struct BitmapIntersectInternalKey<TYPE_CHAR> {
     using InternalKeyType = std::string;
 };
 
-template <PrimitiveType PT>
+template <LogicalType PT>
 using BitmapRuntimeCppType = typename BitmapIntersectInternalKey<PT>::InternalKeyType;
 
-template <PrimitiveType PT, typename T = BitmapRuntimeCppType<PT>, PrimitiveType ResultPT = IntersectCountResultPT<PT>,
+template <LogicalType PT, typename T = BitmapRuntimeCppType<PT>, LogicalType ResultPT = IntersectCountResultPT<PT>,
           typename TResult = RunTimeCppType<ResultPT>>
 class IntersectCountAggregateFunction
         : public AggregateFunctionBatchHelper<BitmapIntersectAggregateState<BitmapRuntimeCppType<PT>>,
@@ -72,7 +84,7 @@ public:
             this->data(state).initial = true;
         }
 
-        const BitmapColumn* bitmap_column = down_cast<const BitmapColumn*>(columns[0]);
+        const auto* bitmap_column = down_cast<const BitmapColumn*>(columns[0]);
 
         // based on NullableAggregateFunctionVariadic.
         const InputColumnType* key_column = down_cast<const InputColumnType*>(columns[1]);
@@ -126,7 +138,7 @@ public:
             }
         }
 
-        const BitmapColumn* bitmap_column = down_cast<const BitmapColumn*>(src[0].get());
+        const auto* bitmap_column = down_cast<const BitmapColumn*>(src[0].get());
         const InputColumnType* key_column = down_cast<const InputColumnType*>(src[1].get());
 
         // compute bytes for serialization for this chunk.

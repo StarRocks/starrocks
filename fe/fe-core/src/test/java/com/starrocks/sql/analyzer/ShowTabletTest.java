@@ -2,7 +2,6 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.utframe.UtFrameUtils;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -13,7 +12,6 @@ public class ShowTabletTest {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
     }
 
@@ -27,7 +25,7 @@ public class ShowTabletTest {
         analyzeSuccess("SHOW TABLET FROM example_db.table_name limit 5,10;");
         analyzeSuccess("SHOW TABLET FROM example_db.table_name where " +
                 "backendid=10000 and version=1 and state=\"NORMAL\";");
-        analyzeSuccess("SHOW TABLET FROM example_db.table_name where backendid=10000 order by version;");
+        analyzeSuccess("SHOW TABLET FROM test.t0 where backendid=10000 order by version;");
         analyzeSuccess("SHOW TABLET FROM example_db.table_name where indexname=\"t1_rollup\";");
     }
 
@@ -36,7 +34,9 @@ public class ShowTabletTest {
         analyzeFail("SHOW TABLET FROM example_db.table_name where backendid=10000 or ts > 10",
                 "Only allow compound predicate with operator AND");
         analyzeFail("SHOW TABLET FROM example_db.table_name where abc=\"t1_rollup\";");
-        analyzeFail("SHOW TABLET FROM example_db.table_name where backendid=10000 order by abc;");
+        analyzeFail("SHOW TABLET FROM test.t0 where backendid=10000 order by abc;");
+        analyzeFail("SHOW TABLET FROM test.lake_table where backendid=10000 order by DataSize;",
+                "Table lake_table is not found");
     }
 
 }

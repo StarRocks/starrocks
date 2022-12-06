@@ -43,6 +43,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CancelExportStmt;
 import com.starrocks.sql.ast.ExportStmt;
+import com.starrocks.sql.common.MetaUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -120,9 +121,7 @@ public class ExportMgr {
     public void cancelExportJob(CancelExportStmt stmt) throws UserException {
         String dbName = stmt.getDbName();
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
-        if (db == null) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
-        }
+        MetaUtils.checkDbNullAndReport(db, dbName);
         long dbId = db.getId();
 
         UUID queryId = stmt.getQueryId();

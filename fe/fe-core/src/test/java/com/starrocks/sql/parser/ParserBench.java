@@ -3,6 +3,7 @@
 package com.starrocks.sql.parser;
 
 import com.google.common.collect.Lists;
+import com.starrocks.common.Config;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.ast.StatementBase;
 import org.antlr.v4.runtime.BaseErrorListener;
@@ -96,7 +97,7 @@ public class ParserBench {
         parser.addErrorListener(new BaseErrorListener());
         parser.removeParseListeners();
         if (isLimit) {
-            parser.addParseListener(new TokenNumberListener(1000000));
+            parser.addParseListener(new TokenNumberListener(100000000, Config.expr_children_limit));
         }
         parser.getInterpreter().setPredictionMode(mode.equals("SLL") ? PredictionMode.SLL : PredictionMode.LL);
         StarRocksParser.SqlStatementsContext sqlStatements = parser.sqlStatements();

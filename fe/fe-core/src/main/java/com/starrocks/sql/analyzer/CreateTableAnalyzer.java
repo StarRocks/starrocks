@@ -62,7 +62,8 @@ public class CreateTableAnalyzer {
         ICEBERG,
         HUDI,
         JDBC,
-        STARROCKS
+        STARROCKS,
+        FILE
     }
 
     public enum CharsetType {
@@ -118,6 +119,11 @@ public class CreateTableAnalyzer {
         statement.setCharsetName(analyzeCharsetName(statement.getCharsetName()).toLowerCase());
 
         KeysDesc keysDesc = statement.getKeysDesc();
+        if (statement.getSortKeys() != null) {
+            if (keysDesc == null || keysDesc.getKeysType() != KeysType.PRIMARY_KEYS) {
+                throw new IllegalArgumentException("only primary key support sort key");
+            }
+        }
         List<ColumnDef> columnDefs = statement.getColumnDefs();
         PartitionDesc partitionDesc = statement.getPartitionDesc();
         // analyze key desc

@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -53,19 +65,19 @@ public:
                                     const TGetTablesConfigRequest& var_params, TGetTablesConfigResponse* var_result);
 };
 
-template <PrimitiveType SlotType>
+template <LogicalType SlotType>
 void fill_data_column_with_slot(vectorized::Column* data_column, void* slot) {
     using ColumnType = typename vectorized::RunTimeTypeTraits<SlotType>::ColumnType;
     using ValueType = typename vectorized::RunTimeTypeTraits<SlotType>::CppType;
 
     ColumnType* result = down_cast<ColumnType*>(data_column);
     if constexpr (vectorized::IsDate<ValueType>) {
-        DateTimeValue* date_time_value = (DateTimeValue*)slot;
+        auto* date_time_value = (DateTimeValue*)slot;
         vectorized::DateValue date_value = vectorized::DateValue::create(
                 date_time_value->year(), date_time_value->month(), date_time_value->day());
         result->append(date_value);
     } else if constexpr (vectorized::IsTimestamp<ValueType>) {
-        DateTimeValue* date_time_value = (DateTimeValue*)slot;
+        auto* date_time_value = (DateTimeValue*)slot;
         vectorized::TimestampValue timestamp_value = vectorized::TimestampValue::create(
                 date_time_value->year(), date_time_value->month(), date_time_value->day(), date_time_value->hour(),
                 date_time_value->minute(), date_time_value->second());
@@ -75,10 +87,10 @@ void fill_data_column_with_slot(vectorized::Column* data_column, void* slot) {
     }
 }
 
-template <PrimitiveType SlotType>
+template <LogicalType SlotType>
 void fill_column_with_slot(vectorized::Column* result, void* slot) {
     if (result->is_nullable()) {
-        vectorized::NullableColumn* nullable_column = down_cast<vectorized::NullableColumn*>(result);
+        auto* nullable_column = down_cast<vectorized::NullableColumn*>(result);
         vectorized::NullData& null_data = nullable_column->null_column_data();
         vectorized::Column* data_column = nullable_column->data_column().get();
         null_data.push_back(0);

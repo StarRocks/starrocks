@@ -5,13 +5,15 @@ package com.starrocks.server;
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.FileTable;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
-import com.starrocks.external.ColumnTypeConverter;
+import com.starrocks.common.FeConstants;
+import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.sql.ast.CreateTableStmt;
 import org.apache.avro.Schema;
 import org.apache.hadoop.conf.Configuration;
@@ -47,6 +49,9 @@ public class TableFactory {
             case HUDI :
                 table = createHudiTable(stmt);
                 break;
+            case FILE :
+                table = createFileTable(stmt);
+                break;
             default:
                 throw new DdlException("Unsupported table type " + type);
         }
@@ -60,6 +65,11 @@ public class TableFactory {
         Map<String, String> properties = stmt.getProperties();
         long tableId = gsm.getNextId();
         Table table = getTableFromResourceMappingCatalog(properties, Table.TableType.HIVE, HIVE);
+        if (table == null) {
+            throw new DdlException("Can not find hive table "
+                    + properties.get(DB) + "." + properties.get(TABLE)
+                    + " from the resource " + properties.get(RESOURCE));
+        }
         HiveTable oHiveTable = (HiveTable) table;
 
         validateHiveColumnType(columns, oHiveTable);
@@ -80,13 +90,34 @@ public class TableFactory {
         HiveTable hiveTable = tableBuilder.build();
 
         // partition key, commented for show partition key
-        String partitionCmt = "PARTITION BY (" + String.join(", ", hiveTable.getPartitionColumnNames()) + ")";
-        if (Strings.isNullOrEmpty(stmt.getComment())) {
+        if (Strings.isNullOrEmpty(stmt.getComment()) && hiveTable.getPartitionColumnNames().size() > 0) {
+            String partitionCmt = "PARTITION BY (" + String.join(", ", hiveTable.getPartitionColumnNames()) + ")";
             hiveTable.setComment(partitionCmt);
-        } else {
+        } else if (!Strings.isNullOrEmpty(stmt.getComment())) {
             hiveTable.setComment(stmt.getComment());
         }
         return hiveTable;
+    }
+
+    private static FileTable createFileTable(CreateTableStmt stmt) throws DdlException {
+        GlobalStateMgr gsm = GlobalStateMgr.getCurrentState();
+        String tableName = stmt.getTableName();
+        List<Column> columns = stmt.getColumns();
+        Map<String, String> properties = stmt.getProperties();
+        long tableId = gsm.getNextId();
+
+        FileTable.Builder tableBuilder = FileTable.builder()
+                .setId(tableId)
+                .setTableName(tableName)
+                .setFullSchema(columns)
+                .setProperties(properties);
+
+        FileTable fileTable = tableBuilder.build();
+
+        if (!Strings.isNullOrEmpty(stmt.getComment())) {
+            fileTable.setComment(stmt.getComment());
+        }
+        return fileTable;
     }
 
     private static HudiTable createHudiTable(CreateTableStmt stmt) throws DdlException {
@@ -108,6 +139,11 @@ public class TableFactory {
         metaFields.forEach(f -> columns.add(new Column(f, Type.STRING, true)));
 
         Table table = getTableFromResourceMappingCatalog(properties, Table.TableType.HUDI, HUDI);
+        if (table == null) {
+            throw new DdlException("Can not find hudi table "
+                    + properties.get(DB) + "." + properties.get(TABLE)
+                    + " from the resource " + properties.get(RESOURCE));
+        }
         HudiTable oHudiTable = (HudiTable) table;
         validateHudiColumnType(columns, oHudiTable);
 
@@ -127,10 +163,10 @@ public class TableFactory {
         HudiTable hudiTable = tableBuilder.build();
 
         // partition key, commented for show partition key
-        String partitionCmt = "PARTITION BY (" + String.join(", ", hudiTable.getPartitionColumnNames()) + ")";
-        if (Strings.isNullOrEmpty(stmt.getComment())) {
+        if (Strings.isNullOrEmpty(stmt.getComment()) && hudiTable.getPartitionColumnNames().size() > 0) {
+            String partitionCmt = "PARTITION BY (" + String.join(", ", hudiTable.getPartitionColumnNames()) + ")";
             hudiTable.setComment(partitionCmt);
-        } else {
+        } else if (!Strings.isNullOrEmpty(stmt.getComment())) {
             hudiTable.setComment(stmt.getComment());
         }
         return hudiTable;
@@ -147,7 +183,8 @@ public class TableFactory {
                 throw new DdlException("Column type convert failed on column: " + column.getName());
             }
 
-            if (!ColumnTypeConverter.validateHiveColumnType(column.getType(), oColumn.getType())) {
+            if (!ColumnTypeConverter.validateHiveColumnType(column.getType(), oColumn.getType()) &&
+                    !FeConstants.runningUnitTest) {
                 throw new DdlException("can not convert hive external table column type [" + column.getType() + "] " +
                         "to correct type [" + oColumn.getType() + "]");
             }

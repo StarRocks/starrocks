@@ -1,12 +1,26 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "column/column_helper.h"
 
 #include <runtime/types.h>
 
 #include "column/array_column.h"
+#include "column/chunk.h"
 #include "column/json_column.h"
 #include "column/map_column.h"
+#include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
 #include "runtime/primitive_type.h"
@@ -187,15 +201,38 @@ ColumnPtr ColumnHelper::create_const_null_column(size_t chunk_size) {
     return ConstColumn::create(nullable_column, chunk_size);
 }
 
+// expression trees' return column should align return type when some return columns maybe diff from the required
+// return type, as well the null flag. e.g., concat_ws returns col from create_const_null_column(), it's type is
+// Nullable(int8), but required return type is nullable(string), so col need align return type to nullable(string).
+ColumnPtr ColumnHelper::align_return_type(const ColumnPtr& old_col, const TypeDescriptor& type_desc, size_t num_rows,
+                                          const bool is_nullable) {
+    ColumnPtr new_column = old_col;
+    if (old_col->only_null()) {
+        new_column = ColumnHelper::create_column(type_desc, true);
+        new_column->append_nulls(num_rows);
+    } else if (old_col->is_constant()) {
+        // Note: we must create a new column every time here,
+        // because result_columns[i] is shared_ptr
+        new_column = ColumnHelper::create_column(type_desc, false);
+        auto* const_column = down_cast<ConstColumn*>(old_col.get());
+        new_column->append(*const_column->data_column(), 0, 1);
+        new_column->assign(num_rows, 0);
+    }
+    if (is_nullable && !new_column->is_nullable()) {
+        new_column = NullableColumn::create(std::move(new_column), NullColumn::create(new_column->size(), 0));
+    }
+    return new_column;
+}
+
 ColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool nullable) {
     return create_column(type_desc, nullable, false, 0);
 }
 
 struct ColumnBuilder {
-    template <PrimitiveType ptype>
+    template <LogicalType ptype>
     ColumnPtr operator()(const TypeDescriptor& type_desc, size_t size) {
         switch (ptype) {
-        case INVALID_TYPE:
+        case TYPE_UNKNOWN:
         case TYPE_NULL:
         case TYPE_BINARY:
         case TYPE_DECIMAL:
@@ -224,15 +261,33 @@ ColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool null
     }
 
     ColumnPtr p;
-    if (type_desc.type == TYPE_ARRAY) {
+    if (type_desc.type == LogicalType::TYPE_ARRAY) {
         auto offsets = UInt32Column::create(size);
         auto data = create_column(type_desc.children[0], true, is_const, size);
         p = ArrayColumn::create(std::move(data), std::move(offsets));
-    } else if (type_desc.type == TYPE_MAP) {
+    } else if (type_desc.type == LogicalType::TYPE_MAP) {
         auto offsets = UInt32Column ::create(size);
         auto keys = create_column(type_desc.children[0], true, is_const, size);
         auto values = create_column(type_desc.children[1], true, is_const, size);
         p = MapColumn::create(std::move(keys), std::move(values), std::move(offsets));
+    } else if (type_desc.type == LogicalType::TYPE_STRUCT) {
+        size_t field_size = type_desc.children.size();
+        DCHECK_EQ(field_size, type_desc.selected_fields.size());
+        Columns columns;
+        BinaryColumn::Ptr field_names = BinaryColumn::create();
+        for (size_t i = 0; i < field_size; i++) {
+            // TODO(SmithCruise): We still create not selected column, but do append_default instead.
+            // We should optimize it in future.
+            // if (!type_desc.selected_fields.at(i)) {
+            //     continue;
+            // }
+
+            // Subfield column must be nullable column.
+            ColumnPtr field_column = create_column(type_desc.children[i], true, is_const, size);
+            columns.emplace_back(field_column);
+            field_names->append_string(type_desc.field_names[i]);
+        }
+        p = StructColumn::create(columns, field_names);
     } else {
         p = type_dispatch_column(type_desc.type, ColumnBuilder(), type_desc, size);
     }
@@ -317,7 +372,7 @@ ColumnPtr ColumnHelper::convert_time_column_from_double_to_str(const ColumnPtr& 
         res = NullableColumn::create(get_binary_column(data_column, column->size()), nullable_column->null_column());
     } else if (column->is_constant()) {
         auto* const_column = down_cast<vectorized::ConstColumn*>(column.get());
-        string time_str = time_str_from_double(const_column->get(0).get_double());
+        std::string time_str = time_str_from_double(const_column->get(0).get_double());
         res = vectorized::ColumnHelper::create_const_column<TYPE_VARCHAR>(time_str, column->size());
     } else {
         auto* data_column = down_cast<DoubleColumn*>(column.get());

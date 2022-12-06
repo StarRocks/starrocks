@@ -47,6 +47,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.transaction.TabletCommitInfo;
+import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionState;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -70,11 +71,12 @@ public abstract class BulkLoadJob extends LoadJob {
     // this param is used to persist the expr of columns
     // the origin stmt is persisted instead of columns expr
     // the expr of columns will be reanalyze when the log is replayed
-    private OriginStatement originStmt;
+    protected OriginStatement originStmt;
 
     // include broker desc and data desc
     protected BrokerFileGroupAggInfo fileGroupAggInfo = new BrokerFileGroupAggInfo();
     protected List<TabletCommitInfo> commitInfos = Lists.newArrayList();
+    protected List<TabletFailInfo> failInfos = Lists.newArrayList();
 
     // sessionVariable's name -> sessionVariable's value
     // we persist these sessionVariables due to the session is not available when replaying the job.
@@ -96,7 +98,6 @@ public abstract class BulkLoadJob extends LoadJob {
             SessionVariable var = ConnectContext.get().getSessionVariable();
             sessionVariables.put(SessionVariable.SQL_MODE, Long.toString(var.getSqlMode()));
             sessionVariables.put(SessionVariable.LOAD_TRANSMISSION_COMPRESSION_TYPE, var.getloadTransmissionCompressionType());
-            sessionVariables.put(SessionVariable.ENABLE_REPLICATED_STORAGE, Boolean.toString(var.getEnableReplicatedStorage()));
         } else {
             sessionVariables.put(SessionVariable.SQL_MODE, String.valueOf(SqlModeHelper.MODE_DEFAULT));
         }

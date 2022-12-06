@@ -35,7 +35,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.external.iceberg.StarRocksIcebergException;
+import com.starrocks.connector.iceberg.StarRocksIcebergException;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.ResourceGroupMetricMgr;
 import com.starrocks.mysql.MysqlChannel;
@@ -48,6 +48,7 @@ import com.starrocks.plugin.AuditEvent.EventType;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.ast.KillStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
@@ -145,13 +146,15 @@ public class ConnectProcessor {
 
         ctx.getAuditEventBuilder().setEventType(EventType.AFTER_QUERY)
                 .setState(ctx.getState().toString()).setErrorCode(ctx.getErrorCode()).setQueryTime(elapseMs)
-                .setScanBytes(statistics == null ? 0 : statistics.scanBytes)
-                .setScanRows(statistics == null ? 0 : statistics.scanRows)
-                .setCpuCostNs(statistics == null || statistics.cpuCostNs == null ? 0 : statistics.cpuCostNs)
-                .setMemCostBytes(statistics == null || statistics.memCostBytes == null ? 0 : statistics.memCostBytes)
                 .setReturnRows(ctx.getReturnRows())
                 .setStmtId(ctx.getStmtId())
                 .setQueryId(ctx.getQueryId() == null ? "NaN" : ctx.getQueryId().toString());
+        if (statistics != null) {
+            ctx.getAuditEventBuilder().setScanBytes(statistics.scanBytes);
+            ctx.getAuditEventBuilder().setScanRows(statistics.scanRows);
+            ctx.getAuditEventBuilder().setCpuCostNs(statistics.cpuCostNs == null ? -1 : statistics.cpuCostNs);
+            ctx.getAuditEventBuilder().setMemCostBytes(statistics.memCostBytes == null ? -1 : statistics.memCostBytes);
+        }
 
         if (ctx.getState().isQuery()) {
             MetricRepo.COUNTER_QUERY_ALL.increase(1L);
@@ -171,13 +174,24 @@ public class ConnectProcessor {
                 }
             }
             ctx.getAuditEventBuilder().setIsQuery(true);
+            if (ctx.getSessionVariable().isEnableBigQueryLog()) {
+                ctx.getAuditEventBuilder().setBigQueryLogCPUSecondThreshold(
+                        ctx.getSessionVariable().getBigQueryLogCPUSecondThreshold());
+                ctx.getAuditEventBuilder().setBigQueryLogScanBytesThreshold(
+                        ctx.getSessionVariable().getBigQueryLogScanBytesThreshold());
+                ctx.getAuditEventBuilder().setBigQueryLogScanRowsThreshold(
+                        ctx.getSessionVariable().getBigQueryLogScanRowsThreshold());
+            }
         } else {
             ctx.getAuditEventBuilder().setIsQuery(false);
         }
 
         ctx.getAuditEventBuilder().setFeIp(FrontendOptions.getLocalHostAddress());
 
-        if (ctx.getState().isQuery() && containsComment(origStmt)) {
+        if (!ctx.getState().isQuery() && (parsedStmt != null && parsedStmt.needAuditEncryption())) {
+            // Some information like username, password in the stmt should not be printed.
+            ctx.getAuditEventBuilder().setStmt(AstToStringBuilder.toString(parsedStmt));
+        } else if (ctx.getState().isQuery() && containsComment(origStmt)) {
             // avoid audit log can't replay
             ctx.getAuditEventBuilder().setStmt(origStmt);
         } else {
@@ -266,7 +280,8 @@ public class ConnectProcessor {
                 .setTimestamp(System.currentTimeMillis())
                 .setClientIp(ctx.getMysqlChannel().getRemoteHostPortString())
                 .setUser(ctx.getQualifiedUser())
-                .setAuthorizedUser(ctx.getCurrentUserIdentity() == null ? "null" : ctx.getCurrentUserIdentity().toString())
+                .setAuthorizedUser(
+                        ctx.getCurrentUserIdentity() == null ? "null" : ctx.getCurrentUserIdentity().toString())
                 .setDb(ctx.getDatabase())
                 .setCatalog(ctx.getCurrentCatalog());
         ctx.getPlannerProfile().reset();

@@ -28,8 +28,8 @@ import java.util.stream.Collectors;
 public class ExpressionStatisticCalculator {
     private static final Logger LOG = LogManager.getLogger(ExpressionStatisticCalculator.class);
 
-    public static final int DAYS_FROM_0_TO_1970 = 719528;
-    public static final int DAYS_FROM_0_TO_9999 = 3652424;
+    public static final long DAYS_FROM_0_TO_1970 = 719528;
+    public static final long DAYS_FROM_0_TO_9999 = 3652424;
 
     public static ColumnStatistic calculate(ScalarOperator operator, Statistics input) {
         return calculate(operator, input, input != null ? input.getOutputRowCount() : 0);
@@ -191,7 +191,7 @@ public class ExpressionStatisticCalculator {
                 case FunctionSet.CURTIME:
                 case FunctionSet.CURRENT_TIME: {
                     LocalDateTime now = LocalDateTime.now();
-                    minValue = now.getHour() * 3600 + now.getMinute() * 60 + now.getSecond();
+                    minValue = now.getHour() * 3600D + now.getMinute() * 60D + now.getSecond();
                     maxValue = minValue;
                     distinctValue = 1;
                     break;
@@ -317,10 +317,10 @@ public class ExpressionStatisticCalculator {
                     if (minMaxValueInfinite) {
                         break;
                     }
-                    minValue =
-                            Utils.getDatetimeFromLong((long) minValue).toLocalDate().toEpochDay() + DAYS_FROM_0_TO_1970;
-                    maxValue =
-                            Utils.getDatetimeFromLong((long) maxValue).toLocalDate().toEpochDay() + DAYS_FROM_0_TO_1970;
+                    minValue = Utils.getDatetimeFromLong((long) minValue).toLocalDate().toEpochDay() +
+                            (double) DAYS_FROM_0_TO_1970;
+                    maxValue = Utils.getDatetimeFromLong((long) maxValue).toLocalDate().toEpochDay() +
+                            (double) DAYS_FROM_0_TO_1970;
                     break;
                 case FunctionSet.FROM_DAYS:
                     if (minValue < DAYS_FROM_0_TO_1970) {
@@ -456,23 +456,23 @@ public class ExpressionStatisticCalculator {
                     maxValue = left.getMaxValue() - right.getMinValue();
                     break;
                 case FunctionSet.YEARS_DIFF:
-                    interval = 3600 * 24 * 365;
+                    interval = 3600L * 24L * 365L;
                     minValue = (left.getMinValue() - right.getMaxValue()) / interval;
                     maxValue = (left.getMaxValue() - right.getMinValue()) / interval;
                     break;
                 case FunctionSet.MONTHS_DIFF:
-                    interval = 3600 * 24 * 31;
+                    interval = 3600L * 24L * 31L;
                     minValue = (left.getMinValue() - right.getMaxValue()) / interval;
                     maxValue = (left.getMaxValue() - right.getMinValue()) / interval;
                     break;
                 case FunctionSet.WEEKS_DIFF:
-                    interval = 3600 * 24 * 7;
+                    interval = 3600L * 24L * 7L;
                     minValue = (left.getMinValue() - right.getMaxValue()) / interval;
                     maxValue = (left.getMaxValue() - right.getMinValue()) / interval;
                     break;
                 case FunctionSet.DAYS_DIFF:
                 case FunctionSet.DATEDIFF:
-                    interval = 3600 * 24;
+                    interval = 3600L * 24L;
                     minValue = (left.getMinValue() - right.getMaxValue()) / interval;
                     maxValue = (left.getMaxValue() - right.getMinValue()) / interval;
                     break;

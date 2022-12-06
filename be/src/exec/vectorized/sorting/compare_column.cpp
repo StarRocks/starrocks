@@ -1,4 +1,18 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+#include <utility>
 
 #include "column/array_column.h"
 #include "column/column_visitor_adapter.h"
@@ -163,6 +177,11 @@ public:
         return Status::OK();
     }
 
+    Status do_visit(const vectorized::StructColumn& column) {
+        //TODO(SmithCruise)
+        return Status::NotSupported("Not support");
+    }
+
     template <typename T>
     Status do_visit(const vectorized::BinaryColumnBase<T>& column) {
         const auto& lhs_datas = column.get_data();
@@ -230,11 +249,14 @@ private:
 
 class ColumnTieBuilder final : public ColumnVisitorAdapter<ColumnTieBuilder> {
 public:
-    explicit ColumnTieBuilder(const ColumnPtr column, Tie* tie)
-            : ColumnVisitorAdapter(this), _column(column), _tie(tie), _nullable_column(nullptr) {}
+    explicit ColumnTieBuilder(ColumnPtr column, Tie* tie)
+            : ColumnVisitorAdapter(this), _column(std::move(column)), _tie(tie), _nullable_column(nullptr) {}
 
-    explicit ColumnTieBuilder(const ColumnPtr column, Tie* tie, const NullColumnPtr nullable_column)
-            : ColumnVisitorAdapter(this), _column(column), _tie(tie), _nullable_column(nullable_column) {}
+    explicit ColumnTieBuilder(ColumnPtr column, Tie* tie, NullColumnPtr nullable_column)
+            : ColumnVisitorAdapter(this),
+              _column(std::move(column)),
+              _tie(tie),
+              _nullable_column(std::move(nullable_column)) {}
 
     Status do_visit(const vectorized::NullableColumn& column) {
         // TODO: maybe could skip compare rows that contains null
@@ -280,9 +302,10 @@ public:
         return Status::OK();
     }
 
-    Status do_visit(const vectorized::ConstColumn& column) { return Status::NotSupported("not support"); }
-    Status do_visit(const vectorized::ArrayColumn& column) { return Status::NotSupported("not support"); }
-    Status do_visit(const vectorized::MapColumn& column) { return Status::NotSupported("not support"); }
+    Status do_visit(const vectorized::ConstColumn& column) { return Status::NotSupported("Not support"); }
+    Status do_visit(const vectorized::ArrayColumn& column) { return Status::NotSupported("Not support"); }
+    Status do_visit(const vectorized::MapColumn& column) { return Status::NotSupported("Not support"); }
+    Status do_visit(const vectorized::StructColumn& column) { return Status::NotSupported("Not support"); }
     template <typename T>
     Status do_visit(const vectorized::ObjectColumn<T>& column) {
         return Status::NotSupported("not support");
@@ -294,15 +317,15 @@ private:
     const NullColumnPtr _nullable_column;
 };
 
-int compare_column(const ColumnPtr column, CompareVector& cmp_vector, Datum rhs_value, const SortDesc& desc) {
-    ColumnCompare compare(cmp_vector, rhs_value, desc);
+int compare_column(const ColumnPtr& column, CompareVector& cmp_vector, Datum rhs_value, const SortDesc& desc) {
+    ColumnCompare compare(cmp_vector, std::move(rhs_value), desc);
 
     [[maybe_unused]] Status st = column->accept(&compare);
     DCHECK(st.ok());
     return compare.get_equal_count();
 }
 
-void compare_columns(const Columns columns, std::vector<int8_t>& cmp_vector, const std::vector<Datum>& rhs_values,
+void compare_columns(const Columns& columns, std::vector<int8_t>& cmp_vector, const std::vector<Datum>& rhs_values,
                      const SortDescs& sort_desc) {
     if (columns.empty()) {
         return;
@@ -313,7 +336,7 @@ void compare_columns(const Columns columns, std::vector<int8_t>& cmp_vector, con
     DCHECK(std::all_of(cmp_vector.begin(), cmp_vector.end(), [](int8_t x) { return x == 1 || x == -1 || x == 0; }));
 
     for (size_t col_idx = 0; col_idx < columns.size(); col_idx++) {
-        Datum rhs_value = rhs_values[col_idx];
+        const Datum& rhs_value = rhs_values[col_idx];
 
         int equal_count = compare_column(columns[col_idx], cmp_vector, rhs_value, sort_desc.get_column_desc(col_idx));
         if (equal_count == 0) {
@@ -322,7 +345,7 @@ void compare_columns(const Columns columns, std::vector<int8_t>& cmp_vector, con
     }
 }
 
-void build_tie_for_column(const ColumnPtr column, Tie* tie, const NullColumnPtr null_column) {
+void build_tie_for_column(const ColumnPtr& column, Tie* tie, const NullColumnPtr& null_column) {
     DCHECK(!!tie);
     DCHECK_EQ(column->size(), tie->size());
 

@@ -27,6 +27,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.AccessPrivilege;
 import com.starrocks.cluster.ClusterNamespace;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.Pair;
@@ -144,7 +145,7 @@ public class UserProperty implements Writable {
         whiteList.removeDomain(domain);
     }
 
-    public void update(List<Pair<String, String>> properties) throws DdlException {
+    public void update(List<Pair<String, String>> properties, boolean isReplay) throws DdlException {
         // copy
         long newMaxConn = maxConn;
 
@@ -168,6 +169,12 @@ public class UserProperty implements Writable {
 
                 if (newMaxConn <= 0 || newMaxConn > 10000) {
                     throw new DdlException(PROP_MAX_USER_CONNECTIONS + " is not valid, must between 1 and 10000");
+                }
+
+                if (!isReplay && newMaxConn > Config.qe_max_connection) {
+                    throw new DdlException(
+                            PROP_MAX_USER_CONNECTIONS + " is not valid, must less than qe_max_connection " +
+                                    Config.qe_max_connection);
                 }
             } else {
                 throw new DdlException("Unknown user property(" + key + ")");

@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -13,8 +25,7 @@
 #include "simd/simd.h"
 #include "typeinfo"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 class ResultNopCheck {
     template <typename Type, typename ResultType>
@@ -31,7 +42,7 @@ class ResultNopCheck {
 template <typename OP>
 class BaseBinaryFunction {
 public:
-    template <PrimitiveType LType, PrimitiveType RType, PrimitiveType ResultType>
+    template <LogicalType LType, LogicalType RType, LogicalType ResultType>
     static ColumnPtr vector_vector(const ColumnPtr& v1, const ColumnPtr& v2) {
         auto& r1 = ColumnHelper::cast_to_raw<LType>(v1)->get_data();
         auto& r2 = ColumnHelper::cast_to_raw<RType>(v2)->get_data();
@@ -52,7 +63,7 @@ public:
         return result;
     }
 
-    template <PrimitiveType LType, PrimitiveType RType, PrimitiveType ResultType>
+    template <LogicalType LType, LogicalType RType, LogicalType ResultType>
     static ColumnPtr const_vector(const ColumnPtr& v1, const ColumnPtr& v2) {
         auto& r1 = ColumnHelper::cast_to_raw<LType>(v1)->get_data();
         auto& r2 = ColumnHelper::cast_to_raw<RType>(v2)->get_data();
@@ -74,7 +85,7 @@ public:
         return result;
     }
 
-    template <PrimitiveType LType, PrimitiveType RType, PrimitiveType ResultType>
+    template <LogicalType LType, LogicalType RType, LogicalType ResultType>
     static ColumnPtr vector_const(const ColumnPtr& v1, const ColumnPtr& v2) {
         auto& r1 = ColumnHelper::cast_to_raw<LType>(v1)->get_data();
         auto& r2 = ColumnHelper::cast_to_raw<RType>(v2)->get_data();
@@ -96,7 +107,7 @@ public:
         return result;
     }
 
-    template <PrimitiveType LType, PrimitiveType RType, PrimitiveType ResultType>
+    template <LogicalType LType, LogicalType RType, LogicalType ResultType>
     static ColumnPtr const_const(const ColumnPtr& v1, const ColumnPtr& v2) {
         auto& r1 = ColumnHelper::cast_to_raw<LType>(v1)->get_data();
         auto& r2 = ColumnHelper::cast_to_raw<RType>(v2)->get_data();
@@ -120,7 +131,7 @@ public:
 template <typename OP>
 class UnpackConstColumnBinaryFunction {
 public:
-    template <PrimitiveType LType, PrimitiveType RType, PrimitiveType ResultType>
+    template <LogicalType LType, LogicalType RType, LogicalType ResultType>
     static ColumnPtr evaluate(const ColumnPtr& v1, const ColumnPtr& v2) {
         if (!v1->is_constant() && !v2->is_constant()) {
             return BaseBinaryFunction<OP>::template vector_vector<LType, RType, ResultType>(v1, v2);
@@ -161,7 +172,7 @@ public:
 template <typename FN>
 class UnionNullableColumnBinaryFunction {
 public:
-    template <PrimitiveType LType, PrimitiveType RType, PrimitiveType ResultType>
+    template <LogicalType LType, LogicalType RType, LogicalType ResultType>
     static ColumnPtr evaluate(const ColumnPtr& v1, const ColumnPtr& v2) {
         if (v1->only_null() || v2->only_null()) {
             return ColumnHelper::create_const_null_column(v1->size());
@@ -181,12 +192,12 @@ public:
         }
     }
 
-    template <PrimitiveType Type>
+    template <LogicalType Type>
     static inline ColumnPtr evaluate(const ColumnPtr& v1, const ColumnPtr& v2) {
         return evaluate<Type, Type, Type>(v1, v2);
     }
 
-    template <PrimitiveType Type, PrimitiveType ResultType>
+    template <LogicalType Type, LogicalType ResultType>
     static inline ColumnPtr evaluate(const ColumnPtr& v1, const ColumnPtr& v2) {
         return evaluate<Type, Type, ResultType>(v1, v2);
     }
@@ -195,7 +206,7 @@ public:
 template <typename FN, typename NULL_OP = ResultNopCheck>
 class CheckOutputBinaryFunction {
 public:
-    template <PrimitiveType LType, PrimitiveType RType, PrimitiveType ResultType>
+    template <LogicalType LType, LogicalType RType, LogicalType ResultType>
     static ColumnPtr evaluate(const ColumnPtr& v1, const ColumnPtr& v2) {
         ColumnPtr data_result = FN::template evaluate<LType, RType, ResultType>(v1, v2);
 
@@ -259,7 +270,7 @@ public:
 template <typename PRODUCE_NULL_FN, typename FN>
 class ProduceNullableColumnBinaryFunction {
 public:
-    template <PrimitiveType LType, PrimitiveType RType, PrimitiveType ResultType>
+    template <LogicalType LType, LogicalType RType, LogicalType ResultType>
     static ColumnPtr evaluate(const ColumnPtr& v1, const ColumnPtr& v2) {
         if (v1->only_null() || v2->only_null()) {
             return ColumnHelper::create_const_null_column(v1->size());
@@ -316,7 +327,7 @@ public:
         }
     }
 
-    template <PrimitiveType Type>
+    template <LogicalType Type>
     static inline ColumnPtr evaluate(const ColumnPtr& v1, const ColumnPtr& v2) {
         return evaluate<Type, Type, Type>(v1, v2);
     }
@@ -325,7 +336,7 @@ public:
 template <typename FN>
 class UnpackNotAlignDataAndNullColumnBinaryFunction {
 public:
-    template <PrimitiveType LType, PrimitiveType RType, PrimitiveType ResultType>
+    template <LogicalType LType, LogicalType RType, LogicalType ResultType>
     static ColumnPtr evaluate(const ColumnPtr& v1, const NullColumnPtr& n1, const ColumnPtr& v2,
                               const NullColumnPtr& n2) {
         if (v1->size() == v2->size()) {
@@ -350,7 +361,7 @@ public:
 template <typename NULL_FN, typename FN>
 class LogicPredicateBaseBinaryFunction {
 public:
-    template <PrimitiveType LType, PrimitiveType RType, PrimitiveType ResultType>
+    template <LogicalType LType, LogicalType RType, LogicalType ResultType>
     static ColumnPtr vector_vector(const ColumnPtr& lv, const NullColumnPtr& ln, const ColumnPtr& rv,
                                    const NullColumnPtr& rn) {
         auto* lvd = ColumnHelper::cast_to_raw<LType>(lv)->get_data().data();
@@ -383,7 +394,7 @@ public:
         return NullableColumn::create(std::move(data_column), std::move(null_column));
     }
 
-    template <PrimitiveType LType, PrimitiveType RType, PrimitiveType ResultType>
+    template <LogicalType LType, LogicalType RType, LogicalType ResultType>
     static ColumnPtr const_vector(const ColumnPtr& lv, const NullColumnPtr& ln, const ColumnPtr& rv,
                                   const NullColumnPtr& rn) {
         auto* lvd = ColumnHelper::cast_to_raw<LType>(lv)->get_data().data();
@@ -416,7 +427,7 @@ public:
         return NullableColumn::create(std::move(data_column), std::move(null_column));
     }
 
-    template <PrimitiveType LType, PrimitiveType RType, PrimitiveType ResultType>
+    template <LogicalType LType, LogicalType RType, LogicalType ResultType>
     static ColumnPtr vector_const(const ColumnPtr& lv, const NullColumnPtr& ln, const ColumnPtr& rv,
                                   const NullColumnPtr& rn) {
         auto* lvd = ColumnHelper::cast_to_raw<LType>(lv)->get_data().data();
@@ -459,7 +470,7 @@ public:
 template <typename CONST_FN, typename NULLABLE_FN>
 class LogicPredicateBinaryFunction {
 public:
-    template <PrimitiveType LType, PrimitiveType RType, PrimitiveType ResultType>
+    template <LogicalType LType, LogicalType RType, LogicalType ResultType>
     static ColumnPtr evaluate(const ColumnPtr& v1, const ColumnPtr& v2) {
         // const/regular
         if (!v1->is_nullable() && !v2->is_nullable()) {
@@ -524,7 +535,7 @@ public:
         }
     }
 
-    template <PrimitiveType Type>
+    template <LogicalType Type>
     static inline ColumnPtr evaluate(const ColumnPtr& v1, const ColumnPtr& v2) {
         return evaluate<Type, Type, Type>(v1, v2);
     }
@@ -614,5 +625,4 @@ using VectorizedLogicPredicateBinaryFunction = LogicPredicateBinaryFunction<
     template <typename LType, typename RType, typename ResultType>                                    \
     uint8_t NAME::apply(const LType& L_VALUE, const uint8_t L_NULL, const RType& R_VALUE, const uint8_t R_NULL)
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

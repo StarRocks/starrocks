@@ -17,12 +17,10 @@ import java.util.Map;
 import java.util.Set;
 
 public class LogicalHudiScanOperator extends LogicalScanOperator {
-    private final Table.TableType tableType;
     private ScanOperatorPredicates predicates = new ScanOperatorPredicates();
     private boolean hasUnknownColumn;
 
     public LogicalHudiScanOperator(Table table,
-                                   Table.TableType tableType,
                                    Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
                                    Map<Column, ColumnRefOperator> columnMetaToColRefMap,
                                    long limit,
@@ -35,7 +33,6 @@ public class LogicalHudiScanOperator extends LogicalScanOperator {
                 predicate, null);
 
         Preconditions.checkState(table instanceof HudiTable);
-        this.tableType = tableType;
         HudiTable hudiTable = (HudiTable) table;
         partitionColumns.addAll(hudiTable.getPartitionColumnNames());
     }
@@ -49,13 +46,8 @@ public class LogicalHudiScanOperator extends LogicalScanOperator {
                 builder.getPredicate(),
                 builder.getProjection());
 
-        this.tableType = builder.tableType;
         this.predicates = builder.predicates;
         this.partitionColumns = builder.partitionColumns;
-    }
-
-    public Table.TableType getTableType() {
-        return tableType;
     }
 
     @Override
@@ -83,7 +75,6 @@ public class LogicalHudiScanOperator extends LogicalScanOperator {
 
     public static class Builder
             extends LogicalScanOperator.Builder<LogicalHudiScanOperator, LogicalHudiScanOperator.Builder> {
-        private Table.TableType tableType;
         private ScanOperatorPredicates predicates = new ScanOperatorPredicates();
         private Set<String> partitionColumns = Sets.newHashSet();
 
@@ -96,7 +87,6 @@ public class LogicalHudiScanOperator extends LogicalScanOperator {
         public LogicalHudiScanOperator.Builder withOperator(LogicalHudiScanOperator scanOperator) {
             super.withOperator(scanOperator);
 
-            this.tableType = scanOperator.tableType;
             this.predicates = scanOperator.predicates;
             this.partitionColumns = scanOperator.partitionColumns;
             return this;

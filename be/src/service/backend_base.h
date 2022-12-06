@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/service/backend_service.h
 
@@ -27,6 +40,7 @@
 
 #include "common/status.h"
 #include "gen_cpp/BackendService.h"
+#include "gen_cpp/MVMaintenance_types.h"
 
 namespace starrocks {
 
@@ -103,6 +117,8 @@ public:
     void get_tablet_stat(TTabletStatResult& result) override{};
 
     void submit_routine_load_task(TStatus& t_status, const std::vector<TRoutineLoadTask>& tasks) override;
+
+    void finish_stream_load_channel(TStatus& t_status, const TStreamLoadChannel& stream_load_channel) override;
 
     // used for external service, open means start the scan procedure
     void open_scanner(TScanOpenResult& result_, const TScanOpenParams& params) override;

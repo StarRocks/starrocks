@@ -1,5 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "storage/aggregate_iterator.h"
 
 #include <memory>
@@ -24,7 +36,7 @@ public:
             : ChunkIterator(child->schema(), child->chunk_size()),
               _child(std::move(child)),
               _pre_aggregate_factor(factor),
-              _fetch_finish(false),
+
               _is_vertical_merge(is_vertical_merge),
               _is_key(is_key) {
         CHECK_LT(_schema.num_key_fields(), std::numeric_limits<uint16_t>::max());
@@ -85,7 +97,7 @@ private:
 
     std::unique_ptr<ChunkAggregator> _aggregator;
 
-    bool _fetch_finish;
+    bool _fetch_finish{false};
 
     bool _is_vertical_merge;
     bool _is_key;

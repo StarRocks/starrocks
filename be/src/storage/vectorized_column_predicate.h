@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -38,13 +50,13 @@ class BloomFilter;
 
 namespace starrocks::vectorized {
 
-template <FieldType ftype>
+template <LogicalType ftype>
 struct PredicateCmpTypeForField {
     using ValueType = typename CppTypeTraits<ftype>::CppType;
 };
 
 template <>
-struct PredicateCmpTypeForField<OLAP_FIELD_TYPE_JSON> {
+struct PredicateCmpTypeForField<TYPE_JSON> {
     using ValueType = JsonValue;
 };
 
@@ -165,7 +177,7 @@ public:
 
     // Constant value in the predicate. And this constant value might be adjusted according to schema.
     // For example, if column type is char(20), then this constant value might be zero-padded to 20 chars.
-    virtual Datum value() const { return Datum(); }
+    virtual Datum value() const { return {}; }
 
     // Constant value in the predicate in vector form. In contrast to `value()`, these value are un-modified.
     virtual std::vector<Datum> values() const { return std::vector<Datum>{}; }

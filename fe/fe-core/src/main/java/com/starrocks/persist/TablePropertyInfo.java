@@ -21,6 +21,7 @@
 
 package com.starrocks.persist;
 
+import com.google.common.base.Objects;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
 import com.starrocks.common.FeMetaVersion;
@@ -102,6 +103,11 @@ public class TablePropertyInfo implements Writable {
             String value = Text.readString(in);
             propertyMap.put(key, value);
         }
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(tableId, groupId);
     }
 
     @Override

@@ -1,5 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "storage/rowset/storage_page_decoder.h"
 
 #include "gutil/strings/substitute.h"
@@ -11,7 +23,7 @@ namespace starrocks {
 class BitShuffleDataDecoder : public DataDecoder {
 public:
     BitShuffleDataDecoder() = default;
-    ~BitShuffleDataDecoder() = default;
+    ~BitShuffleDataDecoder() override = default;
 
     void reserve_head(uint8_t head_size) override {
         DCHECK(_reserve_head_size == 0);
@@ -19,7 +31,7 @@ public:
     }
     Status decode_page_data(PageFooterPB* footer, uint32_t footer_size, EncodingTypePB encoding,
                             std::unique_ptr<char[]>* page, Slice* page_slice) override {
-        DataPageFooterPB data_footer = footer->data_page_footer();
+        const DataPageFooterPB& data_footer = footer->data_page_footer();
 
         size_t num_elements = decode_fixed32_le((const uint8_t*)page_slice->data + _reserve_head_size + 0);
         size_t compressed_size = decode_fixed32_le((const uint8_t*)page_slice->data + _reserve_head_size + 4);
@@ -67,7 +79,7 @@ public:
         _bit_shuffle_decoder = std::make_unique<BitShuffleDataDecoder>();
         _bit_shuffle_decoder->reserve_head(BINARY_DICT_PAGE_HEADER_SIZE);
     }
-    ~BinaryDictDataDecoder() = default;
+    ~BinaryDictDataDecoder() override = default;
 
     Status decode_page_data(PageFooterPB* footer, uint32_t footer_size, EncodingTypePB encoding,
                             std::unique_ptr<char[]>* page, Slice* page_slice) override {

@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/test/olap/rowset/segment_v2/binary_dict_page_test.cpp
 
@@ -69,8 +82,8 @@ public:
         // construct dict page
         OwnedSlice dict_slice = page_builder.get_dictionary_page()->build();
         PageDecoderOptions dict_decoder_options;
-        auto dict_page_decoder = std::make_unique<BinaryPlainPageDecoder<OLAP_FIELD_TYPE_VARCHAR>>(
-                dict_slice.slice(), dict_decoder_options);
+        auto dict_page_decoder =
+                std::make_unique<BinaryPlainPageDecoder<TYPE_VARCHAR>>(dict_slice.slice(), dict_decoder_options);
         status = dict_page_decoder->init();
         ASSERT_TRUE(status.ok());
         // because every slice is unique
@@ -88,7 +101,7 @@ public:
         ASSERT_TRUE(st.ok());
 
         PageDecoderOptions decoder_options;
-        BinaryDictPageDecoder<OLAP_FIELD_TYPE_VARCHAR> page_decoder(encoded_data, decoder_options);
+        BinaryDictPageDecoder<TYPE_VARCHAR> page_decoder(encoded_data, decoder_options);
         page_decoder.set_dict_decoder(dict_page_decoder.get());
 
         status = page_decoder.init();
@@ -96,16 +109,11 @@ public:
         ASSERT_EQ(slices.size(), page_decoder.count());
 
         //check values
-        MemPool pool;
-        TypeInfoPtr type_info = get_type_info(OLAP_FIELD_TYPE_VARCHAR);
-        size_t size = slices.size();
-        std::unique_ptr<ColumnVectorBatch> cvb;
-        ColumnVectorBatch::create(size, false, type_info, nullptr, &cvb);
-        ColumnBlock column_block(cvb.get(), &pool);
-        ColumnBlockView block_view(&column_block);
 
-        status = page_decoder.next_batch(&size, &block_view);
-        Slice* values = reinterpret_cast<Slice*>(column_block.data());
+        auto column = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
+        size_t size = slices.size();
+        status = page_decoder.next_batch(&size, column.get());
+        auto* values = reinterpret_cast<const Slice*>(column->raw_data());
         ASSERT_TRUE(status.ok());
         ASSERT_EQ(slices.size(), size);
         ASSERT_EQ("Individual", values[0].to_string());
@@ -117,19 +125,21 @@ public:
         ASSERT_EQ("Captain", values[6].to_string());
         ASSERT_EQ("Xmas", values[7].to_string());
 
+        column->resize(0);
         status = page_decoder.seek_to_position_in_page(5);
         ASSERT_TRUE(status.ok()) << status.to_string();
-        status = page_decoder.next_batch(&size, &block_view);
+        status = page_decoder.next_batch(&size, column.get());
         ASSERT_TRUE(status.ok()) << status.to_string();
         // read 3 items
         ASSERT_EQ(3, size);
+        values = reinterpret_cast<const Slice*>(column->raw_data());
         ASSERT_EQ("Nature", values[0].to_string());
         ASSERT_EQ("Captain", values[1].to_string());
         ASSERT_EQ("Xmas", values[2].to_string());
 
         page_decoder.seek_to_position_in_page(0);
         ASSERT_EQ(0, page_decoder.current_index());
-        auto column = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_VARCHAR, false);
+        column = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
         vectorized::SparseRange read_range;
         read_range.add(vectorized::Range(0, 2));
         read_range.add(vectorized::Range(4, 7));
@@ -189,8 +199,8 @@ public:
             int slice_index = random() % results.size();
             //int slice_index = 1;
             PageDecoderOptions dict_decoder_options;
-            auto dict_page_decoder = std::make_unique<BinaryPlainPageDecoder<OLAP_FIELD_TYPE_VARCHAR>>(
-                    dict_slice.slice(), dict_decoder_options);
+            auto dict_page_decoder =
+                    std::make_unique<BinaryPlainPageDecoder<TYPE_VARCHAR>>(dict_slice.slice(), dict_decoder_options);
             status = dict_page_decoder->init();
             ASSERT_TRUE(status.ok());
 
@@ -206,27 +216,22 @@ public:
             ASSERT_TRUE(st.ok());
 
             PageDecoderOptions decoder_options;
-            BinaryDictPageDecoder<OLAP_FIELD_TYPE_VARCHAR> page_decoder(encoded_data, decoder_options);
+            BinaryDictPageDecoder<TYPE_VARCHAR> page_decoder(encoded_data, decoder_options);
             status = page_decoder.init();
             page_decoder.set_dict_decoder(dict_page_decoder.get());
             ASSERT_TRUE(status.ok());
 
             //check values
-            MemPool pool;
-            TypeInfoPtr type_info = get_type_info(OLAP_FIELD_TYPE_VARCHAR);
-            std::unique_ptr<ColumnVectorBatch> cvb;
-            ColumnVectorBatch::create(1, false, type_info, nullptr, &cvb);
-            ColumnBlock column_block(cvb.get(), &pool);
-            ColumnBlockView block_view(&column_block);
-            Slice* values = reinterpret_cast<Slice*>(column_block.data());
+            auto column = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
 
             size_t num = 1;
             size_t pos = random() % (page_start_ids[slice_index + 1] - page_start_ids[slice_index]);
             //size_t pos = 613631;
             status = page_decoder.seek_to_position_in_page(pos);
             ASSERT_TRUE(status.ok());
-            status = page_decoder.next_batch(&num, &block_view);
+            status = page_decoder.next_batch(&num, column.get());
             ASSERT_TRUE(status.ok());
+            auto* values = reinterpret_cast<const Slice*>(column->raw_data());
             std::string expect = contents[page_start_ids[slice_index] + pos].to_string();
             std::string actual = values[0].to_string();
             ASSERT_EQ(expect, actual) << "slice index:" << slice_index << ", pos:" << pos
@@ -237,7 +242,7 @@ public:
             status = page_decoder.seek_to_position_in_page(0);
             ASSERT_TRUE(status.ok());
             size_t slice_num = page_start_ids[slice_index + 1] - page_start_ids[slice_index];
-            auto dst = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_VARCHAR, false);
+            auto dst = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
             vectorized::SparseRange read_range;
             read_range.add(vectorized::Range(0, slice_num / 3));
             read_range.add(vectorized::Range(slice_num / 2, (slice_num * 2 / 3)));
@@ -292,7 +297,7 @@ TEST_F(BinaryDictPageTest, TestEncodingRatio) {
     }
     for (int i = 0; i < 10000; ++i) {
         for (const auto& src_string : src_strings) {
-            slices.push_back(src_string);
+            slices.emplace_back(src_string);
         }
     }
 

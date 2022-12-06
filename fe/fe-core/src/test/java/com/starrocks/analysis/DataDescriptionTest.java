@@ -29,6 +29,7 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.MockedAuth;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.ColumnSeparator;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.PartitionNames;
 import mockit.Expectations;

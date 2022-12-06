@@ -45,17 +45,16 @@ public class DistributionPruneRule extends TransformationRule {
         OlapTable olapTable = (OlapTable) olapScanOperator.getTable();
 
         List<Long> result = Lists.newArrayList();
-        for (Long partitionId : olapScanOperator.getSelectedPartitionId()) {
-            Partition partition = olapTable.getPartition(partitionId);
-            MaterializedIndex table = partition.getIndex(olapScanOperator.getSelectedIndexId());
-            Collection<Long> tabletIds = distributionPrune(table, partition.getDistributionInfo(), olapScanOperator);
-            result.addAll(tabletIds);
-        }
-
-        // prune hint tablet
         Preconditions.checkState(olapScanOperator.getHintsTabletIds() != null);
         if (!olapScanOperator.getHintsTabletIds().isEmpty()) {
-            result.retainAll(olapScanOperator.getHintsTabletIds());
+            result.addAll(olapScanOperator.getHintsTabletIds());
+        } else {
+            for (Long partitionId : olapScanOperator.getSelectedPartitionId()) {
+                Partition partition = olapTable.getPartition(partitionId);
+                MaterializedIndex table = partition.getIndex(olapScanOperator.getSelectedIndexId());
+                Collection<Long> tabletIds = distributionPrune(table, partition.getDistributionInfo(), olapScanOperator);
+                result.addAll(tabletIds);
+            }
         }
 
         if (result.equals(olapScanOperator.getSelectedTabletId())) {

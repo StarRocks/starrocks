@@ -8,6 +8,8 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.plan.ExecPlan;
 
 import java.util.List;
 import java.util.Map;
@@ -37,11 +39,15 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     private KeysType keysType = KeysType.DUP_KEYS;
     protected String inlineViewDef;
 
-
     private String simpleViewDef;
-    // for create column in mv
-    private List<Column> mvColumnItems = Lists.newArrayList();
     private List<MaterializedView.BaseTableInfo> baseTableInfos;
+
+    // Maintenance information
+    ExecPlan maintenancePlan;
+    ColumnRefFactory columnRefFactory;
+
+    // Sink table information
+    private List<Column> mvColumnItems = Lists.newArrayList();
     private Column partitionColumn;
     // record expression which related with partition by clause
     private Expr partitionRefTableExpr;
@@ -178,6 +184,19 @@ public class CreateMaterializedViewStatement extends DdlStmt {
 
     public void setPartitionRefTableExpr(Expr partitionRefTableExpr) {
         this.partitionRefTableExpr = partitionRefTableExpr;
+    }
+
+    public ExecPlan getMaintenancePlan() {
+        return maintenancePlan;
+    }
+
+    public ColumnRefFactory getColumnRefFactory() {
+        return columnRefFactory;
+    }
+
+    public void setMaintenancePlan(ExecPlan maintenancePlan, ColumnRefFactory columnRefFactory) {
+        this.maintenancePlan = maintenancePlan;
+        this.columnRefFactory = columnRefFactory;
     }
 
     @Override

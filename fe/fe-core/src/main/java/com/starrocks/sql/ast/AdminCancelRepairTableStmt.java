@@ -7,6 +7,7 @@ import com.starrocks.analysis.TableRef;
 
 import java.util.List;
 
+// ADMIN CANCEL REPAIR TABLE example_db.example_table PARTITION(p1);
 public class AdminCancelRepairTableStmt extends DdlStmt {
 
     private final TableRef tblRef;

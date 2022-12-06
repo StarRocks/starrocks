@@ -63,6 +63,7 @@ import com.starrocks.task.PushTask;
 import com.starrocks.thrift.TEtlState;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TabletCommitInfo;
+import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.LoadJobSourceType;
 import mockit.Expectations;
@@ -386,7 +387,7 @@ public class SparkLoadJobTest {
                 AgentTaskExecutor.submit((AgentBatchTask) any);
                 GlobalStateMgr.getCurrentGlobalTransactionMgr();
                 result = transactionMgr;
-                transactionMgr.commitTransaction(dbId, transactionId, (List<TabletCommitInfo>) any,
+                transactionMgr.commitTransaction(dbId, transactionId, (List<TabletCommitInfo>) any, (List<TabletFailInfo>) any,
                         (LoadJobFinalOperation) any);
             }
         };

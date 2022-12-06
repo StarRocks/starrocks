@@ -101,6 +101,24 @@ public class ExpressionMapping {
             scope.tryResolveField((SlotRef) expression)
                     .ifPresent(field -> fieldMappings[field.getRelationFieldIndex()] = columnRefOperator);
         }
+
+        expressionToColumns.put(expression, columnRefOperator);
+    }
+
+    public void putWithSymbol(Expr expression, Expr resolveExpr, ColumnRefOperator columnRefOperator) {
+        if (resolveExpr instanceof SlotRef) {
+            if (expression instanceof SlotRef
+                    && ((SlotRef) expression).getColumnName().equals(((SlotRef) resolveExpr).getColumnName())) {
+                // There is no alias, and it is an expression of SlotRef,
+                // which is resolved according to the original expression
+                scope.tryResolveField((SlotRef) expression)
+                        .ifPresent(field -> fieldMappings[field.getRelationFieldIndex()] = columnRefOperator);
+            } else {
+                scope.tryResolveField((SlotRef) resolveExpr)
+                        .ifPresent(field -> fieldMappings[field.getRelationFieldIndex()] = columnRefOperator);
+            }
+        }
+
         expressionToColumns.put(expression, columnRefOperator);
     }
 

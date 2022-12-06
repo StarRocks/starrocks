@@ -671,7 +671,7 @@ public class RestoreJob extends AbstractJob {
 
             // estimate timeout, at most 10 min
             long timeout = Config.tablet_create_timeout_second * 1000L * batchTask.getTaskNum();
-            timeout = Math.min(10 * 60 * 1000, timeout);
+            timeout = Math.min(10L * 60L * 1000L, timeout);
             boolean ok = false;
             try {
                 LOG.info("begin to send create replica tasks to BE for restore. total {} tasks. timeout: {}",
@@ -679,7 +679,6 @@ public class RestoreJob extends AbstractJob {
                 ok = latch.await(timeout, TimeUnit.MILLISECONDS);
             } catch (InterruptedException e) {
                 LOG.warn("InterruptedException: ", e);
-                ok = false;
             }
 
             if (ok) {
@@ -804,7 +803,7 @@ public class RestoreJob extends AbstractJob {
                             localTbl.isInMemory(),
                             localTbl.enablePersistentIndex(),
                             localTbl.getPartitionInfo().getTabletType(restorePart.getId()),
-                            localTbl.getCompressionType());
+                            localTbl.getCompressionType(), indexMeta.getSortKeyIdxes());
                     task.setInRestoreMode(true);
                     batchTask.addTask(task);
                 }
@@ -1268,6 +1267,7 @@ public class RestoreJob extends AbstractJob {
                         continue;
                     }
                     DynamicPartitionUtil.registerOrRemoveDynamicPartitionTable(db.getId(), (OlapTable) tbl);
+                    DynamicPartitionUtil.registerOrRemovePartitionTTLTable(db.getId(), (OlapTable) tbl);
                 }
             } finally {
                 db.readUnlock();

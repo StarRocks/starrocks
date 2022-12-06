@@ -38,15 +38,22 @@ public class DbPEntryObject implements PEntryObject {
         id = dbId;
     }
 
+    /**
+     * if the current db matches other db, including fuzzy matching.
+     *
+     * this(db1), other(db1) -> true
+     * this(db1), other(ALL) -> true
+     * this(ALL), other(db1) -> false
+     */
     @Override
     public boolean match(Object obj) {
         if (!(obj instanceof DbPEntryObject)) {
             return false;
         }
-        if (id == ALL_DATABASE_ID) {
+        DbPEntryObject other = (DbPEntryObject) obj;
+        if (other.id == ALL_DATABASE_ID) {
             return true;
         }
-        DbPEntryObject other = (DbPEntryObject) obj;
         return other.id == id;
     }
 
@@ -58,6 +65,11 @@ public class DbPEntryObject implements PEntryObject {
     @Override
     public boolean validate(GlobalStateMgr globalStateMgr) {
         return globalStateMgr.getDbIncludeRecycleBin(this.id) != null;
+    }
+
+    @Override
+    public PEntryObject clone() {
+        return new DbPEntryObject(id);
     }
 
     @Override

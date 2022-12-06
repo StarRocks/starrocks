@@ -1,5 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "storage/rowset/array_column_iterator.h"
 
 #include "column/array_column.h"
@@ -21,60 +33,6 @@ Status ArrayColumnIterator::init(const ColumnIteratorOptions& opts) {
     }
     RETURN_IF_ERROR(_array_size_iterator->init(opts));
     RETURN_IF_ERROR(_element_iterator->init(opts));
-
-    const TypeInfoPtr& null_type = get_type_info(FieldType::OLAP_FIELD_TYPE_TINYINT);
-    RETURN_IF_ERROR(ColumnVectorBatch::create(opts.chunk_size, true, null_type, nullptr, &_null_batch));
-
-    const TypeInfoPtr& array_size_type = get_type_info(FieldType::OLAP_FIELD_TYPE_INT);
-    RETURN_IF_ERROR(ColumnVectorBatch::create(opts.chunk_size, false, array_size_type, nullptr, &_array_size_batch));
-    return Status::OK();
-}
-
-// every time invoke this method, _array_size_batch will be modified, so this method is not thread safe.
-Status ArrayColumnIterator::next_batch(size_t* n, ColumnBlockView* dst, bool* has_null) {
-    ColumnBlock* array_block = dst->column_block();
-    auto* array_batch = reinterpret_cast<ArrayColumnVectorBatch*>(array_block->vector_batch());
-
-    // 1. Read null column
-    if (_null_iterator != nullptr) {
-        _null_batch->resize(*n);
-        ColumnBlock null_block(_null_batch.get(), nullptr);
-        ColumnBlockView null_view(&null_block);
-        RETURN_IF_ERROR(_null_iterator->next_batch(n, &null_view, has_null));
-        uint8_t* null_signs = array_batch->null_signs();
-        memcpy(null_signs, _null_batch->data(), sizeof(uint8_t) * *n);
-    }
-
-    // 2. read offsets into _array_size_batch
-    _array_size_batch->resize(*n);
-    ColumnBlock ordinal_block(_array_size_batch.get(), nullptr);
-    ColumnBlockView ordinal_view(&ordinal_block);
-    bool array_size_null = false;
-    RETURN_IF_ERROR(_array_size_iterator->next_batch(n, &ordinal_view, &array_size_null));
-
-    auto* offsets = array_batch->offsets();
-
-    size_t prev_array_size = dst->current_offset();
-    size_t end_offset = (*offsets)[prev_array_size];
-    size_t num_to_read = end_offset;
-
-    auto* array_size = reinterpret_cast<uint32_t*>(_array_size_batch->data());
-    for (size_t i = 0; i < *n; ++i) {
-        end_offset += array_size[i];
-        (*offsets)[prev_array_size + i + 1] = static_cast<uint32_t>(end_offset);
-    }
-    num_to_read = end_offset - num_to_read;
-
-    // 3. Read elements
-    ColumnVectorBatch* element_vector_batch = array_batch->elements();
-    element_vector_batch->resize(num_to_read);
-    ColumnBlock element_block = ColumnBlock(element_vector_batch, dst->pool());
-    ColumnBlockView element_view(&element_block);
-    bool element_null = false;
-    RETURN_IF_ERROR(_element_iterator->next_batch(&num_to_read, &element_view, &element_null));
-
-    array_batch->prepare_for_read(prev_array_size, prev_array_size + *n);
-
     return Status::OK();
 }
 

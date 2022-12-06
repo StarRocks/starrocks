@@ -1,5 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "runtime/sender_queue.h"
 
 #include "column/chunk.h"
@@ -57,7 +69,7 @@ Status DataStreamRecvr::SenderQueue::_build_chunk_meta(const ChunkPB& pb_chunk) 
         }
     }
     for (const auto& kv : _chunk_meta.tuple_id_to_index) {
-        _chunk_meta.types[kv.second] = TypeDescriptor(PrimitiveType::TYPE_BOOLEAN);
+        _chunk_meta.types[kv.second] = TypeDescriptor(LogicalType::TYPE_BOOLEAN);
         ++column_index;
     }
 
@@ -72,7 +84,7 @@ Status DataStreamRecvr::SenderQueue::_deserialize_chunk(const ChunkPB& pchunk, v
     if (pchunk.compress_type() == CompressionTypePB::NO_COMPRESSION) {
         SCOPED_TIMER(_recvr->_deserialize_chunk_timer);
         TRY_CATCH_BAD_ALLOC({
-            serde::ProtobufChunkDeserializer des(_chunk_meta);
+            serde::ProtobufChunkDeserializer des(_chunk_meta, &pchunk, _recvr->get_encode_level());
             ASSIGN_OR_RETURN(*chunk, des.deserialize(pchunk.data()));
         });
     } else {
@@ -90,7 +102,7 @@ Status DataStreamRecvr::SenderQueue::_deserialize_chunk(const ChunkPB& pchunk, v
             SCOPED_TIMER(_recvr->_deserialize_chunk_timer);
             TRY_CATCH_BAD_ALLOC({
                 std::string_view buff(reinterpret_cast<const char*>(uncompressed_buffer->data()), uncompressed_size);
-                serde::ProtobufChunkDeserializer des(_chunk_meta);
+                serde::ProtobufChunkDeserializer des(_chunk_meta, &pchunk, _recvr->get_encode_level());
                 ASSIGN_OR_RETURN(*chunk, des.deserialize(buff));
             });
         }
@@ -414,6 +426,19 @@ Status DataStreamRecvr::PipelineSenderQueue::get_chunk(vectorized::Chunk** chunk
         VLOG_ROW << "DataStreamRecvr no new data, stop unpluging";
         return Status::OK();
     }
+    DeferOp defer_op([&]() {
+        auto* closure = item.closure;
+        if (closure != nullptr) {
+#ifndef BE_TEST
+            MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(ExecEnv::GetInstance()->process_mem_tracker());
+            DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+#endif
+            _recvr->_closure_block_timer->update(MonotonicNanos() - item.queue_enter_time);
+            closure->Run();
+            chunk_queue_state.blocked_closure_num--;
+        }
+    });
+
     if (item.chunk_ptr == nullptr) {
         ChunkUniquePtr chunk_ptr = std::make_unique<vectorized::Chunk>();
         faststring uncompressed_buffer;
@@ -422,17 +447,8 @@ Status DataStreamRecvr::PipelineSenderQueue::get_chunk(vectorized::Chunk** chunk
     } else {
         *chunk = item.chunk_ptr.release();
     }
-    auto* closure = item.closure;
     VLOG_ROW << "DataStreamRecvr fetched #rows=" << (*chunk)->num_rows();
-    if (closure != nullptr) {
-#ifndef BE_TEST
-        MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(ExecEnv::GetInstance()->process_mem_tracker());
-        DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
-#endif
-        _recvr->_closure_block_timer->update(MonotonicNanos() - item.queue_enter_time);
-        closure->Run();
-        chunk_queue_state.blocked_closure_num--;
-    }
+
     _total_chunks--;
     _recvr->_num_buffered_bytes -= item.chunk_bytes;
     return Status::OK();
@@ -491,6 +507,9 @@ void DataStreamRecvr::PipelineSenderQueue::decrement_senders(int be_number) {
         _sender_eos_set.insert(be_number);
     }
     _num_remaining_senders--;
+    VLOG_FILE << "decremented senders: fragment_instance_id=" << print_id(_recvr->fragment_instance_id())
+              << " node_id=" << _recvr->dest_node_id() << " #senders=" << _num_remaining_senders
+              << " be_number=" << be_number;
 }
 
 void DataStreamRecvr::PipelineSenderQueue::cancel() {
@@ -631,6 +650,11 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
         std::lock_guard<Mutex> l(_lock);
         wait_timer.stop();
 
+        if (_is_cancelled) {
+            LOG(ERROR) << "Cancelled receiver cannot add_chunk for keep order!";
+            return Status::OK();
+        }
+
         _max_processed_sequences.lazy_emplace(be_number, [be_number](const auto& ctor) { ctor(be_number, -1); });
 
         _buffered_chunk_queues.lazy_emplace(be_number, [be_number](const auto& ctor) {
@@ -678,6 +702,11 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
         ScopedTimer<MonotonicStopWatch> wait_timer(_recvr->_sender_wait_lock_timer);
         std::lock_guard<Mutex> l(_lock);
         wait_timer.stop();
+
+        if (_is_cancelled) {
+            LOG(ERROR) << "Cancelled receiver cannot add_chunk!";
+            return Status::OK();
+        }
 
         for (auto iter = chunks.begin(); iter != chunks.end();) {
             if (_is_pipeline_level_shuffle && _chunk_queue_states[iter->driver_sequence].is_short_circuited) {

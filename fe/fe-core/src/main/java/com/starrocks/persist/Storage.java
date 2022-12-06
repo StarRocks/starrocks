@@ -240,10 +240,14 @@ public class Storage {
             if (children != null) {
                 for (String child : children) {
                     File file = new File(metaFile, child);
-                    file.delete();
+                    if (!file.delete()) {
+                        LOG.warn("Failed to delete file, filepath={}", file.getAbsolutePath());
+                    }
                 }
             }
-            metaFile.delete();
+            if (!metaFile.delete()) {
+                LOG.warn("Failed to delete file, filepath={}", metaFile.getAbsolutePath());
+            }
         }
 
         if (!metaFile.mkdirs()) {

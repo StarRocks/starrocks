@@ -1,8 +1,25 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 
 #ifdef USE_STAROS
-
 #include "fs/fs_starlet.h"
+
+DIAGNOSTIC_PUSH
+DIAGNOSTIC_IGNORE("-Wclass-memaccess")
+#include <bvar/bvar.h>
+DIAGNOSTIC_POP
 
 #include <fmt/core.h>
 #include <fslib/configuration.h>
@@ -25,6 +42,16 @@
 #include "util/string_parser.hpp"
 
 namespace starrocks {
+
+bvar::Adder<int64_t> g_starlet_io_read;       // number of bytes read through Starlet
+bvar::Adder<int64_t> g_starlet_io_write;      // number of bytes wrote through Starlet
+bvar::Adder<int64_t> g_starlet_io_num_reads;  // number of Starlet's read API invocations
+bvar::Adder<int64_t> g_starlet_io_num_writes; // number of Starlet's write API invocations
+
+bvar::PerSecond<bvar::Adder<int64_t>> g_starlet_read_second("starlet_io_read_bytes_second", &g_starlet_io_read);
+bvar::PerSecond<bvar::Adder<int64_t>> g_starlet_write_second("starlet_io_write_bytes_second", &g_starlet_io_write);
+bvar::PerSecond<bvar::Adder<int64_t>> g_starlet_num_reads_second("starlet_io_read_second", &g_starlet_io_num_reads);
+bvar::PerSecond<bvar::Adder<int64_t>> g_starlet_num_writes_second("starlet_io_write_second", &g_starlet_io_num_writes);
 
 using FileSystemFactory = staros::starlet::fslib::FileSystemFactory;
 using WriteOptions = staros::starlet::fslib::WriteOptions;
@@ -116,11 +143,13 @@ public:
         if (!stream_st.ok()) {
             return to_status(stream_st.status());
         }
-        auto st = (*stream_st)->read(data, count);
-        if (st.ok()) {
-            return *st;
+        auto res = (*stream_st)->read(data, count);
+        if (res.ok()) {
+            g_starlet_io_num_reads << 1;
+            g_starlet_io_read << *res;
+            return *res;
         } else {
-            return to_status(st.status());
+            return to_status(res.status());
         }
     }
 
@@ -140,6 +169,7 @@ public:
     StatusOr<Buffer> get_direct_buffer() override {
         return Status::NotSupported("StarletOutputStream::get_direct_buffer");
     }
+
     StatusOr<Position> get_direct_buffer_and_advance(int64_t size) override {
         return Status::NotSupported("StarletOutputStream::get_direct_buffer_and_advance");
     }
@@ -149,13 +179,26 @@ public:
         if (!stream_st.ok()) {
             return to_status(stream_st.status());
         }
-        return to_status((*stream_st)->write(data, size).status());
+        auto left = size;
+        while (left > 0) {
+            auto* p = static_cast<const char*>(data) + size - left;
+            auto res = (*stream_st)->write(p, left);
+            if (!res.ok()) {
+                return to_status(res.status());
+            }
+            left -= *res;
+        }
+        g_starlet_io_num_writes << 1;
+        g_starlet_io_write << size;
+        return Status::OK();
     }
 
     bool allows_aliasing() const override { return false; }
+
     Status write_aliased(const void* data, int64_t size) override {
         return Status::NotSupported("StarletOutputStream::write_aliased");
     }
+
     Status close() override {
         auto stream_st = _file_ptr->stream();
         if (!stream_st.ok()) {
@@ -180,9 +223,8 @@ public:
 
     Type type() const override { return STARLET; }
 
-    StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const std::string& path) override {
-        return new_random_access_file(RandomAccessFileOptions(), path);
-    }
+    using FileSystem::new_sequential_file;
+    using FileSystem::new_random_access_file;
 
     StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
                                                                        const std::string& path) override {
@@ -192,7 +234,7 @@ public:
             return to_status(fs_st.status());
         }
 
-        auto file_st = (*fs_st)->open(pair.first, ReadOptions());
+        auto file_st = (*fs_st)->open(pair.first, ReadOptions{.skip_fill_local_cache = opts.skip_fill_local_cache});
 
         if (!file_st.ok()) {
             return to_status(file_st.status());
@@ -201,14 +243,15 @@ public:
         return std::make_unique<RandomAccessFile>(std::move(istream), path);
     }
 
-    StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const std::string& path) override {
+    StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const SequentialFileOptions& opts,
+                                                                  const std::string& path) override {
         ASSIGN_OR_RETURN(auto pair, parse_starlet_uri(path));
 
         auto fs_st = get_shard_filesystem(pair.second);
         if (!fs_st.ok()) {
             return to_status(fs_st.status());
         }
-        auto file_st = (*fs_st)->open(pair.first, ReadOptions());
+        auto file_st = (*fs_st)->open(pair.first, ReadOptions{.skip_fill_local_cache = opts.skip_fill_local_cache});
 
         if (!file_st.ok()) {
             return to_status(file_st.status());
@@ -393,6 +436,15 @@ public:
 
     Status link_file(const std::string& old_path, const std::string& new_path) override {
         return Status::NotSupported("StarletFileSystem::link_file");
+    }
+
+    Status drop_local_cache(const std::string& path) override {
+        ASSIGN_OR_RETURN(auto pair, parse_starlet_uri(path));
+        auto fs_st = get_shard_filesystem(pair.second);
+        if (!fs_st.ok()) {
+            return to_status(fs_st.status());
+        }
+        return to_status((*fs_st)->drop_cache(pair.first));
     }
 
 private:

@@ -82,11 +82,14 @@ public class AnalyzeExprTest {
     public void testExpressionPreceding() {
         String sql = "select v2&~v1|v3^1 from t0";
         StatementBase statementBase = analyzeSuccess(sql);
-        Assert.assertTrue(AST2SQL.toString(statementBase).contains("(v2 & (~v1)) | (v3 ^ 1)"));
+        Assert.assertTrue(AstToStringBuilder.toString(statementBase)
+                .contains("(test.t0.v2 & (~test.t0.v1)) | (test.t0.v3 ^ 1)"));
 
         sql = "select v1 * v1 / v1 % v1 + v1 - v1 DIV v1 from t0";
         statementBase = analyzeSuccess(sql);
-        Assert.assertTrue(AST2SQL.toString(statementBase).contains("((((v1 * v1) / v1) % v1) + v1) - (v1 DIV v1)"));
+        Assert.assertTrue(AstToStringBuilder.toString(statementBase)
+                .contains("((((test.t0.v1 * test.t0.v1) / test.t0.v1) % test.t0.v1) + test.t0.v1) " +
+                        "- (test.t0.v1 DIV test.t0.v1)"));
     }
 
     @Test
@@ -112,6 +115,18 @@ public class AnalyzeExprTest {
         analyzeFail("select array_map((x,x) -> x+1, [1],[1])");
         analyzeFail("select array_map((x,y) -> x+1)");
         analyzeFail("select array_map((x,x) -> x+1, [1], x ->x+1)");
+        analyzeFail("select array_map()");
+        analyzeFail("select array_map(null)");
+        analyzeFail("select array_map(null, [1])");
+        analyzeFail("select array_map(null, null)");
+        analyzeFail("select array_map([1],null);");
+        analyzeFail("select array_map(1)");
+        analyzeFail("select transform()");
+        analyzeFail("select transform(null)");
+        analyzeFail("select transform(null, [1])");
+        analyzeFail("select transform(null, null)");
+        analyzeFail("select transform([1],null);");
+        analyzeFail("select transform(1)");
     }
 
     @Test
@@ -132,5 +147,17 @@ public class AnalyzeExprTest {
         analyzeFail("select array_filter(1,[2])");
         analyzeFail("select array_filter([],[],[])");
         analyzeFail("select array_filter([2],1)");
+    }
+
+    @Test
+    public void testBinaryLiteral() {
+        analyzeSuccess("select x'0000'");
+        analyzeSuccess("select x'0000' from tbinary ");
+        analyzeSuccess("select x\"0000\" from tbinary ");
+        analyzeSuccess("select hex(x'0000') from tbinary ");
+        analyzeSuccess("select hex(x\"0000\") from tbinary ");
+        analyzeSuccess("select hex(v_varbinary4) from tbinary ");
+        analyzeSuccess("select hex(v_varbinary) from tbinary ");
+        analyzeSuccess("insert into tbinary values(1, x'0000', x'0000' )");
     }
 }

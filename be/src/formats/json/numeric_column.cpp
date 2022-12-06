@@ -1,5 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "numeric_column.h"
 
 #include "column/fixed_length_column.h"
@@ -11,11 +23,15 @@ namespace starrocks::vectorized {
 template <typename FromType, typename ToType>
 static inline bool checked_cast(const FromType& from, ToType* to) {
     *to = static_cast<ToType>(from);
-    if constexpr (std::numeric_limits<ToType>::is_integer) {
-        return (from > std::numeric_limits<ToType>::max() || from < std::numeric_limits<ToType>::min());
-    }
 
+    // NOTE: use lowest() because float and double needed.
+    // Needs to covnert long and int128_t to double to compare, so disable compiler's complain
+    DIAGNOSTIC_PUSH
+#if defined(__clang__)
+    DIAGNOSTIC_IGNORE("-Wimplicit-const-int-float-conversion")
+#endif
     return (from < std::numeric_limits<ToType>::lowest() || from > std::numeric_limits<ToType>::max());
+    DIAGNOSTIC_POP
 }
 
 // The value must be in type simdjson::ondemand::json_type::number;

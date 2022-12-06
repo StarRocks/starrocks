@@ -42,7 +42,6 @@ import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SetVar;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.plan.ExecPlan;
-import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.thrift.TResultBatch;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.thrift.TVariableData;
@@ -119,13 +118,11 @@ public class SetExecutor {
     }
 
     private void deriveExpressionResult(UserVariable userVariable) {
-        ConnectContext context = StatisticUtils.buildConnectContext();
-
         QueryStatement queryStatement = ((Subquery) userVariable.getExpression()).getQueryStatement();
         ExecPlan execPlan = StatementPlanner.plan(queryStatement,
                 ConnectContext.get(), true, TResultSinkType.VARIABLE);
-        StmtExecutor executor = new StmtExecutor(context, queryStatement);
-        Pair<List<TResultBatch>, Status> sqlResult = executor.executeStmtWithExecPlan(context, execPlan);
+        StmtExecutor executor = new StmtExecutor(ctx, queryStatement);
+        Pair<List<TResultBatch>, Status> sqlResult = executor.executeStmtWithExecPlan(ctx, execPlan);
         if (!sqlResult.second.ok()) {
             throw new SemanticException(sqlResult.second.getErrorMsg());
         } else {
@@ -154,8 +151,8 @@ public class SetExecutor {
             }
         }
 
-        if (context.getState().getStateType() == QueryState.MysqlStateType.ERR) {
-            throw new SemanticException(context.getState().getErrorMessage());
+        if (ctx.getState().getStateType() == QueryState.MysqlStateType.ERR) {
+            throw new SemanticException(ctx.getState().getErrorMessage());
         }
     }
 

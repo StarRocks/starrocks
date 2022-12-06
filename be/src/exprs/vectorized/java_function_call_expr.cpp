@@ -1,5 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "exprs/vectorized/java_function_call_expr.h"
 
 #include <memory>
@@ -23,6 +35,7 @@
 #include "udf/java/java_udf.h"
 #include "udf/java/utils.h"
 #include "udf/udf.h"
+#include "util/defer_op.h"
 
 namespace starrocks::vectorized {
 
@@ -39,30 +52,32 @@ struct UDFFunctionCallHelper {
         int num_cols = ctx->get_num_args();
         std::vector<const Column*> input_cols;
 
-        for (int i = 0; i < columns.size(); ++i) {
-            if (columns[i]->only_null()) {
+        for (auto& column : columns) {
+            if (column->only_null()) {
                 // we will handle NULL later
-            } else if (columns[i]->is_constant()) {
-                columns[i] = ColumnHelper::unpack_and_duplicate_const_column(size, columns[i]);
+            } else if (column->is_constant()) {
+                column = ColumnHelper::unpack_and_duplicate_const_column(size, column);
             }
         }
 
-        for (auto col : columns) {
+        for (const auto& col : columns) {
             input_cols.emplace_back(col.get());
         }
         // each input arguments as three local references (nullcolumn, offsetcolumn, bytescolumn)
         // result column as a ref
         env->PushLocalFrame((num_cols + 1) * 3 + 1);
+        auto defer = DeferOp([env]() { env->PopLocalFrame(nullptr); });
         // convert input columns to object columns
         std::vector<jobject> input_col_objs;
-        JavaDataTypeConverter::convert_to_boxed_array(ctx, &buffers, input_cols.data(), num_cols, size,
-                                                      &input_col_objs);
+        auto st = JavaDataTypeConverter::convert_to_boxed_array(ctx, &buffers, input_cols.data(), num_cols, size,
+                                                                &input_col_objs);
+        RETURN_IF_UNLIKELY(!st.ok(), ColumnHelper::create_const_null_column(size));
+
         // call UDF method
         jobject res = helper.batch_call(fn_desc->call_stub.get(), input_col_objs.data(), input_col_objs.size(), size);
-
+        RETURN_IF_UNLIKELY_NULL(res, ColumnHelper::create_const_null_column(size));
         // get result
         auto result_cols = get_boxed_result(ctx, res, size);
-        env->PopLocalFrame(nullptr);
         return result_cols;
     }
 
@@ -82,11 +97,11 @@ struct UDFFunctionCallHelper {
 
 JavaFunctionCallExpr::JavaFunctionCallExpr(const TExprNode& node) : Expr(node) {}
 
-ColumnPtr JavaFunctionCallExpr::evaluate(ExprContext* context, vectorized::Chunk* ptr) {
+StatusOr<ColumnPtr> JavaFunctionCallExpr::evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) {
     Columns columns(children().size());
 
     for (int i = 0; i < _children.size(); ++i) {
-        columns[i] = _children[i]->evaluate(context, ptr);
+        ASSIGN_OR_RETURN(columns[i], _children[i]->evaluate_checked(context, ptr));
     }
     ColumnPtr res;
     auto call_udf = [&]() {
@@ -129,7 +144,6 @@ Status JavaFunctionCallExpr::prepare(RuntimeState* state, ExprContext* context) 
     context->fn_context(_fn_context_index)->set_is_udf(true);
 
     _func_desc = std::make_shared<JavaUDFContext>();
-
     // TODO:
     _is_returning_random_value = false;
     return Status::OK();
@@ -222,7 +236,9 @@ Status JavaFunctionCallExpr::open(RuntimeState* state, ExprContext* context,
         }
         return Status::OK();
     };
-    RETURN_IF_ERROR(call_function_in_pthread(state, open_state)->get_future().get());
+    if (scope == FunctionContext::FRAGMENT_LOCAL) {
+        RETURN_IF_ERROR(call_function_in_pthread(state, open_state)->get_future().get());
+    }
     return Status::OK();
 }
 

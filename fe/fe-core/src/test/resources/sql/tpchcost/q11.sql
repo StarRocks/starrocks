@@ -52,7 +52,7 @@ UNPARTITIONED
 |  <slot 21> : 21: sum
 |
 27:NESTLOOP JOIN
-|  join op: CROSS JOIN
+|  join op: INNER JOIN
 |  colocate: false, reason:
 |  other join predicates: 21: sum > 43: expr
 |

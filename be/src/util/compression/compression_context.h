@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #pragma once
 
 #include <lz4/lz4.h>
@@ -11,13 +24,13 @@
 namespace starrocks::compression {
 
 struct ZSTDCompressionContext {
-    ZSTDCompressionContext() : ctx(nullptr), compression_fail(false), compression_count(0) {}
+    ZSTDCompressionContext() {}
 
     // ZSTD compression context
-    ZSTD_CCtx* ctx;
+    ZSTD_CCtx* ctx{nullptr};
 
-    bool compression_fail;
-    uint32_t compression_count;
+    bool compression_fail{false};
+    uint32_t compression_count{0};
 
     // This compression_buffer is shared under the same compress context.
     // We will first save the compression result on this compression_buffer,
@@ -27,22 +40,22 @@ struct ZSTDCompressionContext {
 };
 
 struct ZSTDDecompressContext {
-    ZSTDDecompressContext() : ctx(nullptr), decompression_fail(false), decompression_count(0) {}
+    ZSTDDecompressContext() {}
 
     // ZSTD decompression context
-    ZSTD_DCtx* ctx;
-    bool decompression_fail;
-    uint32_t decompression_count;
+    ZSTD_DCtx* ctx{nullptr};
+    bool decompression_fail{false};
+    uint32_t decompression_count{0};
 };
 
 struct LZ4FCompressContext {
-    LZ4FCompressContext() : ctx(nullptr), compression_fail(false), compression_count(0) {}
+    LZ4FCompressContext() {}
 
     // LZ4F compression context
-    LZ4F_compressionContext_t ctx;
+    LZ4F_compressionContext_t ctx{nullptr};
 
-    bool compression_fail;
-    uint32_t compression_count;
+    bool compression_fail{false};
+    uint32_t compression_count{0};
 
     // This compression_buffer is shared under the same compress context.
     // We will first save the compression result on this compression_buffer,
@@ -52,23 +65,23 @@ struct LZ4FCompressContext {
 };
 
 struct LZ4FDecompressContext {
-    LZ4FDecompressContext() : ctx(nullptr), decompression_fail(false), decompression_count(0) {}
+    LZ4FDecompressContext() {}
 
     // LZ4F decompression context
-    LZ4F_decompressionContext_t ctx;
+    LZ4F_decompressionContext_t ctx{nullptr};
 
-    bool decompression_fail;
-    uint32_t decompression_count;
+    bool decompression_fail{false};
+    uint32_t decompression_count{0};
 };
 
 struct LZ4CompressContext {
-    LZ4CompressContext() : ctx(nullptr), compression_fail(false), compression_count(0) {}
+    LZ4CompressContext() {}
 
     // LZ4 compression context
-    LZ4_stream_t* ctx;
+    LZ4_stream_t* ctx{nullptr};
 
-    bool compression_fail;
-    uint32_t compression_count;
+    bool compression_fail{false};
+    uint32_t compression_count{0};
 
     // This compression_buffer is shared under the same compress context.
     // We will first save the compression result on this compression_buffer,

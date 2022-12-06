@@ -1,9 +1,22 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "exec/pipeline/scan/olap_scan_context.h"
 
 #include "exec/vectorized/olap_scan_node.h"
 #include "exprs/vectorized/runtime_filter_bank.h"
+#include "storage/tablet.h"
 
 namespace starrocks::pipeline {
 
@@ -38,6 +51,31 @@ Status OlapScanContext::prepare(RuntimeState* state) {
 
 void OlapScanContext::close(RuntimeState* state) {
     _chunk_buffer.close();
+    for (const auto& rowsets_per_tablet : _tablet_rowsets) {
+        Rowset::release_readers(rowsets_per_tablet);
+    }
+}
+
+Status OlapScanContext::capture_tablet_rowsets(const std::vector<TInternalScanRange*>& olap_scan_ranges) {
+    _tablet_rowsets.resize(olap_scan_ranges.size());
+    _tablets.resize(olap_scan_ranges.size());
+    for (int i = 0; i < olap_scan_ranges.size(); ++i) {
+        auto* scan_range = olap_scan_ranges[i];
+
+        int64_t version = strtoul(scan_range->version.c_str(), nullptr, 10);
+        ASSIGN_OR_RETURN(TabletSharedPtr tablet, vectorized::OlapScanNode::get_tablet(scan_range));
+
+        // Capture row sets of this version tablet.
+        {
+            std::shared_lock l(tablet->get_header_lock());
+            RETURN_IF_ERROR(tablet->capture_consistent_rowsets(Version(0, version), &_tablet_rowsets[i]));
+            Rowset::acquire_readers(_tablet_rowsets[i]);
+        }
+
+        _tablets[i] = std::move(tablet);
+    }
+
+    return Status::OK();
 }
 
 Status OlapScanContext::parse_conjuncts(RuntimeState* state, const std::vector<ExprContext*>& runtime_in_filters,
@@ -85,7 +123,7 @@ Status OlapScanContext::parse_conjuncts(RuntimeState* state, const std::vector<E
     _conjuncts_manager.get_not_push_down_conjuncts(&_not_push_down_conjuncts);
 
     _dict_optimize_parser.set_mutable_dict_maps(state, state->mutable_query_global_dict_map());
-    _dict_optimize_parser.rewrite_conjuncts(&_not_push_down_conjuncts, state);
+    RETURN_IF_ERROR(_dict_optimize_parser.rewrite_conjuncts(&_not_push_down_conjuncts, state));
 
     return Status::OK();
 }

@@ -22,6 +22,7 @@
 package com.starrocks.load.loadv2;
 
 import com.starrocks.transaction.TabletCommitInfo;
+import com.starrocks.transaction.TabletFailInfo;
 
 import java.util.List;
 import java.util.Map;
@@ -31,13 +32,15 @@ public class BrokerLoadingTaskAttachment extends TaskAttachment {
     private Map<String, String> counters;
     private String trackingUrl;
     private List<TabletCommitInfo> commitInfoList;
+    private List<TabletFailInfo> failInfoList;
 
     public BrokerLoadingTaskAttachment(long taskId, Map<String, String> counters, String trackingUrl,
-                                       List<TabletCommitInfo> commitInfoList) {
+                                       List<TabletCommitInfo> commitInfoList, List<TabletFailInfo> failInfoList) {
         super(taskId);
         this.trackingUrl = trackingUrl;
         this.counters = counters;
         this.commitInfoList = commitInfoList;
+        this.failInfoList = failInfoList;
     }
 
     public String getCounter(String key) {
@@ -54,5 +57,9 @@ public class BrokerLoadingTaskAttachment extends TaskAttachment {
 
     public List<TabletCommitInfo> getCommitInfoList() {
         return commitInfoList;
+    }
+
+    public List<TabletFailInfo> getFailInfoList() {
+        return failInfoList;
     }
 }

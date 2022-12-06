@@ -29,6 +29,7 @@ import com.starrocks.analysis.LabelName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
@@ -347,6 +348,7 @@ public class BrokerLoadJobTest {
                                           @Mocked PriorityLeaderTaskExecutor priorityLeaderTaskExecutor,
                                           @Injectable OlapTable olapTable,
                                           @Mocked LoadingTaskPlanner loadingTaskPlanner) {
+        Config.enable_pipeline_load = false;
         BrokerLoadJob brokerLoadJob = new BrokerLoadJob();
         Deencapsulation.setField(brokerLoadJob, "state", JobState.LOADING);
         long taskId = 1L;
@@ -402,6 +404,7 @@ public class BrokerLoadJobTest {
         Assert.assertEquals(true, finishedTaskIds.contains(taskId));
         Map<Long, LoadTask> idToTasks = Deencapsulation.getField(brokerLoadJob, "idToTasks");
         Assert.assertEquals(3, idToTasks.size());
+        Config.enable_pipeline_load = true;
     }
 
     @Test

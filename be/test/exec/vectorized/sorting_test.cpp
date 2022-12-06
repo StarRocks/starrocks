@@ -1,5 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "exec/vectorized/sorting/sorting.h"
 
 #include <gtest/gtest.h>
@@ -11,6 +23,7 @@
 #include "column/column_helper.h"
 #include "exec/vectorized/sorting/merge.h"
 #include "exec/vectorized/sorting/sort_helper.h"
+#include "exec/vectorized/sorting/sort_permute.h"
 #include "exprs/expr_context.h"
 #include "exprs/vectorized/column_ref.h"
 #include "runtime/chunk_cursor.h"
@@ -21,7 +34,7 @@
 
 namespace starrocks::vectorized {
 
-static ColumnPtr build_sorted_column(TypeDescriptor type_desc, int slot_index, int32_t start, int32_t count,
+static ColumnPtr build_sorted_column(const TypeDescriptor& type_desc, int slot_index, int32_t start, int32_t count,
                                      int32_t step) {
     DCHECK_EQ(TYPE_INT, type_desc.type);
 
@@ -73,8 +86,8 @@ TEST_P(MergeTestFixture, merge_sorter_chunks_two_way) {
     for (int i = 0; i < total_columns; i++) {
         ColumnPtr col = ColumnHelper::create_column(type_desc, false);
         auto& data = sorting_data[i];
-        for (int j = 0; j < data.size(); j++) {
-            col->append_datum(Datum(data[j]));
+        for (int j : data) {
+            col->append_datum(Datum(j));
         }
         if (i < total_columns / 2) {
             left_rows = data.size();
@@ -105,9 +118,7 @@ TEST_P(MergeTestFixture, merge_sorter_chunks_two_way) {
     size_t expected_size = left_rows + right_rows;
     ChunkPtr output;
     SortedRuns output_run;
-    ASSERT_OK(merge_sorted_chunks(sort_desc, &sort_exprs,
-                                  {SortedRun(left_chunk, &sort_exprs), SortedRun(right_chunk, &sort_exprs)},
-                                  &output_run, 0));
+    ASSERT_OK(merge_sorted_chunks(sort_desc, &sort_exprs, {left_chunk, right_chunk}, &output_run));
     output = output_run.assemble();
     ASSERT_EQ(expected_size, output->num_rows());
     ASSERT_EQ(left_chunk->num_columns(), output->num_columns());
@@ -172,7 +183,7 @@ INSTANTIATE_TEST_SUITE_P(
 
                         ));
 
-TEST(SortingTest, append_by_permutation_binary) {
+TEST(SortingTest, materialize_by_permutation_binary) {
     BinaryColumn::Ptr input1 = BinaryColumn::create();
     BinaryColumn::Ptr input2 = BinaryColumn::create();
     input1->append_string("star");
@@ -180,13 +191,13 @@ TEST(SortingTest, append_by_permutation_binary) {
 
     ColumnPtr merged = BinaryColumn::create();
     Permutation perm{{0, 0}, {1, 0}};
-    append_by_permutation(merged.get(), {input1, input2}, perm);
+    materialize_column_by_permutation(merged.get(), {input1, input2}, perm);
     ASSERT_EQ(2, merged->size());
     ASSERT_EQ("star", merged->get(0).get_slice());
     ASSERT_EQ("rock", merged->get(1).get_slice());
 }
 
-TEST(SortingTest, append_by_permutation_int) {
+TEST(SortingTest, materialize_by_permutation_int) {
     Int32Column::Ptr input1 = Int32Column::create();
     Int32Column::Ptr input2 = Int32Column::create();
     input1->append(1024);
@@ -194,7 +205,7 @@ TEST(SortingTest, append_by_permutation_int) {
 
     ColumnPtr merged = Int32Column::create();
     Permutation perm{{0, 0}, {1, 0}};
-    append_by_permutation(merged.get(), {input1, input2}, perm);
+    materialize_column_by_permutation(merged.get(), {input1, input2}, perm);
     ASSERT_EQ(2, merged->size());
     ASSERT_EQ(1024, merged->get(0).get_int32());
     ASSERT_EQ(2048, merged->get(1).get_int32());
@@ -227,8 +238,8 @@ TEST(SortingTest, sorted_runs) {
     ChunkPtr chunk = std::make_shared<Chunk>(Columns{col1, col2}, slot_map);
 
     SortedRuns runs;
-    runs.chunks.push_back(SortedRun(chunk, chunk->columns()));
-    runs.chunks.push_back(SortedRun(chunk, chunk->columns()));
+    runs.chunks.emplace_back(chunk, chunk->columns());
+    runs.chunks.emplace_back(chunk, chunk->columns());
 
     ASSERT_EQ(2, runs.num_chunks());
     ASSERT_EQ(200, runs.num_rows());
@@ -273,7 +284,7 @@ TEST(SortingTest, merge_sorted_chunks) {
 
     SortDescs sort_desc(std::vector<int>{1}, std::vector<int>{-1});
     SortedRuns output;
-    merge_sorted_chunks(sort_desc, &sort_exprs, input_chunks, &output, 0);
+    merge_sorted_chunks(sort_desc, &sort_exprs, input_chunks, &output);
     ASSERT_TRUE(output.is_sorted(sort_desc));
 }
 

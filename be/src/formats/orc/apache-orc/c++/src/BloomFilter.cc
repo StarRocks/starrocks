@@ -93,12 +93,12 @@ void checkArgument(bool expression, const std::string& message) {
 }
 
 int32_t optimalNumOfHashFunctions(uint64_t expectedEntries, uint64_t numBits) {
-    double n = static_cast<double>(expectedEntries);
+    auto n = static_cast<double>(expectedEntries);
     return std::max<int32_t>(1, static_cast<int32_t>(std::round(static_cast<double>(numBits) / n * std::log(2.0))));
 }
 
 int32_t optimalNumOfBits(uint64_t expectedEntries, double fpp) {
-    double n = static_cast<double>(expectedEntries);
+    auto n = static_cast<double>(expectedEntries);
     return static_cast<int32_t>(-n * std::log(fpp) / (std::log(2.0) * std::log(2.0)));
 }
 
@@ -124,7 +124,7 @@ BloomFilterImpl::BloomFilterImpl(uint64_t expectedEntries, double fpp) {
     checkArgument(expectedEntries > 0, "expectedEntries should be > 0");
     checkArgument(fpp > 0.0 && fpp < 1.0, "False positive probability should be > 0.0 & < 1.0");
 
-    uint64_t nb = static_cast<uint64_t>(optimalNumOfBits(expectedEntries, fpp));
+    auto nb = static_cast<uint64_t>(optimalNumOfBits(expectedEntries, fpp));
     // make 'mNumBits' multiple of 64
     mNumBits = nb + (BITS_OF_LONG - (nb % BITS_OF_LONG));
     mNumHashFunctions = optimalNumOfHashFunctions(expectedEntries, mNumBits);
@@ -180,7 +180,7 @@ BloomFilterImpl::BloomFilterImpl(const proto::BloomFilter& bloomFilter) {
     mNumBits = bitsetStr.size() << SHIFT_3_BITS;
     checkArgument(mNumBits % BITS_OF_LONG == 0, "numBits should be multiple of 64!");
 
-    const uint64_t* bitset = reinterpret_cast<const uint64_t*>(bitsetStr.data());
+    const auto* bitset = reinterpret_cast<const uint64_t*>(bitsetStr.data());
     if (isLittleEndian()) {
         mBitSet.reset(new BitSet(bitset, mNumBits));
     } else {
@@ -209,10 +209,10 @@ bool BloomFilterImpl::testDouble(double data) const {
 DIAGNOSTIC_POP
 
 void BloomFilterImpl::addHash(int64_t hash64) {
-    int32_t hash1 = static_cast<int32_t>(hash64 & 0xffffffff);
+    auto hash1 = static_cast<int32_t>(hash64 & 0xffffffff);
     // In Java codes, we use "hash64 >>> 32" which is an unsigned shift op.
     // So we cast hash64 to uint64_t here for an unsigned right shift.
-    int32_t hash2 = static_cast<int32_t>(static_cast<uint64_t>(hash64) >> 32);
+    auto hash2 = static_cast<int32_t>(static_cast<uint64_t>(hash64) >> 32);
 
     for (int32_t i = 1; i <= mNumHashFunctions; ++i) {
         int32_t combinedHash = hash1 + i * hash2;
@@ -226,10 +226,10 @@ void BloomFilterImpl::addHash(int64_t hash64) {
 }
 
 bool BloomFilterImpl::testHash(int64_t hash64) const {
-    int32_t hash1 = static_cast<int32_t>(hash64 & 0xffffffff);
+    auto hash1 = static_cast<int32_t>(hash64 & 0xffffffff);
     // In Java codes, we use "hash64 >>> 32" which is an unsigned shift op.
     // So we cast hash64 to uint64_t here for an unsigned right shift.
-    int32_t hash2 = static_cast<int32_t>(static_cast<uint64_t>(hash64) >> 32);
+    auto hash2 = static_cast<int32_t>(static_cast<uint64_t>(hash64) >> 32);
 
     for (int32_t i = 1; i <= mNumHashFunctions; ++i) {
         int32_t combinedHash = hash1 + i * hash2;

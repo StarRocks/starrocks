@@ -29,6 +29,7 @@
 #include "gutil/endian.h"
 #include "gutil/stringprintf.h"
 #include "runtime/current_thread.h"
+#include "runtime/exec_env.h"
 #include "util/logging.h"
 
 namespace starrocks {
@@ -38,11 +39,11 @@ static bool logging_initialized = false;
 static std::mutex logging_mutex;
 
 static bool iequals(const std::string& a, const std::string& b) {
-    unsigned int sz = a.size();
+    size_t sz = a.size();
     if (b.size() != sz) {
         return false;
     }
-    for (unsigned int i = 0; i < sz; ++i) {
+    for (size_t i = 0; i < sz; ++i) {
         if (tolower(a[i]) != tolower(b[i])) {
             return false;
         }
@@ -74,9 +75,12 @@ static int print_unique_id(char* buffer, const TUniqueId& uid) {
     return 36;
 }
 
+// heap may broken when call dump trace info.
+// so we shouldn't allocate any memory allocate function here
 static void dump_trace_info() {
     static bool start_dump = false;
     if (!start_dump) {
+        // dump query_id and fragment id
         auto query_id = CurrentThread::current().query_id();
         auto fragment_instance_id = CurrentThread::current().fragment_instance_id();
         char buffer[256] = {};
@@ -87,6 +91,15 @@ static void dump_trace_info() {
         res = print_unique_id(buffer + res, fragment_instance_id) + res;
         res = sprintf(buffer + res, "\n") + res;
         [[maybe_unused]] auto wt = write(STDERR_FILENO, buffer, res);
+        // dump memory usage
+        auto trackers = ExecEnv::GetInstance()->mem_trackers();
+        // copy tracker to add reference
+        for (auto tracker : trackers) {
+            if (tracker) {
+                size_t len = tracker->debug_string(buffer, sizeof(buffer));
+                wt = write(STDERR_FILENO, buffer, len);
+            }
+        }
     }
     start_dump = true;
 }
@@ -110,6 +123,11 @@ bool init_glog(const char* basename, bool install_signal_handler) {
 
     if (install_signal_handler) {
         google::InstallFailureSignalHandler();
+    }
+
+    // dump trace info may access some runtime stats
+    // if runtime stats broken we won't dump stack
+    if (config::dump_trace_info) {
         google::InstallFailureWriter(failure_writer);
         google::InstallFailureFunction(failure_function);
     }
@@ -167,7 +185,7 @@ bool init_glog(const char* basename, bool install_signal_handler) {
             const char* sizecstr = sizestr.c_str();
             int64_t ret64 = strtoll(sizecstr, &end, 10);
             if ((errno == 0) && (end == sizecstr + strlen(sizecstr))) {
-                int32_t retval = static_cast<int32_t>(ret64);
+                auto retval = static_cast<int32_t>(ret64);
                 if (retval == ret64) {
                     FLAGS_max_log_size = retval;
                     ok = true;
@@ -206,11 +224,11 @@ void shutdown_logging() {
 
 std::string FormatTimestampForLog(MicrosecondsInt64 micros_since_epoch) {
     time_t secs_since_epoch = micros_since_epoch / 1000000;
-    int usecs = micros_since_epoch % 1000000;
+    int64_t usecs = micros_since_epoch % 1000000;
     struct tm tm_time;
     localtime_r(&secs_since_epoch, &tm_time);
 
-    return StringPrintf("%02d%02d %02d:%02d:%02d.%06d", 1 + tm_time.tm_mon, tm_time.tm_mday, tm_time.tm_hour,
+    return StringPrintf("%02d%02d %02d:%02d:%02d.%06ld", 1 + tm_time.tm_mon, tm_time.tm_mday, tm_time.tm_hour,
                         tm_time.tm_min, tm_time.tm_sec, usecs);
 }
 

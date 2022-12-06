@@ -45,7 +45,7 @@ import java.util.Set;
 
 public class RoleManager implements Writable {
     private static final Logger LOG = LogManager.getLogger(RoleManager.class);
-    private Map<String, Role> roles = Maps.newHashMap();
+    protected Map<String, Role> roles = Maps.newHashMap();
 
     public RoleManager() {
         roles.put(Role.OPERATOR.getRoleName(), Role.OPERATOR);

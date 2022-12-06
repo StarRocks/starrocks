@@ -1,5 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
@@ -8,12 +20,11 @@
 #include "exprs/vectorized/mock_vectorized_expr.h"
 #include "geo/geo_types.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 class geographyFunctionsTest : public ::testing::Test {
 public:
-    void SetUp() {}
+    void SetUp() override {}
 };
 
 TEST_F(geographyFunctionsTest, st_pointTest) {
@@ -28,11 +39,11 @@ TEST_F(geographyFunctionsTest, st_pointTest) {
         str_2->append(56.7);
         columns.emplace_back(str_1);
         columns.emplace_back(str_2);
-        ColumnPtr result = GeoFunctions::st_point(ctx.get(), columns);
+        ColumnPtr result = GeoFunctions::st_point(ctx.get(), columns).value();
 
         columns.clear();
         columns.emplace_back(result);
-        result = GeoFunctions::st_as_wkt(ctx.get(), columns);
+        result = GeoFunctions::st_as_wkt(ctx.get(), columns).value();
 
         auto v = ColumnHelper::as_column<BinaryColumn>(result);
         ASSERT_EQ("POINT (24.7 56.7)", v->get_data()[0].to_string());
@@ -49,7 +60,7 @@ TEST_F(geographyFunctionsTest, st_pointTest) {
         str_2->append(56.7);
         columns.emplace_back(str_1);
         columns.emplace_back(str_2);
-        ColumnPtr result = GeoFunctions::st_point(ctx.get(), columns);
+        ColumnPtr result = GeoFunctions::st_point(ctx.get(), columns).value();
         auto v = ColumnHelper::as_column<BinaryColumn>(result);
         auto str_value = v->get_data()[0];
 
@@ -74,7 +85,7 @@ TEST_F(geographyFunctionsTest, st_xDoubleTest) {
     str_column->append(Slice(buf));
     columns.emplace_back(str_column);
 
-    auto result = GeoFunctions::st_x(ctx.get(), columns);
+    auto result = GeoFunctions::st_x(ctx.get(), columns).value();
     auto v = ColumnHelper::as_column<DoubleColumn>(result);
     ASSERT_EQ(134, v->get_data()[0]);
 
@@ -94,7 +105,7 @@ TEST_F(geographyFunctionsTest, st_yDoubleTest) {
     str_column->append(Slice(buf));
     columns.emplace_back(str_column);
 
-    auto result = GeoFunctions::st_y(ctx.get(), columns);
+    auto result = GeoFunctions::st_y(ctx.get(), columns).value();
     auto v = ColumnHelper::as_column<DoubleColumn>(result);
     ASSERT_EQ(63, v->get_data()[0]);
 }
@@ -118,7 +129,7 @@ TEST_F(geographyFunctionsTest, st_distance_sphereTest) {
     columns.emplace_back(ylng);
     columns.emplace_back(ylat);
 
-    ColumnPtr result = GeoFunctions::st_distance_sphere(ctx.get(), columns);
+    ColumnPtr result = GeoFunctions::st_distance_sphere(ctx.get(), columns).value();
     auto v = ColumnHelper::as_column<DoubleColumn>(result);
 
     ASSERT_EQ(0, v->get_data()[0]);
@@ -137,7 +148,7 @@ TEST_F(geographyFunctionsTest, as_wktTest) {
     columns.emplace_back(str_point);
     str_point->append(buf);
 
-    auto result = GeoFunctions::st_as_wkt(ctx.get(), columns);
+    auto result = GeoFunctions::st_as_wkt(ctx.get(), columns).value();
     auto v = ColumnHelper::as_column<BinaryColumn>(result);
 
     ASSERT_EQ("POINT (134 63)", v->get_data()[0].to_string());
@@ -158,7 +169,7 @@ TEST_F(geographyFunctionsTest, st_from_wktGeneralTest) {
 
     ASSERT_EQ(nullptr, ctx->get_function_state(FunctionContext::FRAGMENT_LOCAL));
 
-    auto result = GeoFunctions::st_from_wkt(ctx.get(), columns);
+    auto result = GeoFunctions::st_from_wkt(ctx.get(), columns).value();
     GeoFunctions::st_from_wkt_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
     auto v = ColumnHelper::as_column<BinaryColumn>(result);
 
@@ -184,7 +195,7 @@ TEST_F(geographyFunctionsTest, st_from_wktConstTest) {
 
     ASSERT_EQ(false, !ctx->get_function_state(FunctionContext::FRAGMENT_LOCAL));
 
-    auto result = GeoFunctions::st_from_wkt(ctx.get(), columns);
+    auto result = GeoFunctions::st_from_wkt(ctx.get(), columns).value();
     auto v = ColumnHelper::as_column<ConstColumn>(result);
     GeoFunctions::st_from_wkt_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
 
@@ -207,7 +218,7 @@ TEST_F(geographyFunctionsTest, st_lineGeneralTest) {
     ctx->impl()->set_constant_columns(columns);
 
     GeoFunctions::st_line_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
-    auto result = GeoFunctions::st_line(ctx.get(), columns);
+    auto result = GeoFunctions::st_line(ctx.get(), columns).value();
     auto v = ColumnHelper::as_column<BinaryColumn>(result);
     GeoLine line_obj;
     auto res = line_obj.decode_from(v->get_data()[0].data, v->get_data()[0].size);
@@ -224,7 +235,7 @@ TEST_F(geographyFunctionsTest, st_lineConstTest) {
     ctx->impl()->set_constant_columns(columns);
 
     GeoFunctions::st_line_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
-    auto result = GeoFunctions::st_line(ctx.get(), columns);
+    auto result = GeoFunctions::st_line(ctx.get(), columns).value();
     auto v = ColumnHelper::get_const_value<TYPE_VARCHAR>(result);
 
     GeoLine line;
@@ -245,7 +256,7 @@ TEST_F(geographyFunctionsTest, st_polygonGeneralTest) {
     GeoFunctions::st_polygon_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
     ASSERT_EQ(nullptr, ctx->get_function_state(FunctionContext::FRAGMENT_LOCAL));
 
-    auto str2 = GeoFunctions::st_polygon(ctx.get(), columns);
+    auto str2 = GeoFunctions::st_polygon(ctx.get(), columns).value();
     auto result = ColumnHelper::as_column<BinaryColumn>(str2);
     ASSERT_FALSE(str2->is_null(0));
     auto v = result->get_data()[0];
@@ -267,7 +278,7 @@ TEST_F(geographyFunctionsTest, st_polygonConstTest) {
     GeoFunctions::st_polygon_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
     ASSERT_NE(nullptr, ctx->get_function_state(FunctionContext::FRAGMENT_LOCAL));
 
-    auto str2 = GeoFunctions::st_polygon(ctx.get(), columns);
+    auto str2 = GeoFunctions::st_polygon(ctx.get(), columns).value();
     auto result = ColumnHelper::as_column<ConstColumn>(str2);
     auto v = ColumnHelper::get_const_value<TYPE_VARCHAR>(result);
 
@@ -295,7 +306,7 @@ TEST_F(geographyFunctionsTest, st_circleGeneralTest) {
     GeoFunctions::st_circle_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
     ASSERT_EQ(nullptr, ctx->get_function_state(FunctionContext::FRAGMENT_LOCAL));
 
-    auto result = GeoFunctions::st_circle(ctx.get(), columns);
+    auto result = GeoFunctions::st_circle(ctx.get(), columns).value();
     ASSERT_FALSE(result->is_null(0));
 
     auto v = ColumnHelper::as_column<BinaryColumn>(result);
@@ -322,7 +333,7 @@ TEST_F(geographyFunctionsTest, st_circleConstTest) {
     GeoFunctions::st_circle_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
     ASSERT_NE(nullptr, ctx->get_function_state(FunctionContext::FRAGMENT_LOCAL));
 
-    auto result = GeoFunctions::st_circle(ctx.get(), columns);
+    auto result = GeoFunctions::st_circle(ctx.get(), columns).value();
     ASSERT_FALSE(result->is_null(0));
 
     auto v = ColumnHelper::as_column<ConstColumn>(result);
@@ -346,7 +357,7 @@ TEST_F(geographyFunctionsTest, st_containsGeneralTest) {
     columns.emplace_back(polygon_column);
     ctx->impl()->set_constant_columns(columns);
     GeoFunctions::st_from_wkt_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
-    auto result1 = GeoFunctions::st_from_wkt(ctx.get(), columns);
+    auto result1 = GeoFunctions::st_from_wkt(ctx.get(), columns).value();
 
     columns.clear();
     std::string point_wkt = "POINT (25 25)";
@@ -355,7 +366,7 @@ TEST_F(geographyFunctionsTest, st_containsGeneralTest) {
     columns.emplace_back(point_column);
     ctx->impl()->set_constant_columns(columns);
     GeoFunctions::st_from_wkt_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
-    auto result2 = GeoFunctions::st_from_wkt(ctx.get(), columns);
+    auto result2 = GeoFunctions::st_from_wkt(ctx.get(), columns).value();
 
     columns.clear();
     columns.emplace_back(result1);
@@ -365,7 +376,7 @@ TEST_F(geographyFunctionsTest, st_containsGeneralTest) {
 
     ASSERT_EQ(nullptr, ctx->get_function_state(FunctionContext::FRAGMENT_LOCAL));
 
-    auto res = GeoFunctions::st_contains(ctx.get(), columns);
+    auto res = GeoFunctions::st_contains(ctx.get(), columns).value();
     auto bools = ColumnHelper::cast_to<TYPE_BOOLEAN>(res);
     ASSERT_FALSE(res->is_null(0));
     ASSERT_TRUE(bools->get_data()[0]);
@@ -384,7 +395,7 @@ TEST_F(geographyFunctionsTest, st_containsWithUnexpectedInputTest) {
     columns.emplace_back(polygon_column);
     ctx->impl()->set_constant_columns(columns);
     GeoFunctions::st_from_wkt_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
-    auto result1 = GeoFunctions::st_from_wkt(ctx.get(), columns);
+    auto result1 = GeoFunctions::st_from_wkt(ctx.get(), columns).value();
 
     columns.clear();
     std::string point_wkt = "POINT (25 25)";
@@ -393,7 +404,7 @@ TEST_F(geographyFunctionsTest, st_containsWithUnexpectedInputTest) {
     columns.emplace_back(point_column);
     ctx->impl()->set_constant_columns(columns);
     GeoFunctions::st_from_wkt_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
-    auto result2 = GeoFunctions::st_from_wkt(ctx.get(), columns);
+    auto result2 = GeoFunctions::st_from_wkt(ctx.get(), columns).value();
 
     columns.clear();
     auto varchar_column = ColumnHelper::cast_to<TYPE_VARCHAR>(result1);
@@ -408,7 +419,7 @@ TEST_F(geographyFunctionsTest, st_containsWithUnexpectedInputTest) {
     columns.emplace_back(result2);
     ctx->impl()->set_constant_columns(columns);
     GeoFunctions::st_contains_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
-    auto res = GeoFunctions::st_contains(ctx.get(), columns);
+    auto res = GeoFunctions::st_contains(ctx.get(), columns).value();
     ASSERT_FALSE(res->only_null());
     GeoFunctions::st_contains_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
 }
@@ -425,7 +436,7 @@ TEST_F(geographyFunctionsTest, st_containsConstTest) {
     columns.emplace_back(polygon_column);
     ctx->impl()->set_constant_columns(columns);
     GeoFunctions::st_from_wkt_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
-    auto result1 = ConstColumn::create(GeoFunctions::st_from_wkt(ctx.get(), columns), 1);
+    auto result1 = ConstColumn::create(GeoFunctions::st_from_wkt(ctx.get(), columns).value(), 1);
 
     columns.clear();
     std::string point_wkt = "POINT (25 25)";
@@ -434,7 +445,7 @@ TEST_F(geographyFunctionsTest, st_containsConstTest) {
     columns.emplace_back(point_column);
     ctx->impl()->set_constant_columns(columns);
     GeoFunctions::st_from_wkt_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
-    auto result2 = ConstColumn::create(GeoFunctions::st_from_wkt(ctx.get(), columns), 1);
+    auto result2 = ConstColumn::create(GeoFunctions::st_from_wkt(ctx.get(), columns).value(), 1);
 
     columns.clear();
     columns.emplace_back(result1);
@@ -444,10 +455,9 @@ TEST_F(geographyFunctionsTest, st_containsConstTest) {
 
     ASSERT_NE(nullptr, ctx->get_function_state(FunctionContext::FRAGMENT_LOCAL));
 
-    auto res = GeoFunctions::st_contains(ctx.get(), columns);
+    auto res = GeoFunctions::st_contains(ctx.get(), columns).value();
     ASSERT_TRUE(ColumnHelper::get_const_value<TYPE_BOOLEAN>(res));
     GeoFunctions::st_contains_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
 }
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

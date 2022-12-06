@@ -217,6 +217,7 @@ public final class SparkDpp implements java.io.Serializable {
         // data type may affect sorting logic
         StructType dstSchema = DppUtils.createDstTableSchema(indexMeta.columns, false, true);
         ExpressionEncoder encoder = RowEncoder.apply(dstSchema);
+        ExpressionEncoderHelper encoderHelper = new ExpressionEncoderHelper(encoder);
 
         resultRDD.repartitionAndSortWithinPartitions(new BucketPartitioner(bucketKeyMap), new BucketComparator())
                 .foreachPartition(new VoidFunction<Iterator<Tuple2<List<Object>, Object[]>>>() {
@@ -247,7 +248,7 @@ public final class SparkDpp implements java.io.Serializable {
                                 columnObjects.add(keyColumns.get(i));
                             }
                             for (int i = 0; i < valueColumns.length; ++i) {
-                                columnObjects.add(sparkRDDAggregators[i].finalize(valueColumns[i]));
+                                columnObjects.add(sparkRDDAggregators[i].finish(valueColumns[i]));
                             }
 
                             Row rowWithoutBucketKey = RowFactory.create(columnObjects.toArray());
@@ -294,7 +295,7 @@ public final class SparkDpp implements java.io.Serializable {
                                 }
                                 lastBucketKey = curBucketKey;
                             }
-                            InternalRow internalRow = encoder.toRow(rowWithoutBucketKey);
+                            InternalRow internalRow = encoderHelper.toRow(rowWithoutBucketKey);
                             parquetWriter.write(internalRow);
                         }
                         if (parquetWriter != null) {
@@ -553,13 +554,13 @@ public final class SparkDpp implements java.io.Serializable {
         List<String> dstColumnNames = new ArrayList<>();
         List<Column> dstColumns = new ArrayList<>();
         for (StructField dstField : dstTableSchema.fields()) {
+            if (mappingColumns != null && mappingColumns.contains(dstField.name())) {
+                // mapping columns will be processed in next step
+                continue;
+            }
             Column dstColumn = null;
             EtlJobConfig.EtlColumn column = baseIndex.getColumn(dstField.name());
             if (!srcColumnNames.contains(dstField.name())) {
-                if (mappingColumns != null && mappingColumns.contains(dstField.name())) {
-                    // mapping columns will be processed in next step
-                    continue;
-                }
                 if (column.defaultValue != null) {
                     if (column.defaultValue.equals(NULL_FLAG)) {
                         dstColumn = functions.lit(null);
@@ -817,6 +818,10 @@ public final class SparkDpp implements java.io.Serializable {
         if (dstClass.equals(Float.class) || dstClass.equals(Double.class)) {
             return null;
         }
+
+        // PartitionKey is initialized according to the value of Json deserialization,
+        // because the data type is Double after deserialization,
+        // so there will be a conditional judgment of "if (srcValue instanceof Double)"
         if (srcValue instanceof Double) {
             if (dstClass.equals(Short.class)) {
                 return ((Double) srcValue).shortValue();

@@ -69,3 +69,33 @@ index 4bf5b1f..0762cab 100644
  };
  
  #ifdef __cplusplus
+diff --git a/configure.ac b/configure.ac
+index e5088ac..7810b49 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -254,11 +254,6 @@ AC_CHECK_HEADERS([ \
+   errno.h \
+ ])
+ 
+-AC_CHECK_HEADERS(sys/sysctl.h, [], [], [
+-#ifdef HAVE_SYS_PARAM_H
+-#include <sys/param.h>
+-#endif
+-])
+ if test "x$ac_cv_header_sys_queue_h" = "xyes"; then
+ 	AC_MSG_CHECKING(for TAILQ_FOREACH in sys/queue.h)
+ 	AC_EGREP_CPP(yes,
+@@ -330,13 +325,6 @@ if test "x$ac_cv_header_sys_time_h" = "xyes"; then
+ )
+ fi
+ 
+-if test "x$ac_cv_header_sys_sysctl_h" = "xyes"; then
+-	AC_CHECK_DECLS([CTL_KERN, KERN_RANDOM, RANDOM_UUID, KERN_ARND], [], [],
+-	   [[#include <sys/types.h>
+-	     #include <sys/sysctl.h>]]
+-	)
+-fi
+-
+ AM_CONDITIONAL(BUILD_WIN32, test x$bwin32 = xtrue)
+ AM_CONDITIONAL(BUILD_CYGWIN, test x$cygwin = xtrue)
+ AM_CONDITIONAL(BUILD_MIDIPIX, test x$midipix = xtrue)

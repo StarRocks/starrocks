@@ -54,4 +54,6 @@ public class SystemId {
 
     public static final long TABLES_CONFIG_ID = 24L;
 
+    public static final long VERBOSE_SESSION_VARIABLES_ID = 25L;
+
 }

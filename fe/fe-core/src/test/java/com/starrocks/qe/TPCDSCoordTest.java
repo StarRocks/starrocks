@@ -80,7 +80,7 @@ public class TPCDSCoordTest extends TPCDSPlanTestBase {
         coord.prepareExec();
 
         PlanFragmentId topFragmentId = coord.getFragments().get(0).getFragmentId();
-        Coordinator.FragmentExecParams params = coord.getFragmentExecParamsMap().get(topFragmentId);
+        CoordinatorPreprocessor.FragmentExecParams params = coord.getFragmentExecParamsMap().get(topFragmentId);
         Assert.assertEquals(params.runtimeFilterParams.id_to_prober_params.get(1).size(), 10);
     }
 
@@ -129,7 +129,7 @@ public class TPCDSCoordTest extends TPCDSPlanTestBase {
 
         int filterId = 2;
         boolean rfExists = false;
-        for (Coordinator.FragmentExecParams params : coord.getFragmentExecParamsMap().values()) {
+        for (CoordinatorPreprocessor.FragmentExecParams params : coord.getFragmentExecParamsMap().values()) {
             Map<Integer, RuntimeFilterDescription> buildRfFilters = params.fragment.getBuildRuntimeFilters();
             if (buildRfFilters == null || !buildRfFilters.containsKey(filterId)) {
                 continue;

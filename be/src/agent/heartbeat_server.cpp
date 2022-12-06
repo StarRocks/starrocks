@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/agent/heartbeat_server.cpp
 
@@ -107,7 +120,7 @@ void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMaste
         heartbeat_result.backend_info.__set_version(get_short_version());
         heartbeat_result.backend_info.__set_num_hardware_cores(num_hardware_cores);
         if (reboot_time == 0) {
-            std::time_t currTime = std::time(0);
+            std::time_t currTime = std::time(nullptr);
             reboot_time = static_cast<int64_t>(currTime);
         }
         heartbeat_result.backend_info.__set_reboot_time(reboot_time);
@@ -145,8 +158,8 @@ StatusOr<HeartbeatServer::CmpResult> HeartbeatServer::compare_master_info(const 
 
     if (master_info.__isset.backend_ip) {
         if (master_info.backend_ip != BackendOptions::get_localhost()) {
-            LOG(INFO) << master_info.backend_ip << " not equal to to backend localhost "
-                      << BackendOptions::get_localhost();
+            LOG(WARNING) << master_info.backend_ip << " not equal to to backend localhost "
+                         << BackendOptions::get_localhost();
             bool fe_saved_is_valid_ip = is_valid_ip(master_info.backend_ip);
             if (fe_saved_is_valid_ip && is_valid_ip(BackendOptions::get_localhost())) {
                 return Status::InternalError("FE saved address not match backend address");

@@ -42,6 +42,7 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import io.netty.handler.codec.http.HttpMethod;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -107,9 +108,9 @@ public class MigrationAction extends RestBaseAction {
                         row.add(partitionName);
                         row.add(tablet.getId());
                         row.add(olapTable.getSchemaHashByIndexId(baseIndex.getId()));
-                        for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
+                        if (CollectionUtils.isNotEmpty(((LocalTablet) tablet).getImmutableReplicas())) {
+                            Replica replica = ((LocalTablet) tablet).getImmutableReplicas().get(0);
                             row.add(replica.getBackendId());
-                            break;
                         }
                         rows.add(row);
                     }
@@ -133,9 +134,9 @@ public class MigrationAction extends RestBaseAction {
                             row.add(partitionName);
                             row.add(tablet.getId());
                             row.add(olapTable.getSchemaHashByIndexId(baseIndex.getId()));
-                            for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
+                            if (CollectionUtils.isNotEmpty(((LocalTablet) tablet).getImmutableReplicas())) {
+                                Replica replica = ((LocalTablet) tablet).getImmutableReplicas().get(0);
                                 row.add(replica.getBackendId());
-                                break;
                             }
                             rows.add(row);
                         }

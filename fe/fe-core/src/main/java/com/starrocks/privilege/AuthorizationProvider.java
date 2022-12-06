@@ -5,21 +5,34 @@ package com.starrocks.privilege;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.server.GlobalStateMgr;
 
+import java.util.Collection;
 import java.util.List;
-import java.util.Map;
+import java.util.Set;
 
 public interface AuthorizationProvider {
 
     /**
-     * return id & version
+     * return plugin id & version
      */
     short getPluginId();
     short getPluginVersion();
 
     /**
-     * validated type(string) -> validated action list(string)
+     * analyze type string -> id
      */
-    Map<String, List<String>> getValidPrivilegeTypeToActions();
+    Set<String> getAllTypes();
+    short getTypeIdByName(String typeStr) throws PrivilegeException;
+
+    /**
+     * analyze action type id -> action
+     */
+    Collection<Action> getAllActions(short typeId) throws PrivilegeException;
+    Action getAction(short typeId, String actionName) throws PrivilegeException;
+
+    /**
+     * analyze plural type name -> type name
+     */
+    String getTypeNameByPlural(String plural) throws PrivilegeException;
 
     /**
      * generate PEntryObject by tokenlist
@@ -61,7 +74,12 @@ public interface AuthorizationProvider {
             PEntryObject object,
             PrivilegeCollection currentPrivilegeCollection);
 
-    boolean checkAnyAction(
+    /**
+     * Search if any object in collection matches the specified object
+     * The specified object can be fuzzy-matching object.
+     * For example, `use db1` statement will pass a (db1, ALL) as the object to check if any table exists
+     */
+    boolean searchObject(
             short type,
             PEntryObject object,
             PrivilegeCollection currentPrivilegeCollection);

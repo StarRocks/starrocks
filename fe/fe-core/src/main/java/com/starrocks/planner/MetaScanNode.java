@@ -124,7 +124,11 @@ public class MetaScanNode extends ScanNode {
 
     @Override
     protected void toThrift(TPlanNode msg) {
-        msg.node_type = TPlanNodeType.META_SCAN_NODE;
+        if (olapTable.isLakeTable()) {
+            msg.node_type = TPlanNodeType.LAKE_META_SCAN_NODE;
+        } else {
+            msg.node_type = TPlanNodeType.META_SCAN_NODE;
+        }
         msg.meta_scan_node = new TMetaScanNode();
         msg.meta_scan_node.setId_to_names(columnIdToNames);
     }
@@ -141,6 +145,11 @@ public class MetaScanNode extends ScanNode {
                     append("\n");
         }
         return output.toString();
+    }
+
+    @Override
+    public boolean canUsePipeLine() {
+        return true;
     }
 
 }

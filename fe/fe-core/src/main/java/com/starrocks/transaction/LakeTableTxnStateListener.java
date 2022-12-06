@@ -42,7 +42,8 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
     }
 
     @Override
-    public void preCommit(TransactionState txnState, List<TabletCommitInfo> finishedTablets) throws TransactionException {
+    public void preCommit(TransactionState txnState, List<TabletCommitInfo> finishedTablets,
+            List<TabletFailInfo> failedTablets) throws TransactionException {
         Preconditions.checkState(txnState.getTransactionStatus() != TransactionStatus.COMMITTED);
         if (table.getState() == OlapTable.OlapTableState.RESTORE) {
             throw new TransactionCommitFailedException("Cannot write RESTORE state table \"" + table.getName() + "\"");
@@ -112,7 +113,7 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
     }
 
     @Override
-    public void postAbort(TransactionState txnState) {
+    public void postAbort(TransactionState txnState, List<TabletFailInfo> failedTablets) {
         Map<Long, List<Long>> tabletGroup = null;
         Database db = GlobalStateMgr.getCurrentState().getDb(txnState.getDbId());
         if (db == null) {

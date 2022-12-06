@@ -30,6 +30,12 @@ public class JoinCommutativityRule extends TransformationRule {
                     .put(JoinOperator.FULL_OUTER_JOIN, JoinOperator.FULL_OUTER_JOIN)
                     .build();
 
+    private static final Map<JoinOperator, JoinOperator> RIGHT_COMMUTATIVITY_MAP =
+            ImmutableMap.<JoinOperator, JoinOperator>builder()
+                    .put(JoinOperator.RIGHT_ANTI_JOIN, JoinOperator.LEFT_ANTI_JOIN)
+                    .put(JoinOperator.RIGHT_SEMI_JOIN, JoinOperator.LEFT_SEMI_JOIN)
+                    .build();
+
     private JoinCommutativityRule() {
         super(RuleType.TF_JOIN_COMMUTATIVITY, Pattern.create(OperatorType.LOGICAL_JOIN).
                 addChildren(Pattern.create(OperatorType.PATTERN_LEAF),
@@ -44,6 +50,14 @@ public class JoinCommutativityRule extends TransformationRule {
 
     public boolean check(final OptExpression input, OptimizerContext context) {
         return ((LogicalJoinOperator) input.getOp()).getJoinHint().isEmpty();
+    }
+
+    public static OptExpression commuteRightSemiAntiJoin(OptExpression input) {
+        LogicalJoinOperator oldJoin = (LogicalJoinOperator) input.getOp();
+        if (!RIGHT_COMMUTATIVITY_MAP.containsKey(oldJoin.getJoinType())) {
+            return input;
+        }
+        return commuteJoin(input, RIGHT_COMMUTATIVITY_MAP).get(0);
     }
 
     public static List<OptExpression> commuteJoin(OptExpression input,

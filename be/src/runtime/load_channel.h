@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/runtime/load_channel.h
 
@@ -21,11 +34,7 @@
 
 #pragma once
 
-#include "common/compiler_util.h"
-DIAGNOSTIC_PUSH
-DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 #include <bthread/mutex.h>
-DIAGNOSTIC_POP
 
 #include <memory>
 #include <ostream>
@@ -33,6 +42,7 @@ DIAGNOSTIC_POP
 #include <unordered_set>
 
 #include "column/chunk.h"
+#include "common/compiler_util.h"
 #include "common/status.h"
 #include "common/tracer.h"
 #include "gen_cpp/InternalService_types.h"

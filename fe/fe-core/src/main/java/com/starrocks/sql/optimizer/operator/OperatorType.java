@@ -10,8 +10,10 @@ public enum OperatorType {
     LOGICAL_PROJECT,
     LOGICAL_OLAP_SCAN,
     LOGICAL_HIVE_SCAN,
+    LOGICAL_FILE_SCAN,
     LOGICAL_ICEBERG_SCAN,
     LOGICAL_HUDI_SCAN,
+    LOGICAL_DELTALAKE_SCAN,
     LOGICAL_SCHEMA_SCAN,
     LOGICAL_MYSQL_SCAN,
     LOGICAL_ES_SCAN,
@@ -46,8 +48,10 @@ public enum OperatorType {
     PHYSICAL_NESTLOOP_JOIN,
     PHYSICAL_OLAP_SCAN,
     PHYSICAL_HIVE_SCAN,
+    PHYSICAL_FILE_SCAN,
     PHYSICAL_ICEBERG_SCAN,
     PHYSICAL_HUDI_SCAN,
+    PHYSICAL_DELTALAKE_SCAN,
     PHYSICAL_SCHEMA_SCAN,
     PHYSICAL_MYSQL_SCAN,
     PHYSICAL_META_SCAN,
@@ -72,12 +76,16 @@ public enum OperatorType {
     PHYSICAL_CTE_CONSUME,
     PHYSICAL_NO_CTE,
 
+    PHYSICAL_STREAM_SCAN,
+    PHYSICAL_STREAM_JOIN,
+    PHYSICAL_STREAM_AGG,
+
     /**
      * Scalar operator
      */
     SCALAR,
     ARRAY,
-    ARRAY_ELEMENT,
+    COLLECTION_ELEMENT,
     ARRAY_SLICE,
     VARIABLE,
     CONSTANT,
@@ -92,7 +100,9 @@ public enum OperatorType {
     DICT_MAPPING,
     CLONE,
     LAMBDA_FUNCTION,
+    LAMBDA_ARGUMENT,
     SUBQUERY,
+    SUBFIELD,
 
     /**
      * PATTERN
@@ -100,4 +110,13 @@ public enum OperatorType {
     PATTERN,
     PATTERN_LEAF,
     PATTERN_MULTI_LEAF,
+    // for all type scan node
+    PATTERN_SCAN,
+    // for extracting pattern like this
+    //     join
+    //    /    \
+    //  join   table
+    //  /  \
+    // table table
+    PATTERN_MULTIJOIN,
 }

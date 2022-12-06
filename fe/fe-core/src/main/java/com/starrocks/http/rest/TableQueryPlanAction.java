@@ -196,6 +196,7 @@ public class TableQueryPlanAction extends RestBaseAction {
             execPlan = new StatementPlanner().plan(statementBase, context);
             context.getSessionVariable().setSingleNodeExecPlan(false);
         } catch (Exception e) {
+            LOG.error("error occurred when optimizing queryId: {}", context.getQueryId(), e);
             throw new StarRocksHttpException(HttpResponseStatus.INTERNAL_SERVER_ERROR,
                     "The Sql is invalid");
         }
@@ -237,6 +238,7 @@ public class TableQueryPlanAction extends RestBaseAction {
         }
 
         if (execPlan == null) {
+            LOG.error("plan is null for queryId: {}", context.getQueryId());
             throw new StarRocksHttpException(HttpResponseStatus.INTERNAL_SERVER_ERROR,
                     "The Sql is invalid");
         }

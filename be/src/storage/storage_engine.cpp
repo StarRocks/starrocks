@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/be/src/olap/storage_engine.cpp
 
@@ -109,6 +122,10 @@ StorageEngine::~StorageEngine() {
     if (_s_instance == this) {
         _s_instance = _p_instance;
     }
+#else
+    if (_s_instance != nullptr) {
+        _s_instance = nullptr;
+    }
 #endif
 }
 
@@ -202,7 +219,7 @@ Status StorageEngine::_init_store_map() {
     SpinLock error_msg_lock;
     std::string error_msg;
     for (auto& path : _options.store_paths) {
-        DataDir* store = new DataDir(path.path, path.storage_medium, _tablet_manager.get(), _txn_manager.get());
+        auto* store = new DataDir(path.path, path.storage_medium, _tablet_manager.get(), _txn_manager.get());
         ScopedCleanup store_release_guard([&]() { delete store; });
         tmp_stores.emplace_back(true, store);
         store_release_guard.cancel();
@@ -340,10 +357,10 @@ void StorageEngine::_start_disk_stat_monitor() {
     static time_t last_sweep_time = 0;
     static const int32_t valid_sweep_interval = 30;
     for (auto& it : _store_map) {
-        if (difftime(time(NULL), last_sweep_time) > valid_sweep_interval && it.second->capacity_limit_reached(0)) {
+        if (difftime(time(nullptr), last_sweep_time) > valid_sweep_interval && it.second->capacity_limit_reached(0)) {
             std::unique_lock<std::mutex> lk(_trash_sweeper_mutex);
             _trash_sweeper_cv.notify_one();
-            last_sweep_time = time(NULL);
+            last_sweep_time = time(nullptr);
         }
     }
 }
@@ -527,6 +544,9 @@ void StorageEngine::stop() {
     if (_fd_cache_clean_thread.joinable()) {
         _fd_cache_clean_thread.join();
     }
+    if (_adjust_cache_thread.joinable()) {
+        _adjust_cache_thread.join();
+    }
     if (config::path_gc_check) {
         for (auto& thread : _path_scan_threads) {
             if (thread.joinable()) {
@@ -602,7 +622,7 @@ void StorageEngine::compaction_check() {
         LOG(INFO) << "start to check compaction";
         size_t num = _compaction_check_one_round();
         stop_watch.stop();
-        LOG(INFO) << num << " tablets checked. time elapse:" << stop_watch.elapsed_time() / 1e9 << " seconds."
+        LOG(INFO) << num << " tablets checked. time elapse:" << stop_watch.elapsed_time() / 1000000000 << " seconds."
                   << " compaction checker will be scheduled again in " << checker_one_round_sleep_time_s << " seconds";
         std::unique_lock<std::mutex> lk(_checker_mutex);
         _checker_cv.wait_for(lk, std::chrono::seconds(checker_one_round_sleep_time_s),
@@ -621,7 +641,7 @@ size_t StorageEngine::_compaction_check_one_round() {
     while (!bg_worker_stopped()) {
         bool finished = _tablet_manager->get_next_batch_tablets(batch_size, &tablets);
         for (auto& tablet : tablets) {
-            _compaction_manager->update_tablet(tablet, true, false);
+            _compaction_manager->update_tablet(tablet);
         }
         tablets_num_checked += tablets.size();
         tablets.clear();
@@ -641,7 +661,7 @@ Status StorageEngine::_perform_cumulative_compaction(DataDir* data_dir,
     MonotonicStopWatch watch;
     watch.start();
     SCOPED_CLEANUP({
-        if (watch.elapsed_time() / 1e9 > config::compaction_trace_threshold) {
+        if (watch.elapsed_time() / 1000000000 > config::compaction_trace_threshold) {
             LOG(INFO) << "Trace:" << std::endl << trace->DumpToString(Trace::INCLUDE_ALL);
         }
     });
@@ -684,7 +704,7 @@ Status StorageEngine::_perform_base_compaction(DataDir* data_dir, std::pair<int3
     MonotonicStopWatch watch;
     watch.start();
     SCOPED_CLEANUP({
-        if (watch.elapsed_time() / 1e9 > config::compaction_trace_threshold) {
+        if (watch.elapsed_time() / 1000000000 > config::compaction_trace_threshold) {
             LOG(INFO) << "Trace:" << std::endl << trace->DumpToString(Trace::INCLUDE_ALL);
         }
     });
@@ -723,7 +743,7 @@ Status StorageEngine::_perform_update_compaction(DataDir* data_dir) {
     MonotonicStopWatch watch;
     watch.start();
     SCOPED_CLEANUP({
-        if (watch.elapsed_time() / 1e9 > config::compaction_trace_threshold) {
+        if (watch.elapsed_time() / 1000000000 > config::compaction_trace_threshold) {
             LOG(WARNING) << "Trace:" << std::endl << trace->DumpToString(Trace::INCLUDE_ALL);
         }
     });
@@ -777,13 +797,14 @@ Status StorageEngine::_start_trash_sweep(double* usage) {
     }
     const time_t local_now = mktime(&local_tm_now);
 
+    double max_usage = 0.0;
     for (DataDirInfo& info : data_dir_infos) {
         if (!info.is_used) {
             continue;
         }
 
         double curr_usage = (double)(info.disk_capacity - info.available) / info.disk_capacity;
-        *usage = *usage > curr_usage ? *usage : curr_usage;
+        max_usage = std::max(max_usage, curr_usage);
 
         Status curr_res = Status::OK();
         std::string snapshot_path = info.path + SNAPSHOT_PREFIX;
@@ -799,6 +820,9 @@ Status StorageEngine::_start_trash_sweep(double* usage) {
             LOG(WARNING) << "failed to sweep trash. [path=%s" << trash_path << ", err_code=" << curr_res;
             res = curr_res;
         }
+    }
+    if (usage != nullptr) {
+        *usage = max_usage;
     }
 
     // clear expire incremental rowset, move deleted tablet to trash

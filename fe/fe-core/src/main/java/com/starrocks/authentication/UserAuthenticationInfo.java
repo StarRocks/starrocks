@@ -38,10 +38,11 @@ public class UserAuthenticationInfo implements Writable {
     @Expose(serialize = false)
     protected PatternMatcher hostPattern;
 
-    public boolean match(String remoteUser, String remoteHost) {
-        if (!isAnyUser && ! userPattern.match(remoteUser)) {
-            return false;
-        }
+    public boolean matchUser(String remoteUser) {
+        return isAnyUser || userPattern.match(remoteUser);
+    }
+
+    public boolean matchHost(String remoteHost) {
         return isAnyHost || hostPattern.match(remoteHost);
     }
 
@@ -69,6 +70,10 @@ public class UserAuthenticationInfo implements Writable {
 
     public String getAuthPlugin() {
         return authPlugin;
+    }
+
+    public String getOrigHost() {
+        return origHost;
     }
 
     public void setPassword(byte[] password) {

@@ -88,6 +88,8 @@ public class ScalarType extends Type implements Cloneable {
                 return createCharType(len);
             case VARCHAR:
                 return createVarcharType(len);
+            case VARBINARY:
+                return createVarbinary(len);
             case DECIMALV2:
                 return createDecimalV2Type(precision, scale);
             case DECIMAL32:
@@ -252,6 +254,13 @@ public class ScalarType extends Type implements Cloneable {
         return stringType;
     }
 
+    // Use for Hive string now.
+    public static ScalarType createDefaultExternalTableString() {
+        ScalarType stringType = ScalarType.createVarcharType(ScalarType.MAX_VARCHAR_LENGTH);
+        stringType.setAssignedStrLenInColDefinition();
+        return stringType;
+    }
+
     public static ScalarType createVarcharType(int len) {
         // length checked in analysis
         ScalarType type = new ScalarType(PrimitiveType.VARCHAR);
@@ -262,6 +271,12 @@ public class ScalarType extends Type implements Cloneable {
     public static ScalarType createVarchar(int len) {
         // length checked in analysis
         ScalarType type = new ScalarType(PrimitiveType.VARCHAR);
+        type.len = len;
+        return type;
+    }
+
+    public static ScalarType createVarbinary(int len) {
+        ScalarType type = new ScalarType(PrimitiveType.VARBINARY);
         type.len = len;
         return type;
     }
@@ -467,6 +482,11 @@ public class ScalarType extends Type implements Cloneable {
                 return "VARCHAR";
             }
             return "VARCHAR(" + len + ")";
+        } else if (type == PrimitiveType.VARBINARY) {
+            if (len == -1) {
+                return "VARBINARY";
+            }
+            return "VARBINARY(" + len + ")";
         }
         return type.toString();
     }
@@ -476,10 +496,21 @@ public class ScalarType extends Type implements Cloneable {
         StringBuilder stringBuilder = new StringBuilder();
         switch (type) {
             case CHAR:
-                stringBuilder.append("char").append("(").append(len).append(")");
+                if (len == -1) {
+                    stringBuilder.append("char");
+                } else {
+                    stringBuilder.append("char").append("(").append(len).append(")");
+                }
                 break;
             case VARCHAR:
-                stringBuilder.append("varchar").append("(").append(len).append(")");
+                if (len == -1) {
+                    stringBuilder.append("varchar");
+                } else {
+                    stringBuilder.append("varchar").append("(").append(len).append(")");
+                }
+                break;
+            case VARBINARY:
+                stringBuilder.append("varbinary").append("(").append(len).append(")");
                 break;
             case DECIMALV2:
                 stringBuilder.append("decimal").append("(").append(precision).append(", ").append(scale).append(")");
@@ -530,8 +561,9 @@ public class ScalarType extends Type implements Cloneable {
         TTypeNode node = new TTypeNode();
         container.types.add(node);
         switch (type) {
-            case VARCHAR:
             case CHAR:
+            case VARCHAR:
+            case VARBINARY:
             case HLL: {
                 node.setType(TTypeNodeType.SCALAR);
                 TScalarType scalarType = new TScalarType();
@@ -625,8 +657,7 @@ public class ScalarType extends Type implements Cloneable {
     @Override
     public boolean isSupported() {
         // BINARY and UNKNOWN_TYPE is unsupported
-        return (type != PrimitiveType.BINARY) &&
-                (type != PrimitiveType.UNKNOWN_TYPE);
+        return type != PrimitiveType.BINARY && type != PrimitiveType.UNKNOWN_TYPE;
     }
 
     @Override
@@ -659,7 +690,10 @@ public class ScalarType extends Type implements Cloneable {
         if (this.isStringType() && t.isStringType()) {
             return true;
         }
-        return isDecimalV2() && t.isDecimalV2();
+        if (isDecimalV2() && t.isDecimalV2()) {
+            return true;
+        }
+        return false;
     }
 
     @Override
@@ -671,10 +705,7 @@ public class ScalarType extends Type implements Cloneable {
         if (type != other.type) {
             return false;
         }
-        if (type == PrimitiveType.CHAR) {
-            return len == other.len;
-        }
-        if (type == PrimitiveType.VARCHAR) {
+        if (type.isVariableLengthType()) {
             return len == other.len;
         }
         if (type.isDecimalV2Type() || type.isDecimalV3Type()) {
@@ -687,7 +718,7 @@ public class ScalarType extends Type implements Cloneable {
     public TColumnType toColumnTypeThrift() {
         TColumnType thrift = new TColumnType();
         thrift.type = type.toThrift();
-        if (type == PrimitiveType.CHAR || type == PrimitiveType.VARCHAR || type == PrimitiveType.HLL) {
+        if (type.isVariableLengthType()) {
             thrift.setLen(len);
         }
         if (type.isDecimalV2Type() || type.isDecimalV3Type()) {

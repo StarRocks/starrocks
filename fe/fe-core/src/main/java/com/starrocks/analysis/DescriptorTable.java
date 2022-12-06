@@ -193,10 +193,16 @@ public class DescriptorTable {
     public static class ReferencedPartitionInfo {
         private long id;
         private PartitionKey key;
+        private String path;
 
-        public ReferencedPartitionInfo(long id, PartitionKey key) {
+        public ReferencedPartitionInfo(long id, PartitionKey key, String path) {
             this.id = id;
             this.key = key;
+            this.path = path;
+        }
+
+        public ReferencedPartitionInfo(long id, PartitionKey key) {
+            this(id, key, "");
         }
 
         public long getId() {
@@ -205,6 +211,10 @@ public class DescriptorTable {
 
         public PartitionKey getKey() {
             return key;
+        }
+
+        public String getPath() {
+            return path;
         }
     }
 }

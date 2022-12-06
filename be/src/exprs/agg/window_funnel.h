@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -40,7 +52,7 @@ struct ComparePairFirst final {
 enum FunnelMode : int { DEDUPLICATION = 1, FIXED = 2, DEDUPLICATION_FIXED = 3, INCREASE = 4 };
 
 namespace InteralTypeOfFunnel {
-template <PrimitiveType primitive_type>
+template <LogicalType primitive_type>
 struct TypeTraits {};
 
 template <>
@@ -67,7 +79,7 @@ struct TypeTraits<TYPE_DATETIME> {
 
 inline const constexpr int reserve_list_size = 4;
 
-template <PrimitiveType PT>
+template <LogicalType PT>
 struct WindowFunnelState {
     // Use to identify timestamp(datetime/date)
     using TimeType = typename InteralTypeOfFunnel::TypeTraits<PT>::Type;
@@ -396,7 +408,7 @@ struct WindowFunnelState {
     static inline int8_t MODE_FLAGS[] = {1 << 0, 1 << 1};
 };
 
-template <PrimitiveType PT>
+template <LogicalType PT>
 class WindowFunnelAggregateFunction final
         : public AggregateFunctionBatchHelper<WindowFunnelState<PT>, WindowFunnelAggregateFunction<PT>> {
     using TimeTypeColumn = typename WindowFunnelState<PT>::TimeTypeColumn;
@@ -404,7 +416,8 @@ class WindowFunnelAggregateFunction final
     using TimestampType = typename WindowFunnelState<PT>::TimestampType;
 
 public:
-    void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state, size_t row_num) const {
+    void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
+                size_t row_num) const override {
         DCHECK(columns[2]->is_constant());
 
         this->data(state).window_size = down_cast<const Int64Column*>(columns[0])->get_data()[0];

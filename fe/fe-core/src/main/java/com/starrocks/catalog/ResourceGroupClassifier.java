@@ -24,7 +24,7 @@ import java.util.stream.Collectors;
 public class ResourceGroupClassifier implements Writable {
     public static final Pattern USE_ROLE_PATTERN = Pattern.compile("^\\w+$");
     public static final ImmutableSet<String> SUPPORTED_QUERY_TYPES =
-            ImmutableSet.of(QueryType.SELECT.name());
+            ImmutableSet.of(QueryType.SELECT.name(), QueryType.INSERT.name());
 
     @SerializedName(value = "id")
     private long id;
