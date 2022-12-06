@@ -1978,18 +1978,20 @@ public class PlanFragmentBuilder {
             List<Expr> conjuncts = joinExpr.conjuncts;
 
             List<PlanFragment> nullablePlanFragments = new ArrayList<>();
+            Set<TupleId> nullableTupleIds = new HashSet<>();
+            nullableTupleIds.addAll(leftFragment.getPlanRoot().getNullableTupleIds());
+            nullableTupleIds.addAll(rightFragment.getPlanRoot().getNullableTupleIds());
             if (joinOperator.isLeftOuterJoin()) {
-                nullablePlanFragments.add(rightFragment);
+                nullableTupleIds.addAll(rightFragment.getPlanRoot().getTupleIds());
             } else if (joinOperator.isRightOuterJoin()) {
-                nullablePlanFragments.add(leftFragment);
+                nullableTupleIds.addAll(leftFragment.getPlanRoot().getTupleIds());
             } else if (joinOperator.isFullOuterJoin()) {
-                nullablePlanFragments.add(leftFragment);
-                nullablePlanFragments.add(rightFragment);
+                nullableTupleIds.addAll(leftFragment.getPlanRoot().getTupleIds());
+                nullableTupleIds.addAll(rightFragment.getPlanRoot().getTupleIds());
             }
-            for (PlanFragment planFragment : nullablePlanFragments) {
-                for (TupleId tupleId : planFragment.getPlanRoot().getTupleIds()) {
-                    context.getDescTbl().getTupleDesc(tupleId).getSlots().forEach(slot -> slot.setIsNullable(true));
-                }
+            for (TupleId tupleId : nullableTupleIds) {
+                context.getDescTbl().getTupleDesc(tupleId).getSlots().forEach(slot -> slot.setIsNullable(true));
+                context.getDescTbl().getTupleDesc(tupleId).computeMemLayout();
             }
 
             JoinNode joinNode;
