@@ -1831,6 +1831,28 @@ public class PlanFragmentBuilder {
                                 context);
             }
 
+            List<PlanFragment> nullablePlanFragments = new ArrayList<>();
+            JoinOperator joinOperator = node.getJoinType();
+            if (joinOperator.isLeftOuterJoin()) {
+                nullablePlanFragments.add(rightFragment);
+            } else if (joinOperator.isRightOuterJoin()) {
+                nullablePlanFragments.add(leftFragment);
+            } else if (joinOperator.isFullOuterJoin()) {
+                nullablePlanFragments.add(leftFragment);
+                nullablePlanFragments.add(rightFragment);
+            }
+            for (PlanFragment planFragment : nullablePlanFragments) {
+                for (TupleId tupleId : planFragment.getPlanRoot().getTupleIds()) {
+                    context.getDescTbl().getTupleDesc(tupleId).getSlots().forEach(slot -> slot.setIsNullable(true));
+                }
+            }
+            for (TupleId tupleId : leftFragment.getPlanRoot().getNullableTupleIds()) {
+                context.getDescTbl().getTupleDesc(tupleId).getSlots().forEach(slot -> slot.setIsNullable(true));
+            }
+            for (TupleId tupleId : rightFragment.getPlanRoot().getNullableTupleIds()) {
+                context.getDescTbl().getTupleDesc(tupleId).getSlots().forEach(slot -> slot.setIsNullable(true));
+            }
+
             NestLoopJoinNode joinNode = new NestLoopJoinNode(context.getNextNodeId(),
                     leftFragment.getPlanRoot(), rightFragment.getPlanRoot(),
                     null, node.getJoinType(), Lists.newArrayList(), joinOnConjuncts);
