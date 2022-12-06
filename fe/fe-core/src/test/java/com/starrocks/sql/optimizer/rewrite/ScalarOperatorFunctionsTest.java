@@ -312,6 +312,13 @@ public class ScalarOperatorFunctionsTest {
         assertEquals("2013-05-10T00:00", ScalarOperatorFunctions
                 .dateParse(ConstantOperator.createVarchar("2013,05,10"), ConstantOperator.createVarchar("%Y,%m,%d"))
                 .getDatetime().toString());
+<<<<<<< HEAD
+=======
+        assertEquals("2013-05-10T00:00", ScalarOperatorFunctions
+                .dateParse(ConstantOperator.createVarchar("   2013,05,10   "),
+                        ConstantOperator.createVarchar("%Y,%m,%d"))
+                .getDatetime().toString());
+>>>>>>> 9c1c75692 ([Enhancement] replace str_to_date trim (#14598))
         assertEquals("2013-05-17T12:35:10", ScalarOperatorFunctions
                 .dateParse(ConstantOperator.createVarchar("2013-05-17 12:35:10"),
                         ConstantOperator.createVarchar("%Y-%m-%d %H:%i:%s")).getDatetime().toString());
@@ -363,6 +370,19 @@ public class ScalarOperatorFunctionsTest {
         Assert.assertThrows(IllegalArgumentException.class,
                 () -> ScalarOperatorFunctions.dateParse(ConstantOperator.createVarchar("2020-02-21"),
                         ConstantOperator.createVarchar("%w")).getVarchar());
+        assertEquals("2013-01-17T00:00", ScalarOperatorFunctions
+                .dateParse(ConstantOperator.createVarchar("\t 2013-1-17"),
+                        ConstantOperator.createVarchar("%Y-%m-%d")).getDate().toString());
+        assertEquals("2013-01-17T00:00", ScalarOperatorFunctions
+                .dateParse(ConstantOperator.createVarchar("\n  2013-1-17"),
+                        ConstantOperator.createVarchar("%Y-%m-%d")).getDate().toString());
+        assertEquals("2013-01-17T00:00", ScalarOperatorFunctions
+                .dateParse(ConstantOperator.createVarchar("\r  2013-1-17"),
+                        ConstantOperator.createVarchar("%Y-%m-%d")).getDate().toString());
+
+        Assert.assertThrows(DateTimeParseException.class,
+                () -> ScalarOperatorFunctions.dateParse(ConstantOperator.createVarchar("\f 2020-02-21"),
+                        ConstantOperator.createVarchar("%Y-%m-%d")).getVarchar());
 
         Assert.assertThrows("Unable to obtain LocalDateTime", DateTimeException.class, () -> ScalarOperatorFunctions
                 .dateParse(ConstantOperator.createVarchar("2013-05-17 12:35:10"),
