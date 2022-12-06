@@ -83,10 +83,12 @@ public:
     bool has_avx() const { return has_avx_; }
     bool has_avx2() const { return has_avx2_; }
     bool has_aesni() const { return has_aesni_; }
+    bool has_avx512f() const { return has_avx512f_; }
     bool has_non_stop_time_stamp_counter() const { return has_non_stop_time_stamp_counter_; }
     bool is_running_in_vm() const { return is_running_in_vm_; }
     IntelMicroArchitecture GetIntelMicroArchitecture() const;
     const std::string& cpu_brand() const { return cpu_brand_; }
+    static const CPU* instance();
 
 private:
     // Query the processor for CPUID information.
@@ -109,9 +111,11 @@ private:
     bool has_avx_{false};
     bool has_avx2_{false};
     bool has_aesni_{false};
+    bool has_avx512f_{false};
     bool has_non_stop_time_stamp_counter_{false};
     bool is_running_in_vm_{false};
     std::string cpu_vendor_;
     std::string cpu_brand_;
 };
+
 } // namespace base
