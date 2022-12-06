@@ -1774,6 +1774,12 @@ public class Config extends ConfigBase {
     public static String default_fs_type = "S3";
 
     /**
+     * starmgr disable auto shard balance or not
+     */
+    @ConfField
+    public static boolean starmgr_disable_shard_balance = false;
+
+    /**
      * default storage cache ttl of lake table
      */
     @ConfField(mutable = true)
