@@ -4,11 +4,16 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.planner.AggregationNode;
+import com.starrocks.planner.PlanFragment;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.MockTpchStatisticStorage;
+import com.starrocks.system.BackendCoreStat;
+import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -1020,11 +1025,23 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
 
     @Test
     public void testPruneAggNode() throws Exception {
+        int numCores = 8;
+        int expectedParallelism = numCores / 2;
+        new MockUp<BackendCoreStat>() {
+            @Mock
+            public int getAvgNumOfHardwareCoresOfBe() {
+                return numCores;
+            }
+        };
+
         ConnectContext.get().getSessionVariable().setNewPlanerAggStage(3);
         String sql = "select count(distinct C_NAME) from customer group by C_CUSTKEY;";
-        String plan = getFragmentPlan(sql);
-
-        Assert.assertTrue(plan.contains("2:AGGREGATE (update finalize)\n" +
+        ExecPlan plan = getExecPlan(sql);
+        PlanFragment fragment = plan.getFragments().get(1);
+        Assert.assertFalse(fragment.isNeedsLocalShuffle());
+        Assert.assertEquals(1, fragment.getPipelineDop());
+        Assert.assertEquals(expectedParallelism, fragment.getParallelExecNum());
+        Assert.assertTrue(fragment.getExplainString(TExplainLevel.NORMAL).contains("2:AGGREGATE (update finalize)\n" +
                 "  |  output: count(2: C_NAME)\n" +
                 "  |  group by: 1: C_CUSTKEY\n" +
                 "  |  \n" +
@@ -1033,8 +1050,12 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
 
         ConnectContext.get().getSessionVariable().setNewPlanerAggStage(4);
         sql = "select count(distinct C_CUSTKEY) from customer;";
-        plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains(" 2:AGGREGATE (update serialize)\n" +
+        plan = getExecPlan(sql);
+        fragment = plan.getFragments().get(1);
+        Assert.assertFalse(fragment.isNeedsLocalShuffle());
+        Assert.assertEquals(1, fragment.getPipelineDop());
+        Assert.assertEquals(expectedParallelism, fragment.getParallelExecNum());
+        Assert.assertTrue(fragment.getExplainString(TExplainLevel.NORMAL).contains(" 2:AGGREGATE (update serialize)\n" +
                 "  |  output: count(1: C_CUSTKEY)\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
@@ -1044,8 +1065,12 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         ConnectContext.get().getSessionVariable().setNewPlanerAggStage(0);
 
         sql = "select count(distinct C_CUSTKEY, C_NAME) from customer;";
-        plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains(" 2:AGGREGATE (update serialize)\n" +
+        plan = getExecPlan(sql);
+        fragment = plan.getFragments().get(1);
+        Assert.assertFalse(fragment.isNeedsLocalShuffle());
+        Assert.assertEquals(1, fragment.getPipelineDop());
+        Assert.assertEquals(expectedParallelism, fragment.getParallelExecNum());
+        Assert.assertTrue(fragment.getExplainString(TExplainLevel.NORMAL).contains(" 2:AGGREGATE (update serialize)\n" +
                 "  |  output: count(if(1: C_CUSTKEY IS NULL, NULL, 2: C_NAME))\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
@@ -1053,8 +1078,12 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "  |  group by: 1: C_CUSTKEY, 2: C_NAME"));
 
         sql = "select count(distinct C_CUSTKEY, C_NAME) from customer group by C_CUSTKEY;";
-        plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  2:AGGREGATE (update finalize)\n" +
+        plan = getExecPlan(sql);
+        fragment = plan.getFragments().get(1);
+        Assert.assertFalse(fragment.isNeedsLocalShuffle());
+        Assert.assertEquals(1, fragment.getPipelineDop());
+        Assert.assertEquals(expectedParallelism, fragment.getParallelExecNum());
+        Assert.assertTrue(fragment.getExplainString(TExplainLevel.NORMAL).contains("  2:AGGREGATE (update finalize)\n" +
                 "  |  output: count(if(1: C_CUSTKEY IS NULL, NULL, 2: C_NAME))\n" +
                 "  |  group by: 1: C_CUSTKEY\n" +
                 "  |  \n" +
@@ -1062,6 +1091,80 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "  |  group by: 1: C_CUSTKEY, 2: C_NAME"));
     }
 
+
+    @Test
+    public void testAggNodeAndBucketDistribution() throws Exception {
+        int numCores = 8;
+        int expectedParallelism = numCores / 2;
+        new MockUp<BackendCoreStat>() {
+            @Mock
+            public int getAvgNumOfHardwareCoresOfBe() {
+                return numCores;
+            }
+        };
+
+        // For the local one-phase aggregation, prefer instance parallel and needn't local shuffle.
+        String sql = "select count(1) from customer group by C_CUSTKEY";
+        ExecPlan plan = getExecPlan(sql);
+        PlanFragment fragment = plan.getFragments().get(1);
+        Assert.assertFalse(fragment.isNeedsLocalShuffle());
+        Assert.assertEquals(1, fragment.getPipelineDop());
+        Assert.assertEquals(expectedParallelism, fragment.getParallelExecNum());
+        assertContains(fragment.getExplainString(TExplainLevel.NORMAL), "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: count(1)\n" +
+                "  |  group by: 1: C_CUSTKEY\n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
+
+        // For the none-local one-phase aggregation, need local shuffle.
+        ConnectContext.get().getSessionVariable().setNewPlanerAggStage(1);
+        sql = "select count(1) from customer group by C_NAME";
+        plan = getExecPlan(sql);
+        fragment = plan.getFragments().get(2);
+        Assert.assertTrue(fragment.isNeedsLocalShuffle());
+        assertContains(fragment.getExplainString(TExplainLevel.NORMAL), "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 01\n" +
+                "    HASH_PARTITIONED: 2: C_NAME\n" +
+                "\n" +
+                "  0:OlapScanNode");
+
+        // For the two-phase aggregation, need local shuffle.
+        ConnectContext.get().getSessionVariable().setNewPlanerAggStage(2);
+        sql = "select count(1) from customer group by C_NAME";
+        plan = getExecPlan(sql);
+        fragment = plan.getFragments().get(2);
+        Assert.assertTrue(fragment.isNeedsLocalShuffle());
+        assertContains(fragment.getExplainString(TExplainLevel.NORMAL), "  1:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  output: count(1)\n" +
+                "  |  group by: 2: C_NAME\n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
+
+        // For the none-pruned four-phase aggregation, need local shuffle.
+        ConnectContext.get().getSessionVariable().setNewPlanerAggStage(4);
+        sql = "select count(distinct C_ADDRESS) from customer group by C_NAME";
+        plan = getExecPlan(sql);
+        fragment = plan.getFragments().get(2);
+        Assert.assertTrue(fragment.isNeedsLocalShuffle());
+        assertContains(fragment.getExplainString(TExplainLevel.NORMAL), "  1:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  group by: 2: C_NAME, 3: C_ADDRESS\n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
+
+        // For the none-pruned three-phase aggregation, need local shuffle.
+        ConnectContext.get().getSessionVariable().setNewPlanerAggStage(3);
+        sql = "select count(distinct C_ADDRESS) from customer";
+        plan = getExecPlan(sql);
+        fragment = plan.getFragments().get(2);
+        Assert.assertTrue(fragment.isNeedsLocalShuffle());
+        assertContains(fragment.getExplainString(TExplainLevel.NORMAL), "  1:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  group by: 3: C_ADDRESS\n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
+    }
 
     @Test
     public void testCastDistributionPrune() throws Exception {

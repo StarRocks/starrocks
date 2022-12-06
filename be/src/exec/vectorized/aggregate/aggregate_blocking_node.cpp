@@ -170,42 +170,60 @@ Status AggregateBlockingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
 std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateBlockingNode::decompose_to_pipeline(
         pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
-    OpFactories operators_with_sink = _children[0]->decompose_to_pipeline(context);
+    OpFactories ops_with_sink = _children[0]->decompose_to_pipeline(context);
     auto& agg_node = _tnode.agg_node;
+    bool has_group_by_keys = agg_node.__isset.grouping_exprs && !_tnode.agg_node.grouping_exprs.empty();
+
+    auto try_interpolate_local_shuffle = [this, context](auto& ops) {
+        // There are two ways of shuffle
+        // 1. If previous op is ExchangeSourceOperator and its partition type is HASH_PARTITIONED or BUCKET_SHUFFLE_HASH_PARTITIONED
+        // then pipeline level shuffle will be performed at sender side (ExchangeSinkOperator), so
+        // there is no need to perform local shuffle again at receiver side
+        // 2. Otherwise, add LocalExchangeOperator
+        // to shuffle multi-stream into #degree_of_parallelism# streams each of that pipes into AggregateBlockingSinkOperator.
+        bool need_local_shuffle = true;
+        if (auto* exchange_op = dynamic_cast<ExchangeSourceOperatorFactory*>(ops[0].get()); exchange_op != nullptr) {
+            auto& texchange_node = exchange_op->texchange_node();
+            DCHECK(texchange_node.__isset.partition_type);
+            if (texchange_node.partition_type == TPartitionType::HASH_PARTITIONED ||
+                texchange_node.partition_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
+                need_local_shuffle = false;
+            }
+        }
+
+        if (!need_local_shuffle) {
+            return ops;
+        }
+        std::vector<ExprContext*> group_by_expr_ctxs;
+        Expr::create_expr_trees(_pool, _tnode.agg_node.grouping_exprs, &group_by_expr_ctxs);
+        Expr::prepare(group_by_expr_ctxs, runtime_state());
+        Expr::open(group_by_expr_ctxs, runtime_state());
+        return context->maybe_interpolate_local_shuffle_exchange(runtime_state(), ops, group_by_expr_ctxs);
+    };
+
+    // 1. Finalize aggregation:
+    //   - Without group by clause, it cannot be parallelized and need local passthough.
+    //   - With group by clause, it can be parallelized and need local shuffle when could_local_shuffle is true.
+    // 2. Non-finalize aggregation:
+    //   - Without group by clause, it can be parallelized and needn't local shuffle.
+    //   - With group by clause, it can be parallelized and need local shuffle when could_local_shuffle is true.
     if (agg_node.need_finalize) {
-        // If finalize aggregate with group by clause, then it can be paralized
-        if (agg_node.__isset.grouping_exprs && !_tnode.agg_node.grouping_exprs.empty()) {
-            // There are two ways of shuffle
-            // 1. If previous op is ExchangeSourceOperator and its partition type is HASH_PARTITIONED or BUCKET_SHUFFLE_HASH_PARTITIONED
-            // then pipeline level shuffle will be performed at sender side (ExchangeSinkOperator), so
-            // there is no need to perform local shuffle again at receiver side
-            // 2. Otherwise, add LocalExchangeOperator
-            // to shuffle multi-stream into #degree_of_parallelism# streams each of that pipes into AggregateBlockingSinkOperator.
-            bool need_local_shuffle = true;
-            if (auto* exchange_op = dynamic_cast<ExchangeSourceOperatorFactory*>(operators_with_sink[0].get());
-                exchange_op != nullptr) {
-                auto& texchange_node = exchange_op->texchange_node();
-                DCHECK(texchange_node.__isset.partition_type);
-                if (texchange_node.partition_type == TPartitionType::HASH_PARTITIONED ||
-                    texchange_node.partition_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
-                    need_local_shuffle = false;
-                }
-            }
-            if (need_local_shuffle) {
-                std::vector<ExprContext*> group_by_expr_ctxs;
-                Expr::create_expr_trees(_pool, _tnode.agg_node.grouping_exprs, &group_by_expr_ctxs);
-                operators_with_sink = context->maybe_interpolate_local_shuffle_exchange(
-                        runtime_state(), operators_with_sink, group_by_expr_ctxs);
-            }
+        if (!has_group_by_keys) {
+            ops_with_sink = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), ops_with_sink);
         } else {
-            operators_with_sink =
-                    context->maybe_interpolate_local_passthrough_exchange(runtime_state(), operators_with_sink);
+            ops_with_sink = try_interpolate_local_shuffle(ops_with_sink);
+        }
+    } else {
+        if (!has_group_by_keys) {
+            // Do nothing.
+        } else {
+            ops_with_sink = try_interpolate_local_shuffle(ops_with_sink);
         }
     }
+
     // We cannot get degree of parallelism from PipelineBuilderContext, of which is only a suggest value
     // and we may set other parallelism for source operator in many special cases
-    size_t degree_of_parallelism =
-            down_cast<SourceOperatorFactory*>(operators_with_sink[0].get())->degree_of_parallelism();
+    size_t degree_of_parallelism = down_cast<SourceOperatorFactory*>(ops_with_sink[0].get())->degree_of_parallelism();
 
     // shared by sink operator and source operator
     AggregatorFactoryPtr aggregator_factory = std::make_shared<AggregatorFactory>(_tnode);
@@ -216,8 +234,8 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateBlockingNode::
                                                                                 aggregator_factory);
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(sink_operator.get(), context, rc_rf_probe_collector);
-    operators_with_sink.push_back(std::move(sink_operator));
-    context->add_pipeline(operators_with_sink);
+    ops_with_sink.push_back(std::move(sink_operator));
+    context->add_pipeline(ops_with_sink);
 
     OpFactories operators_with_source;
     auto source_operator = std::make_shared<AggregateBlockingSourceOperatorFactory>(context->next_operator_id(), id(),
@@ -225,7 +243,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateBlockingNode::
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(source_operator.get(), context, rc_rf_probe_collector);
     // Aggregator must be used by a pair of sink and source operators,
-    // so operators_with_source's degree of parallelism must be equal with operators_with_sink's
+    // so operators_with_source's degree of parallelism must be equal with ops_with_sink's
     source_operator->set_degree_of_parallelism(degree_of_parallelism);
     operators_with_source.push_back(std::move(source_operator));
     if (limit() != -1) {

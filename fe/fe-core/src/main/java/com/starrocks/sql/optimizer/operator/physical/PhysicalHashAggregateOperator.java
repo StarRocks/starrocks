@@ -78,6 +78,17 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
         return type;
     }
 
+    public boolean isOnePhaseAgg() {
+        return type.isGlobal() && !isSplit;
+    }
+
+    /**
+     * Whether it is the first phase in three/four-phase agg whose second phase is pruned.
+     */
+    public boolean isMergedLocalAgg() {
+        return type.isLocal() && !useStreamingPreAgg;
+    }
+
     public List<ColumnRefOperator> getPartitionByColumns() {
         return partitionByColumns;
     }
