@@ -1481,10 +1481,9 @@ public class PlanFragmentBuilder {
             aggregationNode.setHasNullableGenerateChild();
             aggregationNode.computeStatistics(optExpr.getStatistics());
 
-            if ((node.isOnePhaseAgg() || node.getType().isDistinct())) {
+            if (node.isOnePhaseAgg() || node.isMergedLocalAgg()) {
                 // For ScanNode->LocalShuffle->AggNode, we needn't assign scan ranges per driver sequence.
                 inputFragment.setAssignScanRangesPerDriverSeq(!withLocalShuffle);
-                inputFragment.setEnableSharedScan(withLocalShuffle);
                 aggregationNode.setWithLocalShuffle(withLocalShuffle);
             }
 
@@ -2077,10 +2076,6 @@ public class PlanFragmentBuilder {
 
                 leftFragment.mergeQueryGlobalDicts(rightFragment.getQueryGlobalDicts());
 
-                if (distributionMode.equals(HashJoinNode.DistributionMode.COLOCATE)) {
-                    leftFragment.setEnableSharedScan(false);
-                }
-
                 return leftFragment;
             } else if (distributionMode.equals(JoinNode.DistributionMode.SHUFFLE_HASH_BUCKET)) {
                 setJoinPushDown(joinNode);
@@ -2119,8 +2114,6 @@ public class PlanFragmentBuilder {
                     leftFragment = computeBucketShufflePlanFragment(context, leftFragment,
                             rightFragment, joinNode);
                 }
-
-                leftFragment.setEnableSharedScan(false);
 
                 return leftFragment;
             }
