@@ -48,7 +48,7 @@ ColumnPtr ArrayMapExpr::evaluate(ExprContext* context, Chunk* chunk) {
         ColumnPtr child_col = EVALUATE_NULL_IF_ERROR(context, _children[i], chunk);
         // the column is a null literal.
         if (child_col->only_null()) {
-            return ColumnHelper::align_return_type(child_col, type(), chunk->num_rows());
+            return ColumnHelper::align_return_type(child_col, type(), chunk->num_rows(), true);
         }
         // no optimization for const columns.
         child_col = ColumnHelper::unpack_and_duplicate_const_column(child_col->size(), child_col);
@@ -109,14 +109,14 @@ ColumnPtr ArrayMapExpr::evaluate(ExprContext* context, Chunk* chunk) {
         }
         if (cur_chunk->num_rows() <= chunk->num_rows() * 8) {
             column = EVALUATE_NULL_IF_ERROR(context, _children[0], cur_chunk.get());
-            column = ColumnHelper::align_return_type(column, type().children[0], cur_chunk->num_rows());
+            column = ColumnHelper::align_return_type(column, type().children[0], cur_chunk->num_rows(), true);
         } else { // split large chunks into small ones to avoid too large or various batch_size
             ChunkAccumulator accumulator(DEFAULT_CHUNK_SIZE);
             accumulator.push(std::move(cur_chunk));
             accumulator.finalize();
             while (auto tmp_chunk = accumulator.pull()) {
                 auto tmp_col = EVALUATE_NULL_IF_ERROR(context, _children[0], tmp_chunk.get());
-                tmp_col = ColumnHelper::align_return_type(tmp_col, type().children[0], tmp_chunk->num_rows());
+                tmp_col = ColumnHelper::align_return_type(tmp_col, type().children[0], tmp_chunk->num_rows(), true);
                 if (column == nullptr) {
                     column = tmp_col;
                 } else {

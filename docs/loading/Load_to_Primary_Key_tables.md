@@ -569,9 +569,7 @@ The conditional update feature is designed to resolve data disorder. If the sour
 > **NOTICE**
 >
 > - You cannot specify different columns as update conditions for the same batch of data.
->
 > - DELETE operations do not support conditional updates.
->
 > - Partial updates and conditional updates cannot be used simultaneously.
 
 ### Data examples

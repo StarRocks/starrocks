@@ -17,6 +17,7 @@
   + Data distribution
     + [Data distribution](./table_design/Data_distribution.md)
     + [Dynamic partitioning](./table_design/dynamic_partitioning.md)
+  + [Data compression](./table_design/data_compression.md)
   + [Sort keys and prefix indexes](./table_design/Sort_key.md)
 + Data Loading
   + [Overview of data loading](./loading/Loading_intro.md)
@@ -60,7 +61,6 @@
     + [Build in Docker](./administration/Build_in_docker.md)
     + [Deploy and manage CN on Kubernetes with StarRocks Operator](./administration/k8s_operator_cn.md)
     + [Deploy CN](./administration/deploy_cn.md)
-    + [Deploy Broker](./administration/deploy_broker.md)
     + [Deploy FE cluster with high availability](./administration/Deployment.md)
   + Management
     + [Scale in and out](./administration/Scale_up_down.md)
@@ -70,8 +70,10 @@
     + [Manage a cluster](./administration/Cluster_administration.md)
     + [Enable FQDN access](./administration/enable_fqdn.md)
     + [Configure a time zone](./administration/timezone.md)
+    + [Information Schema](./administration/information_schema.md)
     + Resource Management
       + [Resource group](./administration/resource_group.md)
+      + [Query queue](./administration/query_queues.md)
       + [Query management](./administration/Query_management.md)
       + [Memory management](./administration/Memory_management.md)
       + [Load balance](./administration/Load_balance.md)
