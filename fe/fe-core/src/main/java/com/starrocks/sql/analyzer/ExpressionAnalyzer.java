@@ -393,7 +393,7 @@ public class ExpressionAnalyzer {
                 if (!type.isBoolean() && !type.isNull()) {
                     throw new SemanticException("Operand '%s' part of predicate " +
                             "'%s' should return type 'BOOLEAN' but returns type '%s'.",
-                            AST2SQL.toString(node), AST2SQL.toString(node.getChild(i)), type.toSql());
+                            AstToStringBuilder.toString(node), AstToStringBuilder.toString(node.getChild(i)), type.toSql());
                 }
             }
 
@@ -635,13 +635,13 @@ public class ExpressionAnalyzer {
             if (!type1.isStringType() && !type1.isNull()) {
                 throw new SemanticException(
                         "left operand of " + node.getOp().toString() + " must be of type STRING: " +
-                                AST2SQL.toString(node));
+                                AstToStringBuilder.toString(node));
             }
 
             if (!type2.isStringType() && !type2.isNull()) {
                 throw new SemanticException(
                         "right operand of " + node.getOp().toString() + " must be of type STRING: " +
-                                AST2SQL.toString(node));
+                                AstToStringBuilder.toString(node));
             }
 
             // check pattern
@@ -649,7 +649,7 @@ public class ExpressionAnalyzer {
                 try {
                     Pattern.compile(((StringLiteral) node.getChild(1)).getValue());
                 } catch (PatternSyntaxException e) {
-                    throw new SemanticException("Invalid regular expression in '" + AST2SQL.toString(node) + "'");
+                    throw new SemanticException("Invalid regular expression in '" + AstToStringBuilder.toString(node) + "'");
                 }
             }
 
@@ -681,7 +681,7 @@ public class ExpressionAnalyzer {
             if (!Type.canCastTo(cast.getChild(0).getType(), castType)) {
                 throw new SemanticException("Invalid type cast from " + cast.getChild(0).getType().toSql() + " to "
                         + castType.toSql() + " in sql `" +
-                        AST2SQL.toString(cast.getChild(0)).replace("%", "%%") + "`");
+                        AstToStringBuilder.toString(cast.getChild(0)).replace("%", "%%") + "`");
             }
 
             cast.setType(castType);

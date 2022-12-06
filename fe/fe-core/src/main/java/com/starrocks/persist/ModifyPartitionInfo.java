@@ -21,6 +21,7 @@
 
 package com.starrocks.persist;
 
+import com.google.common.base.Objects;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.common.FeMetaVersion;
@@ -89,6 +90,11 @@ public class ModifyPartitionInfo implements Writable {
         ModifyPartitionInfo info = new ModifyPartitionInfo();
         info.readFields(in);
         return info;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(dbId, tableId);
     }
 
     @Override

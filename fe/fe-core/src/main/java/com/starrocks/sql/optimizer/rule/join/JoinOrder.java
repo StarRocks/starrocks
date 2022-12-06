@@ -63,6 +63,21 @@ public abstract class JoinOrder {
         public int hashCode() {
             return Objects.hash(expr.getOp().hashCode(), leftChildExpr, rightChildExpr);
         }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) {
+                return true;
+            }
+            if (!(obj instanceof JoinOrder)) {
+                return false;
+            }
+
+            ExpressionInfo other = (ExpressionInfo) obj;
+            return Objects.equals(expr, other.expr)
+                    && Objects.equals(leftChildExpr, other.leftChildExpr)
+                    && Objects.equals(rightChildExpr, other.rightChildExpr);
+        }
     }
 
     /**
@@ -80,6 +95,19 @@ public abstract class JoinOrder {
         @Override
         public int hashCode() {
             return atoms.hashCode();
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) {
+                return true;
+            }
+            if (obj == null || getClass() != obj.getClass()) {
+                return false;
+            }
+
+            GroupInfo other = (GroupInfo) obj;
+            return atoms.equals(other.atoms);
         }
     }
 

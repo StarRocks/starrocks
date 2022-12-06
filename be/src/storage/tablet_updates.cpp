@@ -1,5 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
 #include "storage/tablet_updates.h"
 
 #include <cmath>
@@ -1418,7 +1430,15 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
         _set_error(msg);
         return;
     }
-    if (!(st = _compaction_state->load(_get_rowset(rowset_id).get())).ok()) {
+    Rowset* output_rowset = _get_rowset(rowset_id).get();
+    if (output_rowset == nullptr) {
+        string msg = strings::Substitute("_apply_compaction_commit rowset not found tablet=$0 rowset=$1",
+                                         _tablet.tablet_id(), rowset_id);
+        LOG(ERROR) << msg;
+        _set_error(msg);
+        return;
+    }
+    if (!(st = _compaction_state->load(output_rowset)).ok()) {
         manager->index_cache().release(index_entry);
         _compaction_state.reset();
         std::string msg = strings::Substitute("_apply_compaction_commit error: load compaction state failed: $0 $1",
@@ -1449,7 +1469,7 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
     uint32_t max_src_rssid = max_rowset_id + rowset->num_segments() - 1;
 
     for (size_t i = 0; i < _compaction_state->pk_cols.size(); i++) {
-        if (st = _compaction_state->load_segments(rowset, i); !st.ok()) {
+        if (st = _compaction_state->load_segments(output_rowset, i); !st.ok()) {
             manager->index_cache().release(index_entry);
             _compaction_state.reset();
             std::string msg = strings::Substitute("_apply_compaction_commit error: load compaction state failed: $0 $1",

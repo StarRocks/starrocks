@@ -34,6 +34,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Internal representation of index, including index type, name, columns and comments.
@@ -108,6 +109,22 @@ public class Index implements Writable {
     @Override
     public int hashCode() {
         return 31 * (indexName.hashCode() + columns.hashCode() + indexType.hashCode());
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) {
+            return true;
+        }
+
+        if (!(obj instanceof Index)) {
+            return false;
+        }
+
+        Index other = (Index) obj;
+        return Objects.equals(indexName, other.indexName) && Objects.equals(columns, other.columns)
+                && Objects.equals(indexType, other.indexType);
+
     }
 
     public Index clone() {

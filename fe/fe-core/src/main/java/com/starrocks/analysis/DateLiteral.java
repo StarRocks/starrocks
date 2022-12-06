@@ -457,6 +457,11 @@ public class DateLiteral extends LiteralExpr {
     }
 
     @Override
+    public boolean equals(Object obj) {
+        return super.equals(obj);
+    }
+
+    @Override
     public boolean isNullable() {
         if (type == Type.DATETIME) {
             return this.compareLiteral(DateLiteral.MIN_DATETIME) < 0

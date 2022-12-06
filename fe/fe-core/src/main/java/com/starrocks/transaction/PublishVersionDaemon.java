@@ -129,6 +129,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
             AgentTaskExecutor.submit(batchTask);
         }
 
+        // FIXME(murphy) refresh the mv in new publish mechanism
         if (Config.enable_new_publish_mechanism) {
             publishVersionNew(globalTransactionMgr, readyTransactionStates);
             return;

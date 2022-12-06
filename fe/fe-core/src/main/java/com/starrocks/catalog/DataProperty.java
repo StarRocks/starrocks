@@ -21,6 +21,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
@@ -117,6 +118,11 @@ public class DataProperty implements Writable {
     public void readFields(DataInput in) throws IOException {
         storageMedium = TStorageMedium.valueOf(Text.readString(in));
         cooldownTimeMs = in.readLong();
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(storageMedium, cooldownTimeMs);
     }
 
     @Override

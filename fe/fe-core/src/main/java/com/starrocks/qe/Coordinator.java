@@ -300,7 +300,6 @@ public class Coordinator {
         }
 
         this.needReport = true;
-
         this.coordinatorPreprocessor =
                 new CoordinatorPreprocessor(queryId, context, fragments, scanNodes, queryGlobals, queryOptions);
     }
@@ -439,6 +438,10 @@ public class Coordinator {
         return fragments;
     }
 
+    public TDescriptorTable getDescTable() {
+        return descTable;
+    }
+
     public boolean isLoadType() {
         return queryOptions.getQuery_type() == TQueryType.LOAD;
     }
@@ -449,11 +452,11 @@ public class Coordinator {
 
     public void exec() throws Exception {
         QueryQueueManager.getInstance().maybeWait(connectContext, this);
-        try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("CoordPrepareExec")) {
+        try (PlannerProfile.ScopedTimer timer = PlannerProfile.getScopedTimer("CoordPrepareExec")) {
             prepareExec();
         }
 
-        try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("CoordDeliverExec")) {
+        try (PlannerProfile.ScopedTimer timer = PlannerProfile.getScopedTimer("CoordDeliverExec")) {
             deliverExecFragments();
         }
     }
@@ -1932,6 +1935,5 @@ public class Coordinator {
         public void setInitiated(boolean initiated) {
             this.initiated = initiated;
         }
-
     }
 }

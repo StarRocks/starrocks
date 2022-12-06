@@ -36,6 +36,7 @@ import org.apache.spark.sql.functions;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -200,10 +201,11 @@ public class SparkEtlJob {
             // only one table
             long tableId = -1;
             EtlTable table = null;
-            for (Map.Entry<Long, EtlTable> entry : etlJobConfig.tables.entrySet()) {
+            Optional<Map.Entry<Long, EtlTable>> optionalEntry = etlJobConfig.tables.entrySet().stream().findFirst();
+            if (optionalEntry.isPresent()) {
+                Map.Entry<Long, EtlTable> entry = optionalEntry.get();
                 tableId = entry.getKey();
                 table = entry.getValue();
-                break;
             }
 
             if (table == null) {

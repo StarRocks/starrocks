@@ -44,7 +44,11 @@ You can decide whether to add the `__op` field based on the data changes you wan
 
 ## Prerequisites
 
-If you choose Broker Load, make sure that a broker is deployed in your StarRocks cluster. You can use the [SHOW BROKER](../sql-reference/sql-statements/Administration/SHOW%20BROKER.md) statement to check for brokers that are deployed in your StarRocks cluster. If no broker is deployed, you must deploy a broker by following the instructions provided in [Deploy a broker](../quick_start/Deploy.md#deploy-broker). Assume that you have deployed a broker named `broker1`.
+### Broker Load
+
+See the "Background information" section in [Load data from HDFS or cloud storage](../loading/BrokerLoad.md).
+
+### Routine load
 
 If you choose Routine Load, make sure that topics are created in your Apache Kafka® cluster. Assume that you have created four topics: `topic1`, `topic2`, `topic3`, and `topic4`.
 
@@ -565,9 +569,7 @@ The conditional update feature is designed to resolve data disorder. If the sour
 > **NOTICE**
 >
 > - You cannot specify different columns as update conditions for the same batch of data.
->
-> - DELETE operations do not support conditional updates. 
->
+> - DELETE operations do not support conditional updates.
 > - Partial updates and conditional updates cannot be used simultaneously.
 
 ### Data examples

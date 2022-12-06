@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
@@ -186,10 +198,11 @@ public:
     // Create an empty column
     static ColumnPtr create_column(const TypeDescriptor& type_desc, bool nullable);
 
-    // expression trees' return column should align return type when some return columns may be different from
-    // the required return type. e.g., concat_ws returns col from create_const_null_column(), it's type is Nullable(int8),
-    // but required return type is nullable(string), so col need align return type to nullable(string).
-    static ColumnPtr align_return_type(const ColumnPtr& old_col, const TypeDescriptor& type_desc, size_t num_rows);
+    // expression trees' return column should align return type when some return columns maybe diff from the required
+    // return type, as well the null flag. e.g., concat_ws returns col from create_const_null_column(), it's type is
+    // Nullable(int8), but required return type is nullable(string), so col need align return type to nullable(string).
+    static ColumnPtr align_return_type(const ColumnPtr& old_col, const TypeDescriptor& type_desc, size_t num_rows,
+                                       const bool is_nullable);
 
     // Create a column with specified size, the column will be resized to size
     static ColumnPtr create_column(const TypeDescriptor& type_desc, bool nullable, bool is_const, size_t size);

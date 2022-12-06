@@ -17,6 +17,7 @@
 
 package com.starrocks.persist;
 
+import com.google.common.base.Objects;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -51,6 +52,11 @@ public class BatchModifyPartitionsInfo implements Writable {
 
     public List<ModifyPartitionInfo> getModifyPartitionInfos() {
         return infos;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(infos);
     }
 
     @Override

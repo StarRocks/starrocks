@@ -197,7 +197,6 @@ public class Config extends ConfigBase {
     @ConfField
     public static String big_query_log_delete_age = "7d";
 
-
     /**
      * plugin_dir:
      * plugin install directory
@@ -231,7 +230,6 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static int label_clean_interval_second = 4 * 3600; // 4 hours
-
 
     /**
      * For Task framework do some background operation like cleanup Task/TaskRun.
@@ -740,7 +738,7 @@ public class Config extends ConfigBase {
     /**
      * Max stream load load batch size
      */
-    @ConfField(mutable = true) 
+    @ConfField(mutable = true)
     public static int max_stream_load_batch_size_mb = 100;
 
     /**
@@ -1118,7 +1116,6 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true, aliases = {"storage_cooldown_second"})
     public static long tablet_sched_storage_cooldown_second = -1L; // won't cool down by default
-
 
     /**
      * FOR BeLoadBalancer:
@@ -1850,7 +1847,7 @@ public class Config extends ConfigBase {
     public static int lake_compaction_max_tasks = -1;
 
     @ConfField(mutable = true)
-    public static boolean enable_new_publish_mechanism = false;
+    public static boolean enable_new_publish_mechanism = true;
 
     /**
      * Normally FE will quit when replaying a bad journal. This configuration provides a bypass mechanism.

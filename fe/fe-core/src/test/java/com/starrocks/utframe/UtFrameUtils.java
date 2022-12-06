@@ -24,7 +24,9 @@ package com.starrocks.utframe;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Database;
@@ -51,10 +53,12 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.Explain;
 import com.starrocks.sql.InsertPlanner;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryStatement;
@@ -82,6 +86,7 @@ import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TResultSinkType;
 import org.apache.commons.codec.binary.Hex;
+import org.junit.Assert;
 
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
@@ -99,6 +104,7 @@ import java.util.Collection;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -299,6 +305,69 @@ public class UtFrameUtils {
         throw new RuntimeException("can not find valid port");
     }
 
+    /**
+     * Validate whether all the fragments belong to the fragment tree.
+     * @param plan The plan need to validate.
+     */
+    public static void validatePlanConnectedness(ExecPlan plan) {
+        PlanFragment root = plan.getTopFragment();
+
+        Queue<PlanFragment> queue = Lists.newLinkedList();
+        Set<PlanFragment> visitedFragments = Sets.newHashSet();
+        visitedFragments.add(root);
+        queue.add(root);
+        while (!queue.isEmpty()) {
+            PlanFragment fragment = queue.poll();
+            for (PlanFragment child : fragment.getChildren()) {
+                if (!visitedFragments.contains(child)) {
+                    visitedFragments.add(child);
+                    queue.add(child);
+                }
+            }
+        }
+
+        Assert.assertEquals("Some fragments do not belong to the fragment tree",
+                plan.getFragments().size(), visitedFragments.size());
+    }
+
+    /*
+     * Return analyzed statement and execution plan for MV maintenance
+     */
+    public static Pair<CreateMaterializedViewStatement, ExecPlan> planMVMaintenance(ConnectContext connectContext, String sql)
+            throws DdlException, CloneNotSupportedException {
+        connectContext.setDumpInfo(new QueryDumpInfo(connectContext.getSessionVariable()));
+
+        List<StatementBase> statements =
+                com.starrocks.sql.parser.SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode());
+        connectContext.getDumpInfo().setOriginStmt(sql);
+        SessionVariable oldSessionVariable = connectContext.getSessionVariable();
+        StatementBase statementBase = statements.get(0);
+
+        try {
+            // update session variable by adding optional hints.
+            if (statementBase instanceof QueryStatement &&
+                    ((QueryStatement) statementBase).getQueryRelation() instanceof SelectRelation) {
+                SelectRelation selectRelation = (SelectRelation) ((QueryStatement) statementBase).getQueryRelation();
+                Map<String, String> optHints = selectRelation.getSelectList().getOptHints();
+                if (optHints != null) {
+                    SessionVariable sessionVariable = (SessionVariable) oldSessionVariable.clone();
+                    for (String key : optHints.keySet()) {
+                        VariableMgr.setVar(sessionVariable, new SetVar(key, new StringLiteral(optHints.get(key))), true);
+                    }
+                    connectContext.setSessionVariable(sessionVariable);
+                }
+            }
+
+            ExecPlan execPlan = StatementPlanner.plan(statementBase, connectContext);
+            Assert.assertTrue(statementBase instanceof CreateMaterializedViewStatement);
+            CreateMaterializedViewStatement createMVStmt = (CreateMaterializedViewStatement) statementBase;
+            return Pair.create(createMVStmt, createMVStmt.getMaintenancePlan());
+        } finally {
+            // before returning we have to restore session variable.
+            connectContext.setSessionVariable(oldSessionVariable);
+        }
+    }
+
     public static Pair<String, ExecPlan> getPlanAndFragment(ConnectContext connectContext, String originStmt)
             throws Exception {
         connectContext.setDumpInfo(new QueryDumpInfo(connectContext.getSessionVariable()));
@@ -350,11 +419,16 @@ public class UtFrameUtils {
                 }
             }
 
+            validatePlanConnectedness(execPlan);
             return new Pair<>(LogicalPlanPrinter.print(execPlan.getPhysicalPlan()), execPlan);
         } finally {
             // before returning we have to restore session variable.
             connectContext.setSessionVariable(oldSessionVariable);
         }
+    }
+
+    public static String printPlan(ExecPlan plan) {
+        return Explain.toString(plan.getPhysicalPlan(), plan.getOutputColumns());
     }
 
     public static String getStmtDigest(ConnectContext connectContext, String originStmt) throws Exception {

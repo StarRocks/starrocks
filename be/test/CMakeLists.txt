@@ -1,5 +1,3 @@
-# This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
 set(EXEC_FILES
         ./test_main.cpp
         ./column/array_column_test.cpp

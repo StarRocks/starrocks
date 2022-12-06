@@ -21,6 +21,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.base.Objects;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.RandomDistributionDesc;
@@ -83,6 +84,11 @@ public class RandomDistributionInfo extends DistributionInfo {
         DistributionInfo distributionInfo = new RandomDistributionInfo();
         distributionInfo.readFields(in);
         return distributionInfo;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(type, bucketNum);
     }
 
     @Override

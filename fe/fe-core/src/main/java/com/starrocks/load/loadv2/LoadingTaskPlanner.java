@@ -61,6 +61,7 @@ import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TPartitionType;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.thrift.TUniqueId;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -195,8 +196,8 @@ public class LoadingTaskPlanner {
         OlapTableSink olapTableSink = new OlapTableSink(table, tupleDesc, partitionIds, true,
                 table.writeQuorum(), table.enableReplicatedStorage());
         olapTableSink.init(loadId, txnId, dbId, timeoutS);
-        olapTableSink.complete();
-
+        Load.checkMergeCondition(mergeConditionStr, table);
+        olapTableSink.complete(mergeConditionStr);
 
         // 3. Plan fragment
         PlanFragment sinkFragment = new PlanFragment(new PlanFragmentId(0), scanNode, DataPartition.RANDOM);
@@ -350,13 +351,13 @@ public class LoadingTaskPlanner {
 
     private List<Long> getAllPartitionIds() throws LoadException, MetaNotFoundException {
         Set<Long> partitionIds = Sets.newHashSet();
-        for (BrokerFileGroup brokerFileGroup : fileGroups) {
+        if (CollectionUtils.isNotEmpty(fileGroups)) {
+            // all file group in fileGroups should have same partitions, so only need to get partition ids
+            // from one of these file groups
+            BrokerFileGroup brokerFileGroup = fileGroups.get(0);
             if (brokerFileGroup.getPartitionIds() != null) {
                 partitionIds.addAll(brokerFileGroup.getPartitionIds());
             }
-            // all file group in fileGroups should have same partitions, so only need to get partition ids
-            // from one of these file groups
-            break;
         }
 
         if (partitionIds.isEmpty()) {

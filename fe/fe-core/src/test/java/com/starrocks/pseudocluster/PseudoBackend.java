@@ -17,6 +17,7 @@ import com.starrocks.proto.PCollectQueryStatisticsResult;
 import com.starrocks.proto.PExecBatchPlanFragmentsResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
 import com.starrocks.proto.PFetchDataResult;
+import com.starrocks.proto.PMVMaintenanceTaskResult;
 import com.starrocks.proto.PProxyRequest;
 import com.starrocks.proto.PProxyResult;
 import com.starrocks.proto.PPulsarProxyRequest;
@@ -35,6 +36,7 @@ import com.starrocks.proto.PUniqueId;
 import com.starrocks.proto.StatusPB;
 import com.starrocks.rpc.PBackendService;
 import com.starrocks.rpc.PExecBatchPlanFragmentsRequest;
+import com.starrocks.rpc.PMVMaintenanceTaskRequest;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.FrontendService;
@@ -933,7 +935,6 @@ public class PseudoBackend {
             return progress.getFetchDataResult();
         }
 
-
         @Override
         public Future<PProxyResult> getInfo(PProxyRequest request) {
             return null;
@@ -942,6 +943,11 @@ public class PseudoBackend {
         @Override
         public Future<PPulsarProxyResult> getPulsarInfo(PPulsarProxyRequest request) {
             return null;
+        }
+
+        @Override
+        public Future<PMVMaintenanceTaskResult> submitMVMaintenanceTaskAsync(PMVMaintenanceTaskRequest request) {
+            throw new org.apache.commons.lang.NotImplementedException("TODO");
         }
     }
 

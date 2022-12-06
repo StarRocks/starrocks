@@ -22,6 +22,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Joiner;
+import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.FunctionName;
@@ -741,6 +742,11 @@ public class Function implements Writable {
             row.add(functionName());
         }
         return row;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(name, hasVarArgs, argTypes.length);
     }
 
     @Override

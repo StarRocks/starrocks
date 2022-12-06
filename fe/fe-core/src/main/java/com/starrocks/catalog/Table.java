@@ -168,6 +168,10 @@ public class Table extends MetaObject implements Writable {
         return id;
     }
 
+    public void setId(long id) {
+        this.id = id;
+    }
+
     public String getName() {
         return name;
     }
@@ -355,6 +359,11 @@ public class Table extends MetaObject implements Writable {
         } else {
             this.createTime = -1L;
         }
+    }
+
+    @Override
+    public int hashCode() {
+        return Long.hashCode(id);
     }
 
     @Override

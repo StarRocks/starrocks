@@ -244,4 +244,9 @@ public class StringLiteral extends LiteralExpr {
     public int hashCode() {
         return Objects.hash(super.hashCode(), value);
     }
+
+    @Override
+    public boolean equals(Object obj) {
+        return super.equals(obj);
+    }
 }

@@ -21,6 +21,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.starrocks.thrift.TTypeDesc;
@@ -70,6 +71,11 @@ public class MapType extends Type {
         if (valueType.isComplexType()) {
             valueType.selectAllFields();
         }
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(keyType, valueType);
     }
 
     @Override

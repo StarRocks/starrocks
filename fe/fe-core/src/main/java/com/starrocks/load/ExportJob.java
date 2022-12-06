@@ -861,6 +861,11 @@ public class ExportJob implements Writable {
     }
 
     @Override
+    public int hashCode() {
+        return Long.hashCode(id);
+    }
+
+    @Override
     public boolean equals(Object obj) {
         if (obj == this) {
             return true;

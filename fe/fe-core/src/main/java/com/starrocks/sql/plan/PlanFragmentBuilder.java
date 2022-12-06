@@ -243,7 +243,6 @@ public class PlanFragmentBuilder {
             fragment.computeLocalRfWaitingSet(fragment.getPlanRoot(), shouldClearRuntimeFilters);
         }
 
-
         if (useQueryCache(execPlan)) {
             List<PlanFragment> fragmentsWithLeftmostOlapScanNode = execPlan.getFragments().stream()
                     .filter(PlanFragment::hasOlapScanNode).collect(Collectors.toList());
@@ -1531,10 +1530,9 @@ public class PlanFragmentBuilder {
             aggregationNode.setHasNullableGenerateChild();
             aggregationNode.computeStatistics(optExpr.getStatistics());
 
-            if ((node.isOnePhaseAgg() || node.getType().isDistinct())) {
+            if (node.isOnePhaseAgg() || node.isMergedLocalAgg()) {
                 // For ScanNode->LocalShuffle->AggNode, we needn't assign scan ranges per driver sequence.
                 inputFragment.setAssignScanRangesPerDriverSeq(!withLocalShuffle);
-                inputFragment.setEnableSharedScan(withLocalShuffle);
                 aggregationNode.setWithLocalShuffle(withLocalShuffle);
             }
 
@@ -1852,10 +1850,7 @@ public class PlanFragmentBuilder {
             context.getFragments().add(leftFragment);
 
             leftFragment.setPlanRoot(joinNode);
-            if (!rightFragment.getChildren().isEmpty()) {
-                // right table isn't value operator
-                leftFragment.addChild(rightFragment.getChild(0));
-            }
+            leftFragment.addChildren(rightFragment.getChildren());
 
             if (!(joinNode.getChild(1) instanceof ExchangeNode)) {
                 joinNode.setReplicated(true);
@@ -2070,7 +2065,7 @@ public class PlanFragmentBuilder {
             context.getFragments().add(stayFragment);
 
             stayFragment.setPlanRoot(hashJoinNode);
-            stayFragment.addChild(removeFragment.getChild(0));
+            stayFragment.addChildren(removeFragment.getChildren());
             stayFragment.mergeQueryGlobalDicts(removeFragment.getQueryGlobalDicts());
             return stayFragment;
         }
@@ -2092,7 +2087,7 @@ public class PlanFragmentBuilder {
             context.getFragments().add(stayFragment);
 
             stayFragment.setPlanRoot(hashJoinNode);
-            stayFragment.addChild(removeFragment.getChild(0));
+            stayFragment.addChildren(removeFragment.getChildren());
             stayFragment.mergeQueryGlobalDicts(removeFragment.getQueryGlobalDicts());
             return stayFragment;
         }
@@ -2628,7 +2623,7 @@ public class PlanFragmentBuilder {
                 context.getFragments().remove(leftFragment);
                 context.getFragments().add(leftFragment);
                 leftFragment.setPlanRoot(joinNode);
-                leftFragment.addChild(rightFragment.getChild(0));
+                leftFragment.addChildren(rightFragment.getChildren());
                 leftFragment.mergeQueryGlobalDicts(rightFragment.getQueryGlobalDicts());
                 return leftFragment;
             } else if (distributionMode.equals(JoinNode.DistributionMode.PARTITIONED)) {
@@ -2647,8 +2642,8 @@ public class PlanFragmentBuilder {
 
                 PlanFragment joinFragment = new PlanFragment(context.getNextFragmentId(),
                         joinNode, lhsJoinPartition);
-                joinFragment.addChild(leftFragment.getChild(0));
-                joinFragment.addChild(rightFragment.getChild(0));
+                joinFragment.addChildren(leftFragment.getChildren());
+                joinFragment.addChildren(rightFragment.getChildren());
 
                 joinFragment.mergeQueryGlobalDicts(leftFragment.getQueryGlobalDicts());
                 joinFragment.mergeQueryGlobalDicts(rightFragment.getQueryGlobalDicts());
@@ -2674,10 +2669,6 @@ public class PlanFragmentBuilder {
                 context.getFragments().add(leftFragment);
 
                 leftFragment.mergeQueryGlobalDicts(rightFragment.getQueryGlobalDicts());
-
-                if (distributionMode.equals(HashJoinNode.DistributionMode.COLOCATE)) {
-                    leftFragment.setEnableSharedScan(false);
-                }
 
                 return leftFragment;
             } else if (distributionMode.equals(JoinNode.DistributionMode.SHUFFLE_HASH_BUCKET)) {

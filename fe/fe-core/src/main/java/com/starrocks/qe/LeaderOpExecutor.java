@@ -28,7 +28,7 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.qe.QueryState.MysqlStateType;
 import com.starrocks.rpc.FrontendServiceProxy;
-import com.starrocks.sql.analyzer.AST2SQL;
+import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.system.SystemInfoService;
@@ -140,7 +140,7 @@ public class LeaderOpExecutor {
         // forward all session variables
         SetStmt setStmt = ctx.getModifiedSessionVariables();
         if (setStmt != null) {
-            params.setModified_variables_sql(AST2SQL.toString(setStmt));
+            params.setModified_variables_sql(AstToSQLBuilder.toSQL(setStmt));
         }
         LOG.info("Forward statement {} to Leader {}", ctx.getStmtId(), thriftAddress);
 
