@@ -24,6 +24,8 @@ package com.starrocks.planner;
 import com.starrocks.sql.ast.AssertNumRowsElement;
 import com.starrocks.thrift.TAssertNumRowsNode;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.TNormalAssertNumRowsNode;
+import com.starrocks.thrift.TNormalPlanNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 
@@ -69,5 +71,15 @@ public class AssertNumRowsNode extends PlanNode {
     @Override
     public boolean canUsePipeLine() {
         return getChildren().stream().allMatch(PlanNode::canUsePipeLine);
+    }
+
+    @Override
+    protected void toNormalForm(TNormalPlanNode planNode, FragmentNormalizer normalizer) {
+        TNormalAssertNumRowsNode assertNumRowsNode = new TNormalAssertNumRowsNode();
+        assertNumRowsNode.setDesired_num_rows(desiredNumOfRows);
+        assertNumRowsNode.setAssertion(assertion.toThrift());
+        planNode.setAssert_num_rows_node(assertNumRowsNode);
+        planNode.setNode_type(TPlanNodeType.ASSERT_NUM_ROWS_NODE);
+        normalizeConjuncts(normalizer, planNode, conjuncts);
     }
 }

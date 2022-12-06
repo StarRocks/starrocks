@@ -12,6 +12,8 @@ import com.starrocks.common.IdGenerator;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.thrift.TNestLoopJoinNode;
+import com.starrocks.thrift.TNormalNestLoopJoinNode;
+import com.starrocks.thrift.TNormalPlanNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import org.apache.commons.collections.CollectionUtils;
@@ -114,4 +116,13 @@ public class NestLoopJoinNode extends JoinNode implements RuntimeFilterBuildNode
         }
     }
 
+    @Override
+    protected void toNormalForm(TNormalPlanNode planNode, FragmentNormalizer normalizer) {
+        TNormalNestLoopJoinNode nlJoinNode = new TNormalNestLoopJoinNode();
+        nlJoinNode.setJoin_op(getJoinOp().toThrift());
+        nlJoinNode.setJoin_conjuncts(normalizer.normalizeExprs(otherJoinConjuncts));
+        planNode.setNestloop_join_node(nlJoinNode);
+        planNode.setNode_type(TPlanNodeType.NESTLOOP_JOIN_NODE);
+        normalizeConjuncts(normalizer, planNode, conjuncts);
+    }
 }

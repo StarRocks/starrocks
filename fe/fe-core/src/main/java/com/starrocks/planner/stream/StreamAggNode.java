@@ -4,16 +4,21 @@ package com.starrocks.planner.stream;
 
 import com.starrocks.analysis.AggregateInfo;
 import com.starrocks.analysis.Expr;
+import com.starrocks.common.FeConstants;
+import com.starrocks.planner.FragmentNormalizer;
 import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.sql.optimizer.operator.physical.stream.IMTInfo;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TExpr;
+import com.starrocks.thrift.TNormalPlanNode;
+import com.starrocks.thrift.TNormalSortAggregationNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TStreamAggregationNode;
 import org.apache.commons.collections.CollectionUtils;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -90,5 +95,17 @@ public class StreamAggNode extends PlanNode {
     @Override
     public boolean canUsePipeLine() {
         return getChildren().stream().allMatch(PlanNode::canUsePipeLine);
+    }
+
+    @Override
+    protected void toNormalForm(TNormalPlanNode planNode, FragmentNormalizer normalizer) {
+        TNormalSortAggregationNode sortAggregationNode = new TNormalSortAggregationNode();
+        sortAggregationNode.setGrouping_exprs(normalizer.normalizeExprs(aggInfo.getGroupingExprs()));
+        sortAggregationNode.setAggregate_functions(
+                normalizer.normalizeExprs(new ArrayList<>(aggInfo.getAggregateExprs())));
+        sortAggregationNode.setAgg_func_set_version(FeConstants.AGG_FUNC_VERSION);
+        planNode.setSort_aggregation_node(sortAggregationNode);
+        planNode.setNode_type(TPlanNodeType.STREAM_AGG_NODE);
+        normalizeConjuncts(normalizer, planNode, conjuncts);
     }
 }
