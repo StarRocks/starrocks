@@ -167,9 +167,11 @@ StatusOr<RowsetSharedPtr> RowsetWriter::build() {
                 _rowset_txn_meta_pb->add_partial_update_column_ids(_context.referenced_column_ids[i]);
                 _rowset_txn_meta_pb->add_partial_update_column_unique_ids(tablet_column.unique_id());
             }
+            if (!_context.merge_condition.empty()) {
+                _rowset_txn_meta_pb->set_merge_condition(_context.merge_condition);
+            }
             *_rowset_meta_pb->mutable_txn_meta() = *_rowset_txn_meta_pb;
-        }
-        if (!_context.merge_condition.empty() && !_context.partial_update_tablet_schema) {
+        } else if (!_context.merge_condition.empty()) {
             _rowset_txn_meta_pb->set_merge_condition(_context.merge_condition);
             *_rowset_meta_pb->mutable_txn_meta() = *_rowset_txn_meta_pb;
         }

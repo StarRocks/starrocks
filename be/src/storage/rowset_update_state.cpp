@@ -172,8 +172,7 @@ Status RowsetUpdateState::_do_load(Tablet* tablet, Rowset* rowset) {
         RETURN_IF_ERROR(_load_upserts(rowset, 0, pk_column.get()));
     }
 
-    if (!rowset->rowset_meta()->get_meta_pb().has_txn_meta() || rowset->num_segments() == 0 ||
-        rowset->rowset_meta()->get_meta_pb().txn_meta().has_merge_condition()) {
+    if (!rowset->rowset_meta()->get_meta_pb().has_txn_meta() || rowset->num_segments() == 0) {
         return Status::OK();
     }
     return _prepare_partial_update_states(tablet, rowset);
@@ -453,8 +452,7 @@ Status RowsetUpdateState::_check_and_resolve_conflict(Tablet* tablet, Rowset* ro
 Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_id, EditVersion latest_applied_version,
                                 const PrimaryIndex& index) {
     const auto& rowset_meta_pb = rowset->rowset_meta()->get_meta_pb();
-    if (!rowset_meta_pb.has_txn_meta() || rowset->num_segments() == 0 ||
-        rowset_meta_pb.txn_meta().has_merge_condition()) {
+    if (!rowset_meta_pb.has_txn_meta() || rowset->num_segments() == 0) {
         return Status::OK();
     }
     // currently assume it's a partial update
