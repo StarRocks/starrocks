@@ -122,6 +122,14 @@ This topic describes FE, BE, Broker, and system parameters. It also provides sug
 
 Some BE configuration items are dynamic parameters which you can set them by commands when BE nodes are still online. The rest of them are static parameters. You can only set the static parameters of a BE node by changing them in the corresponding configuration file **be.conf**, and restart the BE node to allow the change to take effect.
 
+### View BE configuration items
+
+You can view the BE configuration items using the following command:
+
+```shell
+curl http://<BE_IP>:<BE_HTTP_PORT>/varz
+```
+
 ### Configure BE dynamic parameters
 
 You can configure a dynamic parameter of a BE node by using `curl` command.
@@ -233,7 +241,7 @@ BE static parameters are as follows:
 | num_threads_per_core | 3 | N/A | The number threads started in each CPU core. |
 | compress_rowbatches | TRUE | N/A | The boolean value to control if to compress the row batches in RPCs between BEs. This configuration item is used for the data transmission between query layers. The value true indicates to compress the row batches. The value false indicates not to compress the row batches. |
 | serialize_batch | FALSE | N/A | The boolean value to control if to serialize the row batches in RPCs between BEs. This configuration item is used for the data transmission between query layers. The value true indicates to serialize the row batches. The value false indicates not to serialize the row batches. |
-| storage_root_path | ${STARROCKS_HOME}/storage | N/A | The directory of the storage volume. Multiple volumes are separated by semicolon (;), for example, /data1,medium:hdd;/data2,medium:ssd. If the storage medium is SSD, add `ssd` at the end of the directory. If the storage medium is HDD, add `hdd` at the end of the directory. |
+| storage_root_path | ${STARROCKS_HOME}/storage | N/A | The directory and medium of the storage volume. Multiple volumes are separated by semicolon (;). If the storage medium is SSD, add `,medium:ssd` at the end of the directory. If the storage medium is HDD, add `,medium:hdd` at the end of the directory. Example: `/data1,medium:hdd;/data2,medium:ssd`. |
 | max_tablet_num_per_shard | 1024 | N/A | The maximum number of tablets in each shard. This configuration item is used to restrict the number of tablet child directories under each storage directory. |
 | max_garbage_sweep_interval | 3600 | Second | The maximum time interval for garbage collection on storage volumes. |
 | min_garbage_sweep_interval | 180 | Second | The minimum time interval for garbage collection on storage volumes. |

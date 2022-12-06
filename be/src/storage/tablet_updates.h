@@ -229,6 +229,9 @@ public:
     Status get_rowsets_for_incremental_snapshot(const std::vector<int64_t>& missing_version_ranges,
                                                 std::vector<RowsetSharedPtr>& rowsets);
 
+    void to_rowset_meta_pb(const std::vector<RowsetMetaSharedPtr>& rowset_metas,
+                           std::vector<RowsetMetaPB>& rowset_metas_pb);
+
 private:
     friend class Tablet;
     friend class PrimaryIndex;
