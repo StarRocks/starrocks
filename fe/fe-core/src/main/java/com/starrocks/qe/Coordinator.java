@@ -1276,7 +1276,13 @@ public class Coordinator {
 
                 if (dopAdaptionEnabled) {
                     Preconditions.checkArgument(leftMostNode instanceof ExchangeNode);
-                    maxParallelism = hostSet.size();
+                    // If the fragment use instance parallel, maxParallelism should be still equal to
+                    // the max total degree of parallelism.
+                    if (fragment.getParallelExecNum() > 1) {
+                        Preconditions.checkState(fragment.getPipelineDop() == 1);
+                    } else {
+                        maxParallelism = hostSet.size();
+                    }
                 }
 
                 // AddAll() soft copy()
