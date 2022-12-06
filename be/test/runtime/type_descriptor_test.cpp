@@ -459,9 +459,13 @@ TEST_F(TypeDescriptorTest, test_from_protobuf) {
         t_pb.mutable_types(0)->set_type(TTypeNodeType::STRUCT);
         t_pb.mutable_types(0)->add_struct_fields()->set_name("a");
         t_pb.mutable_types(0)->add_struct_fields()->set_name("b");
+        t_pb.mutable_types(0)->add_selected_fields(true);
+        t_pb.mutable_types(0)->add_selected_fields(true);
         t_pb.mutable_types(1)->set_type(TTypeNodeType::SCALAR);
         t_pb.mutable_types(1)->mutable_scalar_type()->set_type(TPrimitiveType::INT);
         t_pb.mutable_types(2)->set_type(TTypeNodeType::MAP);
+        t_pb.mutable_types(2)->add_selected_fields(true);
+        t_pb.mutable_types(2)->add_selected_fields(true);
         t_pb.mutable_types(3)->set_type(TTypeNodeType::SCALAR);
         t_pb.mutable_types(3)->mutable_scalar_type()->set_type(TPrimitiveType::INT);
         t_pb.mutable_types(4)->set_type(TTypeNodeType::SCALAR);
@@ -470,7 +474,13 @@ TEST_F(TypeDescriptorTest, test_from_protobuf) {
         auto t = TypeDescriptor::from_protobuf(t_pb);
         ASSERT_TRUE(t.is_complex_type());
         ASSERT_FALSE(t.is_collection_type());
+<<<<<<< HEAD
         ASSERT_EQ(PrimitiveType::TYPE_STRUCT, t.type);
+=======
+        ASSERT_EQ(LogicalType::TYPE_STRUCT, t.type);
+        ASSERT_TRUE(t.selected_fields[0]);
+        ASSERT_TRUE(t.selected_fields[1]);
+>>>>>>> b11e6ef06 ([BugFix] Make Struct create all subfield columns to prevent BE crash (#14593))
         ASSERT_EQ(2, t.field_names.size());
         ASSERT_EQ("a", t.field_names[0]);
         ASSERT_EQ("b", t.field_names[1]);
@@ -478,8 +488,15 @@ TEST_F(TypeDescriptorTest, test_from_protobuf) {
         ASSERT_EQ(PrimitiveType::TYPE_INT, t.children[0].type);
         ASSERT_EQ(PrimitiveType::TYPE_MAP, t.children[1].type);
         ASSERT_EQ(2, t.children[1].children.size());
+<<<<<<< HEAD
         ASSERT_EQ(PrimitiveType::TYPE_INT, t.children[1].children[0].type);
         ASSERT_EQ(PrimitiveType::TYPE_DOUBLE, t.children[1].children[1].type);
+=======
+        ASSERT_TRUE(t.children[1].selected_fields[0]);
+        ASSERT_TRUE(t.children[1].selected_fields[1]);
+        ASSERT_EQ(LogicalType::TYPE_INT, t.children[1].children[0].type);
+        ASSERT_EQ(LogicalType::TYPE_DOUBLE, t.children[1].children[1].type);
+>>>>>>> b11e6ef06 ([BugFix] Make Struct create all subfield columns to prevent BE crash (#14593))
     }
     // struct{}
     {
@@ -588,6 +605,9 @@ TEST_F(TypeDescriptorTest, test_to_protobuf) {
         t.children[1].children[1].scale = 2;
         t.children[1].children[2].type = PrimitiveType::TYPE_VARCHAR;
         t.children[1].children[2].len = 10;
+        t.children[1].selected_fields.emplace_back(true);
+        t.children[1].selected_fields.emplace_back(true);
+        t.children[1].selected_fields.emplace_back(true);
 
         PTypeDesc t_pb = t.to_protobuf();
         ASSERT_EQ(6, t_pb.types().size());
