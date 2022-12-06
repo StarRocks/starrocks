@@ -212,7 +212,7 @@
         + [DATE](./sql-reference/sql-statements/data-types/DATE.md)
         + [DATETIME](./sql-reference/sql-statements/data-types/DATETIME.md)
       + Others
-        + [ARRAY](./sql-reference/sql-statements/data-types/ARRAY.md)
+        + [ARRAY](./sql-reference/sql-statements/data-types/Array.md)
         + [JSON](./sql-reference/sql-statements/data-types/JSON.md)
         + [BITMAP](./sql-reference/sql-statements/data-types/BITMAP.md)
         + [HLL](./sql-reference/sql-statements/data-types/HLL.md)
