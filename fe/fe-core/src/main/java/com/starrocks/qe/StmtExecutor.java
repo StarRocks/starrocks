@@ -1124,9 +1124,9 @@ public class StmtExecutor {
             }
             context.setState(e.getQueryState());
         } catch (Throwable e) {
-            // Maybe our bug
+            // Maybe our bug or wrong input parematers
             String sql = AstToStringBuilder.toString(parsedStmt);
-            if (sql == null) {
+            if (sql == null || sql.isEmpty()) {
                 sql = originStmt.originStmt;
             }
             LOG.warn("DDL statement (" + sql + ") process failed.", e);
