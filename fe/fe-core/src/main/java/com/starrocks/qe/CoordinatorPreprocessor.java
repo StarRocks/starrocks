@@ -1338,7 +1338,7 @@ public class CoordinatorPreprocessor {
     // execution parameters for a single fragment,
     // per-fragment can have multiple FInstanceExecParam,
     // used to assemble TPlanFragmentExecParas
-    protected class FragmentExecParams {
+    public class FragmentExecParams {
         public PlanFragment fragment;
         public List<TPlanFragmentDestination> destinations = Lists.newArrayList();
         public Map<Integer, Integer> perExchNumSenders = Maps.newHashMap();
@@ -1418,8 +1418,7 @@ public class CoordinatorPreprocessor {
                 if (isEnablePipelineEngine) {
                     commonParams.setIs_pipeline(true);
                     commonParams.getQuery_options().setBatch_size(SessionVariable.PIPELINE_BATCH_SIZE);
-                    commonParams.setEnable_shared_scan(
-                            sessionVariable.isEnableSharedScan() && fragment.isEnableSharedScan());
+                    commonParams.setEnable_shared_scan(sessionVariable.isEnableSharedScan());
                     commonParams.params.setEnable_exchange_pass_through(sessionVariable.isEnableExchangePassThrough());
                     commonParams.params.setEnable_exchange_perf(sessionVariable.isEnableExchangePerf());
 
@@ -1549,10 +1548,10 @@ public class CoordinatorPreprocessor {
             }
         }
 
-        List<TExecPlanFragmentParams> toThrift(Set<TUniqueId> inFlightInstanceIds,
-                                               TDescriptorTable descTable, Set<Long> dbIds,
-                                               boolean enablePipelineEngine, int accTabletSinkDop,
-                                               int tabletSinkTotalDop) throws Exception {
+        public List<TExecPlanFragmentParams> toThrift(Set<TUniqueId> inFlightInstanceIds,
+                                                      TDescriptorTable descTable, Set<Long> dbIds,
+                                                      boolean enablePipelineEngine, int accTabletSinkDop,
+                                                      int tabletSinkTotalDop) throws Exception {
             boolean forceSetTableSinkDop = fragment.forceSetTableSinkDop();
             setBucketSeqToInstanceForRuntimeFilters();
 
