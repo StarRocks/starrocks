@@ -10,7 +10,17 @@ Broker Load also supports data transformation at data loading. For more informat
 
 ## Background information
 
-Broker Load requires a broker to set up a connection between your StarRocks cluster and your storage system. A broker is an independent, stateless service that is integrated with a file-system interface. With a broker, StarRocks can access and read data files that are stored in your storage system, and can use its own computing resources to pre-process and load the data of these data files.
+In StarRocks v2.4 and earlier, Broker Load depends on brokers to set up connections between your StarRocks cluster and your storage system. When you create a Broker Load job, you need to input `WITH BROKER "<broker_name>"` to specify the broker group you want to use. A broker is an independent, stateless service that is integrated with a file-system interface. With brokers, StarRocks can access and read data files that are stored in your storage system, and can use its own computing resources to pre-process and load the data of these data files.
+
+From StarRocks v2.5 onwards, Broker Load no longer needs to depend on brokers to set up connections between your StarRocks cluster and your storage system. When you create a Broker Load job, you no longer need to specify a broker group, but you still need to retain the `WITH BROKER` keyword.
+
+> **NOTE**
+>
+> Loading without brokers may not work in certain circumstances, such as when you configure multiple HA systems or have multiple Kerberos configurations. In this situation, you can still load data by using brokers.
+
+If you need to load data by using brokers, make sure that brokers are deployed in your StarRocks cluster.
+
+You can use the [SHOW BROKER](../sql-reference/sql-statements/Administration/SHOW%20BROKER.md) statement to check for brokers that are deployed in your StarRocks cluster. If no brokers are deployed, you must deploy brokers by following the instructions provided in [Deploy a broker](../administration/deploy_broker.md).
 
 ## Supported data file formats
 
@@ -57,6 +67,8 @@ The following figure shows the workflow of a Broker Load job.
 ### Create a load job
 
 This topic uses CSV as an example to describe how to load data. For information about how to load data in other file formats and about the syntax and parameter descriptions for Broker Load, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
+
+Note that in StarRocks some literals are used as reserved keywords by the SQL language. Do not directly use these keywords in SQL statements. If you want to use such a keyword in an SQL statement, enclose it in a pair of backticks (`). See [Parameter configuration](../sql-reference/sql-statements/keywords.md).
 
 #### Data examples
 
@@ -155,7 +167,7 @@ WITH BROKER "mybroker"
 (
     "fs.s3a.access.key" = "xxxxxxxxxxxxxxxxxxxx",
     "fs.s3a.secret.key" = "yyyyyyyyyyyyyyyyyyyy",
-    "fs.s3a.endpoint" = "s3-ap-northeast-1.amazonaws.com"
+    "fs.s3a.endpoint" = "s3.ap-northeast-1.amazonaws.com"
 )
 ```
 

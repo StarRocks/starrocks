@@ -1329,14 +1329,8 @@ public class PlanFragmentBuilder {
             aggregationNode.setHasNullableGenerateChild();
             aggregationNode.computeStatistics(optExpr.getStatistics());
 
-            if ((node.isOnePhaseAgg() || node.getType().isDistinct())) {
-                if (withLocalShuffle) {
-                    inputFragment.setEnableSharedScan(true);
-                    inputFragment.setAssignScanRangesPerDriverSeq(false);
-                } else {
-                    inputFragment.setEnableSharedScan(false);
-                    inputFragment.setAssignScanRangesPerDriverSeq(true);
-                }
+            if (node.isOnePhaseAgg() || node.isMergedLocalAgg()) {
+                inputFragment.setAssignScanRangesPerDriverSeq(!withLocalShuffle);
             }
 
             inputFragment.setPlanRoot(aggregationNode);
@@ -1685,10 +1679,7 @@ public class PlanFragmentBuilder {
                 context.getFragments().add(leftFragment);
 
                 leftFragment.setPlanRoot(joinNode);
-                if (!rightFragment.getChildren().isEmpty()) {
-                    // right table isn't value operator
-                    leftFragment.addChild(rightFragment.getChild(0));
-                }
+                leftFragment.addChildren(rightFragment.getChildren());
 
                 if (!(joinNode.getChild(1) instanceof ExchangeNode)) {
                     joinNode.setReplicated(true);
@@ -1884,10 +1875,6 @@ public class PlanFragmentBuilder {
 
                     leftFragment.mergeQueryGlobalDicts(rightFragment.getQueryGlobalDicts());
 
-                    if (distributionMode.equals(HashJoinNode.DistributionMode.COLOCATE)) {
-                        leftFragment.setEnableSharedScan(false);
-                    }
-
                     return leftFragment;
                 } else if (distributionMode.equals(JoinNode.DistributionMode.SHUFFLE_HASH_BUCKET)) {
                     setJoinPushDown(joinNode);
@@ -1926,8 +1913,6 @@ public class PlanFragmentBuilder {
                         leftFragment = computeBucketShufflePlanFragment(context, leftFragment,
                                 rightFragment, joinNode);
                     }
-
-                    leftFragment.setEnableSharedScan(false);
 
                     return leftFragment;
                 }
@@ -1989,7 +1974,7 @@ public class PlanFragmentBuilder {
             context.getFragments().add(stayFragment);
 
             stayFragment.setPlanRoot(hashJoinNode);
-            stayFragment.addChild(removeFragment.getChild(0));
+            stayFragment.addChildren(removeFragment.getChildren());
             stayFragment.mergeQueryGlobalDicts(removeFragment.getQueryGlobalDicts());
             return stayFragment;
         }
@@ -2011,7 +1996,7 @@ public class PlanFragmentBuilder {
             context.getFragments().add(stayFragment);
 
             stayFragment.setPlanRoot(hashJoinNode);
-            stayFragment.addChild(removeFragment.getChild(0));
+            stayFragment.addChildren(removeFragment.getChildren());
             stayFragment.mergeQueryGlobalDicts(removeFragment.getQueryGlobalDicts());
             return stayFragment;
         }

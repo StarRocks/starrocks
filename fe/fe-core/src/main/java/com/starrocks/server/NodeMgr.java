@@ -719,6 +719,12 @@ public class NodeMgr {
             if (preUpdateFe == null) {
                 throw new DdlException(String.format("frontend [%s] not found", toBeModifyHost));
             }
+
+            Frontend existFe = getFeByHost(fqdn);
+            if (null != existFe) {
+                throw new DdlException("frontend with host [" + fqdn + "] already exists ");
+            }
+
             // step 1 update the fe information stored in bdb
             BDBHA bdbha = (BDBHA) stateMgr.getHaProtocol();
             bdbha.updateFrontendHostAndPort(preUpdateFe.getNodeName(), fqdn, preUpdateFe.getEditLogPort());
