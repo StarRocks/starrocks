@@ -32,6 +32,7 @@ import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import org.apache.commons.lang.StringUtils;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -178,7 +179,11 @@ public class ScalarOperatorFunctions {
     @ConstantFunction(name = "str_to_date", argTypes = {VARCHAR, VARCHAR}, returnType = DATETIME)
     public static ConstantOperator dateParse(ConstantOperator date, ConstantOperator fmtLiteral) {
         DateTimeFormatterBuilder builder = DateUtils.unixDatetimeFormatBuilder(fmtLiteral.getVarchar(), false);
+<<<<<<< HEAD
 
+=======
+        String dateStr = StringUtils.strip(date.getVarchar(), "\r\n\t ");
+>>>>>>> 9c1c75692 ([Enhancement] replace str_to_date trim (#14598))
         if (HAS_TIME_PART.matcher(fmtLiteral.getVarchar()).matches()) {
             LocalDateTime ldt;
             try {
@@ -202,8 +207,13 @@ public class ScalarOperatorFunctions {
     @ConstantFunction(name = "str2date", argTypes = {VARCHAR, VARCHAR}, returnType = DATE)
     public static ConstantOperator str2Date(ConstantOperator date, ConstantOperator fmtLiteral) {
         DateTimeFormatterBuilder builder = DateUtils.unixDatetimeFormatBuilder(fmtLiteral.getVarchar(), false);
+<<<<<<< HEAD
         LocalDate ld = LocalDate.from(
                 builder.toFormatter().withResolverStyle(ResolverStyle.STRICT).parse(date.getVarchar()));
+=======
+        LocalDate ld = LocalDate.from(builder.toFormatter().withResolverStyle(ResolverStyle.STRICT).parse(
+                StringUtils.strip(date.getVarchar(), "\r\n\t ")));
+>>>>>>> 9c1c75692 ([Enhancement] replace str_to_date trim (#14598))
         return ConstantOperator.createDatetime(ld.atTime(0, 0, 0), Type.DATE);
     }
 
