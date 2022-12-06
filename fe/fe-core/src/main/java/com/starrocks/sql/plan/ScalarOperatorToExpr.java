@@ -424,6 +424,24 @@ public class ScalarOperatorToExpr {
                             ArithmeticExpr.Operator.BITNOT,
                             buildExpr.build(call.getChildren().get(0), context), null);
                     break;
+                case "bit_shift_left":
+                    callExpr = new ArithmeticExpr(
+                            ArithmeticExpr.Operator.BIT_SHIFT_LEFT,
+                            buildExpr.build(call.getChildren().get(0), context),
+                            buildExpr.build(call.getChildren().get(1), context));
+                    break;
+                case "bit_shift_right":
+                    callExpr = new ArithmeticExpr(
+                            ArithmeticExpr.Operator.BIT_SHIFT_RIGHT,
+                            buildExpr.build(call.getChildren().get(0), context),
+                            buildExpr.build(call.getChildren().get(1), context));
+                    break;
+                case "bit_shift_right_logical":
+                    callExpr = new ArithmeticExpr(
+                            ArithmeticExpr.Operator.BIT_SHIFT_RIGHT_LOGICAL,
+                            buildExpr.build(call.getChildren().get(0), context),
+                            buildExpr.build(call.getChildren().get(1), context));
+                    break;
                 // FixMe(kks): InformationFunction shouldn't be CallOperator
                 case "database":
                 case "schema":

@@ -107,6 +107,18 @@ public class ArithmeticExpr extends Expr {
             functionSet.addBuiltin(ScalarFunction.createBuiltinOperator(
                     Operator.INT_DIVIDE.getName(), Lists.newArrayList(t, t), Type.BIGINT));
         }
+        for (Type t : Type.getIntegerTypes()) {
+            functionSet.addBuiltin(ScalarFunction.createBuiltinOperator(
+                    Operator.BIT_SHIFT_LEFT.getName(), Lists.newArrayList(t, Type.BIGINT), t));
+        }
+        for (Type t : Type.getIntegerTypes()) {
+            functionSet.addBuiltin(ScalarFunction.createBuiltinOperator(
+                    Operator.BIT_SHIFT_RIGHT.getName(), Lists.newArrayList(t, Type.BIGINT), t));
+        }
+        for (Type t : Type.getIntegerTypes()) {
+            functionSet.addBuiltin(ScalarFunction.createBuiltinOperator(
+                    Operator.BIT_SHIFT_RIGHT_LOGICAL.getName(), Lists.newArrayList(t, Type.BIGINT), t));
+        }
     }
 
     // cast int128 into decimal128(38, 0).
@@ -252,6 +264,9 @@ public class ArithmeticExpr extends Expr {
             case BITAND:
             case BITOR:
             case BITXOR:
+            case BIT_SHIFT_LEFT:
+            case BIT_SHIFT_RIGHT:
+            case BIT_SHIFT_RIGHT_LOGICAL:
                 result.lhsTargetType = ScalarType.BIGINT;
                 result.rhsTargetType = ScalarType.BIGINT;
                 result.returnType = ScalarType.BIGINT;
@@ -324,6 +339,9 @@ public class ArithmeticExpr extends Expr {
             case BITXOR:
             case BITNOT:
             case INT_DIVIDE:
+            case BIT_SHIFT_LEFT:
+            case BIT_SHIFT_RIGHT:
+            case BIT_SHIFT_RIGHT_LOGICAL:
                 return true;
             default:
                 return false;
@@ -477,7 +495,10 @@ public class ArithmeticExpr extends Expr {
         BITOR("|", "bitor", OperatorPosition.BINARY_INFIX, TExprOpcode.BITOR, false),
         BITXOR("^", "bitxor", OperatorPosition.BINARY_INFIX, TExprOpcode.BITXOR, false),
         BITNOT("~", "bitnot", OperatorPosition.UNARY_PREFIX, TExprOpcode.BITNOT, false),
-        FACTORIAL("!", "factorial", OperatorPosition.UNARY_POSTFIX, TExprOpcode.FACTORIAL, true);
+        FACTORIAL("!", "factorial", OperatorPosition.UNARY_POSTFIX, TExprOpcode.FACTORIAL, true),
+        BIT_SHIFT_LEFT("BITSHIFTLEFT", "bitShiftLeft", OperatorPosition.BINARY_INFIX, TExprOpcode.BIT_SHIFT_LEFT, false),
+        BIT_SHIFT_RIGHT("BITSHIFTRIGHT", "bitShiftRight", OperatorPosition.BINARY_INFIX, TExprOpcode.BIT_SHIFT_RIGHT, false),
+        BIT_SHIFT_RIGHT_LOGICAL("BITSHIFTRIGHTLOGICAL", "bitShiftRightLogical", OperatorPosition.BINARY_INFIX, TExprOpcode.BIT_SHIFT_RIGHT_LOGICAL, false);
 
         private final String description;
         private final String name;

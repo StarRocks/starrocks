@@ -1670,6 +1670,9 @@ valueExpression
         right = valueExpression                                                           #arithmeticBinary
     | left = valueExpression operator = BITAND right = valueExpression                    #arithmeticBinary
     | left = valueExpression operator = BITOR right = valueExpression                     #arithmeticBinary
+    | left = valueExpression operator = BIT_SHIFT_LEFT right = valueExpression              #arithmeticBinary
+    | left = valueExpression operator = BIT_SHIFT_RIGHT right = valueExpression             #arithmeticBinary
+    | left = valueExpression operator = BIT_SHIFT_RIGHT_LOGICAL right = valueExpression     #arithmeticBinary
     ;
 
 primaryExpression
