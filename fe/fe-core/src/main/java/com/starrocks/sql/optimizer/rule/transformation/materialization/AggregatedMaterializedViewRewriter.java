@@ -134,7 +134,6 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
                 normalizeAndReverseProjection(mvProjection, rewriteContext, false);
         boolean isRollup = groupKeyChecker.isRollup();
         if (isRollup && aggregateRewriteChecker.hasDistinct()) {
-
             return null;
         }
         if (isRollup && mvAgg.getProjection() != null) {
@@ -383,8 +382,10 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
             Preconditions.checkState(entry.getValue() instanceof CallOperator);
             CallOperator aggCall = entry.getValue();
             ColumnRefOperator targetColumn = mapping.get(entry.getKey());
+            if (targetColumn == null) {
+                return null;
+            }
             // Aggregate must be CallOperator
-            Preconditions.checkState(targetColumn instanceof ColumnRefOperator);
             CallOperator newAggregate = getRollupAggregate(aggCall, targetColumn);
             if (newAggregate == null) {
                 return null;
@@ -400,7 +401,8 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
     private CallOperator getRollupAggregate(CallOperator aggCall, ColumnRefOperator targetColumn) {
         if (ROLLUP_FUNCTION_MAP.containsKey(aggCall.getFnName())) {
             if (aggCall.getFnName().equals(FunctionSet.COUNT)) {
-                Function sumFn = findArithmeticFunction(aggCall.getFunction().getArgs(), FunctionSet.SUM);
+                Type[] argTypes = {targetColumn.getType()};
+                Function sumFn = findArithmeticFunction(argTypes, FunctionSet.SUM);
                 return new CallOperator(FunctionSet.SUM, aggCall.getFunction().getReturnType(),
                         Lists.newArrayList(targetColumn), sumFn);
             } else {

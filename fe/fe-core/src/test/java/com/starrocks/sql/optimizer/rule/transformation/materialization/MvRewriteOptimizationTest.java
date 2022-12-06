@@ -771,6 +771,25 @@ public class MvRewriteOptimizationTest {
         PlanTestBase.assertContains(plan9, "agg_join_mv_3");
 
         dropMv("test", "agg_join_mv_3");
+
+        createAndRefreshMv("test", "agg_join_mv_4", "create materialized view agg_join_mv_4" +
+                " distributed by hash(`deptno`) as SELECT deptno, count(*) as num from emps group by deptno");
+        String query10 = "select deptno, count(*) from emps group by deptno";
+        String plan10 = getFragmentPlan(query10);
+        PlanTestBase.assertContains(plan10, "agg_join_mv_4");
+
+        String query11 = "select count(*) from emps";
+        String plan11 = getFragmentPlan(query11);
+        PlanTestBase.assertContains(plan11, "agg_join_mv_4");
+        dropMv("test", "agg_join_mv_4");
+
+        createAndRefreshMv("test", "agg_join_mv_5", "create materialized view agg_join_mv_5" +
+                " distributed by hash(`deptno`) as SELECT deptno, count(1) as num from emps group by deptno");
+        String query12 = "select deptno, count(1) from emps group by deptno";
+        String plan12 = getFragmentPlan(query12);
+        PlanTestBase.assertContains(plan12, "agg_join_mv_5");
+
+        dropMv("test", "agg_join_mv_5");
     }
 
     @Test
