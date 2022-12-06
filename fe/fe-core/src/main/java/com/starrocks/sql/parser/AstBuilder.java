@@ -4320,6 +4320,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 return ArithmeticExpr.Operator.BITOR;
             case StarRocksLexer.BITXOR:
                 return ArithmeticExpr.Operator.BITXOR;
+            case StarRocksLexer.BIT_SHIFT_LEFT:
+                return ArithmeticExpr.Operator.BIT_SHIFT_LEFT;
+            case StarRocksLexer.BIT_SHIFT_RIGHT:
+                return ArithmeticExpr.Operator.BIT_SHIFT_RIGHT;
+            case StarRocksLexer.BIT_SHIFT_RIGHT_LOGICAL:
+                return ArithmeticExpr.Operator.BIT_SHIFT_RIGHT_LOGICAL;
         }
 
         throw new UnsupportedOperationException("Unsupported operator: " + operator.getText());

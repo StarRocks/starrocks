@@ -499,6 +499,11 @@ public class ExpressionAnalyzer {
                             commonType = Type.BIGINT;
                         }
                         break;
+                    case BIT_SHIFT_LEFT:
+                    case BIT_SHIFT_RIGHT:
+                    case BIT_SHIFT_RIGHT_LOGICAL:
+                        commonType = t1;
+                        break;
                     default:
                         // the programmer forgot to deal with a case
                         throw unsupportedException("Unknown arithmetic operation " + op + " in: " + node);
