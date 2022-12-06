@@ -579,4 +579,8 @@ int ConnectorScanNode::io_tasks_per_scan_operator() const {
     return config::connector_io_tasks_per_scan_operator;
 }
 
+bool ConnectorScanNode::always_shared_scan() const {
+    return config::connector_scan_node_always_shared_scan;
+}
+
 } // namespace starrocks::vectorized
