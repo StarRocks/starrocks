@@ -302,8 +302,7 @@ public class PlanFragmentBuilder {
         if (ConnectContext.get() == null || !ConnectContext.get().getSessionVariable().isEnableQueryCache()) {
             return false;
         }
-        boolean hasJoinNode = execPlan.getFragments().stream().anyMatch(PlanFragment::hasJoinNode);
-        return !hasJoinNode;
+        return true;
     }
 
     private static ExecPlan finalizeFragments(ExecPlan execPlan, TResultSinkType resultSinkType) {
@@ -323,9 +322,7 @@ public class PlanFragmentBuilder {
         }
 
         if (useQueryCache(execPlan)) {
-            List<PlanFragment> fragmentsWithLeftmostOlapScanNode = execPlan.getFragments().stream()
-                    .filter(PlanFragment::hasOlapScanNode).collect(Collectors.toList());
-            for (PlanFragment fragment : fragmentsWithLeftmostOlapScanNode) {
+            for (PlanFragment fragment : execPlan.getFragments()) {
                 FragmentNormalizer normalizer = new FragmentNormalizer(execPlan, fragment);
                 normalizer.normalize();
             }
@@ -692,6 +689,11 @@ public class PlanFragmentBuilder {
 
             for (ScalarOperator predicate : predicates) {
                 scanNode.getConjuncts().add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
+            }
+
+            for (ScalarOperator predicate : node.getPrunedPartitionPredicates()) {
+                scanNode.getPrunedPartitionPredicates()
+                        .add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
             }
 
             tupleDescriptor.computeMemLayout();
@@ -1667,6 +1669,7 @@ public class PlanFragmentBuilder {
                 // For ScanNode->LocalShuffle->AggNode, we needn't assign scan ranges per driver sequence.
                 inputFragment.setAssignScanRangesPerDriverSeq(!withLocalShuffle);
                 aggregationNode.setWithLocalShuffle(withLocalShuffle);
+                aggregationNode.setIdenticallyDistributed(true);
             }
 
             aggregationNode.getAggInfo().setIntermediateAggrExprs(intermediateAggrExprs);

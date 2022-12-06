@@ -63,6 +63,7 @@ public:
     void set_multilane_operators(MultilaneOperators&& multilane_operators) {
         _multilane_operators = std::move(multilane_operators);
     }
+    void set_scan_operator(pipeline::OperatorRawPtr scan_operator) { _scan_operator = scan_operator; }
 
 private:
     void _update_probe_metrics(int64_t, const std::vector<ChunkPtr>& chunks);
@@ -81,6 +82,7 @@ private:
     PerLaneBuffers _per_lane_buffers;
     ChunkPtr _passthrough_chunk;
     MultilaneOperators _multilane_operators;
+    pipeline::OperatorRawPtr _scan_operator;
     bool _is_input_finished{false};
 
     std::unordered_set<int64_t> _populate_tablets;
