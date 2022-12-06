@@ -16,7 +16,7 @@ Before deploying StarRocks in Docker, make sure the following requirements are s
 
 - **Operating system**
 
-  Your machine MUST be running on Linux. CentOS 7 or later is recommended. 
+  Your machine MUST be running on Linux. CentOS 7 or later is recommended.
 
 - **Software**
 
