@@ -48,8 +48,15 @@
 + Administration
   + Deployment
     + [Deploy StarRocks with StarGo](./administration/stargo.md)
+<<<<<<< HEAD
     + [Build in Docker](./administration/Build_in_docker.md)
     + [Deploy Broker](./administration/deploy_broker.md)
+=======
+    + [Deploy StarRocks in Docker](./administration/deploy_with_docker.md)
+    + [Compile StarRocks](./administration/Build_in_docker.md)
+    + [Deploy and manage CN on Kubernetes with StarRocks Operator](./administration/k8s_operator_cn.md)
+    + [Deploy CN](./administration/deploy_cn.md)
+>>>>>>> 890afd1be ([Doc] Add deploy in Docker (#14708))
     + [Deploy FE cluster with high availability](./administration/Deployment.md)
   + Management
     + [Manage a cluster](./administration/Cluster_administration.md)
