@@ -19,8 +19,8 @@
 #include "column/chunk.h"
 #include "common/config.h"
 #include "fs/fs_util.h"
+#include "storage/lake/filenames.h"
 #include "storage/rowset/segment_writer.h"
-#include "util/uid_util.h"
 
 namespace starrocks::lake {
 
@@ -75,7 +75,7 @@ Status GeneralTabletWriter::reset_segment_writer() {
     if (_schema == nullptr) {
         ASSIGN_OR_RETURN(_schema, _tablet.get_schema());
     }
-    auto name = fmt::format("{}.dat", generate_uuid_string());
+    auto name = random_segment_filename();
     ASSIGN_OR_RETURN(auto of, fs::new_writable_file(_tablet.segment_location(name)));
     SegmentWriterOptions opts;
     auto w = std::make_unique<SegmentWriter>(std::move(of), _seg_id++, _schema.get(), opts);

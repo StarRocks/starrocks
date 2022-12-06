@@ -34,9 +34,21 @@ inline StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const std::
     return fs->new_sequential_file(path);
 }
 
+inline StatusOr<std::unique_ptr<SequentialFile>> new_sequential_file(const SequentialFileOptions& opts,
+                                                                     const std::string& path) {
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(path));
+    return fs->new_sequential_file(opts, path);
+}
+
 inline StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const std::string& path) {
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(path));
     return fs->new_random_access_file(path);
+}
+
+inline StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions& opts,
+                                                                          const std::string& path) {
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(path));
+    return fs->new_random_access_file(opts, path);
 }
 
 inline StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const std::string& path) {

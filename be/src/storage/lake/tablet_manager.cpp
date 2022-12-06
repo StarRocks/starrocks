@@ -270,9 +270,10 @@ Status TabletManager::put_tablet_metadata(const TabletMetadata& metadata) {
     return put_tablet_metadata(std::move(metadata_ptr));
 }
 
-StatusOr<TabletMetadataPtr> TabletManager::load_tablet_metadata(const string& metadata_location) {
+StatusOr<TabletMetadataPtr> TabletManager::load_tablet_metadata(const string& metadata_location, bool fill_cache) {
     std::string read_buf;
-    ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(metadata_location));
+    RandomAccessFileOptions opts{.skip_fill_local_cache = !fill_cache};
+    ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(opts, metadata_location));
     ASSIGN_OR_RETURN(auto size, rf->get_size());
     if (UNLIKELY(size > std::numeric_limits<int>::max())) {
         return Status::Corruption("file size exceeded the int range");
@@ -296,7 +297,7 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(const string& pat
     if (auto ptr = lookup_tablet_metadata(path); ptr != nullptr) {
         return ptr;
     }
-    ASSIGN_OR_RETURN(auto ptr, load_tablet_metadata(path));
+    ASSIGN_OR_RETURN(auto ptr, load_tablet_metadata(path, fill_cache));
     if (fill_cache) {
         auto value_ptr = std::make_unique<CacheValue>(ptr);
         bool inserted = fill_metacache(path, value_ptr.release(), static_cast<int>(ptr->SpaceUsedLong()));
@@ -332,9 +333,10 @@ StatusOr<TabletMetadataIter> TabletManager::list_tablet_metadata(int64_t tablet_
     return TabletMetadataIter{this, std::move(objects)};
 }
 
-StatusOr<TxnLogPtr> TabletManager::load_txn_log(const std::string& txn_log_path) {
+StatusOr<TxnLogPtr> TabletManager::load_txn_log(const std::string& txn_log_path, bool fill_cache) {
     std::string read_buf;
-    ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(txn_log_path));
+    RandomAccessFileOptions opts{.skip_fill_local_cache = !fill_cache};
+    ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(opts, txn_log_path));
     ASSIGN_OR_RETURN(auto size, rf->get_size());
     if (UNLIKELY(size > std::numeric_limits<int>::max())) {
         return Status::Corruption("file size exceeded the int range");
@@ -354,7 +356,7 @@ StatusOr<TxnLogPtr> TabletManager::get_txn_log(const std::string& path, bool fil
     if (auto ptr = lookup_txn_log(path); ptr != nullptr) {
         return ptr;
     }
-    ASSIGN_OR_RETURN(auto ptr, load_txn_log(path));
+    ASSIGN_OR_RETURN(auto ptr, load_txn_log(path, fill_cache));
     if (fill_cache) {
         auto value_ptr = std::make_unique<CacheValue>(ptr);
         bool inserted = fill_metacache(path, value_ptr.release(), static_cast<int>(ptr->SpaceUsedLong()));
@@ -777,6 +779,10 @@ Status TabletManager::delete_tablet_metadata_lock(int64_t tablet_id, int64_t ver
     auto location = tablet_metadata_lock_location(tablet_id, version, expire_time);
     auto st = fs::delete_file(location);
     return st.is_not_found() ? Status::OK() : st;
+}
+
+std::set<int64_t> TabletManager::owned_tablets() {
+    return _location_provider->owned_tablets();
 }
 
 void TabletManager::start_gc() {
