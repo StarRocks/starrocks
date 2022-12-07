@@ -26,7 +26,7 @@ public:
     FileMetaData() = default;
     ~FileMetaData() = default;
 
-    Status init(const tparquet::FileMetaData& t_metadata);
+    Status init(const tparquet::FileMetaData& t_metadata, bool case_sensitive);
 
     uint64_t num_rows() const { return _num_rows; }
 
