@@ -194,7 +194,9 @@ Status SchemaDescriptor::map_to_field(const std::vector<tparquet::SchemaElement>
     auto& key_schema = t_schemas[pos + 2];
     // when key type is char or varchar in hive, not string
     // the real type is BYTE_ARRAY which is OPTIONAL
-    if ((!is_required(key_schema)) && (key_schema.type != tparquet::Type::type::BYTE_ARRAY)) {
+    // when key type is decimal, the real type is FIXED_LEN_BYTE_ARRAY which is OPTIONAL
+    if ((!is_required(key_schema)) && (key_schema.type != tparquet::Type::type::BYTE_ARRAY) &&
+        (key_schema.type != tparquet::Type::type::FIXED_LEN_BYTE_ARRAY)) {
         return Status::InvalidArgument("key in map group must be required");
     }
 
