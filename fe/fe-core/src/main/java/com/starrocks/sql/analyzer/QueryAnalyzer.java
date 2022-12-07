@@ -15,7 +15,6 @@
 package com.starrocks.sql.analyzer;
 
 import com.clearspring.analytics.util.Lists;
-import com.google.common.base.Predicate;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
@@ -404,9 +403,7 @@ public class QueryAnalyzer {
                     throw new SemanticException("WHERE clause must evaluate to a boolean: actual type %s",
                             joinEqual.getType());
                 }
-                if (joinEqual.contains((Predicate<Expr>) node -> !node.getType().canJoinOn())) {
-                    throw new SemanticException(Type.ONLY_METRIC_TYPE_ERROR_MSG);
-                }
+                checkJoinEqual(joinEqual);
             } else {
                 if (join.getJoinOp().isOuterJoin() || join.getJoinOp().isSemiAntiJoin()) {
                     throw new SemanticException(join.getJoinOp() + " requires an ON or USING clause.");
@@ -777,5 +774,19 @@ public class QueryAnalyzer {
 
     private void analyzeExpression(Expr expr, AnalyzeState analyzeState, Scope scope) {
         ExpressionAnalyzer.analyzeExpression(expr, analyzeState, scope, session);
+    }
+
+    public static void checkJoinEqual(Expr expr)  {
+        if (expr instanceof BinaryPredicate) {
+            for (Expr child : expr.getChildren()) {
+                if (!child.getType().canJoinOn()) {
+                    throw new SemanticException(Type.ONLY_METRIC_TYPE_ERROR_MSG);
+                }
+            }
+        } else {
+            for (Expr child : expr.getChildren()) {
+                checkJoinEqual(child);
+            }
+        }
     }
 }
