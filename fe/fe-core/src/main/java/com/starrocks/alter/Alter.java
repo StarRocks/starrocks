@@ -604,7 +604,8 @@ public class Alter {
                 Preconditions.checkState(properties.containsKey(PropertyAnalyzer.PROPERTIES_INMEMORY) ||
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX) ||
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE) ||
-                        properties.containsKey(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM));
+                        properties.containsKey(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM) ||
+                        properties.containsKey(PropertyAnalyzer.PROPERTIES_XC_MAC_ACCESS_LABEL));
 
                 OlapTable olapTable = (OlapTable) db.getTable(tableName);
                 if (olapTable.isLakeTable()) {
@@ -623,6 +624,9 @@ public class Alter {
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE)) {
                     ((SchemaChangeHandler) schemaChangeHandler).updateTableMeta(db, tableName, properties,
                             TTabletMetaType.REPLICATED_STORAGE);
+                } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_XC_MAC_ACCESS_LABEL)) {
+                    ((SchemaChangeHandler) schemaChangeHandler).updateTableMeta(db, tableName, properties,
+                            TTabletMetaType.MAC_ACCESS_LABEL);
                 }
             } else {
                 throw new DdlException("Invalid alter opertion: " + alterClause.getOpType());

@@ -286,7 +286,8 @@ enum TTabletMetaType {
     INMEMORY,
     ENABLE_PERSISTENT_INDEX,
     WRITE_QUORUM,
-    REPLICATED_STORAGE
+    REPLICATED_STORAGE,
+    MAC_ACCESS_LABEL
 }
 
 struct TTabletMetaInfo {

@@ -181,6 +181,16 @@ public class AlterTableStatementAnalyzer {
                 clause.setOpType(AlterOpType.MODIFY_TABLE_PROPERTY_SYNC);
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_TABLET_TYPE)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Alter tablet type not supported");
+            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_XC_MAC_ACCESS_LABEL)) {
+                String label = properties.get(PropertyAnalyzer.PROPERTIES_XC_MAC_ACCESS_LABEL);
+                // for xc purpose only
+                if (!label.equalsIgnoreCase("secret") && !label.equalsIgnoreCase("top_secret") &&
+                        !label.equalsIgnoreCase("normal")) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                            "the value of mac_access_label should be 'top_secret' or 'secret' or 'normal'");
+                }
+                clause.setNeedTableStable(false);
+                clause.setOpType(AlterOpType.MODIFY_TABLE_PROPERTY_SYNC);
             } else {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Unknown table property: " + properties.keySet());
             }

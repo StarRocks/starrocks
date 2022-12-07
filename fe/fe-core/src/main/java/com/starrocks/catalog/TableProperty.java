@@ -103,6 +103,8 @@ public class TableProperty implements Writable, GsonPostProcessable {
     // the default disable replicated storage
     private boolean enableReplicatedStorage = false;
 
+    private String macAccessLabel = "";
+
     // 1. This table has been deleted. if hasDelete is false, the BE segment must don't have deleteConditions.
     //    If hasDelete is true, the BE segment maybe have deleteConditions because compaction.
     // 2. Before checkpoint, we relay delete job journal log to persist.
@@ -149,6 +151,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
                 break;
             case OperationType.OP_MODIFY_REPLICATED_STORAGE:
                 buildReplicatedStorage();
+                break;
+            case OperationType.OP_MODIFY_MAC_ACCESS_LABEL:
+                buildMacAccessLabel();
                 break;
             default:
                 break;
@@ -247,6 +252,11 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
+    public TableProperty buildMacAccessLabel() {
+        macAccessLabel = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_XC_MAC_ACCESS_LABEL, "");
+        return this;
+    }
+
     public TableProperty buildEnablePersistentIndex() {
         enablePersistentIndex = Boolean.parseBoolean(
                 properties.getOrDefault(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, "false"));
@@ -271,6 +281,11 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public Short getReplicationNum() {
         return replicationNum;
+    }
+
+    public String getMacAccessLabel() {
+        macAccessLabel = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_XC_MAC_ACCESS_LABEL, "");
+        return macAccessLabel;
     }
 
     public void setPartitionTTLNumber(int partitionTTLNumber) {

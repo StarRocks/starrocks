@@ -1793,7 +1793,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 } catch (UserException e) {
                     throw new DdlException(e.getMessage());
                 }
-                
+
                 CreateReplicaTask task = new CreateReplicaTask(
                         primaryBackendId,
                         dbId,
@@ -2136,6 +2136,13 @@ public class LocalMetastore implements ConnectorMetadata {
         // replicated storage
         olapTable.setEnableReplicatedStorage(
                 PropertyAnalyzer.analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE, false));
+
+        // mac access label
+        try {
+            olapTable.setMacAccessLabel(PropertyAnalyzer.analyzeMacAccessLabel(properties));
+        } catch (AnalysisException e) {
+            throw new DdlException(e.getMessage());
+        }
 
         TTabletType tabletType = TTabletType.TABLET_TYPE_DISK;
         try {
@@ -3337,13 +3344,13 @@ public class LocalMetastore implements ConnectorMetadata {
                         .put(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT, String.valueOf(limit));
                 materializedView.getTableProperty().setAutoRefreshPartitionsLimit(limit);
             }
-            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER))  {
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)) {
                 int number = PropertyAnalyzer.analyzePartitionRefreshNumber(properties);
                 materializedView.getTableProperty().getProperties()
                         .put(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER, String.valueOf(number));
                 materializedView.getTableProperty().setPartitionRefreshNumber(number);
             }
-            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES))  {
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)) {
                 List<TableName> tables = PropertyAnalyzer.analyzeExcludedTriggerTables(properties, materializedView);
                 StringBuilder tableSb = new StringBuilder();
                 for (int i = 1; i <= tables.size(); i++) {
@@ -3537,7 +3544,8 @@ public class LocalMetastore implements ConnectorMetadata {
             LiteralExpr startExpr = sortedRange.get(partitionNum - limit).lowerEndpoint().getKeys().get(0);
             LiteralExpr endExpr = sortedRange.get(partitionNum - 1).upperEndpoint().getKeys().get(0);
             String partitionStart = AnalyzerUtils.parseLiteralExprToDateString(startExpr, 0);
-            String partitionEnd = AnalyzerUtils.parseLiteralExprToDateString(endExpr, 1);;
+            String partitionEnd = AnalyzerUtils.parseLiteralExprToDateString(endExpr, 1);
+            ;
             HashMap<String, String> taskRunProperties = new HashMap<>();
             taskRunProperties.put(TaskRun.PARTITION_START, partitionStart);
             taskRunProperties.put(TaskRun.PARTITION_END, partitionEnd);
@@ -3967,6 +3975,22 @@ public class LocalMetastore implements ConnectorMetadata {
         editLog.logModifyReplicatedStorage(info);
     }
 
+    public void modifyMacAccessLabel(Database db, OlapTable table, Map<String, String> properties) {
+        Preconditions.checkArgument(db.isWriteLockHeldByCurrentThread());
+        TableProperty tableProperty = table.getTableProperty();
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(properties);
+            table.setTableProperty(tableProperty);
+        } else {
+            tableProperty.modifyTableProperties(properties);
+        }
+        tableProperty.buildMacAccessLabel();
+
+        ModifyTablePropertyOperationLog info =
+                new ModifyTablePropertyOperationLog(db.getId(), table.getId(), properties);
+        editLog.logModifyMacAccessLabel(info);
+    }
+
     public void modifyTableMeta(Database db, OlapTable table, Map<String, String> properties,
                                 TTabletMetaType metaType) {
         if (metaType == TTabletMetaType.INMEMORY) {
@@ -3977,6 +4001,8 @@ public class LocalMetastore implements ConnectorMetadata {
             modifyTableWriteQuorum(db, table, properties);
         } else if (metaType == TTabletMetaType.REPLICATED_STORAGE) {
             modifyTableReplicatedStorage(db, table, properties);
+        } else if (metaType == TTabletMetaType.MAC_ACCESS_LABEL) {
+            modifyMacAccessLabel(db, table, properties);
         }
     }
 

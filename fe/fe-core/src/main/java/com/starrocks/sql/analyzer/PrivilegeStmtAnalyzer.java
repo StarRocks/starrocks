@@ -13,6 +13,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeNameFormat;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.AuthPlugin;
@@ -123,7 +124,7 @@ public class PrivilegeStmtAnalyzer {
             }
 
             // parse privilege actions to PrivBitSet
-            PrivBitSet privs = getPrivBitSet(stmt.getPrivList());
+            PrivBitSet privs = getPrivBitSet(stmt.getPrivList(), stmt);
             String privType = stmt.getPrivType();
             if (privType.equals("TABLE") || privType.equals("DATABASE")) {
                 if (stmt.getPrivilegeObjectNameTokensList().size() != 1) {
@@ -152,13 +153,25 @@ public class PrivilegeStmtAnalyzer {
         }
 
         @NotNull
-        private static PrivBitSet getPrivBitSet(List<String> privList) {
+        private static PrivBitSet getPrivBitSet(List<String> privList, BaseGrantRevokePrivilegeStmt stmt) {
             if (privList.isEmpty()) {
                 throw new SemanticException("No privileges in grant statement.");
             }
             PrivBitSet privs = PrivBitSet.of();
             for (String privStr : privList) {
                 AccessPrivilege accessPrivilege;
+                // for xc only
+                if (stmt.getPrivType().equals("DATABASE") &&
+                        stmt.getPrivilegeObjectNameTokensList().get(0).get(0).equalsIgnoreCase(
+                                PropertyAnalyzer.PROPERTIES_XC_MAC_ACCESS_LABEL)) {
+                    if (privStr.equalsIgnoreCase("normal")) {
+                        privStr = "CREATE_PRIV";
+                    } else if (privStr.equalsIgnoreCase("secret")) {
+                        privStr = "ALTER_PRIV";
+                    } else if (privStr.equalsIgnoreCase("top_secret")) {
+                        privStr = "DROP_PRIV";
+                    }
+                }
                 try {
                     accessPrivilege = AccessPrivilege.valueOf(privStr);
                 } catch (IllegalArgumentException e) {
@@ -206,7 +219,11 @@ public class PrivilegeStmtAnalyzer {
             if (privilegeObjectList.size() == 1) {
                 tablePattern = new TablePattern(privilegeObjectList.get(0), "*");
             } else {
-                tablePattern = new TablePattern(privilegeObjectList.get(0), privilegeObjectList.get(1));
+                String db = privilegeObjectList.get(0);
+                if (db.equalsIgnoreCase(PropertyAnalyzer.PROPERTIES_XC_MAC_ACCESS_LABEL)) {
+                    db = PropertyAnalyzer.PROPERTIES_XC_MAC_ACCESS_LABEL;
+                }
+                tablePattern = new TablePattern(db, privilegeObjectList.get(1));
             }
             try {
                 tablePattern.analyze();

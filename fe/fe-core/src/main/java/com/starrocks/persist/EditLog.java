@@ -715,7 +715,8 @@ public class EditLog {
                 case OperationType.OP_MODIFY_REPLICATION_NUM:
                 case OperationType.OP_MODIFY_WRITE_QUORUM:
                 case OperationType.OP_MODIFY_REPLICATED_STORAGE:
-                case OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX: {
+                case OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX:
+                case OperationType.OP_MODIFY_MAC_ACCESS_LABEL: {
                     ModifyTablePropertyOperationLog modifyTablePropertyOperationLog =
                             (ModifyTablePropertyOperationLog) journal.getData();
                     globalStateMgr.replayModifyTableProperty(opCode, modifyTablePropertyOperationLog);
@@ -1453,6 +1454,10 @@ public class EditLog {
 
     public void logModifyReplicatedStorage(ModifyTablePropertyOperationLog info) {
         logEdit(OperationType.OP_MODIFY_REPLICATED_STORAGE, info);
+    }
+
+    public void logModifyMacAccessLabel(ModifyTablePropertyOperationLog info) {
+        logEdit(OperationType.OP_MODIFY_MAC_ACCESS_LABEL, info);
     }
 
     public void logReplaceTempPartition(ReplacePartitionOperationLog info) {
