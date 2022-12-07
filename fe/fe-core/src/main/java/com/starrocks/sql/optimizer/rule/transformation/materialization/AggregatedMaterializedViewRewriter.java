@@ -1,4 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
@@ -134,7 +147,6 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
                 normalizeAndReverseProjection(mvProjection, rewriteContext, false);
         boolean isRollup = groupKeyChecker.isRollup();
         if (isRollup && aggregateRewriteChecker.hasDistinct()) {
-
             return null;
         }
         if (isRollup && mvAgg.getProjection() != null) {
@@ -383,8 +395,10 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
             Preconditions.checkState(entry.getValue() instanceof CallOperator);
             CallOperator aggCall = entry.getValue();
             ColumnRefOperator targetColumn = mapping.get(entry.getKey());
+            if (targetColumn == null) {
+                return null;
+            }
             // Aggregate must be CallOperator
-            Preconditions.checkState(targetColumn instanceof ColumnRefOperator);
             CallOperator newAggregate = getRollupAggregate(aggCall, targetColumn);
             if (newAggregate == null) {
                 return null;
@@ -400,7 +414,8 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
     private CallOperator getRollupAggregate(CallOperator aggCall, ColumnRefOperator targetColumn) {
         if (ROLLUP_FUNCTION_MAP.containsKey(aggCall.getFnName())) {
             if (aggCall.getFnName().equals(FunctionSet.COUNT)) {
-                Function sumFn = findArithmeticFunction(aggCall.getFunction().getArgs(), FunctionSet.SUM);
+                Type[] argTypes = {targetColumn.getType()};
+                Function sumFn = findArithmeticFunction(argTypes, FunctionSet.SUM);
                 return new CallOperator(FunctionSet.SUM, aggCall.getFunction().getReturnType(),
                         Lists.newArrayList(targetColumn), sumFn);
             } else {

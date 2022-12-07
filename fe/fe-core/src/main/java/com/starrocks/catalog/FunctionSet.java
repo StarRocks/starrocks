@@ -1,4 +1,17 @@
-// This file is made available under Elastic License 2.0.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/catalog/FunctionSet.java
 
@@ -293,6 +306,9 @@ public class FunctionSet {
     public static final String BITNOT = "bitnot";
     public static final String BITOR = "bitor";
     public static final String BITXOR = "bitxor";
+    public static final String BIT_SHIFT_LEFT = "bit_shift_left";
+    public static final String BIT_SHIFT_RIGHT = "bit_shift_right";
+    public static final String BIT_SHIFT_RIGHT_LOGICAL = "bit_shift_right_logical";
 
     // Hash functions:
     public static final String MURMUR_HASH3_32 = "murmur_hash3_32";

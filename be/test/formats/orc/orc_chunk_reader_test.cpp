@@ -4,14 +4,14 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//      https://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-//
+
 #include "formats/orc/orc_chunk_reader.h"
 
 #include <gtest/gtest.h>
@@ -1828,17 +1828,22 @@ TEST_F(OrcChunkReaderTest, TestReadStructArrayMap) {
                 "[[1->{c21: NULL, c22: 'hi1'}], [5->{c21: NULL, c22: 'p4'}], [9->{c21: NULL, c22: 'p5'}]]]",
                 result->debug_row(0));
         EXPECT_EQ(
-                "[2, [{c11: 3, c12: ['danny2', 'Smith3']}, {c11: 5, c12: ['poal', 'alan']}], [[2->{c21: NULL, c22: 'hi2'}], "
+                "[2, [{c11: 3, c12: ['danny2', 'Smith3']}, {c11: 5, c12: ['poal', 'alan']}], [[2->{c21: NULL, c22: "
+                "'hi2'}], "
                 "[6->{c21: NULL, c22: 'p5'}]]]",
                 result->debug_row(1));
-        EXPECT_EQ("[3, [{c11: 4, c12: ['danny3']}, {c11: 6, c12: ['poal']}], [[3->{c21: NULL, c22: 'hi3'}], [7->{c21: NULL, c22: 'p6'}]]]",
-                  result->debug_row(2));
         EXPECT_EQ(
-                "[4, [{c11: 5, c12: ['danny4', 'Smith5']}, {c11: 7, c12: ['poal', 'alan']}], [[4->{c21: NULL, c22: 'hi4'}], "
+                "[3, [{c11: 4, c12: ['danny3']}, {c11: 6, c12: ['poal']}], [[3->{c21: NULL, c22: 'hi3'}], [7->{c21: "
+                "NULL, c22: 'p6'}]]]",
+                result->debug_row(2));
+        EXPECT_EQ(
+                "[4, [{c11: 5, c12: ['danny4', 'Smith5']}, {c11: 7, c12: ['poal', 'alan']}], [[4->{c21: NULL, c22: "
+                "'hi4'}], "
                 "[8->{c21: NULL, c22: 'p7'}]]]",
                 result->debug_row(3));
         EXPECT_EQ(
-                "[5, [{c11: 6, c12: ['danny4']}, {c11: 7, c12: ['poal', 'alan']}], [[5->{c21: NULL, c22: 'hi4'}], [9->{c21: NULL, c22: "
+                "[5, [{c11: 6, c12: ['danny4']}, {c11: 7, c12: ['poal', 'alan']}], [[5->{c21: NULL, c22: 'hi4'}], "
+                "[9->{c21: NULL, c22: "
                 "'p7'}]]]",
                 result->debug_row(4));
     }

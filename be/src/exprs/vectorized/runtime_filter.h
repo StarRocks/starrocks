@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-// http://www.apache.org/licenses/LICENSE-2.0
+//     https://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -328,11 +328,6 @@ public:
     CppType max_value() const { return _max; }
 
     bool test_data(CppType value) const {
-        if constexpr (!IsSlice<CppType>) {
-            if (value < _min || value > _max) {
-                return false;
-            }
-        }
         size_t hash = compute_hash(value);
         return _bf.test_hash(hash);
     }
@@ -341,11 +336,6 @@ public:
         static constexpr uint32_t BUCKET_ABSENT = 2147483647;
         if (shuffle_hash == BUCKET_ABSENT) {
             return false;
-        }
-        if constexpr (!IsSlice<CppType>) {
-            if (value < _min || value > _max) {
-                return false;
-            }
         }
         // module has been done outside, so actually here is bucket idx.
         const uint32_t bucket_idx = shuffle_hash;
@@ -435,6 +425,16 @@ public:
         }
     }
 
+    void evaluate_min_max(const CppType* values, uint8_t* selection, size_t size) const {
+        if constexpr (!IsSlice<CppType>) {
+            for (size_t i = 0; i < size; i++) {
+                selection[i] = (values[i] >= _min && values[i] <= _max);
+            }
+        } else {
+            memset(selection, 0x1, size);
+        }
+    }
+
     // `hash_parittion` parameters means if this runtime filter has multiple `simd-block-filter` underneath.
     // for local runtime filter, it only has once `simd-block-filter`, and `hash_partition` is false.
     // and for global runtime filter, since it concates multiple runtime filters from partitions
@@ -443,64 +443,57 @@ public:
     template <bool hash_partition = false>
     void t_evaluate(Column* input_column, RunningContext* ctx) const {
         size_t size = input_column->size();
-        Column::Filter& _selection = ctx->use_merged_selection ? ctx->merged_selection : ctx->selection;
-        _selection.resize(size);
+        Column::Filter& _selection_filter = ctx->use_merged_selection ? ctx->merged_selection : ctx->selection;
+        _selection_filter.resize(size);
+        uint8_t* _selection = _selection_filter.data();
 
+#define RF_TEST_DATA(i)                                                          \
+    if (_selection[i]) {                                                         \
+        if constexpr (hash_partition) {                                          \
+            _selection[i] = test_data_with_hash(input_data[i], _hash_values[i]); \
+        } else {                                                                 \
+            _selection[i] = test_data(input_data[i]);                            \
+        }                                                                        \
+    }
         // reuse ctx's hash_values object.
         std::vector<uint32_t>& _hash_values = ctx->hash_values;
         if constexpr (hash_partition) {
             DCHECK_LE(size, _hash_values.size());
         }
-
         if (input_column->is_constant()) {
             const auto* const_column = down_cast<const ConstColumn*>(input_column);
-            bool sel = true;
             if (const_column->only_null()) {
-                sel = _has_null;
+                _selection[0] = _has_null;
             } else {
                 auto* input_data = down_cast<const ColumnType*>(const_column->data_column().get())->get_data().data();
-                if constexpr (hash_partition) {
-                    sel = test_data_with_hash(input_data[0], _hash_values[0]);
-                } else {
-                    sel = test_data(input_data[0]);
-                }
+                evaluate_min_max(input_data, _selection, 1);
+                RF_TEST_DATA(0);
             }
-            for (int i = 0; i < size; i++) {
-                _selection[i] = sel;
-            }
+            uint8_t sel = _selection[0];
+            memset(_selection, sel, size);
         } else if (input_column->is_nullable()) {
             const auto* nullable_column = down_cast<const NullableColumn*>(input_column);
             auto* input_data = down_cast<const ColumnType*>(nullable_column->data_column().get())->get_data().data();
+            evaluate_min_max(input_data, _selection, size);
             if (nullable_column->has_null()) {
                 const uint8_t* null_data = nullable_column->immutable_null_column_data().data();
-                for (int i = 0; i < size; ++i) {
+                for (int i = 0; i < size; i++) {
                     if (null_data[i]) {
                         _selection[i] = _has_null;
                     } else {
-                        if constexpr (hash_partition) {
-                            _selection[i] = test_data_with_hash(input_data[i], _hash_values[i]);
-                        } else {
-                            _selection[i] = test_data(input_data[i]);
-                        }
+                        RF_TEST_DATA(i);
                     }
                 }
             } else {
                 for (int i = 0; i < size; ++i) {
-                    if constexpr (hash_partition) {
-                        _selection[i] = test_data_with_hash(input_data[i], _hash_values[i]);
-                    } else {
-                        _selection[i] = test_data(input_data[i]);
-                    }
+                    RF_TEST_DATA(i);
                 }
             }
         } else {
             auto* input_data = down_cast<const ColumnType*>(input_column)->get_data().data();
+            evaluate_min_max(input_data, _selection, size);
             for (int i = 0; i < size; ++i) {
-                if constexpr (hash_partition) {
-                    _selection[i] = test_data_with_hash(input_data[i], _hash_values[i]);
-                } else {
-                    _selection[i] = test_data(input_data[i]);
-                }
+                RF_TEST_DATA(i);
             }
         }
     }
