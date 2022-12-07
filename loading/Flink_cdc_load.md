@@ -101,7 +101,7 @@
    > ./bin/start-cluster.sh
    > ```
 
-5. 下载并解压 [SMT](https://www.starrocks.com/zh-CN/download/community)，并将放在 **flink-1.14.5** 目录下。
+5. 下载并解压 [SMT](https://www.mirrorship.cn/zh-CN/download/community)，并将放在 **flink-1.14.5** 目录下。
 
    ```Bash
    wget https://cdn-thirdparty.starrocks.com/smt.tar.gz
