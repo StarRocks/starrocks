@@ -83,7 +83,7 @@ public final class GlobalVariable {
     public static int lowerCaseTableNames = 0;
 
     @VariableMgr.VarAttr(name = LICENSE, flag = VariableMgr.READ_ONLY)
-    public static String license = "Elastic License 2.0";
+    public static String license = "Apache License 2.0";
 
     @VariableMgr.VarAttr(name = LANGUAGE, flag = VariableMgr.READ_ONLY)
     public static String language = "/starrocks/share/english/";
