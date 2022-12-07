@@ -2,7 +2,6 @@
 package com.starrocks.sql.analyzer;
 
 import com.clearspring.analytics.util.Lists;
-import com.google.common.base.Predicate;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
@@ -390,9 +389,6 @@ public class QueryAnalyzer {
                 if (!joinEqual.getType().matchesType(Type.BOOLEAN) && !joinEqual.getType().matchesType(Type.NULL)) {
                     throw new SemanticException("WHERE clause must evaluate to a boolean: actual type %s",
                             joinEqual.getType());
-                }
-                if (joinEqual.contains((Predicate<Expr>) node -> !node.getType().canJoinOn())) {
-                    throw new SemanticException(Type.ONLY_METRIC_TYPE_ERROR_MSG);
                 }
             } else {
                 if (join.getJoinOp().isOuterJoin() || join.getJoinOp().isSemiAntiJoin()) {

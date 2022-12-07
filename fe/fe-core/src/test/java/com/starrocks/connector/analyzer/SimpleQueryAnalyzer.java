@@ -2,7 +2,6 @@
 
 package com.starrocks.connector.analyzer;
 
-import com.google.common.base.Predicate;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.CompoundPredicate;
@@ -147,9 +146,6 @@ public class SimpleQueryAnalyzer {
                 if (!joinEqual.getType().matchesType(Type.BOOLEAN) && !joinEqual.getType().matchesType(Type.NULL)) {
                     throw new SemanticException("WHERE clause must evaluate to a boolean: actual type %s",
                             joinEqual.getType());
-                }
-                if (joinEqual.contains((Predicate<Expr>) node -> !node.getType().canJoinOn())) {
-                    throw new SemanticException(Type.ONLY_METRIC_TYPE_ERROR_MSG);
                 }
             } else {
                 if (join.getJoinOp().isOuterJoin() || join.getJoinOp().isSemiAntiJoin()) {
