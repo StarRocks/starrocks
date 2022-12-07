@@ -10,7 +10,13 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
+import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ExpressionRangePartitionInfo;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.MaterializationContext;
@@ -88,6 +94,13 @@ public class MaterializedViewRewriter {
         if (!queryConjuncts.isEmpty()) {
             queryPredicate = Utils.compoundAnd(queryConjuncts);
             queryPredicate = queryColumnRefRewriter.rewrite(queryPredicate.clone());
+        }
+        ScalarOperator queryPartitionPredicate = compensatePartitionPredicate(queryExpression);
+        if (queryPartitionPredicate == null) {
+            return Lists.newArrayList();
+        }
+        if (!ConstantOperator.TRUE.equals(queryPartitionPredicate)) {
+            queryPredicate = MvUtils.canonizePredicate(Utils.compoundAnd(queryPredicate, queryPartitionPredicate));
         }
         final PredicateSplit queryPredicateSplit = PredicateSplit.splitPredicate(queryPredicate);
         EquivalenceClasses queryEc = createEquivalenceClasses(queryPredicateSplit.getEqualPredicates());
@@ -471,6 +484,46 @@ public class MaterializedViewRewriter {
         Projection newProjection = new Projection(newQueryProjection);
         targetExpr.getOp().setProjection(newProjection);
         return targetExpr;
+    }
+
+    private ScalarOperator compensatePartitionPredicate(OptExpression plan) {
+        List<LogicalOlapScanOperator> olapScanOperators = MvUtils.getOlapScanNode(plan);
+        if (olapScanOperators.isEmpty()) {
+            return ConstantOperator.createBoolean(true);
+        }
+        List<ScalarOperator> partitionPredicates = Lists.newArrayList();
+        for (LogicalOlapScanOperator olapScanOperator : olapScanOperators) {
+            Preconditions.checkState(olapScanOperator.getTable().isNativeTable());
+            OlapTable olapTable = (OlapTable) olapScanOperator.getTable();
+            if (olapScanOperator.getSelectedPartitionId() != null
+                    && olapScanOperator.getSelectedPartitionId().size() == olapTable.getPartitions().size()) {
+                continue;
+            }
+
+            if (olapTable.getPartitionInfo() instanceof ExpressionRangePartitionInfo) {
+                // do not support now
+                return null;
+            } else if (olapTable.getPartitionInfo() instanceof RangePartitionInfo) {
+                RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) olapTable.getPartitionInfo();
+                List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
+                if (partitionColumns.size() != 1) {
+                    // now do not support more than one partition columns
+                    return null;
+                }
+                List<Range<PartitionKey>> selectedRanges = Lists.newArrayList();
+                for (long pid : olapScanOperator.getSelectedPartitionId()) {
+                    selectedRanges.add(rangePartitionInfo.getRange(pid));
+                }
+                List<Range<PartitionKey>> mergedRanges = MvUtils.mergeRanges(selectedRanges);
+                ColumnRefOperator partitionColumnRef = olapScanOperator.getColumnReference(partitionColumns.get(0));
+                List<ScalarOperator> rangePredicates = MvUtils.convertRanges(partitionColumnRef, mergedRanges);
+                ScalarOperator partitionPredicate = Utils.compoundOr(rangePredicates);
+                partitionPredicates.add(partitionPredicate);
+            } else {
+                return null;
+            }
+        }
+        return partitionPredicates.isEmpty() ? ConstantOperator.createBoolean(true) : Utils.compoundAnd(partitionPredicates);
     }
 
     protected List<ScalarOperator> rewriteQueryScalarOpToTarget(List<ScalarOperator> exprsToRewrites,

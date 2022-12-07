@@ -138,13 +138,18 @@ void TypeDescriptor::to_protobuf(PTypeDesc* proto_type) const {
         children[0].to_protobuf(proto_type);
     } else if (type == TYPE_MAP) {
         node->set_type(TTypeNodeType::MAP);
+        DCHECK_EQ(2, selected_fields.size());
+        node->add_selected_fields(selected_fields[0]);
+        node->add_selected_fields(selected_fields[1]);
         DCHECK_EQ(2, children.size());
         children[0].to_protobuf(proto_type);
         children[1].to_protobuf(proto_type);
     } else if (type == TYPE_STRUCT) {
         node->set_type(TTypeNodeType::STRUCT);
-        for (const auto& field_name : field_names) {
-            node->add_struct_fields()->set_name(field_name);
+        DCHECK_EQ(field_names.size(), selected_fields.size());
+        for (size_t i = 0; i < field_names.size(); i++) {
+            node->add_struct_fields()->set_name(field_names[i]);
+            node->add_selected_fields(selected_fields[i]);
         }
         for (const TypeDescriptor& child : children) {
             child.to_protobuf(proto_type);
@@ -195,6 +200,7 @@ TypeDescriptor::TypeDescriptor(const google::protobuf::RepeatedPtrField<PTypeNod
         for (int i = 0; i < node.struct_fields().size(); ++i) {
             children.push_back(TypeDescriptor(types, idx));
             field_names.push_back(node.struct_fields(i).name());
+            selected_fields.push_back(node.selected_fields(i));
         }
         break;
     case TTypeNodeType::ARRAY:
@@ -209,6 +215,8 @@ TypeDescriptor::TypeDescriptor(const google::protobuf::RepeatedPtrField<PTypeNod
         DCHECK_LT(*idx, types.size() - 2);
         ++(*idx);
         type = TYPE_MAP;
+        selected_fields.push_back(node.selected_fields(0));
+        selected_fields.push_back(node.selected_fields(1));
         children.push_back(TypeDescriptor(types, idx));
         children.push_back(TypeDescriptor(types, idx));
         break;

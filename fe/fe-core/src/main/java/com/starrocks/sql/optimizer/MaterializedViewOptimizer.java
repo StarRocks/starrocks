@@ -2,11 +2,9 @@
 
 package com.starrocks.sql.optimizer;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.MaterializedView;
@@ -19,14 +17,10 @@ import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
-import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
-import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 
 import java.util.List;
 import java.util.Set;
@@ -93,7 +87,7 @@ public class MaterializedViewOptimizer {
                 continue;
             }
             ColumnRefOperator columnRef = scanOperator.getColumnReference(partitionColumn);
-            List<ScalarOperator> partitionPredicates = convertRanges(columnRef, latestBaseTableRanges);
+            List<ScalarOperator> partitionPredicates = MvUtils.convertRanges(columnRef, latestBaseTableRanges);
             ScalarOperator partialPartitionPredicate = Utils.compoundOr(partitionPredicates);
             ScalarOperator originalPredicate = scanOperator.getPredicate();
             ScalarOperator newPredicate = Utils.compoundAnd(originalPredicate, partialPartitionPredicate);
@@ -114,7 +108,7 @@ public class MaterializedViewOptimizer {
                 latestBaseTableRanges.add(range);
             }
         }
-        latestBaseTableRanges = mergeRanges(latestBaseTableRanges);
+        latestBaseTableRanges = MvUtils.mergeRanges(latestBaseTableRanges);
         return latestBaseTableRanges;
     }
 
@@ -129,68 +123,5 @@ public class MaterializedViewOptimizer {
         RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) table.getPartitionInfo();
         List<Range<PartitionKey>> latestPartitionRanges = rangePartitionInfo.getRangeList(modifiedIds, false);
         return latestPartitionRanges;
-    }
-
-    private List<Range<PartitionKey>> mergeRanges(List<Range<PartitionKey>> ranges) {
-        List<Range<PartitionKey>> mergedRanges = Lists.newArrayList();
-        for (int i = 0; i < ranges.size(); i++) {
-            Range<PartitionKey> currentRange = ranges.get(i);
-            boolean merged = false;
-            for (int j = 0; j < mergedRanges.size(); j++) {
-                // 1 < r < 10, 10 <= r < 20 => 1 < r < 20
-                Range<PartitionKey> resultRange = mergedRanges.get(j);
-                if (currentRange.isConnected(currentRange) && currentRange.gap(resultRange).isEmpty()) {
-                    mergedRanges.set(j, resultRange.span(currentRange));
-                    merged = true;
-                }
-            }
-            if (!merged) {
-                mergedRanges.add(currentRange);
-            }
-        }
-        return mergedRanges;
-    }
-
-    private List<ScalarOperator> convertRanges(ScalarOperator partitionScalar, List<Range<PartitionKey>> partitionRanges) {
-        List<ScalarOperator> rangeParts = Lists.newArrayList();
-        for (Range<PartitionKey> range : partitionRanges) {
-            if (range.isEmpty()) {
-                continue;
-            }
-            // partition range must have lower bound and upper bound
-            Preconditions.checkState(range.hasLowerBound() && range.hasUpperBound());
-            LiteralExpr lowerExpr = range.lowerEndpoint().getKeys().get(0);
-            if (lowerExpr.isMinValue() && range.upperEndpoint().isMaxValue()) {
-                continue;
-            } else if (lowerExpr.isMinValue()) {
-                ConstantOperator upperBound =
-                        (ConstantOperator) SqlToScalarOperatorTranslator.translate(range.upperEndpoint().getKeys().get(0));
-                BinaryPredicateOperator upperPredicate = new BinaryPredicateOperator(
-                        BinaryPredicateOperator.BinaryType.LT, partitionScalar, upperBound);
-                rangeParts.add(upperPredicate);
-            } else if (range.upperEndpoint().isMaxValue()) {
-                ConstantOperator lowerBound =
-                        (ConstantOperator) SqlToScalarOperatorTranslator.translate(range.lowerEndpoint().getKeys().get(0));
-                BinaryPredicateOperator lowerPredicate = new BinaryPredicateOperator(
-                        BinaryPredicateOperator.BinaryType.GE, partitionScalar, lowerBound);
-                rangeParts.add(lowerPredicate);
-            } else {
-                // close, open range
-                ConstantOperator lowerBound =
-                        (ConstantOperator) SqlToScalarOperatorTranslator.translate(range.lowerEndpoint().getKeys().get(0));
-                BinaryPredicateOperator lowerPredicate = new BinaryPredicateOperator(
-                        BinaryPredicateOperator.BinaryType.GE, partitionScalar, lowerBound);
-
-                ConstantOperator upperBound =
-                        (ConstantOperator) SqlToScalarOperatorTranslator.translate(range.upperEndpoint().getKeys().get(0));
-                BinaryPredicateOperator upperPredicate = new BinaryPredicateOperator(
-                        BinaryPredicateOperator.BinaryType.LT, partitionScalar, upperBound);
-
-                CompoundPredicateOperator andPredicate = new CompoundPredicateOperator(
-                        CompoundPredicateOperator.CompoundType.AND, lowerPredicate, upperPredicate);
-                rangeParts.add(andPredicate);
-            }
-        }
-        return rangeParts;
     }
 }

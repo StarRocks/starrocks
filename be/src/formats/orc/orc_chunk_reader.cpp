@@ -1025,23 +1025,20 @@ static void fill_struct_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size
 
     Columns& field_columns = col_struct->fields_column();
 
-    size_t child_index = 0;
     for (size_t i = 0; i < type_desc.children.size(); i++) {
-        if (!type_desc.selected_fields[i]) {
-            continue;
+        if (type_desc.selected_fields[i]) {
+            const TypeDescriptor& field_type = type_desc.children[i];
+            size_t column_id = mapping->get_column_id_or_child_mapping(i).orc_column_id;
+
+            orc::ColumnVectorBatch* field_cvb = orc_struct->fieldsColumnIdMap[column_id];
+            const FillColumnFunction& fn_fill_elements = find_fill_func(field_type.type, true);
+            fn_fill_elements(field_cvb, field_columns[i], from, size, field_type,
+                             mapping->get_column_id_or_child_mapping(i).orc_mapping, ctx);
+        } else {
+            // Append default value for not selected subfield
+            field_columns[i]->append_default(size);
         }
-
-        const TypeDescriptor& field_type = type_desc.children[i];
-        size_t column_id = mapping->get_column_id_or_child_mapping(i).orc_column_id;
-
-        orc::ColumnVectorBatch* field_cvb = orc_struct->fieldsColumnIdMap[column_id];
-        const FillColumnFunction& fn_fill_elements = find_fill_func(field_type.type, true);
-        fn_fill_elements(field_cvb, field_columns[child_index], from, size, field_type,
-                         mapping->get_column_id_or_child_mapping(i).orc_mapping, ctx);
-        child_index++;
     }
-
-    DCHECK_EQ(field_columns.size(), child_index);
 }
 
 static void fill_struct_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size,

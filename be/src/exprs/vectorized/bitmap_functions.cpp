@@ -528,4 +528,34 @@ ColumnPtr BitmapFunctions::sub_bitmap(FunctionContext* context, const starrocks:
     return builder.build(ColumnHelper::is_all_const(columns));
 }
 
+ColumnPtr BitmapFunctions::bitmap_to_base64(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
+    ColumnViewer<TYPE_OBJECT> viewer(columns[0]);
+
+    size_t size = columns[0]->size();
+    ColumnBuilder<TYPE_VARCHAR> builder(size);
+
+    for (int row = 0; row < size; ++row) {
+        BitmapValue* bitmap = viewer.value(row);
+        int byteSize = bitmap->getSizeInBytes();
+        std::unique_ptr<char[]> buf;
+        buf.reset(new char[byteSize]);
+
+        int len = (size_t)(4.0 * ceil((double)byteSize / 3.0)) + 1;
+        std::unique_ptr<char[]> p;
+        p.reset(new char[len]);
+        memset(p.get(), 0, len);
+
+        bitmap->write((char*)buf.get());
+
+        int resLen = base64_encode2((unsigned char*)buf.get(), byteSize, (unsigned char*)p.get());
+
+        if (resLen < 0) {
+            builder.append_null();
+            continue;
+        }
+        builder.append(Slice(p.get(), resLen));
+    }
+    return builder.build(ColumnHelper::is_all_const(columns));
+}
+
 } // namespace starrocks::vectorized
