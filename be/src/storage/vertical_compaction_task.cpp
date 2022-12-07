@@ -46,15 +46,8 @@ Status VerticalCompactionTask::_vertical_compaction_data(Statistics* statistics)
             _tablet.get(), max_rows_per_segment, _task_info.algorithm, _task_info.output_version, &output_rs_writer));
 
     std::vector<std::vector<uint32_t>> column_groups;
-    if (_tablet->tablet_schema().sort_key_idxes().empty()) {
-        std::vector<ColumnId> primary_key_iota_idxes(_tablet->num_key_columns());
-        std::iota(primary_key_iota_idxes.begin(), primary_key_iota_idxes.end(), 0);
-        CompactionUtils::split_column_into_groups(_tablet->num_columns(), primary_key_iota_idxes,
-                                                  config::vertical_compaction_max_columns_per_group, &column_groups);
-    } else {
-        CompactionUtils::split_column_into_groups(_tablet->num_columns(), _tablet->tablet_schema().sort_key_idxes(),
-                                                  config::vertical_compaction_max_columns_per_group, &column_groups);
-    }
+    CompactionUtils::split_column_into_groups(_tablet->num_columns(), _tablet->tablet_schema().sort_key_idxes(),
+                                              config::vertical_compaction_max_columns_per_group, &column_groups);
     _task_info.column_group_size = column_groups.size();
 
     auto mask_buffer =

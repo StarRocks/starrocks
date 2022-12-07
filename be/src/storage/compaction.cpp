@@ -70,17 +70,8 @@ Status Compaction::do_compaction_impl() {
     CompactionAlgorithm algorithm = CompactionUtils::choose_compaction_algorithm(
             _tablet->num_columns(), config::vertical_compaction_max_columns_per_group, segment_iterator_num);
     if (algorithm == VERTICAL_COMPACTION) {
-        if (_tablet->tablet_schema().sort_key_idxes().empty()) {
-            std::vector<ColumnId> primary_key_iota_idxes(_tablet->num_key_columns());
-            std::iota(primary_key_iota_idxes.begin(), primary_key_iota_idxes.end(), 0);
-            CompactionUtils::split_column_into_groups(_tablet->num_columns(), primary_key_iota_idxes,
-                                                      config::vertical_compaction_max_columns_per_group,
-                                                      &_column_groups);
-        } else {
-            CompactionUtils::split_column_into_groups(_tablet->num_columns(), _tablet->tablet_schema().sort_key_idxes(),
-                                                      config::vertical_compaction_max_columns_per_group,
-                                                      &_column_groups);
-        }
+        CompactionUtils::split_column_into_groups(_tablet->num_columns(), _tablet->tablet_schema().sort_key_idxes(),
+                                                  config::vertical_compaction_max_columns_per_group, &_column_groups);
     }
 
     uint32_t max_rows_per_segment =

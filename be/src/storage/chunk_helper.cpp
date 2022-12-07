@@ -164,6 +164,15 @@ starrocks::vectorized::VectorizedSchema ChunkHelper::get_sort_key_schema_with_fo
     return starrocks::vectorized::VectorizedSchema(schema.schema(), schema.sort_key_idxes(), sort_key_iota_idxes);
 }
 
+starrocks::vectorized::VectorizedSchema ChunkHelper::get_sort_key_schema_by_primary_key_format_v2(
+        const starrocks::TabletSchema& tablet_schema) {
+    std::vector<ColumnId> primary_key_iota_idxes(tablet_schema.num_key_columns());
+    std::iota(primary_key_iota_idxes.begin(), primary_key_iota_idxes.end(), 0);
+    std::vector<ColumnId> all_keys_iota_idxes(tablet_schema.num_columns());
+    std::iota(all_keys_iota_idxes.begin(), all_keys_iota_idxes.end(), 0);
+    return starrocks::vectorized::VectorizedSchema(tablet_schema.schema(), all_keys_iota_idxes, primary_key_iota_idxes);
+}
+
 ColumnId ChunkHelper::max_column_id(const starrocks::vectorized::VectorizedSchema& schema) {
     ColumnId id = 0;
     for (const auto& field : schema.fields()) {
