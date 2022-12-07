@@ -48,7 +48,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |edit_log_roll_num|50000|该参数用于控制日志文件的大小，指定了每写多少条元数据日志，执行一次日志滚动操作来为这些日志生成新的日志文件。新日志文件会写入到 BDBJE Database。|
 |ignore_unknown_log_id|FALSE|是否忽略未知的 logID。当 FE 回滚到低版本时，可能存在低版本 BE 无法识别的 logID。<br>如果为 TRUE，则 FE 会忽略这些 logID；否则 FE 会退出。|
 |ignore_meta_check|FALSE|是否忽略元数据落后的情形。如果为 true，非主 FE 将忽略主 FE 与其自身之间的元数据延迟间隙，即使元数据延迟间隙超过 meta_delay_toleration_second，非主 FE 仍将提供读取服务。<br>当您尝试停止 Master FE 较长时间，但仍希望非 Master FE 可以提供读取服务时，该参数会很有帮助。|
-|meta_delay_toleration_second | 300  | FE 所在 StarRocks 集群中，非 Leader FE 能够容忍的元数据落后的最大时间。单位：秒。如果非 Leader FE 上的元数据与 Leader FE 上的元数据之间的延迟时间超过该参数取值，则该非 Leader FE 将停止服务。 |
+|meta_delay_toleration_second | 300  | FE 所在 StarRocks 集群中，非 Leader FE 能够容忍的元数据落后的最大时间。单位：秒。<br>如果非 Leader FE 上的元数据与 Leader FE 上的元数据之间的延迟时间超过该参数取值，则该非 Leader FE 将停止服务。 |
 |drop_backend_after_decommission|TRUE|BE 被下线后，是否删除该 BE。true 代表 BE 被下线后会立即删除该 BE。False 代表下线完成后不删除 BE。|
 |enable_collect_query_detail_info|FALSE|是否收集查询的 profile 信息。设置为 true 时，系统会收集查询的 profile。设置为 false 时，系统不会收集查询的 profile。|
 
@@ -128,7 +128,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |capacity_used_percent_high_water|0.75|BE 上磁盘使用容量的度量值，超过 0.75 之后，尽量不再往这个 tablet 上发送建表、克隆的任务，直到恢复正常。|
 |storage_high_watermark_usage_percent|85|BE 存储目录下空间使用率的最大值。如果超限，则不能继续往该路径写数据。|
 |storage_min_left_capacity_bytes|2 \* 1024 \* 1024 \* 1024|BE 存储目录下剩余空间的最小值，单位为 Byte。如果超限，则不能继续往该路径写数据。|
-|catalog_trash_expire_second|86400|删表/数据库之后，元数据在回收站中保留的时长，超过这个时长，数据就不可以在恢复，单位为秒。|
+|catalog_trash_expire_second|86400|删除表/数据库之后，元数据在回收站中保留的时长，超过这个时长，数据就不可以在恢复，单位为秒。|
 |alter_table_timeout_second|86400|Schema change 超时时间，单位为秒。|
 |recover_with_empty_tablet|FALSE|在 tablet 副本丢失/损坏时，是否使用空的 tablet 代替。<br>这样可以保证在有 tablet 副本丢失/损坏时，query 依然能被执行（但是由于缺失了数据，结果可能是错误的）。默认为 false，不进行替代，查询会失败。|
 |tablet_create_timeout_second|1|创建 tablet 的超时时长，单位为秒。|
@@ -149,7 +149,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 |配置项|默认值|描述|
 |---|---|---|
-|plugin_enable|TRUE|是否开启了插件功能。只能在 Leader FE 安装/卸载插件|
+|plugin_enable|TRUE|是否开启了插件功能。只能在 Leader FE 安装/卸载插件。|
 |max_small_file_number|100|允许存储小文件数目的最大值。|
 |max_small_file_size_bytes|1024 \* 1024|存储文件的大小上限，单位为 Byte。|
 |agent_task_resend_wait_time_ms|5000|Agent task 重新发送前的等待时间。当代理任务的创建时间已设置，并且距离现在超过该值，才能重新发送代理任务，单位为 ms。<br>该参数防止过于频繁的代理任务发送。|
@@ -174,17 +174,17 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 | sys_log_dir             | StarRocksFE.STARROCKS_HOME_DIR + "/log" | 系统日志文件的保存目录。                                     |
 | sys_log_level           | INFO                                    | 系统日志的级别，从低到高依次为 `INFO`、`WARN`、`ERROR`、`FATAL`。 |
 | sys_log_verbose_modules | 空字符串                                | 打印系统日志的模块。如果设置参数取值为 `org.apache.starrocks.catalog`，则表示只打印 Catalog 模块下的日志。 |
-| sys_log_roll_interval   | DAY                                     | 系统日志滚动的时间间隔。取值范围：`DAY` 和 `HOUR`。取值为 `DAY` 时，日志文件名的后缀为 `yyyyMMdd`。取值为 `HOUR` 时，日志文件名的后缀为 `yyyyMMddHH`。 |
+| sys_log_roll_interval   | DAY                                     | 系统日志滚动的时间间隔。取值范围：`DAY` 和 `HOUR`。<br>取值为 `DAY` 时，日志文件名的后缀为 `yyyyMMdd`。取值为 `HOUR` 时，日志文件名的后缀为 `yyyyMMddHH`。 |
 | sys_log_delete_age      | 7d                                      | 系统日志文件的保留时长。默认值 `7d` 表示系统日志文件可以保留 7 天，保留时长超过 7 天的系统日志文件会被删除。 |
 | sys_log_roll_num        | 10                                      | 每个 `sys_log_roll_interval` 时间段内，允许保留的系统日志文件的最大数目。 |
 | audit_log_dir           | StarRocksFE.STARROCKS_HOME_DIR + "/log" | 审计日志文件的保存目录。                                     |
 | audit_log_roll_num      | 90                                      | 每个 `audit_log_roll_interval` 时间段内，允许保留的审计日志文件的最大数目。 |
 | audit_log_modules       | slow_query, query                       | 打印审计日志的模块。默认打印 slow_query 和 query 模块的日志。可以指定多个模块，模块名称之间用英文逗号加一个空格分隔。 |
-| audit_log_roll_interval | DAY                                     | 审计日志滚动的时间间隔。取值范围：`DAY` 和 `HOUR`。取值为 `DAY` 时，日志文件名的后缀为 `yyyyMMdd`。取值为 `HOUR` 时，日志文件名的后缀为 `yyyyMMddHH`。 |
+| audit_log_roll_interval | DAY                                     | 审计日志滚动的时间间隔。取值范围：`DAY` 和 `HOUR`。<br>取值为 `DAY` 时，日志文件名的后缀为 `yyyyMMdd`。取值为 `HOUR` 时，日志文件名的后缀为 `yyyyMMddHH`。 |
 | audit_log_delete_age    | 30d                                     | 审计日志文件的保留时长。默认值 `30d` 表示审计日志文件可以保留 30 天，保留时长超过 30 天的审计日志文件会被删除。 |
 | dump_log_dir            | StarRocksFE.STARROCKS_HOME_DIR + "/log" | Dump 日志文件的保存目录。                                    |
 | dump_log_modules        | query                                   | 打印 Dump 日志的模块。默认打印 query 模块的日志。可以指定多个模块，模块名称之间用英文逗号加一个空格分隔。 |
-| dump_log_roll_interval  | DAY                                     | Dump 日志滚动的时间间隔。取值范围：`DAY` 和 `HOUR`。取值为 `DAY` 时，日志文件名的后缀为 `yyyyMMdd`。取值为 `HOUR` 时，日志文件名的后缀为 `yyyyMMddHH`。 |
+| dump_log_roll_interval  | DAY                                     | Dump 日志滚动的时间间隔。取值范围：`DAY` 和 `HOUR`。<br>取值为 `DAY` 时，日志文件名的后缀为 `yyyyMMdd`。取值为 `HOUR` 时，日志文件名的后缀为 `yyyyMMddHH`。 |
 | dump_log_roll_num       | 10                                      | 每个 `dump_log_roll_interval` 时间内，允许保留的 Dump 日志文件的最大数目。 |
 | dump_log_delete_age     | 7d                                      | Dump 日志文件的保留时长。默认值 `7d` 表示 Dump 日志文件可以保留 7 天，保留时长超过 7 天的 Dump 日志文件会被删除。 |
 
@@ -193,7 +193,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 | 配置项                               | 默认值            | 描述                                                         |
 | ------------------------------------ | ----------------- | ------------------------------------------------------------ |
 | frontend_address                     | 0.0.0.0           | FE 节点的 IP 地址。                                          |
-| priority_networks                    | 空字符串          | 为那些有多个 IP 地址的服务器声明一个选择策略。 请注意，最多应该有一个 IP 地址与此列表匹配。这是一个以分号分隔格式的列表，用 CIDR 表示法，例如 `10.10.10.0/24`。 如果没有匹配这条规则的ip，会随机选择一个。 |
+| priority_networks                    | 空字符串          | 为那些有多个 IP 地址的服务器声明一个选择策略。 <br>请注意，最多应该有一个 IP 地址与此列表匹配。这是一个以分号分隔格式的列表，用 CIDR 表示法，例如 `10.10.10.0/24`。 如果没有匹配这条规则的ip，会随机选择一个。 |
 | http_port                            | 8030              | FE 节点上 HTTP 服务器的端口。                                |
 | http_backlog_num                     | 1024              | HTTP 服务器支持的 Backlog 队列长度。                         |
 | cluster_name                         | StarRocks Cluster | FE 所在 StarRocks 集群的名称，显示为网页标题。               |
@@ -210,7 +210,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 | max_mysql_service_task_threads_num   | 4096              | MySQL 服务器中用于处理任务的最大线程数。                     |
 | max_connection_scheduler_threads_num | 4096              | 连接调度器支持的最大线程数。                                 |
 | qe_max_connection                    | 1024              | FE 支持的最大连接数，包括所有用户发起的连接。                |
-| check_java_version                   | TRUE              | 检查已编译的 Java 版本与运行的 Java 版本是否兼容。如果不兼容，则上报 Java 版本不匹配的异常信息，并终止启动。 |
+| check_java_version                   | TRUE              | 检查已编译的 Java 版本与运行的 Java 版本是否兼容。<br>如果不兼容，则上报 Java 版本不匹配的异常信息，并终止启动。 |
 
 #### 元数据与集群管理
 
@@ -254,15 +254,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 | yarn_config_dir                   | StarRocksFE.STARROCKS_HOME_DIR + "/lib/yarn-config"          | Yarn 配置文件的保存目录。                                    |
 | export_checker_interval_second    | 5                                                            | 导出作业调度器的调度间隔。                                   |
 | export_task_pool_size             | 5                                                            | 导出任务线程池的大小。                                       |
-| broker_client_timeout_ms          | 10000                                                        | Broker rpc 的默认超时时间,单位：毫秒，默认10s                 |
+| broker_client_timeout_ms          | 10000                                                        | Broker RPC 的默认超时时间，单位：毫秒，默认值 10s。                 |
 
 #### 存储
 
 | 配置项                               | 默认值          | 描述                                                         |
 | ------------------------------------ | --------------- | ------------------------------------------------------------ |
-| default_storage_medium               | HDD             | 创建表或分区时默认使用的存储介质。取值范围：`HDD` 和 `SSD`。在创建表/分区时，如果没有指定存储介质，则会使用通过该参数指定的默认存储介质。 |
+| default_storage_medium               | HDD             | 创建表或分区时默认使用的存储介质。取值范围：`HDD` 和 `SSD`。<br>在创建表/分区时，如果没有指定存储介质，则会使用通过该参数指定的默认存储介质。 |
 | tablet_sched_balancer_strategy       | disk_and_tablet | Tablet 均衡策略。参数别名为 `tablet_balancer_strategy`。取值范围：`disk_and_tablet` 和 `be_load_score`。 |
-| tablet_sched_storage_cooldown_second | -1              | 从 Table 创建时间点开始计算，自动降冷的时延。降冷是指从 SSD 介质迁移到 HDD 介质。参数别名为 `storage_cooldown_second`。单位：秒。默认值 `-1` 表示不进行自动降冷。如需启用自动降冷功能，请显式设置参数取值大于 0。 |
+| tablet_sched_storage_cooldown_second | -1              | 从 Table 创建时间点开始计算，自动降冷的时延。降冷是指从 SSD 介质迁移到 HDD 介质。<br>参数别名为 `storage_cooldown_second`。单位：秒。默认值 `-1` 表示不进行自动降冷。如需启用自动降冷功能，请显式设置参数取值大于 0。 |
 | tablet_stat_update_interval_second   | 300             | FE 向每个 BE 请求收集 Tablet 统计信息的时间间隔。单位：秒。  |
 
 #### 其他静态参数
@@ -273,7 +273,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 | small_file_dir                     | StarRocksFE.STARROCKS_HOME_DIR + "/small_files" | 小文件的根目录。                                             |
 | max_agent_task_threads_num         | 4096                                            | 代理任务线程池中用于处理代理任务的最大线程数。               |
 | auth_token                         | 空字符串                                        | 用于内部身份验证的集群令牌。为空则在 Leader FE 第一次启动时随机生成一个。 |
-| tmp_dir                            | StarRocksFE.STARROCKS_HOME_DIR + "/temp_dir"    | 临时文件的保存目录，例如备份和恢复过程中产生的临时文件。这些过程完成以后，所产生的临时文件会被清除掉。 |
+| tmp_dir                            | StarRocksFE.STARROCKS_HOME_DIR + "/temp_dir"    | 临时文件的保存目录，例如备份和恢复过程中产生的临时文件。<br>这些过程完成以后，所产生的临时文件会被清除掉。 |
 | locale                             | zh_CN.UTF-8                                     | FE 所使用的字符集。                                          |
 | hive_meta_load_concurrency         | 4                                               | Hive 元数据支持的最大并发线程数。                            |
 | hive_meta_cache_refresh_interval_s | 7200                                            | 刷新 Hive 外表元数据缓存的时间间隔。单位：秒。               |
@@ -308,15 +308,15 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 | 配置项                                                | 默认值      | 单位   | 描述                                                         |
 | ----------------------------------------------------- | ----------- | ------ | ------------------------------------------------------------ |
 | tc_use_memory_min                                     | 10737418240 | Byte   | Tcmalloc 最小预留内存，小于这个值，StarRocks 不会将空闲内存返还给操作系统。 |
-| tc_free_memory_rate                                   | 20          | %      | Tcmalloc 向操作系统返还内存时，自身所保留的空闲内存占总使用内存的最大比例。如果当前空闲内存的占比小于这个值，那么不会向操作系统返还内存。 |
+| tc_free_memory_rate                                   | 20          | %      | Tcmalloc 向操作系统返还内存时，自身所保留的空闲内存占总使用内存的最大比例。<br>如果当前空闲内存的占比小于这个值，那么不会向操作系统返还内存。 |
 | tc_gc_period                                          | 60          | second | Tcmalloc GC 的周期，默认单位是秒。                            |
 | report_task_interval_seconds                          | 10          | second | 汇报单个任务的间隔。建表，删除表，导入，schema change 都可以被认定是任务。 |
 | report_disk_state_interval_seconds                    | 60          | second | 汇报磁盘状态的间隔。汇报各个磁盘的状态，以及其中数据量等。   |
 | report_tablet_interval_seconds                        | 60          | second | 汇报 tablet 的间隔。汇报所有的 tablet 的最新版本。           |
 | report_workgroup_interval_seconds                     | 5           | second | 汇报 workgroup 的间隔。汇报所有 workgroup 的最新版本。           |
 | max_download_speed_kbps                               | 50000       | KB/s   | 单个 HTTP 请求的最大下载速率。这个值会影响 BE 之间同步数据副本的速度。 |
-| download_low_speed_limit_kbps                         | 50          | KB/s   | 单个 HTTP 请求的下载速率下限，如果在 download_low_speed_time 秒内下载速度一直低于download_low_speed_limit_kbps，那么请求会被终止。 |
-| download_low_speed_time                               | 300         | second | 见 download_low_speed_limit_kbps。                             |
+| download_low_speed_limit_kbps                         | 50          | KB/s   | 单个 HTTP 请求的下载速率下限。如果在 `download_low_speed_time` 秒内下载速度一直低于`download_low_speed_limit_kbps`，那么请求会被终止。 |
+| download_low_speed_time                               | 300         | second | 见 `download_low_speed_limit_kbps`。                             |
 | status_report_interval                                | 5           | second | 查询汇报 profile 的间隔，用于 FE 收集查询统计信息。          |
 | scanner_thread_pool_thread_num                        | 48          | N/A    | 存储引擎并发扫描磁盘的线程数，统一管理在线程池中。           |
 | thrift_client_retry_interval_ms                       | 100         | ms     | Thrift client 默认的重试时间间隔。                            |
@@ -324,7 +324,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 | scanner_row_num                                       | 16384       | N/A    | 每个扫描线程单次执行最多返回的数据行数。                     |
 | max_scan_key_num                                      | 1024        | N/A    | 查询最多拆分的 scan key 数目。                               |
 | max_pushdown_conditions_per_column                    | 1024        | N/A    | 单列上允许下推的最大谓词数量，如果超出数量限制，谓词不会下推到存储层。 |
-| exchg_node_buffer_size_bytes                          | 10485760    | Byte   | Exchange 算子中，单个查询在接收端的 buffer 容量。这是一个软限制，如果数据的发送速度过快，接收端会触发反压来限制发送速度。 |
+| exchg_node_buffer_size_bytes                          | 10485760    | Byte   | Exchange 算子中，单个查询在接收端的 buffer 容量。<br>这是一个软限制，如果数据的发送速度过快，接收端会触发反压来限制发送速度。 |
 | column_dictionary_key_ratio_threshold                 | 0           | %      | 字符串类型的取值比例，小于这个比例采用字典压缩算法。         |
 | memory_limitation_per_thread_for_schema_change        | 2           | GB     | 单个 schema change 任务允许占用的最大内存。                  |
 | update_cache_expire_sec                               | 360         | second | Update Cache 的过期时间。                                     |
@@ -349,7 +349,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 | load_error_log_reserve_hours                          | 48          | hour   | 导入数据信息保留的时长。                                     |
 | streaming_load_max_mb                                 | 10240       | MB     | 流式导入单个文件大小的上限。                                 |
 | streaming_load_max_batch_size_mb                      | 100         | MB     | 流式导入单个 JSON 文件大小的上限。                             |
-| memory_maintenance_sleep_time_s                       | 10          | second | 触发 Tcmalloc GC 任务的时间间隔。Starrocks 会周期运行 GC 任务，尝试将 Tcmalloc 的空闲内存返还给操作系统。 |
+| memory_maintenance_sleep_time_s                       | 10          | second | 触发 Tcmalloc GC 任务的时间间隔。StarRocks 会周期运行 GC 任务，尝试将 Tcmalloc 的空闲内存返还给操作系统。 |
 | write_buffer_size                                     | 104857600   | Byte   | MemTable 在内存中的 buffer 大小，超过这个限制会触发 flush。      |
 | tablet_stat_cache_update_interval_second              | 300         | second | Tablet Stat Cache 的更新间隔。                                |
 | result_buffer_cancelled_interval_time                 | 300         | second | BufferControlBlock 释放数据的等待时间。                         |
@@ -376,62 +376,62 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 |配置项|默认值|描述|
 |---|---|---|
-|be_port|9060|BE 上 thrift server 的端口，用于接收来自 FE 的请求|
-|brpc_port|8060|BRPC 的端口，可以查看 BRPC 的一些网络统计信息|
-|brpc_num_threads|-1|BRPC 的 bthreads 线程数量，-1 表示和 CPU 核数一样|
-|priority_networks|空字符串|以 CIDR 形式 10.10.10.0/24 指定 BE IP 地址，适用于机器有多个 IP，需要指定优先使用的网络|
-|heartbeat_service_port|9050|心跳服务端口（thrift），用户接收来自 FE 的心跳|
-|heartbeat_service_thread_count|1|心跳线程数|
-|create_tablet_worker_count|3|创建 tablet 的线程数|
-|drop_tablet_worker_count|3|删除 tablet 的线程数|
-|push_worker_count_normal_priority|3|导入线程数，处理 NORMAL 优先级任务|
-|push_worker_count_high_priority|3|导入线程数，处理 HIGH 优先级任务|
-|transaction_publish_version_worker_count|8|生效版本的线程数|
-|clear_transaction_task_worker_count|1|清理事务的线程数|
-|alter_tablet_worker_count|3|进行 schema change 的线程数|
-|clone_worker_count|3|克隆的线程数|
-|storage_medium_migrate_count|1|介质迁移的线程数，SATA 迁移到 SSD|
-|check_consistency_worker_count|1|计算 tablet 的校验和(checksum)|
-|sys_log_dir|${STARROCKS_HOME}/log|存放日志的地方，包括 INFO，WARNING，ERROR，FATAL 等日志|
-|user_function_dir|${STARROCKS_HOME}/lib/udf|UDF 程序存放的地方|
-|small_file_dir|${STARROCKS_HOME}/lib/small_file|保存文件管理器下载的文件的目录|
-|sys_log_level|INFO|日志级别，INFO < WARNING < ERROR < FATAL|
-|sys_log_roll_mode|SIZE-MB-1024|日志拆分的大小，每 1G 拆分一个日志|
-|sys_log_roll_num|10|日志保留的数目|
-|sys_log_verbose_modules|空字符串|日志打印的模块，写 olap 就只打印 olap 模块下的日志|
-|sys_log_verbose_level|10|日志显示的级别，用于控制代码中 VLOG 开头的日志输出|
-|log_buffer_level|空字符串|日志刷盘的策略，默认保持在内存中|
-|num_threads_per_core|3|每个 CPU core 启动的线程数|
-|compress_rowbatches|TRUE|BE 之间 rpc 通信是否压缩 RowBatch，用于查询层之间的数据传输|
-|serialize_batch|FALSE|BE 之间 rpc 通信是否序列化 RowBatch，用于查询层之间的数据传输|
+|be_port|9060|BE 上 thrift server 的端口，用于接收来自 FE 的请求。|
+|brpc_port|8060|BRPC 的端口，可以查看 BRPC 的一些网络统计信息。|
+|brpc_num_threads|-1|BRPC 的 bthreads 线程数量，-1 表示和 CPU 核数一样。|
+|priority_networks|空字符串|以 CIDR 形式 10.10.10.0/24 指定 BE IP 地址，适用于机器有多个 IP，需要指定优先使用的网络。|
+|heartbeat_service_port|9050|心跳服务端口（thrift），用户接收来自 FE 的心跳。|
+|heartbeat_service_thread_count|1|心跳线程数。|
+|create_tablet_worker_count|3|创建 tablet 的线程数。|
+|drop_tablet_worker_count|3|删除 tablet 的线程数。|
+|push_worker_count_normal_priority|3|导入线程数，处理 NORMAL 优先级任务。|
+|push_worker_count_high_priority|3|导入线程数，处理 HIGH 优先级任务。|
+|transaction_publish_version_worker_count|8|生效版本的线程数。|
+|clear_transaction_task_worker_count|1|清理事务的线程数。|
+|alter_tablet_worker_count|3|进行 schema change 的线程数。|
+|clone_worker_count|3|克隆的线程数。|
+|storage_medium_migrate_count|1|介质迁移的线程数，SATA 迁移到 SSD。|
+|check_consistency_worker_count|1|计算 tablet 的校验和 (checksum)。|
+|sys_log_dir|${STARROCKS_HOME}/log|存放日志的地方，包括 INFO，WARNING，ERROR，FATAL 等日志。|
+|user_function_dir|${STARROCKS_HOME}/lib/udf|UDF 程序存放的路径。|
+|small_file_dir|${STARROCKS_HOME}/lib/small_file|保存文件管理器下载的文件的目录。|
+|sys_log_level|INFO|日志级别，INFO < WARNING < ERROR < FATAL。|
+|sys_log_roll_mode|SIZE-MB-1024|日志拆分的大小，每 1G 拆分一个日志。|
+|sys_log_roll_num|10|日志保留的数目。|
+|sys_log_verbose_modules|空字符串|日志打印的模块，写 olap 就只打印 olap 模块下的日志。|
+|sys_log_verbose_level|10|日志显示的级别，用于控制代码中 VLOG 开头的日志输出。|
+|log_buffer_level|空字符串|日志刷盘的策略，默认保持在内存中。|
+|num_threads_per_core|3|每个 CPU core 启动的线程数。|
+|compress_rowbatches|TRUE|BE 之间 RPC 通信是否压缩 RowBatch，用于查询层之间的数据传输。|
+|serialize_batch|FALSE|BE 之间 RPC 通信是否序列化 RowBatch，用于查询层之间的数据传输。|
 |file_descriptor_cache_clean_interval|3600|文件句柄缓存清理的间隔，用于清理长期不用的文件句柄|
-|storage_root_path|${STARROCKS_HOME}/storage|存储数据的目录以及存储介质类型，多块盘配置使用分号 `;` 隔开。如果为 SSD 磁盘，需在路径后添加 `,medium:ssd`，如果为 HDD 磁盘，需在路径后添加 `,medium:hdd`。例如：`/data1,medium:hdd;/data2,medium:ssd`。|
-|max_percentage_of_error_disk|0|磁盘错误达到一定比例，BE 退出|
-|max_tablet_num_per_shard|1024|每个 shard 的 tablet 数目，用于划分 tablet，防止单个目录下 tablet 子目录过多|
-|max_garbage_sweep_interval|3600|磁盘进行垃圾清理的最大间隔|
-|min_garbage_sweep_interval|180|磁盘进行垃圾清理的最小间隔|
-|row_nums_check|TRUE|Compaction 完成之后，前后 Rowset 行数对比|
-|file_descriptor_cache_capacity|16384|文件句柄缓存的容量|
-|min_file_descriptor_number|60000|BE 进程的文件句柄 limit 要求的下线|
-|index_stream_cache_capacity|10737418240|BloomFilter/Min/Max 等统计信息缓存的容量|
+|storage_root_path|${STARROCKS_HOME}/storage|存储数据的目录以及存储介质类型，多块盘配置使用分号 `;` 隔开。<br>如果为 SSD 磁盘，需在路径后添加 `,medium:ssd`，如果为 HDD 磁盘，需在路径后添加 `,medium:hdd`。例如：`/data1,medium:hdd;/data2,medium:ssd`。|
+|max_percentage_of_error_disk|0|磁盘错误达到一定比例，BE 退出。|
+|max_tablet_num_per_shard|1024|每个 shard 的 tablet 数目，用于划分 tablet，防止单个目录下 tablet 子目录过多。|
+|max_garbage_sweep_interval|3600|磁盘进行垃圾清理的最大间隔。|
+|min_garbage_sweep_interval|180|磁盘进行垃圾清理的最小间隔。|
+|row_nums_check|TRUE|Compaction 完成之后，前后 Rowset 行数对比。|
+|file_descriptor_cache_capacity|16384|文件句柄缓存的容量。|
+|min_file_descriptor_number|60000|BE 进程的文件句柄 limit 要求的下线。|
+|index_stream_cache_capacity|10737418240|BloomFilter/Min/Max 等统计信息缓存的容量。|
 |storage_page_cache_limit|0|PageCache 的容量，string，可写为 “20G”。|
-|disable_storage_page_cache|TRUE|是否开启 PageCache|
-|base_compaction_num_threads_per_disk|1|每个磁盘 BaseCompaction 线程的数目|
-|base_cumulative_delta_ratio|0.3|BaseCompaction 触发条件之一：Cumulative 文件大小达到 Base 文件的比例|
+|disable_storage_page_cache|TRUE|是否开启 PageCache。|
+|base_compaction_num_threads_per_disk|1|每个磁盘 BaseCompaction 线程的数目。|
+|base_cumulative_delta_ratio|0.3|BaseCompaction 触发条件之一：Cumulative 文件大小达到 Base 文件的比例。|
 |max_compaction_concurrency|-1|BaseCompaction + CumulativeCompaction 的最大并发， -1 代表没有限制。|
-|compaction_trace_threshold|60|单次 Compaction 打印 trace 的时间阈值，如果单次 compaction 时间超过该阈值就打印 trace，单位为秒|
-|webserver_port|8040|Http Server 端口|
-|webserver_num_workers|48|Http Server 线程数|
-|load_data_reserve_hours|4|小批量导入生成的文件保留的时间|
-|number_tablet_writer_threads|16|流式导入的线程数|
-|streaming_load_rpc_max_alive_time_sec|1200|流式导入 RPC 的超时时间|
+|compaction_trace_threshold|60|单次 Compaction 打印 trace 的时间阈值，如果单次 compaction 时间超过该阈值就打印 trace，单位为秒。|
+|webserver_port|8040|HTTP Server 端口。|
+|webserver_num_workers|48|HTTP Server 线程数。|
+|load_data_reserve_hours|4|小批量导入生成的文件保留的时。|
+|number_tablet_writer_threads|16|流式导入的线程数。|
+|streaming_load_rpc_max_alive_time_sec|1200|流式导入 RPC 的超时时间。|
 |fragment_pool_thread_num_min|64|最小查询线程数，默认启动 64 个线程。|
 |fragment_pool_thread_num_max|4096|最大查询线程数。|
-|fragment_pool_queue_size|2048|单节点上能够处理的查询请求上限|
-|enable_partitioned_aggregation|TRUE|使用 PartitionAggregation|
-|enable_token_check|TRUE|Token 开启检验|
-|enable_prefetch|TRUE|查询提前预取|
-|load_process_max_memory_limit_bytes|107374182400|单节点上所有的导入线程占据的内存上限，100GB|
+|fragment_pool_queue_size|2048|单节点上能够处理的查询请求上限。|
+|enable_partitioned_aggregation|TRUE|使用 PartitionAggregation。|
+|enable_token_check|TRUE|Token 开启检验。|
+|enable_prefetch|TRUE|查询提前预取。|
+|load_process_max_memory_limit_bytes|107374182400|单节点上所有的导入线程占据的内存上限，100GB。|
 |load_process_max_memory_limit_percent|30|单节点上所有的导入线程占据的内存上限比例。|
 |sync_tablet_meta|FALSE|存储引擎是否开 sync 保留到磁盘上。|
 |routine_load_thread_pool_size|10|例行导入的线程池数目。|
@@ -451,7 +451,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 |参数名称|描述|建议值|修改方式|
 |---|---|---|---|
-|performance|scaling governor 用于控制 CPU 的能耗模式，默认是 on-demand 模式，使用 performance 能耗最高，性能也最好，StarRocks 部署建议采用 performance 模式。|performance|echo 'performance' \|sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor|
+|performance|scaling governor 用于控制 CPU 的能耗模式，默认是 on-demand 模式，使用 performance 能耗最高，性能也最好。<br>StarRocks 部署建议采用 performance 模式。|performance|echo 'performance' \|sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor|
 
 ### 内存
 
