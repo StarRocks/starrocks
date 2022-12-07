@@ -7,7 +7,7 @@ StarRocks 支持前向兼容，因此您可以灰度升级。
 > 注意：
 >
 > * 因为 StarRocks 支持 BE 后向兼容 FE，所以请务必**先升级 BE 节点，再升级 FE 节点**。错误的升级顺序可能导致新旧 FE、BE 节点不兼容，进而导致 BE 节点停止服务。
-> * 请谨慎跨版本升级。如需跨版本升级，建议您在测试环境验证无误后再升级生产环境。DorisDB 升级至 Starrocks-2.x 版本时需要前置开启 CBO，因此您需要先将 DorisDB 升级至 StarRocks 1.19.x 版本。您可以在[官网](https://www.starrocks.com/zh-CN/download)获取 1.19.x 版本的安装包。
+> * 请谨慎跨版本升级。如需跨版本升级，建议您在测试环境验证无误后再升级生产环境。DorisDB 升级至 Starrocks-2.x 版本时需要前置开启 CBO，因此您需要先将 DorisDB 升级至 StarRocks 1.19.x 版本。您可以在[官网](https://www.mirrorship.cn/zh-CN/download)获取 1.19.x 版本的安装包。
 
 ## 准备升级环境
 
