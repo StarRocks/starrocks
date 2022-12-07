@@ -1096,12 +1096,6 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, aliases = {"schedule_slot_num_per_path"})
     public static int tablet_sched_slot_num_per_path = 2;
 
-    /**
-     * the slot number per path for balance task
-     */
-    @ConfField(mutable = true)
-    public static int tablet_sched_balance_slot_num_per_path = 2;
-
     // if the number of scheduled tablets in TabletScheduler exceed max_scheduling_tablets
     // skip checking.
     @ConfField(mutable = true, aliases = {"max_scheduling_tablets"})
