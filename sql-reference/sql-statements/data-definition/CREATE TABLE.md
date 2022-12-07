@@ -298,8 +298,6 @@ PROPERTIES (
 
 **storage_medium**：用于指定该分区的初始存储介质，可选择 SSD 或 HDD。
 
-* 默认初始存储介质可通过 fe 的配置文件 `fe.conf` 中指定 `default_storage_medium=xxx`，如果没有指定，则默认为 HDD。
-
 > 注意：当 FE 配置项 `enable_strict_storage_medium_check` 为 `true` 时，若集群中没有设置对应的存储介质时，建表语句会报错 `Failed to find enough hosts with storage medium [SSD|HDD] at all backends...`。设置 `enable_strict_storage_medium_check` 为 `false` 可以忽略该报错强行建表，但是后续可能会导致集群磁盘空间分布出现不均衡，所以强烈建议在建表时指定和集群存储介质相匹配的 `storage_medium` 属性。
 
 **storage_cooldown_time**：当设置存储介质为 SSD 时，指定该分区在该时间点之后从 SSD 降冷到 HDD，设置的时间应该大于当前时间。
