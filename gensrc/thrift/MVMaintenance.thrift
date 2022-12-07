@@ -16,64 +16,11 @@
 namespace cpp starrocks
 namespace java com.starrocks.thrift
 
+include "AgentService.thrift"
+include "PlanNodes.thrift"
 include "Status.thrift"
 include "Types.thrift"
-include "AgentService.thrift"
 include "InternalService.thrift"
-
-struct TMVMaintenanceStartTask {
-    1: optional string db_name
-    2: optional string mv_name
-    3: optional InternalService.TExecPlanFragmentParams plan_params
-}
-
-struct TMVMaintenanceStopTask {
-}
-
-struct TBinlogOffset {
-    1: optional Types.TVersion version
-    2: optional i64 lsn
-}
-
-struct TBinlogScanRange {
-  1: optional string db_name
-  2: optional Types.TTableId table_id
-  3: optional Types.TPartitionId partition_id
-  4: optional Types.TTabletId tablet_id
-  5: optional TBinlogOffset lsn
-}
-
-struct TMVEpoch {
-    1: optional Types.TTransactionId txn_id
-    2: optional i64 epoch_id
-    3: optional Types.TTimestamp start_ts
-    4: optional Types.TTimestamp commit_ts
-    5: optional list<TBinlogScanRange> binlog_scan
-
-    11: optional i64 max_exec_millis
-    12: optional i64 max_scan_rows
-}
-
-struct TMVStartEpochTask {
-    1: optional TMVEpoch epoch
-}
-
-struct TMVCommitEpochTask {
-    1: optional TMVEpoch epoch
-    2: optional list<AgentService.TPartitionVersionInfo> partition_version_infos
-}
-
-struct TMVReportEpochTask {
-    1: optional TMVEpoch epoch
-    // Each tablet's binlog consumption state
-    2: optional map<i64, TBinlogOffset> binlog_consume_state
-    // Transaction state
-    3: optional list<Types.TTabletCommitInfo> txn_commit_info
-    4: optional list<Types.TTabletFailInfo> txn_fail_info
-}
-
-struct TMVReportEpochResponse {
-}
 
 enum MVTaskType {
     // For BE
@@ -86,23 +33,75 @@ enum MVTaskType {
     REPORT_EPOCH,
 }
 
-// All tasks of MV maintenance
+struct TMVMaintenanceStartTask {
+    3: optional list<InternalService.TExecPlanFragmentParams> fragments;
+}
+
+struct TMVMaintenanceStopTask {
+}
+
+struct TMVEpoch {
+    1: optional Types.TTransactionId txn_id
+    2: optional i64 epoch_id
+    3: optional Types.TTimestamp start_ts
+    4: optional Types.TTimestamp commit_ts
+}
+
+struct TMVStartEpochTask {
+    1: optional TMVEpoch epoch
+    
+    // Start position of this epoch
+    2: optional list<PlanNodes.TScanRange>  scan_range
+    
+    // Max execution threshold of this epoch
+    3: optional i64 max_exec_millis
+    4: optional i64 max_scan_rows
+}
+
+struct TMVCommitEpochTask {
+    1: optional TMVEpoch epoch
+    
+    2: optional list<AgentService.TPartitionVersionInfo> partition_version_infos
+}
+
+// TOD
+struct TMVAbortEpochTask {
+    1: optional TMVEpoch epoch
+}
+
+struct TMVReportEpochTask {
+    1: optional TMVEpoch epoch
+    
+    // Each tablet's binlog consumption state
+    2: optional list<Types.TBinlogOffset> binlog_consume_state
+    // Transaction state
+    3: optional list<Types.TTabletCommitInfo> txn_commit_info
+    4: optional list<Types.TTabletFailInfo> txn_fail_info
+}
+
+struct TMVReportEpochResponse {
+}
+
+// Union of all tasks of MV maintenance, distinguished by task_type
 // Why not put them into the AgentTask interface? 
 // Cause it's under rapid development and changed quickly, it should not disturb the stable interfaces
 struct TMVMaintenanceTasks {
     // Common parameters for task
     1: optional AgentService.TAgentServiceVersion protocol_version
-    2: optional MVTaskType task_type
+    2: optional MVTaskType task_type 
     3: optional i64 signature
-    4: optional i64 job_id
-    5: optional i64 task_id
+    4: optional string db_name
+    5: optional string mv_name
+    6: optional i64 job_id
+    7: optional i64 task_id
 
     // Tasks for BE
     11: optional TMVMaintenanceStartTask start_maintenance
     12: optional TMVMaintenanceStopTask stop_maintenance
     13: optional TMVStartEpochTask start_epoch
     14: optional TMVCommitEpochTask commit_epoch
+    15: optional TMVAbortEpochTask abort_epoch
     
     // Tasks for FE
-    21: optional TMVReportEpochTask report_epoch
+    31: optional TMVReportEpochTask report_epoch
 }

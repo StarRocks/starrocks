@@ -479,3 +479,14 @@ enum TWriteQuorumType {
     MAJORITY = 1;
     ALL = 2;
 }
+
+enum StreamSourceType {
+    BINLOG,
+    KAFKA, // NOT IMPLEMENTED
+}
+
+struct TBinlogOffset {
+    1: optional TTabletId tablet_id
+    2: optional TVersion version
+    3: optional i64 lsn
+}
