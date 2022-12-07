@@ -168,6 +168,7 @@ private:
     Columns _fields;
     // A collection that contains each struct subfield name.
     // _fields and _field_names should have the same size (_fields.size() == _field_names.size()).
+    // _field_names will not participate in serialization because it is created based on meta information
     BinaryColumn::Ptr _field_names;
 };
 } // namespace starrocks::vectorized

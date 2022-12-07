@@ -260,11 +260,11 @@ uint32_t StructColumn::max_one_element_serialize_size() const {
     size_t n = size();
     uint32_t max_size = 0;
     for (size_t i = 0; i < n; i++) {
-        uint32_t row_size = 0;
+        uint32_t row_max_size = 0;
         for (const auto& column : _fields) {
-            row_size += column->max_one_element_serialize_size();
+            row_max_size += column->max_one_element_serialize_size();
         }
-        max_size = std::max(max_size, row_size);
+        max_size = std::max(max_size, row_max_size);
     }
     return max_size;
 }
