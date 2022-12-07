@@ -172,7 +172,7 @@ Status RowsetUpdateState::_do_load(Tablet* tablet, Rowset* rowset) {
         RETURN_IF_ERROR(_load_upserts(rowset, 0, pk_column.get()));
     }
 
-    if (!rowset->rowset_meta()->get_meta_pb().has_txn_meta() || rowset->num_segments() == 0) {
+    if (!_check_partial_update(rowset)) {
         return Status::OK();
     }
     return _prepare_partial_update_states(tablet, rowset);
@@ -371,6 +371,15 @@ Status RowsetUpdateState::_prepare_partial_update_states(Tablet* tablet, Rowset*
     return Status::OK();
 }
 
+bool RowsetUpdateState::_check_partial_update(Rowset *rowset) {
+    if (!rowset->rowset_meta()->get_meta_pb().has_txn_meta() || rowset->num_segments() == 0) {
+        return false;
+    }
+    // Merge condition will also set txn_meta but will not set partial_update_column_ids
+    const auto& txn_meta = rowset->rowset_meta()->get_meta_pb().txn_meta();
+    return !txn_meta.partial_update_column_ids().empty();
+}
+
 Status RowsetUpdateState::_check_and_resolve_conflict(Tablet* tablet, Rowset* rowset, uint32_t rowset_id,
                                                       EditVersion latest_applied_version,
                                                       std::vector<uint32_t>& read_column_ids,
@@ -452,7 +461,7 @@ Status RowsetUpdateState::_check_and_resolve_conflict(Tablet* tablet, Rowset* ro
 Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_id, EditVersion latest_applied_version,
                                 const PrimaryIndex& index) {
     const auto& rowset_meta_pb = rowset->rowset_meta()->get_meta_pb();
-    if (!rowset_meta_pb.has_txn_meta() || rowset->num_segments() == 0) {
+    if (!_check_partial_update(rowset)) {
         return Status::OK();
     }
     // currently assume it's a partial update
