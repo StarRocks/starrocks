@@ -221,6 +221,13 @@ public:
         }
         case VALUE: {
             raw::stl_vector_resize_uninitialized(&_slices, count);
+            size_t size = _dict.size();
+            for (int i = 0; i < count; ++i) {
+                if (_indexes[i] >= size) {
+                    return Status::InternalError(
+                            fmt::format("dict code is out of range. code = {}, size = {}", _indexes[i], size));
+                }
+            }
             for (int i = 0; i < count; ++i) {
                 _slices[i] = _dict[_indexes[i]];
             }
