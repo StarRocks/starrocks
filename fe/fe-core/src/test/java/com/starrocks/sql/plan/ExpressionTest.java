@@ -499,6 +499,20 @@ public class ExpressionTest extends PlanTestBase {
     }
 
     @Test
+    public void testLambdaReduce() throws Exception {
+        starRocksAssert.withTable("create table test_lambda" +
+                "(c0 INT, c2 array<int>) " +
+                " duplicate key(c0) distributed by hash(c0) buckets 1 " +
+                "properties('replication_num'='1');");
+        String sql = "select * from test_lambda where array_map(x -> x, c2) is not null";
+        String plan = getFragmentPlan(sql);
+        Assert.assertFalse(plan.contains("array_map"));
+
+        sql = "select array_map(x -> x, c2) from test_lambda";
+        plan = getFragmentPlan(sql);
+        Assert.assertFalse(plan.contains("array_map"));
+    }
+    @Test
     public void testLambdaPredicateOnScan() throws Exception {
         starRocksAssert.withTable("create table test_lambda_on_scan" +
                 "(c0 INT, c2 array<int>) " +
