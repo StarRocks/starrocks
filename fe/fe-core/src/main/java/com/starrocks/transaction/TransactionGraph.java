@@ -77,6 +77,11 @@ public class TransactionGraph {
         public int hashCode() {
             return Objects.hash(txnId);
         }
+
+        @Override
+        public String toString() {
+            return Long.toString(txnId);
+        }
     }
 
     private Map<Long, Node> nodes = new HashMap<>();
@@ -117,7 +122,12 @@ public class TransactionGraph {
         if (node == null) {
             return;
         }
-        Preconditions.checkState(node.ins == null || node.ins.isEmpty(), "only can remove node with no dependency");
+        if (node.ins != null && !node.ins.isEmpty()) {
+            LOG.warn("remove txn " + txnId + " with dependency: " + node.ins + " this may happen during FE upgrading");
+            for (Node dep : node.ins) {
+                dep.outs.remove(node);
+            }
+        }
         nodes.remove(txnId);
         nodesWithoutIns.remove(node);
         for (long tableId : node.writeTableIds) {
