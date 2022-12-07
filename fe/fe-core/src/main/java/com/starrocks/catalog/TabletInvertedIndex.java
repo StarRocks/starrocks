@@ -40,6 +40,7 @@ import com.google.common.collect.HashBasedTable;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.google.common.collect.Table;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.common.Config;
@@ -87,6 +88,8 @@ public class TabletInvertedIndex {
 
     // replica id -> tablet id
     private Map<Long, Long> replicaToTabletMap = Maps.newHashMap();
+
+    private Set<Long> truncatedTablets = Sets.newHashSet();
 
     // tablet id -> (backend id -> replica)
     private Table<Long, Long, Replica> replicaMetaTable = HashBasedTable.create();
@@ -417,6 +420,18 @@ public class TabletInvertedIndex {
         } finally {
             writeUnlock();
         }
+    }
+
+    public boolean tabletTruncated(long tabletId) {
+        return truncatedTablets.contains(tabletId);
+    }
+
+    public void markTabletTruncated(long tabletId) {
+        truncatedTablets.add(tabletId);
+    }
+    
+    public void eraseTabletTruncated(long tabletId) {
+        truncatedTablets.remove(tabletId);
     }
 
     public void deleteTablet(long tabletId) {
