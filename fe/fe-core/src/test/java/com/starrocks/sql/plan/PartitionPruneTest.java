@@ -136,11 +136,16 @@ public class PartitionPruneTest extends PlanTestBase {
 
     @Test
     public void testInvalidDatePrune() throws Exception {
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(300000);
         List<String> sqls = Lists.newArrayList();
 
+        String plan = "";
         sqls.add("select * from ptest where d2 in ('1998-01-32', 'abc', 'abc')");
-        String plan = getFragmentPlan(sqls.get(0));
-        assertContains(plan, "partitions=0/4");
+        sqls.add("select * from ptest where d2 <= '1998-01-32'");
+        for (String sql : sqls) {
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "partitions=0/4");
+        }
 
         sqls.clear();
         sqls.add("select * from ptest where d2 in ('abc')");
