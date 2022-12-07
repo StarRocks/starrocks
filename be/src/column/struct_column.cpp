@@ -51,8 +51,6 @@ size_t StructColumn::byte_size() const {
     for (const auto& column : _fields) {
         total_size += column->byte_size();
     }
-    // We need plus _field_names size
-    total_size += _field_names->byte_size();
     return total_size;
 }
 
@@ -61,8 +59,6 @@ size_t StructColumn::byte_size(size_t idx) const {
     for (const auto& column : _fields) {
         total_size += column->byte_size(idx);
     }
-    // We need plus _field_names size
-    total_size += _field_names->byte_size();
     return total_size;
 }
 
@@ -223,54 +219,54 @@ void StructColumn::append_default(size_t count) {
 }
 
 uint32_t StructColumn::serialize(size_t idx, uint8_t* pos) {
-    // TODO(SmithCruise) Not tested.
     uint32_t ser_size = 0;
     for (ColumnPtr& column : _fields) {
-        ser_size += column->serialize(idx, pos);
-    }
-    for (size_t i = 0; i < _field_names->size(); i++) {
-        ser_size += _field_names->serialize(i, pos);
+        ser_size += column->serialize(idx, pos + ser_size);
     }
     return ser_size;
 }
 
 uint32_t StructColumn::serialize_default(uint8_t* pos) {
-    // TODO(SmithCruise) Not tested.
     uint32_t ser_size = 0;
     for (ColumnPtr& column : _fields) {
-        ser_size += column->serialize_default(pos);
-    }
-    for (size_t i = 0; i < _field_names->size(); i++) {
-        ser_size += _field_names->serialize(i, pos);
+        ser_size += column->serialize_default(pos + ser_size);
     }
     return ser_size;
 }
 
 void StructColumn::serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
                                    uint32_t max_one_row_size) {
-    // TODO(SmithCruise) Not tested.
     for (size_t i = 0; i < chunk_size; ++i) {
         slice_sizes[i] += serialize(i, dst + i * max_one_row_size + slice_sizes[i]);
     }
 }
 
 const uint8_t* StructColumn::deserialize_and_append(const uint8_t* pos) {
-    DCHECK(false) << "Dont support it";
-    return nullptr;
+    for (size_t i = 0; i < _fields.size(); i++) {
+        pos = _fields[i]->deserialize_and_append(pos);
+    }
+    return pos;
 }
 
 void StructColumn::deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) {
-    DCHECK(false) << "Dont support it";
+    reserve(chunk_size);
+    for (size_t i = 0; i < chunk_size; ++i) {
+        srcs[i].data = (char*)deserialize_and_append((uint8_t*)srcs[i].data);
+    }
+}
+
+uint32_t StructColumn::max_one_element_serialize_size() const {
+    uint32_t max_size = 0;
+    for (const auto& column : _fields) {
+        max_size += column->max_one_element_serialize_size();
+    }
+    return max_size;
 }
 
 uint32_t StructColumn::serialize_size(size_t idx) const {
-    // TODO(SmithCruise) Not tested.
     uint32_t ser_size = 0;
     for (const ColumnPtr& column : _fields) {
         ser_size += column->serialize_size(idx);
-    }
-    for (size_t i = 0; i < _field_names->size(); i++) {
-        ser_size += _field_names->serialize_size(i);
     }
     return ser_size;
 }
@@ -384,6 +380,15 @@ Datum StructColumn::get(size_t idx) const {
     return Datum(res);
 }
 
+size_t StructColumn::memory_usage() const {
+    size_t memory_usage = 0;
+    for (const auto& column : _fields) {
+        memory_usage += column->memory_usage();
+    }
+    memory_usage += _field_names->memory_usage();
+    return memory_usage;
+}
+
 size_t StructColumn::container_memory_usage() const {
     size_t memory_usage = 0;
     for (const auto& column : _fields) {
@@ -391,6 +396,17 @@ size_t StructColumn::container_memory_usage() const {
     }
     memory_usage += _field_names->container_memory_usage();
     return memory_usage;
+}
+
+size_t StructColumn::element_memory_usage(size_t from, size_t size) const {
+    DCHECK_LE(from + size, this->size()) << "Range error";
+    size_t memorg_usage = 0;
+    for (const auto& column : _fields) {
+        memorg_usage += column->element_memory_usage(from, size);
+    }
+
+    // Do not need to include _field_names's element_memory_usage, because it's BinaryColumn, always return 0.
+    return memorg_usage;
 }
 
 void StructColumn::swap_column(Column& rhs) {

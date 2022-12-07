@@ -116,6 +116,8 @@ public:
 
     void deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) override;
 
+    uint32_t max_one_element_serialize_size() const override;
+
     uint32_t serialize_size(size_t idx) const override;
 
     MutableColumnPtr clone_empty() const override;
@@ -140,15 +142,19 @@ public:
 
     Datum get(size_t n) const override;
 
+    size_t memory_usage() const override;
+
     size_t container_memory_usage() const override;
 
+    size_t element_memory_usage(size_t from, size_t size) const override;
+
     void swap_column(Column& rhs) override;
+
+    void reset_column() override;
 
     bool capacity_limit_reached(std::string* msg = nullptr) const override;
 
     void check_or_die() const override;
-
-    void reset_column() override;
 
     // Struct Column own functions
     const Columns& fields() const;
@@ -166,6 +172,7 @@ private:
     Columns _fields;
     // A collection that contains each struct subfield name.
     // _fields and _field_names should have the same size (_fields.size() == _field_names.size()).
+    // _field_names will not participate in serialization because it is created based on meta information
     BinaryColumn::Ptr _field_names;
 };
 } // namespace starrocks::vectorized
