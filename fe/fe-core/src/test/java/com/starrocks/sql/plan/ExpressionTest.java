@@ -547,6 +547,11 @@ public class ExpressionTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("common expressions"));
         Assert.assertTrue(plan.contains("array_length(6: array_map)"));
+
+        sql = "select  array_map(x->x+ 3 *c1 + 3*c1, c2) from test_array";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("common expressions"));
+        Assert.assertTrue(plan.contains("array_map(<slot 4> -> CAST(<slot 4> AS BIGINT) + 7: multiply + 7: multiply, 2: c2)"));
     }
 
     @Test
