@@ -263,6 +263,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 | yarn_config_dir                   | StarRocksFE.STARROCKS_HOME_DIR + "/lib/yarn-config"          | Yarn 配置文件的保存目录。                                    |
 | export_checker_interval_second    | 5                                                            | 导出作业调度器的调度间隔。                                   |
 | export_task_pool_size             | 5                                                            | 导出任务线程池的大小。                                       |
+| broker_client_timeout_ms          | 10000                                                        | Broker rpc 的默认超时时间,单位：毫秒，默认10s                 |
 
 #### 存储
 
