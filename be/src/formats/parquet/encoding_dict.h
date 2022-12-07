@@ -108,19 +108,6 @@ public:
         return Status::OK();
     }
 
-    template <typename T>
-    Status check_dict_code_out_of_range(const std::vector<T>& codes) {
-        size_t size = _dict.size();
-        size_t count = codes.size();
-        for (int i = 0; i < count; ++i) {
-            if (codes[i] >= size) {
-                return Status::InternalError(
-                        fmt::format("dict code is out of range. code = {}, size = {}", codes[i], size));
-            }
-        }
-        return Status::OK();
-    }
-
     Status next_batch(size_t count, ColumnContentType content_type, vectorized::Column* dst) override {
         _indexes.reserve(count);
         _index_batch_decoder.GetBatch(&_indexes[0], count);
@@ -135,7 +122,7 @@ public:
             data_column = down_cast<vectorized::FixedLengthColumn<T>*>(dst);
         }
 
-        RETURN_IF_ERROR(check_dict_code_out_of_range(_indexes));
+        RETURN_IF_ERROR(check_dict_code_out_of_range(_indexes, _dict));
         size_t cur_size = data_column->size();
         data_column->resize_uninitialized(cur_size + count);
         T* __restrict__ data = data_column->get_data().data() + cur_size;
@@ -197,22 +184,9 @@ public:
         return Status::OK();
     }
 
-    template <typename T>
-    Status check_dict_code_out_of_range(const std::vector<T>& codes) {
-        size_t size = _dict.size();
-        size_t count = codes.size();
-        for (int i = 0; i < count; ++i) {
-            if (codes[i] >= size) {
-                return Status::InternalError(
-                        fmt::format("dict code is out of range. code = {}, size = {}", codes[i], size));
-            }
-        }
-        return Status::OK();
-    }
-
     Status get_dict_values(const std::vector<int32_t>& dict_codes, vectorized::Column* column) override {
         std::vector<Slice> slices(dict_codes.size());
-        RETURN_IF_ERROR(check_dict_code_out_of_range(dict_codes));
+        RETURN_IF_ERROR(check_dict_code_out_of_range(dict_codes, _dict));
         for (size_t i = 0; i < dict_codes.size(); i++) {
             slices[i] = _dict[dict_codes[i]];
         }
@@ -249,7 +223,7 @@ public:
         }
         case VALUE: {
             raw::stl_vector_resize_uninitialized(&_slices, count);
-            RETURN_IF_ERROR(check_dict_code_out_of_range(_indexes));
+            RETURN_IF_ERROR(check_dict_code_out_of_range(_indexes, _dict));
             for (int i = 0; i < count; ++i) {
                 _slices[i] = _dict[_indexes[i]];
             }
