@@ -34,13 +34,15 @@ class CompactionCandidate;
 class CompactionScheduler {
 public:
     CompactionScheduler();
-    ~CompactionScheduler() = default;
+    ~CompactionScheduler();
 
     void schedule();
 
     void notify();
 
 private:
+    void _schedule();
+
     // wait until current running tasks are below max_concurrent_num
     void _wait_to_run();
 
@@ -52,8 +54,10 @@ private:
     static bool _check_precondition(const CompactionCandidate& candidate);
 
 private:
-    std::unique_ptr<ThreadPool> _compaction_pool;
+    std::unique_ptr<ThreadPool> _compaction_pool = nullptr;
+    std::thread _scheduler_thread;
 
+    std::atomic<bool> _bg_worker_stopped{false};
     std::mutex _mutex;
     std::condition_variable _cv;
     uint64_t _round = 0;

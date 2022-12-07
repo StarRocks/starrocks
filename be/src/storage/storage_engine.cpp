@@ -53,6 +53,7 @@
 #include "runtime/exec_env.h"
 #include "storage/base_compaction.h"
 #include "storage/compaction_manager.h"
+#include "storage/compaction_scheduler.h"
 #include "storage/data_dir.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/rowset/rowset_meta.h"
@@ -103,7 +104,8 @@ StorageEngine::StorageEngine(const EngineOptions& options)
           _rowset_id_generator(new UniqueRowsetIdGenerator(options.backend_uid)),
           _memtable_flush_executor(nullptr),
           _update_manager(new UpdateManager(options.update_mem_tracker)),
-          _compaction_manager(new CompactionManager()) {
+          _compaction_manager(new CompactionManager()),
+          _compaction_scheduler(new CompactionScheduler()) {
 #ifdef BE_TEST
     _p_instance = _s_instance;
     _s_instance = this;
