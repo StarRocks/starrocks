@@ -80,6 +80,8 @@ public:
 
     OlapRuntimeScanRangePruner runtime_range_pruner;
 
+    const std::atomic<bool>* is_cancelled = nullptr;
+
 public:
     Status convert_to(SegmentReadOptions* dst, const std::vector<LogicalType>& new_types, ObjectPool* obj_pool) const;
 

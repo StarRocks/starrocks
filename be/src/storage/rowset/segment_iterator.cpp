@@ -337,6 +337,9 @@ SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, vectorized::V
 
 Status SegmentIterator::_init() {
     SCOPED_RAW_TIMER(&_opts.stats->segment_init_ns);
+    if (_opts.is_cancelled != nullptr && _opts.is_cancelled->load(std::memory_order_acquire)) {
+        return Status::Cancelled("Cancelled");
+    }
     if (!_get_del_vec_st.ok()) {
         return _get_del_vec_st;
     }
