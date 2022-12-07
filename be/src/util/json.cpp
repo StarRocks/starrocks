@@ -20,7 +20,7 @@
 namespace starrocks {
 
 static bool is_json_start_char(char ch) {
-    return ch == '{' || ch == '[' || ch == '"' || std::isdigit(ch);
+    return ch == '{' || ch == '[' || ch == '"';
 }
 
 StatusOr<JsonValue> JsonValue::parse_json_or_string(const Slice& src) {
@@ -51,6 +51,7 @@ StatusOr<JsonValue> JsonValue::parse_json_or_string(const Slice& src) {
 }
 
 Status JsonValue::parse(const Slice& src, JsonValue* out) {
+<<<<<<< HEAD
     try {
         if (src.empty()) {
             *out = JsonValue(noneJsonSlice());
@@ -65,6 +66,17 @@ Status JsonValue::parse(const Slice& src, JsonValue* out) {
         return fromVPackException(e);
     }
     return Status::OK();
+=======
+    ASSIGN_OR_RETURN(auto json_value, parse_json_or_string(src));
+    *out = std::move(json_value);
+    return {};
+}
+
+StatusOr<JsonValue> JsonValue::parse(const Slice& src) {
+    JsonValue json;
+    RETURN_IF_ERROR(parse(src, &json));
+    return json;
+>>>>>>> d3b0766c9 ([BugFix] fix parse number format json string behavior (#14690))
 }
 
 JsonValue JsonValue::from_null() {
@@ -107,12 +119,6 @@ StatusOr<JsonValue> JsonValue::from_simdjson(simdjson::ondemand::value* value) {
 
 StatusOr<JsonValue> JsonValue::from_simdjson(simdjson::ondemand::object* obj) {
     return convert_from_simdjson(*obj);
-}
-
-StatusOr<JsonValue> JsonValue::parse(const Slice& src) {
-    JsonValue json;
-    RETURN_IF_ERROR(parse(src, &json));
-    return json;
 }
 
 size_t JsonValue::serialize(uint8_t* dst) const {
