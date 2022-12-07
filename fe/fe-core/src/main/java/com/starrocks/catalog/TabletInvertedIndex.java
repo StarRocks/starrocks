@@ -27,6 +27,7 @@ import com.google.common.collect.HashBasedTable;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.google.common.collect.Table;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.common.Pair;
@@ -73,6 +74,7 @@ public class TabletInvertedIndex {
     // replica id -> tablet id
     private Map<Long, Long> replicaToTabletMap = Maps.newHashMap();
 
+<<<<<<< HEAD
     /*
      *  we use this to save memory.
      *  we do not need create TabletMeta instance for each tablet,
@@ -83,6 +85,9 @@ public class TabletInvertedIndex {
      *  partition id -> (index id -> tablet meta)
      */
     private Table<Long, Long, TabletMeta> tabletMetaTable = HashBasedTable.create();
+=======
+    private Set<Long> truncatedTablets = Sets.newHashSet();
+>>>>>>> 5d5f218c6 ([BugFix] Make truncated table not to be moved to trash (#14726))
 
     // tablet id -> (backend id -> replica)
     private Table<Long, Long, Replica> replicaMetaTable = HashBasedTable.create();
@@ -414,6 +419,18 @@ public class TabletInvertedIndex {
         } finally {
             writeUnlock();
         }
+    }
+
+    public boolean tabletTruncated(long tabletId) {
+        return truncatedTablets.contains(tabletId);
+    }
+
+    public void markTabletTruncated(long tabletId) {
+        truncatedTablets.add(tabletId);
+    }
+    
+    public void eraseTabletTruncated(long tabletId) {
+        truncatedTablets.remove(tabletId);
     }
 
     public void deleteTablet(long tabletId) {
