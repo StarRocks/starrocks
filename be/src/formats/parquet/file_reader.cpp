@@ -143,7 +143,7 @@ Status FileReader::_read_min_max_chunk(const tparquet::RowGroup& row_group, vect
     const vectorized::HdfsScannerContext& ctx = *_scanner_ctx;
     for (size_t i = 0; i < ctx.min_max_tuple_desc->slots().size(); i++) {
         const auto* slot = ctx.min_max_tuple_desc->slots()[i];
-        const auto* column_meta = _get_column_meta(row_group, slot->col_name(), _scanner_ctx);
+        const auto* column_meta = _get_column_meta(row_group, slot->col_name(), _scanner_ctx->case_sensitive);
         if (column_meta == nullptr) {
             int col_idx = _get_partition_column_idx(slot->col_name());
             if (col_idx < 0) {
@@ -469,11 +469,10 @@ Status FileReader::_exec_only_partition_scan(vectorized::ChunkPtr* chunk) {
 }
 
 const tparquet::ColumnMetaData* FileReader::_get_column_meta(const tparquet::RowGroup& row_group,
-                                                             const std::string& col_name,
-                                                             const vectorized::HdfsScannerContext* ctx) {
+                                                             const std::string& col_name, bool case_sensitive) {
     for (const auto& column : row_group.columns) {
         // TODO: support non-scalar type
-        if (ctx->case_sensitive) {
+        if (case_sensitive) {
             if (column.meta_data.path_in_schema[0] == col_name) {
                 return &column.meta_data;
             }
