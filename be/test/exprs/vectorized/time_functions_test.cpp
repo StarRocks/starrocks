@@ -2812,6 +2812,55 @@ TEST_F(TimeFunctionsTest, timeSliceCeilTest) {
     }
 }
 
+TEST_F(TimeFunctionsTest, timeSliceTestWithThrowExceptions) {
+    auto tc = TimestampColumn::create();
+    tc->append(TimestampValue::create(0000, 1, 1, 0, 0, 0));
+
+    std::vector<FunctionContext::TypeDesc> arg_types = {
+            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_DATETIME))};
+    auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_DATETIME));
+    std::unique_ptr<FunctionContext> time_slice_context(
+            FunctionContext::create_test_context(std::move(arg_types), return_type));
+
+    //second
+    {
+        auto period_value = Int32Column::create();
+        period_value->append(5);
+        auto period_column = ConstColumn::create(period_value, 1);
+
+        auto unit_text = BinaryColumn::create();
+        unit_text->append("second");
+        auto unit_column = ConstColumn::create(unit_text, 1);
+
+        auto boundary_text = BinaryColumn::create();
+        boundary_text->append("floor");
+        auto boundary_column = ConstColumn::create(boundary_text, 1);
+
+        Columns columns;
+        columns.emplace_back(tc);
+        columns.emplace_back(period_column);
+        columns.emplace_back(unit_column);
+        columns.emplace_back(boundary_column);
+
+        time_slice_context->impl()->set_constant_columns(columns);
+
+        ASSERT_TRUE(TimeFunctions::time_slice_prepare(time_slice_context.get(),
+                                                      FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                            .ok());
+
+        try {
+            ColumnPtr result = TimeFunctions::time_slice(time_slice_context.get(), columns).value();
+        } catch (std::runtime_error const& e ) {
+            ASSERT_EQ("time used with time_slice can't before 0001-01-01 00:00:00", std::string(e.what()));
+        }
+
+        ASSERT_TRUE(
+                TimeFunctions::time_slice_close(time_slice_context.get(),
+                                                FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+    }
+}
+
 TEST_F(TimeFunctionsTest, DateSliceFloorTest) {
     auto tc = DateColumn::create();
     tc->append(DateValue::create(0001, 1, 1));
