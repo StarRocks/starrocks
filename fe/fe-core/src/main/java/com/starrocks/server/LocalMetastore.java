@@ -4261,6 +4261,13 @@ public class LocalMetastore implements ConnectorMetadata {
         // remove the tablets in old partitions
         for (Long tabletId : oldTabletIds) {
             GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(tabletId);
+            // Ensure that only the leader records truncate information.
+            // TODO(yangzaorang): the information will be lost when failover occurs. The probability of this case
+            // happening is small, and the trash data will be deleted by BE anyway, but we need to find a better
+            // solution.
+            if (!isReplay) {
+                GlobalStateMgr.getCurrentInvertedIndex().markTabletTruncated(tabletId);
+            }
         }
 
         // if it is lake table, need to delete shard and drop tablet
