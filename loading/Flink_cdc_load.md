@@ -100,13 +100,13 @@
    > $ ./bin/start-cluster.sh
    > ```
 
-5. 下载并解压 [SMT](https://www.mirrorship.cn/zh-CN/download/community)，并将放在 **flink-1.14.5** 目录下。
+5. 下载并解压 [SMT](https://www.mirrorship.cn/zh-CN/download/community)，并将其放在 **flink-1.14.5** 目录下。您可以根据操作系统选择 x86 或 M1 的安装包。
 
    ```Bash
    wget https://cdn-thirdparty.starrocks.com/smt.tar.gz
    ```
 
-### 开启 MySQL  Binlog 日志
+### 开启 MySQL Binlog 日志
 
 您需要确保已经开启 MySQL Binlog 日志，实时同步时需要读取 MySQL Binlog 日志数据，解析并同步至 StarRocks。
 
