@@ -130,8 +130,8 @@ public class PartitionPruneTest extends PlanTestBase {
         }
 
         sqls.clear();
-        sqls.add("select * from ptest where d2 in ('1998-01-32', cast(cast('2021-01-12' as SIGNED) as DATE))");
-        sqls.add("select * from ptest where d2 in ('1998-01-01', cast(cast('2021-01-12' as SIGNED) as DATE))");
+        sqls.add("select * from ptest where d2 in ('1998-01-32', cast(abs(123456) as DATE))");
+        sqls.add("select * from ptest where d2 in ('1998-01-01', cast(abs(123456) as DATE))");
         for (String sql : sqls) {
             plan = getFragmentPlan(sql);
             assertContains(plan, "partitions=4/4");
