@@ -4,7 +4,7 @@ This topic describes how to deploy Broker. With Broker, StarRocks can read data 
 
 ## Download and decompress the installer
 
-[Download](https://download.starrocks.com/en-US/download/community) and decompress StarRocks installer.
+[Download](https://www.starrocks.io/download/community) and decompress StarRocks installer.
 
 ```bash
 tar -xzvf StarRocks-x.x.x.tar.gz

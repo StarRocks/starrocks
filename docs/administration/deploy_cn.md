@@ -10,7 +10,7 @@ During query execution, BEs run computation tasks that are prior to data shuffli
 
 ## Download and decompress the installer
 
-[Download](https://download.starrocks.com/en-US/download/community) and decompress StarRocks installer.
+[Download](https://www.starrocks.io/download/community) and decompress StarRocks installer.
 
 ```bash
 tar -xzvf StarRocks-x.x.x.tar.gz
