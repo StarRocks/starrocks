@@ -39,7 +39,7 @@ For detailed instructions, please refer to [build](https://github.com/StarRocks/
 
 ## Install
 
-Download the current release [here](https://www.starrocks.com/en-US/download/community).  
+Download the current release [here](https://www.starrocks.io/download/community).  
 For detailed instructions, please refer to [deploy](https://github.com/StarRocks/docs/blob/master/quick_start/Deploy.md).
 
 ## Links
