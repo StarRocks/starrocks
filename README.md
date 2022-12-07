@@ -99,7 +99,7 @@ We welcome all kinds of contributions from the community, individuals and partne
 3. Understand our [GitHub workflow](https://github.com/StarRocks/community/blob/main/Contributors/guide/workflow.md) for opening a pull request; use this [PR Template](https://github.com/StarRocks/starrocks/blob/main/.github/PULL_REQUEST_TEMPLATE.md) when submitting a pull request.
 4. Pick a [good first issue](https://github.com/StarRocks/starrocks/labels/good%20first%20issue) and start contributing. 
 
-**📝 License:** StaRocks is licensed under [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0).
+**📝 License:** StarRocks is licensed under [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0).
 
 **👥 Community Membership:** Learn more about different [contributor roles](community/membership.md) in StarRocks community.
   
