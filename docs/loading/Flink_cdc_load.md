@@ -110,7 +110,7 @@ To synchronize data from MySQL, you need to install the following tools: SMT, Fl
     > $ ./bin/start-cluster.sh
     > ```
 
-5. Download and decompress the [SMT package](https://www.starrocks.com/zh-CN/download/community) and place it in the `flink-1.14.5` directory.
+5. Download and decompress the [SMT package](https://www.starrocks.io/download/community) and place it in the `flink-1.14.5` directory.
 
    ```Bash
    wget https://cdn-thirdparty.starrocks.com/smt.tar.gz
