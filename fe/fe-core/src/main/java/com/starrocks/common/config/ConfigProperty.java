@@ -6,18 +6,18 @@ import com.google.common.base.Strings;
 import com.starrocks.sql.analyzer.SemanticException;
 
 import java.io.Serializable;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 
 /**
  * ConfigProperty describes a configuration property. It contains the configuration
- * key, deprecated older versions of the key, and an optional default value for the configuration,
- * configuration descriptions and also the an infer mechanism to infer the configuration value
- * based on other configurations.
- *
+ * key, deprecated older versions of the key, and an optional default value for the configuration
  * @param <T> The type of the default value.
  */
 public class ConfigProperty<T> implements Serializable {
@@ -32,12 +32,12 @@ public class ConfigProperty<T> implements Serializable {
 
     private final Optional<String> deprecatedVersion;
 
-    private final Set<String> validValues;
+    private final Set<T> validValues;
 
     public static final String EMPTY_STRING = "";
 
     ConfigProperty(String key, T defaultValue, String doc, Optional<String> sinceVersion,
-                   Optional<String> deprecatedVersion, Set<String> validValues) {
+                   Optional<String> deprecatedVersion, Set<T> validValues) {
         this.key = Objects.requireNonNull(key);
         this.defaultValue = defaultValue;
         this.doc = doc;
@@ -66,12 +66,20 @@ public class ConfigProperty<T> implements Serializable {
     }
 
 
-    public void checkValues(String value) {
+    public T checkValues(T value) {
         if (validValues != null && !validValues.isEmpty() && !validValues.contains(value)) {
-            throw new IllegalArgumentException(
+            throw new SemanticException(
                     "The value of " + key + " should be one of "
-                            + String.join(",", validValues) + ", but was " + value);
+                            + String.join(",", validValues.stream()
+                            .map(String::valueOf).collect((Collectors.toList()))) + ", but was: " + value);
         }
+        return value;
+    }
+
+    public ConfigProperty<T> withValidValues(T... validValues) {
+        Objects.requireNonNull(validValues);
+        return new ConfigProperty<>(key, defaultValue, doc, sinceVersion,
+                deprecatedVersion, new HashSet<>(Arrays.asList(validValues)));
     }
 
     public ConfigProperty<T> withDocumentation(String doc) {

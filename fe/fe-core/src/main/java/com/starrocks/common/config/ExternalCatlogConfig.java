@@ -18,6 +18,7 @@ public class ExternalCatlogConfig {
     public static final ConfigProperty<Boolean> ENABLE_CACHE_LIST_NAMES = ConfigProperty
             .key("enable_cache_list_names")
             .defaultValue(false)
+            .withValidValues(true, false)
             .sinceVersion("2.5")
             .withDocumentation("Whether hive cache list names.");
 }
