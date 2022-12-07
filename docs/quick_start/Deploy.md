@@ -49,7 +49,7 @@ After all the [prerequisites](#prerequisites) are met, you can download the Star
 
     ```Plain
     cd HelloStarRocks
-    wget https://download.starrocks.com/en-US/download/request-download/42/StarRocks-2.3.0.tar.gz
+    wget https://download.starrocks.io/en-US/download/request-download/54/StarRocks-2.4.0.tar.gz
     ```
 
 3. Extract the files in the software package to install StarRocks on your machine.
