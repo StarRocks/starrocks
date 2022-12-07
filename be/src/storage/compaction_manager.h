@@ -122,8 +122,8 @@ private:
     std::unordered_map<DataDir*, uint16_t> _data_dir_to_base_task_num_map;
     std::unordered_map<CompactionType, uint16_t> _type_to_task_num_map;
     std::unique_ptr<ThreadPool> _update_candidate_pool;
-    std::thread _dispatch_update_candidate_thread;
     std::mutex _dispatch_mutex;
+    std::thread _dispatch_update_candidate_thread;
     std::map<int64_t, std::pair<TabletSharedPtr, int32_t>> _dispatch_map;
     std::atomic<bool> _stop = false;
     int32_t _max_dispatch_count = 0;
