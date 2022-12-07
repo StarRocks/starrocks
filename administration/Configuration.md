@@ -279,8 +279,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 | hive_meta_cache_ttl_s              | 86400                                           | Hive 外表元数据缓存的失效时间。单位：秒。                    |
 | hive_meta_store_timeout_s          | 10                                              | 连接 Hive Metastore 的超时时间。单位：秒。                   |
 | es_state_sync_interval_second      | 10                                              | FE 获取 Elasticsearch Index 和同步 StarRocks 外部表元数据的时间间隔。单位：秒。 |
-| enable_auth_check                  | TRUE                                            | 是否开启鉴权。                                               |
-| enable_metric_calculator           | TRUE                                            | 是否开启定期收集指标 (Metrics) 的功能。                      |
+| enable_auth_check                  | TRUE                                            | 是否开启鉴权检查功能。取值范围：`TRUE` 和 `FALSE`。`TRUE` 表示开该功能。`FALSE`表示关闭该功能。                                               |
+| enable_metric_calculator           | TRUE                                            | 是否开启定期收集指标 (Metrics) 的功能。取值范围：`TRUE` 和 `FALSE`。`TRUE` 表示开该功能。`FALSE`表示关闭该功能。                      |
 
 ## BE 配置项
 
