@@ -416,6 +416,8 @@ When a query is executed with a materialized view, the original query statement 
 
 - Creating too many materialized views for a table will affect the data load efficiency. When data is being loaded to the base table, the data in materialized view and base table will be updated synchronously. If a base table contains `n` materialized views, the efficiency of loading data into the base table is about the same as the efficiency of loading data into `n` tables.
 
+- You must use the GROUP BY clause when using aggregate functions and specify the GROUP BY column in your SELECT list.
+
 ## Model data warehouse with materialized view
 
 > **CAUTION**
