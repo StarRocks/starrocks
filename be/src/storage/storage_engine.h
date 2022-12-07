@@ -61,6 +61,7 @@ class MemTableFlushExecutor;
 class Tablet;
 class UpdateManager;
 class CompactionManager;
+class CompactionScheduler;
 class SegmentFlushExecutor;
 class SegmentReplicateExecutor;
 
@@ -361,7 +362,7 @@ private:
 
     std::unique_ptr<CompactionManager> _compaction_manager;
 
-    std::thread _compaction_scheduler; // compaction scheduler should destruct before compaction manager
+    std::unique_ptr<CompactionScheduler> _compaction_scheduler;
 
     HeartbeatFlags* _heartbeat_flags = nullptr;
 

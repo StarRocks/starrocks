@@ -14,12 +14,25 @@
 #include "storage/tablet.h"
 #include "util/defer_op.h"
 #include "util/starrocks_metrics.h"
+#include "util/thread.h"
 
 using namespace std::chrono_literals;
 
 namespace starrocks {
 
-CompactionScheduler::CompactionScheduler() {
+CompactionScheduler::CompactionScheduler() {}
+
+CompactionScheduler::~CompactionScheduler() {
+    _bg_worker_stopped.store(true, std::memory_order_release);
+    if (_scheduler_thread.joinable()) {
+        _scheduler_thread.join();
+    }
+    if (_compaction_pool) {
+        _compaction_pool->shutdown();
+    }
+}
+
+void CompactionScheduler::schedule() {
     auto st = ThreadPoolBuilder("compact_pool")
                       .set_min_threads(1)
                       .set_max_threads(std::max(1, StorageEngine::instance()->compaction_manager()->max_task_num()))
@@ -27,11 +40,14 @@ CompactionScheduler::CompactionScheduler() {
                       .build(&_compaction_pool);
     DCHECK(st.ok());
     StorageEngine::instance()->compaction_manager()->register_scheduler(this);
+
+    _scheduler_thread = std::thread([this] { _schedule(); });
+    Thread::set_thread_name(_scheduler_thread, "compact_sched");
 }
 
-void CompactionScheduler::schedule() {
+void CompactionScheduler::_schedule() {
     LOG(INFO) << "start compaction scheduler";
-    while (true) {
+    while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         ++_round;
         _wait_to_run();
         std::shared_ptr<CompactionTask> compaction_task = _try_get_next_compaction_task();
