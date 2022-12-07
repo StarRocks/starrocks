@@ -258,12 +258,11 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 #### 存储
 
-| 配置项                               | 默认值          | 描述                                                         |
-| ------------------------------------ | --------------- | ------------------------------------------------------------ |
-| default_storage_medium               | HDD             | 创建表或分区时默认使用的存储介质。取值范围：`HDD` 和 `SSD`。<br>在创建表/分区时，如果没有指定存储介质，则会使用通过该参数指定的默认存储介质。 |
-| tablet_sched_balancer_strategy       | disk_and_tablet | Tablet 均衡策略。参数别名为 `tablet_balancer_strategy`。取值范围：`disk_and_tablet` 和 `be_load_score`。 |
-| tablet_sched_storage_cooldown_second | -1              | 从 Table 创建时间点开始计算，自动降冷的时延。降冷是指从 SSD 介质迁移到 HDD 介质。<br>参数别名为 `storage_cooldown_second`。单位：秒。默认值 `-1` 表示不进行自动降冷。如需启用自动降冷功能，请显式设置参数取值大于 0。 |
-| tablet_stat_update_interval_second   | 300             | FE 向每个 BE 请求收集 Tablet 统计信息的时间间隔。单位：秒。  |
+| 配置项    | 默认值    | 描述         |
+| -------- | -------- | -----------  |
+| tablet_sched_balancer_strategy | disk_and_tablet | Tablet 均衡策略。参数别名为 `tablet_balancer_strategy`。取值范围：`disk_and_tablet` 和 `be_load_score`。 |
+| tablet_sched_storage_cooldown_second | -1         | 从 Table 创建时间点开始计算，自动降冷的时延。降冷是指从 SSD 介质迁移到 HDD 介质。<br>参数别名为 `storage_cooldown_second`。单位：秒。默认值 `-1` 表示不进行自动降冷。如需启用自动降冷功能，请显式设置参数取值大于 0。 |
+| tablet_stat_update_interval_second| 300         | FE 向每个 BE 请求收集 Tablet 统计信息的时间间隔。单位：秒。  |
 
 #### 其他静态参数
 

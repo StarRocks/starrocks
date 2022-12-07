@@ -1,5 +1,27 @@
 # StarRocks version 2.2
 
+## 2.2.10
+
+发布日期： 2022 年 12 月 2 日
+
+### 功能优化
+
+- 优化 Routine Load 错误提示信息。([#12203](https://github.com/StarRocks/starrocks/pull/12203))
+- 支持逻辑算子 `&&`。 ([#11819](https://github.com/StarRocks/starrocks/issues/11819))
+- BE crash 时，快速取消查询，避免长时间查询超时卡住。（[#12954](https://github.com/StarRocks/starrocks/pull/12954)）
+- 优化 FE 启动脚本，检查 Java 版本。（[#14094](https://github.com/StarRocks/starrocks/pull/14094)）
+- 支持 Primary Key 中大批量数据删除。（[#4772](https://github.com/StarRocks/starrocks/issues/4772)）
+
+### 问题修复
+
+修复了以下问题：
+
+- 多表合并 (union) 视图时，如果左深节点存在 NULL 常量，会导致 BE crash。([#13792](https://github.com/StarRocks/starrocks/pull/13792))
+- Parquet 文件和 Hive 表中的列类型不一致时，会导致查询过程中 BE crash。([#8848](https://github.com/StarRocks/starrocks/issues/8848))
+- 太多 OR 语句导致 Planner 过多递归引发查询超时。([#12788](https://github.com/StarRocks/starrocks/pull/12788))
+- 子查询中有 LIMIT 可能导致结果错误。（[#12466](https://github.com/StarRocks/starrocks/pull/12466)）
+- 创建物化视图时语句中无法包含引号。（[#13102](https://github.com/StarRocks/starrocks/pull/13102)）
+
 ## 2.2.9
 
 发布日期： 2022 年 11 月 15 日
@@ -17,6 +39,7 @@
 - 在做增加列操作时如果删除该列可能导致 compaction crash。([#12907](https://github.com/StarRocks/starrocks/pull/12907))
 - SHOW CREATE VIEW 没有展示注释字段。([#4163](https://github.com/StarRocks/starrocks/issues/4163))
 - UDF 中可能存在内存泄漏导致 OOM 的问题。([#12418](https://github.com/StarRocks/starrocks/pull/12418))
+- Follower FE 上存储的节点存活状态 (alive) 依赖于 `heartbeatRetryTimes`，某些场景下不准确。新版本在 `HeartbeatResponse` 中新增属性 `aliveStatus` 来表示节点存活状态。([#12481](https://github.com/StarRocks/starrocks/pull/12481))
 
 ### 行为变更
 
