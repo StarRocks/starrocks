@@ -256,15 +256,9 @@ void StructColumn::deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chun
 }
 
 uint32_t StructColumn::max_one_element_serialize_size() const {
-    // TODO: performance optimization.
-    size_t n = size();
     uint32_t max_size = 0;
-    for (size_t i = 0; i < n; i++) {
-        uint32_t row_max_size = 0;
-        for (const auto& column : _fields) {
-            row_max_size += column->max_one_element_serialize_size();
-        }
-        max_size = std::max(max_size, row_max_size);
+    for (const auto& column : _fields) {
+        max_size += column->max_one_element_serialize_size();
     }
     return max_size;
 }
@@ -468,6 +462,14 @@ ColumnPtr StructColumn::field_column(const std::string& field_name) {
     }
     DCHECK(false) << "Struct subfield name: " << field_name << " not found!";
     return nullptr;
+}
+
+const BinaryColumn& StructColumn::field_names() const {
+    return *_field_names;
+}
+
+BinaryColumn::Ptr& StructColumn::field_names_column() {
+    return _field_names;
 }
 
 } // namespace starrocks::vectorized

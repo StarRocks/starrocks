@@ -163,6 +163,10 @@ public:
 
     ColumnPtr field_column(const std::string& field_name);
 
+    const BinaryColumn& field_names() const;
+
+    BinaryColumn::Ptr& field_names_column();
+
 private:
     // A collection that contains StructType's subfield column.
     Columns _fields;
