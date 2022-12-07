@@ -2,7 +2,6 @@
 
 #include "formats/parquet/file_reader.h"
 
-#include <filesystem>
 #include <gtest/gtest.h>
 
 #include <filesystem>
@@ -913,7 +912,7 @@ TEST_F(FileReaderTest, TestReadWithUpperPred) {
 TEST_F(FileReaderTest, TestReadArray2dColumn) {
     auto file = _create_file(_file5_path);
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
-                                                std::filesystem::file_size(_file5_path));
+                                                    std::filesystem::file_size(_file5_path));
 
     //init
     auto* ctx = _create_file5_base_context();
@@ -972,25 +971,25 @@ TEST_F(FileReaderTest, TestReadRequiredArrayColumns) {
 TEST_F(FileReaderTest, TestReadStructUpperColumns) {
     auto file = _create_file(_file4_path);
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
-                                                    std::filesystem::file_size(_file4_path));;
+                                                    std::filesystem::file_size(_file4_path));
 
-	// init
-	auto* ctx = _create_context_for_struct_column();
-	Status status = file_reader->init(ctx);
-	ASSERT_TRUE(status.ok());
+    // init
+    auto* ctx = _create_context_for_struct_column();
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok());
 
-	// c3 is dict filter column
-	ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_filter_columns.size());
-	ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_filter_columns[0].slot_id);
+    // c3 is dict filter column
+    ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_filter_columns.size());
+    ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_filter_columns[0].slot_id);
 
-	// get next
-	auto chunk = _create_struct_chunk();
-	status = file_reader->get_next(&chunk);
-	ASSERT_TRUE(status.ok());
-	ASSERT_EQ(3, chunk->num_rows());
-	for (int i = 0; i < chunk->num_rows(); ++i) {
-		std::cout << "row" << i << ": " << chunk->debug_row(i) << std::endl;
-	}
+    // get next
+    auto chunk = _create_struct_chunk();
+    status = file_reader->get_next(&chunk);
+    ASSERT_TRUE(status.ok());
+    ASSERT_EQ(3, chunk->num_rows());
+    for (int i = 0; i < chunk->num_rows(); ++i) {
+        std::cout << "row" << i << ": " << chunk->debug_row(i) << std::endl;
+    }
 
     ColumnPtr int_col = chunk->get_column_by_slot_id(0);
     int i = int_col->get(0).get_int32();
