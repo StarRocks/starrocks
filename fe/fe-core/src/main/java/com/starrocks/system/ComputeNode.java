@@ -433,6 +433,9 @@ public class ComputeNode implements IComputable, Writable {
         boolean becomeDead = false;
         boolean isChanged = false;
         if (hbResponse.getStatus() == HeartbeatResponse.HbStatus.OK) {
+            if (this.version == null) {
+                return false;
+            }
             if (!this.version.equals(hbResponse.getVersion())) {
                 isChanged = true;
                 this.version = hbResponse.getVersion();
