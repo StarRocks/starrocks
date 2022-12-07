@@ -371,7 +371,7 @@ Status RowsetUpdateState::_prepare_partial_update_states(Tablet* tablet, Rowset*
     return Status::OK();
 }
 
-bool RowsetUpdateState::_check_partial_update(Rowset *rowset) {
+bool RowsetUpdateState::_check_partial_update(Rowset* rowset) {
     if (!rowset->rowset_meta()->get_meta_pb().has_txn_meta() || rowset->num_segments() == 0) {
         return false;
     }
