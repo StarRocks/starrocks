@@ -779,14 +779,18 @@ public class ReportHandler extends Daemon {
             AgentTaskExecutor.submit(createReplicaBatchTask);
         }
     }
-
     private static void addDropReplicaTask(AgentBatchTask batchTask, long backendId,
-                                           long tabletId, int schemaHash, String reason) {
+                                           long tabletId, int schemaHash, String reason, boolean force) {
         DropReplicaTask task =
-                new DropReplicaTask(backendId, tabletId, schemaHash, false);
+                new DropReplicaTask(backendId, tabletId, schemaHash, force);
         batchTask.addTask(task);
         LOG.info("delete tablet[{}] from backend[{}] because {}",
                 tabletId, backendId, reason);
+    }
+
+    private static void addDropReplicaTask(AgentBatchTask batchTask, long backendId,
+                                           long tabletId, int schemaHash, String reason) {
+        addDropReplicaTask(batchTask, backendId, tabletId, schemaHash, reason, false);
     }
 
     private static void deleteFromBackend(Map<Long, TTablet> backendTablets,
@@ -805,7 +809,8 @@ public class ReportHandler extends Daemon {
                 // continue to report them to FE forever and add some processing overhead(the tablet report
                 // process is protected with DB S lock).
                 addDropReplicaTask(batchTask, backendId, tabletId,
-                        -1 /* Unknown schema hash */, "not found in meta");
+                        -1 /* Unknown schema hash */, "not found in meta", invertedIndex.tabletTruncated(tabletId));
+                invertedIndex.eraseTabletTruncated(tabletId);
                 ++deleteFromBackendCounter;
                 --maxTaskSendPerBe;
                 continue;
