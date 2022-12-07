@@ -1598,11 +1598,94 @@ public class PlanFragmentBuilder {
             return visitPhysicalJoin(leftFragment, rightFragment, optExpr, context);
         }
 
+<<<<<<< HEAD
+=======
+        private List<Expr> extractConjuncts(ScalarOperator predicate, ExecPlan context) {
+            return Utils.extractConjuncts(predicate).stream()
+                    .map(e -> ScalarOperatorToExpr.buildExecExpression(e,
+                            new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
+                    .collect(Collectors.toList());
+        }
+
+        private void setNullableForJoin(JoinOperator joinOperator,
+                                        PlanFragment leftFragment, PlanFragment rightFragment, ExecPlan context) {
+            Set<TupleId> nullableTupleIds = new HashSet<>();
+            nullableTupleIds.addAll(leftFragment.getPlanRoot().getNullableTupleIds());
+            nullableTupleIds.addAll(rightFragment.getPlanRoot().getNullableTupleIds());
+            if (joinOperator.isLeftOuterJoin()) {
+                nullableTupleIds.addAll(rightFragment.getPlanRoot().getTupleIds());
+            } else if (joinOperator.isRightOuterJoin()) {
+                nullableTupleIds.addAll(leftFragment.getPlanRoot().getTupleIds());
+            } else if (joinOperator.isFullOuterJoin()) {
+                nullableTupleIds.addAll(leftFragment.getPlanRoot().getTupleIds());
+                nullableTupleIds.addAll(rightFragment.getPlanRoot().getTupleIds());
+            }
+            for (TupleId tupleId : nullableTupleIds) {
+                TupleDescriptor tupleDescriptor = context.getDescTbl().getTupleDesc(tupleId);
+                tupleDescriptor.getSlots().forEach(slot -> slot.setIsNullable(true));
+                tupleDescriptor.computeMemLayout();
+            }
+        }
+
+>>>>>>> 0936db2e4 ([BugFix] compute memory layout of TupleDescriptor after setting nullable for SlotDescriptor (#14665))
         @Override
         public PlanFragment visitPhysicalNestLoopJoin(OptExpression optExpr, ExecPlan context) {
             PlanFragment leftFragment = visit(optExpr.inputAt(0), context);
             PlanFragment rightFragment = visit(optExpr.inputAt(1), context);
+<<<<<<< HEAD
             return visitPhysicalJoin(leftFragment, rightFragment, optExpr, context);
+=======
+
+            List<Expr> conjuncts = extractConjuncts(node.getPredicate(), context);
+            List<Expr> joinOnConjuncts = extractConjuncts(node.getOnPredicate(), context);
+            List<Expr> probePartitionByExprs = Lists.newArrayList();
+            DistributionSpec leftDistributionSpec =
+                    optExpr.getRequiredProperties().get(0).getDistributionProperty().getSpec();
+            DistributionSpec rightDistributionSpec =
+                    optExpr.getRequiredProperties().get(1).getDistributionProperty().getSpec();
+            if (leftDistributionSpec instanceof HashDistributionSpec &&
+                    rightDistributionSpec instanceof HashDistributionSpec) {
+                probePartitionByExprs =
+                        getHashDistributionSpecPartitionByExprs((HashDistributionSpec) leftDistributionSpec,
+                                context);
+            }
+
+            setNullableForJoin(node.getJoinType(), leftFragment, rightFragment, context);
+
+            NestLoopJoinNode joinNode = new NestLoopJoinNode(context.getNextNodeId(),
+                    leftFragment.getPlanRoot(), rightFragment.getPlanRoot(),
+                    null, node.getJoinType(), Lists.newArrayList(), joinOnConjuncts);
+
+            joinNode.setLimit(node.getLimit());
+            joinNode.computeStatistics(optExpr.getStatistics());
+            joinNode.addConjuncts(conjuncts);
+            joinNode.setProbePartitionByExprs(probePartitionByExprs);
+
+            // Connect parent and child fragment
+            rightFragment.getPlanRoot().setFragment(leftFragment);
+
+            // Currently, we always generate new fragment for PhysicalDistribution.
+            // So we need to remove exchange node only fragment for Join.
+            context.getFragments().remove(rightFragment);
+
+            // Move leftFragment to end, it depends on all of its children
+            context.getFragments().remove(leftFragment);
+            context.getFragments().add(leftFragment);
+
+            leftFragment.setPlanRoot(joinNode);
+            leftFragment.addChildren(rightFragment.getChildren());
+
+            if (!(joinNode.getChild(1) instanceof ExchangeNode)) {
+                joinNode.setReplicated(true);
+            }
+
+            if (shouldBuildGlobalRuntimeFilter()) {
+                joinNode.buildRuntimeFilters(runtimeFilterIdIdGenerator);
+            }
+
+            leftFragment.mergeQueryGlobalDicts(rightFragment.getQueryGlobalDicts());
+            return leftFragment;
+>>>>>>> 0936db2e4 ([BugFix] compute memory layout of TupleDescriptor after setting nullable for SlotDescriptor (#14665))
         }
 
         @Override
@@ -1642,10 +1725,53 @@ public class PlanFragmentBuilder {
             ColumnRefSet leftChildColumns = optExpr.inputAt(0).getLogicalProperty().getOutputColumns();
             ColumnRefSet rightChildColumns = optExpr.inputAt(1).getLogicalProperty().getOutputColumns();
 
+<<<<<<< HEAD
             // 2. Get eqJoinConjuncts
             List<ScalarOperator> onPredicates = Utils.extractConjuncts(node.getOnPredicate());
             List<BinaryPredicateOperator> eqOnPredicates = JoinHelper.getEqualsPredicate(
                     leftChildColumns, rightChildColumns, onPredicates);
+=======
+            JoinOperator joinOperator = node.getJoinType();
+            Preconditions.checkState(!joinOperator.isCrossJoin(), "should not be cross join");
+
+            PlanNode leftFragmentPlanRoot = leftFragment.getPlanRoot();
+            PlanNode rightFragmentPlanRoot = rightFragment.getPlanRoot();
+            // skip decode node
+            if (leftFragmentPlanRoot instanceof DecodeNode) {
+                leftFragmentPlanRoot = leftFragmentPlanRoot.getChild(0);
+            }
+            if (rightFragmentPlanRoot instanceof DecodeNode) {
+                rightFragmentPlanRoot = rightFragmentPlanRoot.getChild(0);
+            }
+
+            // 1. Get distributionMode
+
+            // When left table's distribution is HashPartition, need to record probe's partitionByExprs to
+            // compute hash, and then check whether GRF can push down ExchangeNode.
+            // TODO(by LiShuMing): Multicolumn-grf generated by colocate HJ and bucket_shuffle HJ also need
+            //  be tackled with, because a broadcast HJ can be interpolated between the left-deepmost
+            //  OlapScanNode and its ancestor of HJ.
+            List<Expr> probePartitionByExprs = Lists.newArrayList();
+            DistributionSpec leftDistributionSpec =
+                    optExpr.getRequiredProperties().get(0).getDistributionProperty().getSpec();
+            DistributionSpec rightDistributionSpec =
+                    optExpr.getRequiredProperties().get(1).getDistributionProperty().getSpec();
+            if (leftDistributionSpec instanceof HashDistributionSpec &&
+                    rightDistributionSpec instanceof HashDistributionSpec) {
+                probePartitionByExprs =
+                        getHashDistributionSpecPartitionByExprs((HashDistributionSpec) leftDistributionSpec,
+                                context);
+            }
+
+            JoinNode.DistributionMode distributionMode =
+                    inferDistributionMode(optExpr, leftFragmentPlanRoot, rightFragmentPlanRoot);
+            JoinExprInfo joinExpr = buildJoinExpr(optExpr, context);
+            List<Expr> eqJoinConjuncts = joinExpr.eqJoinConjuncts;
+            List<Expr> otherJoinConjuncts = joinExpr.otherJoin;
+            List<Expr> conjuncts = joinExpr.conjuncts;
+
+            setNullableForJoin(joinOperator, leftFragment, rightFragment, context);
+>>>>>>> 0936db2e4 ([BugFix] compute memory layout of TupleDescriptor after setting nullable for SlotDescriptor (#14665))
 
             if (node.getJoinType().isCrossJoin()
                     || (node.getJoinType().isInnerJoin() && eqOnPredicates.isEmpty())
