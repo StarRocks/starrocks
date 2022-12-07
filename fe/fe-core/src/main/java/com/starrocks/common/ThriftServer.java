@@ -18,6 +18,7 @@
 package com.starrocks.common;
 
 import com.google.common.collect.Sets;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TNetworkAddress;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -122,6 +123,11 @@ public class ThriftServer {
         threadPoolExecutor.allowCoreThreadTimeOut(true);
         serverArgs.executorService(threadPoolExecutor);
         server = new SRTThreadPoolServer(serverArgs);
+
+        GlobalStateMgr.getCurrentState().getConfigRefreshDaemon().registerListener(() -> {
+            threadPoolExecutor.setCorePoolSize(Config.thrift_server_max_worker_threads);
+            threadPoolExecutor.setMaximumPoolSize(Config.thrift_server_max_worker_threads);
+        });
     }
 
     public void start() throws IOException {
