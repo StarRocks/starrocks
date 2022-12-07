@@ -452,7 +452,6 @@ public:
         for (const auto& field : column.fields()) {
             size += serde::ColumnArraySerde::max_serialized_size(*field, encode_level);
         }
-        size += serde::ColumnArraySerde::max_serialized_size(column.field_names(), encode_level);
         return size;
     }
 
@@ -460,7 +459,6 @@ public:
         for (const auto& field : column.fields()) {
             buff = serde::ColumnArraySerde::serialize(*field, buff, false, encode_level);
         }
-        buff = serde::ColumnArraySerde::serialize(column.field_names(), buff, false, encode_level);
         return buff;
     }
 
@@ -468,7 +466,6 @@ public:
         for (const auto& field : column->fields_column()) {
             buff = serde::ColumnArraySerde::deserialize(buff, field.get(), false, encode_level);
         }
-        buff = serde::ColumnArraySerde::deserialize(buff, column->field_names_column().get(), false, encode_level);
         return buff;
     }
 };
