@@ -267,7 +267,8 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
             org.apache.iceberg.Table icebergTbl = ((IcebergTable) table).getIcebergTable();
             Types.StructType schema = icebergTbl.schema().asStruct();
-            ScalarOperatorToIcebergExpr.IcebergContext icebergContext = new ScalarOperatorToIcebergExpr.IcebergContext(schema);
+            ScalarOperatorToIcebergExpr.IcebergContext icebergContext =
+                    new ScalarOperatorToIcebergExpr.IcebergContext(schema);
             Expression icebergPredicate = new ScalarOperatorToIcebergExpr().convert(predicates, icebergContext);
             Statistics stats = getTableStatistics(icebergPredicate, icebergTbl, colRefToColumnMetaMap);
             context.setStatistics(stats);
@@ -357,7 +358,8 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
             String catalogName = ((HiveMetaStoreTable) table).getCatalogName();
             Statistics statistics = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
-                    optimizerContext, catalogName, table, Lists.newArrayList(colRefToColumnMetaMap.keySet()), partitionKeys);
+                    optimizerContext, catalogName, table, Lists.newArrayList(colRefToColumnMetaMap.keySet()),
+                    partitionKeys);
             context.setStatistics(statistics);
 
             if (node.isLogical()) {
@@ -666,6 +668,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                     rowCount *= StatisticsEstimateCoefficient.DEFAULT_GROUP_BY_EXPAND_COEFFICIENT;
                     if (rowCount > inputStatistics.getOutputRowCount()) {
                         rowCount = inputStatistics.getOutputRowCount();
+                        break;
                     }
                 }
             }
@@ -678,15 +681,16 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 if (groupByIndex == 0) {
                     rowCount *= cardinality;
                 } else {
-                    rowCount *= cardinality * Math.pow(
-                            StatisticsEstimateCoefficient.UNKNOWN_GROUP_BY_CORRELATION_COEFFICIENT, groupByIndex + 1D);
+                    rowCount *= Math.max(1, cardinality * Math.pow(
+                            StatisticsEstimateCoefficient.UNKNOWN_GROUP_BY_CORRELATION_COEFFICIENT, groupByIndex + 1D));
                     if (rowCount > inputStatistics.getOutputRowCount()) {
                         rowCount = inputStatistics.getOutputRowCount();
+                        break;
                     }
                 }
             }
         }
-        return Math.max(1, rowCount);
+        return Math.min(Math.max(1, rowCount), inputStatistics.getOutputRowCount());
     }
 
     @Override
