@@ -21,20 +21,33 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.base.Preconditions;
+import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.system.Backend;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageMedium;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 public class DataProperty implements Writable {
-    public static final DataProperty DEFAULT_DATA_PROPERTY = new DataProperty(
-            "SSD".equalsIgnoreCase(Config.default_storage_medium) ? TStorageMedium.SSD : TStorageMedium.HDD);
+    private static final Logger LOG = LogManager.getLogger(DataProperty.class);
+    /**
+     * Default data property will be inferred from be path configuration,
+     * this static member is reserved only for compatibility with current unit tests.
+     */
+    public static final DataProperty DEFAULT_DATA_PROPERTY = new DataProperty(TStorageMedium.HDD);
     public static final long MAX_COOLDOWN_TIME_MS = 253402271999000L; // 9999-12-31 23:59:59
 
     @SerializedName(value = "storageMedium")
@@ -53,6 +66,32 @@ public class DataProperty implements Writable {
     public DataProperty(TStorageMedium medium, long cooldown) {
         this.storageMedium = medium;
         this.cooldownTimeMs = cooldown;
+    }
+
+    public static DataProperty getInferredDefaultDataProperty() {
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        SystemInfoService infoService = globalStateMgr.getClusterInfo();
+        List<Backend> backends = infoService.getClusterBackends(SystemInfoService.DEFAULT_CLUSTER);
+        Set<TStorageMedium> mediumSet = Sets.newHashSet();
+        for (Backend backend : backends) {
+            if (backend.hasPathHash()) {
+                mediumSet.addAll(backend.getDisks().values().stream()
+                        .filter(v -> v.getState() == DiskInfo.DiskState.ONLINE)
+                        .map(DiskInfo::getStorageMedium).collect(Collectors.toSet()));
+            }
+        }
+
+        Preconditions.checkState(mediumSet.size() <= 2, "current medium set: " + mediumSet);
+        TStorageMedium m = TStorageMedium.SSD;
+        // If the storage paths reported by all the backends all have storage medium type HDD,
+        // we infer that user wants to create a table or partition with storage_medium=HDD when not explicitly
+        // specify the storage_medium property, otherwise it's SSD
+        if (mediumSet.size() == 0 ||
+                (mediumSet.size() == 1 && mediumSet.iterator().next() == TStorageMedium.HDD)) {
+            m = TStorageMedium.HDD;
+        }
+
+        return new DataProperty(m);
     }
 
     public TStorageMedium getStorageMedium() {
