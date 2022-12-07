@@ -141,8 +141,8 @@ StatusOr<bool> FileReader::_filter_group(const tparquet::RowGroup& row_group) {
 Status FileReader::_read_min_max_chunk(const tparquet::RowGroup& row_group, vectorized::ChunkPtr* min_chunk,
                                        vectorized::ChunkPtr* max_chunk, bool* exist) const {
     const vectorized::HdfsScannerContext& ctx = *_scanner_ctx;
-    for (size_t i = 0; i < slots.size(); i++) {
-        const SlotDescriptor* slot = slots[i];
+    for (size_t i = 0; i < ctx.min_max_tuple_desc->slots().size(); i++) {
+        const auto* slot = ctx.min_max_tuple_desc->slots()[i];
         const auto* column_meta = _get_column_meta(row_group, slot->col_name(), _scanner_ctx->case_sensitive);
         if (column_meta == nullptr) {
             int col_idx = _get_partition_column_idx(slot->col_name());
