@@ -31,6 +31,7 @@
 #include "gutil/strings/substitute.h"
 #include "rowset_options.h"
 #include "runtime/exec_env.h"
+#include "runtime/runtime_state.h"
 #include "segment_options.h"
 #include "storage/chunk_helper.h"
 #include "storage/chunk_iterator.h"
@@ -359,6 +360,9 @@ Status Rowset::get_segment_iterators(const vectorized::Schema& schema, const Row
     }
     seg_options.rowid_range_option = options.rowid_range_option;
     seg_options.short_key_ranges = options.short_key_ranges;
+    if (options.runtime_state != nullptr) {
+        seg_options.is_cancelled = &options.runtime_state->cancelled_ref();
+    }
 
     auto segment_schema = schema;
     // Append the columns with delete condition to segment schema.
