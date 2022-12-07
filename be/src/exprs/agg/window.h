@@ -131,7 +131,7 @@ public:
             if constexpr (PT != TYPE_HLL && PT != TYPE_OBJECT) {
                 column->get_data()[i] = value;
             } else {
-                // For TYPE_HLL AND(HLL) and TYPE_OBJECT(BITMAP),
+                // For TYPE_HLL(HLL) AND and TYPE_OBJECT(BITMAP),
                 // we can't use get_data to write datas.
                 *column->get_object(i) = *value;
             }
