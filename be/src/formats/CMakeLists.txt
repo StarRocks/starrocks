@@ -34,6 +34,8 @@ add_library(Formats STATIC
         json/binary_column.cpp
         orc/orc_chunk_reader.cpp
         orc/orc_mapping.cpp
+        orc/fill_function.cpp
+        orc/utils.cpp
         parquet/column_chunk_reader.cpp
         parquet/column_converter.cpp
         parquet/column_reader.cpp

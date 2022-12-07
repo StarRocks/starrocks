@@ -22,6 +22,7 @@
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/vectorized/runtime_filter_bank.h"
+#include "formats/orc/fill_function.h"
 #include "formats/orc/orc_mapping.h"
 #include "runtime/descriptors.h"
 #include "runtime/types.h"
@@ -36,9 +37,6 @@ class RandomAccessFile;
 class RuntimeState;
 } // namespace starrocks
 namespace starrocks::vectorized {
-
-using FillColumnFunction = void (*)(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size,
-                                    const TypeDescriptor& type_desc, const OrcMappingPtr& mapping, void* ctx);
 
 // OrcChunkReader is a bridge between apache/orc and Column
 // It mainly does 4 things:
