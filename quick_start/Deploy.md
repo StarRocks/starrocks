@@ -31,7 +31,7 @@ echo 1 | sudo tee /proc/sys/vm/overcommit_memory
 
 ## 下载 StarRocks
 
-可以通过 [StarRocks 官网下载](https://www.starrocks.com/zh-CN/download) 获取二进制产品包。
+可以通过 [StarRocks 官网下载](https://www.mirrorship.cn/zh-CN/download/community) 获取二进制产品包。
 
 下载的安装包可直接解压后进行安装部署，如有 [下载源码](https://github.com/StarRocks/starrocks) 并编译安装包的需求，可以使用 [Docker 进行编译](../administration/Build_in_docker.md)。
 
