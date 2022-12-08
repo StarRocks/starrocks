@@ -4,44 +4,62 @@
 
 Hudi catalog 是一个外部数据目录 (external catalog)。StarRocks 2.4 及以上版本支持通过该目录直接查询 Apache Hudi 集群中的数据，无需数据导入或创建外部表。
 
-## 使用限制
+## 使用说明
 
 - StarRocks 支持查询如下格式的 Hudi 数据文件：Parquet 和 ORC。
 - StarRocks 支持查询如下压缩格式的 Hudi 数据文件：gzip、Zstd、LZ4 和 Snappy。
-- StarRocks 支持查询如下类型的 Hudi 数据：BOOLEAN、INTEGER、DATE、TIME、BIGINT、FLOAT、DOUBLE、DECIMAL、CHAR 和 VARCHAR。注意查询命中不支持的数据类型（ARRAY、MAP 和 STRUCT）会报错。
+- StarRocks 支持查询如下类型的 Hudi 数据：BOOLEAN、INTEGER、DATE、TIME、BIGINT、FLOAT、DOUBLE、DECIMAL、CHAR、VARCHAR、MAP 和 STRUCT。注意查询命中不支持的数据类型 ARRAY 会报错。
 - StarRocks 支持查询 Copy on write 表和 Merge on read 表。有关这两种表的详细信息，请参见 [Table & Query Types](https://hudi.apache.org/docs/table_types)。
-- StarRocks 支持的 Hudi 查询类型有 Snapshot Queries 和 Read Optimized Queries（仅针对 MOR 表），暂不支持 Incremental Queries。有关 Hudi 查询类型的说明，请参见 [Table & Query Types](https://hudi.apache.org/docs/next/table_types/#query-types)。
+- StarRocks 支持的 Hudi 查询类型有 Snapshot Queries 和 Read Optimized Queries（Hudi 仅支持对 Merge on read 执行 Read Optimized Queries），暂不支持 Incremental Queries。有关 Hudi 查询类型的说明，请参见 [Table & Query Types](https://hudi.apache.org/docs/next/table_types/#query-types)。
 - StarRocks 2.4 及以上版本支持创建 Hudi catalog，以及使用 [DESC](/sql-reference/sql-statements/Utility/DESCRIBE.md) 语句查看 Hudi 表结构。查看时，不支持的数据类型会显示成 `unknown`。
 
 ## 前提条件
 
-在创建 Hudi catalog 前，您需要在 StarRocks 中进行相应的配置，以便能够访问 Hudi 的存储系统和元数据服务。StarRocks 当前支持的 Hudi 存储系统包括：HDFS、Amazon S3、阿里云对象存储 OSS 和腾讯云对象存储 COS；支持的 Hudi 元数据服务为 Hive metastore。具体配置步骤和 Hive catalog 相同，详细信息请参见 [Hive catalog](../catalog/hive_catalog.md#前提条件)。
+在创建 Hudi catalog 前，您需要在 StarRocks 中进行相应的配置，以便能够访问 Hudi 的存储系统和元数据服务。StarRocks 当前支持的 Hudi 存储系统包括：HDFS、Amazon S3、阿里云对象存储 OSS 和腾讯云对象存储 COS；支持的 Hudi 元数据服务包括 Hive metastore 和 AWS Glue。具体配置步骤和 Hive catalog 相同，详细信息请参见 [Hive catalog](../catalog/hive_catalog.md#前提条件)。
 
 ## 创建 Hudi catalog
 
-以上相关配置完成后，即可创建 Hudi catalog，语法如下。
+以上相关配置完成后，即可创建 Hudi catalog。
+
+### 语法
 
 ```SQL
-CREATE EXTERNAL CATALOG catalog_name 
+CREATE EXTERNAL CATALOG <catalog_name>
 PROPERTIES ("key"="value", ...);
 ```
 
-参数说明：
+### 参数说明
 
 - `catalog_name`：Hudi catalog 的名称，必选参数。<br>命名要求如下：
   - 必须由字母 (a-z 或 A-Z)、数字 (0-9) 或下划线 (_) 组成，且只能以字母开头。
   - 总长度不能超过 64 个字符。
 
-- `PROPERTIES`：Hudi catalog 的属性，必选参数。<br>支持配置如下：
+- `PROPERTIES`：Hudi catalog 的属性，必选参数。Hudi 使用的元数据服务不同，该参数的配置也不同。
 
-    | **属性**            | **必选** | **说明**                                                     |
-    | ------------------- | -------- | ------------------------------------------------------------ |
-    | type                | 是       | 数据源类型，取值为 `hudi`。                                   |
-    | hive.metastore.uris | 是       | Hive metastore 的 URI。格式为 `thrift://<Hive metastore的IP地址>:<端口号>`，端口号默认为 9083。 |
+#### Hive metastore
+
+如 Hudi 使用 Hive metastore 作为元数据服务，则需要在创建 Hudi catalog 时设置如下属性：
+
+| **属性**            | **必选** | **说明**                                                     |
+| ------------------- | -------- | ------------------------------------------------------------ |
+| type                | 是       | 数据源类型，取值为 `hudi`。                                   |
+| hive.metastore.uris | 是       | Hive metastore 的 URI。格式为 `thrift://<Hive metastore的IP地址>:<端口号>`，端口号默认为 9083。 |
 
 > **注意**
 >
 > 查询前，需要将 Hive metastore 节点域名和其 IP 的映射关系配置到 **/etc/hosts** 路径中，否则查询时可能会因为域名无法识别而访问失败。
+
+#### AWS Glue【公测中】
+
+如 Hudi 使用 AWS Glue 作为元数据服务，则需要在创建 Hudi catalog 时设置如下属性：
+
+| **属性**                               | **必选** | **说明**                                                     |
+| -------------------------------------- | -------- | ------------------------------------------------------------ |
+| type                                   | 是       | 数据源类型，取值为 `hudi`。                                  |
+| hive.metastore.type                    | 是       | 元数据服务类型，取值为 `glue`。                              |
+| aws.hive.metastore.glue.aws-access-key | 是       | AWS Glue 用户的 access key ID（即访问密钥 ID）。             |
+| aws.hive.metastore.glue.aws-secret-key | 是       | AWS Glue 用户的 secret access key（即秘密访问密钥）。        |
+| aws.hive.metastore.glue.endpoint       | 是       | AWS Glue 服务所在地域的 endpoint。您可以根据 endpoint 与地域的对应关系进行查找，详情参见 [AWS Glue 端点和限额](https://docs.aws.amazon.com/zh_cn/general/latest/gr/glue.html)。 |
 
 ## 元数据异步更新
 

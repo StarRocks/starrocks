@@ -4,7 +4,7 @@
 
 Hive catalog 是一个外部数据目录 (external catalog)。StarRocks 2.3 及以上版本支持通过该目录直接查询 Apache Hive™ 集群中的数据，无需数据导入或创建外部表。
 
-## 使用限制
+## 使用说明
 
 - StarRocks 支持查询如下格式的 Hive 数据：Parquet、ORC 和 CSV。
 - StarRocks 支持查询如下类型的 Hive 数据：TINYINT、SMALLINT、DATE、BOOLEAN、INTEGER、BIGINT、TIMESTAMP、STRING、VARCHAR、CHAR、DOUBLE、FLOAT、DECIMAL、ARRAY、MAP 和 STRUCT。不支持的数据类型包括：INTERVAL、BINARY  和 UNION。
@@ -201,9 +201,9 @@ Hive catalog 是一个外部数据目录 (external catalog)。StarRocks 2.3 及�
 
 3. 重启所有 FE 和 BE。
 
-## 创建Hive catalog
+## 创建 Hive catalog
 
-以上相关配置完成后，即可创建 Hive catalog，语法如下。
+以上相关配置完成后，即可创建 Hive catalog。
 
 ```SQL
 CREATE EXTERNAL CATALOG catalog_name 
@@ -213,7 +213,7 @@ PROPERTIES ("key"="value", ...);
 参数说明：
 
 - `catalog_name`：Hive catalog 的名称，必选参数。<br>命名要求如下：
-  - 必须由字母(a-z或A-Z)、数字(0-9)或下划线(_)组成，且只能以字母开头。
+  - 必须由字母 (a-z或A-Z)、数字 (0-9) 或下划线 (_) 组成，且只能以字母开头。
   - 总长度不能超过 64 个字符。
 
 - `PROPERTIES`：Hive catalog 的属性，必选参数。<br>支持配置如下：

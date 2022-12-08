@@ -18,6 +18,7 @@ StarRocks 2.3 及以上版本支持 catalog（数据目录）功能，方便您�
   - [Hive catalog](../catalog/hive_catalog.md)：用于查询 Hive 数据。
   - [Iceberg catalog](../catalog/iceberg_catalog.md)：用于查询 Iceberg 数据。
   - [Hudi catalog](../catalog/hudi_catalog.md)：用于查询 Hudi 数据。
+  - [Delta Lake catalog](../catalog/deltalake_catalog.md)：用于查询 Delta Lake 数据。
 
   使用 external catalog 查询数据时，StarRocks 会用到外部数据源的两个组件：
 
