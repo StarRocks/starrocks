@@ -46,13 +46,13 @@ public class FeNameFormat {
     private static final String LABEL_REGEX = "^[-\\w]{1,128}$";
     public static final String COMMON_NAME_REGEX = "^[a-zA-Z]\\w{0,63}$|^_[a-zA-Z0-9]\\w{0,62}$";
 
-    public static final String TABLE_NAME_REGEX = "^^[^\0]{1,1024}$$";
-    // Now we can not accept all characters because current design of delete save delete cond contains column name
+    public static final String TABLE_NAME_REGEX = "^[^\0]{1,1024}$";
+    // Now we can not accept all characters because current design of delete save delete cond contains column name,
     // so it can not distinguish whether it is an operator or a column name
     // the future new design will improve this problem and open this limitation
-    private static final String COLUMN_NAME_REGEX = "^[^\0=<>!\\*]{1,1023}$";
+    private static final String COLUMN_NAME_REGEX = "^[^\0=<>!\\*]{1,1024}$";
 
-    // The user name  by kerberos authentication may include the host name, so additional adaptation is required.
+    // The username by kerberos authentication may include the host name, so additional adaptation is required.
     private static final String MYSQL_USER_NAME_REGEX = "^\\w{1,64}/?[.\\w-]{0,63}$";
 
     public static final String FORBIDDEN_PARTITION_NAME = "placeholder_";
