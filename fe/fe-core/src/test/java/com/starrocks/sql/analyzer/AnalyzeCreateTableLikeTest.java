@@ -47,9 +47,4 @@ public class AnalyzeCreateTableLikeTest {
         analyzeSuccess("CREATE TABLE table2 LIKE table1;");
     }
 
-    @Test
-    public void testAnalyzeFail() {
-        analyzeFail("CREATE TABLE `XX_AA*B` LIKE tbl3",
-                "Incorrect table name 'XX_AA*B'");
-    }
 }
