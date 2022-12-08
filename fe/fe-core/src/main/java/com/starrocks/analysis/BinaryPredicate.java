@@ -292,7 +292,15 @@ public class BinaryPredicate extends Predicate implements Writable {
         // Following logical is compatible with MySQL:
         //    Cast to DOUBLE by default, because DOUBLE has the largest range of values.
         if (type1.isJsonType() || type2.isJsonType()) {
+<<<<<<< HEAD
             return ScalarType.createJsonType();
+=======
+            return Type.JSON;
+        }
+        if (type1.isComplexType() || type2.isComplexType()) {
+            // We don't support complex type for binary predicate.
+            return Type.INVALID;
+>>>>>>> 182b94fa9 ([BugFix] fix use TreeNode.contains to check the type support join on (#14802))
         }
         if (t1 == PrimitiveType.VARCHAR && t2 == PrimitiveType.VARCHAR) {
             return Type.VARCHAR;
