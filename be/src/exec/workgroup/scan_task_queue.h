@@ -133,7 +133,7 @@ private:
 
     struct WorkGroupScanSchedEntityComparator {
         using WorkGroupScanSchedEntityPtr = workgroup::WorkGroupScanSchedEntity*;
-        bool operator()(const WorkGroupScanSchedEntityPtr& lhs, const WorkGroupScanSchedEntityPtr& rhs) const;
+        bool operator()(const WorkGroupScanSchedEntityPtr& lhs_ptr, const WorkGroupScanSchedEntityPtr& rhs_ptr) const;
     };
     using WorkgroupSet = std::set<workgroup::WorkGroupScanSchedEntity*, WorkGroupScanSchedEntityComparator>;
 
