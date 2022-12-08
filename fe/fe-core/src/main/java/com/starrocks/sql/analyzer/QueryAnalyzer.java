@@ -2,7 +2,6 @@
 package com.starrocks.sql.analyzer;
 
 import com.clearspring.analytics.util.Lists;
-import com.google.common.base.Predicate;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
@@ -364,9 +363,13 @@ public class QueryAnalyzer {
                     throw new SemanticException("WHERE clause must evaluate to a boolean: actual type %s",
                             joinEqual.getType());
                 }
-                if (joinEqual.contains((Predicate<Expr>) node -> !node.getType().canJoinOn())) {
-                    throw new SemanticException(Type.OnlyMetricTypeErrorMsg);
-                }
+
+                // check the join on predicate, example:
+                // we have col_json, we can't join on table_a.col_json = table_b.col_json,
+                // but we can join on cast(table_a.col_json->"a" as int) = cast(table_b.col_json->"a" as int)
+                // similarly, we can join on table_a.col_map['a'] = table_b.col_map['a'],
+                // and table_a.col_struct.a = table_b.col_struct.a
+                checkJoinEqual(joinEqual);
             } else {
                 if (join.getJoinOp().isOuterJoin() || join.getJoinOp().isSemiAntiJoin()) {
                     throw new SemanticException(join.getJoinOp() + " requires an ON or USING clause.");
@@ -688,5 +691,19 @@ public class QueryAnalyzer {
 
     private void analyzeExpression(Expr expr, AnalyzeState analyzeState, Scope scope) {
         ExpressionAnalyzer.analyzeExpression(expr, analyzeState, scope, session);
+    }
+
+    public static void checkJoinEqual(Expr expr)  {
+        if (expr instanceof BinaryPredicate) {
+            for (Expr child : expr.getChildren()) {
+                if (!child.getType().canJoinOn()) {
+                    throw new SemanticException(Type.OnlyMetricTypeErrorMsg);
+                }
+            }
+        } else {
+            for (Expr child : expr.getChildren()) {
+                checkJoinEqual(child);
+            }
+        }
     }
 }
