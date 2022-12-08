@@ -23,6 +23,7 @@ package com.starrocks.sql.optimizer.rewrite;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableSet;
+import com.google.re2j.Pattern;
 import com.starrocks.analysis.DecimalLiteral;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
@@ -32,6 +33,7 @@ import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import org.apache.commons.lang.StringUtils;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -50,7 +52,6 @@ import java.time.format.ResolverStyle;
 import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalAdjusters;
 import java.util.Set;
-import java.util.regex.Pattern;
 
 import static com.starrocks.catalog.PrimitiveType.BIGINT;
 import static com.starrocks.catalog.PrimitiveType.DATE;
@@ -178,23 +179,22 @@ public class ScalarOperatorFunctions {
     @ConstantFunction(name = "str_to_date", argTypes = {VARCHAR, VARCHAR}, returnType = DATETIME)
     public static ConstantOperator dateParse(ConstantOperator date, ConstantOperator fmtLiteral) {
         DateTimeFormatterBuilder builder = DateUtils.unixDatetimeFormatBuilder(fmtLiteral.getVarchar(), false);
-
+        String dateStr = StringUtils.strip(date.getVarchar(), "\r\n\t ");
         if (HAS_TIME_PART.matcher(fmtLiteral.getVarchar()).matches()) {
             LocalDateTime ldt;
             try {
-                ldt = LocalDateTime.from(builder.toFormatter().withResolverStyle(ResolverStyle.STRICT)
-                        .parse(date.getVarchar()));
+                ldt = LocalDateTime.from(builder.toFormatter().withResolverStyle(ResolverStyle.STRICT).parse(dateStr));
             } catch (DateTimeParseException e) {
                 // If parsing fails, it can be re-parsed from the position of the successful prefix string.
                 // This way datetime string can use incomplete format
                 // eg. str_to_date('2022-10-18 00:00:00','%Y-%m-%d %H:%s');
                 ldt = LocalDateTime.from(builder.toFormatter().withResolverStyle(ResolverStyle.STRICT)
-                        .parse(date.getVarchar().substring(0, e.getErrorIndex())));
+                        .parse(dateStr.substring(0, e.getErrorIndex())));
             }
             return ConstantOperator.createDatetime(ldt, Type.DATETIME);
         } else {
             LocalDate ld = LocalDate.from(
-                    builder.toFormatter().withResolverStyle(ResolverStyle.STRICT).parse(date.getVarchar()));
+                    builder.toFormatter().withResolverStyle(ResolverStyle.STRICT).parse(dateStr));
             return ConstantOperator.createDatetime(ld.atTime(0, 0, 0), Type.DATETIME);
         }
     }
@@ -202,8 +202,8 @@ public class ScalarOperatorFunctions {
     @ConstantFunction(name = "str2date", argTypes = {VARCHAR, VARCHAR}, returnType = DATE)
     public static ConstantOperator str2Date(ConstantOperator date, ConstantOperator fmtLiteral) {
         DateTimeFormatterBuilder builder = DateUtils.unixDatetimeFormatBuilder(fmtLiteral.getVarchar(), false);
-        LocalDate ld = LocalDate.from(
-                builder.toFormatter().withResolverStyle(ResolverStyle.STRICT).parse(date.getVarchar()));
+        LocalDate ld = LocalDate.from(builder.toFormatter().withResolverStyle(ResolverStyle.STRICT).parse(
+                StringUtils.strip(date.getVarchar(), "\r\n\t ")));
         return ConstantOperator.createDatetime(ld.atTime(0, 0, 0), Type.DATE);
     }
 

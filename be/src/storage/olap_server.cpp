@@ -161,11 +161,8 @@ Status StorageEngine::start_bg_threads() {
 
         // compaction_manager must init_max_task_num() before any comapction_scheduler starts
         _compaction_manager->init_max_task_num(max_task_num);
-        _compaction_scheduler = std::thread([] {
-            CompactionScheduler compaction_scheduler;
-            compaction_scheduler.schedule();
-        });
-        Thread::set_thread_name(_compaction_scheduler, "compact_sched");
+
+        _compaction_scheduler->schedule();
 
         _compaction_checker_thread = std::thread([this] { compaction_check(); });
         Thread::set_thread_name(_compaction_checker_thread, "compact_check");

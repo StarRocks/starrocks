@@ -89,6 +89,55 @@ public class Load {
     }
 
     /**
+     * Check merge condition string:
+     * 1. should be a valid column name
+     * 2. should not be bitmap/hll/percentile/json/varchar column
+     * 3. should not be primary key
+     * 4. table should be primary key model
+     *
+     * @param mergeCondition
+     * @param table
+     * @return
+     * @throws UserException
+     */
+    public static void checkMergeCondition(String mergeCondition, OlapTable table) throws DdlException {
+        if (mergeCondition == null || mergeCondition.isEmpty()) {
+            return;
+        }
+
+        if (table.getKeysType() != KeysType.PRIMARY_KEYS) {
+            throw new DdlException("Conditional update only support primary key table " + table.getName());
+        }
+
+        if (table.getColumn(mergeCondition) != null) {
+            if (table.getColumn(mergeCondition).isKey()) {
+                throw new DdlException("Merge condition column " + mergeCondition
+                        + " should not be primary key!");
+            }
+            switch (table.getColumn(mergeCondition).getPrimitiveType()) {
+                case CHAR:
+                case VARCHAR:
+                case PERCENTILE:
+                case BITMAP:
+                case FUNCTION:
+                case BINARY:
+                case JSON:
+                case HLL:
+                case UNKNOWN_TYPE:
+                case INVALID_TYPE:
+                case NULL_TYPE:
+                    throw new DdlException("Merge condition column has invalid type maybe" +
+                            " bitmap/hll/percentile/json/varchar!");
+                default:
+                    return;
+            }
+        } else {
+            throw new DdlException("Merge condition column " + mergeCondition
+                    + " should be a column of the table " + table.getName());
+        }
+    }
+
+    /**
      * When doing schema change, there may have some 'shadow' columns, with prefix '__starrocks_shadow_' in
      * their names. These columns are invisible to user, but we need to generate data for these columns.
      * So we add column mappings for these column.

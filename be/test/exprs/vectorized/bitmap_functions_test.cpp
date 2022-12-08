@@ -1943,6 +1943,133 @@ TEST_F(VecBitmapFunctionsTest, array_to_bitmap_test) {
     res = BitmapFunctions::array_to_bitmap(nullptr, columns);
     ASSERT_EQ(res->debug_item(0), "");
 }
+TEST_F(VecBitmapFunctionsTest, bitmapToBase64Test) {
+    { // Empty Bitmap
+        Columns columns;
+        auto s = BitmapColumn::create();
+        BitmapValue empty;
+        empty.clear();
+        s->append(&empty);
+        columns.push_back(s);
+
+        auto sliceCol = BitmapFunctions::bitmap_to_base64(ctx, columns);
+
+        ColumnViewer<TYPE_VARCHAR> viewer(sliceCol);
+        Columns columns2;
+        columns2.push_back(sliceCol);
+
+        auto bitmapCol = BitmapFunctions::base64_to_bitmap(ctx, columns2);
+
+        ColumnViewer<TYPE_OBJECT> viewer2(bitmapCol);
+        auto bmp = viewer2.value(0);
+        ASSERT_EQ(0, bmp->cardinality());
+    }
+
+    { // Single Bitmap
+        Columns columns;
+        auto s = BitmapColumn::create();
+        BitmapValue single({1});
+        s->append(&single);
+
+        columns.push_back(s);
+
+        auto sliceCol = BitmapFunctions::bitmap_to_base64(ctx, columns);
+
+        ColumnViewer<TYPE_VARCHAR> viewer(sliceCol);
+
+        Columns columns2;
+        columns2.push_back(sliceCol);
+
+        auto bitmapCol = BitmapFunctions::base64_to_bitmap(ctx, columns2);
+
+        ColumnViewer<TYPE_OBJECT> viewer2(bitmapCol);
+        auto bmp = viewer2.value(0);
+        ASSERT_EQ(1, bmp->cardinality());
+        ASSERT_TRUE(bmp->contains(1));
+    }
+
+    { // Set Bitmap
+        Columns columns;
+        auto s = BitmapColumn::create();
+        // Adding values one by one, no more than 32, which makes the bitmap stores value with set
+        BitmapValue set;
+        set.add(1);
+        set.add(2);
+        set.add(3);
+        set.add(4);
+        s->append(&set);
+
+        columns.push_back(s);
+
+        auto sliceCol = BitmapFunctions::bitmap_to_base64(ctx, columns);
+
+        ColumnViewer<TYPE_VARCHAR> viewer(sliceCol);
+
+        Columns columns2;
+        columns2.push_back(sliceCol);
+        auto bitmapCol = BitmapFunctions::base64_to_bitmap(ctx, columns2);
+
+        ColumnViewer<TYPE_OBJECT> viewer2(bitmapCol);
+        auto bmp = viewer2.value(0);
+        ASSERT_EQ(4, bmp->cardinality());
+        ASSERT_TRUE(bmp->contains(1));
+        ASSERT_TRUE(bmp->contains(2));
+        ASSERT_TRUE(bmp->contains(3));
+        ASSERT_TRUE(bmp->contains(4));
+    }
+
+    { // 32bit Bitmap
+        Columns columns;
+        auto s = BitmapColumn::create();
+        // Constructing bitmap with vector which contains 32bit values makes it a 32bit bitmap
+        BitmapValue bmp32bit({1, 2, 3, 4});
+        s->append(&bmp32bit);
+
+        columns.push_back(s);
+
+        auto sliceCol = BitmapFunctions::bitmap_to_base64(ctx, columns);
+
+        ColumnViewer<TYPE_VARCHAR> viewer(sliceCol);
+
+        Columns columns2;
+        columns2.push_back(sliceCol);
+        auto bitmapCol = BitmapFunctions::base64_to_bitmap(ctx, columns2);
+
+        ColumnViewer<TYPE_OBJECT> viewer2(bitmapCol);
+        auto bmp = viewer2.value(0);
+        ASSERT_EQ(4, bmp->cardinality());
+        ASSERT_TRUE(bmp->contains(1));
+        ASSERT_TRUE(bmp->contains(2));
+        ASSERT_TRUE(bmp->contains(3));
+        ASSERT_TRUE(bmp->contains(4));
+    }
+
+    { // 64bit Bitmap
+        Columns columns;
+        auto s = BitmapColumn::create();
+        // Constructing bitmap with vector which contains 64bit values makes it a 64bit bitmap
+        BitmapValue bmp64bit({600123456781, 600123456782, 600123456783, 600123456784});
+        s->append(&bmp64bit);
+
+        columns.push_back(s);
+
+        auto sliceCol = BitmapFunctions::bitmap_to_base64(ctx, columns);
+
+        ColumnViewer<TYPE_VARCHAR> viewer(sliceCol);
+
+        Columns columns2;
+        columns2.push_back(sliceCol);
+        auto bitmapCol = BitmapFunctions::base64_to_bitmap(ctx, columns2);
+
+        ColumnViewer<TYPE_OBJECT> viewer2(bitmapCol);
+        auto bmp = viewer2.value(0);
+        ASSERT_EQ(4, bmp->cardinality());
+        ASSERT_TRUE(bmp->contains(600123456781));
+        ASSERT_TRUE(bmp->contains(600123456782));
+        ASSERT_TRUE(bmp->contains(600123456783));
+        ASSERT_TRUE(bmp->contains(600123456784));
+    }
+}
 
 TEST_F(VecBitmapFunctionsTest, sub_bitmap) {
     BitmapValue bitmap({1, 2, 3, 4, 5, 64, 128, 256, 512, 1024});
