@@ -76,7 +76,8 @@ Status ORCPositionDeleteBuilder::build(const std::string& timezone, const std::s
         auto* position_col = static_cast<Int64Column*>(chunk->get_column_by_slot_id(k_delete_file_pos.id).get());
         for (auto row = 0; row < chunk_size; row++) {
             if (file_path_col->get_slice(row) != _datafile_path) {
-                LOG(WARNING) << "read path not matched, read " << file_path_col->get_slice(row) << " expect " << _datafile_path; 
+                LOG(WARNING) << "read path not matched, read " << file_path_col->get_slice(row) << " expect "
+                             << _datafile_path;
                 continue;
             }
 
