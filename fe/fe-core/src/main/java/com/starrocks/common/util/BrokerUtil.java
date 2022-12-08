@@ -106,8 +106,10 @@ public class BrokerUtil {
                 fileStatuses.add(tBrokerFileStatus);
             }
         } catch (TException e) {
-            LOG.warn("Broker list path exception, path={}, address={}, exception={}", path, address, e);
-            throw new UserException("Broker list path exception. path=" + path + ", broker=" + address);
+            LOG.warn("Broker list path exception, path={}, address={}, timeout_ms={}, exception={}",
+                    path, address, ClientPool.brokerTimeoutMs, e);
+            throw new UserException("Broker list path exception. path=" + path + ", broker=" + address
+                    + ", msg: " + e.getMessage());
         } finally {
             returnClient(client, address, failed);
         }
