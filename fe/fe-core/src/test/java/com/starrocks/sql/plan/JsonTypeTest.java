@@ -52,6 +52,19 @@ public class JsonTypeTest extends PlanTestBase {
 
         ExceptionChecker.expectThrowsNoException(
                 () -> getFragmentPlan("select * from tjson_test t1 join tjson_test t2 on t1.v_id = t2.v_id"));
+
+        ExceptionChecker.expectThrowsNoException(
+                () -> getFragmentPlan("select * from tjson_test t1 join tjson_test t2 on" +
+                        " cast(t1.v_json->'a' as int) = cast(t2.v_json->'a' as int)"));
+
+        ExceptionChecker.expectThrowsNoException(
+                () -> getFragmentPlan("select * from tjson_test t1 join tjson_test t2 on" +
+                        " cast(t1.v_json->'a' as int) = cast(t2.v_json->'a' as int) and t1.v_id = t2.v_id"));
+
+        ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+                "Type percentile/hll/bitmap/json not support aggregation/group-by/order-by/union/join",
+                () -> getFragmentPlan("select * from tjson_test t1 join tjson_test t2 on" +
+                        " t1.v_id = t2.v_id and t1.v_json = t2.v_json"));
     }
 
     /**
