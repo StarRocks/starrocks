@@ -17,7 +17,10 @@ package com.starrocks.qe;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.analysis.TupleId;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.planner.BinlogScanNode;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.EmptySetNode;
 import com.starrocks.planner.JoinNode;
@@ -25,12 +28,19 @@ import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.RuntimeFilterDescription;
+import com.starrocks.planner.ScanNode;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.plan.PlanTestBase;
+import com.starrocks.system.Backend;
+import com.starrocks.thrift.TBinlogOffset;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPartitionType;
 import com.starrocks.thrift.TScanRangeParams;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
 import org.apache.commons.compress.utils.Lists;
 import org.junit.Assert;
 import org.junit.Before;
@@ -43,8 +53,9 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
-public class CoordinatorTest {
+public class CoordinatorTest extends PlanTestBase {
     ConnectContext ctx;
     Coordinator coordinator;
     CoordinatorPreprocessor coordinatorPreprocessor;
@@ -401,5 +412,53 @@ public class CoordinatorTest {
                 expectedInstances, expectedParamAddresses, expectedPipelineDops, expectedBucketSeqToDriverSeqs,
                 expectedNumScanRangesList, expectedDriverSeq2NumScanRangesList);
 
+    }
+
+    @Test
+    public void testBinlogScan() throws Exception {
+        PlanFragmentId fragmentId = new PlanFragmentId(0);
+        PlanNodeId planNodeId = new PlanNodeId(1);
+        TupleDescriptor tupleDesc = new TupleDescriptor(new TupleId(2));
+
+        OlapTable olapTable = getOlapTable("t0");
+        List<Long> olapTableTabletIds =
+                olapTable.getAllPartitions().stream().flatMap(x -> x.getBaseIndex().getTabletIdsInOrder().stream())
+                        .collect(Collectors.toList());
+        Assert.assertFalse(olapTableTabletIds.isEmpty());
+        tupleDesc.setTable(olapTable);
+
+        new MockUp<BinlogScanNode>() {
+
+            @Mock
+            TBinlogOffset getBinlogOffset(long tabletId) {
+                TBinlogOffset offset = new TBinlogOffset();
+                offset.setTablet_id(1);
+                offset.setLsn(2);
+                offset.setVersion(3);
+                return offset;
+            }
+        };
+
+        BinlogScanNode binlogScan = new BinlogScanNode(planNodeId, tupleDesc);
+        binlogScan.setFragmentId(fragmentId);
+        binlogScan.finalizeStats(null);
+
+        List<ScanNode> scanNodes = Arrays.asList(binlogScan);
+        CoordinatorPreprocessor prepare = new CoordinatorPreprocessor(scanNodes);
+        prepare.computeScanRangeAssignment();
+
+        CoordinatorPreprocessor.FragmentScanRangeAssignment scanRangeMap =
+                prepare.getFragmentScanRangeAssignment(fragmentId);
+        Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackends().get(0);
+        Assert.assertFalse(scanRangeMap.isEmpty());
+        TNetworkAddress expectedAddress = backend.getAddress();
+        Assert.assertTrue(scanRangeMap.containsKey(expectedAddress));
+        Map<Integer, List<TScanRangeParams>> rangesPerNode = scanRangeMap.get(expectedAddress);
+        Assert.assertTrue(rangesPerNode.containsKey(planNodeId.asInt()));
+        List<TScanRangeParams> ranges = rangesPerNode.get(planNodeId.asInt());
+        List<Long> tabletIds =
+                ranges.stream().map(x -> x.getScan_range().getBinlog_scan_range().getTablet_id())
+                        .collect(Collectors.toList());
+        Assert.assertEquals(olapTableTabletIds, tabletIds);
     }
 }

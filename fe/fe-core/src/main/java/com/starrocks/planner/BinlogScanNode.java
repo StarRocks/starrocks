@@ -22,7 +22,6 @@ import com.starrocks.thrift.TBinlogOffset;
 import com.starrocks.thrift.TBinlogScanNode;
 import com.starrocks.thrift.TBinlogScanRange;
 import com.starrocks.thrift.TExplainLevel;
-import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRange;
@@ -35,6 +34,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -53,6 +53,9 @@ public class BinlogScanNode extends ScanNode {
 
     public BinlogScanNode(PlanNodeId id, TupleDescriptor desc) {
         super(id, desc, "BinlogScanNode");
+        this.tabletIds = new ArrayList<>();
+        this.scanBackendIds = new HashSet<>();
+        this.scanRanges = new ArrayList<>();
         olapTable = (OlapTable) Preconditions.checkNotNull(desc.getTable());
     }
 
@@ -69,7 +72,7 @@ public class BinlogScanNode extends ScanNode {
         msg.setNode_type(TPlanNodeType.STREAM_SCAN_NODE);
     }
 
-    private TBinlogOffset getBinlogOffset(long tabletId) {
+    protected TBinlogOffset getBinlogOffset(long tabletId) {
         throw new NotImplementedException("TODO");
     }
 
@@ -80,12 +83,14 @@ public class BinlogScanNode extends ScanNode {
 
     @Override
     public void computeStats(Analyzer analyzer) {
-        numNodes = scanBackendIds.size();
+        if (CollectionUtils.isNotEmpty(scanBackendIds)) {
+            numNodes = scanBackendIds.size();
+        }
     }
 
     @Override
     public void finalizeStats(Analyzer analyzer) throws UserException {
-        if (!isFinalized) {
+        if (isFinalized) {
             return;
         }
         computeScanRanges();
@@ -155,8 +160,8 @@ public class BinlogScanNode extends ScanNode {
                             GlobalStateMgr.getCurrentSystemInfo().getBackend(replica.getBackendId()),
                             "backend not found: " + replica.getBackendId());
                     scanBackendIds.add(backend.getId());
-                    TScanRangeLocation replicaLocation = new TScanRangeLocation(new TNetworkAddress(backend.getHost(),
-                            backend.getBePort()));
+                    TScanRangeLocation replicaLocation = new TScanRangeLocation(backend.getAddress());
+                    replicaLocation.setBackend_id(backend.getId());
                     locations.addToLocations(replicaLocation);
                 }
 
@@ -176,4 +181,8 @@ public class BinlogScanNode extends ScanNode {
         return scanRanges.size();
     }
 
+    @Override
+    public boolean canDoReplicatedJoin() {
+        return false;
+    }
 }

@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.qe;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableCollection;
 import com.google.common.collect.ImmutableList;
@@ -77,6 +77,7 @@ import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TScanRangeParams;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWorkGroup;
+import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -168,6 +169,28 @@ public class CoordinatorPreprocessor {
         this.queryGlobals = queryGlobals;
         this.queryOptions = queryOptions;
         this.usePipeline = canUsePipeline(this.connectContext, this.fragments);
+    }
+
+    @VisibleForTesting
+    CoordinatorPreprocessor(List<ScanNode> scanNodes) {
+        this.scanNodes = scanNodes;
+        this.queryId = null;
+        this.connectContext = ConnectContext.buildDefault();
+        this.queryGlobals =
+                genQueryGlobals(System.currentTimeMillis(), connectContext.getSessionVariable().getTimeZone());
+        this.queryOptions = connectContext.getSessionVariable().toThrift();
+        this.usePipeline = true;
+        this.descriptorTable = null;
+        this.fragments = null;
+
+        this.idToBackend = GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
+        this.idToComputeNode = buildComputeNodeInfo();
+
+        for (ScanNode scan : scanNodes) {
+            PlanFragmentId id = scan.getFragmentId();
+            PlanFragment fragment = new PlanFragment(id, scan, DataPartition.RANDOM);
+            fragmentExecParamsMap.put(scan.getFragmentId(), new FragmentExecParams(fragment));
+        }
     }
 
     public static TQueryGlobals genQueryGlobals(long startTime, String timezone) {
@@ -940,9 +963,14 @@ public class CoordinatorPreprocessor {
         }
     }
 
+    public FragmentScanRangeAssignment getFragmentScanRangeAssignment(PlanFragmentId fragmentId) {
+        return fragmentExecParamsMap.get(fragmentId).scanRangeAssignment;
+    }
+
     // Populates scan_range_assignment_.
     // <fragment, <server, nodeId>>
-    private void computeScanRangeAssignment() throws Exception {
+    @VisibleForTesting
+    void computeScanRangeAssignment() throws Exception {
         boolean forceScheduleLocal = connectContext.getSessionVariable().isForceScheduleLocal();
         // set scan ranges/locations for scan nodes
         for (ScanNode scanNode : scanNodes) {
@@ -1243,6 +1271,9 @@ public class CoordinatorPreprocessor {
             }
             return infoStr;
         } else {
+            if (MapUtils.isEmpty(this.idToBackend)) {
+                return "";
+            }
             StringBuilder infoStr = new StringBuilder("backend: ");
             for (Map.Entry<Long, Backend> entry : this.idToBackend.entrySet()) {
                 Long backendID = entry.getKey();
