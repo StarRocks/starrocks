@@ -125,8 +125,10 @@ public class ThriftServer {
         server = new SRTThreadPoolServer(serverArgs);
 
         GlobalStateMgr.getCurrentState().getConfigRefreshDaemon().registerListener(() -> {
-            threadPoolExecutor.setCorePoolSize(Config.thrift_server_max_worker_threads);
-            threadPoolExecutor.setMaximumPoolSize(Config.thrift_server_max_worker_threads);
+            if (threadPoolExecutor.getMaximumPoolSize() != Config.thrift_server_max_worker_threads) {
+                threadPoolExecutor.setCorePoolSize(Config.thrift_server_max_worker_threads);
+                threadPoolExecutor.setMaximumPoolSize(Config.thrift_server_max_worker_threads);
+            }
         });
     }
 
