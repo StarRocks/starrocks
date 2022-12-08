@@ -360,11 +360,11 @@ enum TTableType {
     HDFS_TABLE,
     ICEBERG_TABLE,
     HUDI_TABLE,
-    DELTALAKE_TABLE,
     JDBC_TABLE,
     VIEW = 20,
     MATERIALIZED_VIEW,
-    FILE_TABLE
+    FILE_TABLE,
+    DELTALAKE_TABLE
 }
 
 enum TKeysType {
