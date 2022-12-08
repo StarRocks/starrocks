@@ -282,7 +282,7 @@ PARALLEL_TEST(JsonColumnTest, test_fmt) {
     std::cerr << json;
 
     std::string str = fmt::format("{}", json);
-    ASSERT_EQ("1", str);
+    ASSERT_EQ("\"1\"", str);
 }
 
 // NOLINTNEXTLINE

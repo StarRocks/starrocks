@@ -8,9 +8,9 @@
 
 namespace starrocks::parquet {
 
-Status FileMetaData::init(const tparquet::FileMetaData& t_metadata) {
+Status FileMetaData::init(const tparquet::FileMetaData& t_metadata, bool case_sensitive) {
     // construct schema from thrift
-    RETURN_IF_ERROR(_schema.from_thrift(t_metadata.schema));
+    RETURN_IF_ERROR(_schema.from_thrift(t_metadata.schema, case_sensitive));
     _num_rows = t_metadata.num_rows;
 
     _t_metadata = t_metadata;

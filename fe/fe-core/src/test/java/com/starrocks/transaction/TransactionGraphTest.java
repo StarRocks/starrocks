@@ -41,6 +41,24 @@ public class TransactionGraphTest {
     }
 
     @Test
+    public void testRemoveNodeWithDependency() {
+        TransactionGraph graph = new TransactionGraph();
+        graph.add(1, Lists.newArrayList(1L));
+        graph.add(2, Lists.newArrayList(2L));
+        graph.add(3, Lists.newArrayList(1L));
+        graph.add(4, Lists.newArrayList(2L));
+        graph.add(5, Lists.newArrayList(1L));
+        graph.add(6, Lists.newArrayList(2L));
+        assertEquals(graph.size(), 6);
+        graph.remove(3);
+        graph.remove(4);
+        assertEquals(graph.size(), 4);
+        expectNextBatch(graph, Lists.newArrayList(1L, 2L, 5L, 6L));
+        assertEquals(graph.size(), 0);
+        assertEquals(graph.getTxnsWithoutDependency().size(), 0);
+    }
+
+    @Test
     public void testMultiTableTxn() {
         TransactionGraph graph = new TransactionGraph();
         graph.add(1, Lists.newArrayList(1L));
