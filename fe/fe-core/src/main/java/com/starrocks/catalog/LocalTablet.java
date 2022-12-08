@@ -161,6 +161,9 @@ public class LocalTablet extends Tablet {
         SystemInfoService infoService = Catalog.getCurrentSystemInfo();
         for (Replica replica : replicas) {
             Backend backend = Catalog.getCurrentSystemInfo().getBackend(replica.getBackendId());
+            if (backend == null) {
+                continue;
+            }
             backends.add(backend.getHost()); 
         }
         return backends;
