@@ -128,7 +128,7 @@ public:
 
         InputColumnType* column = down_cast<InputColumnType*>(data_column);
         for (size_t i = start; i < end; ++i) {
-            if constexpr (PT != TYPE_HLL && PT != TYPE_OBJECT) {
+            if constexpr (!is_object_type(PT)) {
                 column->get_data()[i] = value;
             } else {
                 // For TYPE_HLL(HLL) AND and TYPE_OBJECT(BITMAP),
@@ -305,6 +305,15 @@ struct FirstValueState {
     bool is_null = false;
 };
 
+template <LogicalType PT>
+struct FirstValueState<PT, StringPTGuard<PT>> {
+    Buffer<uint8_t> buffer;
+    bool has_value = false;
+    bool is_null = false;
+
+    Slice slice() const { return {buffer.data(), buffer.size()}; }
+};
+
 template <LogicalType PT, typename T = RunTimeCppType<PT>, typename = guard::Guard>
 class FirstValueWindowFunction final : public ValueWindowFunction<PT, FirstValueState<PT>, T> {
     using InputColumnType = typename ValueWindowFunction<PT, FirstValueState<PT>, T>::InputColumnType;
@@ -357,6 +366,14 @@ struct LastValueState {
     bool is_null = false;
 };
 
+template <LogicalType PT>
+struct LastValueState<PT, StringPTGuard<PT>> {
+    Buffer<uint8_t> buffer;
+    bool is_null = false;
+
+    Slice slice() const { return {buffer.data(), buffer.size()}; }
+};
+
 template <LogicalType PT, typename T = RunTimeCppType<PT>, typename = guard::Guard>
 class LastValueWindowFunction final : public ValueWindowFunction<PT, LastValueState<PT>, T> {
     using InputColumnType = typename ValueWindowFunction<PT, FirstValueState<PT>, T>::InputColumnType;
@@ -403,6 +420,16 @@ struct LeadLagState {
     T default_value;
     bool is_null = false;
     bool defualt_is_null = false;
+};
+
+template <LogicalType PT>
+struct LeadLagState<PT, StringPTGuard<PT>> {
+    Buffer<uint8_t> value;
+    Buffer<uint8_t> default_value;
+    bool is_null = false;
+    bool defualt_is_null = false;
+
+    Slice slice() const { return {value.data(), value.size()}; }
 };
 
 template <LogicalType PT, typename T = RunTimeCppType<PT>, typename = guard::Guard>
@@ -456,15 +483,6 @@ class LeadLagWindowFunction final : public ValueWindowFunction<PT, LeadLagState<
 };
 
 template <LogicalType PT>
-struct FirstValueState<PT, StringPTGuard<PT>> {
-    Buffer<uint8_t> buffer;
-    bool has_value = false;
-    bool is_null = false;
-
-    Slice slice() const { return {buffer.data(), buffer.size()}; }
-};
-
-template <LogicalType PT>
 class FirstValueWindowFunction<PT, Slice, StringPTGuard<PT>> final : public WindowFunction<FirstValueState<PT>> {
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
         this->data(state).buffer.clear();
@@ -502,14 +520,6 @@ class FirstValueWindowFunction<PT, Slice, StringPTGuard<PT>> final : public Wind
 };
 
 template <LogicalType PT>
-struct LastValueState<PT, StringPTGuard<PT>> {
-    Buffer<uint8_t> buffer;
-    bool is_null = false;
-
-    Slice slice() const { return {buffer.data(), buffer.size()}; }
-};
-
-template <LogicalType PT>
 class LastValueWindowFunction<PT, Slice, StringPTGuard<PT>> final : public WindowFunction<LastValueState<PT>> {
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
         this->data(state).buffer.clear();
@@ -539,16 +549,6 @@ class LastValueWindowFunction<PT, Slice, StringPTGuard<PT>> final : public Windo
     }
 
     std::string get_name() const override { return "nullable_last_value"; }
-};
-
-template <LogicalType PT>
-struct LeadLagState<PT, StringPTGuard<PT>> {
-    Buffer<uint8_t> value;
-    Buffer<uint8_t> default_value;
-    bool is_null = false;
-    bool defualt_is_null = false;
-
-    Slice slice() const { return {value.data(), value.size()}; }
 };
 
 template <LogicalType PT>
