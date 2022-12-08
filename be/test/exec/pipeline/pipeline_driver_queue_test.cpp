@@ -245,7 +245,9 @@ TEST_F(WorkGroupDriverQueueTest, test_basic) {
     std::vector<DriverRawPtr> out_drivers = {driver1.get(), driver271.get(), driver272.get(), driver251.get(),
                                              driver261.get()};
     // a<b = (a.vruntime!=b.vruntime) ? a.vruntime<b.vruntime : a_ptr < b_ptr
-    if (driver3.get() < driver4.get()) {
+    auto* sched_entity3 = driver3->workgroup()->driver_sched_entity();
+    auto* sched_entity4 = driver4->workgroup()->driver_sched_entity();
+    if (sched_entity3 < sched_entity4) {
         out_drivers.emplace_back(driver3.get());
         out_drivers.emplace_back(driver4.get());
     } else {
@@ -260,15 +262,10 @@ TEST_F(WorkGroupDriverQueueTest, test_basic) {
     }
 
     // Take drivers from queue.
-    int i = 0;
     for (auto* out_driver : out_drivers) {
         auto maybe_driver = queue.take();
         ASSERT_TRUE(maybe_driver.ok());
-        ASSERT_EQ(out_driver, maybe_driver.value())
-                << "The " << i << "-th driver failed, "
-                << "lhs_vruntime=" << out_driver->workgroup()->driver_sched_entity()->vruntime_ns() << ", "
-                << "rhs_vruntime=" << maybe_driver.value()->workgroup()->driver_sched_entity()->vruntime_ns();
-        ++i;
+        ASSERT_EQ(out_driver, maybe_driver.value());
     }
 }
 
