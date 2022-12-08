@@ -284,6 +284,11 @@ std::string ObjectColumn<T>::debug_item(uint32_t idx) const {
 }
 
 template <>
+std::string ObjectColumn<HyperLogLog>::debug_item(uint32_t idx) const {
+    return _pool[idx].to_string();
+}
+
+template <>
 std::string ObjectColumn<BitmapValue>::debug_item(uint32_t idx) const {
     return _pool[idx].to_string();
 }
