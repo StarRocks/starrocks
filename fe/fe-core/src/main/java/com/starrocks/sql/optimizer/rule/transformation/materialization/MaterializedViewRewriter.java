@@ -25,12 +25,17 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.sql.analyzer.RelationFields;
+import com.starrocks.sql.analyzer.RelationId;
+import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -51,6 +56,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.rewrite.BaseScalarOperatorShuttle;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
+import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
+import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import org.apache.commons.collections4.iterators.PermutationIterator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -108,7 +115,8 @@ public class MaterializedViewRewriter {
             queryPredicate = Utils.compoundAnd(queryConjuncts);
             queryPredicate = queryColumnRefRewriter.rewrite(queryPredicate.clone());
         }
-        ScalarOperator queryPartitionPredicate = compensatePartitionPredicate(queryExpression);
+        ScalarOperator queryPartitionPredicate =
+                compensatePartitionPredicate(queryExpression, materializationContext.getQueryRefFactory());
         if (queryPartitionPredicate == null) {
             return Lists.newArrayList();
         }
@@ -499,7 +507,7 @@ public class MaterializedViewRewriter {
         return targetExpr;
     }
 
-    private ScalarOperator compensatePartitionPredicate(OptExpression plan) {
+    private ScalarOperator compensatePartitionPredicate(OptExpression plan, ColumnRefFactory columnRefFactory) {
         List<LogicalOlapScanOperator> olapScanOperators = MvUtils.getOlapScanNode(plan);
         if (olapScanOperators.isEmpty()) {
             return ConstantOperator.createBoolean(true);
@@ -514,8 +522,29 @@ public class MaterializedViewRewriter {
             }
 
             if (olapTable.getPartitionInfo() instanceof ExpressionRangePartitionInfo) {
-                // do not support now
-                return null;
+                ExpressionRangePartitionInfo partitionInfo = (ExpressionRangePartitionInfo) olapTable.getPartitionInfo();
+                Expr partitionExpr = partitionInfo.getPartitionExprs().get(0);
+                List<SlotRef> slotRefs = Lists.newArrayList();
+                partitionExpr.collect(SlotRef.class, slotRefs);
+                Preconditions.checkState(slotRefs.size() == 1);
+                Optional<ColumnRefOperator> partitionColumn = olapScanOperator.getColRefToColumnMetaMap().keySet().stream()
+                        .filter(columnRefOperator -> columnRefOperator.getName().equals(slotRefs.get(0).getColumnName()))
+                        .findFirst();
+                if (!partitionColumn.isPresent()) {
+                    return null;
+                }
+                ExpressionMapping mapping = new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields()));
+                mapping.put(slotRefs.get(0), partitionColumn.get());
+                ScalarOperator partitionScalarOperator =
+                        SqlToScalarOperatorTranslator.translate(partitionExpr, mapping, columnRefFactory);
+                List<Range<PartitionKey>> selectedRanges = Lists.newArrayList();
+                for (long pid : olapScanOperator.getSelectedPartitionId()) {
+                    selectedRanges.add(partitionInfo.getRange(pid));
+                }
+                List<Range<PartitionKey>> mergedRanges = MvUtils.mergeRanges(selectedRanges);
+                List<ScalarOperator> rangePredicates = MvUtils.convertRanges(partitionScalarOperator, mergedRanges);
+                ScalarOperator partitionPredicate = Utils.compoundOr(rangePredicates);
+                partitionPredicates.add(partitionPredicate);
             } else if (olapTable.getPartitionInfo() instanceof RangePartitionInfo) {
                 RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) olapTable.getPartitionInfo();
                 List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
