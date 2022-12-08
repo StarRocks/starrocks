@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <fmt/format.h>
+
 #include <functional>
 #include <memory>
 
@@ -82,6 +84,19 @@ public:
     // Currently, this function is only used to read dictionary values.
     virtual Status next_batch(size_t count, uint8_t* dst) {
         return Status::NotSupported("next_batch is not supported");
+    }
+
+    template <typename TC, typename TD>
+    Status check_dict_code_out_of_range(const std::vector<TC>& codes, const std::vector<TD>& dict) {
+        size_t size = dict.size();
+        size_t count = codes.size();
+        for (int i = 0; i < count; ++i) {
+            if (codes[i] >= size) {
+                return Status::InternalError(
+                        fmt::format("dict code is out of range. code = {}, size = {}", codes[i], size));
+            }
+        }
+        return Status::OK();
     }
 };
 
