@@ -48,7 +48,7 @@ col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"]
   - scale: 0 ~ precision
   - Integer part：precision - scale
 
-Scientific notation is not supported.
+    Scientific notation is not supported.
 
 - DATE (3 bytes): Ranges from 0000-01-01 to 9999-12-31.
 - DATETIME (8 bytes): Ranges from 0000-01-01 00:00:00 to 9999-12-31 23:59:59.
@@ -78,7 +78,7 @@ This aggregation type applies ONLY to the aggregation model whose key_desc type 
 
 - **DEFAULT current_timestamp**: Use the current time as the default value. For more information, see [current_timestamp()](../../sql-functions/date-time-functions/current_timestamp.md).
 - **DEFAULT <default_value>**: Use a given value of the column data type as the default value. For example, if the data type of the column is VARCHAR, you can specify a VARCHAR string, such as beijing, as the default value, as presented in such as `DEFAULT "beijing"`. Note that default values cannot be any of the following types: ARRAY, BITMAP, JSON, HLL, and BOOLEAN.
-- `DEFAULT (<expr>)`: Use the result returned by a given function as the default value. Only the [uuid()](../../sql-functions/utility-functions/uuid.md) and [uuid_numeric()](../../sql-functions/utility-functions/uuid_numeric.md) expressions are supported.
+- **DEFAULT (<expr>)**: Use the result returned by a given function as the default value. Only the [uuid()](../../sql-functions/utility-functions/uuid.md) and [uuid_numeric()](../../sql-functions/utility-functions/uuid_numeric.md) expressions are supported.
 
 ### index_definition
 
