@@ -635,10 +635,9 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "     Predicates: 18: N_NATIONKEY IN (1, 2)\n" +
                 "     partitionsRatio=1/1, tabletsRatio=1/1");
         // eval predicate cardinality in join node
-        assertContains(plan, "6:NESTLOOP JOIN\n" +
-                "  |  join op: INNER JOIN\n" +
-                "  |  other join predicates: ((18: N_NATIONKEY = 1) AND (23: N_NATIONKEY = 2)) " +
-                "OR ((18: N_NATIONKEY = 2) AND (23: N_NATIONKEY = 1))\n" +
+        assertContains(plan, "6:CROSS JOIN\n" +
+                "  |  cross join:\n" +
+                "  |  predicates: ((18: N_NATIONKEY = 1) AND (23: N_NATIONKEY = 2)) OR ((18: N_NATIONKEY = 2) AND (23: N_NATIONKEY = 1))\n" +
                 "  |  cardinality: 1");
     }
 

@@ -216,11 +216,10 @@ LEFT OUTER JOIN (join-predicate [1: v1 = 5: v5] post-join-predicate [null])
 [sql]
 select v1,v2,v3 from t0 left semi join t1 on v1=v5 and 1>2
 [result]
-RIGHT SEMI JOIN (join-predicate [5: v5 = 1: v1] post-join-predicate [null])
-    EXCHANGE SHUFFLE[5]
+LEFT SEMI JOIN (join-predicate [1: v1 = 5: v5] post-join-predicate [null])
+    VALUES
+    EXCHANGE BROADCAST
         SCAN (columns[5: v5] predicate[null])
-    EXCHANGE SHUFFLE[1]
-        VALUES
 [end]
 
 [sql]
