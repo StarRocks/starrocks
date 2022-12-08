@@ -9,15 +9,16 @@ RESTORE is an asynchronous operation. You can check the status of a RESTORE job 
 > **CAUTION**
 >
 > - Only users with the ADMIN privilege can restore data.
-> - In each database, only one running BACKUP or RESTORE job is allowed each time.
+> - In each database, only one running BACKUP or RESTORE job is allowed each time. Otherwise, StarRocks returns an error.
 
 ## Syntax
 
 ```SQL
 RESTORE SNAPSHOT <db_name>.<snapshot_name>
 FROM <repository_name>
-[ON (<table_name> [PARTITION (<partition_name>, ...)] [AS <table_alias>], ...)]
-PROPERTIES ("key"="value", ...);
+[ ON ( <table_name> [ PARTITION ( <partition_name> [, ...] ) ]
+    [ AS <table_alias>] [, ...] ) ]
+PROPERTIES ("key"="value", ...)
 ```
 
 ## Parameters
@@ -33,12 +34,12 @@ PROPERTIES ("key"="value", ...);
 
 ## Examples
 
-Example 1: Restores the table `backup_tbl` in the snapshot `snapshot_1` from `example_repo` repository to the database `example_db1`, and the backup timestamp is `2018-05-04-16-45-08`. Restores one replica.
+Example 1: Restores the table `backup_tbl` in the snapshot `snapshot_label1` from `example_repo` repository to the database `example_db`, and the backup timestamp is `2018-05-04-16-45-08`. Restores one replica.
 
 ```SQL
-RESTORE SNAPSHOT example_db1.`snapshot_1`
-FROM `example_repo`
-ON ( `backup_tbl` )
+RESTORE SNAPSHOT example_db.snapshot_label1
+FROM example_repo
+ON ( backup_tbl )
 PROPERTIES
 (
     "backup_timestamp"="2018-05-04-16-45-08",
@@ -46,16 +47,17 @@ PROPERTIES
 );
 ```
 
-Example 2: Restores partitions `p1` and `p2` of table `backup_tbl` in `snapshot_2` and table `backup_tbl2` from `example_repo` to database `example_db1`, and rename `backup_tbl2` to `new_tbl`. The backup timestamp is `2018-05-04-17-11-01`. Restores three replicas by default.
+Example 2: Restores partitions `p1` and `p2` of table `backup_tbl` in `snapshot_label2` and table `backup_tbl2` from `example_repo` to database `example_db`, and rename `backup_tbl2` to `new_tbl`. The backup timestamp is `2018-05-04-17-11-01`. Restores three replicas by default.
 
 ```SQL
-RESTORE SNAPSHOT example_db1.`snapshot_2`
-FROM `example_repo`
+RESTORE SNAPSHOT example_db.snapshot_label2
+FROM example_repo
 ON(
-    `backup_tbl` PARTITION (`p1`, `p2`),
-    `backup_tbl2` AS `new_tbl`
+    backup_tbl PARTITION (p1, p2),
+    backup_tbl2 AS new_tbl
 )
 PROPERTIES
-("backup_timestamp"="2018-05-04-17-11-01");
+(
+    "backup_timestamp"="2018-05-04-17-11-01"
+);
 ```
-
