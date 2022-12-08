@@ -118,6 +118,7 @@ public class AnalyzeExprTest {
         analyzeSuccess("select array_map([1], x -> x)");
         analyzeSuccess("select array_map([1], x -> x + v1) from t0");
         analyzeSuccess("select transform([1], x -> x)");
+        analyzeSuccess("select arr,array_length(arr) from (select array_map(x->x+1, [1,2]) as arr)T");
 
         analyzeFail("select array_map(x,y -> x + y, [], [])"); // should be (x,y)
         analyzeFail("select array_map((x,y,z) -> x + y, [], [])");
