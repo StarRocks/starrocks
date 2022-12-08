@@ -48,6 +48,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -90,7 +91,7 @@ public class MVMaintenanceJob implements Writable {
     // TODO(murphy) implement a real query coordinator
     private transient Coordinator queryCoordinator;
     private transient TxnBasedEpochCoordinator epochCoordinator;
-    private transient List<MVMaintenanceTask> tasks;
+    private transient Map<Long, MVMaintenanceTask> taskMap;
 
     public MVMaintenanceJob(MaterializedView view) {
         this.jobId = view.getId();
@@ -225,21 +226,24 @@ public class MVMaintenanceJob implements Writable {
         boolean enablePipeline = true;
         int tabletSinkDop = 1;
 
-        this.tasks = new ArrayList<>();
+        // Group all fragment instances by BE id, and package them into a task
+        Map<Long, MVMaintenanceTask> tasksByBe = new HashMap<>();
         int taskId = 0;
         for (Map.Entry<PlanFragmentId, CoordinatorPreprocessor.FragmentExecParams> kv : fragmentExecParams.entrySet()) {
-            PlanFragmentId fragmentId = kv.getKey();
             CoordinatorPreprocessor.FragmentExecParams execParams = kv.getValue();
             List<TExecPlanFragmentParams> tParams =
                     execParams.toThrift(instanceIds, descTable, dbIds, enablePipeline, tabletSinkDop, tabletSinkDop);
 
-            for (TExecPlanFragmentParams tParam : tParams) {
-                TUniqueId instanceId = tParam.params.fragment_instance_id;
-                long beId = 0;
-                MVMaintenanceTask task = MVMaintenanceTask.build(this, taskId, beId, fragmentId, instanceId, tParam);
-                this.tasks.add(task);
+            for (int i = 0; i < execParams.instanceExecParams.size(); i++) {
+                long beId = execParams.instanceExecParams.get(i).getBackendNum();
+                TNetworkAddress beHost = execParams.instanceExecParams.get(i).getHost();
+                MVMaintenanceTask task =
+                        tasksByBe.computeIfAbsent(beId,
+                                k -> MVMaintenanceTask.build(this, taskId, beId, beHost, new ArrayList<>()));
+                task.addFragmentInstance(tParams.get(i));
             }
         }
+        this.taskMap = tasksByBe;
     }
 
     /**
@@ -248,7 +252,7 @@ public class MVMaintenanceJob implements Writable {
      */
     private void deployTasks() throws Exception {
         List<Future<PMVMaintenanceTaskResult>> results = new ArrayList<>();
-        for (MVMaintenanceTask task : tasks) {
+        for (MVMaintenanceTask task : taskMap.values()) {
             long beId = task.getBeId();
             long taskId = task.getTaskId();
             Backend backend =
@@ -257,7 +261,6 @@ public class MVMaintenanceJob implements Writable {
             TNetworkAddress address = new TNetworkAddress(backend.getHost(), backend.getBePort());
             // Request information
             String dbName = GlobalStateMgr.getCurrentState().getDb(view.getDbId()).getFullName();
-            TExecPlanFragmentParams planParam = task.getFragmentInstance();
 
             // Build request
             TMVMaintenanceTasks request = new TMVMaintenanceTasks();
@@ -265,9 +268,9 @@ public class MVMaintenanceJob implements Writable {
             request.setJob_id(getJobId());
             request.setTask_id(taskId);
             request.setStart_maintenance(new TMVMaintenanceStartTask());
-            request.start_maintenance.setDb_name(dbName);
-            request.start_maintenance.setMv_name(view.getName());
-            request.start_maintenance.setPlan_params(planParam);
+            request.setDb_name(dbName);
+            request.setMv_name(view.getName());
+            request.start_maintenance.setFragments(task.getFragmentInstances());
 
             try {
                 Future<PMVMaintenanceTaskResult> resultFuture =
@@ -300,7 +303,7 @@ public class MVMaintenanceJob implements Writable {
 
     private void stopTasks() throws Exception {
         List<Future<PMVMaintenanceTaskResult>> results = new ArrayList<>();
-        for (MVMaintenanceTask task : tasks) {
+        for (MVMaintenanceTask task : taskMap.values()) {
             long beId = task.getBeId();
             TMVMaintenanceTasks request = new TMVMaintenanceTasks();
             request.setTask_type(MVTaskType.STOP_MAINTENANCE);
@@ -373,8 +376,8 @@ public class MVMaintenanceJob implements Writable {
         return queryCoordinator;
     }
 
-    public List<MVMaintenanceTask> getTasks() {
-        return tasks;
+    public Map<Long, MVMaintenanceTask> getTasks() {
+        return taskMap;
     }
 
     private JobState getSerializedState() {
