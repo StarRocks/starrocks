@@ -510,6 +510,41 @@ public class ExpressionTest extends PlanTestBase {
     }
 
     @Test
+    public void testLambdaReuseSubExpressionWithoutLambdaArguments() throws Exception {
+        starRocksAssert.withTable("create table test_array" +
+                "(c0 INT,c1 int, c2 array<int>) " +
+                " duplicate key(c0) distributed by hash(c0) buckets 1 " +
+                "properties('replication_num'='1');");
+        String sql = "select b, array_map(x->x+b, arr) from (select array_map(x->x+1, [1,2]) as arr, 3*c1 as b " +
+                "from test_array)T";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("common expressions"));
+        Assert.assertTrue(plan.contains("array_map(<slot 7> -> CAST(<slot 7> AS BIGINT) + 10: multiply"));
+
+        sql = "select b, array_map(x->x+ 3 *c1, arr) from (select array_map(x->x+1, [1,2]) as arr, 3*c1 as b,c1 " +
+                "from test_array)T";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("common expressions"));
+        Assert.assertTrue(plan.contains("array_map(<slot 7> -> CAST(<slot 7> AS BIGINT) + 10: multiply"));
+
+        sql = "select 3*c1, array_map(x->x+ 3 *c1, c2) from test_array";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("common expressions"));
+        Assert.assertTrue(plan.contains("array_map(<slot 5> -> CAST(<slot 5> AS BIGINT) + 8: multiply"));
+
+        sql = "select arr,array_length(arr) from (select array_map(x->x+1, [1,2]) as arr)T";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("common expressions"));
+        Assert.assertTrue(plan.contains("array_length(6: array_map)"));
+
+        sql = "select  array_map(x->x+ 3 *c1 + 3*c1, c2) from test_array";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("common expressions"));
+        Assert.assertTrue(plan.contains(
+                "array_map(<slot 4> -> CAST(<slot 4> AS BIGINT) + 7: multiply + 7: multiply"));
+    }
+
+    @Test
     public void testInPredicateNormalize() throws Exception {
         starRocksAssert.withTable("create table test_in_pred_norm" +
                 "(c0 INT, c1 INT, c2 INT, c3 INT, c4 DATE, c5 DATE) " +
