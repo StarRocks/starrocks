@@ -44,7 +44,7 @@ FE 按照数据分布情况和算子类型将执行计划中的计算任务分�
 
 ## 环境准备
 
-- 部署 StarRocks 集群。部署方式请参考[部署 StarRocks](https://docs.starrocks.com/zh-cn/latest/quick_start/Deploy)。
+- 部署 StarRocks 集群。部署方式请参考[部署 StarRocks](../quick_start/Deploy.md)。
 
 - 各个节点的网络互通： FE 能够直接访问 K8s 集群中的 pod，并且 CN 能够访问 BE。
 
