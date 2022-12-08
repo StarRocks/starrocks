@@ -45,12 +45,12 @@ Input Partition: UNPARTITIONED
 RESULT SINK
 
 27:MERGING-EXCHANGE
-cardinality: 250
+cardinality: 352
 column statistics:
 * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
-* sum-->[810.9, 104949.5, 0.0, 16.0, 250.28228759765625] ESTIMATE
+* sum-->[810.9, 104949.5, 0.0, 16.0, 351.5625] ESTIMATE
 
 PLAN FRAGMENT 1(F15)
 
@@ -61,25 +61,25 @@ OutPut Exchange Id: 27
 26:SORT
 |  order by: [42, VARCHAR, true] ASC, [46, VARCHAR, true] ASC, [49, SMALLINT, true] ASC
 |  offset: 0
-|  cardinality: 250
+|  cardinality: 352
 |  column statistics:
 |  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
-|  * sum-->[810.9, 104949.5, 0.0, 16.0, 250.28228759765625] ESTIMATE
+|  * sum-->[810.9, 104949.5, 0.0, 16.0, 351.5625] ESTIMATE
 |
 25:AGGREGATE (merge finalize)
 |  aggregate: sum[([51: sum, DECIMAL128(38,4), true]); args: DECIMAL128; result: DECIMAL128(38,4); args nullable: true; result nullable: true]
 |  group by: [42: n_name, VARCHAR, true], [46: n_name, VARCHAR, true], [49: year, SMALLINT, true]
-|  cardinality: 250
+|  cardinality: 352
 |  column statistics:
 |  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
-|  * sum-->[810.9, 104949.5, 0.0, 16.0, 250.28228759765625] ESTIMATE
+|  * sum-->[810.9, 104949.5, 0.0, 16.0, 351.5625] ESTIMATE
 |
 24:EXCHANGE
-cardinality: 297
+cardinality: 352
 
 PLAN FRAGMENT 2(F08)
 
@@ -91,12 +91,12 @@ OutPut Exchange Id: 24
 |  STREAMING
 |  aggregate: sum[([50: expr, DECIMAL128(33,4), true]); args: DECIMAL128; result: DECIMAL128(38,4); args nullable: true; result nullable: true]
 |  group by: [42: n_name, VARCHAR, true], [46: n_name, VARCHAR, true], [49: year, SMALLINT, true]
-|  cardinality: 297
+|  cardinality: 352
 |  column statistics:
 |  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
-|  * sum-->[810.9, 104949.5, 0.0, 16.0, 296.630859375] ESTIMATE
+|  * sum-->[810.9, 104949.5, 0.0, 16.0, 351.5625] ESTIMATE
 |
 22:Project
 |  output columns:
