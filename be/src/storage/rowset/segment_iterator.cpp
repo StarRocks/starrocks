@@ -93,9 +93,6 @@ static int compare(const Slice& lhs_index_key, const Chunk& rhs_chunk, const Vec
     return lhs_index_key.compare(rhs);
 }
 
-/// SegmentIterator
-// TODO(zhuming): Refine the implementation of this class to reduce the intellectual overhead.
-// Too many policies encapsulated in this class, should split this class into many small classes.
 class SegmentIterator final : public ChunkIterator {
 public:
     SegmentIterator(std::shared_ptr<Segment> segment, vectorized::VectorizedSchema _schema,
