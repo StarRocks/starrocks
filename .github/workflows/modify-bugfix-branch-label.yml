@@ -21,11 +21,26 @@ jobs:
       !contains(github.event.pull_request.title, 'cherry-pick') &&
       !contains(github.event.pull_request.title, 'backport')
     steps:
+      - name: get issue number
+        if: contains(toJson(github.event.pull_request.body), 'Fixes https://github.com/StarRocks/starrocks/issues')
+        id: issue
+        run: |
+          number=$(echo ${{ toJson(github.event.pull_request.body)  }} | grep 'Fixes https://github.com/StarRocks/starrocks/issues' | cut -d '/' -f 7)
+          echo $number
+          echo "result=$number" >> $GITHUB_OUTPUT
+
       - name: add branch-2.5 label
         if: contains(toJson(github.event.pull_request.body), '[x] 2.5')
         uses: actions-ecosystem/action-add-labels@v1
         with:
           labels: 2.5
+
+      - name: add branch-2.5 label for issue
+        if: steps.issue.outputs.result != ''
+        uses: actions-ecosystem/action-add-labels@v1
+        with:
+          labels: 2.5
+          number: ${{ steps.issue.outputs.result }}
 
       - name: add branch-2.4 label
         if: contains(toJson(github.event.pull_request.body), '[x] 2.4')
@@ -33,11 +48,25 @@ jobs:
         with:
           labels: 2.4
 
+      - name: add branch-2.4 label for issue
+        if: steps.issue.outputs.result != ''
+        uses: actions-ecosystem/action-add-labels@v1
+        with:
+          labels: 2.4
+          number: ${{ steps.issue.outputs.result }}
+
       - name: add branch-2.3 label
         if: contains(toJson(github.event.pull_request.body), '[x] 2.3')
         uses: actions-ecosystem/action-add-labels@v1
         with:
           labels: 2.3
+
+      - name: add branch-2.3 label for issue
+        if: steps.issue.outputs.result != ''
+        uses: actions-ecosystem/action-add-labels@v1
+        with:
+          labels: 2.3
+          number: ${{ steps.issue.outputs.result }}
 
       - name: add branch-2.2 label
         if: contains(toJson(github.event.pull_request.body), '[x] 2.2')
@@ -45,11 +74,25 @@ jobs:
         with:
           labels: 2.2
 
+      - name: add branch-2.2 label for issue
+        if: steps.issue.outputs.result != ''
+        uses: actions-ecosystem/action-add-labels@v1
+        with:
+          labels: 2.2
+          number: ${{ steps.issue.outputs.result }}
+
       - name: remove branch-2.5 label
         if: contains(toJson(github.event.pull_request.body), '[ ] 2.5')
         uses: actions-ecosystem/action-remove-labels@v1
         with:
           labels: 2.5
+
+      - name: remove branch-2.5 label for issue
+        if: steps.issue.outputs.result != ''
+        uses: actions-ecosystem/action-remove-labels@v1
+        with:
+          labels: 2.5
+          number: ${{ steps.issue.outputs.result }}
 
       - name: remove branch-2.4 label
         if: contains(toJson(github.event.pull_request.body), '[ ] 2.4')
@@ -57,17 +100,38 @@ jobs:
         with:
           labels: 2.4
 
+      - name: remove branch-2.4 label for issue
+        if: steps.issue.outputs.result != ''
+        uses: actions-ecosystem/action-remove-labels@v1
+        with:
+          labels: 2.4
+          number: ${{ steps.issue.outputs.result }}
+
       - name: remove branch-2.3 label
         if: contains(toJson(github.event.pull_request.body), '[ ] 2.3')
         uses: actions-ecosystem/action-remove-labels@v1
         with:
           labels: 2.3
 
+      - name: remove branch-2.3 label for issue
+        if: steps.issue.outputs.result != ''
+        uses: actions-ecosystem/action-remove-labels@v1
+        with:
+          labels: 2.3
+          number: ${{ steps.issue.outputs.result }}
+
       - name: remove branch-2.2 label
         if: contains(toJson(github.event.pull_request.body), '[ ] 2.2')
         uses: actions-ecosystem/action-remove-labels@v1
         with:
           labels: 2.2
+
+      - name: remove branch-2.2 label for issue
+        if: steps.issue.outputs.result != ''
+        uses: actions-ecosystem/action-remove-labels@v1
+        with:
+          labels: 2.2
+          number: ${{ steps.issue.outputs.result }}
 
       - name: check-done
         if: >
