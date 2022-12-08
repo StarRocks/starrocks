@@ -26,14 +26,13 @@ Optional:
 - --timeout: http protocol connect timeout and proccess timeout , default 60*1000ms, for example 5s `--timeout=5000`
 - --queue_size: memory queue limit size , default 256 , not reset unless you have a lot of memory and you need reset `-Xmx`
 - --H: http request header , for example `--H=column_separator:,`,column_separator as key,`,`as value
- 
+
 Other:
-https://docs.starrocks.com/zh-cn/main/loading/StreamLoad
+https://docs.starrocks.io/en-us/latest/loading/StreamLoad
 
 ### Warn
 When appear error a certain thread, other normal thread transaction will not rollback
 
-Currently, you need ensure your file not contain error data,and can clear table 
+Currently, you need ensure your file not contain error data,and can clear table
 
 We are realizing union transaction , it can resolve this problem
-
