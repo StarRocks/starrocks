@@ -33,4 +33,7 @@ public final class AWSGlueConfig {
     public static final String AWS_GLUE_TABLE_CACHE_ENABLE = "aws.hive.metastore.glue.cache.table.enable";
     public static final String AWS_GLUE_TABLE_CACHE_SIZE = "aws.hive.metastore.glue.cache.table.size";
     public static final String AWS_GLUE_TABLE_CACHE_TTL_MINS = "aws.hive.metastore.glue.cache.table.ttl-mins";
+
+    public static final String NUM_PARTITION_SEGMENTS_CONF = "aws.hive.metastore.glue.partition.num.segments";
+    public static final String CUSTOM_EXECUTOR_FACTORY_CONF = "aws.hive.metastore.glue.executorservice.factory.class";
 }
